@@ -87,18 +87,23 @@ describe('QuantChatPanel range settings', () => {
   })
 
   it('renders range preset options 7D/30D/90D/1Y/custom by default', async () => {
-    const onParamsChange = jest.fn()
+    const onParamChange = jest.fn()
 
     await act(async () => {
       root?.render(
         <QuantChatPanel
           messages={[{ id: 'm1', role: 'assistant', content: 'hello' }]}
-          params={baseParams}
-          onParamsChange={onParamsChange}
+          paramSchema={null}
+          paramValues={baseParams}
+          onParamChange={onParamChange}
           onSend={() => {}}
           onRunBacktest={() => {}}
         />,
       )
+    })
+
+    await act(async () => {
+      container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     expect(container.textContent).toContain('7D')
@@ -109,16 +114,17 @@ describe('QuantChatPanel range settings', () => {
   })
 
   it('shows custom datetime inputs and triggers onParamsChange when values change', async () => {
-    const onParamsChange = jest.fn()
+    const onParamChange = jest.fn()
     const Harness = () => {
-      const [params, setParams] = React.useState(baseParams)
+      const [paramValues, setParamValues] = React.useState(baseParams)
       return (
         <QuantChatPanel
           messages={[{ id: 'm1', role: 'assistant', content: 'hello' }]}
-          params={params}
-          onParamsChange={(next) => {
-            onParamsChange(next)
-            setParams(next)
+          paramSchema={null}
+          paramValues={paramValues}
+          onParamChange={(key, value) => {
+            onParamChange(key, value)
+            setParamValues(prev => ({ ...prev, [key]: value }))
           }}
           onSend={() => {}}
           onRunBacktest={() => {}}
@@ -130,13 +136,17 @@ describe('QuantChatPanel range settings', () => {
       root?.render(<Harness />)
     })
 
+    await act(async () => {
+      container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
     const customBtn = Array.from(container.querySelectorAll('button')).find(btn => btn.textContent?.includes('aiQuant.customRange'))
     expect(customBtn).toBeTruthy()
 
     await act(async () => {
       customBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
-    const callCountAfterCustom = onParamsChange.mock.calls.length
+    const callCountAfterCustom = onParamChange.mock.calls.length
 
     const dateInputs = container.querySelectorAll('input[type="datetime-local"]')
     expect(dateInputs).toHaveLength(2)
@@ -145,18 +155,18 @@ describe('QuantChatPanel range settings', () => {
     await act(async () => {
       triggerInputChange(startInput, '2026-01-01T00:00')
     })
-    const callCountAfterStart = onParamsChange.mock.calls.length
+    const callCountAfterStart = onParamChange.mock.calls.length
 
     const endInput = dateInputs[1] as HTMLInputElement
     await act(async () => {
       triggerInputChange(endInput, '2026-02-01T00:00')
     })
 
-    expect(onParamsChange).toHaveBeenCalled()
-    const calls = onParamsChange.mock.calls.map(call => call[0])
-    expect(calls.some((value: any) => value.backtestRangePreset === 'CUSTOM')).toBe(true)
+    expect(onParamChange).toHaveBeenCalled()
+    const calls = onParamChange.mock.calls
+    expect(calls.some(([key, value]) => key === 'backtestRangePreset' && value === 'CUSTOM')).toBe(true)
     expect(callCountAfterStart).toBeGreaterThan(callCountAfterCustom)
-    expect(onParamsChange.mock.calls.length).toBeGreaterThan(callCountAfterStart)
+    expect(onParamChange.mock.calls.length).toBeGreaterThan(callCountAfterStart)
   })
 
   it('does not submit when Enter is pressed during IME composition', async () => {

@@ -36,7 +36,9 @@ interface BacktestJobRecord {
   result?: BacktestReport
 }
 
-type BacktestJobView = Omit<BacktestJobRecord, 'result' | 'ownerUserId'>
+type BacktestJobView = Omit<BacktestJobRecord, 'result' | 'ownerUserId'> & {
+  resultSummary?: BacktestReport['summary']
+}
 
 @Injectable()
 export class BacktestJobsService {
@@ -119,8 +121,18 @@ export class BacktestJobsService {
       return fallbackJob.result
     }
     const job = await this.getOwnedJobOrThrowNotFound(id, ownerUserId)
-    if (job.status === 'failed') throw new DomainException('backtest.job_failed', { code: ErrorCode.BACKTEST_JOB_CONFLICT, status: HttpStatus.CONFLICT, args: { id, error: job.error } })
-    if (job.status !== 'succeeded' || !job.result) throw new DomainException('backtest.job_not_completed', { code: ErrorCode.BACKTEST_JOB_CONFLICT, status: HttpStatus.CONFLICT, args: { id, status: job.status } })
+    if (job.status === 'failed')
+      throw new DomainException('backtest.job_failed', {
+        code: ErrorCode.BACKTEST_JOB_CONFLICT,
+        status: HttpStatus.CONFLICT,
+        args: { id, error: job.error },
+      })
+    if (job.status !== 'succeeded' || !job.result)
+      throw new DomainException('backtest.job_not_completed', {
+        code: ErrorCode.BACKTEST_JOB_CONFLICT,
+        status: HttpStatus.CONFLICT,
+        args: { id, status: job.status },
+      })
     return job.result as unknown as BacktestReport
   }
 
@@ -136,7 +148,11 @@ export class BacktestJobsService {
     return job
   }
 
-  private async executePersistedJob(id: string, input: BacktestRunInput, initialSummary: BacktestJobRecord['inputSummary']) {
+  private async executePersistedJob(
+    id: string,
+    input: BacktestRunInput,
+    initialSummary: BacktestJobRecord['inputSummary'],
+  ) {
     const job = await this.prisma.backtestJob.findUnique({ where: { id } })
     if (!job) return
 
@@ -244,7 +260,10 @@ export class BacktestJobsService {
     finishedAt: Date | null
     error: string | null
     inputSummary: Prisma.JsonValue
+    result?: Prisma.JsonValue | null
   }): BacktestJobView {
+    const resultSummary = this.extractResultSummary(job.result)
+
     return {
       id: job.id,
       status: job.status,
@@ -253,10 +272,13 @@ export class BacktestJobsService {
       finishedAt: job.finishedAt?.toISOString(),
       error: job.error ?? undefined,
       inputSummary: job.inputSummary as unknown as BacktestJobRecord['inputSummary'],
+      resultSummary,
     }
   }
 
   private toFallbackView(job: BacktestJobRecord): BacktestJobView {
+    const resultSummary = job.result?.summary
+
     return {
       id: job.id,
       status: job.status,
@@ -265,6 +287,7 @@ export class BacktestJobsService {
       finishedAt: job.finishedAt,
       error: job.error,
       inputSummary: job.inputSummary,
+      resultSummary,
     }
   }
 
@@ -301,5 +324,16 @@ export class BacktestJobsService {
       return error.message
     }
     return String(error)
+  }
+
+  private extractResultSummary(
+    result: Prisma.JsonValue | null | undefined,
+  ): BacktestReport['summary'] | undefined {
+    if (!result || typeof result !== 'object' || !('summary' in result)) {
+      return undefined
+    }
+
+    const summary = (result as { summary?: BacktestReport['summary'] }).summary
+    return summary && typeof summary === 'object' ? summary : undefined
   }
 }

@@ -36,6 +36,7 @@ export interface BacktestJob {
   startedAt?: string
   finishedAt?: string
   error?: string
+  resultSummary?: BacktestJobResult['summary']
 }
 
 export interface BacktestJobResult {
@@ -47,6 +48,23 @@ export interface BacktestJobResult {
     profitFactor: number
     totalTrades: number
   }
+  equityCurve?: Array<{
+    ts: number
+    equity: number
+  }>
+  trades?: Array<{
+    id: string
+    symbol?: string
+    side: 'LONG' | 'SHORT'
+    entryTs?: number
+    entryPrice?: number
+    exitTs: number
+    exitPrice: number
+    qty?: number
+    fee?: number
+    pnl?: number
+    returnPct: number
+  }>
 }
 
 interface ErrorPayload {
@@ -76,7 +94,10 @@ function extractErrorMessage(payload: unknown, fallback: string): string {
   }
 
   const candidate = payload as ErrorPayload
-  if (typeof candidate.error?.args?.reasonMessage === 'string' && candidate.error.args.reasonMessage.trim()) {
+  if (
+    typeof candidate.error?.args?.reasonMessage === 'string' &&
+    candidate.error.args.reasonMessage.trim()
+  ) {
     return candidate.error.args.reasonMessage
   }
   if (typeof candidate.error?.message === 'string' && candidate.error.message.trim()) {
@@ -111,16 +132,17 @@ function normalizeJobId(jobId: string): string {
   return encodeURIComponent(trimmed)
 }
 
-function assertBacktestJobStatus(status: unknown, context: string): asserts status is BacktestJobStatus {
+function assertBacktestJobStatus(
+  status: unknown,
+  context: string,
+): asserts status is BacktestJobStatus {
   if (typeof status === 'string' && VALID_BACKTEST_JOB_STATUSES.has(status as BacktestJobStatus)) {
     return
   }
-  throw new ApiError(
-    `Unexpected backtest job status: ${String(status)}`,
-    'API_ERROR',
-    500,
-    { context, status },
-  )
+  throw new ApiError(`Unexpected backtest job status: ${String(status)}`, 'API_ERROR', 500, {
+    context,
+    status,
+  })
 }
 
 function parseBacktestJob(payload: unknown, context: string): BacktestJob {
@@ -171,14 +193,16 @@ async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
     })
   } catch (error) {
     if (timedOut) {
-      throw new ApiError('Request timeout', 'API_TIMEOUT', 408, { path, timeoutMs: BACKTEST_REQUEST_TIMEOUT_MS })
+      throw new ApiError('Request timeout', 'API_TIMEOUT', 408, {
+        path,
+        timeoutMs: BACKTEST_REQUEST_TIMEOUT_MS,
+      })
     }
     if (error instanceof ApiError) {
       throw error
     }
-    const message = error instanceof Error && error.message.trim()
-      ? error.message
-      : 'Request failed'
+    const message =
+      error instanceof Error && error.message.trim() ? error.message : 'Request failed'
     throw new ApiError(message, 'API_ERROR')
   } finally {
     globalThis.clearTimeout(timeout)

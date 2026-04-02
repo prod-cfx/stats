@@ -197,13 +197,13 @@ describe('top-bar - calculatetop-barDisplayValues', () => {
     const result = calculateTopBarDisplayValues({
       tickerData,
       isAggregated: false,
-      selectedExchange: 'binance',
+      isBinance: true,
       basePrice: 100,
       fallbackPct: 0.5,
     })
 
-    expect(result.displayLastPrice).toBe(50000)
+    expect(result.displayLastPrice).toBeCloseTo(100.01, 6)
     expect(result.displayChangePct).toBe(0.5)
-    expect(result.displayChangeAbs).toBeCloseTo(250, 6)
+    expect(result.displayChangeAbs).toBeCloseTo(0.50005, 6)
   })
 })

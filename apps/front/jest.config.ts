@@ -15,6 +15,9 @@ const config: Config = {
       },
     ],
   },
+  transformIgnorePatterns: [
+    '/node_modules/(?!(p-limit|yocto-queue|lucide-react)/)',
+  ],
   moduleFileExtensions: ['ts', 'tsx', 'js', 'jsx', 'json'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
