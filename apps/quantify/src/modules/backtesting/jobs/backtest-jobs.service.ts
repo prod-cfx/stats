@@ -12,6 +12,13 @@ import { BacktestMarketDataService } from '../services/backtest-market-data.serv
 
 export type BacktestJobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
 
+const VALID_BACKTEST_JOB_STATUSES = new Set<BacktestJobStatus>([
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+])
+
 interface BacktestJobRecord {
   id: string
   ownerUserId: string
@@ -121,17 +128,18 @@ export class BacktestJobsService {
       return fallbackJob.result
     }
     const job = await this.getOwnedJobOrThrowNotFound(id, ownerUserId)
-    if (job.status === 'failed')
+    const status = this.normalizePersistedStatus(job.status, job.id)
+    if (status === 'failed')
       throw new DomainException('backtest.job_failed', {
         code: ErrorCode.BACKTEST_JOB_CONFLICT,
         status: HttpStatus.CONFLICT,
         args: { id, error: job.error },
       })
-    if (job.status !== 'succeeded' || !job.result)
+    if (status !== 'succeeded' || !job.result)
       throw new DomainException('backtest.job_not_completed', {
         code: ErrorCode.BACKTEST_JOB_CONFLICT,
         status: HttpStatus.CONFLICT,
-        args: { id, status: job.status },
+        args: { id, status },
       })
     return job.result as unknown as BacktestReport
   }
@@ -254,7 +262,7 @@ export class BacktestJobsService {
 
   private toView(job: {
     id: string
-    status: BacktestJobStatus
+    status: string
     createdAt: Date
     startedAt: Date | null
     finishedAt: Date | null
@@ -266,7 +274,7 @@ export class BacktestJobsService {
 
     return {
       id: job.id,
-      status: job.status,
+      status: this.normalizePersistedStatus(job.status, job.id),
       createdAt: job.createdAt.toISOString(),
       startedAt: job.startedAt?.toISOString(),
       finishedAt: job.finishedAt?.toISOString(),
@@ -304,6 +312,18 @@ export class BacktestJobsService {
       isPartial: false,
       strategyId: input.strategy.id,
     }
+  }
+
+  private normalizePersistedStatus(status: string, id: string): BacktestJobStatus {
+    if (VALID_BACKTEST_JOB_STATUSES.has(status as BacktestJobStatus)) {
+      return status as BacktestJobStatus
+    }
+
+    throw new DomainException('backtest.job_invalid_status', {
+      code: ErrorCode.DATA_CONSISTENCY_ERROR,
+      status: HttpStatus.INTERNAL_SERVER_ERROR,
+      args: { id, status },
+    })
   }
 
   private isBacktestJobPersistenceUnavailable(error: unknown): boolean {
