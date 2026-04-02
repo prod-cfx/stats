@@ -1,8 +1,8 @@
-import type { WidgetType } from '../widgets/widgets.catalog';
+import type { WidgetType } from '../widgets/widgets-catalog';
 import { AlertCircle } from 'lucide-react'
 import React from 'react'
 import { useWidgetMockData } from '../mock/useWidgetMockData'
-import { WIDGET_CATALOG } from '../widgets/widgets.catalog';
+import { WIDGET_CATALOG } from '../widgets/widgets-catalog';
 import { WidgetShell } from '../widgets/WidgetShell'
 
 interface DashboardWidgetProps {

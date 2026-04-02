@@ -7,7 +7,7 @@ import type {
 import type { DataPullTask } from '../repositories/data-pull-task.repository'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Inject, Injectable } from '@nestjs/common'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { DATA_PULL_JOB_REGISTRY } from '../data-sync.tokens'
 import {

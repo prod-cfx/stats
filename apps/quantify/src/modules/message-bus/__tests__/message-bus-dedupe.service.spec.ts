@@ -1,4 +1,4 @@
-import { MessageBusDedupeService } from '../runtime/message-bus.dedupe.service'
+import { MessageBusDedupeService } from '../runtime/message-bus-dedupe.service'
 
 describe('messageBusDedupeService', () => {
   it('prefixes dedupe keys and delegates lock creation to cache', async () => {

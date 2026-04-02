@@ -5,7 +5,7 @@ import { Controller, Get, Inject, Query, Sse } from '@nestjs/common'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 import { ApiExtraModels, ApiOkResponse, ApiOperation, ApiQuery, ApiTags, getSchemaPath } from '@nestjs/swagger'
 import { fromEvent, map } from 'rxjs'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { MarketBarDto } from '../dto/market-bar.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时 DTO 元数据
 import { MarketBarsQueryDto } from '../dto/market-bars-query.dto'

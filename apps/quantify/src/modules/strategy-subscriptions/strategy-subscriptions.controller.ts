@@ -10,11 +10,11 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger'
 
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { CreateSubscriptionDto } from './dto/create-subscription.dto'
 import { SubscriptionListQueryDto } from './dto/subscription-list-query.dto'
 import { SubscriptionResponseDto } from './dto/subscription-response.dto'
-import { SubscriptionUserQueryDto } from './dto/subscription-user.query.dto'
+import { SubscriptionUserQueryDto } from './dto/subscription-user-query.dto'
 import { UpdateSubscriptionDto } from './dto/update-subscription.dto'
 import { StrategySubscriptionsService } from './strategy-subscriptions.service'
 

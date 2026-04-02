@@ -10,8 +10,8 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { BaseResponseDto } from '@/common/dto/base.dto'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { CreateAny, DeleteAny, ReadAny, RequireAuth, UpdateAny } from '@/modules/auth/decorators/access-control.decorator'
 import { AppResource } from '@/modules/auth/rbac/permissions'
 // DTO 必须使用值导入以保留运行时类型元数据，供 ValidationPipe 和 Swagger 使用

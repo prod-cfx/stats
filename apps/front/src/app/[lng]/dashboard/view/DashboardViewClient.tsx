@@ -1,6 +1,6 @@
 'use client'
 
-import type { DashboardDoc } from '@/features/dashboards/store/dashboardStore'
+import type { DashboardDoc } from '@/features/dashboards/store/dashboard-store'
 import { ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
 import { useParams, useSearchParams } from 'next/navigation'
@@ -8,7 +8,7 @@ import React, { useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
 import { DashboardEditorSidebar } from '@/components/dashboard/DashboardEditorSidebar'
 import { DashboardReadOnlyCanvas } from '@/features/dashboards/components/DashboardReadOnlyCanvas'
-import { DASHBOARD_UPDATED_EVENT, getDashboard } from '@/features/dashboards/store/dashboardStore'
+import { DASHBOARD_UPDATED_EVENT, getDashboard } from '@/features/dashboards/store/dashboard-store'
 
 export function DashboardViewClient() {
   const { t } = useTranslation()

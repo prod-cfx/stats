@@ -12,7 +12,7 @@ import { OptionalAccessControl, ReadAny } from '@/modules/auth/decorators/access
 import { AppResource } from '@/modules/auth/rbac/permissions'
 // eslint-disable-next-line ts/consistent-type-imports
 import { WhaleAlertService } from './whale-alert.service'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 
 @ApiTags('whale-alerts')
 @ApiBearerAuth('bearer')

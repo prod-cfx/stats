@@ -1,5 +1,5 @@
-import { HttpException, HttpStatus } from '@nestjs/common'
 import { ErrorCode } from '@ai/shared'
+import { HttpException, HttpStatus } from '@nestjs/common'
 
 import { DomainException } from '../exceptions/domain.exception'
 import { AllExceptionsFilter } from './all-exceptions.filter'

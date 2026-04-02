@@ -7,7 +7,7 @@ import type {
 } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { IndicatorConfigRepository } from '../repositories/indicator-config.repository'
  

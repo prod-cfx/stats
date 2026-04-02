@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
-import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
+import { BasePaginationRequestDto } from '@/common/dto/base-pagination.request.dto'
 
 export class LlmSubscriptionListQueryDto extends BasePaginationRequestDto {
   @ApiProperty({ description: '业务用户 ID', example: 'usr_123' })

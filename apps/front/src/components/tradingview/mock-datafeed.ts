@@ -5,7 +5,7 @@
  * - 先用 mock K 线数据跑通 Charting Library（商业版）
  * - 后端数据准备好后，只需要把 getBars() 改成真实请求并映射成 bars 即可（无痛替换）
  *
- * ✅ 真实后端接入点：mockDatafeed.getBars() 里 TODO 标注的位置。
+ * ✅ 真实后端接入点：mock-datafeed.getBars() 里 TODO 标注的位置。
  *
  * 注意：
  * - 不要 import charting_library 代码（它是静态资源，通过 <script> 加载到 window.TradingView）

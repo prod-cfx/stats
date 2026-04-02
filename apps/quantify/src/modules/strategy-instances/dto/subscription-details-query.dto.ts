@@ -1,4 +1,4 @@
-import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
+import { BasePaginationRequestDto } from '@/common/dto/base-pagination.request.dto'
 
 /**
  * 订阅详情查询参数 DTO

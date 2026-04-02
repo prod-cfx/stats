@@ -3,7 +3,7 @@ import type { SubscriptionStatusType } from './update-subscription.dto'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsIn, IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
-import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
+import { BasePaginationRequestDto } from '@/common/dto/base-pagination.request.dto'
 import { SUBSCRIPTION_STATUS_VALUES } from './update-subscription.dto'
 
 export class SubscriptionListQueryDto extends BasePaginationRequestDto {

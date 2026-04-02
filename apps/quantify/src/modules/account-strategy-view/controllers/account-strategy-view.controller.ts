@@ -1,11 +1,11 @@
 import type { AccountStrategyDetailResponseDto } from '../dto/account-strategy-detail.response.dto'
 import type { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
-import type { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import type { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Delete, Get, Headers, Param, Post, Query } from '@nestjs/common'
 import { AccountStrategyActionDto } from '../dto/account-strategy-action.dto'
 import { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
-import { AccountStrategyListQueryDto } from '../dto/account-strategy-list.query.dto'
+import { AccountStrategyListQueryDto } from '../dto/account-strategy-list-query.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { AccountStrategyCallerIdentityService } from '../services/account-strategy-caller-identity.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata

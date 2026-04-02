@@ -1,10 +1,9 @@
 /** @jest-environment jsdom */
 
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
-import React from 'react'
-import { act } from 'react'
+import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
-import { TelegramLoginButtons } from './telegram-login-buttons'
+import { TelegramLoginButtons } from './TelegramLoginButtons'
 
 const createTelegramDesktopIntentMock = jest.fn()
 

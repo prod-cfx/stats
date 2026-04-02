@@ -16,15 +16,15 @@ import {
 } from '@nestjs/swagger'
 import { filter, fromEvent, map, merge, of } from 'rxjs'
 
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { BaseResponseDto } from '@/common/dto/base.dto'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import { createHeartbeatStream } from '@/common/utils/sse.utils'
 
 import { CreateLlmStrategyInstanceDto } from '../dto/create-llm-strategy-instance.dto'
-import { LlmStrategyInstanceListQueryDto } from '../dto/llm-strategy-instance-list.query.dto'
+import { LlmStrategyInstanceListQueryDto } from '../dto/llm-strategy-instance-list-query.dto'
 import { LlmStrategyInstanceResponseDto } from '../dto/llm-strategy-instance.response.dto'
 import { LlmStrategyRunResponseDto } from '../dto/llm-strategy-run.response.dto'
-import { LlmStrategyRunsListQueryDto } from '../dto/llm-strategy-runs-list.query.dto'
+import { LlmStrategyRunsListQueryDto } from '../dto/llm-strategy-runs-list-query.dto'
 import { UpdateLlmStrategyInstanceDto } from '../dto/update-llm-strategy-instance.dto'
 import { LLM_OPS_TEST_LOG_EVENT } from '../llm-ops-test-log.events'
 // eslint-disable-next-line ts/consistent-type-imports -- 需要用于依赖注入，不能使用 import type

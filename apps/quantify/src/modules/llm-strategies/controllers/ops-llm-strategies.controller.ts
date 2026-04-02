@@ -10,11 +10,11 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger'
 
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { BaseResponseDto } from '@/common/dto/base.dto'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 
 import { CreateLlmStrategyDto } from '../dto/create-llm-strategy.dto'
-import { LlmStrategyListQueryDto } from '../dto/llm-strategy-list.query.dto'
+import { LlmStrategyListQueryDto } from '../dto/llm-strategy-list-query.dto'
 import { LlmStrategyResponseDto } from '../dto/llm-strategy.response.dto'
 import { UpdateLlmStrategyDto } from '../dto/update-llm-strategy.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- 需要用于依赖注入，不能使用 import type

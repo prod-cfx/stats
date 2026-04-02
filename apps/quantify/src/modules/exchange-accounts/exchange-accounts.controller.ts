@@ -3,7 +3,7 @@ import { ApiBody, ApiCreatedResponse, ApiOkResponse, ApiOperation, ApiTags } fro
 
 import { CreateExchangeAccountDto } from './dto/create-exchange-account.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest 需要运行时类元数据用于 query DTO 校验
-import { ExchangeAccountUserQueryDto } from './dto/exchange-account-user.query.dto'
+import { ExchangeAccountUserQueryDto } from './dto/exchange-account-user-query.dto'
 import { ExchangeAccountResponseDto } from './dto/exchange-account.response.dto'
 import { ExchangeAccountsService } from './exchange-accounts.service'
 

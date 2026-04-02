@@ -1,13 +1,13 @@
 /* eslint-disable react-hooks-extra/no-direct-set-state-in-use-effect */
 'use client'
 
-import type { DashboardDoc } from '../store/dashboardStore'
+import type { DashboardDoc } from '../store/dashboard-store'
 import { Check, Edit2, Image, Loader2, Save, X } from 'lucide-react'
 import { useParams, useRouter } from 'next/navigation'
 import React, { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { toast } from '@/lib/toast'
-import { deleteDashboard, updateDashboardMeta, upsertDashboard } from '../store/dashboardStore'
+import { deleteDashboard, updateDashboardMeta, upsertDashboard } from '../store/dashboard-store'
 
 interface DashboardHeaderProps {
   dashboard: DashboardDoc

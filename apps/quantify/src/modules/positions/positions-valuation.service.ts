@@ -4,8 +4,8 @@ import type { PrismaClient } from '@/prisma/prisma.types'
 import { PositionSide, PositionStatus } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
-import { OnEvent } from '@nestjs/event-emitter'
 import { Injectable, Logger } from '@nestjs/common'
+import { OnEvent } from '@nestjs/event-emitter'
 import { MARKET_QUOTE_EVENT } from '@/modules/market-data/services/market-data-stream.service'
 import { Prisma } from '@/prisma/prisma.types'
 

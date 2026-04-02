@@ -4,11 +4,11 @@ import type { DataSource, MarketType } from '@/types/trading'
 import React, { useState } from 'react'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
-// import { BottomPanel } from '@/components/trading/BottomPanel/BottomPanel';
-import { CenterChartPanel } from '@/components/trading/CenterChartPanel/CenterChartPanel'
-// import { LeftTradePanel } from '@/components/trading/LeftTradePanel/LeftTradePanel';
-import { RightPanel } from '@/components/trading/RightPanel/RightPanel'
-import { TopBar } from '@/components/trading/TopBar/TopBar'
+// import { BottomPanel } from '@/components/trading/bottom-panel';
+import { CenterChartPanel } from '@/components/trading/center-chart-panel'
+// import { LeftTradePanel } from '@/components/trading/left-trade-panel';
+import { RightPanel } from '@/components/trading/right-panel'
+import { TopBar } from '@/components/trading/top-bar'
 
 export default function MarketPage() {
   const [isAggregated, setIsAggregated] = useState(true)

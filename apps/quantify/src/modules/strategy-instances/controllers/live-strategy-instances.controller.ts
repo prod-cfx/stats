@@ -9,7 +9,7 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger'
 
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 
 import { LiveStrategyInstanceListQueryDto } from '../dto/live-strategy-instance-list-query.dto'
 import { StrategyInstancePublicResponseDto } from '../dto/live-strategy-instance-response.dto'

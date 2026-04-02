@@ -11,7 +11,7 @@ import {
   Max,
   Min,
 } from 'class-validator'
-import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
+import { BasePaginationRequestDto } from '@/common/dto/base-pagination.request.dto'
 
 /**
  * 加密股票报价响应 DTO

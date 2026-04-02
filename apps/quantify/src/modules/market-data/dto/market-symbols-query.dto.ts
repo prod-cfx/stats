@@ -1,7 +1,7 @@
 import { MARKET_INSTRUMENT_TYPES, MARKET_SYMBOL_STATUSES, MARKET_SYMBOL_TYPES } from '@ai/shared'
 import { ApiPropertyOptional } from '@nestjs/swagger'
 import { IsIn, IsOptional, IsString } from 'class-validator'
-import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
+import { BasePaginationRequestDto } from '@/common/dto/base-pagination.request.dto'
 
 export class MarketSymbolsQueryDto extends BasePaginationRequestDto {
   @ApiPropertyOptional({ description: '交易所（如 BINANCE）', example: 'BINANCE' })

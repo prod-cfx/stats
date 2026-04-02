@@ -45,7 +45,7 @@ git commit -m "feat: add strict mode config and schema for llm codegen"
 - Modify: `apps/quantify/src/modules/ai/ai.service.ts`
 - Modify: `apps/quantify/src/modules/ai/providers/llm-provider-adapter.interface.ts`
 - Modify: `apps/quantify/src/modules/ai/providers/openai-compatible.adapter.ts`
-- Test: `apps/quantify/src/modules/ai/providers/__tests__/openai-compatible.adapter.spec.ts`（若无则创建）
+- Test: `apps/quantify/src/modules/ai/providers/__tests__/openai-compatible-adapter.spec.ts`（若无则创建）
 
 **Step 1: Write the failing test**
 - 断言传入 strict response_format 时，adapter 请求体包含对应字段。
@@ -64,7 +64,7 @@ Expected: PASS
 
 **Step 5: Commit**
 ```bash
-git add apps/quantify/src/modules/ai/ai.service.ts apps/quantify/src/modules/ai/providers/llm-provider-adapter.interface.ts apps/quantify/src/modules/ai/providers/openai-compatible.adapter.ts apps/quantify/src/modules/ai/providers/__tests__/openai-compatible.adapter.spec.ts
+git add apps/quantify/src/modules/ai/ai.service.ts apps/quantify/src/modules/ai/providers/llm-provider-adapter.interface.ts apps/quantify/src/modules/ai/providers/openai-compatible.adapter.ts apps/quantify/src/modules/ai/providers/__tests__/openai-compatible-adapter.spec.ts
 git commit -m "feat: support response_format in ai provider adapter"
 ```
 
