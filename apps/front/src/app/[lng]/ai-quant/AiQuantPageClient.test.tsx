@@ -314,4 +314,16 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(container.querySelector('[data-testid="backtest-confirm"]')).toBeNull()
     expect(container.querySelector('[data-testid="backtest-summary"]')).toBeTruthy()
   })
+
+  it('uses shrink-safe layout classes for the chat column', async () => {
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+    })
+
+    const grid = container.querySelector('main > div + div')
+    expect(grid?.className).toContain('md:grid-cols-[280px_minmax(0,1fr)]')
+
+    const contentColumn = grid?.lastElementChild
+    expect(contentColumn?.className).toContain('min-w-0')
+  })
 })
