@@ -431,6 +431,32 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     })
   })
 
+  it('shows in-progress assistant feedback immediately after starting backtest', async () => {
+    let resolvePoll: ((value: unknown) => void) | null = null
+    const pollPromise = new Promise(resolve => {
+      resolvePoll = resolve
+    })
+    mockGetBacktestJob.mockReturnValue(pollPromise)
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestRunning')
+    expect(container.querySelector('[data-testid="backtest-summary"]')).toBeNull()
+
+    resolvePoll?.({ id: 'job-1', status: 'succeeded', createdAt: '2026-03-24T12:00:01.000Z' })
+    await act(async () => {
+      await Promise.resolve()
+    })
+  })
+
   it.each(['submitting', 'running', 'timeout'] as const)(
     'hydrates transient execution state %s to idle to avoid refresh lock',
     async (state) => {

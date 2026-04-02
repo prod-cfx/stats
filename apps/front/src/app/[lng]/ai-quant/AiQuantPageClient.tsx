@@ -1373,19 +1373,29 @@ export function AiQuantPageClient() {
 
     const runToken = (backtestRunTokenRef.current.get(conversationId) ?? 0) + 1
     backtestRunTokenRef.current.set(conversationId, runToken)
-    const appendBacktestMessage = (content: string) => {
-      updateConversationById(conversationId, curr => ({
-        ...curr,
-        messages: [
-          ...curr.messages,
-          {
-            id: `bt-${Date.now()}`,
-            role: 'assistant',
-            content,
-          },
-        ],
-        updatedAt: Date.now(),
-      }))
+    const backtestMessageId = `bt-${Date.now()}`
+    const updateBacktestMessage = (content: string) => {
+      updateConversationById(conversationId, (curr) => {
+        const hasBacktestMessage = curr.messages.some(message => message.id === backtestMessageId)
+        return {
+          ...curr,
+          messages: hasBacktestMessage
+            ? curr.messages.map(message =>
+                message.id === backtestMessageId
+                  ? { ...message, content }
+                  : message,
+              )
+            : [
+                ...curr.messages,
+                {
+                  id: backtestMessageId,
+                  role: 'assistant',
+                  content,
+                },
+              ],
+          updatedAt: Date.now(),
+        }
+      })
     }
     const toFailureMessage = (reason: string) => t('aiQuant.messages.backtestPayloadInvalid', { reason })
     const canContinue = () => (
@@ -1398,6 +1408,16 @@ export function AiQuantPageClient() {
     updateConversationById(conversationId, curr => ({
       ...curr,
       backtestResult: null,
+      messages: [
+        ...curr.messages,
+        {
+          id: backtestMessageId,
+          role: 'assistant',
+          content: t('aiQuant.messages.backtestRunning', {
+            defaultValue: '正在回测中，请稍后...',
+          }),
+        },
+      ],
       updatedAt: Date.now(),
     }))
 
@@ -1412,7 +1432,7 @@ export function AiQuantPageClient() {
         }
         if (support.status === 'not_supported') {
           setConversationBacktestExecutionState(conversationId, 'failed')
-          appendBacktestMessage(toFailureMessage('symbol_not_supported'))
+          updateBacktestMessage(toFailureMessage('symbol_not_supported'))
           return
         }
 
@@ -1431,7 +1451,7 @@ export function AiQuantPageClient() {
           }
           if (Date.now() >= deadline) {
             setConversationBacktestExecutionState(conversationId, 'timeout')
-            appendBacktestMessage(toFailureMessage('timeout'))
+            updateBacktestMessage(toFailureMessage('timeout'))
             return
           }
           await new Promise(resolve => window.setTimeout(resolve, BACKTEST_JOB_POLL_INTERVAL_MS))
@@ -1446,7 +1466,7 @@ export function AiQuantPageClient() {
         }
         if (latestJob.status === 'failed') {
           setConversationBacktestExecutionState(conversationId, 'failed')
-          appendBacktestMessage(toFailureMessage(latestJob.error ?? 'job_failed'))
+          updateBacktestMessage(toFailureMessage(latestJob.error ?? 'job_failed'))
           return
         }
 
@@ -1471,17 +1491,17 @@ export function AiQuantPageClient() {
         updateConversationById(conversationId, curr => ({
           ...curr,
           backtestResult: result,
-          messages: [
-            ...curr.messages,
-            {
-              id: `bt-${Date.now()}`,
-              role: 'assistant',
-              content:
-                result.maxDrawdownPct <= 20
-                  ? t('aiQuant.messages.backtestSuccess', { drawdown: result.maxDrawdownPct })
-                  : t('aiQuant.messages.backtestFail', { drawdown: result.maxDrawdownPct }),
-            },
-          ],
+          messages: curr.messages.map(message =>
+            message.id === backtestMessageId
+              ? {
+                  ...message,
+                  content:
+                    result.maxDrawdownPct <= 20
+                      ? t('aiQuant.messages.backtestSuccess', { drawdown: result.maxDrawdownPct })
+                      : t('aiQuant.messages.backtestFail', { drawdown: result.maxDrawdownPct }),
+                }
+              : message,
+          ),
           updatedAt: Date.now(),
         }))
       } catch (error) {
@@ -1492,7 +1512,7 @@ export function AiQuantPageClient() {
         const message = error instanceof ApiError
           ? (error.message?.trim() || toFailureMessage('unknown_error'))
           : toFailureMessage('unknown_error')
-        appendBacktestMessage(message)
+        updateBacktestMessage(message)
       } finally {
         backtestRunMutexRef.current.delete(conversationId)
       }
