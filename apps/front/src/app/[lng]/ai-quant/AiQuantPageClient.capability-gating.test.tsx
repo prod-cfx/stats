@@ -6,6 +6,8 @@ import { createRoot } from 'react-dom/client'
 import { AiQuantPageClient } from './AiQuantPageClient'
 
 const mockFetchBacktestCapabilities = jest.fn()
+const mockCheckBacktestSymbolSupport = jest.fn()
+const mockCreateBacktestJob = jest.fn()
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -58,12 +60,14 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
     paramSchema,
     paramValues,
     onParamChange,
+    onRunBacktest,
     canRunBacktest,
   }: {
     messages: Array<{ id: string, role: string, content: string }>
     paramSchema: Record<string, unknown> | null
     paramValues: Record<string, unknown>
     onParamChange: (key: string, value: unknown) => void
+    onRunBacktest: () => void
     canRunBacktest?: boolean
   }) => {
     const properties = (paramSchema?.properties as Record<string, any> | undefined) ?? {}
@@ -71,7 +75,7 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
     const timeframeOptions = Array.isArray(properties.baseTimeframe?.enum) ? properties.baseTimeframe.enum : []
     return (
       <div>
-        <button data-testid="run-backtest" disabled={!canRunBacktest}>run</button>
+        <button data-testid="run-backtest" disabled={!canRunBacktest} onClick={onRunBacktest}>run</button>
         <select
           data-testid="symbol-select"
           value={String(paramValues.symbol ?? '')}
@@ -97,8 +101,12 @@ jest.mock('@/components/ai-quant/backtest-capability-client', () => ({
   fetchBacktestCapabilities: (...args: unknown[]) => mockFetchBacktestCapabilities(...args),
 }))
 
+jest.mock('@/components/ai-quant/backtest-symbol-support-client', () => ({
+  checkBacktestSymbolSupport: (...args: unknown[]) => mockCheckBacktestSymbolSupport(...args),
+}))
+
 jest.mock('@/components/ai-quant/backtest-job-client', () => ({
-  createBacktestJob: jest.fn(),
+  createBacktestJob: (...args: unknown[]) => mockCreateBacktestJob(...args),
   getBacktestJob: jest.fn(),
   getBacktestJobResult: jest.fn(),
 }))
@@ -173,6 +181,13 @@ describe('AiQuantPageClient capability gating', () => {
     localStorage.clear()
     seedConfirmedConversation(Date.now())
     jest.clearAllMocks()
+    mockCheckBacktestSymbolSupport.mockResolvedValue({ status: 'supported' })
+    mockCreateBacktestJob.mockResolvedValue({
+      id: 'btjob-1',
+      status: 'failed',
+      createdAt: '2026-04-02T00:00:00.000Z',
+      error: 'mock_failure',
+    })
   })
 
   afterEach(async () => {
@@ -209,9 +224,58 @@ describe('AiQuantPageClient capability gating', () => {
     expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestCapabilityLoadFailed')
   })
 
-  it('ready allows selecting symbol/timeframe', async () => {
+  it('ready keeps strategy symbol and allows timeframe updates even when capabilities are narrower', async () => {
+    const now = Date.now()
+    localStorage.setItem('ai_quant_conversations_v1', JSON.stringify([
+      {
+        id: 'conv-1',
+        title: 'conv',
+        messages: [{ id: 'welcome', role: 'assistant', content: '```typescript\nreturn { ok: true }\n```' }],
+        params: {
+          exchange: 'okx',
+          symbol: 'ETHUSDC',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+        paramSchema: null,
+        paramValues: {
+          exchange: 'okx',
+          symbol: 'ETHUSDC',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+        backtestResult: null,
+        logicGraph: {
+          version: 1,
+          status: 'confirmed',
+          trigger: [],
+          actions: [],
+          risk: [],
+          meta: {
+            exchange: 'okx',
+            symbol: 'ETHUSDC',
+            timeframe: '15m',
+            positionPct: 10,
+          },
+        },
+        llmCodegenSessionId: null,
+        publishedStrategyInstanceId: 'strategy-1',
+        latestSignalMessage: null,
+        backtestExecutionState: 'idle',
+        updatedAt: now,
+      },
+    ]))
+
     mockFetchBacktestCapabilities.mockResolvedValue({
-      allowedSymbols: ['BTCUSDT', 'ETHUSDT'],
+      allowedSymbols: ['BTCUSDT'],
       allowedBaseTimeframes: ['15m', '1h'],
     })
 
@@ -223,20 +287,16 @@ describe('AiQuantPageClient capability gating', () => {
     const runButton = container.querySelector('[data-testid="run-backtest"]') as HTMLButtonElement | null
     expect(runButton?.disabled).toBe(false)
     const symbolOptions = Array.from(container.querySelectorAll('[data-testid="symbol-select"] option')).map(option => option.textContent)
-    expect(symbolOptions).toEqual(expect.arrayContaining(['BTCUSDT', 'ETHUSDT']))
+    expect(symbolOptions).toEqual(expect.arrayContaining(['ETHUSDC', 'BTCUSDT']))
 
     await act(async () => {
-      const symbolSelect = container.querySelector('[data-testid="symbol-select"]') as HTMLSelectElement
-      symbolSelect.value = 'ETHUSDT'
-      symbolSelect.dispatchEvent(new Event('change', { bubbles: true }))
-
       const timeframeSelect = container.querySelector('[data-testid="timeframe-select"]') as HTMLSelectElement
       timeframeSelect.value = '1h'
       timeframeSelect.dispatchEvent(new Event('change', { bubbles: true }))
     })
 
     const paramValues = container.querySelector('[data-testid="param-values"]')?.textContent ?? ''
-    expect(paramValues).toContain('"symbol":"ETHUSDT"')
+    expect(paramValues).toContain('"symbol":"ETHUSDC"')
     expect(paramValues).toContain('"baseTimeframe":"1h"')
   })
 
@@ -304,7 +364,7 @@ describe('AiQuantPageClient capability gating', () => {
     expect(runButton?.disabled).toBe(true)
   })
 
-  it('invalid current values auto-correct to allowed values', async () => {
+  it('invalid current timeframe auto-corrects without overwriting strategy symbol', async () => {
     const now = Date.now()
     localStorage.setItem('ai_quant_conversations_v1', JSON.stringify([
       {
@@ -313,7 +373,7 @@ describe('AiQuantPageClient capability gating', () => {
         messages: [{ id: 'welcome', role: 'assistant', content: 'hello' }],
         params: {
           exchange: 'binance',
-          symbol: 'XRPUSDT',
+          symbol: 'ETHUSDC',
           baseTimeframe: '5m',
           buyWindowMin: 3,
           buyDropPct: 1,
@@ -324,7 +384,7 @@ describe('AiQuantPageClient capability gating', () => {
         paramSchema: null,
         paramValues: {
           exchange: 'binance',
-          symbol: 'XRPUSDT',
+          symbol: 'ETHUSDC',
           baseTimeframe: '5m',
           buyWindowMin: 3,
           buyDropPct: 1,
@@ -352,8 +412,106 @@ describe('AiQuantPageClient capability gating', () => {
     })
 
     const paramValues = container.querySelector('[data-testid="param-values"]')?.textContent ?? ''
-    expect(paramValues).toContain('"symbol":"BTCUSDT"')
+    expect(paramValues).toContain('"symbol":"ETHUSDC"')
     expect(paramValues).toContain('"baseTimeframe":"15m"')
     expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestCapabilityAutoCorrected')
+  })
+
+  it('checks symbol support before creating backtest job', async () => {
+    mockFetchBacktestCapabilities.mockResolvedValue({
+      allowedSymbols: ['BTCUSDT'],
+      allowedBaseTimeframes: ['15m', '1h'],
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      const runButton = container.querySelector('[data-testid="run-backtest"]') as HTMLButtonElement
+      runButton.click()
+      await Promise.resolve()
+    })
+
+    expect(mockCheckBacktestSymbolSupport).toHaveBeenCalledWith({
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+    })
+    expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not create backtest job when symbol support check returns not_supported', async () => {
+    const now = Date.now()
+    localStorage.setItem('ai_quant_conversations_v1', JSON.stringify([
+      {
+        id: 'conv-1',
+        title: 'conv',
+        messages: [{ id: 'welcome', role: 'assistant', content: '```typescript\nreturn { ok: true }\n```' }],
+        params: {
+          exchange: 'okx',
+          symbol: 'ETHUSDC',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+        paramSchema: null,
+        paramValues: {
+          exchange: 'okx',
+          symbol: 'ETHUSDC',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+        backtestResult: null,
+        logicGraph: {
+          version: 1,
+          status: 'confirmed',
+          trigger: [],
+          actions: [],
+          risk: [],
+          meta: {
+            exchange: 'okx',
+            symbol: 'ETHUSDC',
+            timeframe: '15m',
+            positionPct: 10,
+          },
+        },
+        llmCodegenSessionId: null,
+        publishedStrategyInstanceId: 'strategy-1',
+        latestSignalMessage: null,
+        backtestExecutionState: 'idle',
+        updatedAt: now,
+      },
+    ]))
+    mockFetchBacktestCapabilities.mockResolvedValue({
+      allowedSymbols: ['BTCUSDT'],
+      allowedBaseTimeframes: ['15m', '1h'],
+    })
+    mockCheckBacktestSymbolSupport.mockResolvedValueOnce({ status: 'not_supported' })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      const runButton = container.querySelector('[data-testid="run-backtest"]') as HTMLButtonElement
+      runButton.click()
+      await Promise.resolve()
+    })
+
+    expect(mockCheckBacktestSymbolSupport).toHaveBeenCalledWith({
+      exchange: 'okx',
+      symbol: 'ETHUSDC',
+    })
+    expect(mockCreateBacktestJob).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestPayloadInvalid')
   })
 })

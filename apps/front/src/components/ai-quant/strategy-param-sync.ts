@@ -52,6 +52,16 @@ function normalizeSymbol(raw: string): string {
   return raw.replace('/', '').replace(/\s+/g, '').toUpperCase()
 }
 
+function mergeUnique(listA: string[], listB: string[]): string[] {
+  const next = new Set<string>()
+  for (const value of [...listA, ...listB]) {
+    if (value.trim()) {
+      next.add(value)
+    }
+  }
+  return [...next]
+}
+
 function inferExchange(text: string, fallback: StrategyParamSyncFallback['exchange']): StrategyParamSyncFallback['exchange'] {
   if (/okx|欧易/i.test(text)) return 'okx'
   if (/hyperliquid/i.test(text)) return 'hyperliquid'
@@ -59,11 +69,11 @@ function inferExchange(text: string, fallback: StrategyParamSyncFallback['exchan
   return fallback
 }
 
-function inferSymbol(text: string, fallback: string, allowedSymbols: string[]): string {
-  const direct = text.match(/\b([A-Z]{2,10}\/[A-Z]{2,10}|[A-Z]{2,10}USDT|[A-Z]{2,10}USDC)\b/i)?.[1]
-  const normalized = direct ? normalizeSymbol(direct) : fallback
-  if (allowedSymbols.length === 0) return normalized
-  return allowedSymbols.includes(normalized) ? normalized : (allowedSymbols[0] ?? normalized)
+function inferSymbol(text: string, fallback: string, latest = false): string {
+  const matches = text.matchAll(/\b([A-Z]{2,10}\/[A-Z]{2,10}|[A-Z]{2,10}USDT|[A-Z]{2,10}USDC)\b/gi)
+  const symbols = [...matches].map(item => normalizeSymbol(item[1]))
+  if (!symbols.length) return fallback
+  return latest ? symbols[symbols.length - 1] : symbols[0]
 }
 
 function inferBaseTimeframe(specTimeframes: string[], fallback: string, allowedBaseTimeframes: string[]): string {
@@ -128,7 +138,10 @@ export function syncStrategyParamsFromCodegen(args: {
   const contextText = `${args.contextText ?? ''} ${entryRules.join(' ')} ${exitRules.join(' ')}`.trim()
 
   const nextExchange = inferExchange(contextText, args.fallback.exchange)
-  const nextSymbol = inferSymbol(marketSymbols[0] ?? contextText, args.fallback.symbol, allowedSymbols)
+  const symbolFromMarket = inferSymbol(marketSymbols[0] ?? '', args.fallback.symbol)
+  const symbolFromContext = inferSymbol(contextText, args.fallback.symbol, true)
+  const nextSymbol = symbolFromContext !== args.fallback.symbol ? symbolFromContext : symbolFromMarket
+  const symbolEnum = [nextSymbol, ...allowedSymbols.filter(item => item !== nextSymbol)]
   const nextBaseTimeframe = inferBaseTimeframe(marketTimeframes, args.fallback.baseTimeframe, allowedBaseTimeframes)
   const parsedPositionPct = parseNumber(riskRules.positionPct)
     ?? parseNumber(contextText.match(/([0-9]+(?:\.[0-9]+)?)%\s*(?:仓位|总仓位|仓位的)/)?.[1])
@@ -154,7 +167,7 @@ export function syncStrategyParamsFromCodegen(args: {
     symbol: {
       type: 'string',
       title: 'Symbol',
-      enum: allowedSymbols.length > 0 ? allowedSymbols : [nextSymbol],
+      enum: symbolEnum,
     },
     baseTimeframe: {
       type: 'string',
@@ -221,9 +234,12 @@ export function applyCapabilitiesToParamSchema(
 
   const symbolProperty = asObject(properties.symbol)
   if (symbolProperty) {
+    const nextSymbolEnum = capabilities?.allowedSymbols?.length
+      ? mergeUnique(asStringArray(symbolProperty.enum), capabilities.allowedSymbols)
+      : asStringArray(symbolProperty.enum)
     nextProperties.symbol = {
       ...symbolProperty,
-      enum: capabilities?.allowedSymbols?.length ? capabilities.allowedSymbols : symbolProperty.enum,
+      enum: nextSymbolEnum,
     }
   }
 

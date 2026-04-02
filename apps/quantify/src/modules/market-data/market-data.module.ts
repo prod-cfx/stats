@@ -12,6 +12,7 @@ import { OkxMarketDataProvider } from './providers/okx-market-data.provider'
 import { MarketDataHealthService } from './services/market-data-health.service'
 import { MarketDataIngestionService } from './services/market-data-ingestion.service'
 import { MarketDataReadGateway } from './services/market-data-read.gateway'
+import { MarketSymbolCatalogService } from './services/market-symbol-catalog.service'
 import { MarketDataStreamService } from './services/market-data-stream.service'
 import { MarketDataRepository } from './services/market-data.repository'
 import { MarketDataService } from './services/market-data.service'
@@ -25,6 +26,7 @@ import { MarketDataService } from './services/market-data.service'
     MarketDataReadGateway,
     MarketDataHealthService,
     MarketDataIngestionService,
+    MarketSymbolCatalogService,
     MarketDataStreamService,
     BinanceMarketDataProvider,
     OkxMarketDataProvider,
@@ -46,6 +48,15 @@ import { MarketDataService } from './services/market-data.service'
       },
     },
   ],
-  exports: [MarketDataService, MarketDataReadGateway, MarketDataHealthService, MarketDataIngestionService],
+  exports: [
+    MarketDataService,
+    MarketDataReadGateway,
+    MarketDataHealthService,
+    MarketDataIngestionService,
+    MarketSymbolCatalogService,
+    BinanceMarketDataProvider,
+    OkxMarketDataProvider,
+    HyperliquidMarketDataProvider,
+  ],
 })
 export class MarketDataModule {}

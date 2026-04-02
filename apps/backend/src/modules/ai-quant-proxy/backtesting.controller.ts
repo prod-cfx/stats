@@ -25,6 +25,15 @@ export class BacktestingProxyController {
     return this.service.getBacktestCapabilities(authorization, requestId)
   }
 
+  @Post('symbols/check')
+  async checkSymbolSupport(
+    @Headers('authorization') authorization: string | undefined,
+    @Headers('x-request-id') requestId: string | undefined,
+    @Body() body: Record<string, unknown>,
+  ): Promise<unknown> {
+    return this.service.checkBacktestSymbolSupport(authorization, body, requestId)
+  }
+
   @Post('jobs')
   async createJob(
     @Headers('authorization') authorization: string | undefined,

@@ -7,12 +7,14 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 import { BacktestRunnerService } from './core/backtest-runner.service'
 // eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时类元数据
 import { RunBacktestDto } from './dto/run-backtest.dto'
+import { CheckBacktestSymbolDto } from './dto/check-backtest-symbol.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestJobsService } from './jobs/backtest-jobs.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestCallerIdentityService } from './services/backtest-caller-identity.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestCapabilitiesService } from './services/backtest-capabilities.service'
+import { BacktestSymbolSupportService } from './services/backtest-symbol-support.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestStrategyAdapterService } from './services/backtest-strategy-adapter.service'
 
@@ -27,6 +29,7 @@ export class BacktestingController {
     private readonly callerIdentityService: BacktestCallerIdentityService,
     private readonly strategyAdapter: BacktestStrategyAdapterService,
     private readonly capabilitiesService: BacktestCapabilitiesService,
+    private readonly symbolSupportService: BacktestSymbolSupportService,
   ) {}
 
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
@@ -91,5 +94,15 @@ export class BacktestingController {
         args: { reasonMessage: message },
       })
     }
+  }
+
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  @Post('symbols/check')
+  async checkSymbolSupport(
+    @Headers('authorization') authorization: string | undefined,
+    @Body() dto: CheckBacktestSymbolDto,
+  ) {
+    await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    return this.symbolSupportService.checkSupport(dto.exchange, dto.symbol)
   }
 }

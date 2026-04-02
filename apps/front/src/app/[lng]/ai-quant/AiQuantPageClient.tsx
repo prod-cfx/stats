@@ -19,6 +19,7 @@ import {
   fetchBacktestCapabilities,
   type BacktestCapabilities,
 } from '@/components/ai-quant/backtest-capability-client'
+import { checkBacktestSymbolSupport } from '@/components/ai-quant/backtest-symbol-support-client'
 import { buildBacktestPayload, isBacktestPayloadBuilderError } from '@/components/ai-quant/backtest-payload-builder'
 import { BacktestSummaryCard } from '@/components/ai-quant/BacktestSummaryCard'
 import { ConversationSidebar } from '@/components/ai-quant/ConversationSidebar'
@@ -355,7 +356,10 @@ function normalizeParamsFromValues(values: Record<string, unknown>, fallback: Qu
   }
 }
 
-function buildParamSchemaWithCapabilities(capabilities: BacktestCapabilities | null): Record<string, unknown> {
+function buildParamSchemaWithCapabilities(
+  capabilities: BacktestCapabilities | null,
+  currentSymbol = DEFAULT_PARAMS.symbol,
+): Record<string, unknown> {
   const properties = (DEFAULT_PARAM_SCHEMA.properties ?? {}) as Record<string, unknown>
   const symbolProperty = {
     ...(properties.symbol as Record<string, unknown>),
@@ -365,10 +369,10 @@ function buildParamSchemaWithCapabilities(capabilities: BacktestCapabilities | n
   }
 
   if (capabilities) {
-    symbolProperty.enum = capabilities.allowedSymbols
+    symbolProperty.enum = [currentSymbol, ...capabilities.allowedSymbols.filter(item => item !== currentSymbol)]
     baseTimeframeProperty.enum = capabilities.allowedBaseTimeframes
   } else {
-    symbolProperty.enum = [DEFAULT_PARAMS.symbol]
+    symbolProperty.enum = [currentSymbol]
     baseTimeframeProperty.enum = [DEFAULT_PARAMS.baseTimeframe]
   }
 
@@ -531,18 +535,23 @@ export function AiQuantPageClient() {
     try {
       const parsed = JSON.parse(raw) as ConversationState[]
       if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('invalid')
-      const normalized = parsed.map(item => ({
-        ...item,
-        paramSchema: item.paramSchema ?? buildParamSchemaWithCapabilities(null),
-        paramValues: item.paramValues ?? { ...(item.params ?? DEFAULT_PARAMS) },
-        params: item.params
-          ? normalizeParamsFromValues(item.paramValues ?? item.params, item.params)
-          : normalizeParamsFromValues(item.paramValues ?? DEFAULT_PARAM_VALUES, DEFAULT_PARAMS),
-        llmCodegenSessionId: item.llmCodegenSessionId ?? null,
-        publishedStrategyInstanceId: item.publishedStrategyInstanceId ?? null,
-        latestSignalMessage: item.latestSignalMessage ?? null,
-        backtestExecutionState: normalizeHydratedBacktestExecutionState(item.backtestExecutionState),
-      }))
+      const normalized = parsed.map((item) => {
+        const nextParamValues = item.paramValues ?? { ...(item.params ?? DEFAULT_PARAMS) }
+        const nextParams = item.params
+          ? normalizeParamsFromValues(nextParamValues, item.params)
+          : normalizeParamsFromValues(nextParamValues, DEFAULT_PARAMS)
+
+        return {
+          ...item,
+          paramSchema: item.paramSchema ?? buildParamSchemaWithCapabilities(null, nextParams.symbol),
+          paramValues: nextParamValues,
+          params: nextParams,
+          llmCodegenSessionId: item.llmCodegenSessionId ?? null,
+          publishedStrategyInstanceId: item.publishedStrategyInstanceId ?? null,
+          latestSignalMessage: item.latestSignalMessage ?? null,
+          backtestExecutionState: normalizeHydratedBacktestExecutionState(item.backtestExecutionState),
+        }
+      })
       setConversations(normalized)
       setActiveConversationId(normalized[0].id)
     } catch {
@@ -569,7 +578,6 @@ export function AiQuantPageClient() {
     void fetchBacktestCapabilities({ signal: controller.signal })
       .then((capabilities) => {
         if (controller.signal.aborted) return
-        const allowedSymbols = capabilities.allowedSymbols
         const allowedBaseTimeframes = capabilities.allowedBaseTimeframes
 
         setBacktestCapabilities(capabilities)
@@ -579,14 +587,13 @@ export function AiQuantPageClient() {
           const currentBaseTimeframe = typeof conv.paramValues.baseTimeframe === 'string'
             ? conv.paramValues.baseTimeframe
             : conv.params.baseTimeframe
-          const nextSymbol = allowedSymbols.includes(currentSymbol) ? currentSymbol : allowedSymbols[0]
           const nextBaseTimeframe = allowedBaseTimeframes.includes(currentBaseTimeframe)
             ? currentBaseTimeframe
             : allowedBaseTimeframes[0]
-          const corrected = nextSymbol !== currentSymbol || nextBaseTimeframe !== currentBaseTimeframe
+          const corrected = nextBaseTimeframe !== currentBaseTimeframe
           const nextValues = {
             ...conv.paramValues,
-            symbol: nextSymbol,
+            symbol: currentSymbol,
             baseTimeframe: nextBaseTimeframe,
           }
           const nextMessages = corrected
@@ -602,7 +609,7 @@ export function AiQuantPageClient() {
           return {
             ...conv,
             paramSchema: applyCapabilitiesToParamSchema(conv.paramSchema, capabilities)
-              ?? buildParamSchemaWithCapabilities(capabilities),
+              ?? buildParamSchemaWithCapabilities(capabilities, currentSymbol),
             paramValues: nextValues,
             params: normalizeParamsFromValues(nextValues, conv.params),
             messages: nextMessages,
@@ -620,7 +627,7 @@ export function AiQuantPageClient() {
           return {
             ...conv,
             paramSchema: applyCapabilitiesToParamSchema(conv.paramSchema, null)
-              ?? buildParamSchemaWithCapabilities(null),
+              ?? buildParamSchemaWithCapabilities(null, typeof conv.paramValues.symbol === 'string' ? conv.paramValues.symbol : conv.params.symbol),
             messages: [
               ...conv.messages,
               {
@@ -1397,6 +1404,19 @@ export function AiQuantPageClient() {
 
     void (async () => {
       try {
+        const support = await checkBacktestSymbolSupport({
+          exchange: activeConversation.params.exchange,
+          symbol: payload.symbols[0],
+        })
+        if (!canContinue()) {
+          return
+        }
+        if (support.status === 'not_supported') {
+          setConversationBacktestExecutionState(conversationId, 'failed')
+          appendBacktestMessage(toFailureMessage('symbol_not_supported'))
+          return
+        }
+
         const createdJob = await createBacktestJob(payload)
         if (!canContinue()) {
           return
