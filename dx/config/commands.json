@@ -113,11 +113,11 @@
     },
     "affected": {
       "dev": {
-        "command": "npx nx affected -t build --configuration=development --parallel=3",
+        "command": "NX_ISOLATE_PLUGINS=false NX_DAEMON=false npx nx affected -t build --configuration=development --parallel=3",
         "description": "仅构建受影响项目(开发环境)"
       },
       "prod": {
-        "command": "npx nx affected -t build --configuration=production --parallel=3",
+        "command": "NX_ISOLATE_PLUGINS=false NX_DAEMON=false npx nx affected -t build --configuration=production --parallel=3",
         "description": "仅构建受影响项目(生产环境)"
       }
     },
@@ -321,7 +321,7 @@
   },
 
   "lint": {
-    "command": "npx nx run-many -t lint",
+    "command": "NX_ISOLATE_PLUGINS=false NX_DAEMON=false npx nx run-many -t lint",
     "description": "运行代码检查",
     "skipEnvValidation": true
   },

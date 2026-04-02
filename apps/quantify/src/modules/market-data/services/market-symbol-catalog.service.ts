@@ -1,17 +1,18 @@
+import type { MarketDataProvider } from '../interfaces/market-data-provider.interface'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import type { MarketDataProvider } from '../interfaces/market-data-provider.interface'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BinanceMarketDataProvider } from '../providers/binance-market-data.provider'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { HyperliquidMarketDataProvider } from '../providers/hyperliquid-market-data.provider'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { OkxMarketDataProvider } from '../providers/okx-market-data.provider'
-import {
-  normalizeExactCode,
-  normalizeRequestedCode,
-  toSymbolCode,
-} from '../utils/market-symbol-code.util'
+import { normalizeExactCode, normalizeRequestedCode, toSymbolCode } from '../utils/market-symbol-code.util'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { MarketDataRepository } from './market-data.repository'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { MarketDataService } from './market-data.service'
 
 export type ExchangeId = 'binance' | 'okx' | 'hyperliquid'

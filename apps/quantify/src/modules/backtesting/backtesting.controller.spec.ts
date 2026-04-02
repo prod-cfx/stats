@@ -6,8 +6,8 @@ import { BacktestRunnerService } from './core/backtest-runner.service'
 import { BacktestJobsService } from './jobs/backtest-jobs.service'
 import { BacktestCallerIdentityService } from './services/backtest-caller-identity.service'
 import { BacktestCapabilitiesService } from './services/backtest-capabilities.service'
-import { BacktestSymbolSupportService } from './services/backtest-symbol-support.service'
 import { BacktestStrategyAdapterService } from './services/backtest-strategy-adapter.service'
+import { BacktestSymbolSupportService } from './services/backtest-symbol-support.service'
 
 jest.mock('@nestjs-cls/transactional', () => ({
   Transactional: () => (_target: unknown, _propertyKey: string, descriptor: PropertyDescriptor) => descriptor,

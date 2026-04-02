@@ -14,8 +14,8 @@ import { BacktestMarketDataRepository } from './repositories/backtest-market-dat
 import { BacktestCallerIdentityService } from './services/backtest-caller-identity.service'
 import { BacktestCapabilitiesService } from './services/backtest-capabilities.service'
 import { BacktestMarketDataService } from './services/backtest-market-data.service'
-import { BacktestSymbolSupportService } from './services/backtest-symbol-support.service'
 import { BacktestStrategyAdapterService } from './services/backtest-strategy-adapter.service'
+import { BacktestSymbolSupportService } from './services/backtest-symbol-support.service'
 import { StateEngineService } from './state/state-engine.service'
 
 @Module({

@@ -12,10 +12,10 @@ import { OkxMarketDataProvider } from './providers/okx-market-data.provider'
 import { MarketDataHealthService } from './services/market-data-health.service'
 import { MarketDataIngestionService } from './services/market-data-ingestion.service'
 import { MarketDataReadGateway } from './services/market-data-read.gateway'
-import { MarketSymbolCatalogService } from './services/market-symbol-catalog.service'
 import { MarketDataStreamService } from './services/market-data-stream.service'
 import { MarketDataRepository } from './services/market-data.repository'
 import { MarketDataService } from './services/market-data.service'
+import { MarketSymbolCatalogService } from './services/market-symbol-catalog.service'
 
 @Module({
   imports: [ConfigModule.forFeature(marketDataConfig), HttpModule, IndicatorsModule],

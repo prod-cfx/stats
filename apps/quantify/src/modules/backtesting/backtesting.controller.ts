@@ -1,22 +1,23 @@
+import type { CheckBacktestSymbolDto } from './dto/check-backtest-symbol.dto'
 import type { BacktestRunInput } from './types/backtesting.types'
 import { ErrorCode } from '@ai/shared'
-import { Body, Controller, Get, Headers, Logger, Param, Post, UseGuards, HttpStatus  } from '@nestjs/common'
+import { Body, Controller, Get, Headers, HttpStatus, Logger, Param, Post, UseGuards } from '@nestjs/common'
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestRunnerService } from './core/backtest-runner.service'
 // eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时类元数据
 import { RunBacktestDto } from './dto/run-backtest.dto'
-import { CheckBacktestSymbolDto } from './dto/check-backtest-symbol.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestJobsService } from './jobs/backtest-jobs.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestCallerIdentityService } from './services/backtest-caller-identity.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestCapabilitiesService } from './services/backtest-capabilities.service'
-import { BacktestSymbolSupportService } from './services/backtest-symbol-support.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestStrategyAdapterService } from './services/backtest-strategy-adapter.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { BacktestSymbolSupportService } from './services/backtest-symbol-support.service'
 
 @Controller('backtesting')
 @UseGuards(ThrottlerGuard)

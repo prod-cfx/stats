@@ -1,5 +1,7 @@
+import type { MarketSymbolSupportStatus } from '@/modules/market-data/services/market-symbol-catalog.service'
 import { Injectable } from '@nestjs/common'
-import { MarketSymbolCatalogService, type MarketSymbolSupportStatus } from '@/modules/market-data/services/market-symbol-catalog.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { MarketSymbolCatalogService } from '@/modules/market-data/services/market-symbol-catalog.service'
 
 export interface BacktestSymbolSupportResult {
   status: MarketSymbolSupportStatus

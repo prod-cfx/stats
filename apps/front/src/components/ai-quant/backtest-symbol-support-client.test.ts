@@ -1,21 +1,23 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+/** @jest-environment jsdom */
+
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import { postBacktestSymbolSupportCheck } from '@/lib/api'
 import { AuthenticationError, ApiError } from '@/lib/errors'
 import { checkBacktestSymbolSupport } from './backtest-symbol-support-client'
 
-vi.mock('@/lib/api', () => ({
-  postBacktestSymbolSupportCheck: vi.fn(),
+jest.mock('@/lib/api', () => ({
+  postBacktestSymbolSupportCheck: jest.fn(),
 }))
 
 describe('backtest-symbol-support-client', () => {
-  const mockPostBacktestSymbolSupportCheck = vi.mocked(postBacktestSymbolSupportCheck)
+  const mockPostBacktestSymbolSupportCheck = jest.mocked(postBacktestSymbolSupportCheck)
 
   beforeEach(() => {
     mockPostBacktestSymbolSupportCheck.mockReset()
   })
 
   afterEach(() => {
-    vi.restoreAllMocks()
+    jest.restoreAllMocks()
   })
 
   it('calls unified api layer and returns supported status', async () => {
