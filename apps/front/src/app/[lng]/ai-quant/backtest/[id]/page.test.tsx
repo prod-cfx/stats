@@ -10,7 +10,9 @@ jest.mock('@/lib/server-api', () => ({
 
 jest.mock('next/link', () => ({
   __esModule: true,
-  default: ({ href, children }: { href: string, children: React.ReactNode }) => <a href={href}>{children}</a>,
+  default: ({ href, children }: { href: string; children: React.ReactNode }) => (
+    <a href={href}>{children}</a>
+  ),
 }))
 
 jest.mock('@/components/layout/Footer', () => ({
@@ -21,7 +23,26 @@ jest.mock('@/components/layout/Navbar', () => ({
   Navbar: () => <nav>navbar</nav>,
 }))
 
-const mockFetchBacktestJobResultServer = fetchBacktestJobResultServer as jest.MockedFunction<typeof fetchBacktestJobResultServer>
+const mockFetchBacktestJobResultServer = fetchBacktestJobResultServer as jest.MockedFunction<
+  typeof fetchBacktestJobResultServer
+>
+
+function createThenable<T>(value: T) {
+  let resolve!: () => void
+  const promise = new Promise<T>(innerResolve => {
+    resolve = () => innerResolve(value)
+  })
+
+  const then = jest.fn<Promise<T>['then']>((onFulfilled, onRejected) =>
+    promise.then(onFulfilled, onRejected),
+  )
+
+  return {
+    resolve,
+    then,
+    value: { then },
+  }
+}
 
 describe('AiQuantBacktestDetailPage', () => {
   beforeEach(() => {
@@ -83,5 +104,35 @@ describe('AiQuantBacktestDetailPage', () => {
 
     const html = renderToStaticMarkup(element)
     expect(html).toContain('63%')
+  })
+
+  it('starts resolving params and searchParams together', async () => {
+    const params = createThenable({ lng: 'zh', id: 'backtest-2001' })
+    const searchParams = createThenable({
+      symbol: 'SOLUSDT',
+      startAt: '2026-03-01T00:00:00.000Z',
+      endAt: '2026-03-15T00:00:00.000Z',
+    })
+
+    const pagePromise = AiQuantBacktestDetailPage({
+      params: params.value as Promise<{ lng: string; id: string }>,
+      searchParams: searchParams.value as Promise<{
+        symbol?: string | string[]
+        startAt?: string | string[]
+        endAt?: string | string[]
+      }>,
+    })
+
+    await Promise.resolve()
+
+    expect(params.then).toHaveBeenCalledTimes(1)
+    expect(searchParams.then).toHaveBeenCalledTimes(1)
+
+    params.resolve()
+    searchParams.resolve()
+
+    const element = await pagePromise
+    const html = renderToStaticMarkup(element)
+    expect(html).toContain('SOLUSDT')
   })
 })

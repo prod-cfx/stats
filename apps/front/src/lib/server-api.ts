@@ -1,5 +1,5 @@
 import { SERVER_API_BASE_URL, unwrapApiResponse } from './api-client'
-import { getServerAuthHeaders } from './server-auth'
+import { buildServerAuthHeaders, getServerAuthHeaders, getServerToken } from './server-auth'
 
 export type UserLlmStrategyInstanceResponse = any
 
@@ -179,7 +179,8 @@ export async function fetchLlmStrategyInstanceDetailServer(
 export async function fetchBacktestJobResultServer(
   jobId: string,
 ): Promise<BacktestJobResultReport | null> {
-  const authHeaders = await getServerAuthHeaders()
+  const token = await getServerToken()
+  const authHeaders = buildServerAuthHeaders(token)
   if (!authHeaders.Authorization) {
     return null
   }

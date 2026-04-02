@@ -17,6 +17,20 @@ export async function getServerToken(): Promise<string | null> {
   }
 }
 
+export function buildServerAuthHeaders(token: string | null): Record<string, string> {
+  if (!token) {
+    return {}
+  }
+
+  // 基本的 JWT 格式验证
+  if (!/^[\w-]+\.[\w-]+\.[\w-]+$/.test(token)) {
+    console.warn('[server-auth] Invalid JWT format')
+    return {}
+  }
+
+  return { Authorization: `Bearer ${token}` }
+}
+
 /**
  * 获取服务端认证 headers
  * 如果存在 token 则返回 Authorization header，否则返回空对象
@@ -24,16 +38,6 @@ export async function getServerToken(): Promise<string | null> {
  */
 export async function getServerAuthHeaders(): Promise<Record<string, string>> {
   const token = await getServerToken()
-  
-  if (!token) {
-    return {}
-  }
-  
-  // 基本的 JWT 格式验证
-  if (!/^[\w-]+\.[\w-]+\.[\w-]+$/.test(token)) {
-    console.warn('[server-auth] Invalid JWT format')
-    return {}
-  }
-  
-  return { Authorization: `Bearer ${token}` }
+
+  return buildServerAuthHeaders(token)
 }

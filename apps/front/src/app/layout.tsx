@@ -3,8 +3,7 @@ import { cookies, headers } from 'next/headers'
 import './globals.css'
 
 async function inferHtmlLang() {
-  const cookieStore = await cookies()
-  const headerStore = await headers()
+  const [cookieStore, headerStore] = await Promise.all([cookies(), headers()])
 
   const cookieLng = cookieStore.get('i18next')?.value?.toLowerCase()
   if (cookieLng?.startsWith('zh')) return 'zh-CN'
@@ -53,7 +52,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
         />
       </head>
       <body
-        className="min-h-screen bg-[color:var(--cf-bg)] text-[color:var(--cf-text)] antialiased selection:bg-primary/30"
+        className="selection:bg-primary/30 min-h-screen bg-[color:var(--cf-bg)] text-[color:var(--cf-text)] antialiased"
         suppressHydrationWarning
       >
         {children}
@@ -61,4 +60,3 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
     </html>
   )
 }
-
