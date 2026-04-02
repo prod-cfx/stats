@@ -1,12 +1,16 @@
 import type { MarketTimeframe } from '@ai/shared'
-import type { MarketDataProvider, ProviderSymbol } from '@/modules/market-data/interfaces/market-data-provider.interface'
 import type { BacktestRunInput, Bar, Timeframe } from '../types/backtesting.types'
+import type { MarketDataProvider, ProviderSymbol } from '@/modules/market-data/interfaces/market-data-provider.interface'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BinanceMarketDataProvider } from '@/modules/market-data/providers/binance-market-data.provider'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { HyperliquidMarketDataProvider } from '@/modules/market-data/providers/hyperliquid-market-data.provider'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { OkxMarketDataProvider } from '@/modules/market-data/providers/okx-market-data.provider'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { MarketDataService } from '@/modules/market-data/services/market-data.service'
 import {
   instrumentTypeToMarket,
@@ -41,7 +45,12 @@ export class BacktestMarketDataService {
     private readonly hyperliquidProvider: HyperliquidMarketDataProvider,
   ) {}
 
-  async prepareData(input: Pick<BacktestRunInput, 'symbols' | 'baseTimeframe' | 'stateTimeframes' | 'dataRange' | 'strategy'>): Promise<void> {
+  async prepareData(
+    input: Pick<
+      BacktestRunInput,
+      'symbols' | 'baseTimeframe' | 'stateTimeframes' | 'dataRange' | 'strategy'
+    >,
+  ): Promise<void> {
     const exchange = this.extractExchange(input.strategy.params)
     if (!exchange) return
 

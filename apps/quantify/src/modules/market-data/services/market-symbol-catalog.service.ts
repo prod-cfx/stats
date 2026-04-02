@@ -1,6 +1,6 @@
+import type { OnApplicationBootstrap } from '@nestjs/common'
 import type { MarketDataProvider } from '../interfaces/market-data-provider.interface'
 import { ErrorCode } from '@ai/shared'
-import type { OnApplicationBootstrap } from '@nestjs/common'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { DomainException } from '@/common/exceptions/domain.exception'
