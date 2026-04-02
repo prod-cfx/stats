@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from '@jest/globals'
+import { describe, expect, it, jest } from '@jest/globals'
 
 const FRONT_ROOT = join(__dirname, '..')
 
@@ -10,11 +10,38 @@ function readFrontSource(relativePath: string) {
 
 describe('issue #618 chart bundle guards', () => {
   it('exposes the minimal echarts runtime API required by echarts-for-react', () => {
-    const echartsRuntime = readFrontSource('components/charts/echarts-runtime.ts')
+    jest.resetModules()
 
-    expect(echartsRuntime).toContain('init')
-    expect(echartsRuntime).toContain('getInstanceByDom')
-    expect(echartsRuntime).toContain('dispose')
+    jest.doMock('echarts/charts', () => ({
+      BarChart: Symbol('BarChart'),
+      LineChart: Symbol('LineChart'),
+      PieChart: Symbol('PieChart'),
+    }))
+    jest.doMock('echarts/components', () => ({
+      DataZoomComponent: Symbol('DataZoomComponent'),
+      GridComponent: Symbol('GridComponent'),
+      LegendComponent: Symbol('LegendComponent'),
+      MarkLineComponent: Symbol('MarkLineComponent'),
+      TooltipComponent: Symbol('TooltipComponent'),
+    }))
+    jest.doMock('echarts/renderers', () => ({
+      CanvasRenderer: Symbol('CanvasRenderer'),
+    }))
+    jest.doMock('echarts/core', () => ({
+      connect: jest.fn(),
+      disconnect: jest.fn(),
+      dispose: jest.fn(),
+      getInstanceByDom: jest.fn(),
+      graphic: {},
+      init: jest.fn(),
+      use: jest.fn(),
+    }))
+
+    const { echarts } = require('@/components/charts/echarts-runtime')
+
+    expect(typeof echarts.init).toBe('function')
+    expect(typeof echarts.getInstanceByDom).toBe('function')
+    expect(typeof echarts.dispose).toBe('function')
   })
 
   it('uses modular echarts imports instead of the full library entrypoint', () => {
