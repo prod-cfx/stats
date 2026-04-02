@@ -1,15 +1,20 @@
 'use client'
 
 import { Layout as LayoutIcon, Plus } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { AddWidgetModal } from '@/components/dashboard/AddWidgetModal'
 import { removeWidgetFromDashboard, updateDashboardLayout } from '../store/dashboard-actions'
 import { ensureDashboard, getDashboard } from '../store/dashboard-store'
 import { snapToPresetForWidgetType } from '../widgets/unit-size-presets'
 import { WidgetRenderer } from '../widgets/WidgetRenderer'
 import { WIDGET_CATALOG } from '../widgets/widgets-catalog'
 import { DashboardHeader } from './DashboardHeader'
+
+const AddWidgetModal = dynamic(
+  () => import('@/components/dashboard/AddWidgetModal').then(mod => mod.AddWidgetModal),
+  { ssr: false, loading: () => null },
+)
 
 type GridLayoutComponent = React.ComponentType<any> | null
 

@@ -1,6 +1,7 @@
 'use client'
 
 import { Layout as LayoutIcon, Plus } from 'lucide-react'
+import dynamic from 'next/dynamic'
 import { useParams, useRouter } from 'next/navigation'
 import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -11,7 +12,11 @@ import {
   getDashboard,
   updateDashboard,
 } from '@/features/dashboards/store/dashboard-store'
-import { AddWidgetModal } from './AddWidgetModal'
+
+const AddWidgetModal = dynamic(() => import('./AddWidgetModal').then(mod => mod.AddWidgetModal), {
+  ssr: false,
+  loading: () => null,
+})
 
 const DEFAULT_DASHBOARD_ID = 'draft'
 

@@ -9,12 +9,22 @@ import { BellOff, Copy, Pencil, TrendingUp, Trash2 } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { CreateMonitorModal } from '@/features/whale-notification/components/CreateMonitorModal'
 import { fetchTraderPositions, fetchTraderSnapshot } from '@/lib/api'
 import { toast } from '@/lib/toast'
 
 const WhaleTradingStatsModal = dynamic(
-  () => import('@/components/whale-tracking/WhaleTradingStatsModal').then(mod => mod.WhaleTradingStatsModal),
+  () =>
+    import('@/components/whale-tracking/WhaleTradingStatsModal').then(
+      mod => mod.WhaleTradingStatsModal,
+    ),
+  { ssr: false, loading: () => null },
+)
+
+const CreateMonitorModal = dynamic(
+  () =>
+    import('@/features/whale-notification/components/CreateMonitorModal').then(
+      mod => mod.CreateMonitorModal,
+    ),
   { ssr: false, loading: () => null },
 )
 
@@ -69,7 +79,7 @@ export function AddressMonitorSection({
 
       const next: Record<string, AddressMetrics | null> = {}
       await Promise.all(
-        addressRules.map(async (rule) => {
+        addressRules.map(async rule => {
           const address = rule.address!
           try {
             const [snapshot, positions] = await Promise.all([
@@ -125,7 +135,9 @@ export function AddressMonitorSection({
       </div>
 
       {loading && (
-        <div className="py-6 text-center text-sm text-[color:var(--cf-muted)]">{t('common.loading')}</div>
+        <div className="py-6 text-center text-sm text-[color:var(--cf-muted)]">
+          {t('common.loading')}
+        </div>
       )}
 
       {!loading && !addressRules.length && (
@@ -140,22 +152,37 @@ export function AddressMonitorSection({
             <thead>
               <tr className="border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]/70 text-xs text-[color:var(--cf-muted)]">
                 <th className="px-4 py-3 text-left">{t('whaleTracking.holdings.table.address')}</th>
-                <th className="px-4 py-3 text-left">{t('whaleTracking.notifications.addressMetrics.totalValue')}</th>
-                <th className="px-4 py-3 text-left">{t('whaleTracking.holdings.table.unrealizedPnl')}</th>
-                <th className="px-4 py-3 text-left">{t('whaleTracking.notifications.addressMetrics.withdrawable')}</th>
-                <th className="px-4 py-3 text-left">{t('whaleTracking.notifications.addressMetrics.marginUsage')}</th>
-                <th className="px-4 py-3 text-left">{t('whaleTracking.notifications.addressMetrics.positions')}</th>
-                <th className="px-4 py-3 text-right">{t('whaleTracking.notifications.table.actions')}</th>
+                <th className="px-4 py-3 text-left">
+                  {t('whaleTracking.notifications.addressMetrics.totalValue')}
+                </th>
+                <th className="px-4 py-3 text-left">
+                  {t('whaleTracking.holdings.table.unrealizedPnl')}
+                </th>
+                <th className="px-4 py-3 text-left">
+                  {t('whaleTracking.notifications.addressMetrics.withdrawable')}
+                </th>
+                <th className="px-4 py-3 text-left">
+                  {t('whaleTracking.notifications.addressMetrics.marginUsage')}
+                </th>
+                <th className="px-4 py-3 text-left">
+                  {t('whaleTracking.notifications.addressMetrics.positions')}
+                </th>
+                <th className="px-4 py-3 text-right">
+                  {t('whaleTracking.notifications.table.actions')}
+                </th>
               </tr>
             </thead>
             <tbody>
-              {addressRules.map((rule) => {
+              {addressRules.map(rule => {
                 const address = rule.address!
                 const item = metrics[address]
                 const pnl = item?.unrealizedPnl ?? 0
                 const pnlClass = pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'
                 return (
-                  <tr key={rule.id} className="border-b border-[color:var(--cf-border)]/60 bg-[color:var(--cf-surface)]">
+                  <tr
+                    key={rule.id}
+                    className="border-b border-[color:var(--cf-border)]/60 bg-[color:var(--cf-surface)]"
+                  >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-sm text-[color:var(--cf-text-strong)]">
@@ -168,13 +195,17 @@ export function AddressMonitorSection({
                         >
                           <Copy className="h-3.5 w-3.5" />
                         </button>
-                        {rule.note && <span className="text-xs text-[color:var(--cf-muted)]">{rule.note}</span>}
+                        {rule.note && (
+                          <span className="text-xs text-[color:var(--cf-muted)]">{rule.note}</span>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-sm text-[color:var(--cf-text-strong)]">
                       {item ? formatCompactUsd(item.totalPositionValue) : '-'}
                     </td>
-                    <td className={`px-4 py-3 text-sm font-semibold ${item ? pnlClass : 'text-[color:var(--cf-text-strong)]'}`}>
+                    <td
+                      className={`px-4 py-3 text-sm font-semibold ${item ? pnlClass : 'text-[color:var(--cf-text-strong)]'}`}
+                    >
                       {item ? formatCompactUsd(item.unrealizedPnl) : '-'}
                     </td>
                     <td className="px-4 py-3 text-sm text-[color:var(--cf-text-strong)]">
@@ -219,7 +250,9 @@ export function AddressMonitorSection({
                         </button>
                         <button
                           type="button"
-                          onClick={() => { void onDelete(rule.id) }}
+                          onClick={() => {
+                            void onDelete(rule.id)
+                          }}
                           className="rounded-lg border border-[color:var(--cf-border)] p-1.5 text-rose-400 hover:bg-rose-500/10"
                           title={t('whaleTracking.notifications.actions.removeMonitor')}
                         >
@@ -254,7 +287,7 @@ export function AddressMonitorSection({
             channels: editingRule.channels,
           }}
           onClose={() => setEditingRule(null)}
-          onCreate={async (input) => {
+          onCreate={async input => {
             await onUpdate(editingRule.id, {
               thresholdUsd: input.thresholdUsd,
               note: input.note,

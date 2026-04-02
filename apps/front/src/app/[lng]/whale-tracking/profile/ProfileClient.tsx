@@ -19,16 +19,26 @@ import { PositionProfile } from '@/components/whale-tracking/profile/PositionPro
 import { ProfileDataTabs } from '@/components/whale-tracking/profile/ProfileDataTabs'
 import { ProfileHeader } from '@/components/whale-tracking/profile/ProfileHeader'
 import { createWhaleNotificationRule } from '@/features/whale-notification/api/whale-notification-api'
-import { CreateMonitorModal } from '@/features/whale-notification/components/CreateMonitorModal'
 import { ensureMonitorAuth } from '@/features/whale-notification/guards/monitor-auth-guard'
 import { fetchTraderDiscoverTags, fetchTraderFullData } from '@/lib/api'
 
 const ProfileSummary = dynamic(
-  () => import('@/components/whale-tracking/profile/ProfileSummary').then(mod => mod.ProfileSummary),
+  () =>
+    import('@/components/whale-tracking/profile/ProfileSummary').then(mod => mod.ProfileSummary),
   {
     ssr: false,
-    loading: () => <div className="min-h-[140px] w-full animate-pulse rounded-xl bg-[color:var(--cf-surface-2)]" />,
+    loading: () => (
+      <div className="min-h-[140px] w-full animate-pulse rounded-xl bg-[color:var(--cf-surface-2)]" />
+    ),
   },
+)
+
+const CreateMonitorModal = dynamic(
+  () =>
+    import('@/features/whale-notification/components/CreateMonitorModal').then(
+      mod => mod.CreateMonitorModal,
+    ),
+  { ssr: false, loading: () => null },
 )
 
 export function ProfileClient({ address }: { address: string }) {
@@ -152,7 +162,7 @@ export function ProfileClient({ address }: { address: string }) {
         mode="ADDRESS"
         presetAddress={address}
         onClose={() => setIsCreateAddressRuleOpen(false)}
-        onCreate={async (payload) => {
+        onCreate={async payload => {
           if (!ensureMonitorAuth(t)) return { created: false }
           await createWhaleNotificationRule(payload)
           return { created: true }

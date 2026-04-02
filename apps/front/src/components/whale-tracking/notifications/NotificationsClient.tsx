@@ -1,11 +1,11 @@
 'use client'
 
 import type { WhaleNotificationRuleType } from '@/features/whale-notification/types'
+import dynamic from 'next/dynamic'
 import React, { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { PageTitle } from '@/components/ui/Typography'
 import { createWhaleNotificationRule } from '@/features/whale-notification/api/whale-notification-api'
-import { CreateMonitorModal } from '@/features/whale-notification/components/CreateMonitorModal'
 import { ensureMonitorAuth } from '@/features/whale-notification/guards/monitor-auth-guard'
 import { useWhaleNotificationInbox } from '@/features/whale-notification/hooks/useWhaleNotificationInbox'
 import { useWhaleNotificationRules } from '@/features/whale-notification/hooks/useWhaleNotificationRules'
@@ -13,29 +13,25 @@ import { AddressMonitorSection } from './AddressMonitorSection'
 import { InboxTab } from './InboxTab'
 import { RealtimeWhaleMonitorSection } from './RealtimeWhaleMonitorSection'
 
+const CreateMonitorModal = dynamic(
+  () =>
+    import('@/features/whale-notification/components/CreateMonitorModal').then(
+      mod => mod.CreateMonitorModal,
+    ),
+  { ssr: false, loading: () => null },
+)
+
 export function NotificationsClient() {
   const { t } = useTranslation()
   const [openModal, setOpenModal] = useState(false)
   const [modalMode, setModalMode] = useState<WhaleNotificationRuleType>('ADDRESS')
 
-  const {
-    rules,
-    loading,
-    updateRule,
-    deleteRule,
-    refresh,
-  } = useWhaleNotificationRules()
+  const { rules, loading, updateRule, deleteRule, refresh } = useWhaleNotificationRules()
   const inbox = useWhaleNotificationInbox()
 
-  const addressRules = useMemo(
-    () => rules.filter(rule => rule.type === 'ADDRESS'),
-    [rules],
-  )
+  const addressRules = useMemo(() => rules.filter(rule => rule.type === 'ADDRESS'), [rules])
 
-  const symbolRules = useMemo(
-    () => rules.filter(rule => rule.type === 'SYMBOL'),
-    [rules],
-  )
+  const symbolRules = useMemo(() => rules.filter(rule => rule.type === 'SYMBOL'), [rules])
 
   const openCreateModal = (mode: WhaleNotificationRuleType) => {
     if (!ensureMonitorAuth(t)) return
@@ -46,8 +42,12 @@ export function NotificationsClient() {
   return (
     <div className="space-y-5">
       <div className="space-y-1">
-        <PageTitle className="text-xl md:text-2xl">{t('whaleTracking.notifications.title')}</PageTitle>
-        <p className="text-sm text-[color:var(--cf-muted)]">{t('whaleTracking.notifications.subtitle')}</p>
+        <PageTitle className="text-xl md:text-2xl">
+          {t('whaleTracking.notifications.title')}
+        </PageTitle>
+        <p className="text-sm text-[color:var(--cf-muted)]">
+          {t('whaleTracking.notifications.subtitle')}
+        </p>
       </div>
 
       <AddressMonitorSection
@@ -57,14 +57,14 @@ export function NotificationsClient() {
         onUpdate={async (id, input) => {
           await updateRule(id, input)
         }}
-        onDelete={(id) => {
+        onDelete={id => {
           void deleteRule(id)
         }}
       />
 
       <RealtimeWhaleMonitorSection
         rules={symbolRules}
-        onCreateRule={async (input) => {
+        onCreateRule={async input => {
           if (!ensureMonitorAuth(t)) return { created: false }
           await createWhaleNotificationRule(input)
           await refresh()
@@ -73,7 +73,7 @@ export function NotificationsClient() {
         onUpdateRule={async (id, input) => {
           await updateRule(id, input)
         }}
-        onDeleteRule={async (id) => {
+        onDeleteRule={async id => {
           await deleteRule(id)
         }}
       />
@@ -85,7 +85,7 @@ export function NotificationsClient() {
         <InboxTab
           items={inbox.items}
           loading={inbox.loading}
-          onRead={(id) => {
+          onRead={id => {
             void inbox.markRead(id)
           }}
           onReadAll={() => {
@@ -98,7 +98,7 @@ export function NotificationsClient() {
         isOpen={openModal}
         mode={modalMode}
         onClose={() => setOpenModal(false)}
-        onCreate={async (payload) => {
+        onCreate={async payload => {
           if (!ensureMonitorAuth(t)) return { created: false }
           await createWhaleNotificationRule(payload)
           await refresh()
