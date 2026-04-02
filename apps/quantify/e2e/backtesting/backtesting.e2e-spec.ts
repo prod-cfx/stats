@@ -12,6 +12,7 @@ import { BacktestRunnerService } from '@/modules/backtesting/core/backtest-runne
 import { BacktestCallerIdentityService } from '@/modules/backtesting/services/backtest-caller-identity.service'
 import { BacktestMarketDataService } from '@/modules/backtesting/services/backtest-market-data.service'
 import { BacktestStrategyAdapterService } from '@/modules/backtesting/services/backtest-strategy-adapter.service'
+import { MarketDataIngestionService } from '@/modules/market-data/services/market-data-ingestion.service'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { buildApiUrl } from '../fixtures/fixtures'
 import { supertestRequest } from '../helpers/supertest-compat'
@@ -20,7 +21,7 @@ describe('backtestingController (e2e)', () => {
   let app: INestApplication
   let moduleFixture: TestingModule
   let runnerMock: { run: jest.Mock }
-  let marketDataMock: { loadBars: jest.Mock; resolveCoverage: jest.Mock }
+  let marketDataMock: { prepareData: jest.Mock; loadBars: jest.Mock; resolveCoverage: jest.Mock }
   let callerMock: { resolveCallerUserIdFromAuthorization: jest.Mock }
   let strategyAdapterMock: { build: jest.Mock }
 
@@ -62,6 +63,7 @@ describe('backtestingController (e2e)', () => {
       run: jest.fn().mockResolvedValue(report),
     }
     marketDataMock = {
+      prepareData: jest.fn().mockResolvedValue(undefined),
       resolveCoverage: jest.fn().mockResolvedValue({
         kind: 'full',
         availableRange: { fromTs: 1, toTs: 2 },
@@ -106,6 +108,14 @@ describe('backtestingController (e2e)', () => {
       .useValue(runnerMock)
       .overrideProvider(BacktestMarketDataService)
       .useValue(marketDataMock)
+      .overrideProvider(MarketDataIngestionService)
+      .useValue({
+        onModuleInit: () => {},
+        onModuleDestroy: () => {},
+        handleGapFill: () => {},
+        handleDynamicSymbolRefresh: () => {},
+        ensureSymbolsSubscribed: async () => {},
+      })
       .overrideProvider(BacktestCallerIdentityService)
       .useValue(callerMock)
       .overrideProvider(BacktestStrategyAdapterService)

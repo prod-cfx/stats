@@ -19,6 +19,14 @@ export type BacktestRangeValidationResult =
 
 const MAX_RANGE_DAYS = 365
 const DAY_MS = 24 * 60 * 60 * 1000
+const TIMEFRAME_MS: Record<string, number> = {
+  '1m': 60 * 1000,
+  '5m': 5 * 60 * 1000,
+  '15m': 15 * 60 * 1000,
+  '1h': 60 * 60 * 1000,
+  '4h': 4 * 60 * 60 * 1000,
+  '1d': DAY_MS,
+}
 
 const PRESET_DAYS: Record<Exclude<BacktestRangePreset, 'CUSTOM'>, number> = {
   '7D': 7,
@@ -37,9 +45,22 @@ function toIso(date: Date): string {
   return date.toISOString()
 }
 
-export function resolveBacktestRange(input: BacktestRangeInput, now = new Date()): BacktestRangeResolved {
+function alignToTimeframeBoundary(date: Date, timeframe?: string): Date {
+  const timeframeMs = timeframe ? TIMEFRAME_MS[timeframe] : undefined
+  if (!timeframeMs) {
+    return new Date(date)
+  }
+
+  return new Date(Math.floor(date.getTime() / timeframeMs) * timeframeMs)
+}
+
+export function resolveBacktestRange(
+  input: BacktestRangeInput,
+  now = new Date(),
+  baseTimeframe?: string,
+): BacktestRangeResolved {
   if (input.preset !== 'CUSTOM') {
-    const end = new Date(now)
+    const end = alignToTimeframeBoundary(new Date(now), baseTimeframe)
     const start = new Date(end.getTime() - PRESET_DAYS[input.preset] * DAY_MS)
     return {
       startAt: toIso(start),

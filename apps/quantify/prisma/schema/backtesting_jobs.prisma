@@ -1,20 +1,13 @@
-enum BacktestJobStatus {
-  queued
-  running
-  succeeded
-  failed
-}
-
 model BacktestJob {
-  id           String            @id
-  ownerUserId  String            @map("owner_user_id")
-  status       BacktestJobStatus
-  inputSummary Json              @map("input_summary")
-  result       Json?             @map("result")
+  id           String   @id
+  ownerUserId  String   @map("owner_user_id")
+  status       String
+  inputSummary Json     @map("input_summary")
+  result       Json?    @map("result")
   error        String?
-  createdAt    DateTime          @default(now()) @map("created_at")
-  startedAt    DateTime?         @map("started_at")
-  finishedAt   DateTime?         @map("finished_at")
+  createdAt    DateTime @default(now()) @map("created_at")
+  startedAt    DateTime? @map("started_at")
+  finishedAt   DateTime? @map("finished_at")
 
   @@index([ownerUserId, createdAt], map: "idx_backtest_jobs_owner_created_at")
   @@index([ownerUserId, status], map: "idx_backtest_jobs_owner_status")

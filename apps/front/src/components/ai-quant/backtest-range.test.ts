@@ -15,6 +15,17 @@ describe('backtest-range', () => {
     expect(range.endAt).toBe('2026-03-24T12:00:00.000Z')
   })
 
+  it('aligns preset range to the provided 15m candle boundary', () => {
+    const range = resolveBacktestRange(
+      { preset: '30D' },
+      new Date('2026-04-02T09:37:12.000Z'),
+      '15m',
+    )
+
+    expect(range.startAt).toBe('2026-03-03T09:30:00.000Z')
+    expect(range.endAt).toBe('2026-04-02T09:30:00.000Z')
+  })
+
   it('resolves 90D preset range', () => {
     const range = resolveBacktestRange({ preset: '90D' }, now)
     expect(range.startAt).toBe('2025-12-24T12:00:00.000Z')

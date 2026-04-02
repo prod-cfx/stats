@@ -268,6 +268,62 @@ describe('backtestJobsService', () => {
     )
   })
 
+  it('rejects persisted jobs with unexpected status values', async () => {
+    const runner = {
+      run: jest.fn(),
+    }
+    const marketData = createMarketDataMock()
+    const prisma = {
+      backtestJob: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'job-invalid',
+          ownerUserId: OWNER_USER_ID,
+          status: 'stuck',
+          createdAt: new Date('2026-04-02T00:00:00.000Z'),
+          startedAt: null,
+          finishedAt: null,
+          error: null,
+          inputSummary: {},
+          result: null,
+        }),
+      },
+    }
+    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+
+    await expect(service.getJob('job-invalid', OWNER_USER_ID)).rejects.toThrow(
+      'backtest.job_invalid_status',
+    )
+  })
+
+  it('rejects persisted job results with unexpected status values', async () => {
+    const runner = {
+      run: jest.fn(),
+    }
+    const marketData = createMarketDataMock()
+    const prisma = {
+      backtestJob: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'job-invalid-result',
+          ownerUserId: OWNER_USER_ID,
+          status: 'stuck',
+          createdAt: new Date('2026-04-02T00:00:00.000Z'),
+          startedAt: null,
+          finishedAt: null,
+          error: null,
+          inputSummary: {},
+          result: {
+            summary: { totalTrades: 1 },
+          },
+        }),
+      },
+    }
+    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+
+    await expect(service.getJobResult('job-invalid-result', OWNER_USER_ID)).rejects.toThrow(
+      'backtest.job_invalid_status',
+    )
+  })
+
   it('persists applied range when coverage is partial and allowPartial is true', async () => {
     const runner = {
       run: jest.fn().mockResolvedValue({

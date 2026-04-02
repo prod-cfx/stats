@@ -66,6 +66,31 @@ describe('backtest-payload-builder', () => {
     expect(payload.dataRange.fromTs).toBeLessThan(payload.dataRange.toTs)
   })
 
+  it('aligns preset range to the selected base timeframe boundary', () => {
+    const payload = buildBacktestPayload(createInput({ range: { preset: '30D' } }), new Date('2026-04-02T09:37:12.000Z'))
+
+    expect(payload.dataRange).toEqual({
+      fromTs: Date.parse('2026-03-03T09:30:00.000Z'),
+      toTs: Date.parse('2026-04-02T09:30:00.000Z'),
+    })
+  })
+
+  it('aligns preset range with the trimmed base timeframe value', () => {
+    const payload = buildBacktestPayload(
+      createInput({
+        baseTimeframe: ' 15m ',
+        range: { preset: '30D' },
+      }),
+      new Date('2026-04-02T09:37:12.000Z'),
+    )
+
+    expect(payload.baseTimeframe).toBe('15m')
+    expect(payload.dataRange).toEqual({
+      fromTs: Date.parse('2026-03-03T09:30:00.000Z'),
+      toTs: Date.parse('2026-04-02T09:30:00.000Z'),
+    })
+  })
+
   it('validates custom range ordering', () => {
     expectBuildErrorCode(() => {
       buildBacktestPayload(createInput({
