@@ -320,4 +320,36 @@ describe('backtestJobsService', () => {
     await expect(service.getJob('missing', OWNER_USER_ID)).rejects.toBeInstanceOf(DomainException)
     await expect(service.getJob('missing', OWNER_USER_ID)).rejects.toThrow('backtest.job_not_found')
   })
+
+  it('falls back to in-memory jobs when backtest job persistence table is unavailable', async () => {
+    const runner = {
+      run: jest.fn().mockResolvedValue({
+        summary: { totalTrades: 0 },
+        equityCurve: [],
+        trades: [],
+        markers: [],
+        bySymbol: [],
+      }),
+    }
+    const marketData = createMarketDataMock()
+    const prisma = createPrismaMock()
+    prisma.backtestJob.create.mockRejectedValueOnce(Object.assign(
+      new Error('The table `public.backtest_jobs` does not exist in the current database.'),
+      { code: 'P2021' },
+    ))
+    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+
+    const created = await service.createJob(createInput(), OWNER_USER_ID)
+    await flushMicrotasks()
+
+    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toEqual(expect.objectContaining({
+      id: created.id,
+      status: 'succeeded',
+    }))
+    await expect(service.getJobResult(created.id, OWNER_USER_ID)).resolves.toEqual(expect.objectContaining({
+      summary: { totalTrades: 0 },
+    }))
+    expect(prisma.backtestJob.create).toHaveBeenCalledTimes(1)
+    expect(prisma.backtestJob.update).not.toHaveBeenCalled()
+  })
 })
