@@ -141,7 +141,7 @@ describe('backtestingController', () => {
     }
 
     await c.run('Bearer token', dto)
-    await c.createJob('Bearer token', dto)
+    await c.createJob('Bearer token', 'req-job-1', dto)
     await c.getJob('Bearer token', 'job-1')
     await c.getJobResult('Bearer token', 'job-1')
     await c.getCapabilities('req-1')
@@ -225,6 +225,49 @@ describe('backtestingController', () => {
       code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
       status: HttpStatus.SERVICE_UNAVAILABLE,
       args: { exchange: 'okx', symbol: 'BTCUSDT', reasonMessage: 'catalog crashed' },
+    })
+  })
+
+  it('maps create job unknown errors to service unavailable domain exception', async () => {
+    const runner = { run: jest.fn() }
+    const jobs = { createJob: jest.fn(), getJob: jest.fn(), getJobResult: jest.fn() }
+    const adapter = { build: jest.fn().mockRejectedValue(new Error('script engine bootstrap failed')) }
+    const caller = { resolveCallerUserIdFromAuthorization: jest.fn().mockResolvedValue('user-1') }
+    const capabilities = { getCapabilities: jest.fn() }
+    const symbolSupport = { checkSymbolSupport: jest.fn() }
+
+    const mod = await Test.createTestingModule({
+      controllers: [BacktestingController],
+      providers: [
+        { provide: BacktestRunnerService, useValue: runner },
+        { provide: BacktestJobsService, useValue: jobs },
+        { provide: BacktestCallerIdentityService, useValue: caller },
+        { provide: BacktestCapabilitiesService, useValue: capabilities },
+        { provide: BacktestSymbolSupportService, useValue: { checkSupport: symbolSupport.checkSymbolSupport } },
+        { provide: BacktestStrategyAdapterService, useValue: adapter },
+      ],
+    }).compile()
+
+    const c = mod.get(BacktestingController)
+    const dto: any = {
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: ['15m'],
+      initialCash: 10000,
+      leverage: 1,
+      execution: { slippageBps: 10, feeBps: 5, priceSource: 'close' },
+      strategy: { id: 's1', protocolVersion: 'v1', scriptCode: 'strategy', params: {} },
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [],
+    }
+
+    await expect(c.createJob('Bearer token', 'req-job-2', dto)).rejects.toMatchObject({
+      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+      args: {
+        symbols: ['BTCUSDT'],
+        reasonMessage: 'script engine bootstrap failed',
+      },
     })
   })
 })

@@ -49,11 +49,31 @@ export class BacktestingController {
   @Post('jobs')
   async createJob(
     @Headers('authorization') authorization: string | undefined,
+    @Headers('x-request-id') requestId: string | undefined,
     @Body() dto: RunBacktestDto,
   ) {
-    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
-    const strategy = await this.strategyAdapter.build(dto.strategy)
-    return this.jobsService.createJob({ ...dto, strategy, bars: dto.bars ?? [] } as BacktestRunInput, callerUserId)
+    try {
+      const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+      const strategy = await this.strategyAdapter.build(dto.strategy)
+      return this.jobsService.createJob({ ...dto, strategy, bars: dto.bars ?? [] } as BacktestRunInput, callerUserId)
+    } catch (error) {
+      if (error instanceof DomainException) {
+        throw error
+      }
+      const message = error instanceof Error ? error.message : String(error)
+      this.logger.error(
+        `event=backtesting_create_job_failed requestId=${requestId ?? 'N/A'} symbols=${dto.symbols.join(',')} strategyId=${dto.strategy?.id ?? 'N/A'} reason=${message}`,
+      )
+      throw new DomainException('backtesting.job_temporarily_unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        args: {
+          symbols: dto.symbols,
+          strategyId: dto.strategy?.id,
+          reasonMessage: message,
+        },
+      })
+    }
   }
 
   @Get('jobs/:id')
