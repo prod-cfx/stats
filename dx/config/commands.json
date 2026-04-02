@@ -1,44 +1,16 @@
 {
-  "dev": {
-    "backend": {
-      "command": "npx nx dev backend",
-      "app": "backend",
-      "ports": [3000],
-      "description": "启动后端开发服务"
-    },
-    "front": {
-      "command": "npx nx dev front",
-      "app": "front",
-      "ports": [3001],
-      "description": "启动前端开发服务"
-    },
-    "admin": {
-      "command": "npx nx dev admin-front",
-      "app": "admin-front",
-      "ports": [3500],
-      "description": "启动管理后台开发服务"
-    },
-    "all": {
-      "concurrent": true,
-      "commands": ["dev.backend", "dev.front", "dev.admin"],
-      "description": "同时启动所有开发服务",
-      "interactive": true
-    }
-  },
-
   "install": {
     "command": "pnpm install --frozen-lockfile",
     "description": "安装依赖"
   },
-
   "build": {
     "backend": {
-      "dev": {
+      "development": {
         "command": "npx nx build backend --configuration=development",
         "app": "backend",
         "description": "构建后端(开发环境)"
       },
-      "prod": {
+      "production": {
         "command": "npx nx build backend --configuration=production",
         "app": "backend",
         "description": "构建后端(生产环境)"
@@ -46,13 +18,13 @@
     },
     "quantify": {
       "skipEnvValidation": true,
-      "dev": {
+      "development": {
         "command": "npx nx build quantify --configuration=development",
         "app": "quantify",
         "skipEnvValidation": true,
         "description": "构建 Quantify(开发环境)"
       },
-      "prod": {
+      "production": {
         "command": "npx nx build quantify --configuration=production",
         "app": "quantify",
         "skipEnvValidation": true,
@@ -64,59 +36,80 @@
       "description": "构建共享包 @ai/shared"
     },
     "front": {
-      "dev": {
+      "development": {
         "command": "npx nx build front --configuration=development",
         "app": "front",
         "description": "构建前端(开发环境)"
       },
-      "prod": {
+      "production": {
         "command": "npx nx run front:exportDist",
         "app": "front",
         "description": "构建并导出前端到 dist/front (生产环境)"
       }
     },
     "admin": {
-      "dev": {
+      "development": {
         "command": "npx nx build admin-front --configuration=development",
         "app": "admin-front",
         "description": "构建管理后台(开发环境)"
       },
-      "prod": {
+      "production": {
         "command": "npx nx build admin-front --configuration=production",
         "app": "admin-front",
         "description": "构建管理后台(生产环境)"
       }
     },
     "all": {
-      "dev": {
+      "development": {
         "sequential": true,
-        "commands": ["build.backend.dev", "build.quantify.dev", "build.contracts", "build.parallelWeb.dev"],
+        "commands": [
+          "build.backend.development",
+          "build.quantify.development",
+          "build.contracts",
+          "build.parallelWeb.development"
+        ],
         "description": "构建所有应用(开发环境，含 contracts，Web并行)"
       },
-      "prod": {
+      "production": {
         "sequential": true,
-        "commands": ["build.backend.prod", "build.quantify.prod", "build.contracts", "build.parallelWeb.prod"],
+        "commands": [
+          "build.backend.production",
+          "build.quantify.production",
+          "build.contracts",
+          "build.parallelWeb.production"
+        ],
         "description": "构建所有应用(生产环境，Web并行)"
       }
     },
     "parallelWeb": {
-      "dev": {
+      "development": {
         "concurrent": true,
-        "commands": ["build.shared", "build.front.dev", "build.admin.dev"],
+        "commands": [
+          "build.shared",
+          "build.front.development",
+          "build.admin.development"
+        ],
         "description": "并行构建 Web（shared/front/admin 开发环境）"
       },
-      "prod": {
+      "production": {
         "concurrent": true,
-        "commands": ["build.shared", "build.front.prod", "build.admin.prod"],
+        "commands": [
+          "build.shared",
+          "build.front.production",
+          "build.admin.production"
+        ],
         "description": "并行构建 Web（shared/front/admin 生产环境）"
+      },
+      "help": {
+        "expose": false
       }
     },
     "affected": {
-      "dev": {
+      "development": {
         "command": "NX_ISOLATE_PLUGINS=false NX_DAEMON=false npx nx affected -t build --configuration=development --parallel=3",
         "description": "仅构建受影响项目(开发环境)"
       },
-      "prod": {
+      "production": {
         "command": "NX_ISOLATE_PLUGINS=false NX_DAEMON=false npx nx affected -t build --configuration=production --parallel=3",
         "description": "仅构建受影响项目(生产环境)"
       }
@@ -127,7 +120,6 @@
       "description": "生成 API 合约 (packages/api-contracts)"
     }
   },
-
   "db": {
     "generate": {
       "command": "bash -lc 'set -euo pipefail; pnpm --filter @net/backend run prisma:generate; pnpm run generate:enums'",
@@ -141,7 +133,7 @@
       }
     },
     "migrate": {
-      "dev": {
+      "development": {
         "command": "pnpm --filter @net/backend run prisma:migrate:dev",
         "app": "backend",
         "description": "创建数据库迁移(开发环境)",
@@ -154,7 +146,7 @@
       }
     },
     "deploy": {
-      "dev": {
+      "development": {
         "command": "pnpm --filter @net/backend run prisma:migrate:deploy",
         "app": "backend",
         "description": "应用数据库迁移(开发环境)",
@@ -181,7 +173,7 @@
           "description": "应用 Quantify 数据库迁移(E2E环境)"
         }
       },
-      "prod": {
+      "production": {
         "command": "pnpm --filter @net/backend run prisma:migrate:deploy",
         "app": "backend",
         "dangerous": true,
@@ -189,7 +181,7 @@
       }
     },
     "reset": {
-      "dev": {
+      "development": {
         "command": "pnpm --filter @net/backend run prisma:migrate:reset",
         "app": "backend",
         "dangerous": true,
@@ -215,7 +207,7 @@
           "description": "重置 Quantify 数据库(E2E环境)"
         }
       },
-      "prod": {
+      "production": {
         "command": "pnpm --filter @net/backend run prisma:migrate:reset",
         "app": "backend",
         "dangerous": true,
@@ -223,7 +215,7 @@
       }
     },
     "seed": {
-      "dev": {
+      "development": {
         "command": "pnpm --filter @net/backend run prisma:db:seed",
         "app": "backend",
         "description": "填充种子数据(开发环境)",
@@ -245,7 +237,7 @@
           "description": "填充 Quantify 种子数据(E2E环境)"
         }
       },
-      "prod": {
+      "production": {
         "command": "pnpm --filter @net/backend run prisma:db:seed",
         "app": "backend",
         "dangerous": true,
@@ -263,7 +255,7 @@
       }
     },
     "script": {
-      "dev": {
+      "development": {
         "command": "pnpm --filter @net/backend exec tsx prisma/scripts/{SCRIPT_NAME}.ts",
         "app": "backend",
         "description": "执行数据库脚本(开发环境)"
@@ -273,7 +265,7 @@
         "app": "backend",
         "description": "执行数据库脚本(E2E环境)"
       },
-      "prod": {
+      "production": {
         "command": "pnpm --filter @net/backend exec tsx prisma/scripts/{SCRIPT_NAME}.ts",
         "app": "backend",
         "dangerous": true,
@@ -281,7 +273,6 @@
       }
     }
   },
-
   "test": {
     "e2e": {
       "backend": {
@@ -329,21 +320,19 @@
       }
     }
   },
-
   "lint": {
     "command": "NX_ISOLATE_PLUGINS=false NX_DAEMON=false npx nx run-many -t lint",
     "description": "运行代码检查",
     "skipEnvValidation": true
   },
-
   "start": {
     "backend": {
-      "dev": {
+      "development": {
         "command": "pnpm --filter ./apps/backend run dev",
         "app": "backend",
         "description": "启动后端开发服务（tsx watch，支持热重载）"
       },
-      "prod": {
+      "production": {
         "command": "npx nx start backend",
         "app": "backend",
         "description": "启动后端生产服务"
@@ -351,14 +340,16 @@
     },
     "quantify": {
       "skipEnvValidation": true,
-      "dev": {
+      "development": {
         "command": "node scripts/dx/quantify-launcher.cjs pnpm --filter ./apps/quantify run dev",
         "app": "quantify",
-        "ports": [3010],
+        "ports": [
+          3010
+        ],
         "skipEnvValidation": true,
         "description": "启动 Quantify 开发服务"
       },
-      "prod": {
+      "production": {
         "command": "node scripts/dx/quantify-launcher.cjs npx nx start quantify",
         "app": "quantify",
         "skipEnvValidation": true,
@@ -366,26 +357,30 @@
       }
     },
     "front": {
-      "dev": {
+      "development": {
         "command": "npx nx dev front",
         "app": "front",
-        "ports": [3001],
+        "ports": [
+          3001
+        ],
         "description": "启动前端开发服务"
       },
-      "prod": {
+      "production": {
         "command": "npx nx start front",
         "app": "front",
         "description": "启动前端生产服务"
       }
     },
     "admin": {
-      "dev": {
+      "development": {
         "command": "npx nx dev admin-front",
         "app": "admin-front",
-        "ports": [3500],
+        "ports": [
+          3500
+        ],
         "description": "启动管理后台开发服务"
       },
-      "prod": {
+      "production": {
         "command": "npx nx start admin-front",
         "app": "admin-front",
         "description": "启动管理后台生产服务"
@@ -393,11 +388,15 @@
     },
     "all": {
       "concurrent": true,
-      "commands": ["start.backend.dev", "start.front.dev", "start.admin.dev"],
+      "commands": [
+        "start.backend.development",
+        "start.front.development",
+        "start.admin.development"
+      ],
       "description": "同时启动所有服务",
       "interactive": true
     },
-    "dev": {
+    "development": {
       "internal": "start-dev",
       "args": [],
       "description": "启动完整开发环境（集成start-dev.sh功能）",
@@ -447,21 +446,26 @@
     "stagewise-front": {
       "command": "npx stagewise@latest -b -a 3001 -p 3002 -w ./apps/front",
       "description": "Stagewise 桥接 front (3001→3002)",
-      "ports": [3002]
+      "ports": [
+        3002
+      ]
     },
     "stagewise-admin": {
       "command": "npx stagewise@latest -b -s -a 3500 -p 3501 -w ./apps/admin-front",
       "description": "Stagewise 桥接 admin-front (3500→3501)",
-      "ports": [3501]
+      "ports": [
+        3501
+      ]
     },
     "mock": {
       "command": "pnpm --filter @ai/front run dev:mock",
       "app": "front",
-      "ports": [3001],
+      "ports": [
+        3001
+      ],
       "description": "启动前端开发服务(Mock后端)"
     }
   },
-
   "clean": {
     "all": {
       "command": "npx nx run-many -t clean",
@@ -473,7 +477,6 @@
       "dangerous": true
     }
   },
-
   "cache": {
     "clear": {
       "command": "set -e; npx nx reset; pnpm store prune || true; STORE_PATH=$(pnpm store path 2>/dev/null || echo ''); if [ -n \"$STORE_PATH\" ] && [ -d \"$STORE_PATH\" ]; then echo \"移除 PNPM store: $STORE_PATH\"; rm -rf \"$STORE_PATH\"; fi; rm -rf .nx/cache node_modules/.cache ~/.pnpm-store || true; echo 'Nx 与依赖缓存已清理'",
@@ -481,7 +484,6 @@
       "dangerous": true
     }
   },
-
   "demo": {},
   "deploy": {
     "backend": {
@@ -580,7 +582,7 @@
         "app": "front",
         "description": "部署 front 到 Vercel（预发环境）"
       },
-      "prod": {
+      "production": {
         "command": "vercel deploy --yes --prod --local-config vercel.front.json",
         "app": "front",
         "description": "部署 front 到 Vercel（生产环境）"
@@ -592,7 +594,7 @@
         "app": "admin-front",
         "description": "部署 admin 到 Vercel（预发环境）"
       },
-      "prod": {
+      "production": {
         "command": "vercel deploy --yes --prod --local-config vercel.admin.json",
         "app": "admin-front",
         "description": "部署 admin 到 Vercel（生产环境）"
@@ -601,13 +603,117 @@
     "all": {
       "staging": {
         "sequential": true,
-        "commands": ["deploy.backend --staging", "deploy.quantify --staging", "deploy.front.staging", "deploy.admin.staging"],
+        "commands": [
+          "deploy.backend --staging",
+          "deploy.quantify --staging",
+          "deploy.front.staging",
+          "deploy.admin.staging"
+        ],
         "description": "依次部署所有应用到预发环境"
       },
-      "prod": {
+      "production": {
         "sequential": true,
-        "commands": ["deploy.backend --prod", "deploy.quantify --prod", "deploy.front.prod", "deploy.admin.prod"],
+        "commands": [
+          "deploy.backend --prod",
+          "deploy.quantify --prod",
+          "deploy.front.production",
+          "deploy.admin.production"
+        ],
         "description": "依次部署所有应用到生产环境"
+      }
+    }
+  },
+  "help": {
+    "summary": "stats dx 配置",
+    "globalOptions": [
+      {
+        "flags": [
+          "--dev"
+        ],
+        "description": "使用 development 环境"
+      },
+      {
+        "flags": [
+          "--staging"
+        ],
+        "description": "使用 staging 环境"
+      },
+      {
+        "flags": [
+          "--prod"
+        ],
+        "description": "使用 production 环境"
+      },
+      {
+        "flags": [
+          "--test"
+        ],
+        "description": "使用 test 环境"
+      },
+      {
+        "flags": [
+          "--e2e"
+        ],
+        "description": "使用 e2e 环境"
+      }
+    ],
+    "examples": [
+      {
+        "command": "dx start backend --dev",
+        "description": "启动后端开发服务"
+      },
+      {
+        "command": "dx build all --prod",
+        "description": "构建所有应用"
+      },
+      {
+        "command": "dx deploy backend --prod",
+        "description": "部署 backend 制品"
+      }
+    ],
+    "commands": {
+      "start": {
+        "summary": "启动服务或开发套件",
+        "notes": [
+          "未指定 service 时默认使用开发套件，仅允许 --dev"
+        ],
+        "examples": [
+          {
+            "command": "dx start backend --dev",
+            "description": "启动后端开发服务"
+          },
+          {
+            "command": "dx start stack",
+            "description": "启动 PM2 服务栈"
+          }
+        ]
+      },
+      "build": {
+        "summary": "构建应用",
+        "examples": [
+          {
+            "command": "dx build backend --prod",
+            "description": "构建后端生产产物"
+          }
+        ]
+      },
+      "db": {
+        "summary": "执行数据库命令",
+        "examples": [
+          {
+            "command": "dx db migrate --dev --name init-stats-table",
+            "description": "创建开发环境迁移"
+          }
+        ]
+      },
+      "deploy": {
+        "summary": "部署前端或 backend 制品",
+        "examples": [
+          {
+            "command": "dx deploy backend --prod",
+            "description": "部署 backend 制品"
+          }
+        ]
       }
     }
   }

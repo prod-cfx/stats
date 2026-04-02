@@ -1,184 +1,343 @@
-# dx 命令系统 — 部署配置说明
+# stats dx 配置说明
 
-本目录是 `dx` 全局工具的项目级配置根目录，定义了构建、启动、数据库、测试、部署等所有命令。
+这个目录是 `stats` 项目的 `dx` 配置根目录。
+
+它的作用有两层：
+
+1. 定义 `dx/config/*` 的项目级命令树
+2. 作为团队内可直接参考的严格新规范示例
+
+这份配置已经按当前最新 `dx` 规范整理过：
+
+- 只使用 strict 环境键
+- 不保留旧兼容写法
+- `help` 由 `commands.json` 动态生成
+- 配置写错时直接报错，不做自动回退
 
 ## 目录结构
 
 ```text
 dx/
 ├── config/
-│   ├── commands.json      # 所有 dx 命令定义（核心）
-│   ├── env-layers.json    # 环境文件分层映射
-│   └── env-policy.jsonc   # 环境变量治理策略
+│   ├── commands.json
+│   ├── env-layers.json
+│   └── env-policy.jsonc
 ├── deploy/
-│   ├── ecosystem.backend.config.cjs   # backend 部署专用 PM2 配置
-│   └── ecosystem.quantify.config.cjs  # quantify 部署专用 PM2 配置
+│   ├── ecosystem.backend.config.cjs
+│   └── ecosystem.quantify.config.cjs
 └── README.md
 ```
 
-## 部署架构
+这几部分分别负责：
 
-本项目有两类部署目标：
+- [commands.json](/Users/a1/work/stats/dx/config/commands.json)
+  定义命令树、执行方式、帮助信息
+- [env-layers.json](/Users/a1/work/stats/dx/config/env-layers.json)
+  定义每个环境加载哪些 `.env` 文件
+- [env-policy.jsonc](/Users/a1/work/stats/dx/config/env-policy.jsonc)
+  定义环境变量治理规则
+- [ecosystem.backend.config.cjs](/Users/a1/work/stats/dx/deploy/ecosystem.backend.config.cjs)
+  backend 远端 PM2 配置
+- [ecosystem.quantify.config.cjs](/Users/a1/work/stats/dx/deploy/ecosystem.quantify.config.cjs)
+  quantify 远端 PM2 配置
 
-| 目标 | 部署方式 | 部署命令 |
-|------|---------|---------|
-| `backend` | dx `backend-artifact-deploy` → SSH → PM2 | `dx deploy backend --staging/--prod` |
-| `quantify` | dx `backend-artifact-deploy` → SSH → PM2 | `dx deploy quantify --staging/--prod` |
-| `front` | Vercel CLI | `dx deploy front --staging/--prod` |
-| `admin` | Vercel CLI | `dx deploy admin --staging/--prod` |
+## 当前采用的 strict 规范
 
-### 后端制品部署流程 (backend / quantify)
+### 环境键
 
-`dx deploy backend --prod` 执行的完整流程：
+配置文件中只使用：
 
-1. **本地构建** — `npx nx build backend --configuration=production`
-2. **打包制品** — 将 `dist/backend` + `package.json` + `pnpm-lock.yaml` + Prisma schema 打包为 `release/backend/backend-bundle.tar.gz`
-3. **SSH 上传** — 通过 SSH 将制品上传到远端服务器
-4. **远端安装** — `pnpm install --prod --no-frozen-lockfile --ignore-workspace`
-5. **Prisma 迁移** — `prisma generate` + `prisma migrate deploy`（+ 可选 seed）
-6. **PM2 重启** — 使用 `dx/deploy/ecosystem.backend.config.cjs` 重启服务
-7. **版本保留** — 保留最近 5 个 release，旧版本自动清理
+- `development`
+- `staging`
+- `production`
+- `test`
+- `e2e`
 
-quantify 流程相同，使用独立的 Prisma schema 和 PM2 配置。
+不要写：
 
-### 前端 Vercel 部署 (front / admin)
+- `dev`
+- `prod`
 
-`dx deploy front --prod` 会调用 Vercel CLI：
+### CLI 环境标志
+
+命令行统一使用：
+
+- `--dev`
+- `--staging`
+- `--prod`
+- `--test`
+- `--e2e`
+
+### 不再保留的旧写法
+
+以下写法都不应该再出现：
+
+- `--development`
+- `--production`
+- `--stage`
+- 顶层 `dev` 命令树
+- `stack-front` / `stack-admin` / `stack-telegram` 这类兼容别名
+- 任何“旧配置回退到新配置”或“新配置回退到旧配置”的行为
+
+## `commands.json` 怎么看
+
+[commands.json](/Users/a1/work/stats/dx/config/commands.json) 是核心文件。
+
+这里同时放两类内容：
+
+1. 命令执行配置
+2. 帮助信息配置
+
+### 1. 命令执行配置
+
+例如：
+
+```json
+{
+  "start": {
+    "backend": {
+      "development": {
+        "command": "npx nx dev backend",
+        "app": "backend"
+      },
+      "production": {
+        "command": "npx nx start backend",
+        "app": "backend"
+      }
+    }
+  }
+}
+```
+
+表示：
+
+- `dx start backend --dev` 走 `start.backend.development`
+- `dx start backend --prod` 走 `start.backend.production`
+
+### 2. 帮助信息配置
+
+例如：
+
+```json
+{
+  "help": {
+    "summary": "stats dx 配置",
+    "commands": {
+      "start": {
+        "summary": "启动服务或开发套件"
+      }
+    }
+  }
+}
+```
+
+表示：
+
+- `dx --help`
+- `dx help start`
+
+这些帮助输出由配置动态渲染，不再依赖代码中的硬编码长文案。
+
+## 这个项目里的主要命令分组
+
+### `start`
+
+启动相关目标包括：
+
+- `backend`
+- `quantify`
+- `front`
+- `admin`
+- `telegram-bot`
+- `development`
+- `stack`
+- `stagewise-front`
+- `stagewise-admin`
+- `mock`
+
+其中：
+
+- `start.development` 是默认开发套件
+- `start.stack` 是 PM2 交互式服务栈
+- `stagewise-front` / `stagewise-admin` 是桥接目标
+- `mock` 是前端 mock 后端启动方式
+
+推荐命令：
 
 ```bash
-vercel deploy --yes --prod --local-config vercel.front.json
+dx start --dev
+dx start backend --dev
+dx start front --dev
+dx start stack
 ```
 
-Vercel 项目配置文件位于仓库根目录：`vercel.front.json`、`vercel.admin.json`。
+### `build`
 
-## 部署前置配置
+构建目标包括：
 
-### 1. SSH 配置
+- `backend`
+- `quantify`
+- `shared`
+- `front`
+- `admin`
+- `all`
+- `parallelWeb`
+- `api-contracts`
+- `affected`
 
-后端部署需要 SSH 免密访问远端服务器。在 `~/.ssh/config` 中添加：
-
-```
-Host stats-server
-    HostName <your-server-ip>
-    Port <ssh-port>
-    User root
-    IdentityFile ~/.ssh/<your-key>
-```
-
-`commands.json` 中 `deploy.backend.backendDeploy.remote.host` 默认值为 `stats-server`，需与 SSH config 中的 Host 名称一致。
-
-> 在 CI 环境中，host 信息从 GitHub Secrets 注入，不依赖本地 SSH config。
-
-### 2. 远端服务器准备
-
-在目标服务器上确保：
+推荐命令：
 
 ```bash
-# 项目目录
-mkdir -p /opt/stats
-
-# 必要工具
-node -v    # >= 22.12
-pnpm -v    # 已安装
-pm2 -v     # 已安装
-
-# 环境变量文件（敏感值）
-# 在 /opt/stats 下提前放好：
-#   .env.production.local   — backend 生产环境敏感变量
-#   .env.staging.local      — backend 预发环境敏感变量
+dx build backend --prod
+dx build quantify --staging
+dx build all --dev
 ```
 
-### 3. GitHub Secrets 配置
+### `db`
 
-在仓库 Settings → Secrets and variables → Actions 中配置：
+数据库目标包括：
 
-| Secret 名称 | 说明 | 示例 |
-|-------------|------|------|
-| `DEPLOY_ENVIRONMENT` | 部署环境 | `staging` 或 `prod` |
-| `AWS_SSH_PRIVATE_KEY` | SSH 私钥（完整 PEM） | `-----BEGIN OPENSSH...` |
-| `AWS_SSH_HOST` | 服务器 IP / 域名 | `1.2.3.4` |
-| `AWS_SSH_PORT` | SSH 端口 | `22` |
-| `AWS_SSH_USER` | SSH 用户名 | `root` |
-| `VERCEL_TOKEN` | Vercel 部署 Token | `vercel_xxx` |
-| `DATABASE_URL` | Backend 数据库连接串 | `postgresql://...` |
-| `QUANTIFY_DATABASE_URL` | Quantify 数据库连接串 | `postgresql://...` |
-| `REDIS_URL` | Redis 连接串 | `redis://...` |
-| `JWT_SECRET` | JWT 密钥 | — |
-| `APP_SECRET` | 应用密钥 | — |
-| ... | 其余敏感变量见 `dx/config/env-policy.jsonc` | — |
+- `generate`
+- `migrate`
+- `deploy`
+- `reset`
+- `seed`
+- `format`
+- `script`
 
-### 4. Vercel 项目配置
+这里还包含 `quantify` 的独立数据库命令分支。
 
-前端部署前需要在 Vercel 上创建项目并关联：
+推荐命令：
 
 ```bash
-# 登录 Vercel
-vercel login
-
-# 关联 front 项目（在仓库根目录执行）
-vercel link --local-config vercel.front.json
-
-# 关联 admin 项目
-vercel link --local-config vercel.admin.json
+dx db migrate --dev --name init-stats-table
+dx db deploy --prod
+dx db script my-script --dev
 ```
 
-在 Vercel 项目的 Environment Variables 中设置 `APP_ENV`：
-- Production: `APP_ENV=production`
-- Preview: `APP_ENV=staging`
+### `deploy`
 
-`VERCEL_ORG_ID` 和 `VERCEL_PROJECT_ID` 会在 `vercel link` 后写入 `.vercel/project.json`，也可以通过 `.env.<env>` 文件提供。
+部署目标分两类：
 
-## 本地部署（手动）
+1. 后端制品部署
+   - `backend`
+   - `quantify`
+2. 前端 Vercel 部署
+   - `front`
+   - `admin`
+   - `all`
+
+推荐命令：
 
 ```bash
-# 部署 backend 到 staging
 dx deploy backend --staging
-
-# 部署 quantify 到生产
 dx deploy quantify --prod
-
-# 部署 front 到生产
 dx deploy front --prod
-
-# 部署 admin 到 staging
 dx deploy admin --staging
 ```
 
-## CI 部署（GitHub Actions）
+## 默认开发套件
 
-CI 在 `.github/workflows/ci.yml`，通过 `workflow_dispatch` 手动触发：
+当前配置里显式保留了：
 
-1. 进入 GitHub 仓库 → Actions → CI
-2. 点击 "Run workflow"
-3. 选择 target：`all` / `backend` / `quantify` / `front` / `admin`
-4. 点击 "Run workflow"
+```json
+"start": {
+  "development": {
+    "internal": "start-dev"
+  }
+}
+```
 
-CI 会根据 `DEPLOY_ENVIRONMENT` secret 决定部署到 staging 还是 production。
+所以：
 
-### CI 与本地部署的区别
+- `dx start`
+- `dx start --dev`
 
-| 方面 | 本地 | CI |
-|------|------|-----|
-| SSH 主机 | 来自 `~/.ssh/config` (`stats-server`) | 来自 GitHub Secrets (`AWS_SSH_HOST`) |
-| dx 配置 | 直接读 `dx/config/commands.json` | 生成临时配置注入 Secrets 中的主机信息 |
-| 环境变量 | 本地 `.env.*.local` | 服务器预先配置的 `.env.*.local` |
-| Vercel | 本地 `vercel login` 凭证 | `VERCEL_TOKEN` secret |
+都会走默认开发套件。
 
-## PM2 配置文件说明
+这不是兼容回退，而是当前命令树里明确配置出来的入口。
 
-| 文件 | 用途 |
-|------|------|
-| `dx/deploy/ecosystem.backend.config.cjs` | `backend-artifact-deploy` 在远端启动 backend 使用 |
-| `dx/deploy/ecosystem.quantify.config.cjs` | `backend-artifact-deploy` 在远端启动 quantify 使用 |
-| `ecosystem.config.cjs`（仓库根） | 本地 `dx start stack` 开发/生产通用 PM2 配置 |
-| `prod-ecosystem.config.cjs`（仓库根） | 生产服务器手动 PM2 启动备用 |
-| `staging-ecosystem.config.cjs`（仓库根） | 预发服务器手动 PM2 启动备用 |
+## `env-layers.json` 怎么看
 
-## 环境治理
+[env-layers.json](/Users/a1/work/stats/dx/config/env-layers.json) 定义每个环境加载哪些 `.env` 文件。
 
-详见 `dx/config/env-policy.jsonc`。核心规则：
+当前项目是：
 
-- 敏感值只放 `.env.<env>.local`（不提交）
-- 非敏感配置放 `.env.<env>`（提交）
-- 占位符统一为 `__SET_IN_env.local__`
-- quantify 独立前缀：`QUANTIFY_DATABASE_URL`、`QUANTIFY_REDIS_URL`、`QUANTIFY_JWT_SECRET` 等
+```json
+{
+  "development": [".env.development", ".env.development.local"],
+  "staging": [".env.staging", ".env.staging.local"],
+  "production": [".env.production", ".env.production.local"],
+  "test": [".env.test", ".env.test.local"],
+  "e2e": [".env.e2e", ".env.e2e.local"]
+}
+```
+
+## `env-policy.jsonc` 怎么看
+
+[env-policy.jsonc](/Users/a1/work/stats/dx/config/env-policy.jsonc) 负责环境变量治理。
+
+重点看：
+
+- `environments`
+- `keys.secret`
+- `appToTarget`
+- `targets.*.required`
+
+这里特别值得注意的是：
+
+- `backend`
+- `quantify`
+- `frontend`
+
+是分开的 target，`quantify` 使用独立变量前缀，例如：
+
+- `QUANTIFY_DATABASE_URL`
+- `QUANTIFY_REDIS_URL`
+- `QUANTIFY_JWT_SECRET`
+
+## 部署架构
+
+这个项目当前有两类部署目标：
+
+| 目标 | 部署方式 | 命令 |
+|------|---------|------|
+| `backend` | `backend-artifact-deploy` → SSH → PM2 | `dx deploy backend --staging/--prod` |
+| `quantify` | `backend-artifact-deploy` → SSH → PM2 | `dx deploy quantify --staging/--prod` |
+| `front` | Vercel CLI | `dx deploy front --staging/--prod` |
+| `admin` | Vercel CLI | `dx deploy admin --staging/--prod` |
+
+## 后端制品部署说明
+
+`backend` 和 `quantify` 都使用内置的 `backend-artifact-deploy` 流程。
+
+流程大致是：
+
+1. 本地构建
+2. 打包制品
+3. SSH 上传
+4. 远端安装依赖
+5. Prisma generate / migrate deploy
+6. PM2 启动
+7. 保留最近 release
+
+相关配置在：
+
+- [ecosystem.backend.config.cjs](/Users/a1/work/stats/dx/deploy/ecosystem.backend.config.cjs)
+- [ecosystem.quantify.config.cjs](/Users/a1/work/stats/dx/deploy/ecosystem.quantify.config.cjs)
+
+## 前端部署说明
+
+`front` 和 `admin` 走 Vercel CLI。
+
+相关命令在 [commands.json](/Users/a1/work/stats/dx/config/commands.json) 的 `deploy.front` / `deploy.admin` 中定义。
+
+## 给同事的结论
+
+如果你要继续维护这套 `dx` 配置，直接遵守这几条：
+
+- 配置里的环境键只写完整名
+- 命令行只用短环境标志
+- 所有帮助说明都写在 `commands.json` 的 `help` 区域
+- 不要再加任何旧兼容入口
+- 配错了就让 `dx` 直接报错，然后改配置
