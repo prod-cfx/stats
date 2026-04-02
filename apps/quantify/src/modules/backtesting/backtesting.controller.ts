@@ -101,9 +101,29 @@ export class BacktestingController {
   @Post('symbols/check')
   async checkSymbolSupport(
     @Headers('authorization') authorization: string | undefined,
+    @Headers('x-request-id') requestId: string | undefined,
     @Body() dto: CheckBacktestSymbolDto,
   ) {
     await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
-    return this.symbolSupportService.checkSupport(dto.exchange, dto.symbol)
+    try {
+      return await this.symbolSupportService.checkSupport(dto.exchange, dto.symbol)
+    } catch (error) {
+      if (error instanceof DomainException) {
+        throw error
+      }
+      const message = error instanceof Error ? error.message : String(error)
+      this.logger.error(
+        `event=backtesting_symbol_support_failed requestId=${requestId ?? 'N/A'} exchange=${dto.exchange} symbol=${dto.symbol} reason=${message}`,
+      )
+      throw new DomainException('backtesting.symbol_support_temporarily_unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        args: {
+          exchange: dto.exchange,
+          symbol: dto.symbol,
+          reasonMessage: message,
+        },
+      })
+    }
   }
 }

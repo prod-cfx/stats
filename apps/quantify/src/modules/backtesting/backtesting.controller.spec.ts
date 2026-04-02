@@ -140,7 +140,7 @@ describe('backtestingController', () => {
     await c.getJob('Bearer token', 'job-1')
     await c.getJobResult('Bearer token', 'job-1')
     await c.getCapabilities('req-1')
-    await c.checkSymbolSupport('Bearer token', { exchange: 'okx', symbol: 'ETHUSDC' })
+    await c.checkSymbolSupport('Bearer token', 'req-3', { exchange: 'okx', symbol: 'ETHUSDC' })
 
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenCalledTimes(5)
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(1, 'Bearer token')
@@ -189,6 +189,37 @@ describe('backtestingController', () => {
       code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
       status: HttpStatus.SERVICE_UNAVAILABLE,
       args: { reasonMessage: 'db down' },
+    })
+  })
+
+  it('maps symbol support unknown errors to service unavailable domain exception', async () => {
+    const runner = { run: jest.fn() }
+    const jobs = { createJob: jest.fn(), getJob: jest.fn(), getJobResult: jest.fn() }
+    const adapter = { build: jest.fn() }
+    const caller = { resolveCallerUserIdFromAuthorization: jest.fn().mockResolvedValue('user-1') }
+    const capabilities = { getCapabilities: jest.fn() }
+    const symbolSupport = {
+      checkSymbolSupport: jest.fn().mockRejectedValue(new Error('catalog crashed')),
+    }
+
+    const mod = await Test.createTestingModule({
+      controllers: [BacktestingController],
+      providers: [
+        { provide: BacktestRunnerService, useValue: runner },
+        { provide: BacktestJobsService, useValue: jobs },
+        { provide: BacktestCallerIdentityService, useValue: caller },
+        { provide: BacktestCapabilitiesService, useValue: capabilities },
+        { provide: BacktestSymbolSupportService, useValue: { checkSupport: symbolSupport.checkSymbolSupport } },
+        { provide: BacktestStrategyAdapterService, useValue: adapter },
+      ],
+    }).compile()
+
+    const c = mod.get(BacktestingController)
+
+    await expect(c.checkSymbolSupport('Bearer token', 'req-4', { exchange: 'okx', symbol: 'BTCUSDT' })).rejects.toMatchObject({
+      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+      args: { exchange: 'okx', symbol: 'BTCUSDT', reasonMessage: 'catalog crashed' },
     })
   })
 })
