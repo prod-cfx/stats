@@ -86,6 +86,20 @@ describe('marketSymbolCatalogService', () => {
     expect(marketDataService.upsertSymbolsFromProvider).not.toHaveBeenCalled()
   })
 
+  it('surfaces refresh failures as a controlled domain exception instead of leaking 500s', async () => {
+    const { service, repository, okxProvider, marketDataService } = createService()
+    repository.findActiveSymbolByExchangeAndCodes.mockResolvedValueOnce(null)
+    okxProvider.fetchSymbols.mockRejectedValue(new Error('okx upstream timeout'))
+
+    await expect(service.ensureExchangeSymbolAvailable('okx', 'ETHUSDC')).rejects.toMatchObject({
+      message: 'backtesting.symbol_support_temporarily_unavailable',
+      code: 'SERVICE_TEMPORARILY_UNAVAILABLE',
+      status: 503,
+    })
+
+    expect(marketDataService.upsertSymbolsFromProvider).not.toHaveBeenCalled()
+  })
+
   it('rejects unsupported exchange with domain exception', async () => {
     const { service } = createService()
 

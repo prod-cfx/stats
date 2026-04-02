@@ -1,13 +1,26 @@
 import type { MarketTimeframe } from '@ai/shared'
+import type { MarketDataProvider, ProviderSymbol } from '@/modules/market-data/interfaces/market-data-provider.interface'
 import type { BacktestRunInput, Bar, Timeframe } from '../types/backtesting.types'
-import { Injectable } from '@nestjs/common'
-import { normalizeExactCode, normalizeRequestedCode, toSymbolCode } from '@/modules/market-data/utils/market-symbol-code.util'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus, Injectable } from '@nestjs/common'
+import { DomainException } from '@/common/exceptions/domain.exception'
+import { BinanceMarketDataProvider } from '@/modules/market-data/providers/binance-market-data.provider'
+import { HyperliquidMarketDataProvider } from '@/modules/market-data/providers/hyperliquid-market-data.provider'
+import { OkxMarketDataProvider } from '@/modules/market-data/providers/okx-market-data.provider'
+import { MarketDataService } from '@/modules/market-data/services/market-data.service'
+import {
+  instrumentTypeToMarket,
+  normalizeExactCode,
+  normalizeRequestedCode,
+  toSymbolCode,
+} from '@/modules/market-data/utils/market-symbol-code.util'
 import { getMarketTimeframeMs } from '@/modules/market-data/utils/market-timeframe.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestMarketDataRepository } from '../repositories/backtest-market-data.repository'
 
 type LoadBarsInput = Pick<BacktestRunInput, 'symbols' | 'baseTimeframe' | 'stateTimeframes' | 'dataRange'>
 type CoverageInput = Pick<BacktestRunInput, 'symbols' | 'baseTimeframe' | 'stateTimeframes' | 'dataRange'>
+type SupportedExchange = 'binance' | 'okx' | 'hyperliquid'
 
 export interface BacktestRangeCoverage {
   kind: 'full' | 'partial' | 'empty'
@@ -17,7 +30,64 @@ export interface BacktestRangeCoverage {
 
 @Injectable()
 export class BacktestMarketDataService {
-  constructor(private readonly repository: BacktestMarketDataRepository) {}
+  private static readonly DEFAULT_BACKFILL_BATCH_SIZE = 500
+
+  constructor(
+    private readonly repository: BacktestMarketDataRepository,
+    private readonly marketDataService: MarketDataService,
+    private readonly binanceProvider: BinanceMarketDataProvider,
+    private readonly okxProvider: OkxMarketDataProvider,
+    private readonly hyperliquidProvider: HyperliquidMarketDataProvider,
+  ) {}
+
+  async prepareData(input: Pick<BacktestRunInput, 'symbols' | 'baseTimeframe' | 'stateTimeframes' | 'dataRange' | 'strategy'>): Promise<void> {
+    const exchange = this.extractExchange(input.strategy.params)
+    if (!exchange) return
+
+    const normalizedSymbols = this.normalizeSymbols(input.symbols)
+    if (normalizedSymbols.length === 0) return
+
+    const provider = this.getProvider(exchange)
+    const providerSymbols = await provider.fetchSymbols(normalizedSymbols)
+    if (providerSymbols.length === 0) {
+      throw new DomainException('backtest.symbol_not_supported', {
+        code: ErrorCode.MARKET_SYMBOL_NOT_FOUND,
+        status: HttpStatus.BAD_REQUEST,
+        args: { exchange, symbols: normalizedSymbols },
+      })
+    }
+
+    await this.marketDataService.upsertSymbolsFromProvider(providerSymbols, provider.name.toUpperCase())
+
+    const targetSymbols = this.resolveProviderBackfillSymbols(normalizedSymbols, providerSymbols)
+    const targetTimeframes = [...new Set<Timeframe>([input.baseTimeframe, ...input.stateTimeframes])]
+    for (const symbol of targetSymbols) {
+      for (const timeframe of targetTimeframes) {
+        await this.backfillHistoricalBars(provider, symbol, timeframe, input.dataRange)
+      }
+    }
+  }
+
+  async ensureSymbolSupported(exchange: string, symbol: string): Promise<'refreshed_then_supported' | 'not_supported'> {
+    const normalizedExchange = this.normalizeExchange(exchange)
+    const normalizedSymbol = normalizeExactCode(symbol)
+    if (!normalizedSymbol) {
+      throw new DomainException('backtesting.symbol_check_invalid_symbol', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: { symbol },
+      })
+    }
+
+    const provider = this.getProvider(normalizedExchange)
+    const providerSymbols = await provider.fetchSymbols([normalizedSymbol])
+    if (providerSymbols.length === 0) {
+      return 'not_supported'
+    }
+
+    await this.marketDataService.upsertSymbolsFromProvider(providerSymbols, provider.name.toUpperCase())
+    return 'refreshed_then_supported'
+  }
 
   async loadBars(input: LoadBarsInput): Promise<Bar[]> {
     const symbols = this.normalizeSymbols(input.symbols)
@@ -125,6 +195,88 @@ export class BacktestMarketDataService {
 
   private normalizeSymbols(symbols: string[]): string[] {
     return [...new Set(symbols.map(symbol => normalizeExactCode(symbol)))]
+  }
+
+  private extractExchange(params: Record<string, unknown>): SupportedExchange | null {
+    if (typeof params.exchange !== 'string') return null
+    try {
+      return this.normalizeExchange(params.exchange)
+    } catch {
+      return null
+    }
+  }
+
+  private normalizeExchange(exchange: string): SupportedExchange {
+    const normalized = exchange.trim().toLowerCase()
+    if (normalized === 'binance' || normalized === 'okx' || normalized === 'hyperliquid') {
+      return normalized
+    }
+    throw new DomainException('backtesting.symbol_check_invalid_exchange', {
+      code: ErrorCode.BAD_REQUEST,
+      status: HttpStatus.BAD_REQUEST,
+      args: { exchange },
+    })
+  }
+
+  private getProvider(exchange: SupportedExchange): MarketDataProvider {
+    if (exchange === 'okx') return this.okxProvider
+    if (exchange === 'hyperliquid') return this.hyperliquidProvider
+    return this.binanceProvider
+  }
+
+  private resolveProviderBackfillSymbols(symbols: string[], providerSymbols: ProviderSymbol[]): string[] {
+    const availableMarketsByRaw = new Map<string, Set<'SPOT' | 'PERP'>>()
+    for (const item of providerSymbols) {
+      const raw = normalizeExactCode(item.symbol)
+      const market = instrumentTypeToMarket(item.instrumentType)
+      const current = availableMarketsByRaw.get(raw) ?? new Set<'SPOT' | 'PERP'>()
+      current.add(market)
+      availableMarketsByRaw.set(raw, current)
+    }
+
+    return symbols.map((symbol) => {
+      if (symbol.includes(':')) return symbol
+      const availableMarkets = availableMarketsByRaw.get(symbol)
+      if (availableMarkets?.has('SPOT')) return toSymbolCode(symbol, 'SPOT')
+      if (availableMarkets?.has('PERP')) return toSymbolCode(symbol, 'PERP')
+      return normalizeRequestedCode(symbol)
+    })
+  }
+
+  private async backfillHistoricalBars(
+    provider: MarketDataProvider,
+    symbol: string,
+    timeframe: Timeframe,
+    range: { fromTs: number; toTs: number },
+  ): Promise<void> {
+    const timeframeMs = getMarketTimeframeMs(timeframe)
+    const maxIterations = Math.ceil(
+      Math.max(range.toTs - range.fromTs, timeframeMs) / (timeframeMs * BacktestMarketDataService.DEFAULT_BACKFILL_BATCH_SIZE),
+    ) + 2
+    let cursor = new Date(range.fromTs)
+
+    for (let i = 0; i < maxIterations; i += 1) {
+      const bars = await provider.fetchHistoricalBars({
+        symbol,
+        timeframe: timeframe as MarketTimeframe,
+        start: cursor,
+        end: new Date(range.toTs),
+        limit: BacktestMarketDataService.DEFAULT_BACKFILL_BATCH_SIZE,
+      })
+
+      if (bars.length === 0) break
+
+      for (const bar of bars) {
+        if (bar.timestamp < range.fromTs || bar.timestamp > range.toTs) continue
+        await this.marketDataService.saveBarFromProvider(bar)
+      }
+
+      const nextCursorMs = (bars[bars.length - 1]?.timestamp ?? 0) + timeframeMs
+      if (nextCursorMs <= cursor.getTime() || nextCursorMs > range.toTs) {
+        break
+      }
+      cursor = new Date(nextCursorMs)
+    }
   }
 
   private buildCodeCandidates(symbol: string): string[] {

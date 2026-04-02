@@ -1,15 +1,15 @@
 import { BacktestSymbolSupportService } from './backtest-symbol-support.service'
 
 describe('backtestSymbolSupportService', () => {
-  it('delegates exchange symbol availability checks to market symbol catalog service', async () => {
-    const marketSymbolCatalogService = {
-      ensureExchangeSymbolAvailable: jest.fn().mockResolvedValue('refreshed_then_supported'),
+  it('delegates exchange symbol availability checks to backtest market data warmup service', async () => {
+    const backtestMarketDataService = {
+      ensureSymbolSupported: jest.fn().mockResolvedValue('refreshed_then_supported'),
     }
-    const service = new BacktestSymbolSupportService(marketSymbolCatalogService as never)
+    const service = new BacktestSymbolSupportService(backtestMarketDataService as never)
 
     await expect(service.checkSupport('okx', 'ETHUSDC')).resolves.toEqual({
       status: 'refreshed_then_supported',
     })
-    expect(marketSymbolCatalogService.ensureExchangeSymbolAvailable).toHaveBeenCalledWith('okx', 'ETHUSDC')
+    expect(backtestMarketDataService.ensureSymbolSupported).toHaveBeenCalledWith('okx', 'ETHUSDC')
   })
 })

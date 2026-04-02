@@ -100,6 +100,7 @@ export class BacktestJobsService {
     })
 
     try {
+      await this.marketDataService.prepareData(input)
       const coverage = await this.marketDataService.resolveCoverage(input)
       if (coverage.kind === 'empty' || !coverage.appliedRange) {
         throw new DomainException('backtest.market_data_empty', {

@@ -62,6 +62,7 @@ function createMarketDataMock(
   ]) as any[]
 
   return {
+    prepareData: jest.fn().mockResolvedValue(undefined),
     resolveCoverage: jest.fn().mockResolvedValue(coverage),
     loadBars: jest.fn().mockResolvedValue(bars),
   }
@@ -146,6 +147,10 @@ describe('backtestJobsService', () => {
 
     const created = await service.createJob(createInput(), OWNER_USER_ID)
     await flushMicrotasks()
+
+    expect(marketData.prepareData).toHaveBeenCalledWith(expect.objectContaining({
+      symbols: ['BTCUSDT'],
+    }))
 
     expect(prisma.backtestJob.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: created.id },

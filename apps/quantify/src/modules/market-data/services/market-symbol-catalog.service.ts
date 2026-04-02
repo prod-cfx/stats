@@ -39,7 +39,23 @@ export class MarketSymbolCatalogService {
       return 'supported'
     }
 
-    await this.refreshExchangeSymbols(normalizedExchange, [normalizedSymbol])
+    try {
+      await this.refreshExchangeSymbols(normalizedExchange, [normalizedSymbol])
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      this.logger.error(
+        `event=market_symbol_catalog_refresh_failed exchange=${normalizedExchange} symbol=${normalizedSymbol} reason=${reason}`,
+      )
+      throw new DomainException('backtesting.symbol_support_temporarily_unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        args: {
+          exchange: normalizedExchange,
+          symbol: normalizedSymbol,
+          reasonMessage: reason,
+        },
+      })
+    }
 
     return (await this.hasSupportedSymbol(normalizedExchange, normalizedSymbol))
       ? 'refreshed_then_supported'
