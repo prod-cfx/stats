@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common'
-import { BacktestMarketDataService } from './backtest-market-data.service'
+import { MarketSymbolCatalogService } from '@/modules/market-data/services/market-symbol-catalog.service'
 
 export interface BacktestSymbolSupportResult {
   status: 'supported' | 'refreshed_then_supported' | 'not_supported'
@@ -8,11 +8,11 @@ export interface BacktestSymbolSupportResult {
 @Injectable()
 export class BacktestSymbolSupportService {
   constructor(
-    private readonly backtestMarketDataService: BacktestMarketDataService,
+    private readonly marketSymbolCatalogService: MarketSymbolCatalogService,
   ) {}
 
   async checkSupport(exchange: string, symbol: string): Promise<BacktestSymbolSupportResult> {
-    const status = await this.backtestMarketDataService.ensureSymbolSupported(exchange, symbol)
+    const status = await this.marketSymbolCatalogService.ensureExchangeSymbolAvailable(exchange, symbol)
     return { status }
   }
 }
