@@ -880,6 +880,9 @@ export function AiQuantPageClient() {
         const nextParams = syncResult
           ? normalizeParamsFromValues(nextParamValues, conv.params)
           : conv.params
+        const nextGraphStatus = response.status === 'PUBLISHED' || confirmGenerate || conv.logicGraph?.status === 'confirmed'
+          ? 'confirmed'
+          : 'draft'
         const nextGraph = shouldUpdateGraph
           ? buildLogicGraphFromCodegenSpec(
               response.specDesc,
@@ -891,6 +894,7 @@ export function AiQuantPageClient() {
                 executionTags: syncResult?.executionTags ?? [],
               },
               nextVersion,
+              nextGraphStatus,
             )
           : conv.logicGraph
         const publishedReply = response.scriptCode
