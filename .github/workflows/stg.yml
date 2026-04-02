@@ -1,0 +1,547 @@
+name: CI
+
+# 说明：
+# - 统一的 CI/CD 脚本，支持 staging 和 production 环境
+# - 通过 workflow_dispatch 的 target 参数选择部署目标
+# - CI/CD 与本地开发统一使用 dx 命令系统
+# - 前端（front / admin）在 GitHub Actions 中构建并部署到 Vercel
+# - 后端（backend / quantify）通过 dx backend-artifact-deploy 制品部署到 AWS 服务器
+# - Node 版本需与仓库要求一致（.nvmrc 指定 22.14.0）
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: '选择要运行/部署的目标（默认 all）'
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - backend
+          - quantify
+          - front
+          - admin
+
+env:
+  NODE_VERSION: '22.14.0'
+  DX_VERSION: '0.1.90'
+  VERCEL_VERSION: '50.4.5'
+  DEPLOY_ENVIRONMENT: ${{ secrets.DEPLOY_ENVIRONMENT }}
+
+jobs:
+  # ============================================
+  # Job 1: 部署 front 到 Vercel
+  # ============================================
+  deploy-front:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.target == 'all' || inputs.target == 'front' }}
+    env:
+      NX_DAEMON: 'false'
+      CI: '1'
+      APP_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
+      NODE_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+    steps:
+      - name: 显示部署环境
+        run: |
+          echo "=========================================="
+          case "${{ secrets.DEPLOY_ENVIRONMENT }}" in
+            "prod")
+              echo "当前部署环境: Production (生产环境)"
+              ;;
+            "staging")
+              echo "当前部署环境: Staging (测试环境)"
+              ;;
+            *)
+              echo "错误：未配置或配置错误的部署环境"
+              echo "=========================================="
+              echo "请在 Repository Settings 中配置 DEPLOY_ENVIRONMENT"
+              echo ""
+              echo "配置步骤："
+              echo "1. 进入仓库 Settings -> Secrets and variables -> Actions"
+              echo "2. 点击 'New repository secret'"
+              echo "3. Name: DEPLOY_ENVIRONMENT"
+              echo "4. Value: staging 或 prod"
+              echo "=========================================="
+              exit 1
+              ;;
+          esac
+          echo "=========================================="
+
+      - name: Checkout 代码
+        uses: actions/checkout@v5
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: 安装 Vercel CLI
+        run: pnpm add -g vercel@${{ env.VERCEL_VERSION }}
+
+      - name: 安装项目依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 部署 front 到 Vercel
+        run: |
+          unset NO_COLOR
+          npx -y @ranger1/dx@${{ env.DX_VERSION }} deploy front ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }} -Y
+
+  # ============================================
+  # Job 2: 部署 admin 到 Vercel
+  # ============================================
+  deploy-admin:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.target == 'all' || inputs.target == 'admin' }}
+    env:
+      NX_DAEMON: 'false'
+      CI: '1'
+      APP_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
+      NODE_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+
+    steps:
+      - name: 显示部署环境
+        run: |
+          echo "=========================================="
+          case "${{ secrets.DEPLOY_ENVIRONMENT }}" in
+            "prod")
+              echo "当前部署环境: Production (生产环境)"
+              ;;
+            "staging")
+              echo "当前部署环境: Staging (测试环境)"
+              ;;
+            *)
+              echo "错误：未配置或配置错误的部署环境"
+              echo "=========================================="
+              echo "请在 Repository Settings 中配置 DEPLOY_ENVIRONMENT"
+              echo ""
+              echo "配置步骤："
+              echo "1. 进入仓库 Settings -> Secrets and variables -> Actions"
+              echo "2. 点击 'New repository secret'"
+              echo "3. Name: DEPLOY_ENVIRONMENT"
+              echo "4. Value: staging 或 prod"
+              echo "=========================================="
+              exit 1
+              ;;
+          esac
+          echo "=========================================="
+
+      - name: Checkout 代码
+        uses: actions/checkout@v5
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: 安装 Vercel CLI
+        run: pnpm add -g vercel@${{ env.VERCEL_VERSION }}
+
+      - name: 安装项目依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 部署 admin 到 Vercel
+        run: |
+          unset NO_COLOR
+          npx -y @ranger1/dx@${{ env.DX_VERSION }} deploy admin ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }} -Y
+
+  # ============================================
+  # Job 3: 制品部署 backend 到 AWS 服务器
+  # ============================================
+  deploy-backend:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.target == 'all' || inputs.target == 'backend' }}
+    env:
+      NX_DAEMON: 'false'
+      CI: '1'
+
+    steps:
+      - name: 显示部署环境
+        run: |
+          echo "=========================================="
+          case "${{ secrets.DEPLOY_ENVIRONMENT }}" in
+            "prod")
+              echo "当前部署环境: Production (生产环境)"
+              ;;
+            "staging")
+              echo "当前部署环境: Staging (测试环境)"
+              ;;
+            *)
+              echo "错误：未配置或配置错误的部署环境"
+              echo "请配置 DEPLOY_ENVIRONMENT 为 staging 或 prod"
+              exit 1
+              ;;
+          esac
+          echo "=========================================="
+
+      - name: Checkout 代码
+        uses: actions/checkout@v5
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 加载 SSH 私钥
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.STG_AWS_SSH_PRIVATE_KEY }}
+
+      - name: 预热 SSH known_hosts
+        env:
+          AWS_SSH_HOST: ${{ secrets.STG_AWS_SSH_HOST }}
+          AWS_SSH_PORT: ${{ secrets.AWS_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${AWS_SSH_PORT}" -H "${AWS_SSH_HOST}" >> ~/.ssh/known_hosts
+
+      - name: 远端环境 preflight（Node/pnpm/pm2）
+        env:
+          HOST: ${{ secrets.STG_AWS_SSH_HOST }}
+          PORT: ${{ secrets.AWS_SSH_PORT }}
+          USER: ${{ secrets.AWS_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -p "$PORT" "$USER@$HOST" "bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+          if command -v nvm >/dev/null 2>&1; then
+            nvm use 22 || nvm install 22
+            nvm alias default 22 || true
+          fi
+
+          if ! command -v node >/dev/null 2>&1; then
+            echo "[ERROR] 远端缺少 node，请先安装 Node.js 22.x（或启用 nvm）后重试"
+            exit 1
+          fi
+
+          command -v pnpm >/dev/null 2>&1 || npm install -g pnpm
+          command -v pm2 >/dev/null 2>&1 || npm install -g pm2
+
+          echo "[INFO] remote node=$(node -v)"
+          echo "[INFO] remote pnpm=$(pnpm -v)"
+          echo "[INFO] remote pm2=$(pm2 -v | tail -n 1)"
+          REMOTE
+
+      - name: 生成 backend 部署临时 dx 配置
+        env:
+          AWS_SSH_HOST: ${{ secrets.STG_AWS_SSH_HOST }}
+          AWS_SSH_PORT: ${{ secrets.AWS_SSH_PORT }}
+          AWS_SSH_USER: ${{ secrets.AWS_SSH_USER }}
+        run: |
+          set -euo pipefail
+          mkdir -p .tmp/dx-config
+          cp dx/config/env-layers.json .tmp/dx-config/env-layers.json
+          cp dx/config/env-policy.jsonc .tmp/dx-config/env-policy.jsonc
+
+          node - <<'NODE'
+          const fs = require('node:fs')
+          const sourcePath = 'dx/config/commands.json'
+          const targetPath = '.tmp/dx-config/commands.json'
+          const config = JSON.parse(fs.readFileSync(sourcePath, 'utf8'))
+
+          const backendDeploy = config?.deploy?.backend?.backendDeploy
+          if (!backendDeploy) {
+            throw new Error('缺少 deploy.backend.backendDeploy 配置')
+          }
+
+          backendDeploy.remote = {
+            host: process.env.AWS_SSH_HOST,
+            port: Number(process.env.AWS_SSH_PORT || 22),
+            user: process.env.AWS_SSH_USER,
+            baseDir: '/opt/work/backend',
+          }
+
+          fs.writeFileSync(targetPath, `${JSON.stringify(config, null, 2)}\n`)
+          NODE
+
+      - name: 使用 dx 执行 backend 制品部署
+        env:
+          DEPLOY_ENV: ${{ secrets.DEPLOY_ENVIRONMENT }}
+        run: |
+          set -euo pipefail
+          case "$DEPLOY_ENV" in
+            "prod")
+              DX_ENV_FLAG="--prod"
+              ;;
+            "staging")
+              DX_ENV_FLAG="--staging"
+              ;;
+            *)
+              echo "错误：不支持的部署环境: $DEPLOY_ENV"
+              exit 1
+              ;;
+          esac
+
+          unset NO_COLOR
+          npx -y @ranger1/dx@${{ env.DX_VERSION }} --config-dir ./.tmp/dx-config deploy backend "$DX_ENV_FLAG"
+
+  # ============================================
+  # Job 4: 制品部署 quantify 到 AWS 服务器
+  # ============================================
+  deploy-quantify:
+    runs-on: ubuntu-latest
+    if: ${{ inputs.target == 'all' || inputs.target == 'quantify' }}
+    env:
+      NX_DAEMON: 'false'
+      CI: '1'
+
+    steps:
+      - name: 显示部署环境
+        run: |
+          echo "=========================================="
+          case "${{ secrets.DEPLOY_ENVIRONMENT }}" in
+            "prod")
+              echo "当前部署环境: Production (生产环境)"
+              ;;
+            "staging")
+              echo "当前部署环境: Staging (测试环境)"
+              ;;
+            *)
+              echo "错误：未配置或配置错误的部署环境"
+              echo "请配置 DEPLOY_ENVIRONMENT 为 staging 或 prod"
+              exit 1
+              ;;
+          esac
+          echo "=========================================="
+
+      - name: Checkout 代码
+        uses: actions/checkout@v5
+
+      - name: 安装 pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: 安装 Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 加载 SSH 私钥
+        uses: webfactory/ssh-agent@v0.10.0
+        with:
+          ssh-private-key: ${{ secrets.STG_AWS_SSH_PRIVATE_KEY }}
+
+      - name: 预热 SSH known_hosts
+        env:
+          AWS_SSH_HOST: ${{ secrets.STG_AWS_SSH_HOST }}
+          AWS_SSH_PORT: ${{ secrets.AWS_SSH_PORT }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          ssh-keyscan -p "${AWS_SSH_PORT}" -H "${AWS_SSH_HOST}" >> ~/.ssh/known_hosts
+
+      - name: 远端环境 preflight（Node/pnpm/pm2）
+        env:
+          HOST: ${{ secrets.STG_AWS_SSH_HOST }}
+          PORT: ${{ secrets.AWS_SSH_PORT }}
+          USER: ${{ secrets.AWS_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -p "$PORT" "$USER@$HOST" "bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          export NVM_DIR="$HOME/.nvm"
+          [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+          if command -v nvm >/dev/null 2>&1; then
+            nvm use 22 || nvm install 22
+            nvm alias default 22 || true
+          fi
+
+          if ! command -v node >/dev/null 2>&1; then
+            echo "[ERROR] 远端缺少 node，请先安装 Node.js 22.x（或启用 nvm）后重试"
+            exit 1
+          fi
+
+          command -v pnpm >/dev/null 2>&1 || npm install -g pnpm
+          command -v pm2 >/dev/null 2>&1 || npm install -g pm2
+
+          echo "[INFO] remote node=$(node -v)"
+          echo "[INFO] remote pnpm=$(pnpm -v)"
+          echo "[INFO] remote pm2=$(pm2 -v | tail -n 1)"
+          REMOTE
+
+      - name: 生成 quantify 部署临时 dx 配置
+        env:
+          AWS_SSH_HOST: ${{ secrets.STG_AWS_SSH_HOST }}
+          AWS_SSH_PORT: ${{ secrets.AWS_SSH_PORT }}
+          AWS_SSH_USER: ${{ secrets.AWS_SSH_USER }}
+        run: |
+          set -euo pipefail
+          mkdir -p .tmp/dx-config
+          cp dx/config/env-layers.json .tmp/dx-config/env-layers.json
+          cp dx/config/env-policy.jsonc .tmp/dx-config/env-policy.jsonc
+
+          node - <<'NODE'
+          const fs = require('node:fs')
+          const sourcePath = 'dx/config/commands.json'
+          const targetPath = '.tmp/dx-config/commands.json'
+          const config = JSON.parse(fs.readFileSync(sourcePath, 'utf8'))
+
+          const quantifyDeploy = config?.deploy?.quantify?.backendDeploy
+          if (!quantifyDeploy) {
+            throw new Error('缺少 deploy.quantify.backendDeploy 配置')
+          }
+
+          quantifyDeploy.remote = {
+            host: process.env.AWS_SSH_HOST,
+            port: Number(process.env.AWS_SSH_PORT || 22),
+            user: process.env.AWS_SSH_USER,
+            baseDir: '/opt/work/quantify',
+          }
+
+          fs.writeFileSync(targetPath, `${JSON.stringify(config, null, 2)}\n`)
+          NODE
+
+      - name: 使用 dx 执行 quantify 制品部署
+        env:
+          DEPLOY_ENV: ${{ secrets.DEPLOY_ENVIRONMENT }}
+        run: |
+          set -euo pipefail
+          case "$DEPLOY_ENV" in
+            "prod")
+              DX_ENV_FLAG="--prod"
+              ;;
+            "staging")
+              DX_ENV_FLAG="--staging"
+              ;;
+            *)
+              echo "错误：不支持的部署环境: $DEPLOY_ENV"
+              exit 1
+              ;;
+          esac
+
+          unset NO_COLOR
+          npx -y @ranger1/dx@${{ env.DX_VERSION }} --config-dir ./.tmp/dx-config deploy quantify "$DX_ENV_FLAG"
+
+      - name: 校验 quantify 当前运行产物包含 @ai/shared 兜底修复
+        env:
+          HOST: ${{ secrets.STG_AWS_SSH_HOST }}
+          PORT: ${{ secrets.AWS_SSH_PORT }}
+          USER: ${{ secrets.AWS_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -p "$PORT" "$USER@$HOST" "bash -s" <<'REMOTE'
+          set -euo pipefail
+          CURRENT_DIR="$(readlink /opt/work/quantify/current || true)"
+          if [ -z "$CURRENT_DIR" ]; then
+            echo "[ERROR] /opt/work/quantify/current is not a symlink or cannot be resolved"
+            exit 1
+          fi
+
+          PROMPT_FILE="/opt/work/quantify/current/apps/quantify/src/modules/llm-strategy-codegen/prompts/strategy-protocol-contract.prompt.js"
+          CONTEXT_PROMPT_FILE="/opt/work/quantify/current/apps/quantify/src/modules/llm-strategy-codegen/prompts/context-schema.prompt.js"
+
+          echo "[INFO] quantify current release: ${CURRENT_DIR}"
+          echo "[INFO] prompt file: ${PROMPT_FILE}"
+
+          if [ ! -f "$PROMPT_FILE" ] || [ ! -f "$CONTEXT_PROMPT_FILE" ]; then
+            echo "[ERROR] quantify prompt js files not found in current release"
+            exit 1
+          fi
+
+          if ! grep -q "FALLBACK_STRATEGY_PROTOCOL_DECLARATIONS" "$PROMPT_FILE"; then
+            echo "[ERROR] strategy-protocol fallback marker missing (likely old artifact without @ai/shared fallback fix)"
+            exit 1
+          fi
+
+          if ! grep -q "FALLBACK_CONTEXT_SCHEMA_BLOCK" "$CONTEXT_PROMPT_FILE"; then
+            echo "[ERROR] context-schema fallback marker missing (likely old artifact without @ai/shared fallback fix)"
+            exit 1
+          fi
+
+          echo "[INFO] quantify artifact fingerprint check passed"
+          REMOTE
+
+      - name: 强制执行 quantify 数据库迁移并校验关键表
+        env:
+          DEPLOY_ENV: ${{ secrets.DEPLOY_ENVIRONMENT }}
+          HOST: ${{ secrets.STG_AWS_SSH_HOST }}
+          PORT: ${{ secrets.AWS_SSH_PORT }}
+          USER: ${{ secrets.AWS_SSH_USER }}
+        run: |
+          set -euo pipefail
+
+          case "$DEPLOY_ENV" in
+            "prod")
+              APP_ENV_NAME="production"
+              ;;
+            "staging")
+              APP_ENV_NAME="staging"
+              ;;
+            *)
+              echo "错误：不支持的部署环境: $DEPLOY_ENV"
+              exit 1
+              ;;
+          esac
+
+          ssh -p "$PORT" "$USER@$HOST" "APP_ENV_NAME=${APP_ENV_NAME} bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd /opt/work/quantify/current
+
+          export APP_ENV="${APP_ENV_NAME}"
+
+          resolve_env_file() {
+            local filename="$1"
+            local candidates=(
+              "/opt/work/quantify/current/${filename}"
+              "/opt/work/quantify/shared/${filename}"
+              "/opt/work/quantify/${filename}"
+            )
+            for candidate in "${candidates[@]}"; do
+              if [ -f "$candidate" ]; then
+                echo "$candidate"
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          ENV_BASE_FILE="$(resolve_env_file ".env.${APP_ENV}" || true)"
+          ENV_LOCAL_FILE="$(resolve_env_file ".env.${APP_ENV}.local" || true)"
+          if [ -z "$ENV_BASE_FILE" ] || [ -z "$ENV_LOCAL_FILE" ]; then
+            echo "[WARN] cannot locate env files for APP_ENV=${APP_ENV}, skip extra migration verification"
+            echo "[INFO] searched in: /opt/work/quantify/current /opt/work/quantify/shared /opt/work/quantify"
+            exit 0
+          fi
+
+          pnpm exec dotenv -e "$ENV_BASE_FILE" -e "$ENV_LOCAL_FILE" -- bash -lc '
+            set -euo pipefail
+            if [ -n "${QUANTIFY_DATABASE_URL:-}" ] && [ "${QUANTIFY_DATABASE_URL}" != "__SET_IN_env.local__" ]; then
+              export DATABASE_URL="${QUANTIFY_DATABASE_URL}"
+            fi
+            if [ -z "${DATABASE_URL}" ] || [ "${DATABASE_URL}" = "__SET_IN_env.local__" ]; then
+              echo "[WARN] quantify DATABASE_URL is missing, skip extra migration verification"
+              exit 0
+            fi
+
+            pnpm --filter @net/quantify run prisma:migrate:deploy
+            pnpm --filter @net/quantify run prisma:schema:audit
+          '
+          REMOTE
