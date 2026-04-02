@@ -27,6 +27,8 @@ interface DeployStrategyInput {
   symbol: string
   timeframe: string
   positionPct: number
+  initialBalanceQuote?: number
+  accountBalanceQuote?: number
   mode?: 'TESTNET' | 'LIVE'
   strategyInstanceId?: string
   exchangeAccountId?: string
@@ -121,6 +123,12 @@ export class AccountStrategyViewRepository {
           symbol: input.symbol,
           timeframe: input.timeframe,
           positionPct: input.positionPct,
+          ...(typeof input.initialBalanceQuote === 'number' && Number.isFinite(input.initialBalanceQuote)
+            ? { initialBalanceQuote: input.initialBalanceQuote }
+            : {}),
+          ...(typeof input.accountBalanceQuote === 'number' && Number.isFinite(input.accountBalanceQuote)
+            ? { accountBalanceQuote: input.accountBalanceQuote }
+            : {}),
         }
 
         await tx.strategyInstance.update({
@@ -182,6 +190,7 @@ export class AccountStrategyViewRepository {
 
         if (!existingStrategyAccount) {
           const initialBalance = this.resolveInitialBalanceQuote(mergedParams)
+          const accountBalance = this.resolveAccountBalanceQuote(mergedParams, initialBalance)
           await tx.userStrategyAccount.create({
             data: {
               userId: input.userId,
@@ -189,7 +198,7 @@ export class AccountStrategyViewRepository {
               strategyName: normalizedName,
               baseCurrency: 'USDT',
               initialBalance,
-              balance: initialBalance,
+              balance: accountBalance,
               equity: initialBalance,
             },
           })
@@ -235,6 +244,12 @@ export class AccountStrategyViewRepository {
         symbol: input.symbol,
         timeframe: input.timeframe,
         positionPct: input.positionPct,
+        ...(typeof input.initialBalanceQuote === 'number' && Number.isFinite(input.initialBalanceQuote)
+          ? { initialBalanceQuote: input.initialBalanceQuote }
+          : {}),
+        ...(typeof input.accountBalanceQuote === 'number' && Number.isFinite(input.accountBalanceQuote)
+          ? { accountBalanceQuote: input.accountBalanceQuote }
+          : {}),
       }
 
       const strategyInstance = await tx.strategyInstance.create({
@@ -477,6 +492,17 @@ export class AccountStrategyViewRepository {
     return new Prisma.Decimal(1000)
   }
 
+  private resolveAccountBalanceQuote(
+    params: Record<string, unknown>,
+    fallbackInitialBalance: Prisma.Decimal,
+  ): Prisma.Decimal {
+    const numeric = Number(params.accountBalanceQuote)
+    if (Number.isFinite(numeric) && numeric >= 0) {
+      return new Prisma.Decimal(numeric)
+    }
+    return fallbackInitialBalance
+  }
+
   async findStrategyForUser(userId: string, strategyInstanceId: string) {
     const client = this.txHost.tx
     return client.strategyInstance.findFirst({
@@ -502,7 +528,9 @@ export class AccountStrategyViewRepository {
           include: {
             exchangeAccount: {
               select: {
+                id: true,
                 name: true,
+                exchangeId: true,
               },
             },
           },

@@ -4,6 +4,7 @@ import type { AccountStrategyDetailResponseDto, AccountStrategyTimelineEventDto 
 import type { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
 import type { AccountStrategyListQueryDto } from '../dto/account-strategy-list-query.dto'
 import type { StrategySignalsRuntimeConfig } from '@/modules/strategy-signals/types/strategy-signals-config.type'
+import type { ExchangeId, MarketType, UnifiedBalance } from '@/modules/trading/core/types'
 import { createHash } from 'node:crypto'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Optional } from '@nestjs/common'
@@ -20,6 +21,8 @@ import { StrategyInstanceStatsService } from '@/modules/strategy-instances/servi
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { StrategyInstancesService } from '@/modules/strategy-instances/services/strategy-instances.service'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '@/modules/strategy-signals/types/strategy-signals-config.type'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { TradingService } from '@/modules/trading/trading.service'
 import { Prisma } from '@/prisma/prisma.types'
 import { AccountStrategyAction } from '../dto/account-strategy-action.dto'
 import {
@@ -41,6 +44,7 @@ export class AccountStrategyViewService {
     private readonly marketDataIngestionService: MarketDataIngestionService,
     @Optional() private readonly marketDataReadGateway?: MarketDataReadGateway,
     @Optional() private readonly configService?: ConfigService,
+    @Optional() private readonly tradingService?: TradingService,
   ) {}
 
   async listStrategies(
@@ -144,6 +148,12 @@ export class AccountStrategyViewService {
 
     const symbol = this.readString(mergedParams, ['symbol'])
     const normalizedSymbol = symbol?.split(':')[0] ?? null
+    const exchangeId = this.resolveExchangeId(
+      this.readString(mergedParams, ['exchange', 'provider', 'exchangeId'])
+        ?? sub?.exchangeAccount?.exchangeId
+        ?? null,
+    )
+    const marketType = this.resolveMarketType(mergedParams, symbol, exchangeId)
 
     const account = await this.repo.findUserStrategyAccount(userId, row.strategyTemplateId)
       ?? (normalizedSymbol
@@ -167,6 +177,12 @@ export class AccountStrategyViewService {
     const positionOverview = account
       ? await this.repo.loadPositionOverview(account.id)
       : { openCount: 0, closedCount: 0 }
+    const hasLocalActivity = this.hasLocalStrategyActivity({
+      account,
+      equityRows,
+      tradeStats,
+      positionOverview,
+    })
     const timelineSource = await this.repo.loadTimeline(
       userId,
       strategyInstanceId,
@@ -186,6 +202,34 @@ export class AccountStrategyViewService {
     const resolvedAvailableBalance = account
       ? this.resolveAccountAvailableBalance(account, livePositionFinancials ?? positionFinancials)
       : null
+    const resolvedTotalEquity = account
+      ? this.resolveAccountEquity(account, livePositionFinancials ?? positionFinancials)
+      : null
+    const exchangeBalance = exchangeId
+      ? await this.resolveExchangeBalanceSnapshot({
+          userId,
+          exchangeId,
+          marketType,
+          exchangeAccountId: sub?.exchangeAccount?.id ?? null,
+          preferredAsset: account
+            ? this.readAccountBaseCurrency(account)
+            : this.resolvePreferredQuoteAsset(symbol),
+        })
+      : null
+    const shouldUseExchangeBalance = !!exchangeBalance && !hasLocalActivity
+    const shouldSeedInitialBalanceFromExchange = shouldUseExchangeBalance && this.isDefaultSeedAccount(account)
+    const overviewInitialBalance = shouldSeedInitialBalanceFromExchange
+      ? exchangeBalance.total
+      : (account ? this.toFiniteNumber(account.initialBalance) : exchangeBalance?.total ?? null)
+    const overviewTotalEquity = shouldUseExchangeBalance
+      ? exchangeBalance.total
+      : resolvedTotalEquity
+    const overviewAvailableBalance = shouldUseExchangeBalance
+      ? exchangeBalance.free
+      : resolvedAvailableBalance
+    const overviewBaseCurrency = shouldUseExchangeBalance
+      ? exchangeBalance.asset
+      : (account ? this.readAccountBaseCurrency(account) : exchangeBalance?.asset ?? null)
     const totalPnl = account
       ? (resolvedRealizedPnl ?? 0) + (resolvedUnrealizedPnl ?? 0)
       : this.readStatsNumber(stats, 'totalPnl')
@@ -200,13 +244,15 @@ export class AccountStrategyViewService {
 
     const derivedEquitySeries = account
       ? this.buildIndustryEquitySeries({
-          initialBalance: Number(account.initialBalance),
+          initialBalance: overviewInitialBalance ?? Number(account.initialBalance),
           totalRealizedPnl: resolvedRealizedPnl ?? 0,
           totalUnrealizedPnl: resolvedUnrealizedPnl ?? 0,
           closedPositionRows,
           startedAt: lifecycleStartAt,
           dailyRows: equityRows,
-          currentEquity: this.resolveAccountEquity(account, livePositionFinancials ?? positionFinancials),
+          currentEquity: shouldUseExchangeBalance
+            ? (overviewInitialBalance ?? exchangeBalance?.total ?? null)
+            : resolvedTotalEquity,
         })
       : []
 
@@ -220,6 +266,8 @@ export class AccountStrategyViewService {
 
     const todayPnl = account
       ? this.calculateTodayPnl(
+          overviewTotalEquity,
+          equityRows,
           resolvedUnrealizedPnl ?? 0,
           closedPositionRows,
         )
@@ -260,12 +308,12 @@ export class AccountStrategyViewService {
       },
       timeline: this.buildMixedTimeline(timelineSource),
       accountOverview: {
-        initialBalance: account ? this.toFiniteNumber(account.initialBalance) : null,
-        totalEquity: account ? this.resolveAccountEquity(account, livePositionFinancials ?? positionFinancials) : null,
-        availableBalance: resolvedAvailableBalance,
+        initialBalance: overviewInitialBalance,
+        totalEquity: overviewTotalEquity,
+        availableBalance: overviewAvailableBalance,
         totalPnl: totalPnl ?? null,
         todayPnl: todayPnl ?? null,
-        baseCurrency: account ? this.readAccountBaseCurrency(account) : null,
+        baseCurrency: overviewBaseCurrency,
       },
       positionOverview: {
         openPositionsCount: account ? positionOverview.openCount : null,
@@ -279,9 +327,11 @@ export class AccountStrategyViewService {
     if (detail.equitySeries.length === 0 && account) {
       detail.equitySeries = [{
         ts: new Date().toISOString(),
-        value: this.resolveAccountEquity(account, livePositionFinancials ?? positionFinancials) ?? (
-          Number(account.initialBalance) + (resolvedRealizedPnl ?? 0) + (resolvedUnrealizedPnl ?? 0)
-        ),
+        value: shouldUseExchangeBalance
+          ? (overviewInitialBalance ?? exchangeBalance?.total ?? null)
+          : (resolvedTotalEquity ?? (
+              Number(account.initialBalance) + (resolvedRealizedPnl ?? 0) + (resolvedUnrealizedPnl ?? 0)
+            )),
       }]
     }
 
@@ -384,6 +434,19 @@ export class AccountStrategyViewService {
     }
 
     const resolvedDeploy = await this.resolveDeployPayload(dto)
+    const exchangeBalance = dto.exchangeAccountId && this.tradingService
+      ? await this.resolveExchangeBalanceSnapshot({
+          userId: dto.userId,
+          exchangeId: resolvedDeploy.exchange,
+          marketType: this.resolveMarketType(
+            { exchange: resolvedDeploy.exchange },
+            resolvedDeploy.symbol,
+            resolvedDeploy.exchange,
+          ),
+          exchangeAccountId: dto.exchangeAccountId,
+          preferredAsset: this.resolvePreferredQuoteAsset(resolvedDeploy.symbol),
+        })
+      : null
 
     try {
       await this.marketDataIngestionService.ensureSymbolsSubscribed([resolvedDeploy.symbol])
@@ -395,6 +458,8 @@ export class AccountStrategyViewService {
         symbol: resolvedDeploy.symbol,
         timeframe: resolvedDeploy.timeframe,
         positionPct: resolvedDeploy.positionPct,
+        initialBalanceQuote: exchangeBalance?.total,
+        accountBalanceQuote: exchangeBalance?.free,
         mode: dto.mode,
         strategyInstanceId: dto.strategyInstanceId,
         exchangeAccountId: dto.exchangeAccountId,
@@ -800,9 +865,21 @@ export class AccountStrategyViewService {
   }
 
   private calculateTodayPnl(
+    currentEquity: number | null,
+    dailyRows: Array<{ date: Date; equityStart?: any }>,
     totalUnrealizedPnl: number,
     closedPositionRows: Array<{ closedAt: Date | null; realizedPnl: any }>,
   ): number {
+    const latestDailyStart = [...dailyRows]
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
+      .map(row => this.toFiniteNumber(row.equityStart))
+      .filter((value): value is number => value !== null)
+      .at(-1)
+
+    if (currentEquity !== null && latestDailyStart !== undefined) {
+      return Number((currentEquity - latestDailyStart).toFixed(8))
+    }
+
     const startUtcDay = new Date()
     startUtcDay.setUTCHours(0, 0, 0, 0)
     const endUtcDay = new Date(startUtcDay.getTime() + 24 * 60 * 60 * 1000)
@@ -985,6 +1062,125 @@ export class AccountStrategyViewService {
 
     const accountValue = this.toFiniteNumber(accountRow[field])
     return accountValue !== null && accountValue !== 0
+  }
+
+  private hasLocalStrategyActivity(input: {
+    account: unknown
+    equityRows: Array<{ date: Date }>
+    tradeStats: { tradeCount: number; closedCount: number; winningCount: number }
+    positionOverview: { openCount: number; closedCount: number }
+  }): boolean {
+    const row = this.readRecord(input.account)
+    const realizedPnl = this.toFiniteNumber(row?.totalRealizedPnl) ?? 0
+    const unrealizedPnl = this.toFiniteNumber(row?.totalUnrealizedPnl) ?? 0
+
+    return input.tradeStats.tradeCount > 0
+      || input.positionOverview.openCount > 0
+      || input.positionOverview.closedCount > 0
+      || input.equityRows.length > 0
+      || realizedPnl !== 0
+      || unrealizedPnl !== 0
+  }
+
+  private isDefaultSeedAccount(account: unknown): boolean {
+    if (!account) return true
+
+    const row = this.readRecord(account)
+    if (!row) return false
+
+    const initialBalance = this.toFiniteNumber(row.initialBalance)
+    const balance = this.toFiniteNumber(row.balance)
+    const equity = this.toFiniteNumber(row.equity)
+    const realizedPnl = this.toFiniteNumber(row.totalRealizedPnl) ?? 0
+    const unrealizedPnl = this.toFiniteNumber(row.totalUnrealizedPnl) ?? 0
+
+    return initialBalance === 1000
+      && (balance === null || balance === 1000)
+      && (equity === null || equity === 1000)
+      && realizedPnl === 0
+      && unrealizedPnl === 0
+  }
+
+  private resolveExchangeId(value: string | null): ExchangeId | null {
+    if (value === 'binance' || value === 'okx' || value === 'hyperliquid') {
+      return value
+    }
+    return null
+  }
+
+  private resolveMarketType(
+    mergedParams: Record<string, unknown>,
+    symbol: string | null,
+    exchangeId: ExchangeId | null,
+  ): MarketType {
+    const raw = this.readString(mergedParams, ['marketType', 'instrumentType'])
+    if (raw === 'spot' || raw === 'perp') return raw
+    if (symbol?.includes(':') || symbol?.toUpperCase().includes('SWAP')) return 'perp'
+    if (exchangeId === 'hyperliquid') return 'perp'
+    return 'spot'
+  }
+
+  private resolvePreferredQuoteAsset(symbol: string | null): string | null {
+    if (!symbol) return 'USDT'
+
+    const normalized = symbol.trim().toUpperCase()
+    if (normalized.endsWith('USDT')) return 'USDT'
+    if (normalized.endsWith('USDC')) return 'USDC'
+
+    const parts = normalized.split(/[/:-]/).filter(Boolean)
+    return parts[1] ?? 'USDT'
+  }
+
+  private async resolveExchangeBalanceSnapshot(input: {
+    userId: string
+    exchangeId: ExchangeId
+    marketType: MarketType
+    exchangeAccountId: string | null
+    preferredAsset: string | null
+  }): Promise<{ asset: string; free: number; total: number } | null> {
+    if (!this.tradingService) return null
+
+    try {
+      const balances = await this.tradingService.getBalance(
+        input.userId,
+        input.exchangeId,
+        input.marketType,
+        input.exchangeAccountId ?? undefined,
+      )
+
+      return this.pickExchangeBalance(balances, input.preferredAsset)
+    } catch {
+      return null
+    }
+  }
+
+  private pickExchangeBalance(
+    balances: UnifiedBalance[],
+    preferredAsset: string | null,
+  ): { asset: string; free: number; total: number } | null {
+    if (!Array.isArray(balances) || balances.length === 0) return null
+
+    const normalizedPreferredAsset = preferredAsset?.trim().toUpperCase() ?? 'USDT'
+    const preferred = balances.find(balance => balance.asset?.trim().toUpperCase() === normalizedPreferredAsset)
+    if (preferred) {
+      return {
+        asset: preferred.asset,
+        free: preferred.free,
+        total: preferred.total,
+      }
+    }
+
+    const richest = [...balances]
+      .filter(balance => Number.isFinite(balance.total) && balance.total > 0)
+      .sort((a, b) => b.total - a.total)[0]
+
+    if (!richest) return null
+
+    return {
+      asset: richest.asset,
+      free: richest.free,
+      total: richest.total,
+    }
   }
 
   private hashDeployPayload(dto: AccountStrategyDeployDto): string {

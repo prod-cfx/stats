@@ -83,4 +83,20 @@ describe('tradingService', () => {
     expect(accountStore.getAccountConfig).toHaveBeenCalledWith('user-9', 'okx')
     expect(accountStore.getAccountConfigById).not.toHaveBeenCalled()
   })
+
+  it('fetches balances through the selected exchange account when exchangeAccountId is provided', async () => {
+    const { service, client, accountStore } = createService()
+
+    accountStore.getAccountConfigById.mockResolvedValue({
+      exchangeId: 'okx',
+      config: { apiKey: 'k', secret: 's', passphrase: 'p', isTestnet: true },
+    })
+    client.fetchBalance.mockResolvedValue([{ asset: 'USDT', free: 60000, locked: 0, total: 60000 }])
+
+    const result = await service.getBalance('user-1', 'okx', 'spot', 'exchange-account-1')
+
+    expect(accountStore.getAccountConfigById).toHaveBeenCalledWith('exchange-account-1', 'user-1')
+    expect(accountStore.getAccountConfig).not.toHaveBeenCalled()
+    expect(result).toEqual([{ asset: 'USDT', free: 60000, locked: 0, total: 60000 }])
+  })
 })

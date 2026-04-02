@@ -187,4 +187,50 @@ describe('ai-quant-strategy-api-adapter', () => {
     expect(record.schemaVersion).toBe('v2')
     expect(record.supportsDynamicParams).toBe(true)
   })
+
+  it('derives detail initialCapital from account overview initial balance when available', () => {
+    const record = mapAccountStrategyDetailToRecord({
+      id: 'inst-4',
+      name: 'detail strategy 3',
+      status: 'running',
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      positionPct: 10,
+      isSubscribed: true,
+      metrics: {
+        returnPct: 0,
+        maxDrawdownPct: 0,
+        winRatePct: 0,
+        tradeCount: 0,
+      },
+      updatedAt: '2026-03-20T00:00:00.000Z',
+      totalPnl: 0,
+      todayPnl: 0,
+      equitySeries: [{ ts: '2026-03-20T00:00:00.000Z', value: 60000 }],
+      snapshot: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+        deployAccountName: null,
+        deployAt: null,
+        paramSchema: null,
+        paramValues: null,
+        schemaVersion: null,
+      },
+      accountOverview: {
+        initialBalance: 60000,
+        totalEquity: 60000,
+        availableBalance: 60000,
+        totalPnl: 0,
+        todayPnl: 0,
+        baseCurrency: 'USDT',
+      },
+      timeline: [],
+      latestOrders: [],
+    } as any)
+
+    expect(record.initialCapital).toBe(60000)
+  })
 })

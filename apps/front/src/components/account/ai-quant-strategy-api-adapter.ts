@@ -80,6 +80,9 @@ export function mapAccountStrategyDetailToRecord(
   detail: AccountAiQuantStrategyDetail,
 ): AiQuantStrategyRecord {
   const exchange = detail.exchange === 'okx' ? 'okx' : 'binance'
+  const initialCapital = detail.accountOverview?.initialBalance
+    ?? detail.equitySeries[0]?.value
+    ?? 10000
   const dynamicParams = mapDynamicParamFields(
     detail.snapshot.paramSchema ?? detail.paramSchema,
     detail.snapshot.paramValues ?? detail.paramValues,
@@ -94,7 +97,7 @@ export function mapAccountStrategyDetailToRecord(
     symbol: detail.symbol ?? '--',
     timeframe: detail.timeframe ?? '--',
     positionPct: normalizeNumber(detail.positionPct),
-    initialCapital: 10000,
+    initialCapital,
     metrics: {
       returnPct: normalizeNumber(detail.metrics.returnPct),
       maxDrawdownPct: normalizeNumber(detail.metrics.maxDrawdownPct),
