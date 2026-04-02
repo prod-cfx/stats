@@ -1,34 +1,19 @@
-'use client'
-
-import dynamic from 'next/dynamic'
 import React from 'react'
-import { useTranslation } from 'react-i18next'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
 import { BodyText, PageTitle } from '@/components/ui/Typography'
+import { getServerTranslator } from '@/lib/i18n/server'
+import { PredictionMarketGridClient } from './PredictionMarketGridClient'
 
-function PredictionMarketGridFallback() {
-  const { t } = useTranslation()
-  return (
-    <div className="flex h-96 items-center justify-center text-[color:var(--cf-muted)]">
-      {t('common.loading')}
-    </div>
-  )
-}
+export default async function PredictionMarketPage({
+  params,
+}: {
+  params: Promise<{ lng: string }> | { lng: string }
+}) {
+  const resolved = await Promise.resolve(params)
+  const lng = resolved.lng === 'en' ? 'en' : 'zh'
+  const { t } = await getServerTranslator(lng)
 
-const PredictionMarketGrid = dynamic(
-  () =>
-    import('@/components/prediction-market/PredictionMarketGrid').then(
-      mod => mod.PredictionMarketGrid,
-    ),
-  {
-    ssr: false,
-    loading: PredictionMarketGridFallback,
-  },
-)
-
-export default function PredictionMarketPage() {
-  const { t } = useTranslation()
   return (
     <div className="flex min-h-screen flex-col bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
       <Navbar />
@@ -39,7 +24,7 @@ export default function PredictionMarketPage() {
             <BodyText>{t('predictionMarket.subtitle')}</BodyText>
           </div>
 
-          <PredictionMarketGrid />
+          <PredictionMarketGridClient />
         </div>
       </main>
       <Footer />

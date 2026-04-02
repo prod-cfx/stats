@@ -1,13 +1,18 @@
-'use client';
+import React, { Suspense } from 'react'
+import { Footer } from '@/components/layout/Footer'
+import { Navbar } from '@/components/layout/Navbar'
+import { getServerTranslator } from '@/lib/i18n/server'
+import { LiquidationMapClient } from './LiquidationMapClient'
 
-import React, { Suspense } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Footer } from '@/components/layout/Footer';
-import { Navbar } from '@/components/layout/Navbar';
-import { LiquidationMapClient } from './LiquidationMapClient';
+export default async function LiquidationMapPage({
+  params,
+}: {
+  params: Promise<{ lng: string }> | { lng: string }
+}) {
+  const resolved = await Promise.resolve(params)
+  const lng = resolved.lng === 'en' ? 'en' : 'zh'
+  const { t } = await getServerTranslator(lng)
 
-export default function LiquidationMapPage() {
-  const { t } = useTranslation();
   return (
     <div className="flex flex-col min-h-screen bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
       <Navbar />
@@ -19,5 +24,5 @@ export default function LiquidationMapPage() {
       </main>
       <Footer />
     </div>
-  );
+  )
 }

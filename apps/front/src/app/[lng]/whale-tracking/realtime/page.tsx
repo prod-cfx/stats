@@ -1,13 +1,18 @@
-'use client';
+import React, { Suspense } from 'react'
+import { Footer } from '@/components/layout/Footer'
+import { Navbar } from '@/components/layout/Navbar'
+import { getServerTranslator } from '@/lib/i18n/server'
+import { RealtimeWhalesClient } from './RealtimeWhalesClient'
 
-import React, { Suspense } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Footer } from '@/components/layout/Footer';
-import { Navbar } from '@/components/layout/Navbar';
-import { RealtimeWhalesClient } from './RealtimeWhalesClient';
+export default async function RealtimeWhalesPage({
+  params,
+}: {
+  params: Promise<{ lng: string }> | { lng: string }
+}) {
+  const resolved = await Promise.resolve(params)
+  const lng = resolved.lng === 'en' ? 'en' : 'zh'
+  const { t } = await getServerTranslator(lng)
 
-export default function RealtimeWhalesPage() {
-  const { t } = useTranslation();
   return (
     <div className="flex flex-col min-h-screen bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
       <Navbar />
@@ -20,5 +25,5 @@ export default function RealtimeWhalesPage() {
       </main>
       <Footer />
     </div>
-  );
+  )
 }

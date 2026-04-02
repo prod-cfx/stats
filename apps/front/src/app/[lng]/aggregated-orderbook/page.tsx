@@ -1,14 +1,19 @@
-'use client';
+import React, { Suspense } from 'react'
+import { Footer } from '@/components/layout/Footer'
+import { Navbar } from '@/components/layout/Navbar'
+import { BodyText, PageTitle } from '@/components/ui/Typography'
+import { getServerTranslator } from '@/lib/i18n/server'
+import { AggregatedOrderBookClient } from './AggregatedOrderBookClient'
 
-import React, { Suspense } from 'react';
-import { useTranslation } from 'react-i18next';
-import { Footer } from '@/components/layout/Footer';
-import { Navbar } from '@/components/layout/Navbar';
-import { BodyText, PageTitle } from '@/components/ui/Typography';
-import { AggregatedOrderBookClient } from './AggregatedOrderBookClient';
+export default async function AggregatedOrderBookPage({
+  params,
+}: {
+  params: Promise<{ lng: string }> | { lng: string }
+}) {
+  const resolved = await Promise.resolve(params)
+  const lng = resolved.lng === 'en' ? 'en' : 'zh'
+  const { t } = await getServerTranslator(lng)
 
-export default function AggregatedOrderBookPage() {
-  const { t } = useTranslation();
   return (
     <div className="flex flex-col min-h-screen bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
       <Navbar />
@@ -25,5 +30,5 @@ export default function AggregatedOrderBookPage() {
       </main>
       <Footer />
     </div>
-  );
+  )
 }

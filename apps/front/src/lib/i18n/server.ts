@@ -15,12 +15,16 @@ export type AppLocale = 'zh' | 'en'
 const DEFAULT_LOCALE: AppLocale
   = (process.env.NEXT_PUBLIC_DEFAULT_LOCALE === 'en' ? 'en' : 'zh')
 
-export function getRequestLocale(): AppLocale {
-  return DEFAULT_LOCALE
+function normalizeLocale(locale?: string): AppLocale {
+  return locale === 'en' ? 'en' : 'zh'
 }
 
-export async function getServerTranslator() {
-  const lng = getRequestLocale()
+export function getRequestLocale(locale?: string): AppLocale {
+  return normalizeLocale(locale ?? DEFAULT_LOCALE)
+}
+
+export async function getServerTranslator(locale?: string) {
+  const lng = getRequestLocale(locale)
   const instance = i18next.createInstance()
   await instance.init({
     lng,
@@ -41,4 +45,3 @@ export async function getServerTranslator() {
     t: instance.t.bind(instance),
   } as const
 }
-
