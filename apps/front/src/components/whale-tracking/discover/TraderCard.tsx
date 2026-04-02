@@ -3,7 +3,7 @@
 import { Check, Copy, Info, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from '@/lib/toast';
 
@@ -74,11 +74,11 @@ export const TraderCard = ({
   const isPnlPositive = pnlUsd >= 0;
   const isZh = String(lng).startsWith('zh')
 
-  const tr = (key: string, fallbackZh: string, fallbackEn: string) => {
+  const tr = useCallback((key: string, fallbackZh: string, fallbackEn: string) => {
     const v = t(key)
     if (!v || v === key) return isZh ? fallbackZh : fallbackEn
     return v
-  }
+  }, [isZh, t])
 
   const [hasCopied, setHasCopied] = useState(false)
 
@@ -98,6 +98,10 @@ export const TraderCard = ({
   const resolvedTotalValue = currencyCompact.format(totalValueUsd)
   const resolvedPnl = pnlUsd >= 0 ? `+${currencyCompact.format(pnlUsd)}` : currencyCompact.format(pnlUsd)
   const resolvedWinRate = percentFormatter.format(winRatePct / 100)
+  const avatarStyle = useMemo(() => ({
+    backgroundColor: `${avatarColor}33`,
+    color: avatarColor,
+  }), [avatarColor])
 
   const resolveAiTagLabel = (key: NonNullable<TraderCardProps['aiTags']>[number]['key']) =>
     t(`whaleTracking.discover.aiTags.${key}`)
@@ -111,7 +115,7 @@ export const TraderCard = ({
     return t('whaleTracking.discover.labels.aiTagFallback', { label: resolveAiTagLabel(key) })
   };
 
-  const copyAddress = async (e: React.MouseEvent) => {
+  const copyAddress = useCallback(async (e: React.MouseEvent) => {
     e.stopPropagation();
     e.preventDefault();
 
@@ -155,18 +159,18 @@ export const TraderCard = ({
     } catch {
       toast.error({ title: tr('common.error', '复制失败', 'Copy failed'), description: tr('common.tryAgain', '请重试', 'Please try again'), duration: 2500 })
     }
-  };
+  }, [address, hasCopied, tr]);
 
-  const handleAddressClick = (e: React.MouseEvent) => {
+  const handleAddressClick = useCallback((e: React.MouseEvent) => {
     // Prevent card click event but allow navigation
     e.stopPropagation()
-  }
+  }, [])
 
   const content = variant === 'recommended' ? (
     <div className="bg-[color:var(--cf-surface)] border border-[color:var(--cf-border)] rounded-2xl p-4 md:p-6 flex flex-col gap-6 gradient-border-hover group cursor-pointer h-full" onClick={() => onShowStats?.(address)}>
       <div className="flex justify-between items-start">
         <div className="flex items-center gap-3 md:gap-4 overflow-visible">
-          <div className="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center font-bold text-lg md:text-xl flex-shrink-0" style={{ backgroundColor: `${avatarColor}33`, color: avatarColor }}>
+          <div className="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center font-bold text-lg md:text-xl flex-shrink-0" style={avatarStyle}>
             {address.substring(2, 4).toUpperCase() || 'WH'}
           </div>
           <div className="flex flex-col gap-0.5 min-w-0">

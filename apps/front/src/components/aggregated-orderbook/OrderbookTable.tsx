@@ -78,15 +78,24 @@ const OrderRow = ({
     : theme === 'dark'
       ? 'rgba(34, 197, 94, 0.12)'
       : 'rgba(34, 197, 94, 0.06)'
+  const flashTint = isAsk ? 'rgba(239, 68, 68, 0.06)' : 'rgba(34, 197, 94, 0.06)'
+  const rowButtonStyle = useMemo(() => ({
+    background: selected ? selectedTint : rowTint,
+  }), [rowTint, selected, selectedTint])
+  const depthBarStyle = useMemo(() => ({
+    width: `${Math.min(100, Math.max(0, item.depthPercent))}%`,
+    background: barColor,
+  }), [barColor, item.depthPercent])
+  const flashOverlayStyle = useMemo(() => ({
+    background: flashTint,
+  }), [flashTint])
 
   return (
     <button
       type="button"
       onClick={onSelect}
       className={`group relative flex items-center px-1.5 ${isCompact ? 'py-[1px]' : 'py-[5px]'} w-full cursor-pointer text-left transition-colors`}
-      style={{
-        background: selected ? selectedTint : rowTint,
-      }}
+      style={rowButtonStyle}
       onMouseEnter={e => {
         ;(e.currentTarget as HTMLButtonElement).style.background = hoverTint
       }}
@@ -104,14 +113,14 @@ const OrderRow = ({
       {/* Depth background bar (CoinGlass-style) */}
       <div
         className="absolute top-0 right-0 bottom-0 transition-[width] duration-300 ease-out"
-        style={{ width: `${Math.min(100, Math.max(0, item.depthPercent))}%`, background: barColor }}
+        style={depthBarStyle}
       />
 
       {/* tiny flash on updates */}
       {isFlash && (
         <div
           className="pointer-events-none absolute inset-0"
-          style={{ background: isAsk ? 'rgba(239, 68, 68, 0.06)' : 'rgba(34, 197, 94, 0.06)' }}
+          style={flashOverlayStyle}
         />
       )}
 
@@ -157,6 +166,13 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
   const ROW_HEIGHT = isCompact ? 20 : 28
   const VISIBLE_ROWS = 26
   const TOTAL_HEIGHT = ROW_HEIGHT * VISIBLE_ROWS
+  const tableBodyStyle = useMemo(() => ({
+    height: `${TOTAL_HEIGHT}px`,
+    maxHeight: `${TOTAL_HEIGHT}px`,
+  }), [TOTAL_HEIGHT])
+  const rowContainerStyle = useMemo(() => ({
+    height: `${ROW_HEIGHT}px`,
+  }), [ROW_HEIGHT])
 
   const { rows, canScroll } = useMemo(() => {
     const asksSorted = [...asks].sort(
@@ -219,7 +235,7 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
       {/* Table Body - Fixed height for exactly 26 rows */}
       <div
         className={`min-h-0 flex-1 ${canScroll ? 'cf-scrollbar overflow-auto' : 'overflow-hidden'}`}
-        style={{ height: `${TOTAL_HEIGHT}px`, maxHeight: `${TOTAL_HEIGHT}px` }}
+        style={tableBodyStyle}
       >
         {rows.map((r, idx) => {
           if ((r as any)._type === 'gap') {
@@ -228,7 +244,7 @@ export const OrderbookTable: React.FC<OrderbookTableProps> = ({
           const key = `${r._type}-${r.price}-${idx}`
           const side = r._type === 'ask' || r._type === 'bid' ? r._type : 'bid'
           return (
-            <div key={key} style={{ height: `${ROW_HEIGHT}px` }} className="flex items-center">
+            <div key={key} style={rowContainerStyle} className="flex items-center">
               <OrderRow
                 item={r}
                 type={side}

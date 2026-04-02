@@ -1,7 +1,7 @@
 'use client';
 
 import { ChevronDown } from 'lucide-react';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 
 type FilterOption = string | { value: string; label: string };
 
@@ -28,21 +28,22 @@ export const FilterButton = ({ value, options, onChange, minWidth = "100px", cla
     options.find(opt => getOptionValue(opt) === value) ?? value
   );
 
+  const handleClickOutside = useCallback((event: MouseEvent) => {
+    if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      setIsOpen(false);
+    }
+  }, [])
+
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setIsOpen(false);
-      }
-    };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
+  }, [handleClickOutside]);
 
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
       <button 
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={() => setIsOpen(prev => !prev)}
         className={`flex items-center justify-between ${padding} bg-[color:var(--cf-surface-2)] border rounded-md text-[color:var(--cf-text)] ${textSize} transition-all active:scale-95 ${
           isOpen 
             ? 'border-transparent bg-gradient-to-r from-primary to-secondary shadow-lg shadow-primary/20' 

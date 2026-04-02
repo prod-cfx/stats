@@ -3,7 +3,7 @@
 import type { AggregatedOrderbookLevel, AggregatedOrderbookMarketType } from '@/lib/api'
 import { Check, Info, Settings } from 'lucide-react'
 import dynamic from 'next/dynamic'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { OrderbookTable } from '@/components/aggregated-orderbook/OrderbookTable'
 import { FilterButton } from '@/components/ui/FilterButton'
@@ -25,7 +25,7 @@ const SPOT_EXCHANGES = ['binance', 'okx', 'bybit', 'bitmax']
 // 刷新间隔（毫秒）
 const REFRESH_INTERVAL = 3000
 
-const BothIcon = ({ active }: { active: boolean }) => (
+const BothIcon = memo(({ active }: { active: boolean }) => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M2 4H14" stroke={active ? 'var(--cf-text-strong)' : '#ef4444'} strokeWidth="2" strokeLinecap="round" />
     <path d="M2 7H10" stroke={active ? 'var(--cf-text-strong)' : 'var(--cf-muted)'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
@@ -34,9 +34,9 @@ const BothIcon = ({ active }: { active: boolean }) => (
     <path d="M1 4.5L2.5 3L4 4.5" stroke={active ? 'var(--cf-text-strong)' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     <path d="M1 12.5L2.5 14L4 12.5" stroke={active ? 'var(--cf-text-strong)' : '#22c55e'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
-)
+))
 
-const BidsIcon = ({ active }: { active: boolean }) => (
+const BidsIcon = memo(({ active }: { active: boolean }) => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M2 4H14" stroke={active ? 'var(--cf-text-strong)' : 'var(--cf-muted)'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
     <path d="M2 7H10" stroke={active ? 'var(--cf-text-strong)' : 'var(--cf-muted)'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
@@ -44,9 +44,9 @@ const BidsIcon = ({ active }: { active: boolean }) => (
     <path d="M2 13H14" stroke={active ? 'var(--cf-text-strong)' : '#22c55e'} strokeWidth="2" strokeLinecap="round" />
     <path d="M1 12.5L2.5 14L4 12.5" stroke={active ? 'var(--cf-text-strong)' : '#22c55e'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
-)
+))
 
-const AsksIcon = ({ active }: { active: boolean }) => (
+const AsksIcon = memo(({ active }: { active: boolean }) => (
   <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path d="M2 4H14" stroke={active ? 'var(--cf-text-strong)' : '#ef4444'} strokeWidth="2" strokeLinecap="round" />
     <path d="M2 7H10" stroke={active ? 'var(--cf-text-strong)' : 'var(--cf-muted)'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
@@ -54,7 +54,7 @@ const AsksIcon = ({ active }: { active: boolean }) => (
     <path d="M2 13H14" stroke={active ? 'var(--cf-text-strong)' : 'var(--cf-muted)'} strokeWidth="2" strokeLinecap="round" opacity="0.5" />
     <path d="M1 4.5L2.5 3L4 4.5" stroke={active ? 'var(--cf-text-strong)' : '#ef4444'} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
-)
+))
 
 // 转换后端数据到前端组件格式（累计 BTC 数量）
 // isAsks: asks 需要从最佳价（最低）向外累计，但显示时是倒序，所以需要反向计算
@@ -121,10 +121,12 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
     })
   }, [i18n.language])
 
-  // Update selected exchanges when market type changes
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect
-    setSelectedExchanges(marketType === 'futures' ? FUTURES_EXCHANGES : SPOT_EXCHANGES)
+  const handleMarketTypeChange = useCallback((nextMarketType: 'futures' | 'spot') => {
+    if (nextMarketType === marketType)
+      return
+
+    setMarketType(nextMarketType)
+    setSelectedExchanges(nextMarketType === 'futures' ? FUTURES_EXCHANGES : SPOT_EXCHANGES)
   }, [marketType])
 
   // Click outside to close settings
@@ -138,11 +140,11 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const toggleExchange = (ex: string) => {
+  const toggleExchange = useCallback((ex: string) => {
     setSelectedExchanges(prev =>
       prev.includes(ex) ? prev.filter(e => e !== ex) : [...prev, ex],
     )
-  }
+  }, [])
 
   // 获取数据
   const fetchData = useCallback(async () => {
@@ -248,7 +250,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                     <div className="flex bg-[color:var(--cf-bg)] border border-[color:var(--cf-border)] rounded-lg p-0.5">
                       <button
                         type="button"
-                        onClick={() => setMarketType('futures')}
+                        onClick={() => handleMarketTypeChange('futures')}
                         className={`${isCompact ? 'px-2 py-1 text-xs' : 'px-6 py-1.5 text-sm'} rounded-md font-medium transition-all ${marketType === 'futures'
                           ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20'
                           : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]'}`}
@@ -257,7 +259,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
                       </button>
                       <button
                         type="button"
-                        onClick={() => setMarketType('spot')}
+                        onClick={() => handleMarketTypeChange('spot')}
                         className={`${isCompact ? 'px-2 py-1 text-xs' : 'px-6 py-1.5 text-sm'} rounded-md font-medium transition-all ${marketType === 'spot'
                           ? 'bg-gradient-to-r from-primary to-secondary text-white shadow-lg shadow-primary/20'
                           : 'text-[color:var(--cf-muted)] hover:text-[color:var(--cf-text)]'}`}
