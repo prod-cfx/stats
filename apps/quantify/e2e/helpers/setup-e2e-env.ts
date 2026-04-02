@@ -1,4 +1,13 @@
 import { resolve } from 'node:path'
+import {
+  createEnvAccessor,
+  ensureProcessEnvDefaults,
+  restoreProcessEnv,
+  setProcessEnvValue,
+  snapshotProcessEnv,
+} from '@/common/env/env.accessor'
+
+const getE2eEnv = () => createEnvAccessor(process.env)
 
 /**
  * 确保 E2E 测试运行在 APP_ENV=e2e 环境下。
@@ -11,14 +20,16 @@ export function ensureE2eEnv(
   options: { strict?: boolean; label?: string } = {},
 ): void {
   const { strict = false, label = 'E2E' } = options
+  const env = getE2eEnv()
 
-  if (!process.env.APP_ENV) {
-    process.env.APP_ENV = 'e2e'
+  if (!env.raw('APP_ENV')) {
+    setProcessEnvValue('APP_ENV', 'e2e')
   }
 
-  if (strict && process.env.APP_ENV !== 'e2e') {
+  const appEnv = env.raw('APP_ENV')
+  if (strict && appEnv !== 'e2e') {
     throw new Error(
-      `${label} must run with APP_ENV="e2e" to avoid touching non-test databases, current: ${process.env.APP_ENV}`,
+      `${label} must run with APP_ENV="e2e" to avoid touching non-test databases, current: ${appEnv}`,
     )
   }
 
@@ -34,9 +45,21 @@ export function ensureE2eEnv(
 export function ensureE2eDefaults(
   defaults: Record<string, string>,
 ): void {
-  for (const [key, value] of Object.entries(defaults)) {
-    if (!process.env[key]) {
-      process.env[key] = value
-    }
-  }
+  ensureProcessEnvDefaults(defaults)
+}
+
+export function getE2eEnvValue(key: string): string | undefined {
+  return getE2eEnv().raw(key)
+}
+
+export function snapshotE2eEnv(keys: readonly string[]) {
+  return snapshotProcessEnv(keys)
+}
+
+export function restoreE2eEnv(snapshot: Record<string, string | undefined>): void {
+  restoreProcessEnv(snapshot)
+}
+
+export function setE2eEnvValue(key: string, value: string | undefined): void {
+  setProcessEnvValue(key, value)
 }

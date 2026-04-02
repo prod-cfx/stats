@@ -4,9 +4,10 @@ import { MarketTradesRepository } from '@/modules/markets/repositories/market-tr
 import { TradesPairConfigService } from '@/modules/trades-config/services/trades-pair-config.service'
 import { PrismaService } from '@/prisma/prisma.service'
 import { createTestingApp } from '../fixtures/fixtures'
+import { isE2eFlagEnabled } from '../helpers/setup-e2e-env'
 
 // 通过环境变量控制是否实际访问 Binance WS，避免在 CI 默认跑外网依赖
-const E2E_ENABLED = process.env.BINANCE_TRADES_E2E === 'true'
+const E2E_ENABLED = isE2eFlagEnabled('BINANCE_TRADES_E2E')
 const describeIf = E2E_ENABLED ? describe : describe.skip
 
 describeIf('Binance trades WS (E2E)', () => {

@@ -4,6 +4,7 @@ import type { PrismaService } from '@/prisma/prisma.service'
 
 import { PolymarketService } from '@/modules/polymarket/polymarket.service'
 import { createTestingApp } from '../fixtures/fixtures'
+import { assertSafeE2eDatabase } from '../helpers/setup-e2e-env'
 
 type PolymarketMarketCreateData = Parameters<PrismaService['polymarketMarket']['create']>[0]['data']
 type PolymarketOutcomeCreateData = Parameters<PrismaService['polymarketOutcome']['create']>[0]['data']
@@ -34,13 +35,7 @@ describe('Polymarket markets service (E2E)', () => {
     service = ctx.moduleFixture.get(PolymarketService)
 
     // 仅在 e2e/test 数据库上清理与本测试相关的数据，增加安全保护
-    const appEnv = process.env.APP_ENV
-    const databaseUrl = process.env.DATABASE_URL ?? ''
-    if (appEnv !== 'e2e' || (!databaseUrl.includes('e2e') && !databaseUrl.includes('test'))) {
-      throw new Error(
-        `Unsafe database environment for E2E test: APP_ENV=${appEnv}, DATABASE_URL=${databaseUrl}`,
-      )
-    }
+    assertSafeE2eDatabase('Polymarket markets service (E2E)')
 
 
     await prisma.polymarketOrderbookSnapshot.deleteMany({

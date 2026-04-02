@@ -8,7 +8,7 @@ import { ConfigService as ConfigServiceToken } from '@nestjs/config'
 import { PrismaPg } from '@prisma/adapter-pg'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { PrismaClient as PrismaClientBase } from '@/prisma/prisma.types'
-import { defaultEnvAccessor } from '../common/env/env.accessor'
+import { defaultEnvAccessor, setProcessEnvValue } from '../common/env/env.accessor'
 import { EnvService as EnvServiceToken } from '../common/services/env.service'
 import { PRISMA_OPTIONS } from './prisma.constants'
 
@@ -69,8 +69,7 @@ export class PrismaService extends (PrismaClientBase as any) implements OnModule
       if (isPlaceholder) {
         // 非生产环境：允许无数据库启动（自动进入 mock/offline 模式）
         if (!isProd && !isTestOrE2E) {
-          // 受控例外：写入 process.env 作为跨模块 mock 标志，由 defaultEnvAccessor.bool('USE_MOCK_DATA') 读取
-          process.env.USE_MOCK_DATA = 'true'
+          setProcessEnvValue('USE_MOCK_DATA', 'true')
           connectionString = ''
         } else {
           throw new DomainException('prisma.connection_error', {
@@ -127,8 +126,7 @@ export class PrismaService extends (PrismaClientBase as any) implements OnModule
           `原始错误：${(error as Error)?.message}`,
       )
       if (allowFallback) {
-        // 受控例外：写入 process.env 作为跨模块 mock 标志，由 defaultEnvAccessor.bool('USE_MOCK_DATA') 读取
-        process.env.USE_MOCK_DATA = 'true'
+        setProcessEnvValue('USE_MOCK_DATA', 'true')
         this.logger.warn('Non-prod DB connection failed; falling back to USE_MOCK_DATA=true for this run.')
       } else {
         throw error

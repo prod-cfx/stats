@@ -3,6 +3,7 @@ import type { INestApplication } from '@nestjs/common'
 import { CoinglassWhaleAlertJob } from '@/modules/data-sync/jobs/coinglass-whale-alert.job'
 import { PrismaService } from '@/prisma/prisma.service'
 import { createTestingApp } from '../fixtures/fixtures'
+import { getE2eEnvValue } from '../helpers/setup-e2e-env'
 
 jest.setTimeout(180_000)
 
@@ -142,7 +143,7 @@ describe('Coinglass Hyperliquid whale alert data-pull job (E2E)', () => {
       expect(spy).toHaveBeenCalledTimes(1)
       const [urlArg, apiKeyArg] = spy.mock.calls[0]
       expect(String(urlArg)).toContain('/hyperliquid/whale-alert')
-      expect(apiKeyArg).toBe(process.env.COINGLASS_API_KEY)
+      expect(apiKeyArg).toBe(getE2eEnvValue('COINGLASS_API_KEY'))
     } finally {
       spy.mockRestore()
     }

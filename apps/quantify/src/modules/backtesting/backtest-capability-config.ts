@@ -1,4 +1,5 @@
 import type { EnvAccessor } from '@/common/env/env.accessor'
+import { defaultEnvAccessor } from '@/common/env/env.accessor'
 
 export interface BacktestCapabilitiesConfigRecord {
   allowedSymbols?: unknown
@@ -72,7 +73,7 @@ export function resolveConfiguredBacktestCapabilityConfig(
 ): NormalizedBacktestCapabilitiesConfig {
   const read = (key: string): string | undefined => {
     if (!env) {
-      return process.env[key]
+      return defaultEnvAccessor.raw(key)
     }
 
     if ('raw' in env && typeof env.raw === 'function') {

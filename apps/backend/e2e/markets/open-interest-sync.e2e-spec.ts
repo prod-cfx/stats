@@ -4,9 +4,10 @@ import { OpenInterestSyncJob } from '@/modules/open-interest/jobs/open-interest-
 import { OpenInterestService } from '@/modules/open-interest/open-interest.service'
 import { PrismaService } from '@/prisma/prisma.service'
 import { createTestingApp } from '../fixtures/fixtures'
+import { isE2eFlagEnabled } from '../helpers/setup-e2e-env'
 
 // 通过环境变量控制是否实际访问 Coinglass，避免在 CI 默认跑外网依赖
-const E2E_ENABLED = process.env.OPEN_INTEREST_E2E === 'true'
+const E2E_ENABLED = isE2eFlagEnabled('OPEN_INTEREST_E2E')
 const describeIf = E2E_ENABLED ? describe : describe.skip
 
 describeIf('Open interest sync via Coinglass (E2E)', () => {

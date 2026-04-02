@@ -6,9 +6,10 @@ import { BitmaxCexPerpetualOrderbookWsAdapter } from '@/modules/data-sync/servic
 import { BitmaxCexSpotOrderbookWsAdapter } from '@/modules/data-sync/services/adapters/bitmax-cex-spot-orderbook-ws.adapter'
 import { OrderbookPairConfigService } from '@/modules/orderbook-config/services/orderbook-pair-config.service'
 import { createTestingApp } from '../fixtures/fixtures'
+import { isE2eFlagEnabled } from '../helpers/setup-e2e-env'
 
 // 通过环境变量控制是否实际访问 Bitmax WS，避免在 CI 默认跑外网依赖
-const E2E_ENABLED = process.env.BITMAX_ORDERBOOK_E2E === 'true'
+const E2E_ENABLED = isE2eFlagEnabled('BITMAX_ORDERBOOK_E2E')
 const describeIf = E2E_ENABLED ? describe : describe.skip
 
 describeIf('Bitmax orderbook WS (E2E)', () => {

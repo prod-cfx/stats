@@ -3,8 +3,9 @@ import type { Socket as ClientSocket } from 'socket.io-client'
 import { io as ioClient } from 'socket.io-client'
 
 import { createTestingApp } from '../fixtures/fixtures'
+import { isE2eFlagEnabled } from '../helpers/setup-e2e-env'
 
-const E2E_ENABLED = process.env.KLINE_TICKER_E2E === 'true'
+const E2E_ENABLED = isE2eFlagEnabled('KLINE_TICKER_E2E')
 const describeIf = E2E_ENABLED ? describe : describe.skip
 
 describeIf('KlineGateway - Ticker WebSocket (E2E)', () => {
