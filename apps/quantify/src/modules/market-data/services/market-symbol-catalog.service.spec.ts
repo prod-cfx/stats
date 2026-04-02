@@ -121,4 +121,14 @@ describe('marketSymbolCatalogService', () => {
     expect(marketDataService.upsertSymbolsFromProvider).toHaveBeenNthCalledWith(2, expect.any(Array), 'OKX')
     expect(marketDataService.upsertSymbolsFromProvider).toHaveBeenCalledTimes(2)
   })
+
+  it('triggers an initial background sync on application bootstrap', async () => {
+    const { service } = createService()
+    const syncSpy = jest.spyOn(service, 'syncAllExchangeSymbols').mockResolvedValue()
+
+    service.onApplicationBootstrap()
+    await Promise.resolve()
+
+    expect(syncSpy).toHaveBeenCalledTimes(1)
+  })
 })

@@ -1,5 +1,6 @@
 import type { MarketDataProvider } from '../interfaces/market-data-provider.interface'
 import { ErrorCode } from '@ai/shared'
+import type { OnApplicationBootstrap } from '@nestjs/common'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { DomainException } from '@/common/exceptions/domain.exception'
@@ -19,7 +20,7 @@ export type ExchangeId = 'binance' | 'okx' | 'hyperliquid'
 export type MarketSymbolSupportStatus = 'supported' | 'refreshed_then_supported' | 'not_supported'
 
 @Injectable()
-export class MarketSymbolCatalogService {
+export class MarketSymbolCatalogService implements OnApplicationBootstrap {
   private readonly logger = new Logger(MarketSymbolCatalogService.name)
   private syncAllInProgress = false
   private readonly refreshInProgress = new Set<ExchangeId>()
@@ -31,6 +32,10 @@ export class MarketSymbolCatalogService {
     private readonly okxProvider: OkxMarketDataProvider,
     private readonly hyperliquidProvider: HyperliquidMarketDataProvider,
   ) {}
+
+  onApplicationBootstrap(): void {
+    void this.runInitialSync()
+  }
 
   async ensureExchangeSymbolAvailable(exchange: string, symbol: string): Promise<MarketSymbolSupportStatus> {
     const normalizedExchange = this.normalizeExchange(exchange)
@@ -73,6 +78,17 @@ export class MarketSymbolCatalogService {
       }
     } finally {
       this.syncAllInProgress = false
+    }
+  }
+
+  private async runInitialSync(): Promise<void> {
+    this.logger.log('event=market_symbol_catalog_initial_sync_started')
+    try {
+      await this.syncAllExchangeSymbols()
+      this.logger.log('event=market_symbol_catalog_initial_sync_completed')
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      this.logger.error(`event=market_symbol_catalog_initial_sync_failed reason=${reason}`)
     }
   }
 
