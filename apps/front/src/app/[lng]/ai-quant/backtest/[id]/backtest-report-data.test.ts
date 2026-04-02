@@ -2,7 +2,7 @@ import { describe, expect, it } from '@jest/globals'
 import { createBacktestReportDataFromLive } from './backtest-report-data'
 
 describe('backtest-report-data live mapping', () => {
-  it('maps live equity curve and trades to display format', () => {
+  it('maps live equity curve, analytics, and trade details from the live report', () => {
     const data = createBacktestReportDataFromLive(
       'btjob-1',
       {
@@ -21,16 +21,24 @@ describe('backtest-report-data live mapping', () => {
           {
             id: 't1',
             side: 'LONG',
+            entryTs: Date.parse('2026-03-01T08:00:00.000Z'),
+            entryPrice: 100.5,
             exitTs: Date.parse('2026-03-02T12:00:00.000Z'),
             exitPrice: 102.5,
             returnPct: 5.1234,
+            reasonOpen: '价格 <= 入场价',
+            reasonClose: '价格 >= 止盈价',
           },
           {
             id: 't2',
             side: 'SHORT',
+            entryTs: Date.parse('2026-03-02T08:00:00.000Z'),
+            entryPrice: 99.2,
             exitTs: Date.parse('2026-03-03T12:00:00.000Z'),
             exitPrice: 95.8,
             returnPct: -3.2,
+            reasonOpen: '价格 >= 开空阈值',
+            reasonClose: '价格 <= 平空阈值',
           },
         ],
       },
@@ -44,21 +52,39 @@ describe('backtest-report-data live mapping', () => {
     ])
     expect(data?.trades).toEqual([
       {
-        id: 1,
-        time: '2026-03-02 12:00',
-        type: 'buy-long',
-        price: 102.5,
+        id: 't1',
+        direction: 'long',
+        entryTime: '2026-03-01 08:00',
+        entryPrice: 100.5,
+        exitTime: '2026-03-02 12:00',
+        exitPrice: 102.5,
         profitPct: 5.12,
         isProfit: true,
+        reasonOpen: '价格 <= 入场价',
+        reasonClose: '价格 >= 止盈价',
       },
       {
-        id: 2,
-        time: '2026-03-03 12:00',
-        type: 'sell-close',
-        price: 95.8,
+        id: 't2',
+        direction: 'short',
+        entryTime: '2026-03-02 08:00',
+        entryPrice: 99.2,
+        exitTime: '2026-03-03 12:00',
+        exitPrice: 95.8,
         profitPct: -3.2,
         isProfit: false,
+        reasonOpen: '价格 >= 开空阈值',
+        reasonClose: '价格 <= 平空阈值',
       },
+    ])
+    expect(data?.maxDrawdownAnalysis).toEqual([
+      { label: 'Max Drawdown', value: '-5.00%' },
+      { label: 'Drawdown Period', value: '2026-03-01 ~ 2026-03-02' },
+      { label: 'Recovery Days', value: '1 Days' },
+    ])
+    expect(data?.volatilitySharpe).toEqual([
+      { label: 'Annualized Volatility', value: '198.59%' },
+      { label: 'Sharpe Ratio', value: '9.92' },
+      { label: 'Sortino Ratio', value: '29.15' },
     ])
   })
 

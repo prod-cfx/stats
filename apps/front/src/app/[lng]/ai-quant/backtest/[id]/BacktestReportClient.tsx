@@ -44,9 +44,13 @@ function mapDetailedReport(result: BacktestJobResult): LiveBacktestReportInput |
     trades: result.trades.map(trade => ({
       id: trade.id,
       side: trade.side,
+      entryTs: trade.entryTs,
+      entryPrice: trade.entryPrice,
       exitTs: trade.exitTs,
       exitPrice: trade.exitPrice,
       returnPct: trade.returnPct,
+      reasonOpen: trade.reasonOpen,
+      reasonClose: trade.reasonClose,
     })),
   }
 }
@@ -395,9 +399,11 @@ function TradeDetailsSection({ lng, trades }: { lng: string; trades: TradeRecord
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-[color:var(--cf-border)] text-[color:var(--cf-muted)]">
-              <th className="pb-3 font-normal">{lng === 'en' ? 'Time' : '时间'}</th>
+              <th className="pb-3 font-normal">{lng === 'en' ? 'Entry Time' : '开仓时间'}</th>
+              <th className="pb-3 font-normal">{lng === 'en' ? 'Exit Time' : '平仓时间'}</th>
               <th className="pb-3 font-normal">{lng === 'en' ? 'Direction' : '方向'}</th>
-              <th className="pb-3 font-normal">{lng === 'en' ? 'Price' : '成交价'}</th>
+              <th className="pb-3 font-normal">{lng === 'en' ? 'Entry Price' : '开仓价'}</th>
+              <th className="pb-3 font-normal">{lng === 'en' ? 'Exit Price' : '平仓价'}</th>
               <th className="pb-3 text-right font-normal">{lng === 'en' ? 'Return' : '收益率'}</th>
             </tr>
           </thead>
@@ -407,17 +413,31 @@ function TradeDetailsSection({ lng, trades }: { lng: string; trades: TradeRecord
                 key={trade.id}
                 className="border-b border-[color:var(--cf-border)] transition-colors last:border-0 hover:bg-[color:var(--cf-surface-hover)]"
               >
-                <td className="py-3 text-[color:var(--cf-text)]">{trade.time}</td>
                 <td className="py-3 text-[color:var(--cf-text)]">
-                  {trade.type === 'buy-long'
-                    ? lng === 'en'
-                      ? 'Buy/Long'
-                      : '买入/做多'
-                    : lng === 'en'
-                      ? 'Sell/Close'
-                      : '卖出/平多'}
+                  <div>{trade.entryTime}</div>
+                  {trade.reasonOpen && (
+                    <div className="mt-1 text-xs text-[color:var(--cf-muted)]">{trade.reasonOpen}</div>
+                  )}
                 </td>
-                <td className="py-3 text-[color:var(--cf-text)]">${trade.price.toFixed(2)}</td>
+                <td className="py-3 text-[color:var(--cf-text)]">
+                  <div>{trade.exitTime}</div>
+                  {trade.reasonClose && (
+                    <div className="mt-1 text-xs text-[color:var(--cf-muted)]">{trade.reasonClose}</div>
+                  )}
+                </td>
+                <td className="py-3 text-[color:var(--cf-text)]">
+                  {trade.direction === 'long'
+                    ? lng === 'en'
+                      ? 'Long'
+                      : '做多'
+                    : lng === 'en'
+                      ? 'Short'
+                      : '做空'}
+                </td>
+                <td className="py-3 text-[color:var(--cf-text)]">
+                  {trade.entryPrice === null ? '--' : `$${trade.entryPrice.toFixed(2)}`}
+                </td>
+                <td className="py-3 text-[color:var(--cf-text)]">${trade.exitPrice.toFixed(2)}</td>
                 <td
                   className={`py-3 text-right font-medium ${trade.isProfit ? 'text-[color:var(--cf-primary)]' : 'text-[#FF4D4F]'}`}
                 >
@@ -617,8 +637,12 @@ export function BacktestReportClient({
                   lng === 'en'
                     ? item.value
                     : item.label === 'Recovery Days'
-                      ? item.value.replace(' Days', ' 天')
-                      : item.value,
+                      ? item.value === 'Not recovered'
+                        ? '未恢复'
+                        : item.value.replace(' Days', ' 天')
+                      : item.label === 'Drawdown Period' && item.value === '- ~ -'
+                        ? '--'
+                        : item.value,
               }))}
             />
             <RiskCard

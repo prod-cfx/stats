@@ -67,9 +67,13 @@ describe('BacktestReportClient', () => {
         {
           id: 'trade-1',
           side: 'LONG',
+          entryTs: Date.parse('2026-03-01T08:00:00.000Z'),
+          entryPrice: 100.5,
           exitTs: Date.parse('2026-03-02T12:00:00.000Z'),
           exitPrice: 103.2,
           returnPct: 3.2,
+          reasonOpen: '价格 <= 入场价',
+          reasonClose: '价格 >= 止盈价',
         },
       ],
     })
@@ -98,7 +102,13 @@ describe('BacktestReportClient', () => {
 
     expect(mockGetBacktestJobResult).toHaveBeenCalledWith('btjob-1')
     expect(container.textContent).toContain('交易明细')
+    expect(container.textContent).toContain('开仓时间')
+    expect(container.textContent).toContain('平仓时间')
+    expect(container.textContent).toContain('2026-03-01 08:00')
     expect(container.textContent).toContain('2026-03-02 12:00')
+    expect(container.textContent).toContain('2026-03-01 ~ 2026-03-02')
+    expect(container.textContent).not.toContain('买入/做多')
+    expect(container.textContent).not.toContain('2025-12')
     expect(container.textContent).not.toContain('回测结果暂不可用')
   })
 })

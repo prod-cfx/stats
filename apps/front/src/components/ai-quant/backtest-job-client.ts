@@ -64,6 +64,8 @@ export interface BacktestJobResult {
     fee?: number
     pnl?: number
     returnPct: number
+    reasonOpen?: string
+    reasonClose?: string
   }>
 }
 

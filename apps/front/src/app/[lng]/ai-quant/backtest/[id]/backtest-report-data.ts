@@ -12,12 +12,16 @@ export interface EquityPoint {
 }
 
 export interface TradeRecord {
-  id: number
-  time: string
-  type: 'buy-long' | 'sell-close'
-  price: number
+  id: string
+  direction: 'long' | 'short'
+  entryTime: string
+  entryPrice: number | null
+  exitTime: string
+  exitPrice: number
   profitPct: number
   isProfit: boolean
+  reasonOpen?: string
+  reasonClose?: string
 }
 
 export interface RiskItem {
@@ -38,110 +42,31 @@ export interface LiveBacktestReportInput {
   trades?: Array<{
     id: string
     side: 'LONG' | 'SHORT'
+    entryTs?: number
+    entryPrice?: number
     exitTs: number
     exitPrice: number
     returnPct: number
+    reasonOpen?: string
+    reasonClose?: string
   }> | null
 }
 
-function hashString(value: string): number {
-  let hash = 0
-  for (let i = 0; i < value.length; i += 1) {
-    hash = (hash * 31 + value.charCodeAt(i)) >>> 0
-  }
-  return hash
+interface NormalizedEquityPoint {
+  ts: number
+  equity: number
 }
 
-export function createBacktestReportData(
-  id: string,
-  metrics: BacktestReportMetrics
-): BacktestReportData {
-  const seed = hashString(`${id}:${metrics.tradeCount}:${metrics.totalReturnPct}`)
-  const dataCount = 100
-  const startEquity = 10000
-  const targetEndEquity = startEquity * (1 + metrics.totalReturnPct / 100)
-  const steps = Math.max(1, dataCount - 1)
-  const trendPerStep = (targetEndEquity - startEquity) / steps
-  const volatilityBase = Math.max(0.6, metrics.maxDrawdownPct / 20)
-  const endAt = new Date('2025-12-31T00:00:00Z')
-  let currentEquity = startEquity
-  let peakEquity = startEquity
-  const equitySeries: EquityPoint[] = []
-
-  for (let i = 0; i < dataCount; i += 1) {
-    const phase = i + (seed % 11)
-    const waveA = Math.sin(phase / 8) * 42 * volatilityBase
-    const waveB = Math.cos(phase / 17) * 26 * volatilityBase
-    const movement = i === 0 ? 0 : trendPerStep + waveA + waveB
-    currentEquity = Number((i === 0 ? startEquity : currentEquity + movement).toFixed(2))
-    peakEquity = Math.max(peakEquity, currentEquity)
-    const drawdown = currentEquity < peakEquity
-      ? -((peakEquity - currentEquity) / peakEquity) * 100
-      : 0
-    const timestamp = new Date(endAt.getTime() - (dataCount - 1 - i) * 24 * 60 * 60 * 1000)
-    const time = `${timestamp.getUTCMonth() + 1}-${timestamp.getUTCDate()}`
-    equitySeries.push({
-      time,
-      equity: currentEquity,
-      drawdown: Number(drawdown.toFixed(2)),
-    })
-  }
-
-  const tradeCount = Math.max(0, Math.floor(metrics.tradeCount))
-  const trades: TradeRecord[] = Array.from({ length: tradeCount }, (_, index) => {
-    const raw = Math.sin((seed % 37) + index * 1.7) * 3.4 + Math.cos(index * 0.9) * 1.8
-    const normalized = Number(raw.toFixed(2))
-    const isProfit = normalized >= 0
-    const dayOffset = tradeCount - index
-    const tradeAt = new Date(endAt.getTime() - dayOffset * 36 * 60 * 60 * 1000)
-    const price = 20000 + (seed % 9000) + index * 120 + normalized * 60
-    return {
-      id: index + 1,
-      time: tradeAt.toISOString().slice(0, 16).replace('T', ' '),
-      type: index % 2 === 0 ? 'buy-long' : 'sell-close',
-      price: Number(price.toFixed(2)),
-      profitPct: normalized,
-      isProfit,
-    }
-  })
-
-  const winTrades = trades.filter((trade) => trade.isProfit).length
-  const realizedWinRate = tradeCount > 0 ? Number(((winTrades / tradeCount) * 100).toFixed(2)) : 0
-  const recoveryDays = Math.max(1, Math.round(metrics.maxDrawdownPct * 1.3))
-  const drawdownStartOffset = Math.min(55, 10 + (seed % 25))
-  const drawdownEndOffset = Math.max(1, drawdownStartOffset - 12)
-  const drawdownStart = new Date(endAt.getTime() - drawdownStartOffset * 24 * 60 * 60 * 1000)
-  const drawdownEnd = new Date(endAt.getTime() - drawdownEndOffset * 24 * 60 * 60 * 1000)
-  const period = `${drawdownStart.toISOString().slice(0, 10)} ~ ${drawdownEnd.toISOString().slice(0, 10)}`
-  const annualizedVolatility = Number((Math.max(8, metrics.maxDrawdownPct * 1.2)).toFixed(2))
-  const sharpeRatio = Number((metrics.totalReturnPct / Math.max(annualizedVolatility, 1)).toFixed(2))
-  const sortinoRatio = Number((sharpeRatio * 1.28).toFixed(2))
-  const maxDrawdownAnalysis: RiskItem[] = [
-    { label: 'Max Drawdown', value: `-${metrics.maxDrawdownPct}%` },
-    { label: 'Drawdown Period', value: period },
-    { label: 'Recovery Days', value: `${recoveryDays} Days` },
-  ]
-  const volatilitySharpe: RiskItem[] = [
-    { label: 'Annualized Volatility', value: `${annualizedVolatility}%` },
-    { label: 'Sharpe Ratio', value: `${sharpeRatio}` },
-    { label: 'Sortino Ratio', value: `${sortinoRatio}` },
-  ]
-  const insights = [
-    metrics.totalReturnPct > 0
-      ? `The strategy for backtest #${id} closed with ${metrics.totalReturnPct}% total return under current parameters.`
-      : `The strategy for backtest #${id} ended negative with ${metrics.totalReturnPct}% total return and needs parameter review.`,
-    `Realized win rate from ${tradeCount} executed trades is ${realizedWinRate}% with max drawdown ${metrics.maxDrawdownPct}%.`,
-    `Risk/reward profile is anchored to backtest #${id}; repeated visits will render identical curves, trades and risk cards.`,
-  ]
-
-  return {
-    equitySeries,
-    trades,
-    maxDrawdownAnalysis,
-    volatilitySharpe,
-    insights,
-  }
+interface DrawdownSnapshot {
+  maxDrawdownPct: number
+  periodStart: string
+  periodEnd: string
+  recoveryDays: string
+  summary: string
 }
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000
+const DAYS_PER_YEAR = 365
 
 export function createBacktestReportDataFromLive(
   id: string,
@@ -152,40 +77,88 @@ export function createBacktestReportDataFromLive(
     return null
   }
 
-  const mappedEquitySeries = mapLiveEquitySeries(report.equityCurve)
-  const mappedTrades = mapLiveTrades(report.trades)
+  const normalizedEquity = normalizeEquityCurve(report.equityCurve)
+  const equitySeries = mapLiveEquitySeries(normalizedEquity)
+  const trades = mapLiveTrades(report.trades)
+  const drawdown = analyzeDrawdown(normalizedEquity)
+  const performanceStats = analyzePerformance(normalizedEquity)
+  const realizedWinRate = trades.length === 0
+    ? 0
+    : (trades.filter(trade => trade.isProfit).length / trades.length) * 100
+  const bestTrade = trades.reduce<TradeRecord | null>((best, trade) => (
+    !best || trade.profitPct > best.profitPct ? trade : best
+  ), null)
+  const worstTrade = trades.reduce<TradeRecord | null>((worst, trade) => (
+    !worst || trade.profitPct < worst.profitPct ? trade : worst
+  ), null)
 
-  const fallback = createBacktestReportData(id, metrics)
   return {
-    ...fallback,
-    equitySeries: mappedEquitySeries,
-    trades: mappedTrades,
+    equitySeries,
+    trades,
+    maxDrawdownAnalysis: [
+      { label: 'Max Drawdown', value: formatDrawdownPct(drawdown.maxDrawdownPct) },
+      { label: 'Drawdown Period', value: `${drawdown.periodStart} ~ ${drawdown.periodEnd}` },
+      { label: 'Recovery Days', value: drawdown.recoveryDays },
+    ],
+    volatilitySharpe: [
+      {
+        label: 'Annualized Volatility',
+        value: performanceStats.annualizedVolatilityPct === null
+          ? '--'
+          : `${performanceStats.annualizedVolatilityPct.toFixed(2)}%`,
+      },
+      {
+        label: 'Sharpe Ratio',
+        value: performanceStats.sharpeRatio === null ? '--' : performanceStats.sharpeRatio.toFixed(2),
+      },
+      {
+        label: 'Sortino Ratio',
+        value: performanceStats.sortinoRatio === null ? '--' : performanceStats.sortinoRatio.toFixed(2),
+      },
+    ],
+    insights: [
+      metrics.totalReturnPct >= 0
+        ? `Backtest #${id} closed with ${metrics.totalReturnPct.toFixed(2)}% total return across ${trades.length} closed trades.`
+        : `Backtest #${id} closed with ${metrics.totalReturnPct.toFixed(2)}% total return and needs parameter review.`,
+      `Realized win rate from live trades was ${realizedWinRate.toFixed(2)}%, with maximum drawdown ${drawdown.maxDrawdownPct.toFixed(2)}%.`,
+      bestTrade && worstTrade
+        ? `Best closed trade returned ${formatSignedPct(bestTrade.profitPct)} while the weakest closed trade returned ${formatSignedPct(worstTrade.profitPct)}. ${drawdown.summary}`
+        : 'No closed trades were recorded in the live backtest report.',
+    ],
   }
 }
 
-function mapLiveEquitySeries(
+function normalizeEquityCurve(
   equityCurve: LiveBacktestReportInput['equityCurve'],
-): EquityPoint[] {
-  if (!Array.isArray(equityCurve) || equityCurve.length === 0) {
+): NormalizedEquityPoint[] {
+  if (!Array.isArray(equityCurve)) {
+    return []
+  }
+
+  return equityCurve
+    .filter(point => Number.isFinite(point?.ts) && Number.isFinite(point?.equity))
+    .map(point => ({
+      ts: point.ts,
+      equity: point.equity,
+    }))
+    .sort((left, right) => left.ts - right.ts)
+}
+
+function mapLiveEquitySeries(equityCurve: NormalizedEquityPoint[]): EquityPoint[] {
+  if (equityCurve.length === 0) {
     return []
   }
 
   let peak = Number.NEGATIVE_INFINITY
-  return equityCurve
-    .filter(point => Number.isFinite(point?.ts) && Number.isFinite(point?.equity))
-    .map((point) => {
-      peak = Math.max(peak, point.equity)
-      const drawdown = peak > 0 ? -((peak - point.equity) / peak) * 100 : 0
-      const date = new Date(point.ts)
-      const time = Number.isNaN(date.getTime())
-        ? '-'
-        : `${date.getUTCMonth() + 1}-${date.getUTCDate()}`
-      return {
-        time,
-        equity: Number(point.equity.toFixed(2)),
-        drawdown: Number(drawdown.toFixed(2)),
-      }
-    })
+  return equityCurve.map((point) => {
+    peak = Math.max(peak, point.equity)
+    const drawdown = peak > 0 ? -((peak - point.equity) / peak) * 100 : 0
+    return {
+      time: formatMonthDay(point.ts),
+      equity: Number(point.equity.toFixed(2)),
+      drawdown: Number(drawdown.toFixed(2)),
+    }
+  })
 }
 
 function mapLiveTrades(trades: LiveBacktestReportInput['trades']): TradeRecord[] {
@@ -195,19 +168,186 @@ function mapLiveTrades(trades: LiveBacktestReportInput['trades']): TradeRecord[]
 
   return trades
     .filter(trade => Number.isFinite(trade?.exitTs) && Number.isFinite(trade?.exitPrice) && Number.isFinite(trade?.returnPct))
-    .map((trade, index) => {
-      const date = new Date(trade.exitTs)
-      const time = Number.isNaN(date.getTime())
-        ? '-'
-        : date.toISOString().slice(0, 16).replace('T', ' ')
+    .sort((left, right) => left.exitTs - right.exitTs)
+    .map((trade) => {
       const profitPct = Number(trade.returnPct.toFixed(2))
       return {
-        id: index + 1,
-        time,
-        type: trade.side === 'LONG' ? 'buy-long' : 'sell-close',
-        price: Number(trade.exitPrice.toFixed(2)),
+        id: trade.id,
+        direction: trade.side === 'LONG' ? 'long' : 'short',
+        entryTime: formatDateTime(trade.entryTs),
+        entryPrice: Number.isFinite(trade.entryPrice) ? Number(trade.entryPrice!.toFixed(2)) : null,
+        exitTime: formatDateTime(trade.exitTs),
+        exitPrice: Number(trade.exitPrice.toFixed(2)),
         profitPct,
         isProfit: profitPct >= 0,
+        reasonOpen: sanitizeReason(trade.reasonOpen),
+        reasonClose: sanitizeReason(trade.reasonClose),
       }
     })
+}
+
+function analyzeDrawdown(equityCurve: NormalizedEquityPoint[]): DrawdownSnapshot {
+  if (equityCurve.length === 0) {
+    return {
+      maxDrawdownPct: 0,
+      periodStart: '-',
+      periodEnd: '-',
+      recoveryDays: '--',
+      summary: 'No live equity data was available for drawdown analysis.',
+    }
+  }
+
+  let peakIndex = 0
+  let peakEquity = equityCurve[0]!.equity
+  let maxDrawdownPct = 0
+  let drawdownStartIndex = 0
+  let troughIndex = 0
+  let drawdownPeakEquity = peakEquity
+
+  for (let index = 0; index < equityCurve.length; index += 1) {
+    const point = equityCurve[index]!
+    if (point.equity > peakEquity) {
+      peakEquity = point.equity
+      peakIndex = index
+    }
+
+    const drawdownPct = peakEquity > 0 ? ((peakEquity - point.equity) / peakEquity) * 100 : 0
+    if (drawdownPct > maxDrawdownPct) {
+      maxDrawdownPct = drawdownPct
+      drawdownStartIndex = peakIndex
+      troughIndex = index
+      drawdownPeakEquity = peakEquity
+    }
+  }
+
+  const drawdownStart = equityCurve[drawdownStartIndex]!
+  const trough = equityCurve[troughIndex]!
+  let recoveryDays = 'Not recovered'
+  let summary = 'The deepest drawdown had not fully recovered by the end of the backtest.'
+
+  if (maxDrawdownPct === 0) {
+    recoveryDays = '0 Days'
+    summary = 'Equity never fell below its running peak during the recorded period.'
+  } else {
+    const recoveryPoint = equityCurve
+      .slice(troughIndex + 1)
+      .find(point => point.equity >= drawdownPeakEquity)
+
+    if (recoveryPoint) {
+      const elapsedDays = Math.max(0, Math.round((recoveryPoint.ts - trough.ts) / MS_PER_DAY))
+      recoveryDays = `${elapsedDays} Days`
+      summary = `The deepest drawdown recovered in ${recoveryDays.toLowerCase()}.`
+    }
+  }
+
+  return {
+    maxDrawdownPct: Number(maxDrawdownPct.toFixed(2)),
+    periodStart: formatDate(drawdownStart.ts),
+    periodEnd: formatDate(trough.ts),
+    recoveryDays,
+    summary,
+  }
+}
+
+function analyzePerformance(equityCurve: NormalizedEquityPoint[]): {
+  annualizedVolatilityPct: number | null
+  sharpeRatio: number | null
+  sortinoRatio: number | null
+} {
+  if (equityCurve.length < 2) {
+    return {
+      annualizedVolatilityPct: null,
+      sharpeRatio: null,
+      sortinoRatio: null,
+    }
+  }
+
+  const returns = buildReturnSeries(equityCurve)
+  const intervalMs = resolveMedianIntervalMs(equityCurve)
+  if (returns.length === 0 || intervalMs === null) {
+    return {
+      annualizedVolatilityPct: null,
+      sharpeRatio: null,
+      sortinoRatio: null,
+    }
+  }
+
+  const periodsPerYear = (DAYS_PER_YEAR * MS_PER_DAY) / intervalMs
+  const meanReturn = average(returns)
+  const stdDev = Math.sqrt(average(returns.map(value => (value - meanReturn) ** 2)))
+  const downsideDev = Math.sqrt(average(returns.map(value => Math.min(value, 0) ** 2)))
+  const annualization = Math.sqrt(periodsPerYear)
+
+  return {
+    annualizedVolatilityPct: Number((stdDev * annualization * 100).toFixed(2)),
+    sharpeRatio: stdDev > 0 ? Number(((meanReturn / stdDev) * annualization).toFixed(2)) : null,
+    sortinoRatio: downsideDev > 0 ? Number(((meanReturn / downsideDev) * annualization).toFixed(2)) : null,
+  }
+}
+
+function buildReturnSeries(equityCurve: NormalizedEquityPoint[]): number[] {
+  const returns: number[] = []
+  for (let index = 1; index < equityCurve.length; index += 1) {
+    const previous = equityCurve[index - 1]!
+    const current = equityCurve[index]!
+    if (previous.equity <= 0) {
+      continue
+    }
+    returns.push((current.equity - previous.equity) / previous.equity)
+  }
+  return returns
+}
+
+function resolveMedianIntervalMs(equityCurve: NormalizedEquityPoint[]): number | null {
+  const intervals = equityCurve
+    .slice(1)
+    .map((point, index) => point.ts - equityCurve[index]!.ts)
+    .filter(interval => interval > 0)
+    .sort((left, right) => left - right)
+
+  if (intervals.length === 0) {
+    return null
+  }
+
+  return intervals[Math.floor(intervals.length / 2)] ?? null
+}
+
+function average(values: number[]): number {
+  if (values.length === 0) {
+    return 0
+  }
+  return values.reduce((sum, value) => sum + value, 0) / values.length
+}
+
+function formatMonthDay(ts: number): string {
+  const date = new Date(ts)
+  return Number.isNaN(date.getTime()) ? '-' : `${date.getUTCMonth() + 1}-${date.getUTCDate()}`
+}
+
+function formatDate(ts: number): string {
+  const date = new Date(ts)
+  return Number.isNaN(date.getTime()) ? '-' : date.toISOString().slice(0, 10)
+}
+
+function formatDateTime(ts: number | undefined): string {
+  if (!Number.isFinite(ts)) {
+    return '-'
+  }
+  const date = new Date(ts!)
+  return Number.isNaN(date.getTime()) ? '-' : date.toISOString().slice(0, 16).replace('T', ' ')
+}
+
+function sanitizeReason(value: string | undefined): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function formatDrawdownPct(value: number): string {
+  if (Math.abs(value) < 0.005) {
+    return '0.00%'
+  }
+  return `-${value.toFixed(2)}%`
+}
+
+function formatSignedPct(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
 }
