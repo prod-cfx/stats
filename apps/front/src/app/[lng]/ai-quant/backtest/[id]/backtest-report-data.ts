@@ -80,6 +80,9 @@ export function createBacktestReportDataFromLive(
   const normalizedEquity = normalizeEquityCurve(report.equityCurve)
   const equitySeries = mapLiveEquitySeries(normalizedEquity)
   const trades = mapLiveTrades(report.trades)
+  if (!isDetailedReportConsistent(metrics, normalizedEquity, trades)) {
+    return null
+  }
   const drawdown = analyzeDrawdown(normalizedEquity)
   const performanceStats = analyzePerformance(normalizedEquity)
   const realizedWinRate = trades.length === 0
@@ -126,6 +129,27 @@ export function createBacktestReportDataFromLive(
         : 'No closed trades were recorded in the live backtest report.',
     ],
   }
+}
+
+function isDetailedReportConsistent(
+  metrics: BacktestReportMetrics,
+  equityCurve: NormalizedEquityPoint[],
+  trades: TradeRecord[],
+): boolean {
+  if (equityCurve.length === 0) {
+    if (trades.length > 0 || metrics.tradeCount > 0) {
+      return false
+    }
+    if (metrics.maxDrawdownPct !== 0 || metrics.totalReturnPct !== 0) {
+      return false
+    }
+  }
+
+  if (trades.length === 0 && metrics.tradeCount > 0) {
+    return false
+  }
+
+  return true
 }
 
 function normalizeEquityCurve(

@@ -91,7 +91,7 @@ describe('backtest-report-data live mapping', () => {
   it('keeps empty live arrays and only falls back when fields are missing', () => {
     const emptyArrays = createBacktestReportDataFromLive(
       'btjob-2',
-      { maxDrawdownPct: 10, totalReturnPct: 20, winRatePct: 60, tradeCount: 0 },
+      { maxDrawdownPct: 0, totalReturnPct: 0, winRatePct: 0, tradeCount: 0 },
       { equityCurve: [], trades: [] },
     )
     const missingTrades = createBacktestReportDataFromLive(
@@ -110,6 +110,22 @@ describe('backtest-report-data live mapping', () => {
     expect(emptyArrays?.equitySeries).toEqual([])
     expect(missingTrades).toBeNull()
     expect(missingEquity).toBeNull()
+  })
+
+  it('returns null when empty detailed arrays conflict with non-empty summary metrics', () => {
+    expect(createBacktestReportDataFromLive(
+      'btjob-6',
+      {
+        maxDrawdownPct: 0.45,
+        totalReturnPct: 1.37,
+        winRatePct: 100,
+        tradeCount: 9,
+      },
+      {
+        equityCurve: [],
+        trades: [],
+      },
+    )).toBeNull()
   })
 
   it('returns null for incomplete live reports instead of synthesizing fallback charts', () => {
