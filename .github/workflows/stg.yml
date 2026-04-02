@@ -1,4 +1,4 @@
-name: CI
+name: STG
 
 # 说明：
 # - 统一的 CI/CD 脚本，支持 staging 和 production 环境
