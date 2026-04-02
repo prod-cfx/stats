@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 
 import { useEffect, useMemo, useState } from 'react'
-import { useAuth } from '@/components/providers/auth-provider'
+import { useAuth } from '@/components/providers/AuthProvider'
 import { loginAdmin } from '@/lib/api'
 
 const REMEMBER_KEY = 'admin.login.remember'

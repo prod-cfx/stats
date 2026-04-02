@@ -17,6 +17,7 @@ describe('signalExecutorService', () => {
       markSkipped: jest.fn(),
     }
     const telemetry = { recordExecutionSummary: jest.fn() }
+    const txHost = { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) }
 
     return new SignalExecutorService(
       prisma as any,
@@ -28,7 +29,7 @@ describe('signalExecutorService', () => {
       tradingSignalRepository as any,
       executionRepository as any,
       telemetry as any,
-      {} as any,
+      txHost as any,
     )
   }
 
@@ -66,7 +67,7 @@ describe('signalExecutorService', () => {
     })
   })
 
-  it('handles signal-created events inside a fresh transaction scope', async () => {
+  it('delegates signal-created events to the execution pipeline when enabled', async () => {
     const txHost = { withTransaction: jest.fn(async (fn: () => Promise<void>) => fn()) }
     const config = {
       ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
@@ -75,18 +76,9 @@ describe('signalExecutorService', () => {
         enabled: true,
       },
     }
-    const service = new SignalExecutorService(
-      {} as any,
-      { get: jest.fn().mockReturnValue(config) } as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      {} as any,
-      txHost as any,
-    )
+    const service = createService()
+    ;(service as any).configService.get.mockReturnValue(config)
+    ;(service as any).txHost = txHost
     const executeSignalForSubscribedUsers = jest
       .spyOn(service as any, 'executeSignalForSubscribedUsers')
       .mockResolvedValue(undefined)

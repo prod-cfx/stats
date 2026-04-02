@@ -2,8 +2,8 @@
 
 import type { DataSource, MarketType } from '@/types/trading'
 import React, { useMemo, useState } from 'react'
-import { CenterChartPanel } from '@/components/trading/CenterChartPanel/CenterChartPanel'
-import { TopBar } from '@/components/trading/TopBar/TopBar'
+import { CenterChartPanel } from '@/components/trading/center-chart-panel'
+import { TopBar } from '@/components/trading/top-bar'
 
 export function KlineWidget(props: { config: Record<string, any> }) {
   // Keep only initial symbol from config; other interactions should be handled by the embedded UI.

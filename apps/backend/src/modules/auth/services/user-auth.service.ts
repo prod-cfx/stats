@@ -11,7 +11,7 @@ import type { VerifyEmailRequestDto } from '../dto/requests/verify-email.request
 import type { VerifyEmailLoginCodeRequestDto } from '../dto/requests/verify-email-login-code.request.dto'
 import type { VerifyPasswordResetRequestDto } from '../dto/requests/verify-password-reset.request.dto'
 import type { AuthResponseDto } from '../dto/responses/auth.response.dto'
-import type { UserProfileResponseDto } from '../dto/responses/user.profile.response.dto'
+import type { UserProfileResponseDto } from '../dto/responses/user-profile.response.dto'
 import type { BindEmailRequestDto } from '../dto/requests/bind-email.request.dto'
 import type { BindTelegramRequestDto } from '../dto/requests/bind-telegram.request.dto'
 import type { CreateTelegramDesktopIntentRequestDto } from '../dto/requests/create-telegram-desktop-intent.request.dto'

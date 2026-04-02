@@ -116,7 +116,7 @@ dx/
 
 ## 关键约定速记
 
-- 分页基类：`apps/backend/src/common/dto/base.pagination.request.dto.ts`、`apps/backend/src/common/dto/base.pagination.response.dto.ts`
+- 分页基类：`apps/backend/src/common/dto/base-pagination.request.dto.ts`、`apps/backend/src/common/dto/base-pagination.response.dto.ts`
 - 统一错误码：`packages/shared/src/constants/error-codes.ts`
 - 统一业务异常基类：`apps/backend/src/common/exceptions/domain.exception.ts`
 - 固定端口：backend=`3000`，front=`3001`，admin=`3500`，quantify=`3010`

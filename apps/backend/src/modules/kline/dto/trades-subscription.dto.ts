@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import { IsInt, IsNumber, IsOptional, IsString, Max, Min } from 'class-validator'
-import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
+import { BasePaginationRequestDto } from '@/common/dto/base-pagination.request.dto'
 
 /**
  * Trades 订阅请求 DTO

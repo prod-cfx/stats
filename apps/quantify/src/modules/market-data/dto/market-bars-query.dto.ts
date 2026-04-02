@@ -2,7 +2,7 @@ import { MARKET_TIMEFRAMES } from '@ai/shared'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import { IsDateString, IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator'
-import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
+import { BasePaginationRequestDto } from '@/common/dto/base-pagination.request.dto'
 
 const MARKET_BAR_PROVIDERS = ['BINANCE', 'OKX', 'HYPERLIQUID'] as const
 

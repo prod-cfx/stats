@@ -7,7 +7,7 @@ import {
   calculateTopBarDisplayValues,
 } from './price-change'
 
-describe('TopBar - calculatePriceChange', () => {
+describe('top-bar - calculatePriceChange', () => {
   describe('实时 K线 + ticker 24h 前价格', () => {
     it('应该基于实时 K线价格和 ticker 数据计算涨跌幅', () => {
       const tickerData: TickerData = {
@@ -133,7 +133,7 @@ describe('TopBar - calculatePriceChange', () => {
   })
 })
 
-describe('TopBar - calculateFromTicker', () => {
+describe('top-bar - calculateFromTicker', () => {
   it('应该从 ticker 数据计算涨跌幅', () => {
     const tickerData: TickerData = {
       symbol: 'BTCUSDT',
@@ -150,7 +150,7 @@ describe('TopBar - calculateFromTicker', () => {
   })
 })
 
-describe('TopBar - calculateTopBarDisplayValues', () => {
+describe('top-bar - calculatetop-barDisplayValues', () => {
   it('ticker 正常时：展示严格使用 ticker last + 24h change%', () => {
     const tickerData: TickerData = {
       symbol: 'BTCUSDT',

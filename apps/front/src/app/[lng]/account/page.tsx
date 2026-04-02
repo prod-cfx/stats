@@ -9,7 +9,7 @@ import { ExchangeApiSection } from '@/components/account/ExchangeApiSection'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
 import { useToast } from '@/components/ui/toast'
-import { TelegramLoginButtons } from '@/features/auth/components/telegram-login-buttons'
+import { TelegramLoginButtons } from '@/features/auth/components/TelegramLoginButtons'
 import { useAuth } from '@/hooks/use-auth'
 
 function maskEmail(email: string) {

@@ -1,6 +1,6 @@
 'use client'
 
-import type { DashboardDoc } from '@/features/dashboards/store/dashboardStore'
+import type { DashboardDoc } from '@/features/dashboards/store/dashboard-store'
 import { Bookmark, Grid3x3, Layout, MoreHorizontal, Pencil, Trash2 } from 'lucide-react'
 import { useParams, useRouter, useSearchParams } from 'next/navigation'
 import React, { useEffect, useState } from 'react'
@@ -16,7 +16,7 @@ import {
   getMyDashboards,
   getSavedDashboards,
   updateDashboardMeta,
-} from '@/features/dashboards/store/dashboardStore'
+} from '@/features/dashboards/store/dashboard-store'
 import { toast } from '@/lib/toast'
 
 type TabType = 'explore' | 'my' | 'saved'

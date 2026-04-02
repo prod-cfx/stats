@@ -1,6 +1,6 @@
 'use client'
 
-import type { DashboardDoc } from '@/features/dashboards/store/dashboardStore'
+import type { DashboardDoc } from '@/features/dashboards/store/dashboard-store'
 import { Bookmark, Check, ChevronDown, Layout, Loader2, Plus, Send, Trash2 } from 'lucide-react'
 import { useParams, useRouter } from 'next/navigation'
 import React, { useCallback, useEffect, useState, useSyncExternalStore } from 'react'
@@ -16,7 +16,7 @@ import {
   getSavedDashboards,
   publishDashboard,
   upsertDashboard,
-} from '@/features/dashboards/store/dashboardStore'
+} from '@/features/dashboards/store/dashboard-store'
 import { toast } from '@/lib/toast'
 
 interface DashboardEditorSidebarProps {

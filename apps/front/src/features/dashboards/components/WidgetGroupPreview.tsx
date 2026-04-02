@@ -1,6 +1,6 @@
 'use client'
 
-import type { WidgetCatalogGroup, WidgetCatalogItem } from '../widgets/widgets.catalog'
+import type { WidgetCatalogGroup, WidgetCatalogItem } from '../widgets/widgets-catalog'
 import { ChevronLeft } from 'lucide-react'
 import React from 'react'
 import { useTranslation } from 'react-i18next'

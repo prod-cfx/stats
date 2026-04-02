@@ -1,9 +1,9 @@
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { normalizeBacktestCapabilityConfig } from '../backtest-capability-config'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestCapabilitiesRepository } from '../repositories/backtest-capabilities.repository'
-import { normalizeBacktestCapabilityConfig } from '../backtest-capability-config'
 
 export interface BacktestCapabilitiesDto {
   allowedSymbols: string[]

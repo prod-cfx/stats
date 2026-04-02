@@ -10,7 +10,7 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { SignalGeneratorService } from '@/modules/strategy-signals/services/signal-generator.service'

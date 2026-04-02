@@ -5,7 +5,13 @@ import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard'
 import { WhaleAlertService as WhaleAlertServiceToken } from '@/modules/whale-alert/whale-alert.service'
 import { WhaleNotificationDeduplicatorService } from '@/modules/whale-notification/services/whale-notification-deduplicator.service'
 import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
-import { createTestingApp } from '../fixtures/fixtures'
+import { createTestingApp, createUserRecord } from '../fixtures/fixtures'
+
+type WhaleNotificationRuleCreateData = Parameters<PrismaService['whaleNotificationRule']['create']>[0]['data']
+
+const createWhaleNotificationRuleRecord = async (prisma: PrismaService, data: WhaleNotificationRuleCreateData) => {
+  return prisma.whaleNotificationRule.create({ data })
+}
 
 describe('Whale notification gray release allowlist placeholder (E2E)', () => {
   let app: INestApplication
@@ -60,28 +66,21 @@ describe('Whale notification gray release allowlist placeholder (E2E)', () => {
     await prisma.whaleNotificationRule.deleteMany({ where: { userId } })
     await prisma.user.deleteMany({ where: { id: userId } })
 
-    await prisma.user.create({
-      data: {
-        id: userId,
-        email: 'e2e-allowlist@example.com',
-        passwordHash: 'e2e-password-hash',
-        nickname: 'allowlist-user',
-        emailVerified: true,
-        isGuest: false,
-      },
+    await createUserRecord(prisma, {
+      id: userId,
+      email: 'e2e-allowlist@example.com',
+      nickname: 'allowlist-user',
     })
 
-    await prisma.whaleNotificationRule.create({
-      data: {
-        userId,
-        type: 'SYMBOL',
-        symbol: 'BTC',
-        thresholdUsd: 5_000,
-        channelWeb: true,
-        channelEmail: false,
-        channelTelegram: false,
-        isActive: true,
-      },
+    await createWhaleNotificationRuleRecord(prisma, {
+      userId,
+      type: 'SYMBOL',
+      symbol: 'BTC',
+      thresholdUsd: 5_000,
+      channelWeb: true,
+      channelEmail: false,
+      channelTelegram: false,
+      isActive: true,
     })
   })
 

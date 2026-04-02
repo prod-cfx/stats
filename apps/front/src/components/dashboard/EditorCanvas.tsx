@@ -10,7 +10,7 @@ import {
   ensureDashboard,
   getDashboard,
   updateDashboard,
-} from '@/features/dashboards/store/dashboardStore'
+} from '@/features/dashboards/store/dashboard-store'
 import { AddWidgetModal } from './AddWidgetModal'
 
 const DEFAULT_DASHBOARD_ID = 'draft'

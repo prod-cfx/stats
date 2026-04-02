@@ -10,11 +10,11 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger'
 
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { CreateLlmSubscriptionDto } from './dto/create-llm-subscription.dto'
 import { LlmSubscriptionListQueryDto } from './dto/llm-subscription-list-query.dto'
 import { LlmSubscriptionResponseDto } from './dto/llm-subscription-response.dto'
-import { LlmSubscriptionUserQueryDto } from './dto/llm-subscription-user.query.dto'
+import { LlmSubscriptionUserQueryDto } from './dto/llm-subscription-user-query.dto'
 import { UpdateLlmSubscriptionDto } from './dto/update-llm-subscription.dto'
 import { LlmStrategySubscriptionsService } from './llm-strategy-subscriptions.service'
 

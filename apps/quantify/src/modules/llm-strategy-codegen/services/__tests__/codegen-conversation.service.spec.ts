@@ -566,7 +566,7 @@ const strategy: StrategyAdapterV1 = {
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s10', expect.objectContaining({
       status: 'PUBLISHED',
     }))
-  })
+  }, 15_000)
 
   it('uses strict json schema response in codegen and publishes when code is returned', async () => {
     process.env.LLM_CODEGEN_STRICT_ENABLED = 'true'

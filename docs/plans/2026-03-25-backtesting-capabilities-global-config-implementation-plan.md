@@ -152,7 +152,7 @@ git commit -m "feat(quantify): expose backtesting capabilities endpoint"
 ### Task 5: 模块装配与回归验证
 
 **Files:**
-- Modify (if needed): `apps/quantify/src/modules/backtesting/backtesting.module.spec.ts`
+- Modify (if needed): `apps/quantify/src/modules/backtesting/backtesting-module.spec.ts`
 - Modify (if needed): `apps/quantify/src/modules/backtesting/backtesting.module.ts`
 
 **Step 1: Verify module wiring tests**

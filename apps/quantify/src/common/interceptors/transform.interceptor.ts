@@ -2,8 +2,8 @@ import type { CallHandler, ExecutionContext, NestInterceptor } from '@nestjs/com
 import type { Observable } from 'rxjs'
 import { Injectable } from '@nestjs/common'
 import { map } from 'rxjs/operators'
+import { BasePaginationResponseDto } from '../dto/base-pagination.response.dto'
 import { BaseResponseDto } from '../dto/base.dto'
-import { BasePaginationResponseDto } from '../dto/base.pagination.response.dto'
 
 interface PaginationShape<T> {
   items: T[]

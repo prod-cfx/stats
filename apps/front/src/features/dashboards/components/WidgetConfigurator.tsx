@@ -1,8 +1,8 @@
 /* eslint-disable react-hooks-extra/no-direct-set-state-in-use-effect */
 'use client'
 
-import type { UnitSize } from '../widgets/unitSizePresets'
-import type { WidgetCatalogItem } from '../widgets/widgets.catalog'
+import type { UnitSize } from '../widgets/unit-size-presets'
+import type { WidgetCatalogItem } from '../widgets/widgets-catalog'
 import { ChevronLeft } from 'lucide-react'
 import React, { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -17,7 +17,7 @@ import {
   PREDICTION_UNIT_SIZE_PRESETS,
   UNIT_SIZE_PRESETS,
   VOLUME_UNIT_SIZE_PRESETS,
-} from '../widgets/unitSizePresets'
+} from '../widgets/unit-size-presets'
 import { WidgetRenderer } from '../widgets/WidgetRenderer'
 
 interface WidgetConfiguratorProps {

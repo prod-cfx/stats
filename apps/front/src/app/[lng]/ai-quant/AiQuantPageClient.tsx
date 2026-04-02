@@ -47,7 +47,7 @@ import {
 import { ApiError } from '@/lib/errors'
 
 export interface QuantParams {
-  exchange: 'binance' | 'okx'
+  exchange: 'binance' | 'okx' | 'hyperliquid'
   symbol: string
   baseTimeframe: string
   buyWindowMin: number
@@ -75,7 +75,7 @@ const DEFAULT_PARAM_SCHEMA: Record<string, unknown> = {
     exchange: {
       type: 'string',
       title: 'Exchange',
-      enum: ['binance', 'okx'],
+      enum: ['binance', 'okx', 'hyperliquid'],
     },
     symbol: {
       type: 'string',
@@ -480,7 +480,7 @@ export function AiQuantPageClient() {
   const [deployOpen, setDeployOpen] = useState(false)
   const [deployRequestId, setDeployRequestId] = useState<string | null>(null)
   const [deploySubmitting, setDeploySubmitting] = useState(false)
-  const [selectedDeployExchange, setSelectedDeployExchange] = useState<'binance' | 'okx'>('binance')
+  const [selectedDeployExchange, setSelectedDeployExchange] = useState<QuantParams['exchange']>('binance')
   const [selectedDeployAccountId, setSelectedDeployAccountId] = useState('')
   const [exchangeAccounts, setExchangeAccounts] = useState<DeployExchangeAccount[]>([])
   const [backtestCapabilityState, setBacktestCapabilityState] = useState<CapabilityState>('loading')

@@ -1,9 +1,9 @@
 import { PositionSide, PositionStatus } from '@ai/shared'
-import { Prisma } from '@/prisma/prisma.types'
 import { MARKET_QUOTE_EVENT } from '@/modules/market-data/services/market-data-stream.service'
+import { Prisma } from '@/prisma/prisma.types'
 import { PositionsValuationService } from './positions-valuation.service'
 
-describe('PositionsValuationService', () => {
+describe('positionsValuationService', () => {
   it('updates raw-symbol open positions when quote uses canonical market suffix', async () => {
     const tx = {
       position: {

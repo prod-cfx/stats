@@ -2,7 +2,7 @@
 import type { SubscriptionStatus } from '@ai/shared'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 
 import { AccountsService } from '@/modules/accounts/accounts.service'

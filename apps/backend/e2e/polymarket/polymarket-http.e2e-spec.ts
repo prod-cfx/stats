@@ -5,6 +5,22 @@ import type { PrismaService } from '@/prisma/prisma.service'
 import { PolymarketService } from '@/modules/polymarket/polymarket.service'
 import { createTestingApp } from '../fixtures/fixtures'
 
+type PolymarketMarketCreateData = Parameters<PrismaService['polymarketMarket']['create']>[0]['data']
+type PolymarketOutcomeCreateData = Parameters<PrismaService['polymarketOutcome']['create']>[0]['data']
+type PolymarketOutcomeCreateManyData = Parameters<PrismaService['polymarketOutcome']['createMany']>[0]['data']
+
+const createPolymarketMarketRecord = async (prisma: PrismaService, data: PolymarketMarketCreateData) => {
+  return prisma.polymarketMarket.create({ data })
+}
+
+const createPolymarketOutcomeRecord = async (prisma: PrismaService, data: PolymarketOutcomeCreateData) => {
+  await prisma.polymarketOutcome.create({ data })
+}
+
+const createPolymarketOutcomeRecords = async (prisma: PrismaService, data: PolymarketOutcomeCreateManyData) => {
+  await prisma.polymarketOutcome.createMany({ data })
+}
+
 describe('Polymarket markets service (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
@@ -57,103 +73,89 @@ describe('Polymarket markets service (E2E)', () => {
     })
 
     // 插入一条 crypto 市场和一条 sports 市场，用于验证 category 过滤与映射逻辑
-    const cryptoMarket = await prisma.polymarketMarket.create({
-      data: {
-        marketId: 'e2e-m-crypto',
-        question: 'E2E: Will BTC go up?',
-        category: 'crypto',
-        status: 'open',
-        liquidity: '1000',
-        volume24h: '100',
-        volumeTotal: '500',
-        openInterest: '200',
-        isActive: true,
-        rawPayload: {},
-      },
+    const cryptoMarket = await createPolymarketMarketRecord(prisma, {
+      marketId: 'e2e-m-crypto',
+      question: 'E2E: Will BTC go up?',
+      category: 'crypto',
+      status: 'open',
+      liquidity: '1000',
+      volume24h: '100',
+      volumeTotal: '500',
+      openInterest: '200',
+      isActive: true,
+      rawPayload: {},
     })
 
-    await prisma.polymarketOutcome.createMany({
-      data: [
-        {
-          marketId: cryptoMarket.id,
-          outcomeTokenId: 'e2e-token-yes',
-          name: 'Yes',
-          shortName: 'Yes',
-          side: 'YES',
-          price: '0.6',
-          probability: '0.6',
-          rawPayload: {},
-        },
-        {
-          marketId: cryptoMarket.id,
-          outcomeTokenId: 'e2e-token-no',
-          name: 'No',
-          shortName: 'No',
-          side: 'NO',
-          price: '0.4',
-          probability: '0.4',
-          rawPayload: {},
-        },
-      ],
-    })
-
-    const cryptoMarketMissingProb = await prisma.polymarketMarket.create({
-      data: {
-        marketId: 'e2e-m-crypto-missing-prob',
-        question: 'E2E: Missing probability should fallback to price',
-        category: 'crypto',
-        status: 'open',
-        isActive: true,
-        rawPayload: {},
-      },
-    })
-
-    await prisma.polymarketOutcome.create({
-      data: {
-        marketId: cryptoMarketMissingProb.id,
-        outcomeTokenId: 'e2e-token-missing-prob',
+    await createPolymarketOutcomeRecords(prisma, [
+      {
+        marketId: cryptoMarket.id,
+        outcomeTokenId: 'e2e-token-yes',
         name: 'Yes',
         shortName: 'Yes',
         side: 'YES',
         price: '0.6',
-        probability: null,
+        probability: '0.6',
         rawPayload: {},
       },
+      {
+        marketId: cryptoMarket.id,
+        outcomeTokenId: 'e2e-token-no',
+        name: 'No',
+        shortName: 'No',
+        side: 'NO',
+        price: '0.4',
+        probability: '0.4',
+        rawPayload: {},
+      },
+    ])
+
+    const cryptoMarketMissingProb = await createPolymarketMarketRecord(prisma, {
+      marketId: 'e2e-m-crypto-missing-prob',
+      question: 'E2E: Missing probability should fallback to price',
+      category: 'crypto',
+      status: 'open',
+      isActive: true,
+      rawPayload: {},
     })
 
-    const cryptoMarketSuspectZero = await prisma.polymarketMarket.create({
-      data: {
-        marketId: 'e2e-m-crypto-suspect-zero',
-        question: 'E2E: Suspect probability=0 should be treated as missing',
-        category: 'crypto',
-        status: 'open',
-        isActive: true,
-        rawPayload: {},
-      },
+    await createPolymarketOutcomeRecord(prisma, {
+      marketId: cryptoMarketMissingProb.id,
+      outcomeTokenId: 'e2e-token-missing-prob',
+      name: 'Yes',
+      shortName: 'Yes',
+      side: 'YES',
+      price: '0.6',
+      probability: null,
+      rawPayload: {},
     })
 
-    await prisma.polymarketOutcome.create({
-      data: {
-        marketId: cryptoMarketSuspectZero.id,
-        outcomeTokenId: 'e2e-token-suspect-zero',
-        name: 'Yes',
-        shortName: 'Yes',
-        side: 'YES',
-        price: null,
-        probability: '0',
-        rawPayload: {},
-      },
+    const cryptoMarketSuspectZero = await createPolymarketMarketRecord(prisma, {
+      marketId: 'e2e-m-crypto-suspect-zero',
+      question: 'E2E: Suspect probability=0 should be treated as missing',
+      category: 'crypto',
+      status: 'open',
+      isActive: true,
+      rawPayload: {},
     })
 
-    await prisma.polymarketMarket.create({
-      data: {
-        marketId: 'e2e-m-sports',
-        question: 'E2E: Some sports market',
-        category: 'sports',
-        status: 'open',
-        isActive: true,
-        rawPayload: {},
-      },
+    await createPolymarketOutcomeRecord(prisma, {
+      marketId: cryptoMarketSuspectZero.id,
+      outcomeTokenId: 'e2e-token-suspect-zero',
+      name: 'Yes',
+      shortName: 'Yes',
+      side: 'YES',
+      price: null,
+      probability: '0',
+      rawPayload: {},
+    })
+
+    await createPolymarketMarketRecord(prisma, {
+      marketId: 'e2e-m-sports',
+      question: 'E2E: Some sports market',
+      category: 'sports',
+      status: 'open',
+      isActive: true,
+      rawPayload: {},
     })
   })
 

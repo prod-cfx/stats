@@ -3,7 +3,7 @@ import { ApiPropertyOptional } from '@nestjs/swagger'
 import { Transform } from 'class-transformer'
 
 import { IsIn, IsOptional, IsString, MaxLength } from 'class-validator'
-import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
+import { BasePaginationRequestDto } from '@/common/dto/base-pagination.request.dto'
 import {
   STRATEGY_STATUS_VALUES
   

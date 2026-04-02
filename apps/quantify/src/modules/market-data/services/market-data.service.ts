@@ -7,7 +7,7 @@ import type { ProviderSymbol } from '../interfaces/market-data-provider.interfac
 import type { Prisma, Symbol as PrismaSymbol } from '@/prisma/prisma.types'
 import { ErrorCode, SymbolStatus as PrismaSymbolStatus } from '@ai/shared'
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import {
   mapSymbolStatus,

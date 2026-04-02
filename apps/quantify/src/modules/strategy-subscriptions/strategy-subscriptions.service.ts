@@ -2,7 +2,7 @@
 import type { SubscriptionStatus } from '@ai/shared'
 import { Injectable, Logger } from '@nestjs/common'
 import Ajv from 'ajv'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { ExchangeAccountNotFoundException } from '@/modules/exchange-accounts/exceptions/exchange-account-not-found.exception'
 import { Prisma } from '@/prisma/prisma.types'
 import { CreateSubscriptionDto } from './dto/create-subscription.dto'

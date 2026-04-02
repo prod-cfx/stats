@@ -1,12 +1,12 @@
 import type { CreateStrategyTemplateDto } from '../dto/create-strategy-template.dto'
-import type { StrategyTemplateListQueryDto } from '../dto/strategy-template-list.query.dto'
+import type { StrategyTemplateListQueryDto } from '../dto/strategy-template-list-query.dto'
 import type { UpdateStrategyTemplateDto } from '../dto/update-strategy-template.dto'
 import type { StrategyDataRequirements, StrategyExecutionConfig, StrategyLegDefinition } from '../types/strategy-template.types'
 import type { Prisma, StrategyTemplate } from '@/prisma/prisma.types'
 import { createScriptEngine } from '@ai/shared/node'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 
 import { AiService } from '@/modules/ai/ai.service'
 import { AiProviderErrorException } from '@/modules/ai/exceptions/ai-provider-error.exception'

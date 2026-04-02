@@ -1,5 +1,12 @@
-import ts from 'typescript'
+import type { ScriptTarget } from 'typescript'
 import { compileStrategyScriptForVm } from '../strategy-script-compiler.util'
+
+type TypeScriptModule = typeof import('typescript')
+
+function loadCompileStrategyScriptForVm() {
+  return jest.requireActual<typeof import('../strategy-script-compiler.util')>('../strategy-script-compiler.util')
+    .compileStrategyScriptForVm
+}
 
 describe('strategyScriptCompilerUtil', () => {
   it('keeps legacy js script unchanged', () => {
@@ -77,7 +84,7 @@ strategy
 
     let compileWithFallback!: typeof compileStrategyScriptForVm
     jest.isolateModules(() => {
-      ({ compileStrategyScriptForVm: compileWithFallback } = require('../strategy-script-compiler.util'))
+      compileWithFallback = loadCompileStrategyScriptForVm()
     })
 
     expect(() => compileWithFallback(source)).not.toThrow()
@@ -133,11 +140,11 @@ strategy
       const actual = jest.requireActual('typescript')
       return {
         ...actual,
-        createCompilerHost: (...args: Parameters<typeof actual.createCompilerHost>) => {
+        createCompilerHost: (...args: Parameters<TypeScriptModule['createCompilerHost']>) => {
           const host = actual.createCompilerHost(...args)
           return {
             ...host,
-            getSourceFile: (name: string, languageVersion: ts.ScriptTarget, onError?: (message: string) => void, shouldCreateNewSourceFile?: boolean) => {
+            getSourceFile: (name: string, languageVersion: ScriptTarget, onError?: (message: string) => void, shouldCreateNewSourceFile?: boolean) => {
               if (name.includes('/packages/shared/')) {
                 return undefined
               }
@@ -162,7 +169,7 @@ strategy
 
     let compileWithFallback!: typeof compileStrategyScriptForVm
     jest.isolateModules(() => {
-      ({ compileStrategyScriptForVm: compileWithFallback } = require('../strategy-script-compiler.util'))
+      compileWithFallback = loadCompileStrategyScriptForVm()
     })
 
     const compiled = compileWithFallback(source)
@@ -299,11 +306,11 @@ strategy
       const actual = jest.requireActual('typescript')
       return {
         ...actual,
-        createCompilerHost: (...args: Parameters<typeof actual.createCompilerHost>) => {
+        createCompilerHost: (...args: Parameters<TypeScriptModule['createCompilerHost']>) => {
           const host = actual.createCompilerHost(...args)
           return {
             ...host,
-            getSourceFile: (name: string, languageVersion: ts.ScriptTarget, onError?: (message: string) => void, shouldCreateNewSourceFile?: boolean) => {
+            getSourceFile: (name: string, languageVersion: ScriptTarget, onError?: (message: string) => void, shouldCreateNewSourceFile?: boolean) => {
               if (name.includes('/packages/shared/')) {
                 return undefined
               }
@@ -328,7 +335,7 @@ strategy
 
     let compileWithFallback!: typeof compileStrategyScriptForVm
     jest.isolateModules(() => {
-      ({ compileStrategyScriptForVm: compileWithFallback } = require('../strategy-script-compiler.util'))
+      compileWithFallback = loadCompileStrategyScriptForVm()
     })
 
     const compiled = compileWithFallback(source)

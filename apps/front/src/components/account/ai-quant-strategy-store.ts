@@ -22,7 +22,7 @@ export interface AiQuantStrategyRecord {
   id: string
   name: string
   status: StrategyStatus
-  exchange: 'binance' | 'okx'
+  exchange: 'binance' | 'okx' | 'hyperliquid'
   symbol: string
   timeframe: string
   positionPct: number
@@ -61,7 +61,7 @@ export interface AiQuantStrategyRecord {
     orderId: string | null
   }>
   deploy?: {
-    exchange: 'binance' | 'okx'
+    exchange: 'binance' | 'okx' | 'hyperliquid'
     accountId: string
     accountName: string
     at: string
@@ -265,7 +265,7 @@ export function getStrategyById(id: string) {
 export function upsertStrategyDeployment(input: {
   id: string
   name: string
-  exchange: 'binance' | 'okx'
+  exchange: 'binance' | 'okx' | 'hyperliquid'
   symbol: string
   timeframe: string
   positionPct: number

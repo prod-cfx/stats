@@ -4,6 +4,59 @@ import { AggregatedLiquidationService } from '@/modules/aggregated-liquidation/a
 import { PrismaService } from '@/prisma/prisma.service'
 import { createTestingApp } from '../fixtures/fixtures'
 
+type AggregatedLiquidationHistorySeedData = Parameters<PrismaService['aggregatedLiquidationHistory']['createMany']>[0]['data']
+
+function buildAggregatedLiquidationHistorySeedData(baseTime: Date): AggregatedLiquidationHistorySeedData {
+  const t1hLatest = new Date(baseTime.getTime() + 60 * 60 * 1000)
+  const t4hLatest = new Date(baseTime.getTime() + 4 * 60 * 60 * 1000)
+
+  return [
+    {
+      symbol: 'BTC',
+      exchangeCode: 'AGGREGATED',
+      interval: '1h',
+      timestamp: t1hLatest,
+      longLiquidationUsd: '100',
+      shortLiquidationUsd: '50',
+      source: 'TEST',
+    },
+    {
+      symbol: 'BTC',
+      exchangeCode: 'AGGREGATED',
+      interval: '4h',
+      timestamp: t4hLatest,
+      longLiquidationUsd: '9999',
+      shortLiquidationUsd: '8888',
+      source: 'TEST',
+    },
+    {
+      symbol: 'BTC',
+      exchangeCode: 'BINANCE',
+      interval: '4h',
+      timestamp: t4hLatest,
+      longLiquidationUsd: '200',
+      shortLiquidationUsd: '80',
+      source: 'TEST',
+    },
+    {
+      symbol: 'BTC',
+      exchangeCode: 'OKX',
+      interval: '4h',
+      timestamp: t4hLatest,
+      longLiquidationUsd: '150',
+      shortLiquidationUsd: '70',
+      source: 'TEST',
+    },
+  ]
+}
+
+const seedAggregatedLiquidationHistory = async (prisma: PrismaService, data: AggregatedLiquidationHistorySeedData) => {
+  await prisma.aggregatedLiquidationHistory.createMany({
+    data,
+    skipDuplicates: true,
+  })
+}
+
 describe('Aggregated liquidation service (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
@@ -31,53 +84,10 @@ describe('Aggregated liquidation service (E2E)', () => {
     // - interval = 1h: 仅 AGGREGATED 行，用于验证 summary 中聚合分支
     // - interval = 4h: 同时包含 AGGREGATED 行和多交易所行，用于验证 summary 汇总分支 & exchange breakdown 过滤聚合行
     const baseTime = new Date('2025-01-01T00:00:00Z')
-    const t1hLatest = new Date(baseTime.getTime() + 60 * 60 * 1000)
-    const t4hLatest = new Date(baseTime.getTime() + 4 * 60 * 60 * 1000)
-
-    await prisma.aggregatedLiquidationHistory.createMany({
-      data: [
-        // 1h 聚合行（优先使用 AGGREGATED）
-        {
-          symbol: 'BTC',
-          exchangeCode: 'AGGREGATED',
-          interval: '1h',
-          timestamp: t1hLatest,
-          longLiquidationUsd: '100',
-          shortLiquidationUsd: '50',
-          source: 'TEST',
-        },
-        // 4h 聚合行（应在 breakdown 中被过滤，仅用于 summary）
-        {
-          symbol: 'BTC',
-          exchangeCode: 'AGGREGATED',
-          interval: '4h',
-          timestamp: t4hLatest,
-          longLiquidationUsd: '9999',
-          shortLiquidationUsd: '8888',
-          source: 'TEST',
-        },
-        // 4h 多交易所行（BINANCE + OKX），用于验证求和逻辑
-        {
-          symbol: 'BTC',
-          exchangeCode: 'BINANCE',
-          interval: '4h',
-          timestamp: t4hLatest,
-          longLiquidationUsd: '200',
-          shortLiquidationUsd: '80',
-          source: 'TEST',
-        },
-        {
-          symbol: 'BTC',
-          exchangeCode: 'OKX',
-          interval: '4h',
-          timestamp: t4hLatest,
-          longLiquidationUsd: '150',
-          shortLiquidationUsd: '70',
-          source: 'TEST',
-        },
-      ],
-      skipDuplicates: true,
-    })
+    await seedAggregatedLiquidationHistory(
+      prisma,
+      buildAggregatedLiquidationHistorySeedData(baseTime),
+    )
   })
 
   afterAll(async () => {

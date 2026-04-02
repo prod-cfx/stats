@@ -2,7 +2,18 @@ import type { INestApplication } from '@nestjs/common'
 import type { PrismaService } from '@/prisma/prisma.service'
 import { WhaleNotificationMatcherService } from '@/modules/whale-notification/services/whale-notification-matcher.service'
 import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
-import { createTestingApp } from '../fixtures/fixtures'
+import { createTestingApp, createUserRecord } from '../fixtures/fixtures'
+
+type WhaleNotificationRuleCreateData = Parameters<PrismaService['whaleNotificationRule']['create']>[0]['data']
+type WhaleNotificationRuleOverrideSeedData = Parameters<PrismaService['whaleNotificationRuleSymbolOverride']['createMany']>[0]['data']
+
+const createWhaleNotificationRuleRecord = async (prisma: PrismaService, data: WhaleNotificationRuleCreateData) => {
+  return prisma.whaleNotificationRule.create({ data })
+}
+
+const createWhaleNotificationRuleOverrideRecords = async (prisma: PrismaService, data: WhaleNotificationRuleOverrideSeedData) => {
+  await prisma.whaleNotificationRuleSymbolOverride.createMany({ data })
+}
 
 describe('Whale notification matcher (service E2E)', () => {
   let app: INestApplication
@@ -22,15 +33,10 @@ describe('Whale notification matcher (service E2E)', () => {
     await prisma.whaleNotificationRule.deleteMany({ where: { userId: 'e2e-matcher-user' } })
     await prisma.user.deleteMany({ where: { id: 'e2e-matcher-user' } })
 
-    await prisma.user.create({
-      data: {
-        id: 'e2e-matcher-user',
-        email: 'e2e-matcher-user@example.com',
-        passwordHash: 'e2e-password-hash',
-        nickname: 'matcher-user',
-        emailVerified: true,
-        isGuest: false,
-      },
+    await createUserRecord(prisma, {
+      id: 'e2e-matcher-user',
+      email: 'e2e-matcher-user@example.com',
+      nickname: 'matcher-user',
     })
   })
 
@@ -50,20 +56,17 @@ describe('Whale notification matcher (service E2E)', () => {
 
   it('should apply threshold priority: address+symbol override > symbol override > default threshold', async () => {
 
-    const rule = await prisma.whaleNotificationRule.create({
-      data: {
-        userId: 'e2e-matcher-user',
-        type: 'ADDRESS',
-        whaleAddress: '0xabc',
-        thresholdUsd: 100000,
-        channelWeb: true,
-        channelEmail: false,
-        channelTelegram: true,
-      },
+    const rule = await createWhaleNotificationRuleRecord(prisma, {
+      userId: 'e2e-matcher-user',
+      type: 'ADDRESS',
+      whaleAddress: '0xabc',
+      thresholdUsd: 100000,
+      channelWeb: true,
+      channelEmail: false,
+      channelTelegram: true,
     })
 
-    await prisma.whaleNotificationRuleSymbolOverride.createMany({
-      data: [
+    await createWhaleNotificationRuleOverrideRecords(prisma, [
         {
           ruleId: rule.id,
           whaleAddress: null,
@@ -76,8 +79,7 @@ describe('Whale notification matcher (service E2E)', () => {
           symbol: 'BTC',
           minTradeValueUsd: 200000,
         },
-      ],
-    })
+      ])
 
     const belowAddressSymbol = await matcher.matchTradeEvent({
       whaleAddress: '0xabc',

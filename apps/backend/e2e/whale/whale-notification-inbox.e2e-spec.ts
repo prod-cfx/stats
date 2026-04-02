@@ -2,7 +2,18 @@ import type { INestApplication, ExecutionContext } from '@nestjs/common'
 import type { PrismaService } from '@/prisma/prisma.service'
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard'
 import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
-import { createAuthApiClient, createTestingApp } from '../fixtures/fixtures'
+import { createAuthApiClient, createTestingApp, createUserRecord } from '../fixtures/fixtures'
+
+type WhaleNotificationRuleCreateData = Parameters<PrismaService['whaleNotificationRule']['create']>[0]['data']
+type WhaleNotificationDeliverySeedData = Parameters<PrismaService['whaleNotificationDelivery']['createMany']>[0]['data']
+
+const createWhaleNotificationRuleRecord = async (prisma: PrismaService, data: WhaleNotificationRuleCreateData) => {
+  return prisma.whaleNotificationRule.create({ data })
+}
+
+const createWhaleNotificationDeliveryRecords = async (prisma: PrismaService, data: WhaleNotificationDeliverySeedData) => {
+  await prisma.whaleNotificationDelivery.createMany({ data })
+}
 
 describe('Whale notification inbox HTTP (E2E)', () => {
   let app: INestApplication
@@ -37,29 +48,21 @@ describe('Whale notification inbox HTTP (E2E)', () => {
     await prisma.whaleNotificationRule.deleteMany({ where: { userId } })
     await prisma.user.deleteMany({ where: { id: userId } })
 
-    await prisma.user.create({
-      data: {
-        id: userId,
-        email: 'e2e-inbox-user@example.com',
-        passwordHash: 'e2e-password-hash',
-        nickname: 'inbox-user',
-        emailVerified: true,
-        isGuest: false,
-      },
+    await createUserRecord(prisma, {
+      id: userId,
+      email: 'e2e-inbox-user@example.com',
+      nickname: 'inbox-user',
     })
 
-    const rule = await prisma.whaleNotificationRule.create({
-      data: {
-        userId,
-        type: 'ADDRESS',
-        whaleAddress: '0xabc',
-        thresholdUsd: 100000,
-      },
+    const rule = await createWhaleNotificationRuleRecord(prisma, {
+      userId,
+      type: 'ADDRESS',
+      whaleAddress: '0xabc',
+      thresholdUsd: 100000,
     })
     ruleId = rule.id
 
-    await prisma.whaleNotificationDelivery.createMany({
-      data: [
+    await createWhaleNotificationDeliveryRecords(prisma, [
         {
           userId,
           ruleId,
@@ -75,8 +78,7 @@ describe('Whale notification inbox HTTP (E2E)', () => {
           content: '0xabc 开多 BTC 120000',
           isRead: false,
         },
-      ],
-    })
+      ])
   })
 
   afterAll(async () => {

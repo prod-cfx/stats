@@ -1,5 +1,5 @@
 /* eslint-disable ts/consistent-type-imports */
-import type { UserProfileResponseDto } from '@/modules/auth/dto/responses/user.profile.response.dto'
+import type { UserProfileResponseDto } from '@/modules/auth/dto/responses/user-profile.response.dto'
 
 import { ErrorCode } from '@ai/shared'
 import { Controller, Get, HttpStatus, UseGuards } from '@nestjs/common'
@@ -7,7 +7,7 @@ import { ApiBearerAuth, ApiOkResponse, ApiTags } from '@nestjs/swagger'
 
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
-import { UserProfileResponseDto as UserProfileResponseSchema } from '@/modules/auth/dto/responses/user.profile.response.dto'
+import { UserProfileResponseDto as UserProfileResponseSchema } from '@/modules/auth/dto/responses/user-profile.response.dto'
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard'
 import { UserService } from './user.service'
 

@@ -2,7 +2,7 @@ import type { TradingSignalListQueryDto } from '../dto/trading-signal-list-query
 import { Controller, Get, Query } from '@nestjs/common'
 import { ApiExtraModels, ApiOkResponse, ApiOperation, ApiTags, getSchemaPath } from '@nestjs/swagger'
 
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { TradingSignalResponseDto } from '../dto/trading-signal-response.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入实例
 import { OpsTradingSignalsService } from '../services/ops-trading-signals.service'

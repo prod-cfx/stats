@@ -7,6 +7,12 @@ import { createTestingApp } from '../fixtures/fixtures'
 
 jest.setTimeout(180_000)
 
+type WhalePositionSeedData = Parameters<PrismaService['hyperliquidWhalePosition']['createMany']>[0]['data']
+
+async function createWhalePositionRecords(prisma: PrismaService, data: WhalePositionSeedData) {
+  await prisma.hyperliquidWhalePosition.createMany({ data })
+}
+
 describe('WhaleHoldingsService (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
@@ -38,8 +44,7 @@ describe('WhaleHoldingsService (E2E)', () => {
     // - user1/BTC: 持仓价值 500k（低于 1M 阈值）
     // - user2/BTC: 持仓价值 1.2M（高于 1M 阈值）
     // - user3/ETH: 持仓价值 200k（低于 1M 但高于 100k 阈值）
-    await prisma.hyperliquidWhalePosition.createMany({
-      data: [
+    await createWhalePositionRecords(prisma, [
         {
           userAddress: '0xWhaleAddress1',
           symbol: 'BTC',
@@ -76,8 +81,7 @@ describe('WhaleHoldingsService (E2E)', () => {
           snapshotTime: minutes(3),
           source: 'TEST',
         },
-      ],
-    })
+      ])
 
     // 1）仅筛选 BTC，且设置较高的 minPositionValueUsd，只应命中 user2/BTC
     const btcHoldings = await whaleHoldingsService.getCurrentHoldings({
@@ -117,8 +121,7 @@ describe('WhaleHoldingsService (E2E)', () => {
     const minutes = (n: number) => new Date(now.getTime() - n * 60 * 1000)
 
     // Seed 5 whale positions all above threshold
-    await prisma.hyperliquidWhalePosition.createMany({
-      data: Array.from({ length: 5 }, (_, i) => ({
+    await createWhalePositionRecords(prisma, Array.from({ length: 5 }, (_, i) => ({
         userAddress: `0xPagWhale${i}`,
         symbol: 'BTC',
         positionSize: `${(i + 1) * 10}`,
@@ -129,8 +132,7 @@ describe('WhaleHoldingsService (E2E)', () => {
         roe: '0.01',
         snapshotTime: minutes(i),
         source: 'TEST',
-      })),
-    })
+      })))
 
     const result = await whaleHoldingsService.getCurrentHoldings({
       minPositionValueUsd: 500_000,

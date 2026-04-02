@@ -1,10 +1,10 @@
 import type { LlmStrategyInstanceStatus } from '@ai/shared'
 import type { CreateLlmStrategyInstanceDto } from '../dto/create-llm-strategy-instance.dto'
-import type { LlmStrategyInstanceListQueryDto } from '../dto/llm-strategy-instance-list.query.dto'
+import type { LlmStrategyInstanceListQueryDto } from '../dto/llm-strategy-instance-list-query.dto'
 import type { UpdateLlmStrategyInstanceDto } from '../dto/update-llm-strategy-instance.dto'
 import type { LlmStrategyInstance, Prisma } from '@/prisma/prisma.types'
 import { Injectable, Logger } from '@nestjs/common'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 
 import { Prisma as PrismaNamespace } from '@/prisma/prisma.types'
 

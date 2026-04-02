@@ -2,8 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { DASHBOARD_UPDATED_EVENT, ensureDashboard, getDashboard } from '../store/dashboardStore'
-import { snapToPresetForWidgetType } from '../widgets/unitSizePresets'
+import { DASHBOARD_UPDATED_EVENT, ensureDashboard, getDashboard } from '../store/dashboard-store'
+import { snapToPresetForWidgetType } from '../widgets/unit-size-presets'
 import { WidgetRenderer } from '../widgets/WidgetRenderer'
 
 type GridLayoutComponent = React.ComponentType<any> | null

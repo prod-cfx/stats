@@ -9,11 +9,11 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger'
-import { BaseResponseDto } from '@/common/dto/base.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BaseResponseDto } from '@/common/dto/base.dto'
 import { CreateStrategyTemplateDto } from '../dto/create-strategy-template.dto'
-import { StrategyTemplateListQueryDto } from '../dto/strategy-template-list.query.dto'
+import { StrategyTemplateListQueryDto } from '../dto/strategy-template-list-query.dto'
 import { StrategyTemplateResponseDto } from '../dto/strategy-template.response.dto'
 import { UpdateStrategyTemplateDto } from '../dto/update-strategy-template.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- 需要用于依赖注入，不能使用 import type

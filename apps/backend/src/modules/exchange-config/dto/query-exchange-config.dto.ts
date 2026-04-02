@@ -1,7 +1,7 @@
 import { ApiPropertyOptional } from '@nestjs/swagger'
 import { Transform } from 'class-transformer'
 import { IsBoolean, IsEnum, IsOptional, IsString } from 'class-validator'
-import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
+import { BasePaginationRequestDto } from '@/common/dto/base-pagination.request.dto'
 
 export class QueryExchangeConfigDto extends BasePaginationRequestDto {
   @ApiPropertyOptional({ description: '按 code 精确筛选（例如 BINANCE）' })

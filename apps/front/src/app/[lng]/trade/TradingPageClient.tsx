@@ -5,11 +5,11 @@ import { useSearchParams } from 'next/navigation'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
-import { BottomPanel } from '@/components/trading/BottomPanel/BottomPanel'
-import { CenterChartPanel } from '@/components/trading/CenterChartPanel/CenterChartPanel'
-import { LeftTradePanel } from '@/components/trading/LeftTradePanel/LeftTradePanel'
-import { RightPanel } from '@/components/trading/RightPanel/RightPanel'
-import { TopBar } from '@/components/trading/TopBar/TopBar'
+import { BottomPanel } from '@/components/trading/bottom-panel'
+import { CenterChartPanel } from '@/components/trading/center-chart-panel'
+import { LeftTradePanel } from '@/components/trading/left-trade-panel'
+import { RightPanel } from '@/components/trading/right-panel'
+import { TopBar } from '@/components/trading/top-bar'
 
 function normalizeSymbol(raw: string | null): string | null {
   if (!raw) return null
