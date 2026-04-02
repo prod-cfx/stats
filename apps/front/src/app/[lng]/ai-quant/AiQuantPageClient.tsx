@@ -1334,6 +1334,7 @@ export function AiQuantPageClient() {
           params: activeConversation.paramValues,
         },
         range: resolveBacktestRangeInput(activeConversation.paramValues),
+        allowPartial: true,
       })
     } catch (error) {
       backtestRunMutexRef.current.delete(conversationId)

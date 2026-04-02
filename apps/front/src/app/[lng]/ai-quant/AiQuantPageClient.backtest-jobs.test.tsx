@@ -295,6 +295,22 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(summary?.textContent).toContain('2026-03-24T00:00:00.000Z')
   })
 
+  it('passes allowPartial to the backtest payload builder when submitting a job', async () => {
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(expect.objectContaining({
+      allowPartial: true,
+    }))
+  })
+
   it('failed path: job failed appends feedback and does not write success result', async () => {
     mockGetBacktestJob.mockResolvedValue({
       id: 'job-1',
