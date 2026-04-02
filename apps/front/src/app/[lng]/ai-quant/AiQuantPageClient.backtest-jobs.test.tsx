@@ -427,7 +427,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
         {
           id: 'conv-1',
           title: 'conv',
-          messages: [{ id: 'welcome', role: 'assistant', content: 'hello' }],
+          messages: [{ id: 'welcome', role: 'assistant', content: '```typescript\nreturn { ok: true }\n```' }],
           params: {
             exchange: 'binance',
             symbol: 'BTCUSDT',

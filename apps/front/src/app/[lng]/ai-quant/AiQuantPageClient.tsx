@@ -383,8 +383,7 @@ function buildParamSchemaWithCapabilities(capabilities: BacktestCapabilities | n
 }
 
 function hasLatestPublishedCode(conversation: ConversationState | null | undefined): boolean {
-  if (!conversation?.publishedStrategyInstanceId) return false
-  return extractLatestScriptCode(conversation.messages).trim().length > 0
+  return extractLatestScriptCode(conversation?.messages ?? []).trim().length > 0
 }
 
 const VALID_RANGE_PRESETS = ['7D', '30D', '90D', '1Y', 'CUSTOM'] as const
