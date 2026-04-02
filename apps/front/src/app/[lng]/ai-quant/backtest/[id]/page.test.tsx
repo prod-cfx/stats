@@ -1,11 +1,38 @@
 import { describe, expect, it, jest } from '@jest/globals'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server.node'
-import { fetchBacktestJobResultServer } from '@/lib/server-api'
+import { fetchBacktestJobServer } from '@/lib/server-api'
 import AiQuantBacktestDetailPage from './page'
 
 jest.mock('@/lib/server-api', () => ({
-  fetchBacktestJobResultServer: jest.fn(async () => null),
+  fetchBacktestJobServer: jest.fn(async () => null),
+}))
+
+const mockBacktestReportClient = jest.fn(
+  ({
+    symbol,
+    rangeDisplay,
+    metrics,
+  }: {
+    symbol: string
+    rangeDisplay: string
+    metrics: {
+      maxDrawdownPct: number
+      totalReturnPct: number
+      winRatePct: number
+      tradeCount: number
+    } | null
+  }) => (
+    <section>
+      <div>{symbol}</div>
+      <div>{rangeDisplay}</div>
+      <div>{metrics ? `${metrics.winRatePct}%` : '--'}</div>
+    </section>
+  ),
+)
+
+jest.mock('./BacktestReportClient', () => ({
+  BacktestReportClient: (props: unknown) => mockBacktestReportClient(props as never),
 }))
 
 jest.mock('next/link', () => ({
@@ -23,8 +50,8 @@ jest.mock('@/components/layout/Navbar', () => ({
   Navbar: () => <nav>navbar</nav>,
 }))
 
-const mockFetchBacktestJobResultServer = fetchBacktestJobResultServer as jest.MockedFunction<
-  typeof fetchBacktestJobResultServer
+const mockFetchBacktestJobServer = fetchBacktestJobServer as jest.MockedFunction<
+  typeof fetchBacktestJobServer
 >
 
 function createThenable<T>(value: T) {
@@ -46,7 +73,8 @@ function createThenable<T>(value: T) {
 
 describe('AiQuantBacktestDetailPage', () => {
   beforeEach(() => {
-    mockFetchBacktestJobResultServer.mockResolvedValue(null)
+    mockFetchBacktestJobServer.mockResolvedValue(null)
+    mockBacktestReportClient.mockClear()
   })
 
   it('renders symbol and historical range from searchParams', async () => {
@@ -76,12 +104,12 @@ describe('AiQuantBacktestDetailPage', () => {
 
     const html = renderToStaticMarkup(element)
     expect(html).toContain('BTCUSDT')
-    expect(html).toContain(' · -')
+    expect(html).toContain('<div>-</div>')
   })
 
   it('normalizes ratio winRate to percent display', async () => {
-    mockFetchBacktestJobResultServer.mockResolvedValue({
-      summary: {
+    mockFetchBacktestJobServer.mockResolvedValue({
+      resultSummary: {
         netProfit: 10,
         netProfitPct: 2,
         maxDrawdownPct: 3,
@@ -89,8 +117,6 @@ describe('AiQuantBacktestDetailPage', () => {
         profitFactor: 1.1,
         totalTrades: 2,
       },
-      equityCurve: [],
-      trades: [],
     })
 
     const element = await AiQuantBacktestDetailPage({
@@ -104,6 +130,44 @@ describe('AiQuantBacktestDetailPage', () => {
 
     const html = renderToStaticMarkup(element)
     expect(html).toContain('63%')
+  })
+
+  it('passes only summary metrics to BacktestReportClient without serializing report arrays', async () => {
+    mockFetchBacktestJobServer.mockResolvedValue({
+      id: 'backtest-2002',
+      status: 'succeeded',
+      createdAt: '2026-03-25T00:00:00.000Z',
+      resultSummary: {
+        netProfit: 50,
+        netProfitPct: 8.8,
+        maxDrawdownPct: 5.2,
+        winRate: 0.5,
+        profitFactor: 1.4,
+        totalTrades: 4,
+      },
+    })
+
+    const element = await AiQuantBacktestDetailPage({
+      params: { lng: 'zh', id: 'backtest-2002' },
+      searchParams: {
+        symbol: 'BTCUSDT',
+      },
+    })
+
+    renderToStaticMarkup(element)
+
+    const props = mockBacktestReportClient.mock.calls[0]?.[0] as Record<string, unknown>
+
+    expect(props).toMatchObject({
+      id: 'backtest-2002',
+      metrics: {
+        maxDrawdownPct: 5.2,
+        totalReturnPct: 8.8,
+        winRatePct: 50,
+        tradeCount: 4,
+      },
+    })
+    expect(props).not.toHaveProperty('report')
   })
 
   it('starts resolving params and searchParams together', async () => {

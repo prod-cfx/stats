@@ -88,17 +88,21 @@ function createPrismaBacktestJobMock() {
     findUnique: jest.fn().mockImplementation(async ({ where }: { where: { id: string } }) => {
       return store.get(where.id) ?? null
     }),
-    update: jest.fn().mockImplementation(async ({ where, data }: { where: { id: string }; data: Record<string, any> }) => {
-      const existing = store.get(where.id)
-      if (!existing) throw new Error(`missing job ${where.id}`)
-      const next = {
-        ...existing,
-        ...data,
-        inputSummary: data.inputSummary ?? existing.inputSummary,
-      }
-      store.set(where.id, next)
-      return next
-    }),
+    update: jest
+      .fn()
+      .mockImplementation(
+        async ({ where, data }: { where: { id: string }; data: Record<string, any> }) => {
+          const existing = store.get(where.id)
+          if (!existing) throw new Error(`missing job ${where.id}`)
+          const next = {
+            ...existing,
+            ...data,
+            inputSummary: data.inputSummary ?? existing.inputSummary,
+          }
+          store.set(where.id, next)
+          return next
+        },
+      ),
     deleteMany: jest.fn(),
   }
 }
@@ -120,13 +124,15 @@ describe('backtestJobsService', () => {
 
     const created = await service.createJob(createInput(), OWNER_USER_ID)
 
-    expect(prisma.backtestJob.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        id: expect.stringMatching(/^btjob-/),
-        ownerUserId: OWNER_USER_ID,
-        status: 'queued',
+    expect(prisma.backtestJob.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          id: expect.stringMatching(/^btjob-/),
+          ownerUserId: OWNER_USER_ID,
+          status: 'queued',
+        }),
       }),
-    }))
+    )
     expect(created.status).toBe('queued')
   })
 
@@ -147,19 +153,61 @@ describe('backtestJobsService', () => {
     const created = await service.createJob(createInput(), OWNER_USER_ID)
     await flushMicrotasks()
 
-    expect(prisma.backtestJob.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: created.id },
-      data: expect.objectContaining({
-        status: 'succeeded',
-        result: expect.objectContaining({
-          summary: { totalTrades: 0 },
+    expect(prisma.backtestJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: created.id },
+        data: expect.objectContaining({
+          status: 'succeeded',
+          result: expect.objectContaining({
+            summary: { totalTrades: 0 },
+          }),
         }),
       }),
-    }))
+    )
 
-    await expect(service.getJobResult(created.id, OWNER_USER_ID)).resolves.toEqual(expect.objectContaining({
-      summary: { totalTrades: 0 },
-    }))
+    await expect(service.getJobResult(created.id, OWNER_USER_ID)).resolves.toEqual(
+      expect.objectContaining({
+        summary: { totalTrades: 0 },
+      }),
+    )
+  })
+
+  it('includes resultSummary in getJob without leaking full report payload', async () => {
+    const runner = {
+      run: jest.fn().mockResolvedValue({
+        summary: {
+          netProfit: 1200,
+          netProfitPct: 12,
+          maxDrawdownPct: 8,
+          winRate: 0.6,
+          profitFactor: 1.7,
+          totalTrades: 6,
+        },
+        equityCurve: [{ ts: 1, equity: 10000 }],
+        trades: [{ id: 'trade-1', symbol: 'BTCUSDT' }],
+        markers: [],
+        bySymbol: [],
+      }),
+    }
+    const marketData = createMarketDataMock()
+    const prisma = createPrismaMock()
+    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+
+    const created = await service.createJob(createInput(), OWNER_USER_ID)
+    await flushMicrotasks()
+
+    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toMatchObject({
+      id: created.id,
+      status: 'succeeded',
+      resultSummary: {
+        netProfit: 1200,
+        netProfitPct: 12,
+        maxDrawdownPct: 8,
+        winRate: 0.6,
+        profitFactor: 1.7,
+        totalTrades: 6,
+      },
+    })
   })
 
   it('stores failed result state in prisma when runner throws', async () => {
@@ -173,13 +221,15 @@ describe('backtestJobsService', () => {
     const created = await service.createJob(createInput(), OWNER_USER_ID)
     await flushMicrotasks()
 
-    expect(prisma.backtestJob.update).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: created.id },
-      data: expect.objectContaining({
-        status: 'failed',
-        error: 'boom',
+    expect(prisma.backtestJob.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: created.id },
+        data: expect.objectContaining({
+          status: 'failed',
+          error: 'boom',
+        }),
       }),
-    }))
+    )
   })
 
   it('rejects result query when job is not completed', async () => {
@@ -191,7 +241,9 @@ describe('backtestJobsService', () => {
     const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
     const created = await service.createJob(createInput(), OWNER_USER_ID)
 
-    await expect(service.getJobResult(created.id, OWNER_USER_ID)).rejects.toThrow('backtest.job_not_completed')
+    await expect(service.getJobResult(created.id, OWNER_USER_ID)).rejects.toThrow(
+      'backtest.job_not_completed',
+    )
   })
 
   it('rejects reading job for non-owner user', async () => {
@@ -204,7 +256,9 @@ describe('backtestJobsService', () => {
     const created = await service.createJob(createInput(), OWNER_USER_ID)
 
     await expect(service.getJob(created.id, 'user-2')).rejects.toThrow('backtest.job_not_found')
-    await expect(service.getJobResult(created.id, 'user-2')).rejects.toThrow('backtest.job_not_found')
+    await expect(service.getJobResult(created.id, 'user-2')).rejects.toThrow(
+      'backtest.job_not_found',
+    )
   })
 
   it('persists applied range when coverage is partial and allowPartial is true', async () => {
@@ -231,13 +285,15 @@ describe('backtestJobsService', () => {
     const created = await service.createJob(input, OWNER_USER_ID)
     await flushMicrotasks()
 
-    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toEqual(expect.objectContaining({
-      status: 'succeeded',
-      inputSummary: expect.objectContaining({
-        appliedRange: { fromTs: 2, toTs: 3 },
-        isPartial: true,
+    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toEqual(
+      expect.objectContaining({
+        status: 'succeeded',
+        inputSummary: expect.objectContaining({
+          appliedRange: { fromTs: 2, toTs: 3 },
+          isPartial: true,
+        }),
       }),
-    }))
+    )
   })
 
   it('fails partial coverage when allowPartial is omitted', async () => {
@@ -265,12 +321,14 @@ describe('backtestJobsService', () => {
     const created = await service.createJob(input, OWNER_USER_ID)
     await flushMicrotasks()
 
-    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toEqual(expect.objectContaining({
-      status: 'failed',
-      inputSummary: expect.objectContaining({
-        allowPartial: false,
+    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toEqual(
+      expect.objectContaining({
+        status: 'failed',
+        inputSummary: expect.objectContaining({
+          allowPartial: false,
+        }),
       }),
-    }))
+    )
     expect(runner.run).not.toHaveBeenCalled()
   })
 
@@ -293,14 +351,18 @@ describe('backtestJobsService', () => {
     const second = await service.createJob(createInput(), OWNER_USER_ID)
     await flushMicrotasks()
 
-    await expect(service.getJob(first.id, OWNER_USER_ID)).resolves.toEqual(expect.objectContaining({
-      id: first.id,
-      status: 'succeeded',
-    }))
-    await expect(service.getJob(second.id, OWNER_USER_ID)).resolves.toEqual(expect.objectContaining({
-      id: second.id,
-      status: 'succeeded',
-    }))
+    await expect(service.getJob(first.id, OWNER_USER_ID)).resolves.toEqual(
+      expect.objectContaining({
+        id: first.id,
+        status: 'succeeded',
+      }),
+    )
+    await expect(service.getJob(second.id, OWNER_USER_ID)).resolves.toEqual(
+      expect.objectContaining({
+        id: second.id,
+        status: 'succeeded',
+      }),
+    )
     expect(prisma.backtestJob.deleteMany).not.toHaveBeenCalled()
   })
 

@@ -85,4 +85,37 @@ describe('fetchBacktestJobResultServer', () => {
     expect(mockGetServerAuthHeaders).not.toHaveBeenCalled()
     expect(fetchMock).not.toHaveBeenCalled()
   })
+
+  it('fetchBacktestJobServer uses absolute URL for summary requests', async () => {
+    const fetchMock = jest.fn(async () => ({
+      ok: true,
+      json: async () => ({
+        data: {
+          id: 'btjob-1',
+          status: 'succeeded',
+          createdAt: '2026-03-25T00:00:00.000Z',
+          resultSummary: {
+            netProfit: 100,
+            netProfitPct: 1,
+            maxDrawdownPct: 2,
+            winRate: 0.6,
+            profitFactor: 1.5,
+            totalTrades: 10,
+          },
+        },
+      }),
+    }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { fetchBacktestJobServer } = await import('./server-api')
+    await fetchBacktestJobServer('btjob-1')
+
+    expect(mockGetServerToken).toHaveBeenCalledTimes(1)
+    expect(mockBuildServerAuthHeaders).toHaveBeenCalledWith('a.b.c')
+    expect(mockGetServerAuthHeaders).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringMatching(/^https?:\/\/.*\/backtesting\/jobs\/btjob-1$/),
+      expect.objectContaining({ method: 'GET' }),
+    )
+  })
 })

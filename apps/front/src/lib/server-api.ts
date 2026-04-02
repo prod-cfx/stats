@@ -50,6 +50,17 @@ export interface BacktestJobResultReport {
   trades?: BacktestJobResultTradeRecord[]
 }
 
+export interface BacktestJobServerResponse {
+  id: string
+  status: 'queued' | 'running' | 'succeeded' | 'failed'
+  createdAt: string
+  startedAt?: string
+  finishedAt?: string
+  error?: string
+  inputSummary?: unknown
+  resultSummary?: BacktestJobResultSummary
+}
+
 /**
  * 在服务端获取 LLM 策略实例列表
  * 支持匿名访问，登录用户会看到 isSubscribed 状态
@@ -202,6 +213,37 @@ export async function fetchBacktestJobResultServer(
   const json = await response.json()
   const payload = unwrapApiResponse(json) as BacktestJobResultReport
   if (!payload?.summary) {
+    return null
+  }
+  return payload
+}
+
+export async function fetchBacktestJobServer(
+  jobId: string,
+): Promise<BacktestJobServerResponse | null> {
+  const token = await getServerToken()
+  const authHeaders = buildServerAuthHeaders(token)
+  if (!authHeaders.Authorization) {
+    return null
+  }
+
+  const url = `${SERVER_API_BASE_URL}/backtesting/jobs/${encodeURIComponent(jobId)}`
+  const response = await fetch(url, {
+    method: 'GET',
+    headers: {
+      'Content-Type': 'application/json',
+      ...authHeaders,
+    },
+    cache: 'no-store',
+  })
+
+  if (!response.ok) {
+    return null
+  }
+
+  const json = await response.json()
+  const payload = unwrapApiResponse(json) as BacktestJobServerResponse
+  if (!payload?.id || !payload?.status) {
     return null
   }
   return payload
