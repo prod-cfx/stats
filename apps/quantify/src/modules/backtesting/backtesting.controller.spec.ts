@@ -54,6 +54,11 @@ jest.mock('@nestjs/throttler', () => ({
 }))
 
 describe('backtestingController', () => {
+  it('retains runtime DTO metadata for symbol support requests', () => {
+    const paramTypes = Reflect.getMetadata('design:paramtypes', BacktestingController.prototype, 'checkSymbolSupport')
+    expect(paramTypes?.[2]?.name).toBe('CheckBacktestSymbolDto')
+  })
+
   it('should expose run and jobs endpoint methods', async () => {
     const mod = await Test.createTestingModule({
       controllers: [BacktestingController],
