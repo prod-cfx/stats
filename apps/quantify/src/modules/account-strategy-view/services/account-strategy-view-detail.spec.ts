@@ -422,6 +422,89 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(detail.equitySeries.every(item => item.value === 60000)).toBe(true)
   })
 
+  it('uses live exchange equity as the latest curve point for pristine non-default seed accounts', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-live-account-nondefault-seed',
+        name: 'Live account strategy with seeded capital',
+        status: 'running',
+        createdBy: 'user-1',
+        params: { symbol: 'BTCUSDT', exchange: 'okx' },
+        strategyTemplateId: 'tpl-live-account-nondefault-seed',
+        strategyTemplate: { defaultParams: {} },
+        subscriptions: [{
+          userId: 'user-1',
+          status: 'active',
+          customParams: {},
+          exchangeAccount: {
+            id: 'exchange-account-1',
+            name: 'OKX Sim',
+            exchangeId: 'okx',
+          },
+        }],
+        startedAt: new Date('2026-03-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue({
+        id: 'acc-live-account-nondefault-seed',
+        baseCurrency: 'USDT',
+        initialBalance: 50000,
+        balance: 50000,
+        equity: 50000,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 0,
+      }),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadClosedPositionPnlSeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
+      loadPositionFinancials: jest.fn().mockResolvedValue({
+        openCostBasis: 0,
+        totalUnrealizedPnl: 0,
+        totalRealizedPnl: 0,
+      }),
+      loadOpenPositionsForValuation: jest.fn().mockResolvedValue([]),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-03-18T10:00:00.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const statsService = {
+      calculateStats: jest.fn().mockResolvedValue(null),
+      calculateBatchStats: jest.fn(),
+    }
+    const strategyInstancesService = { updateInstance: jest.fn() }
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+    const tradingService = {
+      getBalance: jest.fn().mockResolvedValue([
+        { asset: 'USDT', free: 58000, locked: 2000, total: 60000 },
+      ]),
+    }
+
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+      undefined,
+      undefined,
+      tradingService as any,
+    )
+    const detail = await service.getStrategyDetail('user-1', 'inst-live-account-nondefault-seed')
+
+    expect(detail.accountOverview).toEqual({
+      initialBalance: 50000,
+      totalEquity: 60000,
+      availableBalance: 58000,
+      totalPnl: 0,
+      todayPnl: 0,
+      baseCurrency: 'USDT',
+    })
+    expect(detail.equitySeries.at(-1)?.value).toBe(60000)
+  })
+
   it('ignores pre-start closed positions when computing drawdown', async () => {
     const repo = {
       findStrategyForUser: jest.fn().mockResolvedValue({

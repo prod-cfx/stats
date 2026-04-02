@@ -253,7 +253,7 @@ export class AccountStrategyViewService {
           startedAt: lifecycleStartAt,
           dailyRows: equityRows,
           currentEquity: shouldUseExchangeBalance
-            ? (overviewInitialBalance ?? exchangeBalance?.total ?? null)
+            ? overviewTotalEquity
             : resolvedTotalEquity,
         })
       : []
@@ -330,7 +330,7 @@ export class AccountStrategyViewService {
       detail.equitySeries = [{
         ts: new Date().toISOString(),
         value: shouldUseExchangeBalance
-          ? (overviewInitialBalance ?? exchangeBalance?.total ?? null)
+          ? overviewTotalEquity
           : (resolvedTotalEquity ?? (
               Number(account.initialBalance) + (resolvedRealizedPnl ?? 0) + (resolvedUnrealizedPnl ?? 0)
             )),
