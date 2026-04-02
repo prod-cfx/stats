@@ -31,6 +31,10 @@ import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
 import { buildAiQuantStageFallbackMessage, parseAiQuantErrorMeta } from '@/components/ai-quant/ai-quant-error-stage'
 import {
+  applyCapabilitiesToParamSchema,
+  syncStrategyParamsFromCodegen,
+} from '@/components/ai-quant/strategy-param-sync'
+import {
   buildAutoAdvanceMessage,
   shouldAutoAdvanceOnConfirmation,
   resolveChecklistPayload,
@@ -332,8 +336,13 @@ function normalizeNumber(value: unknown, fallback: number): number {
 }
 
 function normalizeParamsFromValues(values: Record<string, unknown>, fallback: QuantParams): QuantParams {
+  const exchange = values.exchange === 'okx'
+    ? 'okx'
+    : values.exchange === 'hyperliquid'
+      ? 'hyperliquid'
+      : 'binance'
   return {
-    exchange: values.exchange === 'okx' ? 'okx' : 'binance',
+    exchange,
     symbol: typeof values.symbol === 'string' && values.symbol.trim() ? values.symbol.trim() : fallback.symbol,
     baseTimeframe: typeof values.baseTimeframe === 'string' && values.baseTimeframe.trim()
       ? values.baseTimeframe.trim()
@@ -371,6 +380,11 @@ function buildParamSchemaWithCapabilities(capabilities: BacktestCapabilities | n
       baseTimeframe: baseTimeframeProperty,
     },
   }
+}
+
+function hasLatestPublishedCode(conversation: ConversationState | null | undefined): boolean {
+  if (!conversation?.publishedStrategyInstanceId) return false
+  return extractLatestScriptCode(conversation.messages).trim().length > 0
 }
 
 const VALID_RANGE_PRESETS = ['7D', '30D', '90D', '1Y', 'CUSTOM'] as const
@@ -486,12 +500,14 @@ export function AiQuantPageClient() {
   const [backtestCapabilityState, setBacktestCapabilityState] = useState<CapabilityState>('loading')
   const [backtestCapabilities, setBacktestCapabilities] = useState<BacktestCapabilities | null>(null)
   const [backtestCapabilityRetryNonce, setBacktestCapabilityRetryNonce] = useState(0)
+  const [codegenBusyConversationIds, setCodegenBusyConversationIds] = useState<string[]>([])
   const isMountedRef = useRef(true)
   const activeConversationIdRef = useRef('')
   const previousActiveConversationIdRef = useRef<string>('')
   const backtestRunTokenRef = useRef(new Map<string, number>())
   const backtestRunMutexRef = useRef(new Set<string>())
   const backtestSummarySyncRef = useRef(new Set<string>())
+  const codegenRequestMutexRef = useRef(new Set<string>())
 
   const activeConversation = useMemo(() => {
     if (!activeConversationId) return conversations[0]
@@ -553,7 +569,6 @@ export function AiQuantPageClient() {
     void fetchBacktestCapabilities({ signal: controller.signal })
       .then((capabilities) => {
         if (controller.signal.aborted) return
-        const normalizedSchema = buildParamSchemaWithCapabilities(capabilities)
         const allowedSymbols = capabilities.allowedSymbols
         const allowedBaseTimeframes = capabilities.allowedBaseTimeframes
 
@@ -586,7 +601,8 @@ export function AiQuantPageClient() {
             : conv.messages
           return {
             ...conv,
-            paramSchema: normalizedSchema,
+            paramSchema: applyCapabilitiesToParamSchema(conv.paramSchema, capabilities)
+              ?? buildParamSchemaWithCapabilities(capabilities),
             paramValues: nextValues,
             params: normalizeParamsFromValues(nextValues, conv.params),
             messages: nextMessages,
@@ -603,7 +619,8 @@ export function AiQuantPageClient() {
           if (alreadyAppended) return conv
           return {
             ...conv,
-            paramSchema: buildParamSchemaWithCapabilities(null),
+            paramSchema: applyCapabilitiesToParamSchema(conv.paramSchema, null)
+              ?? buildParamSchemaWithCapabilities(null),
             messages: [
               ...conv.messages,
               {
@@ -710,6 +727,18 @@ export function AiQuantPageClient() {
     return activeConversation.backtestResult.maxDrawdownPct <= 20
   }, [activeConversation?.backtestResult])
   const graphConfirmed = activeConversation?.logicGraph?.status === 'confirmed'
+  const codegenBusy = activeConversation
+    ? codegenBusyConversationIds.includes(activeConversation.id)
+    : false
+  const canRunBacktest = useMemo(() => {
+    if (!activeConversation) return false
+    if (backtestCapabilityState !== 'ready') return false
+    if (!graphConfirmed) return false
+    if (codegenBusy) return false
+    if (!hasLatestPublishedCode(activeConversation)) return false
+    return activeConversation.backtestExecutionState !== 'submitting'
+      && activeConversation.backtestExecutionState !== 'running'
+  }, [activeConversation, backtestCapabilityState, codegenBusy, graphConfirmed])
 
   const compactMode = useMemo(() => {
     if (!activeConversation) return true
@@ -757,9 +786,16 @@ export function AiQuantPageClient() {
   }) => {
     const { conversationId, message, params: targetParams, sessionId, usePresetRules = false, confirmGenerate = false } = args
     if (!session?.userId) return
+    if (codegenRequestMutexRef.current.has(conversationId)) return
+    codegenRequestMutexRef.current.add(conversationId)
+    setCodegenBusyConversationIds(prev => (prev.includes(conversationId) ? prev : [...prev, conversationId]))
     let activeSessionId = sessionId
     const trimmedMessage = message.trim()
-    if (!trimmedMessage) return
+    if (!trimmedMessage) {
+      codegenRequestMutexRef.current.delete(conversationId)
+      setCodegenBusyConversationIds(prev => prev.filter(id => id !== conversationId))
+      return
+    }
     const loadingMessageId = `a-loading-${Date.now()}`
     const startedAt = Date.now()
 
@@ -823,13 +859,36 @@ export function AiQuantPageClient() {
         const shouldReuseCodegenSession = !isCodegenTerminalStatus(response.status)
         const shouldUpdateGraph = (response.status === 'CHECKLIST_GATE' || response.status === 'PUBLISHED')
           && Boolean(response.specDesc)
+        const syncResult = shouldUpdateGraph
+          ? syncStrategyParamsFromCodegen({
+              spec: response.specDesc,
+              fallback: {
+                exchange: targetParams.exchange,
+                symbol: targetParams.symbol,
+                baseTimeframe: targetParams.baseTimeframe,
+                positionPct: targetParams.positionPct,
+              },
+              currentValues: conv.paramValues,
+              capabilities: backtestCapabilities,
+              contextText: trimmedMessage,
+            })
+          : null
+        const nextParamValues = syncResult?.paramValues ?? conv.paramValues
+        const nextParamSchema = shouldUpdateGraph
+          ? applyCapabilitiesToParamSchema(syncResult?.paramSchema, backtestCapabilities)
+          : conv.paramSchema
+        const nextParams = syncResult
+          ? normalizeParamsFromValues(nextParamValues, conv.params)
+          : conv.params
         const nextGraph = shouldUpdateGraph
           ? buildLogicGraphFromCodegenSpec(
               response.specDesc,
               {
-                exchange: targetParams.exchange,
-                symbol: targetParams.symbol,
-                positionPct: targetParams.positionPct,
+                exchange: syncResult?.normalized.exchange ?? targetParams.exchange,
+                symbol: syncResult?.normalized.symbol ?? targetParams.symbol,
+                baseTimeframe: syncResult?.normalized.baseTimeframe ?? targetParams.baseTimeframe,
+                positionPct: syncResult?.normalized.positionPct ?? targetParams.positionPct,
+                executionTags: syncResult?.executionTags ?? [],
               },
               nextVersion,
             )
@@ -856,6 +915,9 @@ export function AiQuantPageClient() {
             response,
             isStartingNewSession: !activeSessionId,
           }),
+          params: nextParams,
+          paramSchema: nextParamSchema,
+          paramValues: nextParamValues,
           logicGraph: nextGraph,
           backtestResult: null,
           latestSignalMessage: null,
@@ -1021,6 +1083,8 @@ export function AiQuantPageClient() {
         }
       }))
     } finally {
+      codegenRequestMutexRef.current.delete(conversationId)
+      setCodegenBusyConversationIds(prev => prev.filter(id => id !== conversationId))
       window.clearInterval(loadingTimer)
     }
   }
@@ -1217,16 +1281,20 @@ export function AiQuantPageClient() {
       return
     }
 
-    if (!graphConfirmed) {
+    if (!canRunBacktest) {
       backtestRunMutexRef.current.delete(conversationId)
       updateActiveConversation(curr => ({
         ...curr,
         messages: [
           ...curr.messages,
           {
-            id: `graph-guard-${Date.now()}`,
+            id: `backtest-guard-${Date.now()}`,
             role: 'assistant',
-            content: t('aiQuant.messages.graphGuard'),
+            content: !graphConfirmed
+              ? t('aiQuant.messages.graphGuard')
+              : t('aiQuant.messages.codegenGuard', {
+                  defaultValue: 'Please generate strategy code before running backtest.',
+                }),
           },
         ],
         updatedAt: Date.now(),
@@ -1249,7 +1317,9 @@ export function AiQuantPageClient() {
           priceSource: 'close',
         },
         strategy: {
-          id: activeConversation.llmCodegenSessionId ?? `mock-${Date.now()}`,
+          id: activeConversation.publishedStrategyInstanceId
+            ?? activeConversation.llmCodegenSessionId
+            ?? `mock-${Date.now()}`,
           scriptCode: extractLatestScriptCode(activeConversation.messages),
           params: activeConversation.paramValues,
         },
@@ -1590,17 +1660,13 @@ export function AiQuantPageClient() {
             })}
             onSend={onSend}
             onRunBacktest={onRunBacktest}
-            canRunBacktest={
-              backtestCapabilityState === 'ready'
-              && graphConfirmed
-              && activeConversation.backtestExecutionState !== 'submitting'
-              && activeConversation.backtestExecutionState !== 'running'
-            }
+            canRunBacktest={canRunBacktest}
           />
 
           {activeConversation.logicGraph && (
             <LogicGraphPreview
               graph={activeConversation.logicGraph}
+              confirmDisabled={codegenBusy || activeConversation.logicGraph.status === 'confirmed'}
               onConfirm={() => {
                 const currentConversationId = activeConversation.id
                 const currentParams = activeConversation.params

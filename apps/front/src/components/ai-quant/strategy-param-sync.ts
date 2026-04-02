@@ -1,0 +1,242 @@
+import type { BacktestCapabilities } from './backtest-capability-client'
+
+export interface StrategyParamSyncFallback {
+  exchange: 'binance' | 'okx' | 'hyperliquid'
+  symbol: string
+  baseTimeframe: string
+  positionPct: number
+}
+
+export interface StrategyParamSyncResult {
+  paramSchema: Record<string, unknown>
+  paramValues: Record<string, unknown>
+  normalized: StrategyParamSyncFallback
+  executionTags: string[]
+}
+
+const STRATEGY_PARAM_KEYS = new Set([
+  'exchange',
+  'symbol',
+  'baseTimeframe',
+  'buyWindowMin',
+  'buyDropPct',
+  'sellWindowMin',
+  'sellRisePct',
+  'positionPct',
+  'entryPrice',
+  'exitPrice',
+  'stopLossPct',
+  'maxDrawdownPct',
+])
+
+function asObject(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return []
+  return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+}
+
+function parseNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+function normalizeSymbol(raw: string): string {
+  return raw.replace('/', '').replace(/\s+/g, '').toUpperCase()
+}
+
+function inferExchange(text: string, fallback: StrategyParamSyncFallback['exchange']): StrategyParamSyncFallback['exchange'] {
+  if (/okx|欧易/i.test(text)) return 'okx'
+  if (/hyperliquid/i.test(text)) return 'hyperliquid'
+  if (/binance|币安/i.test(text)) return 'binance'
+  return fallback
+}
+
+function inferSymbol(text: string, fallback: string, allowedSymbols: string[]): string {
+  const direct = text.match(/\b([A-Z]{2,10}\/[A-Z]{2,10}|[A-Z]{2,10}USDT|[A-Z]{2,10}USDC)\b/i)?.[1]
+  const normalized = direct ? normalizeSymbol(direct) : fallback
+  if (allowedSymbols.length === 0) return normalized
+  return allowedSymbols.includes(normalized) ? normalized : (allowedSymbols[0] ?? normalized)
+}
+
+function inferBaseTimeframe(specTimeframes: string[], fallback: string, allowedBaseTimeframes: string[]): string {
+  const candidate = specTimeframes[0] ?? fallback
+  if (allowedBaseTimeframes.length === 0) return candidate
+  return allowedBaseTimeframes.includes(candidate) ? candidate : (allowedBaseTimeframes[0] ?? candidate)
+}
+
+function setNumberField(
+  properties: Record<string, unknown>,
+  required: string[],
+  values: Record<string, unknown>,
+  key: string,
+  title: string,
+  value: number | null,
+  options?: { minimum?: number, maximum?: number },
+) {
+  if (value === null) return
+  properties[key] = {
+    type: Number.isInteger(value) ? 'integer' : 'number',
+    title,
+    ...(options?.minimum !== undefined ? { minimum: options.minimum } : {}),
+    ...(options?.maximum !== undefined ? { maximum: options.maximum } : {}),
+  }
+  values[key] = value
+  required.push(key)
+}
+
+function extractWindowDropRule(rule: string): { windowMin: number, pct: number } | null {
+  const match = rule.match(/(\d+)\s*m\s*内下跌\s*([0-9]+(?:\.[0-9]+)?)%/i)
+  if (!match) return null
+  return { windowMin: Number(match[1]), pct: Number(match[2]) }
+}
+
+function extractWindowRiseRule(rule: string): { windowMin: number, pct: number } | null {
+  const match = rule.match(/(\d+)\s*m\s*内上涨\s*([0-9]+(?:\.[0-9]+)?)%/i)
+  if (!match) return null
+  return { windowMin: Number(match[1]), pct: Number(match[2]) }
+}
+
+function extractPriceRule(rule: string): number | null {
+  const match = rule.match(/价格(?:达到|到达|上涨到|涨到|跌到|触及)\s*([0-9]+(?:\.[0-9]+)?)/)
+  return match ? Number(match[1]) : null
+}
+
+export function syncStrategyParamsFromCodegen(args: {
+  spec: unknown
+  fallback: StrategyParamSyncFallback
+  currentValues?: Record<string, unknown> | null
+  capabilities?: BacktestCapabilities | null
+  contextText?: string
+}): StrategyParamSyncResult {
+  const typed = asObject(args.spec) ?? {}
+  const market = asObject(typed.market) ?? {}
+  const riskRules = asObject(typed.riskRules) ?? {}
+  const entryRules = asStringArray(typed.entryRules)
+  const exitRules = asStringArray(typed.exitRules)
+  const marketSymbols = asStringArray(market.symbols)
+  const marketTimeframes = asStringArray(market.timeframes)
+  const allowedSymbols = args.capabilities?.allowedSymbols ?? []
+  const allowedBaseTimeframes = args.capabilities?.allowedBaseTimeframes ?? []
+  const contextText = `${args.contextText ?? ''} ${entryRules.join(' ')} ${exitRules.join(' ')}`.trim()
+
+  const nextExchange = inferExchange(contextText, args.fallback.exchange)
+  const nextSymbol = inferSymbol(marketSymbols[0] ?? contextText, args.fallback.symbol, allowedSymbols)
+  const nextBaseTimeframe = inferBaseTimeframe(marketTimeframes, args.fallback.baseTimeframe, allowedBaseTimeframes)
+  const parsedPositionPct = parseNumber(riskRules.positionPct)
+    ?? parseNumber(contextText.match(/([0-9]+(?:\.[0-9]+)?)%\s*(?:仓位|总仓位|仓位的)/)?.[1])
+    ?? args.fallback.positionPct
+
+  const preservedValues = Object.fromEntries(
+    Object.entries(args.currentValues ?? {}).filter(([key]) => !STRATEGY_PARAM_KEYS.has(key)),
+  )
+  const values: Record<string, unknown> = {
+    ...preservedValues,
+    exchange: nextExchange,
+    symbol: nextSymbol,
+    baseTimeframe: nextBaseTimeframe,
+    positionPct: parsedPositionPct,
+  }
+
+  const properties: Record<string, unknown> = {
+    exchange: {
+      type: 'string',
+      title: 'Exchange',
+      enum: ['binance', 'okx', 'hyperliquid'],
+    },
+    symbol: {
+      type: 'string',
+      title: 'Symbol',
+      enum: allowedSymbols.length > 0 ? allowedSymbols : [nextSymbol],
+    },
+    baseTimeframe: {
+      type: 'string',
+      title: 'Base Timeframe',
+      enum: allowedBaseTimeframes.length > 0 ? allowedBaseTimeframes : [nextBaseTimeframe],
+    },
+    positionPct: {
+      type: Number.isInteger(parsedPositionPct) ? 'integer' : 'number',
+      title: 'Position %',
+      minimum: 1,
+      maximum: 100,
+    },
+  }
+  const required = ['exchange', 'symbol', 'baseTimeframe', 'positionPct']
+
+  const entryWindowRule = entryRules.map(extractWindowDropRule).find(Boolean) ?? null
+  const exitWindowRule = exitRules.map(extractWindowRiseRule).find(Boolean) ?? null
+  const entryPrice = entryRules.map(extractPriceRule).find((value): value is number => value !== null) ?? null
+  const exitPrice = exitRules.map(extractPriceRule).find((value): value is number => value !== null) ?? null
+
+  setNumberField(properties, required, values, 'buyWindowMin', 'Buy Window (min)', entryWindowRule?.windowMin ?? null, { minimum: 1 })
+  setNumberField(properties, required, values, 'buyDropPct', 'Buy Drop %', entryWindowRule?.pct ?? null, { minimum: 0 })
+  setNumberField(properties, required, values, 'sellWindowMin', 'Sell Window (min)', exitWindowRule?.windowMin ?? null, { minimum: 1 })
+  setNumberField(properties, required, values, 'sellRisePct', 'Sell Rise %', exitWindowRule?.pct ?? null, { minimum: 0 })
+  setNumberField(properties, required, values, 'entryPrice', 'Entry Price', entryPrice, { minimum: 0 })
+  setNumberField(properties, required, values, 'exitPrice', 'Exit Price', exitPrice, { minimum: 0 })
+  setNumberField(properties, required, values, 'stopLossPct', 'Stop Loss %', parseNumber(riskRules.stopLossPct), { minimum: 0 })
+  setNumberField(properties, required, values, 'maxDrawdownPct', 'Max Drawdown %', parseNumber(riskRules.maxDrawdownPct), { minimum: 0, maximum: 100 })
+
+  const executionTags = Object.entries(values)
+    .filter(([key]) => !['exchange', 'symbol', 'baseTimeframe'].includes(key))
+    .filter(([, value]) => ['string', 'number', 'boolean'].includes(typeof value))
+    .map(([key, value]) => `${key}: ${String(value)}`)
+
+  return {
+    paramSchema: {
+      type: 'object',
+      required,
+      properties,
+    },
+    paramValues: values,
+    normalized: {
+      exchange: nextExchange,
+      symbol: nextSymbol,
+      baseTimeframe: nextBaseTimeframe,
+      positionPct: parsedPositionPct,
+    },
+    executionTags,
+  }
+}
+
+export function applyCapabilitiesToParamSchema(
+  schema: Record<string, unknown> | null | undefined,
+  capabilities: BacktestCapabilities | null,
+): Record<string, unknown> | null {
+  if (!schema) return schema ?? null
+  const typed = asObject(schema)
+  const properties = asObject(typed?.properties)
+  if (!typed || !properties) return schema
+
+  const nextProperties = {
+    ...properties,
+  }
+
+  const symbolProperty = asObject(properties.symbol)
+  if (symbolProperty) {
+    nextProperties.symbol = {
+      ...symbolProperty,
+      enum: capabilities?.allowedSymbols?.length ? capabilities.allowedSymbols : symbolProperty.enum,
+    }
+  }
+
+  const timeframeProperty = asObject(properties.baseTimeframe)
+  if (timeframeProperty) {
+    nextProperties.baseTimeframe = {
+      ...timeframeProperty,
+      enum: capabilities?.allowedBaseTimeframes?.length ? capabilities.allowedBaseTimeframes : timeframeProperty.enum,
+    }
+  }
+
+  return {
+    ...typed,
+    properties: nextProperties,
+  }
+}

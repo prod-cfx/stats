@@ -183,7 +183,7 @@ function seedConfirmedConversation(now = Date.now()) {
         },
       },
       llmCodegenSessionId: null,
-      publishedStrategyInstanceId: null,
+      publishedStrategyInstanceId: 'strategy-1',
       latestSignalMessage: null,
       backtestExecutionState: 'idle',
       updatedAt: now,

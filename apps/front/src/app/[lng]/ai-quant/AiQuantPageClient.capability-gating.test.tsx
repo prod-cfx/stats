@@ -153,7 +153,7 @@ function seedConfirmedConversation(now = Date.now()) {
         },
       },
       llmCodegenSessionId: null,
-      publishedStrategyInstanceId: null,
+      publishedStrategyInstanceId: 'strategy-1',
       latestSignalMessage: null,
       backtestExecutionState: 'idle',
       updatedAt: now,
@@ -222,6 +222,8 @@ describe('AiQuantPageClient capability gating', () => {
 
     const runButton = container.querySelector('[data-testid="run-backtest"]') as HTMLButtonElement | null
     expect(runButton?.disabled).toBe(false)
+    const symbolOptions = Array.from(container.querySelectorAll('[data-testid="symbol-select"] option')).map(option => option.textContent)
+    expect(symbolOptions).toEqual(expect.arrayContaining(['BTCUSDT', 'ETHUSDT']))
 
     await act(async () => {
       const symbolSelect = container.querySelector('[data-testid="symbol-select"]') as HTMLSelectElement
@@ -236,6 +238,70 @@ describe('AiQuantPageClient capability gating', () => {
     const paramValues = container.querySelector('[data-testid="param-values"]')?.textContent ?? ''
     expect(paramValues).toContain('"symbol":"ETHUSDT"')
     expect(paramValues).toContain('"baseTimeframe":"1h"')
+  })
+
+  it('keeps run disabled before latest code is published', async () => {
+    const now = Date.now()
+    localStorage.setItem('ai_quant_conversations_v1', JSON.stringify([
+      {
+        id: 'conv-1',
+        title: 'conv',
+        messages: [{ id: 'welcome', role: 'assistant', content: 'draft only' }],
+        params: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+        paramSchema: null,
+        paramValues: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+        backtestResult: null,
+        logicGraph: {
+          version: 1,
+          status: 'confirmed',
+          trigger: [],
+          actions: [],
+          risk: [],
+          meta: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+            positionPct: 10,
+          },
+        },
+        llmCodegenSessionId: null,
+        publishedStrategyInstanceId: null,
+        latestSignalMessage: null,
+        backtestExecutionState: 'idle',
+        updatedAt: now,
+      },
+    ]))
+
+    mockFetchBacktestCapabilities.mockResolvedValue({
+      allowedSymbols: ['BTCUSDT', 'ETHUSDT'],
+      allowedBaseTimeframes: ['15m', '1h'],
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    const runButton = container.querySelector('[data-testid="run-backtest"]') as HTMLButtonElement | null
+    expect(runButton?.disabled).toBe(true)
   })
 
   it('invalid current values auto-correct to allowed values', async () => {

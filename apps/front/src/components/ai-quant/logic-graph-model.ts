@@ -26,5 +26,6 @@ export interface StrategyLogicGraph {
     symbol: string
     timeframe: string
     positionPct: number
+    executionTags?: string[]
   }
 }

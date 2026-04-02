@@ -5,10 +5,19 @@ interface LogicGraphPreviewProps {
   graph: StrategyLogicGraph
   onConfirm: () => void
   onRevise: () => void
+  confirmDisabled?: boolean
 }
 
-export function LogicGraphPreview({ graph, onConfirm, onRevise }: LogicGraphPreviewProps) {
+export function LogicGraphPreview({
+  graph,
+  onConfirm,
+  onRevise,
+  confirmDisabled = false,
+}: LogicGraphPreviewProps) {
   const { t } = useTranslation()
+  const executionTags = graph.meta.executionTags?.length
+    ? graph.meta.executionTags
+    : graph.risk
 
   return (
     <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
@@ -53,7 +62,7 @@ export function LogicGraphPreview({ graph, onConfirm, onRevise }: LogicGraphPrev
             <span className="rounded border border-[color:var(--cf-border)] px-2 py-1">{graph.meta.exchange.toUpperCase()}</span>
             <span className="rounded border border-[color:var(--cf-border)] px-2 py-1">{graph.meta.symbol}</span>
             <span className="rounded border border-[color:var(--cf-border)] px-2 py-1">{graph.meta.timeframe}</span>
-            {graph.risk.map(item => (
+            {executionTags.map(item => (
               <span key={item} className="rounded border border-[color:var(--cf-border)] px-2 py-1">{item}</span>
             ))}
           </div>
@@ -64,11 +73,12 @@ export function LogicGraphPreview({ graph, onConfirm, onRevise }: LogicGraphPrev
         <button
           type="button"
           onClick={onConfirm}
+          disabled={confirmDisabled}
           className={`rounded-xl px-4 py-2 text-sm font-bold text-white ${
             graph.status === 'confirmed'
               ? 'bg-emerald-600'
               : 'bg-gradient-to-r from-primary to-secondary'
-          }`}
+          } disabled:cursor-not-allowed disabled:opacity-60`}
         >
           {graph.status === 'confirmed' ? t('aiQuant.messages.confirmedBacktest') : t('aiQuant.messages.confirmBacktest')}
         </button>

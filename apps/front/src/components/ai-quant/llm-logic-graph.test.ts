@@ -15,7 +15,9 @@ describe('buildLogicGraphFromCodegenSpec', () => {
       {
         exchange: 'binance',
         symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
         positionPct: 10,
+        executionTags: ['positionPct: 10', 'maxDrawdownPct: 20'],
       },
       3,
     )
@@ -26,6 +28,7 @@ describe('buildLogicGraphFromCodegenSpec', () => {
     expect(graph.risk).toContain('maxDrawdownPct: 20')
     expect(graph.meta.symbol).toBe('BTCUSDT')
     expect(graph.meta.timeframe).toBe('15m/30m')
+    expect(graph.meta.executionTags).toEqual(['positionPct: 10', 'maxDrawdownPct: 20'])
   })
 
   it('falls back to params when spec is incomplete', () => {
@@ -34,6 +37,7 @@ describe('buildLogicGraphFromCodegenSpec', () => {
       {
         exchange: 'okx',
         symbol: 'ETHUSDT',
+        baseTimeframe: '1h',
         positionPct: 25,
       },
       1,
@@ -41,6 +45,7 @@ describe('buildLogicGraphFromCodegenSpec', () => {
 
     expect(graph.trigger[0].subject).toBe('ETHUSDT')
     expect(graph.meta.exchange).toBe('okx')
+    expect(graph.meta.timeframe).toBe('1h')
     expect(graph.actions).toHaveLength(0)
     expect(graph.risk).toContain('等待风控规则补充')
   })
@@ -51,6 +56,7 @@ describe('buildLogicGraphFromCodegenSpec', () => {
       {
         exchange: 'binance',
         symbol: 'SOLUSDT',
+        baseTimeframe: '5m',
         positionPct: 12,
       },
       9,
@@ -65,6 +71,7 @@ describe('buildLogicGraphFromCodegenSpec', () => {
       {
         exchange: 'okx',
         symbol: 'SOLUSDT',
+        baseTimeframe: '1h',
         positionPct: 10,
       },
       10,
