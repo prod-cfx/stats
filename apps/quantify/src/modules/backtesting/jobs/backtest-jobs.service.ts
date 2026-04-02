@@ -1,9 +1,10 @@
 import type { BacktestReport, BacktestRunInput } from '../types/backtesting.types'
+import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { Injectable, HttpStatus } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
-import type { Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestRunnerService } from '../core/backtest-runner.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
