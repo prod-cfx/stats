@@ -10,8 +10,8 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { BaseResponseDto } from '@/common/dto/base.dto'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
 import {
   CreateAny,
   DeleteAny,

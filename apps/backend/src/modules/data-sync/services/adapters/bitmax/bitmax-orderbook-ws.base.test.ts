@@ -1,23 +1,23 @@
-import assert from 'node:assert/strict'
-import test from 'node:test'
 import { isBitmaxConnectionActivityMessage } from './bitmax-orderbook-ws.base'
 
-test('treats Bitmax depth updates as connection activity', () => {
-  assert.equal(isBitmaxConnectionActivityMessage({ m: 'depth' }), true)
-  assert.equal(isBitmaxConnectionActivityMessage({ m: 'depth-snapshot' }), true)
-})
+describe('bitmax orderbook ws base', () => {
+  it('treats Bitmax depth updates as connection activity', () => {
+    expect(isBitmaxConnectionActivityMessage({ m: 'depth' })).toBe(true)
+    expect(isBitmaxConnectionActivityMessage({ m: 'depth-snapshot' })).toBe(true)
+  })
 
-test('treats control frames as connection activity', () => {
-  assert.equal(isBitmaxConnectionActivityMessage({ m: 'connected' }), true)
-  assert.equal(isBitmaxConnectionActivityMessage({ m: 'ping' }), true)
-  assert.equal(isBitmaxConnectionActivityMessage({ m: 'pong' }), true)
-  assert.equal(isBitmaxConnectionActivityMessage({ m: 'sub' }), true)
-  assert.equal(isBitmaxConnectionActivityMessage({ m: 'unsub' }), true)
-  assert.equal(isBitmaxConnectionActivityMessage({ m: 'error' }), true)
-})
+  it('treats control frames as connection activity', () => {
+    expect(isBitmaxConnectionActivityMessage({ m: 'connected' })).toBe(true)
+    expect(isBitmaxConnectionActivityMessage({ m: 'ping' })).toBe(true)
+    expect(isBitmaxConnectionActivityMessage({ m: 'pong' })).toBe(true)
+    expect(isBitmaxConnectionActivityMessage({ m: 'sub' })).toBe(true)
+    expect(isBitmaxConnectionActivityMessage({ m: 'unsub' })).toBe(true)
+    expect(isBitmaxConnectionActivityMessage({ m: 'error' })).toBe(true)
+  })
 
-test('ignores invalid frames', () => {
-  assert.equal(isBitmaxConnectionActivityMessage(null), false)
-  assert.equal(isBitmaxConnectionActivityMessage(undefined), false)
-  assert.equal(isBitmaxConnectionActivityMessage({ m: '' as never }), true)
+  it('ignores invalid frames', () => {
+    expect(isBitmaxConnectionActivityMessage(null)).toBe(false)
+    expect(isBitmaxConnectionActivityMessage(undefined)).toBe(false)
+    expect(isBitmaxConnectionActivityMessage({ m: '' as never })).toBe(true)
+  })
 })

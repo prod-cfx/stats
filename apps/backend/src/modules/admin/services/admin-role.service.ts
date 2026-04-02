@@ -2,7 +2,7 @@ import type { CreateAdminRoleDto, UpdateAdminRoleDto } from '../dto/admin-role.d
 import type { Role } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { AppRole } from '@/modules/auth/rbac/permissions'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用

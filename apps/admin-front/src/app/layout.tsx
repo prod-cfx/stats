@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
-import { AntdProvider } from '@/components/providers/antd-provider'
-import { AuthProvider } from '@/components/providers/auth-provider'
+import { AntdProvider } from '@/components/providers/AntdProvider'
+import { AuthProvider } from '@/components/providers/AuthProvider'
 
 import 'antd/dist/reset.css'
 import './globals.css'

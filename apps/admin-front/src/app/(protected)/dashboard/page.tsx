@@ -4,7 +4,7 @@
 import { Button, Card, Space, Typography } from 'antd'
 import Link from 'next/link'
 
-import { useAuth } from '@/components/providers/auth-provider'
+import { useAuth } from '@/components/providers/AuthProvider'
 
 export default function DashboardPage() {
   const { session, logout } = useAuth()

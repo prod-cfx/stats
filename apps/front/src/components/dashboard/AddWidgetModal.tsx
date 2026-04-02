@@ -1,14 +1,14 @@
 'use client';
 
-import type { WidgetCatalogGroup, WidgetCatalogItem } from '@/features/dashboards/widgets/widgets.catalog';
+import type { WidgetCatalogGroup, WidgetCatalogItem } from '@/features/dashboards/widgets/widgets-catalog';
 import { Database, TrendingUp, Zap } from 'lucide-react';
 import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Modal } from '@/components/ui/Modal';
 import { WidgetConfigurator } from '@/features/dashboards/components/WidgetConfigurator';
 import { WidgetGroupPreview } from '@/features/dashboards/components/WidgetGroupPreview';
-import { addWidgetToDashboard } from '@/features/dashboards/store/dashboardActions';
-import { WIDGET_CATALOG } from '@/features/dashboards/widgets/widgets.catalog';
+import { addWidgetToDashboard } from '@/features/dashboards/store/dashboard-actions';
+import { WIDGET_CATALOG } from '@/features/dashboards/widgets/widgets-catalog';
 
 interface AddWidgetModalProps {
   isOpen: boolean;

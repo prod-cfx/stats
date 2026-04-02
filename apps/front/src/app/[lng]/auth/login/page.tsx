@@ -5,8 +5,8 @@ import React, { useEffect } from 'react'
 import { useTranslation } from 'react-i18next'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
-import { EmailOtpForm } from '@/features/auth/components/email-otp-form'
-import { TelegramLoginButtons } from '@/features/auth/components/telegram-login-buttons'
+import { EmailOtpForm } from '@/features/auth/components/EmailOtpForm'
+import { TelegramLoginButtons } from '@/features/auth/components/TelegramLoginButtons'
 import { useAuth } from '@/hooks/use-auth'
 
 export default function LoginPage() {

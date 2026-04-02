@@ -1,7 +1,7 @@
 import type { LlmStrategyInstanceStatus } from '@ai/shared'
 import { ApiPropertyOptional } from '@nestjs/swagger'
 import { IsEnum, IsOptional, IsString } from 'class-validator'
-import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
+import { BasePaginationRequestDto } from '@/common/dto/base-pagination.request.dto'
 
 export class LlmStrategyInstanceListQueryDto extends BasePaginationRequestDto {
   @ApiPropertyOptional({ description: '实例状态筛选', enum: ['running', 'paused', 'stopped'] })

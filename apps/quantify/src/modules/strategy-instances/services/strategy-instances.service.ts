@@ -16,7 +16,7 @@ import {
   buildStrategyContext,
 } from '@ai/shared/script-engine/helpers/context-builder'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { EnvService } from '@/common/services/env.service'
 import { normalizeGatewayBars } from '@/modules/market-data/services/market-data-bar.mapper'

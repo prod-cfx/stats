@@ -6,7 +6,7 @@ import {
   IsOptional,
   IsString,
 } from 'class-validator'
-import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
+import { BasePaginationRequestDto } from '@/common/dto/base-pagination.request.dto'
 
 /**
  * 持仓量数据 DTO

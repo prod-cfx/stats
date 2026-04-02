@@ -1,7 +1,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import { IsBoolean, IsIn, IsOptional, IsString, MaxLength, Min, ValidateNested } from 'class-validator'
-import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
+import { BasePaginationRequestDto } from '@/common/dto/base-pagination.request.dto'
 
 export const INDICATOR_TIMEFRAMES_DTO = ['1m', '5m', '15m', '1h', '4h', '1d'] as const
 export type IndicatorTimeframeDto = (typeof INDICATOR_TIMEFRAMES_DTO)[number]

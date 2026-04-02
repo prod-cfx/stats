@@ -9,7 +9,7 @@ import {
   Max,
   Min,
 } from 'class-validator'
-import { BasePaginationRequestDto } from '@/common/dto/base.pagination.request.dto'
+import { BasePaginationRequestDto } from '@/common/dto/base-pagination.request.dto'
 
 export class WhaleHoldingDto {
   @ApiProperty({ description: '鲸鱼地址（用户地址）', example: '0xWhaleAddress1' })

@@ -1,4 +1,4 @@
-import type { WidgetType } from '../widgets/widgets.catalog'
+import type { WidgetType } from '../widgets/widgets-catalog'
 
 export interface DashboardWidgetInstance {
   id: string

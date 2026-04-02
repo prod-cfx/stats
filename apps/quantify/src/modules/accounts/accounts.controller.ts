@@ -1,10 +1,10 @@
-import type { AccountDetailQueryDto } from './dto/account-detail.query.dto'
+import type { AccountDetailQueryDto } from './dto/account-detail-query.dto'
 import type { CreateStrategyAccountDto } from './dto/create-strategy-account.dto'
 import type { GenerateDailyReportDto } from './dto/generate-daily-report.dto'
 import type { LedgerQueryDto } from './dto/ledger-query.dto'
 import type { MutateBalanceDto } from './dto/mutate-balance.dto'
-import type { StrategyAccountListQueryDto } from './dto/strategy-account-list.query.dto'
-import type { StrategyPnlDailyQueryDto } from './dto/strategy-pnl-daily.query.dto'
+import type { StrategyAccountListQueryDto } from './dto/strategy-account-list-query.dto'
+import type { StrategyPnlDailyQueryDto } from './dto/strategy-pnl-daily-query.dto'
 import { ErrorCode } from '@ai/shared'
 import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common'
@@ -15,7 +15,7 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AccountsService } from './accounts.service'

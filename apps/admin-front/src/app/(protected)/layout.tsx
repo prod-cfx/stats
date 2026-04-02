@@ -6,7 +6,7 @@ import { Avatar, Dropdown, Layout, Menu, Result, Spin } from 'antd'
 import { usePathname, useRouter } from 'next/navigation'
 
 import { useEffect, useMemo } from 'react'
-import { useAuth } from '@/components/providers/auth-provider'
+import { useAuth } from '@/components/providers/AuthProvider'
 
 const NAV_ITEMS = [
   { key: '/dashboard', label: '面板', path: '/dashboard', permission: 'dashboard' },

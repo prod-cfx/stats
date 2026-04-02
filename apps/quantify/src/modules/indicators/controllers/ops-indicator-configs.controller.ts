@@ -12,7 +12,7 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { mapIndicatorType, mapTimeframe, reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 IndicatorConfigService
 import { IndicatorConfigService } from '../services/indicator-config.service'

@@ -1,6 +1,6 @@
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
-import { AiQuantPlazaPageClient } from './plaza-page-client'
+import { AiQuantPlazaPageClient } from './PlazaPageClient'
 
 export default function AiQuantPlazaPage() {
   return (

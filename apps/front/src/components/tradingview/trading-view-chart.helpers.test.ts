@@ -3,7 +3,7 @@ import { describe, expect, it } from '@jest/globals'
 import {
   extractLongShortRatioItems,
   getSafeChartFromWidget,
-} from './TradingViewChart.helpers'
+} from './trading-view-chart.helpers'
 
 describe('TradingViewChart helpers', () => {
   describe('extractLongShortRatioItems', () => {

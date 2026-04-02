@@ -5,7 +5,7 @@ import type { PrismaClient, Prisma } from '@/prisma/prisma.types'
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 
 export interface FindSignalOptions {
   includeStrategy?: boolean

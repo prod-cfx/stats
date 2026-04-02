@@ -19,7 +19,7 @@ import type {
 } from '@ai/shared'
 import { TRADING_PAIRS } from '@ai/shared'
 import type { MarketTrade, Prisma } from '@/prisma/prisma.types'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import type { GetMarketTradesRequestDto } from './dto/requests/get-market-trades.request.dto'
 import type { GetAggregatedVolumeRequestDto } from './dto/requests/get-aggregated-volume.request.dto'
 import type { ExchangeLongShortTimeRange } from './dto/requests/get-exchange-long-short-ratio.request.dto'

@@ -17,7 +17,7 @@ const KNOWN_QUOTES = [
 export function normalizeExecutionSymbol(
   raw: string,
   marketType: MarketType,
-  exchangeId: ExchangeId,
+  _exchangeId: ExchangeId,
 ): string {
   if (raw.includes('/')) {
     if (marketType === 'perp' && !raw.endsWith(':PERP')) {

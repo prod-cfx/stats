@@ -7,7 +7,7 @@ import { JwtService } from '@nestjs/jwt'
 import type { AdminUser } from '@/prisma/prisma.types'
 import { PrincipalType, ErrorCode } from '@ai/shared'
 import { compare, hash } from 'bcrypt'
-import { BasePaginationResponseDto } from '@/common/dto/base.pagination.response.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { buildAuthorizedMenuTree } from '../utils/menu-permissions.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用

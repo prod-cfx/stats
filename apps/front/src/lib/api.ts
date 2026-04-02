@@ -147,9 +147,19 @@ interface BaseResponse<T> {
   message?: string
 }
 
+interface PaginatedItemsResponse<T> {
+  items?: T[]
+}
+
 // 使用统一的unwrapApiResponse
 function unwrapResponse<T>(response: T | BaseResponse<T>): T {
   return unwrapApiResponse(response)
+}
+
+function unwrapPaginatedItems<T>(
+  response: PaginatedItemsResponse<T> | BaseResponse<PaginatedItemsResponse<T>>,
+): T[] {
+  return unwrapResponse(response).items ?? []
 }
 
 function extractBackendErrorMessage(payload: unknown, fallback: string): string {
@@ -349,7 +359,7 @@ export async function fetchWhaleHoldings(
         queries: query,
       })
 
-      return unwrapResponse(response) as WhaleHoldingApiItem[]
+      return unwrapPaginatedItems(response)
     }, 'FETCH_WHALE_HOLDINGS')
   } catch (error) {
     if (!shouldFallbackToMock(error)) throw error
@@ -454,7 +464,7 @@ export async function fetchTraderDiscoverTags(
     const method = getTraderDiscoverTagsMethod(client)
 
     if (method) {
-      return safeApiCall(
+      return safeApiCall<TraderDiscoverTagsResponse>(
         () =>
           method({
             headers: optionalAuthHeaders(),
@@ -971,12 +981,14 @@ export async function fetchRealtimeWhaleAlerts(
           ? `${API_BASE_URL}/whale-alerts/realtime?${queryString}`
           : `${API_BASE_URL}/whale-alerts/realtime`
 
-      return safeApiCall(
-        () =>
-          client.WhaleAlertController_getRealtime({
-            headers: optionalAuthHeaders(),
-            queries,
-          }),
+      return safeApiCall<RealtimeWhaleAlertItem[]>(
+        async () =>
+          unwrapPaginatedItems<RealtimeWhaleAlertItem>(
+            await client.WhaleAlertController_getRealtime({
+              headers: optionalAuthHeaders(),
+              queries,
+            }),
+          ),
         {
           url: fallbackUrl,
           options: {
@@ -987,8 +999,8 @@ export async function fetchRealtimeWhaleAlerts(
             },
           },
           validateResponse: data =>
-            unwrapApiResponse<RealtimeWhaleAlertItem[]>(
-              data as unknown as RealtimeWhaleAlertItem[] | BaseResponse<RealtimeWhaleAlertItem[]>,
+            unwrapPaginatedItems(
+              data as PaginatedItemsResponse<RealtimeWhaleAlertItem> | BaseResponse<PaginatedItemsResponse<RealtimeWhaleAlertItem>>,
             ),
         },
       )
@@ -1082,12 +1094,14 @@ export async function fetchWhaleTradesRealtime(
           ? `${API_BASE_URL}/whale-alerts/trades?${queryString}`
           : `${API_BASE_URL}/whale-alerts/trades`
 
-      return safeApiCall(
-        () =>
-          client.WhaleAlertController_getWhaleTrades({
-            headers: optionalAuthHeaders(),
-            queries,
-          }),
+      return safeApiCall<WhaleTradeDto[]>(
+        async () =>
+          unwrapPaginatedItems<WhaleTradeDto>(
+            await client.WhaleAlertController_getWhaleTrades({
+              headers: optionalAuthHeaders(),
+              queries,
+            }),
+          ),
         {
           url: fallbackUrl,
           options: {
@@ -1098,8 +1112,8 @@ export async function fetchWhaleTradesRealtime(
             },
           },
           validateResponse: data =>
-            unwrapApiResponse<WhaleTradeDto[]>(
-              data as unknown as WhaleTradeDto[] | BaseResponse<WhaleTradeDto[]>,
+            unwrapPaginatedItems(
+              data as PaginatedItemsResponse<WhaleTradeDto> | BaseResponse<PaginatedItemsResponse<WhaleTradeDto>>,
             ),
         },
       )
@@ -1198,7 +1212,7 @@ export async function fetchLongShortRatio(
           | '1w',
       },
     })
-    return unwrapResponse(response)
+    return unwrapPaginatedItems(response)
   }, 'FETCH_LONG_SHORT_RATIO')
 }
 
@@ -2553,7 +2567,7 @@ export async function fetchKlineData(params: FetchKlineDataParams): Promise<Klin
     }, 'FETCH_KLINE_DATA')
   } catch (error) {
     if (!shouldFallbackToMock(error)) throw error
-    // 降级到 mock（由 mockDatafeed 处理）
+    // 降级到 mock（由 mock-datafeed 处理）
     return []
   }
 }

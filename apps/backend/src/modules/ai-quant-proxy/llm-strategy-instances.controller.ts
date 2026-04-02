@@ -1,6 +1,6 @@
 import type { AiQuantProxyService } from './ai-quant-proxy.service'
-import type { LlmStrategyInstanceListQueryDto } from './dto/llm-strategy-instance-list.query.dto'
-import type { LlmStrategyInstanceSignalsQueryDto } from './dto/llm-strategy-instance-signals.query.dto'
+import type { LlmStrategyInstanceListQueryDto } from './dto/llm-strategy-instance-list-query.dto'
+import type { LlmStrategyInstanceSignalsQueryDto } from './dto/llm-strategy-instance-signals-query.dto'
 import { Controller, Get, Inject, Param, Query, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'

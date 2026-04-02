@@ -1,6 +1,6 @@
 'use client'
 
-import type { DashboardDoc } from '@/features/dashboards/store/dashboardStore'
+import type { DashboardDoc } from '@/features/dashboards/store/dashboard-store'
 import {
   Bookmark,
   ChevronDown,
@@ -23,7 +23,7 @@ import {
   getMyDashboards,
   getSavedDashboards,
   updateDashboardMeta,
-} from '@/features/dashboards/store/dashboardStore'
+} from '@/features/dashboards/store/dashboard-store'
 import { toast } from '@/lib/toast'
 
 interface DashboardSidebarProps {

@@ -1,6 +1,6 @@
-import type { WidgetCatalogItem } from '../widgets/widgets.catalog'
-import { snapToPresetForWidgetType } from '../widgets/unitSizePresets'
-import { updateDashboard } from './dashboardStore'
+import type { WidgetCatalogItem } from '../widgets/widgets-catalog'
+import { snapToPresetForWidgetType } from '../widgets/unit-size-presets'
+import { updateDashboard } from './dashboard-store'
 
 export function addWidgetToDashboard(dashboardId: string, item: WidgetCatalogItem) {
   const id = crypto.randomUUID()
@@ -61,4 +61,3 @@ export function updateDashboardLayout(dashboardId: string, layout: any[]) {
     return { ...doc, layout: normalized as any, updatedAt: Date.now() }
   })
 }
-
