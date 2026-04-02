@@ -1,4 +1,3 @@
-import type { CheckBacktestSymbolDto } from './dto/check-backtest-symbol.dto'
 import type { BacktestRunInput } from './types/backtesting.types'
 import { ErrorCode } from '@ai/shared'
 import { Body, Controller, Get, Headers, HttpStatus, Logger, Param, Post, UseGuards } from '@nestjs/common'
@@ -6,6 +5,8 @@ import { Throttle, ThrottlerGuard } from '@nestjs/throttler'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestRunnerService } from './core/backtest-runner.service'
+// eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时类元数据
+import { CheckBacktestSymbolDto } from './dto/check-backtest-symbol.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时类元数据
 import { RunBacktestDto } from './dto/run-backtest.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -48,11 +49,31 @@ export class BacktestingController {
   @Post('jobs')
   async createJob(
     @Headers('authorization') authorization: string | undefined,
+    @Headers('x-request-id') requestId: string | undefined,
     @Body() dto: RunBacktestDto,
   ) {
-    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
-    const strategy = await this.strategyAdapter.build(dto.strategy)
-    return this.jobsService.createJob({ ...dto, strategy, bars: dto.bars ?? [] } as BacktestRunInput, callerUserId)
+    try {
+      const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+      const strategy = await this.strategyAdapter.build(dto.strategy)
+      return this.jobsService.createJob({ ...dto, strategy, bars: dto.bars ?? [] } as BacktestRunInput, callerUserId)
+    } catch (error) {
+      if (error instanceof DomainException) {
+        throw error
+      }
+      const message = error instanceof Error ? error.message : String(error)
+      this.logger.error(
+        `event=backtesting_create_job_failed requestId=${requestId ?? 'N/A'} symbols=${dto.symbols.join(',')} strategyId=${dto.strategy?.id ?? 'N/A'} reason=${message}`,
+      )
+      throw new DomainException('backtesting.job_temporarily_unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        args: {
+          symbols: dto.symbols,
+          strategyId: dto.strategy?.id,
+          reasonMessage: message,
+        },
+      })
+    }
   }
 
   @Get('jobs/:id')
@@ -101,9 +122,29 @@ export class BacktestingController {
   @Post('symbols/check')
   async checkSymbolSupport(
     @Headers('authorization') authorization: string | undefined,
+    @Headers('x-request-id') requestId: string | undefined,
     @Body() dto: CheckBacktestSymbolDto,
   ) {
     await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
-    return this.symbolSupportService.checkSupport(dto.exchange, dto.symbol)
+    try {
+      return await this.symbolSupportService.checkSupport(dto.exchange, dto.symbol)
+    } catch (error) {
+      if (error instanceof DomainException) {
+        throw error
+      }
+      const message = error instanceof Error ? error.message : String(error)
+      this.logger.error(
+        `event=backtesting_symbol_support_failed requestId=${requestId ?? 'N/A'} exchange=${dto.exchange} symbol=${dto.symbol} reason=${message}`,
+      )
+      throw new DomainException('backtesting.symbol_support_temporarily_unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        args: {
+          exchange: dto.exchange,
+          symbol: dto.symbol,
+          reasonMessage: message,
+        },
+      })
+    }
   }
 }

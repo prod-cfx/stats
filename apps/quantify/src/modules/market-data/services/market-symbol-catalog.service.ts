@@ -1,3 +1,4 @@
+import type { OnApplicationBootstrap } from '@nestjs/common'
 import type { MarketDataProvider } from '../interfaces/market-data-provider.interface'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
@@ -19,7 +20,7 @@ export type ExchangeId = 'binance' | 'okx' | 'hyperliquid'
 export type MarketSymbolSupportStatus = 'supported' | 'refreshed_then_supported' | 'not_supported'
 
 @Injectable()
-export class MarketSymbolCatalogService {
+export class MarketSymbolCatalogService implements OnApplicationBootstrap {
   private readonly logger = new Logger(MarketSymbolCatalogService.name)
   private syncAllInProgress = false
   private readonly refreshInProgress = new Set<ExchangeId>()
@@ -32,6 +33,10 @@ export class MarketSymbolCatalogService {
     private readonly hyperliquidProvider: HyperliquidMarketDataProvider,
   ) {}
 
+  onApplicationBootstrap(): void {
+    void this.runInitialSync()
+  }
+
   async ensureExchangeSymbolAvailable(exchange: string, symbol: string): Promise<MarketSymbolSupportStatus> {
     const normalizedExchange = this.normalizeExchange(exchange)
     const normalizedSymbol = this.normalizeSymbol(symbol)
@@ -39,7 +44,23 @@ export class MarketSymbolCatalogService {
       return 'supported'
     }
 
-    await this.refreshExchangeSymbols(normalizedExchange, [normalizedSymbol])
+    try {
+      await this.refreshExchangeSymbols(normalizedExchange, [normalizedSymbol])
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      this.logger.error(
+        `event=market_symbol_catalog_refresh_failed exchange=${normalizedExchange} symbol=${normalizedSymbol} reason=${reason}`,
+      )
+      throw new DomainException('backtesting.symbol_support_temporarily_unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        args: {
+          exchange: normalizedExchange,
+          symbol: normalizedSymbol,
+          reasonMessage: reason,
+        },
+      })
+    }
 
     return (await this.hasSupportedSymbol(normalizedExchange, normalizedSymbol))
       ? 'refreshed_then_supported'
@@ -57,6 +78,17 @@ export class MarketSymbolCatalogService {
       }
     } finally {
       this.syncAllInProgress = false
+    }
+  }
+
+  private async runInitialSync(): Promise<void> {
+    this.logger.log('event=market_symbol_catalog_initial_sync_started')
+    try {
+      await this.syncAllExchangeSymbols()
+      this.logger.log('event=market_symbol_catalog_initial_sync_completed')
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      this.logger.error(`event=market_symbol_catalog_initial_sync_failed reason=${reason}`)
     }
   }
 

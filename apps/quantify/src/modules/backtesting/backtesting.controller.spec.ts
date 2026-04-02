@@ -54,6 +54,11 @@ jest.mock('@nestjs/throttler', () => ({
 }))
 
 describe('backtestingController', () => {
+  it('retains runtime DTO metadata for symbol support requests', () => {
+    const paramTypes = Reflect.getMetadata('design:paramtypes', BacktestingController.prototype, 'checkSymbolSupport')
+    expect(paramTypes?.[2]?.name).toBe('CheckBacktestSymbolDto')
+  })
+
   it('should expose run and jobs endpoint methods', async () => {
     const mod = await Test.createTestingModule({
       controllers: [BacktestingController],
@@ -136,11 +141,11 @@ describe('backtestingController', () => {
     }
 
     await c.run('Bearer token', dto)
-    await c.createJob('Bearer token', dto)
+    await c.createJob('Bearer token', 'req-job-1', dto)
     await c.getJob('Bearer token', 'job-1')
     await c.getJobResult('Bearer token', 'job-1')
     await c.getCapabilities('req-1')
-    await c.checkSymbolSupport('Bearer token', { exchange: 'okx', symbol: 'ETHUSDC' })
+    await c.checkSymbolSupport('Bearer token', 'req-3', { exchange: 'okx', symbol: 'ETHUSDC' })
 
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenCalledTimes(5)
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(1, 'Bearer token')
@@ -189,6 +194,80 @@ describe('backtestingController', () => {
       code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
       status: HttpStatus.SERVICE_UNAVAILABLE,
       args: { reasonMessage: 'db down' },
+    })
+  })
+
+  it('maps symbol support unknown errors to service unavailable domain exception', async () => {
+    const runner = { run: jest.fn() }
+    const jobs = { createJob: jest.fn(), getJob: jest.fn(), getJobResult: jest.fn() }
+    const adapter = { build: jest.fn() }
+    const caller = { resolveCallerUserIdFromAuthorization: jest.fn().mockResolvedValue('user-1') }
+    const capabilities = { getCapabilities: jest.fn() }
+    const symbolSupport = {
+      checkSymbolSupport: jest.fn().mockRejectedValue(new Error('catalog crashed')),
+    }
+
+    const mod = await Test.createTestingModule({
+      controllers: [BacktestingController],
+      providers: [
+        { provide: BacktestRunnerService, useValue: runner },
+        { provide: BacktestJobsService, useValue: jobs },
+        { provide: BacktestCallerIdentityService, useValue: caller },
+        { provide: BacktestCapabilitiesService, useValue: capabilities },
+        { provide: BacktestSymbolSupportService, useValue: { checkSupport: symbolSupport.checkSymbolSupport } },
+        { provide: BacktestStrategyAdapterService, useValue: adapter },
+      ],
+    }).compile()
+
+    const c = mod.get(BacktestingController)
+
+    await expect(c.checkSymbolSupport('Bearer token', 'req-4', { exchange: 'okx', symbol: 'BTCUSDT' })).rejects.toMatchObject({
+      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+      args: { exchange: 'okx', symbol: 'BTCUSDT', reasonMessage: 'catalog crashed' },
+    })
+  })
+
+  it('maps create job unknown errors to service unavailable domain exception', async () => {
+    const runner = { run: jest.fn() }
+    const jobs = { createJob: jest.fn(), getJob: jest.fn(), getJobResult: jest.fn() }
+    const adapter = { build: jest.fn().mockRejectedValue(new Error('script engine bootstrap failed')) }
+    const caller = { resolveCallerUserIdFromAuthorization: jest.fn().mockResolvedValue('user-1') }
+    const capabilities = { getCapabilities: jest.fn() }
+    const symbolSupport = { checkSymbolSupport: jest.fn() }
+
+    const mod = await Test.createTestingModule({
+      controllers: [BacktestingController],
+      providers: [
+        { provide: BacktestRunnerService, useValue: runner },
+        { provide: BacktestJobsService, useValue: jobs },
+        { provide: BacktestCallerIdentityService, useValue: caller },
+        { provide: BacktestCapabilitiesService, useValue: capabilities },
+        { provide: BacktestSymbolSupportService, useValue: { checkSupport: symbolSupport.checkSymbolSupport } },
+        { provide: BacktestStrategyAdapterService, useValue: adapter },
+      ],
+    }).compile()
+
+    const c = mod.get(BacktestingController)
+    const dto: any = {
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: ['15m'],
+      initialCash: 10000,
+      leverage: 1,
+      execution: { slippageBps: 10, feeBps: 5, priceSource: 'close' },
+      strategy: { id: 's1', protocolVersion: 'v1', scriptCode: 'strategy', params: {} },
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [],
+    }
+
+    await expect(c.createJob('Bearer token', 'req-job-2', dto)).rejects.toMatchObject({
+      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+      args: {
+        symbols: ['BTCUSDT'],
+        reasonMessage: 'script engine bootstrap failed',
+      },
     })
   })
 })
