@@ -2,7 +2,7 @@ import type { MarketTimeframe } from '@ai/shared'
 import type { MarketDataProvider, ProviderSymbol } from '@/modules/market-data/interfaces/market-data-provider.interface'
 import type { BacktestRunInput, Bar, Timeframe } from '../types/backtesting.types'
 import { ErrorCode } from '@ai/shared'
-import { HttpStatus, Injectable } from '@nestjs/common'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { BinanceMarketDataProvider } from '@/modules/market-data/providers/binance-market-data.provider'
 import { HyperliquidMarketDataProvider } from '@/modules/market-data/providers/hyperliquid-market-data.provider'
@@ -31,6 +31,7 @@ export interface BacktestRangeCoverage {
 @Injectable()
 export class BacktestMarketDataService {
   private static readonly DEFAULT_BACKFILL_BATCH_SIZE = 500
+  private readonly logger = new Logger(BacktestMarketDataService.name)
 
   constructor(
     private readonly repository: BacktestMarketDataRepository,
@@ -68,7 +69,7 @@ export class BacktestMarketDataService {
     }
   }
 
-  async ensureSymbolSupported(exchange: string, symbol: string): Promise<'refreshed_then_supported' | 'not_supported'> {
+  async ensureSymbolSupported(exchange: string, symbol: string): Promise<'supported' | 'refreshed_then_supported' | 'not_supported'> {
     const normalizedExchange = this.normalizeExchange(exchange)
     const normalizedSymbol = normalizeExactCode(symbol)
     if (!normalizedSymbol) {
@@ -79,14 +80,36 @@ export class BacktestMarketDataService {
       })
     }
 
-    const provider = this.getProvider(normalizedExchange)
-    const providerSymbols = await provider.fetchSymbols([normalizedSymbol])
-    if (providerSymbols.length === 0) {
-      return 'not_supported'
+    if (await this.hasSupportedSymbol(normalizedExchange, normalizedSymbol)) {
+      return 'supported'
     }
 
-    await this.marketDataService.upsertSymbolsFromProvider(providerSymbols, provider.name.toUpperCase())
-    return 'refreshed_then_supported'
+    const provider = this.getProvider(normalizedExchange)
+    try {
+      const providerSymbols = await provider.fetchSymbols([normalizedSymbol])
+      if (providerSymbols.length === 0) {
+        return 'not_supported'
+      }
+
+      await this.marketDataService.upsertSymbolsFromProvider(providerSymbols, provider.name.toUpperCase())
+      return (await this.hasSupportedSymbol(normalizedExchange, normalizedSymbol))
+        ? 'refreshed_then_supported'
+        : 'not_supported'
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      this.logger.error(
+        `event=backtest_symbol_support_refresh_failed exchange=${normalizedExchange} symbol=${normalizedSymbol} reason=${reason}`,
+      )
+      throw new DomainException('backtesting.symbol_support_temporarily_unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        args: {
+          exchange: normalizedExchange,
+          symbol: normalizedSymbol,
+          reasonMessage: reason,
+        },
+      })
+    }
   }
 
   async loadBars(input: LoadBarsInput): Promise<Bar[]> {
@@ -195,6 +218,14 @@ export class BacktestMarketDataService {
 
   private normalizeSymbols(symbols: string[]): string[] {
     return [...new Set(symbols.map(symbol => normalizeExactCode(symbol)))]
+  }
+
+  private async hasSupportedSymbol(exchange: SupportedExchange, symbol: string): Promise<boolean> {
+    const found = await this.repository.findActiveSymbolByExchangeAndCodes(
+      exchange.toUpperCase(),
+      this.buildCodeCandidates(symbol),
+    )
+    return Boolean(found)
   }
 
   private extractExchange(params: Record<string, unknown>): SupportedExchange | null {

@@ -6,6 +6,7 @@ function createRepositoryMock() {
     findBars: jest.fn(),
     aggregateCoverage: jest.fn(),
     findSymbolsByCodes: jest.fn(),
+    findActiveSymbolByExchangeAndCodes: jest.fn(),
   }
 }
 
@@ -322,6 +323,32 @@ describe('backtestMarketDataService', () => {
     await expect(service.ensureSymbolSupported('okx', 'UNKNOWNUSDT')).resolves.toBe('not_supported')
 
     expect(okxProvider.fetchSymbols).toHaveBeenCalledWith(['UNKNOWNUSDT'])
+    expect(marketDataService.upsertSymbolsFromProvider).not.toHaveBeenCalled()
+  })
+
+  it('returns supported without hitting upstream when symbol already exists in the market table', async () => {
+    const repository = createRepositoryMock()
+    repository.findActiveSymbolByExchangeAndCodes.mockResolvedValue({ id: 'sym-1', code: 'BTCUSDT' })
+    const { service, okxProvider, marketDataService } = createService(repository)
+
+    await expect(service.ensureSymbolSupported('okx', 'BTCUSDT')).resolves.toBe('supported')
+
+    expect(okxProvider.fetchSymbols).not.toHaveBeenCalled()
+    expect(marketDataService.upsertSymbolsFromProvider).not.toHaveBeenCalled()
+  })
+
+  it('wraps upstream refresh failures as a controlled 503 instead of leaking 500s', async () => {
+    const repository = createRepositoryMock()
+    repository.findActiveSymbolByExchangeAndCodes.mockResolvedValue(null)
+    const { service, okxProvider, marketDataService } = createService(repository)
+    okxProvider.fetchSymbols.mockRejectedValue(new Error('okx upstream timeout'))
+
+    await expect(service.ensureSymbolSupported('okx', 'ETHUSDC')).rejects.toMatchObject({
+      message: 'backtesting.symbol_support_temporarily_unavailable',
+      code: 'SERVICE_TEMPORARILY_UNAVAILABLE',
+      status: 503,
+    })
+
     expect(marketDataService.upsertSymbolsFromProvider).not.toHaveBeenCalled()
   })
 })

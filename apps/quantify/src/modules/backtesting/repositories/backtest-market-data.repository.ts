@@ -1,4 +1,5 @@
 import type { MarketTimeframe } from '@ai/shared'
+import { SymbolStatus as PrismaSymbolStatus } from '@ai/shared'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { PrismaClient } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -15,6 +16,18 @@ export class BacktestMarketDataRepository {
       where: {
         code: { in: codes },
       },
+      select: { id: true, code: true },
+    })
+  }
+
+  findActiveSymbolByExchangeAndCodes(exchange: string, codes: string[]) {
+    return this.txHost.tx.symbol.findFirst({
+      where: {
+        exchange,
+        status: PrismaSymbolStatus.ACTIVE,
+        code: { in: codes },
+      },
+      orderBy: { updatedAt: 'desc' },
       select: { id: true, code: true },
     })
   }
