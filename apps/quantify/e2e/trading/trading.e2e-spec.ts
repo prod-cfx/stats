@@ -7,6 +7,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter'
 import { Test } from '@nestjs/testing'
 import { ClsConfigModule } from '@/common/modules/cls.module'
 import { EnvModule } from '@/common/modules/env.module'
+import { MarketDataIngestionService } from '@/modules/market-data/services/market-data-ingestion.service'
 import { TradingModule } from '@/modules/trading/trading.module'
 import { TradingService } from '@/modules/trading/trading.service'
 import { PrismaService } from '@/prisma/prisma.service'
@@ -66,6 +67,10 @@ class InMemoryAccountStore implements ExchangeAccountStore {
 
     return null
   }
+
+  async getAccountConfigById(_accountId: string, userId: string): Promise<ExchangeAccountConfig | null> {
+    return this.getAccountConfig(userId, 'binance')
+  }
 }
 
 describe('TradingService (E2E, trading module only)', () => {
@@ -77,7 +82,7 @@ describe('TradingService (E2E, trading module only)', () => {
 
   beforeAll(async () => {
     // 全局 mock fetch，拦截 Binance / OKX 请求，避免访问真实交易所
-    globalThis.fetch = jest.fn(async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    globalThis.fetch = jest.fn(async (input: Parameters<typeof fetch>[0], init?: RequestInit): Promise<Response> => {
       const url = typeof input === 'string' || input instanceof URL ? new URL(input.toString()) : new URL(input.url)
       const method = (init?.method || 'GET').toUpperCase()
 
@@ -191,6 +196,14 @@ describe('TradingService (E2E, trading module only)', () => {
     moduleFixture = await Test.createTestingModule({
       imports: [ConfigModule.forRoot({ isGlobal: true }), EventEmitterModule.forRoot(), EnvModule, ClsConfigModule, TradingModule],
     })
+      .overrideProvider(MarketDataIngestionService)
+      .useValue({
+        onModuleInit: () => {},
+        onModuleDestroy: () => {},
+        handleGapFill: () => {},
+        handleDynamicSymbolRefresh: () => {},
+        ensureSymbolsSubscribed: async () => {},
+      })
       .overrideProvider(PrismaService)
       .useValue({})
       .overrideProvider('ExchangeAccountStore')

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 import { ThrottlerModule } from '@nestjs/throttler'
 import { EnvModule } from '@/common/modules/env.module'
+import { PrismaModule } from '@/prisma/prisma.module'
 import { BacktestingController } from './backtesting.controller'
 import { BacktestRunnerService } from './core/backtest-runner.service'
 import { TheoreticalExecutionModel } from './execution/theoretical-execution.model'
@@ -8,6 +9,7 @@ import { BacktestJobsService } from './jobs/backtest-jobs.service'
 import { PortfolioLedgerServiceFactory } from './portfolio/portfolio-ledger.service'
 import { BacktestReporterService } from './report/backtest-reporter.service'
 import { BacktestCapabilitiesRepository } from './repositories/backtest-capabilities.repository'
+import { BacktestMarketDataRepository } from './repositories/backtest-market-data.repository'
 import { BacktestCallerIdentityService } from './services/backtest-caller-identity.service'
 import { BacktestCapabilitiesService } from './services/backtest-capabilities.service'
 import { BacktestMarketDataService } from './services/backtest-market-data.service'
@@ -15,7 +17,7 @@ import { BacktestStrategyAdapterService } from './services/backtest-strategy-ada
 import { StateEngineService } from './state/state-engine.service'
 
 @Module({
-  imports: [EnvModule, ThrottlerModule.forRoot()],
+  imports: [EnvModule, PrismaModule, ThrottlerModule.forRoot()],
   controllers: [BacktestingController],
   providers: [
     BacktestRunnerService,
@@ -29,6 +31,7 @@ import { StateEngineService } from './state/state-engine.service'
     BacktestStrategyAdapterService,
     StateEngineService,
     BacktestCapabilitiesRepository,
+    BacktestMarketDataRepository,
   ],
 })
 export class BacktestingModule {}

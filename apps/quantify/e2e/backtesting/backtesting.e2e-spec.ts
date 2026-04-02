@@ -1,5 +1,6 @@
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
+import type { Response } from 'supertest'
 import { ValidationPipe } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { EventEmitterModule } from '@nestjs/event-emitter'
@@ -135,6 +136,7 @@ describe('backtestingController (e2e)', () => {
       stateTimeframes: ['1h'],
       initialCash: 10000,
       leverage: 2,
+      allowPartial: false,
       execution: { slippageBps: 5, feeBps: 4, priceSource: 'mid' },
       strategy: {
         id: 'demo-strategy',
@@ -163,7 +165,7 @@ describe('backtestingController (e2e)', () => {
       .set('Authorization', 'Bearer test-token')
       .send(payload)
       .expect(201)
-      .expect((res) => {
+      .expect((res: Response) => {
         expect(res.body).toHaveProperty('summary')
         expect(res.body).toHaveProperty('markers')
         expect(res.body.summary.totalTrades).toBe(1)
@@ -224,6 +226,7 @@ describe('backtestingController (e2e)', () => {
       stateTimeframes: ['1h'],
       initialCash: 10000,
       leverage: 2,
+      allowPartial: false,
       execution: { slippageBps: 5, feeBps: 4, priceSource: 'mid' },
       strategy: {
         id: 'demo-strategy',
@@ -275,6 +278,7 @@ describe('backtestingController (e2e)', () => {
       stateTimeframes: ['1h'],
       initialCash: 10000,
       leverage: 2,
+      allowPartial: false,
       execution: { slippageBps: 5, feeBps: 4, priceSource: 'mid' },
       strategy: {
         id: 'demo-strategy',

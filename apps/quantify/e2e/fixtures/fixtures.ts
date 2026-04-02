@@ -181,7 +181,13 @@ export async function createTestingApp(
     imports: normalizedOptions.imports,
   })
     .overrideProvider(MarketDataIngestionService)
-    .useValue({ onModuleInit: () => {}, onModuleDestroy: () => {}, handleGapFill: () => {}, handleDynamicSymbolRefresh: () => {} })
+    .useValue({
+      onModuleInit: () => {},
+      onModuleDestroy: () => {},
+      handleGapFill: () => {},
+      handleDynamicSymbolRefresh: () => {},
+      ensureSymbolsSubscribed: async () => {},
+    })
 
   for (const override of normalizedOptions.providerOverrides ?? []) {
     moduleBuilder = moduleBuilder

@@ -1,22 +1,19 @@
+import { BacktestMarketDataRepository } from '../repositories/backtest-market-data.repository'
 import { BacktestMarketDataService } from './backtest-market-data.service'
 
-function createPrismaMock() {
+function createRepositoryMock() {
   return {
-    symbol: {
-      findMany: jest.fn(),
-    },
-    marketBar: {
-      findMany: jest.fn(),
-      aggregate: jest.fn(),
-    },
+    findBars: jest.fn(),
+    aggregateCoverage: jest.fn(),
+    findSymbolsByCodes: jest.fn(),
   }
 }
 
 describe('backtestMarketDataService', () => {
-  it('loads and maps bars from prisma with range filter', async () => {
-    const prisma = createPrismaMock()
-    prisma.symbol.findMany.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
-    prisma.marketBar.findMany
+  it('loads and maps bars from repository with range filter', async () => {
+    const repository = createRepositoryMock()
+    repository.findSymbolsByCodes.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
+    repository.findBars
       .mockResolvedValueOnce([
         {
           time: new Date(2_000),
@@ -38,7 +35,7 @@ describe('backtestMarketDataService', () => {
         },
       ])
 
-    const service = new BacktestMarketDataService(prisma as never)
+    const service = new BacktestMarketDataService(repository as never)
     const bars = await service.loadBars({
       symbols: ['BTCUSDT'],
       baseTimeframe: '5m',
@@ -46,7 +43,7 @@ describe('backtestMarketDataService', () => {
       dataRange: { fromTs: 1_500, toTs: 2_500 },
     })
 
-    expect(prisma.marketBar.findMany).toHaveBeenCalledTimes(2)
+    expect(repository.findBars).toHaveBeenCalledTimes(2)
     expect(bars).toEqual([
       expect.objectContaining({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2_000, close: 11.5 }),
       expect.objectContaining({ symbol: 'BTCUSDT', timeframe: '1h', closeTime: 2_000, close: 10.5 }),
@@ -54,13 +51,13 @@ describe('backtestMarketDataService', () => {
   })
 
   it('resolves full coverage when requested range is inside available range', async () => {
-    const prisma = createPrismaMock()
-    prisma.symbol.findMany.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
-    prisma.marketBar.aggregate
+    const repository = createRepositoryMock()
+    repository.findSymbolsByCodes.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
+    repository.aggregateCoverage
       .mockResolvedValueOnce({ _min: { time: new Date(1_000) }, _max: { time: new Date(5_000) } })
       .mockResolvedValueOnce({ _min: { time: new Date(2_000) }, _max: { time: new Date(4_000) } })
 
-    const service = new BacktestMarketDataService(prisma as never)
+    const service = new BacktestMarketDataService(repository as never)
     const coverage = await service.resolveCoverage({
       symbols: ['BTCUSDT'],
       baseTimeframe: '5m',
@@ -76,13 +73,13 @@ describe('backtestMarketDataService', () => {
   })
 
   it('resolves partial coverage when requested range exceeds available range', async () => {
-    const prisma = createPrismaMock()
-    prisma.symbol.findMany.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
-    prisma.marketBar.aggregate
+    const repository = createRepositoryMock()
+    repository.findSymbolsByCodes.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
+    repository.aggregateCoverage
       .mockResolvedValueOnce({ _min: { time: new Date(1_000) }, _max: { time: new Date(5_000) } })
       .mockResolvedValueOnce({ _min: { time: new Date(2_000) }, _max: { time: new Date(4_000) } })
 
-    const service = new BacktestMarketDataService(prisma as never)
+    const service = new BacktestMarketDataService(repository as never)
     const coverage = await service.resolveCoverage({
       symbols: ['BTCUSDT'],
       baseTimeframe: '5m',
@@ -98,13 +95,13 @@ describe('backtestMarketDataService', () => {
   })
 
   it('resolves empty coverage when no overlap exists', async () => {
-    const prisma = createPrismaMock()
-    prisma.symbol.findMany.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
-    prisma.marketBar.aggregate
+    const repository = createRepositoryMock()
+    repository.findSymbolsByCodes.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
+    repository.aggregateCoverage
       .mockResolvedValueOnce({ _min: { time: new Date(1_000) }, _max: { time: new Date(2_000) } })
       .mockResolvedValueOnce({ _min: { time: new Date(1_000) }, _max: { time: new Date(2_000) } })
 
-    const service = new BacktestMarketDataService(prisma as never)
+    const service = new BacktestMarketDataService(repository as never)
     const coverage = await service.resolveCoverage({
       symbols: ['BTCUSDT'],
       baseTimeframe: '5m',
@@ -119,9 +116,9 @@ describe('backtestMarketDataService', () => {
   })
 
   it('deduplicates normalized symbols when loading bars', async () => {
-    const prisma = createPrismaMock()
-    prisma.symbol.findMany.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
-    prisma.marketBar.findMany
+    const repository = createRepositoryMock()
+    repository.findSymbolsByCodes.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
+    repository.findBars
       .mockResolvedValueOnce([
         {
           time: new Date(2_000),
@@ -143,7 +140,7 @@ describe('backtestMarketDataService', () => {
         },
       ])
 
-    const service = new BacktestMarketDataService(prisma as never)
+    const service = new BacktestMarketDataService(repository as never)
     const bars = await service.loadBars({
       symbols: ['btcusdt', ' BTCUSDT '],
       baseTimeframe: '5m',
@@ -151,19 +148,19 @@ describe('backtestMarketDataService', () => {
       dataRange: { fromTs: 1_500, toTs: 2_500 },
     })
 
-    expect(prisma.marketBar.findMany).toHaveBeenCalledTimes(2)
+    expect(repository.findBars).toHaveBeenCalledTimes(2)
     expect(bars).toHaveLength(2)
     expect(bars.every(bar => bar.symbol === 'BTCUSDT')).toBe(true)
   })
 
   it('does not mark duplicate normalized symbols as missing coverage', async () => {
-    const prisma = createPrismaMock()
-    prisma.symbol.findMany.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
-    prisma.marketBar.aggregate
+    const repository = createRepositoryMock()
+    repository.findSymbolsByCodes.mockResolvedValue([{ id: 's1', code: 'BTCUSDT' }])
+    repository.aggregateCoverage
       .mockResolvedValueOnce({ _min: { time: new Date(1_000) }, _max: { time: new Date(5_000) } })
       .mockResolvedValueOnce({ _min: { time: new Date(2_000) }, _max: { time: new Date(4_000) } })
 
-    const service = new BacktestMarketDataService(prisma as never)
+    const service = new BacktestMarketDataService(repository as never)
     const coverage = await service.resolveCoverage({
       symbols: ['btcusdt', ' BTCUSDT '],
       baseTimeframe: '5m',
@@ -171,7 +168,7 @@ describe('backtestMarketDataService', () => {
       dataRange: { fromTs: 2_100, toTs: 3_900 },
     })
 
-    expect(prisma.marketBar.aggregate).toHaveBeenCalledTimes(2)
+    expect(repository.aggregateCoverage).toHaveBeenCalledTimes(2)
     expect(coverage).toEqual({
       kind: 'full',
       availableRange: { fromTs: 2_000, toTs: 4_000 },
@@ -180,9 +177,9 @@ describe('backtestMarketDataService', () => {
   })
 
   it('falls back unsuffixed symbol to canonical spot code when loading bars', async () => {
-    const prisma = createPrismaMock()
-    prisma.symbol.findMany.mockResolvedValue([{ id: 'spot-id', code: 'BTCUSDT:SPOT' }])
-    prisma.marketBar.findMany.mockResolvedValue([
+    const repository = createRepositoryMock()
+    repository.findSymbolsByCodes.mockResolvedValue([{ id: 'spot-id', code: 'BTCUSDT:SPOT' }])
+    repository.findBars.mockResolvedValue([
       {
         time: new Date(2_000),
         open: 11,
@@ -193,7 +190,7 @@ describe('backtestMarketDataService', () => {
       },
     ])
 
-    const service = new BacktestMarketDataService(prisma as never)
+    const service = new BacktestMarketDataService(repository as never)
     const bars = await service.loadBars({
       symbols: ['BTCUSDT'],
       baseTimeframe: '5m',
@@ -201,12 +198,7 @@ describe('backtestMarketDataService', () => {
       dataRange: { fromTs: 1_500, toTs: 2_500 },
     })
 
-    expect(prisma.symbol.findMany).toHaveBeenCalledWith({
-      where: {
-        code: { in: ['BTCUSDT', 'BTCUSDT:PERP', 'BTCUSDT:SPOT'] },
-      },
-      select: { id: true, code: true },
-    })
+    expect(repository.findSymbolsByCodes).toHaveBeenCalledWith(['BTCUSDT', 'BTCUSDT:PERP', 'BTCUSDT:SPOT'])
     expect(bars).toEqual([
       expect.objectContaining({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2_000, close: 11.5 }),
     ])

@@ -18,7 +18,7 @@ describe('positionsService', () => {
   }
 
   it('maps locked position rows to Prisma field names', async () => {
-    const $queryRaw = jest.fn(async () => [
+    const lockOpenPosition = jest.fn(async () => [
       {
         id: 'position-1',
         userStrategyAccountId: 'account-1',
@@ -39,7 +39,7 @@ describe('positionsService', () => {
         updatedAt: new Date('2026-03-18T10:23:24.000Z'),
       },
     ])
-    const service = createService({ tx: { $queryRaw } })
+    const service = createService({}, {}, {}, { lockOpenPosition })
 
     const position = await (service as any).loadAndLockPosition(
       'account-1',
@@ -54,34 +54,33 @@ describe('positionsService', () => {
 
   it('credits spot close principal back to the account when recording a sell trade', async () => {
     const accountApplyLedgerDelta = jest.fn().mockResolvedValue(undefined)
-    const tx = {
-      userStrategyAccount: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'account-1' }),
-      },
-      trade: {
-        findFirst: jest.fn().mockResolvedValue(null),
-        create: jest.fn().mockResolvedValue({
-          id: 'trade-1',
-          userStrategyAccountId: 'account-1',
-          positionId: 'position-1',
-          symbol: 'BTCUSDT',
-          market: 'okx:spot',
-          side: TradeSide.SELL,
-          positionSide: PositionSide.LONG,
-          price: new Prisma.Decimal(120),
-          quantity: new Prisma.Decimal(1),
-          fee: new Prisma.Decimal(0),
-          feeCurrency: null,
-          orderId: null,
-          externalTradeId: null,
-          provider: 'okx',
-          executedAt: new Date('2026-04-01T01:00:00.000Z'),
-          metadata: null,
-          createdAt: new Date('2026-04-01T01:00:00.000Z'),
-          updatedAt: new Date('2026-04-01T01:00:00.000Z'),
-        }),
-      },
-      $queryRaw: jest.fn().mockResolvedValue([
+    const txHost = {
+      withTransaction: jest.fn(async (callback: () => Promise<any>) => callback()),
+    }
+    const positionsRepository = {
+      findAccountById: jest.fn().mockResolvedValue({ id: 'account-1' }),
+      findTradeByExternalTradeId: jest.fn().mockResolvedValue(null),
+      createTrade: jest.fn().mockResolvedValue({
+        id: 'trade-1',
+        userStrategyAccountId: 'account-1',
+        positionId: 'position-1',
+        symbol: 'BTCUSDT',
+        market: 'okx:spot',
+        side: TradeSide.SELL,
+        positionSide: PositionSide.LONG,
+        price: new Prisma.Decimal(120),
+        quantity: new Prisma.Decimal(1),
+        fee: new Prisma.Decimal(0),
+        feeCurrency: null,
+        orderId: null,
+        externalTradeId: null,
+        provider: 'okx',
+        executedAt: new Date('2026-04-01T01:00:00.000Z'),
+        metadata: null,
+        createdAt: new Date('2026-04-01T01:00:00.000Z'),
+        updatedAt: new Date('2026-04-01T01:00:00.000Z'),
+      }),
+      lockOpenPosition: jest.fn().mockResolvedValue([
         {
           id: 'position-1',
           userStrategyAccountId: 'account-1',
@@ -102,39 +101,31 @@ describe('positionsService', () => {
           updatedAt: new Date('2026-04-01T00:00:00.000Z'),
         },
       ]),
-      position: {
-        update: jest.fn().mockResolvedValue({
-          id: 'position-1',
-          userStrategyAccountId: 'account-1',
-          symbol: 'BTCUSDT',
-          positionSide: PositionSide.LONG,
-          leverage: null,
-          quantity: new Prisma.Decimal(0),
-          avgEntryPrice: new Prisma.Decimal(100),
-          realizedPnl: new Prisma.Decimal(20),
-          unrealizedPnl: new Prisma.Decimal(0),
-          status: 'CLOSED',
-          openedAt: new Date('2026-04-01T00:00:00.000Z'),
-          closedAt: new Date('2026-04-01T01:00:00.000Z'),
-          exchangeId: 'okx',
-          marketType: 'spot',
-          metadata: null,
-          createdAt: new Date('2026-04-01T00:00:00.000Z'),
-          updatedAt: new Date('2026-04-01T01:00:00.000Z'),
-        }),
-        aggregate: jest.fn().mockResolvedValue({
-          _sum: { unrealizedPnl: new Prisma.Decimal(0) },
-        }),
-      },
-      $executeRaw: jest.fn().mockResolvedValue(1),
-    }
-    const txHost = {
-      tx,
-      withTransaction: jest.fn(async (callback: () => Promise<any>) => callback()),
+      updatePosition: jest.fn().mockResolvedValue({
+        id: 'position-1',
+        userStrategyAccountId: 'account-1',
+        symbol: 'BTCUSDT',
+        positionSide: PositionSide.LONG,
+        leverage: null,
+        quantity: new Prisma.Decimal(0),
+        avgEntryPrice: new Prisma.Decimal(100),
+        realizedPnl: new Prisma.Decimal(20),
+        unrealizedPnl: new Prisma.Decimal(0),
+        status: 'CLOSED',
+        openedAt: new Date('2026-04-01T00:00:00.000Z'),
+        closedAt: new Date('2026-04-01T01:00:00.000Z'),
+        exchangeId: 'okx',
+        marketType: 'spot',
+        metadata: null,
+        createdAt: new Date('2026-04-01T00:00:00.000Z'),
+        updatedAt: new Date('2026-04-01T01:00:00.000Z'),
+      }),
+      aggregateOpenPositionUnrealizedPnl: jest.fn().mockResolvedValue(new Prisma.Decimal(0)),
+      refreshAccountEquityFromBalance: jest.fn().mockResolvedValue(undefined),
     }
     const service = createService(txHost, {
       applyLedgerDelta: accountApplyLedgerDelta,
-    })
+    }, {}, positionsRepository)
 
     await service.recordTrade({
       userStrategyAccountId: 'account-1',

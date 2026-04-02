@@ -1,6 +1,7 @@
+import type { PositionSide } from '@ai/shared'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { ExchangeId } from '@/modules/trading/core/types'
-import type { PrismaClient, Prisma } from '@/prisma/prisma.types'
+import type { Position, PrismaClient, Prisma, Trade } from '@/prisma/prisma.types'
 import { PositionStatus } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
@@ -140,6 +141,115 @@ export class PositionsRepository {
     return this.txHost.tx.userStrategyAccount.findUnique({
       where: { id: accountId },
       select: { userId: true, id: true },
+    })
+  }
+
+  findAccountById(accountId: string) {
+    return this.txHost.tx.userStrategyAccount.findUnique({
+      where: { id: accountId },
+    })
+  }
+
+  findTradeByExternalTradeId(accountId: string, externalTradeId: string) {
+    return this.txHost.tx.trade.findFirst({
+      where: {
+        userStrategyAccountId: accountId,
+        externalTradeId,
+      },
+    })
+  }
+
+  lockOpenPosition(accountId: string, normalizedSymbol: string, positionSide: PositionSide) {
+    return this.txHost.tx.$queryRaw<Position[]>`
+      SELECT
+        "id",
+        "user_strategy_account_id" AS "userStrategyAccountId",
+        "symbol",
+        "position_side" AS "positionSide",
+        "leverage",
+        "quantity",
+        "avg_entry_price" AS "avgEntryPrice",
+        "realized_pnl" AS "realizedPnl",
+        "unrealized_pnl" AS "unrealizedPnl",
+        "status",
+        "opened_at" AS "openedAt",
+        "closed_at" AS "closedAt",
+        "exchange_id" AS "exchangeId",
+        "market_type" AS "marketType",
+        "metadata",
+        "created_at" AS "createdAt",
+        "updated_at" AS "updatedAt"
+      FROM "positions"
+      WHERE "user_strategy_account_id" = ${accountId}
+        AND "symbol" = ${normalizedSymbol}
+        AND "position_side" = ${positionSide}
+        AND "status" = ${PositionStatus.OPEN}
+      FOR UPDATE
+    `
+  }
+
+  createPosition(data: Prisma.PositionUncheckedCreateInput) {
+    return this.txHost.tx.position.create({ data })
+  }
+
+  updatePosition(id: string, data: Prisma.PositionUncheckedUpdateInput) {
+    return this.txHost.tx.position.update({
+      where: { id },
+      data,
+    })
+  }
+
+  createTrade(data: Prisma.TradeUncheckedCreateInput): Promise<Trade> {
+    return this.txHost.tx.trade.create({ data })
+  }
+
+  aggregateOpenPositionUnrealizedPnl(accountId: string) {
+    return this.txHost.tx.position.aggregate({
+      where: { userStrategyAccountId: accountId, status: PositionStatus.OPEN },
+      _sum: { unrealizedPnl: true },
+    }).then(result => result._sum.unrealizedPnl)
+  }
+
+  refreshAccountEquityFromBalance(accountId: string, totalUnrealized: Prisma.Decimal) {
+    return this.txHost.tx.$executeRaw`
+      UPDATE "user_strategy_accounts"
+      SET "total_unrealized_pnl" = ${totalUnrealized},
+          "equity" = "balance" + ${totalUnrealized},
+          "updated_at" = NOW()
+      WHERE "id" = ${accountId}
+    `
+  }
+
+  findOpenPositionsBySymbols(symbols: string[]) {
+    return this.txHost.tx.position.findMany({
+      where: {
+        status: PositionStatus.OPEN,
+        symbol: { in: symbols },
+      },
+    })
+  }
+
+  updatePositionUnrealizedPnl(positionId: string, unrealizedPnl: Prisma.Decimal) {
+    return this.txHost.tx.position.update({
+      where: { id: positionId },
+      data: { unrealizedPnl },
+    })
+  }
+
+  findAccountBalance(accountId: string) {
+    return this.txHost.tx.userStrategyAccount.findUnique({
+      where: { id: accountId },
+      select: { balance: true },
+    }).then(account => account?.balance ?? null)
+  }
+
+  updateAccountValuation(accountId: string, totalUnrealizedPnl: Prisma.Decimal, equity: Prisma.Decimal) {
+    return this.txHost.tx.userStrategyAccount.update({
+      where: { id: accountId },
+      data: {
+        totalUnrealizedPnl,
+        equity,
+      },
     })
   }
 

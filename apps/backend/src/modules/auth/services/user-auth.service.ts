@@ -164,9 +164,11 @@ export class UserAuthService {
       expiresAt: this.addMinutes(new Date(), VERIFICATION_CODE_TTL_MINUTES),
     })
 
-    // 发送验证码邮件
-    await this.mailService.sendVerificationCode(email, code, 'password_reset')
-    this.logger.log(`Sent password reset code to ${this.maskEmail(email)}`)
+    const maskedEmail = this.maskEmail(email)
+    this.txEvents.afterCommit(async () => {
+      await this.mailService.sendVerificationCode(email, code, 'password_reset')
+      this.logger.log(`Sent password reset code to ${maskedEmail}`)
+    })
   }
 
   async verifyPasswordReset(dto: VerifyPasswordResetRequestDto): Promise<void> {

@@ -19,10 +19,10 @@ import type {
 import type {
   IndicatorConfig,
   Prisma,
+  PrismaClient,
   StrategyInstance,
   StrategyTemplate,
   Symbol,
-  PrismaClient,
 } from '@/prisma/prisma.types'
 import { fillPromptTemplate, parseAiSignalResponse, ErrorCode } from '@ai/shared'
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
@@ -30,7 +30,7 @@ import {
   buildMultiLegStrategyContext,
   buildStrategyContext,
 } from '@ai/shared/script-engine/helpers/context-builder'
-// eslint-disable-next-line ts/consistent-type-imports
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 TransactionHost
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 ConfigService
@@ -627,36 +627,21 @@ export class SignalGeneratorService {
     const cooldownSince = new Date(Date.now() - config.cooldownMinutes * 60 * 1000)
 
     const result = await this.txHost.withTransaction(async () => {
-      const tx = this.txHost.tx
-      // 对当前策略实例行加锁，避免同一实例并发通过冷却检查后重复创建信号
-      await tx.$queryRaw`
-        SELECT "id"
-        FROM "strategy_instances"
-        WHERE "id" = ${instance.id}
-        FOR UPDATE
-      `
+      await this.generatorRepository.lockStrategyInstance(instance.id)
 
-      // 手动触发时允许跳过 cooldown 检查，确保管理员能够强制生成信号
       if (!skipCooldown) {
-        const existingCount = await tx.tradingSignal.count({
-          where: {
-            strategyId: strategy.id,
-            symbolId: group.symbol.id,
-            createdAt: {
-              gte: cooldownSince,
-            },
-            // 兼容历史数据：strategyInstanceId 为空的旧信号也视为命中冷却窗口，
-            // 避免在数据尚未完全回填前生成重复信号。
-            OR: [{ strategyInstanceId: instance.id }, { strategyInstanceId: null }],
-          },
-        })
+        const existingCount = await this.generatorRepository.countRecentSignals(
+          strategy.id,
+          group.symbol.id,
+          cooldownSince,
+        )
 
         if (existingCount > 0) {
           return { created: false as const, signalId: null as string | null }
         }
       }
 
-      const data: Prisma.TradingSignalCreateInput = {
+      const signal = await this.tradingSignalRepository.create({
         strategy: { connect: { id: strategy.id } },
         strategyInstance: { connect: { id: instance.id } },
         symbol: { connect: { id: group.symbol.id } },
@@ -681,10 +666,6 @@ export class SignalGeneratorService {
         metadata: {
           generatorVersion: 'v1',
         },
-      }
-
-      const signal = await tx.tradingSignal.create({
-        data,
       })
 
       return { created: true as const, signalId: signal.id }
@@ -1873,35 +1854,22 @@ export class SignalGeneratorService {
     const cooldownSince = new Date(Date.now() - cooldownMinutes * 60 * 1000)
 
     const result = await this.txHost.withTransaction(async () => {
-      const tx = this.txHost.tx
-      await tx.$queryRaw`
-        SELECT "id"
-        FROM "strategy_instances"
-        WHERE "id" = ${instance.id}
-        FOR UPDATE
-      `
+      await this.generatorRepository.lockStrategyInstance(instance.id)
 
-      // 手动触发时允许跳过 cooldown 检查，确保管理员能够强制生成信号
       if (!skipCooldown) {
-        const recentSignal = await tx.tradingSignal.findFirst({
-          where: {
-            strategyId: strategy.id,
-            symbolId: primarySymbol.id,
-            createdAt: { gte: cooldownSince },
-            // 兼容历史数据：strategyInstanceId 为空的旧信号也视为命中冷却窗口，
-            // 避免在数据尚未完全回填前生成重复信号。
-            OR: [{ strategyInstanceId: instance.id }, { strategyInstanceId: null }],
-          },
-          orderBy: { createdAt: 'desc' },
-        })
+        const recentSignal = await this.generatorRepository.findRecentSignalForCooldown(
+          strategy.id,
+          primarySymbol.id,
+          instance.id,
+          cooldownSince,
+        )
 
         if (recentSignal) {
           return { created: false as const, signalId: null, reason: 'COOLDOWN' }
         }
       }
 
-      // 直接使用事务客户端创建信号，确保原子性
-      const data: Prisma.TradingSignalCreateInput = {
+      const newSignal = await this.tradingSignalRepository.create({
         strategy: { connect: { id: strategy.id } },
         strategyInstance: { connect: { id: instance.id } },
         symbol: { connect: { id: primarySymbol.id } },
@@ -1925,10 +1893,6 @@ export class SignalGeneratorService {
         metadata: {
           generatorVersion: 'v2-multi-leg',
         },
-      }
-
-      const newSignal = await tx.tradingSignal.create({
-        data,
       })
 
       return { created: true as const, signalId: newSignal.id }
