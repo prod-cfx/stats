@@ -48,6 +48,7 @@ export const CenterChartPanel = ({
     storageKey,
     [],
   )
+  const activeIdSet = new Set(activeIds)
 
   const chartIndicatorItems = catalogItems
     .filter(x => x.kind === 'chartSeries' || x.kind === 'chartOverlay')
@@ -56,7 +57,7 @@ export const CenterChartPanel = ({
     .map(x => ({
       ...x,
       name: t(x.labelKey),
-      isActive: activeIds.includes(x.id),
+      isActive: activeIdSet.has(x.id),
       kind: x.kind as 'chartSeries' | 'chartOverlay',
     }))
 
@@ -106,9 +107,10 @@ export const CenterChartPanel = ({
   useEffect(() => {
     const chart = tvChartRef.current
     if (!chart) return
+    const activeIdSet = new Set(activeIds)
     const ids = ['long-short-ratio', 'aggregated-open-interest', 'aggregated-volume', 'liquidation-data'] as const
     ids.forEach(id => {
-      if (activeIds.includes(id)) {
+      if (activeIdSet.has(id)) {
         chart.ensureCustomIndicator(id)
       } else {
         chart.removeCustomIndicator(id)

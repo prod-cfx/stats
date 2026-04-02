@@ -119,6 +119,20 @@ function extractPriceRule(rule: string): number | null {
   return match ? Number(match[1]) : null
 }
 
+function findFirstMappedValue<T, TValue>(
+  items: T[],
+  mapper: (item: T) => TValue | null | undefined,
+): TValue | null {
+  for (const item of items) {
+    const value = mapper(item)
+    if (value !== null && value !== undefined) {
+      return value
+    }
+  }
+
+  return null
+}
+
 export function syncStrategyParamsFromCodegen(args: {
   spec: unknown
   fallback: StrategyParamSyncFallback
@@ -183,10 +197,10 @@ export function syncStrategyParamsFromCodegen(args: {
   }
   const required = ['exchange', 'symbol', 'baseTimeframe', 'positionPct']
 
-  const entryWindowRule = entryRules.map(extractWindowDropRule).find(Boolean) ?? null
-  const exitWindowRule = exitRules.map(extractWindowRiseRule).find(Boolean) ?? null
-  const entryPrice = entryRules.map(extractPriceRule).find((value): value is number => value !== null) ?? null
-  const exitPrice = exitRules.map(extractPriceRule).find((value): value is number => value !== null) ?? null
+  const entryWindowRule = findFirstMappedValue(entryRules, extractWindowDropRule)
+  const exitWindowRule = findFirstMappedValue(exitRules, extractWindowRiseRule)
+  const entryPrice = findFirstMappedValue(entryRules, extractPriceRule)
+  const exitPrice = findFirstMappedValue(exitRules, extractPriceRule)
 
   setNumberField(properties, required, values, 'buyWindowMin', 'Buy Window (min)', entryWindowRule?.windowMin ?? null, { minimum: 1 })
   setNumberField(properties, required, values, 'buyDropPct', 'Buy Drop %', entryWindowRule?.pct ?? null, { minimum: 0 })

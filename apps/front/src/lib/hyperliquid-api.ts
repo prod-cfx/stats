@@ -531,7 +531,8 @@ function findSpotPrice(
   }
 
   // 2. 查找包含该 token 的交易对（优先查找 canonical 交易对）
-  const pairs = spotMeta.universe.filter(u => u.tokens.includes(tokenIndex))
+  const tokenIndexSet = new Set([tokenIndex])
+  const pairs = spotMeta.universe.filter(u => u.tokens.some(token => tokenIndexSet.has(token)))
 
   logger.debug('findSpotPrice', { tokenIndex, pairsCount: pairs.length })
   if (pairs.length > 0) {

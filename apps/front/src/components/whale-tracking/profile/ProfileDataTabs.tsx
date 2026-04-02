@@ -128,7 +128,13 @@ interface OpenOrder {
 function getOpenOrderKey(order: OpenOrder): string {
   if (order.id) return order.id
 
-  const detailIds = order.details.map(d => d.id).filter(Boolean)
+  const detailIds: string[] = []
+  for (const detail of order.details) {
+    if (detail.id) {
+      detailIds.push(detail.id)
+    }
+  }
+
   if (detailIds.length > 0) {
     // 以排序后的明细 id 组合生成稳定且唯一的键（避免 details 顺序变化导致 key 改变）
     return `${order.asset}:${order.side}:${detailIds.sort().join('|')}`

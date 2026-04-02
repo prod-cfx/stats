@@ -96,6 +96,12 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
     hyperliquid: null,
   })
   const [loading, setLoading] = useState(true)
+  const boundExchangeIds = EXCHANGES.reduce<UserExchangeId[]>((result, exchangeId) => {
+    if (accounts[exchangeId].isBound) {
+      result.push(exchangeId)
+    }
+    return result
+  }, [])
 
   useEffect(() => {
     void loadStatuses()
@@ -434,7 +440,7 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
       <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
         <p className="text-xs font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.boundAccounts')}</p>
         <div className="mt-2 space-y-2">
-          {EXCHANGES.filter(exchangeId => accounts[exchangeId].isBound).map(exchangeId => (
+          {boundExchangeIds.map(exchangeId => (
             <div key={exchangeId} className="flex items-center justify-between text-xs text-[color:var(--cf-muted)]">
               <span>{exchangeId === 'hyperliquid' ? 'Hyperliquid' : exchangeId.toUpperCase()} / {accounts[exchangeId].name ?? '-'}</span>
               <span>{accounts[exchangeId].maskedCredential}</span>
