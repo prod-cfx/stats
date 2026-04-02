@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, jest } from '@jest/globals'
 import type { CryptoStockQuoteLatest } from '@/lib/api'
 import { fetchPublicCompanyQuotes } from './fetch-public-company-quotes'
 
@@ -41,7 +41,7 @@ const baseQuote = (overrides: Partial<CryptoStockQuoteLatest>): CryptoStockQuote
 describe('fetchPublicCompanyQuotes', () => {
   it('returns holdings data when BBX fails', async () => {
     const holdings = [baseQuote({ symbol: 'MSTR', source: 'BBX_SCRAPER', holdingsValue: '$58.00B' })]
-    const fetcher = vi.fn(async ({ source }: { source: 'BBX_SCRAPER' | 'BBX' }) => {
+    const fetcher = jest.fn(async ({ source }: { source: 'BBX_SCRAPER' | 'BBX' }) => {
       if (source === 'BBX_SCRAPER') return holdings
       throw new Error('bbx failed')
     })
@@ -54,7 +54,7 @@ describe('fetchPublicCompanyQuotes', () => {
 
   it('returns BBX data when holdings source fails', async () => {
     const prices = [baseQuote({ symbol: 'MSTR', source: 'BBX', price: '165.12', holdingsValue: null })]
-    const fetcher = vi.fn(async ({ source }: { source: 'BBX_SCRAPER' | 'BBX' }) => {
+    const fetcher = jest.fn(async ({ source }: { source: 'BBX_SCRAPER' | 'BBX' }) => {
       if (source === 'BBX') return prices
       throw new Error('holdings failed')
     })
@@ -66,7 +66,7 @@ describe('fetchPublicCompanyQuotes', () => {
   })
 
   it('throws when both sources fail', async () => {
-    const fetcher = vi.fn(async () => {
+    const fetcher = jest.fn(async () => {
       throw new Error('all failed')
     })
 

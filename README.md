@@ -107,6 +107,8 @@ dx build contracts --dev
 dx test e2e backend apps/backend/e2e/<file-or-dir>
 dx test e2e quantify apps/quantify/e2e/<file-or-dir>
 dx test e2e quantify apps/quantify/e2e/health
+dx test unit front
+dx test unit admin
 dx test unit backend
 dx test unit quantify
 
@@ -117,7 +119,7 @@ dx cache clear
 
 - `dx lint` 当前是全仓 lint 入口
 - DX 升级后，`quantify` 的 E2E 属于 guarded target，必须传测试路径；推荐最小校验命令：`dx test e2e quantify apps/quantify/e2e/health`
-- 前端项目在 Nx 中存在 `test`/`type-check` 目标，但仓库规范里的主门禁仍以后端与 Quantify 测试为主
+- 前端项目支持 `dx test unit front` / `dx test unit admin`；如需聚焦单个文件，可直接在对应 app 目录下执行 `jest --config ... <file> -t "<case>"`
 - 后端 DTO / OpenAPI 变更后，需要执行 `dx build contracts --dev`
 
 ## 当前架构概览

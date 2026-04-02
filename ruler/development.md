@@ -13,7 +13,7 @@
 3. 构建：优先直接执行目标构建（如 `dx build backend --dev`）；改动范围不确定时再用 `dx build affected --dev|--prod`（避免手工逐个编译）
 4. 后端改动：识别受影响 E2E，逐个运行 `dx test e2e backend <file-or-dir> [-t "case name"]`
 5. Quantify 改动：识别受影响 E2E，逐个运行 `dx test e2e quantify apps/quantify/e2e/<file-or-dir>`；最小可用校验可执行 `dx test e2e quantify apps/quantify/e2e/health`
-6. 前端改动：`dx` 命令清单当前仅定义 `dx test unit backend`；如需前端单测，请先补齐 `dx test unit front/admin` 后再纳入统一流程
+6. 前端改动：按改动范围执行 `dx test unit front` / `dx test unit admin`；若只需最小验证，可直接运行单个测试文件
 7. 后端 DTO/API 变更：在 backend 构建后再 `dx build contracts --dev`
 
 ## 3) 常用命令（速查）

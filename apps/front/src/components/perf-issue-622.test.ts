@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from '@jest/globals'
 import { getServerTranslator } from '@/lib/i18n/server'
 
-const FRONT_ROOT = join(process.cwd(), 'apps/front/src')
+const FRONT_ROOT = join(__dirname, '..')
 
 function readFrontSource(relativePath: string) {
   return readFileSync(join(FRONT_ROOT, relativePath), 'utf8')

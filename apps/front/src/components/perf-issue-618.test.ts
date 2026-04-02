@@ -1,9 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from '@jest/globals'
 
-const FRONT_ROOT = join(fileURLToPath(new URL('..', import.meta.url)))
+const FRONT_ROOT = join(__dirname, '..')
 
 function readFrontSource(relativePath: string) {
   return readFileSync(join(FRONT_ROOT, relativePath), 'utf8')
@@ -85,8 +84,8 @@ describe('issue #618 chart bundle guards', () => {
 
     for (const [file, lazyImport] of expectedLazyImports) {
       const source = readFrontSource(file)
-      expect(source, file).toContain("from 'next/dynamic'")
-      expect(source, file).toMatch(lazyImport)
+      expect(source).toContain("from 'next/dynamic'")
+      expect(source).toMatch(lazyImport)
     }
   })
 
@@ -117,15 +116,15 @@ describe('issue #618 chart bundle guards', () => {
         /dynamic\(\s*\(\)\s*=>\s*import\('@\/features\/whale-notification\/components\/CreateMonitorModal'\)/,
       ],
       [
-        'app/[lng]/prediction-market/page.tsx',
+        'app/[lng]/prediction-market/PredictionMarketGridClient.tsx',
         /dynamic\(\s*\(\)\s*=>\s*import\('@\/components\/prediction-market\/PredictionMarketGrid'\)/,
       ],
     ] as const
 
     for (const [file, lazyImport] of expectedLazyImports) {
       const source = readFrontSource(file)
-      expect(source, file).toContain("from 'next/dynamic'")
-      expect(source, file).toMatch(lazyImport)
+      expect(source).toContain("from 'next/dynamic'")
+      expect(source).toMatch(lazyImport)
     }
   })
 })

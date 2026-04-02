@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from '@jest/globals'
 import type { CryptoStockQuoteLatest } from '@/lib/api'
 import { mergeQuotesBySymbol } from './merge-quotes'
 

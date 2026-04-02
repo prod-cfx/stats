@@ -69,7 +69,7 @@
     "test": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "vitest || exit 0",
+        "command": "jest --config jest.config.ts",
         "cwd": "apps/front"
       }
     },

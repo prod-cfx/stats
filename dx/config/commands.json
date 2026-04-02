@@ -306,6 +306,16 @@
       }
     },
     "unit": {
+      "front": {
+        "command": "npx nx test front",
+        "app": "front",
+        "description": "运行前端单元测试(front)"
+      },
+      "admin": {
+        "command": "npx nx test admin-front",
+        "app": "admin-front",
+        "description": "运行前端单元测试(admin-front)"
+      },
       "backend": {
         "command": "npx nx test backend",
         "app": "backend",

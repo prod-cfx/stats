@@ -11,6 +11,7 @@ const mockGetBacktestJob = jest.fn()
 const mockGetBacktestJobResult = jest.fn()
 const mockBuildBacktestPayload = jest.fn()
 const mockFetchBacktestCapabilities = jest.fn()
+const mockCheckBacktestSymbolSupport = jest.fn()
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => key }),
@@ -114,6 +115,9 @@ jest.mock('@/components/ai-quant/backtest-payload-builder', () => ({
 }))
 jest.mock('@/components/ai-quant/backtest-capability-client', () => ({
   fetchBacktestCapabilities: (...args: unknown[]) => mockFetchBacktestCapabilities(...args),
+}))
+jest.mock('@/components/ai-quant/backtest-symbol-support-client', () => ({
+  checkBacktestSymbolSupport: (...args: unknown[]) => mockCheckBacktestSymbolSupport(...args),
 }))
 
 jest.mock('@/components/ai-quant/backtest-job-client', () => ({
@@ -227,6 +231,9 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       allowedSymbols: ['BTCUSDT'],
       allowedBaseTimeframes: ['15m'],
     })
+    mockCheckBacktestSymbolSupport.mockResolvedValue({
+      status: 'supported',
+    })
     mockCreateBacktestJob.mockResolvedValue({
       id: 'job-1',
       status: 'queued',
@@ -263,10 +270,12 @@ describe('AiQuantPageClient backtest jobs integration', () => {
   it('success path: create job -> poll -> fetch result -> show summary', async () => {
     await act(async () => {
       root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
     })
 
     await act(async () => {
       container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
     })
 
     await act(async () => {
@@ -296,10 +305,12 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
     await act(async () => {
       root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
     })
 
     await act(async () => {
       container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
     })
 
     await act(async () => {
@@ -403,6 +414,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
     await act(async () => {
       root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
     })
 
     await act(async () => {
@@ -479,10 +491,12 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
     await act(async () => {
       root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
     })
 
     await act(async () => {
       container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
     })
 
     await act(async () => {
@@ -506,6 +520,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
     await act(async () => {
       root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
     })
 
     await act(async () => {
@@ -521,6 +536,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
   it('double click triggers only one create job call', async () => {
     await act(async () => {
       root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
     })
 
     await act(async () => {
@@ -547,6 +563,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
     await act(async () => {
       root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
     })
 
     await act(async () => {
