@@ -1,15 +1,24 @@
 'use client'
 
 import type { DataSource, MarketType } from '@/types/trading'
+import dynamic from 'next/dynamic'
 import { useSearchParams } from 'next/navigation'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
 import { BottomPanel } from '@/components/trading/bottom-panel'
-import { CenterChartPanel } from '@/components/trading/center-chart-panel'
 import { LeftTradePanel } from '@/components/trading/left-trade-panel'
 import { RightPanel } from '@/components/trading/right-panel'
 import { TopBar } from '@/components/trading/top-bar'
+import { Skeleton } from '@/components/ui/loading'
+
+const CenterChartPanel = dynamic(
+  () => import('@/components/trading/center-chart-panel').then(mod => mod.CenterChartPanel),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-full min-h-[360px] w-full rounded-xl" height="100%" />,
+  },
+)
 
 function normalizeSymbol(raw: string | null): string | null {
   if (!raw) return null

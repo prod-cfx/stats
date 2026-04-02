@@ -1,9 +1,18 @@
 'use client'
 
 import type { DataSource, MarketType } from '@/types/trading'
+import dynamic from 'next/dynamic'
 import React, { useMemo, useState } from 'react'
-import { CenterChartPanel } from '@/components/trading/center-chart-panel'
 import { TopBar } from '@/components/trading/top-bar'
+import { Skeleton } from '@/components/ui/loading'
+
+const CenterChartPanel = dynamic(
+  () => import('@/components/trading/center-chart-panel').then(mod => mod.CenterChartPanel),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-full min-h-[280px] w-full rounded-none" height="100%" />,
+  },
+)
 
 export function KlineWidget(props: { config: Record<string, any> }) {
   // Keep only initial symbol from config; other interactions should be handled by the embedded UI.
