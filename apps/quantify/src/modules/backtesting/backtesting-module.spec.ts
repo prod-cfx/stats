@@ -1,9 +1,12 @@
 import { Test } from '@nestjs/testing'
+import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
 import { BacktestingModule } from './backtesting.module'
 import { BacktestJobsService } from './jobs/backtest-jobs.service'
 import { BacktestCapabilitiesRepository } from './repositories/backtest-capabilities.repository'
 import { BacktestMarketDataRepository } from './repositories/backtest-market-data.repository'
+import { RiskEvaluatorService } from './risk/risk-evaluator.service'
 import { BacktestMarketDataService } from './services/backtest-market-data.service'
+import { BacktestSnapshotLoaderService } from './services/backtest-snapshot-loader.service'
 import { BacktestSymbolSupportService } from './services/backtest-symbol-support.service'
 
 jest.mock('@/prisma/prisma.module', () => ({
@@ -12,6 +15,9 @@ jest.mock('@/prisma/prisma.module', () => ({
 
 jest.mock('@/modules/market-data/market-data.module', () => ({
   MarketDataModule: class MarketDataModule {},
+}))
+jest.mock('./backtesting.controller', () => ({
+  BacktestingController: class BacktestingController {},
 }))
 
 describe('backtestingModule', () => {
@@ -25,9 +31,14 @@ describe('backtestingModule', () => {
       .useValue({ findSymbolsByCodes: jest.fn(), findBars: jest.fn(), aggregateCoverage: jest.fn() })
       .overrideProvider(BacktestMarketDataService)
       .useValue({ resolveCoverage: jest.fn(), loadBars: jest.fn() })
+      .overrideProvider(PublishedStrategySnapshotsRepository)
+      .useValue({ findById: jest.fn() })
+      .overrideProvider(BacktestSnapshotLoaderService)
+      .useValue({ load: jest.fn() })
       .overrideProvider(BacktestSymbolSupportService)
       .useValue({ checkSymbolSupport: jest.fn() })
       .compile()
     expect(mod).toBeDefined()
+    expect(mod.get(RiskEvaluatorService)).toBeDefined()
   })
 })

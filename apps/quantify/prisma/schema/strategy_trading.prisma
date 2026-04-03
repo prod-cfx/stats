@@ -265,7 +265,7 @@ model StrategyInstance {
   createdAt          DateTime               @default(now()) @map("created_at")
   updatedAt          DateTime               @default(now()) @updatedAt @map("updated_at")
 
-  strategyTemplate StrategyTemplate           @relation(fields: [strategyTemplateId], references: [id], onDelete: Cascade)
+  strategyTemplate StrategyTemplate             @relation(fields: [strategyTemplateId], references: [id], onDelete: Cascade)
   signals          TradingSignal[]
   signalState      StrategySignalState?
   safetyState      StrategyInstanceSafetyState?
@@ -282,18 +282,18 @@ model StrategyInstance {
 }
 
 model DeployRequest {
-  id               String   @id @default(cuid())
-  userId           String   @map("user_id")
-  deployRequestId  String   @map("deploy_request_id")
-  payloadHash      String   @map("payload_hash")
-  strategyInstanceId String? @map("strategy_instance_id")
-  status           String
-  errorCode        String?  @map("error_code")
-  errorMessage     String?  @map("error_message")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+  id                 String   @id @default(cuid())
+  userId             String   @map("user_id")
+  deployRequestId    String   @map("deploy_request_id")
+  payloadHash        String   @map("payload_hash")
+  strategyInstanceId String?  @map("strategy_instance_id")
+  status             String
+  errorCode          String?  @map("error_code")
+  errorMessage       String?  @map("error_message")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at")
 
-  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   strategyInstance StrategyInstance? @relation(fields: [strategyInstanceId], references: [id], onDelete: SetNull)
 
   @@unique([userId, deployRequestId], map: "uniq_deploy_request_user_request_id")
@@ -324,13 +324,13 @@ model StrategyInstanceRiskProfile {
 }
 
 model StrategyInstanceSafetyState {
-  strategyInstanceId          String    @id @map("strategy_instance_id")
-  consecutiveExecutionFailures Int      @default(0) @map("consecutive_execution_failures")
-  autoStoppedAt               DateTime? @map("auto_stopped_at")
-  autoStopReason              String?   @map("auto_stop_reason")
-  lastFailureAt               DateTime? @map("last_failure_at")
-  createdAt                   DateTime  @default(now()) @map("created_at")
-  updatedAt                   DateTime  @default(now()) @updatedAt @map("updated_at")
+  strategyInstanceId           String    @id @map("strategy_instance_id")
+  consecutiveExecutionFailures Int       @default(0) @map("consecutive_execution_failures")
+  autoStoppedAt                DateTime? @map("auto_stopped_at")
+  autoStopReason               String?   @map("auto_stop_reason")
+  lastFailureAt                DateTime? @map("last_failure_at")
+  createdAt                    DateTime  @default(now()) @map("created_at")
+  updatedAt                    DateTime  @default(now()) @updatedAt @map("updated_at")
 
   strategyInstance StrategyInstance @relation(fields: [strategyInstanceId], references: [id], onDelete: Cascade)
 

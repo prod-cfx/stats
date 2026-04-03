@@ -23,6 +23,10 @@ interface BacktestJobRecord {
   id: string
   ownerUserId: string
   status: BacktestJobStatus
+  snapshotId?: string
+  snapshotHash?: string
+  scriptHash?: string
+  specHash?: string
   createdAt: string
   startedAt?: string
   finishedAt?: string
@@ -39,6 +43,12 @@ interface BacktestJobRecord {
     allowPartial: boolean
     isPartial: boolean
     strategyId: string
+    strategyInstanceId?: string
+    strategyTemplateId?: string
+    snapshotId?: string
+    snapshotHash?: string
+    scriptHash?: string
+    specHash?: string
   }
   result?: BacktestReport
 }
@@ -67,6 +77,10 @@ export class BacktestJobsService {
           id,
           ownerUserId,
           status: 'queued',
+          snapshotId: inputSummary.snapshotId ?? null,
+          snapshotHash: inputSummary.snapshotHash ?? null,
+          scriptHash: inputSummary.scriptHash ?? null,
+          specHash: inputSummary.specHash ?? null,
           inputSummary: inputSummary as Prisma.InputJsonValue,
         },
       })
@@ -311,7 +325,27 @@ export class BacktestJobsService {
       allowPartial: input.allowPartial === true,
       isPartial: false,
       strategyId: input.strategy.id,
+      strategyInstanceId: this.readStrategyIdentity(input.strategy, 'strategyInstanceId'),
+      strategyTemplateId: this.readStrategyIdentity(input.strategy, 'strategyTemplateId'),
+      snapshotId: this.readStrategyMetadata(input.strategy, 'snapshotId'),
+      snapshotHash: this.readStrategyMetadata(input.strategy, 'snapshotHash'),
+      scriptHash: this.readStrategyMetadata(input.strategy, 'scriptHash'),
+      specHash: this.readStrategyMetadata(input.strategy, 'specHash'),
     }
+  }
+
+  private readStrategyIdentity(strategy: BacktestRunInput['strategy'], key: 'strategyInstanceId' | 'strategyTemplateId'): string | undefined {
+    const value = strategy[key]
+    if (typeof value !== 'string') return undefined
+    const normalized = value.trim()
+    return normalized || undefined
+  }
+
+  private readStrategyMetadata(strategy: BacktestRunInput['strategy'], key: 'snapshotId' | 'snapshotHash' | 'scriptHash' | 'specHash'): string | undefined {
+    const value = (strategy as Record<string, unknown>)[key]
+    if (typeof value !== 'string') return undefined
+    const normalized = value.trim()
+    return normalized || undefined
   }
 
   private normalizePersistedStatus(status: string, id: string): BacktestJobStatus {

@@ -16,7 +16,7 @@ function buildValidPayload() {
     strategy: {
       id: 's1',
       protocolVersion: 'v1',
-      scriptCode: 'const strategy = { protocolVersion: "v1", onBar: () => ({ action: "NOOP" }) }\nstrategy',
+      publishedSnapshotId: 'snapshot-1',
       params: {},
     },
     dataRange: { fromTs: 1, toTs: 2 },
@@ -28,7 +28,12 @@ function buildValidPayload() {
     initialCash: number
     leverage: number
     execution: { slippageBps: number; feeBps: number; priceSource: string }
-    strategy: { id: string; protocolVersion: string; scriptCode: string; params: Record<string, unknown> }
+    strategy: {
+      id: string
+      protocolVersion: string
+      publishedSnapshotId?: string
+      params: Record<string, unknown>
+    }
     dataRange: { fromTs: number; toTs: number }
     bars?: unknown[]
     allowPartial?: boolean
@@ -66,6 +71,24 @@ describe('runBacktestDto', () => {
     const errors = await validate(dto)
 
     expect(errors).toHaveLength(0)
+  })
+
+  it('accepts snapshot-backed payload', async () => {
+    const payload = buildValidPayload()
+    const dto = plainToInstance(RunBacktestDto, payload)
+    const errors = await validate(dto)
+
+    expect(errors).toHaveLength(0)
+  })
+
+  it('rejects strategy payload when publishedSnapshotId is missing', async () => {
+    const payload = buildValidPayload()
+    delete payload.strategy.publishedSnapshotId
+
+    const dto = plainToInstance(RunBacktestDto, payload)
+    const errors = await validate(dto)
+
+    expect(errors.length).toBeGreaterThan(0)
   })
 
   it('accepts payload without bars', async () => {

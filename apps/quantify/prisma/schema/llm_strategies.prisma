@@ -29,7 +29,9 @@ enum LlmCodegenSessionStatus {
   VALIDATING_STATIC
   VALIDATING_RUNTIME
   VALIDATING_OUTPUT
+  VALIDATING_CONSISTENCY
   PUBLISHED
+  CONSISTENCY_FAILED
   REJECTED
 }
 
@@ -116,19 +118,20 @@ model LlmStrategyRun {
 }
 
 model LlmStrategyCodegenSession {
-  id              String                  @id @default(cuid())
-  userId          String                  @map("user_id")
-  strategyInstanceId String?              @map("strategy_instance_id")
-  status          LlmCodegenSessionStatus @default(DRAFTING)
-  checklist       Json?
-  constraintPack  Json?                   @map("constraint_pack")
-  latestDraftCode String?                 @map("latest_draft_code") @db.Text
-  latestSpecDesc  Json?                   @map("latest_spec_desc")
-  rejectReason    String?                 @map("reject_reason")
-  createdAt       DateTime                @default(now()) @map("created_at")
-  updatedAt       DateTime                @default(now()) @updatedAt @map("updated_at")
+  id                 String                  @id @default(cuid())
+  userId             String                  @map("user_id")
+  strategyInstanceId String?                 @map("strategy_instance_id")
+  status             LlmCodegenSessionStatus @default(DRAFTING)
+  checklist          Json?
+  constraintPack     Json?                   @map("constraint_pack")
+  latestDraftCode    String?                 @map("latest_draft_code") @db.Text
+  latestSpecDesc     Json?                   @map("latest_spec_desc")
+  rejectReason       String?                 @map("reject_reason")
+  createdAt          DateTime                @default(now()) @map("created_at")
+  updatedAt          DateTime                @default(now()) @updatedAt @map("updated_at")
 
-  versions LlmStrategyCodeVersion[]
+  versions           LlmStrategyCodeVersion[]
+  publishedSnapshots PublishedStrategySnapshot[]
 
   @@index([userId, status, createdAt], map: "idx_llm_codegen_sessions_user_status_created_at")
   @@index([status, createdAt], map: "idx_llm_codegen_sessions_status_created_at")
@@ -152,4 +155,28 @@ model LlmStrategyCodeVersion {
   @@index([sessionId, createdAt], map: "idx_llm_code_versions_session_created_at")
   @@index([llmStrategyId, createdAt], map: "idx_llm_code_versions_strategy_created_at")
   @@map("llm_strategy_code_versions")
+}
+
+model PublishedStrategySnapshot {
+  id                 String   @id @default(cuid())
+  sessionId          String   @map("session_id")
+  strategyTemplateId String?  @map("strategy_template_id")
+  strategyInstanceId String?  @map("strategy_instance_id")
+  snapshotHash       String   @map("snapshot_hash")
+  scriptHash         String   @map("script_hash")
+  specHash           String   @map("spec_hash")
+  scriptSnapshot     String   @map("script_snapshot") @db.Text
+  specSnapshot       Json     @map("spec_snapshot")
+  consistencyReport  Json     @map("consistency_report")
+  paramsSnapshot     Json?    @map("params_snapshot")
+  executionPolicy    Json?    @map("execution_policy")
+  dataRequirements   Json?    @map("data_requirements")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  session LlmStrategyCodegenSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt], map: "idx_published_strategy_snapshots_session_created_at")
+  @@index([strategyInstanceId, createdAt], map: "idx_published_strategy_snapshots_instance_created_at")
+  @@index([snapshotHash], map: "idx_published_strategy_snapshots_snapshot_hash")
+  @@map("published_strategy_snapshots")
 }

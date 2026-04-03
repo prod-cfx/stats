@@ -25,7 +25,7 @@ function createInput(overrides: Partial<BuildBacktestPayloadInput> = {}): BuildB
     },
     strategy: {
       id: 'strategy-1',
-      scriptCode: 'return { type: "NOOP" }',
+      publishedSnapshotId: 'snapshot-1',
       params: { buyDropPct: 1, sellRisePct: 2 },
     },
     range: {
@@ -118,13 +118,13 @@ describe('backtest-payload-builder', () => {
     })
   })
 
-  it('includes strategy protocolVersion=v1, scriptCode and params', () => {
+  it('includes strategy protocolVersion=v1, publishedSnapshotId and params', () => {
     const payload = buildBacktestPayload(createInput(), now)
 
     expect(payload.strategy).toEqual({
       id: 'strategy-1',
       protocolVersion: 'v1',
-      scriptCode: 'return { type: "NOOP" }',
+      publishedSnapshotId: 'snapshot-1',
       params: { buyDropPct: 1, sellRisePct: 2 },
     })
   })
@@ -143,16 +143,16 @@ describe('backtest-payload-builder', () => {
     expect('allowPartial' in withoutPartial).toBe(false)
   })
 
-  it('throws when scriptCode is missing', () => {
+  it('throws when published snapshot id is missing', () => {
     expectBuildErrorCode(() => {
       buildBacktestPayload(createInput({
         strategy: {
           id: 'strategy-1',
-          scriptCode: '   ',
+          publishedSnapshotId: '   ',
           params: {},
         },
       }), now)
-    }, 'missing_script_code')
+    }, 'missing_published_snapshot')
   })
 
   it('keeps strategy symbol even when capability symbols are narrower', () => {

@@ -146,7 +146,7 @@ export class CodegenSessionsRepository {
     const result = await this.txHost.tx.llmStrategyCodegenSession.updateMany({
       where: {
         id,
-        status: { in: ['VALIDATING_STATIC', 'VALIDATING_RUNTIME', 'VALIDATING_OUTPUT'] },
+        status: { in: ['VALIDATING_STATIC', 'VALIDATING_RUNTIME', 'VALIDATING_OUTPUT', 'VALIDATING_CONSISTENCY'] },
       },
       data,
     })
@@ -201,10 +201,9 @@ export class CodegenSessionsRepository {
     specDesc: Record<string, unknown>
     params: Record<string, unknown>
     metadata?: Record<string, unknown>
-  }): Promise<{ strategyInstanceId: string }> {
+  }): Promise<{ strategyTemplateId: string, strategyInstanceId: string }> {
     if (this.strategyInstanceColumnMissing) {
-      const created = await this.createDraftStrategyInstanceFromPublishedSession(input)
-      return { strategyInstanceId: created.strategyInstanceId }
+      return this.createDraftStrategyInstanceFromPublishedSession(input)
     }
 
     return this.runWithTransactionStartRetry(async () => {
@@ -217,7 +216,10 @@ export class CodegenSessionsRepository {
           select: { strategyInstanceId: true },
         })
         if (existing?.strategyInstanceId) {
-          return { strategyInstanceId: existing.strategyInstanceId }
+          return {
+            strategyTemplateId: '',
+            strategyInstanceId: existing.strategyInstanceId,
+          }
         }
 
         const created = await this.createDraftStrategyInstanceFromPublishedSessionWithTx(tx, input)
@@ -225,12 +227,11 @@ export class CodegenSessionsRepository {
           where: { id: input.sessionId },
           data: { strategyInstanceId: created.strategyInstanceId },
         })
-        return { strategyInstanceId: created.strategyInstanceId }
+        return created
       }).catch(async error => {
         if (!this.isMissingStrategyInstanceColumnError(error)) throw error
         this.strategyInstanceColumnMissing = true
-        const created = await this.createDraftStrategyInstanceFromPublishedSession(input)
-        return { strategyInstanceId: created.strategyInstanceId }
+        return this.createDraftStrategyInstanceFromPublishedSession(input)
       })
     })
   }

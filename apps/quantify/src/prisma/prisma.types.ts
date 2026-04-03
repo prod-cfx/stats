@@ -17,6 +17,7 @@ export type {
   PnlLedger,
   Position,
   PositionSyncLog,
+  PublishedStrategySnapshot,
   StrategyInstance,
   StrategyInstanceRiskProfile,
   StrategyInstanceSafetyState,

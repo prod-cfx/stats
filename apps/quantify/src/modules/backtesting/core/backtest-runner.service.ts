@@ -1,5 +1,13 @@
 import type { MultiLegStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
-import type { BacktestReport, BacktestRunInput, Bar, SignalIntent, StrategyContext } from '../types/backtesting.types'
+import type {
+  BacktestExecutionPolicy,
+  BacktestReasonSource,
+  BacktestReport,
+  BacktestRunInput,
+  Bar,
+  SignalIntent,
+  StrategyContext,
+} from '../types/backtesting.types'
 import { ErrorCode } from '@ai/shared'
 import { buildMultiLegStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import { Injectable, HttpStatus } from '@nestjs/common'
@@ -11,6 +19,8 @@ import { TheoreticalExecutionModel } from '../execution/theoretical-execution.mo
 import { PortfolioLedgerServiceFactory } from '../portfolio/portfolio-ledger.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestReporterService } from '../report/backtest-reporter.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { RiskEvaluatorService } from '../risk/risk-evaluator.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { StateEngineService } from '../state/state-engine.service'
 
@@ -28,6 +38,12 @@ interface HistorySeries {
   scriptBars: ScriptRuntimeBar[]
 }
 
+interface PendingOrder {
+  deltaQty: number
+  reason?: string
+  reasonSource: BacktestReasonSource
+}
+
 @Injectable()
 export class BacktestRunnerService {
   constructor(
@@ -35,6 +51,7 @@ export class BacktestRunnerService {
     private readonly ledgerFactory: PortfolioLedgerServiceFactory,
     private readonly reporterService: BacktestReporterService,
     private readonly stateEngine: StateEngineService,
+    private readonly riskEvaluator: RiskEvaluatorService,
   ) {}
 
   async run(input: BacktestRunInput): Promise<BacktestReport> {
@@ -62,6 +79,8 @@ export class BacktestRunnerService {
 
     let stateCursor = 0
     const historyBarsBySymbolTimeframe = new Map<string, HistorySeries>()
+    const pendingOrdersBySymbol = new Map<string, PendingOrder>()
+    const executionPolicy = this.resolveExecutionPolicy(input.strategy.executionPolicy)
 
     for (const bar of baseBars) {
       while (stateCursor < stateBars.length && stateBars[stateCursor].closeTime <= bar.closeTime) {
@@ -85,6 +104,22 @@ export class BacktestRunnerService {
         this.appendHistoryBar(historyBarsBySymbolTimeframe, bar)
       }
 
+      const pending = pendingOrdersBySymbol.get(bar.symbol)
+      if (pending && pending.deltaQty !== 0) {
+        pendingOrdersBySymbol.delete(bar.symbol)
+        this.applyDeltaOrder({
+          input,
+          bar,
+          ledger,
+          reporter,
+          deltaQty: pending.deltaQty,
+          reason: pending.reason,
+          reasonSource: pending.reasonSource,
+          forcedPriceSource: 'open',
+        })
+      }
+
+      ledger.markToMarket({ [bar.symbol]: bar.close })
       const snapshot = ledger.snapshot()
       const position = ledger.getPosition(bar.symbol)
       const htfState = this.stateEngine.getLatestByTimeframes(bar.symbol, input.stateTimeframes)
@@ -117,47 +152,57 @@ export class BacktestRunnerService {
         requestedDelta: normalized,
         equity: snapshot.equity,
       })
-      const intentReason = this.extractIntentReason(intent)
-
-      if (adjustedDelta === 0) {
-        ledger.markToMarket({ [bar.symbol]: bar.close })
-        reporter.pushEquity(bar.closeTime, ledger.snapshot().equity)
-        continue
+      const strategyReason = this.extractIntentReason(intent)
+      const strategyOrder: PendingOrder = {
+        deltaQty: adjustedDelta,
+        reason: strategyReason,
+        reasonSource: 'strategy',
       }
 
-      const side: 'BUY' | 'SELL' = adjustedDelta > 0 ? 'BUY' : 'SELL'
-      const fill = this.executionModel.fill(bar, side, Math.abs(adjustedDelta), input.execution, intentReason)
-      const events = ledger.applyFill(fill)
-      events.forEach((event) => {
-        if (event.type === 'OPEN') {
-          reporter.onTradeOpen({
-            symbol: event.symbol,
-            ts: event.ts,
-            price: event.price,
-            side: event.side,
-            qty: event.qty,
-            fee: event.fee,
-            reason: intentReason,
-          })
-          return
-        }
-
-        reporter.onTradeClose({
-          symbol: event.symbol,
-          ts: event.ts,
-          price: event.price,
-          side: event.side,
-          qty: event.qty,
-          fee: event.fee,
-          pnl: event.pnl ?? 0,
-          reason: intentReason,
-        })
+      const riskDecision = this.riskEvaluator.evaluate({
+        symbol: bar.symbol,
+        bar,
+        historyBars: this.getHistoryBars(historyBarsBySymbolTimeframe, bar.symbol, input.baseTimeframe),
+        position,
+        riskRules: input.strategy.riskRules,
       })
+
+      const riskOrder: PendingOrder | undefined = riskDecision
+        ? {
+          deltaQty: riskDecision.targetQty - position.qty,
+          reason: riskDecision.reason,
+          reasonSource: riskDecision.source,
+        }
+        : undefined
+      const selectedOrder = riskOrder && riskOrder.deltaQty !== 0
+        ? riskOrder
+        : strategyOrder
+
+      if (selectedOrder.deltaQty !== 0) {
+        if (executionPolicy.fillTiming === 'NEXT_BAR_OPEN') {
+          pendingOrdersBySymbol.set(bar.symbol, selectedOrder)
+        } else {
+          this.applyDeltaOrder({
+            input,
+            bar,
+            ledger,
+            reporter,
+            deltaQty: selectedOrder.deltaQty,
+            reason: selectedOrder.reason,
+            reasonSource: selectedOrder.reasonSource,
+          })
+        }
+      }
 
       ledger.markToMarket({ [bar.symbol]: bar.close })
       reporter.pushEquity(bar.closeTime, ledger.snapshot().equity)
     }
 
+    const pendingSignals = this.finalizePendingSignals({
+      pendingOrdersBySymbol,
+      executionPolicy,
+      baseBars,
+    })
     const report = reporter.toReport(input.initialCash)
     const snapshot = ledger.snapshot()
     const openPositions = Object.values(snapshot.positions).map(pos => ({
@@ -168,11 +213,113 @@ export class BacktestRunnerService {
     }))
 
     this.stateEngine.reset()
+    this.riskEvaluator.reset()
 
     return {
       ...report,
       openPositions,
+      pendingSignals,
     }
+  }
+
+  private applyDeltaOrder(input: {
+    input: BacktestRunInput
+    bar: Bar
+    ledger: ReturnType<PortfolioLedgerServiceFactory['create']>
+    reporter: ReturnType<BacktestReporterService['create']>
+    deltaQty: number
+    reason?: string
+    reasonSource: BacktestReasonSource
+    forcedPriceSource?: BacktestRunInput['execution']['priceSource']
+  }) {
+    if (input.deltaQty === 0) return
+
+    const side: 'BUY' | 'SELL' = input.deltaQty > 0 ? 'BUY' : 'SELL'
+    const fill = this.executionModel.fill(
+      input.bar,
+      side,
+      Math.abs(input.deltaQty),
+      {
+        ...input.input.execution,
+        priceSource: input.forcedPriceSource ?? input.input.execution.priceSource,
+      },
+      input.reason,
+    )
+    const events = input.ledger.applyFill(fill)
+
+    events.forEach((event) => {
+      if (event.type === 'OPEN') {
+        input.reporter.onTradeOpen({
+          symbol: event.symbol,
+          ts: event.ts,
+          price: event.price,
+          side: event.side,
+          qty: event.qty,
+          fee: event.fee,
+          reason: input.reason,
+          reasonSource: input.reasonSource,
+        })
+        return
+      }
+
+      input.reporter.onTradeClose({
+        symbol: event.symbol,
+        ts: event.ts,
+        price: event.price,
+        side: event.side,
+        qty: event.qty,
+        fee: event.fee,
+        pnl: event.pnl ?? 0,
+        reason: input.reason,
+        reasonSource: input.reasonSource,
+      })
+    })
+  }
+
+  private resolveExecutionPolicy(policy?: BacktestExecutionPolicy): Required<Pick<BacktestExecutionPolicy, 'signalTiming' | 'fillTiming' | 'noNextBarHandling'>> {
+    return {
+      signalTiming: policy?.signalTiming ?? 'BAR_CLOSE',
+      fillTiming: policy?.fillTiming ?? 'NEXT_BAR_OPEN',
+      noNextBarHandling: policy?.noNextBarHandling ?? 'KEEP_PENDING',
+    }
+  }
+
+  private getHistoryBars(
+    historyBarsBySymbolTimeframe: Map<string, HistorySeries>,
+    symbol: string,
+    timeframe: string,
+  ): Bar[] {
+    return historyBarsBySymbolTimeframe.get(`${symbol}:${timeframe}`)?.rawBars ?? []
+  }
+
+  private finalizePendingSignals(input: {
+    pendingOrdersBySymbol: Map<string, PendingOrder>
+    executionPolicy: Required<Pick<BacktestExecutionPolicy, 'signalTiming' | 'fillTiming' | 'noNextBarHandling'>>
+    baseBars: Bar[]
+  }): BacktestReport['pendingSignals'] {
+    if (input.pendingOrdersBySymbol.size === 0) {
+      return undefined
+    }
+
+    if (input.executionPolicy.noNextBarHandling === 'DROP_SIGNAL') {
+      input.pendingOrdersBySymbol.clear()
+      return undefined
+    }
+
+    const lastBarBySymbol = new Map<string, Bar>()
+    input.baseBars.forEach((bar) => {
+      lastBarBySymbol.set(bar.symbol, bar)
+    })
+
+    return Array.from(input.pendingOrdersBySymbol.entries())
+      .filter(([, order]) => order.deltaQty !== 0)
+      .map(([symbol, order]) => ({
+        symbol,
+        ts: lastBarBySymbol.get(symbol)?.closeTime ?? 0,
+        deltaQty: order.deltaQty,
+        reason: order.reason,
+        reasonSource: order.reasonSource,
+      }))
   }
 
   private normalizeIntent(

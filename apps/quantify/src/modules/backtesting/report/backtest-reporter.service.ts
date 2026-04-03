@@ -1,4 +1,4 @@
-import type { BacktestReport, TradeMarker, TradeRecord } from '../types/backtesting.types'
+import type { BacktestReasonSource, BacktestReport, TradeMarker, TradeRecord } from '../types/backtesting.types'
 import { Injectable } from '@nestjs/common'
 
 interface OpenPayload {
@@ -9,6 +9,7 @@ interface OpenPayload {
   qty: number
   fee: number
   reason?: string
+  reasonSource?: BacktestReasonSource
 }
 
 interface ClosePayload {
@@ -20,6 +21,7 @@ interface ClosePayload {
   fee: number
   pnl: number
   reason?: string
+  reasonSource?: BacktestReasonSource
 }
 
 export class BacktestReporter {
@@ -48,6 +50,7 @@ export class BacktestReporter {
       pnl: 0,
       returnPct: 0,
       reasonOpen: payload.reason,
+      reasonOpenSource: payload.reasonSource,
     }
 
     this.openTrades.set(payload.symbol, draft)
@@ -72,6 +75,9 @@ export class BacktestReporter {
       pnl: payload.pnl - current.fee - payload.fee,
       returnPct: this.computeReturnPct(current.side, current.entryPrice, payload.price),
       reasonClose: payload.reason,
+      reasonCloseSource: payload.reasonSource,
+      exitReason: payload.reason,
+      exitSource: payload.reasonSource,
     }
 
     this.trades.push(closed)

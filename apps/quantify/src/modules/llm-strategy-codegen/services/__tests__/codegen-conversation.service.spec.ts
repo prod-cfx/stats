@@ -1,15 +1,21 @@
 import type { ContinueCodegenSessionDto } from '../../dto/continue-codegen-session.dto'
 import type { StartCodegenSessionDto } from '../../dto/start-codegen-session.dto'
 import type { CodegenSessionsRepository } from '../../repositories/codegen-sessions.repository'
+import type { PublishedStrategySnapshotsRepository } from '../../repositories/published-strategy-snapshots.repository'
 import type { RecommendationIndexService } from '../recommendation-index.service'
 import type { AiService } from '@/modules/ai/ai.service'
 import { restoreProcessEnv, setProcessEnvValue, snapshotProcessEnv } from '@/common/env/env.accessor'
+import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CodegenConversationService } from '../codegen-conversation.service'
 import { RuntimeGuardrailService } from '../runtime-guardrail.service'
+import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
 import { SpecDescBuilderService } from '../spec-desc-builder.service'
 import { StaticGuardrailService } from '../static-guardrail.service'
+import { StrategyConsistencyService } from '../strategy-consistency.service'
 
 describe('codegenConversationService (llm orchestrated flow)', () => {
+  jest.setTimeout(120_000)
+
   const envSnapshot = snapshotProcessEnv([
     'LLM_CODEGEN_STRICT_ENABLED',
     'LLM_CODEGEN_STRICT_FALLBACK',
@@ -25,6 +31,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     findSessionStrategyInstanceId: jest.fn(),
     bindStrategyInstanceIfEmpty: jest.fn(),
     createVersion: jest.fn(),
+    create: jest.fn(),
+    findLatestBySessionId: jest.fn(),
     createDraftStrategyInstanceFromPublishedSession: jest.fn().mockResolvedValue({
       strategyTemplateId: 'template-1',
       strategyInstanceId: 'instance-1',
@@ -44,15 +52,31 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   const service = new CodegenConversationService(
     mockAi as unknown as AiService,
     mockRepo as unknown as CodegenSessionsRepository,
+    mockRepo as unknown as PublishedStrategySnapshotsRepository,
     new StaticGuardrailService(),
     new RuntimeGuardrailService(),
     new SpecDescBuilderService(),
+    new CanonicalSpecBuilderService(),
+    new StrategyConsistencyService(new ScriptProfileExtractorService()),
     mockRecommendation as unknown as RecommendationIndexService,
   )
-  const flushAsync = async (ticks = 50): Promise<void> => {
-    for (let i = 0; i < ticks; i++) {
-      await new Promise(resolve => setTimeout(resolve, 0))
+  const waitForTerminalStatus = async (
+    sessionId: string,
+    timeoutMs = 20_000,
+  ): Promise<void> => {
+    const startedAt = Date.now()
+    while (Date.now() - startedAt <= timeoutMs) {
+      const hasTerminal = mockRepo.updateSession.mock.calls.some((call) => {
+        const currentId = call[0] as string
+        const payload = call[1] as { status?: string }
+        return currentId === sessionId
+          && (payload.status === 'PUBLISHED' || payload.status === 'CONSISTENCY_FAILED' || payload.status === 'REJECTED')
+      })
+      if (hasTerminal) return
+      await new Promise(resolve => setTimeout(resolve, 20))
     }
+
+    throw new Error(`timed out waiting for terminal status: ${sessionId}`)
   }
 
   beforeEach(() => {
@@ -61,6 +85,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.tryRequeueFromProcessing.mockResolvedValue(false)
     mockRepo.findSessionStrategyInstanceId.mockResolvedValue(null)
     mockRepo.bindStrategyInstanceIfEmpty.mockResolvedValue(true)
+    mockRepo.create.mockResolvedValue({
+      id: 'snapshot-1',
+      consistencyReport: {},
+    })
+    mockRepo.findLatestBySessionId.mockResolvedValue(null)
     mockRepo.createDraftStrategyInstanceFromPublishedSession.mockResolvedValue({
       strategyTemplateId: 'template-1',
       strategyInstanceId: 'instance-1',
@@ -191,6 +220,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('returns strategyInstanceId in session snapshot response', async () => {
+    mockRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-session-1',
+      consistencyReport: {
+        status: 'PASSED',
+      },
+    })
     mockRepo.findById.mockResolvedValue({
       id: 's-snapshot',
       userId: 'u1',
@@ -198,7 +233,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       checklist: {},
       constraintPack: {},
       latestDraftCode: 'return null',
-      latestSpecDesc: {},
+      latestSpecDesc: {
+        publishedSnapshotId: 'snapshot-session-old',
+        consistencyReport: { status: 'FAILED' },
+      },
       strategyInstanceId: 'instance-snapshot-1',
       rejectReason: null,
     })
@@ -207,6 +245,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(result.status).toBe('PUBLISHED')
     expect(result.strategyInstanceId).toBe('instance-snapshot-1')
+    expect(result.publishedSnapshotId).toBe('snapshot-session-1')
+    expect(result.consistencyReport).toEqual({ status: 'PASSED' })
   })
 
   it('keeps drafting and returns unrelated guidance when planner marks message unrelated', async () => {
@@ -288,7 +328,21 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         }),
       })
       .mockResolvedValueOnce({
-        content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 80, entryPrice: 62000, stopLoss: 60000, takeProfit: 65000, reasoning: "趋势突破", positionSizeRatio: 0.15 }',
+        content: `const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const bars = Array.isArray(ctx.bars) ? ctx.bars : []
+    if (bars.length < 20) return { action: 'NOOP', reason: 'insufficient bars' }
+    const closes = bars.map(item => item?.close).filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+    if (closes.length < 20) return { action: 'NOOP', reason: 'insufficient closes' }
+    const fast = ctx.helpers?.ta?.sma(closes, 5)
+    const slow = ctx.helpers?.ta?.sma(closes, 20)
+    if (typeof fast !== 'number' || typeof slow !== 'number') return { action: 'NOOP', reason: 'sma unavailable' }
+    if (fast > slow) return { action: 'OPEN_LONG', size: { mode: 'RATIO', value: 0.1 }, confidence: 80, reason: 'golden cross' }
+    return { action: 'NOOP', reason: 'wait' }
+  },
+}
+strategy`,
       })
     mockRepo.createVersion.mockResolvedValue({ id: 'v1' })
 
@@ -300,7 +354,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const result = await service.continueSession('s5', dto)
 
     expect(result.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s5')
 
     expect(mockRepo.createVersion).toHaveBeenCalled()
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s5', expect.objectContaining({
@@ -308,7 +362,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
-  it('rejects when script output cannot satisfy signal payload schema', async () => {
+  it('marks consistency failed when script output cannot satisfy signal payload schema and fallback publish is disabled', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's6',
       userId: 'u1',
@@ -339,12 +393,16 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     expect(result.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s6')
 
-    // fallback script passes validation, so pipeline ends with PUBLISHED
-    expect(mockRepo.updateSession).toHaveBeenCalledWith('s6', expect.objectContaining({
-      status: 'PUBLISHED',
-    }))
+    const hasRejectedOrConsistencyFailed = mockRepo.updateSession.mock.calls.some(call =>
+      call[0] === 's6' && ['CONSISTENCY_FAILED', 'REJECTED'].includes((call[1] as { status?: string }).status ?? ''),
+    )
+    const hasPublished = mockRepo.updateSession.mock.calls.some(call =>
+      call[0] === 's6' && (call[1] as { status?: string }).status === 'PUBLISHED',
+    )
+    expect(hasRejectedOrConsistencyFailed).toBe(true)
+    expect(hasPublished).toBe(false)
   })
 
   it('generates directly when confirmGenerate is true and checklist is complete even if session is drafting', async () => {
@@ -378,7 +436,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     expect(result.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s7')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s7', expect.objectContaining({
       status: 'PUBLISHED',
@@ -413,7 +471,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     expect(result.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s8')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s8', expect.objectContaining({
       status: 'REJECTED',
@@ -455,7 +513,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     expect(result.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s8-publish-fail')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s8-publish-fail', expect.objectContaining({
       status: 'REJECTED',
@@ -545,7 +603,7 @@ strategy
     })
 
     expect(result.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s9')
 
     expect(mockAi.chat).toHaveBeenCalledTimes(3)
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s9', expect.objectContaining({
@@ -555,7 +613,7 @@ strategy
     expect(repairPrompt).toContain('自动修复')
   }, 15_000)
 
-  it('returns rejected with retry suffix after exhausting auto-repair retries', async () => {
+  it('returns consistency failed after exhausting auto-repair retries and blocks fallback publish', async () => {
     const brokenScript = `
 const strategy: StrategyAdapterV1 = {
   protocolVersion: 'v1',
@@ -594,12 +652,100 @@ const strategy: StrategyAdapterV1 = {
     })
 
     expect(result.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s10')
 
-    // fallback script passes validation after all retries, so pipeline ends with PUBLISHED
-    expect(mockRepo.updateSession).toHaveBeenCalledWith('s10', expect.objectContaining({
-      status: 'PUBLISHED',
-    }))
+    const hasRejectedOrConsistencyFailed = mockRepo.updateSession.mock.calls.some(call =>
+      call[0] === 's10' && ['CONSISTENCY_FAILED', 'REJECTED'].includes((call[1] as { status?: string }).status ?? ''),
+    )
+    const hasPublished = mockRepo.updateSession.mock.calls.some(call =>
+      call[0] === 's10' && (call[1] as { status?: string }).status === 'PUBLISHED',
+    )
+    expect(hasRejectedOrConsistencyFailed).toBe(true)
+    expect(hasPublished).toBe(false)
+  }, 15_000)
+
+  it('marks session as consistency failed when validated script does not match checklist semantics', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-consistency',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['K线收盘后确认突破布林带上轨时做空', 'K线收盘后确认突破布林带下轨时做多'],
+        exitRules: ['价格回到布林带中轨(MA20)时平仓'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'spot',
+          positionPct: 10,
+          stopLossPct: 5,
+          earlyStop: '价格连续3根K线在轨外时考虑提前止损或减仓',
+        },
+      },
+      constraintPack: {},
+    })
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已确认，可以生成。',
+        }),
+      })
+      .mockResolvedValueOnce({
+        content: `const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const bars = Array.isArray(ctx.bars) ? ctx.bars : []
+    if (bars.length < 20) return { action: 'NOOP', reason: 'fallback: insufficient bars' }
+    const closes = bars.map(item => item?.close).filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+    const fast = ctx.helpers?.ta?.sma(closes, 5)
+    const slow = ctx.helpers?.ta?.sma(closes, 20)
+    const size: StrategyDecisionV1['size'] = { mode: 'RATIO', value: 0.1 }
+    if (fast > slow) return { action: 'OPEN_LONG', size, confidence: 55, reason: 'fallback: fast SMA above slow SMA' }
+    if (fast < slow) return { action: 'OPEN_SHORT', size, confidence: 55, reason: 'fallback: fast SMA below slow SMA' }
+    return { action: 'NOOP', reason: 'fallback: neutral trend' }
+  },
+}
+strategy`,
+      })
+      .mockResolvedValueOnce({
+        content: `const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const bars = Array.isArray(ctx.bars) ? ctx.bars : []
+    if (bars.length < 20) return { action: 'NOOP', reason: 'fallback: insufficient bars' }
+    const closes = bars.map(item => item?.close).filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+    const fast = ctx.helpers?.ta?.sma(closes, 5)
+    const slow = ctx.helpers?.ta?.sma(closes, 20)
+    const size: StrategyDecisionV1['size'] = { mode: 'RATIO', value: 0.1 }
+    if (fast > slow) return { action: 'OPEN_LONG', size, confidence: 55, reason: 'fallback: fast SMA above slow SMA' }
+    if (fast < slow) return { action: 'OPEN_SHORT', size, confidence: 55, reason: 'fallback: fast SMA below slow SMA' }
+    return { action: 'NOOP', reason: 'fallback: neutral trend' }
+  },
+}
+strategy`,
+      })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v-consistency' })
+
+    const result = await service.continueSession('s-consistency', {
+      userId: 'u1',
+      message: '确认并生成',
+      confirmGenerate: true,
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await waitForTerminalStatus('s-consistency')
+
+    const hasRejectedOrConsistencyFailed = mockRepo.updateSession.mock.calls.some(call =>
+      call[0] === 's-consistency' && ['CONSISTENCY_FAILED', 'REJECTED'].includes((call[1] as { status?: string }).status ?? ''),
+    )
+    const hasPublished = mockRepo.updateSession.mock.calls.some(call =>
+      call[0] === 's-consistency' && (call[1] as { status?: string }).status === 'PUBLISHED',
+    )
+    expect(hasRejectedOrConsistencyFailed).toBe(true)
+    expect(hasPublished).toBe(false)
+    expect(mockRepo.ensureDraftStrategyInstanceBoundForPublishedSession).not.toHaveBeenCalled()
   }, 15_000)
 
   it('uses strict json schema response in codegen and publishes when code is returned', async () => {
@@ -640,7 +786,7 @@ const strategy: StrategyAdapterV1 = {
     })
 
     expect(result.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s11')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s11', expect.objectContaining({
       status: 'PUBLISHED',
@@ -686,7 +832,7 @@ const strategy: StrategyAdapterV1 = {
     })
 
     expect(result.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s12')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s12', expect.objectContaining({
       status: 'REJECTED',
@@ -729,7 +875,7 @@ const strategy: StrategyAdapterV1 = {
     })
 
     expect(result.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s13')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s13', expect.objectContaining({
       status: 'PUBLISHED',
@@ -773,7 +919,7 @@ const strategy: StrategyAdapterV1 = {
     })
 
     expect(result.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s14')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s14', expect.objectContaining({
       status: 'PUBLISHED',
@@ -836,7 +982,7 @@ const strategy: StrategyAdapterV1 = {
       model: 'gpt-4',
     })
     expect(first.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s15')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s15', expect.objectContaining({
       status: 'REJECTED',
@@ -850,7 +996,7 @@ const strategy: StrategyAdapterV1 = {
       model: 'gpt-4o',
     })
     expect(second.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s16')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s16', expect.objectContaining({
       status: 'PUBLISHED',
@@ -911,7 +1057,7 @@ const strategy: StrategyAdapterV1 = {
       providerCode: 'unit-no-model-provider',
     })
     expect(first.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s17')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s17', expect.objectContaining({
       status: 'REJECTED',
@@ -924,7 +1070,7 @@ const strategy: StrategyAdapterV1 = {
       providerCode: 'unit-no-model-provider',
     })
     expect(second.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s18')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s18', expect.objectContaining({
       status: 'PUBLISHED',
@@ -969,9 +1115,14 @@ const strategy: StrategyAdapterV1 = {
     })
 
     expect(result.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s-new-instance')
 
     expect(mockRepo.ensureDraftStrategyInstanceBoundForPublishedSession).toHaveBeenCalledTimes(1)
+    expect(mockRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 's-new-instance',
+      strategyInstanceId: 'instance-1',
+      scriptSnapshot: expect.any(String),
+    }))
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-new-instance', expect.objectContaining({
       status: 'PUBLISHED',
       strategyInstanceId: 'instance-1',
@@ -1017,7 +1168,7 @@ const strategy: StrategyAdapterV1 = {
     })
 
     expect(result.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s-perp-publish')
 
     expect(mockRepo.ensureDraftStrategyInstanceBoundForPublishedSession).toHaveBeenCalledWith(expect.objectContaining({
       params: expect.objectContaining({
@@ -1062,7 +1213,7 @@ const strategy: StrategyAdapterV1 = {
     })
 
     expect(result.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s-existing-instance')
 
     expect(mockRepo.ensureDraftStrategyInstanceBoundForPublishedSession).not.toHaveBeenCalled()
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-existing-instance', expect.objectContaining({
@@ -1071,7 +1222,7 @@ const strategy: StrategyAdapterV1 = {
     }))
   })
 
-  it('keeps rejected with null strategyInstanceId and rejectReason when instance creation fails', async () => {
+  it('rejects publish when strategy instance binding fails before snapshot creation', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-instance-failed',
       userId: 'u1',
@@ -1107,7 +1258,7 @@ const strategy: StrategyAdapterV1 = {
     })
 
     expect(result.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s-instance-failed')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-instance-failed', expect.objectContaining({
       status: 'REJECTED',
@@ -1116,5 +1267,6 @@ const strategy: StrategyAdapterV1 = {
       strategyInstanceId: null,
       rejectReason: 'create instance failed',
     }))
+    expect(mockRepo.create).not.toHaveBeenCalled()
   })
 })

@@ -250,6 +250,7 @@ function seedPublishedConversation(now = Date.now()) {
         },
         llmCodegenSessionId: 'session-1',
         publishedStrategyInstanceId: 'strategy-1',
+        publishedSnapshotId: 'snapshot-1',
         latestSignalMessage: null,
         backtestExecutionState: 'succeeded',
         updatedAt: now,
@@ -287,6 +288,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       id: 'session-1',
       status: 'PUBLISHED',
       strategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
       scriptCode: 'return { ok: true }',
       specDesc: {
         entryRules: ['价格达到 66830 时买入'],
@@ -315,6 +317,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       id: 'session-1',
       status: 'PUBLISHED' as const,
       strategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
       scriptCode: 'return { ok: true }',
       specDesc: {
         entryRules: ['价格达到 66830 时买入'],
@@ -366,6 +369,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
         id: 'session-1',
         status: 'PUBLISHED',
         strategyInstanceId: 'strategy-1',
+        publishedSnapshotId: 'snapshot-1',
         scriptCode: 'return { ok: true }',
         specDesc: {
           entryRules: ['价格达到 66830 时买入'],
@@ -392,6 +396,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       id: 'session-1',
       status: 'PUBLISHED',
       strategyInstanceId: null,
+      publishedSnapshotId: 'snapshot-1',
       scriptCode: 'return { ok: true }',
       specDesc: {
         entryRules: ['价格达到 66830 时买入'],
@@ -444,6 +449,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
         id: 'session-1',
         status: 'PUBLISHED',
         strategyInstanceId: 'strategy-2',
+        publishedSnapshotId: 'snapshot-2',
         scriptCode: 'return { ok: "revised" }',
         specDesc: {
           entryRules: ['价格回踩 5 日均线买入'],
