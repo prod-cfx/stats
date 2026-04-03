@@ -1,8 +1,10 @@
 import type { StrategyDecisionV1 } from '@ai/shared'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { TheoreticalExecutionModel } from '../execution/theoretical-execution.model'
 import { PortfolioLedgerServiceFactory } from '../portfolio/portfolio-ledger.service'
 import { BacktestReporterService } from '../report/backtest-reporter.service'
 import { StateEngineService } from '../state/state-engine.service'
+import type { BacktestRunInput } from '../types/backtesting.types'
 import { BacktestRunnerService, createBar } from './backtest-runner.service'
 
 describe('backtestRunnerService', () => {
@@ -259,6 +261,48 @@ describe('backtestRunnerService', () => {
     })
 
     expect(report.openPositions?.[0]?.qty).toBeCloseTo(1.5)
+  })
+
+  it('should reject invalid strategy adapter decisions instead of silently no-oping', async () => {
+    const runner = new BacktestRunnerService(
+      new TheoreticalExecutionModel(),
+      new PortfolioLedgerServiceFactory(),
+      new BacktestReporterService(),
+      new StateEngineService(),
+    )
+
+    const input: BacktestRunInput = {
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['1h'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-invalid-ratio',
+        params: {},
+        fn: (): StrategyDecisionV1 => ({
+          action: 'OPEN_LONG',
+          size: { mode: 'RATIO', value: 100 },
+          confidence: 80,
+          reason: 'bad ratio',
+        }),
+      },
+      dataRange: { fromTs: 1, toTs: 1 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+      ],
+    }
+
+    await expect(runner.run(input)).rejects.toThrow(DomainException)
+
+    await runner.run(input).catch((error: unknown) => {
+      expect(error).toBeInstanceOf(DomainException)
+      expect((error as DomainException).getResponse()).toMatchObject({
+        message: 'backtest.strategy_decision_invalid',
+        args: { error: expect.stringContaining('RATIO') },
+      })
+    })
   })
 
   it('should support ADJUST_POSITION with TARGET mode', async () => {

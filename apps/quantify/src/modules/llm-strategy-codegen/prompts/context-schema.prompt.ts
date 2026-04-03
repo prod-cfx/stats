@@ -149,7 +149,7 @@ export function buildContextSchemaPrompt(): string {
     '',
     '// 使用规则',
     '1) 你的 onBar 入参是 ctx（可视为 StrategyContext & MultiLegStrategyContext 的运行时联合）。',
-    '2) 参数优先使用 ctx.paramsNormalized，不要臆造参数字段。',
+    '2) 通用字段优先使用 ctx.paramsNormalized；策略自定义字段可从 ctx.params 读取，不要臆造参数字段。',
     '3) 多腿模式优先使用 ctx.data / ctx.execution / ctx.legs / ctx.dataRequirements。',
     '4) 访问字段前先判空，不要假设任何字段一定存在。',
     '5) 不要访问未声明字段，不要使用外部 I/O（网络/文件/进程）。',

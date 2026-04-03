@@ -7,8 +7,14 @@ export interface SessionChecklistPayload {
   symbols?: string[]
   timeframes?: string[]
   riskRules?: {
-    positionPct: number
-    maxDrawdownPct: number
+    positionPct?: number
+    maxDrawdownPct?: number
+    marketType?: string
+    gridLower?: number
+    gridUpper?: number
+    gridCount?: number
+    gridStepPct?: number
+    [key: string]: unknown
   }
 }
 
@@ -48,6 +54,12 @@ function asNumber(value: unknown): number | undefined {
     if (Number.isFinite(parsed)) return parsed
   }
   return undefined
+}
+
+function asString(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined
+  const normalized = value.trim()
+  return normalized.length > 0 ? normalized : undefined
 }
 
 function collectMissingRequiredKeys(
@@ -93,14 +105,31 @@ function deriveLockedChecklist(
   const maxDrawdownPct = asNumber(inputRiskRules?.maxDrawdownPct)
     ?? asNumber(values.maxDrawdownPct)
     ?? 20
+  const marketType = asString(inputRiskRules?.marketType)
+    ?? asString(values.marketType)
+  const gridLower = asNumber(inputRiskRules?.gridLower)
+    ?? asNumber(values.gridLower)
+  const gridUpper = asNumber(inputRiskRules?.gridUpper)
+    ?? asNumber(values.gridUpper)
+  const gridCount = asNumber(inputRiskRules?.gridCount)
+    ?? asNumber(values.gridCount)
+  const gridStepPct = asNumber(inputRiskRules?.gridStepPct)
+    ?? asNumber(values.gridStepPct)
+
+  const riskRules: NonNullable<SessionChecklistPayload['riskRules']> = {
+    positionPct,
+    maxDrawdownPct,
+  }
+  if (marketType) riskRules.marketType = marketType
+  if (gridLower !== undefined) riskRules.gridLower = gridLower
+  if (gridUpper !== undefined) riskRules.gridUpper = gridUpper
+  if (gridCount !== undefined) riskRules.gridCount = gridCount
+  if (gridStepPct !== undefined) riskRules.gridStepPct = gridStepPct
 
   return {
     symbols,
     timeframes,
-    riskRules: {
-      positionPct,
-      maxDrawdownPct,
-    },
+    riskRules,
   }
 }
 

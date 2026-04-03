@@ -25,6 +25,7 @@ import { BacktestMarketDataRepository } from '../repositories/backtest-market-da
 type LoadBarsInput = Pick<BacktestRunInput, 'symbols' | 'baseTimeframe' | 'stateTimeframes' | 'dataRange'>
 type CoverageInput = Pick<BacktestRunInput, 'symbols' | 'baseTimeframe' | 'stateTimeframes' | 'dataRange'>
 type SupportedExchange = 'binance' | 'okx' | 'hyperliquid'
+type SupportedMarketType = 'spot' | 'perp'
 
 export interface BacktestRangeCoverage {
   kind: 'full' | 'partial' | 'empty'
@@ -54,7 +55,7 @@ export class BacktestMarketDataService {
     const exchange = this.extractExchange(input.strategy.params)
     if (!exchange) return
 
-    const normalizedSymbols = this.normalizeSymbols(input.symbols)
+    const normalizedSymbols = this.normalizeSymbols(input.symbols, this.extractMarketType(input.strategy.params))
     if (normalizedSymbols.length === 0) return
 
     const provider = this.getProvider(exchange)
@@ -225,8 +226,14 @@ export class BacktestMarketDataService {
     return result
   }
 
-  private normalizeSymbols(symbols: string[]): string[] {
-    return [...new Set(symbols.map(symbol => normalizeExactCode(symbol)))]
+  private normalizeSymbols(symbols: string[], marketType?: SupportedMarketType | null): string[] {
+    return [...new Set(symbols.map((symbol) => {
+      const normalized = normalizeExactCode(symbol)
+      if (normalized.includes(':')) return normalized
+      if (marketType === 'perp') return toSymbolCode(normalized, 'PERP')
+      if (marketType === 'spot') return normalizeRequestedCode(normalized)
+      return normalized
+    }))]
   }
 
   private async hasSupportedSymbol(exchange: SupportedExchange, symbol: string): Promise<boolean> {
@@ -244,6 +251,15 @@ export class BacktestMarketDataService {
     } catch {
       return null
     }
+  }
+
+  private extractMarketType(params: Record<string, unknown>): SupportedMarketType | null {
+    if (typeof params.marketType !== 'string') return null
+    const normalized = params.marketType.trim().toLowerCase()
+    if (normalized === 'spot' || normalized === 'perp') {
+      return normalized
+    }
+    return null
   }
 
   private normalizeExchange(exchange: string): SupportedExchange {

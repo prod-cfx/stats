@@ -16,6 +16,7 @@ export interface StrategyParamSyncResult {
 
 const STRATEGY_PARAM_KEYS = new Set([
   'exchange',
+  'marketType',
   'symbol',
   'baseTimeframe',
   'buyWindowMin',
@@ -27,6 +28,10 @@ const STRATEGY_PARAM_KEYS = new Set([
   'exitPrice',
   'stopLossPct',
   'maxDrawdownPct',
+  'gridLower',
+  'gridUpper',
+  'gridCount',
+  'gridStepPct',
 ])
 
 function asObject(value: unknown): Record<string, unknown> | null {
@@ -48,6 +53,12 @@ function parseNumber(value: unknown): number | null {
   return null
 }
 
+function parseString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim()
+  return normalized.length > 0 ? normalized : null
+}
+
 function normalizeSymbol(raw: string): string {
   return raw.replace('/', '').replace(/\s+/g, '').toUpperCase()
 }
@@ -67,6 +78,12 @@ function inferExchange(text: string, fallback: StrategyParamSyncFallback['exchan
   if (/hyperliquid/i.test(text)) return 'hyperliquid'
   if (/binance|币安/i.test(text)) return 'binance'
   return fallback
+}
+
+function inferMarketType(text: string): 'spot' | 'perp' | null {
+  if (/永续|perp|perpetual|swap|合约/i.test(text)) return 'perp'
+  if (/现货|spot/i.test(text)) return 'spot'
+  return null
 }
 
 function inferSymbol(text: string, fallback: string, latest = false): string {
@@ -119,6 +136,15 @@ function extractPriceRule(rule: string): number | null {
   return match ? Number(match[1]) : null
 }
 
+function extractPriceRange(text: string): { lower: number, upper: number } | null {
+  const match = text.match(/([0-9]+(?:\.[0-9]+)?)\s*[-~到至]\s*([0-9]+(?:\.[0-9]+)?)/)
+  if (!match?.[1] || !match[2]) return null
+  const lower = Number(match[1])
+  const upper = Number(match[2])
+  if (!Number.isFinite(lower) || !Number.isFinite(upper)) return null
+  return lower <= upper ? { lower, upper } : { lower: upper, upper: lower }
+}
+
 function findFirstMappedValue<T, TValue>(
   items: T[],
   mapper: (item: T) => TValue | null | undefined,
@@ -152,6 +178,7 @@ export function syncStrategyParamsFromCodegen(args: {
   const contextText = `${args.contextText ?? ''} ${entryRules.join(' ')} ${exitRules.join(' ')}`.trim()
 
   const nextExchange = inferExchange(contextText, args.fallback.exchange)
+  const currentValues = args.currentValues ?? {}
   const symbolFromMarket = inferSymbol(marketSymbols[0] ?? '', args.fallback.symbol)
   const symbolFromContext = inferSymbol(contextText, args.fallback.symbol, true)
   const nextSymbol = symbolFromContext !== args.fallback.symbol ? symbolFromContext : symbolFromMarket
@@ -160,9 +187,23 @@ export function syncStrategyParamsFromCodegen(args: {
   const parsedPositionPct = parseNumber(riskRules.positionPct)
     ?? parseNumber(contextText.match(/([0-9]+(?:\.[0-9]+)?)%\s*(?:仓位|总仓位|仓位的)/)?.[1])
     ?? args.fallback.positionPct
+  const nextMarketType = (() => {
+    const fromRiskRules = parseString(riskRules.marketType)?.toLowerCase()
+    if (fromRiskRules === 'spot' || fromRiskRules === 'perp') return fromRiskRules
+    const fromCurrentValues = parseString(currentValues.marketType)?.toLowerCase()
+    const inferred = inferMarketType(contextText)
+    if (inferred) return inferred
+    if (fromCurrentValues === 'spot' || fromCurrentValues === 'perp') return fromCurrentValues
+    return null
+  })()
+  const inferredRange = extractPriceRange(contextText)
+  const gridLower = parseNumber(riskRules.gridLower) ?? parseNumber(currentValues.gridLower) ?? inferredRange?.lower ?? null
+  const gridUpper = parseNumber(riskRules.gridUpper) ?? parseNumber(currentValues.gridUpper) ?? inferredRange?.upper ?? null
+  const gridCount = parseNumber(riskRules.gridCount) ?? parseNumber(currentValues.gridCount)
+  const gridStepPct = parseNumber(riskRules.gridStepPct) ?? parseNumber(currentValues.gridStepPct)
 
   const preservedValues = Object.fromEntries(
-    Object.entries(args.currentValues ?? {}).filter(([key]) => !STRATEGY_PARAM_KEYS.has(key)),
+    Object.entries(currentValues).filter(([key]) => !STRATEGY_PARAM_KEYS.has(key)),
   )
   const values: Record<string, unknown> = {
     ...preservedValues,
@@ -170,6 +211,9 @@ export function syncStrategyParamsFromCodegen(args: {
     symbol: nextSymbol,
     baseTimeframe: nextBaseTimeframe,
     positionPct: parsedPositionPct,
+  }
+  if (nextMarketType) {
+    values.marketType = nextMarketType
   }
 
   const properties: Record<string, unknown> = {
@@ -196,6 +240,14 @@ export function syncStrategyParamsFromCodegen(args: {
     },
   }
   const required = ['exchange', 'symbol', 'baseTimeframe', 'positionPct']
+  if (nextMarketType) {
+    properties.marketType = {
+      type: 'string',
+      title: 'Market Type',
+      enum: ['spot', 'perp'],
+    }
+    required.push('marketType')
+  }
 
   const entryWindowRule = findFirstMappedValue(entryRules, extractWindowDropRule)
   const exitWindowRule = findFirstMappedValue(exitRules, extractWindowRiseRule)
@@ -210,6 +262,10 @@ export function syncStrategyParamsFromCodegen(args: {
   setNumberField(properties, required, values, 'exitPrice', 'Exit Price', exitPrice, { minimum: 0 })
   setNumberField(properties, required, values, 'stopLossPct', 'Stop Loss %', parseNumber(riskRules.stopLossPct), { minimum: 0 })
   setNumberField(properties, required, values, 'maxDrawdownPct', 'Max Drawdown %', parseNumber(riskRules.maxDrawdownPct), { minimum: 0, maximum: 100 })
+  setNumberField(properties, required, values, 'gridLower', 'Grid Lower', gridLower, { minimum: 0 })
+  setNumberField(properties, required, values, 'gridUpper', 'Grid Upper', gridUpper, { minimum: 0 })
+  setNumberField(properties, required, values, 'gridCount', 'Grid Count', gridCount, { minimum: 1 })
+  setNumberField(properties, required, values, 'gridStepPct', 'Grid Step %', gridStepPct, { minimum: 0 })
 
   const executionTags = Object.entries(values)
     .filter(([key]) => !['exchange', 'symbol', 'baseTimeframe'].includes(key))
