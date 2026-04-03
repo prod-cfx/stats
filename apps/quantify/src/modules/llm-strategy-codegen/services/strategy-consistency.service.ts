@@ -1,7 +1,8 @@
-import { Injectable } from '@nestjs/common'
 import type { CanonicalAction, CanonicalStrategySpec } from '../types/canonical-strategy-spec'
 import type { StrategyConsistencyCheck, StrategyConsistencyReport } from '../types/strategy-consistency-report'
 import type { StrategySemanticProfile, StrategySemanticRuleKey } from '../types/strategy-semantic-profile'
+import { Injectable } from '@nestjs/common'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { ScriptProfileExtractorService } from './script-profile-extractor.service'
 
 @Injectable()

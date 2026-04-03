@@ -513,7 +513,7 @@ strategy`,
     })
 
     expect(result.status).toBe('GENERATING')
-    await flushAsync()
+    await waitForTerminalStatus('s8-publish-fail')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s8-publish-fail', expect.objectContaining({
       status: 'REJECTED',

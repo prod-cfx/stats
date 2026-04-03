@@ -1,6 +1,6 @@
-import { Injectable } from '@nestjs/common'
 import type { CanonicalAction, CanonicalSizingMode } from '../types/canonical-strategy-spec'
 import type { StrategySemanticIndicator, StrategySemanticProfile, StrategySemanticRuleKey } from '../types/strategy-semantic-profile'
+import { Injectable } from '@nestjs/common'
 
 const ACTION_PATTERN = /action\s*:\s*['"]([A-Z_]+)['"]/g
 const PARAM_PATTERN = /ctx\.params(?:Normalized)?\??\.([A-Za-z_]\w*)/g
@@ -32,8 +32,8 @@ export class ScriptProfileExtractorService {
       indicators.push({ kind, params })
     }
 
-    if (/bollingerBands\s*(?:\?\.)?\s*\(/.test(scriptCode)) {
-      const match = scriptCode.match(/bollingerBands\s*(?:\?\.)?\s*\([^,]+,\s*(\d+)\s*,\s*(\d+(?:\.\d+)?)\s*\)/)
+    if (/bollingerBands(?:\?\.)?\(/.test(scriptCode)) {
+      const match = scriptCode.match(/bollingerBands(?:\?\.)?\([^,]+,\s*(\d+),\s*(\d+(?:\.\d+)?)\s*\)/)
       const period = Number(match?.[1] ?? 20)
       const stdDev = Number(match?.[2] ?? 2)
       tryPush('bollingerBands', { period, stdDev })
@@ -96,13 +96,13 @@ export class ScriptProfileExtractorService {
         }
       }
 
-      if (/(?:\.upper\b|\bupper\b|upperband)/.test(window)) {
+      if (/\.upper\b|\bupper\b|upperband/.test(window)) {
         push('bollinger.upper_break')
       }
-      if (/(?:\.lower\b|\blower\b|lowerband)/.test(window)) {
+      if (/\.lower\b|\blower\b|lowerband/.test(window)) {
         push('bollinger.lower_break')
       }
-      if (/(?:\bmiddle\b|中轨|\bmid\b|ma20)/.test(window)) {
+      if (/\bmiddle\b|中轨|\bmid\b|ma20/.test(window)) {
         push('bollinger.middle_revert')
       }
     })
@@ -111,7 +111,7 @@ export class ScriptProfileExtractorService {
   }
 
   private extractSizing(scriptCode: string): StrategySemanticProfile['sizing'] {
-    const match = scriptCode.match(/size\s*:\s*\{\s*mode\s*:\s*['"](RATIO|QUOTE|QTY)['"]\s*,\s*value\s*:\s*(\d+(?:\.\d+)?)\s*}/)
+    const match = scriptCode.match(/size\s*:\s*\{\s*mode\s*:\s*['"](RATIO|QUOTE|QTY)['"]\s*,\s*value\s*:\s*(\d+(?:\.\d+)?)\s*\}/)
     if (!match?.[1] || !match[2]) {
       return null
     }

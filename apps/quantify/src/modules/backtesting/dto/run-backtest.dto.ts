@@ -1,6 +1,8 @@
+import type { ValidationArguments, ValidatorConstraintInterface } from 'class-validator'
 import type { BacktestRunInput } from '../types/backtesting.types'
 import { Type } from 'class-transformer'
 import {
+  IsBoolean,
   IsArray,
   IsIn,
   IsNotEmpty,
@@ -9,11 +11,8 @@ import {
   IsOptional,
   IsPositive,
   IsString,
-  IsBoolean,
   Min,
   ValidatorConstraint,
-  ValidatorConstraintInterface,
-  ValidationArguments,
   Validate,
   ValidateNested,
 } from 'class-validator'

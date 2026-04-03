@@ -102,7 +102,7 @@ export class CanonicalSpecBuilderService {
       })
     }
     const earlyStopText = typeof riskRules.earlyStop === 'string' ? riskRules.earlyStop : ''
-    if (/连续\s*3|3\s*根/i.test(earlyStopText) && /轨外|outside/i.test(earlyStopText)) {
+    if (/连续\s*3|3\s*根/.test(earlyStopText) && /轨外|outside/.test(earlyStopText)) {
       normalizedRiskRules.push({
         id: 'risk-outside-band-3-bars',
         trigger: earlyStopText,
