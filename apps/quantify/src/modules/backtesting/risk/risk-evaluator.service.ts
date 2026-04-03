@@ -16,9 +16,14 @@ export interface RiskDecision {
   source: BacktestReasonSource
 }
 
+interface OutsideBandStreakState {
+  direction: 1 | -1
+  count: number
+}
+
 @Injectable()
 export class RiskEvaluatorService {
-  private readonly outsideBandStreakBySymbol = new Map<string, number>()
+  private readonly outsideBandStreakBySymbol = new Map<string, OutsideBandStreakState>()
 
   evaluate(input: RiskEvaluationInput): RiskDecision | undefined {
     const { position, riskRules, symbol } = input
@@ -35,7 +40,7 @@ export class RiskEvaluatorService {
 
     const outsideBandDecision = this.evaluateOutsideBand(input)
     if (outsideBandDecision) {
-      this.outsideBandStreakBySymbol.set(symbol, 0)
+      this.outsideBandStreakBySymbol.delete(symbol)
       return outsideBandDecision
     }
 
@@ -71,15 +76,27 @@ export class RiskEvaluatorService {
     const rule = input.riskRules?.outsideBand
     if (!rule) return undefined
 
+    const direction = Math.sign(input.position.qty)
+    if (direction !== 1 && direction !== -1) {
+      this.outsideBandStreakBySymbol.delete(input.symbol)
+      return undefined
+    }
+
     const bounds = this.resolveOutsideBandBounds(input, rule)
     if (!bounds) {
       return undefined
     }
 
-    const isOutside = input.bar.close < bounds.lowerBound || input.bar.close > bounds.upperBound
-    const previousStreak = this.outsideBandStreakBySymbol.get(input.symbol) ?? 0
-    const currentStreak = isOutside ? previousStreak + 1 : 0
-    this.outsideBandStreakBySymbol.set(input.symbol, currentStreak)
+    const isAdverseOutside = direction > 0
+      ? input.bar.close < bounds.lowerBound
+      : input.bar.close > bounds.upperBound
+    const previousState = this.outsideBandStreakBySymbol.get(input.symbol)
+    const previousStreak = previousState?.direction === direction ? previousState.count : 0
+    const currentStreak = isAdverseOutside ? previousStreak + 1 : 0
+    this.outsideBandStreakBySymbol.set(input.symbol, {
+      direction,
+      count: currentStreak,
+    })
 
     const required = Number.isFinite(rule.consecutiveBars) && rule.consecutiveBars && rule.consecutiveBars > 0
       ? Math.floor(rule.consecutiveBars)

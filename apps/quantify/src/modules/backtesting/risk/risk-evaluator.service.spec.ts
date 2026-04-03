@@ -44,7 +44,44 @@ describe('riskEvaluatorService', () => {
     })
   })
 
-  it('forces close after 3 consecutive outside-band bars', () => {
+  it('forces close after 3 consecutive adverse outside-band bars', () => {
+    const service = new RiskEvaluatorService()
+    const input = {
+      symbol: 'BTCUSDT',
+      position: { symbol: 'BTCUSDT', qty: 2, avgEntryPrice: 100, realizedPnl: 0, unrealizedPnl: 0 },
+      riskRules: {
+        outsideBand: {
+          lowerBound: 95,
+          upperBound: 105,
+          consecutiveBars: 3,
+          action: 'CLOSE',
+        },
+      },
+    } as const
+
+    const d1 = service.evaluate({
+      ...input,
+      bar: createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, close: 94 }),
+    })
+    const d2 = service.evaluate({
+      ...input,
+      bar: createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, close: 93 }),
+    })
+    const d3 = service.evaluate({
+      ...input,
+      bar: createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 3, close: 92 }),
+    })
+
+    expect(d1).toBeUndefined()
+    expect(d2).toBeUndefined()
+    expect(d3).toMatchObject({
+      type: 'CLOSE',
+      reason: 'risk.consecutive_outside_band',
+      source: 'risk',
+    })
+  })
+
+  it('does not count favorable outside-band bars for a long position', () => {
     const service = new RiskEvaluatorService()
     const input = {
       symbol: 'BTCUSDT',
@@ -74,18 +111,14 @@ describe('riskEvaluatorService', () => {
 
     expect(d1).toBeUndefined()
     expect(d2).toBeUndefined()
-    expect(d3).toMatchObject({
-      type: 'CLOSE',
-      reason: 'risk.consecutive_outside_band',
-      source: 'risk',
-    })
+    expect(d3).toBeUndefined()
   })
 
-  it('supports bollinger-based outside-band streak evaluation from history bars', () => {
+  it('supports bollinger-based adverse outside-band streak evaluation from history bars', () => {
     const service = new RiskEvaluatorService()
     const input = {
       symbol: 'BTCUSDT',
-      position: { symbol: 'BTCUSDT', qty: 2, avgEntryPrice: 100, realizedPnl: 0, unrealizedPnl: 0 },
+      position: { symbol: 'BTCUSDT', qty: -2, avgEntryPrice: 100, realizedPnl: 0, unrealizedPnl: 0 },
       riskRules: {
         outsideBand: {
           mode: 'BOLLINGER_BANDS' as const,

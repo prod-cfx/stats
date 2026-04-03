@@ -515,7 +515,7 @@ describe('backtestRunnerService', () => {
     expect(report.trades[0]?.exitSource).toBe('risk')
   })
 
-  it('triggers risk close after 3 consecutive outside-band bars', async () => {
+  it('triggers risk close after 3 consecutive adverse outside-band bars', async () => {
     const runner = createRunner()
 
     const report = await runner.run({
@@ -543,10 +543,10 @@ describe('backtestRunnerService', () => {
       dataRange: { fromTs: 1, toTs: 5 },
       bars: [
         createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
-        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, open: 106, close: 106 }),
-        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 3, open: 107, close: 107 }),
-        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 4, open: 108, close: 108 }),
-        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 5, open: 109, close: 109 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, open: 94, close: 94 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 3, open: 93, close: 93 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 4, open: 92, close: 92 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 5, open: 91, close: 91 }),
       ],
     })
 
@@ -554,6 +554,45 @@ describe('backtestRunnerService', () => {
     expect(report.openPositions ?? []).toHaveLength(0)
     expect(report.trades[0]?.exitReason).toBe('risk.consecutive_outside_band')
     expect(report.trades[0]?.exitSource).toBe('risk')
+  })
+
+  it('does not trigger outside-band risk close for favorable long breakout bars', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['5m'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-risk-band-favorable',
+        params: {},
+        riskRules: {
+          outsideBand: {
+            lowerBound: 95,
+            upperBound: 105,
+            consecutiveBars: 3,
+            action: 'CLOSE',
+          },
+        },
+        fn: ({ ts }): StrategyDecisionV1 => ts === 1
+          ? { action: 'OPEN_LONG', size: { mode: 'QTY', value: 1 }, confidence: 90, reason: 'open' }
+          : { action: 'NOOP' },
+      },
+      dataRange: { fromTs: 1, toTs: 5 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, open: 106, close: 106 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 3, open: 107, close: 107 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 4, open: 108, close: 108 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 5, open: 109, close: 109 }),
+      ],
+    })
+
+    expect(report.summary.totalTrades).toBe(0)
+    expect(report.openPositions ?? []).toHaveLength(1)
   })
 
   it('calls risk evaluator on every base bar', async () => {
