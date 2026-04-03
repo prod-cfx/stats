@@ -53,6 +53,7 @@ import {
   fetchUserExchangeAccountStatuses,
   getLlmCodegenSession,
   startLlmCodegenSession,
+  type UserExchangeAccountStatus,
 } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
 
@@ -533,12 +534,31 @@ function buildBacktestSummaryResult(
   }
 }
 
+function mapExchangeStatusesToDeployAccounts(
+  items: UserExchangeAccountStatus[],
+): DeployExchangeAccount[] {
+  return items
+    .filter(item => item.isBound && typeof item.id === 'string' && item.id.trim().length > 0)
+    .map(item => ({
+      accountId: item.id as string,
+      exchange: item.exchangeId,
+      accountName: item.name?.trim() || item.exchangeId.toUpperCase(),
+      apiKeyMask: item.maskedCredential?.trim() || '****',
+      status: 'available' as const,
+    }))
+}
+
+function buildApiConfigHref(lng: 'zh' | 'en') {
+  return `/${lng}/account?tab=ai-quant#exchange-api`
+}
+
 export function AiQuantPageClient() {
   const { t } = useTranslation()
   const params = useParams<{ lng: string }>()
   const lng = params?.lng === 'en' ? 'en' : 'zh'
   const router = useRouter()
   const { session, isLoading } = useAuth()
+  const apiConfigHref = buildApiConfigHref(lng)
 
   const createConversation = (): ConversationState => {
     const now = Date.now()
@@ -1779,19 +1799,7 @@ export function AiQuantPageClient() {
       try {
         const items = await fetchUserExchangeAccountStatuses()
         if (cancelled) return
-        setExchangeAccounts(
-          items
-            .filter(
-              item => item.isBound && typeof item.id === 'string' && item.id.trim().length > 0,
-            )
-            .map(item => ({
-              accountId: item.id as string,
-              exchange: item.exchangeId,
-              accountName: item.name?.trim() || item.exchangeId.toUpperCase(),
-              apiKeyMask: item.maskedCredential?.trim() || '****',
-              status: 'available' as const,
-            })),
-        )
+        setExchangeAccounts(mapExchangeStatusesToDeployAccounts(items))
       } catch {
         if (!cancelled) {
           setExchangeAccounts([])
@@ -2038,8 +2046,7 @@ export function AiQuantPageClient() {
           if (deploySubmitting) {
             return
           }
-          const account = deployAccounts.find(item => item.accountId === selectedDeployAccountId)
-          if (!account || !activeConversation.backtestResult || !session?.userId) return
+          if (!activeConversation.backtestResult || !session?.userId) return
 
           const strategyName =
             activeConversation.title ||
@@ -2052,6 +2059,26 @@ export function AiQuantPageClient() {
 
           try {
             setDeploySubmitting(true)
+            const latestExchangeAccounts = mapExchangeStatusesToDeployAccounts(
+              await fetchUserExchangeAccountStatuses(),
+            )
+            setExchangeAccounts(latestExchangeAccounts)
+            const latestAvailableAccounts = latestExchangeAccounts.filter(
+              item => item.exchange === selectedDeployExchange && item.status === 'available',
+            )
+            const account = latestAvailableAccounts.find(
+              item => item.accountId === selectedDeployAccountId,
+            )
+
+            if (!account) {
+              const nextAccountId = latestAvailableAccounts[0]?.accountId ?? ''
+              setSelectedDeployAccountId(nextAccountId)
+              if (!nextAccountId) {
+                router.push(apiConfigHref)
+              }
+              return
+            }
+
             await deployAccountAiQuantStrategy({
               userId: session.userId,
               name: strategyName,
