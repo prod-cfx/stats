@@ -57,24 +57,39 @@ jest.mock('@/components/ai-quant/BacktestSummaryCard', () => ({
 jest.mock('@/components/ai-quant/DeployDialog', () => ({
   DeployDialog: ({
     open,
+    exchange,
     selectedAccountId,
     deploySubmitting,
+    onSelectExchange,
+    onSelectAccount,
     onConfirmDeploy,
   }: {
     open: boolean
+    exchange: 'binance' | 'okx' | 'hyperliquid'
     selectedAccountId: string
     deploySubmitting: boolean
+    onSelectExchange: (exchange: 'binance' | 'okx' | 'hyperliquid') => void
+    onSelectAccount: (accountId: string) => void
     onConfirmDeploy: () => Promise<void> | void
   }) => (
     open
       ? (
-          <button
-            data-testid="confirm-deploy"
-            disabled={!selectedAccountId || deploySubmitting}
-            onClick={() => void onConfirmDeploy()}
-          >
-            confirm deploy
-          </button>
+          <div>
+            <div data-testid="selected-exchange">{exchange}</div>
+            <button data-testid="select-hyperliquid" onClick={() => onSelectExchange('hyperliquid')}>
+              select hyperliquid
+            </button>
+            <button data-testid="select-account" onClick={() => onSelectAccount('acct-hyper-1')}>
+              select account
+            </button>
+            <button
+              data-testid="confirm-deploy"
+              disabled={!selectedAccountId || deploySubmitting}
+              onClick={() => void onConfirmDeploy()}
+            >
+              confirm deploy
+            </button>
+          </div>
         )
       : null
   ),
@@ -227,5 +242,68 @@ describe('AiQuantPageClient deploy guard', () => {
     expect(mockFetchUserExchangeAccountStatuses).toHaveBeenCalledTimes(2)
     expect(mockDeployAccountAiQuantStrategy).not.toHaveBeenCalled()
     expect(mockPush).toHaveBeenCalledWith('/zh/account?tab=ai-quant#exchange-api')
+  })
+
+  it('submits hyperliquid when the user switches deploy exchange to hyperliquid', async () => {
+    mockFetchUserExchangeAccountStatuses.mockReset()
+    mockDeployAccountAiQuantStrategy.mockReset()
+    mockFetchUserExchangeAccountStatuses.mockResolvedValue([
+      {
+        id: 'acct-binance-1',
+        exchangeId: 'binance',
+        isBound: true,
+        name: 'Binance Main',
+        maskedCredential: 'BIN****01',
+        isTestnet: false,
+        lastValidatedAt: null,
+        createdAt: null,
+      },
+      {
+        id: 'acct-hyper-1',
+        exchangeId: 'hyperliquid',
+        isBound: true,
+        name: 'Hyper Testnet',
+        maskedCredential: 'HYP****01',
+        isTestnet: true,
+        lastValidatedAt: null,
+        createdAt: null,
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="open-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(container.querySelector('[data-testid="selected-exchange"]')?.textContent).toBe('binance')
+
+    await act(async () => {
+      container.querySelector('[data-testid="select-hyperliquid"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(container.querySelector('[data-testid="selected-exchange"]')?.textContent).toBe('hyperliquid')
+
+    await act(async () => {
+      container.querySelector('[data-testid="select-account"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="confirm-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mockDeployAccountAiQuantStrategy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        exchange: 'hyperliquid',
+        exchangeAccountId: 'acct-hyper-1',
+        exchangeAccountName: 'Hyper Testnet',
+      }),
+    )
   })
 })
