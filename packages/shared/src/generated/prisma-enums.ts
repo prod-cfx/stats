@@ -157,11 +157,17 @@ export type IndicatorType = (typeof IndicatorType)[keyof typeof IndicatorType]
 
 export const QuantifyMarketTimeframe = {
   m1: 'm1',
+  m3: 'm3',
   m5: 'm5',
   m15: 'm15',
+  m30: 'm30',
   h1: 'h1',
   h4: 'h4',
+  h6: 'h6',
+  h8: 'h8',
+  h12: 'h12',
   d1: 'd1',
+  w1: 'w1',
 } as const
 export type QuantifyMarketTimeframe = (typeof QuantifyMarketTimeframe)[keyof typeof QuantifyMarketTimeframe]
 

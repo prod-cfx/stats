@@ -6,6 +6,7 @@
  */
 import type { IndicatorType, MarketTimeframe } from '@ai/shared'
 import { ErrorCode } from '@ai/shared'
+import { MARKET_TIMEFRAMES } from '@ai/shared'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line no-restricted-imports -- $Enums needed for Prisma 7 @map key-name mapping
 import { $Enums } from '../../../generated/prisma'
@@ -20,14 +21,39 @@ export type PrismaSymbolStatus = $Enums.SymbolStatus
  */
 export const PRISMA_TIMEFRAME: Record<string, PrismaMarketTimeframe> = {
   M1: 'm1' as PrismaMarketTimeframe,
+  M3: 'm3' as PrismaMarketTimeframe,
   M5: 'm5' as PrismaMarketTimeframe,
   M15: 'm15' as PrismaMarketTimeframe,
+  M30: 'm30' as PrismaMarketTimeframe,
   H1: 'h1' as PrismaMarketTimeframe,
   H4: 'h4' as PrismaMarketTimeframe,
+  H6: 'h6' as PrismaMarketTimeframe,
+  H8: 'h8' as PrismaMarketTimeframe,
+  H12: 'h12' as PrismaMarketTimeframe,
   D1: 'd1' as PrismaMarketTimeframe,
+  W1: 'w1' as PrismaMarketTimeframe,
 } as const
 
-export const SUPPORTED_MARKET_TIMEFRAMES = ['1m', '5m', '15m', '1h', '4h', '1d'] as const satisfies readonly MarketTimeframe[]
+const MARKET_TIMEFRAME_PRISMA_MAP = {
+  '1m': PRISMA_TIMEFRAME.M1,
+  '3m': PRISMA_TIMEFRAME.M3,
+  '5m': PRISMA_TIMEFRAME.M5,
+  '15m': PRISMA_TIMEFRAME.M15,
+  '30m': PRISMA_TIMEFRAME.M30,
+  '1h': PRISMA_TIMEFRAME.H1,
+  '4h': PRISMA_TIMEFRAME.H4,
+  '6h': PRISMA_TIMEFRAME.H6,
+  '8h': PRISMA_TIMEFRAME.H8,
+  '12h': PRISMA_TIMEFRAME.H12,
+  '1d': PRISMA_TIMEFRAME.D1,
+  '1w': PRISMA_TIMEFRAME.W1,
+} as const satisfies Record<MarketTimeframe, PrismaMarketTimeframe>
+
+const PRISMA_MARKET_TIMEFRAME_MAP = Object.fromEntries(
+  Object.entries(MARKET_TIMEFRAME_PRISMA_MAP).map(([appTimeframe, prismaTimeframe]) => [prismaTimeframe, appTimeframe]),
+) as Record<PrismaMarketTimeframe, MarketTimeframe>
+
+export const SUPPORTED_MARKET_TIMEFRAMES = MARKET_TIMEFRAMES satisfies readonly MarketTimeframe[]
 
 /**
  * 将应用层时间周期映射为 Prisma 枚举键名
@@ -39,16 +65,7 @@ export function mapTimeframe(
   timeframe: MarketTimeframe,
   errorCode: ErrorCode = ErrorCode.INDICATOR_UNSUPPORTED_TIMEFRAME
 ): PrismaMarketTimeframe {
-  const mapping: Record<string, PrismaMarketTimeframe> = {
-    '1m': PRISMA_TIMEFRAME.M1,
-    '5m': PRISMA_TIMEFRAME.M5,
-    '15m': PRISMA_TIMEFRAME.M15,
-    '1h': PRISMA_TIMEFRAME.H1,
-    '4h': PRISMA_TIMEFRAME.H4,
-    '1d': PRISMA_TIMEFRAME.D1,
-  }
-
-  const mapped = mapping[timeframe]
+  const mapped = MARKET_TIMEFRAME_PRISMA_MAP[timeframe]
   if (!mapped) {
     throw new DomainException(`Unsupported timeframe: ${timeframe}`, {
       code: errorCode,
@@ -66,16 +83,7 @@ export function mapTimeframe(
  * @throws DomainException 当枚举值无效时
  */
 export function reverseMapTimeframe(timeframe: PrismaMarketTimeframe): MarketTimeframe {
-  const reverseMapping: Record<string, MarketTimeframe> = {
-    'm1': '1m',
-    'm5': '5m',
-    'm15': '15m',
-    'h1': '1h',
-    'h4': '4h',
-    'd1': '1d',
-  }
-
-  const mapped = reverseMapping[timeframe]
+  const mapped = PRISMA_MARKET_TIMEFRAME_MAP[timeframe]
   if (!mapped) {
     throw new DomainException(`Unsupported Prisma timeframe: ${timeframe}`, {
       code: ErrorCode.INDICATOR_UNSUPPORTED_TIMEFRAME,

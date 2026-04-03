@@ -25,11 +25,17 @@ enum IndicatorType {
 
 enum MarketTimeframe {
   m1  @map("1m")
+  m3  @map("3m")
   m5  @map("5m")
   m15 @map("15m")
+  m30 @map("30m")
   h1  @map("1h")
   h4  @map("4h")
+  h6  @map("6h")
+  h8  @map("8h")
+  h12 @map("12h")
   d1  @map("1d")
+  w1  @map("1w")
 }
 
 model Symbol {
