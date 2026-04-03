@@ -37,6 +37,8 @@ import { AccountStrategyViewRepository } from '../repositories/account-strategy-
 
 @Injectable()
 export class AccountStrategyViewService {
+  private static readonly BEST_EFFORT_EXTERNAL_TIMEOUT_MS = 1_500
+
   constructor(
     private readonly repo: AccountStrategyViewRepository,
     private readonly statsService: StrategyInstanceStatsService,
@@ -1148,17 +1150,28 @@ export class AccountStrategyViewService {
     if (!this.tradingService) return null
 
     try {
-      const balances = await this.tradingService.getBalance(
-        input.userId,
-        input.exchangeId,
-        input.marketType,
-        input.exchangeAccountId ?? undefined,
+      const balances = await this.withBestEffortTimeout(
+        this.tradingService.getBalance(
+          input.userId,
+          input.exchangeId,
+          input.marketType,
+          input.exchangeAccountId ?? undefined,
+        ),
       )
 
       return this.pickExchangeBalance(balances, input.preferredAsset)
     } catch {
       return null
     }
+  }
+
+  private async withBestEffortTimeout<T>(promise: Promise<T>): Promise<T> {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => {
+        setTimeout(() => reject(new Error('best effort timeout')), AccountStrategyViewService.BEST_EFFORT_EXTERNAL_TIMEOUT_MS)
+      }),
+    ])
   }
 
   private pickExchangeBalance(
