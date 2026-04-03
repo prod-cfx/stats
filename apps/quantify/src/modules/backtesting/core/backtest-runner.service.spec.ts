@@ -1,10 +1,10 @@
 import type { StrategyDecisionV1 } from '@ai/shared'
+import type { BacktestRunInput } from '../types/backtesting.types'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { TheoreticalExecutionModel } from '../execution/theoretical-execution.model'
 import { PortfolioLedgerServiceFactory } from '../portfolio/portfolio-ledger.service'
 import { BacktestReporterService } from '../report/backtest-reporter.service'
 import { StateEngineService } from '../state/state-engine.service'
-import type { BacktestRunInput } from '../types/backtesting.types'
 import { BacktestRunnerService, createBar } from './backtest-runner.service'
 
 describe('backtestRunnerService', () => {
