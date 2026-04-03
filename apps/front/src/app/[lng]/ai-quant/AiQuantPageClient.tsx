@@ -2035,7 +2035,11 @@ export function AiQuantPageClient() {
         accounts={deployAccounts}
         selectedAccountId={selectedDeployAccountId}
         onSelectExchange={nextExchange => {
-          if (nextExchange !== 'binance' && nextExchange !== 'okx') {
+          if (
+            nextExchange !== 'binance' &&
+            nextExchange !== 'okx' &&
+            nextExchange !== 'hyperliquid'
+          ) {
             return
           }
           setSelectedDeployExchange(nextExchange)
