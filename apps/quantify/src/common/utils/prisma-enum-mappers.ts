@@ -5,8 +5,7 @@
  * 例如: m1 @map("1m") 表示应用层使用 "m1"，数据库存储 "1m"
  */
 import type { IndicatorType, MarketTimeframe } from '@ai/shared'
-import { ErrorCode } from '@ai/shared'
-import { MARKET_TIMEFRAMES } from '@ai/shared'
+import { ErrorCode, MARKET_TIMEFRAMES } from '@ai/shared'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line no-restricted-imports -- $Enums needed for Prisma 7 @map key-name mapping
 import { $Enums } from '../../../generated/prisma'
