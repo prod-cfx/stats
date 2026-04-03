@@ -1,7 +1,9 @@
 import type { MultiLegStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import type { BacktestReport, BacktestRunInput, Bar, SignalIntent, StrategyContext } from '../types/backtesting.types'
+import { ErrorCode } from '@ai/shared'
 import { buildMultiLegStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
-import { Injectable } from '@nestjs/common'
+import { Injectable, HttpStatus } from '@nestjs/common'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { strategyDecisionToDeltaQty, validateStrategyDecision } from '@/modules/strategy-runtime/strategy-protocol.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TheoreticalExecutionModel } from '../execution/theoretical-execution.model'
@@ -181,6 +183,13 @@ export class BacktestRunnerService {
     if (decisionValidation.valid && decisionValidation.value) {
       return strategyDecisionToDeltaQty(decisionValidation.value, context)
     }
+    if (this.isStrategyDecisionLike(intent)) {
+      throw new DomainException('backtest.strategy_decision_invalid', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: { error: decisionValidation.error ?? 'invalid strategy decision' },
+      })
+    }
 
     if (this.isLlmSignalIntent(intent)) {
       return this.normalizeLlmSignalIntent(intent, context)
@@ -203,6 +212,14 @@ export class BacktestRunnerService {
       default:
         return 0
     }
+  }
+
+  private isStrategyDecisionLike(intent: SignalIntent): intent is Extract<SignalIntent, { action: string }> {
+    return typeof intent === 'object' && intent !== null && (
+      'action' in intent ||
+      'size' in intent ||
+      'adjustMode' in intent
+    )
   }
 
   private isLlmSignalIntent(intent: SignalIntent): intent is Extract<SignalIntent, { direction: string }> {

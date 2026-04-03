@@ -102,6 +102,23 @@ const PROCESSING_SESSION_STATUSES: readonly LlmCodegenSessionStatus[] = [
   'VALIDATING_OUTPUT',
 ]
 
+function normalizePublishedSymbol(raw: string): string {
+  return raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
+}
+
+function inferPublishedMarketType(args: {
+  symbol: string
+  checklist: ChecklistPayload
+  message: string
+}): 'spot' | 'perp' {
+  if (args.symbol.endsWith(':PERP')) return 'perp'
+  if (args.symbol.endsWith(':SPOT')) return 'spot'
+  const riskRules = args.checklist.riskRules ?? {}
+  const marketType = typeof riskRules.marketType === 'string' ? riskRules.marketType.trim().toLowerCase() : ''
+  if (marketType === 'perp' || marketType === 'spot') return marketType
+  return /永续|perp|swap|合约/i.test(args.message) ? 'perp' : 'spot'
+}
+
 @Injectable()
 export class CodegenConversationService {
   private readonly strictUnsupportedTargets = new Map<string, number>()
@@ -591,7 +608,13 @@ export class CodegenConversationService {
     params: Record<string, unknown>
     metadata: Record<string, unknown>
   } {
-    const symbol = args.checklist.symbols?.[0] ?? 'BTCUSDT'
+    const rawSymbol = args.checklist.symbols?.[0] ?? 'BTCUSDT'
+    const marketType = inferPublishedMarketType({
+      symbol: rawSymbol,
+      checklist: args.checklist,
+      message: args.message,
+    })
+    const symbol = normalizePublishedSymbol(rawSymbol)
     const timeframe = args.checklist.timeframes?.[0] ?? '5m'
     const name = `${symbol} ${timeframe} AI策略`
     return {
@@ -605,7 +628,7 @@ export class CodegenConversationService {
       params: {
         symbol,
         timeframe,
-        marketType: 'spot',
+        marketType,
       },
       metadata: {
         source: 'llm-codegen-session',

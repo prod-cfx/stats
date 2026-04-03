@@ -15,6 +15,7 @@ describe('contextSchemaPrompt', () => {
     const prompt = buildContextSchemaPrompt()
 
     expect(prompt).toContain('ctx.paramsNormalized')
+    expect(prompt).toContain('策略自定义字段可从 ctx.params 读取')
     expect(prompt).toContain('ctx.data / ctx.execution / ctx.legs / ctx.dataRequirements')
     expect(prompt).toContain('不要访问未声明字段')
   })

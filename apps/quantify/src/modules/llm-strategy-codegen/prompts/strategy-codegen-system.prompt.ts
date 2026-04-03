@@ -15,7 +15,7 @@ export function buildStrategyCodegenSystemPrompt(helperSignatures: string): stri
     '3) action=NOOP 时可省略 size；其他 action 必须有 size。',
     '4) action=ADJUST_POSITION 时 size.mode 必须是 "QTY"，adjustMode 只能是 TARGET 或 DELTA。',
     '5) confidence 若提供必须在 0~100。',
-    '6) 参数读取必须优先使用 ctx.paramsNormalized 固定字段，不要自造参数名。',
+    '6) 通用字段优先使用 ctx.paramsNormalized；策略自定义字段可从 ctx.params 读取，不要臆造参数名。',
     '7) 只输出纯 TypeScript 源码，不要任何说明文字。',
     'ctx 运行时上下文字段（可直接读取）：',
     buildContextSchemaPrompt(),

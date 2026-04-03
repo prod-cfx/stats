@@ -143,6 +143,37 @@ describe('ai-quant session-loop', () => {
     expect(payload.riskRules).toEqual({ positionPct: 25, maxDrawdownPct: 12 })
   })
 
+  it('keeps grid and marketType values in locked checklist when confirming generated logic', () => {
+    const payload = resolveChecklistPayload({
+      usePresetRules: false,
+      confirmGenerate: true,
+      message: '确认',
+      sessionId: null,
+      graph,
+      params: baseParams,
+      paramValues: {
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        gridLower: 60000,
+        gridUpper: 80000,
+        gridCount: 20,
+        gridStepPct: 1.67,
+        positionPct: 10,
+      },
+    } as any)
+
+    expect(payload.symbols).toEqual(['BTCUSDT'])
+    expect(payload.riskRules).toEqual({
+      positionPct: 10,
+      maxDrawdownPct: 20,
+      marketType: 'perp',
+      gridLower: 60000,
+      gridUpper: 80000,
+      gridCount: 20,
+      gridStepPct: 1.67,
+    })
+  })
+
   it('returns explicit error object when schema required keys are missing in paramValues', () => {
     const payload = resolveChecklistPayload({
       usePresetRules: false,

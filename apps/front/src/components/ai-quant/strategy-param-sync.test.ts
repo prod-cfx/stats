@@ -223,4 +223,44 @@ describe('strategy-param-sync', () => {
     expect(result.paramValues.symbol).toBe('ETHUSDC')
     expect(result.normalized.symbol).toBe('ETHUSDC')
   })
+
+  it('preserves grid-specific params and perp market intent from codegen spec', () => {
+    const result = syncStrategyParamsFromCodegen({
+      spec: {
+        entryRules: ['在 60000-80000 价格区间内，当价格下跌触及网格线时买入'],
+        exitRules: ['买入后当价格上涨一个网格时卖出'],
+        riskRules: {
+          positionPct: 10,
+          marketType: 'perp',
+          gridLower: 60000,
+          gridUpper: 80000,
+          gridCount: 20,
+          gridStepPct: 1.67,
+        },
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+      },
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 5,
+      },
+      capabilities: {
+        allowedSymbols: ['BTCUSDT'],
+        allowedBaseTimeframes: ['15m'],
+      },
+      contextText: '在 OKX 的 BTCUSDT 永续上运行网格策略',
+    })
+
+    expect(result.paramValues.exchange).toBe('okx')
+    expect(result.paramValues.marketType).toBe('perp')
+    expect(result.paramValues.gridLower).toBe(60000)
+    expect(result.paramValues.gridUpper).toBe(80000)
+    expect(result.paramValues.gridCount).toBe(20)
+    expect(result.paramValues.gridStepPct).toBe(1.67)
+    expect((result.paramSchema.properties as Record<string, any>).marketType.title).toBe('Market Type')
+  })
 })

@@ -8,6 +8,7 @@ describe('strategyCodegenSystemPrompt', () => {
     expect(prompt).toContain('const strategy: StrategyAdapterV1')
     expect(prompt).toContain('ctx.data')
     expect(prompt).toContain('ctx.paramsNormalized')
+    expect(prompt).toContain('策略自定义字段可从 ctx.params 读取')
     expect(prompt).toContain('size.mode 必须是 "QTY"')
     expect(prompt).toContain('helpers.ta.sma')
   })

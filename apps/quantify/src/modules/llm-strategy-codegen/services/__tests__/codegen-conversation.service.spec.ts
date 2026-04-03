@@ -933,6 +933,55 @@ const strategy: StrategyAdapterV1 = {
     }))
   })
 
+  it('publishes perp marketType when checklist risk rules require perpetual market', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-perp-publish',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      strategyInstanceId: null,
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['价格下跌触及网格线时买入'],
+        exitRules: ['价格上涨一个网格时卖出'],
+        riskRules: {
+          marketType: 'perp',
+          positionPct: 10,
+        },
+      },
+      constraintPack: {},
+    })
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已确认，可以生成。',
+        }),
+      })
+      .mockResolvedValueOnce({
+        content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 75, entryPrice: 62000, stopLoss: 61000, takeProfit: 64000, reasoning: "grid", positionSizeRatio: 0.1 }',
+      })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v-perp-1' })
+    mockRepo.updateSession.mockResolvedValue({ id: 's-perp-publish' })
+
+    const result = await service.continueSession('s-perp-publish', {
+      userId: 'u1',
+      message: '确认并生成',
+      confirmGenerate: true,
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await flushAsync()
+
+    expect(mockRepo.ensureDraftStrategyInstanceBoundForPublishedSession).toHaveBeenCalledWith(expect.objectContaining({
+      params: expect.objectContaining({
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+      }),
+    }))
+  })
+
   it('does not recreate strategy instance when session already bound', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-existing-instance',
