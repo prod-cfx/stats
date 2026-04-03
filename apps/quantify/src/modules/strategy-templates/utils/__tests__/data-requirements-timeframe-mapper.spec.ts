@@ -16,9 +16,19 @@ describe('data requirements timeframe mapper', () => {
     })
   })
 
+  it('parses shared market timeframes like 3m and 1w', () => {
+    const parsed = parseDataRequirements({
+      btc: ['3m', '1w'],
+    })
+
+    expect(parsed).toEqual({
+      btc: ['3m', '1w'],
+    })
+  })
+
   it('returns null when payload contains unsupported timeframe', () => {
     const parsed = parseDataRequirements({
-      btc: ['3m'],
+      btc: ['2m'],
     })
 
     expect(parsed).toBeNull()
@@ -26,12 +36,12 @@ describe('data requirements timeframe mapper', () => {
 
   it('maps a leg data requirement into app/prisma timeframe pairs', () => {
     const mappings = mapLegDataRequirementTimeframes({
-      btc: ['1h', '1d'],
+      btc: ['3m', '1w'],
     }, 'btc')
 
     expect(mappings).toEqual([
-      { appTimeframe: '1h', prismaTimeframe: 'h1' },
-      { appTimeframe: '1d', prismaTimeframe: 'd1' },
+      { appTimeframe: '3m', prismaTimeframe: 'm3' },
+      { appTimeframe: '1w', prismaTimeframe: 'w1' },
     ])
   })
 })
