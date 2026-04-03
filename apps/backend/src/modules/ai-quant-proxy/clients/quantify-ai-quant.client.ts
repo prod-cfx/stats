@@ -10,6 +10,10 @@ interface QuantifyErrorPayload {
   message?: string
 }
 
+interface QuantifyRequestOptions extends RequestInit {
+  timeoutMs?: number
+}
+
 const ENV_PLACEHOLDER = '__SET_IN_env.local__'
 
 function tryParseJson<T>(raw: string): T | null {
@@ -72,11 +76,11 @@ export class QuantifyAiQuantClient {
 
   constructor(@Inject(EnvService) private readonly env: EnvService) {}
 
-  async get<T>(path: string, init?: RequestInit): Promise<T> {
+  async get<T>(path: string, init?: QuantifyRequestOptions): Promise<T> {
     return this.request<T>(path, { method: 'GET', ...init })
   }
 
-  async post<T>(path: string, body?: unknown, init?: RequestInit): Promise<T> {
+  async post<T>(path: string, body?: unknown, init?: QuantifyRequestOptions): Promise<T> {
     return this.request<T>(path, {
       method: 'POST',
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -84,7 +88,7 @@ export class QuantifyAiQuantClient {
     })
   }
 
-  async patch<T>(path: string, body?: unknown, init?: RequestInit): Promise<T> {
+  async patch<T>(path: string, body?: unknown, init?: QuantifyRequestOptions): Promise<T> {
     return this.request<T>(path, {
       method: 'PATCH',
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -92,14 +96,15 @@ export class QuantifyAiQuantClient {
     })
   }
 
-  async delete<T>(path: string, init?: RequestInit): Promise<T> {
+  async delete<T>(path: string, init?: QuantifyRequestOptions): Promise<T> {
     return this.request<T>(path, { method: 'DELETE', ...init })
   }
 
-  private async request<T>(path: string, init?: RequestInit): Promise<T> {
-    const timeoutMs = this.getRequestTimeoutMs()
+  private async request<T>(path: string, init?: QuantifyRequestOptions): Promise<T> {
+    const { timeoutMs: timeoutOverrideMs, ...fetchInit } = init ?? {}
+    const timeoutMs = this.getRequestTimeoutMs(timeoutOverrideMs)
     const timeoutController = new AbortController()
-    const upstreamSignal = init?.signal
+    const upstreamSignal = fetchInit.signal
     const onUpstreamAbort = () => timeoutController.abort(upstreamSignal?.reason)
     if (upstreamSignal) {
       if (upstreamSignal.aborted) {
@@ -113,11 +118,11 @@ export class QuantifyAiQuantClient {
     let response: Response
     try {
       response = await fetch(`${this.baseUrl()}${path}`, {
-        ...init,
+        ...fetchInit,
         signal: timeoutController.signal,
         headers: {
           'content-type': 'application/json',
-          ...(init?.headers ?? {}),
+          ...(fetchInit.headers ?? {}),
         },
       })
     }
@@ -194,7 +199,13 @@ export class QuantifyAiQuantClient {
     return 'http://localhost:3010/api/v1'
   }
 
-  private getRequestTimeoutMs(): number {
+  private getRequestTimeoutMs(overrideMs?: number): number {
+    if (overrideMs !== undefined && Number.isFinite(overrideMs)) {
+      return Math.max(
+        QuantifyAiQuantClient.MIN_REQUEST_TIMEOUT_MS,
+        Math.floor(overrideMs),
+      )
+    }
     const configured = this.env.getNumber('QUANTIFY_REQUEST_TIMEOUT_MS')
     if (!configured || !Number.isFinite(configured)) {
       return QuantifyAiQuantClient.DEFAULT_REQUEST_TIMEOUT_MS

@@ -10,6 +10,7 @@ export class AiQuantProxyService {
   private static readonly BACKTEST_CAPABILITIES_BACKOFF_BASE_MS = 200
   private static readonly BACKTEST_CAPABILITIES_BACKOFF_MAX_MS = 1_500
   private static readonly BACKTEST_CAPABILITIES_BACKOFF_JITTER_MS = 100
+  private static readonly CODEGEN_REQUEST_TIMEOUT_MS = 60_000
   private static readonly DEPLOY_RETRY_ATTEMPTS = 3
   private static readonly DEPLOY_BACKOFF_BASE_MS = 200
   private static readonly DEPLOY_BACKOFF_MAX_MS = 1_000
@@ -123,12 +124,14 @@ export class AiQuantProxyService {
 
   async startCodegen(authorization: string | undefined, body: Record<string, unknown>) {
     return this.quantifyClient.post('/llm-strategy-codegen/sessions', body, {
+      timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
       headers: this.authorizationHeaders(authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
   async getCodegenSession(authorization: string | undefined, sessionId: string) {
     return this.quantifyClient.get(`/llm-strategy-codegen/sessions/${encodeURIComponent(sessionId)}`, {
+      timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
       headers: this.authorizationHeaders(authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
@@ -139,6 +142,7 @@ export class AiQuantProxyService {
     body: Record<string, unknown>,
   ) {
     return this.quantifyClient.post(`/llm-strategy-codegen/sessions/${encodeURIComponent(sessionId)}/messages`, body, {
+      timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
       headers: this.authorizationHeaders(authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
   }

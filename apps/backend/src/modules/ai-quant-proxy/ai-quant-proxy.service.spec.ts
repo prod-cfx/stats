@@ -3,6 +3,8 @@ import { AiQuantProxyService } from './ai-quant-proxy.service'
 import { QuantifyClientError } from './clients/quantify-ai-quant.client'
 
 describe('aiQuantProxyService', () => {
+  const codegenTimeoutMs = 60_000
+
   function createService() {
     const quantifyClient = {
       get: jest.fn(),
@@ -177,6 +179,7 @@ describe('aiQuantProxyService', () => {
         symbols: ['BTCUSDT'],
       },
       {
+        timeoutMs: codegenTimeoutMs,
         headers: { authorization: 'Bearer token-1' },
       },
     )
@@ -198,6 +201,7 @@ describe('aiQuantProxyService', () => {
         confirmGenerate: false,
       },
       {
+        timeoutMs: codegenTimeoutMs,
         headers: { authorization: 'Bearer token-1' },
       },
     )
@@ -212,6 +216,7 @@ describe('aiQuantProxyService', () => {
     expect(quantifyClient.get).toHaveBeenCalledWith(
       '/llm-strategy-codegen/sessions/session-1',
       {
+        timeoutMs: codegenTimeoutMs,
         headers: { authorization: 'Bearer token-1' },
       },
     )
