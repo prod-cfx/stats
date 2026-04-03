@@ -1,9 +1,17 @@
 import type { CanonicalAction, CanonicalSizingMode } from '../types/canonical-strategy-spec'
-import type { StrategySemanticIndicator, StrategySemanticProfile, StrategySemanticRuleKey } from '../types/strategy-semantic-profile'
+import type {
+  StrategySemanticIndicator,
+  StrategySemanticProfile,
+  StrategySemanticRuleKey,
+  StrategySemanticSizing,
+} from '../types/strategy-semantic-profile'
 import { Injectable } from '@nestjs/common'
 
 const ACTION_PATTERN = /action\s*:\s*['"]([A-Z_]+)['"]/g
 const PARAM_PATTERN = /ctx\.params(?:Normalized)?\??\.([A-Za-z_]\w*)/g
+const DECISION_SIZE_PATTERN = /size\s*:\s*\{[^}]*mode\s*:\s*['"](RATIO|QUOTE|QTY)['"][^}]*value\s*:\s*([^,\n}]+)/
+const LEGACY_RATIO_SIZE_PATTERN = /positionSizeRatio\s*:\s*([^,\n}]+)/
+const LEGACY_QUOTE_SIZE_PATTERN = /positionSizeQuote\s*:\s*([^,\n}]+)/
 
 @Injectable()
 export class ScriptProfileExtractorService {
@@ -111,14 +119,34 @@ export class ScriptProfileExtractorService {
   }
 
   private extractSizing(scriptCode: string): StrategySemanticProfile['sizing'] {
-    const match = scriptCode.match(/size\s*:\s*\{\s*mode\s*:\s*['"](RATIO|QUOTE|QTY)['"]\s*,\s*value\s*:\s*(\d+(?:\.\d+)?)\s*\}/)
-    if (!match?.[1] || !match[2]) {
-      return null
+    const decisionMatch = scriptCode.match(DECISION_SIZE_PATTERN)
+    if (decisionMatch?.[1] && decisionMatch[2]) {
+      return this.resolveSizingExpression({
+        scriptCode,
+        mode: decisionMatch[1] as CanonicalSizingMode,
+        expression: decisionMatch[2],
+      })
     }
-    return {
-      mode: match[1] as CanonicalSizingMode,
-      value: Number(match[2]),
+
+    const legacyRatioMatch = scriptCode.match(LEGACY_RATIO_SIZE_PATTERN)
+    if (legacyRatioMatch?.[1]) {
+      return this.resolveSizingExpression({
+        scriptCode,
+        mode: 'RATIO',
+        expression: legacyRatioMatch[1],
+      })
     }
+
+    const legacyQuoteMatch = scriptCode.match(LEGACY_QUOTE_SIZE_PATTERN)
+    if (legacyQuoteMatch?.[1]) {
+      return this.resolveSizingExpression({
+        scriptCode,
+        mode: 'QUOTE',
+        expression: legacyQuoteMatch[1],
+      })
+    }
+
+    return null
   }
 
   private extractRequiredParams(scriptCode: string): string[] {
@@ -146,5 +174,80 @@ export class ScriptProfileExtractorService {
     const guardHits = guardMarkers.filter(marker => normalized.includes(marker)).length
     const signalHits = signalMarkers.filter(marker => normalized.includes(marker)).length
     return guardHits >= 2 && signalHits >= 1
+  }
+
+  private resolveSizingExpression(input: {
+    scriptCode: string
+    mode: CanonicalSizingMode
+    expression: string
+    depth?: number
+  }): StrategySemanticSizing {
+    const depth = input.depth ?? 0
+    const expression = input.expression.trim()
+
+    if (/^\d+(?:\.\d+)?$/.test(expression)) {
+      return {
+        mode: input.mode,
+        value: Number(expression),
+        source: 'literal',
+      }
+    }
+
+    if (this.isNormalizedPositionPctExpression(expression)) {
+      return {
+        mode: input.mode,
+        value: null,
+        source: 'positionPct_normalized',
+      }
+    }
+
+    if (this.isRawPositionPctExpression(expression)) {
+      return {
+        mode: input.mode,
+        value: null,
+        source: 'positionPct_raw',
+      }
+    }
+
+    const identifier = expression.match(/^[a-z_]\w*$/i)?.[0]
+    if (identifier && depth < 3) {
+      const assignedExpression = this.findAssignedExpression(input.scriptCode, identifier)
+      if (assignedExpression) {
+        return this.resolveSizingExpression({
+          ...input,
+          expression: assignedExpression,
+          depth: depth + 1,
+        })
+      }
+    }
+
+    return {
+      mode: input.mode,
+      value: null,
+      source: 'unknown',
+    }
+  }
+
+  private isNormalizedPositionPctExpression(expression: string): boolean {
+    return /positionPct\s*\/\s*100/.test(expression)
+      || /params(?:Normalized)?\??\.positionPct\s*\/\s*100/.test(expression)
+  }
+
+  private isRawPositionPctExpression(expression: string): boolean {
+    return /params(?:Normalized)?\??\.positionPct/.test(expression)
+      || expression === 'positionPct'
+  }
+
+  private findAssignedExpression(scriptCode: string, identifier: string): string | null {
+    const escaped = identifier.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const declarationPattern = new RegExp(
+      `(?:const|let|var)\\s+${escaped}\\s*=\\s*([\\s\\S]{0,400}?)(?=;|\\n\\s*(?:const|let|var|return|if|for|while)\\b|\\n\\s*\\})`,
+    )
+    const declarationMatch = declarationPattern.exec(scriptCode)
+    if (declarationMatch?.[1]) {
+      return declarationMatch[1].trim()
+    }
+
+    return null
   }
 }

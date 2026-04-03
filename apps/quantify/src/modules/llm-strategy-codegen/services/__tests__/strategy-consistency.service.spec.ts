@@ -101,4 +101,71 @@ strategy
     expect(report.status).toBe('FAILED')
     expect(report.checks.some(check => check.key === 'rules.mapping' && check.status === 'failed')).toBe(true)
   })
+
+  it('passes when ratio sizing is derived from normalized positionPct params', () => {
+    const spec = canonicalBuilder.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['突破布林带上轨时做空'],
+      exitRules: ['回到中轨时平仓'],
+      riskRules: { positionPct: 10 },
+    })
+
+    const report = consistency.evaluate({
+      canonicalSpec: spec,
+      scriptCode: `
+const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const closes = ctx.bars?.map(item => item.close) ?? []
+    const bb = ctx.helpers?.ta?.bollingerBands(closes, 20, 2)
+    if (!bb) return { action: 'NOOP' }
+    const positionPct = ctx.paramsNormalized?.positionPct
+    const ratio = typeof positionPct === 'number' && positionPct > 0
+      ? Math.min(positionPct / 100, 1)
+      : 0.1
+    if (closes.at(-1)! > bb.upper) return { action: 'OPEN_SHORT', size: { mode: 'RATIO', value: ratio } }
+    if (Math.abs(closes.at(-1)! - bb.middle) <= 1) return { action: 'ADJUST_POSITION', reason: 'middle' }
+    return { action: 'NOOP' }
+  },
+}
+strategy
+`,
+    })
+
+    expect(report.status).toBe('PASSED')
+    expect(report.checks.some(check => check.key === 'sizing.mode' && check.status === 'passed')).toBe(true)
+  })
+
+  it('fails when ratio sizing uses raw positionPct without normalization', () => {
+    const spec = canonicalBuilder.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['突破布林带上轨时做空'],
+      exitRules: ['回到中轨时平仓'],
+      riskRules: { positionPct: 10 },
+    })
+
+    const report = consistency.evaluate({
+      canonicalSpec: spec,
+      scriptCode: `
+const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const closes = ctx.bars?.map(item => item.close) ?? []
+    const bb = ctx.helpers?.ta?.bollingerBands(closes, 20, 2)
+    if (!bb) return { action: 'NOOP' }
+    const params = ctx.paramsNormalized || {}
+    if (closes.at(-1)! > bb.upper) return { action: 'OPEN_SHORT', size: { mode: 'RATIO', value: params.positionPct } }
+    if (Math.abs(closes.at(-1)! - bb.middle) <= 1) return { action: 'ADJUST_POSITION', reason: 'middle' }
+    return { action: 'NOOP' }
+  },
+}
+strategy
+`,
+    })
+
+    expect(report.status).toBe('FAILED')
+    expect(report.checks.some(check => check.key === 'sizing.mode' && check.status === 'failed')).toBe(true)
+  })
 })

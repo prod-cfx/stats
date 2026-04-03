@@ -43,7 +43,12 @@ export class StrategyConsistencyService {
       indicators: spec.indicators,
       actions: Array.from(actions),
       ruleMappings: this.buildRuleMappings(spec),
-      sizing: spec.sizing ?? null,
+      sizing: spec.sizing
+        ? {
+          ...spec.sizing,
+          source: 'literal',
+        }
+        : null,
       requiredParams: [],
       fallbackDetected: false,
     }
@@ -238,21 +243,46 @@ export class StrategyConsistencyService {
     specProfile: StrategySemanticProfile,
     scriptProfile: StrategySemanticProfile,
   ): StrategyConsistencyCheck {
-    if (!specProfile.sizing || !scriptProfile.sizing) {
+    const requiresSizingEvidence = specProfile.actions.some(action => action.startsWith('OPEN_'))
+      || scriptProfile.actions.some(action => action.startsWith('OPEN_'))
+
+    if (!specProfile.sizing) {
       return {
         key: 'sizing.mode',
         level: 'warning',
         status: 'unprovable',
         expected: specProfile.sizing,
         actual: scriptProfile.sizing,
-        message: '仓位语义不足，跳过仓位比对。',
+        message: 'canonical spec 未声明仓位规则，跳过仓位比对。',
+      }
+    }
+
+    if (!requiresSizingEvidence) {
+      return {
+        key: 'sizing.mode',
+        level: 'warning',
+        status: 'unprovable',
+        expected: specProfile.sizing,
+        actual: scriptProfile.sizing,
+        message: '当前脚本未呈现可校验的开仓仓位语义，跳过 sizing 强校验。',
+      }
+    }
+
+    if (!scriptProfile.sizing) {
+      return {
+        key: 'sizing.mode',
+        level: 'critical',
+        status: 'failed',
+        expected: specProfile.sizing,
+        actual: null,
+        message: '脚本缺少可验证的仓位声明，禁止发布。',
       }
     }
 
     if (specProfile.sizing.mode !== scriptProfile.sizing.mode) {
       return {
         key: 'sizing.mode',
-        level: 'warning',
+        level: 'critical',
         status: 'failed',
         expected: specProfile.sizing.mode,
         actual: scriptProfile.sizing.mode,
@@ -260,13 +290,50 @@ export class StrategyConsistencyService {
       }
     }
 
+    if (scriptProfile.sizing.source === 'positionPct_raw') {
+      return {
+        key: 'sizing.mode',
+        level: 'critical',
+        status: 'failed',
+        expected: specProfile.sizing,
+        actual: scriptProfile.sizing,
+        message: '脚本直接把 positionPct 当作 RATIO 使用，缺少百分比归一化。',
+      }
+    }
+
+    if (scriptProfile.sizing.source === 'unknown') {
+      return {
+        key: 'sizing.mode',
+        level: 'critical',
+        status: 'failed',
+        expected: specProfile.sizing,
+        actual: scriptProfile.sizing,
+        message: '脚本仓位表达式无法证明与 canonical spec 一致，禁止发布。',
+      }
+    }
+
+    if (scriptProfile.sizing.source === 'literal') {
+      const actualValue = scriptProfile.sizing.value
+      const expectedValue = specProfile.sizing.value
+      if (typeof actualValue !== 'number' || Math.abs(actualValue - expectedValue) > 0.0001) {
+        return {
+          key: 'sizing.mode',
+          level: 'critical',
+          status: 'failed',
+          expected: specProfile.sizing,
+          actual: scriptProfile.sizing,
+          message: '脚本仓位值与 canonical spec 不一致。',
+        }
+      }
+    }
+
     return {
       key: 'sizing.mode',
-      level: 'warning',
+      level: 'critical',
       status: 'passed',
-      expected: specProfile.sizing.mode,
-      actual: scriptProfile.sizing.mode,
-      message: '仓位模式一致。',
+      expected: specProfile.sizing,
+      actual: scriptProfile.sizing,
+      message: '仓位语义与 canonical spec 一致。',
     }
   }
 
