@@ -371,6 +371,75 @@ describe('backtestMarketDataService', () => {
     }))
   })
 
+  it('prefers perp symbol when resolving coverage for perp backtests', async () => {
+    const repository = createRepositoryMock()
+    repository.findSymbolsByCodes.mockResolvedValue([{ id: 'perp-id', code: 'BTCUSDT:PERP' }])
+    repository.aggregateCoverage.mockResolvedValue({ _min: { time: new Date(1_000) }, _max: { time: new Date(5_000) } })
+
+    const { service } = createService(repository)
+    const coverage = await service.resolveCoverage({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      dataRange: { fromTs: 1_500, toTs: 4_500 },
+      strategy: {
+        id: 's-perp',
+        params: { exchange: 'okx', marketType: 'perp' },
+        fn: () => ({ type: 'NOOP' }),
+      },
+    })
+
+    expect(repository.findSymbolsByCodes).toHaveBeenCalledWith(['BTCUSDT:PERP'])
+    expect(repository.aggregateCoverage).toHaveBeenCalledWith({
+      symbolId: 'perp-id',
+      timeframe: '15m',
+    })
+    expect(coverage).toEqual({
+      kind: 'full',
+      availableRange: { fromTs: 1_000, toTs: 5_000 },
+      appliedRange: { fromTs: 1_500, toTs: 4_500 },
+    })
+  })
+
+  it('prefers perp symbol when loading bars for perp backtests', async () => {
+    const repository = createRepositoryMock()
+    repository.findSymbolsByCodes.mockResolvedValue([{ id: 'perp-id', code: 'BTCUSDT:PERP' }])
+    repository.findBars.mockResolvedValue([
+      {
+        time: new Date(2_000),
+        open: 11,
+        high: 12,
+        low: 10,
+        close: 11.5,
+        volume: 120,
+      },
+    ])
+
+    const { service } = createService(repository)
+    const bars = await service.loadBars({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: [],
+      dataRange: { fromTs: 1_500, toTs: 2_500 },
+      strategy: {
+        id: 's-perp',
+        params: { exchange: 'okx', marketType: 'perp' },
+        fn: () => ({ type: 'NOOP' }),
+      },
+    })
+
+    expect(repository.findSymbolsByCodes).toHaveBeenCalledWith(['BTCUSDT:PERP'])
+    expect(repository.findBars).toHaveBeenCalledWith({
+      symbolId: 'perp-id',
+      timeframe: '15m',
+      fromTs: 1_500,
+      toTs: 2_500,
+    })
+    expect(bars).toEqual([
+      expect.objectContaining({ symbol: 'BTCUSDT:PERP', timeframe: '15m', closeTime: 2_000, close: 11.5 }),
+    ])
+  })
+
   it('returns not_supported when the requested exchange symbol is absent upstream', async () => {
     const repository = createRepositoryMock()
     const { service, okxProvider, marketDataService } = createService(repository)

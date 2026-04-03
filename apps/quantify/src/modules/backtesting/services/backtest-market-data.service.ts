@@ -22,8 +22,12 @@ import { getMarketTimeframeMs } from '@/modules/market-data/utils/market-timefra
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestMarketDataRepository } from '../repositories/backtest-market-data.repository'
 
-type LoadBarsInput = Pick<BacktestRunInput, 'symbols' | 'baseTimeframe' | 'stateTimeframes' | 'dataRange'>
-type CoverageInput = Pick<BacktestRunInput, 'symbols' | 'baseTimeframe' | 'stateTimeframes' | 'dataRange'>
+type LoadBarsInput = Pick<BacktestRunInput, 'symbols' | 'baseTimeframe' | 'stateTimeframes' | 'dataRange'> & {
+  strategy?: BacktestRunInput['strategy']
+}
+type CoverageInput = Pick<BacktestRunInput, 'symbols' | 'baseTimeframe' | 'stateTimeframes' | 'dataRange'> & {
+  strategy?: BacktestRunInput['strategy']
+}
 type SupportedExchange = 'binance' | 'okx' | 'hyperliquid'
 type SupportedMarketType = 'spot' | 'perp'
 
@@ -123,7 +127,7 @@ export class BacktestMarketDataService {
   }
 
   async loadBars(input: LoadBarsInput): Promise<Bar[]> {
-    const symbols = this.normalizeSymbols(input.symbols)
+    const symbols = this.normalizeSymbols(input.symbols, this.extractMarketType(input.strategy?.params ?? {}))
     const bars: Bar[] = []
     const symbolMap = await this.loadSymbolMap(symbols)
     const timeframes = [...new Set<Timeframe>([input.baseTimeframe, ...input.stateTimeframes])]
@@ -162,7 +166,7 @@ export class BacktestMarketDataService {
   }
 
   async resolveCoverage(input: CoverageInput): Promise<BacktestRangeCoverage> {
-    const symbols = this.normalizeSymbols(input.symbols)
+    const symbols = this.normalizeSymbols(input.symbols, this.extractMarketType(input.strategy?.params ?? {}))
     const ranges: Array<{ fromTs: number; toTs: number }> = []
     const symbolMap = await this.loadSymbolMap(symbols)
     if (symbolMap.size < symbols.length) return { kind: 'empty' }
