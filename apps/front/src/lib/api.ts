@@ -2103,6 +2103,8 @@ export interface LlmCodegenSessionResponse {
   status: string
   missingFields?: string[]
   scriptCode?: string | null
+  publishedSnapshotId?: string | null
+  consistencyReport?: Record<string, unknown> | null
   specDesc?: Record<string, unknown> | null
   strategyInstanceId?: string | null
   rejectReason?: string | null

@@ -149,7 +149,7 @@ function defaultPayload() {
     strategy: {
       id: 'session-1',
       protocolVersion: 'v1',
-      scriptCode: 'return {}',
+      publishedSnapshotId: 'snapshot-1',
       params: {},
     },
     dataRange: {
@@ -203,6 +203,7 @@ function seedConfirmedConversation(now = Date.now()) {
       },
       llmCodegenSessionId: null,
       publishedStrategyInstanceId: null,
+      publishedSnapshotId: 'snapshot-1',
       latestSignalMessage: null,
       backtestExecutionState: 'idle',
       updatedAt: now,
@@ -509,6 +510,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
           },
           llmCodegenSessionId: null,
           publishedStrategyInstanceId: null,
+          publishedSnapshotId: 'snapshot-1',
           latestSignalMessage: null,
           backtestExecutionState: state,
           updatedAt: now,
@@ -554,9 +556,9 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
   it('builder payload failure blocks execution and shows message', async () => {
     mockBuildBacktestPayload.mockImplementation(() => {
-      const error = new Error('missing_script_code')
+      const error = new Error('missing_published_snapshot')
       ;(error as Error & { __builderError: boolean; code: string }).__builderError = true
-      ;(error as Error & { __builderError: boolean; code: string }).code = 'missing_script_code'
+      ;(error as Error & { __builderError: boolean; code: string }).code = 'missing_published_snapshot'
       throw error
     })
 

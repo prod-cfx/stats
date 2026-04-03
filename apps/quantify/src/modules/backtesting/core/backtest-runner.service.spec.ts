@@ -4,17 +4,23 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 import { TheoreticalExecutionModel } from '../execution/theoretical-execution.model'
 import { PortfolioLedgerServiceFactory } from '../portfolio/portfolio-ledger.service'
 import { BacktestReporterService } from '../report/backtest-reporter.service'
+import { RiskEvaluatorService } from '../risk/risk-evaluator.service'
 import { StateEngineService } from '../state/state-engine.service'
 import { BacktestRunnerService, createBar } from './backtest-runner.service'
 
+function createRunner(riskEvaluator: RiskEvaluatorService = new RiskEvaluatorService()) {
+  return new BacktestRunnerService(
+    new TheoreticalExecutionModel(),
+    new PortfolioLedgerServiceFactory(),
+    new BacktestReporterService(),
+    new StateEngineService(),
+    riskEvaluator,
+  )
+}
+
 describe('backtestRunnerService', () => {
   it('should run low-tf loop and return report skeleton', async () => {
-    const runner = new BacktestRunnerService(
-      new TheoreticalExecutionModel(),
-      new PortfolioLedgerServiceFactory(),
-      new BacktestReporterService(),
-      new StateEngineService(),
-    )
+    const runner = createRunner()
 
     const report = await runner.run({
       symbols: ['BTCUSDT'],
@@ -40,12 +46,7 @@ describe('backtestRunnerService', () => {
   })
 
   it('should only run base bars for requested symbols', async () => {
-    const runner = new BacktestRunnerService(
-      new TheoreticalExecutionModel(),
-      new PortfolioLedgerServiceFactory(),
-      new BacktestReporterService(),
-      new StateEngineService(),
-    )
+    const runner = createRunner()
     const symbolsSeen: string[] = []
 
     await runner.run({
@@ -74,12 +75,7 @@ describe('backtestRunnerService', () => {
   })
 
   it('should only run base bars inside dataRange', async () => {
-    const runner = new BacktestRunnerService(
-      new TheoreticalExecutionModel(),
-      new PortfolioLedgerServiceFactory(),
-      new BacktestReporterService(),
-      new StateEngineService(),
-    )
+    const runner = createRunner()
     const tsSeen: number[] = []
 
     await runner.run({
@@ -110,12 +106,7 @@ describe('backtestRunnerService', () => {
   })
 
   it('should respect leverage cap when opening position', async () => {
-    const runner = new BacktestRunnerService(
-      new TheoreticalExecutionModel(),
-      new PortfolioLedgerServiceFactory(),
-      new BacktestReporterService(),
-      new StateEngineService(),
-    )
+    const runner = createRunner()
 
     const report = await runner.run({
       symbols: ['BTCUSDT'],
@@ -129,9 +120,10 @@ describe('backtestRunnerService', () => {
         params: {},
         fn: () => ({ type: 'TARGET_POSITION', targetQty: 10 }),
       },
-      dataRange: { fromTs: 1, toTs: 1 },
+      dataRange: { fromTs: 1, toTs: 2 },
       bars: [
         createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, open: 100, close: 100 }),
       ],
     })
 
@@ -139,12 +131,7 @@ describe('backtestRunnerService', () => {
   })
 
   it('should accept llm signal payload and open long by positionSizeRatio', async () => {
-    const runner = new BacktestRunnerService(
-      new TheoreticalExecutionModel(),
-      new PortfolioLedgerServiceFactory(),
-      new BacktestReporterService(),
-      new StateEngineService(),
-    )
+    const runner = createRunner()
 
     const report = await runner.run({
       symbols: ['BTCUSDT'],
@@ -167,9 +154,10 @@ describe('backtestRunnerService', () => {
           positionSizeRatio: 0.2,
         }),
       },
-      dataRange: { fromTs: 1, toTs: 1 },
+      dataRange: { fromTs: 1, toTs: 2 },
       bars: [
         createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, open: 100, close: 100 }),
       ],
     })
 
@@ -177,12 +165,7 @@ describe('backtestRunnerService', () => {
   })
 
   it('should accept llm signal payload and close long position', async () => {
-    const runner = new BacktestRunnerService(
-      new TheoreticalExecutionModel(),
-      new PortfolioLedgerServiceFactory(),
-      new BacktestReporterService(),
-      new StateEngineService(),
-    )
+    const runner = createRunner()
 
     const report = await runner.run({
       symbols: ['BTCUSDT'],
@@ -218,24 +201,22 @@ describe('backtestRunnerService', () => {
           }
         },
       },
-      dataRange: { fromTs: 1, toTs: 2 },
+      dataRange: { fromTs: 1, toTs: 3 },
       bars: [
         createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
         createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, open: 102, close: 102 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 3, open: 101, close: 101 }),
       ],
     })
 
     expect((report.openPositions ?? []).length).toBe(0)
     expect(report.summary.totalTrades).toBe(1)
+    expect(report.trades[0]?.exitReason).toBe('close')
+    expect(report.trades[0]?.exitSource).toBe('strategy')
   })
 
   it('should accept strategy decision protocol and open long', async () => {
-    const runner = new BacktestRunnerService(
-      new TheoreticalExecutionModel(),
-      new PortfolioLedgerServiceFactory(),
-      new BacktestReporterService(),
-      new StateEngineService(),
-    )
+    const runner = createRunner()
 
     const report = await runner.run({
       symbols: ['BTCUSDT'],
@@ -254,9 +235,10 @@ describe('backtestRunnerService', () => {
           reason: 'protocol v1',
         }),
       },
-      dataRange: { fromTs: 1, toTs: 1 },
+      dataRange: { fromTs: 1, toTs: 2 },
       bars: [
         createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, open: 100, close: 100 }),
       ],
     })
 
@@ -264,12 +246,7 @@ describe('backtestRunnerService', () => {
   })
 
   it('should reject invalid strategy adapter decisions instead of silently no-oping', async () => {
-    const runner = new BacktestRunnerService(
-      new TheoreticalExecutionModel(),
-      new PortfolioLedgerServiceFactory(),
-      new BacktestReporterService(),
-      new StateEngineService(),
-    )
+    const runner = createRunner()
 
     const input: BacktestRunInput = {
       symbols: ['BTCUSDT'],
@@ -306,12 +283,7 @@ describe('backtestRunnerService', () => {
   })
 
   it('should support ADJUST_POSITION with TARGET mode', async () => {
-    const runner = new BacktestRunnerService(
-      new TheoreticalExecutionModel(),
-      new PortfolioLedgerServiceFactory(),
-      new BacktestReporterService(),
-      new StateEngineService(),
-    )
+    const runner = createRunner()
 
     const report = await runner.run({
       symbols: ['BTCUSDT'],
@@ -336,10 +308,11 @@ describe('backtestRunnerService', () => {
           }
         },
       },
-      dataRange: { fromTs: 1, toTs: 2 },
+      dataRange: { fromTs: 1, toTs: 3 },
       bars: [
-        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, close: 100 }),
-        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, close: 101 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, open: 101, close: 101 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 3, open: 102, close: 102 }),
       ],
     })
 
@@ -347,12 +320,7 @@ describe('backtestRunnerService', () => {
   })
 
   it('should support ADJUST_POSITION with DELTA mode', async () => {
-    const runner = new BacktestRunnerService(
-      new TheoreticalExecutionModel(),
-      new PortfolioLedgerServiceFactory(),
-      new BacktestReporterService(),
-      new StateEngineService(),
-    )
+    const runner = createRunner()
 
     const report = await runner.run({
       symbols: ['BTCUSDT'],
@@ -377,10 +345,11 @@ describe('backtestRunnerService', () => {
           }
         },
       },
-      dataRange: { fromTs: 1, toTs: 2 },
+      dataRange: { fromTs: 1, toTs: 3 },
       bars: [
-        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, close: 100 }),
-        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, close: 101 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, open: 101, close: 101 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 3, open: 102, close: 102 }),
       ],
     })
 
@@ -388,12 +357,7 @@ describe('backtestRunnerService', () => {
   })
 
   it('should provide multi-leg runtime context helpers for protocol strategy scripts', async () => {
-    const runner = new BacktestRunnerService(
-      new TheoreticalExecutionModel(),
-      new PortfolioLedgerServiceFactory(),
-      new BacktestReporterService(),
-      new StateEngineService(),
-    )
+    const runner = createRunner()
 
     const report = await runner.run({
       symbols: ['BTCUSDT'],
@@ -421,16 +385,204 @@ describe('backtestRunnerService', () => {
           return { action: 'NOOP' }
         },
       },
-      dataRange: { fromTs: 1, toTs: 4 },
+      dataRange: { fromTs: 1, toTs: 5 },
       bars: [
         createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, close: 1 }),
         createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, close: 2 }),
         createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 3, close: 3 }),
         createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 4, close: 0 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 5, close: 0 }),
       ],
     })
 
     expect(report.summary.totalTrades).toBe(1)
     expect(report.openPositions?.length ?? 0).toBe(0)
+  })
+
+  it('defaults to signal-at-close and fill-at-next-bar-open', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['5m'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-next-open',
+        params: {},
+        fn: ({ ts }): StrategyDecisionV1 => ts === 1
+          ? { action: 'OPEN_LONG', size: { mode: 'QTY', value: 1 }, confidence: 90, reason: 'open on next' }
+          : { action: 'NOOP' },
+      },
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 105 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, open: 110, close: 111 }),
+      ],
+    })
+
+    expect(report.openPositions?.[0]?.avgEntryPrice).toBeCloseTo(110)
+  })
+
+  it('preserves a final pending signal when there is no next bar under NEXT_BAR_OPEN policy', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['5m'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-pending-last-bar',
+        params: {},
+        fn: (): StrategyDecisionV1 => ({ action: 'OPEN_LONG', size: { mode: 'QTY', value: 1 }, confidence: 90 }),
+      },
+      dataRange: { fromTs: 1, toTs: 1 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+      ],
+    })
+
+    expect(report.summary.totalTrades).toBe(0)
+    expect(report.openPositions ?? []).toHaveLength(0)
+    expect(report.pendingSignals).toEqual([
+      expect.objectContaining({
+        symbol: 'BTCUSDT',
+        deltaQty: 1,
+        reasonSource: 'strategy',
+      }),
+    ])
+  })
+
+  it('drops the final pending signal when noNextBarHandling is DROP_SIGNAL', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['5m'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-pending-drop',
+        params: {},
+        executionPolicy: { fillTiming: 'NEXT_BAR_OPEN', noNextBarHandling: 'DROP_SIGNAL' },
+        fn: (): StrategyDecisionV1 => ({ action: 'OPEN_LONG', size: { mode: 'QTY', value: 1 }, confidence: 90 }),
+      },
+      dataRange: { fromTs: 1, toTs: 1 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+      ],
+    })
+
+    expect(report.pendingSignals).toBeUndefined()
+  })
+
+  it('applies max floating loss stop and writes risk exit reason/source', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['5m'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-risk-stop',
+        params: {},
+        riskRules: { maxFloatingLossPct: 5 },
+        fn: ({ ts }): StrategyDecisionV1 => ts === 1
+          ? { action: 'OPEN_LONG', size: { mode: 'QTY', value: 1 }, confidence: 90, reason: 'open' }
+          : { action: 'NOOP' },
+      },
+      dataRange: { fromTs: 1, toTs: 3 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, open: 100, close: 94 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 3, open: 93, close: 93 }),
+      ],
+    })
+
+    expect(report.summary.totalTrades).toBe(1)
+    expect(report.openPositions ?? []).toHaveLength(0)
+    expect(report.trades[0]?.exitReason).toBe('risk.max_floating_loss')
+    expect(report.trades[0]?.exitSource).toBe('risk')
+  })
+
+  it('triggers risk close after 3 consecutive outside-band bars', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['5m'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-risk-band',
+        params: {},
+        riskRules: {
+          outsideBand: {
+            lowerBound: 95,
+            upperBound: 105,
+            consecutiveBars: 3,
+            action: 'CLOSE',
+          },
+        },
+        fn: ({ ts }): StrategyDecisionV1 => ts === 1
+          ? { action: 'OPEN_LONG', size: { mode: 'QTY', value: 1 }, confidence: 90, reason: 'open' }
+          : { action: 'NOOP' },
+      },
+      dataRange: { fromTs: 1, toTs: 5 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, open: 106, close: 106 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 3, open: 107, close: 107 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 4, open: 108, close: 108 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 5, open: 109, close: 109 }),
+      ],
+    })
+
+    expect(report.summary.totalTrades).toBe(1)
+    expect(report.openPositions ?? []).toHaveLength(0)
+    expect(report.trades[0]?.exitReason).toBe('risk.consecutive_outside_band')
+    expect(report.trades[0]?.exitSource).toBe('risk')
+  })
+
+  it('calls risk evaluator on every base bar', async () => {
+    const riskEvaluator = {
+      evaluate: jest.fn().mockReturnValue(undefined),
+      reset: jest.fn(),
+    } as unknown as RiskEvaluatorService
+    const runner = createRunner(riskEvaluator)
+
+    await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['5m'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-risk-hook',
+        params: {},
+        fn: (): StrategyDecisionV1 => ({ action: 'NOOP' }),
+      },
+      dataRange: { fromTs: 1, toTs: 3 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, close: 101 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 3, close: 102 }),
+      ],
+    })
+
+    expect((riskEvaluator.evaluate as jest.Mock).mock.calls.length).toBe(3)
   })
 })

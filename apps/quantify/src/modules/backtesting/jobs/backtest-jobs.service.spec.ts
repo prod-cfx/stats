@@ -137,6 +137,45 @@ describe('backtestJobsService', () => {
     expect(created.status).toBe('queued')
   })
 
+  it('persists snapshot tracing fields when strategy was loaded from a published snapshot', async () => {
+    const runner = {
+      run: jest.fn().mockImplementation(() => new Promise(() => {})),
+    }
+    const marketData = createMarketDataMock()
+    const prisma = createPrismaMock()
+    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+    const input = createInput()
+    Object.assign(input.strategy as Record<string, unknown>, {
+      strategyInstanceId: 'instance-1',
+      strategyTemplateId: 'template-1',
+      snapshotId: 'snapshot-1',
+      snapshotHash: 'snapshot-hash',
+      scriptHash: 'script-hash',
+      specHash: 'spec-hash',
+    })
+
+    await service.createJob(input, OWNER_USER_ID)
+
+    expect(prisma.backtestJob.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          snapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash',
+          scriptHash: 'script-hash',
+          specHash: 'spec-hash',
+          inputSummary: expect.objectContaining({
+            strategyInstanceId: 'instance-1',
+            strategyTemplateId: 'template-1',
+            snapshotId: 'snapshot-1',
+            snapshotHash: 'snapshot-hash',
+            scriptHash: 'script-hash',
+            specHash: 'spec-hash',
+          }),
+        }),
+      }),
+    )
+  })
+
   it('stores succeeded result in prisma and returns it from getJobResult', async () => {
     const runner = {
       run: jest.fn().mockResolvedValue({

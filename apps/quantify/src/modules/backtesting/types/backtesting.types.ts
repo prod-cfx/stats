@@ -67,6 +67,40 @@ export type SignalIntent =
 
 export type StrategyFn = (ctx: StrategyContext) => SignalIntent | Promise<SignalIntent>
 
+export type BacktestReasonSource = 'strategy' | 'risk' | 'system'
+
+export interface BacktestExecutionPolicy {
+  signalTiming?: 'BAR_CLOSE'
+  fillTiming?: 'NEXT_BAR_OPEN' | 'BAR_CLOSE'
+  noNextBarHandling?: 'KEEP_PENDING' | 'DROP_SIGNAL'
+}
+
+export interface BacktestOutsideBandIndicatorRef {
+  kind: 'bollingerBands'
+  period: number
+  stdDev: number
+}
+
+export interface BacktestOutsideBandRiskRule {
+  mode?: 'STATIC_BOUNDS' | 'BOLLINGER_BANDS'
+  lowerBound?: number
+  upperBound?: number
+  indicator?: BacktestOutsideBandIndicatorRef
+  consecutiveBars?: number
+  action: 'REDUCE' | 'CLOSE'
+  reduceRatio?: number
+}
+
+export interface BacktestRiskRules {
+  maxFloatingLossPct?: number
+  outsideBand?: BacktestOutsideBandRiskRule
+}
+
+export interface BacktestScriptMetadata {
+  source?: string
+  [key: string]: unknown
+}
+
 export interface ExecutionConfig {
   slippageBps: number
   feeBps: number
@@ -113,7 +147,11 @@ export interface TradeRecord {
   pnl: number
   returnPct: number
   reasonOpen?: string
+  reasonOpenSource?: BacktestReasonSource
   reasonClose?: string
+  reasonCloseSource?: BacktestReasonSource
+  exitReason?: string
+  exitSource?: BacktestReasonSource
 }
 
 export interface TradeMarker {
@@ -138,6 +176,7 @@ export interface BacktestReport {
   markers: TradeMarker[]
   bySymbol: Array<{ symbol: string; pnl: number; trades: number; winRate: number }>
   openPositions?: Array<{ symbol: string; qty: number; avgEntryPrice: number; unrealizedPnl: number }>
+  pendingSignals?: Array<{ symbol: string; ts: number; deltaQty: number; reason?: string; reasonSource: BacktestReasonSource }>
 }
 
 export interface BacktestRunInput {
@@ -148,7 +187,22 @@ export interface BacktestRunInput {
   initialCash: number
   leverage: number
   execution: ExecutionConfig
-  strategy: { id: string; params: Record<string, unknown>; fn: StrategyFn }
+  strategy: {
+    id: string
+    strategyInstanceId?: string
+    strategyTemplateId?: string
+    params: Record<string, unknown>
+    executionPolicy?: BacktestExecutionPolicy
+    riskRules?: BacktestRiskRules
+    scriptMetadata?: BacktestScriptMetadata
+    snapshotId?: string
+    snapshotHash?: string
+    scriptHash?: string
+    specHash?: string
+    dataRequirements?: Record<string, unknown>
+    specSnapshot?: Record<string, unknown>
+    fn: StrategyFn
+  }
   dataRange: { fromTs: number; toTs: number }
   bars: Bar[]
 }

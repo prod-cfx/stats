@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 import { ThrottlerModule } from '@nestjs/throttler'
 import { EnvModule } from '@/common/modules/env.module'
+import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
 import { MarketDataModule } from '@/modules/market-data/market-data.module'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { BacktestingController } from './backtesting.controller'
@@ -9,11 +10,13 @@ import { TheoreticalExecutionModel } from './execution/theoretical-execution.mod
 import { BacktestJobsService } from './jobs/backtest-jobs.service'
 import { PortfolioLedgerServiceFactory } from './portfolio/portfolio-ledger.service'
 import { BacktestReporterService } from './report/backtest-reporter.service'
+import { RiskEvaluatorService } from './risk/risk-evaluator.service'
 import { BacktestCapabilitiesRepository } from './repositories/backtest-capabilities.repository'
 import { BacktestMarketDataRepository } from './repositories/backtest-market-data.repository'
 import { BacktestCallerIdentityService } from './services/backtest-caller-identity.service'
 import { BacktestCapabilitiesService } from './services/backtest-capabilities.service'
 import { BacktestMarketDataService } from './services/backtest-market-data.service'
+import { BacktestSnapshotLoaderService } from './services/backtest-snapshot-loader.service'
 import { BacktestStrategyAdapterService } from './services/backtest-strategy-adapter.service'
 import { BacktestSymbolSupportService } from './services/backtest-symbol-support.service'
 import { StateEngineService } from './state/state-engine.service'
@@ -28,13 +31,16 @@ import { StateEngineService } from './state/state-engine.service'
     TheoreticalExecutionModel,
     PortfolioLedgerServiceFactory,
     BacktestReporterService,
+    RiskEvaluatorService,
     BacktestCallerIdentityService,
     BacktestCapabilitiesService,
+    BacktestSnapshotLoaderService,
     BacktestStrategyAdapterService,
     StateEngineService,
     BacktestCapabilitiesRepository,
     BacktestMarketDataRepository,
     BacktestSymbolSupportService,
+    PublishedStrategySnapshotsRepository,
   ],
 })
 export class BacktestingModule {}

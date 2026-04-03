@@ -157,6 +157,7 @@ interface ConversationState {
   logicGraph: StrategyLogicGraph | null
   llmCodegenSessionId: string | null
   publishedStrategyInstanceId: string | null
+  publishedSnapshotId: string | null
   publishedScriptCode: string | null
   publishedScriptGraphVersion: number | null
   latestSignalMessage: string | null
@@ -172,11 +173,13 @@ const CODEGEN_PROCESSING_STATUSES = new Set([
   'VALIDATING_STATIC',
   'VALIDATING_RUNTIME',
   'VALIDATING_OUTPUT',
+  'VALIDATING_CONSISTENCY',
 ])
 const CODEGEN_RECOVERABLE_STATUSES = new Set([
   ...CODEGEN_TERMINAL_STATUSES,
   ...CODEGEN_PROCESSING_STATUSES,
   'CHECKLIST_GATE',
+  'CONSISTENCY_FAILED',
 ])
 
 function isCodegenTerminalStatus(status: string): boolean {
@@ -238,6 +241,11 @@ export function buildCodegenReplyContent(args: {
     return `${stillGeneratingPrefix}（${response.status}）`
   }
   if (response.status === 'REJECTED') {
+    return response.rejectReason
+      ? `${rejectedPrefix}：${response.rejectReason}`
+      : rejectedWithoutReason
+  }
+  if (response.status === 'CONSISTENCY_FAILED') {
     return response.rejectReason
       ? `${rejectedPrefix}：${response.rejectReason}`
       : rejectedWithoutReason
@@ -422,6 +430,14 @@ function normalizePublishedScriptCode(scriptCode: unknown): string | null {
   return normalized.length > 0 ? normalized : null
 }
 
+function normalizePublishedSnapshotId(snapshotId: unknown): string | null {
+  if (typeof snapshotId !== 'string') {
+    return null
+  }
+  const normalized = snapshotId.trim()
+  return normalized.length > 0 ? normalized : null
+}
+
 function resolveHydratedPublishedScriptCode(item: Partial<ConversationState>): string | null {
   const explicitScriptCode = normalizePublishedScriptCode(item.publishedScriptCode)
   if (explicitScriptCode) {
@@ -440,7 +456,7 @@ function hasLatestPublishedCode(conversation: ConversationState | null | undefin
   if (conversation.publishedScriptGraphVersion !== conversation.logicGraph.version) {
     return false
   }
-  return normalizePublishedScriptCode(conversation.publishedScriptCode) !== null
+  return typeof conversation.publishedSnapshotId === 'string' && conversation.publishedSnapshotId.trim().length > 0
 }
 
 function invalidateConversationPublication(
@@ -458,6 +474,7 @@ function invalidateConversationPublication(
         ? { ...conversation.logicGraph, status: 'draft' }
         : conversation.logicGraph,
     publishedStrategyInstanceId: null,
+    publishedSnapshotId: null,
     publishedScriptCode: null,
     publishedScriptGraphVersion: null,
     backtestResult: null,
@@ -579,6 +596,7 @@ export function AiQuantPageClient() {
       logicGraph: null,
       llmCodegenSessionId: null,
       publishedStrategyInstanceId: null,
+      publishedSnapshotId: null,
       publishedScriptCode: null,
       publishedScriptGraphVersion: null,
       latestSignalMessage: null,
@@ -651,6 +669,10 @@ export function AiQuantPageClient() {
           params: nextParams,
           llmCodegenSessionId: item.llmCodegenSessionId ?? null,
           publishedStrategyInstanceId: item.publishedStrategyInstanceId ?? null,
+          publishedSnapshotId:
+            typeof item.publishedSnapshotId === 'string' && item.publishedSnapshotId.trim()
+              ? item.publishedSnapshotId.trim()
+              : null,
           publishedScriptCode: resolveHydratedPublishedScriptCode(item),
           publishedScriptGraphVersion: (() => {
             if (typeof item.publishedScriptGraphVersion === 'number') {
@@ -1079,6 +1101,22 @@ export function AiQuantPageClient() {
             }
             return conv.publishedScriptCode
           })()
+          const nextPublishedSnapshotId = (() => {
+            if (response.status === 'PUBLISHED' && !response.rejectReason) {
+              const snapshotId = normalizePublishedSnapshotId(response.publishedSnapshotId)
+              if (snapshotId) {
+                return snapshotId
+              }
+              if (!shouldUpdateGraph) {
+                return conv.publishedSnapshotId
+              }
+              return null
+            }
+            if (shouldUpdateGraph) {
+              return null
+            }
+            return conv.publishedSnapshotId
+          })()
           const nextPublishedScriptGraphVersion = nextPublishedScriptCode
             ? (nextGraph?.version ?? conv.publishedScriptGraphVersion)
             : null
@@ -1127,6 +1165,7 @@ export function AiQuantPageClient() {
               response,
               isStartingNewSession: !activeSessionId,
             }),
+            publishedSnapshotId: nextPublishedSnapshotId,
             publishedScriptCode: nextPublishedScriptCode,
             publishedScriptGraphVersion: nextPublishedScriptGraphVersion,
             params: nextParams,
@@ -1547,7 +1586,7 @@ export function AiQuantPageClient() {
             activeConversation.publishedStrategyInstanceId ??
             activeConversation.llmCodegenSessionId ??
             `mock-${Date.now()}`,
-          scriptCode: activeConversation.publishedScriptCode ?? '',
+          publishedSnapshotId: activeConversation.publishedSnapshotId ?? '',
           params: activeConversation.paramValues,
         },
         range: resolveBacktestRangeInput(activeConversation.paramValues),
@@ -1567,7 +1606,7 @@ export function AiQuantPageClient() {
             return t('aiQuant.messages.backtestRangeOrderInvalid')
           case 'range_too_large':
             return t('aiQuant.messages.backtestRangeTooLarge')
-          case 'missing_script_code':
+          case 'missing_published_snapshot':
             return t('aiQuant.messages.backtestMissingScriptCode')
           case 'missing_symbol':
           default:

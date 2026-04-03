@@ -16,7 +16,7 @@ import { BacktestCallerIdentityService } from './services/backtest-caller-identi
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestCapabilitiesService } from './services/backtest-capabilities.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { BacktestStrategyAdapterService } from './services/backtest-strategy-adapter.service'
+import { BacktestSnapshotLoaderService } from './services/backtest-snapshot-loader.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestSymbolSupportService } from './services/backtest-symbol-support.service'
 
@@ -29,7 +29,7 @@ export class BacktestingController {
     private readonly runner: BacktestRunnerService,
     private readonly jobsService: BacktestJobsService,
     private readonly callerIdentityService: BacktestCallerIdentityService,
-    private readonly strategyAdapter: BacktestStrategyAdapterService,
+    private readonly snapshotLoader: BacktestSnapshotLoaderService,
     private readonly capabilitiesService: BacktestCapabilitiesService,
     private readonly symbolSupportService: BacktestSymbolSupportService,
   ) {}
@@ -41,7 +41,7 @@ export class BacktestingController {
     @Body() dto: RunBacktestDto,
   ) {
     await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
-    const strategy = await this.strategyAdapter.build(dto.strategy)
+    const strategy = await this.resolveStrategy(dto)
     return this.runner.run({ ...dto, strategy, bars: dto.bars ?? [] } as BacktestRunInput)
   }
 
@@ -54,7 +54,7 @@ export class BacktestingController {
   ) {
     try {
       const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
-      const strategy = await this.strategyAdapter.build(dto.strategy)
+      const strategy = await this.resolveStrategy(dto)
       return this.jobsService.createJob({ ...dto, strategy, bars: dto.bars ?? [] } as BacktestRunInput, callerUserId)
     } catch (error) {
       if (error instanceof DomainException) {
@@ -146,5 +146,22 @@ export class BacktestingController {
         },
       })
     }
+  }
+
+  private async resolveStrategy(dto: RunBacktestDto) {
+    const publishedSnapshotId = dto.strategy.publishedSnapshotId?.trim() ?? ''
+    if (!publishedSnapshotId) {
+      throw new DomainException('backtest.snapshot_required', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+      })
+    }
+
+    return this.snapshotLoader.load({
+      id: dto.strategy.id,
+      protocolVersion: dto.strategy.protocolVersion,
+      publishedSnapshotId,
+      params: dto.strategy.params,
+    })
   }
 }

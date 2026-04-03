@@ -1,15 +1,20 @@
 model BacktestJob {
-  id           String   @id
-  ownerUserId  String   @map("owner_user_id")
+  id           String    @id
+  ownerUserId  String    @map("owner_user_id")
   status       String
-  inputSummary Json     @map("input_summary")
-  result       Json?    @map("result")
+  snapshotId   String?   @map("snapshot_id")
+  snapshotHash String?   @map("snapshot_hash")
+  scriptHash   String?   @map("script_hash")
+  specHash     String?   @map("spec_hash")
+  inputSummary Json      @map("input_summary")
+  result       Json?     @map("result")
   error        String?
-  createdAt    DateTime @default(now()) @map("created_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
   startedAt    DateTime? @map("started_at")
   finishedAt   DateTime? @map("finished_at")
 
   @@index([ownerUserId, createdAt], map: "idx_backtest_jobs_owner_created_at")
   @@index([ownerUserId, status], map: "idx_backtest_jobs_owner_status")
+  @@index([snapshotId], map: "idx_backtest_jobs_snapshot_id")
   @@map("backtest_jobs")
 }

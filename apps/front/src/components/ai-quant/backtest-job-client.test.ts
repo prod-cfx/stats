@@ -53,7 +53,7 @@ describe('backtest-job-client', () => {
       strategy: {
         id: 'strategy-1',
         protocolVersion: 'v1',
-        scriptCode: 'return { type: "NOOP" }',
+        publishedSnapshotId: 'snapshot-1',
         params: { foo: 'bar' },
       },
       dataRange: { fromTs: 1, toTs: 2 },
@@ -143,7 +143,7 @@ describe('backtest-job-client', () => {
       strategy: {
         id: 'strategy-1',
         protocolVersion: 'v1',
-        scriptCode: 'return { type: "NOOP" }',
+        publishedSnapshotId: 'snapshot-1',
         params: {},
       },
       dataRange: { fromTs: 1, toTs: 2 },

@@ -6,6 +6,7 @@ import { BacktestRunnerService } from './core/backtest-runner.service'
 import { BacktestJobsService } from './jobs/backtest-jobs.service'
 import { BacktestCallerIdentityService } from './services/backtest-caller-identity.service'
 import { BacktestCapabilitiesService } from './services/backtest-capabilities.service'
+import { BacktestSnapshotLoaderService } from './services/backtest-snapshot-loader.service'
 import { BacktestStrategyAdapterService } from './services/backtest-strategy-adapter.service'
 import { BacktestSymbolSupportService } from './services/backtest-symbol-support.service'
 
@@ -20,6 +21,9 @@ jest.mock('./core/backtest-runner.service', () => ({
 }))
 jest.mock('./services/backtest-strategy-adapter.service', () => ({
   BacktestStrategyAdapterService: class {},
+}))
+jest.mock('./services/backtest-snapshot-loader.service', () => ({
+  BacktestSnapshotLoaderService: class {},
 }))
 jest.mock('./services/backtest-caller-identity.service', () => ({
   BacktestCallerIdentityService: class {},
@@ -76,6 +80,10 @@ describe('backtestingController', () => {
           useValue: { build: jest.fn() },
         },
         {
+          provide: BacktestSnapshotLoaderService,
+          useValue: { load: jest.fn() },
+        },
+        {
           provide: BacktestCallerIdentityService,
           useValue: { resolveCallerUserIdFromAuthorization: jest.fn() },
         },
@@ -99,11 +107,12 @@ describe('backtestingController', () => {
     expect(typeof c.checkSymbolSupport).toBe('function')
   })
 
-  it('adapts script strategy before delegating to runner and jobs service', async () => {
+  it('loads published snapshot strategy before delegating to runner and jobs service', async () => {
     const runner = { run: jest.fn().mockResolvedValue({ ok: true }) }
     const jobs = { createJob: jest.fn().mockReturnValue({ id: 'job-1' }), getJob: jest.fn(), getJobResult: jest.fn() }
     const adapted = { id: 's1', params: { p: 1 }, fn: jest.fn() }
-    const adapter = { build: jest.fn().mockResolvedValue(adapted) }
+    const adapter = { build: jest.fn() }
+    const snapshotLoader = { load: jest.fn().mockResolvedValue(adapted) }
     const caller = { resolveCallerUserIdFromAuthorization: jest.fn().mockResolvedValue('user-1') }
     const capabilities = {
       getCapabilities: jest.fn().mockResolvedValue({
@@ -122,6 +131,7 @@ describe('backtestingController', () => {
         { provide: BacktestJobsService, useValue: jobs },
         { provide: BacktestCallerIdentityService, useValue: caller },
         { provide: BacktestCapabilitiesService, useValue: capabilities },
+        { provide: BacktestSnapshotLoaderService, useValue: snapshotLoader },
         { provide: BacktestSymbolSupportService, useValue: { checkSupport: symbolSupport.checkSymbolSupport } },
         { provide: BacktestStrategyAdapterService, useValue: adapter },
       ],
@@ -135,7 +145,7 @@ describe('backtestingController', () => {
       initialCash: 1000,
       leverage: 1,
       execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
-      strategy: { id: 's1', protocolVersion: 'v1', scriptCode: 'strategy', params: { p: 1 } },
+      strategy: { id: 's1', protocolVersion: 'v1', publishedSnapshotId: 'snapshot-1', params: { p: 1 } },
       dataRange: { fromTs: 1, toTs: 2 },
       bars: [],
     }
@@ -153,8 +163,13 @@ describe('backtestingController', () => {
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(3, 'Bearer token')
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(4, 'Bearer token')
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(5, 'Bearer token')
-    expect(adapter.build).toHaveBeenCalledTimes(2)
-    expect(adapter.build).toHaveBeenCalledWith(dto.strategy)
+    expect(snapshotLoader.load).toHaveBeenCalledTimes(2)
+    expect(snapshotLoader.load).toHaveBeenCalledWith({
+      id: 's1',
+      protocolVersion: 'v1',
+      publishedSnapshotId: 'snapshot-1',
+      params: { p: 1 },
+    })
     expect(runner.run).toHaveBeenCalledWith({ ...dto, strategy: adapted })
     expect(jobs.createJob).toHaveBeenCalledWith({ ...dto, strategy: adapted }, 'user-1')
     expect(jobs.getJob).toHaveBeenCalledWith('job-1', 'user-1')
@@ -162,12 +177,60 @@ describe('backtestingController', () => {
     expect(capabilities.getCapabilities).toHaveBeenCalledTimes(1)
     expect(capabilities.getCapabilities).toHaveBeenCalledWith('req-1')
     expect(symbolSupport.checkSymbolSupport).toHaveBeenCalledWith('okx', 'ETHUSDC')
+    expect(adapter.build).not.toHaveBeenCalled()
+  })
+
+  it('prefers published snapshot loader when snapshot id is provided', async () => {
+    const runner = { run: jest.fn().mockResolvedValue({ ok: true }) }
+    const jobs = { createJob: jest.fn().mockReturnValue({ id: 'job-1' }), getJob: jest.fn(), getJobResult: jest.fn() }
+    const adapted = { id: 's1', params: { p: 1 }, fn: jest.fn(), snapshotId: 'snapshot-1' }
+    const snapshotLoader = { load: jest.fn().mockResolvedValue(adapted) }
+    const caller = { resolveCallerUserIdFromAuthorization: jest.fn().mockResolvedValue('user-1') }
+    const capabilities = { getCapabilities: jest.fn() }
+    const symbolSupport = { checkSymbolSupport: jest.fn() }
+
+    const mod = await Test.createTestingModule({
+      controllers: [BacktestingController],
+      providers: [
+        { provide: BacktestRunnerService, useValue: runner },
+        { provide: BacktestJobsService, useValue: jobs },
+        { provide: BacktestCallerIdentityService, useValue: caller },
+        { provide: BacktestCapabilitiesService, useValue: capabilities },
+        { provide: BacktestSnapshotLoaderService, useValue: snapshotLoader },
+        { provide: BacktestSymbolSupportService, useValue: { checkSupport: symbolSupport.checkSymbolSupport } },
+        { provide: BacktestStrategyAdapterService, useValue: { build: jest.fn() } },
+      ],
+    }).compile()
+
+    const c = mod.get(BacktestingController)
+    const dto: any = {
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: ['15m'],
+      initialCash: 10000,
+      leverage: 1,
+      execution: { slippageBps: 10, feeBps: 5, priceSource: 'close' },
+      strategy: { id: 's1', protocolVersion: 'v1', publishedSnapshotId: 'snapshot-1', params: { p: 1 } },
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [],
+    }
+
+    await c.run('Bearer token', dto)
+    await c.createJob('Bearer token', 'req-job-1', dto)
+
+    expect(snapshotLoader.load).toHaveBeenCalledTimes(2)
+    expect(snapshotLoader.load).toHaveBeenCalledWith({
+      id: 's1',
+      protocolVersion: 'v1',
+      publishedSnapshotId: 'snapshot-1',
+      params: { p: 1 },
+    })
   })
 
   it('maps capability upstream error to service unavailable domain exception', async () => {
     const runner = { run: jest.fn() }
     const jobs = { createJob: jest.fn(), getJob: jest.fn(), getJobResult: jest.fn() }
-    const adapter = { build: jest.fn() }
+    const snapshotLoader = { load: jest.fn() }
     const caller = { resolveCallerUserIdFromAuthorization: jest.fn() }
     const capabilities = {
       getCapabilities: jest.fn().mockRejectedValue(new Error('db down')),
@@ -183,8 +246,9 @@ describe('backtestingController', () => {
         { provide: BacktestJobsService, useValue: jobs },
         { provide: BacktestCallerIdentityService, useValue: caller },
         { provide: BacktestCapabilitiesService, useValue: capabilities },
+        { provide: BacktestSnapshotLoaderService, useValue: snapshotLoader },
         { provide: BacktestSymbolSupportService, useValue: { checkSupport: symbolSupport.checkSymbolSupport } },
-        { provide: BacktestStrategyAdapterService, useValue: adapter },
+        { provide: BacktestStrategyAdapterService, useValue: { build: jest.fn() } },
       ],
     }).compile()
 
@@ -200,7 +264,7 @@ describe('backtestingController', () => {
   it('maps symbol support unknown errors to service unavailable domain exception', async () => {
     const runner = { run: jest.fn() }
     const jobs = { createJob: jest.fn(), getJob: jest.fn(), getJobResult: jest.fn() }
-    const adapter = { build: jest.fn() }
+    const snapshotLoader = { load: jest.fn() }
     const caller = { resolveCallerUserIdFromAuthorization: jest.fn().mockResolvedValue('user-1') }
     const capabilities = { getCapabilities: jest.fn() }
     const symbolSupport = {
@@ -214,8 +278,9 @@ describe('backtestingController', () => {
         { provide: BacktestJobsService, useValue: jobs },
         { provide: BacktestCallerIdentityService, useValue: caller },
         { provide: BacktestCapabilitiesService, useValue: capabilities },
+        { provide: BacktestSnapshotLoaderService, useValue: snapshotLoader },
         { provide: BacktestSymbolSupportService, useValue: { checkSupport: symbolSupport.checkSymbolSupport } },
-        { provide: BacktestStrategyAdapterService, useValue: adapter },
+        { provide: BacktestStrategyAdapterService, useValue: { build: jest.fn() } },
       ],
     }).compile()
 
@@ -231,7 +296,8 @@ describe('backtestingController', () => {
   it('maps create job unknown errors to service unavailable domain exception', async () => {
     const runner = { run: jest.fn() }
     const jobs = { createJob: jest.fn(), getJob: jest.fn(), getJobResult: jest.fn() }
-    const adapter = { build: jest.fn().mockRejectedValue(new Error('script engine bootstrap failed')) }
+    const adapter = { build: jest.fn() }
+    const snapshotLoader = { load: jest.fn().mockRejectedValue(new Error('script engine bootstrap failed')) }
     const caller = { resolveCallerUserIdFromAuthorization: jest.fn().mockResolvedValue('user-1') }
     const capabilities = { getCapabilities: jest.fn() }
     const symbolSupport = { checkSymbolSupport: jest.fn() }
@@ -243,6 +309,7 @@ describe('backtestingController', () => {
         { provide: BacktestJobsService, useValue: jobs },
         { provide: BacktestCallerIdentityService, useValue: caller },
         { provide: BacktestCapabilitiesService, useValue: capabilities },
+        { provide: BacktestSnapshotLoaderService, useValue: snapshotLoader },
         { provide: BacktestSymbolSupportService, useValue: { checkSupport: symbolSupport.checkSymbolSupport } },
         { provide: BacktestStrategyAdapterService, useValue: adapter },
       ],
@@ -256,7 +323,7 @@ describe('backtestingController', () => {
       initialCash: 10000,
       leverage: 1,
       execution: { slippageBps: 10, feeBps: 5, priceSource: 'close' },
-      strategy: { id: 's1', protocolVersion: 'v1', scriptCode: 'strategy', params: {} },
+      strategy: { id: 's1', protocolVersion: 'v1', publishedSnapshotId: 'snapshot-1', params: {} },
       dataRange: { fromTs: 1, toTs: 2 },
       bars: [],
     }

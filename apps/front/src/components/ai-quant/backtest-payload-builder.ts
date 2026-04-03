@@ -4,7 +4,7 @@ import { resolveBacktestRange, validateBacktestRange } from './backtest-range'
 
 export type BacktestPayloadBuilderErrorCode =
   | 'missing_symbol'
-  | 'missing_script_code'
+  | 'missing_published_snapshot'
   | 'missing_range'
   | 'start_after_end'
   | 'range_too_large'
@@ -34,7 +34,7 @@ export interface BuildBacktestPayloadInput {
   execution: CreateBacktestJobPayload['execution']
   strategy: {
     id: string
-    scriptCode: string
+    publishedSnapshotId: string
     params: Record<string, unknown>
   }
   range: BacktestRangeInput
@@ -55,9 +55,9 @@ export function buildBacktestPayload(
     throw new BacktestPayloadBuilderError('timeframe_not_allowed')
   }
 
-  const scriptCode = input.strategy.scriptCode.trim()
-  if (!scriptCode) {
-    throw new BacktestPayloadBuilderError('missing_script_code')
+  const publishedSnapshotId = input.strategy.publishedSnapshotId.trim()
+  if (!publishedSnapshotId) {
+    throw new BacktestPayloadBuilderError('missing_published_snapshot')
   }
 
   const validation = validateBacktestRange(input.range)
@@ -77,7 +77,7 @@ export function buildBacktestPayload(
     strategy: {
       id: input.strategy.id,
       protocolVersion: 'v1',
-      scriptCode,
+      publishedSnapshotId,
       params: input.strategy.params,
     },
     dataRange: {

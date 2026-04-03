@@ -17,8 +17,8 @@ export interface CreateBacktestJobPayload {
   }
   strategy: {
     id: string
-    protocolVersion: 'v1'
-    scriptCode: string
+    protocolVersion?: 'v1'
+    publishedSnapshotId?: string
     params: Record<string, unknown>
   }
   dataRange: {

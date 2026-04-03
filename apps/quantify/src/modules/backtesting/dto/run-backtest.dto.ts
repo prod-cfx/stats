@@ -11,8 +11,31 @@ import {
   IsString,
   IsBoolean,
   Min,
+  ValidatorConstraint,
+  ValidatorConstraintInterface,
+  ValidationArguments,
+  Validate,
   ValidateNested,
 } from 'class-validator'
+
+@ValidatorConstraint({ name: 'backtestStrategyPayloadConstraint', async: false })
+class BacktestStrategyPayloadConstraint implements ValidatorConstraintInterface {
+  validate(_value: unknown, args?: ValidationArguments): boolean {
+    const objectValue = args?.object
+    if (!objectValue || typeof objectValue !== 'object') {
+      return false
+    }
+
+    const strategy = objectValue as { publishedSnapshotId?: unknown }
+    const snapshotId = typeof strategy.publishedSnapshotId === 'string' ? strategy.publishedSnapshotId.trim() : ''
+
+    return snapshotId.length > 0
+  }
+
+  defaultMessage(_args?: ValidationArguments): string {
+    return 'strategy requires publishedSnapshotId'
+  }
+}
 
 export class BacktestStrategyInputDto {
   @IsString()
@@ -22,12 +45,15 @@ export class BacktestStrategyInputDto {
   @IsIn(['v1'])
   protocolVersion!: 'v1'
 
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  scriptCode!: string
-
+  publishedSnapshotId?: string
   @IsObject()
   params!: Record<string, unknown>
+
+  @Validate(BacktestStrategyPayloadConstraint)
+  private readonly __payloadGuard = true
 }
 
 type RunBacktestDtoShape = Omit<BacktestRunInput, 'strategy' | 'bars'> & {
