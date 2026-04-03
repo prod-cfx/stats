@@ -145,9 +145,19 @@ describe('exchangeAccountsService', () => {
       name: 'Updated Binance',
     })
 
-    expect(tradingService.validateCexCredentials).toHaveBeenCalledWith(
+    expect(tradingService.validateCexCredentials).toHaveBeenNthCalledWith(
+      1,
       'binance',
       'spot',
+      expect.objectContaining({
+        apiKey: 'new-valid-key',
+        secret: 'new-valid-secret',
+      }),
+    )
+    expect(tradingService.validateCexCredentials).toHaveBeenNthCalledWith(
+      2,
+      'binance',
+      'perp',
       expect.objectContaining({
         apiKey: 'new-valid-key',
         secret: 'new-valid-secret',
@@ -161,6 +171,72 @@ describe('exchangeAccountsService', () => {
       }),
     )
     expect(repo.createExchangeAccount).toHaveBeenCalled()
+  })
+
+  it('validates both spot and perp capabilities for binance bindings', async () => {
+    const { service, tradingService, crypto } = createService()
+
+    await service.create('user-1', {
+      userId: 'user-1',
+      userEmail: 'user-1@example.com',
+      exchangeId: 'binance',
+      apiKey: 'valid_key',
+      apiSecret: 'valid_secret',
+      marketType: 'spot',
+      isTestnet: true,
+      name: 'Binance Demo',
+    })
+
+    expect(tradingService.validateCexCredentials).toHaveBeenNthCalledWith(
+      1,
+      'binance',
+      'spot',
+      expect.objectContaining({
+        apiKey: 'valid_key',
+        secret: 'valid_secret',
+        isTestnet: true,
+      }),
+    )
+    expect(tradingService.validateCexCredentials).toHaveBeenNthCalledWith(
+      2,
+      'binance',
+      'perp',
+      expect.objectContaining({
+        apiKey: 'valid_key',
+        secret: 'valid_secret',
+        isTestnet: true,
+      }),
+    )
+    expect(crypto.encryptConfig).toHaveBeenCalledWith(expect.objectContaining({
+      spotEnabled: true,
+      futuresEnabled: true,
+    }))
+  })
+
+  it('persists partial binance capabilities when only one market validates', async () => {
+    const { service, tradingService, crypto } = createService()
+    tradingService.validateCexCredentials
+      .mockResolvedValueOnce(true)
+      .mockRejectedValueOnce(new InvalidCredentialsException({
+        exchangeId: 'binance',
+        message: 'API Key权限不足，请确保开启"读取"和"交易"权限',
+      }))
+
+    await service.create('user-1', {
+      userId: 'user-1',
+      userEmail: 'user-1@example.com',
+      exchangeId: 'binance',
+      apiKey: 'valid_key',
+      apiSecret: 'valid_secret',
+      marketType: 'spot',
+      isTestnet: true,
+      name: 'Binance Partial',
+    })
+
+    expect(crypto.encryptConfig).toHaveBeenCalledWith(expect.objectContaining({
+      spotEnabled: true,
+      futuresEnabled: false,
+    }))
   })
 
   it('keeps existing binding unchanged when revalidation fails during update', async () => {

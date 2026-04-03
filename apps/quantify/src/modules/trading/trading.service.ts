@@ -44,6 +44,7 @@ export class TradingService {
     if (!account) {
       throw new TradingAccountNotFoundException({ userId, exchangeId })
     }
+    this.ensureMarketTypeSupported(exchangeId, marketType, account)
 
     // 校验 marketType 一致性：参数和 input 中的 marketType 必须一致
     if (input.marketType && input.marketType !== marketType) {
@@ -79,6 +80,7 @@ export class TradingService {
     if (!account) {
       throw new TradingAccountNotFoundException({ userId, exchangeId })
     }
+    this.ensureMarketTypeSupported(exchangeId, marketType, account)
 
     const client = this.exchangeFactory.createClient(exchangeId, marketType, account)
 
@@ -106,6 +108,7 @@ export class TradingService {
     if (!account) {
       throw new TradingAccountNotFoundException({ userId, exchangeId })
     }
+    this.ensureMarketTypeSupported(exchangeId, marketType, account)
     const client = this.exchangeFactory.createClient(exchangeId, marketType, account)
 
     try {
@@ -131,6 +134,7 @@ export class TradingService {
     if (!account) {
       throw new TradingAccountNotFoundException({ userId, exchangeId })
     }
+    this.ensureMarketTypeSupported(exchangeId, marketType, account)
     const client = this.exchangeFactory.createClient(exchangeId, marketType, account)
 
     try {
@@ -208,6 +212,27 @@ export class TradingService {
       }
 
       throw error
+    }
+  }
+
+  private ensureMarketTypeSupported(
+    exchangeId: ExchangeId,
+    marketType: MarketType,
+    account: ExchangeAccountConfig,
+  ): void {
+    if (exchangeId !== 'binance' || account.exchangeId !== 'binance') {
+      return
+    }
+
+    const supportsSpot = account.config.spotEnabled
+    const supportsPerp = account.config.futuresEnabled
+
+    if (marketType === 'spot' && supportsSpot === false) {
+      throw new UnsupportedMarketTypeException({ exchangeId, marketType })
+    }
+
+    if (marketType === 'perp' && supportsPerp === false) {
+      throw new UnsupportedMarketTypeException({ exchangeId, marketType })
     }
   }
 }

@@ -44,8 +44,8 @@ export class ExchangeAccountsService {
     })
     const existingConfig = this.resolveExistingConfigForCreate(dto, existing)
     const config = this.buildConfig(dto, existingConfig)
-    const lastValidatedAt = await this.validateCredentials(dto.exchangeId, dto.marketType, config)
-    const encryptedConfig = this.crypto.encryptConfig(config)
+    const { config: validatedConfig, lastValidatedAt } = await this.validateCredentials(dto.exchangeId, dto.marketType, config)
+    const encryptedConfig = this.crypto.encryptConfig(validatedConfig)
     try {
       const record = await this.exchangeAccountRepository.createExchangeAccount({
         userId,
@@ -55,7 +55,7 @@ export class ExchangeAccountsService {
         encryptedConfig,
         lastValidatedAt,
       })
-      return this.toResponse(record, config)
+      return this.toResponse(record, validatedConfig)
     }
     catch (error) {
       if (!(error instanceof PrismaClientKnownRequestError) || error.code !== 'P2002')
@@ -75,7 +75,7 @@ export class ExchangeAccountsService {
         encryptedConfig,
         lastValidatedAt,
       })
-      return this.toResponse(record, config)
+      return this.toResponse(record, validatedConfig)
     }
   }
 
@@ -216,7 +216,11 @@ export class ExchangeAccountsService {
     exchangeId: ExchangeId,
     marketType: MarketType | undefined,
     config: BinanceConfig | OkxConfig | HyperliquidConfig,
-  ): Promise<Date> {
+  ): Promise<{ config: BinanceConfig | OkxConfig | HyperliquidConfig; lastValidatedAt: Date }> {
+    if (exchangeId === 'binance') {
+      return this.validateBinanceCredentials(config as BinanceConfig)
+    }
+
     try {
       await this.tradingService.validateCexCredentials(
         exchangeId,
@@ -248,7 +252,59 @@ export class ExchangeAccountsService {
       throw error
     }
 
-    return new Date()
+    return {
+      config,
+      lastValidatedAt: new Date(),
+    }
+  }
+
+  private async validateBinanceCredentials(config: BinanceConfig): Promise<{ config: BinanceConfig; lastValidatedAt: Date }> {
+    const [spotResult, perpResult] = await Promise.allSettled([
+      this.tradingService.validateCexCredentials('binance', 'spot', config),
+      this.tradingService.validateCexCredentials('binance', 'perp', config),
+    ])
+
+    const spotEnabled = spotResult.status === 'fulfilled'
+    const futuresEnabled = perpResult.status === 'fulfilled'
+
+    if (!spotEnabled && !futuresEnabled) {
+      const failure = [spotResult, perpResult]
+        .find(result => result.status === 'rejected' && result.reason instanceof InvalidCredentialsException)
+        ?? [spotResult, perpResult]
+          .find(result => result.status === 'rejected' && result.reason instanceof ExchangeOperationFailedException)
+
+      if (failure?.status === 'rejected') {
+        const error = failure.reason
+        if (error instanceof InvalidCredentialsException) {
+          const normalized = this.normalizeCredentialError('binance', error.message)
+          throw new DomainException(normalized.reasonMessage, {
+            code: ErrorCode.TRADING_INVALID_CREDENTIALS,
+            args: normalized,
+          })
+        }
+
+        if (error instanceof ExchangeOperationFailedException) {
+          throw new DomainException('exchange_account.exchange_unavailable', {
+            code: ErrorCode.EXCHANGE_ACCOUNT_EXCHANGE_UNAVAILABLE,
+            args: {
+              exchangeId: 'binance',
+              reasonCode: 'EXCHANGE_UNAVAILABLE',
+              reasonMessage: 'Exchange service temporarily unavailable, please retry later',
+              retryable: true,
+            },
+          })
+        }
+      }
+    }
+
+    return {
+      config: {
+        ...config,
+        spotEnabled,
+        futuresEnabled,
+      },
+      lastValidatedAt: new Date(),
+    }
   }
 
   private normalizeCredentialError(exchangeId: ExchangeId, message: string) {
@@ -405,8 +461,8 @@ export class ExchangeAccountsService {
       apiKey,
       secret: apiSecret,
       isTestnet: dto.isTestnet,
-      spotEnabled: dto.marketType ? dto.marketType === 'spot' : undefined,
-      futuresEnabled: dto.marketType ? dto.marketType === 'perp' : undefined,
+      spotEnabled: existingConfig?.spotEnabled,
+      futuresEnabled: existingConfig?.futuresEnabled,
     }
   }
 
