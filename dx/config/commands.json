@@ -41,6 +41,11 @@
         "app": "front",
         "description": "构建前端(开发环境)"
       },
+      "staging": {
+        "command": "npx nx run front:exportDist",
+        "app": "front",
+        "description": "构建并导出前端到 dist/front (预发环境)"
+      },
       "production": {
         "command": "npx nx run front:exportDist",
         "app": "front",
@@ -52,6 +57,11 @@
         "command": "npx nx build admin-front --configuration=development",
         "app": "admin-front",
         "description": "构建管理后台(开发环境)"
+      },
+      "staging": {
+        "command": "npx nx build admin-front --configuration=production",
+        "app": "admin-front",
+        "description": "构建管理后台(预发环境)"
       },
       "production": {
         "command": "npx nx build admin-front --configuration=production",
