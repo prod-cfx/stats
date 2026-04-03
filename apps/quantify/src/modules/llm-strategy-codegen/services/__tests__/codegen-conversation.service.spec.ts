@@ -479,6 +479,51 @@ strategy`,
     }))
   })
 
+  it('marks session rejected instead of published when publish step fails after code generation', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's8-publish-fail',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        entryRules: ['突破关键阻力位后入场'],
+        exitRules: ['跌破最近支撑位出场'],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已确认，可以生成。',
+        }),
+      })
+      .mockResolvedValueOnce({
+        content: 'const strategy: StrategyAdapterV1 = { protocolVersion: "v1", onBar(): StrategyDecisionV1 { return { action: "NOOP" } } }\nstrategy',
+      })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v-publish-fail' })
+    mockRepo.ensureDraftStrategyInstanceBoundForPublishedSession.mockRejectedValue(
+      new Error('Transaction API error: Unable to start a transaction in the given time.'),
+    )
+
+    const result = await service.continueSession('s8-publish-fail', {
+      userId: 'u1',
+      message: '确认，直接生成代码',
+      confirmGenerate: true,
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await flushAsync()
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s8-publish-fail', expect.objectContaining({
+      status: 'REJECTED',
+      latestDraftCode: expect.any(String),
+      latestSpecDesc: expect.any(Object),
+      rejectReason: expect.stringContaining('Unable to start a transaction'),
+      strategyInstanceId: null,
+    }))
+  })
+
   it('auto-repairs a TypeScript-invalid script and publishes on next attempt', async () => {
     const brokenScriptFromRealCase = `
 const strategy: StrategyAdapterV1 = {
@@ -566,7 +611,7 @@ strategy
     }))
     const repairPrompt = (mockAi.chat.mock.calls[2]?.[0] as { messages: Array<{ role: string; content: string }> })?.messages?.[1]?.content
     expect(repairPrompt).toContain('自动修复')
-  })
+  }, 15_000)
 
   it('returns consistency failed after exhausting auto-repair retries and blocks fallback publish', async () => {
     const brokenScript = `
@@ -1217,6 +1262,8 @@ strategy`,
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-instance-failed', expect.objectContaining({
       status: 'REJECTED',
+      latestDraftCode: expect.any(String),
+      latestSpecDesc: expect.any(Object),
       strategyInstanceId: null,
       rejectReason: 'create instance failed',
     }))

@@ -99,4 +99,55 @@ describe('tradingService', () => {
     expect(accountStore.getAccountConfig).not.toHaveBeenCalled()
     expect(result).toEqual([{ asset: 'USDT', free: 60000, locked: 0, total: 60000 }])
   })
+
+  it('rejects binance spot orders when the account only has futures capability', async () => {
+    const { service, accountStore } = createService()
+
+    accountStore.getAccountConfig.mockResolvedValue({
+      exchangeId: 'binance',
+      config: { apiKey: 'k', secret: 's', isTestnet: true, spotEnabled: false, futuresEnabled: true },
+    })
+
+    await expect(service.placeOrder(
+      'user-1',
+      'binance',
+      'spot',
+      {
+        symbol: 'BTC/USDT',
+        marketType: 'spot',
+        side: 'buy',
+        type: 'market',
+        amount: 0.001,
+      },
+    )).rejects.toMatchObject({
+      code: expect.any(String),
+      args: expect.objectContaining({
+        exchangeId: 'binance',
+        marketType: 'spot',
+      }),
+    })
+  })
+
+  it('allows binance perp orders when the account has futures capability', async () => {
+    const { service, client, accountStore } = createService()
+
+    accountStore.getAccountConfig.mockResolvedValue({
+      exchangeId: 'binance',
+      config: { apiKey: 'k', secret: 's', isTestnet: true, spotEnabled: false, futuresEnabled: true },
+    })
+    client.createOrder.mockResolvedValue({ id: 'order-3', status: 'open' })
+
+    await expect(service.placeOrder(
+      'user-1',
+      'binance',
+      'perp',
+      {
+        symbol: 'BTC/USDT:PERP',
+        marketType: 'perp',
+        side: 'buy',
+        type: 'market',
+        amount: 0.001,
+      },
+    )).resolves.toEqual({ id: 'order-3', status: 'open' })
+  })
 })

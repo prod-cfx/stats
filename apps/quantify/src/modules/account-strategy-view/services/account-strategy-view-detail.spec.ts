@@ -1,6 +1,95 @@
 import { AccountStrategyViewService } from './account-strategy-view.service'
 
 describe('accountStrategyViewService.getStrategyDetail', () => {
+  it('degrades gracefully when exchange balance lookup is slow', async () => {
+    jest.useFakeTimers()
+    try {
+      const repo = {
+        findStrategyForUser: jest.fn().mockResolvedValue({
+          id: 'inst-slow-balance',
+          name: 'Hyperliquid detail',
+          status: 'running',
+          createdBy: 'user-1',
+          params: { exchange: 'hyperliquid', symbol: 'BTCUSDT', timeframe: '15m', positionPct: 5 },
+          strategyTemplateId: 'tpl-hl-1',
+          strategyTemplate: {
+            defaultParams: {},
+            paramsSchema: null,
+            rulesVersion: 0,
+          },
+          subscriptions: [{
+            userId: 'user-1',
+            status: 'active',
+            customParams: {},
+            subscribedAt: new Date('2026-04-03T11:58:59.000Z'),
+            exchangeAccount: { id: 'acct-hl-1', exchangeId: 'hyperliquid', name: '1212' },
+          }],
+          startedAt: new Date('2026-04-03T11:58:59.000Z'),
+          updatedAt: new Date('2026-04-03T11:59:00.000Z'),
+        }),
+        findUserStrategyAccount: jest.fn().mockResolvedValue({
+          id: 'acc-hl-1',
+          initialBalance: 1000,
+          equity: 1000,
+          totalRealizedPnl: 0,
+          totalUnrealizedPnl: 0,
+          baseCurrency: 'USDT',
+        }),
+        loadEquitySeries: jest.fn().mockResolvedValue([]),
+        loadLatestDailySnapshot: jest.fn().mockResolvedValue(null),
+        loadClosedPositionPnlSeries: jest.fn().mockResolvedValue([]),
+        loadPositionFinancials: jest.fn().mockResolvedValue({
+          openCostBasis: 0,
+          totalRealizedPnl: 0,
+          totalUnrealizedPnl: 0,
+        }),
+        loadOpenPositionsForValuation: jest.fn().mockResolvedValue([]),
+        loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+        loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
+        loadTimeline: jest.fn().mockResolvedValue({
+          instance: {
+            createdAt: new Date('2026-04-03T11:58:50.000Z'),
+            startedAt: new Date('2026-04-03T11:58:59.000Z'),
+            stoppedAt: null,
+          },
+          subscription: { subscribedAt: new Date('2026-04-03T11:58:59.000Z') },
+          signalExecutions: [],
+          trades: [],
+        }),
+      }
+      const statsService = { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() }
+      const strategyInstancesService = { updateInstance: jest.fn() }
+      const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+      const tradingService = {
+        getBalance: jest.fn().mockImplementation(
+          () => new Promise(() => {}),
+        ),
+      }
+
+      const service = new AccountStrategyViewService(
+        repo as any,
+        statsService as any,
+        strategyInstancesService as any,
+        marketDataIngestionService as any,
+        undefined,
+        undefined,
+        tradingService as any,
+      )
+
+      const detailPromise = service.getStrategyDetail('user-1', 'inst-slow-balance')
+      const resultPromise = Promise.race([
+        detailPromise.then(detail => ({ type: 'resolved' as const, detail })),
+        jest.advanceTimersByTimeAsync(3_000).then(() => ({ type: 'timeout' as const })),
+      ])
+
+      await expect(resultPromise).resolves.toMatchObject({
+        type: 'resolved',
+      })
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   it('builds detail payload with equity series and mixed timeline', async () => {
     const repo = {
       findStrategyForUser: jest.fn().mockResolvedValue({

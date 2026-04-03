@@ -151,6 +151,46 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
     })
   })
 
+  it('retries transaction startup timeout before binding strategy instance', async () => {
+    const tx = {
+      $executeRaw: jest.fn(),
+      strategyTemplate: {
+        create: jest.fn().mockResolvedValue({ id: 'template-1' }),
+      },
+      strategyInstance: {
+        create: jest.fn().mockResolvedValue({ id: 'instance-1' }),
+      },
+      llmStrategyCodegenSession: {
+        findUnique: jest.fn().mockResolvedValue({ strategyInstanceId: null }),
+        update: jest.fn().mockResolvedValue({}),
+      },
+    }
+
+    const transactionTimeoutError = Object.assign(
+      new Error('Transaction API error: Unable to start a transaction in the given time.'),
+      { code: 'P2034' },
+    )
+
+    const txHost = {
+      tx,
+      withTransaction: jest.fn()
+        .mockRejectedValueOnce(transactionTimeoutError)
+        .mockImplementation(async (callback: () => Promise<unknown>) => callback()),
+    }
+    const repo = new CodegenSessionsRepository(txHost as any)
+
+    const result = await repo.ensureDraftStrategyInstanceBoundForPublishedSession(buildInput())
+
+    expect(result).toEqual({ strategyInstanceId: 'instance-1' })
+    expect(txHost.withTransaction).toHaveBeenCalledTimes(2)
+    expect(tx.strategyTemplate.create).toHaveBeenCalledTimes(1)
+    expect(tx.strategyInstance.create).toHaveBeenCalledTimes(1)
+    expect(tx.llmStrategyCodegenSession.update).toHaveBeenCalledWith({
+      where: { id: 'session-1' },
+      data: { strategyInstanceId: 'instance-1' },
+    })
+  })
+
   it('uses the ambient prisma client for single-statement session reads and writes', async () => {
     const tx = {
       llmStrategyCodegenSession: {
