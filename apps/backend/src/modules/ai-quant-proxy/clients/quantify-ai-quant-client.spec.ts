@@ -154,4 +154,43 @@ describe('quantifyAiQuantClient', () => {
     await assertion
     expect(abort).toHaveBeenCalledWith('timeout after 1000ms')
   })
+
+  it('prefers per-request timeout overrides over the global timeout setting', async () => {
+    jest.useFakeTimers()
+    const abort = jest.spyOn(AbortController.prototype, 'abort')
+
+    jest.spyOn(globalThis, 'fetch').mockImplementation((_, init) => {
+      const signal = init?.signal
+      return new Promise((_, reject) => {
+        signal?.addEventListener(
+          'abort',
+          () => {
+            reject(signal.reason)
+          },
+          { once: true },
+        )
+      }) as Promise<Response>
+    })
+
+    const envWithTimeout = {
+      getString: jest.fn((key: string) => key === 'QUANTIFY_API_BASE_URL' ? 'http://quantify.test/api/v1' : undefined),
+      getNumber: jest.fn((key: string) => key === 'QUANTIFY_REQUEST_TIMEOUT_MS' ? 1000 : undefined),
+    }
+
+    const client = new QuantifyAiQuantClient(envWithTimeout as any)
+    const requestPromise = client.get('/llm-strategy-instances', { timeoutMs: 2500 })
+    const assertion = expect(requestPromise).rejects.toMatchObject({
+      status: 502,
+      message: 'Quantify request failed',
+      code: 'UPSTREAM_REQUEST_FAILED',
+      args: {
+        cause: 'timeout after 2500ms',
+      },
+    })
+
+    await jest.advanceTimersByTimeAsync(2500)
+
+    await assertion
+    expect(abort).toHaveBeenCalledWith('timeout after 2500ms')
+  })
 })
