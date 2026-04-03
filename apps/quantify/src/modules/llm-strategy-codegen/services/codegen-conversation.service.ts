@@ -534,7 +534,7 @@ export class CodegenConversationService {
         } catch (publishError) {
           const publishReason = publishError instanceof Error ? publishError.message : String(publishError)
           await this.sessionsRepo.updateSession(sessionId, {
-            status: 'PUBLISHED',
+            status: 'REJECTED',
             latestSpecDesc: specDesc as Prisma.InputJsonValue,
             latestDraftCode: finalScriptCode,
             rejectReason: publishReason,

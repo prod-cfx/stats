@@ -24,6 +24,8 @@ const SESSION_SELECT_WITH_STRATEGY = {
   strategyInstanceId: true,
 } as const
 
+const MAX_TRANSACTION_START_RETRIES = 3
+
 @Injectable()
 export class CodegenSessionsRepository {
   private strategyInstanceColumnMissing = false
@@ -184,7 +186,9 @@ export class CodegenSessionsRepository {
     params: Record<string, unknown>
     metadata?: Record<string, unknown>
   }): Promise<{ strategyTemplateId: string, strategyInstanceId: string }> {
-    return this.txHost.withTransaction(async () => this.createDraftStrategyInstanceFromPublishedSessionWithTx(this.txHost.tx, input))
+    return this.runWithTransactionStartRetry(
+      async () => this.txHost.withTransaction(async () => this.createDraftStrategyInstanceFromPublishedSessionWithTx(this.txHost.tx, input)),
+    )
   }
 
   async ensureDraftStrategyInstanceBoundForPublishedSession(input: {
@@ -203,30 +207,49 @@ export class CodegenSessionsRepository {
       return { strategyInstanceId: created.strategyInstanceId }
     }
 
-    return this.txHost.withTransaction(async () => {
-      const tx = this.txHost.tx
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.sessionId}))`
+    return this.runWithTransactionStartRetry(async () => {
+      return this.txHost.withTransaction(async () => {
+        const tx = this.txHost.tx
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.sessionId}))`
 
-      const existing = await tx.llmStrategyCodegenSession.findUnique({
-        where: { id: input.sessionId },
-        select: { strategyInstanceId: true },
-      })
-      if (existing?.strategyInstanceId) {
-        return { strategyInstanceId: existing.strategyInstanceId }
-      }
+        const existing = await tx.llmStrategyCodegenSession.findUnique({
+          where: { id: input.sessionId },
+          select: { strategyInstanceId: true },
+        })
+        if (existing?.strategyInstanceId) {
+          return { strategyInstanceId: existing.strategyInstanceId }
+        }
 
-      const created = await this.createDraftStrategyInstanceFromPublishedSessionWithTx(tx, input)
-      await tx.llmStrategyCodegenSession.update({
-        where: { id: input.sessionId },
-        data: { strategyInstanceId: created.strategyInstanceId },
+        const created = await this.createDraftStrategyInstanceFromPublishedSessionWithTx(tx, input)
+        await tx.llmStrategyCodegenSession.update({
+          where: { id: input.sessionId },
+          data: { strategyInstanceId: created.strategyInstanceId },
+        })
+        return { strategyInstanceId: created.strategyInstanceId }
+      }).catch(async error => {
+        if (!this.isMissingStrategyInstanceColumnError(error)) throw error
+        this.strategyInstanceColumnMissing = true
+        const created = await this.createDraftStrategyInstanceFromPublishedSession(input)
+        return { strategyInstanceId: created.strategyInstanceId }
       })
-      return { strategyInstanceId: created.strategyInstanceId }
-    }).catch(async error => {
-      if (!this.isMissingStrategyInstanceColumnError(error)) throw error
-      this.strategyInstanceColumnMissing = true
-      const created = await this.createDraftStrategyInstanceFromPublishedSession(input)
-      return { strategyInstanceId: created.strategyInstanceId }
     })
+  }
+
+  private async runWithTransactionStartRetry<T>(operation: () => Promise<T>): Promise<T> {
+    let lastError: unknown
+
+    for (let attempt = 1; attempt <= MAX_TRANSACTION_START_RETRIES; attempt++) {
+      try {
+        return await operation()
+      } catch (error) {
+        lastError = error
+        if (!this.isTransactionStartTimeoutError(error) || attempt >= MAX_TRANSACTION_START_RETRIES) {
+          throw error
+        }
+      }
+    }
+
+    throw lastError
   }
 
   private omitStrategyInstanceIdField<T extends Record<string, unknown>>(input: T): T {
@@ -265,6 +288,18 @@ export class CodegenSessionsRepository {
     }
 
     return false
+  }
+
+  private isTransactionStartTimeoutError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false
+
+    const code = 'code' in error ? (error as { code?: unknown }).code : undefined
+    if (code === 'P2034') {
+      return true
+    }
+
+    const message = 'message' in error ? (error as { message?: unknown }).message : undefined
+    return typeof message === 'string' && message.includes('Unable to start a transaction in the given time')
   }
 
   private resolveExecutionTimeframe(params: Record<string, unknown>): string {
