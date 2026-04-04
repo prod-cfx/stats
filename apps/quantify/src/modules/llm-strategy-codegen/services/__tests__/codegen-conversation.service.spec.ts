@@ -12,6 +12,7 @@ import { ScriptProfileExtractorService } from '../script-profile-extractor.servi
 import { SpecDescBuilderService } from '../spec-desc-builder.service'
 import { StaticGuardrailService } from '../static-guardrail.service'
 import { StrategyConsistencyService } from '../strategy-consistency.service'
+import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
 
 describe('codegenConversationService (llm orchestrated flow)', () => {
   jest.setTimeout(120_000)
@@ -58,6 +59,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     new SpecDescBuilderService(),
     new CanonicalSpecBuilderService(),
     new StrategyConsistencyService(new ScriptProfileExtractorService()),
+    new StrategySummaryBuilderService(new ScriptProfileExtractorService()),
     mockRecommendation as unknown as RecommendationIndexService,
   )
   const waitForTerminalStatus = async (
@@ -339,6 +341,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const slow = ctx.helpers?.ta?.sma(closes, 20)
     if (typeof fast !== 'number' || typeof slow !== 'number') return { action: 'NOOP', reason: 'sma unavailable' }
     if (fast > slow) return { action: 'OPEN_LONG', size: { mode: 'RATIO', value: 0.1 }, confidence: 80, reason: 'golden cross' }
+    if (fast < slow) return { action: 'CLOSE_LONG', reason: 'death cross' }
     return { action: 'NOOP', reason: 'wait' }
   },
 }
@@ -613,7 +616,7 @@ strategy
     expect(repairPrompt).toContain('自动修复')
   }, 15_000)
 
-  it('returns consistency failed after exhausting auto-repair retries and blocks fallback publish', async () => {
+  it('rejects after exhausting auto-repair retries and does not attempt fallback script publish', async () => {
     const brokenScript = `
 const strategy: StrategyAdapterV1 = {
   protocolVersion: 'v1',
@@ -654,14 +657,18 @@ const strategy: StrategyAdapterV1 = {
     expect(result.status).toBe('GENERATING')
     await waitForTerminalStatus('s10')
 
-    const hasRejectedOrConsistencyFailed = mockRepo.updateSession.mock.calls.some(call =>
-      call[0] === 's10' && ['CONSISTENCY_FAILED', 'REJECTED'].includes((call[1] as { status?: string }).status ?? ''),
+    const hasRejected = mockRepo.updateSession.mock.calls.some(call =>
+      call[0] === 's10' && (call[1] as { status?: string }).status === 'REJECTED',
     )
     const hasPublished = mockRepo.updateSession.mock.calls.some(call =>
       call[0] === 's10' && (call[1] as { status?: string }).status === 'PUBLISHED',
     )
-    expect(hasRejectedOrConsistencyFailed).toBe(true)
+    const rejectPayload = mockRepo.updateSession.mock.calls.find(call =>
+      call[0] === 's10' && (call[1] as { status?: string }).status === 'REJECTED',
+    )?.[1] as { rejectReason?: string } | undefined
+    expect(hasRejected).toBe(true)
     expect(hasPublished).toBe(false)
+    expect(rejectPayload?.rejectReason ?? '').not.toContain('fallback')
   }, 15_000)
 
   it('marks session as consistency failed when validated script does not match checklist semantics', async () => {
@@ -1126,6 +1133,88 @@ strategy`,
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-new-instance', expect.objectContaining({
       status: 'PUBLISHED',
       strategyInstanceId: 'instance-1',
+    }))
+  })
+
+  it('persists user/strategy/script summaries and lockedParams on successful publish', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-summary-snapshot',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      strategyInstanceId: null,
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['K线收盘后确认突破布林带上轨时做空'],
+        exitRules: ['价格回到布林带中轨(MA20)时平仓'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'spot',
+          positionPct: 10,
+          stopLossPct: 5,
+        },
+      },
+      constraintPack: {},
+    })
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已确认，可以生成。',
+        }),
+      })
+      .mockResolvedValueOnce({
+        content: `
+const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const bars = Array.isArray(ctx.bars) ? ctx.bars : []
+    if (bars.length < 20) return { action: 'NOOP', reason: 'wait' }
+    const closes = bars.map(item => item?.close).filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+    const bb = ctx.helpers?.ta?.bollingerBands(closes, 20, 2)
+    if (!bb) return { action: 'NOOP', reason: 'wait' }
+    const pct = ctx.paramsNormalized?.positionPct
+    const ratio = typeof pct === 'number' ? Math.min(Math.max(pct / 100, 0.01), 1) : 0.1
+    if (closes.at(-1)! > bb.upper) return { action: 'OPEN_SHORT', size: { mode: 'RATIO', value: ratio }, reason: 'upper break' }
+    if (Math.abs(closes.at(-1)! - bb.middle) <= 1) return { action: 'ADJUST_POSITION', reason: 'middle revert' }
+    return { action: 'NOOP', reason: 'wait' }
+  },
+}
+strategy`,
+      })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v-summary-snapshot' })
+
+    const result = await service.continueSession('s-summary-snapshot', {
+      userId: 'u1',
+      message: '确认并生成',
+      confirmGenerate: true,
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await waitForTerminalStatus('s-summary-snapshot')
+
+    expect(mockRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      userIntentSummary: expect.objectContaining({
+        strategyType: 'bollinger',
+        indicators: ['bollingerBands'],
+      }),
+      strategySummary: expect.objectContaining({
+        strategyType: 'bollinger',
+        indicators: ['bollingerBands'],
+      }),
+      scriptSummary: expect.objectContaining({
+        strategyType: 'bollinger',
+        indicators: ['bollingerBands'],
+      }),
+      lockedParams: expect.objectContaining({
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        marketType: 'spot',
+        positionPct: 10,
+        stopLossPct: 5,
+      }),
+      snapshotVersion: 2,
     }))
   })
 

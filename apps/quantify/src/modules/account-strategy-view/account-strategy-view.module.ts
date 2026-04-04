@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common'
+import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
 import { MarketDataModule } from '@/modules/market-data/market-data.module'
 import { StrategyInstancesModule } from '@/modules/strategy-instances/strategy-instances.module'
 import { TradingModule } from '@/modules/trading/trading.module'
@@ -15,6 +16,7 @@ import { AccountStrategyViewService } from './services/account-strategy-view.ser
     AccountStrategyViewService,
     AccountStrategyViewRepository,
     AccountStrategyCallerIdentityService,
+    PublishedStrategySnapshotsRepository,
   ],
   exports: [AccountStrategyViewService],
 })

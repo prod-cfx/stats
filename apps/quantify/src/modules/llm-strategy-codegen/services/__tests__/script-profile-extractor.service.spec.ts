@@ -46,4 +46,48 @@ strategy`)
       source: 'positionPct_normalized',
     })
   })
+
+  it('recognizes BBANDS evidence and keeps sizing empty when script has no explicit size field', () => {
+    const service = new ScriptProfileExtractorService()
+    const profile = service.extract(`
+const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const closes = (ctx.bars ?? []).map(item => item.close)
+    const bb = ctx.helpers?.ta?.BBANDS(closes, 20, 2)
+    if (!bb) return { action: 'NOOP', reason: 'wait' }
+    if (closes.at(-1)! > bb.upper) return { action: 'OPEN_SHORT', reason: 'upper break' }
+    if (closes.at(-1)! < bb.lower) return { action: 'OPEN_LONG', reason: 'lower break' }
+    return { action: 'NOOP', reason: 'wait' }
+  },
+}
+strategy`)
+
+    expect(profile.indicators.some(item => item.kind === 'bollingerBands')).toBe(true)
+    expect(profile.actions).toEqual(expect.arrayContaining(['OPEN_SHORT', 'OPEN_LONG']))
+    expect(profile.sizing).toBeNull()
+  })
+
+  it('binds moving-average crossover rules to executable actions instead of preceding NOOP guards', () => {
+    const service = new ScriptProfileExtractorService()
+    const profile = service.extract(`
+const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const closes = ctx.bars?.map(item => item.close) ?? []
+    const fast = ctx.helpers?.ta?.sma(closes, 5)
+    const slow = ctx.helpers?.ta?.sma(closes, 20)
+    if (typeof fast !== 'number' || typeof slow !== 'number') return { action: 'NOOP' }
+    if (fast < slow) return { action: 'OPEN_SHORT', size: { mode: 'RATIO', value: 0.1 } }
+    if (fast > slow) return { action: 'CLOSE_SHORT' }
+    return { action: 'NOOP' }
+  },
+}
+strategy`)
+
+    expect(profile.ruleMappings).toEqual(expect.arrayContaining([
+      { key: 'ma.death_cross', action: 'OPEN_SHORT' },
+      { key: 'ma.golden_cross', action: 'CLOSE_SHORT' },
+    ]))
+  })
 })

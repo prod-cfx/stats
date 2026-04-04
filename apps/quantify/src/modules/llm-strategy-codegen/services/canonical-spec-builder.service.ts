@@ -64,13 +64,12 @@ export class CanonicalSpecBuilderService {
         params: { period: 20 },
       })
     }
-    if (indicators.length === 0 && /均线|\bsma\b/i.test(ruleTexts)) {
+    if (/\bsma\b|简单均线|均线|moving average/i.test(ruleTexts)) {
       pushIndicator({
         kind: 'sma',
         params: { period: 20 },
       })
     }
-
     const entries: RuleSpec[] = []
     entryTexts.forEach((rule, index) => {
       if (/上轨|upper/i.test(rule) && /做空|空单|short/i.test(rule)) {
@@ -79,12 +78,23 @@ export class CanonicalSpecBuilderService {
       if (/下轨|lower/i.test(rule) && /做多|多单|long/i.test(rule)) {
         entries.push({ id: `entry-${index + 1}`, trigger: rule, action: 'OPEN_LONG' })
       }
+      if (/金叉|上穿|死叉|下穿/.test(rule) && /均线|\bma\b|\bsma\b|\bema\b/i.test(rule)) {
+        const action = /做空|空单|short/i.test(rule) ? 'OPEN_SHORT' : 'OPEN_LONG'
+        entries.push({ id: `entry-${index + 1}`, trigger: rule, action })
+      }
     })
 
     const exits: RuleSpec[] = []
     exitTexts.forEach((rule, index) => {
       if (/中轨|ma20|均线20|middle/i.test(rule)) {
         exits.push({ id: `exit-${index + 1}`, trigger: rule, action: 'ADJUST_POSITION' })
+      }
+      if (/金叉|上穿|死叉|下穿/.test(rule) && /均线|\bma\b|\bsma\b|\bema\b/i.test(rule)) {
+        exits.push({
+          id: `exit-${index + 1}`,
+          trigger: rule,
+          action: this.resolveExitAction(rule),
+        })
       }
     })
 
@@ -110,44 +120,76 @@ export class CanonicalSpecBuilderService {
       })
     }
 
-    const rawPositionPct = typeof riskRules.positionPct === 'number' ? riskRules.positionPct : 10
-    const ratioValue = rawPositionPct > 1 ? rawPositionPct / 100 : rawPositionPct
+    const market: CanonicalStrategySpec['market'] = {}
+    const exchange = this.normalizeExchange(riskRules.exchange)
+    if (exchange) {
+      market.exchange = exchange
+    }
+    const symbol = symbols[0] ? String(symbols[0]).trim().toUpperCase() : ''
+    if (symbol) {
+      market.symbol = symbol
+    }
+    const marketType = this.normalizeMarketType(riskRules.marketType)
+    if (marketType) {
+      market.marketType = marketType
+    }
+    const timeframe = timeframes[0] ? String(timeframes[0]).trim() : ''
+    if (timeframe) {
+      market.timeframe = timeframe
+    }
+    const rawPositionPct = typeof riskRules.positionPct === 'number' ? riskRules.positionPct : null
+    const sizing = typeof rawPositionPct === 'number' && Number.isFinite(rawPositionPct) && rawPositionPct > 0
+      ? {
+        mode: 'RATIO' as const,
+        value: Number((rawPositionPct > 1 ? rawPositionPct / 100 : rawPositionPct).toFixed(4)),
+      }
+      : null
 
     return {
       version: 1,
-      market: {
-        exchange: this.normalizeExchange(riskRules.exchange),
-        symbol: symbols[0] ? String(symbols[0]).trim().toUpperCase() : 'BTCUSDT',
-        marketType: this.normalizeMarketType(riskRules.marketType),
-        timeframe: timeframes[0] ? String(timeframes[0]).trim() : '15m',
-      },
+      market,
       indicators,
       entries,
       exits,
       riskRules: normalizedRiskRules,
-      sizing: {
-        mode: 'RATIO',
-        value: Number(ratioValue.toFixed(4)),
-      },
+      sizing,
       executionPolicy: {
         signalTiming: 'BAR_CLOSE',
         fillTiming: 'NEXT_BAR_OPEN',
       },
       dataRequirements: {
-        primary: [timeframes[0] ? String(timeframes[0]).trim() : '15m'],
+        primary: timeframe ? [timeframe] : [],
       },
     }
   }
 
-  private normalizeExchange(value: unknown): CanonicalStrategySpec['market']['exchange'] {
+  private normalizeExchange(value: unknown): CanonicalStrategySpec['market']['exchange'] | undefined {
     const normalized = typeof value === 'string' ? value.trim().toLowerCase() : ''
     if (normalized === 'okx' || normalized === 'hyperliquid') {
       return normalized
     }
-    return 'binance'
+    if (normalized === 'binance') {
+      return 'binance'
+    }
+    return undefined
   }
 
-  private normalizeMarketType(value: unknown): CanonicalStrategySpec['market']['marketType'] {
-    return typeof value === 'string' && value.trim().toLowerCase() === 'perp' ? 'perp' : 'spot'
+  private normalizeMarketType(value: unknown): CanonicalStrategySpec['market']['marketType'] | undefined {
+    if (typeof value !== 'string') return undefined
+    const normalized = value.trim().toLowerCase()
+    if (normalized === 'perp' || normalized === 'spot') {
+      return normalized
+    }
+    return undefined
+  }
+
+  private resolveExitAction(rule: string): RuleSpec['action'] {
+    if (/平空|close\s+short/i.test(rule)) {
+      return 'CLOSE_SHORT'
+    }
+    if (/平多|close\s+long/i.test(rule)) {
+      return 'CLOSE_LONG'
+    }
+    return 'ADJUST_POSITION'
   }
 }

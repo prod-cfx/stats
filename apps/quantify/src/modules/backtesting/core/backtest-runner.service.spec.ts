@@ -426,6 +426,69 @@ describe('backtestRunnerService', () => {
     expect(report.openPositions?.[0]?.avgEntryPrice).toBeCloseTo(110)
   })
 
+  it('fails fast when strict snapshot strategy is missing execution policy', async () => {
+    const runner = createRunner()
+
+    await expect(runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['5m'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-strict-missing-policy',
+        params: {},
+        bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+        fn: (): StrategyDecisionV1 => ({ action: 'NOOP' }),
+      } as any,
+      dataRange: { fromTs: 1, toTs: 1 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+      ],
+    })).rejects.toMatchObject({
+      message: 'backtest.execution_policy_required',
+    })
+  })
+
+  it('fails fast when strict snapshot LLM entry signal misses size', async () => {
+    const runner = createRunner()
+
+    await expect(runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['5m'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-strict-missing-size',
+        params: {},
+        bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+          noNextBarHandling: 'KEEP_PENDING',
+        },
+        fn: () => ({
+          direction: 'BUY',
+          signalType: 'ENTRY',
+          confidence: 90,
+          entryPrice: 100,
+          stopLoss: 95,
+          takeProfit: 110,
+          reasoning: 'missing size',
+        }),
+      } as any,
+      dataRange: { fromTs: 1, toTs: 1 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+      ],
+    })).rejects.toMatchObject({
+      message: 'backtest.llm_signal_size_required',
+    })
+  })
+
   it('preserves a final pending signal when there is no next bar under NEXT_BAR_OPEN policy', async () => {
     const runner = createRunner()
 

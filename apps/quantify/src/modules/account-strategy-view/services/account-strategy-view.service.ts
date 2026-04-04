@@ -13,6 +13,8 @@ import { ConfigService } from '@nestjs/config'
 import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { MarketDataIngestionService } from '@/modules/market-data/services/market-data-ingestion.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
@@ -47,6 +49,7 @@ export class AccountStrategyViewService {
     @Optional() private readonly marketDataReadGateway?: MarketDataReadGateway,
     @Optional() private readonly configService?: ConfigService,
     @Optional() private readonly tradingService?: TradingService,
+    @Optional() private readonly publishedSnapshotsRepository?: PublishedStrategySnapshotsRepository,
   ) {}
 
   async listStrategies(
@@ -462,6 +465,13 @@ export class AccountStrategyViewService {
         symbol: resolvedDeploy.symbol,
         timeframe: resolvedDeploy.timeframe,
         positionPct: resolvedDeploy.positionPct,
+        publishedSnapshotBinding: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: resolvedDeploy.publishedSnapshotId,
+          snapshotHash: resolvedDeploy.snapshotHash,
+          sourceStrategyInstanceId: resolvedDeploy.sourceStrategyInstanceId ?? dto.strategyInstanceId ?? null,
+          sourceStrategyTemplateId: resolvedDeploy.sourceStrategyTemplateId,
+        },
         initialBalanceQuote: exchangeBalance?.total,
         accountBalanceQuote: exchangeBalance?.free,
         mode: dto.mode,
@@ -1202,10 +1212,7 @@ export class AccountStrategyViewService {
     return createHash('sha256')
       .update(JSON.stringify({
         name: dto.name,
-        exchange: dto.exchange ?? null,
-        symbol: dto.symbol ?? null,
-        timeframe: dto.timeframe ?? null,
-        positionPct: dto.positionPct ?? null,
+        publishedSnapshotId: dto.publishedSnapshotId,
         exchangeAccountId: dto.exchangeAccountId ?? null,
         strategyInstanceId: dto.strategyInstanceId ?? null,
         mode: dto.mode ?? null,
@@ -1258,27 +1265,52 @@ export class AccountStrategyViewService {
     symbol: string
     timeframe: string
     positionPct: number
+    publishedSnapshotId: string
+    snapshotHash: string
+    sourceStrategyInstanceId: string | null
+    sourceStrategyTemplateId: string | null
   }> {
-    let fallbackParams: Record<string, unknown> = {}
-
-    if (dto.strategyInstanceId) {
-      const row = await this.repo.findStrategyForUser(dto.userId!, dto.strategyInstanceId)
-      fallbackParams = {
-        ...(row?.strategyTemplate?.defaultParams as Record<string, unknown> ?? {}),
-        ...(row?.params as Record<string, unknown> ?? {}),
-        ...(row?.subscriptions?.[0]?.customParams as Record<string, unknown> ?? {}),
-      }
+    if (!this.publishedSnapshotsRepository) {
+      throw new DomainException('account_strategy.deploy_snapshot_repository_unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+      })
     }
 
-    const exchange = (dto.exchange
-      || this.readString(fallbackParams, ['exchange', 'exchangeId', 'provider'])) as
+    const publishedSnapshotId = dto.publishedSnapshotId?.trim() ?? ''
+    if (!publishedSnapshotId) {
+      throw new DomainException('account_strategy.deploy_missing_required_fields', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: {
+          exchange: null,
+          symbol: null,
+          timeframe: null,
+          positionPct: null,
+          strategyInstanceId: dto.strategyInstanceId ?? null,
+          publishedSnapshotId: null,
+        },
+      })
+    }
+
+    const snapshot = await this.publishedSnapshotsRepository.findByIdForUser(publishedSnapshotId, dto.userId!)
+    if (!snapshot) {
+      throw new DomainException('account_strategy.published_snapshot_not_found', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: { publishedSnapshotId },
+      })
+    }
+
+    const snapshotParams = this.resolveSnapshotParamsForDeploy(snapshot)
+    const exchange = this.readString(snapshotParams, ['exchange', 'exchangeId', 'provider']) as
       | 'binance'
       | 'okx'
       | 'hyperliquid'
       | null
-    const symbol = dto.symbol || this.readString(fallbackParams, ['symbol'])
-    const timeframe = dto.timeframe || this.readString(fallbackParams, ['timeframe', 'period'])
-    const positionPct = dto.positionPct ?? this.readNumber(fallbackParams, ['positionPct', 'positionSizeRatioPercent'])
+    const symbol = this.readString(snapshotParams, ['symbol'])
+    const timeframe = this.readString(snapshotParams, ['timeframe', 'period'])
+    const positionPct = this.readNumber(snapshotParams, ['positionPct', 'positionSizeRatioPercent'])
 
     if (!exchange || !symbol || !timeframe || positionPct === null) {
       throw new DomainException('account_strategy.deploy_missing_required_fields', {
@@ -1290,10 +1322,43 @@ export class AccountStrategyViewService {
           timeframe,
           positionPct,
           strategyInstanceId: dto.strategyInstanceId ?? null,
+          publishedSnapshotId,
         },
       })
     }
 
-    return { exchange, symbol, timeframe, positionPct }
+    return {
+      exchange,
+      symbol,
+      timeframe,
+      positionPct,
+      publishedSnapshotId: snapshot.id,
+      snapshotHash: snapshot.snapshotHash,
+      sourceStrategyInstanceId: snapshot.strategyInstanceId,
+      sourceStrategyTemplateId: snapshot.strategyTemplateId,
+    }
+  }
+
+  private resolveSnapshotParamsForDeploy(snapshot: {
+    id: string
+    paramsSnapshot: unknown
+    lockedParams: unknown
+  }): Record<string, unknown> {
+    const paramsSnapshot = this.readRecord(snapshot.paramsSnapshot)
+    const lockedParams = this.readRecord(snapshot.lockedParams)
+    const merged = {
+      ...(paramsSnapshot ?? {}),
+      ...(lockedParams ?? {}),
+    }
+
+    if (Object.keys(merged).length > 0) {
+      return merged
+    }
+
+    throw new DomainException('account_strategy.published_snapshot_params_missing', {
+      code: ErrorCode.BAD_REQUEST,
+      status: HttpStatus.BAD_REQUEST,
+      args: { publishedSnapshotId: snapshot.id },
+    })
   }
 }

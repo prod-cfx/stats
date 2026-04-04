@@ -48,8 +48,10 @@ export class BacktestStrategyInputDto {
   @IsString()
   @IsNotEmpty()
   publishedSnapshotId?: string
+
+  @IsOptional()
   @IsObject()
-  params!: Record<string, unknown>
+  params?: Record<string, unknown>
 
   @Validate(BacktestStrategyPayloadConstraint)
   private readonly __payloadGuard = true

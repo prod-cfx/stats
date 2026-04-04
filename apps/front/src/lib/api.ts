@@ -1512,10 +1512,11 @@ export interface AccountAiQuantDeployPayload {
   userId: string
   name: string
   deployRequestId: string
-  exchange: 'binance' | 'okx' | 'hyperliquid'
-  symbol: string
-  timeframe: string
-  positionPct: number
+  publishedSnapshotId: string
+  exchange?: 'binance' | 'okx' | 'hyperliquid'
+  symbol?: string
+  timeframe?: string
+  positionPct?: number
   strategyInstanceId?: string
   exchangeAccountId?: string
   exchangeAccountName?: string
@@ -1798,6 +1799,9 @@ export async function deployAccountAiQuantStrategy(
     if (!payload.deployRequestId?.trim()) {
       throw new ApiError('deployRequestId is required', 'INVALID_INPUT')
     }
+    if (!payload.publishedSnapshotId?.trim()) {
+      throw new ApiError('publishedSnapshotId is required', 'INVALID_INPUT')
+    }
 
     const response = await fetch(`${API_BASE_URL}/account/ai-quant/strategies/deploy`, {
       method: 'POST',
@@ -1806,11 +1810,7 @@ export async function deployAccountAiQuantStrategy(
         userId: payload.userId.trim(),
         name: payload.name.trim(),
         deployRequestId: payload.deployRequestId.trim(),
-        exchange: payload.exchange,
-        symbol: payload.symbol,
-        timeframe: payload.timeframe,
-        positionPct: payload.positionPct,
-        strategyInstanceId: payload.strategyInstanceId,
+        publishedSnapshotId: payload.publishedSnapshotId.trim(),
         exchangeAccountId: payload.exchangeAccountId,
         exchangeAccountName: payload.exchangeAccountName,
       }),

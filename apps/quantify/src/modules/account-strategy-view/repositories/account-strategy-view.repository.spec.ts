@@ -54,6 +54,13 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       symbol: 'SOLUSDT',
       timeframe: '5m',
       positionPct: 10,
+      publishedSnapshotBinding: {
+        bindingSource: 'PUBLISHED_SNAPSHOT',
+        publishedSnapshotId: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        sourceStrategyInstanceId: 'strategy-instance-1',
+        sourceStrategyTemplateId: 'template-1',
+      },
       exchangeAccountId: 'exchange-account-1',
       strategyInstanceId: 'strategy-instance-1',
     })
@@ -67,6 +74,13 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       data: expect.objectContaining({
         status: 'running',
         mode: 'TESTNET',
+        metadata: expect.objectContaining({
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+          sourceStrategyInstanceId: 'strategy-instance-1',
+          sourceStrategyTemplateId: 'template-1',
+        }),
       }),
     }))
     expect(tx.userStrategySubscription.create).toHaveBeenCalled()
@@ -136,6 +150,71 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
     expect(tx.userStrategyAccount.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         strategyName: 'AI策略',
+      }),
+    }))
+  })
+
+  it('writes snapshot binding metadata to strategy instance on create path', async () => {
+    const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'user-1' }),
+      },
+      exchangeAccount: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true }),
+      },
+      strategyTemplate: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn().mockResolvedValue({ id: 'template-1' }),
+      },
+      strategyInstance: {
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        create: jest.fn().mockResolvedValue({ id: 'created-instance-1' }),
+      },
+      userStrategySubscription: {
+        findFirst: jest.fn(),
+        create: jest.fn(),
+      },
+      userStrategyAccount: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'account-1' }),
+        create: jest.fn(),
+      },
+    }
+
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
+
+    await repo.deployStrategyForUser({
+      userId: 'user-1',
+      name: 'snapshot deploy',
+      exchange: 'okx',
+      symbol: 'SOLUSDT',
+      timeframe: '5m',
+      positionPct: 10,
+      exchangeAccountId: 'exchange-account-1',
+      publishedSnapshotBinding: {
+        bindingSource: 'PUBLISHED_SNAPSHOT',
+        publishedSnapshotId: 'snapshot-created',
+        snapshotHash: 'snapshot-hash-created',
+        sourceStrategyInstanceId: null,
+        sourceStrategyTemplateId: 'template-1',
+      },
+    } as any)
+
+    expect(tx.strategyInstance.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        metadata: expect.objectContaining({
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-created',
+          snapshotHash: 'snapshot-hash-created',
+          sourceStrategyTemplateId: 'template-1',
+        }),
+      }),
+    }))
+    expect(tx.strategyTemplate.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        metadata: expect.not.objectContaining({
+          publishedSnapshotId: expect.anything(),
+        }),
       }),
     }))
   })

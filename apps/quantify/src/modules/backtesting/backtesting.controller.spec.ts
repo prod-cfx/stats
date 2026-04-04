@@ -168,7 +168,7 @@ describe('backtestingController', () => {
       id: 's1',
       protocolVersion: 'v1',
       publishedSnapshotId: 'snapshot-1',
-      params: { p: 1 },
+      userId: 'user-1',
     })
     expect(runner.run).toHaveBeenCalledWith({ ...dto, strategy: adapted })
     expect(jobs.createJob).toHaveBeenCalledWith({ ...dto, strategy: adapted }, 'user-1')
@@ -223,7 +223,7 @@ describe('backtestingController', () => {
       id: 's1',
       protocolVersion: 'v1',
       publishedSnapshotId: 'snapshot-1',
-      params: { p: 1 },
+      userId: 'user-1',
     })
   })
 
