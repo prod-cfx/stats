@@ -136,18 +136,7 @@ const DEFAULT_PARAM_SCHEMA: Record<string, unknown> = {
   },
 }
 
-const DEFAULT_BACKTEST_PARAM_VALUES: Record<string, unknown> = {
-  backtestInitialCash: 10000,
-  backtestLeverage: 1,
-  backtestSlippageBps: 10,
-  backtestFeeBps: 5,
-  backtestPriceSource: 'close',
-  backtestAllowPartial: true,
-}
-const DEFAULT_PARAM_VALUES: Record<string, unknown> = {
-  ...DEFAULT_PARAMS,
-  ...DEFAULT_BACKTEST_PARAM_VALUES,
-}
+const DEFAULT_PARAM_VALUES: Record<string, unknown> = { ...DEFAULT_PARAMS }
 const CAPABILITY_FAILED_MESSAGE_KEY = 'aiQuant.messages.backtestCapabilityLoadFailed'
 const CAPABILITY_AUTO_CORRECTED_MESSAGE_KEY = 'aiQuant.messages.backtestCapabilityAutoCorrected'
 const CAPABILITY_AUTO_RETRY_DELAY_MS = 15_000
