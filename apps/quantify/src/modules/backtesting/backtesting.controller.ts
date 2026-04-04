@@ -161,7 +161,6 @@ export class BacktestingController {
       id: dto.strategy.id,
       protocolVersion: dto.strategy.protocolVersion,
       publishedSnapshotId,
-      params: dto.strategy.params,
     })
   }
 }

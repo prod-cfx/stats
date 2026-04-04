@@ -55,4 +55,18 @@ describe('canonicalSpecBuilderService', () => {
       { kind: 'ema', params: { period: 20 } },
     ]))
   })
+
+  it('does not inject implicit market/sizing/sma defaults when checklist is missing them', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      entryRules: ['价格收盘确认突破关键阻力位入场'],
+      exitRules: ['价格跌破关键支撑位出场'],
+    })
+
+    expect(spec.market).toEqual({})
+    expect(spec.indicators).toEqual([])
+    expect(spec.sizing).toBeNull()
+    expect(spec.dataRequirements).toEqual({ primary: [] })
+  })
 })

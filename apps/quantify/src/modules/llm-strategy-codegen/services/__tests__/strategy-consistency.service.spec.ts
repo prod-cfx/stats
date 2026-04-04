@@ -1,10 +1,12 @@
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
 import { StrategyConsistencyService } from '../strategy-consistency.service'
+import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
 
 describe('strategyConsistencyService', () => {
   const consistency = new StrategyConsistencyService(new ScriptProfileExtractorService())
   const canonicalBuilder = new CanonicalSpecBuilderService()
+  const summaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
 
   it('passes when script aligns with canonical bollinger spec', () => {
     const spec = canonicalBuilder.build({
@@ -167,5 +169,46 @@ strategy
 
     expect(report.status).toBe('FAILED')
     expect(report.checks.some(check => check.key === 'sizing.mode' && check.status === 'failed')).toBe(true)
+  })
+
+  it('fails when bollinger intent cannot be evidenced by script summary', () => {
+    const checklist = {
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['突破布林带上轨时做空'],
+      exitRules: ['回到布林带中轨时平仓'],
+      riskRules: { positionPct: 10 },
+    }
+    const canonicalSpec = canonicalBuilder.build(checklist)
+    const userIntentSummary = summaryBuilder.buildUserIntentSummary({
+      checklist,
+      message: '我要一个布林带策略',
+    })
+    const strategySummary = summaryBuilder.buildStrategySummary(canonicalSpec)
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: `
+const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const bars = ctx.bars ?? []
+    const closes = bars.map(item => item.close)
+    const fast = ctx.helpers?.ta?.sma(closes, 5)
+    const slow = ctx.helpers?.ta?.sma(closes, 20)
+    if (typeof fast !== 'number' || typeof slow !== 'number') return { action: 'NOOP' }
+    if (fast > slow) return { action: 'OPEN_LONG', size: { mode: 'RATIO', value: 0.1 } }
+    return { action: 'NOOP' }
+  },
+}
+strategy
+`,
+      userIntentSummary,
+      strategySummary,
+    })
+
+    expect(report.status).toBe('FAILED')
+    expect(report.checks.some(check => check.key === 'indicators.required' && check.status === 'failed')).toBe(true)
+    expect(report.checks.some(check => check.key === 'summary.alignment' && check.status === 'failed')).toBe(true)
   })
 })

@@ -171,6 +171,11 @@ model PublishedStrategySnapshot {
   paramsSnapshot     Json?    @map("params_snapshot")
   executionPolicy    Json?    @map("execution_policy")
   dataRequirements   Json?    @map("data_requirements")
+  userIntentSummary  Json     @map("user_intent_summary")
+  strategySummary    Json     @map("strategy_summary")
+  scriptSummary      Json     @map("script_summary")
+  lockedParams       Json     @map("locked_params")
+  snapshotVersion    Int      @default(2) @map("snapshot_version")
   createdAt          DateTime @default(now()) @map("created_at")
 
   session LlmStrategyCodegenSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)

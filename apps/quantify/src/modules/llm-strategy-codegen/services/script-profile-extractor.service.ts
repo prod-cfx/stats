@@ -40,8 +40,8 @@ export class ScriptProfileExtractorService {
       indicators.push({ kind, params })
     }
 
-    if (/bollingerBands(?:\?\.)?\(/.test(scriptCode)) {
-      const match = scriptCode.match(/bollingerBands(?:\?\.)?\([^,]+,\s*(\d+),\s*(\d+(?:\.\d+)?)\s*\)/)
+    if (/(?:bollingerBands|bbands)(?:\?\.)?\(/i.test(scriptCode)) {
+      const match = scriptCode.match(/(?:bollingerBands|bbands)(?:\?\.)?\([^,]+,\s*(\d+),\s*(\d+(?:\.\d+)?)\s*\)/i)
       const period = Number(match?.[1] ?? 20)
       const stdDev = Number(match?.[2] ?? 2)
       tryPush('bollingerBands', { period, stdDev })
@@ -201,6 +201,19 @@ export class ScriptProfileExtractorService {
       }
     }
 
+    if (this.isAliasNormalizedPositionPctExpression({
+      scriptCode: input.scriptCode,
+      expression,
+      depth,
+      mode: input.mode,
+    })) {
+      return {
+        mode: input.mode,
+        value: null,
+        source: 'positionPct_normalized',
+      }
+    }
+
     if (this.isRawPositionPctExpression(expression)) {
       return {
         mode: input.mode,
@@ -226,6 +239,39 @@ export class ScriptProfileExtractorService {
       value: null,
       source: 'unknown',
     }
+  }
+
+  private isAliasNormalizedPositionPctExpression(input: {
+    scriptCode: string
+    expression: string
+    depth: number
+    mode: CanonicalSizingMode
+  }): boolean {
+    const aliases = Array.from(input.expression.matchAll(/\b([a-z_]\w*)\s*\/\s*100\b/gi))
+      .map(match => match[1])
+      .filter((identifier): identifier is string => typeof identifier === 'string' && identifier.length > 0)
+
+    for (const identifier of aliases) {
+      const assignedExpression = this.findAssignedExpression(input.scriptCode, identifier)
+      if (!assignedExpression) continue
+
+      if (this.isRawPositionPctExpression(assignedExpression) || this.isNormalizedPositionPctExpression(assignedExpression)) {
+        return true
+      }
+
+      if (input.depth >= 3) continue
+      const resolvedAssigned = this.resolveSizingExpression({
+        scriptCode: input.scriptCode,
+        mode: input.mode,
+        expression: assignedExpression,
+        depth: input.depth + 1,
+      })
+      if (resolvedAssigned.source === 'positionPct_raw' || resolvedAssigned.source === 'positionPct_normalized') {
+        return true
+      }
+    }
+
+    return false
   }
 
   private isNormalizedPositionPctExpression(expression: string): boolean {

@@ -708,6 +708,8 @@ export class SignalGeneratorService {
     referencePrice?: number,
     manualTrigger = false,
   ): Promise<(AiSignalPayload & { rawResponse: string }) | null> {
+    const isStrictCodegen = this.isStrictPublishedCodegenTemplate(strategy)
+
     // 准备填充 prompt 模板的数据
     let promptData: Record<string, any> = {}
 
@@ -720,6 +722,9 @@ export class SignalGeneratorService {
           this.logger.error(
             `TypeScript check failed for strategy ${strategy.id}: ${compiledScript.error ?? 'Unknown error'}`,
           )
+          if (isStrictCodegen) {
+            return null
+          }
           promptData = indicators
         } else {
           const marketBars = await this.loadRecentBars(symbol.id, timeframe, DEFAULT_BAR_LIMIT)
@@ -775,6 +780,9 @@ export class SignalGeneratorService {
                 `Reason: ${validation.error ?? 'Unknown validation error'}. ` +
                 `Using indicators as fallback.`,
               )
+              if (isStrictCodegen) {
+                return null
+              }
               promptData = indicators
             }
             else {
@@ -786,6 +794,9 @@ export class SignalGeneratorService {
                 this.logger.warn(
                   `Script adapter resolution failed for strategy ${strategy.id}: ${resolved.error}. Using indicators as fallback.`,
                 )
+                if (isStrictCodegen) {
+                  return null
+                }
                 promptData = indicators
               } else if (resolved.decision) {
                 const decisionContext = this.buildDecisionContext(indicators, referencePrice)
@@ -798,11 +809,17 @@ export class SignalGeneratorService {
                   )
                   return null
                 }
-                promptData = strategyDecisionToSignalPayload(
-                  resolved.decision,
-                  referencePrice || 0,
-                  decisionContext,
-                ) as Record<string, any>
+                promptData = isStrictCodegen
+                  ? this.buildStrictPublishedPromptDataFromDecision(
+                    resolved.decision,
+                    referencePrice || 0,
+                    decisionContext,
+                  )
+                  : strategyDecisionToSignalPayload(
+                    resolved.decision,
+                    referencePrice || 0,
+                    decisionContext,
+                  ) as Record<string, any>
               } else {
                 promptData = (resolved.passthrough ?? validation.value) as Record<string, any>
               }
@@ -814,6 +831,9 @@ export class SignalGeneratorService {
           else {
             this.logger.warn(`Script execution failed for strategy ${strategy.id}: ${result.error?.message}`)
             // 脚本执行失败时，使用原始指标数据作为后备
+            if (isStrictCodegen) {
+              return null
+            }
             promptData = indicators
           }
         }
@@ -822,10 +842,16 @@ export class SignalGeneratorService {
           `Error executing script for strategy ${strategy.id}: ${(error as Error).message}`,
         )
         // 出错时使用原始指标数据
+        if (isStrictCodegen) {
+          return null
+        }
         promptData = indicators
       }
     } else {
       // 没有脚本时，直接使用指标数据
+      if (isStrictCodegen) {
+        return null
+      }
       promptData = indicators
     }
 
@@ -840,6 +866,9 @@ export class SignalGeneratorService {
         return null
       }
       return directSignal.payload
+    }
+    if (isStrictCodegen) {
+      return null
     }
 
     // 填充 prompt 模板中的占位符（使用 shared helper，保证与调试接口一致）
@@ -900,7 +929,7 @@ export class SignalGeneratorService {
     }
 
     this.logger.warn(`Exceeded AI retry attempts for strategy ${strategy.id}`)
-    if (manualTrigger) {
+    if (manualTrigger && !isStrictCodegen) {
       return this.buildManualFallbackSignal(referencePrice, strategy.id, symbol.code)
     }
     return null
@@ -998,14 +1027,14 @@ export class SignalGeneratorService {
     promptData: Record<string, unknown>,
     referencePrice: number | undefined,
     strategy: Pick<StrategyTemplate, 'promptTemplate' | 'defaultParams'>,
-    instance: Pick<StrategyInstance, 'params'>,
+    _instance: Pick<StrategyInstance, 'params'>,
   ): GeneratedSignalPayload | null {
-    if (strategy.promptTemplate !== 'AI_CODEGEN_PUBLISHED_TEMPLATE') {
+    if (!this.isStrictPublishedCodegenTemplate(strategy)) {
       return null
     }
 
     const action = typeof promptData.action === 'string' ? promptData.action.trim().toLowerCase() : ''
-    if (!action || action === 'hold' || action === 'wait' || action === 'none') {
+    if (!action) {
       const normalizedSignal = this.buildPublishedCodegenNormalizedSignal(promptData)
       if (normalizedSignal) {
         return {
@@ -1016,36 +1045,53 @@ export class SignalGeneratorService {
           },
         }
       }
+      return { type: 'none', reason: 'INVALID_NORMALIZED_SIGNAL' }
+    }
+
+    if (action === 'hold' || action === 'wait' || action === 'none') {
       return { type: 'none', reason: 'NO_ACTION' }
     }
 
     const metadata = this.asRecord(promptData.metadata)
-    const effectiveParams = this.buildEffectiveParams(strategy as StrategyTemplate, instance as StrategyInstance) ?? {}
     const entryPrice = this.readNumeric(metadata.entryPrice) ?? referencePrice ?? 0
     if (!(entryPrice > 0)) {
       return { type: 'none', reason: 'MISSING_ENTRY_PRICE' }
     }
 
-    const stopLoss = this.readNumeric(metadata.stopLossPrice)
-    const takeProfit = this.readNumeric(metadata.takeProfitPrice)
-    const rawAmount = this.readNumeric(promptData.amount)
-    const positionSizeQuote =
-      this.readNumeric(promptData.positionSizeQuote)
-      ?? this.readNumeric((effectiveParams as Record<string, unknown>).entryQuoteAmount)
-      ?? (rawAmount && rawAmount > 0 ? Number((rawAmount * entryPrice).toFixed(8)) : undefined)
+    const confidence =
+      this.readNumeric(promptData.confidence)
+      ?? this.readNumeric(metadata.confidence)
+    const stopLoss =
+      this.readNumeric(metadata.stopLossPrice)
+      ?? this.readNumeric(promptData.stopLoss)
+    const takeProfit =
+      this.readNumeric(metadata.takeProfitPrice)
+      ?? this.readNumeric(promptData.takeProfit)
+    if (confidence === undefined || stopLoss === undefined || takeProfit === undefined) {
+      return { type: 'none', reason: 'INVALID_NORMALIZED_SIGNAL' }
+    }
+
+    const positionSizeQuote = this.readNumeric(promptData.positionSizeQuote)
+    const positionSizeRatio = this.readNumeric(promptData.positionSizeRatio)
     const rawResponse = this.truncateRawResponse(JSON.stringify(promptData), this.getConfig())
 
     if (action === 'buy') {
+      const hasQuoteSize = typeof positionSizeQuote === 'number' && positionSizeQuote > 0
+      const hasRatioSize = typeof positionSizeRatio === 'number' && positionSizeRatio > 0
+      if (!hasQuoteSize && !hasRatioSize) {
+        return { type: 'none', reason: 'INVALID_NORMALIZED_SIGNAL' }
+      }
       return {
         type: 'signal',
         payload: {
           signalType: 'ENTRY',
           direction: 'BUY',
-          confidence: 90,
+          confidence,
           entryPrice,
           stopLoss,
           takeProfit,
-          positionSizeQuote,
+          positionSizeQuote: hasQuoteSize ? positionSizeQuote : undefined,
+          positionSizeRatio: hasRatioSize ? positionSizeRatio : undefined,
           reasoning: 'AI codegen direct signal: buy',
           rawResponse,
         },
@@ -1058,7 +1104,7 @@ export class SignalGeneratorService {
         payload: {
           signalType: 'EXIT',
           direction: 'CLOSE_LONG',
-          confidence: 90,
+          confidence,
           entryPrice: referencePrice ?? entryPrice,
           stopLoss,
           takeProfit,
@@ -1075,12 +1121,24 @@ export class SignalGeneratorService {
     const direction = typeof promptData.direction === 'string' ? promptData.direction : null
     const signalType = typeof promptData.signalType === 'string' ? promptData.signalType : null
     const entryPrice = this.readNumeric(promptData.entryPrice)
+    const confidence = this.readNumeric(promptData.confidence)
+    const stopLoss = this.readNumeric(promptData.stopLoss)
+    const takeProfit = this.readNumeric(promptData.takeProfit)
+    const positionSizeQuote = this.readNumeric(promptData.positionSizeQuote)
+    const positionSizeRatio = this.readNumeric(promptData.positionSizeRatio)
+    const hasQuoteSize = typeof positionSizeQuote === 'number' && positionSizeQuote > 0
+    const hasRatioSize = typeof positionSizeRatio === 'number' && positionSizeRatio > 0
+
     if (
       !direction
       || !['BUY', 'SELL', 'CLOSE_LONG', 'CLOSE_SHORT'].includes(direction)
       || !signalType
       || !['ENTRY', 'EXIT', 'ADJUSTMENT', 'ALERT'].includes(signalType)
       || !(entryPrice && entryPrice > 0)
+      || confidence === undefined
+      || stopLoss === undefined
+      || takeProfit === undefined
+      || (signalType === 'ENTRY' && !hasQuoteSize && !hasRatioSize)
     ) {
       return null
     }
@@ -1088,12 +1146,12 @@ export class SignalGeneratorService {
     return {
       direction: direction as AiSignalPayload['direction'],
       signalType: signalType as AiSignalPayload['signalType'],
-      confidence: this.readNumeric(promptData.confidence) ?? 80,
+      confidence,
       entryPrice,
-      stopLoss: this.readNumeric(promptData.stopLoss) ?? Math.max(0.00000001, entryPrice * 0.98),
-      takeProfit: this.readNumeric(promptData.takeProfit) ?? entryPrice * 1.02,
-      positionSizeQuote: this.readNumeric(promptData.positionSizeQuote),
-      positionSizeRatio: this.readNumeric(promptData.positionSizeRatio),
+      stopLoss,
+      takeProfit,
+      positionSizeQuote: hasQuoteSize ? positionSizeQuote : undefined,
+      positionSizeRatio: hasRatioSize ? positionSizeRatio : undefined,
       reasoning:
         (typeof promptData.reasoning === 'string' && promptData.reasoning.trim())
         || (typeof promptData.reason === 'string' && promptData.reason.trim())
@@ -1121,6 +1179,64 @@ export class SignalGeneratorService {
   private readNumeric(value: unknown): number | undefined {
     const numeric = Number(value)
     return Number.isFinite(numeric) ? numeric : undefined
+  }
+
+  private isStrictPublishedCodegenTemplate(
+    strategy: Pick<StrategyTemplate, 'promptTemplate'>,
+  ): boolean {
+    return strategy.promptTemplate === 'AI_CODEGEN_PUBLISHED_TEMPLATE'
+  }
+
+  private buildStrictPublishedPromptDataFromDecision(
+    decision: StrategyDecisionV1,
+    referencePrice: number,
+    context?: { currentQty?: number; equity?: number; markPrice?: number },
+  ): Record<string, unknown> {
+    if (decision.action === 'NOOP') {
+      return { action: 'hold' }
+    }
+
+    const payload = strategyDecisionToSignalPayload(
+      decision,
+      referencePrice,
+      context,
+    ) as Record<string, unknown>
+
+    const confidence = this.readNumeric(decision.confidence)
+    const stopLoss = this.readNumeric(decision.risk?.stopLoss)
+    const takeProfit = this.readNumeric(decision.risk?.takeProfit)
+
+    const strictPromptData: Record<string, unknown> = {
+      direction: payload.direction,
+      signalType: payload.signalType,
+      entryPrice: payload.entryPrice,
+    }
+
+    if (confidence !== undefined) {
+      strictPromptData.confidence = confidence
+    }
+    if (stopLoss !== undefined) {
+      strictPromptData.stopLoss = stopLoss
+    }
+    if (takeProfit !== undefined) {
+      strictPromptData.takeProfit = takeProfit
+    }
+    if (typeof decision.reason === 'string' && decision.reason.trim()) {
+      strictPromptData.reasoning = decision.reason.trim()
+    }
+
+    if (decision.size?.mode === 'QUOTE') {
+      strictPromptData.positionSizeQuote = Math.abs(decision.size.value)
+    } else if (decision.size?.mode === 'RATIO') {
+      strictPromptData.positionSizeRatio = Math.abs(decision.size.value)
+    } else if (decision.size?.mode === 'QTY') {
+      const entryPrice = this.readNumeric(payload.entryPrice)
+      if (entryPrice && entryPrice > 0) {
+        strictPromptData.positionSizeQuote = Math.abs(decision.size.value) * entryPrice
+      }
+    }
+
+    return strictPromptData
   }
 
   private buildManualFallbackSignal(
@@ -1567,11 +1683,17 @@ export class SignalGeneratorService {
           })
           return
         }
-        promptData = strategyDecisionToSignalPayload(
-          resolved.decision,
-          adapterReferencePrice,
-          decisionContext,
-        ) as Record<string, any>
+        promptData = this.isStrictPublishedCodegenTemplate(strategy)
+          ? this.buildStrictPublishedPromptDataFromDecision(
+            resolved.decision,
+            adapterReferencePrice,
+            decisionContext,
+          )
+          : strategyDecisionToSignalPayload(
+            resolved.decision,
+            adapterReferencePrice,
+            decisionContext,
+          ) as Record<string, any>
       } else {
         promptData = (resolved.passthrough ?? validation.value) as Record<string, any>
       }
@@ -1623,8 +1745,19 @@ export class SignalGeneratorService {
       strategy,
       instance,
     )
+    const isStrictCodegen = this.isStrictPublishedCodegenTemplate(strategy)
     if (directSignal) {
       if (directSignal.type === 'none') {
+        if (isStrictCodegen && directSignal.reason !== 'NO_ACTION') {
+          await this.handleStrategyFailure(instance.id, config)
+          this.telemetry.recordGeneration({
+            strategyId: strategy.id,
+            symbolCode: primaryLeg.symbol,
+            success: false,
+            reason: directSignal.reason || 'STRICT_CODEGEN_SIGNAL_INVALID',
+          })
+          return
+        }
         this.logger.debug(
           `Multi-leg strategy ${strategy.id} direct codegen output requested no action (${directSignal.reason})`,
         )
@@ -1664,6 +1797,16 @@ export class SignalGeneratorService {
         strategyId: strategy.id,
         symbolCode: primaryLeg.symbol,
         success: true,
+      })
+      return
+    }
+    if (isStrictCodegen) {
+      await this.handleStrategyFailure(instance.id, config)
+      this.telemetry.recordGeneration({
+        strategyId: strategy.id,
+        symbolCode: primaryLeg.symbol,
+        success: false,
+        reason: 'STRICT_CODEGEN_SIGNAL_INVALID',
       })
       return
     }

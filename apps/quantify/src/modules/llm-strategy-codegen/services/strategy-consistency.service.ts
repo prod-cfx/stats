@@ -1,6 +1,7 @@
 import type { CanonicalAction, CanonicalStrategySpec } from '../types/canonical-strategy-spec'
 import type { StrategyConsistencyCheck, StrategyConsistencyReport } from '../types/strategy-consistency-report'
 import type { StrategySemanticProfile, StrategySemanticRuleKey } from '../types/strategy-semantic-profile'
+import type { StrategySummary } from '../types/strategy-summary'
 import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { ScriptProfileExtractorService } from './script-profile-extractor.service'
@@ -12,12 +13,21 @@ export class StrategyConsistencyService {
   evaluate(input: {
     canonicalSpec: CanonicalStrategySpec
     scriptCode: string
+    userIntentSummary?: StrategySummary
+    strategySummary?: StrategySummary
+    scriptSummary?: StrategySummary
   }): StrategyConsistencyReport {
     const scriptProfile = this.scriptProfileExtractor.extract(input.scriptCode)
+    const derivedScriptSummary = input.scriptSummary ?? this.buildScriptSummaryFromProfile(scriptProfile)
     const specProfile = this.specToProfile(input.canonicalSpec)
     const checks: StrategyConsistencyCheck[] = []
 
     checks.push(this.checkFallback(scriptProfile))
+    checks.push(this.checkSummaryAlignment({
+      userIntentSummary: input.userIntentSummary,
+      strategySummary: input.strategySummary,
+      scriptSummary: derivedScriptSummary,
+    }))
     checks.push(this.checkIndicators(specProfile, scriptProfile))
     checks.push(this.checkRuleMappings(specProfile, scriptProfile))
     checks.push(this.checkActions(specProfile, scriptProfile))
@@ -131,6 +141,61 @@ export class StrategyConsistencyService {
       expected: specProfile.indicators.filter(item => item.kind !== 'custom'),
       actual,
       message: '脚本指标与 canonical spec 一致。',
+    }
+  }
+
+  private checkSummaryAlignment(input: {
+    userIntentSummary?: StrategySummary
+    strategySummary?: StrategySummary
+    scriptSummary?: StrategySummary
+  }): StrategyConsistencyCheck {
+    const userIntentSummary = input.userIntentSummary
+    const strategySummary = input.strategySummary
+    const scriptSummary = input.scriptSummary
+
+    if (!userIntentSummary || !strategySummary || !scriptSummary) {
+      return {
+        key: 'summary.alignment',
+        level: 'warning',
+        status: 'unprovable',
+        expected: {
+          userIntentSummary: userIntentSummary ?? null,
+          strategySummary: strategySummary ?? null,
+        },
+        actual: scriptSummary ?? null,
+        message: '缺少 userIntentSummary/strategySummary/scriptSummary，跳过 summary 强校验。',
+      }
+    }
+
+    const mismatches = [
+      ...this.compareSummaries('用户意图', userIntentSummary, '策略描述', strategySummary),
+      ...this.compareSummaries('策略描述', strategySummary, '脚本语义', scriptSummary),
+    ]
+
+    if (mismatches.length > 0) {
+      return {
+        key: 'summary.alignment',
+        level: 'critical',
+        status: 'failed',
+        expected: {
+          userIntentSummary,
+          strategySummary,
+        },
+        actual: scriptSummary,
+        message: `summary 对齐失败：${mismatches.join('；')}`,
+      }
+    }
+
+    return {
+      key: 'summary.alignment',
+      level: 'critical',
+      status: 'passed',
+      expected: {
+        userIntentSummary,
+        strategySummary,
+      },
+      actual: scriptSummary,
+      message: 'userIntentSummary / strategySummary / scriptSummary 对齐一致。',
     }
   }
 
@@ -351,6 +416,95 @@ export class StrategyConsistencyService {
         unprovable: 0,
       },
     )
+  }
+
+  private compareSummaries(
+    leftLabel: string,
+    left: StrategySummary,
+    rightLabel: string,
+    right: StrategySummary,
+  ): string[] {
+    const issues: string[] = []
+    if (left.strategyType !== right.strategyType) {
+      issues.push(`${leftLabel}.strategyType=${left.strategyType} != ${rightLabel}.strategyType=${right.strategyType}`)
+    }
+
+    const leftIndicators = [...left.indicators].sort()
+    const rightIndicators = [...right.indicators].sort()
+    if (leftIndicators.join('|') !== rightIndicators.join('|')) {
+      issues.push(`${leftLabel}.indicators 与 ${rightLabel}.indicators 不一致`)
+    }
+
+    if (left.entryRule !== right.entryRule) {
+      issues.push(`${leftLabel}.entryRule=${left.entryRule} != ${rightLabel}.entryRule=${right.entryRule}`)
+    }
+
+    if (left.exitRule !== right.exitRule) {
+      issues.push(`${leftLabel}.exitRule=${left.exitRule} != ${rightLabel}.exitRule=${right.exitRule}`)
+    }
+
+    if (left.sizing && right.sizing) {
+      const leftSizing = `${left.sizing.mode}:${left.sizing.evidence}`
+      const rightSizing = `${right.sizing.mode}:${right.sizing.evidence}`
+      if (leftSizing !== rightSizing) {
+        issues.push(`${leftLabel}.sizing=${leftSizing} != ${rightLabel}.sizing=${rightSizing}`)
+      }
+    }
+
+    return issues
+  }
+
+  private buildScriptSummaryFromProfile(profile: StrategySemanticProfile): StrategySummary {
+    const indicators = Array.from(new Set(
+      profile.indicators
+        .map(item => item.kind)
+        .filter((kind): kind is Exclude<typeof kind, 'custom'> => kind !== 'custom'),
+    ))
+
+    const strategyType: StrategySummary['strategyType'] = indicators.includes('bollingerBands')
+      ? 'bollinger'
+      : (indicators.includes('sma') || indicators.includes('ema'))
+          ? 'movingAverage'
+          : (indicators.includes('rsi') || indicators.includes('macd'))
+              ? 'momentum'
+              : indicators.includes('atr')
+                  ? 'volatility'
+                  : 'custom'
+
+    const upperRule = profile.ruleMappings.find(item => item.key === 'bollinger.upper_break')
+    const lowerRule = profile.ruleMappings.find(item => item.key === 'bollinger.lower_break')
+    const hasMiddleRule = profile.ruleMappings.some(item => item.key === 'bollinger.middle_revert')
+    const hasMaOpenAction = profile.actions.some(item => item.startsWith('OPEN_'))
+    const hasMaCloseAction = profile.actions.some(item => item.startsWith('CLOSE_'))
+
+    const entryRule = upperRule?.action === 'OPEN_SHORT'
+      ? 'bollinger.upper_break_short'
+      : lowerRule?.action === 'OPEN_LONG'
+          ? 'bollinger.lower_break_long'
+          : (strategyType === 'movingAverage' && hasMaOpenAction)
+              ? 'ma.golden_cross'
+              : 'custom'
+    const exitRule = hasMiddleRule
+      ? 'bollinger.middle_revert'
+      : (strategyType === 'movingAverage' && hasMaCloseAction)
+          ? 'ma.death_cross'
+          : 'custom'
+
+    return {
+      strategyType,
+      indicators,
+      entryRule,
+      exitRule,
+      market: {},
+      sizing: profile.sizing
+        ? {
+          mode: profile.sizing.mode,
+          evidence: profile.sizing.source === 'literal' || profile.sizing.source === 'positionPct_normalized'
+            ? 'explicit'
+            : 'unresolved',
+        }
+        : null,
+    }
   }
 
   private buildRuleMappings(spec: CanonicalStrategySpec): StrategySemanticProfile['ruleMappings'] {

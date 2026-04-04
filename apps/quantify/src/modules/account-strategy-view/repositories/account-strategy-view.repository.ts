@@ -27,6 +27,13 @@ interface DeployStrategyInput {
   symbol: string
   timeframe: string
   positionPct: number
+  publishedSnapshotBinding?: {
+    bindingSource: 'PUBLISHED_SNAPSHOT'
+    publishedSnapshotId: string
+    snapshotHash: string
+    sourceStrategyInstanceId: string | null
+    sourceStrategyTemplateId: string | null
+  }
   initialBalanceQuote?: number
   accountBalanceQuote?: number
   mode?: 'TESTNET' | 'LIVE'
@@ -110,6 +117,7 @@ export class AccountStrategyViewRepository {
             id: true,
             strategyTemplateId: true,
             params: true,
+            metadata: true,
           },
         })
 
@@ -131,6 +139,8 @@ export class AccountStrategyViewRepository {
             : {}),
         }
 
+        const snapshotBindingMetadata = this.buildSnapshotBindingMetadata(input)
+        const existingMetadata = this.asRecord(existingInstance.metadata)
         await tx.strategyInstance.update({
           where: { id: existingInstance.id },
           data: {
@@ -142,8 +152,10 @@ export class AccountStrategyViewRepository {
             startedAt: new Date(),
             updatedBy: input.userId,
             metadata: {
+              ...existingMetadata,
               source: 'account-ai-quant-deploy',
               sourceStrategyInstanceId: existingInstance.id,
+              ...snapshotBindingMetadata,
             },
           },
         })
@@ -264,7 +276,10 @@ export class AccountStrategyViewRepository {
           startedAt: new Date(),
           createdBy: input.userId,
           updatedBy: input.userId,
-          metadata: { source: 'account-ai-quant-deploy' },
+          metadata: {
+            source: 'account-ai-quant-deploy',
+            ...this.buildSnapshotBindingMetadata(input),
+          },
         },
         select: { id: true },
       })
@@ -471,6 +486,17 @@ export class AccountStrategyViewRepository {
       return {}
     }
     return value as Record<string, unknown>
+  }
+
+  private buildSnapshotBindingMetadata(input: DeployStrategyInput): Record<string, unknown> {
+    if (!input.publishedSnapshotBinding) return {}
+    return {
+      bindingSource: input.publishedSnapshotBinding.bindingSource,
+      publishedSnapshotId: input.publishedSnapshotBinding.publishedSnapshotId,
+      snapshotHash: input.publishedSnapshotBinding.snapshotHash,
+      sourceStrategyInstanceId: input.publishedSnapshotBinding.sourceStrategyInstanceId,
+      sourceStrategyTemplateId: input.publishedSnapshotBinding.sourceStrategyTemplateId,
+    }
   }
 
   private normalizeStrategyName(value: unknown): string {

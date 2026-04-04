@@ -11,6 +11,26 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
     }
+    const snapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyInstanceId: 'inst-draft-1',
+        strategyTemplateId: 'template-1',
+        paramsSnapshot: {
+          exchange: 'okx',
+          symbol: 'SOLUSDT',
+          timeframe: '5m',
+          positionPct: 10,
+        },
+        lockedParams: {
+          exchange: 'okx',
+          symbol: 'SOLUSDT',
+          timeframe: '5m',
+          positionPct: 10,
+        },
+      }),
+    }
     const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
     const strategyInstancesService = { updateInstance: jest.fn() }
     const marketDataIngestionService = {
@@ -22,6 +42,10 @@ describe('accountStrategyViewService.deployStrategy', () => {
       statsService as any,
       strategyInstancesService as any,
       marketDataIngestionService as any,
+      undefined,
+      undefined,
+      undefined,
+      snapshotsRepository as any,
     )
     service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-okx-1' } as any)
 
@@ -32,6 +56,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       symbol: 'SOLUSDT',
       timeframe: '5m',
       positionPct: 10,
+      publishedSnapshotId: 'snapshot-1',
       deployRequestId: 'deploy-req-1',
       exchangeAccountId: 'acc-1',
       strategyInstanceId: 'inst-draft-1',
@@ -42,28 +67,42 @@ describe('accountStrategyViewService.deployStrategy', () => {
       exchange: 'okx',
       symbol: 'SOLUSDT',
       strategyInstanceId: 'inst-draft-1',
+      publishedSnapshotBinding: expect.objectContaining({
+        publishedSnapshotId: 'snapshot-1',
+      }),
     }))
     expect(service.getStrategyDetail).toHaveBeenCalledWith('user-1', 'inst-okx-1')
   })
 
-  it('falls back to strategy instance params when deploy payload fields are missing', async () => {
+  it('resolves deploy params from publishedSnapshotId and ignores UI overrides', async () => {
     const repo = {
       deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-okx-1', mode: 'TESTNET' }),
-      findStrategyForUser: jest.fn().mockResolvedValue({
-        params: {
-          exchange: 'okx',
-          symbol: 'SOLUSDT',
-          timeframe: '5m',
-          positionPct: 10,
-        },
-        strategyTemplate: { defaultParams: {} },
-        subscriptions: [],
-      }),
+      findStrategyForUser: jest.fn().mockResolvedValue(null),
       findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
       createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-1' }),
       markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
       markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+    }
+    const snapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-2',
+        snapshotHash: 'snapshot-hash-2',
+        strategyInstanceId: 'inst-draft-1',
+        strategyTemplateId: 'template-1',
+        paramsSnapshot: {
+          exchange: 'okx',
+          symbol: 'SOLUSDT',
+          timeframe: '5m',
+          positionPct: 10,
+        },
+        lockedParams: {
+          exchange: 'okx',
+          symbol: 'SOLUSDT',
+          timeframe: '5m',
+          positionPct: 10,
+        },
+      }),
     }
     const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
     const strategyInstancesService = { updateInstance: jest.fn() }
@@ -76,28 +115,35 @@ describe('accountStrategyViewService.deployStrategy', () => {
       statsService as any,
       strategyInstancesService as any,
       marketDataIngestionService as any,
+      undefined,
+      undefined,
+      undefined,
+      snapshotsRepository as any,
     )
     service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-okx-1' } as any)
 
     await service.deployStrategy({
       userId: 'user-1',
       name: 'OKX SOL 5m',
-      exchange: undefined as any,
-      symbol: undefined as any,
-      timeframe: undefined as any,
-      positionPct: undefined as any,
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      timeframe: '1h',
+      positionPct: 99,
+      publishedSnapshotId: 'snapshot-2',
       deployRequestId: 'deploy-req-2',
       exchangeAccountId: 'acc-1',
       strategyInstanceId: 'inst-draft-1',
     } as any)
 
-    expect(repo.findStrategyForUser).toHaveBeenCalledWith('user-1', 'inst-draft-1')
     expect(marketDataIngestionService.ensureSymbolsSubscribed).toHaveBeenCalledWith(['SOLUSDT'])
     expect(repo.deployStrategyForUser).toHaveBeenCalledWith(expect.objectContaining({
       exchange: 'okx',
       symbol: 'SOLUSDT',
       timeframe: '5m',
       positionPct: 10,
+      publishedSnapshotBinding: expect.objectContaining({
+        publishedSnapshotId: 'snapshot-2',
+      }),
     }))
   })
 
@@ -110,6 +156,26 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
       markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+    }
+    const snapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-live-balance',
+        snapshotHash: 'snapshot-hash-3',
+        strategyInstanceId: 'inst-draft-1',
+        strategyTemplateId: 'template-1',
+        paramsSnapshot: {
+          exchange: 'okx',
+          symbol: 'SOLUSDT',
+          timeframe: '5m',
+          positionPct: 10,
+        },
+        lockedParams: {
+          exchange: 'okx',
+          symbol: 'SOLUSDT',
+          timeframe: '5m',
+          positionPct: 10,
+        },
+      }),
     }
     const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
     const strategyInstancesService = { updateInstance: jest.fn() }
@@ -130,6 +196,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       undefined,
       undefined,
       tradingService as any,
+      snapshotsRepository as any,
     )
     service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-okx-1' } as any)
 
@@ -140,6 +207,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       symbol: 'SOLUSDT',
       timeframe: '5m',
       positionPct: 10,
+      publishedSnapshotId: 'snapshot-live-balance',
       deployRequestId: 'deploy-req-live-balance',
       exchangeAccountId: 'exchange-account-1',
       strategyInstanceId: 'inst-draft-1',
@@ -162,6 +230,26 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
     }
+    const snapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-missing-asset',
+        snapshotHash: 'snapshot-hash-4',
+        strategyInstanceId: 'inst-draft-1',
+        strategyTemplateId: 'template-1',
+        paramsSnapshot: {
+          exchange: 'okx',
+          symbol: 'SOLUSDT',
+          timeframe: '5m',
+          positionPct: 10,
+        },
+        lockedParams: {
+          exchange: 'okx',
+          symbol: 'SOLUSDT',
+          timeframe: '5m',
+          positionPct: 10,
+        },
+      }),
+    }
     const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
     const strategyInstancesService = { updateInstance: jest.fn() }
     const marketDataIngestionService = {
@@ -181,6 +269,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       undefined,
       undefined,
       tradingService as any,
+      snapshotsRepository as any,
     )
     service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-okx-1' } as any)
 
@@ -191,6 +280,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       symbol: 'SOLUSDT',
       timeframe: '5m',
       positionPct: 10,
+      publishedSnapshotId: 'snapshot-missing-asset',
       deployRequestId: 'deploy-req-missing-quote-asset',
       exchangeAccountId: 'exchange-account-1',
       strategyInstanceId: 'inst-draft-1',
@@ -200,5 +290,45 @@ describe('accountStrategyViewService.deployStrategy', () => {
       initialBalanceQuote: expect.anything(),
       accountBalanceQuote: expect.anything(),
     }))
+  })
+
+  it('hashes deploy payload with publishedSnapshotId semantics and ignores UI field drift', () => {
+    const repo = {}
+    const statsService = {}
+    const strategyInstancesService = {}
+    const marketDataIngestionService = {}
+    const snapshotsRepository = {}
+
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+      undefined,
+      undefined,
+      undefined,
+      snapshotsRepository as any,
+    )
+
+    const hashA = (service as any).hashDeployPayload({
+      name: 'snapshot deploy',
+      publishedSnapshotId: 'snapshot-same',
+      exchange: 'okx',
+      symbol: 'SOLUSDT',
+      timeframe: '5m',
+      positionPct: 10,
+      deployRequestId: 'deploy-req-hash',
+    })
+    const hashB = (service as any).hashDeployPayload({
+      name: 'snapshot deploy',
+      publishedSnapshotId: 'snapshot-same',
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      timeframe: '1h',
+      positionPct: 99,
+      deployRequestId: 'deploy-req-hash',
+    })
+
+    expect(hashA).toBe(hashB)
   })
 })

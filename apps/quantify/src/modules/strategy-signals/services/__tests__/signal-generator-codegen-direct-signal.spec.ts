@@ -55,11 +55,12 @@ describe('signal generator AI_CODEGEN_PUBLISHED_TEMPLATE direct signal', () => {
     jest.restoreAllMocks()
   })
 
-  it('maps buy action output into an ENTRY BUY signal payload', () => {
+  it('maps buy action output into an ENTRY BUY signal payload when strict fields are explicit', () => {
     const payload = (service as any).buildPublishedCodegenSignalPayload(
       {
         action: 'buy',
-        amount: 0.5,
+        confidence: 88,
+        positionSizeQuote: 100,
         metadata: {
           entryPrice: 200,
           stopLossPrice: 180,
@@ -85,6 +86,7 @@ describe('signal generator AI_CODEGEN_PUBLISHED_TEMPLATE direct signal', () => {
       payload: {
         signalType: 'ENTRY',
         direction: 'BUY',
+        confidence: 88,
         entryPrice: 200,
         stopLoss: 180,
         takeProfit: 220,
@@ -142,6 +144,50 @@ describe('signal generator AI_CODEGEN_PUBLISHED_TEMPLATE direct signal', () => {
     })
   })
 
+  it('rejects normalized payloads that miss strict confidence or risk fields', () => {
+    const payload = (service as any).buildPublishedCodegenSignalPayload(
+      {
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        entryPrice: 200,
+        positionSizeRatio: 0.1,
+        reasoning: 'missing confidence and risk fields',
+      },
+      200,
+      {
+        promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+      },
+      {},
+    )
+
+    expect(payload).toEqual({ type: 'none', reason: 'INVALID_NORMALIZED_SIGNAL' })
+  })
+
+  it('rejects ENTRY payloads without explicit positionSizeQuote or positionSizeRatio', () => {
+    const payload = (service as any).buildPublishedCodegenSignalPayload(
+      {
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        confidence: 60,
+        entryPrice: 200,
+        stopLoss: 180,
+        takeProfit: 220,
+        reasoning: 'missing explicit position size',
+      },
+      200,
+      {
+        promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+      },
+      {
+        params: {
+          entryQuoteAmount: 100,
+        },
+      },
+    )
+
+    expect(payload).toEqual({ type: 'none', reason: 'INVALID_NORMALIZED_SIGNAL' })
+  })
+
   it('runs published codegen adapter scripts against single-leg bars context even when template has legs metadata', async () => {
     const generatorRepository = {
       findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-1', code: 'BTCUSDT:SPOT' }),
@@ -197,7 +243,13 @@ describe('signal generator AI_CODEGEN_PUBLISHED_TEMPLATE direct signal', () => {
   onBar(ctx): StrategyDecisionV1 {
     const bars = Array.isArray(ctx.bars) ? ctx.bars : []
     if (bars.length < 20) return { action: 'NOOP', reason: 'insufficient bars' }
-    return { action: 'OPEN_LONG', size: { mode: 'RATIO', value: 0.1 }, confidence: 55, reason: 'buy signal' }
+    return {
+      action: 'OPEN_LONG',
+      size: { mode: 'RATIO', value: 0.1 },
+      confidence: 55,
+      risk: { stopLoss: 120, takeProfit: 130 },
+      reason: 'buy signal',
+    }
   },
 }
 strategy`,
@@ -221,6 +273,9 @@ strategy`,
       expect.objectContaining({
         direction: 'BUY',
         signalType: 'ENTRY',
+        confidence: 55,
+        stopLoss: 120,
+        takeProfit: 130,
         positionSizeRatio: 0.1,
         reasoning: 'buy signal',
       }),

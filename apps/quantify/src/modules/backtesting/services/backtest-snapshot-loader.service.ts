@@ -12,7 +12,7 @@ export interface SnapshotBacktestStrategyInput {
   id: string
   protocolVersion: 'v1'
   publishedSnapshotId: string
-  params: Record<string, unknown>
+  params?: Record<string, unknown>
 }
 
 @Injectable()
@@ -31,12 +31,13 @@ export class BacktestSnapshotLoaderService {
         args: { snapshotId: input.publishedSnapshotId },
       })
     }
+    const strictParams = this.resolveStrictParams(snapshot)
 
     const strategy = await this.strategyAdapter.build({
       id: this.resolveStrategyId(snapshot, input.id),
       protocolVersion: input.protocolVersion,
       scriptCode: snapshot.scriptSnapshot,
-      params: input.params,
+      params: strictParams,
     })
 
     const specSnapshot = this.readCanonicalSpec(snapshot.specSnapshot)
@@ -50,11 +51,36 @@ export class BacktestSnapshotLoaderService {
       snapshotHash: snapshot.snapshotHash,
       scriptHash: snapshot.scriptHash,
       specHash: snapshot.specHash,
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
       executionPolicy: snapshot.executionPolicy ?? undefined,
       riskRules: specSnapshot ? this.buildRiskRules(specSnapshot) : undefined,
       dataRequirements: snapshot.dataRequirements ?? undefined,
       specSnapshot: specSnapshot as unknown as Record<string, unknown> | undefined,
     } as BacktestRunInput['strategy']
+  }
+
+  private resolveStrictParams(snapshot: {
+    id: string
+    paramsSnapshot: unknown
+    lockedParams: unknown
+  }): Record<string, unknown> {
+    const paramsSnapshot = this.readJsonRecord(snapshot.paramsSnapshot)
+    const lockedParams = this.readJsonRecord(snapshot.lockedParams)
+    const resolvedParams = paramsSnapshot && Object.keys(paramsSnapshot).length > 0
+      ? paramsSnapshot
+      : lockedParams
+
+    const positionPct = resolvedParams?.positionPct
+    const hasPositionPct = typeof positionPct === 'number' && Number.isFinite(positionPct)
+    if (!resolvedParams || Object.keys(resolvedParams).length === 0 || !hasPositionPct) {
+      throw new DomainException('backtest.snapshot_params_missing', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: { snapshotId: snapshot.id },
+      })
+    }
+
+    return resolvedParams
   }
 
   private resolveStrategyId(
@@ -71,6 +97,11 @@ export class BacktestSnapshotLoaderService {
   private readCanonicalSpec(raw: unknown): CanonicalStrategySpec | undefined {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined
     return raw as CanonicalStrategySpec
+  }
+
+  private readJsonRecord(raw: unknown): Record<string, unknown> | null {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+    return raw as Record<string, unknown>
   }
 
   private buildRiskRules(spec: CanonicalStrategySpec): BacktestRunInput['strategy']['riskRules'] {

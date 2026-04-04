@@ -12,6 +12,11 @@ export interface CreatePublishedStrategySnapshotInput {
   scriptSnapshot: string
   specSnapshot: Record<string, unknown>
   consistencyReport: Record<string, unknown>
+  userIntentSummary: Record<string, unknown>
+  strategySummary: Record<string, unknown>
+  scriptSummary: Record<string, unknown>
+  lockedParams: Record<string, unknown>
+  snapshotVersion?: number
   paramsSnapshot?: Record<string, unknown> | null
   executionPolicy?: Record<string, unknown> | null
   dataRequirements?: Record<string, unknown> | null
@@ -40,9 +45,14 @@ export class PublishedStrategySnapshotsRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async create(input: CreatePublishedStrategySnapshotInput): Promise<PublishedStrategySnapshot> {
+    const snapshotVersion = input.snapshotVersion ?? 2
     const normalizedScript = input.scriptSnapshot.trim()
     const normalizedSpec = stableJsonStringify(input.specSnapshot)
     const normalizedConsistency = stableJsonStringify(input.consistencyReport)
+    const normalizedUserIntentSummary = stableJsonStringify(input.userIntentSummary)
+    const normalizedStrategySummary = stableJsonStringify(input.strategySummary)
+    const normalizedScriptSummary = stableJsonStringify(input.scriptSummary)
+    const normalizedLockedParams = stableJsonStringify(input.lockedParams)
     const normalizedParams = input.paramsSnapshot ? stableJsonStringify(input.paramsSnapshot) : null
     const normalizedExecutionPolicy = input.executionPolicy ? stableJsonStringify(input.executionPolicy) : null
     const normalizedDataRequirements = input.dataRequirements ? stableJsonStringify(input.dataRequirements) : null
@@ -53,6 +63,11 @@ export class PublishedStrategySnapshotsRepository {
       scriptHash,
       specHash,
       sha256(normalizedConsistency),
+      sha256(normalizedUserIntentSummary),
+      sha256(normalizedStrategySummary),
+      sha256(normalizedScriptSummary),
+      sha256(normalizedLockedParams),
+      sha256(String(snapshotVersion)),
       normalizedParams ? sha256(normalizedParams) : '',
       normalizedExecutionPolicy ? sha256(normalizedExecutionPolicy) : '',
       normalizedDataRequirements ? sha256(normalizedDataRequirements) : '',
@@ -69,6 +84,11 @@ export class PublishedStrategySnapshotsRepository {
         scriptSnapshot: normalizedScript,
         specSnapshot: input.specSnapshot as Prisma.InputJsonValue,
         consistencyReport: input.consistencyReport as Prisma.InputJsonValue,
+        userIntentSummary: input.userIntentSummary as Prisma.InputJsonValue,
+        strategySummary: input.strategySummary as Prisma.InputJsonValue,
+        scriptSummary: input.scriptSummary as Prisma.InputJsonValue,
+        lockedParams: input.lockedParams as Prisma.InputJsonValue,
+        snapshotVersion,
         paramsSnapshot: input.paramsSnapshot as Prisma.InputJsonValue | null | undefined,
         executionPolicy: input.executionPolicy as Prisma.InputJsonValue | null | undefined,
         dataRequirements: input.dataRequirements as Prisma.InputJsonValue | null | undefined,

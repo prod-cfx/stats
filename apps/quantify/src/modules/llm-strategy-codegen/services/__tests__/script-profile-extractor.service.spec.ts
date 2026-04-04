@@ -46,4 +46,25 @@ strategy`)
       source: 'positionPct_normalized',
     })
   })
+
+  it('recognizes BBANDS evidence and keeps sizing empty when script has no explicit size field', () => {
+    const service = new ScriptProfileExtractorService()
+    const profile = service.extract(`
+const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const closes = (ctx.bars ?? []).map(item => item.close)
+    const bb = ctx.helpers?.ta?.BBANDS(closes, 20, 2)
+    if (!bb) return { action: 'NOOP', reason: 'wait' }
+    if (closes.at(-1)! > bb.upper) return { action: 'OPEN_SHORT', reason: 'upper break' }
+    if (closes.at(-1)! < bb.lower) return { action: 'OPEN_LONG', reason: 'lower break' }
+    return { action: 'NOOP', reason: 'wait' }
+  },
+}
+strategy`)
+
+    expect(profile.indicators.some(item => item.kind === 'bollingerBands')).toBe(true)
+    expect(profile.actions).toEqual(expect.arrayContaining(['OPEN_SHORT', 'OPEN_LONG']))
+    expect(profile.sizing).toBeNull()
+  })
 })

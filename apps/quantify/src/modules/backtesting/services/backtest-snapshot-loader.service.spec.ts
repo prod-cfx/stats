@@ -11,6 +11,13 @@ describe('backtestSnapshotLoaderService', () => {
         scriptHash: 'script-hash',
         specHash: 'spec-hash',
         scriptSnapshot: 'const strategy = { protocolVersion: "v1", onBar: () => ({ action: "NOOP" }) }\nstrategy',
+        paramsSnapshot: {
+          positionPct: 25,
+          exchange: 'okx',
+        },
+        lockedParams: {
+          positionPct: 25,
+        },
         executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
         dataRequirements: { primary: ['15m'] },
         specSnapshot: {
@@ -25,7 +32,10 @@ describe('backtestSnapshotLoaderService', () => {
     }
     const adaptedStrategy = {
       id: 'strategy-1',
-      params: { positionPct: 10 },
+      params: {
+        positionPct: 25,
+        exchange: 'okx',
+      },
       fn: jest.fn(),
     }
     const strategyAdapter = {
@@ -44,17 +54,24 @@ describe('backtestSnapshotLoaderService', () => {
       id: 'instance-1',
       protocolVersion: 'v1',
       scriptCode: 'const strategy = { protocolVersion: "v1", onBar: () => ({ action: "NOOP" }) }\nstrategy',
-      params: { positionPct: 10 },
+      params: {
+        positionPct: 25,
+        exchange: 'okx',
+      },
     })
     expect(strategy).toMatchObject({
       id: 'instance-1',
       strategyInstanceId: 'instance-1',
       strategyTemplateId: 'template-1',
-      params: { positionPct: 10 },
+      params: {
+        positionPct: 25,
+        exchange: 'okx',
+      },
       snapshotId: 'snapshot-1',
       snapshotHash: 'snapshot-hash',
       scriptHash: 'script-hash',
       specHash: 'spec-hash',
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
       executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
       riskRules: {
         maxFloatingLossPct: 5,
@@ -86,6 +103,43 @@ describe('backtestSnapshotLoaderService', () => {
       params: {},
     })).rejects.toMatchObject({
       message: 'backtest.snapshot_not_found',
+    })
+    expect(strategyAdapter.build).not.toHaveBeenCalled()
+  })
+
+  it('fails fast when snapshot does not contain strict params', async () => {
+    const snapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        strategyInstanceId: 'instance-1',
+        strategyTemplateId: 'template-1',
+        snapshotHash: 'snapshot-hash',
+        scriptHash: 'script-hash',
+        specHash: 'spec-hash',
+        scriptSnapshot: 'const strategy = { protocolVersion: "v1", onBar: () => ({ action: "NOOP" }) }\nstrategy',
+        paramsSnapshot: null,
+        lockedParams: null,
+        executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+        dataRequirements: { primary: ['15m'] },
+        specSnapshot: {
+          market: { exchange: 'okx' },
+          indicators: [],
+          riskRules: [],
+        },
+      }),
+    }
+    const strategyAdapter = {
+      build: jest.fn(),
+    }
+    const service = new BacktestSnapshotLoaderService(snapshotsRepository as never, strategyAdapter as never)
+
+    await expect(service.load({
+      id: 'strategy-1',
+      protocolVersion: 'v1',
+      publishedSnapshotId: 'snapshot-1',
+      params: { positionPct: 10 },
+    })).rejects.toMatchObject({
+      message: 'backtest.snapshot_params_missing',
     })
     expect(strategyAdapter.build).not.toHaveBeenCalled()
   })

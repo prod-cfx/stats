@@ -35,6 +35,8 @@ import { SpecDescBuilderService } from './spec-desc-builder.service'
 import { StaticGuardrailService } from './static-guardrail.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { StrategyConsistencyService } from './strategy-consistency.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { StrategySummaryBuilderService } from './strategy-summary-builder.service'
 
 interface ChecklistPayload {
   symbols?: string[]
@@ -116,17 +118,13 @@ function normalizePublishedSymbol(raw: string): string {
   return raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
 }
 
-function inferPublishedMarketType(args: {
-  symbol: string
-  checklist: ChecklistPayload
-  message: string
-}): 'spot' | 'perp' {
-  if (args.symbol.endsWith(':PERP')) return 'perp'
-  if (args.symbol.endsWith(':SPOT')) return 'spot'
-  const riskRules = args.checklist.riskRules ?? {}
-  const marketType = typeof riskRules.marketType === 'string' ? riskRules.marketType.trim().toLowerCase() : ''
-  if (marketType === 'perp' || marketType === 'spot') return marketType
-  return /永续|perp|swap|合约/i.test(args.message) ? 'perp' : 'spot'
+function parseExplicitMarketType(value: unknown): 'spot' | 'perp' | undefined {
+  if (typeof value !== 'string') return undefined
+  const marketType = value.trim().toLowerCase()
+  if (marketType === 'spot' || marketType === 'perp') {
+    return marketType
+  }
+  return undefined
 }
 
 @Injectable()
@@ -142,6 +140,7 @@ export class CodegenConversationService {
     private readonly specDescBuilder: SpecDescBuilderService,
     private readonly canonicalSpecBuilder: CanonicalSpecBuilderService,
     private readonly strategyConsistencyService: StrategyConsistencyService,
+    private readonly strategySummaryBuilder: StrategySummaryBuilderService,
     private readonly recommendationIndex: RecommendationIndexService,
   ) {}
 
@@ -469,11 +468,7 @@ export class CodegenConversationService {
         })
 
         if (attempt >= maxAttempts) {
-          const fallbackScript = this.buildTypeSafeFallbackScript(checklist)
-          const fallbackValidation = await this.validateGeneratedScript(fallbackScript)
-          const rejectReason = fallbackValidation.passed
-            ? `${lastRejectReason}（自动修复重试后仅得到通用 fallback 脚本，已禁止发布）`
-            : `${lastRejectReason}（已自动修复重试 ${MAX_CODEGEN_AUTO_REPAIR_RETRIES} 次仍失败）`
+          const rejectReason = `${lastRejectReason || '脚本校验失败'}（已自动修复重试 ${MAX_CODEGEN_AUTO_REPAIR_RETRIES} 次仍失败）`
           await this.sessionsRepo.updateSession(sessionId, {
             status: 'REJECTED',
             rejectReason,
@@ -513,14 +508,30 @@ export class CodegenConversationService {
 
       const baseSpecDesc = this.specDescBuilder.build(checklist, finalScriptCode)
       const canonicalSpec = this.canonicalSpecBuilder.build(checklist)
+      const userIntentSummary = this.strategySummaryBuilder.buildUserIntentSummary({
+        checklist,
+        message,
+      })
+      const strategySummary = this.strategySummaryBuilder.buildStrategySummary(canonicalSpec)
+      const scriptSummary = this.strategySummaryBuilder.buildScriptSummary({
+        scriptCode: finalScriptCode,
+      })
+      const lockedParams = this.buildLockedParams(checklist)
       const consistencyReport = this.strategyConsistencyService.evaluate({
         canonicalSpec,
         scriptCode: finalScriptCode,
+        userIntentSummary,
+        strategySummary,
+        scriptSummary,
       })
       const specDesc = {
         ...baseSpecDesc,
         canonicalSpec,
         consistencyReport,
+        userIntentSummary,
+        strategySummary,
+        scriptSummary,
+        lockedParams,
       } satisfies Record<string, unknown>
 
       await this.sessionsRepo.updateSession(sessionId, {
@@ -559,10 +570,10 @@ export class CodegenConversationService {
         sessionId,
         userId,
         checklist,
-        message,
         model,
         scriptCode: finalScriptCode,
         specDesc,
+        lockedParams,
       })
       if (!strategyInstanceId) {
         try {
@@ -589,6 +600,11 @@ export class CodegenConversationService {
         scriptSnapshot: finalScriptCode,
         specSnapshot: canonicalSpec as unknown as Record<string, unknown>,
         consistencyReport: consistencyReport as unknown as Record<string, unknown>,
+        userIntentSummary: userIntentSummary as unknown as Record<string, unknown>,
+        strategySummary: strategySummary as unknown as Record<string, unknown>,
+        scriptSummary: scriptSummary as unknown as Record<string, unknown>,
+        lockedParams,
+        snapshotVersion: 2,
         paramsSnapshot: publishInput.params,
         executionPolicy: canonicalSpec.executionPolicy,
         dataRequirements: canonicalSpec.dataRequirements,
@@ -661,10 +677,10 @@ export class CodegenConversationService {
     sessionId: string
     userId: string
     checklist: ChecklistPayload
-    message: string
     model?: string
     scriptCode: string
     specDesc: Record<string, unknown>
+    lockedParams: Record<string, unknown>
   }): {
     userId: string
     sessionId: string
@@ -676,15 +692,25 @@ export class CodegenConversationService {
     params: Record<string, unknown>
     metadata: Record<string, unknown>
   } {
-    const rawSymbol = args.checklist.symbols?.[0] ?? 'BTCUSDT'
-    const marketType = inferPublishedMarketType({
-      symbol: rawSymbol,
-      checklist: args.checklist,
-      message: args.message,
-    })
-    const symbol = normalizePublishedSymbol(rawSymbol)
-    const timeframe = args.checklist.timeframes?.[0] ?? '5m'
-    const name = `${symbol} ${timeframe} AI策略`
+    const rawSymbol = args.checklist.symbols?.[0]
+    const symbol = typeof rawSymbol === 'string' && rawSymbol.trim()
+      ? normalizePublishedSymbol(rawSymbol)
+      : undefined
+    const rawTimeframe = args.checklist.timeframes?.[0]
+    const timeframe = typeof rawTimeframe === 'string' && rawTimeframe.trim()
+      ? rawTimeframe.trim()
+      : undefined
+    const marketType = parseExplicitMarketType((args.checklist.riskRules ?? {}).marketType)
+    const params = Object.fromEntries(
+      Object.entries({
+        symbol,
+        timeframe,
+        marketType,
+      }).filter(([, value]) => value !== undefined),
+    )
+    const nameParts = [symbol, timeframe].filter((item): item is string => Boolean(item))
+    const name = nameParts.length > 0 ? `${nameParts.join(' ')} AI策略` : 'AI策略'
+
     return {
       userId: args.userId,
       sessionId: args.sessionId,
@@ -693,14 +719,10 @@ export class CodegenConversationService {
       llmModel: args.model ?? DEFAULT_MODEL,
       scriptCode: args.scriptCode,
       specDesc: args.specDesc,
-      params: {
-        symbol,
-        timeframe,
-        marketType,
-      },
+      params,
       metadata: {
         source: 'llm-codegen-session',
-        confirmMessage: args.message,
+        lockedParams: args.lockedParams,
       },
     }
   }
@@ -714,6 +736,50 @@ export class CodegenConversationService {
       return '策略脚本与策略描述一致性校验失败'
     }
     return `策略脚本与策略描述不一致：${failedChecks.join('；')}`
+  }
+
+  private buildLockedParams(checklist: ChecklistPayload): Record<string, unknown> {
+    const riskRules = checklist.riskRules ?? {}
+    const locked: Record<string, unknown> = {}
+
+    const rawSymbol = checklist.symbols?.[0]
+    if (typeof rawSymbol === 'string' && rawSymbol.trim()) {
+      locked.symbol = normalizePublishedSymbol(rawSymbol)
+    }
+
+    const rawTimeframe = checklist.timeframes?.[0]
+    if (typeof rawTimeframe === 'string' && rawTimeframe.trim()) {
+      locked.timeframe = rawTimeframe.trim()
+    }
+
+    const marketType = parseExplicitMarketType(riskRules.marketType)
+    if (marketType) {
+      locked.marketType = marketType
+    }
+
+    const exchange = typeof riskRules.exchange === 'string'
+      ? riskRules.exchange.trim().toLowerCase()
+      : ''
+    if (exchange === 'binance' || exchange === 'okx' || exchange === 'hyperliquid') {
+      locked.exchange = exchange
+    }
+
+    if (typeof riskRules.positionPct === 'number' && Number.isFinite(riskRules.positionPct)) {
+      locked.positionPct = riskRules.positionPct
+    }
+
+    const stopLossPct = typeof riskRules.stopLossPct === 'number'
+      ? riskRules.stopLossPct
+      : (typeof riskRules.stopLoss === 'number' ? riskRules.stopLoss : null)
+    if (typeof stopLossPct === 'number' && Number.isFinite(stopLossPct)) {
+      locked.stopLossPct = stopLossPct
+    }
+
+    if (typeof riskRules.maxDrawdownPct === 'number' && Number.isFinite(riskRules.maxDrawdownPct)) {
+      locked.maxDrawdownPct = riskRules.maxDrawdownPct
+    }
+
+    return locked
   }
 
   async testEngine(dto: TestLlmCodegenEngineDto): Promise<LlmCodegenEngineTestResponseDto> {
@@ -1283,40 +1349,6 @@ export class CodegenConversationService {
 
     const unique = Array.from(new Set(items))
     return unique.slice(0, 12).join('; ')
-  }
-
-  private buildTypeSafeFallbackScript(checklist: ChecklistPayload): string {
-    const riskRules = checklist.riskRules ?? {}
-    const rawPositionPct = riskRules.positionPct
-    const parsedPositionPct = typeof rawPositionPct === 'number' && Number.isFinite(rawPositionPct)
-      ? rawPositionPct
-      : null
-    const ratio = (() => {
-      if (parsedPositionPct === null) return 0.1
-      const pctBased = parsedPositionPct > 1 ? parsedPositionPct / 100 : parsedPositionPct
-      return Math.max(0.01, Math.min(1, pctBased))
-    })()
-    const ratioText = Number(ratio.toFixed(4))
-
-    return [
-      'const strategy: StrategyAdapterV1 = {',
-      "  protocolVersion: 'v1',",
-      '  onBar(ctx): StrategyDecisionV1 {',
-      "    const bars = Array.isArray(ctx.bars) ? ctx.bars : []",
-      "    if (bars.length < 20) return { action: 'NOOP', reason: 'fallback: insufficient bars' }",
-      "    const closes = bars.map(item => item?.close).filter((v): v is number => typeof v === 'number' && Number.isFinite(v))",
-      "    if (closes.length < 20) return { action: 'NOOP', reason: 'fallback: insufficient close series' }",
-      '    const fast = ctx.helpers?.ta?.sma(closes, 5)',
-      '    const slow = ctx.helpers?.ta?.sma(closes, 20)',
-      "    if (typeof fast !== 'number' || typeof slow !== 'number') return { action: 'NOOP', reason: 'fallback: SMA unavailable' }",
-      `    const size: StrategyDecisionV1['size'] = { mode: 'RATIO', value: ${ratioText} }`,
-      "    if (fast > slow) return { action: 'OPEN_LONG', size, confidence: 55, reason: 'fallback: fast SMA above slow SMA' }",
-      "    if (fast < slow) return { action: 'OPEN_SHORT', size, confidence: 55, reason: 'fallback: fast SMA below slow SMA' }",
-      "    return { action: 'NOOP', reason: 'fallback: neutral trend' }",
-      '  },',
-      '}',
-      'strategy',
-    ].join('\n')
   }
 
   private tryAutoFixStringOutputScript(scriptCode: string, reason?: string): string | null {

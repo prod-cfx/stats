@@ -80,7 +80,8 @@ export class BacktestRunnerService {
     let stateCursor = 0
     const historyBarsBySymbolTimeframe = new Map<string, HistorySeries>()
     const pendingOrdersBySymbol = new Map<string, PendingOrder>()
-    const executionPolicy = this.resolveExecutionPolicy(input.strategy.executionPolicy)
+    const strictSnapshotPath = this.isStrictSnapshotPath(input.strategy)
+    const executionPolicy = this.resolveExecutionPolicy(input.strategy.executionPolicy, strictSnapshotPath)
 
     for (const bar of baseBars) {
       while (stateCursor < stateBars.length && stateBars[stateCursor].closeTime <= bar.closeTime) {
@@ -144,7 +145,7 @@ export class BacktestRunnerService {
         currentQty: position.qty,
         equity: snapshot.equity,
         markPrice: this.getMarkPrice(bar, input.execution.priceSource),
-      })
+      }, strictSnapshotPath)
       const adjustedDelta = this.applyLeverageCap({
         leverage: input.leverage,
         price: this.getMarkPrice(bar, input.execution.priceSource),
@@ -276,7 +277,25 @@ export class BacktestRunnerService {
     })
   }
 
-  private resolveExecutionPolicy(policy?: BacktestExecutionPolicy): Required<Pick<BacktestExecutionPolicy, 'signalTiming' | 'fillTiming' | 'noNextBarHandling'>> {
+  private isStrictSnapshotPath(strategy: BacktestRunInput['strategy']): boolean {
+    return strategy.bindingSource === 'PUBLISHED_SNAPSHOT_STRICT'
+  }
+
+  private resolveExecutionPolicy(
+    policy: BacktestExecutionPolicy | undefined,
+    strictSnapshotPath: boolean,
+  ): Required<Pick<BacktestExecutionPolicy, 'signalTiming' | 'fillTiming' | 'noNextBarHandling'>> {
+    if (strictSnapshotPath && (
+      policy?.signalTiming == null
+      || policy?.fillTiming == null
+      || policy?.noNextBarHandling == null
+    )) {
+      throw new DomainException('backtest.execution_policy_required', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+      })
+    }
+
     return {
       signalTiming: policy?.signalTiming ?? 'BAR_CLOSE',
       fillTiming: policy?.fillTiming ?? 'NEXT_BAR_OPEN',
@@ -325,6 +344,7 @@ export class BacktestRunnerService {
   private normalizeIntent(
     intent: SignalIntent,
     context: { currentQty: number; equity: number; markPrice: number },
+    strictSnapshotPath: boolean,
   ): number {
     const decisionValidation = validateStrategyDecision(intent)
     if (decisionValidation.valid && decisionValidation.value) {
@@ -339,7 +359,7 @@ export class BacktestRunnerService {
     }
 
     if (this.isLlmSignalIntent(intent)) {
-      return this.normalizeLlmSignalIntent(intent, context)
+      return this.normalizeLlmSignalIntent(intent, context, strictSnapshotPath)
     }
 
     if (!this.isLegacyEngineIntent(intent)) {
@@ -382,8 +402,9 @@ export class BacktestRunnerService {
   private normalizeLlmSignalIntent(
     intent: Extract<SignalIntent, { direction: string }>,
     context: { currentQty: number; equity: number; markPrice: number },
+    strictSnapshotPath: boolean,
   ): number {
-    const signalQty = this.resolveLlmSignalQty(intent, context)
+    const signalQty = this.resolveLlmSignalQty(intent, context, strictSnapshotPath)
     switch (intent.direction) {
       case 'BUY':
         return signalQty > 0 ? signalQty : 0
@@ -401,6 +422,7 @@ export class BacktestRunnerService {
   private resolveLlmSignalQty(
     intent: Extract<SignalIntent, { direction: string }>,
     context: { equity: number; markPrice: number },
+    strictSnapshotPath: boolean,
   ): number {
     const referencePrice = context.markPrice > 0
       ? context.markPrice
@@ -412,6 +434,13 @@ export class BacktestRunnerService {
 
     if (typeof intent.positionSizeRatio === 'number' && Number.isFinite(intent.positionSizeRatio) && intent.positionSizeRatio > 0) {
       return (Math.max(0, context.equity) * intent.positionSizeRatio) / referencePrice
+    }
+
+    if (strictSnapshotPath) {
+      throw new DomainException('backtest.llm_signal_size_required', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+      })
     }
 
     return 1

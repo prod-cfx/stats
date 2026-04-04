@@ -192,6 +192,7 @@ export interface BacktestRunInput {
     strategyInstanceId?: string
     strategyTemplateId?: string
     params: Record<string, unknown>
+    bindingSource?: 'PUBLISHED_SNAPSHOT_STRICT'
     executionPolicy?: BacktestExecutionPolicy
     riskRules?: BacktestRiskRules
     scriptMetadata?: BacktestScriptMetadata
