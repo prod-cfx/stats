@@ -161,6 +161,7 @@ interface ConversationState {
   publishedScriptCode: string | null
   publishedScriptGraphVersion: number | null
   latestSignalMessage: string | null
+  backtestExecutionConfigExplicit?: boolean
   backtestExecutionState: 'idle' | 'submitting' | 'running' | 'succeeded' | 'failed' | 'timeout'
   updatedAt: number
 }
@@ -502,6 +503,23 @@ const NON_STRATEGY_PARAM_KEYS = new Set([
   'backtestPriceSource',
   'backtestAllowPartial',
 ])
+const BACKTEST_EXECUTION_PARAM_KEYS = [
+  'backtestInitialCash',
+  'backtestLeverage',
+  'backtestSlippageBps',
+  'backtestFeeBps',
+  'backtestPriceSource',
+  'backtestAllowPartial',
+] as const
+const BACKTEST_EXECUTION_PARAM_KEY_SET = new Set<string>(BACKTEST_EXECUTION_PARAM_KEYS)
+const LEGACY_IMPLICIT_BACKTEST_PARAM_VALUES = {
+  backtestInitialCash: 10000,
+  backtestLeverage: 1,
+  backtestSlippageBps: 10,
+  backtestFeeBps: 5,
+  backtestPriceSource: 'close',
+  backtestAllowPartial: true,
+} as const
 
 function normalizeHydratedBacktestExecutionState(
   state: ConversationState['backtestExecutionState'] | undefined,
@@ -533,6 +551,43 @@ function resolveBacktestRangeInput(values: Record<string, unknown>): BacktestRan
 
 function shouldInvalidatePublicationForParamChange(key: string): boolean {
   return !NON_STRATEGY_PARAM_KEYS.has(key)
+}
+
+function stripBacktestExecutionParamValues(
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  const nextValues = { ...values }
+  BACKTEST_EXECUTION_PARAM_KEYS.forEach((key) => {
+    delete nextValues[key]
+  })
+  return nextValues
+}
+
+function hasLegacyImplicitBacktestExecutionConfig(
+  values: Record<string, unknown>,
+): boolean {
+  return BACKTEST_EXECUTION_PARAM_KEYS.every((key) => values[key] === LEGACY_IMPLICIT_BACKTEST_PARAM_VALUES[key])
+}
+
+function normalizeHydratedBacktestExecutionConfig(input: {
+  paramValues: Record<string, unknown>
+  explicit: boolean
+}): {
+  paramValues: Record<string, unknown>
+  explicit: boolean
+} {
+  if (input.explicit) {
+    return input
+  }
+
+  if (!hasLegacyImplicitBacktestExecutionConfig(input.paramValues)) {
+    return input
+  }
+
+  return {
+    paramValues: stripBacktestExecutionParamValues(input.paramValues),
+    explicit: false,
+  }
 }
 
 function extractLatestScriptCode(messages: QuantMessage[]): string {
@@ -615,6 +670,7 @@ export function AiQuantPageClient() {
       publishedScriptCode: null,
       publishedScriptGraphVersion: null,
       latestSignalMessage: null,
+      backtestExecutionConfigExplicit: false,
       backtestExecutionState: 'idle',
       updatedAt: now,
     }
@@ -684,15 +740,19 @@ export function AiQuantPageClient() {
           ...baseParams,
           ...storedValues,
         }
+        const normalizedBacktestExecutionConfig = normalizeHydratedBacktestExecutionConfig({
+          paramValues: nextParamValues,
+          explicit: item.backtestExecutionConfigExplicit === true,
+        })
         const nextParams = item.params
-          ? normalizeParamsFromValues(nextParamValues, item.params)
-          : normalizeParamsFromValues(nextParamValues, DEFAULT_PARAMS)
+          ? normalizeParamsFromValues(normalizedBacktestExecutionConfig.paramValues, item.params)
+          : normalizeParamsFromValues(normalizedBacktestExecutionConfig.paramValues, DEFAULT_PARAMS)
 
         return {
           ...item,
           paramSchema:
             item.paramSchema ?? buildParamSchemaWithCapabilities(null, nextParams.symbol),
-          paramValues: nextParamValues,
+          paramValues: normalizedBacktestExecutionConfig.paramValues,
           params: nextParams,
           llmCodegenSessionId: item.llmCodegenSessionId ?? null,
           publishedStrategyInstanceId: item.publishedStrategyInstanceId ?? null,
@@ -712,6 +772,7 @@ export function AiQuantPageClient() {
             return null
           })(),
           latestSignalMessage: item.latestSignalMessage ?? null,
+          backtestExecutionConfigExplicit: normalizedBacktestExecutionConfig.explicit,
           backtestExecutionState: normalizeHydratedBacktestExecutionState(
             item.backtestExecutionState,
           ),
@@ -1989,6 +2050,8 @@ export function AiQuantPageClient() {
                   ...curr,
                   paramValues: nextValues,
                   params: normalizeParamsFromValues(nextValues, curr.params),
+                  backtestExecutionConfigExplicit:
+                    BACKTEST_EXECUTION_PARAM_KEY_SET.has(key) ? true : curr.backtestExecutionConfigExplicit,
                   updatedAt: Date.now(),
                 }
                 return shouldInvalidatePublicationForParamChange(key)
