@@ -528,10 +528,10 @@ export class StrategyConsistencyService {
       if (/中轨|middle|ma20/i.test(trigger)) {
         mappings.set('bollinger.middle_revert', action)
       }
-      if (/金叉|上穿/i.test(trigger) && /均线|\bma\b|\bsma\b|\bema\b/i.test(trigger)) {
+      if (/金叉|上穿/.test(trigger) && /均线|\bma\b|\bsma\b|\bema\b/i.test(trigger)) {
         mappings.set('ma.golden_cross', action)
       }
-      if (/死叉|下穿/i.test(trigger) && /均线|\bma\b|\bsma\b|\bema\b/i.test(trigger)) {
+      if (/死叉|下穿/.test(trigger) && /均线|\bma\b|\bsma\b|\bema\b/i.test(trigger)) {
         mappings.set('ma.death_cross', action)
       }
     }

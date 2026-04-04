@@ -239,8 +239,8 @@ export class StrategySummaryBuilderService {
   }
 
   private resolveMovingAverageRuleTagFromText(text: string): 'ma.golden_cross' | 'ma.death_cross' | null {
-    const hasGoldenCross = /金叉|上穿/i.test(text)
-    const hasDeathCross = /死叉|下穿/i.test(text)
+    const hasGoldenCross = /金叉|上穿/.test(text)
+    const hasDeathCross = /死叉|下穿/.test(text)
 
     if (hasGoldenCross && hasDeathCross) return null
     if (hasGoldenCross) return 'ma.golden_cross'
