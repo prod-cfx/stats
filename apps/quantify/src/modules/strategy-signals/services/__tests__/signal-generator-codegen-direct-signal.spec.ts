@@ -144,7 +144,7 @@ describe('signal generator AI_CODEGEN_PUBLISHED_TEMPLATE direct signal', () => {
     })
   })
 
-  it('rejects normalized payloads that miss strict confidence or risk fields', () => {
+  it('accepts normalized payloads that omit optional confidence or risk fields by applying protocol defaults', () => {
     const payload = (service as any).buildPublishedCodegenSignalPayload(
       {
         direction: 'BUY',
@@ -160,7 +160,46 @@ describe('signal generator AI_CODEGEN_PUBLISHED_TEMPLATE direct signal', () => {
       {},
     )
 
-    expect(payload).toEqual({ type: 'none', reason: 'INVALID_NORMALIZED_SIGNAL' })
+    expect(payload).toMatchObject({
+      type: 'signal',
+      payload: {
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        confidence: 80,
+        entryPrice: 200,
+        stopLoss: 196,
+        takeProfit: 204,
+        positionSizeRatio: 0.1,
+        reasoning: 'missing confidence and risk fields',
+      },
+    })
+  })
+
+  it('accepts strict action payloads that omit optional confidence or risk fields by applying protocol defaults', () => {
+    const payload = (service as any).buildPublishedCodegenSignalPayload(
+      {
+        action: 'buy',
+        positionSizeRatio: 0.1,
+      },
+      200,
+      {
+        promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+      },
+      {},
+    )
+
+    expect(payload).toMatchObject({
+      type: 'signal',
+      payload: {
+        signalType: 'ENTRY',
+        direction: 'BUY',
+        confidence: 80,
+        entryPrice: 200,
+        stopLoss: 196,
+        takeProfit: 204,
+        positionSizeRatio: 0.1,
+      },
+    })
   })
 
   it('rejects ENTRY payloads without explicit positionSizeQuote or positionSizeRatio', () => {

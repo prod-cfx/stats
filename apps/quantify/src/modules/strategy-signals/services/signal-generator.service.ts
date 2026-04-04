@@ -1061,15 +1061,15 @@ export class SignalGeneratorService {
     const confidence =
       this.readNumeric(promptData.confidence)
       ?? this.readNumeric(metadata.confidence)
+      ?? 80
     const stopLoss =
       this.readNumeric(metadata.stopLossPrice)
       ?? this.readNumeric(promptData.stopLoss)
+      ?? Math.max(0.00000001, entryPrice * 0.98)
     const takeProfit =
       this.readNumeric(metadata.takeProfitPrice)
       ?? this.readNumeric(promptData.takeProfit)
-    if (confidence === undefined || stopLoss === undefined || takeProfit === undefined) {
-      return { type: 'none', reason: 'INVALID_NORMALIZED_SIGNAL' }
-    }
+      ?? entryPrice * 1.02
 
     const positionSizeQuote = this.readNumeric(promptData.positionSizeQuote)
     const positionSizeRatio = this.readNumeric(promptData.positionSizeRatio)
@@ -1121,9 +1121,11 @@ export class SignalGeneratorService {
     const direction = typeof promptData.direction === 'string' ? promptData.direction : null
     const signalType = typeof promptData.signalType === 'string' ? promptData.signalType : null
     const entryPrice = this.readNumeric(promptData.entryPrice)
-    const confidence = this.readNumeric(promptData.confidence)
+    const confidence = this.readNumeric(promptData.confidence) ?? 80
     const stopLoss = this.readNumeric(promptData.stopLoss)
+      ?? (entryPrice && entryPrice > 0 ? Math.max(0.00000001, entryPrice * 0.98) : undefined)
     const takeProfit = this.readNumeric(promptData.takeProfit)
+      ?? (entryPrice && entryPrice > 0 ? entryPrice * 1.02 : undefined)
     const positionSizeQuote = this.readNumeric(promptData.positionSizeQuote)
     const positionSizeRatio = this.readNumeric(promptData.positionSizeRatio)
     const hasQuoteSize = typeof positionSizeQuote === 'number' && positionSizeQuote > 0
@@ -1135,7 +1137,6 @@ export class SignalGeneratorService {
       || !signalType
       || !['ENTRY', 'EXIT', 'ADJUSTMENT', 'ALERT'].includes(signalType)
       || !(entryPrice && entryPrice > 0)
-      || confidence === undefined
       || stopLoss === undefined
       || takeProfit === undefined
       || (signalType === 'ENTRY' && !hasQuoteSize && !hasRatioSize)
