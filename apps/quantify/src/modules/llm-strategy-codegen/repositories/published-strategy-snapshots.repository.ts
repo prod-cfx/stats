@@ -103,6 +103,17 @@ export class PublishedStrategySnapshotsRepository {
     })
   }
 
+  async findByIdForUser(id: string, userId: string): Promise<PublishedStrategySnapshot | null> {
+    return this.txHost.tx.publishedStrategySnapshot.findFirst({
+      where: {
+        id,
+        session: {
+          userId,
+        },
+      },
+    })
+  }
+
   async findById(id: string): Promise<PublishedStrategySnapshot | null> {
     return this.txHost.tx.publishedStrategySnapshot.findUnique({
       where: { id },

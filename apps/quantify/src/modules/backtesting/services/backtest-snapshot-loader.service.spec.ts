@@ -3,7 +3,7 @@ import { BacktestSnapshotLoaderService } from './backtest-snapshot-loader.servic
 describe('backtestSnapshotLoaderService', () => {
   it('loads snapshot-backed strategy via published snapshot id', async () => {
     const snapshotsRepository = {
-      findById: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue({
         id: 'snapshot-1',
         strategyInstanceId: 'instance-1',
         strategyTemplateId: 'template-1',
@@ -47,9 +47,10 @@ describe('backtestSnapshotLoaderService', () => {
       id: 'strategy-1',
       protocolVersion: 'v1',
       publishedSnapshotId: 'snapshot-1',
-      params: { positionPct: 10 },
+      userId: 'user-1',
     })
 
+    expect(snapshotsRepository.findByIdForUser).toHaveBeenCalledWith('snapshot-1', 'user-1')
     expect(strategyAdapter.build).toHaveBeenCalledWith({
       id: 'instance-1',
       protocolVersion: 'v1',
@@ -89,7 +90,7 @@ describe('backtestSnapshotLoaderService', () => {
 
   it('throws when published snapshot does not exist', async () => {
     const snapshotsRepository = {
-      findById: jest.fn().mockResolvedValue(null),
+      findByIdForUser: jest.fn().mockResolvedValue(null),
     }
     const strategyAdapter = {
       build: jest.fn(),
@@ -100,7 +101,7 @@ describe('backtestSnapshotLoaderService', () => {
       id: 'strategy-1',
       protocolVersion: 'v1',
       publishedSnapshotId: 'snapshot-missing',
-      params: {},
+      userId: 'user-1',
     })).rejects.toMatchObject({
       message: 'backtest.snapshot_not_found',
     })
@@ -109,7 +110,7 @@ describe('backtestSnapshotLoaderService', () => {
 
   it('fails fast when snapshot does not contain strict params', async () => {
     const snapshotsRepository = {
-      findById: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue({
         id: 'snapshot-1',
         strategyInstanceId: 'instance-1',
         strategyTemplateId: 'template-1',
@@ -137,7 +138,7 @@ describe('backtestSnapshotLoaderService', () => {
       id: 'strategy-1',
       protocolVersion: 'v1',
       publishedSnapshotId: 'snapshot-1',
-      params: { positionPct: 10 },
+      userId: 'user-1',
     })).rejects.toMatchObject({
       message: 'backtest.snapshot_params_missing',
     })

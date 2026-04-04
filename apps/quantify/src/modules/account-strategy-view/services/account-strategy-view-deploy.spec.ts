@@ -12,7 +12,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
-      findById: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue({
         id: 'snapshot-1',
         snapshotHash: 'snapshot-hash-1',
         strategyInstanceId: 'inst-draft-1',
@@ -63,6 +63,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
     } as any)
 
     expect(marketDataIngestionService.ensureSymbolsSubscribed).toHaveBeenCalledWith(['SOLUSDT'])
+    expect(snapshotsRepository.findByIdForUser).toHaveBeenCalledWith('snapshot-1', 'user-1')
     expect(repo.deployStrategyForUser).toHaveBeenCalledWith(expect.objectContaining({
       exchange: 'okx',
       symbol: 'SOLUSDT',
@@ -85,7 +86,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
-      findById: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue({
         id: 'snapshot-2',
         snapshotHash: 'snapshot-hash-2',
         strategyInstanceId: 'inst-draft-1',
@@ -158,7 +159,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
-      findById: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue({
         id: 'snapshot-live-balance',
         snapshotHash: 'snapshot-hash-3',
         strategyInstanceId: 'inst-draft-1',
@@ -231,7 +232,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
-      findById: jest.fn().mockResolvedValue({
+      findByIdForUser: jest.fn().mockResolvedValue({
         id: 'snapshot-missing-asset',
         snapshotHash: 'snapshot-hash-4',
         strategyInstanceId: 'inst-draft-1',
@@ -330,5 +331,40 @@ describe('accountStrategyViewService.deployStrategy', () => {
     })
 
     expect(hashA).toBe(hashB)
+  })
+
+  it('rejects deploy when published snapshot is not owned by current user', async () => {
+    const repo = {
+      deployStrategyForUser: jest.fn(),
+      findStrategyForUser: jest.fn().mockResolvedValue(null),
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-1' }),
+      markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
+      markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
+      upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+    }
+    const snapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue(null),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      {} as any,
+      {} as any,
+      { ensureSymbolsSubscribed: jest.fn() } as any,
+      undefined,
+      undefined,
+      undefined,
+      snapshotsRepository as any,
+    )
+
+    await expect(service.deployStrategy({
+      userId: 'user-1',
+      name: 'snapshot deploy',
+      publishedSnapshotId: 'snapshot-foreign',
+      deployRequestId: 'deploy-req-foreign',
+    } as any)).rejects.toMatchObject({
+      message: 'account_strategy.published_snapshot_not_found',
+    })
+    expect(repo.deployStrategyForUser).not.toHaveBeenCalled()
   })
 })

@@ -151,6 +151,29 @@ describe('publishedStrategySnapshotsRepository', () => {
     })
   })
 
+  it('reads snapshot by id within user ownership boundary', async () => {
+    const snapshot = { id: 'snapshot-1' }
+    const tx = {
+      publishedStrategySnapshot: {
+        create: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(snapshot),
+        findUnique: jest.fn(),
+      },
+    }
+    const txHost = { tx }
+    const repo = new PublishedStrategySnapshotsRepository(txHost)
+
+    await expect(repo.findByIdForUser('snapshot-1', 'user-1')).resolves.toBe(snapshot)
+    expect(tx.publishedStrategySnapshot.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'snapshot-1',
+        session: {
+          userId: 'user-1',
+        },
+      },
+    })
+  })
+
   it('produces stable hashes for objects with different key ordering', () => {
     const left = { b: 2, a: { d: 4, c: 3 } }
     const right = { a: { c: 3, d: 4 }, b: 2 }

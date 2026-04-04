@@ -12,6 +12,7 @@ export interface SnapshotBacktestStrategyInput {
   id: string
   protocolVersion: 'v1'
   publishedSnapshotId: string
+  userId: string
   params?: Record<string, unknown>
 }
 
@@ -23,7 +24,7 @@ export class BacktestSnapshotLoaderService {
   ) {}
 
   async load(input: SnapshotBacktestStrategyInput): Promise<BacktestRunInput['strategy']> {
-    const snapshot = await this.snapshotsRepository.findById(input.publishedSnapshotId)
+    const snapshot = await this.snapshotsRepository.findByIdForUser(input.publishedSnapshotId, input.userId)
     if (!snapshot) {
       throw new DomainException('backtest.snapshot_not_found', {
         code: ErrorCode.BACKTEST_INSTANCE_NOT_FOUND,

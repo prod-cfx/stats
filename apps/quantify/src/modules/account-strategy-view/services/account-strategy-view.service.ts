@@ -1293,7 +1293,7 @@ export class AccountStrategyViewService {
       })
     }
 
-    const snapshot = await this.publishedSnapshotsRepository.findById(publishedSnapshotId)
+    const snapshot = await this.publishedSnapshotsRepository.findByIdForUser(publishedSnapshotId, dto.userId!)
     if (!snapshot) {
       throw new DomainException('account_strategy.published_snapshot_not_found', {
         code: ErrorCode.BAD_REQUEST,

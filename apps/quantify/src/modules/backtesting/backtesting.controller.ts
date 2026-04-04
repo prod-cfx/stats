@@ -40,8 +40,8 @@ export class BacktestingController {
     @Headers('authorization') authorization: string | undefined,
     @Body() dto: RunBacktestDto,
   ) {
-    await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
-    const strategy = await this.resolveStrategy(dto)
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const strategy = await this.resolveStrategy(dto, callerUserId)
     return this.runner.run({ ...dto, strategy, bars: dto.bars ?? [] } as BacktestRunInput)
   }
 
@@ -54,7 +54,7 @@ export class BacktestingController {
   ) {
     try {
       const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
-      const strategy = await this.resolveStrategy(dto)
+      const strategy = await this.resolveStrategy(dto, callerUserId)
       return this.jobsService.createJob({ ...dto, strategy, bars: dto.bars ?? [] } as BacktestRunInput, callerUserId)
     } catch (error) {
       if (error instanceof DomainException) {
@@ -148,7 +148,7 @@ export class BacktestingController {
     }
   }
 
-  private async resolveStrategy(dto: RunBacktestDto) {
+  private async resolveStrategy(dto: RunBacktestDto, userId: string) {
     const publishedSnapshotId = dto.strategy.publishedSnapshotId?.trim() ?? ''
     if (!publishedSnapshotId) {
       throw new DomainException('backtest.snapshot_required', {
@@ -161,6 +161,7 @@ export class BacktestingController {
       id: dto.strategy.id,
       protocolVersion: dto.strategy.protocolVersion,
       publishedSnapshotId,
+      userId,
     })
   }
 }
