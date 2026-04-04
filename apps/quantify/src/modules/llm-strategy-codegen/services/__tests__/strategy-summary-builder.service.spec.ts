@@ -63,4 +63,41 @@ strategy
     expect(summary.entryRule).toBe('custom')
     expect(summary.exitRule).toBe('custom')
   })
+
+  it('binds moving-average summary rules to entry and exit action direction', () => {
+    const service = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+
+    const userIntentSummary = service.buildUserIntentSummary({
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['短均线下穿长均线（死叉）时做空'],
+        exitRules: ['短均线上穿长均线（金叉）时平空'],
+      },
+      message: '我要一个均线死叉开空、金叉平空的策略',
+    })
+
+    const scriptSummary = service.buildScriptSummary({
+      scriptCode: `
+const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const closes = ctx.bars?.map(item => item.close) ?? []
+    const fast = ctx.helpers?.ta?.sma(closes, 5)
+    const slow = ctx.helpers?.ta?.sma(closes, 20)
+    if (typeof fast !== 'number' || typeof slow !== 'number') return { action: 'NOOP' }
+    if (fast < slow) return { action: 'OPEN_SHORT', size: { mode: 'RATIO', value: 0.1 } }
+    if (fast > slow) return { action: 'CLOSE_SHORT' }
+    return { action: 'NOOP' }
+  },
+}
+strategy
+`,
+    })
+
+    expect(userIntentSummary.entryRule).toBe('ma.death_cross')
+    expect(userIntentSummary.exitRule).toBe('ma.golden_cross')
+    expect(scriptSummary.entryRule).toBe('ma.death_cross')
+    expect(scriptSummary.exitRule).toBe('ma.golden_cross')
+  })
 })

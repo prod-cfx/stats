@@ -78,7 +78,7 @@ export class CanonicalSpecBuilderService {
       if (/下轨|lower/i.test(rule) && /做多|多单|long/i.test(rule)) {
         entries.push({ id: `entry-${index + 1}`, trigger: rule, action: 'OPEN_LONG' })
       }
-      if (/金叉|上穿/i.test(rule) && /均线|\bma\b|\bsma\b|\bema\b/i.test(rule)) {
+      if (/(金叉|上穿|死叉|下穿)/i.test(rule) && /均线|\bma\b|\bsma\b|\bema\b/i.test(rule)) {
         const action = /做空|空单|short/i.test(rule) ? 'OPEN_SHORT' : 'OPEN_LONG'
         entries.push({ id: `entry-${index + 1}`, trigger: rule, action })
       }
@@ -89,8 +89,12 @@ export class CanonicalSpecBuilderService {
       if (/中轨|ma20|均线20|middle/i.test(rule)) {
         exits.push({ id: `exit-${index + 1}`, trigger: rule, action: 'ADJUST_POSITION' })
       }
-      if (/死叉|下穿/i.test(rule) && /均线|\bma\b|\bsma\b|\bema\b/i.test(rule)) {
-        exits.push({ id: `exit-${index + 1}`, trigger: rule, action: 'ADJUST_POSITION' })
+      if (/(金叉|上穿|死叉|下穿)/i.test(rule) && /均线|\bma\b|\bsma\b|\bema\b/i.test(rule)) {
+        exits.push({
+          id: `exit-${index + 1}`,
+          trigger: rule,
+          action: this.resolveExitAction(rule),
+        })
       }
     })
 
@@ -177,5 +181,15 @@ export class CanonicalSpecBuilderService {
       return normalized
     }
     return undefined
+  }
+
+  private resolveExitAction(rule: string): RuleSpec['action'] {
+    if (/平空|close\s+short/i.test(rule)) {
+      return 'CLOSE_SHORT'
+    }
+    if (/平多|close\s+long/i.test(rule)) {
+      return 'CLOSE_LONG'
+    }
+    return 'ADJUST_POSITION'
   }
 }

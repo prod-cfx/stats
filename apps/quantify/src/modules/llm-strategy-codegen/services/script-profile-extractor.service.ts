@@ -81,7 +81,7 @@ export class ScriptProfileExtractorService {
     const actions = new Set<CanonicalAction>()
     for (const match of scriptCode.matchAll(ACTION_PATTERN)) {
       const action = match[1] as CanonicalAction
-      if (action === 'OPEN_LONG' || action === 'OPEN_SHORT' || action === 'CLOSE_LONG' || action === 'CLOSE_SHORT' || action === 'ADJUST_POSITION') {
+      if (this.isExecutableAction(action)) {
         actions.add(action)
       }
     }
@@ -95,6 +95,7 @@ export class ScriptProfileExtractorService {
     actionMatches.forEach((match) => {
       const action = match[1] as CanonicalAction
       if (typeof match.index !== 'number') return
+      if (!this.isExecutableAction(action)) return
 
       const windowStart = Math.max(0, match.index - 160)
       const window = scriptCode.slice(windowStart, match.index + 40).toLowerCase()
@@ -311,5 +312,13 @@ export class ScriptProfileExtractorService {
 
     if (/死叉|death\s+cross|cross(?:over)?\s+down/.test(window)) return true
     return /\b(?:fast|short|ma\d+|sma\d+|ema\d+)\b[\s\S]{0,40}(?:<|<=)[\s\S]{0,20}\b(?:slow|long|ma\d+|sma\d+|ema\d+)\b/.test(window)
+  }
+
+  private isExecutableAction(action: CanonicalAction): action is 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | 'ADJUST_POSITION' {
+    return action === 'OPEN_LONG'
+      || action === 'OPEN_SHORT'
+      || action === 'CLOSE_LONG'
+      || action === 'CLOSE_SHORT'
+      || action === 'ADJUST_POSITION'
   }
 }

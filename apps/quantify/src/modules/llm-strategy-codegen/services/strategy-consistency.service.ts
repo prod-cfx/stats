@@ -6,6 +6,9 @@ import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { ScriptProfileExtractorService } from './script-profile-extractor.service'
 
+const ENTRY_ACTIONS = new Set(['OPEN_LONG', 'OPEN_SHORT'])
+const EXIT_ACTIONS = new Set(['CLOSE_LONG', 'CLOSE_SHORT', 'ADJUST_POSITION'])
+
 @Injectable()
 export class StrategyConsistencyService {
   constructor(private readonly scriptProfileExtractor: ScriptProfileExtractorService) {}
@@ -474,20 +477,20 @@ export class StrategyConsistencyService {
     const upperRule = profile.ruleMappings.find(item => item.key === 'bollinger.upper_break')
     const lowerRule = profile.ruleMappings.find(item => item.key === 'bollinger.lower_break')
     const hasMiddleRule = profile.ruleMappings.some(item => item.key === 'bollinger.middle_revert')
-    const hasMaGoldenCross = profile.ruleMappings.some(item => item.key === 'ma.golden_cross')
-    const hasMaDeathCross = profile.ruleMappings.some(item => item.key === 'ma.death_cross')
+    const movingAverageEntryRule = this.resolveMovingAverageSummaryRule(profile, ENTRY_ACTIONS)
+    const movingAverageExitRule = this.resolveMovingAverageSummaryRule(profile, EXIT_ACTIONS)
 
     const entryRule = upperRule?.action === 'OPEN_SHORT'
       ? 'bollinger.upper_break_short'
       : lowerRule?.action === 'OPEN_LONG'
           ? 'bollinger.lower_break_long'
-          : (strategyType === 'movingAverage' && hasMaGoldenCross)
-              ? 'ma.golden_cross'
+          : (strategyType === 'movingAverage' && movingAverageEntryRule)
+              ? movingAverageEntryRule
               : 'custom'
     const exitRule = hasMiddleRule
       ? 'bollinger.middle_revert'
-      : (strategyType === 'movingAverage' && hasMaDeathCross)
-          ? 'ma.death_cross'
+      : (strategyType === 'movingAverage' && movingAverageExitRule)
+          ? movingAverageExitRule
           : 'custom'
 
     return {
@@ -537,5 +540,20 @@ export class StrategyConsistencyService {
     spec.exits.forEach(rule => register(rule.trigger, rule.action))
 
     return Array.from(mappings.entries()).map(([key, action]) => ({ key, action }))
+  }
+
+  private resolveMovingAverageSummaryRule(
+    profile: StrategySemanticProfile,
+    actionSet: Set<string>,
+  ): 'ma.golden_cross' | 'ma.death_cross' | null {
+    const matchedKeys = Array.from(new Set(
+      profile.ruleMappings
+        .filter(item => actionSet.has(item.action))
+        .map(item => item.key)
+        .filter((key): key is 'ma.golden_cross' | 'ma.death_cross' =>
+          key === 'ma.golden_cross' || key === 'ma.death_cross'),
+    ))
+
+    return matchedKeys.length === 1 ? matchedKeys[0] : null
   }
 }

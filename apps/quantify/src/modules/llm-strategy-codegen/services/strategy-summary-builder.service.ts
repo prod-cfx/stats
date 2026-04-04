@@ -13,6 +13,9 @@ interface ChecklistSnapshot {
   riskRules?: unknown
 }
 
+const ENTRY_ACTIONS = new Set(['OPEN_LONG', 'OPEN_SHORT'])
+const EXIT_ACTIONS = new Set(['CLOSE_LONG', 'CLOSE_SHORT', 'ADJUST_POSITION'])
+
 @Injectable()
 export class StrategySummaryBuilderService {
   constructor(private readonly scriptProfileExtractor: ScriptProfileExtractorService) {}
@@ -188,8 +191,9 @@ export class StrategySummaryBuilderService {
       if (/下轨|lower/i.test(text) && /多|long/i.test(text)) return 'bollinger.lower_break_long'
       return 'bollinger.entry'
     }
-    if ((indicators.includes('sma') || indicators.includes('ema')) && /金叉|上穿/i.test(text)) {
-      return 'ma.golden_cross'
+    if (indicators.includes('sma') || indicators.includes('ema')) {
+      const maRule = this.resolveMovingAverageRuleTagFromText(text)
+      if (maRule) return maRule
     }
     return 'custom'
   }
@@ -200,8 +204,9 @@ export class StrategySummaryBuilderService {
       if (/中轨|middle|ma20/i.test(text)) return 'bollinger.middle_revert'
       return 'bollinger.exit'
     }
-    if ((indicators.includes('sma') || indicators.includes('ema')) && /死叉|下穿/i.test(text)) {
-      return 'ma.death_cross'
+    if (indicators.includes('sma') || indicators.includes('ema')) {
+      const maRule = this.resolveMovingAverageRuleTagFromText(text)
+      if (maRule) return maRule
     }
     return 'custom'
   }
@@ -214,11 +219,8 @@ export class StrategySummaryBuilderService {
     if (upper?.action === 'OPEN_SHORT') return 'bollinger.upper_break_short'
     const lower = profile.ruleMappings.find(item => item.key === 'bollinger.lower_break')
     if (lower?.action === 'OPEN_LONG') return 'bollinger.lower_break_long'
-    if (
-      (indicators.includes('sma') || indicators.includes('ema'))
-      && profile.ruleMappings.some(item => item.key === 'ma.golden_cross')
-    ) {
-      return 'ma.golden_cross'
+    if (indicators.includes('sma') || indicators.includes('ema')) {
+      return this.resolveMovingAverageRuleTagFromMappings(profile, ENTRY_ACTIONS)
     }
     return 'custom'
   }
@@ -230,13 +232,35 @@ export class StrategySummaryBuilderService {
     if (profile.ruleMappings.some(item => item.key === 'bollinger.middle_revert')) {
       return 'bollinger.middle_revert'
     }
-    if (
-      (indicators.includes('sma') || indicators.includes('ema'))
-      && profile.ruleMappings.some(item => item.key === 'ma.death_cross')
-    ) {
-      return 'ma.death_cross'
+    if (indicators.includes('sma') || indicators.includes('ema')) {
+      return this.resolveMovingAverageRuleTagFromMappings(profile, EXIT_ACTIONS)
     }
     return 'custom'
+  }
+
+  private resolveMovingAverageRuleTagFromText(text: string): 'ma.golden_cross' | 'ma.death_cross' | null {
+    const hasGoldenCross = /金叉|上穿/i.test(text)
+    const hasDeathCross = /死叉|下穿/i.test(text)
+
+    if (hasGoldenCross && hasDeathCross) return null
+    if (hasGoldenCross) return 'ma.golden_cross'
+    if (hasDeathCross) return 'ma.death_cross'
+    return null
+  }
+
+  private resolveMovingAverageRuleTagFromMappings(
+    profile: StrategySemanticProfile,
+    actionSet: Set<string>,
+  ): string {
+    const matchedKeys = Array.from(new Set(
+      profile.ruleMappings
+        .filter(item => actionSet.has(item.action))
+        .map(item => item.key)
+        .filter((key): key is 'ma.golden_cross' | 'ma.death_cross' =>
+          key === 'ma.golden_cross' || key === 'ma.death_cross'),
+    ))
+
+    return matchedKeys.length === 1 ? matchedKeys[0] : 'custom'
   }
 
   private normalizeSymbol(value: unknown): string | undefined {

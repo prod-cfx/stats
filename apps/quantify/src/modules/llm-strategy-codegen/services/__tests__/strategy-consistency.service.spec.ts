@@ -251,4 +251,45 @@ strategy
     expect(report.status).toBe('FAILED')
     expect(report.checks.some(check => check.key === 'summary.alignment' && check.status === 'failed')).toBe(true)
   })
+
+  it('passes when moving-average short entry and short exit use death/golden cross in the correct stage', () => {
+    const checklist = {
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['短均线下穿长均线（死叉）时做空'],
+      exitRules: ['短均线上穿长均线（金叉）时平空'],
+      riskRules: { positionPct: 10 },
+    }
+    const canonicalSpec = canonicalBuilder.build(checklist)
+    const userIntentSummary = summaryBuilder.buildUserIntentSummary({
+      checklist,
+      message: '我要一个均线死叉开空、金叉平空的策略',
+    })
+    const strategySummary = summaryBuilder.buildStrategySummary(canonicalSpec)
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: `
+const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const closes = ctx.bars?.map(item => item.close) ?? []
+    const fast = ctx.helpers?.ta?.sma(closes, 5)
+    const slow = ctx.helpers?.ta?.sma(closes, 20)
+    const ratio = ctx.paramsNormalized?.positionPct ? Math.min(ctx.paramsNormalized.positionPct / 100, 1) : 0.1
+    if (typeof fast !== 'number' || typeof slow !== 'number') return { action: 'NOOP' }
+    if (fast < slow) return { action: 'OPEN_SHORT', size: { mode: 'RATIO', value: ratio } }
+    if (fast > slow) return { action: 'CLOSE_SHORT' }
+    return { action: 'NOOP' }
+  },
+}
+strategy
+`,
+      userIntentSummary,
+      strategySummary,
+    })
+
+    expect(report.status).toBe('PASSED')
+    expect(report.checks.some(check => check.key === 'summary.alignment' && check.status === 'passed')).toBe(true)
+  })
 })
