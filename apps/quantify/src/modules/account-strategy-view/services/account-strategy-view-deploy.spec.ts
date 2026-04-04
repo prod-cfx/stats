@@ -18,15 +18,11 @@ describe('accountStrategyViewService.deployStrategy', () => {
         strategyInstanceId: 'inst-draft-1',
         strategyTemplateId: 'template-1',
         paramsSnapshot: {
-          exchange: 'okx',
           symbol: 'SOLUSDT',
           timeframe: '5m',
-          positionPct: 10,
         },
         lockedParams: {
           exchange: 'okx',
-          symbol: 'SOLUSDT',
-          timeframe: '5m',
           positionPct: 10,
         },
       }),
@@ -92,15 +88,11 @@ describe('accountStrategyViewService.deployStrategy', () => {
         strategyInstanceId: 'inst-draft-1',
         strategyTemplateId: 'template-1',
         paramsSnapshot: {
-          exchange: 'okx',
           symbol: 'SOLUSDT',
           timeframe: '5m',
-          positionPct: 10,
         },
         lockedParams: {
           exchange: 'okx',
-          symbol: 'SOLUSDT',
-          timeframe: '5m',
           positionPct: 10,
         },
       }),
@@ -165,15 +157,11 @@ describe('accountStrategyViewService.deployStrategy', () => {
         strategyInstanceId: 'inst-draft-1',
         strategyTemplateId: 'template-1',
         paramsSnapshot: {
-          exchange: 'okx',
           symbol: 'SOLUSDT',
           timeframe: '5m',
-          positionPct: 10,
         },
         lockedParams: {
           exchange: 'okx',
-          symbol: 'SOLUSDT',
-          timeframe: '5m',
           positionPct: 10,
         },
       }),
@@ -238,15 +226,11 @@ describe('accountStrategyViewService.deployStrategy', () => {
         strategyInstanceId: 'inst-draft-1',
         strategyTemplateId: 'template-1',
         paramsSnapshot: {
-          exchange: 'okx',
           symbol: 'SOLUSDT',
           timeframe: '5m',
-          positionPct: 10,
         },
         lockedParams: {
           exchange: 'okx',
-          symbol: 'SOLUSDT',
-          timeframe: '5m',
           positionPct: 10,
         },
       }),

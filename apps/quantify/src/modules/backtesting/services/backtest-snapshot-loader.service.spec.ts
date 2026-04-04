@@ -12,10 +12,12 @@ describe('backtestSnapshotLoaderService', () => {
         specHash: 'spec-hash',
         scriptSnapshot: 'const strategy = { protocolVersion: "v1", onBar: () => ({ action: "NOOP" }) }\nstrategy',
         paramsSnapshot: {
-          positionPct: 25,
-          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+          marketType: 'spot',
         },
         lockedParams: {
+          exchange: 'okx',
           positionPct: 25,
         },
         executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
@@ -56,8 +58,11 @@ describe('backtestSnapshotLoaderService', () => {
       protocolVersion: 'v1',
       scriptCode: 'const strategy = { protocolVersion: "v1", onBar: () => ({ action: "NOOP" }) }\nstrategy',
       params: {
-        positionPct: 25,
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        marketType: 'spot',
         exchange: 'okx',
+        positionPct: 25,
       },
     })
     expect(strategy).toMatchObject({
@@ -65,8 +70,11 @@ describe('backtestSnapshotLoaderService', () => {
       strategyInstanceId: 'instance-1',
       strategyTemplateId: 'template-1',
       params: {
-        positionPct: 25,
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        marketType: 'spot',
         exchange: 'okx',
+        positionPct: 25,
       },
       snapshotId: 'snapshot-1',
       snapshotHash: 'snapshot-hash',

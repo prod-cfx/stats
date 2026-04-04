@@ -46,6 +46,7 @@ export class BacktestSnapshotLoaderService {
     return {
       ...strategy,
       id: this.resolveStrategyId(snapshot, input.id),
+      params: strictParams,
       strategyInstanceId: snapshot.strategyInstanceId ?? undefined,
       strategyTemplateId: snapshot.strategyTemplateId ?? undefined,
       snapshotId: snapshot.id,
@@ -67,9 +68,10 @@ export class BacktestSnapshotLoaderService {
   }): Record<string, unknown> {
     const paramsSnapshot = this.readJsonRecord(snapshot.paramsSnapshot)
     const lockedParams = this.readJsonRecord(snapshot.lockedParams)
-    const resolvedParams = paramsSnapshot && Object.keys(paramsSnapshot).length > 0
-      ? paramsSnapshot
-      : lockedParams
+    const resolvedParams = {
+      ...(paramsSnapshot ?? {}),
+      ...(lockedParams ?? {}),
+    }
 
     const positionPct = resolvedParams?.positionPct
     const hasPositionPct = typeof positionPct === 'number' && Number.isFinite(positionPct)

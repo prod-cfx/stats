@@ -1345,13 +1345,14 @@ export class AccountStrategyViewService {
     lockedParams: unknown
   }): Record<string, unknown> {
     const paramsSnapshot = this.readRecord(snapshot.paramsSnapshot)
-    if (paramsSnapshot && Object.keys(paramsSnapshot).length > 0) {
-      return paramsSnapshot
+    const lockedParams = this.readRecord(snapshot.lockedParams)
+    const merged = {
+      ...(paramsSnapshot ?? {}),
+      ...(lockedParams ?? {}),
     }
 
-    const lockedParams = this.readRecord(snapshot.lockedParams)
-    if (lockedParams && Object.keys(lockedParams).length > 0) {
-      return lockedParams
+    if (Object.keys(merged).length > 0) {
+      return merged
     }
 
     throw new DomainException('account_strategy.published_snapshot_params_missing', {
