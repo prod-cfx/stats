@@ -296,6 +296,18 @@ describe('AiQuantPageClient backtest jobs integration', () => {
   })
 
   it('passes allowPartial to the backtest payload builder when submitting a job', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    seeded[0].paramValues = {
+      ...seeded[0].paramValues,
+      backtestInitialCash: 10000,
+      backtestLeverage: 1,
+      backtestSlippageBps: 10,
+      backtestFeeBps: 5,
+      backtestPriceSource: 'close',
+      backtestAllowPartial: true,
+    }
+    localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(seeded))
+
     await act(async () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
