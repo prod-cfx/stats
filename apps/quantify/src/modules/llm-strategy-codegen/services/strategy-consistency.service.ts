@@ -474,19 +474,19 @@ export class StrategyConsistencyService {
     const upperRule = profile.ruleMappings.find(item => item.key === 'bollinger.upper_break')
     const lowerRule = profile.ruleMappings.find(item => item.key === 'bollinger.lower_break')
     const hasMiddleRule = profile.ruleMappings.some(item => item.key === 'bollinger.middle_revert')
-    const hasMaOpenAction = profile.actions.some(item => item.startsWith('OPEN_'))
-    const hasMaCloseAction = profile.actions.some(item => item.startsWith('CLOSE_'))
+    const hasMaGoldenCross = profile.ruleMappings.some(item => item.key === 'ma.golden_cross')
+    const hasMaDeathCross = profile.ruleMappings.some(item => item.key === 'ma.death_cross')
 
     const entryRule = upperRule?.action === 'OPEN_SHORT'
       ? 'bollinger.upper_break_short'
       : lowerRule?.action === 'OPEN_LONG'
           ? 'bollinger.lower_break_long'
-          : (strategyType === 'movingAverage' && hasMaOpenAction)
+          : (strategyType === 'movingAverage' && hasMaGoldenCross)
               ? 'ma.golden_cross'
               : 'custom'
     const exitRule = hasMiddleRule
       ? 'bollinger.middle_revert'
-      : (strategyType === 'movingAverage' && hasMaCloseAction)
+      : (strategyType === 'movingAverage' && hasMaDeathCross)
           ? 'ma.death_cross'
           : 'custom'
 
@@ -509,7 +509,8 @@ export class StrategyConsistencyService {
 
   private buildRuleMappings(spec: CanonicalStrategySpec): StrategySemanticProfile['ruleMappings'] {
     const hasBollinger = spec.indicators.some(item => item.kind === 'bollingerBands')
-    if (!hasBollinger) {
+    const hasMovingAverage = spec.indicators.some(item => item.kind === 'sma' || item.kind === 'ema')
+    if (!hasBollinger && !hasMovingAverage) {
       return []
     }
 
@@ -523,6 +524,12 @@ export class StrategyConsistencyService {
       }
       if (/中轨|middle|ma20/i.test(trigger)) {
         mappings.set('bollinger.middle_revert', action)
+      }
+      if (/金叉|上穿/i.test(trigger) && /均线|\bma\b|\bsma\b|\bema\b/i.test(trigger)) {
+        mappings.set('ma.golden_cross', action)
+      }
+      if (/死叉|下穿/i.test(trigger) && /均线|\bma\b|\bsma\b|\bema\b/i.test(trigger)) {
+        mappings.set('ma.death_cross', action)
       }
     }
 

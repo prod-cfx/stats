@@ -214,7 +214,10 @@ export class StrategySummaryBuilderService {
     if (upper?.action === 'OPEN_SHORT') return 'bollinger.upper_break_short'
     const lower = profile.ruleMappings.find(item => item.key === 'bollinger.lower_break')
     if (lower?.action === 'OPEN_LONG') return 'bollinger.lower_break_long'
-    if ((indicators.includes('sma') || indicators.includes('ema')) && profile.actions.some(item => item.startsWith('OPEN_'))) {
+    if (
+      (indicators.includes('sma') || indicators.includes('ema'))
+      && profile.ruleMappings.some(item => item.key === 'ma.golden_cross')
+    ) {
       return 'ma.golden_cross'
     }
     return 'custom'
@@ -227,7 +230,10 @@ export class StrategySummaryBuilderService {
     if (profile.ruleMappings.some(item => item.key === 'bollinger.middle_revert')) {
       return 'bollinger.middle_revert'
     }
-    if ((indicators.includes('sma') || indicators.includes('ema')) && profile.actions.some(item => item.startsWith('CLOSE_'))) {
+    if (
+      (indicators.includes('sma') || indicators.includes('ema'))
+      && profile.ruleMappings.some(item => item.key === 'ma.death_cross')
+    ) {
       return 'ma.death_cross'
     }
     return 'custom'

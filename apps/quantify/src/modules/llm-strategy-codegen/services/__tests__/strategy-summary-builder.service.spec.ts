@@ -37,4 +37,30 @@ describe('strategySummaryBuilderService', () => {
     expect(summary.market).toEqual({})
     expect(summary.sizing).toBeNull()
   })
+
+  it('does not label moving-average summaries as golden/death cross without explicit crossover evidence', () => {
+    const service = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+
+    const summary = service.buildScriptSummary({
+      scriptCode: `
+const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const closes = ctx.bars?.map(item => item.close) ?? []
+    const fast = ctx.helpers?.ta?.sma(closes, 5)
+    const slow = ctx.helpers?.ta?.sma(closes, 20)
+    if (typeof fast !== 'number' || typeof slow !== 'number') return { action: 'NOOP' }
+    if (closes.at(-1)! > fast) return { action: 'OPEN_LONG', size: { mode: 'RATIO', value: 0.1 } }
+    if (closes.at(-1)! < slow) return { action: 'CLOSE_LONG' }
+    return { action: 'NOOP' }
+  },
+}
+strategy
+`,
+    })
+
+    expect(summary.strategyType).toBe('movingAverage')
+    expect(summary.entryRule).toBe('custom')
+    expect(summary.exitRule).toBe('custom')
+  })
 })

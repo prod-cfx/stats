@@ -9,6 +9,8 @@ export type StrategySemanticRuleKey =
   | 'bollinger.upper_break'
   | 'bollinger.lower_break'
   | 'bollinger.middle_revert'
+  | 'ma.golden_cross'
+  | 'ma.death_cross'
 
 export interface StrategySemanticRuleMapping {
   key: StrategySemanticRuleKey

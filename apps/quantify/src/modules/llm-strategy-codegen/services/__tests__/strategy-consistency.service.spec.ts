@@ -211,4 +211,44 @@ strategy
     expect(report.checks.some(check => check.key === 'indicators.required' && check.status === 'failed')).toBe(true)
     expect(report.checks.some(check => check.key === 'summary.alignment' && check.status === 'failed')).toBe(true)
   })
+
+  it('fails when moving-average script uses SMA filters without crossover semantics', () => {
+    const checklist = {
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['短均线上穿长均线（金叉）入场'],
+      exitRules: ['短均线下穿长均线（死叉）出场'],
+      riskRules: { positionPct: 10 },
+    }
+    const canonicalSpec = canonicalBuilder.build(checklist)
+    const userIntentSummary = summaryBuilder.buildUserIntentSummary({
+      checklist,
+      message: '我要一个均线金叉入场、死叉出场的策略',
+    })
+    const strategySummary = summaryBuilder.buildStrategySummary(canonicalSpec)
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: `
+const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const closes = ctx.bars?.map(item => item.close) ?? []
+    const fast = ctx.helpers?.ta?.sma(closes, 5)
+    const slow = ctx.helpers?.ta?.sma(closes, 20)
+    if (typeof fast !== 'number' || typeof slow !== 'number') return { action: 'NOOP' }
+    if (closes.at(-1)! > fast) return { action: 'OPEN_LONG', size: { mode: 'RATIO', value: 0.1 } }
+    if (closes.at(-1)! < slow) return { action: 'CLOSE_LONG' }
+    return { action: 'NOOP' }
+  },
+}
+strategy
+`,
+      userIntentSummary,
+      strategySummary,
+    })
+
+    expect(report.status).toBe('FAILED')
+    expect(report.checks.some(check => check.key === 'summary.alignment' && check.status === 'failed')).toBe(true)
+  })
 })

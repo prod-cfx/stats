@@ -113,6 +113,12 @@ export class ScriptProfileExtractorService {
       if (/\bmiddle\b|中轨|\bmid\b|ma20/.test(window)) {
         push('bollinger.middle_revert')
       }
+      if (this.hasMovingAverageCrossEvidence(window, 'up')) {
+        push('ma.golden_cross')
+      }
+      if (this.hasMovingAverageCrossEvidence(window, 'down')) {
+        push('ma.death_cross')
+      }
     })
 
     return Array.from(mappings.entries()).map(([key, action]) => ({ key, action }))
@@ -295,5 +301,15 @@ export class ScriptProfileExtractorService {
     }
 
     return null
+  }
+
+  private hasMovingAverageCrossEvidence(window: string, direction: 'up' | 'down'): boolean {
+    if (direction === 'up') {
+      if (/金叉|golden\s+cross|cross(?:over)?\s+up/.test(window)) return true
+      return /\b(?:fast|short|ma\d+|sma\d+|ema\d+)\b[\s\S]{0,40}(?:>|>=)[\s\S]{0,20}\b(?:slow|long|ma\d+|sma\d+|ema\d+)\b/.test(window)
+    }
+
+    if (/死叉|death\s+cross|cross(?:over)?\s+down/.test(window)) return true
+    return /\b(?:fast|short|ma\d+|sma\d+|ema\d+)\b[\s\S]{0,40}(?:<|<=)[\s\S]{0,20}\b(?:slow|long|ma\d+|sma\d+|ema\d+)\b/.test(window)
   }
 }
