@@ -12,7 +12,7 @@ SET
   "user_intent_summary" = COALESCE("user_intent_summary", '{}'::jsonb),
   "strategy_summary" = COALESCE("strategy_summary", '{}'::jsonb),
   "script_summary" = COALESCE("script_summary", '{}'::jsonb),
-  "locked_params" = COALESCE("locked_params", "params_snapshot", '{}'::jsonb),
+  "locked_params" = COALESCE(NULLIF("locked_params", '{}'::jsonb), "params_snapshot", '{}'::jsonb),
   "snapshot_version" = 1;
 
 ALTER TABLE "published_strategy_snapshots"
