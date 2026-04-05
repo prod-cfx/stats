@@ -122,7 +122,9 @@ export const LlmCodegenSessionStatus = {
   VALIDATING_STATIC: 'VALIDATING_STATIC',
   VALIDATING_RUNTIME: 'VALIDATING_RUNTIME',
   VALIDATING_OUTPUT: 'VALIDATING_OUTPUT',
+  VALIDATING_CONSISTENCY: 'VALIDATING_CONSISTENCY',
   PUBLISHED: 'PUBLISHED',
+  CONSISTENCY_FAILED: 'CONSISTENCY_FAILED',
   REJECTED: 'REJECTED',
 } as const
 export type LlmCodegenSessionStatus = (typeof LlmCodegenSessionStatus)[keyof typeof LlmCodegenSessionStatus]

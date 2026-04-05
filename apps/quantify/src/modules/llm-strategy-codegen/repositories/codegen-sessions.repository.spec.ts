@@ -113,7 +113,10 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
 
     const result = await repo.ensureDraftStrategyInstanceBoundForPublishedSession(buildInput())
 
-    expect(result).toEqual({ strategyInstanceId: 'existing-instance-id' })
+    expect(result).toEqual({
+      strategyTemplateId: '',
+      strategyInstanceId: 'existing-instance-id',
+    })
     expect(tx.strategyTemplate.create).not.toHaveBeenCalled()
     expect(tx.strategyInstance.create).not.toHaveBeenCalled()
     expect(tx.llmStrategyCodegenSession.update).not.toHaveBeenCalled()
@@ -142,7 +145,10 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
 
     const result = await repo.ensureDraftStrategyInstanceBoundForPublishedSession(buildInput())
 
-    expect(result).toEqual({ strategyInstanceId: 'instance-1' })
+    expect(result).toEqual({
+      strategyTemplateId: 'template-1',
+      strategyInstanceId: 'instance-1',
+    })
     expect(tx.strategyTemplate.create).toHaveBeenCalledTimes(1)
     expect(tx.strategyInstance.create).toHaveBeenCalledTimes(1)
     expect(tx.llmStrategyCodegenSession.update).toHaveBeenCalledWith({
@@ -181,7 +187,10 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
 
     const result = await repo.ensureDraftStrategyInstanceBoundForPublishedSession(buildInput())
 
-    expect(result).toEqual({ strategyInstanceId: 'instance-1' })
+    expect(result).toEqual({
+      strategyTemplateId: 'template-1',
+      strategyInstanceId: 'instance-1',
+    })
     expect(txHost.withTransaction).toHaveBeenCalledTimes(2)
     expect(tx.strategyTemplate.create).toHaveBeenCalledTimes(1)
     expect(tx.strategyInstance.create).toHaveBeenCalledTimes(1)
@@ -263,5 +272,91 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
     expect(tx.llmStrategyCodegenSession.updateMany).toHaveBeenCalled()
     expect(tx.llmStrategyCodeVersion.create).toHaveBeenCalled()
     expect(txHost.withTransaction).not.toHaveBeenCalled()
+  })
+
+  it('includes graphSnapshot in session select and update payloads', async () => {
+    const sessionRow = {
+      id: 'session-1',
+      userId: 'user-1',
+      status: 'DRAFTING',
+      checklist: {},
+      constraintPack: {},
+      latestDraftCode: null,
+      latestSpecDesc: null,
+      graphSnapshot: {
+        graphVersion: 'gss.v1',
+        nodes: [],
+        edges: [],
+      },
+      rejectReason: null,
+      strategyInstanceId: null,
+      createdAt: new Date('2026-04-04T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-04T00:00:00.000Z'),
+    }
+    const tx = {
+      llmStrategyCodegenSession: {
+        create: jest.fn().mockResolvedValue(sessionRow),
+        findUnique: jest.fn().mockResolvedValue(sessionRow),
+        update: jest.fn().mockResolvedValue({
+          ...sessionRow,
+          status: 'CHECKLIST_GATE',
+          graphSnapshot: {
+            graphVersion: 'gss.v1',
+            nodes: [{ id: 'entry-1' }],
+            edges: [],
+          },
+        }),
+      },
+    }
+    const txHost = {
+      tx,
+      withTransaction: jest.fn(async (callback: () => Promise<unknown>) => callback()),
+    }
+    const repo = new CodegenSessionsRepository(txHost as any)
+
+    await repo.createSession({
+      user: { connect: { id: 'user-1' } },
+      status: 'DRAFTING',
+      checklist: {} as any,
+      constraintPack: {} as any,
+      graphSnapshot: {
+        graphVersion: 'gss.v1',
+        nodes: [],
+        edges: [],
+      } as any,
+    } as any)
+    await repo.findById('session-1')
+    await repo.updateSession('session-1', {
+      status: 'CHECKLIST_GATE',
+      graphSnapshot: {
+        graphVersion: 'gss.v1',
+        nodes: [{ id: 'entry-1' }],
+        edges: [],
+      } as any,
+    } as any)
+
+    expect(tx.llmStrategyCodegenSession.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        graphSnapshot: expect.objectContaining({ graphVersion: 'gss.v1' }),
+      }),
+      select: expect.objectContaining({
+        graphSnapshot: true,
+      }),
+    }))
+    expect(tx.llmStrategyCodegenSession.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.objectContaining({
+        graphSnapshot: true,
+      }),
+    }))
+    expect(tx.llmStrategyCodegenSession.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        graphSnapshot: expect.objectContaining({
+          nodes: [{ id: 'entry-1' }],
+        }),
+      }),
+      select: expect.objectContaining({
+        graphSnapshot: true,
+      }),
+    }))
   })
 })

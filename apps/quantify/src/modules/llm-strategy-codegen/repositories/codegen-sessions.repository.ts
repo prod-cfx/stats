@@ -14,6 +14,7 @@ const SESSION_SELECT_BASE = {
   constraintPack: true,
   latestDraftCode: true,
   latestSpecDesc: true,
+  graphSnapshot: true,
   rejectReason: true,
   createdAt: true,
   updatedAt: true,
