@@ -174,6 +174,7 @@ function seedDeployableConversation(now = Date.now()) {
       },
       llmCodegenSessionId: null,
       publishedStrategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
       latestSignalMessage: null,
       backtestExecutionState: 'idle',
       updatedAt: now,
@@ -300,7 +301,7 @@ describe('AiQuantPageClient deploy guard', () => {
 
     expect(mockDeployAccountAiQuantStrategy).toHaveBeenCalledWith(
       expect.objectContaining({
-        exchange: 'hyperliquid',
+        publishedSnapshotId: 'snapshot-1',
         exchangeAccountId: 'acct-hyper-1',
         exchangeAccountName: 'Hyper Testnet',
       }),

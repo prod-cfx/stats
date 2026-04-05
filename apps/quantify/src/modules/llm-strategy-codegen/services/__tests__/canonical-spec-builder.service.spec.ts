@@ -55,4 +55,41 @@ describe('canonicalSpecBuilderService', () => {
       { kind: 'ema', params: { period: 20 } },
     ]))
   })
+
+  it('does not inject implicit market/sizing/sma defaults when checklist is missing them', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      entryRules: ['价格收盘确认突破关键阻力位入场'],
+      exitRules: ['价格跌破关键支撑位出场'],
+    })
+
+    expect(spec.market).toEqual({})
+    expect(spec.indicators).toEqual([])
+    expect(spec.sizing).toBeNull()
+    expect(spec.dataRequirements).toEqual({ primary: [] })
+  })
+
+  it('parses moving-average short entry and short exit without forcing golden-entry/death-exit defaults', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['短均线下穿长均线（死叉）时做空'],
+      exitRules: ['短均线上穿长均线（金叉）时平空'],
+      riskRules: { positionPct: 10 },
+    })
+
+    expect(spec.indicators).toContainEqual({
+      kind: 'sma',
+      params: { period: 20 },
+    })
+    expect(spec.entries).toEqual([
+      { id: 'entry-1', trigger: '短均线下穿长均线（死叉）时做空', action: 'OPEN_SHORT' },
+    ])
+    expect(spec.exits).toEqual([
+      { id: 'exit-1', trigger: '短均线上穿长均线（金叉）时平空', action: 'CLOSE_SHORT' },
+    ])
+  })
 })

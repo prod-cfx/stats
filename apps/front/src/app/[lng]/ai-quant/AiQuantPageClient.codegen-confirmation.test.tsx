@@ -67,11 +67,13 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
     onSend,
     onRunBacktest,
     canRunBacktest,
+    onParamChange,
   }: {
     messages: Array<{ id: string; role: string; content: string }>
     onSend: (input: string) => void
     onRunBacktest: () => void
     canRunBacktest?: boolean
+    onParamChange?: (key: string, value: unknown) => void
   }) => {
     const [input, setInput] = React.useState('')
 
@@ -88,6 +90,12 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
         </button>
         <button data-testid="run-backtest" disabled={!canRunBacktest} onClick={onRunBacktest}>
           run
+        </button>
+        <button data-testid="set-position-20" onClick={() => onParamChange?.('positionPct', 20)}>
+          set position
+        </button>
+        <button data-testid="set-backtest-range-7d" onClick={() => onParamChange?.('backtestRangePreset', '7D')}>
+          set range
         </button>
       </div>
     )
@@ -517,5 +525,45 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     ) as HTMLButtonElement | null
     expect(confirmButtonAfterReconfirm?.disabled).toBe(true)
     expect(runButtonAfterReconfirm?.disabled).toBe(false)
+  })
+
+  it('invalidates published snapshot when a strategy param changes but keeps publication for pure backtest-range changes', async () => {
+    localStorage.clear()
+    seedPublishedConversation(Date.now())
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    const initialRunButton = container.querySelector(
+      '[data-testid="run-backtest"]',
+    ) as HTMLButtonElement | null
+    expect(initialRunButton?.disabled).toBe(false)
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="set-backtest-range-7d"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    const runButtonAfterRangeChange = container.querySelector(
+      '[data-testid="run-backtest"]',
+    ) as HTMLButtonElement | null
+    expect(runButtonAfterRangeChange?.disabled).toBe(false)
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="set-position-20"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    const runButtonAfterStrategyChange = container.querySelector(
+      '[data-testid="run-backtest"]',
+    ) as HTMLButtonElement | null
+    expect(container.querySelector('[data-testid="graph-status"]')?.textContent).toBe('draft')
+    expect(runButtonAfterStrategyChange?.disabled).toBe(true)
   })
 })

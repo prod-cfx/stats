@@ -161,6 +161,7 @@ interface ConversationState {
   publishedScriptCode: string | null
   publishedScriptGraphVersion: number | null
   latestSignalMessage: string | null
+  backtestExecutionConfigExplicit?: boolean
   backtestExecutionState: 'idle' | 'submitting' | 'running' | 'succeeded' | 'failed' | 'timeout'
   updatedAt: number
 }
@@ -491,6 +492,34 @@ const TRANSIENT_BACKTEST_STATES = new Set<ConversationState['backtestExecutionSt
   'running',
   'timeout',
 ])
+const NON_STRATEGY_PARAM_KEYS = new Set([
+  'backtestRangePreset',
+  'backtestStart',
+  'backtestEnd',
+  'backtestInitialCash',
+  'backtestLeverage',
+  'backtestSlippageBps',
+  'backtestFeeBps',
+  'backtestPriceSource',
+  'backtestAllowPartial',
+])
+const BACKTEST_EXECUTION_PARAM_KEYS = [
+  'backtestInitialCash',
+  'backtestLeverage',
+  'backtestSlippageBps',
+  'backtestFeeBps',
+  'backtestPriceSource',
+  'backtestAllowPartial',
+] as const
+const BACKTEST_EXECUTION_PARAM_KEY_SET = new Set<string>(BACKTEST_EXECUTION_PARAM_KEYS)
+const LEGACY_IMPLICIT_BACKTEST_PARAM_VALUES = {
+  backtestInitialCash: 10000,
+  backtestLeverage: 1,
+  backtestSlippageBps: 10,
+  backtestFeeBps: 5,
+  backtestPriceSource: 'close',
+  backtestAllowPartial: true,
+} as const
 
 function normalizeHydratedBacktestExecutionState(
   state: ConversationState['backtestExecutionState'] | undefined,
@@ -517,6 +546,47 @@ function resolveBacktestRangeInput(values: Record<string, unknown>): BacktestRan
     preset: 'CUSTOM',
     startAt: typeof values.backtestStart === 'string' ? values.backtestStart : '',
     endAt: typeof values.backtestEnd === 'string' ? values.backtestEnd : '',
+  }
+}
+
+function shouldInvalidatePublicationForParamChange(key: string): boolean {
+  return !NON_STRATEGY_PARAM_KEYS.has(key)
+}
+
+function stripBacktestExecutionParamValues(
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  const nextValues = { ...values }
+  BACKTEST_EXECUTION_PARAM_KEYS.forEach((key) => {
+    delete nextValues[key]
+  })
+  return nextValues
+}
+
+function hasLegacyImplicitBacktestExecutionConfig(
+  values: Record<string, unknown>,
+): boolean {
+  return BACKTEST_EXECUTION_PARAM_KEYS.every((key) => values[key] === LEGACY_IMPLICIT_BACKTEST_PARAM_VALUES[key])
+}
+
+function normalizeHydratedBacktestExecutionConfig(input: {
+  paramValues: Record<string, unknown>
+  explicit: boolean
+}): {
+  paramValues: Record<string, unknown>
+  explicit: boolean
+} {
+  if (input.explicit) {
+    return input
+  }
+
+  if (!hasLegacyImplicitBacktestExecutionConfig(input.paramValues)) {
+    return input
+  }
+
+  return {
+    paramValues: stripBacktestExecutionParamValues(input.paramValues),
+    explicit: false,
   }
 }
 
@@ -600,6 +670,7 @@ export function AiQuantPageClient() {
       publishedScriptCode: null,
       publishedScriptGraphVersion: null,
       latestSignalMessage: null,
+      backtestExecutionConfigExplicit: false,
       backtestExecutionState: 'idle',
       updatedAt: now,
     }
@@ -656,16 +727,32 @@ export function AiQuantPageClient() {
       const parsed = JSON.parse(raw) as ConversationState[]
       if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('invalid')
       const normalized = parsed.map(item => {
-        const nextParamValues = item.paramValues ?? { ...(item.params ?? DEFAULT_PARAMS) }
+        const baseParams =
+          item.params && typeof item.params === 'object' && !Array.isArray(item.params)
+            ? (item.params as Record<string, unknown>)
+            : {}
+        const storedValues =
+          item.paramValues && typeof item.paramValues === 'object' && !Array.isArray(item.paramValues)
+            ? item.paramValues
+            : {}
+        const nextParamValues = {
+          ...DEFAULT_PARAM_VALUES,
+          ...baseParams,
+          ...storedValues,
+        }
+        const normalizedBacktestExecutionConfig = normalizeHydratedBacktestExecutionConfig({
+          paramValues: nextParamValues,
+          explicit: item.backtestExecutionConfigExplicit === true,
+        })
         const nextParams = item.params
-          ? normalizeParamsFromValues(nextParamValues, item.params)
-          : normalizeParamsFromValues(nextParamValues, DEFAULT_PARAMS)
+          ? normalizeParamsFromValues(normalizedBacktestExecutionConfig.paramValues, item.params)
+          : normalizeParamsFromValues(normalizedBacktestExecutionConfig.paramValues, DEFAULT_PARAMS)
 
         return {
           ...item,
           paramSchema:
             item.paramSchema ?? buildParamSchemaWithCapabilities(null, nextParams.symbol),
-          paramValues: nextParamValues,
+          paramValues: normalizedBacktestExecutionConfig.paramValues,
           params: nextParams,
           llmCodegenSessionId: item.llmCodegenSessionId ?? null,
           publishedStrategyInstanceId: item.publishedStrategyInstanceId ?? null,
@@ -685,6 +772,7 @@ export function AiQuantPageClient() {
             return null
           })(),
           latestSignalMessage: item.latestSignalMessage ?? null,
+          backtestExecutionConfigExplicit: normalizedBacktestExecutionConfig.explicit,
           backtestExecutionState: normalizeHydratedBacktestExecutionState(
             item.backtestExecutionState,
           ),
@@ -1447,22 +1535,22 @@ export function AiQuantPageClient() {
     const prompt = `${presetName}：${nextParams.buyWindowMin}m drop ${nextParams.buyDropPct}% buy`
 
     updateActiveConversation(curr => ({
-      ...curr,
-      params: nextParams,
-      paramValues: { ...curr.paramValues, ...nextParams },
-      backtestResult: null,
-      latestSignalMessage: null,
-      messages: [
-        ...curr.messages,
-        {
-          id: `pick-${Date.now()}`,
-          role: 'assistant',
-          content: fromLoginIntent
-            ? t('aiQuant.messages.restorePreset', { name: presetName })
-            : t('aiQuant.messages.applyPreset', { name: presetName }),
-        },
-      ],
-      updatedAt: Date.now(),
+      ...invalidateConversationPublication({
+        ...curr,
+        params: nextParams,
+        paramValues: { ...curr.paramValues, ...nextParams },
+        messages: [
+          ...curr.messages,
+          {
+            id: `pick-${Date.now()}`,
+            role: 'assistant',
+            content: fromLoginIntent
+              ? t('aiQuant.messages.restorePreset', { name: presetName })
+              : t('aiQuant.messages.applyPreset', { name: presetName }),
+          },
+        ],
+        updatedAt: Date.now(),
+      }, { markGraphDraft: true }),
     }))
 
     void requestBackendGraphGeneration({
@@ -1487,22 +1575,22 @@ export function AiQuantPageClient() {
     const prompt = `${presetName}, generate logic graph`
 
     updateActiveConversation(curr => ({
-      ...curr,
-      params: nextParams,
-      paramValues: { ...curr.paramValues, ...nextParams },
-      backtestResult: null,
-      latestSignalMessage: null,
-      messages: [
-        ...curr.messages,
-        {
-          id: `run-pick-${Date.now()}`,
-          role: 'assistant',
-          content: fromLoginIntent
-            ? t('aiQuant.messages.restoreRun', { name: presetName })
-            : t('aiQuant.messages.applyRun', { name: presetName }),
-        },
-      ],
-      updatedAt: Date.now(),
+      ...invalidateConversationPublication({
+        ...curr,
+        params: nextParams,
+        paramValues: { ...curr.paramValues, ...nextParams },
+        messages: [
+          ...curr.messages,
+          {
+            id: `run-pick-${Date.now()}`,
+            role: 'assistant',
+            content: fromLoginIntent
+              ? t('aiQuant.messages.restoreRun', { name: presetName })
+              : t('aiQuant.messages.applyRun', { name: presetName }),
+          },
+        ],
+        updatedAt: Date.now(),
+      }, { markGraphDraft: true }),
     }))
 
     void requestBackendGraphGeneration({
@@ -1569,17 +1657,19 @@ export function AiQuantPageClient() {
 
     let payload: ReturnType<typeof buildBacktestPayload>
     try {
+      const paramValues = activeConversation.paramValues
+      const backtestPriceSource = String(paramValues.backtestPriceSource ?? '')
       payload = buildBacktestPayload({
         symbol: activeConversation.params.symbol,
         baseTimeframe: activeConversation.params.baseTimeframe,
         capabilities: backtestCapabilities,
         stateTimeframes: [activeConversation.params.baseTimeframe],
-        initialCash: 10000,
-        leverage: 1,
+        initialCash: Number(paramValues.backtestInitialCash),
+        leverage: Number(paramValues.backtestLeverage),
         execution: {
-          slippageBps: 10,
-          feeBps: 5,
-          priceSource: 'close',
+          slippageBps: Number(paramValues.backtestSlippageBps),
+          feeBps: Number(paramValues.backtestFeeBps),
+          priceSource: backtestPriceSource as 'open' | 'close' | 'mid',
         },
         strategy: {
           id:
@@ -1587,10 +1677,9 @@ export function AiQuantPageClient() {
             activeConversation.llmCodegenSessionId ??
             `mock-${Date.now()}`,
           publishedSnapshotId: activeConversation.publishedSnapshotId ?? '',
-          params: activeConversation.paramValues,
         },
         range: resolveBacktestRangeInput(activeConversation.paramValues),
-        allowPartial: true,
+        allowPartial: paramValues.backtestAllowPartial === true,
       })
     } catch (error) {
       backtestRunMutexRef.current.delete(conversationId)
@@ -1608,6 +1697,8 @@ export function AiQuantPageClient() {
             return t('aiQuant.messages.backtestRangeTooLarge')
           case 'missing_published_snapshot':
             return t('aiQuant.messages.backtestMissingScriptCode')
+          case 'invalid_execution_config':
+            return t('aiQuant.messages.backtestPayloadInvalid', { reason: 'invalid_execution_config' })
           case 'missing_symbol':
           default:
             return t('aiQuant.messages.backtestPayloadInvalid', { reason: error.code })
@@ -1955,12 +2046,17 @@ export function AiQuantPageClient() {
             onParamChange={(key, value) =>
               updateActiveConversation(curr => {
                 const nextValues = { ...curr.paramValues, [key]: value }
-                return {
+                const nextConversation = {
                   ...curr,
                   paramValues: nextValues,
                   params: normalizeParamsFromValues(nextValues, curr.params),
+                  backtestExecutionConfigExplicit:
+                    BACKTEST_EXECUTION_PARAM_KEY_SET.has(key) ? true : curr.backtestExecutionConfigExplicit,
                   updatedAt: Date.now(),
                 }
+                return shouldInvalidatePublicationForParamChange(key)
+                  ? invalidateConversationPublication(nextConversation, { markGraphDraft: true })
+                  : nextConversation
               })
             }
             onSend={onSend}
@@ -2094,7 +2190,6 @@ export function AiQuantPageClient() {
           const strategyName =
             activeConversation.title ||
             t('aiQuant.defaultStrategyName', { defaultValue: 'AI Strategy' })
-          const timeframe = `${activeConversation.params.buyWindowMin}m/${activeConversation.params.sellWindowMin}m`
           const requestId = deployRequestId ?? createDeployRequestId()
           if (!deployRequestId) {
             setDeployRequestId(requestId)
@@ -2102,6 +2197,24 @@ export function AiQuantPageClient() {
 
           try {
             setDeploySubmitting(true)
+            const publishedSnapshotId = activeConversation.publishedSnapshotId?.trim() ?? ''
+            if (!publishedSnapshotId) {
+              updateActiveConversation(curr => ({
+                ...curr,
+                messages: [
+                  ...curr.messages,
+                  {
+                    id: `deploy-guard-${Date.now()}`,
+                    role: 'assistant',
+                    content: t('aiQuant.messages.codegenGuard', {
+                      defaultValue: 'Please generate strategy code before deploying.',
+                    }),
+                  },
+                ],
+                updatedAt: Date.now(),
+              }))
+              return
+            }
             const latestExchangeAccounts = mapExchangeStatusesToDeployAccounts(
               await fetchUserExchangeAccountStatuses(),
             )
@@ -2126,11 +2239,7 @@ export function AiQuantPageClient() {
               userId: session.userId,
               name: strategyName,
               deployRequestId: requestId,
-              exchange: selectedDeployExchange,
-              symbol: activeConversation.params.symbol,
-              timeframe,
-              positionPct: activeConversation.params.positionPct,
-              strategyInstanceId: activeConversation.publishedStrategyInstanceId ?? undefined,
+              publishedSnapshotId,
               exchangeAccountId: account.accountId,
               exchangeAccountName: account.accountName,
             })

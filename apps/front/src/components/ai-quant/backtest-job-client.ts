@@ -19,7 +19,7 @@ export interface CreateBacktestJobPayload {
     id: string
     protocolVersion?: 'v1'
     publishedSnapshotId?: string
-    params: Record<string, unknown>
+    params?: Record<string, unknown>
   }
   dataRange: {
     fromTs: number

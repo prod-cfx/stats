@@ -15,6 +15,7 @@ import { ScriptProfileExtractorService } from './services/script-profile-extract
 import { SpecDescBuilderService } from './services/spec-desc-builder.service'
 import { StaticGuardrailService } from './services/static-guardrail.service'
 import { StrategyConsistencyService } from './services/strategy-consistency.service'
+import { StrategySummaryBuilderService } from './services/strategy-summary-builder.service'
 
 @Module({
   imports: [PrismaModule, AiModule],
@@ -29,6 +30,7 @@ import { StrategyConsistencyService } from './services/strategy-consistency.serv
     CanonicalSpecBuilderService,
     ScriptProfileExtractorService,
     StrategyConsistencyService,
+    StrategySummaryBuilderService,
     RecommendationIndexService,
     CallerIdentityService,
     CodegenConversationService,

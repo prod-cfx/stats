@@ -19,25 +19,34 @@ export class AccountStrategyDeployDto {
   @IsNotEmpty()
   deployRequestId!: string
 
-  @ApiProperty({ description: '交易所', enum: EXCHANGES })
+  @ApiProperty({ description: '发布快照 ID（部署与运行唯一绑定来源）' })
+  @IsString()
+  @IsNotEmpty()
+  publishedSnapshotId!: string
+
+  @ApiPropertyOptional({ description: '交易所（展示字段，后端以 publishedSnapshotId 快照为准）', enum: EXCHANGES })
+  @IsOptional()
   @IsIn(EXCHANGES)
-  exchange!: 'binance' | 'okx' | 'hyperliquid'
+  exchange?: 'binance' | 'okx' | 'hyperliquid'
 
-  @ApiProperty({ description: '交易对，如 BTCUSDT' })
+  @ApiPropertyOptional({ description: '交易对，如 BTCUSDT（展示字段，后端以 publishedSnapshotId 快照为准）' })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  symbol!: string
+  symbol?: string
 
-  @ApiProperty({ description: '周期，如 5m/15m' })
+  @ApiPropertyOptional({ description: '周期，如 5m/15m（展示字段，后端以 publishedSnapshotId 快照为准）' })
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  timeframe!: string
+  timeframe?: string
 
-  @ApiProperty({ description: '仓位百分比（0-100）' })
+  @ApiPropertyOptional({ description: '仓位百分比（0-100，展示字段，后端以 publishedSnapshotId 快照为准）' })
+  @IsOptional()
   @IsNumber()
   @Min(0)
   @Max(100)
-  positionPct!: number
+  positionPct?: number
 
   @ApiPropertyOptional({ description: '交易所账户 ID（后端真实账户）' })
   @IsOptional()

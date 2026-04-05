@@ -26,7 +26,6 @@ function createInput(overrides: Partial<BuildBacktestPayloadInput> = {}): BuildB
     strategy: {
       id: 'strategy-1',
       publishedSnapshotId: 'snapshot-1',
-      params: { buyDropPct: 1, sellRisePct: 2 },
     },
     range: {
       preset: '30D',
@@ -118,14 +117,13 @@ describe('backtest-payload-builder', () => {
     })
   })
 
-  it('includes strategy protocolVersion=v1, publishedSnapshotId and params', () => {
+  it('includes strategy protocolVersion=v1 and publishedSnapshotId only', () => {
     const payload = buildBacktestPayload(createInput(), now)
 
     expect(payload.strategy).toEqual({
       id: 'strategy-1',
       protocolVersion: 'v1',
       publishedSnapshotId: 'snapshot-1',
-      params: { buyDropPct: 1, sellRisePct: 2 },
     })
   })
 
@@ -149,10 +147,17 @@ describe('backtest-payload-builder', () => {
         strategy: {
           id: 'strategy-1',
           publishedSnapshotId: '   ',
-          params: {},
         },
       }), now)
     }, 'missing_published_snapshot')
+  })
+
+  it('throws when execution config is invalid', () => {
+    expectBuildErrorCode(() => {
+      buildBacktestPayload(createInput({
+        initialCash: Number.NaN,
+      }), now)
+    }, 'invalid_execution_config')
   })
 
   it('keeps strategy symbol even when capability symbols are narrower', () => {

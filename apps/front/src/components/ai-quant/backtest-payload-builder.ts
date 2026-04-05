@@ -5,6 +5,7 @@ import { resolveBacktestRange, validateBacktestRange } from './backtest-range'
 export type BacktestPayloadBuilderErrorCode =
   | 'missing_symbol'
   | 'missing_published_snapshot'
+  | 'invalid_execution_config'
   | 'missing_range'
   | 'start_after_end'
   | 'range_too_large'
@@ -35,7 +36,6 @@ export interface BuildBacktestPayloadInput {
   strategy: {
     id: string
     publishedSnapshotId: string
-    params: Record<string, unknown>
   }
   range: BacktestRangeInput
   allowPartial?: boolean
@@ -60,6 +60,21 @@ export function buildBacktestPayload(
     throw new BacktestPayloadBuilderError('missing_published_snapshot')
   }
 
+  const initialCash = input.initialCash
+  const leverage = input.leverage
+  const slippageBps = input.execution?.slippageBps
+  const feeBps = input.execution?.feeBps
+  const priceSource = input.execution?.priceSource
+  if (
+    !Number.isFinite(initialCash) || initialCash <= 0 ||
+    !Number.isFinite(leverage) || leverage <= 0 ||
+    !Number.isFinite(slippageBps) || slippageBps < 0 ||
+    !Number.isFinite(feeBps) || feeBps < 0 ||
+    (priceSource !== 'open' && priceSource !== 'close' && priceSource !== 'mid')
+  ) {
+    throw new BacktestPayloadBuilderError('invalid_execution_config')
+  }
+
   const validation = validateBacktestRange(input.range)
   if (!validation.ok) {
     throw new BacktestPayloadBuilderError(validation.reason)
@@ -71,14 +86,13 @@ export function buildBacktestPayload(
     symbols: [symbol],
     baseTimeframe,
     stateTimeframes: input.stateTimeframes,
-    initialCash: input.initialCash,
-    leverage: input.leverage,
+    initialCash,
+    leverage,
     execution: input.execution,
     strategy: {
       id: input.strategy.id,
       protocolVersion: 'v1',
       publishedSnapshotId,
-      params: input.strategy.params,
     },
     dataRange: {
       fromTs: Date.parse(resolvedRange.startAt),
