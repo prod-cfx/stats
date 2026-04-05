@@ -1,3 +1,4 @@
+import type { StrategyInstanceStatus } from '@ai/shared'
 import type { schemas } from '@ai/api-contracts'
 import type { ZodTypeAny } from 'zod'
 
@@ -1414,7 +1415,7 @@ export interface PaginatedResponse<T> {
   items: T[]
 }
 
-export type AccountAiQuantStrategyStatus = 'running' | 'stopped' | 'draft'
+export type AccountAiQuantStrategyApiState = Extract<StrategyInstanceStatus, 'running' | 'stopped' | 'draft'>
 export type AccountAiQuantStrategyAction = 'run' | 'stop'
 
 export interface AccountAiQuantStrategyMetrics {
@@ -1430,7 +1431,7 @@ export type AccountAiQuantParamValues = Record<string, unknown>
 export interface AccountAiQuantStrategyListItem {
   id: string
   name: string
-  status: AccountAiQuantStrategyStatus
+  status: AccountAiQuantStrategyApiState
   exchange: string | null
   symbol: string | null
   timeframe: string | null
@@ -1503,7 +1504,7 @@ interface AccountAiQuantListQuery {
   userId: string
   page?: number
   limit?: number
-  status?: AccountAiQuantStrategyStatus
+  status?: AccountAiQuantStrategyApiState
   subscribedOnly?: boolean
   excludeDraft?: boolean
 }
@@ -2374,7 +2375,7 @@ export async function fetchPredictionMarkets(
 
 // ===== 聚合订单簿 API =====
 
-export type AggregatedOrderbookMarketType = 'spot' | 'perp'
+export type AggregatedOrderbookQueryType = import('@ai/shared').MarketType
 
 export interface AggregatedOrderbookVenueDetail {
   venueId: string
@@ -2401,7 +2402,7 @@ export interface AggregatedOrderbookResponse {
 
 export interface FetchAggregatedOrderbookParams {
   base: string
-  type: AggregatedOrderbookMarketType
+  type: AggregatedOrderbookQueryType
   venues?: string
   depth?: number
   tickSize?: number

@@ -10,9 +10,9 @@ import { BacktestRunnerService } from '../core/backtest-runner.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestMarketDataService } from '../services/backtest-market-data.service'
 
-export type BacktestJobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
+export type BacktestJobPhase = 'queued' | 'running' | 'succeeded' | 'failed'
 
-const VALID_BACKTEST_JOB_STATUSES = new Set<BacktestJobStatus>([
+const VALID_BACKTEST_JOB_PHASES = new Set<BacktestJobPhase>([
   'queued',
   'running',
   'succeeded',
@@ -22,7 +22,7 @@ const VALID_BACKTEST_JOB_STATUSES = new Set<BacktestJobStatus>([
 interface BacktestJobRecord {
   id: string
   ownerUserId: string
-  status: BacktestJobStatus
+  status: BacktestJobPhase
   snapshotId?: string
   snapshotHash?: string
   scriptHash?: string
@@ -348,9 +348,9 @@ export class BacktestJobsService {
     return normalized || undefined
   }
 
-  private normalizePersistedStatus(status: string, id: string): BacktestJobStatus {
-    if (VALID_BACKTEST_JOB_STATUSES.has(status as BacktestJobStatus)) {
-      return status as BacktestJobStatus
+  private normalizePersistedStatus(status: string, id: string): BacktestJobPhase {
+    if (VALID_BACKTEST_JOB_PHASES.has(status as BacktestJobPhase)) {
+      return status as BacktestJobPhase
     }
 
     throw new DomainException('backtest.job_invalid_status', {

@@ -1,6 +1,7 @@
 import type { OnApplicationBootstrap } from '@nestjs/common'
 import type { MarketDataProvider } from '../interfaces/market-data-provider.interface'
-import { ErrorCode } from '@ai/shared'
+import type { ExchangeId as ExchangeIdType } from '@ai/shared'
+import { ErrorCode, ExchangeId } from '@ai/shared'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { Cron, CronExpression } from '@nestjs/schedule'
 import { DomainException } from '@/common/exceptions/domain.exception'
@@ -16,14 +17,13 @@ import { MarketDataRepository } from './market-data.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { MarketDataService } from './market-data.service'
 
-export type ExchangeId = 'binance' | 'okx' | 'hyperliquid'
-export type MarketSymbolSupportStatus = 'supported' | 'refreshed_then_supported' | 'not_supported'
+export type ExchangeSymbolAvailability = 'supported' | 'refreshed_then_supported' | 'not_supported'
 
 @Injectable()
 export class MarketSymbolCatalogService implements OnApplicationBootstrap {
   private readonly logger = new Logger(MarketSymbolCatalogService.name)
   private syncAllInProgress = false
-  private readonly refreshInProgress = new Set<ExchangeId>()
+  private readonly refreshInProgress = new Set<ExchangeIdType>()
 
   constructor(
     private readonly repository: MarketDataRepository,
@@ -37,7 +37,7 @@ export class MarketSymbolCatalogService implements OnApplicationBootstrap {
     void this.runInitialSync()
   }
 
-  async ensureExchangeSymbolAvailable(exchange: string, symbol: string): Promise<MarketSymbolSupportStatus> {
+  async ensureExchangeSymbolAvailable(exchange: string, symbol: string): Promise<ExchangeSymbolAvailability> {
     const normalizedExchange = this.normalizeExchange(exchange)
     const normalizedSymbol = this.normalizeSymbol(symbol)
     if (await this.hasSupportedSymbol(normalizedExchange, normalizedSymbol)) {
@@ -73,7 +73,7 @@ export class MarketSymbolCatalogService implements OnApplicationBootstrap {
     this.syncAllInProgress = true
 
     try {
-      for (const exchange of ['binance', 'okx', 'hyperliquid'] as const) {
+      for (const exchange of Object.values(ExchangeId)) {
         await this.refreshExchangeSymbols(exchange)
       }
     } finally {
@@ -92,7 +92,7 @@ export class MarketSymbolCatalogService implements OnApplicationBootstrap {
     }
   }
 
-  async refreshExchangeSymbols(exchange: ExchangeId, symbols?: string[]): Promise<void> {
+  async refreshExchangeSymbols(exchange: ExchangeIdType, symbols?: string[]): Promise<void> {
     if (this.refreshInProgress.has(exchange)) return
     this.refreshInProgress.add(exchange)
 
@@ -110,7 +110,7 @@ export class MarketSymbolCatalogService implements OnApplicationBootstrap {
     }
   }
 
-  private async hasSupportedSymbol(exchange: ExchangeId, symbol: string): Promise<boolean> {
+  private async hasSupportedSymbol(exchange: ExchangeIdType, symbol: string): Promise<boolean> {
     const found = await this.repository.findActiveSymbolByExchangeAndCodes(
       exchange.toUpperCase(),
       this.buildCodeCandidates(symbol),
@@ -118,10 +118,10 @@ export class MarketSymbolCatalogService implements OnApplicationBootstrap {
     return Boolean(found)
   }
 
-  private normalizeExchange(exchange: string): ExchangeId {
+  private normalizeExchange(exchange: string): ExchangeIdType {
     const normalized = exchange.trim().toLowerCase()
-    if (normalized === 'binance' || normalized === 'okx' || normalized === 'hyperliquid') {
-      return normalized
+    if (Object.values(ExchangeId).includes(normalized as ExchangeIdType)) {
+      return normalized as ExchangeIdType
     }
     throw new DomainException('backtesting.symbol_check_invalid_exchange', {
       code: ErrorCode.BAD_REQUEST,
@@ -142,7 +142,7 @@ export class MarketSymbolCatalogService implements OnApplicationBootstrap {
     })
   }
 
-  private getProvider(exchange: ExchangeId): MarketDataProvider {
+  private getProvider(exchange: ExchangeIdType): MarketDataProvider {
     if (exchange === 'okx') return this.okxProvider
     if (exchange === 'hyperliquid') return this.hyperliquidProvider
     return this.binanceProvider

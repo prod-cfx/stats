@@ -1,4 +1,4 @@
-export type StrategyStatus = 'running' | 'stopped' | 'draft'
+export type AiQuantStrategyViewState = 'running' | 'stopped' | 'draft'
 
 export interface StrategyMetricSnapshot {
   returnPct: number
@@ -21,7 +21,7 @@ export interface StrategyTimelineEvent {
 export interface AiQuantStrategyRecord {
   id: string
   name: string
-  status: StrategyStatus
+  status: AiQuantStrategyViewState
   exchange: 'binance' | 'okx' | 'hyperliquid'
   symbol: string
   timeframe: string
@@ -344,7 +344,7 @@ export function upsertStrategyDeployment(input: {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
 }
 
-export function updateStrategyStatus(id: string, status: StrategyStatus) {
+export function updateStrategyStatus(id: string, status: AiQuantStrategyViewState) {
   const now = new Date().toISOString()
   const existing = ensureStrategyStore()
   const next = existing.map(item => {

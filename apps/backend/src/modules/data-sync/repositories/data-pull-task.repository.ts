@@ -4,7 +4,7 @@ import type { DataPullTask as DataPullTaskModel } from '@/prisma/prisma.types'
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 
-export type DataPullTaskStatus = 'IDLE' | 'RUNNING' | 'SUCCESS' | 'FAILED'
+export type DataPullTaskRunState = 'IDLE' | 'RUNNING' | 'SUCCESS' | 'FAILED'
 
 export type DataPullTask = DataPullTaskModel
 

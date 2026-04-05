@@ -1,9 +1,9 @@
+import type { SubscriptionStatus as SubscriptionStatusType } from '@ai/shared'
+import { SubscriptionStatus as SharedSubscriptionStatus } from '@ai/shared'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { IsIn, IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator'
 
-export const SUBSCRIPTION_STATUS_VALUES = ['active', 'paused', 'cancelled'] as const
-
-export type SubscriptionStatusType = (typeof SUBSCRIPTION_STATUS_VALUES)[number]
+export const SUBSCRIPTION_STATUS_VALUES = Object.values(SharedSubscriptionStatus)
 
 export class UpdateSubscriptionDto {
   @ApiProperty({
@@ -33,4 +33,4 @@ export class UpdateSubscriptionDto {
   customParams?: Record<string, unknown> | null
 }
 
-export type SubscriptionStatus = SubscriptionStatusType
+export type { SubscriptionStatusType }

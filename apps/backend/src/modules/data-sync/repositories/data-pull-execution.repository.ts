@@ -5,7 +5,7 @@ import type { DataPullExecution as DataPullExecutionModel } from '@/prisma/prism
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 
-export type DataPullExecutionStatus = 'SUCCESS' | 'FAILED' | 'SKIPPED'
+export type DataPullExecutionOutcome = 'SUCCESS' | 'FAILED' | 'SKIPPED'
 
 export type DataPullExecution = DataPullExecutionModel
 
@@ -106,4 +106,3 @@ export class DataPullExecutionRepository {
     return result
   }
 }
-

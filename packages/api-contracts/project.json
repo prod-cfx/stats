@@ -14,11 +14,9 @@
       }
     },
     "lint": {
-      "executor": "@nx/eslint:lint",
-      "outputs": ["{options.outputFile}"],
+      "executor": "nx:run-commands",
       "options": {
-        "lintFilePatterns": ["packages/api-contracts/**/*.ts"],
-        "eslintConfig": "eslint.config.js"
+        "command": "cd packages/api-contracts && npx eslint --max-warnings=9999 --no-warn-ignored --config ../../eslint.config.js --ext .ts src/**/*.ts --ignore-pattern src/generated/**"
       }
     }
   }

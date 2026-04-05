@@ -171,6 +171,12 @@ function seedConfirmedConversation(now = Date.now()) {
         sellWindowMin: 15,
         sellRisePct: 2,
         positionPct: 10,
+        backtestInitialCash: 10000,
+        backtestLeverage: 1,
+        backtestSlippageBps: 10,
+        backtestFeeBps: 5,
+        backtestPriceSource: 'close',
+        backtestAllowPartial: true,
       },
       backtestResult: null,
       logicGraph: {
@@ -188,6 +194,9 @@ function seedConfirmedConversation(now = Date.now()) {
       },
       llmCodegenSessionId: null,
       publishedStrategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
+      publishedScriptGraphVersion: 1,
+      backtestExecutionConfigExplicit: true,
       latestSignalMessage: null,
       backtestExecutionState: 'idle',
       updatedAt: now,
@@ -233,6 +242,8 @@ describe('AiQuantPageClient backtest range integration', () => {
 
     await act(async () => {
       root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+      await Promise.resolve()
     })
 
     await act(async () => {
@@ -241,6 +252,7 @@ describe('AiQuantPageClient backtest range integration', () => {
 
     await act(async () => {
       container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
     })
 
     expect(container.querySelector('[data-testid="backtest-summary"]')).toBeNull()
@@ -251,6 +263,8 @@ describe('AiQuantPageClient backtest range integration', () => {
   it('writes normalized startAt/endAt into backtest result when range is valid', async () => {
     await act(async () => {
       root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+      await Promise.resolve()
     })
 
     await act(async () => {
@@ -261,6 +275,7 @@ describe('AiQuantPageClient backtest range integration', () => {
       container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
     await act(async () => {
+      await Promise.resolve()
       await Promise.resolve()
     })
 
@@ -273,6 +288,8 @@ describe('AiQuantPageClient backtest range integration', () => {
   it('passes symbol/startAt/endAt query params when opening backtest full screen', async () => {
     await act(async () => {
       root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+      await Promise.resolve()
     })
 
     await act(async () => {
@@ -283,6 +300,7 @@ describe('AiQuantPageClient backtest range integration', () => {
       container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
     await act(async () => {
+      await Promise.resolve()
       await Promise.resolve()
     })
 
@@ -304,14 +322,18 @@ describe('AiQuantPageClient backtest range integration', () => {
   it('runs backtest directly without rendering legacy confirm dialog', async () => {
     await act(async () => {
       root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+      await Promise.resolve()
     })
 
     await act(async () => {
       container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
     })
 
     await act(async () => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+      await Promise.resolve()
       await Promise.resolve()
     })
 
