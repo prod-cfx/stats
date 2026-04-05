@@ -1,5 +1,9 @@
 import { PublishedStrategySnapshotsRepository, __test__ } from './published-strategy-snapshots.repository'
 
+function createTxHost(tx: unknown): ConstructorParameters<typeof PublishedStrategySnapshotsRepository>[0] {
+  return { tx } as ConstructorParameters<typeof PublishedStrategySnapshotsRepository>[0]
+}
+
 describe('publishedStrategySnapshotsRepository', () => {
   it('persists script/spec snapshots with derived hashes and consistency report', async () => {
     const tx = {
@@ -11,10 +15,7 @@ describe('publishedStrategySnapshotsRepository', () => {
         })),
       },
     }
-    const txHost = {
-      tx,
-    }
-    const repo = new PublishedStrategySnapshotsRepository(txHost)
+    const repo = new PublishedStrategySnapshotsRepository(createTxHost(tx))
 
     const result = await repo.create({
       sessionId: 'session-1',
@@ -94,10 +95,7 @@ describe('publishedStrategySnapshotsRepository', () => {
         })),
       },
     }
-    const txHost = {
-      tx,
-    }
-    const repo = new PublishedStrategySnapshotsRepository(txHost)
+    const repo = new PublishedStrategySnapshotsRepository(createTxHost(tx))
 
     const baseInput = {
       sessionId: 'session-1',
@@ -141,8 +139,7 @@ describe('publishedStrategySnapshotsRepository', () => {
         findUnique: jest.fn(),
       },
     }
-    const txHost = { tx }
-    const repo = new PublishedStrategySnapshotsRepository(txHost)
+    const repo = new PublishedStrategySnapshotsRepository(createTxHost(tx))
 
     await expect(repo.findLatestBySessionId('session-1')).resolves.toBe(latest)
     expect(tx.publishedStrategySnapshot.findFirst).toHaveBeenCalledWith({
@@ -160,8 +157,7 @@ describe('publishedStrategySnapshotsRepository', () => {
         findUnique: jest.fn(),
       },
     }
-    const txHost = { tx }
-    const repo = new PublishedStrategySnapshotsRepository(txHost)
+    const repo = new PublishedStrategySnapshotsRepository(createTxHost(tx))
 
     await expect(repo.findByIdForUser('snapshot-1', 'user-1')).resolves.toBe(snapshot)
     expect(tx.publishedStrategySnapshot.findFirst).toHaveBeenCalledWith({
