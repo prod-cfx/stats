@@ -1,15 +1,15 @@
-import type { AiQuantStrategyRecord, StrategyStatus } from './ai-quant-strategy-store'
+import type { AiQuantStrategyRecord, AiQuantStrategyViewState } from './ai-quant-strategy-store'
 import type {
   AccountAiQuantStrategyDetail,
   AccountAiQuantStrategyListItem,
-  AccountAiQuantStrategyStatus,
+  AccountAiQuantStrategyApiState,
 } from '@/lib/api'
 
 function normalizeNumber(value: number | null | undefined): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : 0
 }
 
-function normalizeStatus(status: AccountAiQuantStrategyStatus): StrategyStatus {
+function normalizeStatus(status: AccountAiQuantStrategyApiState): AiQuantStrategyViewState {
   if (status === 'running') return 'running'
   if (status === 'draft') return 'draft'
   return 'stopped'

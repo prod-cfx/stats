@@ -1,6 +1,6 @@
 'use client'
 
-import type { AggregatedOrderbookLevel, AggregatedOrderbookMarketType } from '@/lib/api'
+import type { AggregatedOrderbookLevel, AggregatedOrderbookQueryType } from '@/lib/api'
 import { Check, Info, Settings } from 'lucide-react'
 import dynamic from 'next/dynamic'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -149,7 +149,7 @@ export function AggregatedOrderbookView({ variant = 'default' }: { variant?: 'de
   // 获取数据
   const fetchData = useCallback(async () => {
     try {
-      const apiType: AggregatedOrderbookMarketType = marketType === 'futures' ? 'perp' : 'spot'
+      const apiType: AggregatedOrderbookQueryType = marketType === 'futures' ? 'perp' : 'spot'
 
       const data = await fetchAggregatedOrderbook({
         base: symbol,

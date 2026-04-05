@@ -1,6 +1,6 @@
 'use client'
 
-import type { AiQuantStrategyRecord, StrategyStatus } from './ai-quant-strategy-store'
+import type { AiQuantStrategyRecord, AiQuantStrategyViewState } from './ai-quant-strategy-store'
 import { Activity, Clock, MoreHorizontal, Play, PlayCircle, Square, StopCircle, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
@@ -145,7 +145,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
     }
   }
 
-  const STATUS_CONFIG: Record<StrategyStatus, { label: string; className: string; icon: React.ElementType }> = {
+  const STATUS_CONFIG: Record<AiQuantStrategyViewState, { label: string; className: string; icon: React.ElementType }> = {
     running: {
       label: t('aiQuant.status.running'),
       className: 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20 dark:text-emerald-400',

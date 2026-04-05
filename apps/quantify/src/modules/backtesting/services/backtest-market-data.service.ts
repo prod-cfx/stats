@@ -1,4 +1,4 @@
-import type { MarketTimeframe } from '@ai/shared'
+import type { MarketTimeframe, MarketType as SharedMarketType } from '@ai/shared'
 import type { BacktestRunInput, Bar, Timeframe } from '../types/backtesting.types'
 import type { MarketDataProvider, ProviderSymbol } from '@/modules/market-data/interfaces/market-data-provider.interface'
 import { ErrorCode } from '@ai/shared'
@@ -28,8 +28,8 @@ type LoadBarsInput = Pick<BacktestRunInput, 'symbols' | 'baseTimeframe' | 'state
 type CoverageInput = Pick<BacktestRunInput, 'symbols' | 'baseTimeframe' | 'stateTimeframes' | 'dataRange'> & {
   strategy?: BacktestRunInput['strategy']
 }
-type SupportedExchange = 'binance' | 'okx' | 'hyperliquid'
-type SupportedMarketType = 'spot' | 'perp'
+type BacktestExchangeId = 'binance' | 'okx' | 'hyperliquid'
+type BacktestMarketType = SharedMarketType
 
 export interface BacktestRangeCoverage {
   kind: 'full' | 'partial' | 'empty'
@@ -230,7 +230,7 @@ export class BacktestMarketDataService {
     return result
   }
 
-  private normalizeSymbols(symbols: string[], marketType?: SupportedMarketType | null): string[] {
+  private normalizeSymbols(symbols: string[], marketType?: BacktestMarketType | null): string[] {
     return [...new Set(symbols.map((symbol) => {
       const normalized = normalizeExactCode(symbol)
       if (normalized.includes(':')) return normalized
@@ -240,7 +240,7 @@ export class BacktestMarketDataService {
     }))]
   }
 
-  private async hasSupportedSymbol(exchange: SupportedExchange, symbol: string): Promise<boolean> {
+  private async hasSupportedSymbol(exchange: BacktestExchangeId, symbol: string): Promise<boolean> {
     const found = await this.repository.findActiveSymbolByExchangeAndCodes(
       exchange.toUpperCase(),
       this.buildCodeCandidates(symbol),
@@ -248,7 +248,7 @@ export class BacktestMarketDataService {
     return Boolean(found)
   }
 
-  private extractExchange(params: Record<string, unknown>): SupportedExchange | null {
+  private extractExchange(params: Record<string, unknown>): BacktestExchangeId | null {
     if (typeof params.exchange !== 'string') return null
     try {
       return this.normalizeExchange(params.exchange)
@@ -257,7 +257,7 @@ export class BacktestMarketDataService {
     }
   }
 
-  private extractMarketType(params: Record<string, unknown>): SupportedMarketType | null {
+  private extractMarketType(params: Record<string, unknown>): BacktestMarketType | null {
     if (typeof params.marketType !== 'string') return null
     const normalized = params.marketType.trim().toLowerCase()
     if (normalized === 'spot' || normalized === 'perp') {
@@ -266,7 +266,7 @@ export class BacktestMarketDataService {
     return null
   }
 
-  private normalizeExchange(exchange: string): SupportedExchange {
+  private normalizeExchange(exchange: string): BacktestExchangeId {
     const normalized = exchange.trim().toLowerCase()
     if (normalized === 'binance' || normalized === 'okx' || normalized === 'hyperliquid') {
       return normalized
@@ -278,7 +278,7 @@ export class BacktestMarketDataService {
     })
   }
 
-  private getProvider(exchange: SupportedExchange): MarketDataProvider {
+  private getProvider(exchange: BacktestExchangeId): MarketDataProvider {
     if (exchange === 'okx') return this.okxProvider
     if (exchange === 'hyperliquid') return this.hyperliquidProvider
     return this.binanceProvider

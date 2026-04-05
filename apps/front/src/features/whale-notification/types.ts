@@ -1,4 +1,4 @@
-export type WhaleNotificationRuleType = 'ADDRESS' | 'SYMBOL'
+import type { WhaleNotificationRuleType } from '@ai/shared'
 
 export interface WhaleNotificationChannels {
   web: boolean

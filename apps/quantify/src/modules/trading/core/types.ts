@@ -1,7 +1,7 @@
+import type { ExchangeId as SharedExchangeId } from '@ai/shared'
 import type { ExchangeError } from './errors'
 
-export type ExchangeId = 'binance' | 'okx' | 'hyperliquid'
-
+export type ExchangeId = SharedExchangeId
 export type MarketType = 'spot' | 'perp'
 
 export type OrderSide = 'buy' | 'sell'
