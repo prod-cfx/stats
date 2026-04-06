@@ -69,7 +69,7 @@ interface GenerationOptions {
   maxTokens?: number
 }
 
-type LlmCodegenSessionStatus
+type CodegenWorkflowPhase
   = 'DRAFTING'
     | 'CHECKLIST_GATE'
     | 'GENERATING'
@@ -105,7 +105,7 @@ const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
   },
 }
 
-const PROCESSING_SESSION_STATUSES: readonly LlmCodegenSessionStatus[] = [
+const PROCESSING_SESSION_PHASES: readonly CodegenWorkflowPhase[] = [
   'GENERATING',
   'VALIDATING_STATIC',
   'VALIDATING_RUNTIME',
@@ -180,7 +180,7 @@ export class CodegenConversationService {
       checklist,
       undefined,
     )
-    const status: LlmCodegenSessionStatus = plan.logicReady ? 'CHECKLIST_GATE' : 'DRAFTING'
+    const status: CodegenWorkflowPhase = plan.logicReady ? 'CHECKLIST_GATE' : 'DRAFTING'
 
     const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
     const initialSpecDesc = plan.logicReady ? this.specDescBuilder.build(checklist, '') : null
@@ -255,7 +255,7 @@ export class CodegenConversationService {
         args: { sessionId, status: session.status },
       })
     }
-    if (PROCESSING_SESSION_STATUSES.includes(session.status)) {
+    if (PROCESSING_SESSION_PHASES.includes(session.status)) {
       if (dto.confirmGenerate === true) {
         const graphSnapshot = this.readGraphSnapshot(session.graphSnapshot)
         if (!graphSnapshot) {
@@ -582,7 +582,7 @@ export class CodegenConversationService {
 
   private async toSessionSnapshotResponse(session: {
     id: string
-    status: LlmCodegenSessionStatus
+    status: CodegenWorkflowPhase
     latestDraftCode: Prisma.JsonValue | null
     latestSpecDesc: Prisma.JsonValue | null
     rejectReason: string | null
@@ -1417,7 +1417,7 @@ export class CodegenConversationService {
     return requestUserId?.trim() ?? ''
   }
 
-  static isTerminalStatus(status: LlmCodegenSessionStatus): boolean {
+  static isTerminalStatus(status: CodegenWorkflowPhase): boolean {
     return status === 'PUBLISHED' || status === 'CONSISTENCY_FAILED' || status === 'REJECTED'
   }
 }

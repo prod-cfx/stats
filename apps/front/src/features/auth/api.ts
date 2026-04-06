@@ -1,10 +1,10 @@
+import type { TelegramDesktopIntentKind } from '@ai/shared'
 import type { AuthLoginMethod, AuthSession } from './types'
 import type { AuthResponseDto } from '@/types/auth'
 import { API_BASE_URL, unwrapApiResponse } from '@/lib/api-client'
 import { buildSession } from '@/lib/auth-storage'
 
-type TelegramDesktopIntentKind = 'login' | 'bind'
-type TelegramDesktopIntentStatus = 'pending' | 'confirmed' | 'expired'
+type TelegramDesktopIntentPollState = 'pending' | 'confirmed' | 'expired'
 const DEV_EMAIL_TEST_CODE = '123456'
 const DEV_EMAIL_FALLBACK_HINT = 'DEV_EMAIL_FALLBACK_CODE_123456'
 const DEV_MODE = process.env.NODE_ENV !== 'production'
@@ -174,7 +174,7 @@ export async function getTelegramWebAuthorizeUrlRequest(payload: {
 }
 
 export async function getTelegramDesktopIntentStatusRequest(intentId: string): Promise<{
-  status: TelegramDesktopIntentStatus
+  status: TelegramDesktopIntentPollState
 }> {
   return getJson(`/auth/telegram/desktop/intent/${encodeURIComponent(intentId)}`)
 }

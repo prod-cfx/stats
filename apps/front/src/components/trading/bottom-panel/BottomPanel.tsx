@@ -115,7 +115,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
     ];
   }, [basePrice, seeded, symbol]);
 
-  type PositionSide = 'long' | 'short'
+  type MockPositionSide = 'long' | 'short'
 
   const filteredPositions = useMemo(() => {
     if (posSideFilter === 'all') return mockPositions;
@@ -123,7 +123,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
   }, [mockPositions, posSideFilter]);
 
   const mockPositionHistory = useMemo(() => {
-    const mk = (idx: number, side: PositionSide) => {
+    const mk = (idx: number, side: MockPositionSide) => {
       const size = basePrice >= 1000 ? 0.2 + seeded(idx) * 0.8 : basePrice >= 100 ? 1 + seeded(idx) * 8 : 300 + seeded(idx) * 2500;
       const entry = basePrice * (1 + (seeded(idx + 10) - 0.5) * 0.015);
       const exit = basePrice * (1 + (seeded(idx + 11) - 0.5) * 0.02);
@@ -184,7 +184,7 @@ export const BottomPanel = ({ symbol }: { symbol: string }) => {
 
   const renderOrderType = (key: OrderTypeKey) => t(`bottomPanel.orderTypes.${key}`)
   const renderOrderStatus = (key: OrderStatusKey) => t(`bottomPanel.statuses.${key}`)
-  const renderPositionSide = (side: PositionSide) => (side === 'long' ? t('bottomPanel.long') : t('bottomPanel.short'))
+  const renderPositionSide = (side: MockPositionSide) => (side === 'long' ? t('bottomPanel.long') : t('bottomPanel.short'))
 
   const renderContent = () => {
     switch (activeTab) {

@@ -1,4 +1,6 @@
+import type { SignalDirection as SignalDirectionType, SignalType as SignalTypeType } from '@ai/shared'
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
+import { SignalDirection, SignalType } from '@ai/shared'
 import { buildStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import { Injectable } from '@nestjs/common'
 import { resolveStrategyOutput, validateStrategyDecision } from '@/modules/strategy-runtime/strategy-protocol.util'
@@ -10,11 +12,8 @@ export interface RuntimeGuardrailResult {
   reason?: string
 }
 
-type SignalDirection = 'BUY' | 'SELL' | 'CLOSE_LONG' | 'CLOSE_SHORT'
-type SignalType = 'ENTRY' | 'EXIT' | 'ADJUSTMENT' | 'ALERT'
-
-const ALLOWED_DIRECTIONS: readonly SignalDirection[] = ['BUY', 'SELL', 'CLOSE_LONG', 'CLOSE_SHORT']
-const ALLOWED_SIGNAL_TYPES: readonly SignalType[] = ['ENTRY', 'EXIT', 'ADJUSTMENT', 'ALERT']
+const ALLOWED_DIRECTIONS: readonly SignalDirectionType[] = Object.values(SignalDirection)
+const ALLOWED_SIGNAL_TYPES: readonly SignalTypeType[] = Object.values(SignalType)
 
 @Injectable()
 export class RuntimeGuardrailService {
@@ -135,12 +134,12 @@ export class RuntimeGuardrailService {
 
   private validateSignalPayload(value: Record<string, unknown>): string | null {
     const direction = this.readNonEmptyString(value.direction)
-    if (!direction || !ALLOWED_DIRECTIONS.includes(direction as SignalDirection)) {
+    if (!direction || !ALLOWED_DIRECTIONS.includes(direction as SignalDirectionType)) {
       return '脚本输出缺少合法的 direction（BUY/SELL/CLOSE_LONG/CLOSE_SHORT）'
     }
 
     const signalType = this.readNonEmptyString(value.signalType)
-    if (!signalType || !ALLOWED_SIGNAL_TYPES.includes(signalType as SignalType)) {
+    if (!signalType || !ALLOWED_SIGNAL_TYPES.includes(signalType as SignalTypeType)) {
       return '脚本输出缺少合法的 signalType（ENTRY/EXIT/ADJUSTMENT/ALERT）'
     }
 

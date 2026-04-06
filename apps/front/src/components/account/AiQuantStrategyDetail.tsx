@@ -1,6 +1,6 @@
 'use client'
 
-import type { AiQuantStrategyRecord, StrategyEquityPoint, StrategyStatus } from './ai-quant-strategy-store'
+import type { AiQuantStrategyRecord, StrategyEquityPoint, AiQuantStrategyViewState } from './ai-quant-strategy-store'
 import Link from 'next/link'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -8,13 +8,13 @@ import { resolveDisplayMetrics } from './account-strategy-display-metrics'
 import { buildDynamicParamRows } from './dynamic-param-summary'
 import { deriveAdjacentChangePct, formatSignedNumber } from './pnl-metrics'
 
-const STATUS_LABEL: Record<StrategyStatus, string> = {
+const STATUS_LABEL: Record<AiQuantStrategyViewState, string> = {
   running: '运行中',
   stopped: '已停止',
   draft: '草稿',
 }
 
-const STATUS_CLASS: Record<StrategyStatus, string> = {
+const STATUS_CLASS: Record<AiQuantStrategyViewState, string> = {
   running: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
   stopped: 'bg-slate-500/10 text-slate-300 border-slate-500/30',
   draft: 'bg-amber-500/10 text-amber-300 border-amber-500/30',

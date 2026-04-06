@@ -145,6 +145,12 @@ function seedConfirmedConversation(now = Date.now()) {
         sellWindowMin: 15,
         sellRisePct: 2,
         positionPct: 10,
+        backtestInitialCash: 10000,
+        backtestLeverage: 1,
+        backtestSlippageBps: 10,
+        backtestFeeBps: 5,
+        backtestPriceSource: 'close',
+        backtestAllowPartial: true,
       },
       backtestResult: null,
       logicGraph: {
@@ -162,6 +168,9 @@ function seedConfirmedConversation(now = Date.now()) {
       },
       llmCodegenSessionId: null,
       publishedStrategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
+      publishedScriptGraphVersion: 1,
+      backtestExecutionConfigExplicit: true,
       latestSignalMessage: null,
       backtestExecutionState: 'idle',
       updatedAt: now,
@@ -251,6 +260,12 @@ describe('AiQuantPageClient capability gating', () => {
           sellWindowMin: 15,
           sellRisePct: 2,
           positionPct: 10,
+          backtestInitialCash: 10000,
+          backtestLeverage: 1,
+          backtestSlippageBps: 10,
+          backtestFeeBps: 5,
+          backtestPriceSource: 'close',
+          backtestAllowPartial: true,
         },
         backtestResult: null,
         logicGraph: {
@@ -268,6 +283,9 @@ describe('AiQuantPageClient capability gating', () => {
         },
         llmCodegenSessionId: null,
         publishedStrategyInstanceId: 'strategy-1',
+        publishedSnapshotId: 'snapshot-1',
+        publishedScriptGraphVersion: 1,
+        backtestExecutionConfigExplicit: true,
         latestSignalMessage: null,
         backtestExecutionState: 'idle',
         updatedAt: now,
@@ -281,6 +299,7 @@ describe('AiQuantPageClient capability gating', () => {
 
     await act(async () => {
       root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
       await Promise.resolve()
     })
 
@@ -432,6 +451,7 @@ describe('AiQuantPageClient capability gating', () => {
       const runButton = container.querySelector('[data-testid="run-backtest"]') as HTMLButtonElement
       runButton.click()
       await Promise.resolve()
+      await Promise.resolve()
     })
 
     expect(mockCheckBacktestSymbolSupport).toHaveBeenCalledWith({
@@ -468,6 +488,12 @@ describe('AiQuantPageClient capability gating', () => {
           sellWindowMin: 15,
           sellRisePct: 2,
           positionPct: 10,
+          backtestInitialCash: 10000,
+          backtestLeverage: 1,
+          backtestSlippageBps: 10,
+          backtestFeeBps: 5,
+          backtestPriceSource: 'close',
+          backtestAllowPartial: true,
         },
         backtestResult: null,
         logicGraph: {
@@ -485,6 +511,9 @@ describe('AiQuantPageClient capability gating', () => {
         },
         llmCodegenSessionId: null,
         publishedStrategyInstanceId: 'strategy-1',
+        publishedSnapshotId: 'snapshot-1',
+        publishedScriptGraphVersion: 1,
+        backtestExecutionConfigExplicit: true,
         latestSignalMessage: null,
         backtestExecutionState: 'idle',
         updatedAt: now,
@@ -499,11 +528,13 @@ describe('AiQuantPageClient capability gating', () => {
     await act(async () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
+      await Promise.resolve()
     })
 
     await act(async () => {
       const runButton = container.querySelector('[data-testid="run-backtest"]') as HTMLButtonElement
       runButton.click()
+      await Promise.resolve()
       await Promise.resolve()
     })
 

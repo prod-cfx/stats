@@ -2,7 +2,7 @@ import { API_BASE_URL, unwrapApiResponse } from '@/lib/api-client'
 import { getToken } from '@/lib/auth-storage'
 import { ApiError, AuthenticationError } from '@/lib/errors'
 
-export type BacktestJobStatus = 'queued' | 'running' | 'succeeded' | 'failed'
+export type BacktestJobPhase = 'queued' | 'running' | 'succeeded' | 'failed'
 
 export interface CreateBacktestJobPayload {
   symbols: string[]
@@ -31,7 +31,7 @@ export interface CreateBacktestJobPayload {
 
 export interface BacktestJob {
   id: string
-  status: BacktestJobStatus
+  status: BacktestJobPhase
   createdAt: string
   startedAt?: string
   finishedAt?: string
@@ -81,7 +81,7 @@ interface ErrorPayload {
   }
 }
 
-const VALID_BACKTEST_JOB_STATUSES = new Set<BacktestJobStatus>([
+const VALID_BACKTEST_JOB_PHASES = new Set<BacktestJobPhase>([
   'queued',
   'running',
   'succeeded',
@@ -134,11 +134,11 @@ function normalizeJobId(jobId: string): string {
   return encodeURIComponent(trimmed)
 }
 
-function assertBacktestJobStatus(
+function assertBacktestJobPhase(
   status: unknown,
   context: string,
-): asserts status is BacktestJobStatus {
-  if (typeof status === 'string' && VALID_BACKTEST_JOB_STATUSES.has(status as BacktestJobStatus)) {
+): asserts status is BacktestJobPhase {
+  if (typeof status === 'string' && VALID_BACKTEST_JOB_PHASES.has(status as BacktestJobPhase)) {
     return
   }
   throw new ApiError(`Unexpected backtest job status: ${String(status)}`, 'API_ERROR', 500, {
@@ -149,7 +149,7 @@ function assertBacktestJobStatus(
 
 function parseBacktestJob(payload: unknown, context: string): BacktestJob {
   const job = payload as BacktestJob
-  assertBacktestJobStatus(job?.status, context)
+  assertBacktestJobPhase(job?.status, context)
   return job
 }
 
