@@ -187,7 +187,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   it('starts in checklist gate when llm says logic is ready', async () => {
     const dto: StartCodegenSessionDto = {
       userId: 'u1',
-      initialMessage: '3分钟跌1%买入，5分钟涨2%卖出',
+      initialMessage: '当前K线收盘价相对于上一根K线收盘价下跌≥1%时买入开仓；当前K线收盘价相对于开仓均价上涨≥2%时卖出平仓',
     }
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
@@ -195,8 +195,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         logicReady: true,
         assistantPrompt: '策略逻辑已完整，请确认逻辑图。',
         logic: {
-          entryRules: ['3m 内下跌 1% 买入'],
-          exitRules: ['5m 内上涨 2% 卖出'],
+          symbols: ['BTCUSDT'],
+          timeframes: ['3m', '15m'],
+          entryRules: ['当前K线收盘价相对于上一根K线收盘价下跌≥1%时买入开仓'],
+          exitRules: ['当前K线收盘价相对于开仓均价上涨≥2%时卖出平仓'],
+          riskRules: {
+            positionPct: 30,
+            stopLossPct: 4,
+          },
         },
       }),
     })
@@ -335,9 +341,52 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.updateSession).not.toHaveBeenCalled()
   })
 
-  it('moves to checklist gate when llm planner marks logic ready', async () => {
+  it('moves to checklist gate when llm planner marks logic ready and semantic graph is valid', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's4',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {},
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+        logic: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['3m', '15m'],
+          entryRules: ['当前K线收盘价相对于上一根K线收盘价下跌≥1%时买入开仓'],
+          exitRules: ['当前K线收盘价相对于开仓均价上涨≥2%时卖出平仓'],
+          riskRules: {
+            positionPct: 25,
+            stopLossPct: 4,
+          },
+        },
+      }),
+    })
+
+    const result = await service.continueSession('s4', {
+      userId: 'u1',
+      message: '当前K线收盘价相对于上一根K线收盘价下跌≥1%时买入开仓，当前K线收盘价相对于开仓均价上涨≥2%时卖出平仓',
+    })
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.specDesc).toBeTruthy()
+    expect(result.assistantPrompt).toContain('确认逻辑图')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s4', expect.objectContaining({
+      status: 'CHECKLIST_GATE',
+      graphSnapshot: expect.objectContaining({
+        status: 'confirmed',
+        trigger: expect.arrayContaining([expect.objectContaining({ phase: 'entry' })]),
+      }),
+    }))
+  })
+
+  it('keeps drafting when planner marks logic ready but semantic graph is unsupported', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's4-unsupported',
       userId: 'u1',
       status: 'DRAFTING',
       checklist: {},
@@ -355,20 +404,155 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
     })
 
-    const result = await service.continueSession('s4', {
+    const result = await service.continueSession('s4-unsupported', {
       userId: 'u1',
-      message: '入场用金叉，出场用死叉',
+      message: '入场金叉，出场死叉',
     })
 
-    expect(result.status).toBe('CHECKLIST_GATE')
-    expect(result.specDesc).toBeTruthy()
-    expect(result.assistantPrompt).toContain('确认逻辑图')
-    expect(mockRepo.updateSession).toHaveBeenCalledWith('s4', expect.objectContaining({
-      status: 'CHECKLIST_GATE',
-      graphSnapshot: expect.objectContaining({
-        status: 'confirmed',
-        trigger: expect.arrayContaining([expect.objectContaining({ phase: 'entry' })]),
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('逻辑已识别')
+    expect(result.assistantPrompt).toContain('暂不支持或不完整的语义')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s4-unsupported', expect.objectContaining({
+      status: 'DRAFTING',
+      graphSnapshot: null,
+    }))
+  })
+
+  it('keeps drafting when planner provides incomplete grid semantics', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's4-grid-incomplete',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {},
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+        logic: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+          entryRules: ['在固定区间网格买入'],
+          exitRules: ['价格触达上方网格时执行网格卖出平仓'],
+        },
       }),
+    })
+
+    const result = await service.continueSession('s4-grid-incomplete', {
+      userId: 'u1',
+      message: '在固定区间网格买入，价格触达上方网格卖出',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('暂不支持或不完整的语义')
+    expect(result.assistantPrompt).toContain('grid_params_missing')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s4-grid-incomplete', expect.objectContaining({
+      status: 'DRAFTING',
+      graphSnapshot: null,
+    }))
+  })
+
+  it('keeps drafting when planner only provides bollinger lower-band long entry without exit', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's4-boll-entry-only',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {},
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+        logic: {
+          symbols: ['ETHUSDT'],
+          timeframes: ['15m'],
+          entryRules: ['当价格下穿布林带下轨时做多开仓'],
+          exitRules: [],
+        },
+      }),
+    })
+
+    const result = await service.continueSession('s4-boll-entry-only', {
+      userId: 'u1',
+      message: '当价格下穿布林带下轨时做多开仓',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('暂不支持或不完整的语义')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s4-boll-entry-only', expect.objectContaining({
+      status: 'DRAFTING',
+      graphSnapshot: null,
+    }))
+  })
+
+  it('keeps drafting when planner returns mixed drop+RSI entry rule', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's4-mixed-rsi',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {},
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+        logic: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['3m', '15m'],
+          entryRules: ['当前K线收盘价相对于上一根K线收盘价下跌≥1%且RSI<30时买入开仓'],
+          exitRules: ['当前K线收盘价相对于开仓均价上涨≥2%时卖出平仓'],
+        },
+      }),
+    })
+
+    const result = await service.continueSession('s4-mixed-rsi', {
+      userId: 'u1',
+      message: '下跌1%且RSI<30买入，盈利2%卖出',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('暂不支持或不完整的语义')
+    expect(result.assistantPrompt).toContain('unsupported_feature')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s4-mixed-rsi', expect.objectContaining({
+      status: 'DRAFTING',
+      graphSnapshot: null,
+    }))
+  })
+
+  it('accepts chinese timeframe values by normalizing to canonical timeframe strings before semantic gate', async () => {
+    const dto: StartCodegenSessionDto = {
+      userId: 'u1',
+      initialMessage: '当前K线收盘价相对于上一根K线收盘价下跌≥1%时买入开仓；当前K线收盘价相对于开仓均价上涨≥2%时卖出平仓',
+    }
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '策略逻辑已完整，请确认逻辑图。',
+        logic: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['3分钟', '15分钟'],
+          entryRules: ['当前K线收盘价相对于上一根K线收盘价下跌≥1%时买入开仓'],
+          exitRules: ['当前K线收盘价相对于开仓均价上涨≥2%时卖出平仓'],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-cn-timeframe' })
+
+    const result = await service.startSession(dto)
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      checklist: expect.objectContaining({
+        timeframes: ['3m', '15m'],
+      }),
+      status: 'CHECKLIST_GATE',
     }))
   })
 

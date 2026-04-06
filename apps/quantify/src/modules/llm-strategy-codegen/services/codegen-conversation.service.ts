@@ -40,6 +40,9 @@ import { GraphSemanticProjectionService } from './graph-semantic-projection.serv
 import { RecommendationIndexService } from './recommendation-index.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RuntimeGuardrailService } from './runtime-guardrail.service'
+import { SemanticGraphBuilderService } from './semantic-graph-builder.service'
+import type { SemanticGraphValidationResult } from './semantic-graph-validator.service'
+import { SemanticGraphValidatorService } from './semantic-graph-validator.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { SpecDescBuilderService } from './spec-desc-builder.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -130,6 +133,8 @@ function parseExplicitMarketType(value: unknown): 'spot' | 'perp' | undefined {
 export class CodegenConversationService {
   private readonly strictUnsupportedTargets = new Map<string, number>()
   private readonly graphSnapshotService = new CodegenGraphSnapshotService()
+  private readonly semanticGraphBuilder = new SemanticGraphBuilderService()
+  private readonly semanticGraphValidator = new SemanticGraphValidatorService()
   private readonly irCompiler = new CanonicalStrategyIrCompilerService(
     new GraphOperatorParserService(),
     new GraphSemanticProjectionService(),
@@ -180,11 +185,13 @@ export class CodegenConversationService {
       checklist,
       undefined,
     )
-    const status: CodegenWorkflowPhase = plan.logicReady ? 'CHECKLIST_GATE' : 'DRAFTING'
-
     const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
     const initialSpecDesc = plan.logicReady ? this.specDescBuilder.build(checklist, '') : null
-    const initialGraphSnapshot = plan.logicReady && initialSpecDesc
+    const semanticGate = plan.logicReady && initialSpecDesc
+      ? this.evaluateSemanticGate(checklist, initialSpecDesc)
+      : null
+    const status: CodegenWorkflowPhase = semanticGate?.ok ? 'CHECKLIST_GATE' : 'DRAFTING'
+    const initialGraphSnapshot = semanticGate?.ok && initialSpecDesc
       ? this.buildGraphSnapshot(checklist, initialSpecDesc, 1)
       : null
     const initialHistory = this.appendConversationHistory([], dto.initialMessage, plan.assistantPrompt)
@@ -209,9 +216,9 @@ export class CodegenConversationService {
       status,
       missingFields: [],
       specDesc: initialSpecDesc,
-      assistantPrompt: plan.logicReady
+      assistantPrompt: semanticGate?.ok
         ? `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`
-        : plan.assistantPrompt,
+        : this.buildSemanticRetryPrompt(plan.assistantPrompt, semanticGate?.validation),
     }
   }
 
@@ -397,6 +404,28 @@ export class CodegenConversationService {
     }
 
     const specDesc = this.specDescBuilder.build(mergedChecklist, '')
+    const semanticGate = this.evaluateSemanticGate(mergedChecklist, specDesc)
+    if (!semanticGate.ok) {
+      await this.sessionsRepo.updateSession(session.id, {
+        status: 'DRAFTING',
+        checklist: mergedChecklist as Prisma.InputJsonValue,
+        constraintPack: {
+          ...nextConstraintPack,
+          conversationHistory: historyAfterPlanner,
+        } as unknown as Prisma.InputJsonValue,
+        latestSpecDesc: specDesc as Prisma.InputJsonValue,
+        graphSnapshot: null,
+      })
+
+      return {
+        id: session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        specDesc,
+        assistantPrompt: this.buildSemanticRetryPrompt(plan.assistantPrompt, semanticGate.validation),
+      }
+    }
+
     const graphSnapshot = this.buildGraphSnapshot(mergedChecklist, specDesc, 1)
     await this.sessionsRepo.updateSession(session.id, {
       status: 'CHECKLIST_GATE',
@@ -714,6 +743,42 @@ export class CodegenConversationService {
     return locked
   }
 
+  private evaluateSemanticGate(
+    checklist: ChecklistPayload,
+    specDesc: Record<string, unknown>,
+  ): { ok: boolean; validation: SemanticGraphValidationResult } {
+    const normalizedSpecDesc = specDesc as {
+      market?: { timeframes?: unknown }
+      entryRules?: unknown
+      exitRules?: unknown
+    }
+    const built = this.semanticGraphBuilder.build({
+      symbols: checklist.symbols,
+      timeframes: checklist.timeframes
+        ?? (Array.isArray(normalizedSpecDesc.market?.timeframes) ? normalizedSpecDesc.market?.timeframes as string[] : undefined),
+      entryRules: checklist.entryRules
+        ?? (Array.isArray(normalizedSpecDesc.entryRules) ? normalizedSpecDesc.entryRules as string[] : undefined),
+      exitRules: checklist.exitRules
+        ?? (Array.isArray(normalizedSpecDesc.exitRules) ? normalizedSpecDesc.exitRules as string[] : undefined),
+      riskRules: checklist.riskRules,
+    })
+    const validation = this.semanticGraphValidator.validate(built)
+    return {
+      ok: validation.ok,
+      validation,
+    }
+  }
+
+  private buildSemanticRetryPrompt(basePrompt: string, validation?: SemanticGraphValidationResult): string {
+    if (!validation || validation.ok) {
+      return basePrompt
+    }
+    const details = validation.errors
+      .map(error => `${error.code.replace('codegen.', '')}: ${error.message}`)
+      .join('；')
+    return `${basePrompt}\n逻辑已识别，但存在暂不支持或不完整的语义，请根据提示调整：${details}`
+  }
+
   private buildGraphSnapshot(
     checklist: ChecklistPayload,
     specDesc: Record<string, unknown>,
@@ -954,6 +1019,22 @@ export class CodegenConversationService {
       return normalized.length > 0 ? normalized : undefined
     }
 
+    const normalizeTimeframeArray = (value: unknown): string[] | undefined => {
+      const raw = normalizeStringArray(value)
+      if (!raw) return undefined
+      const normalized = raw.map((timeframe) => {
+        const matched = timeframe.match(/^(\d{1,4})\s*(m|min|分钟|h|小时|d|天)$/iu)
+        if (!matched?.[1] || !matched[2]) {
+          return timeframe
+        }
+        const unit = matched[2].toLowerCase()
+        if (unit === 'm' || unit === 'min' || unit === '分钟') return `${matched[1]}m`
+        if (unit === 'h' || unit === '小时') return `${matched[1]}h`
+        return `${matched[1]}d`
+      })
+      return normalized.length > 0 ? normalized : undefined
+    }
+
     const normalizeObject = (value: unknown): Record<string, unknown> | undefined => {
       if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return undefined
@@ -967,7 +1048,7 @@ export class CodegenConversationService {
 
     return {
       symbols: normalizeStringArray(payload.symbols),
-      timeframes: normalizeStringArray(payload.timeframes),
+      timeframes: normalizeTimeframeArray(payload.timeframes),
       entryRules: normalizeStringArray(payload.entryRules),
       exitRules: normalizeStringArray(payload.exitRules),
       riskRules: normalizeObject(payload.riskRules),
