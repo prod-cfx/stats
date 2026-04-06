@@ -127,6 +127,49 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }
   }
 
+  const createSemanticGraph = (overrides?: {
+    symbol?: string
+    entryTimeframe?: string
+    exitTimeframe?: string
+    sizePct?: number
+    pnlPct?: number
+  }) => ({
+    version: 1 as const,
+    market: {
+      symbol: overrides?.symbol ?? 'BTCUSDT',
+      primaryTimeframe: overrides?.entryTimeframe ?? '3m',
+    },
+    nodes: [
+      {
+        id: 'entry-drop-1',
+        phase: 'entry' as const,
+        kind: 'price_change_pct' as const,
+        params: {
+          timeframe: overrides?.entryTimeframe ?? '3m',
+          left: { source: 'close' as const, offsetBars: 0 },
+          right: { source: 'close' as const, offsetBars: 1 },
+          op: 'lte' as const,
+          valuePct: -1,
+        },
+      },
+      {
+        id: 'exit-pnl-1',
+        phase: 'exit' as const,
+        kind: 'position_pnl_pct' as const,
+        params: {
+          timeframe: overrides?.exitTimeframe ?? '15m',
+          op: 'gte' as const,
+          valuePct: overrides?.pnlPct ?? 2,
+        },
+      },
+    ],
+    actions: [
+      { id: 'open-long', kind: 'OPEN_LONG' as const, sizePct: overrides?.sizePct ?? 25 },
+      { id: 'close-long', kind: 'CLOSE_LONG' as const, sizePct: 100 },
+    ],
+    risk: [],
+  })
+
   beforeEach(() => {
     jest.resetAllMocks()
     mockRepo.tryMarkGenerating.mockResolvedValue(true)
@@ -566,6 +609,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['短均线下穿长均线（死叉）出场'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph(),
       graphSnapshot: createGraphSnapshot(),
     })
     mockRepo.createVersion.mockResolvedValue({ id: 'v1' })
@@ -592,8 +636,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
-  it('compiles from stored graph snapshot when confirmGenerate is true', async () => {
+  it('compiles from stored semantic graph when confirmGenerate is true', async () => {
     const graphSnapshot = createGraphSnapshot()
+    const semanticGraph = createSemanticGraph()
 
     mockRepo.findById.mockResolvedValue({
       id: 's-compile',
@@ -607,6 +652,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       latestSpecDesc: {
         market: { symbols: ['BTCUSDT'], timeframes: ['1h'] },
       },
+      semanticGraph,
       graphSnapshot,
       strategyInstanceId: null,
       rejectReason: null,
@@ -623,12 +669,18 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     await waitForTerminalStatus('s-compile')
 
     expect(mockAi.chat).not.toHaveBeenCalled()
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-compile', expect.objectContaining({
+      status: 'VALIDATING_STATIC',
+      compiledIr: expect.objectContaining({
+        irVersion: 'csi.v1',
+      }),
+    }))
     expect(mockCompiledPublicationGate.publish).toHaveBeenCalledWith(expect.objectContaining({
       graphSnapshot,
     }))
   })
 
-  it('rejects confirmGenerate when graph snapshot is missing', async () => {
+  it('rejects confirmGenerate when semantic graph is missing', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-missing-graph',
       userId: 'u1',
@@ -638,6 +690,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['短均线下穿长均线（死叉）出场'],
       },
       constraintPack: {},
+      semanticGraph: null,
       graphSnapshot: null,
     })
 
@@ -646,7 +699,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '确认逻辑图',
       confirmGenerate: true,
     })).rejects.toMatchObject({
-      message: 'codegen.graph_snapshot_missing',
+      message: 'codegen.semantic_graph_missing',
     })
 
     expect(mockCompiledPublicationGate.publish).not.toHaveBeenCalled()
@@ -664,6 +717,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['短均线下穿长均线（死叉）出场'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph(),
       graphSnapshot,
     })
     mockRepo.createVersion.mockResolvedValue({ id: 'v-ignore-checklist' })
@@ -700,6 +754,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['atr stop'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph(),
       graphSnapshot: createGraphSnapshot({
         entryOperator: 'LT(RSI(CLOSE,14),30)',
         exitOperator: 'GT(ATR(CLOSE,14),3)',
@@ -737,6 +792,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['跌破最近支撑位出场'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph(),
       graphSnapshot: createGraphSnapshot(),
     })
     mockRepo.createVersion.mockResolvedValue({ id: 'v3' })
@@ -770,6 +826,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['跌破最近支撑位出场'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph(),
       graphSnapshot: createGraphSnapshot(),
     })
     mockRepo.createVersion.mockResolvedValue({ id: 'v-publish-fail' })
@@ -805,6 +862,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['跌破最近支撑位出场'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph(),
       graphSnapshot: createGraphSnapshot(),
     })
     mockRepo.createVersion.mockResolvedValue({ id: 'v4' })
@@ -835,6 +893,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['跌破支撑位出场'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph(),
       graphSnapshot: createGraphSnapshot(),
     })
     mockRepo.createVersion.mockResolvedValue({ id: 'v6' })
@@ -871,6 +930,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['跌破支撑位出场'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph({ entryTimeframe: '5m', exitTimeframe: '5m' }),
       graphSnapshot: createGraphSnapshot({ timeframe: '5m' }),
     })
     mockRepo.createVersion.mockResolvedValue({ id: 'v-instance-1' })
@@ -920,6 +980,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         },
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph({ entryTimeframe: '15m', exitTimeframe: '15m', sizePct: 10 }),
       graphSnapshot: createGraphSnapshot({
         exchange: 'okx',
         timeframe: '15m',
@@ -968,6 +1029,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         },
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph({ entryTimeframe: '15m', exitTimeframe: '15m', sizePct: 10 }),
       graphSnapshot: createGraphSnapshot({
         timeframe: '15m',
         positionPct: 10,
@@ -1006,6 +1068,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['跌破支撑位出场'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph({ entryTimeframe: '15m', exitTimeframe: '15m' }),
       graphSnapshot: createGraphSnapshot({
         timeframe: '15m',
       }),
@@ -1042,6 +1105,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['跌破支撑位出场'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph({ entryTimeframe: '5m', exitTimeframe: '5m' }),
       graphSnapshot: createGraphSnapshot({
         timeframe: '5m',
       }),

@@ -1,6 +1,7 @@
 import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
 import type { CanonicalStrategyIrV1 } from '../types/canonical-strategy-ir'
 import type { StrategyAstV1 } from '../types/canonical-strategy-ast'
+import type { SemanticStrategyGraph } from '../types/semantic-strategy-graph'
 import type { CompiledScriptExecutionEnvelope } from '../types/compiled-script-projection'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { Injectable } from '@nestjs/common'
@@ -14,6 +15,7 @@ interface PublishCompiledSnapshotInput {
   strategyTemplateId?: string | null
   strategyInstanceId?: string | null
   graphSnapshot: StrategyLogicGraphSnapshot
+  semanticGraph?: SemanticStrategyGraph
   ir: CanonicalStrategyIrV1
   ast: StrategyAstV1
   executionEnvelope: CompiledScriptExecutionEnvelope
@@ -45,6 +47,8 @@ export class CompiledPublicationGateService {
       strategyInstanceId: input.strategyInstanceId ?? null,
       scriptSnapshot: input.script,
       specSnapshot: input.graphSnapshot as unknown as Record<string, unknown>,
+      semanticGraph: input.semanticGraph as unknown as Record<string, unknown> | null | undefined,
+      compiledIr: input.ir as unknown as Record<string, unknown>,
       irSnapshot: input.ir as unknown as Record<string, unknown>,
       astSnapshot: input.ast as unknown as Record<string, unknown>,
       compiledManifest: manifest as unknown as Record<string, unknown>,
