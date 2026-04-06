@@ -200,6 +200,12 @@ export interface BacktestRunInput {
     snapshotHash?: string
     scriptHash?: string
     specHash?: string
+    irHash?: string
+    astDigest?: string
+    structuralDigest?: string
+    irSnapshot?: Record<string, unknown>
+    astSnapshot?: Record<string, unknown>
+    executionEnvelope?: Record<string, unknown>
     dataRequirements?: Record<string, unknown>
     specSnapshot?: Record<string, unknown>
     fn: StrategyFn

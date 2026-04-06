@@ -406,10 +406,14 @@ export class CodegenConversationService {
     }
 
     const providerCode = this.resolveProviderCode(dto.providerCode)
-    const graphSnapshot = this.readGraphSnapshot(session.graphSnapshot)
+    const specDescForCompilation = this.specDescBuilder.build(mergedChecklist, '')
+    const effectiveGraphSnapshot = this.readGraphSnapshot(session.graphSnapshot)
+      ?? this.buildGraphSnapshot(mergedChecklist, specDescForCompilation, 1)
     const markedGenerating = await this.sessionsRepo.tryMarkGenerating(session.id, {
       status: 'GENERATING',
       checklist: mergedChecklist as Prisma.InputJsonValue,
+      latestSpecDesc: specDescForCompilation as Prisma.InputJsonValue,
+      graphSnapshot: effectiveGraphSnapshot as unknown as Prisma.InputJsonValue,
       constraintPack: {
         ...nextConstraintPack,
         conversationHistory: this.appendConversationHistory(
@@ -432,13 +436,13 @@ export class CodegenConversationService {
       return this.toSessionSnapshotResponse(latest)
     }
 
-    if (graphSnapshot) {
+    if (effectiveGraphSnapshot) {
       void this.runCompilationPipeline({
         sessionId: session.id,
         userId: sessionUserId,
         checklist: mergedChecklist,
         message: dto.message,
-        graphSnapshot,
+        graphSnapshot: effectiveGraphSnapshot,
         existingStrategyInstanceId: session.strategyInstanceId ?? null,
         model: dto.model,
       })
