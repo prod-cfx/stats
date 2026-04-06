@@ -57,6 +57,7 @@ export interface SeriesDef {
     | 'PRICE_CHANGE_PCT'
     | 'POSITION_AVG_PRICE'
     | 'POSITION_PNL_PCT'
+    | 'BOLLINGER_BARS_OUTSIDE'
     | 'SMA'
     | 'EMA'
     | 'RSI'

@@ -2,6 +2,7 @@ import type {
   ActionDef,
   CanonicalStrategyIrV1,
   HashString,
+  LevelSetDef,
   PredicateDef,
   RiskGuard,
   RuleBlock,
@@ -38,6 +39,47 @@ function hashCanonicalJson(value: unknown): HashString {
   return `sha256:${digest}`
 }
 
+interface CompilerBollingerBandTouchNode {
+  id: string
+  kind: 'bollinger_band_touch'
+  phase: 'entry' | 'exit' | 'risk'
+  params: {
+    timeframe: string
+    band: 'upper' | 'middle' | 'lower'
+    direction: 'breakout' | 'breakdown'
+    actionBias: 'long' | 'short'
+    period: number
+    stdDev: number
+  }
+}
+
+interface CompilerBollingerBarsOutsideNode {
+  id: string
+  kind: 'bollinger_bars_outside'
+  phase: 'entry' | 'exit' | 'risk'
+  params: {
+    timeframe: string
+    bandSide: 'outside' | 'upper' | 'lower'
+    bars: number
+    effect: 'FORCE_EXIT' | 'REDUCE_POSITION' | 'BLOCK_ENTRY'
+  }
+}
+
+interface CompilerGridLevelTouchNode {
+  id: string
+  kind: 'grid_level_touch'
+  phase: 'entry' | 'exit' | 'risk'
+  params: {
+    timeframe: string
+    range: {
+      min: number
+      max: number
+    }
+    stepPct: number
+    levelCount: number
+  }
+}
+
 @Injectable()
 export class SemanticGraphCompilerService {
   constructor(
@@ -47,12 +89,14 @@ export class SemanticGraphCompilerService {
 
   compile(graph: SemanticStrategyGraph): CanonicalStrategyIrV1 {
     const seriesMap = new Map<string, SeriesDef>()
+    const levelSetMap = new Map<string, LevelSetDef>()
     const predicateMap = new Map<string, PredicateDef>()
     const timeframes = new Set<string>([graph.market.primaryTimeframe])
     const ruleBlocks: RuleBlock[] = []
 
-    const entryWhen = this.compilePhasePredicate(graph.nodes, 'entry', seriesMap, predicateMap, timeframes)
-    const exitWhen = this.compilePhasePredicate(graph.nodes, 'exit', seriesMap, predicateMap, timeframes)
+    const entryWhen = this.compilePhasePredicate(graph.nodes, 'entry', seriesMap, levelSetMap, predicateMap, timeframes)
+    const exitWhen = this.compilePhasePredicate(graph.nodes, 'exit', seriesMap, levelSetMap, predicateMap, timeframes)
+    const rebalanceRuleBlocks = this.compileRiskRuleBlocks(graph.nodes, seriesMap, levelSetMap, predicateMap, timeframes, graph.actions)
     const actions = this.groupActions(graph.actions)
     const riskGuards = this.compileRisk(graph.risk)
     const primaryOpenAction = graph.actions.find(action => action.kind === 'OPEN_LONG' || action.kind === 'OPEN_SHORT')
@@ -79,6 +123,8 @@ export class SemanticGraphCompilerService {
         actions: actions.exit,
       })
     }
+
+    ruleBlocks.push(...rebalanceRuleBlocks)
 
     const ir: CanonicalStrategyIrV1 = {
       irVersion: 'csi.v1',
@@ -111,7 +157,7 @@ export class SemanticGraphCompilerService {
       },
       signalCatalog: {
         series: [...seriesMap.values()],
-        levelSets: [],
+        levelSets: [...levelSetMap.values()],
         predicates: [...predicateMap.values()],
       },
       ruleBlocks,
@@ -137,12 +183,13 @@ export class SemanticGraphCompilerService {
     nodes: SemanticStrategyNode[],
     phase: 'entry' | 'exit',
     seriesMap: Map<string, SeriesDef>,
+    levelSetMap: Map<string, LevelSetDef>,
     predicateMap: Map<string, PredicateDef>,
     timeframes: Set<string>,
   ): string {
     const phaseNodes = nodes.filter(node => node.phase === phase && node.kind !== 'logical_group')
     const predicateRefs = phaseNodes
-      .map(node => this.compileNode(node, seriesMap, predicateMap, timeframes))
+      .map(node => this.compileNode(node, seriesMap, levelSetMap, predicateMap, timeframes))
       .filter((value): value is string => value.length > 0)
 
     if (predicateRefs.length === 0) return ''
@@ -160,6 +207,7 @@ export class SemanticGraphCompilerService {
   private compileNode(
     node: SemanticStrategyNode,
     seriesMap: Map<string, SeriesDef>,
+    levelSetMap: Map<string, LevelSetDef>,
     predicateMap: Map<string, PredicateDef>,
     timeframes: Set<string>,
   ): string {
@@ -204,7 +252,116 @@ export class SemanticGraphCompilerService {
       return predicateId
     }
 
+    if (this.isBollingerBandTouchNode(node)) {
+      return this.compileBollingerBandTouch(node, seriesMap, predicateMap, timeframes)
+    }
+
+    if (this.isBollingerBarsOutsideNode(node)) {
+      return this.compileBollingerBarsOutside(node, seriesMap, predicateMap, timeframes)
+    }
+
+    if (this.isGridLevelTouchNode(node)) {
+      return this.compileGridLevelTouch(node, seriesMap, levelSetMap, predicateMap, timeframes)
+    }
+
     throw new Error('codegen.semantic_graph_node_not_supported')
+  }
+
+  private compileBollingerBandTouch(
+    node: CompilerBollingerBandTouchNode,
+    seriesMap: Map<string, SeriesDef>,
+    predicateMap: Map<string, PredicateDef>,
+    timeframes: Set<string>,
+  ): string {
+    timeframes.add(node.params.timeframe)
+    const closeSeriesId = this.ensureCloseSeries(node.params.timeframe, 0, seriesMap)
+    const bandSeriesId = this.ensureBandSeries(node, seriesMap)
+
+    if (node.params.band === 'middle') {
+      const aboveId = `predicate_${node.id}_above`
+      const belowId = `predicate_${node.id}_below`
+      const unionId = `predicate_${node.id}`
+
+      predicateMap.set(aboveId, {
+        id: aboveId,
+        kind: 'CROSS_OVER',
+        args: [closeSeriesId, bandSeriesId],
+      })
+      predicateMap.set(belowId, {
+        id: belowId,
+        kind: 'CROSS_UNDER',
+        args: [closeSeriesId, bandSeriesId],
+      })
+      predicateMap.set(unionId, {
+        id: unionId,
+        kind: 'OR',
+        args: [aboveId, belowId],
+      })
+
+      return unionId
+    }
+
+    const predicateId = `predicate_${node.id}`
+    predicateMap.set(predicateId, {
+      id: predicateId,
+      kind: node.params.band === 'upper' ? 'CROSS_OVER' : 'CROSS_UNDER',
+      args: [closeSeriesId, bandSeriesId],
+    })
+    return predicateId
+  }
+
+  private compileBollingerBarsOutside(
+    node: CompilerBollingerBarsOutsideNode,
+    seriesMap: Map<string, SeriesDef>,
+    predicateMap: Map<string, PredicateDef>,
+    timeframes: Set<string>,
+  ): string {
+    timeframes.add(node.params.timeframe)
+    const seriesId = `bollinger_bars_outside_${node.id}`
+    const constId = this.ensureConstSeries(node.params.bars, seriesMap)
+    const predicateId = `predicate_${node.id}`
+
+    if (!seriesMap.has(seriesId)) {
+      seriesMap.set(seriesId, {
+        id: seriesId,
+        kind: 'BOLLINGER_BARS_OUTSIDE',
+        timeframe: node.params.timeframe,
+        params: {
+          bandSide: node.params.bandSide,
+          bars: node.params.bars,
+        },
+      })
+    }
+
+    predicateMap.set(predicateId, {
+      id: predicateId,
+      kind: 'GTE',
+      args: [seriesId, constId],
+    })
+    return predicateId
+  }
+
+  private compileGridLevelTouch(
+    node: CompilerGridLevelTouchNode,
+    seriesMap: Map<string, SeriesDef>,
+    levelSetMap: Map<string, LevelSetDef>,
+    predicateMap: Map<string, PredicateDef>,
+    timeframes: Set<string>,
+  ): string {
+    timeframes.add(node.params.timeframe)
+    const closeSeriesId = this.ensureCloseSeries(node.params.timeframe, 0, seriesMap)
+    const lowerConstId = this.ensureConstSeries(node.params.range.min, seriesMap)
+    const upperConstId = this.ensureConstSeries(node.params.range.max, seriesMap)
+    const levelSetId = this.ensureGridLevelSet(node, lowerConstId, upperConstId, levelSetMap)
+    const predicateId = `predicate_${node.id}`
+
+    predicateMap.set(predicateId, {
+      id: predicateId,
+      kind: node.phase === 'entry' ? 'TOUCH_LEVEL_DOWN' : 'TOUCH_LEVEL_UP',
+      args: [closeSeriesId, levelSetId],
+    })
+
+    return predicateId
   }
 
   private ensureCloseSeries(
@@ -232,6 +389,63 @@ export class SemanticGraphCompilerService {
         id,
         kind: 'CONST',
         value,
+      })
+    }
+    return id
+  }
+
+  private ensureBandSeries(
+    node: CompilerBollingerBandTouchNode,
+    seriesMap: Map<string, SeriesDef>,
+  ): string {
+    const closeSeriesId = this.ensureCloseSeries(node.params.timeframe, 0, seriesMap)
+    const kind = node.params.band === 'upper'
+      ? 'UPPER_BAND'
+      : node.params.band === 'lower'
+        ? 'LOWER_BAND'
+        : 'MID_BAND'
+    const id = `${kind.toLowerCase()}_${node.params.timeframe}_${node.params.period}_${String(node.params.stdDev).replace('.', '_')}`
+
+    if (!seriesMap.has(id)) {
+      seriesMap.set(id, {
+        id,
+        kind,
+        timeframe: node.params.timeframe,
+        inputs: [closeSeriesId],
+        params: {
+          period: node.params.period,
+          stdDev: node.params.stdDev,
+        },
+      })
+    }
+
+    return id
+  }
+
+  private ensureGridLevelSet(
+    node: CompilerGridLevelTouchNode,
+    lowerConstId: string,
+    upperConstId: string,
+    levelSetMap: Map<string, LevelSetDef>,
+  ): string {
+    const id = `grid_${node.params.timeframe}_${node.params.range.min}_${node.params.range.max}_${node.params.stepPct}_${node.params.levelCount}`
+    if (!levelSetMap.has(id)) {
+      levelSetMap.set(id, {
+        id,
+        kind: 'ARITHMETIC_LEVEL_SET',
+        anchorRef: lowerConstId,
+        spacing: {
+          mode: 'pct',
+          value: node.params.stepPct,
+        },
+        levelsPerSide: {
+          down: 0,
+          up: Math.max(0, node.params.levelCount - 1),
+        },
+        hardBounds: {
+          lowerRef: lowerConstId,
+          upperRef: upperConstId,
+        },
       })
     }
     return id
@@ -282,12 +496,71 @@ export class SemanticGraphCompilerService {
     }))
   }
 
+  private compileRiskRuleBlocks(
+    nodes: SemanticStrategyNode[],
+    seriesMap: Map<string, SeriesDef>,
+    levelSetMap: Map<string, LevelSetDef>,
+    predicateMap: Map<string, PredicateDef>,
+    timeframes: Set<string>,
+    actions: SemanticActionNode[],
+  ): RuleBlock[] {
+    const riskNodes = nodes.filter(node => node.phase === 'risk')
+    const ruleBlocks: RuleBlock[] = []
+    const hasLong = actions.some(action => action.kind === 'OPEN_LONG' || action.kind === 'CLOSE_LONG')
+    const hasShort = actions.some(action => action.kind === 'OPEN_SHORT' || action.kind === 'CLOSE_SHORT')
+
+    for (const node of riskNodes) {
+      if (!this.isBollingerBarsOutsideNode(node) || node.params.effect !== 'REDUCE_POSITION') {
+        continue
+      }
+
+      const when = this.compileNode(node, seriesMap, levelSetMap, predicateMap, timeframes)
+      const rebalanceActions: ActionDef[] = []
+      if (hasLong) {
+        rebalanceActions.push({
+          kind: 'REDUCE_LONG',
+          quantity: { mode: 'position_pct', value: 50 },
+        })
+      }
+      if (hasShort) {
+        rebalanceActions.push({
+          kind: 'REDUCE_SHORT',
+          quantity: { mode: 'position_pct', value: 50 },
+        })
+      }
+
+      if (when && rebalanceActions.length > 0) {
+        ruleBlocks.push({
+          id: `rebalance_${node.id}`,
+          phase: 'rebalance',
+          when,
+          priority: 50,
+          actions: rebalanceActions,
+        })
+      }
+    }
+
+    return ruleBlocks
+  }
+
   private resolvePositionMode(actions: SemanticActionNode[]): CanonicalStrategyIrV1['portfolio']['positionMode'] {
     const hasLong = actions.some(action => action.kind === 'OPEN_LONG' || action.kind === 'CLOSE_LONG')
     const hasShort = actions.some(action => action.kind === 'OPEN_SHORT' || action.kind === 'CLOSE_SHORT')
     if (hasLong && hasShort) return 'long_short'
     if (hasShort) return 'short_only'
     return 'long_only'
+  }
+
+  private isBollingerBandTouchNode(node: SemanticStrategyNode): node is CompilerBollingerBandTouchNode {
+    return node.kind === 'bollinger_band_touch'
+  }
+
+  private isBollingerBarsOutsideNode(node: SemanticStrategyNode): node is CompilerBollingerBarsOutsideNode {
+    return node.kind === 'bollinger_bars_outside'
+  }
+
+  private isGridLevelTouchNode(node: SemanticStrategyNode): node is CompilerGridLevelTouchNode {
+    return node.kind === 'grid_level_touch'
   }
 }
 
