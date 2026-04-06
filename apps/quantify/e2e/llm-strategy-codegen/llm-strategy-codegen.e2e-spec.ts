@@ -10,22 +10,20 @@ import { AiService } from '@/modules/ai/ai.service'
 import { LlmStrategyCodegenModule } from '@/modules/llm-strategy-codegen/llm-strategy-codegen.module'
 import { MarketDataIngestionService } from '@/modules/market-data/services/market-data-ingestion.service'
 import { PrismaService } from '@/prisma/prisma.service'
+import { ordinarySemanticGraphStrategyFixtures } from '@/modules/llm-strategy-codegen/services/__tests__/fixtures/semantic-graph-strategies'
 import { buildApiUrl } from '../fixtures/fixtures'
 import { supertestRequest } from '../helpers/supertest-compat'
 
 const TEST_ENGINE_SECRET = 'e2e-engine-test-secret'
+const multiTimeframeFixture = ordinarySemanticGraphStrategyFixtures.find(
+  fixture => fixture.id === 'multi-timeframe-drop-rise',
+)
 
-const PLANNER_READY_JSON = JSON.stringify({
-  related: true,
-  logicReady: true,
-  assistantPrompt: '逻辑已完整，请确认后生成代码。',
-  logic: {
-    entryRules: ['短均线上穿长均线（金叉）入场'],
-    exitRules: ['短均线下穿长均线（死叉）出场'],
-    symbols: ['BTCUSDT'],
-    timeframes: ['1h'],
-  },
-})
+if (!multiTimeframeFixture) {
+  throw new Error('missing multi-timeframe ordinary strategy fixture')
+}
+
+const PLANNER_READY_JSON = JSON.stringify(multiTimeframeFixture.planner)
 
 function createBearerToken(userId: string): string {
   const encodedHeader = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url')
@@ -82,6 +80,52 @@ function createGraphSnapshot() {
       positionPct: 25,
       executionTags: [],
     },
+  }
+}
+
+function createSemanticGraph() {
+  return {
+    version: 1,
+    market: {
+      symbol: 'BTCUSDT',
+      primaryTimeframe: '3m',
+    },
+    nodes: [
+      {
+        id: 'entry-drop-1',
+        phase: 'entry',
+        kind: 'price_change_pct',
+        params: {
+          timeframe: '3m',
+          left: { source: 'close', offsetBars: 0 },
+          right: { source: 'close', offsetBars: 1 },
+          op: 'lte',
+          valuePct: -1,
+        },
+      },
+      {
+        id: 'exit-pnl-1',
+        phase: 'exit',
+        kind: 'position_pnl_pct',
+        params: {
+          timeframe: '15m',
+          op: 'gte',
+          valuePct: 2,
+        },
+      },
+    ],
+    actions: [
+      { id: 'open-long', kind: 'OPEN_LONG', sizePct: 10 },
+      { id: 'close-long', kind: 'CLOSE_LONG', sizePct: 100 },
+    ],
+    risk: [
+      {
+        id: 'risk-stop-loss-pct',
+        kind: 'STOP_LOSS_PCT',
+        valuePct: 5,
+        effect: 'FORCE_EXIT',
+      },
+    ],
   }
 }
 
@@ -193,22 +237,21 @@ describe('llm strategy codegen (E2E)', () => {
       data: {
         userId: 'u-e2e-1',
         status: 'CHECKLIST_GATE',
-        checklist: {
-          symbols: ['BTCUSDT'],
-          timeframes: ['1h'],
-          entryRules: ['短均线上穿长均线（金叉）入场'],
-          exitRules: ['短均线下穿长均线（死叉）出场'],
-          riskRules: { maxPositionPct: 0.1 },
-        },
+        checklist: multiTimeframeFixture.planner.logic,
         constraintPack: {
           conversationHistory: [],
           guidePrompt: null,
           recommendationStyle: 'ma',
         },
         latestSpecDesc: {
-          market: { symbols: ['BTCUSDT'], timeframes: ['1h'] },
+          market: { symbols: ['BTCUSDT'], timeframes: ['3m', '15m'] },
         },
         graphSnapshot: createGraphSnapshot(),
+        semanticGraph: createSemanticGraph(),
+        validationReport: {
+          ok: true,
+          errors: [],
+        },
       },
     })
 
@@ -248,12 +291,8 @@ describe('llm strategy codegen (E2E)', () => {
       .set('authorization', `Bearer ${token}`)
       .send({
         userId: 'u-e2e-2',
-        initialMessage: 'BTCUSDT 1h EMA 金叉做多，死叉平仓',
-        symbols: ['BTCUSDT'],
-        timeframes: ['1h'],
-        entryRules: ['短均线上穿长均线（金叉）入场'],
-        exitRules: ['短均线下穿长均线（死叉）出场'],
-        riskRules: { maxPositionPct: 0.1 },
+        initialMessage: multiTimeframeFixture.prompt,
+        ...multiTimeframeFixture.planner.logic,
       })
       .expect(201)
 
@@ -265,6 +304,81 @@ describe('llm strategy codegen (E2E)', () => {
       status: 'confirmed',
       trigger: expect.arrayContaining([expect.objectContaining({ phase: 'entry' })]),
     })
+  })
+
+  it('supports ordinary quant strategies through the full compiled flow', async () => {
+    const server = app.getHttpServer()
+    const token = createBearerToken('u-e2e-ordinary')
+
+    const chatSpy = jest.spyOn(aiService, 'chat').mockImplementation(async ({ messages }) => {
+      const userPayload = (() => {
+        const raw = messages?.find(item => item.role === 'user')?.content
+        if (!raw) return null
+        try {
+          return JSON.parse(raw) as { message?: unknown }
+        } catch {
+          return null
+        }
+      })()
+      const matched = ordinarySemanticGraphStrategyFixtures.find(
+        fixture => fixture.prompt === userPayload?.message,
+      )
+      if (!matched) {
+        throw new Error(`unexpected planner prompt: ${String(userPayload?.message ?? '(missing)')}`)
+      }
+      return {
+        content: JSON.stringify(matched.planner),
+      }
+    })
+
+    for (const fixture of ordinarySemanticGraphStrategyFixtures) {
+      const startRes = await supertestRequest(server)
+        .post(buildApiUrl('llm-strategy-codegen/sessions'))
+        .set('authorization', `Bearer ${token}`)
+        .send({
+          userId: 'u-e2e-ordinary',
+          initialMessage: fixture.prompt,
+        })
+        .expect(201)
+
+      const startPayload = (startRes.body.data ?? startRes.body) as Record<string, unknown>
+      expect(startPayload.status).toBe('CHECKLIST_GATE')
+      expect(startPayload.validationReport).toEqual({
+        ok: true,
+        errors: [],
+      })
+      expect(startPayload.semanticGraph).toEqual(expect.objectContaining({
+        market: expect.objectContaining({
+          symbol: fixture.expected.symbol,
+          primaryTimeframe: fixture.expected.primaryTimeframe,
+        }),
+      }))
+
+      const sessionId = String(startPayload.id)
+      const continueRes = await supertestRequest(server)
+        .post(buildApiUrl(`llm-strategy-codegen/sessions/${sessionId}/messages`))
+        .set('authorization', `Bearer ${token}`)
+        .send({
+          userId: 'u-e2e-ordinary',
+          message: '确认并生成',
+          confirmGenerate: true,
+        })
+        .expect(202)
+
+      const continuePayload = continueRes.body.data ?? continueRes.body
+      expect(continuePayload.status).toBe('GENERATING')
+
+      const publishedPayload = await waitForSessionStatus(sessionId, token, 'PUBLISHED')
+      expect(publishedPayload.publishedSnapshotId).toBeTruthy()
+      expect(publishedPayload.semanticGraph).toEqual(expect.objectContaining({
+        market: expect.objectContaining({
+          symbol: fixture.expected.symbol,
+          primaryTimeframe: fixture.expected.primaryTimeframe,
+        }),
+      }))
+    }
+
+    expect(chatSpy).toHaveBeenCalledTimes(ordinarySemanticGraphStrategyFixtures.length)
   })
 
   it('rejects session start when authorization header is missing', async () => {

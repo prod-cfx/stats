@@ -13,6 +13,7 @@ import { ScriptProfileExtractorService } from '../script-profile-extractor.servi
 import { SpecDescBuilderService } from '../spec-desc-builder.service'
 import { StaticGuardrailService } from '../static-guardrail.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
+import { ordinarySemanticGraphStrategyFixtures } from './fixtures/semantic-graph-strategies'
 
 describe('codegenConversationService (llm orchestrated flow)', () => {
   jest.setTimeout(120_000)
@@ -618,6 +619,46 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       status: 'CHECKLIST_GATE',
     }))
   })
+
+  it.each(ordinarySemanticGraphStrategyFixtures)(
+    'builds validated semantic graph for ordinary strategy: $id',
+    async ({ prompt, planner, expected }) => {
+      const dto: StartCodegenSessionDto = {
+        userId: 'u1',
+        initialMessage: prompt,
+      }
+      mockAi.chat.mockResolvedValue({
+        content: JSON.stringify(planner),
+      })
+      mockRepo.createSession.mockResolvedValue({ id: `session-${expected.primaryTimeframe}` })
+
+      const result = await service.startSession(dto)
+
+      expect(result.status).toBe('CHECKLIST_GATE')
+      expect(result.validationReport).toEqual({
+        ok: true,
+        errors: [],
+      })
+      expect(result.semanticGraph).toEqual(expect.objectContaining({
+        version: 1,
+        market: expect.objectContaining({
+          symbol: expected.symbol,
+          primaryTimeframe: expected.primaryTimeframe,
+        }),
+        nodes: expect.arrayContaining(
+          expected.nodeKinds.map(kind => expect.objectContaining({ kind })),
+        ),
+        actions: expect.arrayContaining(
+          expected.actionKinds
+            .filter(kind => kind !== 'REDUCE_POSITION')
+            .map(kind => expect.objectContaining({ kind })),
+        ),
+        risk: expect.arrayContaining(
+          expected.riskKinds.map(kind => expect.objectContaining({ kind })),
+        ),
+      }))
+    },
+  )
 
   it('publishes after confirmGenerate with compiled pipeline', async () => {
     mockRepo.findById.mockResolvedValue({

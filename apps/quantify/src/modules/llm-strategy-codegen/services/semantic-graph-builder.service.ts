@@ -412,17 +412,25 @@ export class SemanticGraphBuilderService {
   }
 
   private collectUnsupportedFeatures(text: string): string[] {
+    const normalizedForUnsupportedScan = text
+      // Treat middle-band aliases like "布林带中轨(MA20)" as supported bollinger
+      // semantics instead of unsupported moving-average strategies.
+      .replace(
+        /布林(?:带)?[^。；;\n]{0,24}中轨\s*[（(]?\s*(?:MA\s*20|20\s*(?:日|周期)?均线)\s*[)）]?/giu,
+        '布林带中轨',
+      )
+
     const unsupported = new Set<string>()
-    if (/(金叉|死叉|均线|EMA|MA)/iu.test(text)) {
+    if (/(金叉|死叉|均线|EMA|MA)/iu.test(normalizedForUnsupportedScan)) {
       unsupported.add('均线交叉类语义')
     }
-    if (/(^|[^a-z])RSI([^a-z]|$)|相对强弱/iu.test(text)) {
+    if (/(^|[^a-z])RSI([^a-z]|$)|相对强弱/iu.test(normalizedForUnsupportedScan)) {
       unsupported.add('RSI 指标语义')
     }
-    if (/(^|[^a-z])MACD([^a-z]|$)|指数平滑异同/iu.test(text)) {
+    if (/(^|[^a-z])MACD([^a-z]|$)|指数平滑异同/iu.test(normalizedForUnsupportedScan)) {
       unsupported.add('MACD 指标语义')
     }
-    if (/(^|[^a-z])ATR([^a-z]|$)|平均真实波幅/iu.test(text)) {
+    if (/(^|[^a-z])ATR([^a-z]|$)|平均真实波幅/iu.test(normalizedForUnsupportedScan)) {
       unsupported.add('ATR 指标语义')
     }
     return [...unsupported]
