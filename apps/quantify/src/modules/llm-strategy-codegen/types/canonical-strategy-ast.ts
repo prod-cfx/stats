@@ -1,4 +1,4 @@
-import type { ActionDef, OrderProgram, RiskGuard, SeriesDef, PredicateDef } from './canonical-strategy-ir'
+import type { ActionDef, LevelSetDef, OrderProgram, RiskGuard, SeriesDef, PredicateDef } from './canonical-strategy-ir'
 
 export interface StrategyAstV1 {
   astVersion: 'csa.v1'
@@ -40,8 +40,8 @@ export interface StrategyAstV1 {
 export interface ExprNode {
   id: string
   sourceRef: string
-  nodeType: 'series' | 'predicate'
-  payload: SeriesDef | PredicateDef
+  nodeType: 'series' | 'level_set' | 'predicate'
+  payload: SeriesDef | LevelSetDef | PredicateDef
   deps: string[]
 }
 

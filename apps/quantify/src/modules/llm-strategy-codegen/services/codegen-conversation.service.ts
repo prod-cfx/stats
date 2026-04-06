@@ -5,6 +5,7 @@ import type { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.
 import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-test.response.dto'
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
+import type { SemanticStrategyGraph } from '../types/semantic-strategy-graph'
 import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
 import type { CompiledScriptExecutionEnvelope } from '../types/compiled-script-projection'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
@@ -27,19 +28,18 @@ import { PublishedStrategySnapshotsRepository } from '../repositories/published-
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
 import { CanonicalStrategyAstCompilerService } from './canonical-strategy-ast-compiler.service'
-import { CanonicalStrategyIrCanonicalizerService } from './canonical-strategy-ir-canonicalizer.service'
-import { CanonicalStrategyIrCompilerService } from './canonical-strategy-ir-compiler.service'
-import { CanonicalStrategyIrValidatorService } from './canonical-strategy-ir-validator.service'
 import { CodegenGraphSnapshotService } from './codegen-graph-snapshot.service'
 import { CompiledPublicationGateService } from './compiled-publication-gate.service'
 import { CompiledScriptEmitterService } from './compiled-script-emitter.service'
 import { CompiledScriptParserService } from './compiled-script-parser.service'
-import { GraphOperatorParserService } from './graph-operator-parser.service'
-import { GraphSemanticProjectionService } from './graph-semantic-projection.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RecommendationIndexService } from './recommendation-index.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RuntimeGuardrailService } from './runtime-guardrail.service'
+import { SemanticGraphBuilderService } from './semantic-graph-builder.service'
+import { SemanticGraphCompilerService } from './semantic-graph-compiler.service'
+import type { SemanticGraphValidationResult } from './semantic-graph-validator.service'
+import { SemanticGraphValidatorService } from './semantic-graph-validator.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { SpecDescBuilderService } from './spec-desc-builder.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -130,12 +130,9 @@ function parseExplicitMarketType(value: unknown): 'spot' | 'perp' | undefined {
 export class CodegenConversationService {
   private readonly strictUnsupportedTargets = new Map<string, number>()
   private readonly graphSnapshotService = new CodegenGraphSnapshotService()
-  private readonly irCompiler = new CanonicalStrategyIrCompilerService(
-    new GraphOperatorParserService(),
-    new GraphSemanticProjectionService(),
-    new CanonicalStrategyIrValidatorService(),
-    new CanonicalStrategyIrCanonicalizerService(),
-  )
+  private readonly semanticGraphBuilder = new SemanticGraphBuilderService()
+  private readonly semanticGraphCompiler = new SemanticGraphCompilerService()
+  private readonly semanticGraphValidator = new SemanticGraphValidatorService()
   private readonly astCompiler = new CanonicalStrategyAstCompilerService()
   private readonly scriptEmitter = new CompiledScriptEmitterService()
 
@@ -180,11 +177,13 @@ export class CodegenConversationService {
       checklist,
       undefined,
     )
-    const status: CodegenWorkflowPhase = plan.logicReady ? 'CHECKLIST_GATE' : 'DRAFTING'
-
     const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
     const initialSpecDesc = plan.logicReady ? this.specDescBuilder.build(checklist, '') : null
-    const initialGraphSnapshot = plan.logicReady && initialSpecDesc
+    const semanticGate = plan.logicReady && initialSpecDesc
+      ? this.evaluateSemanticGate(checklist, initialSpecDesc)
+      : null
+    const status: CodegenWorkflowPhase = semanticGate?.ok ? 'CHECKLIST_GATE' : 'DRAFTING'
+    const initialGraphSnapshot = semanticGate?.ok && initialSpecDesc
       ? this.buildGraphSnapshot(checklist, initialSpecDesc, 1)
       : null
     const initialHistory = this.appendConversationHistory([], dto.initialMessage, plan.assistantPrompt)
@@ -200,6 +199,8 @@ export class CodegenConversationService {
       latestDraftCode: null,
       latestSpecDesc: initialSpecDesc as Prisma.InputJsonValue,
       graphSnapshot: initialGraphSnapshot as unknown as Prisma.InputJsonValue,
+      semanticGraph: semanticGate?.graph as unknown as Prisma.InputJsonValue,
+      validationReport: semanticGate?.validation as unknown as Prisma.InputJsonValue,
       rejectReason: null,
       strategyInstanceId: null,
     })
@@ -209,9 +210,11 @@ export class CodegenConversationService {
       status,
       missingFields: [],
       specDesc: initialSpecDesc,
-      assistantPrompt: plan.logicReady
+      semanticGraph: semanticGate?.graph ?? null,
+      validationReport: semanticGate?.validation ?? null,
+      assistantPrompt: semanticGate?.ok
         ? `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`
-        : plan.assistantPrompt,
+        : this.buildSemanticRetryPrompt(plan.assistantPrompt, semanticGate?.validation),
     }
   }
 
@@ -257,14 +260,15 @@ export class CodegenConversationService {
     }
     if (PROCESSING_SESSION_PHASES.includes(session.status)) {
       if (dto.confirmGenerate === true) {
-        const graphSnapshot = this.readGraphSnapshot(session.graphSnapshot)
-        if (!graphSnapshot) {
-          throw new DomainException('codegen.graph_snapshot_missing', {
+        const semanticGraph = this.readSemanticGraph(session.semanticGraph)
+        if (!semanticGraph) {
+          throw new DomainException('codegen.semantic_graph_missing', {
             code: ErrorCode.CONFLICT,
             status: HttpStatus.CONFLICT,
             args: { sessionId },
           })
         }
+        const graphSnapshot = this.readGraphSnapshot(session.graphSnapshot)
         const requeued = await this.sessionsRepo.tryRequeueFromProcessing(session.id, {
           status: 'GENERATING',
           rejectReason: null,
@@ -276,6 +280,7 @@ export class CodegenConversationService {
             userId: sessionUserId,
             checklist,
             message: dto.message,
+            semanticGraph,
             graphSnapshot,
             existingStrategyInstanceId: session.strategyInstanceId ?? null,
             model: dto.model,
@@ -292,14 +297,15 @@ export class CodegenConversationService {
 
     const baseChecklist = this.readChecklist(session.checklist)
     if (dto.confirmGenerate === true) {
-      const graphSnapshot = this.readGraphSnapshot(session.graphSnapshot)
-      if (!graphSnapshot) {
-        throw new DomainException('codegen.graph_snapshot_missing', {
+      const semanticGraph = this.readSemanticGraph(session.semanticGraph)
+      if (!semanticGraph) {
+        throw new DomainException('codegen.semantic_graph_missing', {
           code: ErrorCode.CONFLICT,
           status: HttpStatus.CONFLICT,
           args: { sessionId },
         })
       }
+      const graphSnapshot = this.readGraphSnapshot(session.graphSnapshot)
 
       const constraintPack = this.readConstraintPack(session.constraintPack)
       const markedGenerating = await this.sessionsRepo.tryMarkGenerating(session.id, {
@@ -307,6 +313,7 @@ export class CodegenConversationService {
         checklist: baseChecklist as Prisma.InputJsonValue,
         latestSpecDesc: session.latestSpecDesc,
         graphSnapshot: graphSnapshot as unknown as Prisma.InputJsonValue,
+        semanticGraph: semanticGraph as unknown as Prisma.InputJsonValue,
         constraintPack: {
           ...constraintPack,
           conversationHistory: this.appendConversationHistory(
@@ -334,6 +341,7 @@ export class CodegenConversationService {
         userId: sessionUserId,
         checklist: baseChecklist,
         message: dto.message,
+        semanticGraph,
         graphSnapshot,
         existingStrategyInstanceId: session.strategyInstanceId ?? null,
         model: dto.model,
@@ -397,6 +405,32 @@ export class CodegenConversationService {
     }
 
     const specDesc = this.specDescBuilder.build(mergedChecklist, '')
+    const semanticGate = this.evaluateSemanticGate(mergedChecklist, specDesc)
+    if (!semanticGate.ok) {
+      await this.sessionsRepo.updateSession(session.id, {
+        status: 'DRAFTING',
+        checklist: mergedChecklist as Prisma.InputJsonValue,
+        constraintPack: {
+          ...nextConstraintPack,
+          conversationHistory: historyAfterPlanner,
+        } as unknown as Prisma.InputJsonValue,
+        latestSpecDesc: specDesc as Prisma.InputJsonValue,
+        graphSnapshot: null,
+        semanticGraph: semanticGate.graph as unknown as Prisma.InputJsonValue,
+        validationReport: semanticGate.validation as unknown as Prisma.InputJsonValue,
+      })
+
+      return {
+        id: session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        specDesc,
+        semanticGraph: semanticGate.graph,
+        validationReport: semanticGate.validation,
+        assistantPrompt: this.buildSemanticRetryPrompt(plan.assistantPrompt, semanticGate.validation),
+      }
+    }
+
     const graphSnapshot = this.buildGraphSnapshot(mergedChecklist, specDesc, 1)
     await this.sessionsRepo.updateSession(session.id, {
       status: 'CHECKLIST_GATE',
@@ -407,6 +441,8 @@ export class CodegenConversationService {
       } as unknown as Prisma.InputJsonValue,
       latestSpecDesc: specDesc as Prisma.InputJsonValue,
       graphSnapshot: graphSnapshot as unknown as Prisma.InputJsonValue,
+      semanticGraph: semanticGate.graph as unknown as Prisma.InputJsonValue,
+      validationReport: semanticGate.validation as unknown as Prisma.InputJsonValue,
     })
 
     return {
@@ -414,6 +450,8 @@ export class CodegenConversationService {
       status: 'CHECKLIST_GATE',
       missingFields: [],
       specDesc,
+      semanticGraph: semanticGate.graph,
+      validationReport: semanticGate.validation,
       assistantPrompt: `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`,
     }
   }
@@ -423,12 +461,13 @@ export class CodegenConversationService {
     userId: string
     checklist: ChecklistPayload
     message: string
-    graphSnapshot: StrategyLogicGraphSnapshot
+    semanticGraph: SemanticStrategyGraph
+    graphSnapshot: StrategyLogicGraphSnapshot | null
     existingStrategyInstanceId?: string | null
     model?: string
   }): Promise<void> {
     try {
-      const ir = this.irCompiler.compile(args.graphSnapshot)
+      const ir = this.semanticGraphCompiler.compile(args.semanticGraph)
       const ast = this.astCompiler.compile(ir)
       const executionEnvelope = this.resolveExecutionEnvelope(ir)
       const script = this.scriptEmitter.emit({
@@ -439,6 +478,7 @@ export class CodegenConversationService {
       await this.sessionsRepo.updateSession(args.sessionId, {
         status: 'VALIDATING_STATIC',
         latestDraftCode: script,
+        compiledIr: ir as unknown as Prisma.InputJsonValue,
       })
 
       await this.sessionsRepo.updateSession(args.sessionId, {
@@ -521,7 +561,8 @@ export class CodegenConversationService {
         sessionId: args.sessionId,
         strategyTemplateId,
         strategyInstanceId: strategyInstanceId ?? null,
-        graphSnapshot: args.graphSnapshot,
+        graphSnapshot: args.graphSnapshot ?? this.buildGraphSnapshot(args.checklist, specDesc, 1),
+        semanticGraph: args.semanticGraph,
         ir,
         ast,
         executionEnvelope,
@@ -580,11 +621,32 @@ export class CodegenConversationService {
     return candidate as StrategyLogicGraphSnapshot
   }
 
+  private readSemanticGraph(payload: Prisma.JsonValue | null): SemanticStrategyGraph | null {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return null
+    }
+
+    const candidate = payload as Partial<SemanticStrategyGraph>
+    if (
+      candidate.version !== 1
+      || !candidate.market
+      || !Array.isArray(candidate.nodes)
+      || !Array.isArray(candidate.actions)
+      || !Array.isArray(candidate.risk)
+    ) {
+      return null
+    }
+
+    return candidate as SemanticStrategyGraph
+  }
+
   private async toSessionSnapshotResponse(session: {
     id: string
     status: CodegenWorkflowPhase
     latestDraftCode: Prisma.JsonValue | null
     latestSpecDesc: Prisma.JsonValue | null
+    semanticGraph?: Prisma.JsonValue | null
+    validationReport?: Prisma.JsonValue | null
     rejectReason: string | null
     strategyInstanceId?: string | null
   }): Promise<CodegenSessionResponseDto> {
@@ -611,8 +673,48 @@ export class CodegenConversationService {
             ? sessionConsistencyReport as Record<string, unknown>
             : null),
       specDesc: sessionSpecDesc,
+      semanticGraph: this.readSemanticGraph(session.semanticGraph ?? null) as unknown as Record<string, unknown> | null,
+      validationReport: this.readValidationReport(session.validationReport ?? null),
       strategyInstanceId: session.strategyInstanceId ?? null,
       rejectReason: session.rejectReason,
+    }
+  }
+
+  private readValidationReport(value: Prisma.JsonValue | null | undefined): SemanticGraphValidationResult | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null
+    }
+
+    const candidate = value as {
+      ok?: unknown
+      errors?: Array<{ code?: unknown; message?: unknown; nodeId?: unknown }>
+    }
+    if (typeof candidate.ok !== 'boolean' || !Array.isArray(candidate.errors)) {
+      return null
+    }
+
+    const isValidationErrorCode = (
+      code: unknown,
+    ): code is SemanticGraphValidationResult['errors'][number]['code'] =>
+      code === 'codegen.semantic_graph_incomplete'
+      || code === 'codegen.semantic_graph_invalid_reference'
+      || code === 'codegen.semantic_graph_unsupported_feature'
+
+    const errors = candidate.errors.flatMap((error) => {
+      if (!error || typeof error !== 'object') return []
+      if (!isValidationErrorCode(error.code) || typeof error.message !== 'string') {
+        return []
+      }
+      return [{
+        code: error.code,
+        message: error.message,
+        ...(typeof error.nodeId === 'string' ? { nodeId: error.nodeId } : {}),
+      }]
+    })
+
+    return {
+      ok: candidate.ok,
+      errors,
     }
   }
 
@@ -712,6 +814,43 @@ export class CodegenConversationService {
     }
 
     return locked
+  }
+
+  private evaluateSemanticGate(
+    checklist: ChecklistPayload,
+    specDesc: Record<string, unknown>,
+  ): { ok: boolean; graph: SemanticStrategyGraph | null; validation: SemanticGraphValidationResult } {
+    const normalizedSpecDesc = specDesc as {
+      market?: { timeframes?: unknown }
+      entryRules?: unknown
+      exitRules?: unknown
+    }
+    const built = this.semanticGraphBuilder.build({
+      symbols: checklist.symbols,
+      timeframes: checklist.timeframes
+        ?? (Array.isArray(normalizedSpecDesc.market?.timeframes) ? normalizedSpecDesc.market?.timeframes as string[] : undefined),
+      entryRules: checklist.entryRules
+        ?? (Array.isArray(normalizedSpecDesc.entryRules) ? normalizedSpecDesc.entryRules as string[] : undefined),
+      exitRules: checklist.exitRules
+        ?? (Array.isArray(normalizedSpecDesc.exitRules) ? normalizedSpecDesc.exitRules as string[] : undefined),
+      riskRules: checklist.riskRules,
+    })
+    const validation = this.semanticGraphValidator.validate(built)
+    return {
+      ok: validation.ok,
+      graph: built.graph,
+      validation,
+    }
+  }
+
+  private buildSemanticRetryPrompt(basePrompt: string, validation?: SemanticGraphValidationResult): string {
+    if (!validation || validation.ok) {
+      return basePrompt
+    }
+    const details = validation.errors
+      .map(error => `${error.code.replace('codegen.', '')}: ${error.message}`)
+      .join('；')
+    return `${basePrompt}\n逻辑已识别，但存在暂不支持或不完整的语义，请根据提示调整：${details}`
   }
 
   private buildGraphSnapshot(
@@ -954,6 +1093,22 @@ export class CodegenConversationService {
       return normalized.length > 0 ? normalized : undefined
     }
 
+    const normalizeTimeframeArray = (value: unknown): string[] | undefined => {
+      const raw = normalizeStringArray(value)
+      if (!raw) return undefined
+      const normalized = raw.map((timeframe) => {
+        const matched = timeframe.match(/^(\d{1,4})\s*(m|min|分钟|h|小时|d|天)$/iu)
+        if (!matched?.[1] || !matched[2]) {
+          return timeframe
+        }
+        const unit = matched[2].toLowerCase()
+        if (unit === 'm' || unit === 'min' || unit === '分钟') return `${matched[1]}m`
+        if (unit === 'h' || unit === '小时') return `${matched[1]}h`
+        return `${matched[1]}d`
+      })
+      return normalized.length > 0 ? normalized : undefined
+    }
+
     const normalizeObject = (value: unknown): Record<string, unknown> | undefined => {
       if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return undefined
@@ -967,7 +1122,7 @@ export class CodegenConversationService {
 
     return {
       symbols: normalizeStringArray(payload.symbols),
-      timeframes: normalizeStringArray(payload.timeframes),
+      timeframes: normalizeTimeframeArray(payload.timeframes),
       entryRules: normalizeStringArray(payload.entryRules),
       exitRules: normalizeStringArray(payload.exitRules),
       riskRules: normalizeObject(payload.riskRules),

@@ -11,6 +11,8 @@ export interface CreatePublishedStrategySnapshotInput {
   strategyInstanceId?: string | null
   scriptSnapshot: string
   specSnapshot: Record<string, unknown>
+  semanticGraph?: Record<string, unknown> | null
+  compiledIr?: Record<string, unknown> | null
   irSnapshot?: Record<string, unknown> | null
   astSnapshot?: Record<string, unknown> | null
   compiledManifest?: Record<string, unknown> | null
@@ -62,6 +64,8 @@ export class PublishedStrategySnapshotsRepository {
     const snapshotVersion = input.snapshotVersion ?? 2
     const normalizedScript = input.scriptSnapshot.trim()
     const normalizedSpec = stableJsonStringify(input.specSnapshot)
+    const normalizedSemanticGraph = input.semanticGraph ? stableJsonStringify(input.semanticGraph) : null
+    const normalizedCompiledIr = input.compiledIr ? stableJsonStringify(input.compiledIr) : null
     const normalizedIr = input.irSnapshot ? stableJsonStringify(input.irSnapshot) : null
     const normalizedAst = input.astSnapshot ? stableJsonStringify(input.astSnapshot) : null
     const normalizedManifest = input.compiledManifest ? stableJsonStringify(input.compiledManifest) : null
@@ -85,6 +89,8 @@ export class PublishedStrategySnapshotsRepository {
     const snapshotHash = sha256([
       scriptHash,
       specHash,
+      normalizedSemanticGraph ? sha256(normalizedSemanticGraph) : '',
+      normalizedCompiledIr ? sha256(normalizedCompiledIr) : '',
       irHash ?? '',
       astDigest ?? '',
       structuralDigest ?? '',
@@ -114,6 +120,8 @@ export class PublishedStrategySnapshotsRepository {
         structuralDigest,
         scriptSnapshot: normalizedScript,
         specSnapshot: input.specSnapshot as Prisma.InputJsonValue,
+        semanticGraph: input.semanticGraph as Prisma.InputJsonValue | null | undefined,
+        compiledIr: input.compiledIr as Prisma.InputJsonValue | null | undefined,
         irSnapshot: input.irSnapshot as Prisma.InputJsonValue | null | undefined,
         astSnapshot: input.astSnapshot as Prisma.InputJsonValue | null | undefined,
         compiledManifest: input.compiledManifest as Prisma.InputJsonValue | null | undefined,

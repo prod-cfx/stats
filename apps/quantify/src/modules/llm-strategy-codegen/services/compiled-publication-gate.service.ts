@@ -1,6 +1,7 @@
 import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
 import type { CanonicalStrategyIrV1 } from '../types/canonical-strategy-ir'
 import type { StrategyAstV1 } from '../types/canonical-strategy-ast'
+import type { SemanticStrategyGraph } from '../types/semantic-strategy-graph'
 import type { CompiledScriptExecutionEnvelope } from '../types/compiled-script-projection'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { Injectable } from '@nestjs/common'
@@ -8,12 +9,17 @@ import { Injectable } from '@nestjs/common'
 import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CompiledScriptParserService } from './compiled-script-parser.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { ScriptProfileExtractorService } from './script-profile-extractor.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { StrategyConsistencyService } from './strategy-consistency.service'
 
 interface PublishCompiledSnapshotInput {
   sessionId: string
   strategyTemplateId?: string | null
   strategyInstanceId?: string | null
   graphSnapshot: StrategyLogicGraphSnapshot
+  semanticGraph?: SemanticStrategyGraph
   ir: CanonicalStrategyIrV1
   ast: StrategyAstV1
   executionEnvelope: CompiledScriptExecutionEnvelope
@@ -29,6 +35,10 @@ export class CompiledPublicationGateService {
   constructor(
     private readonly publishedSnapshotsRepo: PublishedStrategySnapshotsRepository,
     private readonly scriptParser: CompiledScriptParserService = new CompiledScriptParserService(),
+    private readonly strategyConsistency: StrategyConsistencyService = new StrategyConsistencyService(
+      new ScriptProfileExtractorService(),
+      new CompiledScriptParserService(),
+    ),
   ) {}
 
   async publish(input: PublishCompiledSnapshotInput): Promise<{
@@ -45,6 +55,8 @@ export class CompiledPublicationGateService {
       strategyInstanceId: input.strategyInstanceId ?? null,
       scriptSnapshot: input.script,
       specSnapshot: input.graphSnapshot as unknown as Record<string, unknown>,
+      semanticGraph: input.semanticGraph as unknown as Record<string, unknown> | null | undefined,
+      compiledIr: input.ir as unknown as Record<string, unknown>,
       irSnapshot: input.ir as unknown as Record<string, unknown>,
       astSnapshot: input.ast as unknown as Record<string, unknown>,
       compiledManifest: manifest as unknown as Record<string, unknown>,
@@ -74,6 +86,14 @@ export class CompiledPublicationGateService {
     input: PublishCompiledSnapshotInput,
     parsed: ReturnType<CompiledScriptParserService['parse']>,
   ): Record<string, unknown> {
+    if (input.semanticGraph) {
+      return this.strategyConsistency.audit({
+        semanticGraph: input.semanticGraph,
+        ir: input.ir,
+        scriptCode: input.script,
+      }) as unknown as Record<string, unknown>
+    }
+
     const graphVsIrPassed = input.ir.source.graphDigest === input.ir.source.specHash
     const irVsScriptPassed = parsed.compiledManifest.irHash === input.ast.manifest.irHash
       && parsed.compiledManifest.structuralDigest === input.ast.manifest.structuralDigest

@@ -63,6 +63,8 @@ export class CanonicalStrategyAstCompilerService {
       return left.id.localeCompare(right.id)
     })
 
+    const orderedLevelSets = [...ir.signalCatalog.levelSets].sort((left, right) => left.id.localeCompare(right.id))
+
     const predicatePriority = new Map<string, number>()
     for (const ruleBlock of ir.ruleBlocks) {
       const current = predicatePriority.get(ruleBlock.when)
@@ -86,15 +88,27 @@ export class CanonicalStrategyAstCompilerService {
       deps: (series.inputs ?? []).map(dep => this.exprIdFor(dep, ir)),
     }))
 
+    const levelSetNodes = orderedLevelSets.map((levelSet, index) => ({
+      id: `expr_${String(seriesNodes.length + index + 1).padStart(2, '0')}_${levelSet.id}`,
+      sourceRef: levelSet.id,
+      nodeType: 'level_set' as const,
+      payload: levelSet,
+      deps: [
+        levelSet.anchorRef,
+        levelSet.hardBounds?.lowerRef,
+        levelSet.hardBounds?.upperRef,
+      ].filter((dep): dep is string => typeof dep === 'string').map(dep => this.exprIdFor(dep, ir)),
+    }))
+
     const predicateNodes = orderedPredicates.map((predicate, index) => ({
-      id: `expr_${String(seriesNodes.length + index + 1).padStart(2, '0')}_${predicate.id}`,
+      id: `expr_${String(seriesNodes.length + levelSetNodes.length + index + 1).padStart(2, '0')}_${predicate.id}`,
       sourceRef: predicate.id,
       nodeType: 'predicate' as const,
       payload: predicate,
       deps: predicate.args.map(dep => this.exprIdFor(dep, ir)),
     }))
 
-    return [...seriesNodes, ...predicateNodes]
+    return [...seriesNodes, ...levelSetNodes, ...predicateNodes]
   }
 
   private compileGuards(ir: CanonicalStrategyIrV1): GuardProgramNode[] {
@@ -187,6 +201,13 @@ export class CanonicalStrategyAstCompilerService {
       return `expr_${String(seriesPosition + 1).padStart(2, '0')}_${sourceRef}`
     }
 
+    const orderedLevelSets = [...ir.signalCatalog.levelSets].sort((left, right) => left.id.localeCompare(right.id))
+    const levelSetPosition = orderedLevelSets.findIndex(item => item.id === sourceRef)
+    const seriesCount = ir.signalCatalog.series.length
+    if (levelSetPosition >= 0) {
+      return `expr_${String(seriesCount + levelSetPosition + 1).padStart(2, '0')}_${sourceRef}`
+    }
+
     const predicatePriority = new Map<string, number>()
     for (const ruleBlock of ir.ruleBlocks) {
       const current = predicatePriority.get(ruleBlock.when)
@@ -201,8 +222,7 @@ export class CanonicalStrategyAstCompilerService {
       return left.id.localeCompare(right.id)
     })
     const predicatePosition = orderedPredicates.findIndex(item => item.id === sourceRef)
-    const seriesCount = ir.signalCatalog.series.length
-    return `expr_${String(seriesCount + predicatePosition + 1).padStart(2, '0')}_${sourceRef}`
+    return `expr_${String(seriesCount + orderedLevelSets.length + predicatePosition + 1).padStart(2, '0')}_${sourceRef}`
   }
 
   private seriesRank(series: SeriesDef, seriesIndex: Map<string, SeriesDef>): number {

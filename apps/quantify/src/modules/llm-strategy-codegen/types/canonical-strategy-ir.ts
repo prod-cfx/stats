@@ -54,6 +54,10 @@ export interface SeriesDef {
   kind:
     | 'PRICE'
     | 'CONST'
+    | 'PRICE_CHANGE_PCT'
+    | 'POSITION_AVG_PRICE'
+    | 'POSITION_PNL_PCT'
+    | 'BOLLINGER_BARS_OUTSIDE'
     | 'SMA'
     | 'EMA'
     | 'RSI'
@@ -66,8 +70,9 @@ export interface SeriesDef {
     | 'LOWER_BAND'
   timeframe?: string
   field?: 'open' | 'high' | 'low' | 'close'
+  offsetBars?: number
   inputs?: string[]
-  params?: Record<string, number>
+  params?: Record<string, number | string>
   value?: number
 }
 
@@ -149,6 +154,7 @@ export interface RiskGuard {
   kind:
     | 'STOP_LOSS_PCT'
     | 'TAKE_PROFIT_PCT'
+    | 'MAX_SINGLE_LOSS_PCT'
     | 'MAX_DRAWDOWN_PCT'
     | 'MAX_POSITION_PCT'
     | 'TRAILING_STOP_PCT'

@@ -211,6 +211,9 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
           constraintPack: {},
           latestDraftCode: null,
           latestSpecDesc: null,
+          semanticGraph: null,
+          validationReport: null,
+          compiledIr: null,
           rejectReason: null,
           strategyInstanceId: null,
           createdAt: new Date('2026-04-02T00:00:00.000Z'),
@@ -224,6 +227,9 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
           constraintPack: {},
           latestDraftCode: null,
           latestSpecDesc: null,
+          semanticGraph: null,
+          validationReport: null,
+          compiledIr: null,
           rejectReason: null,
           strategyInstanceId: null,
           createdAt: new Date('2026-04-02T00:00:00.000Z'),
@@ -237,6 +243,9 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
           constraintPack: {},
           latestDraftCode: 'code',
           latestSpecDesc: null,
+          semanticGraph: null,
+          validationReport: null,
+          compiledIr: null,
           rejectReason: null,
           strategyInstanceId: null,
           createdAt: new Date('2026-04-02T00:00:00.000Z'),
@@ -274,7 +283,7 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
     expect(txHost.withTransaction).not.toHaveBeenCalled()
   })
 
-  it('includes graphSnapshot in session select and update payloads', async () => {
+  it('includes semantic pipeline fields in session select and update payloads', async () => {
     const sessionRow = {
       id: 'session-1',
       userId: 'user-1',
@@ -287,6 +296,18 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
         graphVersion: 'gss.v1',
         nodes: [],
         edges: [],
+      },
+      semanticGraph: {
+        version: 1,
+        nodes: [],
+      },
+      validationReport: {
+        ok: true,
+        errors: [],
+      },
+      compiledIr: {
+        irVersion: 'csi.v1',
+        nodes: [],
       },
       rejectReason: null,
       strategyInstanceId: null,
@@ -304,6 +325,18 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
             graphVersion: 'gss.v1',
             nodes: [{ id: 'entry-1' }],
             edges: [],
+          },
+          semanticGraph: {
+            version: 1,
+            nodes: [{ id: 'entry-1' }],
+          },
+          validationReport: {
+            ok: false,
+            errors: [{ code: 'codegen.semantic_graph_incomplete' }],
+          },
+          compiledIr: {
+            irVersion: 'csi.v1',
+            nodes: [{ id: 'ir-1' }],
           },
         }),
       },
@@ -324,6 +357,18 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
         nodes: [],
         edges: [],
       } as any,
+      semanticGraph: {
+        version: 1,
+        nodes: [],
+      } as any,
+      validationReport: {
+        ok: true,
+        errors: [],
+      } as any,
+      compiledIr: {
+        irVersion: 'csi.v1',
+        nodes: [],
+      } as any,
     } as any)
     await repo.findById('session-1')
     await repo.updateSession('session-1', {
@@ -333,19 +378,40 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
         nodes: [{ id: 'entry-1' }],
         edges: [],
       } as any,
+      semanticGraph: {
+        version: 1,
+        nodes: [{ id: 'entry-1' }],
+      } as any,
+      validationReport: {
+        ok: false,
+        errors: [{ code: 'codegen.semantic_graph_incomplete' }],
+      } as any,
+      compiledIr: {
+        irVersion: 'csi.v1',
+        nodes: [{ id: 'ir-1' }],
+      } as any,
     } as any)
 
     expect(tx.llmStrategyCodegenSession.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         graphSnapshot: expect.objectContaining({ graphVersion: 'gss.v1' }),
+        semanticGraph: expect.objectContaining({ version: 1 }),
+        validationReport: expect.objectContaining({ ok: true }),
+        compiledIr: expect.objectContaining({ irVersion: 'csi.v1' }),
       }),
       select: expect.objectContaining({
         graphSnapshot: true,
+        semanticGraph: true,
+        validationReport: true,
+        compiledIr: true,
       }),
     }))
     expect(tx.llmStrategyCodegenSession.findUnique).toHaveBeenCalledWith(expect.objectContaining({
       select: expect.objectContaining({
         graphSnapshot: true,
+        semanticGraph: true,
+        validationReport: true,
+        compiledIr: true,
       }),
     }))
     expect(tx.llmStrategyCodegenSession.update).toHaveBeenCalledWith(expect.objectContaining({
@@ -353,9 +419,21 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
         graphSnapshot: expect.objectContaining({
           nodes: [{ id: 'entry-1' }],
         }),
+        semanticGraph: expect.objectContaining({
+          nodes: [{ id: 'entry-1' }],
+        }),
+        validationReport: expect.objectContaining({
+          ok: false,
+        }),
+        compiledIr: expect.objectContaining({
+          nodes: [{ id: 'ir-1' }],
+        }),
       }),
       select: expect.objectContaining({
         graphSnapshot: true,
+        semanticGraph: true,
+        validationReport: true,
+        compiledIr: true,
       }),
     }))
   })

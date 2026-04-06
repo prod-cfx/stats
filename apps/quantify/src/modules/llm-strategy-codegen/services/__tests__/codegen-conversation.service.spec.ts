@@ -13,6 +13,7 @@ import { ScriptProfileExtractorService } from '../script-profile-extractor.servi
 import { SpecDescBuilderService } from '../spec-desc-builder.service'
 import { StaticGuardrailService } from '../static-guardrail.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
+import { ordinarySemanticGraphStrategyFixtures } from './fixtures/semantic-graph-strategies'
 
 describe('codegenConversationService (llm orchestrated flow)', () => {
   jest.setTimeout(120_000)
@@ -127,6 +128,49 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }
   }
 
+  const createSemanticGraph = (overrides?: {
+    symbol?: string
+    entryTimeframe?: string
+    exitTimeframe?: string
+    sizePct?: number
+    pnlPct?: number
+  }) => ({
+    version: 1 as const,
+    market: {
+      symbol: overrides?.symbol ?? 'BTCUSDT',
+      primaryTimeframe: overrides?.entryTimeframe ?? '3m',
+    },
+    nodes: [
+      {
+        id: 'entry-drop-1',
+        phase: 'entry' as const,
+        kind: 'price_change_pct' as const,
+        params: {
+          timeframe: overrides?.entryTimeframe ?? '3m',
+          left: { source: 'close' as const, offsetBars: 0 },
+          right: { source: 'close' as const, offsetBars: 1 },
+          op: 'lte' as const,
+          valuePct: -1,
+        },
+      },
+      {
+        id: 'exit-pnl-1',
+        phase: 'exit' as const,
+        kind: 'position_pnl_pct' as const,
+        params: {
+          timeframe: overrides?.exitTimeframe ?? '15m',
+          op: 'gte' as const,
+          valuePct: overrides?.pnlPct ?? 2,
+        },
+      },
+    ],
+    actions: [
+      { id: 'open-long', kind: 'OPEN_LONG' as const, sizePct: overrides?.sizePct ?? 25 },
+      { id: 'close-long', kind: 'CLOSE_LONG' as const, sizePct: 100 },
+    ],
+    risk: [],
+  })
+
   beforeEach(() => {
     jest.resetAllMocks()
     mockRepo.tryMarkGenerating.mockResolvedValue(true)
@@ -187,7 +231,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   it('starts in checklist gate when llm says logic is ready', async () => {
     const dto: StartCodegenSessionDto = {
       userId: 'u1',
-      initialMessage: '3分钟跌1%买入，5分钟涨2%卖出',
+      initialMessage: '当前K线收盘价相对于上一根K线收盘价下跌≥1%时买入开仓；当前K线收盘价相对于开仓均价上涨≥2%时卖出平仓',
     }
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
@@ -195,8 +239,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         logicReady: true,
         assistantPrompt: '策略逻辑已完整，请确认逻辑图。',
         logic: {
-          entryRules: ['3m 内下跌 1% 买入'],
-          exitRules: ['5m 内上涨 2% 卖出'],
+          symbols: ['BTCUSDT'],
+          timeframes: ['3m', '15m'],
+          entryRules: ['当前K线收盘价相对于上一根K线收盘价下跌≥1%时买入开仓'],
+          exitRules: ['当前K线收盘价相对于开仓均价上涨≥2%时卖出平仓'],
+          riskRules: {
+            positionPct: 30,
+            stopLossPct: 4,
+          },
         },
       }),
     })
@@ -206,6 +256,16 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(result.status).toBe('CHECKLIST_GATE')
     expect(result.specDesc).toBeTruthy()
+    expect(result.semanticGraph).toEqual(expect.objectContaining({
+      version: 1,
+      market: expect.objectContaining({
+        symbol: 'BTCUSDT',
+      }),
+    }))
+    expect(result.validationReport).toEqual({
+      ok: true,
+      errors: [],
+    })
     expect(result.assistantPrompt).toContain('确认逻辑图')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       graphSnapshot: expect.objectContaining({
@@ -297,6 +357,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         publishedSnapshotId: 'snapshot-session-old',
         consistencyReport: { status: 'FAILED' },
       },
+      semanticGraph: createSemanticGraph(),
+      validationReport: {
+        ok: true,
+        errors: [],
+      },
       strategyInstanceId: 'instance-snapshot-1',
       rejectReason: null,
     })
@@ -307,6 +372,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.strategyInstanceId).toBe('instance-snapshot-1')
     expect(result.publishedSnapshotId).toBe('snapshot-session-1')
     expect(result.consistencyReport).toEqual({ status: 'PASSED' })
+    expect(result.semanticGraph).toEqual(createSemanticGraph())
+    expect(result.validationReport).toEqual({
+      ok: true,
+      errors: [],
+    })
   })
 
   it('keeps drafting and returns unrelated guidance when planner marks message unrelated', async () => {
@@ -335,9 +405,52 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.updateSession).not.toHaveBeenCalled()
   })
 
-  it('moves to checklist gate when llm planner marks logic ready', async () => {
+  it('moves to checklist gate when llm planner marks logic ready and semantic graph is valid', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's4',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {},
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+        logic: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['3m', '15m'],
+          entryRules: ['当前K线收盘价相对于上一根K线收盘价下跌≥1%时买入开仓'],
+          exitRules: ['当前K线收盘价相对于开仓均价上涨≥2%时卖出平仓'],
+          riskRules: {
+            positionPct: 25,
+            stopLossPct: 4,
+          },
+        },
+      }),
+    })
+
+    const result = await service.continueSession('s4', {
+      userId: 'u1',
+      message: '当前K线收盘价相对于上一根K线收盘价下跌≥1%时买入开仓，当前K线收盘价相对于开仓均价上涨≥2%时卖出平仓',
+    })
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.specDesc).toBeTruthy()
+    expect(result.assistantPrompt).toContain('确认逻辑图')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s4', expect.objectContaining({
+      status: 'CHECKLIST_GATE',
+      graphSnapshot: expect.objectContaining({
+        status: 'confirmed',
+        trigger: expect.arrayContaining([expect.objectContaining({ phase: 'entry' })]),
+      }),
+    }))
+  })
+
+  it('keeps drafting when planner marks logic ready but semantic graph is unsupported', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's4-unsupported',
       userId: 'u1',
       status: 'DRAFTING',
       checklist: {},
@@ -355,22 +468,197 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
     })
 
-    const result = await service.continueSession('s4', {
+    const result = await service.continueSession('s4-unsupported', {
       userId: 'u1',
-      message: '入场用金叉，出场用死叉',
+      message: '入场金叉，出场死叉',
     })
 
-    expect(result.status).toBe('CHECKLIST_GATE')
-    expect(result.specDesc).toBeTruthy()
-    expect(result.assistantPrompt).toContain('确认逻辑图')
-    expect(mockRepo.updateSession).toHaveBeenCalledWith('s4', expect.objectContaining({
-      status: 'CHECKLIST_GATE',
-      graphSnapshot: expect.objectContaining({
-        status: 'confirmed',
-        trigger: expect.arrayContaining([expect.objectContaining({ phase: 'entry' })]),
-      }),
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('逻辑已识别')
+    expect(result.assistantPrompt).toContain('暂不支持或不完整的语义')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s4-unsupported', expect.objectContaining({
+      status: 'DRAFTING',
+      graphSnapshot: null,
     }))
   })
+
+  it('keeps drafting when planner provides incomplete grid semantics', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's4-grid-incomplete',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {},
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+        logic: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+          entryRules: ['在固定区间网格买入'],
+          exitRules: ['价格触达上方网格时执行网格卖出平仓'],
+        },
+      }),
+    })
+
+    const result = await service.continueSession('s4-grid-incomplete', {
+      userId: 'u1',
+      message: '在固定区间网格买入，价格触达上方网格卖出',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('暂不支持或不完整的语义')
+    expect(result.assistantPrompt).toContain('grid_params_missing')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s4-grid-incomplete', expect.objectContaining({
+      status: 'DRAFTING',
+      graphSnapshot: null,
+    }))
+  })
+
+  it('keeps drafting when planner only provides bollinger lower-band long entry without exit', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's4-boll-entry-only',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {},
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+        logic: {
+          symbols: ['ETHUSDT'],
+          timeframes: ['15m'],
+          entryRules: ['当价格下穿布林带下轨时做多开仓'],
+          exitRules: [],
+        },
+      }),
+    })
+
+    const result = await service.continueSession('s4-boll-entry-only', {
+      userId: 'u1',
+      message: '当价格下穿布林带下轨时做多开仓',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('暂不支持或不完整的语义')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s4-boll-entry-only', expect.objectContaining({
+      status: 'DRAFTING',
+      graphSnapshot: null,
+    }))
+  })
+
+  it('keeps drafting when planner returns mixed drop+RSI entry rule', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's4-mixed-rsi',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {},
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+        logic: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['3m', '15m'],
+          entryRules: ['当前K线收盘价相对于上一根K线收盘价下跌≥1%且RSI<30时买入开仓'],
+          exitRules: ['当前K线收盘价相对于开仓均价上涨≥2%时卖出平仓'],
+        },
+      }),
+    })
+
+    const result = await service.continueSession('s4-mixed-rsi', {
+      userId: 'u1',
+      message: '下跌1%且RSI<30买入，盈利2%卖出',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('暂不支持或不完整的语义')
+    expect(result.assistantPrompt).toContain('unsupported_feature')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s4-mixed-rsi', expect.objectContaining({
+      status: 'DRAFTING',
+      graphSnapshot: null,
+    }))
+  })
+
+  it('accepts chinese timeframe values by normalizing to canonical timeframe strings before semantic gate', async () => {
+    const dto: StartCodegenSessionDto = {
+      userId: 'u1',
+      initialMessage: '当前K线收盘价相对于上一根K线收盘价下跌≥1%时买入开仓；当前K线收盘价相对于开仓均价上涨≥2%时卖出平仓',
+    }
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '策略逻辑已完整，请确认逻辑图。',
+        logic: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['3分钟', '15分钟'],
+          entryRules: ['当前K线收盘价相对于上一根K线收盘价下跌≥1%时买入开仓'],
+          exitRules: ['当前K线收盘价相对于开仓均价上涨≥2%时卖出平仓'],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-cn-timeframe' })
+
+    const result = await service.startSession(dto)
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      checklist: expect.objectContaining({
+        timeframes: ['3m', '15m'],
+      }),
+      status: 'CHECKLIST_GATE',
+    }))
+  })
+
+  it.each(ordinarySemanticGraphStrategyFixtures)(
+    'builds validated semantic graph for ordinary strategy: $id',
+    async ({ prompt, planner, expected }) => {
+      const dto: StartCodegenSessionDto = {
+        userId: 'u1',
+        initialMessage: prompt,
+      }
+      mockAi.chat.mockResolvedValue({
+        content: JSON.stringify(planner),
+      })
+      mockRepo.createSession.mockResolvedValue({ id: `session-${expected.primaryTimeframe}` })
+
+      const result = await service.startSession(dto)
+
+      expect(result.status).toBe('CHECKLIST_GATE')
+      expect(result.validationReport).toEqual({
+        ok: true,
+        errors: [],
+      })
+      expect(result.semanticGraph).toEqual(expect.objectContaining({
+        version: 1,
+        market: expect.objectContaining({
+          symbol: expected.symbol,
+          primaryTimeframe: expected.primaryTimeframe,
+        }),
+        nodes: expect.arrayContaining(
+          expected.nodeKinds.map(kind => expect.objectContaining({ kind })),
+        ),
+        actions: expect.arrayContaining(
+          expected.actionKinds
+            .filter(kind => kind !== 'REDUCE_POSITION')
+            .map(kind => expect.objectContaining({ kind })),
+        ),
+        risk: expect.arrayContaining(
+          expected.riskKinds.map(kind => expect.objectContaining({ kind })),
+        ),
+      }))
+    },
+  )
 
   it('publishes after confirmGenerate with compiled pipeline', async () => {
     mockRepo.findById.mockResolvedValue({
@@ -382,6 +670,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['短均线下穿长均线（死叉）出场'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph(),
       graphSnapshot: createGraphSnapshot(),
     })
     mockRepo.createVersion.mockResolvedValue({ id: 'v1' })
@@ -408,8 +697,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
-  it('compiles from stored graph snapshot when confirmGenerate is true', async () => {
+  it('compiles from stored semantic graph when confirmGenerate is true', async () => {
     const graphSnapshot = createGraphSnapshot()
+    const semanticGraph = createSemanticGraph()
 
     mockRepo.findById.mockResolvedValue({
       id: 's-compile',
@@ -423,6 +713,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       latestSpecDesc: {
         market: { symbols: ['BTCUSDT'], timeframes: ['1h'] },
       },
+      semanticGraph,
       graphSnapshot,
       strategyInstanceId: null,
       rejectReason: null,
@@ -439,12 +730,18 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     await waitForTerminalStatus('s-compile')
 
     expect(mockAi.chat).not.toHaveBeenCalled()
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-compile', expect.objectContaining({
+      status: 'VALIDATING_STATIC',
+      compiledIr: expect.objectContaining({
+        irVersion: 'csi.v1',
+      }),
+    }))
     expect(mockCompiledPublicationGate.publish).toHaveBeenCalledWith(expect.objectContaining({
       graphSnapshot,
     }))
   })
 
-  it('rejects confirmGenerate when graph snapshot is missing', async () => {
+  it('rejects confirmGenerate when semantic graph is missing', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-missing-graph',
       userId: 'u1',
@@ -454,6 +751,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['短均线下穿长均线（死叉）出场'],
       },
       constraintPack: {},
+      semanticGraph: null,
       graphSnapshot: null,
     })
 
@@ -462,7 +760,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '确认逻辑图',
       confirmGenerate: true,
     })).rejects.toMatchObject({
-      message: 'codegen.graph_snapshot_missing',
+      message: 'codegen.semantic_graph_missing',
     })
 
     expect(mockCompiledPublicationGate.publish).not.toHaveBeenCalled()
@@ -480,6 +778,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['短均线下穿长均线（死叉）出场'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph(),
       graphSnapshot,
     })
     mockRepo.createVersion.mockResolvedValue({ id: 'v-ignore-checklist' })
@@ -516,6 +815,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['atr stop'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph(),
       graphSnapshot: createGraphSnapshot({
         entryOperator: 'LT(RSI(CLOSE,14),30)',
         exitOperator: 'GT(ATR(CLOSE,14),3)',
@@ -553,6 +853,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['跌破最近支撑位出场'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph(),
       graphSnapshot: createGraphSnapshot(),
     })
     mockRepo.createVersion.mockResolvedValue({ id: 'v3' })
@@ -586,6 +887,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['跌破最近支撑位出场'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph(),
       graphSnapshot: createGraphSnapshot(),
     })
     mockRepo.createVersion.mockResolvedValue({ id: 'v-publish-fail' })
@@ -621,6 +923,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['跌破最近支撑位出场'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph(),
       graphSnapshot: createGraphSnapshot(),
     })
     mockRepo.createVersion.mockResolvedValue({ id: 'v4' })
@@ -651,6 +954,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['跌破支撑位出场'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph(),
       graphSnapshot: createGraphSnapshot(),
     })
     mockRepo.createVersion.mockResolvedValue({ id: 'v6' })
@@ -687,6 +991,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['跌破支撑位出场'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph({ entryTimeframe: '5m', exitTimeframe: '5m' }),
       graphSnapshot: createGraphSnapshot({ timeframe: '5m' }),
     })
     mockRepo.createVersion.mockResolvedValue({ id: 'v-instance-1' })
@@ -736,6 +1041,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         },
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph({ entryTimeframe: '15m', exitTimeframe: '15m', sizePct: 10 }),
       graphSnapshot: createGraphSnapshot({
         exchange: 'okx',
         timeframe: '15m',
@@ -784,6 +1090,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         },
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph({ entryTimeframe: '15m', exitTimeframe: '15m', sizePct: 10 }),
       graphSnapshot: createGraphSnapshot({
         timeframe: '15m',
         positionPct: 10,
@@ -822,6 +1129,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['跌破支撑位出场'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph({ entryTimeframe: '15m', exitTimeframe: '15m' }),
       graphSnapshot: createGraphSnapshot({
         timeframe: '15m',
       }),
@@ -858,6 +1166,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['跌破支撑位出场'],
       },
       constraintPack: {},
+      semanticGraph: createSemanticGraph({ entryTimeframe: '5m', exitTimeframe: '5m' }),
       graphSnapshot: createGraphSnapshot({
         timeframe: '5m',
       }),

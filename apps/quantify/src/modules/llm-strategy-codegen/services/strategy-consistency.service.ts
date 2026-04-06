@@ -1,8 +1,14 @@
 import type { CanonicalAction, CanonicalStrategySpec } from '../types/canonical-strategy-spec'
+import type { CanonicalStrategyIrV1 } from '../types/canonical-strategy-ir'
+import type { SemanticStrategyGraph } from '../types/semantic-strategy-graph'
 import type { StrategyConsistencyCheck, StrategyConsistencyReport } from '../types/strategy-consistency-report'
 import type { StrategySemanticProfile, StrategySemanticRuleKey } from '../types/strategy-semantic-profile'
 import type { StrategySummary } from '../types/strategy-summary'
+import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
+import { createHash } from 'node:crypto'
 import { Injectable } from '@nestjs/common'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { CompiledScriptParserService } from './compiled-script-parser.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { ScriptProfileExtractorService } from './script-profile-extractor.service'
 
@@ -11,7 +17,34 @@ const EXIT_ACTIONS = new Set(['CLOSE_LONG', 'CLOSE_SHORT', 'ADJUST_POSITION'])
 
 @Injectable()
 export class StrategyConsistencyService {
-  constructor(private readonly scriptProfileExtractor: ScriptProfileExtractorService) {}
+  constructor(
+    private readonly scriptProfileExtractor: ScriptProfileExtractorService,
+    private readonly compiledScriptParser: CompiledScriptParserService = new CompiledScriptParserService(),
+  ) {}
+
+  audit(input: {
+    semanticGraph: SemanticStrategyGraph
+    ir: CanonicalStrategyIrV1
+    scriptCode: string
+  }): StrategyConsistencyReport {
+    const scriptProfile = this.extractCompiledScriptProfile(input.scriptCode)
+    const specProfile = this.irToProfile(input.ir)
+    const checks: StrategyConsistencyCheck[] = []
+
+    checks.push(this.checkSemanticGraphDigest(input.semanticGraph, input.ir))
+    checks.push(this.checkIrSupportsSemanticGraph(input.semanticGraph, input.ir))
+    checks.push(this.checkCompiledScriptMatchesIr(input.ir, input.scriptCode))
+
+    const summary = this.buildSummary(checks)
+
+    return {
+      status: summary.criticalFailed > 0 ? 'FAILED' : 'PASSED',
+      specProfile,
+      scriptProfile,
+      checks,
+      summary,
+    }
+  }
 
   evaluate(input: {
     canonicalSpec: CanonicalStrategySpec
@@ -44,6 +77,327 @@ export class StrategyConsistencyService {
       scriptProfile,
       checks,
       summary,
+    }
+  }
+
+  private extractCompiledScriptProfile(scriptCode: string): StrategySemanticProfile {
+    try {
+      const parsed = this.compiledScriptParser.parse(scriptCode)
+      return this.projectionToProfile(parsed)
+    } catch {
+      return this.scriptProfileExtractor.extract(scriptCode)
+    }
+  }
+
+  private irToProfile(ir: CanonicalStrategyIrV1): StrategySemanticProfile {
+    const indicators: StrategySemanticProfile['indicators'] = []
+    const pushIndicator = (indicator: StrategySemanticProfile['indicators'][number]) => {
+      if (!indicators.some(item => item.kind === indicator.kind)) {
+        indicators.push(indicator)
+      }
+    }
+
+    for (const series of ir.signalCatalog.series) {
+      switch (series.kind) {
+        case 'UPPER_BAND':
+        case 'MID_BAND':
+        case 'LOWER_BAND':
+          pushIndicator({ kind: 'bollingerBands', params: {
+            period: typeof series.params?.period === 'number' ? series.params.period : 20,
+            stdDev: typeof series.params?.stdDev === 'number' ? series.params.stdDev : 2,
+          } })
+          break
+        case 'SMA':
+          pushIndicator({ kind: 'sma', params: { period: typeof series.params?.period === 'number' ? series.params.period : 20 } })
+          break
+        case 'EMA':
+          pushIndicator({ kind: 'ema', params: { period: typeof series.params?.period === 'number' ? series.params.period : 20 } })
+          break
+        case 'RSI':
+          pushIndicator({ kind: 'rsi', params: { period: typeof series.params?.period === 'number' ? series.params.period : 14 } })
+          break
+        case 'ATR':
+          pushIndicator({ kind: 'atr', params: { period: typeof series.params?.period === 'number' ? series.params.period : 14 } })
+          break
+        case 'MACD_LINE':
+        case 'MACD_SIGNAL':
+          pushIndicator({ kind: 'macd', params: {} })
+          break
+        default:
+          break
+      }
+    }
+
+    const actions = Array.from(new Set(
+      ir.ruleBlocks.flatMap(rule =>
+        rule.actions.map((action): CanonicalAction =>
+          action.kind === 'REDUCE_LONG' || action.kind === 'REDUCE_SHORT'
+            ? 'ADJUST_POSITION'
+            : action.kind,
+        ),
+      ),
+    ))
+
+    const ruleMappings: StrategySemanticProfile['ruleMappings'] = []
+    const pushRuleMapping = (mapping: StrategySemanticProfile['ruleMappings'][number]) => {
+      if (!ruleMappings.some(item => item.key === mapping.key && item.action === mapping.action)) {
+        ruleMappings.push(mapping)
+      }
+    }
+
+    for (const predicate of ir.signalCatalog.predicates) {
+      const action = this.findPredicateAction(ir, predicate.id)
+      if (!action) continue
+      if (predicate.kind === 'CROSS_OVER') {
+        pushRuleMapping({ key: 'bollinger.upper_break', action })
+        continue
+      }
+      if (predicate.kind === 'CROSS_UNDER') {
+        pushRuleMapping({ key: 'bollinger.lower_break', action })
+        continue
+      }
+      if (predicate.kind === 'OR' && predicate.id.includes('middle')) {
+        pushRuleMapping({ key: 'bollinger.middle_revert', action })
+      }
+    }
+
+    return {
+      indicators,
+      actions,
+      ruleMappings,
+      sizing: {
+        mode: this.mapSizingMode(ir.portfolio.sizing.mode),
+        value: ir.portfolio.sizing.value,
+        source: 'literal',
+      },
+      requiredParams: [],
+      fallbackDetected: false,
+    }
+  }
+
+  private projectionToProfile(
+    projection: ReturnType<CompiledScriptParserService['parse']>,
+  ): StrategySemanticProfile {
+    const indicators: StrategySemanticProfile['indicators'] = []
+    const pushIndicator = (indicator: StrategySemanticProfile['indicators'][number]) => {
+      if (!indicators.some(item => item.kind === indicator.kind)) {
+        indicators.push(indicator)
+      }
+    }
+
+    for (const expr of projection.exprPool) {
+      if (expr.nodeType !== 'series') continue
+      const payload = expr.payload
+      switch (payload.kind) {
+        case 'UPPER_BAND':
+        case 'MID_BAND':
+        case 'LOWER_BAND':
+          pushIndicator({ kind: 'bollingerBands', params: {
+            period: typeof payload.params?.period === 'number' ? payload.params.period : 20,
+            stdDev: typeof payload.params?.stdDev === 'number' ? payload.params.stdDev : 2,
+          } })
+          break
+        case 'SMA':
+          pushIndicator({ kind: 'sma', params: { period: typeof payload.params?.period === 'number' ? payload.params.period : 20 } })
+          break
+        case 'EMA':
+          pushIndicator({ kind: 'ema', params: { period: typeof payload.params?.period === 'number' ? payload.params.period : 20 } })
+          break
+        case 'RSI':
+          pushIndicator({ kind: 'rsi', params: { period: typeof payload.params?.period === 'number' ? payload.params.period : 14 } })
+          break
+        case 'ATR':
+          pushIndicator({ kind: 'atr', params: { period: typeof payload.params?.period === 'number' ? payload.params.period : 14 } })
+          break
+        case 'MACD_LINE':
+        case 'MACD_SIGNAL':
+          pushIndicator({ kind: 'macd', params: {} })
+          break
+        default:
+          break
+      }
+    }
+
+    const actions = Array.from(new Set(
+      projection.decisionPrograms.flatMap(program =>
+        program.actions.map((action): CanonicalAction =>
+          action.kind === 'REDUCE_LONG' || action.kind === 'REDUCE_SHORT'
+            ? 'ADJUST_POSITION'
+            : action.kind,
+        ),
+      ),
+    ))
+
+    const ruleMappings: StrategySemanticProfile['ruleMappings'] = []
+    const pushRuleMapping = (mapping: StrategySemanticProfile['ruleMappings'][number]) => {
+      if (!ruleMappings.some(item => item.key === mapping.key && item.action === mapping.action)) {
+        ruleMappings.push(mapping)
+      }
+    }
+
+    for (const expr of projection.exprPool) {
+      if (expr.nodeType !== 'predicate') continue
+      const action = projection.decisionPrograms.find(program => program.when === expr.id)?.actions[0]
+      if (!action) continue
+      const normalizedAction: CanonicalAction = action.kind === 'REDUCE_LONG' || action.kind === 'REDUCE_SHORT'
+        ? 'ADJUST_POSITION'
+        : action.kind
+      if (expr.payload.kind === 'CROSS_OVER') {
+        pushRuleMapping({ key: 'bollinger.upper_break', action: normalizedAction })
+        continue
+      }
+      if (expr.payload.kind === 'CROSS_UNDER') {
+        pushRuleMapping({ key: 'bollinger.lower_break', action: normalizedAction })
+        continue
+      }
+      if (expr.payload.kind === 'OR' && expr.sourceRef.includes('middle')) {
+        pushRuleMapping({ key: 'bollinger.middle_revert', action: normalizedAction })
+      }
+    }
+
+    const firstOpenAction = projection.decisionPrograms
+      .flatMap(program => program.actions)
+      .find(action => action.kind === 'OPEN_LONG' || action.kind === 'OPEN_SHORT')
+
+    return {
+      indicators,
+      actions,
+      ruleMappings,
+      sizing: firstOpenAction
+        ? {
+            mode: this.mapSizingMode(firstOpenAction.quantity.mode),
+            value: firstOpenAction.quantity.value,
+            source: 'literal',
+          }
+        : null,
+      requiredParams: [],
+      fallbackDetected: false,
+    }
+  }
+
+  private checkSemanticGraphDigest(
+    semanticGraph: SemanticStrategyGraph,
+    ir: CanonicalStrategyIrV1,
+  ): StrategyConsistencyCheck {
+    const expectedDigest = this.hashCanonicalJson(semanticGraph)
+    const passed = ir.source.graphDigest === expectedDigest
+
+    return {
+      key: 'semantic_graph.digest',
+      level: 'critical',
+      status: passed ? 'passed' : 'failed',
+      expected: expectedDigest,
+      actual: ir.source.graphDigest,
+      message: passed ? 'IR graphDigest 与 semanticGraph 一致。' : 'IR graphDigest 与 semanticGraph 不一致。',
+    }
+  }
+
+  private checkIrSupportsSemanticGraph(
+    semanticGraph: SemanticStrategyGraph,
+    ir: CanonicalStrategyIrV1,
+  ): StrategyConsistencyCheck {
+    const failures: string[] = []
+
+    const graphTimeframes = new Set([
+      semanticGraph.market.primaryTimeframe,
+      ...semanticGraph.nodes
+        .filter((node): node is SemanticStrategyGraph['nodes'][number] & { params: { timeframe: string } } =>
+          typeof (node as { params?: { timeframe?: unknown } }).params?.timeframe === 'string')
+        .map(node => node.params.timeframe),
+    ])
+    for (const timeframe of graphTimeframes) {
+      if (!ir.market.timeframes.includes(timeframe)) {
+        failures.push(`缺少 timeframe ${timeframe}`)
+      }
+    }
+
+    const hasBollingerNode = semanticGraph.nodes.some(node => node.kind === 'bollinger_band_touch')
+    if (hasBollingerNode) {
+      const bandKinds = new Set(ir.signalCatalog.series.map(series => series.kind))
+      for (const required of ['UPPER_BAND', 'MID_BAND', 'LOWER_BAND'] as const) {
+        if (!bandKinds.has(required)) {
+          failures.push(`缺少 ${required}`)
+        }
+      }
+    }
+
+    const gridNodeCount = semanticGraph.nodes.filter(node => node.kind === 'grid_level_touch').length
+    if (gridNodeCount > 0) {
+      if (ir.signalCatalog.levelSets.length === 0) {
+        failures.push('缺少 grid level sets')
+      }
+      const touchPredicateCount = ir.signalCatalog.predicates.filter(predicate =>
+        predicate.kind === 'TOUCH_LEVEL_DOWN' || predicate.kind === 'TOUCH_LEVEL_UP',
+      ).length
+      if (touchPredicateCount < gridNodeCount) {
+        failures.push('grid touch predicates 不足')
+      }
+    }
+
+    const outsideRiskCount = semanticGraph.nodes.filter(node => node.kind === 'bollinger_bars_outside').length
+    if (outsideRiskCount > 0) {
+      const outsideSeriesCount = ir.signalCatalog.series.filter(series => series.kind === 'BOLLINGER_BARS_OUTSIDE').length
+      if (outsideSeriesCount < outsideRiskCount) {
+        failures.push('缺少 bollinger outside risk series')
+      }
+      const rebalanceCount = ir.ruleBlocks.filter(rule => rule.phase === 'rebalance').length
+      if (rebalanceCount === 0) {
+        failures.push('缺少 rebalance risk rule')
+      }
+    }
+
+    const graphActionKinds = new Set(semanticGraph.actions.map(action => action.kind))
+    const irActionKinds = new Set(ir.ruleBlocks.flatMap(rule => rule.actions.map(action => action.kind)))
+    for (const actionKind of graphActionKinds) {
+      if (actionKind === 'REDUCE_POSITION') continue
+      if (!irActionKinds.has(actionKind)) {
+        failures.push(`缺少 action ${actionKind}`)
+      }
+    }
+
+    return {
+      key: 'semantic_graph.ir_alignment',
+      level: 'critical',
+      status: failures.length === 0 ? 'passed' : 'failed',
+      expected: {
+        timeframes: [...graphTimeframes],
+        actionKinds: [...graphActionKinds],
+      },
+      actual: {
+        marketTimeframes: ir.market.timeframes,
+        actionKinds: [...irActionKinds],
+        levelSetCount: ir.signalCatalog.levelSets.length,
+      },
+      message: failures.length === 0 ? 'IR 已完整承接 semanticGraph 语义。' : failures.join('；'),
+    }
+  }
+
+  private checkCompiledScriptMatchesIr(
+    ir: CanonicalStrategyIrV1,
+    scriptCode: string,
+  ): StrategyConsistencyCheck {
+    try {
+      const parsed = this.compiledScriptParser.parse(scriptCode)
+      const expectedIrHash = this.hashCanonicalJson(ir)
+      const passed = parsed.compiledManifest.irHash === expectedIrHash
+
+      return {
+        key: 'script.ir_manifest',
+        level: 'critical',
+        status: passed ? 'passed' : 'failed',
+        expected: expectedIrHash,
+        actual: parsed.compiledManifest.irHash,
+        message: passed ? '脚本 manifest 与 IR 哈希一致。' : '脚本 manifest 与 IR 哈希不一致。',
+      }
+    } catch (error) {
+      return {
+        key: 'script.ir_manifest',
+        level: 'critical',
+        status: 'failed',
+        expected: this.hashCanonicalJson(ir),
+        actual: null,
+        message: error instanceof Error ? error.message : 'compiled script parse failed',
+      }
     }
   }
 
@@ -419,6 +773,37 @@ export class StrategyConsistencyService {
         unprovable: 0,
       },
     )
+  }
+
+  private findPredicateAction(
+    ir: CanonicalStrategyIrV1,
+    predicateId: string,
+  ): CanonicalAction | null {
+    const action = ir.ruleBlocks.find(rule => rule.when === predicateId)?.actions[0]
+    if (!action) return null
+    if (action.kind === 'REDUCE_LONG' || action.kind === 'REDUCE_SHORT') {
+      return 'ADJUST_POSITION'
+    }
+    return action.kind
+  }
+
+  private mapSizingMode(
+    mode: 'pct_equity' | 'fixed_quote' | 'fixed_base' | 'position_pct',
+  ): NonNullable<StrategySemanticProfile['sizing']>['mode'] {
+    switch (mode) {
+      case 'pct_equity':
+      case 'position_pct':
+        return 'RATIO'
+      case 'fixed_quote':
+        return 'QUOTE'
+      case 'fixed_base':
+        return 'QTY'
+    }
+  }
+
+  private hashCanonicalJson(value: unknown): `sha256:${string}` {
+    const digest = createHash('sha256').update(canonicalSerialize(value)).digest('hex')
+    return `sha256:${digest}`
   }
 
   private compareSummaries(
