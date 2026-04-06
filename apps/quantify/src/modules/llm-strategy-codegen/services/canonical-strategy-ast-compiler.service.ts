@@ -48,7 +48,6 @@ export class CanonicalStrategyAstCompilerService {
 
   private compileExprPool(ir: CanonicalStrategyIrV1): ExprNode[] {
     const seriesIndex = new Map(ir.signalCatalog.series.map(series => [series.id, series]))
-    const predicateIndex = new Map(ir.signalCatalog.predicates.map(predicate => [predicate.id, predicate]))
 
     const orderedSeries = [...ir.signalCatalog.series].sort((left, right) => {
       const leftRank = this.seriesRank(left, seriesIndex)
