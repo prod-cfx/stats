@@ -2,6 +2,7 @@ import type { ContinueCodegenSessionDto } from '../../dto/continue-codegen-sessi
 import type { StartCodegenSessionDto } from '../../dto/start-codegen-session.dto'
 import type { CodegenSessionsRepository } from '../../repositories/codegen-sessions.repository'
 import type { PublishedStrategySnapshotsRepository } from '../../repositories/published-strategy-snapshots.repository'
+import type { CompiledPublicationGateService } from '../compiled-publication-gate.service'
 import type { RecommendationIndexService } from '../recommendation-index.service'
 import type { AiService } from '@/modules/ai/ai.service'
 import { restoreProcessEnv, setProcessEnvValue, snapshotProcessEnv } from '@/common/env/env.accessor'
@@ -49,6 +50,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   const mockRecommendation = {
     onSpecDescPersisted: jest.fn(),
   }
+  const mockCompiledPublicationGate = {
+    publish: jest.fn(),
+  }
 
   const service = new CodegenConversationService(
     mockAi as unknown as AiService,
@@ -61,6 +65,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     new StrategyConsistencyService(new ScriptProfileExtractorService()),
     new StrategySummaryBuilderService(new ScriptProfileExtractorService()),
     mockRecommendation as unknown as RecommendationIndexService,
+    mockCompiledPublicationGate as unknown as CompiledPublicationGateService,
   )
   const waitForTerminalStatus = async (
     sessionId: string,
@@ -99,6 +104,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.ensureDraftStrategyInstanceBoundForPublishedSession.mockResolvedValue({
       strategyTemplateId: 'template-1',
       strategyInstanceId: 'instance-1',
+    })
+    mockCompiledPublicationGate.publish.mockResolvedValue({
+      snapshotId: 'snapshot-compiled-1',
+      consistencyReport: {
+        status: 'PASSED',
+      },
     })
     setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'false')
     setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'true')
@@ -362,6 +373,70 @@ strategy`,
     expect(mockRepo.createVersion).toHaveBeenCalled()
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s5', expect.objectContaining({
       status: 'PUBLISHED',
+    }))
+  })
+
+  it('compiles from stored graph snapshot when confirmGenerate is true', async () => {
+    const graphSnapshot = {
+      version: 3,
+      status: 'confirmed' as const,
+      trigger: [
+        { id: 'trigger-entry-1', phase: 'entry' as const, operator: 'CROSS_OVER(EMA(CLOSE,7),EMA(CLOSE,21))' },
+        { id: 'trigger-exit-1', phase: 'exit' as const, operator: 'CROSS_UNDER(EMA(CLOSE,7),EMA(CLOSE,21))' },
+      ],
+      actions: [
+        { id: 'action-buy-1', action: 'BUY' as const, target: 'BTCUSDT', amount: '25%' },
+        { id: 'action-sell-1', action: 'SELL' as const, target: 'BTCUSDT', amount: '25%' },
+      ],
+      risk: ['stopLossPct: STOP_LOSS_PCT(4)'],
+      meta: {
+        exchange: 'binance' as const,
+        symbol: 'BTCUSDT',
+        timeframe: '1h',
+        positionPct: 25,
+        executionTags: [],
+      },
+    }
+
+    mockRepo.findById.mockResolvedValue({
+      id: 's-compile',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        entryRules: ['短均线上穿长均线（金叉）入场'],
+        exitRules: ['短均线下穿长均线（死叉）出场'],
+      },
+      constraintPack: {},
+      latestSpecDesc: {
+        market: { symbols: ['BTCUSDT'], timeframes: ['1h'] },
+      },
+      graphSnapshot,
+      strategyInstanceId: null,
+      rejectReason: null,
+    })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '已确认逻辑，开始编译。',
+      }),
+    })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v-compile-1' })
+
+    const result = await service.continueSession('s-compile', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await waitForTerminalStatus('s-compile')
+
+    expect(mockAi.chat).not.toHaveBeenCalledWith(expect.objectContaining({
+      responseFormat: expect.any(Object),
+    }))
+    expect(mockCompiledPublicationGate.publish).toHaveBeenCalledWith(expect.objectContaining({
+      graphSnapshot,
     }))
   })
 

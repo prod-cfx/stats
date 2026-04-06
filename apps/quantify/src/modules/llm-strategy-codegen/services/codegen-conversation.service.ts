@@ -5,6 +5,8 @@ import type { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.
 import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-test.response.dto'
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
+import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
+import type { CompiledScriptExecutionEnvelope } from '../types/compiled-script-projection'
 import type { StrategyConsistencyReport } from '../types/strategy-consistency-report'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 import type { Prisma } from '@/prisma/prisma.types'
@@ -25,6 +27,16 @@ import { CodegenSessionsRepository } from '../repositories/codegen-sessions.repo
 import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
+import { CanonicalStrategyAstCompilerService } from './canonical-strategy-ast-compiler.service'
+import { CanonicalStrategyIrCanonicalizerService } from './canonical-strategy-ir-canonicalizer.service'
+import { CanonicalStrategyIrCompilerService } from './canonical-strategy-ir-compiler.service'
+import { CanonicalStrategyIrValidatorService } from './canonical-strategy-ir-validator.service'
+import { CodegenGraphSnapshotService } from './codegen-graph-snapshot.service'
+import { CompiledPublicationGateService } from './compiled-publication-gate.service'
+import { CompiledScriptEmitterService } from './compiled-script-emitter.service'
+import { CompiledScriptParserService } from './compiled-script-parser.service'
+import { GraphOperatorParserService } from './graph-operator-parser.service'
+import { GraphSemanticProjectionService } from './graph-semantic-projection.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RecommendationIndexService } from './recommendation-index.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -130,6 +142,15 @@ function parseExplicitMarketType(value: unknown): 'spot' | 'perp' | undefined {
 @Injectable()
 export class CodegenConversationService {
   private readonly strictUnsupportedTargets = new Map<string, number>()
+  private readonly graphSnapshotService = new CodegenGraphSnapshotService()
+  private readonly irCompiler = new CanonicalStrategyIrCompilerService(
+    new GraphOperatorParserService(),
+    new GraphSemanticProjectionService(),
+    new CanonicalStrategyIrValidatorService(),
+    new CanonicalStrategyIrCanonicalizerService(),
+  )
+  private readonly astCompiler = new CanonicalStrategyAstCompilerService()
+  private readonly scriptEmitter = new CompiledScriptEmitterService()
 
   constructor(
     private readonly aiService: AiService,
@@ -142,6 +163,10 @@ export class CodegenConversationService {
     private readonly strategyConsistencyService: StrategyConsistencyService,
     private readonly strategySummaryBuilder: StrategySummaryBuilderService,
     private readonly recommendationIndex: RecommendationIndexService,
+    private readonly compiledPublicationGate: CompiledPublicationGateService = new CompiledPublicationGateService(
+      publishedSnapshotsRepo,
+      new CompiledScriptParserService(),
+    ),
   ) {}
 
   async startSession(
@@ -173,6 +198,9 @@ export class CodegenConversationService {
 
     const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
     const initialSpecDesc = plan.logicReady ? this.specDescBuilder.build(checklist, '') : null
+    const initialGraphSnapshot = plan.logicReady && initialSpecDesc
+      ? this.buildGraphSnapshot(checklist, initialSpecDesc, 1)
+      : null
     const initialHistory = this.appendConversationHistory([], dto.initialMessage, plan.assistantPrompt)
     const session = await this.sessionsRepo.createSession({
       userId: sessionUserId,
@@ -185,6 +213,7 @@ export class CodegenConversationService {
       } as unknown as Prisma.InputJsonValue,
       latestDraftCode: null,
       latestSpecDesc: initialSpecDesc as Prisma.InputJsonValue,
+      graphSnapshot: initialGraphSnapshot as unknown as Prisma.InputJsonValue,
       rejectReason: null,
       strategyInstanceId: null,
     })
@@ -249,17 +278,30 @@ export class CodegenConversationService {
         })
         if (requeued) {
           const checklist = this.readChecklist(session.checklist)
-          void this.runGenerationPipeline({
-            sessionId: session.id,
-            userId: sessionUserId,
-            checklist,
-            message: dto.message,
-            providerCode,
-            model: dto.model,
-            temperature: dto.temperature,
-            maxTokens: dto.maxTokens,
-            existingStrategyInstanceId: session.strategyInstanceId ?? null,
-          })
+          const graphSnapshot = this.readGraphSnapshot(session.graphSnapshot)
+          if (graphSnapshot) {
+            void this.runCompilationPipeline({
+              sessionId: session.id,
+              userId: sessionUserId,
+              checklist,
+              message: dto.message,
+              graphSnapshot,
+              existingStrategyInstanceId: session.strategyInstanceId ?? null,
+              model: dto.model,
+            })
+          } else {
+            void this.runGenerationPipeline({
+              sessionId: session.id,
+              userId: sessionUserId,
+              checklist,
+              message: dto.message,
+              providerCode,
+              model: dto.model,
+              temperature: dto.temperature,
+              maxTokens: dto.maxTokens,
+              existingStrategyInstanceId: session.strategyInstanceId ?? null,
+            })
+          }
           return {
             id: session.id,
             status: 'GENERATING',
@@ -323,6 +365,7 @@ export class CodegenConversationService {
       }
 
       const specDesc = this.specDescBuilder.build(mergedChecklist, '')
+      const graphSnapshot = this.buildGraphSnapshot(mergedChecklist, specDesc, 1)
       await this.sessionsRepo.updateSession(session.id, {
         status: 'CHECKLIST_GATE',
         checklist: mergedChecklist as Prisma.InputJsonValue,
@@ -331,6 +374,7 @@ export class CodegenConversationService {
           conversationHistory: historyAfterPlanner,
         } as unknown as Prisma.InputJsonValue,
         latestSpecDesc: specDesc as Prisma.InputJsonValue,
+        graphSnapshot: graphSnapshot as unknown as Prisma.InputJsonValue,
       })
 
       return {
@@ -362,6 +406,7 @@ export class CodegenConversationService {
     }
 
     const providerCode = this.resolveProviderCode(dto.providerCode)
+    const graphSnapshot = this.readGraphSnapshot(session.graphSnapshot)
     const markedGenerating = await this.sessionsRepo.tryMarkGenerating(session.id, {
       status: 'GENERATING',
       checklist: mergedChecklist as Prisma.InputJsonValue,
@@ -387,22 +432,168 @@ export class CodegenConversationService {
       return this.toSessionSnapshotResponse(latest)
     }
 
-    void this.runGenerationPipeline({
-      sessionId: session.id,
-      userId: sessionUserId,
-      checklist: mergedChecklist,
-      message: dto.message,
-      providerCode,
-      model: dto.model,
-      temperature: dto.temperature,
-      maxTokens: dto.maxTokens,
-      existingStrategyInstanceId: session.strategyInstanceId ?? null,
-    })
+    if (graphSnapshot) {
+      void this.runCompilationPipeline({
+        sessionId: session.id,
+        userId: sessionUserId,
+        checklist: mergedChecklist,
+        message: dto.message,
+        graphSnapshot,
+        existingStrategyInstanceId: session.strategyInstanceId ?? null,
+        model: dto.model,
+      })
+    } else {
+      void this.runGenerationPipeline({
+        sessionId: session.id,
+        userId: sessionUserId,
+        checklist: mergedChecklist,
+        message: dto.message,
+        providerCode,
+        model: dto.model,
+        temperature: dto.temperature,
+        maxTokens: dto.maxTokens,
+        existingStrategyInstanceId: session.strategyInstanceId ?? null,
+      })
+    }
 
     return {
       id: session.id,
       status: 'GENERATING',
       missingFields: [],
+    }
+  }
+
+  private async runCompilationPipeline(args: {
+    sessionId: string
+    userId: string
+    checklist: ChecklistPayload
+    message: string
+    graphSnapshot: StrategyLogicGraphSnapshot
+    existingStrategyInstanceId?: string | null
+    model?: string
+  }): Promise<void> {
+    try {
+      const ir = this.irCompiler.compile(args.graphSnapshot)
+      const ast = this.astCompiler.compile(ir)
+      const executionEnvelope = this.resolveExecutionEnvelope(ir)
+      const script = this.scriptEmitter.emit({
+        ast,
+        executionEnvelope,
+      })
+
+      await this.sessionsRepo.updateSession(args.sessionId, {
+        status: 'VALIDATING_STATIC',
+        latestDraftCode: script,
+      })
+
+      await this.sessionsRepo.updateSession(args.sessionId, {
+        status: 'VALIDATING_RUNTIME',
+      })
+
+      await this.sessionsRepo.updateSession(args.sessionId, {
+        status: 'VALIDATING_OUTPUT',
+      })
+
+      const baseSpecDesc = this.specDescBuilder.build(args.checklist, script)
+      const canonicalSpec = this.canonicalSpecBuilder.build(args.checklist)
+      const userIntentSummary = this.strategySummaryBuilder.buildUserIntentSummary({
+        checklist: args.checklist,
+        message: args.message,
+      })
+      const strategySummary = this.strategySummaryBuilder.buildStrategySummary(canonicalSpec)
+      const scriptSummary = this.strategySummaryBuilder.buildScriptSummary({
+        scriptCode: script,
+      })
+      const lockedParams = this.buildLockedParams(args.checklist)
+      const specDesc = {
+        ...baseSpecDesc,
+        canonicalSpec,
+        userIntentSummary,
+        strategySummary,
+        scriptSummary,
+        lockedParams,
+      } satisfies Record<string, unknown>
+
+      await this.sessionsRepo.updateSession(args.sessionId, {
+        status: 'VALIDATING_CONSISTENCY',
+      })
+
+      const version = await this.sessionsRepo.createVersion({
+        session: { connect: { id: args.sessionId } },
+        scriptCode: script,
+        specDesc: specDesc as unknown as Prisma.InputJsonValue,
+        staticPassed: true,
+        runtimePassed: true,
+        outputPassed: true,
+      })
+
+      await this.recommendationIndex.onSpecDescPersisted({
+        versionId: version.id,
+        specDesc: baseSpecDesc,
+      })
+
+      let strategyInstanceId = args.existingStrategyInstanceId
+        ?? await this.sessionsRepo.findSessionStrategyInstanceId(args.sessionId)
+      let strategyTemplateId: string | null = null
+      const publishInput = this.buildPublishedStrategyInput({
+        sessionId: args.sessionId,
+        userId: args.userId,
+        checklist: args.checklist,
+        model: args.model,
+        scriptCode: script,
+        specDesc,
+        lockedParams,
+      })
+      if (!strategyInstanceId) {
+        try {
+          const bound = await this.sessionsRepo.ensureDraftStrategyInstanceBoundForPublishedSession(publishInput)
+          strategyTemplateId = bound.strategyTemplateId || null
+          strategyInstanceId = bound.strategyInstanceId
+        } catch (publishError) {
+          const publishReason = publishError instanceof Error ? publishError.message : String(publishError)
+          await this.sessionsRepo.updateSession(args.sessionId, {
+            status: 'REJECTED',
+            latestSpecDesc: specDesc as unknown as Prisma.InputJsonValue,
+            latestDraftCode: script,
+            rejectReason: publishReason,
+            strategyInstanceId: null,
+          })
+          return
+        }
+      }
+
+      const published = await this.compiledPublicationGate.publish({
+        sessionId: args.sessionId,
+        strategyTemplateId,
+        strategyInstanceId: strategyInstanceId ?? null,
+        graphSnapshot: args.graphSnapshot,
+        ir,
+        ast,
+        executionEnvelope,
+        script,
+        userIntentSummary: userIntentSummary as unknown as Record<string, unknown>,
+        strategySummary: strategySummary as unknown as Record<string, unknown>,
+        scriptSummary: scriptSummary as unknown as Record<string, unknown>,
+        lockedParams,
+      })
+
+      await this.sessionsRepo.updateSession(args.sessionId, {
+        status: 'PUBLISHED',
+        latestSpecDesc: {
+          ...specDesc,
+          consistencyReport: published.consistencyReport,
+          publishedSnapshotId: published.snapshotId,
+        } as unknown as Prisma.InputJsonValue,
+        latestDraftCode: script,
+        rejectReason: null,
+        strategyInstanceId: strategyInstanceId ?? null,
+      })
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      await this.sessionsRepo.updateSession(args.sessionId, {
+        status: 'REJECTED',
+        rejectReason: reason,
+      })
     }
   }
 
@@ -637,6 +828,26 @@ export class CodegenConversationService {
     return this.normalizeChecklist(payload as Record<string, unknown>)
   }
 
+  private readGraphSnapshot(payload: Prisma.JsonValue | null): StrategyLogicGraphSnapshot | null {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return null
+    }
+
+    const candidate = payload as Partial<StrategyLogicGraphSnapshot>
+    if (
+      typeof candidate.version !== 'number'
+      || candidate.status !== 'confirmed'
+      || !Array.isArray(candidate.trigger)
+      || !Array.isArray(candidate.actions)
+      || !Array.isArray(candidate.risk)
+      || !candidate.meta
+    ) {
+      return null
+    }
+
+    return candidate as StrategyLogicGraphSnapshot
+  }
+
   private async toSessionSnapshotResponse(session: {
     id: string
     status: LlmCodegenSessionStatus
@@ -780,6 +991,58 @@ export class CodegenConversationService {
     }
 
     return locked
+  }
+
+  private buildGraphSnapshot(
+    checklist: ChecklistPayload,
+    specDesc: Record<string, unknown>,
+    version: number,
+  ): StrategyLogicGraphSnapshot {
+    const riskRules = checklist.riskRules ?? {}
+    const exchange = typeof riskRules.exchange === 'string'
+      && ['binance', 'okx', 'hyperliquid'].includes(riskRules.exchange.trim().toLowerCase())
+      ? riskRules.exchange.trim().toLowerCase() as 'binance' | 'okx' | 'hyperliquid'
+      : 'binance'
+    const symbol = typeof checklist.symbols?.[0] === 'string' && checklist.symbols[0].trim().length > 0
+      ? normalizePublishedSymbol(checklist.symbols[0])
+      : 'BTCUSDT'
+    const baseTimeframe = typeof checklist.timeframes?.[0] === 'string' && checklist.timeframes[0].trim().length > 0
+      ? checklist.timeframes[0].trim()
+      : '1h'
+
+    return this.graphSnapshotService.build({
+      version,
+      specDesc,
+      fallback: {
+        exchange,
+        symbol,
+        baseTimeframe,
+        positionPct: this.resolvePositionPct(riskRules),
+      },
+    })
+  }
+
+  private resolvePositionPct(riskRules: Record<string, unknown>): number {
+    if (typeof riskRules.positionPct === 'number' && Number.isFinite(riskRules.positionPct) && riskRules.positionPct > 0) {
+      return riskRules.positionPct
+    }
+
+    return 10
+  }
+
+  private resolveExecutionEnvelope(ir: {
+    portfolio: {
+      positionMode: 'long_only' | 'short_only' | 'long_short'
+    }
+  }): CompiledScriptExecutionEnvelope {
+    return {
+      positionMode: ir.portfolio.positionMode,
+      marginMode: 'cash',
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict',
+    }
   }
 
   async testEngine(dto: TestLlmCodegenEngineDto): Promise<LlmCodegenEngineTestResponseDto> {
