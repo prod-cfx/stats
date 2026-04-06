@@ -12,7 +12,6 @@ import { RuntimeGuardrailService } from '../runtime-guardrail.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
 import { SpecDescBuilderService } from '../spec-desc-builder.service'
 import { StaticGuardrailService } from '../static-guardrail.service'
-import { StrategyConsistencyService } from '../strategy-consistency.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
 
 describe('codegenConversationService (llm orchestrated flow)', () => {
@@ -62,7 +61,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     new RuntimeGuardrailService(),
     new SpecDescBuilderService(),
     new CanonicalSpecBuilderService(),
-    new StrategyConsistencyService(new ScriptProfileExtractorService()),
     new StrategySummaryBuilderService(new ScriptProfileExtractorService()),
     mockRecommendation as unknown as RecommendationIndexService,
     mockCompiledPublicationGate as unknown as CompiledPublicationGateService,
@@ -209,6 +207,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('CHECKLIST_GATE')
     expect(result.specDesc).toBeTruthy()
     expect(result.assistantPrompt).toContain('确认逻辑图')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      graphSnapshot: expect.objectContaining({
+        status: 'confirmed',
+        trigger: expect.arrayContaining([expect.objectContaining({ phase: 'entry' })]),
+      }),
+    }))
   })
 
   it('stays in drafting when planner says logicReady is false even with a detailed message', async () => {
@@ -361,6 +365,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).toContain('确认逻辑图')
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s4', expect.objectContaining({
       status: 'CHECKLIST_GATE',
+      graphSnapshot: expect.objectContaining({
+        status: 'confirmed',
+        trigger: expect.arrayContaining([expect.objectContaining({ phase: 'entry' })]),
+      }),
     }))
   })
 
@@ -376,13 +384,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       constraintPack: {},
       graphSnapshot: createGraphSnapshot(),
     })
-    mockAi.chat.mockResolvedValueOnce({
-      content: JSON.stringify({
-        related: true,
-        logicReady: true,
-        assistantPrompt: '已确认逻辑，开始编译。',
-      }),
-    })
     mockRepo.createVersion.mockResolvedValue({ id: 'v1' })
 
     const dto: ContinueCodegenSessionDto = {
@@ -395,6 +396,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('GENERATING')
     await waitForTerminalStatus('s5')
 
+    expect(mockAi.chat).not.toHaveBeenCalled()
     expect(mockRepo.createVersion).toHaveBeenCalled()
     expect(mockCompiledPublicationGate.publish).toHaveBeenCalledWith(expect.objectContaining({
       graphSnapshot: expect.objectContaining({
@@ -425,13 +427,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       strategyInstanceId: null,
       rejectReason: null,
     })
-    mockAi.chat.mockResolvedValueOnce({
-      content: JSON.stringify({
-        related: true,
-        logicReady: true,
-        assistantPrompt: '已确认逻辑，开始编译。',
-      }),
-    })
     mockRepo.createVersion.mockResolvedValue({ id: 'v-compile-1' })
 
     const result = await service.continueSession('s-compile', {
@@ -443,8 +438,68 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('GENERATING')
     await waitForTerminalStatus('s-compile')
 
-    expect(mockAi.chat).not.toHaveBeenCalledWith(expect.objectContaining({
-      responseFormat: expect.any(Object),
+    expect(mockAi.chat).not.toHaveBeenCalled()
+    expect(mockCompiledPublicationGate.publish).toHaveBeenCalledWith(expect.objectContaining({
+      graphSnapshot,
+    }))
+  })
+
+  it('rejects confirmGenerate when graph snapshot is missing', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-missing-graph',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        entryRules: ['短均线上穿长均线（金叉）入场'],
+        exitRules: ['短均线下穿长均线（死叉）出场'],
+      },
+      constraintPack: {},
+      graphSnapshot: null,
+    })
+
+    await expect(service.continueSession('s-missing-graph', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+    })).rejects.toMatchObject({
+      message: 'codegen.graph_snapshot_missing',
+    })
+
+    expect(mockCompiledPublicationGate.publish).not.toHaveBeenCalled()
+    expect(mockAi.chat).not.toHaveBeenCalled()
+  })
+
+  it('does not re-read checklist fields when compilation starts', async () => {
+    const graphSnapshot = createGraphSnapshot()
+    mockRepo.findById.mockResolvedValue({
+      id: 's-ignore-checklist',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        entryRules: ['短均线上穿长均线（金叉）入场'],
+        exitRules: ['短均线下穿长均线（死叉）出场'],
+      },
+      constraintPack: {},
+      graphSnapshot,
+    })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v-ignore-checklist' })
+
+    const result = await service.continueSession('s-ignore-checklist', {
+      userId: 'u1',
+      message: '确认',
+      confirmGenerate: true,
+      entryRules: ['这条规则必须被忽略'],
+      exitRules: ['这条规则也必须被忽略'],
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await waitForTerminalStatus('s-ignore-checklist')
+
+    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith('s-ignore-checklist', expect.objectContaining({
+      checklist: expect.objectContaining({
+        entryRules: ['短均线上穿长均线（金叉）入场'],
+        exitRules: ['短均线下穿长均线（死叉）出场'],
+      }),
     }))
     expect(mockCompiledPublicationGate.publish).toHaveBeenCalledWith(expect.objectContaining({
       graphSnapshot,
@@ -464,13 +519,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       graphSnapshot: createGraphSnapshot({
         entryOperator: 'LT(RSI(CLOSE,14),30)',
         exitOperator: 'GT(ATR(CLOSE,14),3)',
-      }),
-    })
-    mockAi.chat.mockResolvedValueOnce({
-      content: JSON.stringify({
-        related: true,
-        logicReady: true,
-        assistantPrompt: '可以编译',
       }),
     })
     mockCompiledPublicationGate.publish.mockRejectedValueOnce(new Error('compiled manifest invalid'))
@@ -507,13 +555,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       constraintPack: {},
       graphSnapshot: createGraphSnapshot(),
     })
-    mockAi.chat.mockResolvedValueOnce({
-      content: JSON.stringify({
-        related: true,
-        logicReady: true,
-        assistantPrompt: '逻辑已确认，可以编译。',
-      }),
-    })
     mockRepo.createVersion.mockResolvedValue({ id: 'v3' })
 
     const result = await service.continueSession('s7', {
@@ -546,13 +587,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
       constraintPack: {},
       graphSnapshot: createGraphSnapshot(),
-    })
-    mockAi.chat.mockResolvedValueOnce({
-      content: JSON.stringify({
-        related: true,
-        logicReady: true,
-        assistantPrompt: '逻辑已确认，可以编译。',
-      }),
     })
     mockRepo.createVersion.mockResolvedValue({ id: 'v-publish-fail' })
     mockRepo.ensureDraftStrategyInstanceBoundForPublishedSession.mockRejectedValue(
@@ -589,13 +623,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       constraintPack: {},
       graphSnapshot: createGraphSnapshot(),
     })
-    mockAi.chat.mockResolvedValueOnce({
-      content: JSON.stringify({
-        related: true,
-        logicReady: true,
-        assistantPrompt: '逻辑已确认，可以编译。',
-      }),
-    })
     mockRepo.createVersion.mockResolvedValue({ id: 'v4' })
 
     const result = await service.continueSession('s9', {
@@ -607,7 +634,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('GENERATING')
     await waitForTerminalStatus('s9')
 
-    expect(mockAi.chat).toHaveBeenCalledTimes(1)
+    expect(mockAi.chat).not.toHaveBeenCalled()
     expect(mockCompiledPublicationGate.publish).toHaveBeenCalledTimes(1)
   })
 
@@ -626,13 +653,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       constraintPack: {},
       graphSnapshot: createGraphSnapshot(),
     })
-    mockAi.chat.mockResolvedValueOnce({
-      content: JSON.stringify({
-        related: true,
-        logicReady: true,
-        assistantPrompt: '逻辑已确认，可以编译。',
-      }),
-    })
     mockRepo.createVersion.mockResolvedValue({ id: 'v6' })
 
     const result = await service.continueSession('s11', {
@@ -646,9 +666,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('GENERATING')
     await waitForTerminalStatus('s11')
 
-    expect(mockAi.chat).toHaveBeenCalledTimes(1)
-    const plannerCall = mockAi.chat.mock.calls[0]?.[0] as { responseFormat?: unknown }
-    expect(plannerCall.responseFormat).toBeUndefined()
+    expect(mockAi.chat).not.toHaveBeenCalled()
     expect(mockCompiledPublicationGate.publish).toHaveBeenCalledWith(expect.objectContaining({
       graphSnapshot: expect.objectContaining({
         status: 'confirmed',
@@ -670,13 +688,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
       constraintPack: {},
       graphSnapshot: createGraphSnapshot({ timeframe: '5m' }),
-    })
-    mockAi.chat.mockResolvedValueOnce({
-      content: JSON.stringify({
-        related: true,
-        logicReady: true,
-        assistantPrompt: '逻辑已确认，可以编译。',
-      }),
     })
     mockRepo.createVersion.mockResolvedValue({ id: 'v-instance-1' })
     mockRepo.updateSession.mockResolvedValue({ id: 's-new-instance' })
@@ -731,13 +742,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         positionPct: 10,
       }),
     })
-    mockAi.chat.mockResolvedValueOnce({
-      content: JSON.stringify({
-        related: true,
-        logicReady: true,
-        assistantPrompt: '逻辑已确认，可以编译。',
-      }),
-    })
     mockRepo.createVersion.mockResolvedValue({ id: 'v-summary-snapshot' })
 
     const result = await service.continueSession('s-summary-snapshot', {
@@ -785,13 +789,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         positionPct: 10,
       }),
     })
-    mockAi.chat.mockResolvedValueOnce({
-      content: JSON.stringify({
-        related: true,
-        logicReady: true,
-        assistantPrompt: '逻辑已确认，可以编译。',
-      }),
-    })
     mockRepo.createVersion.mockResolvedValue({ id: 'v-perp-1' })
     mockRepo.updateSession.mockResolvedValue({ id: 's-perp-publish' })
 
@@ -829,13 +826,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         timeframe: '15m',
       }),
     })
-    mockAi.chat.mockResolvedValueOnce({
-      content: JSON.stringify({
-        related: true,
-        logicReady: true,
-        assistantPrompt: '逻辑已确认，可以编译。',
-      }),
-    })
     mockRepo.createVersion.mockResolvedValue({ id: 'v-instance-2' })
     mockRepo.updateSession.mockResolvedValue({ id: 's-existing-instance' })
 
@@ -870,13 +860,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       constraintPack: {},
       graphSnapshot: createGraphSnapshot({
         timeframe: '5m',
-      }),
-    })
-    mockAi.chat.mockResolvedValueOnce({
-      content: JSON.stringify({
-        related: true,
-        logicReady: true,
-        assistantPrompt: '逻辑已确认，可以编译。',
       }),
     })
     mockRepo.createVersion.mockResolvedValue({ id: 'v-instance-3' })

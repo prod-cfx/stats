@@ -1203,6 +1203,16 @@ interface PublishedCompiledSnapshot {
 
 这不是功能切分建议，而是为了保证每一层都能独立验证 deterministic 行为。
 
+## 18.1 实现回写（2026-04-06）
+
+截至当前实现阶段，后端主链路已经补充以下硬约束：
+
+- session 一旦进入 `CHECKLIST_GATE`，服务端会把确认态 `graphSnapshot` 连同 `specDesc` 一起冻结持久化
+- `confirmGenerate` 只允许从 session 上已冻结的 `graphSnapshot` 进入编译链路，缺失时直接 fail fast
+- 编译开始时禁止重新读取请求里的 `entryRules / exitRules / riskRules` 去影响执行结果，发布链路只消费冻结后的 graph snapshot
+- legacy 的 live publish fallback 已从 `confirmGenerate` 主链路移除；保留的 engine test 能力仅供调试，不参与正式发布
+- backtest 在加载 published snapshot 前必须先通过 compiled manifest / digest preflight，避免被篡改脚本进入回测执行
+
 ## 19. 最终结论
 
 这套设计把当前“逻辑图之后又让系统自由发挥一次”的问题彻底拿掉，收敛为：
