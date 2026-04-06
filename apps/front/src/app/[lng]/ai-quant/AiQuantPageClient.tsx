@@ -7,7 +7,11 @@ import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import type { QuantReturnIntentInput } from '@/components/ai-quant/intent-storage'
 import type { StrategyLogicGraph } from '@/components/ai-quant/logic-graph-model'
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
-import type { LlmCodegenSessionResponse } from '@/lib/api'
+import type {
+  LlmCodegenSessionResponse,
+  LlmSemanticGraph,
+  LlmSemanticGraphValidationReport,
+} from '@/lib/api'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -35,6 +39,8 @@ import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-
 import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-graph'
 import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
+import { SemanticGraphCard } from '@/components/ai-quant/SemanticGraphCard'
+import { SemanticGraphValidationAlert } from '@/components/ai-quant/SemanticGraphValidationAlert'
 import {
   buildAutoAdvanceMessage,
   isStrategyModificationIntent,
@@ -155,6 +161,8 @@ interface ConversationState {
   paramValues: Record<string, unknown>
   backtestResult: BacktestResult | null
   logicGraph: StrategyLogicGraph | null
+  semanticGraph: LlmSemanticGraph | null
+  validationReport: LlmSemanticGraphValidationReport | null
   llmCodegenSessionId: string | null
   publishedStrategyInstanceId: string | null
   publishedSnapshotId: string | null
@@ -252,6 +260,21 @@ export function buildCodegenReplyContent(args: {
       : rejectedWithoutReason
   }
   return response.scriptCode ? graphGeneratedMessage : graphReviseMessage
+}
+
+function getSemanticGraphValidationMessage(
+  validationReport: LlmSemanticGraphValidationReport | null | undefined,
+  fallback: string,
+): string {
+  const message = validationReport?.errors.find(error => error.message.trim())?.message?.trim()
+  return message || fallback
+}
+
+function hasSemanticGraphPayload(
+  response: LlmCodegenSessionResponse,
+  key: 'semanticGraph' | 'validationReport',
+): boolean {
+  return Object.prototype.hasOwnProperty.call(response, key)
 }
 
 export function resolvePublishedStrategyInstanceId(args: {
@@ -664,6 +687,8 @@ export function AiQuantPageClient() {
       paramValues: { ...DEFAULT_PARAM_VALUES },
       backtestResult: null,
       logicGraph: null,
+      semanticGraph: null,
+      validationReport: null,
       llmCodegenSessionId: null,
       publishedStrategyInstanceId: null,
       publishedSnapshotId: null,
@@ -754,6 +779,14 @@ export function AiQuantPageClient() {
             item.paramSchema ?? buildParamSchemaWithCapabilities(null, nextParams.symbol),
           paramValues: normalizedBacktestExecutionConfig.paramValues,
           params: nextParams,
+          semanticGraph:
+            item.semanticGraph && typeof item.semanticGraph === 'object' && !Array.isArray(item.semanticGraph)
+              ? item.semanticGraph
+              : null,
+          validationReport:
+            item.validationReport && typeof item.validationReport === 'object' && !Array.isArray(item.validationReport)
+              ? item.validationReport
+              : null,
           llmCodegenSessionId: item.llmCodegenSessionId ?? null,
           publishedStrategyInstanceId: item.publishedStrategyInstanceId ?? null,
           publishedSnapshotId:
@@ -989,9 +1022,18 @@ export function AiQuantPageClient() {
     return activeConversation.backtestResult.maxDrawdownPct <= 20
   }, [activeConversation?.backtestResult])
   const graphConfirmed = activeConversation?.logicGraph?.status === 'confirmed'
+  const semanticGraphExecutable = Boolean(
+    activeConversation?.semanticGraph && activeConversation.validationReport?.ok === true,
+  )
   const codegenBusy = activeConversation
     ? codegenBusyConversationIds.includes(activeConversation.id)
     : false
+  const semanticGraphGuardMessage = getSemanticGraphValidationMessage(
+    activeConversation?.validationReport,
+    t('aiQuant.messages.semanticGraphInvalid', {
+      defaultValue: 'The current strategy graph is not yet executable.',
+    }),
+  )
   const canRunBacktest = useMemo(() => {
     if (!activeConversation) return false
     if (backtestCapabilityState !== 'ready') return false
@@ -1034,6 +1076,26 @@ export function AiQuantPageClient() {
     updateConversationById(conversationId, curr => ({
       ...curr,
       backtestExecutionState: state,
+      updatedAt: Date.now(),
+    }))
+  }
+
+  function appendSemanticGraphGuardMessage(conversationId: string) {
+    updateConversationById(conversationId, curr => ({
+      ...curr,
+      messages: [
+        ...curr.messages,
+        {
+          id: `semantic-graph-guard-${Date.now()}`,
+          role: 'assistant',
+          content: getSemanticGraphValidationMessage(
+            curr.validationReport,
+            t('aiQuant.messages.semanticGraphInvalid', {
+              defaultValue: 'The current strategy graph is not yet executable.',
+            }),
+          ),
+        },
+      ],
       updatedAt: Date.now(),
     }))
   }
@@ -1208,6 +1270,12 @@ export function AiQuantPageClient() {
           const nextPublishedScriptGraphVersion = nextPublishedScriptCode
             ? (nextGraph?.version ?? conv.publishedScriptGraphVersion)
             : null
+          const nextSemanticGraph = hasSemanticGraphPayload(response, 'semanticGraph')
+            ? (response.semanticGraph ?? null)
+            : conv.semanticGraph
+          const nextValidationReport = hasSemanticGraphPayload(response, 'validationReport')
+            ? (response.validationReport ?? null)
+            : conv.validationReport
           const publishedReply = response.scriptCode
             ? `${
                 confirmGenerate
@@ -1260,6 +1328,8 @@ export function AiQuantPageClient() {
             paramSchema: nextParamSchema,
             paramValues: nextParamValues,
             logicGraph: nextGraph,
+            semanticGraph: nextSemanticGraph,
+            validationReport: nextValidationReport,
             backtestResult: null,
             latestSignalMessage: null,
             messages: [
@@ -1476,6 +1546,10 @@ export function AiQuantPageClient() {
     const confirmPattern =
       /^(?:确认逻辑图|\/confirm|确认|可以|好的?|行|ok|okay|yes|同意|没问题)[。.!！?？\s]*$/i
     if (currentGraphStatus === 'draft' && confirmPattern.test(trimmedInput)) {
+      if (!semanticGraphExecutable) {
+        appendSemanticGraphGuardMessage(currentConversationId)
+        return
+      }
       updateActiveConversation(curr => ({
         ...curr,
         logicGraph: curr.logicGraph ? { ...curr.logicGraph, status: 'confirmed' } : null,
@@ -1501,6 +1575,10 @@ export function AiQuantPageClient() {
     }
 
     if (autoAdvance) {
+      if (!semanticGraphExecutable) {
+        appendSemanticGraphGuardMessage(currentConversationId)
+        return
+      }
       await requestBackendGraphGeneration({
         conversationId: currentConversationId,
         message: buildAutoAdvanceMessage(lastAssistantMessage),
@@ -2064,53 +2142,69 @@ export function AiQuantPageClient() {
             canRunBacktest={canRunBacktest}
           />
 
+          {activeConversation.semanticGraph && (
+            <SemanticGraphCard semanticGraph={activeConversation.semanticGraph} />
+          )}
+          {activeConversation.validationReport && !activeConversation.validationReport.ok && (
+            <SemanticGraphValidationAlert validationReport={activeConversation.validationReport} />
+          )}
           {activeConversation.logicGraph && (
-            <LogicGraphPreview
-              graph={activeConversation.logicGraph}
-              confirmDisabled={codegenBusy || activeConversation.logicGraph.status === 'confirmed'}
-              onConfirm={() => {
-                const currentConversationId = activeConversation.id
-                const currentParams = activeConversation.params
-                const currentSessionId = activeConversation.llmCodegenSessionId
-                updateActiveConversation(curr => ({
-                  ...curr,
-                  logicGraph: curr.logicGraph ? { ...curr.logicGraph, status: 'confirmed' } : null,
-                  messages: [
-                    ...curr.messages,
-                    {
-                      id: `graph-confirm-${Date.now()}`,
-                      role: 'assistant',
-                      content: t('aiQuant.messages.graphConfirmed'),
-                    },
-                  ],
-                  updatedAt: Date.now(),
-                }))
-                void requestBackendGraphGeneration({
-                  conversationId: currentConversationId,
-                  message: t('aiQuant.messages.confirmGenerate', {
-                    defaultValue: 'Confirm code generation',
-                  }),
-                  params: currentParams,
-                  sessionId: currentSessionId,
-                  usePresetRules: false,
-                  confirmGenerate: true,
-                })
-              }}
-              onRevise={() => {
-                updateActiveConversation(curr => ({
-                  ...invalidateConversationPublication(curr, { markGraphDraft: true }),
-                  messages: [
-                    ...curr.messages,
-                    {
-                      id: `graph-revise-${Date.now()}`,
-                      role: 'assistant',
-                      content: t('aiQuant.messages.graphRevise'),
-                    },
-                  ],
-                  updatedAt: Date.now(),
-                }))
-              }}
-            />
+            <>
+              <LogicGraphPreview
+                graph={activeConversation.logicGraph}
+                confirmDisabled={
+                  codegenBusy ||
+                  activeConversation.logicGraph.status === 'confirmed' ||
+                  !semanticGraphExecutable
+                }
+                onConfirm={() => {
+                  const currentConversationId = activeConversation.id
+                  const currentParams = activeConversation.params
+                  const currentSessionId = activeConversation.llmCodegenSessionId
+                  if (!semanticGraphExecutable) {
+                    appendSemanticGraphGuardMessage(currentConversationId)
+                    return
+                  }
+                  updateActiveConversation(curr => ({
+                    ...curr,
+                    logicGraph: curr.logicGraph ? { ...curr.logicGraph, status: 'confirmed' } : null,
+                    messages: [
+                      ...curr.messages,
+                      {
+                        id: `graph-confirm-${Date.now()}`,
+                        role: 'assistant',
+                        content: t('aiQuant.messages.graphConfirmed'),
+                      },
+                    ],
+                    updatedAt: Date.now(),
+                  }))
+                  void requestBackendGraphGeneration({
+                    conversationId: currentConversationId,
+                    message: t('aiQuant.messages.confirmGenerate', {
+                      defaultValue: 'Confirm code generation',
+                    }),
+                    params: currentParams,
+                    sessionId: currentSessionId,
+                    usePresetRules: false,
+                    confirmGenerate: true,
+                  })
+                }}
+                onRevise={() => {
+                  updateActiveConversation(curr => ({
+                    ...invalidateConversationPublication(curr, { markGraphDraft: true }),
+                    messages: [
+                      ...curr.messages,
+                      {
+                        id: `graph-revise-${Date.now()}`,
+                        role: 'assistant',
+                        content: t('aiQuant.messages.graphRevise'),
+                      },
+                    ],
+                    updatedAt: Date.now(),
+                  }))
+                }}
+              />
+            </>
           )}
 
           {activeConversation.backtestResult && (

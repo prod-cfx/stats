@@ -25,6 +25,23 @@ export class CodegenSessionResponseDto {
   @ApiPropertyOptional({ description: '结构化策略描述（用于推荐）', type: 'object', additionalProperties: true })
   specDesc?: Record<string, unknown> | null
 
+  @ApiPropertyOptional({ description: '结构化语义图（确认与编译真源）', type: 'object', additionalProperties: true })
+  semanticGraph?: Record<string, unknown> | null
+
+  @ApiPropertyOptional({
+    description: '语义图校验结果',
+    type: 'object',
+    additionalProperties: true,
+  })
+  validationReport?: {
+    ok: boolean
+    errors: Array<{
+      code: string
+      message: string
+      nodeId?: string
+    }>
+  } | null
+
   @ApiPropertyOptional({ description: '发布后生成的策略实例 ID' })
   strategyInstanceId?: string | null
 

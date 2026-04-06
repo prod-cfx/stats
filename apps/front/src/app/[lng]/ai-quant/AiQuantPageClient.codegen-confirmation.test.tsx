@@ -7,6 +7,32 @@ import { AiQuantPageClient } from './AiQuantPageClient'
 
 const mockContinueLlmCodegenSession = jest.fn()
 const mockFetchBacktestCapabilities = jest.fn()
+const validSemanticGraph = {
+  version: 1,
+  market: {
+    symbol: 'BTCUSDT',
+    primaryTimeframe: '15m',
+  },
+  nodes: [
+    {
+      id: 'entry-drop-1',
+      phase: 'entry',
+      kind: 'price_change_pct',
+      params: {
+        timeframe: '15m',
+        left: { source: 'close', offsetBars: 0 },
+        right: { source: 'close', offsetBars: 1 },
+        op: 'lte',
+        valuePct: -1,
+      },
+    },
+  ],
+  actions: [
+    { id: 'open-long', kind: 'OPEN_LONG', sizePct: 10 },
+    { id: 'close-long', kind: 'CLOSE_LONG', sizePct: 100 },
+  ],
+  risk: [],
+} as const
 const translationMap: Record<string, string> = {
   'aiQuant.messages.graphConfirmed': '逻辑图已确认，正在生成策略代码...',
   'aiQuant.messages.graphGenerated': '我已把你的自然语言转换为逻辑图。请先确认逻辑图，再开始回测。',
@@ -144,7 +170,16 @@ jest.mock('@/lib/api', () => ({
   startLlmCodegenSession: jest.fn(),
 }))
 
-function seedDraftConversation(now = Date.now()) {
+function seedDraftConversation(
+  now = Date.now(),
+  overrides?: {
+    semanticGraph?: typeof validSemanticGraph | null
+    validationReport?: {
+      ok: boolean
+      errors: Array<{ code: string; message: string }>
+    } | null
+  },
+) {
   localStorage.setItem(
     'ai_quant_conversations_v1',
     JSON.stringify([
@@ -187,6 +222,10 @@ function seedDraftConversation(now = Date.now()) {
             positionPct: 10,
           },
         },
+        semanticGraph: overrides?.semanticGraph === undefined ? validSemanticGraph : overrides.semanticGraph,
+        validationReport: overrides?.validationReport === undefined
+          ? { ok: true, errors: [] }
+          : overrides.validationReport,
         llmCodegenSessionId: 'session-1',
         publishedStrategyInstanceId: null,
         latestSignalMessage: null,
@@ -256,6 +295,8 @@ function seedPublishedConversation(now = Date.now()) {
             positionPct: 10,
           },
         },
+        semanticGraph: validSemanticGraph,
+        validationReport: { ok: true, errors: [] },
         llmCodegenSessionId: 'session-1',
         publishedStrategyInstanceId: 'strategy-1',
         publishedSnapshotId: 'snapshot-1',
@@ -298,6 +339,8 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       strategyInstanceId: 'strategy-1',
       publishedSnapshotId: 'snapshot-1',
       scriptCode: 'return { ok: true }',
+      semanticGraph: validSemanticGraph,
+      validationReport: { ok: true, errors: [] },
       specDesc: {
         entryRules: ['价格达到 66830 时买入'],
         exitRules: ['价格上涨到 66890 时卖出'],
@@ -327,6 +370,8 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       strategyInstanceId: 'strategy-1',
       publishedSnapshotId: 'snapshot-1',
       scriptCode: 'return { ok: true }',
+      semanticGraph: validSemanticGraph,
+      validationReport: { ok: true, errors: [] },
       specDesc: {
         entryRules: ['价格达到 66830 时买入'],
         exitRules: ['价格上涨到 66890 时卖出'],
@@ -379,6 +424,8 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
         strategyInstanceId: 'strategy-1',
         publishedSnapshotId: 'snapshot-1',
         scriptCode: 'return { ok: true }',
+        semanticGraph: validSemanticGraph,
+        validationReport: { ok: true, errors: [] },
         specDesc: {
           entryRules: ['价格达到 66830 时买入'],
           exitRules: ['价格上涨到 66890 时卖出'],
@@ -406,6 +453,8 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       strategyInstanceId: null,
       publishedSnapshotId: 'snapshot-1',
       scriptCode: 'return { ok: true }',
+      semanticGraph: validSemanticGraph,
+      validationReport: { ok: true, errors: [] },
       specDesc: {
         entryRules: ['价格达到 66830 时买入'],
         exitRules: ['价格上涨到 66890 时卖出'],
@@ -443,6 +492,8 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       .mockResolvedValueOnce({
         id: 'session-1',
         status: 'CHECKLIST_GATE',
+        semanticGraph: validSemanticGraph,
+        validationReport: { ok: true, errors: [] },
         specDesc: {
           entryRules: ['价格回踩 5 日均线买入'],
           exitRules: ['价格跌破 10 日均线卖出'],
@@ -459,6 +510,8 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
         strategyInstanceId: 'strategy-2',
         publishedSnapshotId: 'snapshot-2',
         scriptCode: 'return { ok: "revised" }',
+        semanticGraph: validSemanticGraph,
+        validationReport: { ok: true, errors: [] },
         specDesc: {
           entryRules: ['价格回踩 5 日均线买入'],
           exitRules: ['价格跌破 10 日均线卖出'],
@@ -565,5 +618,68 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     ) as HTMLButtonElement | null
     expect(container.querySelector('[data-testid="graph-status"]')?.textContent).toBe('draft')
     expect(runButtonAfterStrategyChange?.disabled).toBe(true)
+  })
+
+  it('disables graph confirmation and shows validation errors when semantic graph is not executable', async () => {
+    localStorage.clear()
+    seedDraftConversation(Date.now(), {
+      semanticGraph: validSemanticGraph,
+      validationReport: {
+        ok: false,
+        errors: [
+          {
+            code: 'codegen.semantic_graph_unsupported_feature',
+            message: 'grid range missing',
+          },
+        ],
+      },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    const confirmButton = container.querySelector(
+      '[data-testid="confirm-graph"]',
+    ) as HTMLButtonElement | null
+    expect(confirmButton?.disabled).toBe(true)
+    expect(container.textContent).toContain('grid range missing')
+  })
+
+  it('blocks chat-based confirmation when semantic graph validation is not ok', async () => {
+    localStorage.clear()
+    seedDraftConversation(Date.now(), {
+      semanticGraph: validSemanticGraph,
+      validationReport: {
+        ok: false,
+        errors: [
+          {
+            code: 'codegen.semantic_graph_unsupported_feature',
+            message: 'grid range missing',
+          },
+        ],
+      },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      const input = container.querySelector('[data-testid="chat-input"]') as HTMLInputElement | null
+      input!.value = '确认'
+      input?.dispatchEvent(new Event('input', { bubbles: true }))
+      container
+        .querySelector('[data-testid="send-chat"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockContinueLlmCodegenSession).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-testid="graph-status"]')?.textContent).toBe('draft')
+    expect(container.textContent).toContain('grid range missing')
   })
 })

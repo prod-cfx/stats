@@ -210,6 +210,8 @@ export class CodegenConversationService {
       status,
       missingFields: [],
       specDesc: initialSpecDesc,
+      semanticGraph: semanticGate?.graph ?? null,
+      validationReport: semanticGate?.validation ?? null,
       assistantPrompt: semanticGate?.ok
         ? `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`
         : this.buildSemanticRetryPrompt(plan.assistantPrompt, semanticGate?.validation),
@@ -423,6 +425,8 @@ export class CodegenConversationService {
         status: 'DRAFTING',
         missingFields: [],
         specDesc,
+        semanticGraph: semanticGate.graph,
+        validationReport: semanticGate.validation,
         assistantPrompt: this.buildSemanticRetryPrompt(plan.assistantPrompt, semanticGate.validation),
       }
     }
@@ -446,6 +450,8 @@ export class CodegenConversationService {
       status: 'CHECKLIST_GATE',
       missingFields: [],
       specDesc,
+      semanticGraph: semanticGate.graph,
+      validationReport: semanticGate.validation,
       assistantPrompt: `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`,
     }
   }
@@ -639,6 +645,8 @@ export class CodegenConversationService {
     status: CodegenWorkflowPhase
     latestDraftCode: Prisma.JsonValue | null
     latestSpecDesc: Prisma.JsonValue | null
+    semanticGraph?: Prisma.JsonValue | null
+    validationReport?: Prisma.JsonValue | null
     rejectReason: string | null
     strategyInstanceId?: string | null
   }): Promise<CodegenSessionResponseDto> {
@@ -665,8 +673,48 @@ export class CodegenConversationService {
             ? sessionConsistencyReport as Record<string, unknown>
             : null),
       specDesc: sessionSpecDesc,
+      semanticGraph: this.readSemanticGraph(session.semanticGraph ?? null) as unknown as Record<string, unknown> | null,
+      validationReport: this.readValidationReport(session.validationReport ?? null),
       strategyInstanceId: session.strategyInstanceId ?? null,
       rejectReason: session.rejectReason,
+    }
+  }
+
+  private readValidationReport(value: Prisma.JsonValue | null | undefined): SemanticGraphValidationResult | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null
+    }
+
+    const candidate = value as {
+      ok?: unknown
+      errors?: Array<{ code?: unknown; message?: unknown; nodeId?: unknown }>
+    }
+    if (typeof candidate.ok !== 'boolean' || !Array.isArray(candidate.errors)) {
+      return null
+    }
+
+    const isValidationErrorCode = (
+      code: unknown,
+    ): code is SemanticGraphValidationResult['errors'][number]['code'] =>
+      code === 'codegen.semantic_graph_incomplete'
+      || code === 'codegen.semantic_graph_invalid_reference'
+      || code === 'codegen.semantic_graph_unsupported_feature'
+
+    const errors = candidate.errors.flatMap((error) => {
+      if (!error || typeof error !== 'object') return []
+      if (!isValidationErrorCode(error.code) || typeof error.message !== 'string') {
+        return []
+      }
+      return [{
+        code: error.code,
+        message: error.message,
+        ...(typeof error.nodeId === 'string' ? { nodeId: error.nodeId } : {}),
+      }]
+    })
+
+    return {
+      ok: candidate.ok,
+      errors,
     }
   }
 

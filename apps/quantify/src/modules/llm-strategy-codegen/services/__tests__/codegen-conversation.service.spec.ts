@@ -255,6 +255,16 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(result.status).toBe('CHECKLIST_GATE')
     expect(result.specDesc).toBeTruthy()
+    expect(result.semanticGraph).toEqual(expect.objectContaining({
+      version: 1,
+      market: expect.objectContaining({
+        symbol: 'BTCUSDT',
+      }),
+    }))
+    expect(result.validationReport).toEqual({
+      ok: true,
+      errors: [],
+    })
     expect(result.assistantPrompt).toContain('确认逻辑图')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       graphSnapshot: expect.objectContaining({
@@ -346,6 +356,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         publishedSnapshotId: 'snapshot-session-old',
         consistencyReport: { status: 'FAILED' },
       },
+      semanticGraph: createSemanticGraph(),
+      validationReport: {
+        ok: true,
+        errors: [],
+      },
       strategyInstanceId: 'instance-snapshot-1',
       rejectReason: null,
     })
@@ -356,6 +371,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.strategyInstanceId).toBe('instance-snapshot-1')
     expect(result.publishedSnapshotId).toBe('snapshot-session-1')
     expect(result.consistencyReport).toEqual({ status: 'PASSED' })
+    expect(result.semanticGraph).toEqual(createSemanticGraph())
+    expect(result.validationReport).toEqual({
+      ok: true,
+      errors: [],
+    })
   })
 
   it('keeps drafting and returns unrelated guidance when planner marks message unrelated', async () => {

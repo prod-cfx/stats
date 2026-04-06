@@ -2107,9 +2107,53 @@ export interface LlmCodegenSessionResponse {
   publishedSnapshotId?: string | null
   consistencyReport?: Record<string, unknown> | null
   specDesc?: Record<string, unknown> | null
+  semanticGraph?: LlmSemanticGraph | null
+  validationReport?: LlmSemanticGraphValidationReport | null
   strategyInstanceId?: string | null
   rejectReason?: string | null
   assistantPrompt?: string
+}
+
+export interface LlmSemanticGraphNode {
+  id: string
+  phase: 'entry' | 'exit' | 'risk'
+  kind: string
+  params: Record<string, unknown>
+}
+
+export interface LlmSemanticGraphAction {
+  id: string
+  kind: string
+  sizePct: number
+}
+
+export interface LlmSemanticGraphRisk {
+  id: string
+  kind: string
+  valuePct: number
+  effect: string
+}
+
+export interface LlmSemanticGraph {
+  version: number
+  market: {
+    symbol: string
+    primaryTimeframe: string
+  }
+  nodes: LlmSemanticGraphNode[]
+  actions: LlmSemanticGraphAction[]
+  risk: LlmSemanticGraphRisk[]
+}
+
+export interface LlmSemanticGraphValidationError {
+  code: string
+  message: string
+  nodeId?: string
+}
+
+export interface LlmSemanticGraphValidationReport {
+  ok: boolean
+  errors: LlmSemanticGraphValidationError[]
 }
 
 export interface StartLlmCodegenSessionPayload {
