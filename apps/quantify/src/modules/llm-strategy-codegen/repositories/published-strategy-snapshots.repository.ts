@@ -11,6 +11,9 @@ export interface CreatePublishedStrategySnapshotInput {
   strategyInstanceId?: string | null
   scriptSnapshot: string
   specSnapshot: Record<string, unknown>
+  irSnapshot?: Record<string, unknown> | null
+  astSnapshot?: Record<string, unknown> | null
+  compiledManifest?: Record<string, unknown> | null
   consistencyReport: Record<string, unknown>
   userIntentSummary: Record<string, unknown>
   strategySummary: Record<string, unknown>
@@ -18,6 +21,7 @@ export interface CreatePublishedStrategySnapshotInput {
   lockedParams: Record<string, unknown>
   snapshotVersion?: number
   paramsSnapshot?: Record<string, unknown> | null
+  executionEnvelope?: Record<string, unknown> | null
   executionPolicy?: Record<string, unknown> | null
   dataRequirements?: Record<string, unknown> | null
 }
@@ -40,6 +44,16 @@ function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex')
 }
 
+function readManifestDigest(
+  manifest: Record<string, unknown> | null | undefined,
+  key: 'irHash' | 'astDigest' | 'structuralDigest',
+  fallback?: string,
+): string | null {
+  const value = manifest?.[key]
+  if (typeof value === 'string' && value.trim().length > 0) return value
+  return fallback ?? null
+}
+
 @Injectable()
 export class PublishedStrategySnapshotsRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
@@ -48,20 +62,34 @@ export class PublishedStrategySnapshotsRepository {
     const snapshotVersion = input.snapshotVersion ?? 2
     const normalizedScript = input.scriptSnapshot.trim()
     const normalizedSpec = stableJsonStringify(input.specSnapshot)
+    const normalizedIr = input.irSnapshot ? stableJsonStringify(input.irSnapshot) : null
+    const normalizedAst = input.astSnapshot ? stableJsonStringify(input.astSnapshot) : null
+    const normalizedManifest = input.compiledManifest ? stableJsonStringify(input.compiledManifest) : null
     const normalizedConsistency = stableJsonStringify(input.consistencyReport)
     const normalizedUserIntentSummary = stableJsonStringify(input.userIntentSummary)
     const normalizedStrategySummary = stableJsonStringify(input.strategySummary)
     const normalizedScriptSummary = stableJsonStringify(input.scriptSummary)
     const normalizedLockedParams = stableJsonStringify(input.lockedParams)
     const normalizedParams = input.paramsSnapshot ? stableJsonStringify(input.paramsSnapshot) : null
+    const normalizedExecutionEnvelope = input.executionEnvelope ? stableJsonStringify(input.executionEnvelope) : null
     const normalizedExecutionPolicy = input.executionPolicy ? stableJsonStringify(input.executionPolicy) : null
     const normalizedDataRequirements = input.dataRequirements ? stableJsonStringify(input.dataRequirements) : null
 
     const scriptHash = sha256(normalizedScript)
     const specHash = sha256(normalizedSpec)
+    const irHash = readManifestDigest(input.compiledManifest, 'irHash', normalizedIr ? sha256(normalizedIr) : undefined)
+    const astDigest = readManifestDigest(input.compiledManifest, 'astDigest', normalizedAst ? sha256(normalizedAst) : undefined)
+    const structuralDigest = readManifestDigest(input.compiledManifest, 'structuralDigest', normalizedManifest ? sha256(normalizedManifest) : undefined)
+    const compiledManifestHash = normalizedManifest ? sha256(normalizedManifest) : ''
+    const executionEnvelopeHash = normalizedExecutionEnvelope ? sha256(normalizedExecutionEnvelope) : ''
     const snapshotHash = sha256([
       scriptHash,
       specHash,
+      irHash ?? '',
+      astDigest ?? '',
+      structuralDigest ?? '',
+      compiledManifestHash,
+      executionEnvelopeHash,
       sha256(normalizedConsistency),
       sha256(normalizedUserIntentSummary),
       sha256(normalizedStrategySummary),
@@ -81,8 +109,14 @@ export class PublishedStrategySnapshotsRepository {
         snapshotHash,
         scriptHash,
         specHash,
+        irHash,
+        astDigest,
+        structuralDigest,
         scriptSnapshot: normalizedScript,
         specSnapshot: input.specSnapshot as Prisma.InputJsonValue,
+        irSnapshot: input.irSnapshot as Prisma.InputJsonValue | null | undefined,
+        astSnapshot: input.astSnapshot as Prisma.InputJsonValue | null | undefined,
+        compiledManifest: input.compiledManifest as Prisma.InputJsonValue | null | undefined,
         consistencyReport: input.consistencyReport as Prisma.InputJsonValue,
         userIntentSummary: input.userIntentSummary as Prisma.InputJsonValue,
         strategySummary: input.strategySummary as Prisma.InputJsonValue,
@@ -90,6 +124,7 @@ export class PublishedStrategySnapshotsRepository {
         lockedParams: input.lockedParams as Prisma.InputJsonValue,
         snapshotVersion,
         paramsSnapshot: input.paramsSnapshot as Prisma.InputJsonValue | null | undefined,
+        executionEnvelope: input.executionEnvelope as Prisma.InputJsonValue | null | undefined,
         executionPolicy: input.executionPolicy as Prisma.InputJsonValue | null | undefined,
         dataRequirements: input.dataRequirements as Prisma.InputJsonValue | null | undefined,
       },
@@ -122,6 +157,7 @@ export class PublishedStrategySnapshotsRepository {
 }
 
 export const __test__ = {
+  readManifestDigest,
   stableJsonStringify,
   sha256,
 }

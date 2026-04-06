@@ -1,6 +1,26 @@
+import { createHash } from 'node:crypto'
+
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { DeployIdempotencyConflictException } from '../exceptions'
 import { AccountStrategyViewService } from './account-strategy-view.service'
+
+function buildDeployPayloadHash(input: {
+  name: string
+  publishedSnapshotId?: string
+  exchangeAccountId?: string
+  strategyInstanceId?: string
+  mode?: string
+}): string {
+  return createHash('sha256')
+    .update(JSON.stringify({
+      name: input.name,
+      publishedSnapshotId: input.publishedSnapshotId,
+      exchangeAccountId: input.exchangeAccountId ?? null,
+      strategyInstanceId: input.strategyInstanceId ?? null,
+      mode: input.mode ?? null,
+    }))
+    .digest('hex')
+}
 
 describe('accountStrategyViewService.deployStrategy safety', () => {
   const buildService = (overrides?: Record<string, unknown>) => {
@@ -46,17 +66,7 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
   })
 
   it('returns existing result for succeeded idempotent request', async () => {
-    const { service, repo } = buildService({
-      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue({
-        id: 'req-1',
-        deployRequestId: 'same-1',
-        payloadHash: 'da9e0957006d451fea0880e20b99900b5fe6f9f9511036865c189e1bcca61244',
-        status: 'SUCCEEDED',
-        strategyInstanceId: 'inst-existing',
-      }),
-    })
-
-    await service.deployStrategy({
+    const dto = {
       userId: 'user-1',
       deployRequestId: 'same-1',
       name: 'OKX SOL 5m',
@@ -64,7 +74,20 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       symbol: 'SOLUSDT',
       timeframe: '5m',
       positionPct: 10,
-    } as any)
+    } as const
+    const { service, repo } = buildService({
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue({
+        id: 'req-1',
+        deployRequestId: 'same-1',
+        payloadHash: buildDeployPayloadHash({
+          name: dto.name,
+        }),
+        status: 'SUCCEEDED',
+        strategyInstanceId: 'inst-existing',
+      }),
+    })
+
+    await service.deployStrategy(dto as any)
 
     expect(repo.deployStrategyForUser).not.toHaveBeenCalled()
     expect(service.getStrategyDetail).toHaveBeenCalledWith('user-1', 'inst-existing')

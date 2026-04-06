@@ -15,6 +15,7 @@ import { BacktestMarketDataRepository } from './repositories/backtest-market-dat
 import { RiskEvaluatorService } from './risk/risk-evaluator.service'
 import { BacktestCallerIdentityService } from './services/backtest-caller-identity.service'
 import { BacktestCapabilitiesService } from './services/backtest-capabilities.service'
+import { BacktestCompiledSnapshotPreflightService } from './services/backtest-compiled-snapshot-preflight.service'
 import { BacktestMarketDataService } from './services/backtest-market-data.service'
 import { BacktestSnapshotLoaderService } from './services/backtest-snapshot-loader.service'
 import { BacktestStrategyAdapterService } from './services/backtest-strategy-adapter.service'
@@ -34,6 +35,7 @@ import { StateEngineService } from './state/state-engine.service'
     RiskEvaluatorService,
     BacktestCallerIdentityService,
     BacktestCapabilitiesService,
+    BacktestCompiledSnapshotPreflightService,
     BacktestSnapshotLoaderService,
     BacktestStrategyAdapterService,
     StateEngineService,

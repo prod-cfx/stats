@@ -85,6 +85,72 @@ describe('publishedStrategySnapshotsRepository', () => {
     expect(result.id).toBe('snapshot-1')
   })
 
+  it('persists compiled snapshot fields with stable hashes', async () => {
+    const tx = {
+      publishedStrategySnapshot: {
+        create: jest.fn().mockImplementation(async ({ data }) => ({
+          id: 'snapshot-compiled-1',
+          createdAt: new Date('2026-04-04T10:00:00.000Z'),
+          ...data,
+        })),
+      },
+    }
+    const repo = new PublishedStrategySnapshotsRepository(createTxHost(tx))
+
+    await repo.create({
+      sessionId: 'session-1',
+      scriptSnapshot: 'const strategy = {}',
+      specSnapshot: { graphDigest: 'sha256:graph' },
+      irSnapshot: { irVersion: 'csi.v1' },
+      astSnapshot: { astVersion: 'csa.v1' },
+      compiledManifest: {
+        irVersion: 'csi.v1',
+        astVersion: 'csa.v1',
+        compileVersion: 'compiler.v1',
+        irHash: 'sha256:ir',
+        specHash: 'sha256:spec',
+        astDigest: 'sha256:ast',
+        structuralDigest: 'sha256:struct',
+      },
+      consistencyReport: {
+        graphVsIr: { passed: true },
+        irVsScript: { passed: true },
+        manifestSelfCheck: { passed: true },
+      },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'ma-crossover' },
+      scriptSummary: { indicators: ['EMA'] },
+      lockedParams: { positionPct: 25 },
+      snapshotVersion: 2,
+      executionEnvelope: {
+        positionMode: 'long_only',
+        marginMode: 'cash',
+        tickSize: 0.01,
+        pricePrecision: 2,
+        quantityPrecision: 6,
+        fillAssumption: 'strict',
+      },
+    })
+
+    expect(tx.publishedStrategySnapshot.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        irHash: 'sha256:ir',
+        astDigest: 'sha256:ast',
+        structuralDigest: 'sha256:struct',
+        irSnapshot: { irVersion: 'csi.v1' },
+        astSnapshot: { astVersion: 'csa.v1' },
+        executionEnvelope: expect.objectContaining({
+          positionMode: 'long_only',
+          marginMode: 'cash',
+        }),
+        compiledManifest: expect.objectContaining({
+          compileVersion: 'compiler.v1',
+          structuralDigest: 'sha256:struct',
+        }),
+      }),
+    }))
+  })
+
   it('includes new snapshot contract fields in snapshot hash', async () => {
     const tx = {
       publishedStrategySnapshot: {

@@ -7,6 +7,7 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- runtime DI required
 import { BacktestStrategyAdapterService } from './backtest-strategy-adapter.service'
+import { BacktestCompiledSnapshotPreflightService } from './backtest-compiled-snapshot-preflight.service'
 
 export interface SnapshotBacktestStrategyInput {
   id: string
@@ -21,6 +22,7 @@ export class BacktestSnapshotLoaderService {
   constructor(
     private readonly snapshotsRepository: PublishedStrategySnapshotsRepository,
     private readonly strategyAdapter: BacktestStrategyAdapterService,
+    private readonly compiledSnapshotPreflight: BacktestCompiledSnapshotPreflightService = new BacktestCompiledSnapshotPreflightService(),
   ) {}
 
   async load(input: SnapshotBacktestStrategyInput): Promise<BacktestRunInput['strategy']> {
@@ -33,6 +35,7 @@ export class BacktestSnapshotLoaderService {
       })
     }
     const strictParams = this.resolveStrictParams(snapshot)
+    this.compiledSnapshotPreflight.validate(snapshot)
 
     const strategy = await this.strategyAdapter.build({
       id: this.resolveStrategyId(snapshot, input.id),
@@ -53,9 +56,15 @@ export class BacktestSnapshotLoaderService {
       snapshotHash: snapshot.snapshotHash,
       scriptHash: snapshot.scriptHash,
       specHash: snapshot.specHash,
+      irHash: typeof snapshot.irHash === 'string' ? snapshot.irHash : undefined,
+      astDigest: typeof snapshot.astDigest === 'string' ? snapshot.astDigest : undefined,
+      structuralDigest: typeof snapshot.structuralDigest === 'string' ? snapshot.structuralDigest : undefined,
       bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
       executionPolicy: snapshot.executionPolicy ?? undefined,
       riskRules: specSnapshot ? this.buildRiskRules(specSnapshot) : undefined,
+      irSnapshot: this.readJsonRecord(snapshot.irSnapshot) ?? undefined,
+      astSnapshot: this.readJsonRecord(snapshot.astSnapshot) ?? undefined,
+      executionEnvelope: this.readJsonRecord(snapshot.executionEnvelope) ?? undefined,
       dataRequirements: snapshot.dataRequirements ?? undefined,
       specSnapshot: specSnapshot as unknown as Record<string, unknown> | undefined,
     } as BacktestRunInput['strategy']

@@ -1,5 +1,6 @@
 import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
+import type { CanonicalStrategyIrV1 } from '@/modules/llm-strategy-codegen/types/canonical-strategy-ir'
 import type { Response } from 'supertest'
 import { ValidationPipe } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
@@ -12,6 +13,9 @@ import { BacktestRunnerService } from '@/modules/backtesting/core/backtest-runne
 import { BacktestCallerIdentityService } from '@/modules/backtesting/services/backtest-caller-identity.service'
 import { BacktestMarketDataService } from '@/modules/backtesting/services/backtest-market-data.service'
 import { BacktestStrategyAdapterService } from '@/modules/backtesting/services/backtest-strategy-adapter.service'
+import { CanonicalStrategyAstCompilerService } from '@/modules/llm-strategy-codegen/services/canonical-strategy-ast-compiler.service'
+import { CompiledScriptEmitterService } from '@/modules/llm-strategy-codegen/services/compiled-script-emitter.service'
+import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
 import { MarketDataIngestionService } from '@/modules/market-data/services/market-data-ingestion.service'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { buildApiUrl } from '../fixtures/fixtures'
@@ -24,8 +28,10 @@ describe('backtestingController (e2e)', () => {
   let marketDataMock: { prepareData: jest.Mock; loadBars: jest.Mock; resolveCoverage: jest.Mock }
   let callerMock: { resolveCallerUserIdFromAuthorization: jest.Mock }
   let strategyAdapterMock: { build: jest.Mock }
+  let snapshotsRepositoryMock: { findByIdForUser: jest.Mock }
 
   beforeEach(async () => {
+    const compiledSnapshot = createCompiledSnapshotFixture()
     const report = {
       summary: {
         netProfit: 10,
@@ -93,6 +99,40 @@ describe('backtestingController (e2e)', () => {
         fn: () => ({ type: 'NOOP' }),
       }),
     }
+    snapshotsRepositoryMock = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        strategyInstanceId: 'instance-1',
+        strategyTemplateId: 'template-1',
+        snapshotHash: 'snapshot-hash',
+        scriptHash: 'script-hash',
+        specHash: compiledSnapshot.compiledManifest.specHash,
+        irHash: compiledSnapshot.compiledManifest.irHash,
+        astDigest: compiledSnapshot.compiledManifest.astDigest,
+        structuralDigest: compiledSnapshot.compiledManifest.structuralDigest,
+        scriptSnapshot: compiledSnapshot.scriptSnapshot,
+        paramsSnapshot: {
+          symbol: 'BTCUSDT',
+          timeframe: '5m',
+          marketType: 'spot',
+        },
+        lockedParams: {
+          exchange: 'okx',
+          positionPct: 25,
+        },
+        executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+        dataRequirements: { primary: ['5m'] },
+        irSnapshot: compiledSnapshot.ir,
+        astSnapshot: compiledSnapshot.ast,
+        compiledManifest: compiledSnapshot.compiledManifest,
+        executionEnvelope: compiledSnapshot.executionEnvelope,
+        specSnapshot: {
+          market: { exchange: 'okx' },
+          indicators: [],
+          riskRules: [],
+        },
+      }),
+    }
 
     moduleFixture = await Test.createTestingModule({
       imports: [
@@ -120,6 +160,8 @@ describe('backtestingController (e2e)', () => {
       .useValue(callerMock)
       .overrideProvider(BacktestStrategyAdapterService)
       .useValue(strategyAdapterMock)
+      .overrideProvider(PublishedStrategySnapshotsRepository)
+      .useValue(snapshotsRepositoryMock)
       .compile()
 
     app = moduleFixture.createNestApplication()
@@ -151,7 +193,7 @@ describe('backtestingController (e2e)', () => {
       strategy: {
         id: 'demo-strategy',
         protocolVersion: 'v1',
-        scriptCode: 'return { type: "NOOP" }',
+        publishedSnapshotId: 'snapshot-1',
         params: { fast: 9, slow: 21 },
       },
       dataRange: { fromTs: 1, toTs: 2 },
@@ -199,7 +241,7 @@ describe('backtestingController (e2e)', () => {
       strategy: {
         id: 'demo-strategy',
         protocolVersion: 'v1',
-        scriptCode: 'return { type: "NOOP" }',
+        publishedSnapshotId: 'snapshot-1',
         params: { fast: 9, slow: 21 },
       },
       dataRange: { fromTs: 1, toTs: 2 },
@@ -227,6 +269,87 @@ describe('backtestingController (e2e)', () => {
     expect(runnerMock.run).toHaveBeenCalledTimes(0)
   })
 
+  it('POST /api/v1/backtesting/run should reject tampered compiled snapshots before runner execution', async () => {
+    const compiledSnapshot = createCompiledSnapshotFixture()
+    const tamperedScript = compiledSnapshot.scriptSnapshot.replace(
+      '"sourceRef":"entry_cross"',
+      '"sourceRef":"entry_cross_mutated"',
+    )
+
+    snapshotsRepositoryMock.findByIdForUser.mockResolvedValueOnce({
+      id: 'snapshot-1',
+      strategyInstanceId: 'instance-1',
+      strategyTemplateId: 'template-1',
+      snapshotHash: 'snapshot-hash',
+      scriptHash: 'script-hash',
+      specHash: compiledSnapshot.compiledManifest.specHash,
+      irHash: compiledSnapshot.compiledManifest.irHash,
+      astDigest: compiledSnapshot.compiledManifest.astDigest,
+      structuralDigest: compiledSnapshot.compiledManifest.structuralDigest,
+      scriptSnapshot: tamperedScript,
+      paramsSnapshot: {
+        symbol: 'BTCUSDT',
+        timeframe: '5m',
+        marketType: 'spot',
+      },
+      lockedParams: {
+        exchange: 'okx',
+        positionPct: 25,
+      },
+      executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+      dataRequirements: { primary: ['5m'] },
+      irSnapshot: compiledSnapshot.ir,
+      astSnapshot: compiledSnapshot.ast,
+      compiledManifest: compiledSnapshot.compiledManifest,
+      executionEnvelope: compiledSnapshot.executionEnvelope,
+      specSnapshot: {
+        market: { exchange: 'okx' },
+        indicators: [],
+        riskRules: [],
+      },
+    })
+
+    await supertestRequest(app.getHttpServer())
+      .post(buildApiUrl('backtesting/run'))
+      .set('Authorization', 'Bearer test-token')
+      .send({
+        symbols: ['BTCUSDT'],
+        baseTimeframe: '5m',
+        stateTimeframes: ['1h'],
+        initialCash: 10000,
+        leverage: 2,
+        allowPartial: false,
+        execution: { slippageBps: 5, feeBps: 4, priceSource: 'mid' },
+        strategy: {
+          id: 'demo-strategy',
+          protocolVersion: 'v1',
+          publishedSnapshotId: 'snapshot-1',
+          params: { fast: 9, slow: 21 },
+        },
+        dataRange: { fromTs: 1, toTs: 2 },
+        bars: [
+          {
+            symbol: 'BTCUSDT',
+            timeframe: '5m',
+            openTime: 1,
+            closeTime: 2,
+            open: 100,
+            high: 110,
+            low: 90,
+            close: 105,
+            volume: 100,
+          },
+        ],
+      })
+      .expect(400)
+      .expect((res: Response) => {
+        const serializedBody = JSON.stringify(res.body)
+        expect(serializedBody).toContain('backtest.compiled_snapshot_invalid')
+      })
+
+    expect(runnerMock.run).not.toHaveBeenCalled()
+  })
+
   it('POST /api/v1/backtesting/jobs should fail when market data is empty', async () => {
     marketDataMock.loadBars.mockResolvedValueOnce([])
 
@@ -241,7 +364,7 @@ describe('backtestingController (e2e)', () => {
       strategy: {
         id: 'demo-strategy',
         protocolVersion: 'v1',
-        scriptCode: 'return { type: "NOOP" }',
+        publishedSnapshotId: 'snapshot-1',
         params: { fast: 9, slow: 21 },
       },
       dataRange: { fromTs: 1, toTs: 2 },
@@ -293,7 +416,7 @@ describe('backtestingController (e2e)', () => {
       strategy: {
         id: 'demo-strategy',
         protocolVersion: 'v1',
-        scriptCode: 'return { type: "NOOP" }',
+        publishedSnapshotId: 'snapshot-1',
         params: { fast: 9, slow: 21 },
       },
       dataRange: { fromTs: 1, toTs: 2 },
@@ -337,7 +460,7 @@ describe('backtestingController (e2e)', () => {
       strategy: {
         id: 'demo-strategy',
         protocolVersion: 'v1',
-        scriptCode: 'return { type: "NOOP" }',
+        publishedSnapshotId: 'snapshot-1',
         params: { fast: 9, slow: 21 },
       },
       dataRange: { fromTs: 1, toTs: 2 },
@@ -367,3 +490,107 @@ describe('backtestingController (e2e)', () => {
     expect(status).toBe('succeeded')
   })
 })
+
+function createCompiledSnapshotFixture() {
+  const ir = createIrFixture()
+  const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+  const executionEnvelope = createExecutionEnvelope()
+  const emitter = new CompiledScriptEmitterService()
+  const scriptSnapshot = emitter.emit({ ast, executionEnvelope })
+  const projection = emitter.buildProjection({ ast, executionEnvelope })
+
+  return {
+    ir,
+    ast,
+    executionEnvelope,
+    scriptSnapshot,
+    compiledManifest: projection.compiledManifest,
+  }
+}
+
+function createIrFixture(): CanonicalStrategyIrV1 {
+  return {
+    irVersion: 'csi.v1',
+    source: {
+      graphVersion: 18,
+      graphDigest: 'sha256:11aa',
+      specHash: 'sha256:11aa',
+    },
+    market: {
+      venue: 'binance',
+      instrumentType: 'spot',
+      symbol: 'BTCUSDT',
+      timeframes: ['1h'],
+      priceFeed: 'close',
+    },
+    portfolio: {
+      positionMode: 'long_only',
+      sizing: { mode: 'pct_equity', value: 25 },
+      maxConcurrentPositions: 1,
+      allowPyramiding: false,
+      maxPyramidingLayers: 1,
+    },
+    dataRequirements: {
+      warmupBars: 21,
+      maxLookback: 21,
+      requiredTimeframes: ['1h'],
+    },
+    signalCatalog: {
+      series: [
+        { id: 'close_1h', kind: 'PRICE', timeframe: '1h', field: 'close' },
+        { id: 'ema_7', kind: 'EMA', inputs: ['close_1h'], params: { period: 7 } },
+        { id: 'ema_21', kind: 'EMA', inputs: ['close_1h'], params: { period: 21 } },
+      ],
+      levelSets: [],
+      predicates: [
+        { id: 'entry_cross', kind: 'CROSS_OVER', args: ['ema_7', 'ema_21'] },
+        { id: 'exit_cross', kind: 'CROSS_UNDER', args: ['ema_7', 'ema_21'] },
+      ],
+    },
+    ruleBlocks: [
+      {
+        id: 'entry_long',
+        phase: 'entry',
+        when: 'entry_cross',
+        priority: 200,
+        actions: [
+          { kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 25 } },
+        ],
+      },
+      {
+        id: 'exit_long',
+        phase: 'exit',
+        when: 'exit_cross',
+        priority: 100,
+        actions: [
+          { kind: 'CLOSE_LONG', quantity: { mode: 'position_pct', value: 100 } },
+        ],
+      },
+    ],
+    orderPrograms: [],
+    riskPolicy: {
+      guards: [
+        { id: 'stop_loss_4', kind: 'STOP_LOSS_PCT', scope: 'position', value: 4, onBreach: 'FORCE_EXIT' },
+      ],
+    },
+    executionPolicy: {
+      signalEvaluation: 'bar_close',
+      fillPolicy: 'next_bar_open',
+      timeframeAlignment: 'strict',
+      orderTypeDefault: 'market',
+      timeInForce: 'gtc',
+      allowPartialFill: false,
+    },
+  }
+}
+
+function createExecutionEnvelope() {
+  return {
+    positionMode: 'long_only' as const,
+    marginMode: 'cash' as const,
+    tickSize: 0.01,
+    pricePrecision: 2,
+    quantityPrecision: 6,
+    fillAssumption: 'strict' as const,
+  }
+}

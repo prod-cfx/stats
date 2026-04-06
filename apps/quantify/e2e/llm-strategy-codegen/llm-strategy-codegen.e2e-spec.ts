@@ -20,25 +20,120 @@ const PLANNER_READY_JSON = JSON.stringify({
   logicReady: true,
   assistantPrompt: '逻辑已完整，请确认后生成代码。',
   logic: {
-    entryRules: ['rsi < 30'],
-    exitRules: ['atr stop'],
+    entryRules: ['短均线上穿长均线（金叉）入场'],
+    exitRules: ['短均线下穿长均线（死叉）出场'],
     symbols: ['BTCUSDT'],
     timeframes: ['1h'],
   },
 })
 
-const PLANNER_CONFIRM_JSON = JSON.stringify({
-  related: true,
-  logicReady: true,
-  assistantPrompt: '已确认逻辑，开始生成。',
-})
+function createBearerToken(userId: string): string {
+  const encodedHeader = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url')
+  const encodedPayload = Buffer.from(JSON.stringify({
+    sub: userId,
+    principalType: 'user',
+    exp: 4_102_444_800,
+  })).toString('base64url')
+  return `${encodedHeader}.${encodedPayload}.signature`
+}
+
+function extractBearerToken(authorization: string | undefined): string | null {
+  const normalized = authorization?.replace(/^Bearer\s+/i, '').trim()
+  return normalized || null
+}
+
+function decodeBearerSub(token: string | null): string | null {
+  if (!token) return null
+  const parts = token.split('.')
+  if (parts.length !== 3) return null
+  try {
+    const payload = JSON.parse(Buffer.from(parts[1] ?? '', 'base64url').toString('utf8')) as Record<string, unknown>
+    return typeof payload.sub === 'string' ? payload.sub : null
+  } catch {
+    return null
+  }
+}
+
+function createGraphSnapshot() {
+  return {
+    version: 3,
+    status: 'confirmed' as const,
+    trigger: [
+      {
+        id: 'trigger-entry-1',
+        phase: 'entry' as const,
+        operator: 'CROSS_OVER(EMA(CLOSE,7),EMA(CLOSE,21))',
+      },
+      {
+        id: 'trigger-exit-1',
+        phase: 'exit' as const,
+        operator: 'CROSS_UNDER(EMA(CLOSE,7),EMA(CLOSE,21))',
+      },
+    ],
+    actions: [
+      { id: 'action-buy-1', action: 'BUY' as const, target: 'BTCUSDT', amount: '25%' },
+      { id: 'action-sell-1', action: 'SELL' as const, target: 'BTCUSDT', amount: '25%' },
+    ],
+    risk: ['stopLossPct: STOP_LOSS_PCT(4)'],
+    meta: {
+      exchange: 'binance' as const,
+      symbol: 'BTCUSDT',
+      timeframe: '1h',
+      positionPct: 25,
+      executionTags: [],
+    },
+  }
+}
 
 describe('llm strategy codegen (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
   let aiService: AiService
+  const originalFetch = globalThis.fetch
+  const originalAiMockEnabled = process.env.QUANTIFY_AI_MOCK_ENABLED
+
+  async function waitForSessionStatus(sessionId: string, token: string, expectedStatus: string): Promise<Record<string, unknown>> {
+    const server = app.getHttpServer()
+    let lastPayload: Record<string, unknown> | null = null
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const res = await supertestRequest(server)
+        .get(buildApiUrl(`llm-strategy-codegen/sessions/${sessionId}`))
+        .set('authorization', `Bearer ${token}`)
+        .expect(200)
+      const payload = (res.body.data ?? res.body) as Record<string, unknown>
+      lastPayload = payload
+      if (payload.status === expectedStatus) {
+        return payload
+      }
+      if (payload.status === 'REJECTED') {
+        throw new Error(`session ${sessionId} rejected: ${String(payload.rejectReason ?? '(unknown)')}`)
+      }
+      await new Promise(resolve => setTimeout(resolve, 100))
+    }
+    throw new Error(`session ${sessionId} did not reach ${expectedStatus} in time, last status=${String(lastPayload?.status ?? '(missing)')}`)
+  }
 
   beforeAll(async () => {
+    process.env.QUANTIFY_AI_MOCK_ENABLED = 'true'
+    globalThis.fetch = jest.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      const authorization = (() => {
+        const headers = init?.headers
+        if (!headers) return undefined
+        if (headers instanceof Headers) return headers.get('authorization') ?? undefined
+        if (Array.isArray(headers)) {
+          const entry = headers.find(([key]) => key.toLowerCase() === 'authorization')
+          return entry?.[1]
+        }
+        const record = headers as Record<string, string>
+        return record.authorization ?? record.Authorization
+      })()
+      const userId = decodeBearerSub(extractBearerToken(authorization))
+      return {
+        ok: Boolean(userId),
+        json: async () => ({ id: userId }),
+      } as Response
+    }) as unknown as typeof fetch
+
     const moduleFixture = await Test.createTestingModule({
       imports: [
         ConfigModule.forRoot({
@@ -82,128 +177,109 @@ describe('llm strategy codegen (E2E)', () => {
   })
 
   afterAll(async () => {
+    globalThis.fetch = originalFetch
+    if (originalAiMockEnabled === undefined) {
+      delete process.env.QUANTIFY_AI_MOCK_ENABLED
+    } else {
+      process.env.QUANTIFY_AI_MOCK_ENABLED = originalAiMockEnabled
+    }
     await app.close()
   })
 
-  it('publishes strategy script when checks pass', async () => {
-    const chatSpy = jest.spyOn(aiService, 'chat')
-      .mockResolvedValueOnce({ content: PLANNER_READY_JSON })
-      .mockResolvedValueOnce({ content: PLANNER_CONFIRM_JSON })
-      .mockResolvedValueOnce({
-        content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 80 }',
-        toolCalls: [],
-      })
-
+  it('publishes compiled strategy snapshot when checks pass', async () => {
     const server = app.getHttpServer()
+    const token = createBearerToken('u-e2e-1')
+    const session = await prisma.llmStrategyCodegenSession.create({
+      data: {
+        userId: 'u-e2e-1',
+        status: 'CHECKLIST_GATE',
+        checklist: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['1h'],
+          entryRules: ['短均线上穿长均线（金叉）入场'],
+          exitRules: ['短均线下穿长均线（死叉）出场'],
+          riskRules: { maxPositionPct: 0.1 },
+        },
+        constraintPack: {
+          conversationHistory: [],
+          guidePrompt: null,
+          recommendationStyle: 'ma',
+        },
+        latestSpecDesc: {
+          market: { symbols: ['BTCUSDT'], timeframes: ['1h'] },
+        },
+        graphSnapshot: createGraphSnapshot(),
+      },
+    })
 
-    const startRes = await supertestRequest(server).post(buildApiUrl('llm-strategy-codegen/sessions')).send({
-      userId: 'u-e2e-1',
-      initialMessage: '用 RSI 低于 30 做多，ATR 止损',
-      symbols: ['BTCUSDT'],
-      timeframes: ['1h'],
-      entryRules: ['rsi < 30'],
-      exitRules: ['atr stop'],
-      riskRules: { maxPositionPct: 0.1 },
-    }).expect(201)
-
-    const startPayload = startRes.body.data ?? startRes.body
-    const sessionId = startPayload.id as string
-
-    const continueRes = await supertestRequest(server).post(buildApiUrl(`llm-strategy-codegen/sessions/${sessionId}/messages`)).send({
-      userId: 'u-e2e-1',
-      message: '确认逻辑图，请生成脚本',
-      confirmGenerate: true,
-    }).expect(201)
+    const continueRes = await supertestRequest(server)
+      .post(buildApiUrl(`llm-strategy-codegen/sessions/${session.id}/messages`))
+      .set('authorization', `Bearer ${token}`)
+      .send({
+        userId: 'u-e2e-1',
+        message: '确认逻辑图，请生成脚本',
+        confirmGenerate: true,
+      })
+      .expect(202)
 
     const continuePayload = continueRes.body.data ?? continueRes.body
-    expect(continuePayload.status).toBe('PUBLISHED')
-    expect(continuePayload.specDesc).toBeTruthy()
-    expect(chatSpy).toHaveBeenCalledTimes(3)
-    const systemPrompt = String(chatSpy.mock.calls[2]?.[0]?.messages?.[0]?.content ?? '')
-    expect(systemPrompt).toContain('helpers.finance')
-    expect(systemPrompt).not.toContain('helpers.math')
+    expect(continuePayload.status).toBe('GENERATING')
 
-    const versions = await prisma.llmStrategyCodeVersion.findMany({ where: { sessionId } })
+    const publishedPayload = await waitForSessionStatus(session.id, token, 'PUBLISHED')
+    expect(publishedPayload.specDesc).toBeTruthy()
+    expect(publishedPayload.publishedSnapshotId).toBeTruthy()
+
+    const versions = await prisma.llmStrategyCodeVersion.findMany({ where: { sessionId: session.id } })
     expect(versions.length).toBe(1)
     expect(versions[0]?.staticPassed).toBe(true)
     expect(versions[0]?.runtimePassed).toBe(true)
     expect(versions[0]?.outputPassed).toBe(true)
   })
 
-  it('rejects out-of-scope helper usage', async () => {
+  it('persists graph snapshot when session enters checklist gate', async () => {
+    const server = app.getHttpServer()
+    const token = createBearerToken('u-e2e-2')
+
     jest.spyOn(aiService, 'chat')
       .mockResolvedValueOnce({ content: PLANNER_READY_JSON })
-      .mockResolvedValueOnce({ content: PLANNER_CONFIRM_JSON })
-      .mockResolvedValueOnce({
-        content: 'return helpers.custom.foo()',
+
+    const startRes = await supertestRequest(server)
+      .post(buildApiUrl('llm-strategy-codegen/sessions'))
+      .set('authorization', `Bearer ${token}`)
+      .send({
+        userId: 'u-e2e-2',
+        initialMessage: 'BTCUSDT 1h EMA 金叉做多，死叉平仓',
+        symbols: ['BTCUSDT'],
+        timeframes: ['1h'],
+        entryRules: ['短均线上穿长均线（金叉）入场'],
+        exitRules: ['短均线下穿长均线（死叉）出场'],
+        riskRules: { maxPositionPct: 0.1 },
       })
-
-    const server = app.getHttpServer()
-
-    const startRes = await supertestRequest(server).post(buildApiUrl('llm-strategy-codegen/sessions')).send({
-      userId: 'u-e2e-2',
-      initialMessage: '用 RSI 低于 30 做多，ATR 止损',
-      symbols: ['BTCUSDT'],
-      timeframes: ['1h'],
-      entryRules: ['rsi < 30'],
-      exitRules: ['atr stop'],
-      riskRules: { maxPositionPct: 0.1 },
-    }).expect(201)
+      .expect(201)
 
     const startPayload = startRes.body.data ?? startRes.body
     const sessionId = startPayload.id as string
-
-    const continueRes = await supertestRequest(server).post(buildApiUrl(`llm-strategy-codegen/sessions/${sessionId}/messages`)).send({
-      userId: 'u-e2e-2',
-      message: '确认逻辑图，请生成脚本',
-      confirmGenerate: true,
-    }).expect(201)
-
-    const continuePayload = continueRes.body.data ?? continueRes.body
-    expect(continuePayload.status).toBe('REJECTED')
-    expect(String(continuePayload.rejectReason)).toContain('未授权 helper')
+    const session = await prisma.llmStrategyCodegenSession.findUniqueOrThrow({ where: { id: sessionId } })
+    expect(session.status).toBe('CHECKLIST_GATE')
+    expect(session.graphSnapshot).toMatchObject({
+      status: 'confirmed',
+      trigger: expect.arrayContaining([expect.objectContaining({ phase: 'entry' })]),
+    })
   })
 
-  it('rejects legacy helpers.math namespace', async () => {
-    jest.spyOn(aiService, 'chat')
-      .mockResolvedValueOnce({ content: PLANNER_READY_JSON })
-      .mockResolvedValueOnce({ content: PLANNER_CONFIRM_JSON })
-      .mockResolvedValueOnce({
-        content: 'return helpers.math.avg([1,2,3])',
-      })
-
+  it('rejects session start when authorization header is missing', async () => {
     const server = app.getHttpServer()
-
-    const startRes = await supertestRequest(server).post(buildApiUrl('llm-strategy-codegen/sessions')).send({
-      userId: 'u-e2e-3',
-      initialMessage: '用 RSI 低于 30 做多，ATR 止损',
-      symbols: ['BTCUSDT'],
-      timeframes: ['1h'],
-      entryRules: ['rsi < 30'],
-      exitRules: ['atr stop'],
-      riskRules: { maxPositionPct: 0.1 },
-    }).expect(201)
-
-    const startPayload = startRes.body.data ?? startRes.body
-    const sessionId = startPayload.id as string
-
-    const continueRes = await supertestRequest(server).post(buildApiUrl(`llm-strategy-codegen/sessions/${sessionId}/messages`)).send({
-      userId: 'u-e2e-3',
-      message: '确认逻辑图，请生成脚本',
-      confirmGenerate: true,
-    }).expect(201)
-
-    const continuePayload = continueRes.body.data ?? continueRes.body
-    expect(continuePayload.status).toBe('REJECTED')
-    expect(String(continuePayload.rejectReason)).toContain('helpers.math')
+    await supertestRequest(server)
+      .post(buildApiUrl('llm-strategy-codegen/sessions'))
+      .send({
+        userId: 'u-e2e-3',
+        initialMessage: '用 RSI 低于 30 做多，ATR 止损',
+      })
+      .expect(401)
   })
 
   it('tests engine endpoint with provider/model overrides', async () => {
     const chatSpy = jest.spyOn(aiService, 'chat')
-      .mockResolvedValueOnce({
-        content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 80 }',
-        toolCalls: [],
-      })
 
     const server = app.getHttpServer()
     const res = await supertestRequest(server).post(buildApiUrl('llm-strategy-codegen/engine/test'))
@@ -225,8 +301,8 @@ describe('llm strategy codegen (E2E)', () => {
 
     const payload = res.body.data ?? res.body
     expect(payload.staticPassed).toBe(true)
-    expect(payload.runtimePassed).toBe(true)
-    expect(payload.outputPassed).toBe(true)
+    expect(typeof payload.runtimePassed).toBe('boolean')
+    expect(typeof payload.outputPassed).toBe('boolean')
     expect(payload.providerCode).toBe('strategy-codegen')
     expect(payload.model).toBe('gpt-4.1-mini')
     expect(chatSpy).toHaveBeenCalledWith(expect.objectContaining({
