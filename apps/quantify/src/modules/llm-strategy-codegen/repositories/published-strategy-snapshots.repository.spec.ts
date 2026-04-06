@@ -101,6 +101,8 @@ describe('publishedStrategySnapshotsRepository', () => {
       sessionId: 'session-1',
       scriptSnapshot: 'const strategy = {}',
       specSnapshot: { graphDigest: 'sha256:graph' },
+      semanticGraph: { version: 1, nodes: [{ id: 'entry-1' }] },
+      compiledIr: { irVersion: 'csi.v1', rules: [{ id: 'rule-1' }] },
       irSnapshot: { irVersion: 'csi.v1' },
       astSnapshot: { astVersion: 'csa.v1' },
       compiledManifest: {
@@ -134,6 +136,8 @@ describe('publishedStrategySnapshotsRepository', () => {
 
     expect(tx.publishedStrategySnapshot.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
+        semanticGraph: { version: 1, nodes: [{ id: 'entry-1' }] },
+        compiledIr: { irVersion: 'csi.v1', rules: [{ id: 'rule-1' }] },
         irHash: 'sha256:ir',
         astDigest: 'sha256:ast',
         structuralDigest: 'sha256:struct',
@@ -171,6 +175,14 @@ describe('publishedStrategySnapshotsRepository', () => {
       specSnapshot: {
         market: { exchange: 'okx', symbol: 'BTCUSDT', timeframe: '15m' },
       },
+      semanticGraph: {
+        version: 1,
+        nodes: [{ id: 'entry-1' }],
+      },
+      compiledIr: {
+        irVersion: 'csi.v1',
+        rules: [{ id: 'rule-1' }],
+      },
       consistencyReport: {
         status: 'PASSED',
       },
@@ -187,7 +199,10 @@ describe('publishedStrategySnapshotsRepository', () => {
     await repo.create(baseInput)
     await repo.create({
       ...baseInput,
-      lockedParams: { leverage: 5 },
+      semanticGraph: {
+        version: 1,
+        nodes: [{ id: 'entry-2' }],
+      },
     })
 
     const firstCall = tx.publishedStrategySnapshot.create.mock.calls[0][0]

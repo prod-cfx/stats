@@ -32,8 +32,16 @@ describe('SemanticGraphBuilderService', () => {
 
     const entryNode = result.graph?.nodes.find(node => node.kind === 'price_change_pct' && node.phase === 'entry')
     const exitNode = result.graph?.nodes.find(node => node.kind === 'position_pnl_pct' && node.phase === 'exit')
-    expect(entryNode?.params.timeframe).toBe('3m')
-    expect(exitNode?.params.timeframe).toBe('15m')
+    expect(entryNode?.kind).toBe('price_change_pct')
+    expect(exitNode?.kind).toBe('position_pnl_pct')
+    if (!entryNode || entryNode.kind !== 'price_change_pct') {
+      throw new Error('expected entry price_change_pct node')
+    }
+    if (!exitNode || exitNode.kind !== 'position_pnl_pct') {
+      throw new Error('expected exit position_pnl_pct node')
+    }
+    expect(entryNode.params.timeframe).toBe('3m')
+    expect(exitNode.params.timeframe).toBe('15m')
   })
 
   it('builds fixed-range grid buy and upper-grid sell graph with position/risk', () => {

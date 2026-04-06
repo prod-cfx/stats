@@ -127,6 +127,9 @@ model LlmStrategyCodegenSession {
   latestDraftCode    String?                 @map("latest_draft_code") @db.Text
   latestSpecDesc     Json?                   @map("latest_spec_desc")
   graphSnapshot      Json?                   @map("graph_snapshot")
+  semanticGraph      Json?                   @map("semantic_graph")
+  validationReport   Json?                   @map("validation_report")
+  compiledIr         Json?                   @map("compiled_ir")
   rejectReason       String?                 @map("reject_reason")
   createdAt          DateTime                @default(now()) @map("created_at")
   updatedAt          DateTime                @default(now()) @updatedAt @map("updated_at")
@@ -171,6 +174,8 @@ model PublishedStrategySnapshot {
   structuralDigest   String?  @map("structural_digest")
   scriptSnapshot     String   @map("script_snapshot") @db.Text
   specSnapshot       Json     @map("spec_snapshot")
+  semanticGraph      Json?    @map("semantic_graph")
+  compiledIr         Json?    @map("compiled_ir")
   irSnapshot         Json?    @map("ir_snapshot")
   astSnapshot        Json?    @map("ast_snapshot")
   compiledManifest   Json?    @map("compiled_manifest")
