@@ -9,6 +9,10 @@ import { Injectable } from '@nestjs/common'
 import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CompiledScriptParserService } from './compiled-script-parser.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { ScriptProfileExtractorService } from './script-profile-extractor.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { StrategyConsistencyService } from './strategy-consistency.service'
 
 interface PublishCompiledSnapshotInput {
   sessionId: string
@@ -31,6 +35,10 @@ export class CompiledPublicationGateService {
   constructor(
     private readonly publishedSnapshotsRepo: PublishedStrategySnapshotsRepository,
     private readonly scriptParser: CompiledScriptParserService = new CompiledScriptParserService(),
+    private readonly strategyConsistency: StrategyConsistencyService = new StrategyConsistencyService(
+      new ScriptProfileExtractorService(),
+      new CompiledScriptParserService(),
+    ),
   ) {}
 
   async publish(input: PublishCompiledSnapshotInput): Promise<{
@@ -78,6 +86,14 @@ export class CompiledPublicationGateService {
     input: PublishCompiledSnapshotInput,
     parsed: ReturnType<CompiledScriptParserService['parse']>,
   ): Record<string, unknown> {
+    if (input.semanticGraph) {
+      return this.strategyConsistency.audit({
+        semanticGraph: input.semanticGraph,
+        ir: input.ir,
+        scriptCode: input.script,
+      }) as unknown as Record<string, unknown>
+    }
+
     const graphVsIrPassed = input.ir.source.graphDigest === input.ir.source.specHash
     const irVsScriptPassed = parsed.compiledManifest.irHash === input.ast.manifest.irHash
       && parsed.compiledManifest.structuralDigest === input.ast.manifest.structuralDigest

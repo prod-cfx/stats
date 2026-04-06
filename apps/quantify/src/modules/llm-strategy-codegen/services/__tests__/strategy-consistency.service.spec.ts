@@ -1,10 +1,17 @@
+import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
+import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
+import { CompiledScriptParserService } from '../compiled-script-parser.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
+import { SemanticGraphCompilerService } from '../semantic-graph-compiler.service'
 import { StrategyConsistencyService } from '../strategy-consistency.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
 
 describe('strategyConsistencyService', () => {
-  const consistency = new StrategyConsistencyService(new ScriptProfileExtractorService())
+  const consistency = new StrategyConsistencyService(
+    new ScriptProfileExtractorService(),
+    new CompiledScriptParserService(),
+  )
   const canonicalBuilder = new CanonicalSpecBuilderService()
   const summaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
 
@@ -41,6 +48,39 @@ strategy
 
     expect(report.status).toBe('PASSED')
     expect(report.summary.criticalFailed).toBe(0)
+  })
+
+  it('passes when semantic graph, ir and compiled script stay aligned', () => {
+    const semanticGraph = createBollingerSemanticGraph()
+    const ir = new SemanticGraphCompilerService().compile(semanticGraph)
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const script = new CompiledScriptEmitterService().emit({
+      ast,
+      executionEnvelope: createExecutionEnvelope(),
+    })
+
+    const report = consistency.audit({
+      semanticGraph,
+      ir,
+      scriptCode: script,
+    })
+
+    expect(report.status).toBe('PASSED')
+    expect(report.checks.every(check => check.status === 'passed')).toBe(true)
+  })
+
+  it('fails when compiled script no longer matches ir manifest', () => {
+    const semanticGraph = createBollingerSemanticGraph()
+    const ir = new SemanticGraphCompilerService().compile(semanticGraph)
+
+    const report = consistency.audit({
+      semanticGraph,
+      ir,
+      scriptCode: `export default function strategy() { return { action: 'OPEN_LONG' } }`,
+    })
+
+    expect(report.status).toBe('FAILED')
+    expect(report.checks.some(check => check.key === 'script.ir_manifest' && check.status === 'failed')).toBe(true)
   })
 
   it('fails when fallback script is detected', () => {
@@ -293,3 +333,69 @@ strategy
     expect(report.checks.some(check => check.key === 'summary.alignment' && check.status === 'passed')).toBe(true)
   })
 })
+
+function createBollingerSemanticGraph() {
+  return {
+    version: 1 as const,
+    market: { symbol: 'BTCUSDT', primaryTimeframe: '15m' },
+    nodes: [
+      {
+        id: 'entry-upper-short',
+        phase: 'entry' as const,
+        kind: 'bollinger_band_touch' as const,
+        params: {
+          timeframe: '15m',
+          band: 'upper' as const,
+          direction: 'breakout' as const,
+          actionBias: 'short' as const,
+          period: 20,
+          stdDev: 2,
+        },
+      },
+      {
+        id: 'entry-lower-long',
+        phase: 'entry' as const,
+        kind: 'bollinger_band_touch' as const,
+        params: {
+          timeframe: '15m',
+          band: 'lower' as const,
+          direction: 'breakdown' as const,
+          actionBias: 'long' as const,
+          period: 20,
+          stdDev: 2,
+        },
+      },
+      {
+        id: 'exit-middle-close',
+        phase: 'exit' as const,
+        kind: 'bollinger_band_touch' as const,
+        params: {
+          timeframe: '15m',
+          band: 'middle' as const,
+          direction: 'breakout' as const,
+          actionBias: 'long' as const,
+          period: 20,
+          stdDev: 2,
+        },
+      },
+    ],
+    actions: [
+      { id: 'open-long', kind: 'OPEN_LONG' as const, sizePct: 10 },
+      { id: 'open-short', kind: 'OPEN_SHORT' as const, sizePct: 10 },
+      { id: 'close-long', kind: 'CLOSE_LONG' as const, sizePct: 100 },
+      { id: 'close-short', kind: 'CLOSE_SHORT' as const, sizePct: 100 },
+    ],
+    risk: [],
+  }
+}
+
+function createExecutionEnvelope() {
+  return {
+    positionMode: 'long_short' as const,
+    marginMode: 'cash' as const,
+    tickSize: 0.01,
+    pricePrecision: 2,
+    quantityPrecision: 6,
+    fillAssumption: 'strict' as const,
+  }
+}

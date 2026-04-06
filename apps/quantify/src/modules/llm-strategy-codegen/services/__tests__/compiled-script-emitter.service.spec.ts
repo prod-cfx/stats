@@ -14,6 +14,7 @@ describe('CompiledScriptEmitterService', () => {
     expect(first).toBe(second)
     expect(first).toContain("import type { StrategyAdapterV1 } from '@ai/shared'")
     expect(first).toContain("} from '@ai/shared/script-engine/compiled-runtime'")
+    expect(first).not.toContain('突破布林带上轨做空')
     expect(first.endsWith('\n')).toBe(true)
   })
 })
