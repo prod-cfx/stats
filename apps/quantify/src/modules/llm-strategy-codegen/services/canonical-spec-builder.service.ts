@@ -1,4 +1,4 @@
-import type { CanonicalRuleV2, CanonicalStrategySpecAnyVersion, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
+import type { CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
 import { Injectable } from '@nestjs/common'
 
 interface ChecklistSnapshot {
@@ -11,7 +11,7 @@ interface ChecklistSnapshot {
 
 @Injectable()
 export class CanonicalSpecBuilderService {
-  build(checklist: ChecklistSnapshot): CanonicalStrategySpecAnyVersion {
+  build(checklist: ChecklistSnapshot): CanonicalStrategySpecV2 {
     const entryRules = Array.isArray(checklist.entryRules) ? checklist.entryRules : []
     const exitRules = Array.isArray(checklist.exitRules) ? checklist.exitRules : []
     const riskRules = checklist.riskRules && typeof checklist.riskRules === 'object' && !Array.isArray(checklist.riskRules)

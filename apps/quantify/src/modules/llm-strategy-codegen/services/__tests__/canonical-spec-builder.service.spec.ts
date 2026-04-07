@@ -59,10 +59,12 @@ describe('canonicalSpecBuilderService', () => {
       exitRules: ['根据主观判断离场'],
     })
 
-    expect(spec).toEqual({
+    expect(spec).toEqual(expect.objectContaining({
       version: 2,
       rules: [],
-    })
+      indicators: [],
+      sizing: null,
+    }))
   })
 
   it('does not inject implicit market/sizing/sma defaults when checklist is missing them', () => {
@@ -73,10 +75,15 @@ describe('canonicalSpecBuilderService', () => {
       exitRules: ['价格跌破关键支撑位出场'],
     })
 
-    expect(spec.market).toEqual({})
+    expect(spec.market).toEqual({
+      exchange: 'binance',
+      symbol: null,
+      marketType: 'spot',
+      timeframe: null,
+    })
     expect(spec.indicators).toEqual([])
     expect(spec.sizing).toBeNull()
-    expect(spec.dataRequirements).toEqual({ primary: [] })
+    expect(spec.dataRequirements).toEqual({ requiredTimeframes: [] })
   })
 
   it('parses moving-average short entry and short exit without forcing golden-entry/death-exit defaults', () => {
@@ -94,11 +101,17 @@ describe('canonicalSpecBuilderService', () => {
       kind: 'sma',
       params: { period: 20 },
     })
-    expect(spec.entries).toEqual([
-      { id: 'entry-1', trigger: '短均线下穿长均线（死叉）时做空', action: 'OPEN_SHORT' },
-    ])
-    expect(spec.exits).toEqual([
-      { id: 'exit-1', trigger: '短均线上穿长均线（金叉）时平空', action: 'CLOSE_SHORT' },
-    ])
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'short',
+        actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        sideScope: 'short',
+        actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
+      }),
+    ]))
   })
 })

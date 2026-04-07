@@ -1,5 +1,5 @@
 import type { BacktestRunInput } from '../types/backtesting.types'
-import type { CanonicalStrategySpec, RiskRuleSpec } from '@/modules/llm-strategy-codegen/types/canonical-strategy-spec'
+import type { CanonicalRuleV2, CanonicalStrategySpec, RiskRuleSpec } from '@/modules/llm-strategy-codegen/types/canonical-strategy-spec'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
@@ -118,6 +118,36 @@ export class BacktestSnapshotLoaderService {
 
   private buildRiskRules(spec: CanonicalStrategySpec): BacktestRunInput['strategy']['riskRules'] {
     const riskRules: NonNullable<BacktestRunInput['strategy']['riskRules']> = {}
+    if (spec.version === 2) {
+      const stopLossRule = spec.rules.find(rule => this.isStopLossRuleV2(rule))
+      const stopLossPct = this.parseStopLossPctV2(stopLossRule)
+      if (typeof stopLossPct === 'number') {
+        riskRules.maxFloatingLossPct = stopLossPct
+      }
+
+      const outsideBandRule = spec.rules.find(rule => this.isOutsideBandRuleV2(rule))
+      const bollingerIndicator = spec.indicators.find(item => item.kind === 'bollingerBands')
+      if (outsideBandRule && bollingerIndicator) {
+        const hasReduceAction = outsideBandRule.actions.some(action =>
+          action.type === 'REDUCE_LONG' || action.type === 'REDUCE_SHORT')
+        riskRules.outsideBand = {
+          mode: 'BOLLINGER_BANDS',
+          lowerBound: 0,
+          upperBound: 0,
+          indicator: {
+            kind: 'bollingerBands',
+            period: Number(bollingerIndicator.params.period ?? 20),
+            stdDev: Number(bollingerIndicator.params.stdDev ?? 2),
+          },
+          consecutiveBars: this.parseConsecutiveBarsV2(outsideBandRule) ?? 3,
+          action: hasReduceAction ? 'REDUCE' : 'CLOSE',
+          reduceRatio: hasReduceAction ? 0.5 : undefined,
+        }
+      }
+
+      return Object.keys(riskRules).length > 0 ? riskRules : undefined
+    }
+
     const stopLossRule = spec.riskRules.find(rule => rule.effect === 'FORCE_STOP')
     const stopLossPct = this.parseStopLossPct(stopLossRule)
     if (typeof stopLossPct === 'number') {
@@ -162,5 +192,39 @@ export class BacktestSnapshotLoaderService {
 
   private isOutsideBandRule(rule: RiskRuleSpec): boolean {
     return /轨外|outside/i.test(rule.trigger)
+  }
+
+  private parseStopLossPctV2(rule?: CanonicalRuleV2): number | undefined {
+    if (!rule || rule.condition.kind !== 'atom' || rule.condition.key !== 'position_loss_pct') {
+      return undefined
+    }
+
+    const value = typeof rule.condition.value === 'number' ? rule.condition.value : Number.NaN
+    if (!Number.isFinite(value) || value <= 0) return undefined
+    return value <= 1 ? value * 100 : value
+  }
+
+  private parseConsecutiveBarsV2(rule: CanonicalRuleV2): number | undefined {
+    if (rule.condition.kind !== 'atom') return undefined
+    const rawBars = rule.condition.params?.bars
+    if (typeof rawBars === 'number' && Number.isFinite(rawBars) && rawBars > 0) {
+      return Math.floor(rawBars)
+    }
+    const rawValue = rule.condition.value
+    if (typeof rawValue === 'number' && Number.isFinite(rawValue) && rawValue > 0) {
+      return Math.floor(rawValue)
+    }
+    return undefined
+  }
+
+  private isOutsideBandRuleV2(rule: CanonicalRuleV2): boolean {
+    return rule.condition.kind === 'atom' && rule.condition.key === 'bollinger.bars_outside'
+  }
+
+  private isStopLossRuleV2(rule: CanonicalRuleV2): boolean {
+    return rule.phase === 'risk'
+      && rule.condition.kind === 'atom'
+      && rule.condition.key === 'position_loss_pct'
+      && rule.actions.some(action => action.type === 'FORCE_EXIT')
   }
 }

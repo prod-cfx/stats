@@ -3,7 +3,25 @@ import { CanonicalSpecV2ValidatorService } from '../canonical-spec-v2-validator.
 
 describe('canonicalSpecV2ValidatorService', () => {
   const validator = new CanonicalSpecV2ValidatorService()
-  const createSpec = (rules: CanonicalRuleV2[]): CanonicalStrategySpecV2 => ({ version: 2, rules })
+  const createSpec = (rules: CanonicalRuleV2[]): CanonicalStrategySpecV2 => ({
+    version: 2,
+    market: {
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      marketType: 'spot',
+      timeframe: '15m',
+    },
+    indicators: [],
+    sizing: null,
+    executionPolicy: {
+      signalTiming: 'BAR_CLOSE',
+      fillTiming: 'NEXT_BAR_OPEN',
+    },
+    dataRequirements: {
+      requiredTimeframes: ['15m'],
+    },
+    rules,
+  })
 
   it('rejects an entry rule that contains both OPEN_LONG and OPEN_SHORT', () => {
     const report = validator.validate(createSpec([
