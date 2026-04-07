@@ -123,7 +123,6 @@ model LlmStrategyCodegenSession {
   strategyInstanceId String?                 @map("strategy_instance_id")
   status             LlmCodegenSessionStatus @default(DRAFTING)
   checklist          Json?
-  clarificationState Json?                   @map("clarification_state")
   constraintPack     Json?                   @map("constraint_pack")
   clarificationState Json?                   @map("clarification_state")
   latestDraftCode    String?                 @map("latest_draft_code") @db.Text
