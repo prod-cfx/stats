@@ -807,6 +807,23 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   )
 
   it('publishes after confirmGenerate with compiled pipeline', async () => {
+    const clarificationState = {
+      strategyType: 'grid',
+      items: [
+        {
+          id: 'grid:gridSpacingMode',
+          kind: 'semantic_ambiguity',
+          strategyType: 'grid',
+          field: 'gridSpacingMode',
+          reason: '当前网格间距仍有两种可编译解释',
+          question: '这里的1%等距网格，是固定价差，还是按百分比递增的复利网格？',
+          priority: 80,
+          status: 'resolved',
+          resolvedValue: 'fixed_step',
+        },
+      ],
+      lastAskedItemId: 'grid:gridSpacingMode',
+    }
     mockRepo.findById.mockResolvedValue({
       id: 's5',
       userId: 'u1',
@@ -816,6 +833,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         exitRules: ['短均线下穿长均线（死叉）出场'],
       },
       constraintPack: {},
+      clarificationState,
       semanticGraph: createSemanticGraph(),
       graphSnapshot: createGraphSnapshot(),
     })
@@ -834,6 +852,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockAi.chat).not.toHaveBeenCalled()
     expect(mockRepo.createVersion).toHaveBeenCalled()
     expect(mockCompiledPublicationGate.publish).toHaveBeenCalledWith(expect.objectContaining({
+      clarificationState,
       graphSnapshot: expect.objectContaining({
         status: 'confirmed',
       }),

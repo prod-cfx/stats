@@ -293,6 +293,7 @@ export class CodegenConversationService {
             sessionId: session.id,
             userId: sessionUserId,
             checklist,
+            clarificationState: this.readClarificationState(session.clarificationState ?? null),
             message: dto.message,
             semanticGraph,
             graphSnapshot,
@@ -354,6 +355,7 @@ export class CodegenConversationService {
         sessionId: session.id,
         userId: sessionUserId,
         checklist: baseChecklist,
+        clarificationState: this.readClarificationState(session.clarificationState ?? null),
         message: dto.message,
         semanticGraph,
         graphSnapshot,
@@ -517,6 +519,7 @@ export class CodegenConversationService {
     sessionId: string
     userId: string
     checklist: ChecklistPayload
+    clarificationState?: StrategyClarificationState | null
     message: string
     semanticGraph: SemanticStrategyGraph
     graphSnapshot: StrategyLogicGraphSnapshot | null
@@ -619,6 +622,7 @@ export class CodegenConversationService {
         strategyTemplateId,
         strategyInstanceId: strategyInstanceId ?? null,
         graphSnapshot: args.graphSnapshot ?? this.buildGraphSnapshot(args.checklist, specDesc, 1),
+        clarificationState: args.clarificationState ?? null,
         semanticGraph: args.semanticGraph,
         ir,
         ast,
