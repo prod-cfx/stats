@@ -6,6 +6,7 @@ import type { RecommendationIndexService } from '../recommendation-index.service
 import type { AiService } from '@/modules/ai/ai.service'
 import { restoreProcessEnv, setProcessEnvValue, snapshotProcessEnv } from '@/common/env/env.accessor'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
+import { CanonicalSpecV2DigestService } from '../canonical-spec-v2-digest.service'
 import { CodegenConversationService } from '../codegen-conversation.service'
 import { RuntimeGuardrailService } from '../runtime-guardrail.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
@@ -52,20 +53,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     onSpecDescPersisted: jest.fn(),
   }
   const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+  const canonicalDigestService = new CanonicalSpecV2DigestService()
   const specDescBuilder = new SpecDescBuilderService(canonicalSpecBuilder)
   const buildConfirmedCanonicalDigest = (checklist: Record<string, unknown>): string => {
-    const specDesc = specDescBuilder.build(checklist, '')
-    if (typeof specDesc.canonicalDigest === 'string' && specDesc.canonicalDigest.trim()) {
-      return specDesc.canonicalDigest
-    }
-    const confirmation = specDesc.confirmation
-    if (confirmation && typeof confirmation === 'object' && !Array.isArray(confirmation)) {
-      const digest = (confirmation as { digest?: unknown }).digest
-      if (typeof digest === 'string' && digest.trim()) {
-        return digest
-      }
-    }
-    throw new Error('missing canonical digest in specDesc')
+    return canonicalDigestService.hash(canonicalSpecBuilder.build(checklist))
   }
 
   const service = new CodegenConversationService(
@@ -241,6 +232,15 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(result.status).toBe('CHECKLIST_GATE')
     expect(result.specDesc).toBeTruthy()
+    expect(result.canonicalDigest).toMatch(/^sha256:/)
+    expect(result.specDesc).toEqual(expect.objectContaining({
+      viewType: 'canonical-semantic-view.v1',
+      canonicalDigest: result.canonicalDigest,
+      confirmation: expect.objectContaining({
+        required: true,
+        digest: result.canonicalDigest,
+      }),
+    }))
     expect(result.assistantPrompt).toContain('确认逻辑图')
   })
 
@@ -459,17 +459,18 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('publishes after confirmGenerate with planner+generator pipeline', async () => {
-    mockRepo.findById.mockResolvedValue({
-      id: 's5',
-      userId: 'u1',
-      status: 'CHECKLIST_GATE',
-      checklist: {
-        entryRules: ['短均线上穿长均线（金叉）时做多'],
-        exitRules: ['短均线下穿长均线（死叉）时平多'],
-      },
-      constraintPack: {},
-    })
     mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '已确认逻辑，开始生成。',
+          logic: {
+            entryRules: ['短均线上穿长均线（金叉）时做多'],
+            exitRules: ['短均线下穿长均线（死叉）时平多'],
+          },
+        }),
+      })
       .mockResolvedValueOnce({
         content: JSON.stringify({
           related: true,
@@ -495,16 +496,33 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 }
 strategy`,
       })
+    mockRepo.createSession.mockResolvedValue({ id: 's5' })
     mockRepo.createVersion.mockResolvedValue({ id: 'v1' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '短均线上穿长均线（金叉）时做多，短均线下穿长均线（死叉）时平多',
+    })
+
+    expect(started.status).toBe('CHECKLIST_GATE')
+    expect(started.canonicalDigest).toMatch(/^sha256:/)
+
+    mockRepo.findById.mockResolvedValue({
+      id: 's5',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        entryRules: ['短均线上穿长均线（金叉）时做多'],
+        exitRules: ['短均线下穿长均线（死叉）时平多'],
+      },
+      constraintPack: {},
+    })
 
     const dto: ContinueCodegenSessionDto = {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
-        entryRules: ['短均线上穿长均线（金叉）时做多'],
-        exitRules: ['短均线下穿长均线（死叉）时平多'],
-      }),
+      confirmedCanonicalDigest: started.canonicalDigest ?? undefined,
     }
     const result = await service.continueSession('s5', dto)
 
