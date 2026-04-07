@@ -7,6 +7,7 @@ import { CodegenSessionsRepository } from './repositories/codegen-sessions.repos
 import { PublishedStrategySnapshotsRepository } from './repositories/published-strategy-snapshots.repository'
 import { CallerIdentityService } from './services/caller-identity.service'
 import { CanonicalSpecBuilderService } from './services/canonical-spec-builder.service'
+import { CanonicalSpecV2DigestService } from './services/canonical-spec-v2-digest.service'
 import { CanonicalSpecV2ValidatorService } from './services/canonical-spec-v2-validator.service'
 import { CompiledPublicationGateService } from './services/compiled-publication-gate.service'
 import { CompiledScriptParserService } from './services/compiled-script-parser.service'
@@ -33,6 +34,7 @@ import { StrategySummaryBuilderService } from './services/strategy-summary-build
     RuntimeGuardrailService,
     SpecDescBuilderService,
     CanonicalSpecBuilderService,
+    CanonicalSpecV2DigestService,
     CanonicalSpecV2ValidatorService,
     CompiledScriptParserService,
     CompiledPublicationGateService,

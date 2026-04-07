@@ -52,6 +52,21 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     onSpecDescPersisted: jest.fn(),
   }
   const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+  const specDescBuilder = new SpecDescBuilderService(canonicalSpecBuilder)
+  const buildConfirmedCanonicalDigest = (checklist: Record<string, unknown>): string => {
+    const specDesc = specDescBuilder.build(checklist, '')
+    if (typeof specDesc.canonicalDigest === 'string' && specDesc.canonicalDigest.trim()) {
+      return specDesc.canonicalDigest
+    }
+    const confirmation = specDesc.confirmation
+    if (confirmation && typeof confirmation === 'object' && !Array.isArray(confirmation)) {
+      const digest = (confirmation as { digest?: unknown }).digest
+      if (typeof digest === 'string' && digest.trim()) {
+        return digest
+      }
+    }
+    throw new Error('missing canonical digest in specDesc')
+  }
 
   const service = new CodegenConversationService(
     mockAi as unknown as AiService,
@@ -59,7 +74,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo as unknown as PublishedStrategySnapshotsRepository,
     new StaticGuardrailService(),
     new RuntimeGuardrailService(),
-    new SpecDescBuilderService(canonicalSpecBuilder),
+    specDescBuilder,
     canonicalSpecBuilder,
     new StrategyConsistencyService(new ScriptProfileExtractorService()),
     mockRecommendation as unknown as RecommendationIndexService,
@@ -486,6 +501,10 @@ strategy`,
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        entryRules: ['短均线上穿长均线（金叉）时做多'],
+        exitRules: ['短均线下穿长均线（死叉）时平多'],
+      }),
     }
     const result = await service.continueSession('s5', dto)
 
@@ -499,6 +518,64 @@ strategy`,
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s5', expect.objectContaining({
       status: 'PUBLISHED',
     }))
+  })
+
+  it('rejects confirmGenerate when confirmedCanonicalDigest does not match the current semantic view', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-1',
+      userId: 'u-1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['EMA7 上穿 EMA21 做多'],
+        exitRules: ['EMA7 下穿 EMA21 平多'],
+        riskRules: { positionPct: 10 },
+      },
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestDraftCode: null,
+      latestSpecDesc: null,
+      rejectReason: null,
+      strategyInstanceId: null,
+    })
+
+    await expect(service.continueSession('session-1', {
+      userId: 'u-1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: 'sha256:stale',
+    })).rejects.toThrow('codegen.confirmation_digest_mismatch')
+  })
+
+  it('rejects processing-session requeue when confirmedCanonicalDigest mismatches current semantic view', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-processing-1',
+      userId: 'u-1',
+      status: 'VALIDATING_RUNTIME',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['EMA7 上穿 EMA21 做多'],
+        exitRules: ['EMA7 下穿 EMA21 平多'],
+        riskRules: { positionPct: 10 },
+      },
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestDraftCode: 'const strategy = {}',
+      latestSpecDesc: null,
+      rejectReason: null,
+      strategyInstanceId: null,
+    })
+
+    await expect(service.continueSession('session-processing-1', {
+      userId: 'u-1',
+      message: '确认并继续',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: 'sha256:stale',
+    })).rejects.toThrow('codegen.confirmation_digest_mismatch')
+
+    expect(mockRepo.tryRequeueFromProcessing).not.toHaveBeenCalled()
   })
 
   it('marks consistency failed when script output cannot satisfy signal payload schema and fallback publish is disabled', async () => {
@@ -529,6 +606,10 @@ strategy`,
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        entryRules: ['rsi < 30'],
+        exitRules: ['atr stop'],
+      }),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -572,6 +653,10 @@ strategy`,
       userId: 'u1',
       message: '确认，直接生成代码',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        entryRules: ['突破关键阻力位后入场'],
+        exitRules: ['跌破最近支撑位出场'],
+      }),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -607,6 +692,10 @@ strategy`,
       userId: 'u1',
       message: '确认，直接生成代码',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        entryRules: ['突破关键阻力位后入场'],
+        exitRules: ['跌破最近支撑位出场'],
+      }),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -649,6 +738,10 @@ strategy`,
       userId: 'u1',
       message: '确认，直接生成代码',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        entryRules: ['突破关键阻力位后入场'],
+        exitRules: ['跌破最近支撑位出场'],
+      }),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -739,6 +832,10 @@ strategy
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        entryRules: ['价格收盘确认突破阻力位入场'],
+        exitRules: ['跌破最近支撑位出场'],
+      }),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -788,6 +885,10 @@ const strategy: StrategyAdapterV1 = {
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      }),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -871,6 +972,19 @@ strategy`,
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['K线收盘后确认突破布林带上轨时做空', 'K线收盘后确认突破布林带下轨时做多'],
+        exitRules: ['价格回到布林带中轨(MA20)时平仓'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'spot',
+          positionPct: 10,
+          stopLossPct: 5,
+          earlyStop: '价格连续3根K线在轨外时考虑提前止损或减仓',
+        },
+      }),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -887,7 +1001,7 @@ strategy`,
     expect(mockRepo.ensureDraftStrategyInstanceBoundForPublishedSession).not.toHaveBeenCalled()
   }, 15_000)
 
-  it('marks session consistency failed when canonical spec version is not 2', async () => {
+  it('rejects continueSession when canonical spec version is not 2', async () => {
     const buildSpy = jest.spyOn(canonicalSpecBuilder, 'build').mockReturnValue({
       version: 1,
       market: {
@@ -938,24 +1052,14 @@ strategy`,
         }),
       })
 
-    const result = await service.continueSession('s-v1', {
+    await expect(service.continueSession('s-v1', {
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
       providerCode: 'uniapi',
       model: 'gpt-4',
-    })
+    })).rejects.toThrow('canonical_spec_v2_required')
 
-    expect(result.status).toBe('GENERATING')
-    await waitForTerminalStatus('s-v1')
-
-    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-v1', expect.objectContaining({
-      status: 'CONSISTENCY_FAILED',
-      rejectReason: 'canonical_spec_v2_required_for_publication',
-    }))
-    expect(mockRepo.updateSession).not.toHaveBeenCalledWith('s-v1', expect.objectContaining({
-      status: 'PUBLISHED',
-    }))
     buildSpy.mockRestore()
   })
 
@@ -992,6 +1096,10 @@ strategy`,
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      }),
       providerCode: 'uniapi',
       model: 'gpt-4',
     })
@@ -1038,6 +1146,10 @@ strategy`,
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      }),
       providerCode: 'uniapi',
       model: 'gpt-4',
     })
@@ -1082,6 +1194,10 @@ strategy`,
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      }),
       model: 'deepseek-chat',
     })
 
@@ -1126,6 +1242,10 @@ strategy`,
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      }),
       providerCode: 'strategy-codegen',
     })
 
@@ -1189,6 +1309,10 @@ strategy`,
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      }),
       providerCode: 'uniapi',
       model: 'gpt-4',
     })
@@ -1203,6 +1327,10 @@ strategy`,
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      }),
       providerCode: 'uniapi',
       model: 'gpt-4o',
     })
@@ -1265,6 +1393,10 @@ strategy`,
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      }),
       providerCode: 'unit-no-model-provider',
     })
     expect(first.status).toBe('GENERATING')
@@ -1278,6 +1410,10 @@ strategy`,
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      }),
       providerCode: 'unit-no-model-provider',
     })
     expect(second.status).toBe('GENERATING')
@@ -1323,6 +1459,12 @@ strategy`,
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        symbols: ['BTCUSDT'],
+        timeframes: ['5m'],
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      }),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -1376,6 +1518,16 @@ strategy`,
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['价格下跌触及网格线时买入'],
+        exitRules: ['价格上涨一个网格时卖出'],
+        riskRules: {
+          marketType: 'perp',
+          positionPct: 10,
+        },
+      }),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -1421,6 +1573,12 @@ strategy`,
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      }),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -1466,6 +1624,12 @@ strategy`,
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        symbols: ['BTCUSDT'],
+        timeframes: ['5m'],
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      }),
     })
 
     expect(result.status).toBe('GENERATING')

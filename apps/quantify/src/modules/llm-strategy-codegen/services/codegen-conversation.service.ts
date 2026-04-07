@@ -192,6 +192,7 @@ export class CodegenConversationService {
 
     const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
     const initialSpecDesc = shouldGateChecklist ? this.specDescBuilder.build(checklist, '') : null
+    const initialCanonicalDigest = this.readCanonicalDigest(initialSpecDesc)
     const assistantPrompt = clarificationState.status === 'NEEDS_CLARIFICATION' && clarificationPrompt
       ? clarificationPrompt
       : (shouldGateChecklist
@@ -219,6 +220,7 @@ export class CodegenConversationService {
       status,
       missingFields: [],
       specDesc: initialSpecDesc,
+      canonicalDigest: initialCanonicalDigest,
       assistantPrompt,
       clarificationState,
     }
@@ -266,13 +268,27 @@ export class CodegenConversationService {
     }
     if (PROCESSING_SESSION_STATUSES.includes(session.status)) {
       if (dto.confirmGenerate === true) {
+        const checklist = this.readChecklist(session.checklist)
+        const specDesc = this.specDescBuilder.build(checklist, '')
+        const canonicalDigest = this.readCanonicalDigest(specDesc)
+        const confirmedCanonicalDigest = dto.confirmedCanonicalDigest?.trim() ?? ''
+        if (!canonicalDigest || confirmedCanonicalDigest !== canonicalDigest) {
+          throw new DomainException('codegen.confirmation_digest_mismatch', {
+            code: ErrorCode.BAD_REQUEST,
+            status: HttpStatus.BAD_REQUEST,
+            args: {
+              expectedCanonicalDigest: canonicalDigest,
+              confirmedCanonicalDigest: confirmedCanonicalDigest || null,
+            },
+          })
+        }
+
         const providerCode = this.resolveProviderCode(dto.providerCode)
         const requeued = await this.sessionsRepo.tryRequeueFromProcessing(session.id, {
           status: 'GENERATING',
           rejectReason: null,
         })
         if (requeued) {
-          const checklist = this.readChecklist(session.checklist)
           void this.runGenerationPipeline({
             sessionId: session.id,
             userId: sessionUserId,
@@ -353,6 +369,23 @@ export class CodegenConversationService {
       dto.message,
       plan.assistantPrompt,
     )
+    const canonicalSpec = this.canonicalSpecBuilder.build(mergedChecklist)
+    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
+    const canonicalDigest = this.readCanonicalDigest(specDesc)
+
+    if (dto.confirmGenerate === true) {
+      const confirmedCanonicalDigest = dto.confirmedCanonicalDigest?.trim() ?? ''
+      if (!canonicalDigest || confirmedCanonicalDigest !== canonicalDigest) {
+        throw new DomainException('codegen.confirmation_digest_mismatch', {
+          code: ErrorCode.BAD_REQUEST,
+          status: HttpStatus.BAD_REQUEST,
+          args: {
+            expectedCanonicalDigest: canonicalDigest,
+            confirmedCanonicalDigest: confirmedCanonicalDigest || null,
+          },
+        })
+      }
+    }
 
     if (dto.confirmGenerate !== true) {
       if (!plan.logicReady) {
@@ -375,7 +408,6 @@ export class CodegenConversationService {
         }
       }
 
-      const specDesc = this.specDescBuilder.build(mergedChecklist, '')
       await this.sessionsRepo.updateSession(session.id, {
         status: 'CHECKLIST_GATE',
         checklist: mergedChecklist as Prisma.InputJsonValue,
@@ -392,6 +424,7 @@ export class CodegenConversationService {
         status: 'CHECKLIST_GATE',
         missingFields: [],
         specDesc,
+        canonicalDigest,
         assistantPrompt: `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`,
         clarificationState,
       }
@@ -567,8 +600,8 @@ export class CodegenConversationService {
         status: 'VALIDATING_OUTPUT',
       })
 
-      const baseSpecDesc = this.specDescBuilder.build(checklist, finalScriptCode)
       const canonicalSpec = this.canonicalSpecBuilder.build(checklist)
+      const baseSpecDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, finalScriptCode)
       const userIntentSummary = this.strategySummaryBuilder.buildUserIntentSummary({
         checklist,
         message,
@@ -712,6 +745,27 @@ export class CodegenConversationService {
     return this.normalizeChecklist(payload as Record<string, unknown>)
   }
 
+  private readCanonicalDigest(specDesc: Record<string, unknown> | null): string | null {
+    if (!specDesc || typeof specDesc !== 'object' || Array.isArray(specDesc)) {
+      return null
+    }
+
+    const directCanonicalDigest = specDesc.canonicalDigest
+    if (typeof directCanonicalDigest === 'string' && directCanonicalDigest.trim().length > 0) {
+      return directCanonicalDigest.trim()
+    }
+
+    const confirmation = specDesc.confirmation
+    if (!confirmation || typeof confirmation !== 'object' || Array.isArray(confirmation)) {
+      return null
+    }
+    const digest = (confirmation as { digest?: unknown }).digest
+    if (typeof digest !== 'string' || digest.trim().length === 0) {
+      return null
+    }
+    return digest.trim()
+  }
+
   private async toSessionSnapshotResponse(session: {
     id: string
     status: LlmCodegenSessionStatus
@@ -744,6 +798,7 @@ export class CodegenConversationService {
             ? sessionConsistencyReport as Record<string, unknown>
             : null),
       specDesc: sessionSpecDesc,
+      canonicalDigest: this.readCanonicalDigest(sessionSpecDesc),
       strategyInstanceId: session.strategyInstanceId ?? null,
       clarificationState: this.readClarificationState(session.clarificationState),
       rejectReason: session.rejectReason,
