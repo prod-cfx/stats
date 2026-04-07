@@ -200,6 +200,94 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
     })
   })
 
+  it('persists clarification state on codegen sessions', async () => {
+    let storedRow: Record<string, unknown> | null = null
+
+    const pickSelected = (row: Record<string, unknown>, select?: Record<string, boolean>) => {
+      const keys = Object.entries(select ?? {})
+        .filter(([, enabled]) => enabled)
+        .map(([key]) => key)
+      return Object.fromEntries(keys.map(key => [key, row[key]]))
+    }
+
+    const tx = {
+      llmStrategyCodegenSession: {
+        create: jest.fn().mockImplementation(async (args: { data: Record<string, unknown>; select?: Record<string, boolean> }) => {
+          storedRow = {
+            id: 'session-1',
+            userId: args.data.userId,
+            status: args.data.status,
+            checklist: args.data.checklist ?? null,
+            clarificationState: args.data.clarificationState ?? null,
+            constraintPack: args.data.constraintPack ?? null,
+            latestDraftCode: args.data.latestDraftCode ?? null,
+            latestSpecDesc: args.data.latestSpecDesc ?? null,
+            rejectReason: args.data.rejectReason ?? null,
+            strategyInstanceId: args.data.strategyInstanceId ?? null,
+            createdAt: new Date('2026-04-02T00:00:00.000Z'),
+            updatedAt: new Date('2026-04-02T00:00:00.000Z'),
+          }
+          return pickSelected(storedRow, args.select)
+        }),
+        findUnique: jest.fn().mockImplementation(async (args: { select?: Record<string, boolean> }) => {
+          if (!storedRow) return null
+          return pickSelected(storedRow, args.select)
+        }),
+      },
+    }
+
+    const txHost = {
+      tx,
+      withTransaction: jest.fn(async (callback: () => Promise<unknown>) => callback()),
+    }
+    const repository = new CodegenSessionsRepository(txHost as never)
+
+    const clarificationState = {
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        {
+          key: 'rule.entry.upper_band.side_scope',
+          reason: 'direction_ambiguous',
+          question: '突破上轨时是只做空还是也允许做多？',
+          status: 'pending',
+        },
+      ],
+    } as const
+
+    const created = await repository.createSession({
+      userId: 'u-1',
+      status: 'DRAFTING',
+      checklist: {},
+      clarificationState,
+    } as never)
+
+    const loaded = await repository.findById('session-1')
+
+    expect(tx.llmStrategyCodegenSession.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        clarificationState,
+      }),
+    }))
+    expect(created.clarificationState).toEqual({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        expect.objectContaining({
+          key: 'rule.entry.upper_band.side_scope',
+          status: 'pending',
+        }),
+      ],
+    })
+    expect(loaded?.clarificationState).toEqual({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        expect.objectContaining({
+          key: 'rule.entry.upper_band.side_scope',
+          status: 'pending',
+        }),
+      ],
+    })
+  })
+
   it('uses the ambient prisma client for single-statement session reads and writes', async () => {
     const tx = {
       llmStrategyCodegenSession: {

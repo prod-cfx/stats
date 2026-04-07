@@ -56,11 +56,13 @@ export class StrategySummaryBuilderService {
         .filter((item): item is Exclude<typeof item, 'custom'> => item !== 'custom'),
     )
 
+    const specRuleText = this.resolveSpecRuleText(spec)
+
     return {
       strategyType: this.resolveStrategyType(indicators),
       indicators,
-      entryRule: this.resolveEntryRuleTag(spec.entries.map(item => item.trigger).join('\n'), indicators),
-      exitRule: this.resolveExitRuleTag(spec.exits.map(item => item.trigger).join('\n'), indicators),
+      entryRule: this.resolveEntryRuleTag(specRuleText.entry, indicators),
+      exitRule: this.resolveExitRuleTag(specRuleText.exit, indicators),
       market: this.buildMarket({
         symbol: this.normalizeSymbol(spec.market.symbol),
         timeframe: this.normalizeTimeframe(spec.market.timeframe),
@@ -69,6 +71,28 @@ export class StrategySummaryBuilderService {
       sizing: spec.sizing
         ? { mode: spec.sizing.mode, evidence: 'explicit' }
         : null,
+    }
+  }
+
+  private resolveSpecRuleText(spec: CanonicalStrategySpec): {
+    entry: string
+    exit: string
+  } {
+    if (spec.version === 2) {
+      const entry = spec.rules
+        .filter(rule => rule.phase === 'entry')
+        .map(rule => `${rule.condition.kind === 'atom' ? rule.condition.key : rule.id} ${rule.actions.map(action => action.type).join(' ')}`)
+        .join('\n')
+      const exit = spec.rules
+        .filter(rule => rule.phase === 'exit')
+        .map(rule => `${rule.condition.kind === 'atom' ? rule.condition.key : rule.id} ${rule.actions.map(action => action.type).join(' ')}`)
+        .join('\n')
+      return { entry, exit }
+    }
+
+    return {
+      entry: spec.entries.map(item => item.trigger).join('\n'),
+      exit: spec.exits.map(item => item.trigger).join('\n'),
     }
   }
 
@@ -239,8 +263,8 @@ export class StrategySummaryBuilderService {
   }
 
   private resolveMovingAverageRuleTagFromText(text: string): 'ma.golden_cross' | 'ma.death_cross' | null {
-    const hasGoldenCross = /金叉|上穿/.test(text)
-    const hasDeathCross = /死叉|下穿/.test(text)
+    const hasGoldenCross = /金叉|上穿|golden[_\s]?cross|ma\.golden_cross/i.test(text)
+    const hasDeathCross = /死叉|下穿|death[_\s]?cross|ma\.death_cross/i.test(text)
 
     if (hasGoldenCross && hasDeathCross) return null
     if (hasGoldenCross) return 'ma.golden_cross'

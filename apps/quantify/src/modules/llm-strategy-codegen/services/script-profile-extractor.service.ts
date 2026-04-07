@@ -2,7 +2,9 @@ import type { CanonicalAction, CanonicalSizingMode } from '../types/canonical-st
 import type {
   StrategySemanticIndicator,
   StrategySemanticProfile,
+  StrategySemanticRuleMapping,
   StrategySemanticRuleKey,
+  StrategySemanticRuleProfile,
   StrategySemanticSizing,
 } from '../types/strategy-semantic-profile'
 import { Injectable } from '@nestjs/common'
@@ -18,7 +20,8 @@ export class ScriptProfileExtractorService {
   extract(scriptCode: string): StrategySemanticProfile {
     const indicators = this.extractIndicators(scriptCode)
     const actions = this.extractActions(scriptCode)
-    const ruleMappings = this.extractRuleMappings(scriptCode)
+    const rules = this.extractRules(scriptCode)
+    const ruleMappings = this.toRuleMappings(rules)
     const sizing = this.extractSizing(scriptCode)
     const requiredParams = this.extractRequiredParams(scriptCode)
 
@@ -26,6 +29,7 @@ export class ScriptProfileExtractorService {
       indicators,
       actions,
       ruleMappings,
+      rules,
       sizing,
       requiredParams,
       fallbackDetected: this.detectFallback(scriptCode),
@@ -81,15 +85,25 @@ export class ScriptProfileExtractorService {
     const actions = new Set<CanonicalAction>()
     for (const match of scriptCode.matchAll(ACTION_PATTERN)) {
       const action = match[1] as CanonicalAction
-      if (this.isExecutableAction(action)) {
+      if (
+        action === 'OPEN_LONG'
+        || action === 'OPEN_SHORT'
+        || action === 'CLOSE_LONG'
+        || action === 'CLOSE_SHORT'
+        || action === 'REDUCE_LONG'
+        || action === 'REDUCE_SHORT'
+        || action === 'FORCE_EXIT'
+        || action === 'BLOCK_NEW_ENTRY'
+        || action === 'ADJUST_POSITION'
+      ) {
         actions.add(action)
       }
     }
     return Array.from(actions)
   }
 
-  private extractRuleMappings(scriptCode: string): StrategySemanticProfile['ruleMappings'] {
-    const mappings = new Map<StrategySemanticRuleKey, CanonicalAction>()
+  private extractRules(scriptCode: string): StrategySemanticProfile['rules'] {
+    const rules = new Map<string, StrategySemanticRuleProfile>()
     const actionMatches = Array.from(scriptCode.matchAll(ACTION_PATTERN))
 
     actionMatches.forEach((match) => {
@@ -97,11 +111,15 @@ export class ScriptProfileExtractorService {
       if (typeof match.index !== 'number') return
       if (!this.isExecutableAction(action)) return
 
-      const windowStart = Math.max(0, match.index - 160)
-      const window = scriptCode.slice(windowStart, match.index + 40).toLowerCase()
+      const statementWindow = this.extractStatementWindow(scriptCode, match.index)
+      const window = statementWindow.toLowerCase()
       const push = (key: StrategySemanticRuleKey) => {
-        if (!mappings.has(key)) {
-          mappings.set(key, action)
+        const profile = this.createRuleProfile(key, action, window)
+        if (!profile) return
+
+        const ruleKey = `${profile.key}:${profile.phase}:${profile.sideScope}:${profile.action}`
+        if (!rules.has(ruleKey)) {
+          rules.set(ruleKey, profile)
         }
       }
 
@@ -114,6 +132,9 @@ export class ScriptProfileExtractorService {
       if (/\bmiddle\b|中轨|\bmid\b|ma20/.test(window)) {
         push('bollinger.middle_revert')
       }
+      if (/bars_outside|outside|轨外/.test(window)) {
+        push('bollinger.bars_outside')
+      }
       if (this.hasMovingAverageCrossEvidence(window, 'up')) {
         push('ma.golden_cross')
       }
@@ -122,7 +143,7 @@ export class ScriptProfileExtractorService {
       }
     })
 
-    return Array.from(mappings.entries()).map(([key, action]) => ({ key, action }))
+    return Array.from(rules.values())
   }
 
   private extractSizing(scriptCode: string): StrategySemanticProfile['sizing'] {
@@ -304,6 +325,51 @@ export class ScriptProfileExtractorService {
     return null
   }
 
+  private extractStatementWindow(scriptCode: string, actionIndex: number): string {
+    const statementStart = Math.max(
+      scriptCode.lastIndexOf('if', actionIndex),
+      scriptCode.lastIndexOf('\n', actionIndex - 1),
+      0,
+    )
+    const nextNewline = scriptCode.indexOf('\n', actionIndex)
+    const nextBrace = scriptCode.indexOf('}', actionIndex)
+    const candidateEnds = [nextNewline, nextBrace].filter((value): value is number => value >= 0)
+    const statementEnd = candidateEnds.length > 0 ? Math.min(...candidateEnds) : actionIndex + 120
+    return scriptCode.slice(statementStart, statementEnd)
+  }
+
+  private createRuleProfile(
+    key: StrategySemanticRuleKey,
+    action: CanonicalAction,
+    window: string,
+  ): StrategySemanticRuleProfile | null {
+    const phase = this.inferPhase(action)
+    if (!phase) return null
+
+    return {
+      key,
+      phase,
+      sideScope: this.inferSideScope(action, window),
+      action,
+    }
+  }
+
+  private inferPhase(action: CanonicalAction): StrategySemanticRuleProfile['phase'] | null {
+    if (action === 'OPEN_LONG' || action === 'OPEN_SHORT') return 'entry'
+    if (action === 'CLOSE_LONG' || action === 'CLOSE_SHORT' || action === 'ADJUST_POSITION') return 'exit'
+    if (action === 'REDUCE_LONG' || action === 'REDUCE_SHORT' || action === 'FORCE_EXIT' || action === 'BLOCK_NEW_ENTRY') return 'risk'
+    return null
+  }
+
+  private inferSideScope(action: CanonicalAction, window: string): StrategySemanticRuleProfile['sideScope'] {
+    if (action === 'OPEN_LONG' || action === 'CLOSE_LONG' || action === 'REDUCE_LONG') return 'long'
+    if (action === 'OPEN_SHORT' || action === 'CLOSE_SHORT' || action === 'REDUCE_SHORT') return 'short'
+
+    if (/\bshort\b|空头|做空/.test(window)) return 'short'
+    if (/\blong\b|多头|做多/.test(window)) return 'long'
+    return 'both'
+  }
+
   private hasMovingAverageCrossEvidence(window: string, direction: 'up' | 'down'): boolean {
     if (direction === 'up') {
       if (/金叉|golden\s+cross|cross(?:over)?\s+up/.test(window)) return true
@@ -314,11 +380,40 @@ export class ScriptProfileExtractorService {
     return /\b(?:fast|short|ma\d+|sma\d+|ema\d+)\b[\s\S]{0,40}(?:<|<=)[\s\S]{0,20}\b(?:slow|long|ma\d+|sma\d+|ema\d+)\b/.test(window)
   }
 
-  private isExecutableAction(action: CanonicalAction): action is 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | 'ADJUST_POSITION' {
+  private isExecutableAction(action: CanonicalAction): action is
+    | 'OPEN_LONG'
+    | 'OPEN_SHORT'
+    | 'CLOSE_LONG'
+    | 'CLOSE_SHORT'
+    | 'REDUCE_LONG'
+    | 'REDUCE_SHORT'
+    | 'FORCE_EXIT'
+    | 'BLOCK_NEW_ENTRY'
+    | 'ADJUST_POSITION' {
     return action === 'OPEN_LONG'
       || action === 'OPEN_SHORT'
       || action === 'CLOSE_LONG'
       || action === 'CLOSE_SHORT'
+      || action === 'REDUCE_LONG'
+      || action === 'REDUCE_SHORT'
+      || action === 'FORCE_EXIT'
+      || action === 'BLOCK_NEW_ENTRY'
       || action === 'ADJUST_POSITION'
+  }
+
+  private toRuleMappings(rules: StrategySemanticRuleProfile[]): StrategySemanticRuleMapping[] {
+    const mappings = new Map<string, StrategySemanticRuleMapping>()
+
+    for (const rule of rules) {
+      const mappingKey = `${rule.key}:${rule.action}`
+      if (!mappings.has(mappingKey)) {
+        mappings.set(mappingKey, {
+          key: rule.key,
+          action: rule.action,
+        })
+      }
+    }
+
+    return Array.from(mappings.values())
   }
 }

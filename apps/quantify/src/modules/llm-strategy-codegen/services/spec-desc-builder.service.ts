@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
 
 interface SpecDescChecklistSnapshot {
   symbols?: unknown
@@ -10,12 +11,15 @@ interface SpecDescChecklistSnapshot {
 
 @Injectable()
 export class SpecDescBuilderService {
+  constructor(
+    private readonly canonicalSpecBuilder: CanonicalSpecBuilderService = new CanonicalSpecBuilderService(),
+  ) {}
+
   build(checklist: SpecDescChecklistSnapshot, scriptCode: string): Record<string, unknown> {
     const symbols = Array.isArray(checklist.symbols) ? checklist.symbols : []
     const timeframes = Array.isArray(checklist.timeframes) ? checklist.timeframes : []
-    const entryRules = Array.isArray(checklist.entryRules) ? checklist.entryRules : []
-    const exitRules = Array.isArray(checklist.exitRules) ? checklist.exitRules : []
-    const riskRules = checklist.riskRules && typeof checklist.riskRules === 'object' ? checklist.riskRules : {}
+    const canonicalSpec = this.canonicalSpecBuilder.build(checklist)
+    const rules = canonicalSpec.version === 2 ? canonicalSpec.rules : []
 
     const scriptLower = scriptCode.toLowerCase()
     const features = ['rsi', 'sma', 'ema', 'atr', 'macd', 'bollinger', 'crossover', 'crossunder']
@@ -29,23 +33,38 @@ export class SpecDescBuilderService {
       styleTags.push('mean-reversion')
     }
 
+    const phaseCounts = {
+      entry: 0,
+      exit: 0,
+      risk: 0,
+      rebalance: 0,
+    }
+
+    for (const rule of rules) {
+      phaseCounts[rule.phase] += 1
+    }
+
+    const totalRules = rules.length
+
     return {
-      version: 1,
+      version: 2,
       market: {
         symbols,
         timeframes,
         session: '24x7',
       },
-      entryRules,
-      exitRules,
-      riskRules,
+      rules,
+      ruleSummary: {
+        ...phaseCounts,
+        total: totalRules,
+      },
       features,
       styleTags,
       constraints: {
         runtime: 'current_script_engine',
         allowedHelpersOnly: true,
       },
-      summary: `策略包含 ${entryRules.length} 条入场规则、${exitRules.length} 条出场规则`,
+      summary: `策略规则共 ${totalRules} 条（入场 ${phaseCounts.entry}、出场 ${phaseCounts.exit}、风控 ${phaseCounts.risk}）`,
       embedding: null,
     }
   }

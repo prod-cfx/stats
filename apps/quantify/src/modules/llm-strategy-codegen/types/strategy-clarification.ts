@@ -1,25 +1,28 @@
-export type StrategyClarificationKind = 'missing_parameter' | 'semantic_ambiguity'
+export const STRATEGY_CLARIFICATION_REASONS = [
+  'missing_action_uniqueness',
+  'missing_side_scope',
+  'direction_ambiguous',
+  'ambiguous_risk_effect',
+  'ambiguous_condition_basis',
+] as const
 
-export type StrategyClarificationStrategyType = 'price_change_pct' | 'grid' | 'bollinger' | 'custom'
+export const STRATEGY_CLARIFICATION_ITEM_STATUSES = ['pending', 'answered'] as const
+export const STRATEGY_CLARIFICATION_STATUSES = ['CLEAR', 'NEEDS_CLARIFICATION'] as const
 
-export type StrategyClarificationStatus = 'pending' | 'resolved' | 'skipped'
+export type StrategyClarificationReason = typeof STRATEGY_CLARIFICATION_REASONS[number]
+export type StrategyClarificationItemStatus = typeof STRATEGY_CLARIFICATION_ITEM_STATUSES[number]
+export type StrategyClarificationStatus = typeof STRATEGY_CLARIFICATION_STATUSES[number]
 
 export interface StrategyClarificationItem {
-  id?: string
-  kind?: StrategyClarificationKind | string
-  strategyType?: StrategyClarificationStrategyType | string
-  field?: string
-  reason?: string
-  question?: string
-  priority?: number
-  status?: StrategyClarificationStatus | string
-  resolvedValue?: unknown
-  [key: string]: unknown
+  key: string
+  reason: StrategyClarificationReason
+  ruleId?: string
+  question: string
+  status: StrategyClarificationItemStatus
+  answer?: string
 }
 
 export interface StrategyClarificationState {
-  strategyType?: StrategyClarificationStrategyType | string
-  items?: StrategyClarificationItem[]
-  lastAskedItemId?: string | null
-  [key: string]: unknown
+  status: StrategyClarificationStatus
+  items: StrategyClarificationItem[]
 }

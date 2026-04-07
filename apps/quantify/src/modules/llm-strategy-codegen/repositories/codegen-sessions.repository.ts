@@ -24,8 +24,30 @@ const SESSION_SELECT_BASE = {
   updatedAt: true,
 } as const
 
+const SESSION_SELECT_BASE_WITHOUT_CLARIFICATION = {
+  id: true,
+  userId: true,
+  status: true,
+  checklist: true,
+  constraintPack: true,
+  latestDraftCode: true,
+  latestSpecDesc: true,
+  graphSnapshot: true,
+  semanticGraph: true,
+  validationReport: true,
+  compiledIr: true,
+  rejectReason: true,
+  createdAt: true,
+  updatedAt: true,
+} as const
+
 const SESSION_SELECT_WITH_STRATEGY = {
   ...SESSION_SELECT_BASE,
+  strategyInstanceId: true,
+} as const
+
+const SESSION_SELECT_WITH_STRATEGY_WITHOUT_CLARIFICATION = {
+  ...SESSION_SELECT_BASE_WITHOUT_CLARIFICATION,
   strategyInstanceId: true,
 } as const
 
@@ -34,56 +56,33 @@ const MAX_TRANSACTION_START_RETRIES = 3
 @Injectable()
 export class CodegenSessionsRepository {
   private strategyInstanceColumnMissing = false
+  private clarificationStateColumnMissing = false
 
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
   async createSession(data: Prisma.LlmStrategyCodegenSessionCreateInput): Promise<LlmStrategyCodegenSession> {
-    if (this.strategyInstanceColumnMissing) {
-      const row = await this.txHost.tx.llmStrategyCodegenSession.create({
-        data: this.omitStrategyInstanceIdField(data),
-        select: SESSION_SELECT_BASE,
-      })
-      return this.toSessionWithNullableStrategy(row)
-    }
-
     try {
-      return await this.txHost.tx.llmStrategyCodegenSession.create({
-        data,
-        select: SESSION_SELECT_WITH_STRATEGY,
-      })
-    } catch (error) {
-      if (!this.isMissingStrategyInstanceColumnError(error)) throw error
-      this.strategyInstanceColumnMissing = true
       const row = await this.txHost.tx.llmStrategyCodegenSession.create({
-        data: this.omitStrategyInstanceIdField(data),
-        select: SESSION_SELECT_BASE,
+        data: this.omitUnavailableSessionFields(data),
+        select: this.resolveSessionSelect(),
       })
-      return this.toSessionWithNullableStrategy(row)
+      return this.toSessionWithNullableOptionalColumns(row)
+    } catch (error) {
+      if (!this.markMissingOptionalSessionColumn(error)) throw error
+      return this.createSession(data)
     }
   }
 
   async findById(id: string): Promise<LlmStrategyCodegenSession | null> {
-    if (this.strategyInstanceColumnMissing) {
-      const row = await this.txHost.tx.llmStrategyCodegenSession.findUnique({
-        where: { id },
-        select: SESSION_SELECT_BASE,
-      })
-      return row ? this.toSessionWithNullableStrategy(row) : null
-    }
-
     try {
-      return await this.txHost.tx.llmStrategyCodegenSession.findUnique({
-        where: { id },
-        select: SESSION_SELECT_WITH_STRATEGY,
-      })
-    } catch (error) {
-      if (!this.isMissingStrategyInstanceColumnError(error)) throw error
-      this.strategyInstanceColumnMissing = true
       const row = await this.txHost.tx.llmStrategyCodegenSession.findUnique({
         where: { id },
-        select: SESSION_SELECT_BASE,
+        select: this.resolveSessionSelect(),
       })
-      return row ? this.toSessionWithNullableStrategy(row) : null
+      return row ? this.toSessionWithNullableOptionalColumns(row) : null
+    } catch (error) {
+      if (!this.markMissingOptionalSessionColumn(error)) throw error
+      return this.findById(id)
     }
   }
 
@@ -103,30 +102,16 @@ export class CodegenSessionsRepository {
   }
 
   async updateSession(id: string, data: Prisma.LlmStrategyCodegenSessionUpdateInput): Promise<LlmStrategyCodegenSession> {
-    if (this.strategyInstanceColumnMissing) {
-      const row = await this.txHost.tx.llmStrategyCodegenSession.update({
-        where: { id },
-        data: this.omitStrategyInstanceIdField(data),
-        select: SESSION_SELECT_BASE,
-      })
-      return this.toSessionWithNullableStrategy(row)
-    }
-
     try {
-      return await this.txHost.tx.llmStrategyCodegenSession.update({
-        where: { id },
-        data,
-        select: SESSION_SELECT_WITH_STRATEGY,
-      })
-    } catch (error) {
-      if (!this.isMissingStrategyInstanceColumnError(error)) throw error
-      this.strategyInstanceColumnMissing = true
       const row = await this.txHost.tx.llmStrategyCodegenSession.update({
         where: { id },
-        data: this.omitStrategyInstanceIdField(data),
-        select: SESSION_SELECT_BASE,
+        data: this.omitUnavailableSessionFields(data),
+        select: this.resolveSessionSelect(),
       })
-      return this.toSessionWithNullableStrategy(row)
+      return this.toSessionWithNullableOptionalColumns(row)
+    } catch (error) {
+      if (!this.markMissingOptionalSessionColumn(error)) throw error
+      return this.updateSession(id, data)
     }
   }
 
@@ -258,18 +243,44 @@ export class CodegenSessionsRepository {
     throw lastError
   }
 
-  private omitStrategyInstanceIdField<T extends Record<string, unknown>>(input: T): T {
-    if (!('strategyInstanceId' in input)) return input
-    const { strategyInstanceId: _ignored, ...rest } = input
+  private resolveSessionSelect() {
+    if (this.strategyInstanceColumnMissing) {
+      return this.clarificationStateColumnMissing
+        ? SESSION_SELECT_BASE_WITHOUT_CLARIFICATION
+        : SESSION_SELECT_BASE
+    }
+    return this.clarificationStateColumnMissing
+      ? SESSION_SELECT_WITH_STRATEGY_WITHOUT_CLARIFICATION
+      : SESSION_SELECT_WITH_STRATEGY
+  }
+
+  private omitUnavailableSessionFields<T extends Record<string, unknown>>(input: T): T {
+    let output: Record<string, unknown> = input
+    if (this.strategyInstanceColumnMissing) {
+      output = this.omitField(output, 'strategyInstanceId')
+    }
+    if (this.clarificationStateColumnMissing) {
+      output = this.omitField(output, 'clarificationState')
+    }
+    return output as T
+  }
+
+  private omitField<T extends Record<string, unknown>>(input: T, field: string): T {
+    if (!(field in input)) return input
+    const { [field]: _ignored, ...rest } = input
     return rest as T
   }
 
-  private toSessionWithNullableStrategy(
-    session: Omit<LlmStrategyCodegenSession, 'strategyInstanceId'> & { strategyInstanceId?: string | null },
+  private toSessionWithNullableOptionalColumns(
+    session: Omit<LlmStrategyCodegenSession, 'strategyInstanceId' | 'clarificationState'> & {
+      strategyInstanceId?: string | null
+      clarificationState?: Prisma.JsonValue | null
+    },
   ): LlmStrategyCodegenSession {
     return {
       ...session,
       strategyInstanceId: session.strategyInstanceId ?? null,
+      clarificationState: session.clarificationState ?? null,
     } as LlmStrategyCodegenSession
   }
 
@@ -294,6 +305,42 @@ export class CodegenSessionsRepository {
     }
 
     return false
+  }
+
+  private isMissingClarificationStateColumnError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false
+
+    const code = 'code' in error ? (error as { code?: unknown }).code : undefined
+    const message = 'message' in error ? (error as { message?: unknown }).message : undefined
+    const meta = 'meta' in error ? (error as { meta?: unknown }).meta : undefined
+
+    if (code !== 'P2022') return false
+
+    if (typeof message === 'string' && message.includes('clarification_state')) {
+      return true
+    }
+
+    if (meta && typeof meta === 'object') {
+      const column = (meta as { column?: unknown }).column
+      if (typeof column === 'string' && column.includes('clarification_state')) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  private markMissingOptionalSessionColumn(error: unknown): boolean {
+    let changed = false
+    if (this.isMissingStrategyInstanceColumnError(error) && !this.strategyInstanceColumnMissing) {
+      this.strategyInstanceColumnMissing = true
+      changed = true
+    }
+    if (this.isMissingClarificationStateColumnError(error) && !this.clarificationStateColumnMissing) {
+      this.clarificationStateColumnMissing = true
+      changed = true
+    }
+    return changed
   }
 
   private isTransactionStartTimeoutError(error: unknown): boolean {

@@ -1,8 +1,18 @@
-import type { CanonicalAction, CanonicalStrategySpec } from '../types/canonical-strategy-spec'
+import type {
+  CanonicalAction,
+  CanonicalRuleV2,
+  CanonicalStrategySpec,
+  CanonicalStrategySpecV2,
+} from '../types/canonical-strategy-spec'
 import type { CanonicalStrategyIrV1 } from '../types/canonical-strategy-ir'
 import type { SemanticStrategyGraph } from '../types/semantic-strategy-graph'
 import type { StrategyConsistencyCheck, StrategyConsistencyReport } from '../types/strategy-consistency-report'
-import type { StrategySemanticProfile, StrategySemanticRuleKey } from '../types/strategy-semantic-profile'
+import type {
+  StrategySemanticProfile,
+  StrategySemanticRuleKey,
+  StrategySemanticRuleMapping,
+  StrategySemanticRuleProfile,
+} from '../types/strategy-semantic-profile'
 import type { StrategySummary } from '../types/strategy-summary'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { createHash } from 'node:crypto'
@@ -36,7 +46,6 @@ export class StrategyConsistencyService {
     checks.push(this.checkCompiledScriptMatchesIr(input.ir, input.scriptCode))
 
     const summary = this.buildSummary(checks)
-
     return {
       status: summary.criticalFailed > 0 ? 'FAILED' : 'PASSED',
       specProfile,
@@ -128,43 +137,50 @@ export class StrategyConsistencyService {
       }
     }
 
-    const actions = Array.from(new Set(
-      ir.ruleBlocks.flatMap(rule =>
-        rule.actions.map((action): CanonicalAction =>
-          action.kind === 'REDUCE_LONG' || action.kind === 'REDUCE_SHORT'
-            ? 'ADJUST_POSITION'
-            : action.kind,
-        ),
-      ),
-    ))
-
-    const ruleMappings: StrategySemanticProfile['ruleMappings'] = []
-    const pushRuleMapping = (mapping: StrategySemanticProfile['ruleMappings'][number]) => {
-      if (!ruleMappings.some(item => item.key === mapping.key && item.action === mapping.action)) {
-        ruleMappings.push(mapping)
+    const rules: StrategySemanticRuleProfile[] = []
+    const pushRule = (rule: StrategySemanticRuleProfile) => {
+      if (!rules.some(item =>
+        item.key === rule.key
+        && item.phase === rule.phase
+        && item.sideScope === rule.sideScope
+        && item.action === rule.action,
+      )) {
+        rules.push(rule)
       }
     }
 
     for (const predicate of ir.signalCatalog.predicates) {
-      const action = this.findPredicateAction(ir, predicate.id)
-      if (!action) continue
-      if (predicate.kind === 'CROSS_OVER') {
-        pushRuleMapping({ key: 'bollinger.upper_break', action })
-        continue
-      }
-      if (predicate.kind === 'CROSS_UNDER') {
-        pushRuleMapping({ key: 'bollinger.lower_break', action })
-        continue
-      }
-      if (predicate.kind === 'OR' && predicate.id.includes('middle')) {
-        pushRuleMapping({ key: 'bollinger.middle_revert', action })
+      const actions = ir.ruleBlocks.filter(rule => rule.when === predicate.id).flatMap(rule => rule.actions)
+      for (const action of actions) {
+        const normalizedAction = this.normalizeAction(action.kind)
+        if (!normalizedAction) continue
+        const key = this.inferRuleKeyFromPredicate({
+          predicateKind: predicate.kind,
+          predicateId: predicate.id,
+        })
+        if (!key) continue
+        pushRule({
+          key,
+          action: normalizedAction,
+          phase: this.resolvePhaseFromAction(normalizedAction),
+          sideScope: this.resolveRuleSideScope('both', normalizedAction),
+        })
       }
     }
+
+    const actions = Array.from(new Set(
+      ir.ruleBlocks.flatMap(rule =>
+        rule.actions
+          .map(action => this.normalizeAction(action.kind))
+          .filter((action): action is CanonicalAction => action !== null),
+      ),
+    ))
 
     return {
       indicators,
       actions,
-      ruleMappings,
+      ruleMappings: this.toRuleMappings(rules),
+      rules,
       sizing: {
         mode: this.mapSizingMode(ir.portfolio.sizing.mode),
         value: ir.portfolio.sizing.value,
@@ -218,42 +234,48 @@ export class StrategyConsistencyService {
       }
     }
 
-    const actions = Array.from(new Set(
-      projection.decisionPrograms.flatMap(program =>
-        program.actions.map((action): CanonicalAction =>
-          action.kind === 'REDUCE_LONG' || action.kind === 'REDUCE_SHORT'
-            ? 'ADJUST_POSITION'
-            : action.kind,
-        ),
-      ),
-    ))
-
-    const ruleMappings: StrategySemanticProfile['ruleMappings'] = []
-    const pushRuleMapping = (mapping: StrategySemanticProfile['ruleMappings'][number]) => {
-      if (!ruleMappings.some(item => item.key === mapping.key && item.action === mapping.action)) {
-        ruleMappings.push(mapping)
+    const rules: StrategySemanticRuleProfile[] = []
+    const pushRule = (rule: StrategySemanticRuleProfile) => {
+      if (!rules.some(item =>
+        item.key === rule.key
+        && item.phase === rule.phase
+        && item.sideScope === rule.sideScope
+        && item.action === rule.action,
+      )) {
+        rules.push(rule)
       }
     }
 
     for (const expr of projection.exprPool) {
       if (expr.nodeType !== 'predicate') continue
-      const action = projection.decisionPrograms.find(program => program.when === expr.id)?.actions[0]
-      if (!action) continue
-      const normalizedAction: CanonicalAction = action.kind === 'REDUCE_LONG' || action.kind === 'REDUCE_SHORT'
-        ? 'ADJUST_POSITION'
-        : action.kind
-      if (expr.payload.kind === 'CROSS_OVER') {
-        pushRuleMapping({ key: 'bollinger.upper_break', action: normalizedAction })
-        continue
-      }
-      if (expr.payload.kind === 'CROSS_UNDER') {
-        pushRuleMapping({ key: 'bollinger.lower_break', action: normalizedAction })
-        continue
-      }
-      if (expr.payload.kind === 'OR' && expr.sourceRef.includes('middle')) {
-        pushRuleMapping({ key: 'bollinger.middle_revert', action: normalizedAction })
+      const key = this.inferRuleKeyFromPredicate({
+        predicateKind: expr.payload.kind,
+        predicateId: expr.sourceRef,
+      })
+      if (!key) continue
+
+      const actions = projection.decisionPrograms
+        .filter(program => program.when === expr.id)
+        .flatMap(program => program.actions)
+      for (const action of actions) {
+        const normalizedAction = this.normalizeAction(action.kind)
+        if (!normalizedAction) continue
+        pushRule({
+          key,
+          action: normalizedAction,
+          phase: this.resolvePhaseFromAction(normalizedAction),
+          sideScope: this.resolveRuleSideScope('both', normalizedAction),
+        })
       }
     }
+
+    const actions = Array.from(new Set(
+      projection.decisionPrograms.flatMap(program =>
+        program.actions
+          .map(action => this.normalizeAction(action.kind))
+          .filter((action): action is CanonicalAction => action !== null),
+      ),
+    ))
 
     const firstOpenAction = projection.decisionPrograms
       .flatMap(program => program.actions)
@@ -262,7 +284,8 @@ export class StrategyConsistencyService {
     return {
       indicators,
       actions,
-      ruleMappings,
+      ruleMappings: this.toRuleMappings(rules),
+      rules,
       sizing: firstOpenAction
         ? {
             mode: this.mapSizingMode(firstOpenAction.quantity.mode),
@@ -402,14 +425,40 @@ export class StrategyConsistencyService {
   }
 
   private specToProfile(spec: CanonicalStrategySpec): StrategySemanticProfile {
+    if (spec.version === 2) {
+      const rules = spec.rules.flatMap(rule => this.flattenV2Rule(rule))
+      return {
+        indicators: spec.indicators,
+        actions: Array.from(new Set(
+          spec.rules.flatMap(rule => rule.actions.map(action => action.type as CanonicalAction)),
+        )),
+        ruleMappings: this.toRuleMappings(rules),
+        rules,
+        sizing: spec.sizing
+          ? {
+            ...spec.sizing,
+            source: 'literal',
+          }
+          : null,
+        requiredParams: [],
+        fallbackDetected: false,
+      }
+    }
+
     const actions = new Set<CanonicalAction>()
     for (const rule of spec.entries) actions.add(rule.action)
     for (const rule of spec.exits) actions.add(rule.action)
 
+    const rules = [
+      ...spec.entries.map(rule => this.createLegacyRuleProfile(rule.trigger, rule.action, 'entry')),
+      ...spec.exits.map(rule => this.createLegacyRuleProfile(rule.trigger, rule.action, 'exit')),
+    ].filter((item): item is StrategySemanticRuleProfile => item !== null)
+
     return {
       indicators: spec.indicators,
       actions: Array.from(actions),
-      ruleMappings: this.buildRuleMappings(spec),
+      ruleMappings: this.buildLegacyRuleMappings(spec),
+      rules,
       sizing: spec.sizing
         ? {
           ...spec.sizing,
@@ -560,6 +609,10 @@ export class StrategyConsistencyService {
     specProfile: StrategySemanticProfile,
     scriptProfile: StrategySemanticProfile,
   ): StrategyConsistencyCheck {
+    if (specProfile.rules.length > 0 || scriptProfile.rules.length > 0) {
+      return this.checkRuleProfiles(specProfile, scriptProfile)
+    }
+
     if (specProfile.ruleMappings.length === 0) {
       return {
         key: 'rules.mapping',
@@ -610,11 +663,85 @@ export class StrategyConsistencyService {
     }
   }
 
+  private checkRuleProfiles(
+    specProfile: StrategySemanticProfile,
+    scriptProfile: StrategySemanticProfile,
+  ): StrategyConsistencyCheck {
+    if (specProfile.rules.length === 0) {
+      return {
+        key: 'rules.mapping',
+        level: 'warning',
+        status: 'unprovable',
+        expected: [],
+        actual: scriptProfile.rules,
+        message: 'canonical spec 未生成规则级语义映射，跳过规则强校验。',
+      }
+    }
+
+    const missing: string[] = []
+    const sideScopeDrift: string[] = []
+    const mismatched: string[] = []
+
+    specProfile.rules.forEach((expectedRule) => {
+      const actualRule = scriptProfile.rules.find(item =>
+        item.key === expectedRule.key
+        && item.phase === expectedRule.phase
+        && item.sideScope === expectedRule.sideScope,
+      )
+      if (!actualRule) {
+        const driftCandidates = scriptProfile.rules.filter(item =>
+          item.key === expectedRule.key
+          && item.phase === expectedRule.phase
+          && item.action === expectedRule.action
+          && item.sideScope !== expectedRule.sideScope,
+        )
+        if (driftCandidates.length > 0) {
+          const actualSideScopes = Array.from(new Set(driftCandidates.map(item => item.sideScope))).join(',')
+          sideScopeDrift.push(
+            `${expectedRule.key}:${expectedRule.phase}:${expectedRule.action}: expected sideScope=${expectedRule.sideScope}, actual sideScope=${actualSideScopes}`,
+          )
+        }
+        missing.push(`${expectedRule.key}:${expectedRule.phase}:${expectedRule.sideScope}`)
+        return
+      }
+
+      if (actualRule.action !== expectedRule.action) {
+        mismatched.push(
+          `${expectedRule.key}:${expectedRule.phase}:${expectedRule.sideScope}: expected=${expectedRule.action}, actual=${actualRule.action}`,
+        )
+      }
+    })
+
+    if (missing.length > 0 || mismatched.length > 0) {
+      return {
+        key: 'rules.mapping',
+        level: 'critical',
+        status: 'failed',
+        expected: specProfile.rules,
+        actual: scriptProfile.rules,
+        message: [
+          missing.length > 0 ? `脚本缺少关键规则映射: ${missing.join(' | ')}` : '',
+          sideScopeDrift.length > 0 ? `sideScope 漂移: ${sideScopeDrift.join(' | ')}` : '',
+          mismatched.length > 0 ? `脚本规则动作不匹配: ${mismatched.join(' | ')}` : '',
+        ].filter(Boolean).join('；'),
+      }
+    }
+
+    return {
+      key: 'rules.mapping',
+      level: 'critical',
+      status: 'passed',
+      expected: specProfile.rules,
+      actual: scriptProfile.rules,
+      message: '脚本规则级语义与 canonical spec 一致。',
+    }
+  }
+
   private checkActions(
     specProfile: StrategySemanticProfile,
     scriptProfile: StrategySemanticProfile,
   ): StrategyConsistencyCheck {
-    const expected = specProfile.actions.filter(action => action.startsWith('OPEN_'))
+    const expected = Array.from(new Set(specProfile.actions))
     const actual = scriptProfile.actions
     const missing = expected.filter(action => !actual.includes(action))
 
@@ -636,7 +763,7 @@ export class StrategyConsistencyService {
         status: 'unprovable',
         expected,
         actual,
-        message: 'canonical spec 未声明关键开仓动作，跳过强校验。',
+        message: 'canonical spec 未声明关键动作，跳过强校验。',
       }
     }
 
@@ -775,16 +902,33 @@ export class StrategyConsistencyService {
     )
   }
 
-  private findPredicateAction(
-    ir: CanonicalStrategyIrV1,
-    predicateId: string,
-  ): CanonicalAction | null {
-    const action = ir.ruleBlocks.find(rule => rule.when === predicateId)?.actions[0]
-    if (!action) return null
-    if (action.kind === 'REDUCE_LONG' || action.kind === 'REDUCE_SHORT') {
-      return 'ADJUST_POSITION'
+  private normalizeAction(action: string): CanonicalAction | null {
+    if (
+      action === 'OPEN_LONG'
+      || action === 'OPEN_SHORT'
+      || action === 'CLOSE_LONG'
+      || action === 'CLOSE_SHORT'
+      || action === 'REDUCE_LONG'
+      || action === 'REDUCE_SHORT'
+      || action === 'FORCE_EXIT'
+      || action === 'BLOCK_NEW_ENTRY'
+      || action === 'ADJUST_POSITION'
+    ) {
+      return action
     }
-    return action.kind
+    return null
+  }
+
+  private inferRuleKeyFromPredicate(input: {
+    predicateKind: string
+    predicateId: string
+  }): StrategySemanticRuleKey | null {
+    if (input.predicateKind === 'CROSS_OVER') return 'bollinger.upper_break'
+    if (input.predicateKind === 'CROSS_UNDER') return 'bollinger.lower_break'
+    if (input.predicateKind === 'OR' && input.predicateId.includes('middle')) return 'bollinger.middle_revert'
+    if (input.predicateId.includes('outside')) return 'bollinger.bars_outside'
+    if (input.predicateId.includes('stop-loss') || input.predicateId.includes('loss')) return 'position_loss_pct'
+    return null
   }
 
   private mapSizingMode(
@@ -895,7 +1039,7 @@ export class StrategyConsistencyService {
     }
   }
 
-  private buildRuleMappings(spec: CanonicalStrategySpec): StrategySemanticProfile['ruleMappings'] {
+  private buildLegacyRuleMappings(spec: Exclude<CanonicalStrategySpec, CanonicalStrategySpecV2>): StrategySemanticRuleMapping[] {
     const hasBollinger = spec.indicators.some(item => item.kind === 'bollingerBands')
     const hasMovingAverage = spec.indicators.some(item => item.kind === 'sma' || item.kind === 'ema')
     if (!hasBollinger && !hasMovingAverage) {
@@ -940,5 +1084,96 @@ export class StrategyConsistencyService {
     ))
 
     return matchedKeys.length === 1 ? matchedKeys[0] : null
+  }
+
+  private flattenV2Rule(rule: CanonicalRuleV2): StrategySemanticRuleProfile[] {
+    const keys = this.collectRuleKeys(rule.condition)
+    if (keys.length === 0) return []
+
+    return keys.flatMap(key => rule.actions.map((action) => ({
+      key,
+      phase: rule.phase,
+      sideScope: this.resolveRuleSideScope(rule.sideScope ?? 'both', action.type as CanonicalAction),
+      action: action.type as CanonicalAction,
+    })))
+  }
+
+  private collectRuleKeys(condition: CanonicalRuleV2['condition']): StrategySemanticRuleKey[] {
+    if (condition.kind === 'atom') {
+      return this.isSupportedRuleKey(condition.key) ? [condition.key] : []
+    }
+
+    return condition.children.flatMap(child => this.collectRuleKeys(child))
+  }
+
+  private createLegacyRuleProfile(
+    trigger: string,
+    action: CanonicalAction,
+    phase: StrategySemanticRuleProfile['phase'],
+  ): StrategySemanticRuleProfile | null {
+    const key = this.inferRuleKeyFromTrigger(trigger)
+    if (!key) return null
+
+    return {
+      key,
+      phase,
+      sideScope: this.resolveRuleSideScope('both', action),
+      action,
+    }
+  }
+
+  private inferRuleKeyFromTrigger(trigger: string): StrategySemanticRuleKey | null {
+    if (/上轨|upper/i.test(trigger)) return 'bollinger.upper_break'
+    if (/下轨|lower/i.test(trigger)) return 'bollinger.lower_break'
+    if (/中轨|middle|ma20/i.test(trigger)) return 'bollinger.middle_revert'
+    if (/轨外|outside/i.test(trigger)) return 'bollinger.bars_outside'
+    if (/金叉|上穿/.test(trigger) && /均线|\bma\b|\bsma\b|\bema\b/i.test(trigger)) return 'ma.golden_cross'
+    if (/死叉|下穿/.test(trigger) && /均线|\bma\b|\bsma\b|\bema\b/i.test(trigger)) return 'ma.death_cross'
+    if (/止损|亏损|loss/i.test(trigger)) return 'position_loss_pct'
+    return null
+  }
+
+  private resolveRuleSideScope(
+    fallbackScope: StrategySemanticRuleProfile['sideScope'],
+    action: CanonicalAction,
+  ): StrategySemanticRuleProfile['sideScope'] {
+    if (action === 'OPEN_LONG' || action === 'CLOSE_LONG' || action === 'REDUCE_LONG') return 'long'
+    if (action === 'OPEN_SHORT' || action === 'CLOSE_SHORT' || action === 'REDUCE_SHORT') return 'short'
+    return fallbackScope
+  }
+
+  private resolvePhaseFromAction(action: CanonicalAction): StrategySemanticRuleProfile['phase'] {
+    if (action === 'OPEN_LONG' || action === 'OPEN_SHORT') return 'entry'
+    if (action === 'CLOSE_LONG' || action === 'CLOSE_SHORT' || action === 'ADJUST_POSITION') return 'exit'
+    if (action === 'REDUCE_LONG' || action === 'REDUCE_SHORT' || action === 'FORCE_EXIT' || action === 'BLOCK_NEW_ENTRY') {
+      return 'risk'
+    }
+    return 'rebalance'
+  }
+
+  private toRuleMappings(rules: StrategySemanticRuleProfile[]): StrategySemanticRuleMapping[] {
+    const mappings = new Map<string, StrategySemanticRuleMapping>()
+
+    for (const rule of rules) {
+      const key = `${rule.key}:${rule.action}`
+      if (!mappings.has(key)) {
+        mappings.set(key, {
+          key: rule.key,
+          action: rule.action,
+        })
+      }
+    }
+
+    return Array.from(mappings.values())
+  }
+
+  private isSupportedRuleKey(key: string): key is StrategySemanticRuleKey {
+    return key === 'bollinger.upper_break'
+      || key === 'bollinger.lower_break'
+      || key === 'bollinger.middle_revert'
+      || key === 'bollinger.bars_outside'
+      || key === 'ma.golden_cross'
+      || key === 'ma.death_cross'
+      || key === 'position_loss_pct'
   }
 }

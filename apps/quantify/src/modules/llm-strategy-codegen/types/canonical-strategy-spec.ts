@@ -1,4 +1,5 @@
-export type CanonicalAction = 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | 'ADJUST_POSITION'
+import type { CanonicalStrategySpecV2 } from './canonical-strategy-spec-v2'
+
 export type CanonicalSizingMode = 'RATIO' | 'QUOTE' | 'QTY'
 export type CanonicalIndicatorKind = 'bollingerBands' | 'sma' | 'ema' | 'rsi' | 'atr' | 'macd' | 'custom'
 
@@ -16,7 +17,7 @@ export interface RiskRuleSpec {
   notes?: string
 }
 
-export interface CanonicalStrategySpec {
+export interface CanonicalStrategySpecV1 {
   version: 1
   market: {
     exchange?: 'binance' | 'okx' | 'hyperliquid'
@@ -43,3 +44,30 @@ export interface CanonicalStrategySpec {
     primary: string[]
   }
 }
+
+export type CanonicalAction =
+  | 'OPEN_LONG'
+  | 'OPEN_SHORT'
+  | 'CLOSE_LONG'
+  | 'CLOSE_SHORT'
+  | 'REDUCE_LONG'
+  | 'REDUCE_SHORT'
+  | 'FORCE_EXIT'
+  | 'BLOCK_NEW_ENTRY'
+  | 'ADJUST_POSITION'
+
+export type CanonicalStrategySpec = CanonicalStrategySpecV1 | CanonicalStrategySpecV2
+export type CanonicalStrategySpecAnyVersion = CanonicalStrategySpec
+
+export type {
+  CanonicalConditionAtom,
+  CanonicalConditionGroup,
+  CanonicalConditionNode,
+  CanonicalRuleAction,
+  CanonicalRuleActionType,
+  CanonicalRulePhase,
+  CanonicalRiskRuleSideScope,
+  CanonicalRuleSideScope,
+  CanonicalRuleV2,
+  CanonicalStrategySpecV2,
+} from './canonical-strategy-spec-v2'
