@@ -56,6 +56,7 @@ export type {
   CanonicalRuleAction,
   CanonicalRuleActionType,
   CanonicalRulePhase,
+  CanonicalRiskRuleSideScope,
   CanonicalRuleSideScope,
   CanonicalRuleV2,
   CanonicalStrategySpecV2,

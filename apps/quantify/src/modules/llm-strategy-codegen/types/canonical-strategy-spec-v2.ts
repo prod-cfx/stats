@@ -1,9 +1,11 @@
 export type CanonicalRulePhase = 'entry' | 'exit' | 'risk' | 'rebalance'
 export type CanonicalRuleSideScope = 'long' | 'short' | 'both' | 'flat'
+export type CanonicalRiskRuleSideScope = Exclude<CanonicalRuleSideScope, 'flat'>
 
 export interface CanonicalConditionAtom {
   kind: 'atom'
   key: string
+  semanticScope?: 'market' | 'position' | 'portfolio'
   op?: 'EQ' | 'LTE' | 'GTE' | 'CROSS_OVER' | 'CROSS_UNDER'
   value?: number | string | boolean
   params?: Record<string, number | string | boolean>

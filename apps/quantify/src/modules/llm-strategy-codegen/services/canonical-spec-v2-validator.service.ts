@@ -21,7 +21,7 @@ export class CanonicalSpecV2ValidatorService {
         errors.push('entry_rule_mutually_exclusive_open_actions')
       }
 
-      if (this.requiresSideScope(rule) && !rule.sideScope) {
+      if (this.requiresSideScope(rule) && !this.hasMeaningfulRiskSideScope(rule.sideScope)) {
         errors.push('rule_requires_side_scope')
       }
     }
@@ -43,9 +43,13 @@ export class CanonicalSpecV2ValidatorService {
     return this.containsSideSensitiveCondition(rule.condition)
   }
 
+  private hasMeaningfulRiskSideScope(sideScope: CanonicalRuleV2['sideScope']): boolean {
+    return sideScope === 'long' || sideScope === 'short' || sideScope === 'both'
+  }
+
   private containsSideSensitiveCondition(condition: CanonicalConditionNode): boolean {
     if (condition.kind === 'atom') {
-      return /position_|unrealized_pnl|drawdown/i.test(condition.key)
+      return condition.semanticScope === 'position'
     }
 
     return condition.children.some(child => this.containsSideSensitiveCondition(child))
