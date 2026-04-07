@@ -38,7 +38,8 @@ const strategy: StrategyAdapterV1 = {
     if (!bb) return { action: 'NOOP' }
     if (closes.at(-1)! > bb.upper) return { action: 'OPEN_SHORT', size: { mode: 'RATIO', value: 0.1 } }
     if (closes.at(-1)! < bb.lower) return { action: 'OPEN_LONG', size: { mode: 'RATIO', value: 0.1 } }
-    if (Math.abs(closes.at(-1)! - bb.middle) <= 1) return { action: 'ADJUST_POSITION', reason: 'middle' }
+    if (Math.abs(closes.at(-1)! - bb.middle) <= 1 && ctx.position?.side === 'long') return { action: 'CLOSE_LONG' }
+    if (Math.abs(closes.at(-1)! - bb.middle) <= 1 && ctx.position?.side === 'short') return { action: 'CLOSE_SHORT' }
     return { action: 'NOOP' }
   },
 }
@@ -167,7 +168,8 @@ const strategy: StrategyAdapterV1 = {
       ? Math.min(positionPct / 100, 1)
       : 0.1
     if (closes.at(-1)! > bb.upper) return { action: 'OPEN_SHORT', size: { mode: 'RATIO', value: ratio } }
-    if (Math.abs(closes.at(-1)! - bb.middle) <= 1) return { action: 'ADJUST_POSITION', reason: 'middle' }
+    if (Math.abs(closes.at(-1)! - bb.middle) <= 1 && ctx.position?.side === 'long') return { action: 'CLOSE_LONG' }
+    if (Math.abs(closes.at(-1)! - bb.middle) <= 1 && ctx.position?.side === 'short') return { action: 'CLOSE_SHORT' }
     return { action: 'NOOP' }
   },
 }
