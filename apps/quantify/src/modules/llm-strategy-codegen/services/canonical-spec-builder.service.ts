@@ -30,6 +30,20 @@ export class CanonicalSpecBuilderService {
       const openAction = this.detectOpenAction(ruleText)
       if (!openAction) return
 
+      if (this.isMovingAverageRule(ruleText)) {
+        const movingAverageRule = this.buildMovingAverageRule({
+          ruleText,
+          index,
+          phase: 'entry',
+          actionType: openAction.type,
+          sideScope: openAction.sideScope,
+          sizing,
+        })
+        if (movingAverageRule) {
+          rules.push(movingAverageRule)
+        }
+      }
+
       if (/上轨|upper/i.test(ruleText)) {
         rules.push({
           id: `entry-upper-${index + 1}`,
@@ -64,6 +78,21 @@ export class CanonicalSpecBuilderService {
     })
 
     exitTexts.forEach((ruleText, index) => {
+      const closeAction = this.detectCloseAction(ruleText)
+      if (closeAction && this.isMovingAverageRule(ruleText)) {
+        const movingAverageRule = this.buildMovingAverageRule({
+          ruleText,
+          index,
+          phase: 'exit',
+          actionType: closeAction.type,
+          sideScope: closeAction.sideScope,
+          sizing,
+        })
+        if (movingAverageRule) {
+          rules.push(movingAverageRule)
+        }
+      }
+
       if (/中轨|ma20|均线20|middle/i.test(ruleText)) {
         rules.push({
           id: `exit-middle-${index + 1}`,
@@ -150,6 +179,16 @@ export class CanonicalSpecBuilderService {
     return null
   }
 
+  private detectCloseAction(ruleText: string): { type: 'CLOSE_LONG' | 'CLOSE_SHORT'; sideScope: 'long' | 'short' } | null {
+    if (/平空|空单止盈|close\s*short/i.test(ruleText)) {
+      return { type: 'CLOSE_SHORT', sideScope: 'short' }
+    }
+    if (/平多|多单止盈|close\s*long/i.test(ruleText)) {
+      return { type: 'CLOSE_LONG', sideScope: 'long' }
+    }
+    return null
+  }
+
   private resolveStopLossPct(riskRules: Record<string, unknown>): number | null {
     const stopLossPct = typeof riskRules.stopLossPct === 'number'
       ? riskRules.stopLossPct
@@ -210,6 +249,13 @@ export class CanonicalSpecBuilderService {
       }]
     }
 
+    if (allTexts.some(text => /(均线|moving average|\bsma\b|\bema\b|金叉|死叉|上穿|下穿)/iu.test(text))) {
+      return [{
+        kind: 'sma',
+        params: { period: 20 },
+      }]
+    }
+
     return []
   }
 
@@ -243,6 +289,44 @@ export class CanonicalSpecBuilderService {
     return {
       type,
       sizing,
+    }
+  }
+
+  private isMovingAverageRule(text: string): boolean {
+    return /(均线|moving average|\bsma\b|\bema\b|金叉|死叉|上穿|下穿)/iu.test(text)
+  }
+
+  private buildMovingAverageRule(input: {
+    ruleText: string
+    index: number
+    phase: 'entry' | 'exit'
+    actionType: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
+    sideScope: 'long' | 'short'
+    sizing: { mode: 'RATIO'; value: number } | null
+  }): CanonicalRuleV2 | null {
+    const ruleKey = /金叉|上穿/iu.test(input.ruleText)
+      ? 'ma.golden_cross'
+      : /死叉|下穿/iu.test(input.ruleText)
+          ? 'ma.death_cross'
+          : null
+    if (!ruleKey) return null
+
+    const operator = ruleKey === 'ma.golden_cross' ? 'CROSS_OVER' : 'CROSS_UNDER'
+
+    return {
+      id: `${input.phase}-${ruleKey.replace('.', '-')}-${input.index + 1}`,
+      phase: input.phase,
+      sideScope: input.sideScope,
+      priority: input.phase === 'entry' ? 200 - input.index : 140 - input.index,
+      condition: {
+        kind: 'atom',
+        key: ruleKey,
+        semanticScope: 'market',
+        op: operator,
+      },
+      actions: [input.phase === 'entry'
+        ? this.buildOpenAction(input.actionType as 'OPEN_LONG' | 'OPEN_SHORT', input.sizing)
+        : { type: input.actionType }],
     }
   }
 }
