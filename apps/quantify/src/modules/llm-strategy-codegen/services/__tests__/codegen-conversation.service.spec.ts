@@ -14,6 +14,8 @@ import { SpecDescBuilderService } from '../spec-desc-builder.service'
 import { StaticGuardrailService } from '../static-guardrail.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
 import { ordinarySemanticGraphStrategyFixtures } from './fixtures/semantic-graph-strategies'
+import { StrategyClarificationQuestionService } from '../strategy-clarification-question.service'
+import { StrategyClarificationRulesService } from '../strategy-clarification-rules.service'
 
 describe('codegenConversationService (llm orchestrated flow)', () => {
   jest.setTimeout(120_000)
@@ -65,6 +67,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     new StrategySummaryBuilderService(new ScriptProfileExtractorService()),
     mockRecommendation as unknown as RecommendationIndexService,
     mockCompiledPublicationGate as unknown as CompiledPublicationGateService,
+    new StrategyClarificationRulesService(),
+    new StrategyClarificationQuestionService(),
   )
   const waitForTerminalStatus = async (
     sessionId: string,
@@ -226,6 +230,19 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       status: 'DRAFTING',
     }))
+  })
+
+  it('stays in DRAFTING when an entry rule can resolve to both OPEN_LONG and OPEN_SHORT', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-clarify-1' })
+
+    const result = await service.startSession({
+      userId: 'u-1',
+      initialMessage: '在BTCUSDT 15分钟图上，突破布林带上轨交易，仓位10%',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('当前这条规则还缺少方向约束')
+    expect(result.assistantPrompt).toContain('是只做空，还是也允许做多')
   })
 
   it('starts in checklist gate when llm says logic is ready', async () => {

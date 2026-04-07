@@ -1,145 +1,107 @@
-import type { StrategyClarificationItem, StrategyClarificationState, StrategyClarificationStrategyType } from '../types/strategy-clarification'
+import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
+import { Injectable } from '@nestjs/common'
 
-export type { StrategyClarificationState } from '../types/strategy-clarification'
-
-interface ClarificationChecklistPayload {
-  strategyType?: StrategyClarificationStrategyType | null
-  symbols?: string[]
-  timeframes?: string[]
+interface ClarificationChecklistInput {
   entryRules?: string[]
-  exitRules?: string[]
   riskRules?: Record<string, unknown>
 }
 
-const PRIORITY = {
-  direction: 100,
-  triggerSemantics: 80,
-  riskAction: 60,
-  numericParam: 40,
-} as const
+const LONG_DIRECTION_PATTERN = /做多|多单|开多|long|买入/u
+const SHORT_DIRECTION_PATTERN = /做空|空单|开空|short|卖出/u
+const UPPER_BAND_PATTERN = /(布林|bollinger).{0,8}(上轨|upper)|(上轨|upper).{0,8}(布林|bollinger)|突破.{0,8}(上轨|upper)/iu
+const LOWER_BAND_PATTERN = /(布林|bollinger).{0,8}(下轨|lower)|(下轨|lower).{0,8}(布林|bollinger)|跌破.{0,8}(下轨|lower)|突破.{0,8}(下轨|lower)/iu
 
+@Injectable()
 export class StrategyClarificationRulesService {
-  evaluate(checklist: ClarificationChecklistPayload): StrategyClarificationState {
-    const state = this.buildState(checklist)
-    const nextItem = this.pickNextPendingItem(state)
+  detect(input: ClarificationChecklistInput): StrategyClarificationState {
+    const items: StrategyClarificationItem[] = [
+      ...this.detectEntryItems(input.entryRules ?? []),
+      ...this.detectRiskItems(input.riskRules ?? {}),
+    ]
 
-    return {
-      ...state,
-      lastAskedItemId: nextItem?.id ?? null,
+    if (items.length === 0) {
+      return {
+        status: 'CLEAR',
+        items: [],
+      }
     }
-  }
-
-  buildState(checklist: ClarificationChecklistPayload): StrategyClarificationState {
-    const strategyType = this.resolveStrategyType(checklist)
-    const items = this.buildItems(strategyType, checklist)
-      .sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id))
 
     return {
-      strategyType,
+      status: 'NEEDS_CLARIFICATION',
       items,
-      lastAskedItemId: null,
     }
   }
 
-  pickNextPendingItem(state: StrategyClarificationState): StrategyClarificationItem | null {
-    return state.items
-      .filter(item => item.status === 'pending')
-      .sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id))[0] ?? null
-  }
-
-  private buildItems(
-    strategyType: StrategyClarificationStrategyType | null,
-    checklist: ClarificationChecklistPayload,
-  ): StrategyClarificationItem[] {
+  private detectEntryItems(entryRules: string[]): StrategyClarificationItem[] {
     const items: StrategyClarificationItem[] = []
+    let sideQuestionAdded = false
 
-    if (!strategyType) {
-      return items
-    }
+    for (const [index, rawRule] of entryRules.entries()) {
+      const rule = rawRule.trim()
+      if (!rule) continue
 
-    if (strategyType === 'price_change_pct') {
-      const exitRules = checklist.exitRules ?? []
-      const hasExplicitExitBasis = exitRules.some(rule => /开仓均价|持仓收益|浮盈|浮亏|上一根|上一条|前一根|前一条/u.test(rule))
-      const hasPctExitRule = exitRules.some(rule => /(?:涨|上涨|跌|下跌).{0,12}\d+(?:\.\d+)?\s*%/u.test(rule))
-      if (hasPctExitRule && !hasExplicitExitBasis) {
+      const hasLongDirection = LONG_DIRECTION_PATTERN.test(rule)
+      const hasShortDirection = SHORT_DIRECTION_PATTERN.test(rule)
+
+      if (hasLongDirection && hasShortDirection) {
         items.push({
-          id: 'price_change_pct:exitBasis',
-          kind: 'semantic_ambiguity',
-          strategyType,
-          field: 'exitBasis',
-          reason: '当前出场条件存在两种可编译解释',
-          question: '这里的上涨1%，是相对上一根3分钟K线，还是相对开仓均价？',
-          priority: PRIORITY.triggerSemantics,
+          key: `entry.action_uniqueness.${index + 1}`,
+          ruleId: `entry-${index + 1}`,
+          reason: 'missing_action_uniqueness',
+          question: '这条入场规则同时包含做多和做空，请确认最终只保留哪个方向？',
           status: 'pending',
         })
+        continue
       }
-    }
 
-    if (strategyType === 'grid') {
-      const text = [...(checklist.entryRules ?? []), ...(checklist.exitRules ?? [])].join(' ')
-      const mentionsEqualGrid = /网格/u.test(text) && /1\s*%\s*等距|按\s*1\s*%\s*等距/u.test(text)
-      const hasExplicitSpacingMode = /固定价差|固定步长|百分比递增|复利网格/u.test(text)
-      if (mentionsEqualGrid && !hasExplicitSpacingMode) {
+      if (sideQuestionAdded || hasLongDirection || hasShortDirection) continue
+
+      if (UPPER_BAND_PATTERN.test(rule)) {
         items.push({
-          id: 'grid:gridSpacingMode',
-          kind: 'semantic_ambiguity',
-          strategyType,
-          field: 'gridSpacingMode',
-          reason: '当前网格间距仍有两种可编译解释',
-          question: '这里的1%等距网格，是固定价差，还是按百分比递增的复利网格？',
-          priority: PRIORITY.triggerSemantics,
+          key: 'entry.side',
+          ruleId: `entry-${index + 1}`,
+          reason: 'missing_side_scope',
+          question: '突破上轨时是只做空，还是也允许做多？',
           status: 'pending',
         })
+        sideQuestionAdded = true
+        continue
       }
-    }
 
-    if (strategyType === 'bollinger') {
-      const text = [
-        ...(checklist.entryRules ?? []),
-        ...(checklist.exitRules ?? []),
-        ...Object.values(checklist.riskRules ?? {}).filter((value): value is string => typeof value === 'string'),
-      ].join(' ')
-      if ((/布林|boll/i.test(text) || strategyType === 'bollinger') && /提前止损或减仓|止损或减仓/u.test(text)) {
+      if (LOWER_BAND_PATTERN.test(rule)) {
         items.push({
-          id: 'bollinger:outsideBandAction',
-          kind: 'semantic_ambiguity',
-          strategyType,
-          field: 'outsideBandAction',
-          reason: '当前轨外风控动作还不够明确',
-          question: '价格连续3根K线在布林带外时，你希望提前全平，还是只减仓？',
-          priority: PRIORITY.riskAction,
+          key: 'entry.side',
+          ruleId: `entry-${index + 1}`,
+          reason: 'missing_side_scope',
+          question: '跌破下轨时是只做多，还是也允许做空？',
           status: 'pending',
         })
+        sideQuestionAdded = true
       }
     }
 
     return items
   }
 
-  private resolveStrategyType(checklist: ClarificationChecklistPayload): StrategyClarificationStrategyType | null {
-    if (checklist.strategyType) {
-      return checklist.strategyType
-    }
+  private detectRiskItems(riskRules: Record<string, unknown>): StrategyClarificationItem[] {
+    const riskTexts = Object.values(riskRules)
+      .filter((value): value is string => typeof value === 'string' && !!value.trim())
 
-    const text = [
-      ...(checklist.entryRules ?? []),
-      ...(checklist.exitRules ?? []),
-      ...Object.values(checklist.riskRules ?? {}).filter((value): value is string => typeof value === 'string'),
-    ].join(' ')
-    if (!text.trim()) {
-      return null
-    }
+    const hasAmbiguousEffect = riskTexts.some((text) => {
+      const hasOutsideBand = /轨外|outside/iu.test(text)
+      const hasThreeBars = /连续\s*3|3\s*根|三根/iu.test(text)
+      const hasForceExit = /全平|全部平仓|清仓|强平|force\s*exit|force\s*close/iu.test(text)
+      const hasReduce = /减仓|reduce/iu.test(text)
+      return hasOutsideBand && hasThreeBars && hasForceExit && hasReduce
+    })
 
-    if (/布林|boll/i.test(text)) {
-      return 'bollinger'
-    }
-    if (/网格/u.test(text)) {
-      return 'grid'
-    }
-    if (/(?:涨|上涨|跌|下跌).{0,12}\d+(?:\.\d+)?\s*%/u.test(text)) {
-      return 'price_change_pct'
-    }
+    if (!hasAmbiguousEffect) return []
 
-    return 'custom'
+    return [{
+      key: 'risk.effect',
+      reason: 'ambiguous_risk_effect',
+      question: '轨外3根时是全平还是减仓？',
+      status: 'pending',
+    }]
   }
 }

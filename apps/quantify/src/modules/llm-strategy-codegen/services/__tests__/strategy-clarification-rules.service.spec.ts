@@ -1,100 +1,65 @@
-import type { StrategyClarificationState } from '../strategy-clarification-rules.service'
 import { StrategyClarificationRulesService } from '../strategy-clarification-rules.service'
 
-describe('StrategyClarificationRulesService', () => {
+describe('strategyClarificationRulesService', () => {
   const service = new StrategyClarificationRulesService()
 
-  it('detects exitBasis ambiguity for price-change sell rule without explicit baseline', () => {
-    const state = service.buildState({
-      strategyType: 'price_change_pct',
-      exitRules: ['上涨 2% 卖出平仓'],
+  it('detects missing side scope for upper-band breakout entry rule', () => {
+    const state = service.detect({
+      entryRules: ['突破布林带上轨交易'],
     })
 
-    expect(state.strategyType).toBe('price_change_pct')
-    expect(state.lastAskedItemId).toBeNull()
-    expect(state.items).toHaveLength(1)
-    expect(state.items[0]).toMatchObject({
-      id: 'price_change_pct:exitBasis',
-      kind: 'semantic_ambiguity',
-      strategyType: 'price_change_pct',
-      field: 'exitBasis',
-      status: 'pending',
-    })
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'entry.side',
+        reason: 'missing_side_scope',
+        status: 'pending',
+      }),
+    ]))
   })
 
-  it('skips exitBasis ambiguity when baseline is explicit in sell rule', () => {
-    const state = service.buildState({
-      strategyType: 'price_change_pct',
-      exitRules: ['当前K线收盘价相对于开仓均价上涨 2% 卖出平仓'],
+  it('detects entry action uniqueness conflict when one rule includes long and short actions', () => {
+    const state = service.detect({
+      entryRules: ['突破后同时做多和做空'],
     })
 
-    expect(state.items).toEqual([])
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'missing_action_uniqueness',
+        status: 'pending',
+      }),
+    ]))
   })
 
-  it('detects gridSpacingMode ambiguity for percentage-spaced grid split', () => {
-    const state = service.buildState({
-      strategyType: 'grid',
-      entryRules: ['按 1% 等距划分网格并执行买入'],
-    })
-
-    expect(state.items).toHaveLength(1)
-    expect(state.items[0]).toMatchObject({
-      id: 'grid:gridSpacingMode',
-      kind: 'semantic_ambiguity',
-      strategyType: 'grid',
-      field: 'gridSpacingMode',
-      status: 'pending',
-    })
-  })
-
-  it('detects outsideBandAction ambiguity for bollinger risk rule with stop-loss or reduce-position', () => {
-    const state = service.buildState({
-      strategyType: 'bollinger',
+  it('detects ambiguous risk effect when risk text contains force-exit and reduce-position alternatives', () => {
+    const state = service.detect({
       riskRules: {
-        note: '价格在布林带外连续运行时提前止损或减仓',
+        earlyStop: '价格连续3根K线在轨外时全平或减仓',
       },
     })
 
-    expect(state.items).toHaveLength(1)
-    expect(state.items[0]).toMatchObject({
-      id: 'bollinger:outsideBandAction',
-      kind: 'semantic_ambiguity',
-      strategyType: 'bollinger',
-      field: 'outsideBandAction',
-      status: 'pending',
-    })
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.effect',
+        reason: 'ambiguous_risk_effect',
+        question: '轨外3根时是全平还是减仓？',
+      }),
+    ]))
   })
 
-  it('picks next pending item by priority and then id for stable ordering', () => {
-    const state: StrategyClarificationState = {
-      strategyType: 'grid',
-      lastAskedItemId: null,
-      items: [
-        {
-          id: 'grid:b',
-          kind: 'semantic_ambiguity',
-          strategyType: 'grid',
-          field: 'b',
-          reason: 'r2',
-          question: 'q2',
-          priority: 20,
-          status: 'pending',
-        },
-        {
-          id: 'grid:a',
-          kind: 'semantic_ambiguity',
-          strategyType: 'grid',
-          field: 'a',
-          reason: 'r1',
-          question: 'q1',
-          priority: 20,
-          status: 'pending',
-        },
-      ],
-    }
+  it('returns CLEAR for unambiguous rules', () => {
+    const state = service.detect({
+      entryRules: ['突破布林带上轨时做空'],
+      riskRules: {
+        stopLossPct: 5,
+      },
+    })
 
-    const item = service.pickNextPendingItem(state)
-
-    expect(item?.id).toBe('grid:a')
+    expect(state).toEqual({
+      status: 'CLEAR',
+      items: [],
+    })
   })
 })

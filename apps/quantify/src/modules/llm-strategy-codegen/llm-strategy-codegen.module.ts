@@ -15,6 +15,8 @@ import { CodegenConversationService } from './services/codegen-conversation.serv
 import { RecommendationIndexService } from './services/recommendation-index.service'
 import { RuntimeGuardrailService } from './services/runtime-guardrail.service'
 import { ScriptProfileExtractorService } from './services/script-profile-extractor.service'
+import { StrategyClarificationQuestionService } from './services/strategy-clarification-question.service'
+import { StrategyClarificationRulesService } from './services/strategy-clarification-rules.service'
 import { SpecDescBuilderService } from './services/spec-desc-builder.service'
 import { StaticGuardrailService } from './services/static-guardrail.service'
 import { StrategyConsistencyService } from './services/strategy-consistency.service'
@@ -37,6 +39,8 @@ import { StrategySummaryBuilderService } from './services/strategy-summary-build
     ScriptProfileExtractorService,
     StrategyConsistencyService,
     StrategySummaryBuilderService,
+    StrategyClarificationRulesService,
+    StrategyClarificationQuestionService,
     RecommendationIndexService,
     CallerIdentityService,
     CodegenConversationService,
