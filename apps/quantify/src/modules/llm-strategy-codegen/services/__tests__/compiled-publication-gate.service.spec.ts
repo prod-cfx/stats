@@ -8,7 +8,13 @@ describe('CompiledPublicationGateService', () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-1' }),
     }
-    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never)
+    const gate = new CompiledPublicationGateService(
+      publishedSnapshotsRepo as never,
+      undefined,
+      {
+        audit: jest.fn().mockReturnValue({ status: 'PASSED' }),
+      } as never,
+    )
     const ir = createIrFixture()
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
     const executionEnvelope = {
@@ -44,6 +50,16 @@ describe('CompiledPublicationGateService', () => {
       strategyTemplateId: 'template-1',
       strategyInstanceId: 'instance-1',
       graphSnapshot,
+      semanticGraph: {
+        version: 1,
+        market: {
+          symbol: 'BTCUSDT',
+          primaryTimeframe: '1h',
+        },
+        nodes: [],
+        actions: [],
+        risk: [],
+      } as any,
       ir,
       ast,
       executionEnvelope,
@@ -65,6 +81,68 @@ describe('CompiledPublicationGateService', () => {
       compiledManifest: expect.objectContaining({ compileVersion: 'compiler.v1' }),
       executionEnvelope: expect.objectContaining({ marginMode: 'cash' }),
     }))
+  })
+
+  it('rejects publish when clarification items remain pending', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn(),
+    }
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never)
+    const ir = createIrFixture()
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'long_only' as const,
+      marginMode: 'cash' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await expect(gate.publish({
+      sessionId: 'session-clarification',
+      graphSnapshot: {
+        version: 3,
+        status: 'confirmed' as const,
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'binance' as const,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          positionPct: 25,
+          executionTags: [],
+        },
+      },
+      clarificationState: {
+        strategyType: 'grid',
+        lastAskedItemId: 'grid:gridSpacingMode',
+        items: [
+          {
+            id: 'grid:gridSpacingMode',
+            kind: 'semantic_ambiguity',
+            strategyType: 'grid',
+            field: 'gridSpacingMode',
+            reason: '当前网格间距仍有两种可编译解释',
+            question: '这里的1%等距网格，是固定价差，还是按百分比递增的复利网格？',
+            priority: 80,
+            status: 'pending' as const,
+          },
+        ],
+      },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'grid' },
+      scriptSummary: { indicators: [] },
+      lockedParams: { positionPct: 25 },
+    } as any)).rejects.toThrow('clarification unresolved')
+
+    expect(publishedSnapshotsRepo.create).not.toHaveBeenCalled()
   })
 })
 

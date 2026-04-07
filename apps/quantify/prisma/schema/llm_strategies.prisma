@@ -124,6 +124,7 @@ model LlmStrategyCodegenSession {
   status             LlmCodegenSessionStatus @default(DRAFTING)
   checklist          Json?
   constraintPack     Json?                   @map("constraint_pack")
+  clarificationState Json?                   @map("clarification_state")
   latestDraftCode    String?                 @map("latest_draft_code") @db.Text
   latestSpecDesc     Json?                   @map("latest_spec_desc")
   graphSnapshot      Json?                   @map("graph_snapshot")

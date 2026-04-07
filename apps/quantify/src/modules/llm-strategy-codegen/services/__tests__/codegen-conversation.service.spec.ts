@@ -275,6 +275,53 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('stays in drafting and asks one clarification question when ambiguity is unresolved', async () => {
+    const dto: StartCodegenSessionDto = {
+      userId: 'u1',
+      initialMessage: 'BTCUSDT 3分钟下跌1%买入，3分钟上涨1%卖出',
+    }
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕。',
+        logic: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['3m'],
+          entryRules: ['3分钟下跌1%买入'],
+          exitRules: ['3分钟上涨1%卖出'],
+          riskRules: {
+            positionPct: 10,
+            stopLossPct: 5,
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 'clarify-1' })
+
+    const result = await service.startSession(dto)
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.semanticGraph).toBeUndefined()
+    expect(result.assistantPrompt).toContain('存在两种可编译解释')
+    expect(result.assistantPrompt).toContain('这里的上涨1%')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      status: 'DRAFTING',
+      clarificationState: expect.objectContaining({
+        strategyType: 'price_change_pct',
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            field: 'exitBasis',
+            status: 'pending',
+          }),
+        ]),
+      }),
+      graphSnapshot: null,
+      semanticGraph: null,
+      validationReport: null,
+    }))
+  })
+
   it('stays in drafting when planner says logicReady is false even with a detailed message', async () => {
     const dto: StartCodegenSessionDto = {
       userId: 'u1',
@@ -445,6 +492,105 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         status: 'confirmed',
         trigger: expect.arrayContaining([expect.objectContaining({ phase: 'entry' })]),
       }),
+    }))
+  })
+
+  it('retains resolved clarification answers and asks only the next unresolved item', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-clarify-1',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['3m'],
+        entryRules: ['3分钟下跌1%买入'],
+        exitRules: ['3分钟上涨1%卖出'],
+      },
+      clarificationState: {
+        strategyType: 'price_change_pct',
+        items: [
+          {
+            id: 'price-change-exit-basis',
+            kind: 'semantic_ambiguity',
+            strategyType: 'price_change_pct',
+            field: 'exitBasis',
+            reason: '当前出场条件存在两种可编译解释',
+            question: '这里的上涨1%，是相对上一根3分钟K线，还是相对开仓均价？',
+            priority: 80,
+            status: 'pending',
+          },
+          {
+            id: 'price-change-position-pct',
+            kind: 'missing_parameter',
+            strategyType: 'price_change_pct',
+            field: 'positionPct',
+            reason: '当前仓位参数还不够明确',
+            question: '这里的仓位你希望设为多少？',
+            priority: 40,
+            status: 'pending',
+          },
+        ],
+        lastAskedItemId: 'price-change-exit-basis',
+      },
+      constraintPack: {
+        conversationHistory: [],
+      },
+      latestDraftCode: null,
+      latestSpecDesc: null,
+      graphSnapshot: null,
+      semanticGraph: null,
+      validationReport: null,
+      compiledIr: null,
+      rejectReason: null,
+      strategyInstanceId: null,
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '已记录你的补充。',
+        logic: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['3m'],
+          entryRules: ['3分钟下跌1%买入'],
+          exitRules: ['价格相对开仓均价上涨1%卖出'],
+        },
+      }),
+    })
+    mockRepo.updateSession.mockResolvedValue({
+      id: 'session-clarify-1',
+      userId: 'u1',
+      status: 'DRAFTING',
+      latestDraftCode: null,
+      latestSpecDesc: null,
+      semanticGraph: null,
+      validationReport: null,
+      rejectReason: null,
+      strategyInstanceId: null,
+    })
+
+    const result = await service.continueSession('session-clarify-1', {
+      userId: 'u1',
+      message: '这里的上涨1%是相对开仓均价',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('当前仓位参数还不够明确')
+    expect(result.assistantPrompt).toContain('这里的仓位你希望设为多少')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('session-clarify-1', expect.objectContaining({
+      status: 'DRAFTING',
+      clarificationState: expect.objectContaining({
+        lastAskedItemId: 'price-change-position-pct',
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'price-change-position-pct',
+            status: 'pending',
+          }),
+        ]),
+      }),
+      graphSnapshot: null,
+      semanticGraph: null,
+      validationReport: null,
     }))
   })
 
@@ -840,6 +986,46 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       call[0] === 's6' && (call[1] as { status?: string }).status === 'PUBLISHED',
     )
     expect(hasRejectedOrConsistencyFailed).toBe(true)
+    expect(hasPublished).toBe(false)
+  })
+
+  it('marks session consistency failed instead of published when publish returns failed consistency', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's6-consistency-failed',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        entryRules: ['rsi < 30'],
+        exitRules: ['atr stop'],
+      },
+      constraintPack: {},
+      semanticGraph: createSemanticGraph(),
+      graphSnapshot: createGraphSnapshot(),
+    })
+    mockCompiledPublicationGate.publish.mockResolvedValueOnce({
+      snapshotId: 'snapshot-consistency-failed',
+      consistencyReport: {
+        status: 'FAILED',
+      },
+    })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v-consistency-failed' })
+
+    const result = await service.continueSession('s6-consistency-failed', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await waitForTerminalStatus('s6-consistency-failed')
+
+    const hasConsistencyFailed = mockRepo.updateSession.mock.calls.some(call =>
+      call[0] === 's6-consistency-failed' && (call[1] as { status?: string }).status === 'CONSISTENCY_FAILED',
+    )
+    const hasPublished = mockRepo.updateSession.mock.calls.some(call =>
+      call[0] === 's6-consistency-failed' && (call[1] as { status?: string }).status === 'PUBLISHED',
+    )
+    expect(hasConsistencyFailed).toBe(true)
     expect(hasPublished).toBe(false)
   })
 

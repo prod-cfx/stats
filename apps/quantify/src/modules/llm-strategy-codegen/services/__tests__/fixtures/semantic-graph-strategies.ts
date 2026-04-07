@@ -26,7 +26,7 @@ export const ordinarySemanticGraphStrategyFixtures: OrdinarySemanticGraphStrateg
   {
     id: 'bollinger-reversion',
     prompt:
-      '在BTCUSDT 15分钟图上，突破布林带上轨做空、突破下轨做多，仓位10%；出场条件为价格回到布林带中轨（MA20）平仓、亏损≥5%强制止损，以及价格连续3根K线在轨外时提前止损或减仓。',
+      '在BTCUSDT 15分钟图上，突破布林带上轨做空、突破下轨做多，仓位10%；出场条件为价格回到布林带中轨（MA20）平仓、亏损≥5%强制止损，以及价格连续3根K线在轨外时提前减仓。',
     planner: {
       related: true,
       logicReady: true,
@@ -39,7 +39,7 @@ export const ordinarySemanticGraphStrategyFixtures: OrdinarySemanticGraphStrateg
         riskRules: {
           positionPct: 10,
           stopLossPct: 5,
-          outsideBandRule: '价格连续3根K线在轨外时提前止损或减仓',
+          outsideBandRule: '价格连续3根K线在轨外时提前减仓',
         },
       },
     },

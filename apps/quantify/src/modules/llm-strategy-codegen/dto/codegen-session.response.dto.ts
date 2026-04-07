@@ -1,3 +1,4 @@
+import type { StrategyClarificationState } from '../types/strategy-clarification'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 
 export class CodegenSessionResponseDto {
@@ -27,6 +28,9 @@ export class CodegenSessionResponseDto {
 
   @ApiPropertyOptional({ description: '结构化语义图（确认与编译真源）', type: 'object', additionalProperties: true })
   semanticGraph?: Record<string, unknown> | null
+
+  @ApiPropertyOptional({ description: '待澄清问题状态', type: 'object', additionalProperties: true })
+  clarificationState?: StrategyClarificationState | null
 
   @ApiPropertyOptional({
     description: '语义图校验结果',
