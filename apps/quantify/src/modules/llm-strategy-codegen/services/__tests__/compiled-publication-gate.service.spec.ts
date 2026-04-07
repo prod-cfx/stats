@@ -144,6 +144,74 @@ describe('CompiledPublicationGateService', () => {
 
     expect(publishedSnapshotsRepo.create).not.toHaveBeenCalled()
   })
+
+  it('returns failed consistency report instead of throwing so caller can persist diagnostics', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn().mockResolvedValue({ id: 'snapshot-failed' }),
+    }
+    const gate = new CompiledPublicationGateService(
+      publishedSnapshotsRepo as never,
+      undefined,
+      {
+        audit: jest.fn().mockReturnValue({ status: 'FAILED', reasons: ['mismatch'] }),
+      } as never,
+    )
+    const ir = createIrFixture()
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'long_only' as const,
+      marginMode: 'cash' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await expect(gate.publish({
+      sessionId: 'session-consistency-failed',
+      graphSnapshot: {
+        version: 3,
+        status: 'confirmed' as const,
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'binance' as const,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          positionPct: 25,
+          executionTags: [],
+        },
+      },
+      semanticGraph: {
+        version: 1,
+        market: {
+          symbol: 'BTCUSDT',
+          primaryTimeframe: '1h',
+        },
+        nodes: [],
+        actions: [],
+        risk: [],
+      } as any,
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'ma-crossover' },
+      scriptSummary: { indicators: ['EMA'] },
+      lockedParams: { positionPct: 25 },
+    })).resolves.toEqual({
+      snapshotId: 'snapshot-failed',
+      consistencyReport: { status: 'FAILED', reasons: ['mismatch'] },
+    })
+
+    expect(publishedSnapshotsRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: 'session-consistency-failed',
+      consistencyReport: { status: 'FAILED', reasons: ['mismatch'] },
+    }))
+  })
 })
 
 function createIrFixture(): CanonicalStrategyIrV1 {

@@ -54,9 +54,6 @@ export class CompiledPublicationGateService {
     const parsed = this.scriptParser.parse(input.script)
     const manifest = parsed.compiledManifest
     const consistencyReport = this.buildConsistencyReport(input, parsed)
-    if (consistencyReport.status !== 'PASSED') {
-      throw new Error('consistency report failed')
-    }
 
     const snapshot = await this.publishedSnapshotsRepo.create({
       sessionId: input.sessionId,
