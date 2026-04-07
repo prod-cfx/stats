@@ -458,7 +458,7 @@ describe('llm strategy codegen (E2E)', () => {
         userId: 'u-e2e-clarify-price',
         message: plannerReplies[1].message,
       })
-      .expect(200)
+      .expect(202)
 
     const continuePayload = (continueRes.body.data ?? continueRes.body) as Record<string, unknown>
     expect(continuePayload.status).toBe('CHECKLIST_GATE')
@@ -536,7 +536,7 @@ describe('llm strategy codegen (E2E)', () => {
         userId: 'u-e2e-clarify-grid',
         message: plannerReplies[1].message,
       })
-      .expect(200)
+      .expect(202)
 
     const continuePayload = (continueRes.body.data ?? continueRes.body) as Record<string, unknown>
     expect(continuePayload.status).toBe('CHECKLIST_GATE')
@@ -616,7 +616,7 @@ describe('llm strategy codegen (E2E)', () => {
         userId: 'u-e2e-clarify-boll',
         message: plannerReplies[1].message,
       })
-      .expect(200)
+      .expect(202)
 
     const continuePayload = (continueRes.body.data ?? continueRes.body) as Record<string, unknown>
     expect(continuePayload.status).toBe('CHECKLIST_GATE')
