@@ -200,6 +200,77 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
     })
   })
 
+  it('persists clarification state on codegen sessions', async () => {
+    const persistedRow = {
+      id: 'session-1',
+      userId: 'u-1',
+      status: 'DRAFTING',
+      checklist: {},
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'rule.entry.upper_band.side_scope',
+            reason: 'direction_ambiguous',
+            question: '突破上轨时是只做空还是也允许做多？',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: null,
+      latestDraftCode: null,
+      latestSpecDesc: null,
+      rejectReason: null,
+      strategyInstanceId: null,
+      createdAt: new Date('2026-04-02T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-02T00:00:00.000Z'),
+    }
+
+    const tx = {
+      llmStrategyCodegenSession: {
+        create: jest.fn().mockImplementation(async (args: { select?: Record<string, boolean> }) => {
+          const select = args.select ?? {}
+          return Object.fromEntries(
+            Object.entries(persistedRow).filter(([key]) => key in select),
+          )
+        }),
+      },
+    }
+
+    const txHost = {
+      tx,
+      withTransaction: jest.fn(async (callback: () => Promise<unknown>) => callback()),
+    }
+    const repository = new CodegenSessionsRepository(txHost as never)
+
+    const row = await repository.createSession({
+      userId: 'u-1',
+      status: 'DRAFTING',
+      checklist: {},
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'rule.entry.upper_band.side_scope',
+            reason: 'direction_ambiguous',
+            question: '突破上轨时是只做空还是也允许做多？',
+            status: 'pending',
+          },
+        ],
+      },
+    } as never)
+
+    expect(row.clarificationState).toEqual({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        expect.objectContaining({
+          key: 'rule.entry.upper_band.side_scope',
+          status: 'pending',
+        }),
+      ],
+    })
+  })
+
   it('uses the ambient prisma client for single-statement session reads and writes', async () => {
     const tx = {
       llmStrategyCodegenSession: {

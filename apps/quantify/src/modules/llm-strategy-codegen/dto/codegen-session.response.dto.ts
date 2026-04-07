@@ -1,5 +1,6 @@
 import type { StrategyClarificationState } from '../types/strategy-clarification'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import type { StrategyClarificationState } from '../types/strategy-clarification'
 
 export class CodegenSessionResponseDto {
   @ApiProperty({ description: '会话 ID' })
@@ -48,6 +49,9 @@ export class CodegenSessionResponseDto {
 
   @ApiPropertyOptional({ description: '发布后生成的策略实例 ID' })
   strategyInstanceId?: string | null
+
+  @ApiPropertyOptional({ description: '规则语义澄清状态', type: 'object', additionalProperties: true })
+  clarificationState?: StrategyClarificationState | null
 
   @ApiPropertyOptional({ description: '拒绝原因' })
   rejectReason?: string | null
