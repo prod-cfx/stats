@@ -48,6 +48,11 @@ export class LlmCodegenContinueRequestDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
+  confirmedCanonicalDigest?: string
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
   providerCode?: string
 
   @ApiPropertyOptional()

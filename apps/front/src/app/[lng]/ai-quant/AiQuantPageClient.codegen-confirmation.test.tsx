@@ -114,6 +114,9 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
         <button data-testid="send-chat" onClick={() => onSend(input)}>
           send
         </button>
+        <button data-testid="send-revise" onClick={() => onSend('把止损改成 8%，并重新整理逻辑图')}>
+          revise
+        </button>
         <button data-testid="run-backtest" disabled={!canRunBacktest} onClick={onRunBacktest}>
           run
         </button>
@@ -178,6 +181,7 @@ function seedDraftConversation(
       ok: boolean
       errors: Array<{ code: string; message: string }>
     } | null
+    pendingCanonicalDigest?: string | null
   },
 ) {
   localStorage.setItem(
@@ -226,6 +230,9 @@ function seedDraftConversation(
         validationReport: overrides?.validationReport === undefined
           ? { ok: true, errors: [] }
           : overrides.validationReport,
+        pendingCanonicalDigest: overrides?.pendingCanonicalDigest === undefined
+          ? 'sha256:canonical-1'
+          : overrides.pendingCanonicalDigest,
         llmCodegenSessionId: 'session-1',
         publishedStrategyInstanceId: null,
         latestSignalMessage: null,
@@ -316,6 +323,27 @@ function createDeferred<T>() {
   return { promise, resolve }
 }
 
+async function waitForAssertion(
+  assertion: () => void,
+  timeoutMs = 1000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+
+  while (true) {
+    try {
+      assertion()
+      return
+    } catch (error) {
+      if (Date.now() >= deadline) {
+        throw error
+      }
+      await act(async () => {
+        await new Promise(resolve => window.setTimeout(resolve, 10))
+      })
+    }
+  }
+}
+
 describe('AiQuantPageClient codegen confirmation flow', () => {
   let container: HTMLDivElement
   let root: ReturnType<typeof createRoot> | null
@@ -338,6 +366,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       status: 'PUBLISHED',
       strategyInstanceId: 'strategy-1',
       publishedSnapshotId: 'snapshot-1',
+      canonicalDigest: 'sha256:canonical-1',
       scriptCode: 'return { ok: true }',
       semanticGraph: validSemanticGraph,
       validationReport: { ok: true, errors: [] },
@@ -369,6 +398,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       status: 'PUBLISHED' as const,
       strategyInstanceId: 'strategy-1',
       publishedSnapshotId: 'snapshot-1',
+      canonicalDigest: 'sha256:canonical-1',
       scriptCode: 'return { ok: true }',
       semanticGraph: validSemanticGraph,
       validationReport: { ok: true, errors: [] },
@@ -423,6 +453,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
         status: 'PUBLISHED',
         strategyInstanceId: 'strategy-1',
         publishedSnapshotId: 'snapshot-1',
+        canonicalDigest: 'sha256:canonical-1',
         scriptCode: 'return { ok: true }',
         semanticGraph: validSemanticGraph,
         validationReport: { ok: true, errors: [] },
@@ -452,6 +483,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       status: 'PUBLISHED',
       strategyInstanceId: null,
       publishedSnapshotId: 'snapshot-1',
+      canonicalDigest: 'sha256:canonical-1',
       scriptCode: 'return { ok: true }',
       semanticGraph: validSemanticGraph,
       validationReport: { ok: true, errors: [] },
@@ -492,6 +524,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       .mockResolvedValueOnce({
         id: 'session-1',
         status: 'CHECKLIST_GATE',
+        canonicalDigest: 'sha256:canonical-2',
         semanticGraph: validSemanticGraph,
         validationReport: { ok: true, errors: [] },
         specDesc: {
@@ -509,6 +542,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
         status: 'PUBLISHED',
         strategyInstanceId: 'strategy-2',
         publishedSnapshotId: 'snapshot-2',
+        canonicalDigest: 'sha256:canonical-2',
         scriptCode: 'return { ok: "revised" }',
         semanticGraph: validSemanticGraph,
         validationReport: { ok: true, errors: [] },
@@ -541,24 +575,24 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     })
 
     await act(async () => {
-      const input = container.querySelector('[data-testid="chat-input"]') as HTMLInputElement | null
-      input!.value = '把止损改成 8%，并重新整理逻辑图'
-      input?.dispatchEvent(new Event('input', { bubbles: true }))
       container
-        .querySelector('[data-testid="send-chat"]')
+        .querySelector('[data-testid="send-revise"]')
         ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-      await Promise.resolve()
-      await Promise.resolve()
     })
 
-    expect(container.querySelector('[data-testid="graph-status"]')?.textContent).toBe('draft')
-    const confirmButtonAfterRevise = container.querySelector(
-      '[data-testid="confirm-graph"]',
-    ) as HTMLButtonElement | null
+    await waitForAssertion(() => {
+      expect(mockContinueLlmCodegenSession).toHaveBeenCalledTimes(1)
+    })
+
+    await waitForAssertion(() => {
+      expect(container.querySelector('[data-testid="graph-status"]')?.textContent).toBe('draft')
+      expect(
+        (container.querySelector('[data-testid="confirm-graph"]') as HTMLButtonElement | null)?.disabled,
+      ).toBe(false)
+    })
     const runButtonAfterRevise = container.querySelector(
       '[data-testid="run-backtest"]',
     ) as HTMLButtonElement | null
-    expect(confirmButtonAfterRevise?.disabled).toBe(false)
     expect(runButtonAfterRevise?.disabled).toBe(true)
 
     await act(async () => {
@@ -633,6 +667,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
           },
         ],
       },
+      pendingCanonicalDigest: null,
     })
 
     await act(async () => {
@@ -645,6 +680,55 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     ) as HTMLButtonElement | null
     expect(confirmButton?.disabled).toBe(true)
     expect(container.textContent).toContain('grid range missing')
+  })
+
+  it('enables graph confirmation when a canonical digest is pending even without semanticGraph payload', async () => {
+    localStorage.clear()
+    seedDraftConversation(Date.now(), {
+      semanticGraph: null,
+      validationReport: null,
+      pendingCanonicalDigest: 'sha256:canonical-1',
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    const confirmButton = container.querySelector(
+      '[data-testid="confirm-graph"]',
+    ) as HTMLButtonElement | null
+    expect(confirmButton?.disabled).toBe(false)
+  })
+
+  it('posts confirmedCanonicalDigest when the user confirms the logic graph', async () => {
+    localStorage.clear()
+    seedDraftConversation(Date.now(), {
+      semanticGraph: null,
+      validationReport: null,
+      pendingCanonicalDigest: 'sha256:canonical-1',
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="confirm-graph"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockContinueLlmCodegenSession).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        confirmGenerate: true,
+        confirmedCanonicalDigest: 'sha256:canonical-1',
+      }),
+    )
   })
 
   it('blocks chat-based confirmation when semantic graph validation is not ok', async () => {
@@ -660,6 +744,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
           },
         ],
       },
+      pendingCanonicalDigest: null,
     })
 
     await act(async () => {
