@@ -437,4 +437,129 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
       }),
     }))
   })
+
+  it('persists clarificationState with session reads and writes', async () => {
+    const clarificationState = {
+      strategyType: 'grid',
+      items: [
+        {
+          id: 'item-1',
+          kind: 'semantic_ambiguity',
+          strategyType: 'grid',
+          field: 'gridSpacingMode',
+          reason: '当前网格间距仍有两种解释',
+          question: '这里的 1% 等距网格，是固定价差还是按百分比递增？',
+          priority: 80,
+          status: 'pending',
+        },
+      ],
+      lastAskedItemId: 'item-1',
+    }
+    const sessionRow = {
+      id: 'session-1',
+      userId: 'user-1',
+      status: 'DRAFTING',
+      checklist: {},
+      constraintPack: {},
+      clarificationState,
+      latestDraftCode: null,
+      latestSpecDesc: null,
+      graphSnapshot: null,
+      semanticGraph: null,
+      validationReport: null,
+      compiledIr: null,
+      rejectReason: null,
+      strategyInstanceId: null,
+      createdAt: new Date('2026-04-07T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-07T00:00:00.000Z'),
+    }
+    const tx = {
+      llmStrategyCodegenSession: {
+        create: jest.fn().mockResolvedValue(sessionRow),
+        findUnique: jest.fn().mockResolvedValue(sessionRow),
+        update: jest.fn().mockResolvedValue({
+          ...sessionRow,
+          clarificationState: {
+            ...clarificationState,
+            items: clarificationState.items.map(item => ({
+              ...item,
+              status: item.id === 'item-1' ? 'resolved' : item.status,
+              resolvedValue: item.id === 'item-1' ? 'fixed_step' : undefined,
+            })),
+          },
+        }),
+      },
+    }
+    const txHost = {
+      tx,
+      withTransaction: jest.fn(async (callback: () => Promise<unknown>) => callback()),
+    }
+    const repo = new CodegenSessionsRepository(txHost as any)
+
+    const created = await repo.createSession({
+      user: { connect: { id: 'user-1' } },
+      status: 'DRAFTING',
+      checklist: {} as any,
+      constraintPack: {} as any,
+      clarificationState: clarificationState as any,
+    } as any)
+    const found = await repo.findById('session-1')
+    const updated = await repo.updateSession('session-1', {
+      clarificationState: {
+        ...clarificationState,
+        items: clarificationState.items.map(item => ({
+          ...item,
+          status: item.id === 'item-1' ? 'resolved' : item.status,
+          resolvedValue: item.id === 'item-1' ? 'fixed_step' : undefined,
+        })),
+      } as any,
+    } as any)
+
+    expect((created as any).clarificationState).toEqual(expect.objectContaining({
+      strategyType: 'grid',
+      lastAskedItemId: 'item-1',
+    }))
+    expect((found as any)?.clarificationState).toEqual(expect.objectContaining({
+      strategyType: 'grid',
+    }))
+    expect((updated as any).clarificationState).toEqual(expect.objectContaining({
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'item-1',
+          status: 'resolved',
+          resolvedValue: 'fixed_step',
+        }),
+      ]),
+    }))
+    expect(tx.llmStrategyCodegenSession.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        clarificationState: expect.objectContaining({
+          strategyType: 'grid',
+        }),
+      }),
+      select: expect.objectContaining({
+        clarificationState: true,
+      }),
+    }))
+    expect(tx.llmStrategyCodegenSession.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.objectContaining({
+        clarificationState: true,
+      }),
+    }))
+    expect(tx.llmStrategyCodegenSession.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        clarificationState: expect.objectContaining({
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              id: 'item-1',
+              status: 'resolved',
+            }),
+          ]),
+        }),
+      }),
+      select: expect.objectContaining({
+        clarificationState: true,
+      }),
+    }))
+  })
 })

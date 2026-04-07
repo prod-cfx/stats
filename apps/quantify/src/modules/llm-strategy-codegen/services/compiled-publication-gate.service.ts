@@ -2,6 +2,7 @@ import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-s
 import type { CanonicalStrategyIrV1 } from '../types/canonical-strategy-ir'
 import type { StrategyAstV1 } from '../types/canonical-strategy-ast'
 import type { SemanticStrategyGraph } from '../types/semantic-strategy-graph'
+import type { StrategyClarificationState } from '../types/strategy-clarification'
 import type { CompiledScriptExecutionEnvelope } from '../types/compiled-script-projection'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { Injectable } from '@nestjs/common'
@@ -19,6 +20,7 @@ interface PublishCompiledSnapshotInput {
   strategyTemplateId?: string | null
   strategyInstanceId?: string | null
   graphSnapshot: StrategyLogicGraphSnapshot
+  clarificationState?: StrategyClarificationState | null
   semanticGraph?: SemanticStrategyGraph
   ir: CanonicalStrategyIrV1
   ast: StrategyAstV1
@@ -45,6 +47,10 @@ export class CompiledPublicationGateService {
     snapshotId: string
     consistencyReport: Record<string, unknown>
   }> {
+    if (input.clarificationState?.items.some(item => item.status === 'pending')) {
+      throw new Error('clarification unresolved')
+    }
+
     const parsed = this.scriptParser.parse(input.script)
     const manifest = parsed.compiledManifest
     const consistencyReport = this.buildConsistencyReport(input, parsed)

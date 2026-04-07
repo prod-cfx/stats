@@ -6,6 +6,7 @@ import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
 import type { SemanticStrategyGraph } from '../types/semantic-strategy-graph'
+import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
 import type { CompiledScriptExecutionEnvelope } from '../types/compiled-script-projection'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
@@ -44,6 +45,8 @@ import { SemanticGraphValidatorService } from './semantic-graph-validator.servic
 import { SpecDescBuilderService } from './spec-desc-builder.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { StaticGuardrailService } from './static-guardrail.service'
+import { StrategyClarificationQuestionService } from './strategy-clarification-question.service'
+import { StrategyClarificationRulesService } from './strategy-clarification-rules.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { StrategySummaryBuilderService } from './strategy-summary-builder.service'
 
@@ -133,6 +136,8 @@ export class CodegenConversationService {
   private readonly semanticGraphBuilder = new SemanticGraphBuilderService()
   private readonly semanticGraphCompiler = new SemanticGraphCompilerService()
   private readonly semanticGraphValidator = new SemanticGraphValidatorService()
+  private readonly clarificationRules = new StrategyClarificationRulesService()
+  private readonly clarificationQuestion = new StrategyClarificationQuestionService()
   private readonly astCompiler = new CanonicalStrategyAstCompilerService()
   private readonly scriptEmitter = new CompiledScriptEmitterService()
 
@@ -172,21 +177,30 @@ export class CodegenConversationService {
       model: undefined,
     })
     const checklist = this.mergeChecklistSnapshots(seedChecklist, plan.logic ?? {})
+    const clarificationState = plan.logicReady
+      ? this.clarificationRules.evaluate(checklist)
+      : this.createEmptyClarificationState()
+    const nextClarificationItem = this.getNextClarificationItem(clarificationState)
     const recommendationStyle = this.inferRecommendationStyleFromContext(
       dto.initialMessage,
       checklist,
       undefined,
     )
     const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
-    const initialSpecDesc = plan.logicReady ? this.specDescBuilder.build(checklist, '') : null
-    const semanticGate = plan.logicReady && initialSpecDesc
+    const initialSpecDesc = plan.logicReady && !nextClarificationItem ? this.specDescBuilder.build(checklist, '') : null
+    const semanticGate = plan.logicReady && !nextClarificationItem && initialSpecDesc
       ? this.evaluateSemanticGate(checklist, initialSpecDesc)
       : null
-    const status: CodegenWorkflowPhase = semanticGate?.ok ? 'CHECKLIST_GATE' : 'DRAFTING'
-    const initialGraphSnapshot = semanticGate?.ok && initialSpecDesc
+    const status: CodegenWorkflowPhase = semanticGate?.ok && !nextClarificationItem ? 'CHECKLIST_GATE' : 'DRAFTING'
+    const initialGraphSnapshot = semanticGate?.ok && initialSpecDesc && !nextClarificationItem
       ? this.buildGraphSnapshot(checklist, initialSpecDesc, 1)
       : null
-    const initialHistory = this.appendConversationHistory([], dto.initialMessage, plan.assistantPrompt)
+    const initialAssistantPrompt = nextClarificationItem
+      ? this.clarificationQuestion.buildPrompt(nextClarificationItem)
+      : (semanticGate?.ok
+          ? `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`
+          : this.buildSemanticRetryPrompt(plan.assistantPrompt, semanticGate?.validation))
+    const initialHistory = this.appendConversationHistory([], dto.initialMessage, initialAssistantPrompt)
     const session = await this.sessionsRepo.createSession({
       userId: sessionUserId,
       status,
@@ -196,25 +210,25 @@ export class CodegenConversationService {
         recommendationStyle,
         conversationHistory: initialHistory,
       } as unknown as Prisma.InputJsonValue,
+      clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
       latestDraftCode: null,
       latestSpecDesc: initialSpecDesc as Prisma.InputJsonValue,
       graphSnapshot: initialGraphSnapshot as unknown as Prisma.InputJsonValue,
-      semanticGraph: semanticGate?.graph as unknown as Prisma.InputJsonValue,
-      validationReport: semanticGate?.validation as unknown as Prisma.InputJsonValue,
+      semanticGraph: (semanticGate?.graph ?? null) as unknown as Prisma.InputJsonValue,
+      validationReport: (semanticGate?.validation ?? null) as unknown as Prisma.InputJsonValue,
       rejectReason: null,
       strategyInstanceId: null,
-    })
+    } as any)
 
     return {
       id: session.id,
       status,
       missingFields: [],
-      specDesc: initialSpecDesc,
-      semanticGraph: semanticGate?.graph ?? null,
-      validationReport: semanticGate?.validation ?? null,
-      assistantPrompt: semanticGate?.ok
-        ? `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`
-        : this.buildSemanticRetryPrompt(plan.assistantPrompt, semanticGate?.validation),
+      clarificationState,
+      ...(initialSpecDesc ? { specDesc: initialSpecDesc } : {}),
+      ...(semanticGate?.graph ? { semanticGraph: semanticGate.graph } : {}),
+      ...(semanticGate?.validation ? { validationReport: semanticGate.validation } : {}),
+      assistantPrompt: initialAssistantPrompt,
     }
   }
 
@@ -279,6 +293,7 @@ export class CodegenConversationService {
             sessionId: session.id,
             userId: sessionUserId,
             checklist,
+            clarificationState: this.readClarificationState(session.clarificationState ?? null),
             message: dto.message,
             semanticGraph,
             graphSnapshot,
@@ -340,6 +355,7 @@ export class CodegenConversationService {
         sessionId: session.id,
         userId: sessionUserId,
         checklist: baseChecklist,
+        clarificationState: this.readClarificationState(session.clarificationState ?? null),
         message: dto.message,
         semanticGraph,
         graphSnapshot,
@@ -374,6 +390,14 @@ export class CodegenConversationService {
       }
     }
     const mergedChecklist = this.mergeChecklistSnapshots(preMergedChecklist, plan.logic ?? {})
+    const persistedClarificationState = (session as { clarificationState?: Prisma.JsonValue | null }).clarificationState
+    const clarificationState = plan.logicReady
+      ? this.mergeClarificationState(
+          this.readClarificationState(persistedClarificationState),
+          this.clarificationRules.evaluate(mergedChecklist),
+        )
+      : (this.readClarificationState(persistedClarificationState) ?? this.createEmptyClarificationState())
+    const nextClarificationItem = plan.logicReady ? this.getNextClarificationItem(clarificationState) : null
     const recommendationStyle = this.inferRecommendationStyleFromContext(
       dto.message,
       mergedChecklist,
@@ -394,13 +418,44 @@ export class CodegenConversationService {
           ...nextConstraintPack,
           conversationHistory: historyAfterPlanner,
         } as unknown as Prisma.InputJsonValue,
-      })
+        clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
+      } as any)
 
       return {
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
+        clarificationState,
         assistantPrompt: plan.assistantPrompt,
+      }
+    }
+
+    if (nextClarificationItem) {
+      const clarificationPrompt = this.clarificationQuestion.buildPrompt(nextClarificationItem)
+      await this.sessionsRepo.updateSession(session.id, {
+        status: 'DRAFTING',
+        checklist: mergedChecklist as Prisma.InputJsonValue,
+        constraintPack: {
+          ...nextConstraintPack,
+          conversationHistory: this.appendConversationHistory(
+            constraintPack.conversationHistory ?? [],
+            dto.message,
+            clarificationPrompt,
+          ),
+        } as unknown as Prisma.InputJsonValue,
+        clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
+        latestSpecDesc: null,
+        graphSnapshot: null,
+        semanticGraph: null,
+        validationReport: null,
+      } as any)
+
+      return {
+        id: session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        clarificationState,
+        assistantPrompt: clarificationPrompt,
       }
     }
 
@@ -414,16 +469,18 @@ export class CodegenConversationService {
           ...nextConstraintPack,
           conversationHistory: historyAfterPlanner,
         } as unknown as Prisma.InputJsonValue,
+        clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
         latestSpecDesc: specDesc as Prisma.InputJsonValue,
         graphSnapshot: null,
         semanticGraph: semanticGate.graph as unknown as Prisma.InputJsonValue,
         validationReport: semanticGate.validation as unknown as Prisma.InputJsonValue,
-      })
+      } as any)
 
       return {
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
+        clarificationState,
         specDesc,
         semanticGraph: semanticGate.graph,
         validationReport: semanticGate.validation,
@@ -439,16 +496,18 @@ export class CodegenConversationService {
         ...nextConstraintPack,
         conversationHistory: historyAfterPlanner,
       } as unknown as Prisma.InputJsonValue,
+      clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
       latestSpecDesc: specDesc as Prisma.InputJsonValue,
       graphSnapshot: graphSnapshot as unknown as Prisma.InputJsonValue,
       semanticGraph: semanticGate.graph as unknown as Prisma.InputJsonValue,
       validationReport: semanticGate.validation as unknown as Prisma.InputJsonValue,
-    })
+    } as any)
 
     return {
       id: session.id,
       status: 'CHECKLIST_GATE',
       missingFields: [],
+      clarificationState,
       specDesc,
       semanticGraph: semanticGate.graph,
       validationReport: semanticGate.validation,
@@ -460,6 +519,7 @@ export class CodegenConversationService {
     sessionId: string
     userId: string
     checklist: ChecklistPayload
+    clarificationState?: StrategyClarificationState | null
     message: string
     semanticGraph: SemanticStrategyGraph
     graphSnapshot: StrategyLogicGraphSnapshot | null
@@ -562,6 +622,7 @@ export class CodegenConversationService {
         strategyTemplateId,
         strategyInstanceId: strategyInstanceId ?? null,
         graphSnapshot: args.graphSnapshot ?? this.buildGraphSnapshot(args.checklist, specDesc, 1),
+        clarificationState: args.clarificationState ?? null,
         semanticGraph: args.semanticGraph,
         ir,
         ast,
@@ -572,6 +633,21 @@ export class CodegenConversationService {
         scriptSummary: scriptSummary as unknown as Record<string, unknown>,
         lockedParams,
       })
+
+      if (published.consistencyReport.status !== 'PASSED') {
+        await this.sessionsRepo.updateSession(args.sessionId, {
+          status: 'CONSISTENCY_FAILED',
+          latestSpecDesc: {
+            ...specDesc,
+            consistencyReport: published.consistencyReport,
+            publishedSnapshotId: published.snapshotId,
+          } as unknown as Prisma.InputJsonValue,
+          latestDraftCode: script,
+          rejectReason: 'consistency report failed',
+          strategyInstanceId: strategyInstanceId ?? null,
+        })
+        return
+      }
 
       await this.sessionsRepo.updateSession(args.sessionId, {
         status: 'PUBLISHED',
@@ -586,6 +662,13 @@ export class CodegenConversationService {
       })
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
+      if (reason === 'consistency report failed') {
+        await this.sessionsRepo.updateSession(args.sessionId, {
+          status: 'CONSISTENCY_FAILED',
+          rejectReason: reason,
+        })
+        return
+      }
       await this.sessionsRepo.updateSession(args.sessionId, {
         status: 'REJECTED',
         rejectReason: reason,
@@ -645,6 +728,7 @@ export class CodegenConversationService {
     status: CodegenWorkflowPhase
     latestDraftCode: Prisma.JsonValue | null
     latestSpecDesc: Prisma.JsonValue | null
+    clarificationState?: Prisma.JsonValue | null
     semanticGraph?: Prisma.JsonValue | null
     validationReport?: Prisma.JsonValue | null
     rejectReason: string | null
@@ -673,10 +757,110 @@ export class CodegenConversationService {
             ? sessionConsistencyReport as Record<string, unknown>
             : null),
       specDesc: sessionSpecDesc,
+      clarificationState: this.readClarificationState(session.clarificationState ?? null),
       semanticGraph: this.readSemanticGraph(session.semanticGraph ?? null) as unknown as Record<string, unknown> | null,
       validationReport: this.readValidationReport(session.validationReport ?? null),
       strategyInstanceId: session.strategyInstanceId ?? null,
       rejectReason: session.rejectReason,
+    }
+  }
+
+  private createEmptyClarificationState(): StrategyClarificationState {
+    return {
+      strategyType: null,
+      items: [],
+      lastAskedItemId: null,
+    }
+  }
+
+  private getNextClarificationItem(state: StrategyClarificationState | null): StrategyClarificationItem | null {
+    return state?.items.find(item => item.status === 'pending') ?? null
+  }
+
+  private mergeClarificationState(
+    previous: StrategyClarificationState | null,
+    next: StrategyClarificationState,
+  ): StrategyClarificationState {
+    const nextItems = new Map(next.items.map(item => [item.id, item]))
+    const carriedItems = (previous?.items ?? []).flatMap((item) => {
+      if (nextItems.has(item.id)) {
+        return []
+      }
+      if (item.status !== 'pending') {
+        return []
+      }
+      if (item.id === previous?.lastAskedItemId) {
+        return []
+      }
+      return [item]
+    })
+    const items = [...next.items, ...carriedItems]
+      .sort((left, right) => right.priority - left.priority || left.id.localeCompare(right.id))
+
+    return {
+      strategyType: next.strategyType ?? previous?.strategyType ?? null,
+      items,
+      lastAskedItemId: items[0]?.id ?? null,
+    }
+  }
+
+  private readClarificationState(value: Prisma.JsonValue | null | undefined): StrategyClarificationState | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null
+    }
+
+    const candidate = value as {
+      strategyType?: unknown
+      items?: unknown
+      lastAskedItemId?: unknown
+    }
+    if (candidate.strategyType !== null && typeof candidate.strategyType !== 'string') {
+      return null
+    }
+    if (!Array.isArray(candidate.items)) {
+      return null
+    }
+    if (candidate.lastAskedItemId !== null && typeof candidate.lastAskedItemId !== 'string') {
+      return null
+    }
+
+    const items = candidate.items.flatMap((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        return []
+      }
+      const record = item as Record<string, unknown>
+      if (
+        typeof record.id !== 'string'
+        || (record.kind !== 'missing_parameter' && record.kind !== 'semantic_ambiguity')
+        || typeof record.strategyType !== 'string'
+        || typeof record.field !== 'string'
+        || typeof record.reason !== 'string'
+        || typeof record.question !== 'string'
+        || typeof record.priority !== 'number'
+        || (record.status !== 'pending' && record.status !== 'resolved')
+      ) {
+        return []
+      }
+
+      return [{
+        id: record.id,
+        kind: record.kind,
+        strategyType: record.strategyType,
+        field: record.field,
+        reason: record.reason,
+        question: record.question,
+        priority: record.priority,
+        status: record.status,
+        ...(Object.prototype.hasOwnProperty.call(record, 'resolvedValue')
+            ? { resolvedValue: record.resolvedValue }
+            : {}),
+      }]
+    })
+
+    return {
+      strategyType: typeof candidate.strategyType === 'string' ? candidate.strategyType : null,
+      items,
+      lastAskedItemId: typeof candidate.lastAskedItemId === 'string' ? candidate.lastAskedItemId : null,
     }
   }
 

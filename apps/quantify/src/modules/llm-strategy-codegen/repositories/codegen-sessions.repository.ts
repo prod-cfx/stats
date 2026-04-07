@@ -11,6 +11,7 @@ const SESSION_SELECT_BASE = {
   userId: true,
   status: true,
   checklist: true,
+  clarificationState: true,
   constraintPack: true,
   latestDraftCode: true,
   latestSpecDesc: true,

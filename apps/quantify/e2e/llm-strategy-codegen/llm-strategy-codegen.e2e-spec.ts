@@ -129,6 +129,11 @@ function createSemanticGraph() {
   }
 }
 
+interface PlannerStubConfig {
+  message: string
+  reply: Record<string, unknown>
+}
+
 describe('llm strategy codegen (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
@@ -379,6 +384,243 @@ describe('llm strategy codegen (E2E)', () => {
     }
 
     expect(chatSpy).toHaveBeenCalledTimes(ordinarySemanticGraphStrategyFixtures.length)
+  })
+
+  it('clarifies ambiguous price-change exit basis before showing logic graph', async () => {
+    const server = app.getHttpServer()
+    const token = createBearerToken('u-e2e-clarify-price')
+    const plannerReplies: PlannerStubConfig[] = [
+      {
+        message: 'BTCUSDT 3分钟下跌1%买入，3分钟上涨1%卖出，仓位10%，止损5%',
+        reply: {
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已整理完毕。',
+          logic: {
+            symbols: ['BTCUSDT'],
+            timeframes: ['3m'],
+            entryRules: ['3分钟下跌1%买入'],
+            exitRules: ['3分钟上涨1%卖出'],
+            riskRules: {
+              positionPct: 10,
+              stopLossPct: 5,
+            },
+          },
+        },
+      },
+      {
+        message: '这里的上涨1%是相对开仓均价',
+        reply: {
+          related: true,
+          logicReady: true,
+          assistantPrompt: '已记录你的补充。',
+          logic: {
+            symbols: ['BTCUSDT'],
+            timeframes: ['3m'],
+            entryRules: ['当前K线收盘价相对于上一根K线收盘价下跌≥1%时买入开仓'],
+            exitRules: ['当前K线收盘价相对于开仓均价上涨≥1%时卖出平仓'],
+            riskRules: {
+              positionPct: 10,
+              stopLossPct: 5,
+            },
+          },
+        },
+      },
+    ]
+    jest.spyOn(aiService, 'chat').mockImplementation(async ({ messages }) => {
+      const raw = messages?.find(item => item.role === 'user')?.content
+      const payload = raw ? JSON.parse(raw) as { message?: unknown } : {}
+      const matched = plannerReplies.find(item => item.message === payload.message)
+      if (!matched) {
+        throw new Error(`unexpected planner prompt: ${String(payload.message ?? '(missing)')}`)
+      }
+      return { content: JSON.stringify(matched.reply) }
+    })
+
+    const startRes = await supertestRequest(server)
+      .post(buildApiUrl('llm-strategy-codegen/sessions'))
+      .set('authorization', `Bearer ${token}`)
+      .send({
+        userId: 'u-e2e-clarify-price',
+        initialMessage: plannerReplies[0].message,
+      })
+      .expect(201)
+
+    const startPayload = (startRes.body.data ?? startRes.body) as Record<string, unknown>
+    expect(startPayload.status).toBe('DRAFTING')
+    expect(startPayload.semanticGraph).toBeFalsy()
+    expect(String(startPayload.assistantPrompt ?? '')).toContain('存在两种可编译解释')
+
+    const continueRes = await supertestRequest(server)
+      .post(buildApiUrl(`llm-strategy-codegen/sessions/${String(startPayload.id)}/messages`))
+      .set('authorization', `Bearer ${token}`)
+      .send({
+        userId: 'u-e2e-clarify-price',
+        message: plannerReplies[1].message,
+      })
+      .expect(202)
+
+    const continuePayload = (continueRes.body.data ?? continueRes.body) as Record<string, unknown>
+    expect(continuePayload.status).toBe('CHECKLIST_GATE')
+    expect(continuePayload.semanticGraph).toBeTruthy()
+  })
+
+  it('clarifies grid spacing semantics before checklist gate', async () => {
+    const server = app.getHttpServer()
+    const token = createBearerToken('u-e2e-clarify-grid')
+    const plannerReplies: PlannerStubConfig[] = [
+      {
+        message: 'BTCUSDT 60000-80000 按1%等距网格买入，触及上方网格卖出，仓位1%，单笔最大亏损2%',
+        reply: {
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已整理完毕。',
+          logic: {
+            symbols: ['BTCUSDT'],
+            timeframes: ['15m'],
+            entryRules: ['在60000-80000固定区间按1%等距划分网格线，价格触及或跌破网格线时买入'],
+            exitRules: ['买入后价格上涨触及上方网格线时卖出'],
+            riskRules: {
+              positionPct: 1,
+              maxSingleLossPct: 2,
+            },
+          },
+        },
+      },
+      {
+        message: '这里的1%等距网格是固定价差',
+        reply: {
+          related: true,
+          logicReady: true,
+          assistantPrompt: '已记录你的补充。',
+          logic: {
+            symbols: ['BTCUSDT'],
+            timeframes: ['15m'],
+            entryRules: ['在60000-80000固定区间按步长1%，共21格执行区间网格买入'],
+            exitRules: ['价格触达上方网格卖出'],
+            riskRules: {
+              positionPct: 1,
+              maxSingleLossPct: 2,
+            },
+          },
+        },
+      },
+    ]
+    jest.spyOn(aiService, 'chat').mockImplementation(async ({ messages }) => {
+      const raw = messages?.find(item => item.role === 'user')?.content
+      const payload = raw ? JSON.parse(raw) as { message?: unknown } : {}
+      const matched = plannerReplies.find(item => item.message === payload.message)
+      if (!matched) {
+        throw new Error(`unexpected planner prompt: ${String(payload.message ?? '(missing)')}`)
+      }
+      return { content: JSON.stringify(matched.reply) }
+    })
+
+    const startRes = await supertestRequest(server)
+      .post(buildApiUrl('llm-strategy-codegen/sessions'))
+      .set('authorization', `Bearer ${token}`)
+      .send({
+        userId: 'u-e2e-clarify-grid',
+        initialMessage: plannerReplies[0].message,
+      })
+      .expect(201)
+
+    const startPayload = (startRes.body.data ?? startRes.body) as Record<string, unknown>
+    expect(startPayload.status).toBe('DRAFTING')
+    expect(String(startPayload.assistantPrompt ?? '')).toContain('网格间距')
+
+    const continueRes = await supertestRequest(server)
+      .post(buildApiUrl(`llm-strategy-codegen/sessions/${String(startPayload.id)}/messages`))
+      .set('authorization', `Bearer ${token}`)
+      .send({
+        userId: 'u-e2e-clarify-grid',
+        message: plannerReplies[1].message,
+      })
+      .expect(202)
+
+    const continuePayload = (continueRes.body.data ?? continueRes.body) as Record<string, unknown>
+    expect(continuePayload.status).toBe('CHECKLIST_GATE')
+    expect(continuePayload.semanticGraph).toBeTruthy()
+  })
+
+  it('clarifies bollinger outside-band risk action before graph confirmation', async () => {
+    const server = app.getHttpServer()
+    const token = createBearerToken('u-e2e-clarify-boll')
+    const plannerReplies: PlannerStubConfig[] = [
+      {
+        message: 'BTCUSDT 15分钟上突破上轨做空，下突破下轨做多，回到中轨平仓，亏损5%止损，连续3根K线在轨外时提前止损或减仓，仓位10%',
+        reply: {
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已整理完毕。',
+          logic: {
+            symbols: ['BTCUSDT'],
+            timeframes: ['15m'],
+            entryRules: ['突破布林带上轨做空', '突破布林带下轨做多'],
+            exitRules: ['价格回到布林带中轨（MA20）平仓'],
+            riskRules: {
+              positionPct: 10,
+              stopLossPct: 5,
+              outsideBandRule: '价格连续3根K线在轨外时提前止损或减仓',
+            },
+          },
+        },
+      },
+      {
+        message: '这里的轨外处理是提前减仓',
+        reply: {
+          related: true,
+          logicReady: true,
+          assistantPrompt: '已记录你的补充。',
+          logic: {
+            symbols: ['BTCUSDT'],
+            timeframes: ['15m'],
+            entryRules: ['突破布林带上轨做空', '突破布林带下轨做多'],
+            exitRules: ['价格回到布林带中轨（MA20）平仓'],
+            riskRules: {
+              positionPct: 10,
+              stopLossPct: 5,
+              outsideBandRule: '价格连续3根K线在轨外时提前减仓',
+            },
+          },
+        },
+      },
+    ]
+    jest.spyOn(aiService, 'chat').mockImplementation(async ({ messages }) => {
+      const raw = messages?.find(item => item.role === 'user')?.content
+      const payload = raw ? JSON.parse(raw) as { message?: unknown } : {}
+      const matched = plannerReplies.find(item => item.message === payload.message)
+      if (!matched) {
+        throw new Error(`unexpected planner prompt: ${String(payload.message ?? '(missing)')}`)
+      }
+      return { content: JSON.stringify(matched.reply) }
+    })
+
+    const startRes = await supertestRequest(server)
+      .post(buildApiUrl('llm-strategy-codegen/sessions'))
+      .set('authorization', `Bearer ${token}`)
+      .send({
+        userId: 'u-e2e-clarify-boll',
+        initialMessage: plannerReplies[0].message,
+      })
+      .expect(201)
+
+    const startPayload = (startRes.body.data ?? startRes.body) as Record<string, unknown>
+    expect(startPayload.status).toBe('DRAFTING')
+    expect(String(startPayload.assistantPrompt ?? '')).toContain('轨外风控动作')
+
+    const continueRes = await supertestRequest(server)
+      .post(buildApiUrl(`llm-strategy-codegen/sessions/${String(startPayload.id)}/messages`))
+      .set('authorization', `Bearer ${token}`)
+      .send({
+        userId: 'u-e2e-clarify-boll',
+        message: plannerReplies[1].message,
+      })
+      .expect(202)
+
+    const continuePayload = (continueRes.body.data ?? continueRes.body) as Record<string, unknown>
+    expect(continuePayload.status).toBe('CHECKLIST_GATE')
+    expect(continuePayload.semanticGraph).toBeTruthy()
   })
 
   it('rejects session start when authorization header is missing', async () => {
