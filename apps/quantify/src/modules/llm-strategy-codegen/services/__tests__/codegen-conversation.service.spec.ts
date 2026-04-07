@@ -415,7 +415,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         items: [
           {
             key: 'rule.entry.upper_band.side_scope',
-            reason: 'missing_side_scope',
+            reason: 'direction_ambiguous',
             question: '突破上轨时是只做空还是也允许做多？',
             status: 'pending',
           },

@@ -1,6 +1,39 @@
 import type { StrategyClarificationState } from '../types/strategy-clarification'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import {
+  STRATEGY_CLARIFICATION_ITEM_STATUSES,
+  STRATEGY_CLARIFICATION_REASONS,
+  STRATEGY_CLARIFICATION_STATUSES,
+} from '../types/strategy-clarification'
 import type { StrategyClarificationState } from '../types/strategy-clarification'
+
+class StrategyClarificationItemDto {
+  @ApiProperty({ description: '澄清项唯一键' })
+  key!: string
+
+  @ApiProperty({ description: '澄清触发原因', enum: STRATEGY_CLARIFICATION_REASONS })
+  reason!: string
+
+  @ApiPropertyOptional({ description: '规则 ID' })
+  ruleId?: string
+
+  @ApiProperty({ description: '面向用户的问题' })
+  question!: string
+
+  @ApiProperty({ description: '澄清项状态', enum: STRATEGY_CLARIFICATION_ITEM_STATUSES })
+  status!: string
+
+  @ApiPropertyOptional({ description: '用户回答' })
+  answer?: string
+}
+
+class StrategyClarificationStateDto {
+  @ApiProperty({ description: '澄清总状态', enum: STRATEGY_CLARIFICATION_STATUSES })
+  status!: string
+
+  @ApiProperty({ description: '澄清项列表', type: [StrategyClarificationItemDto] })
+  items!: StrategyClarificationItemDto[]
+}
 
 export class CodegenSessionResponseDto {
   @ApiProperty({ description: '会话 ID' })
@@ -50,7 +83,7 @@ export class CodegenSessionResponseDto {
   @ApiPropertyOptional({ description: '发布后生成的策略实例 ID' })
   strategyInstanceId?: string | null
 
-  @ApiPropertyOptional({ description: '规则语义澄清状态', type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ description: '规则语义澄清状态', type: StrategyClarificationStateDto })
   clarificationState?: StrategyClarificationState | null
 
   @ApiPropertyOptional({ description: '拒绝原因' })

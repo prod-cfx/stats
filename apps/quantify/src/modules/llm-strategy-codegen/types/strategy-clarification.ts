@@ -1,6 +1,5 @@
 export const STRATEGY_CLARIFICATION_REASONS = [
   'missing_action_uniqueness',
-  'missing_side_scope',
   'direction_ambiguous',
   'ambiguous_risk_effect',
   'ambiguous_condition_basis',

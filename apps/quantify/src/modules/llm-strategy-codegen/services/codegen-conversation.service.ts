@@ -4,7 +4,7 @@ import type { CodegenSessionResponseDto } from '../dto/codegen-session.response.
 import type { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.dto'
 import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-test.response.dto'
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
-import type { StrategyClarificationState } from '../types/strategy-clarification'
+import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
 import type { SemanticStrategyGraph } from '../types/semantic-strategy-graph'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
@@ -23,6 +23,11 @@ import { AiService } from '@/modules/ai/ai.service'
 import { createDefaultConstraintPack } from '../constants/constraint-pack'
 import { buildConversationPlannerSystemPrompt } from '../prompts/conversation-planner-system.prompt'
 import { buildStrategyCodegenSystemPrompt } from '../prompts/strategy-codegen-system.prompt'
+import {
+  STRATEGY_CLARIFICATION_ITEM_STATUSES,
+  STRATEGY_CLARIFICATION_REASONS,
+  STRATEGY_CLARIFICATION_STATUSES,
+} from '../types/strategy-clarification'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CodegenSessionsRepository } from '../repositories/codegen-sessions.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -907,10 +912,43 @@ export class CodegenConversationService {
 
   private readClarificationState(payload: Prisma.JsonValue | null | undefined): StrategyClarificationState | null {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
-    const status = (payload as { status?: unknown }).status
-    const items = (payload as { items?: unknown }).items
-    if ((status !== 'CLEAR' && status !== 'NEEDS_CLARIFICATION') || !Array.isArray(items)) return null
-    return payload as unknown as StrategyClarificationState
+    const rawStatus = (payload as { status?: unknown }).status
+    const rawItems = (payload as { items?: unknown }).items
+    if (!STRATEGY_CLARIFICATION_STATUSES.includes(rawStatus as never) || !Array.isArray(rawItems)) return null
+
+    const normalizedItems: StrategyClarificationItem[] = []
+    for (const rawItem of rawItems) {
+      if (!rawItem || typeof rawItem !== 'object' || Array.isArray(rawItem)) return null
+      const key = (rawItem as { key?: unknown }).key
+      const reason = (rawItem as { reason?: unknown }).reason
+      const question = (rawItem as { question?: unknown }).question
+      const status = (rawItem as { status?: unknown }).status
+      const ruleId = (rawItem as { ruleId?: unknown }).ruleId
+      const answer = (rawItem as { answer?: unknown }).answer
+
+      if (typeof key !== 'string' || !key.trim()) return null
+      if (!STRATEGY_CLARIFICATION_REASONS.includes(reason as never)) return null
+      if (typeof question !== 'string' || !question.trim()) return null
+      if (!STRATEGY_CLARIFICATION_ITEM_STATUSES.includes(status as never)) return null
+      if (ruleId !== undefined && typeof ruleId !== 'string') return null
+      if (answer !== undefined && typeof answer !== 'string') return null
+      const typedReason = reason as StrategyClarificationItem['reason']
+      const typedStatus = status as StrategyClarificationItem['status']
+
+      normalizedItems.push({
+        key,
+        reason: typedReason,
+        question,
+        status: typedStatus,
+        ...(ruleId !== undefined ? { ruleId } : {}),
+        ...(answer !== undefined ? { answer } : {}),
+      })
+    }
+
+    return {
+      status: rawStatus as StrategyClarificationState['status'],
+      items: normalizedItems,
+    }
   }
 
   private buildPublishedStrategyInput(args: {
