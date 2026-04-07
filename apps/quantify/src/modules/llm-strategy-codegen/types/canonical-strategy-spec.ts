@@ -1,6 +1,5 @@
 import type { CanonicalStrategySpecV2 } from './canonical-strategy-spec-v2'
 
-export type CanonicalAction = 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | 'ADJUST_POSITION'
 export type CanonicalSizingMode = 'RATIO' | 'QUOTE' | 'QTY'
 export type CanonicalIndicatorKind = 'bollingerBands' | 'sma' | 'ema' | 'rsi' | 'atr' | 'macd' | 'custom'
 
@@ -46,8 +45,19 @@ export interface CanonicalStrategySpecV1 {
   }
 }
 
-export type CanonicalStrategySpec = CanonicalStrategySpecV1
-export type CanonicalStrategySpecAnyVersion = CanonicalStrategySpecV1 | CanonicalStrategySpecV2
+export type CanonicalAction =
+  | 'OPEN_LONG'
+  | 'OPEN_SHORT'
+  | 'CLOSE_LONG'
+  | 'CLOSE_SHORT'
+  | 'REDUCE_LONG'
+  | 'REDUCE_SHORT'
+  | 'FORCE_EXIT'
+  | 'BLOCK_NEW_ENTRY'
+  | 'ADJUST_POSITION'
+
+export type CanonicalStrategySpec = CanonicalStrategySpecV1 | CanonicalStrategySpecV2
+export type CanonicalStrategySpecAnyVersion = CanonicalStrategySpec
 
 export type {
   CanonicalConditionAtom,
