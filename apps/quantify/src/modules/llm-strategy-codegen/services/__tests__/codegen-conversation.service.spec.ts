@@ -410,6 +410,17 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         errors: [],
       },
       strategyInstanceId: 'instance-snapshot-1',
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'rule.entry.upper_band.side_scope',
+            reason: 'missing_side_scope',
+            question: '突破上轨时是只做空还是也允许做多？',
+            status: 'pending',
+          },
+        ],
+      },
       rejectReason: null,
     })
 
@@ -417,6 +428,15 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(result.status).toBe('PUBLISHED')
     expect(result.strategyInstanceId).toBe('instance-snapshot-1')
+    expect(result.clarificationState).toEqual({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        expect.objectContaining({
+          key: 'rule.entry.upper_band.side_scope',
+          status: 'pending',
+        }),
+      ],
+    })
     expect(result.publishedSnapshotId).toBe('snapshot-session-1')
     expect(result.consistencyReport).toEqual({ status: 'PASSED' })
     expect(result.semanticGraph).toEqual(createSemanticGraph())

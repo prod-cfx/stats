@@ -4,6 +4,7 @@ import type { CodegenSessionResponseDto } from '../dto/codegen-session.response.
 import type { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.dto'
 import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-test.response.dto'
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
+import type { StrategyClarificationState } from '../types/strategy-clarification'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
 import type { SemanticStrategyGraph } from '../types/semantic-strategy-graph'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
@@ -733,6 +734,7 @@ export class CodegenConversationService {
     validationReport?: Prisma.JsonValue | null
     rejectReason: string | null
     strategyInstanceId?: string | null
+    clarificationState?: Prisma.JsonValue | null
   }): Promise<CodegenSessionResponseDto> {
     const latestSnapshot = session.status === 'PUBLISHED'
       ? await this.publishedSnapshotsRepo.findLatestBySessionId(session.id)
@@ -761,6 +763,7 @@ export class CodegenConversationService {
       semanticGraph: this.readSemanticGraph(session.semanticGraph ?? null) as unknown as Record<string, unknown> | null,
       validationReport: this.readValidationReport(session.validationReport ?? null),
       strategyInstanceId: session.strategyInstanceId ?? null,
+      clarificationState: this.readClarificationState(session.clarificationState),
       rejectReason: session.rejectReason,
     }
   }
@@ -900,6 +903,14 @@ export class CodegenConversationService {
       ok: candidate.ok,
       errors,
     }
+  }
+
+  private readClarificationState(payload: Prisma.JsonValue | null | undefined): StrategyClarificationState | null {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
+    const status = (payload as { status?: unknown }).status
+    const items = (payload as { items?: unknown }).items
+    if ((status !== 'CLEAR' && status !== 'NEEDS_CLARIFICATION') || !Array.isArray(items)) return null
+    return payload as unknown as StrategyClarificationState
   }
 
   private buildPublishedStrategyInput(args: {
