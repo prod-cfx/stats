@@ -37,6 +37,7 @@ import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
 import { CanonicalStrategyAstCompilerService } from './canonical-strategy-ast-compiler.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CompiledPublicationGateService } from './compiled-publication-gate.service'
+import { CompiledScriptParserService } from './compiled-script-parser.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CompiledScriptEmitterService } from './compiled-script-emitter.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -172,6 +173,7 @@ export class CodegenConversationService {
     private readonly canonicalStrategyAstCompiler: CanonicalStrategyAstCompilerService = new CanonicalStrategyAstCompilerService(),
     private readonly compiledScriptEmitter: CompiledScriptEmitterService = new CompiledScriptEmitterService(),
     private readonly compiledScriptExecutionEnvelope: CompiledScriptExecutionEnvelopeService = new CompiledScriptExecutionEnvelopeService(),
+    private readonly compiledScriptParser: CompiledScriptParserService = new CompiledScriptParserService(),
     private readonly compiledPublicationGate: CompiledPublicationGateService = new CompiledPublicationGateService(
       publishedSnapshotsRepo,
     ),
@@ -569,10 +571,21 @@ export class CodegenConversationService {
       })
       const executionEnvelope = this.compiledScriptExecutionEnvelope.build(canonicalSpec)
       const ast = this.canonicalStrategyAstCompiler.compile(compiled.ir)
-      const compiledScript = this.compiledScriptEmitter.emit({
+      let compiledScript = this.compiledScriptEmitter.emit({
         ast,
         executionEnvelope,
       })
+      const compiledValidation = await this.validateCompiledScript(compiledScript)
+      if (!compiledValidation.passed) {
+        await this.sessionsRepo.updateSession(sessionId, {
+          status: 'REJECTED',
+          latestDraftCode: compiledValidation.scriptCode,
+          rejectReason: compiledValidation.reason,
+          strategyInstanceId: strategyInstanceId ?? null,
+        })
+        return
+      }
+      compiledScript = compiledValidation.scriptCode
       const semanticConsistency = this.strategyConsistencyService.evaluate({
         canonicalSpec,
         scriptCode: compiledScript,
@@ -601,9 +614,9 @@ export class CodegenConversationService {
         session: { connect: { id: sessionId } },
         scriptCode: compiledScript,
         specDesc: sessionSpecDesc as unknown as Prisma.InputJsonValue,
-        staticPassed: true,
-        runtimePassed: true,
-        outputPassed: true,
+        staticPassed: compiledValidation.staticPassed,
+        runtimePassed: compiledValidation.runtimePassed,
+        outputPassed: compiledValidation.outputPassed,
       })
 
       await this.recommendationIndex.onSpecDescPersisted({
@@ -660,6 +673,19 @@ export class CodegenConversationService {
         scriptSummary: scriptSummary as unknown as Record<string, unknown>,
         lockedParams,
       })
+      if (this.readPublishedConsistencyStatus(snapshot.consistencyReport) !== 'PASSED') {
+        await this.sessionsRepo.updateSession(sessionId, {
+          status: 'CONSISTENCY_FAILED',
+          latestSpecDesc: {
+            ...sessionSpecDesc,
+            consistencyReport: snapshot.consistencyReport,
+          } as unknown as Prisma.InputJsonValue,
+          latestDraftCode: compiledScript,
+          rejectReason: this.buildCompiledPublishRejectReason(snapshot.consistencyReport),
+          strategyInstanceId: strategyInstanceId ?? null,
+        })
+        return
+      }
 
       await this.sessionsRepo.updateSession(sessionId, {
         status: 'PUBLISHED',
@@ -927,6 +953,42 @@ export class CodegenConversationService {
       return '策略脚本与策略描述一致性校验失败'
     }
     return `策略脚本与策略描述不一致：${failedChecks.join('；')}`
+  }
+
+  private buildCompiledPublishRejectReason(report: Record<string, unknown>): string {
+    const compilerConsistency = this.readRecord(report.compilerConsistency)
+    const reasons: string[] = []
+
+    const graphVsIr = this.readRecord(compilerConsistency?.graphVsIr)
+    if (graphVsIr?.passed === false) {
+      reasons.push('semantic view 与 IR 摘要不一致')
+    }
+
+    const irVsScript = this.readRecord(compilerConsistency?.irVsScript)
+    if (irVsScript?.passed === false) {
+      reasons.push('IR 与 compiled script 摘要不一致')
+    }
+
+    const manifestSelfCheck = this.readRecord(compilerConsistency?.manifestSelfCheck)
+    if (manifestSelfCheck?.passed === false) {
+      reasons.push('compiled manifest 自校验失败')
+    }
+
+    return reasons.length > 0
+      ? `编译发布一致性校验失败：${reasons.join('；')}`
+      : '编译发布一致性校验失败'
+  }
+
+  private readPublishedConsistencyStatus(report: Record<string, unknown>): string | null {
+    return typeof report.status === 'string' ? report.status : null
+  }
+
+  private readRecord(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null
+    }
+
+    return value as Record<string, unknown>
   }
 
   async testEngine(dto: TestLlmCodegenEngineDto): Promise<LlmCodegenEngineTestResponseDto> {
@@ -1503,6 +1565,28 @@ export class CodegenConversationService {
       staticPassed: true,
       runtimePassed: runtimeResult.runtimePassed,
       outputPassed: runtimeResult.outputPassed,
+    }
+  }
+
+  private async validateCompiledScript(scriptCode: string): Promise<ScriptValidationResult> {
+    try {
+      this.compiledScriptParser.parse(scriptCode)
+      return {
+        passed: true,
+        scriptCode,
+        staticPassed: true,
+        runtimePassed: true,
+        outputPassed: true,
+      }
+    } catch (error) {
+      return {
+        passed: false,
+        scriptCode,
+        reason: `编译脚本结构校验失败: ${error instanceof Error ? error.message : 'unknown'}`,
+        staticPassed: true,
+        runtimePassed: false,
+        outputPassed: false,
+      }
     }
   }
 

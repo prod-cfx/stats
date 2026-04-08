@@ -223,10 +223,13 @@ export class CanonicalSpecBuilderService {
     const timeframes = Array.isArray(checklist.timeframes) ? checklist.timeframes : []
     const rawSymbol = typeof symbols[0] === 'string' ? symbols[0].trim().toUpperCase() : ''
     const rawTimeframe = typeof timeframes[0] === 'string' ? timeframes[0].trim() : ''
+    const riskExchange = typeof riskRules.exchange === 'string' ? riskRules.exchange.trim().toLowerCase() : ''
     const riskMarketType = typeof riskRules.marketType === 'string' ? riskRules.marketType.trim().toLowerCase() : ''
 
     return {
-      exchange: 'binance',
+      exchange: riskExchange === 'okx' || riskExchange === 'hyperliquid' || riskExchange === 'binance'
+        ? riskExchange
+        : 'binance',
       symbol: rawSymbol || null,
       marketType: riskMarketType === 'perp' ? 'perp' : 'spot',
       timeframe: rawTimeframe || null,

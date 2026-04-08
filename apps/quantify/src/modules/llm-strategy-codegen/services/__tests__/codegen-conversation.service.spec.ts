@@ -7,6 +7,8 @@ import type { AiService } from '@/modules/ai/ai.service'
 import { restoreProcessEnv, setProcessEnvValue, snapshotProcessEnv } from '@/common/env/env.accessor'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2DigestService } from '../canonical-spec-v2-digest.service'
+import { CompiledPublicationGateService } from '../compiled-publication-gate.service'
+import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
 import { CodegenConversationService } from '../codegen-conversation.service'
 import { RuntimeGuardrailService } from '../runtime-guardrail.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
@@ -114,6 +116,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
     setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'false')
     setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'true')
+  })
+
+  afterEach(() => {
+    jest.restoreAllMocks()
   })
 
   afterAll(() => {
@@ -590,6 +596,143 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       snapshotVersion: 3,
     }))
     expect(mockAi.chat).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects compiler-first publish when compiled script fails structural validation', async () => {
+    const emitSpy = jest
+      .spyOn(CompiledScriptEmitterService.prototype, 'emit')
+      .mockReturnValue('broken compiled script')
+
+    mockRepo.findById.mockResolvedValue({
+      id: 's-runtime-invalid',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      strategyInstanceId: null,
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['EMA7 上穿 EMA21 做多'],
+        exitRules: ['EMA7 下穿 EMA21 平多'],
+        riskRules: { positionPct: 10 },
+      },
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+
+    const result = await service.continueSession('s-runtime-invalid', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['EMA7 上穿 EMA21 做多'],
+        exitRules: ['EMA7 下穿 EMA21 平多'],
+        riskRules: { positionPct: 10 },
+      }),
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await waitForTerminalStatus('s-runtime-invalid')
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-runtime-invalid', expect.objectContaining({
+      status: 'REJECTED',
+      rejectReason: expect.stringContaining('编译脚本结构校验失败'),
+    }))
+    expect(mockRepo.createVersion).not.toHaveBeenCalled()
+    expect(mockRepo.create).not.toHaveBeenCalled()
+    expect(emitSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('marks session as consistency failed when compiled publication gate reports failed compiler consistency', async () => {
+    jest
+      .spyOn(StrategyConsistencyService.prototype, 'evaluate')
+      .mockReturnValue({
+        status: 'PASSED',
+        checks: [],
+        summary: {
+          criticalFailed: 0,
+          warningFailed: 0,
+          unprovable: 0,
+        },
+        specProfile: {
+          actions: [],
+          fallbackDetected: false,
+          indicators: [],
+          requiredParams: [],
+          ruleMappings: [],
+          rules: [],
+        },
+        scriptProfile: {
+          actions: [],
+          fallbackDetected: false,
+          indicators: [],
+          requiredParams: [],
+          ruleMappings: [],
+          rules: [],
+        },
+      } as never)
+    const publishSpy = jest
+      .spyOn(CompiledPublicationGateService.prototype, 'publish')
+      .mockResolvedValue({
+        snapshotId: 'snapshot-compiler-failed',
+        consistencyReport: {
+          status: 'FAILED',
+          semanticConsistency: { status: 'PASSED', checks: [] },
+          compilerConsistency: {
+            status: 'FAILED',
+            graphVsIr: { passed: false },
+          },
+        },
+      })
+
+    mockRepo.findById.mockResolvedValue({
+      id: 's-compiler-consistency-failed',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      strategyInstanceId: null,
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['EMA7 上穿 EMA21 做多'],
+        exitRules: ['EMA7 下穿 EMA21 平多'],
+        riskRules: { positionPct: 10 },
+      },
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+
+    const result = await service.continueSession('s-compiler-consistency-failed', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['EMA7 上穿 EMA21 做多'],
+        exitRules: ['EMA7 下穿 EMA21 平多'],
+        riskRules: { positionPct: 10 },
+      }),
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await waitForTerminalStatus('s-compiler-consistency-failed')
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-compiler-consistency-failed', expect.objectContaining({
+      status: 'CONSISTENCY_FAILED',
+      rejectReason: expect.stringContaining('编译发布一致性校验失败'),
+      latestSpecDesc: expect.objectContaining({
+        consistencyReport: expect.objectContaining({
+          status: 'FAILED',
+        }),
+      }),
+    }))
+
+    const hasPublished = mockRepo.updateSession.mock.calls.some(call =>
+      call[0] === 's-compiler-consistency-failed' && (call[1] as { status?: string }).status === 'PUBLISHED',
+    )
+    expect(hasPublished).toBe(false)
+    expect(publishSpy).toHaveBeenCalledTimes(1)
   })
 
   it('rejects confirmGenerate when confirmedCanonicalDigest does not match the current semantic view', async () => {
@@ -1070,7 +1213,7 @@ strategy`,
     }))
   })
 
-  it('publishes perp marketType when checklist risk rules require perpetual market', async () => {
+  it('publishes requested exchange and perp marketType when checklist risk rules require perpetual market', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-perp-publish',
       userId: 'u1',
@@ -1082,6 +1225,7 @@ strategy`,
         entryRules: ['价格下跌触及网格线时买入'],
         exitRules: ['价格上涨一个网格时卖出'],
         riskRules: {
+          exchange: 'okx',
           marketType: 'perp',
           positionPct: 10,
         },
@@ -1112,6 +1256,7 @@ strategy`,
         entryRules: ['价格下跌触及网格线时买入'],
         exitRules: ['价格上涨一个网格时卖出'],
         riskRules: {
+          exchange: 'okx',
           marketType: 'perp',
           positionPct: 10,
         },
@@ -1125,6 +1270,18 @@ strategy`,
       params: expect.objectContaining({
         symbol: 'BTCUSDT',
         marketType: 'perp',
+      }),
+    }))
+    expect(mockRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      paramsSnapshot: expect.objectContaining({
+        exchange: 'okx',
+        marketType: 'perp',
+      }),
+      compiledIr: expect.objectContaining({
+        market: expect.objectContaining({
+          venue: 'okx',
+          instrumentType: 'perpetual',
+        }),
       }),
     }))
   })

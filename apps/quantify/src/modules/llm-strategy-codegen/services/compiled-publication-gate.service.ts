@@ -78,6 +78,7 @@ export class CompiledPublicationGateService {
         exchange: input.ir.market.venue,
         symbol: input.ir.market.symbol,
         timeframe: input.ir.market.timeframes[0] ?? null,
+        marketType: input.ir.market.instrumentType === 'perpetual' ? 'perp' : 'spot',
         positionPct: input.ir.portfolio.sizing.mode === 'pct_equity'
           ? input.ir.portfolio.sizing.value
           : null,

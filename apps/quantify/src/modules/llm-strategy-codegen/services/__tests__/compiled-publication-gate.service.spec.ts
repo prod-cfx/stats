@@ -105,6 +105,7 @@ describe('CompiledPublicationGateService', () => {
         exchange: 'binance',
         symbol: 'BTCUSDT',
         timeframe: '1h',
+        marketType: 'spot',
         positionPct: 25,
       },
       executionEnvelope: expect.objectContaining({ marginMode: 'cash' }),
@@ -112,13 +113,17 @@ describe('CompiledPublicationGateService', () => {
     }))
   })
 
-  it('keeps exchange and pct_equity positionPct in paramsSnapshot for non-long-only execution envelopes', async () => {
+  it('keeps exchange, marketType, and pct_equity positionPct in paramsSnapshot for non-long-only execution envelopes', async () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-2' }),
     }
     const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never)
     const ir = {
       ...createIrFixture(),
+      market: {
+        ...createIrFixture().market,
+        instrumentType: 'perpetual' as const,
+      },
       portfolio: {
         ...createIrFixture().portfolio,
         positionMode: 'long_short' as const,
@@ -177,6 +182,7 @@ describe('CompiledPublicationGateService', () => {
         exchange: 'binance',
         symbol: 'BTCUSDT',
         timeframe: '1h',
+        marketType: 'perp',
         positionPct: 25,
       },
     }))
