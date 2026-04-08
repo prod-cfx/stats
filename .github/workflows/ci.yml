@@ -307,6 +307,7 @@ jobs:
     env:
       NX_DAEMON: 'false'
       CI: '1'
+      APP_ENV: ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && 'production' || 'staging' }}
 
     steps:
       - name: 显示部署环境
@@ -440,6 +441,84 @@ jobs:
           unset NO_COLOR
           npx -y @ranger1/dx@${{ env.DX_VERSION }} --config-dir ./.tmp/dx-config deploy quantify "$DX_ENV_FLAG"
 
+      - name: 校验 quantify 远端运行时环境
+        env:
+          DEPLOY_ENV: ${{ secrets.DEPLOY_ENVIRONMENT }}
+          HOST: ${{ secrets.AWS_SSH_HOST }}
+          PORT: ${{ secrets.AWS_SSH_PORT }}
+          USER: ${{ secrets.AWS_SSH_USER }}
+        run: |
+          set -euo pipefail
+
+          case "$DEPLOY_ENV" in
+            "prod")
+              APP_ENV_NAME="production"
+              ;;
+            "staging")
+              APP_ENV_NAME="staging"
+              ;;
+            *)
+              echo "错误：不支持的部署环境: $DEPLOY_ENV"
+              exit 1
+              ;;
+          esac
+
+          ssh -p "$PORT" "$USER@$HOST" "APP_ENV_NAME=${APP_ENV_NAME} bash -s" <<'REMOTE'
+          set -euo pipefail
+          cd /opt/work/quantify/current
+
+          export APP_ENV="${APP_ENV_NAME}"
+
+          resolve_env_file() {
+            local filename="$1"
+            local candidates=(
+              "/opt/work/quantify/current/${filename}"
+              "/opt/work/quantify/shared/${filename}"
+              "/opt/work/quantify/${filename}"
+            )
+            for candidate in "${candidates[@]}"; do
+              if [ -f "$candidate" ]; then
+                echo "$candidate"
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          ENV_BASE_FILE="$(resolve_env_file ".env.${APP_ENV}" || true)"
+          ENV_LOCAL_FILE="$(resolve_env_file ".env.${APP_ENV}.local" || true)"
+          if [ -z "$ENV_BASE_FILE" ] || [ -z "$ENV_LOCAL_FILE" ]; then
+            echo "[ERROR] cannot locate quantify env files for APP_ENV=${APP_ENV}"
+            echo "[INFO] searched in: /opt/work/quantify/current /opt/work/quantify/shared /opt/work/quantify"
+            exit 1
+          fi
+
+          EXPECTED_APP_ENV="$APP_ENV" pnpm exec dotenv -e "$ENV_BASE_FILE" -e "$ENV_LOCAL_FILE" -- bash -lc '
+            set -euo pipefail
+            required_keys=(
+              APP_ENV
+              QUANTIFY_DATABASE_URL
+              QUANTIFY_REDIS_URL
+              QUANTIFY_APP_SECRET
+              QUANTIFY_JWT_SECRET
+            )
+
+            for key in "${required_keys[@]}"; do
+              value="${!key:-}"
+              if [ -z "$value" ] || [ "$value" = "__SET_IN_env.local__" ]; then
+                echo "[ERROR] missing required quantify env key: $key"
+                exit 1
+              fi
+              echo "[INFO] $key is present"
+            done
+
+            if [ "${APP_ENV}" != "${EXPECTED_APP_ENV}" ]; then
+              echo "[ERROR] APP_ENV mismatch: expected ${EXPECTED_APP_ENV}, got ${APP_ENV}"
+              exit 1
+            fi
+          '
+          REMOTE
+
       - name: 校验 quantify 当前运行产物包含 @ai/shared 兜底修复
         env:
           HOST: ${{ secrets.AWS_SSH_HOST }}
@@ -526,9 +605,9 @@ jobs:
           ENV_BASE_FILE="$(resolve_env_file ".env.${APP_ENV}" || true)"
           ENV_LOCAL_FILE="$(resolve_env_file ".env.${APP_ENV}.local" || true)"
           if [ -z "$ENV_BASE_FILE" ] || [ -z "$ENV_LOCAL_FILE" ]; then
-            echo "[WARN] cannot locate env files for APP_ENV=${APP_ENV}, skip extra migration verification"
+            echo "[ERROR] cannot locate env files for APP_ENV=${APP_ENV}"
             echo "[INFO] searched in: /opt/work/quantify/current /opt/work/quantify/shared /opt/work/quantify"
-            exit 0
+            exit 1
           fi
 
           pnpm exec dotenv -e "$ENV_BASE_FILE" -e "$ENV_LOCAL_FILE" -- bash -lc '
@@ -537,11 +616,43 @@ jobs:
               export DATABASE_URL="${QUANTIFY_DATABASE_URL}"
             fi
             if [ -z "${DATABASE_URL}" ] || [ "${DATABASE_URL}" = "__SET_IN_env.local__" ]; then
-              echo "[WARN] quantify DATABASE_URL is missing, skip extra migration verification"
-              exit 0
+              echo "[ERROR] quantify DATABASE_URL is missing"
+              exit 1
             fi
 
             pnpm --filter @net/quantify run prisma:migrate:deploy
             pnpm --filter @net/quantify run prisma:schema:audit
           '
+          REMOTE
+
+      - name: 校验 quantify 健康检查
+        env:
+          HOST: ${{ secrets.AWS_SSH_HOST }}
+          PORT: ${{ secrets.AWS_SSH_PORT }}
+          USER: ${{ secrets.AWS_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -p "$PORT" "$USER@$HOST" "bash -s" <<'REMOTE'
+          set -euo pipefail
+
+          if ! command -v curl >/dev/null 2>&1; then
+            echo "[ERROR] curl is required for quantify health check"
+            exit 1
+          fi
+
+          for attempt in $(seq 1 10); do
+            if RESPONSE="$(curl -fsS --max-time 5 http://127.0.0.1:3010/api/v1/health)"; then
+              echo "[INFO] quantify health response: ${RESPONSE}"
+              echo "${RESPONSE}" | grep -q '"service":"quantify"'
+              echo "${RESPONSE}" | grep -q '"status":"ok"'
+              exit 0
+            fi
+
+            echo "[WARN] quantify health check attempt ${attempt}/10 failed, retrying..."
+            sleep 3
+          done
+
+          echo "[ERROR] quantify health check failed after retries"
+          pm2 logs quantify --lines 120 --nostream || true
+          exit 1
           REMOTE
