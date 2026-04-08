@@ -30,7 +30,17 @@ import { CodegenSessionsRepository } from '../repositories/codegen-sessions.repo
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CanonicalSpecV2IrCompilerService } from './canonical-spec-v2-ir-compiler.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CanonicalStrategyAstCompilerService } from './canonical-strategy-ast-compiler.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CompiledPublicationGateService } from './compiled-publication-gate.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CompiledScriptEmitterService } from './compiled-script-emitter.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CompiledScriptExecutionEnvelopeService } from './compiled-script-execution-envelope.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RecommendationIndexService } from './recommendation-index.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -158,6 +168,13 @@ export class CodegenConversationService {
     private readonly clarificationRules: StrategyClarificationRulesService,
     private readonly clarificationQuestion: StrategyClarificationQuestionService,
     private readonly strategySummaryBuilder: StrategySummaryBuilderService,
+    private readonly canonicalSpecV2IrCompiler: CanonicalSpecV2IrCompilerService = new CanonicalSpecV2IrCompilerService(),
+    private readonly canonicalStrategyAstCompiler: CanonicalStrategyAstCompilerService = new CanonicalStrategyAstCompilerService(),
+    private readonly compiledScriptEmitter: CompiledScriptEmitterService = new CompiledScriptEmitterService(),
+    private readonly compiledScriptExecutionEnvelope: CompiledScriptExecutionEnvelopeService = new CompiledScriptExecutionEnvelopeService(),
+    private readonly compiledPublicationGate: CompiledPublicationGateService = new CompiledPublicationGateService(
+      publishedSnapshotsRepo,
+    ),
   ) {}
 
   async startSession(
@@ -702,20 +719,34 @@ export class CodegenConversationService {
         }
       }
 
-      const snapshot = await this.publishedSnapshotsRepo.create({
+      const compiled = this.canonicalSpecV2IrCompiler.compile({
+        canonicalSpec,
+        fallback: this.buildCompiledIrFallback({
+          checklist,
+          lockedParams,
+          publishParams: publishInput.params,
+        }),
+      })
+      const executionEnvelope = this.compiledScriptExecutionEnvelope.build(canonicalSpec)
+      const ast = this.canonicalStrategyAstCompiler.compile(compiled.ir)
+      const compiledScript = this.compiledScriptEmitter.emit({
+        ast,
+        executionEnvelope,
+      })
+
+      const snapshot = await this.compiledPublicationGate.publish({
         sessionId,
         strategyTemplateId,
         strategyInstanceId: strategyInstanceId ?? null,
-        scriptSnapshot: finalScriptCode,
-        specSnapshot: canonicalSpec as unknown as Record<string, unknown>,
-        consistencyReport: consistencyReport as unknown as Record<string, unknown>,
+        graphSnapshot: compiled.graphSnapshot,
+        ir: compiled.ir,
+        ast,
+        executionEnvelope,
+        script: compiledScript,
         userIntentSummary: userIntentSummary as unknown as Record<string, unknown>,
         strategySummary: strategySummary as unknown as Record<string, unknown>,
         scriptSummary: scriptSummary as unknown as Record<string, unknown>,
         lockedParams,
-        paramsSnapshot: publishInput.params,
-        executionPolicy: canonicalSpec.executionPolicy,
-        dataRequirements: canonicalSpec.dataRequirements,
       })
 
       await this.sessionsRepo.updateSession(sessionId, {
@@ -724,7 +755,7 @@ export class CodegenConversationService {
           ...specDesc,
           publishedSnapshotId: snapshot.id,
         } as unknown as Prisma.InputJsonValue,
-        latestDraftCode: finalScriptCode,
+        latestDraftCode: compiledScript,
         rejectReason: null,
         strategyInstanceId: strategyInstanceId ?? null,
       })
@@ -893,6 +924,38 @@ export class CodegenConversationService {
         confirmMessage: args.message,
         lockedParams: args.lockedParams,
       },
+    }
+  }
+
+  private buildCompiledIrFallback(args: {
+    checklist: ChecklistPayload
+    lockedParams: Record<string, unknown>
+    publishParams: Record<string, unknown>
+  }): {
+    exchange: 'binance' | 'okx' | 'hyperliquid'
+    symbol: string
+    baseTimeframe: string
+    positionPct: number
+    executionTags?: string[]
+  } {
+    const exchange = args.lockedParams.exchange
+    const symbol = args.publishParams.symbol
+    const timeframe = args.publishParams.timeframe
+    const positionPct = args.lockedParams.positionPct
+
+    return {
+      exchange: exchange === 'binance' || exchange === 'okx' || exchange === 'hyperliquid'
+        ? exchange
+        : 'binance',
+      symbol: typeof symbol === 'string' && symbol.trim().length > 0
+        ? symbol.trim()
+        : normalizePublishedSymbol(args.checklist.symbols?.[0] ?? 'BTCUSDT'),
+      baseTimeframe: typeof timeframe === 'string' && timeframe.trim().length > 0
+        ? timeframe.trim()
+        : (args.checklist.timeframes?.[0] ?? '5m'),
+      positionPct: typeof positionPct === 'number' && Number.isFinite(positionPct)
+        ? positionPct
+        : 10,
     }
   }
 

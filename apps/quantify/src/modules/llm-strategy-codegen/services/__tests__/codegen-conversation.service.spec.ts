@@ -538,6 +538,97 @@ strategy`,
     }))
   })
 
+  it('publishes compiled artifacts instead of raw canonical spec snapshots after confirmGenerate', async () => {
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '已确认逻辑，开始生成。',
+          logic: {
+            entryRules: ['短均线上穿长均线（金叉）时做多'],
+            exitRules: ['短均线下穿长均线（死叉）时平多'],
+          },
+        }),
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '已确认逻辑，开始生成。',
+        }),
+      })
+      .mockResolvedValueOnce({
+        content: `const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const bars = Array.isArray(ctx.bars) ? ctx.bars : []
+    if (bars.length < 20) return { action: 'NOOP', reason: 'insufficient bars' }
+    const closes = bars.map(item => item?.close).filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
+    if (closes.length < 20) return { action: 'NOOP', reason: 'insufficient closes' }
+    const fast = ctx.helpers?.ta?.sma(closes, 5)
+    const slow = ctx.helpers?.ta?.sma(closes, 20)
+    if (typeof fast !== 'number' || typeof slow !== 'number') return { action: 'NOOP', reason: 'sma unavailable' }
+    if (fast > slow) return { action: 'OPEN_LONG', size: { mode: 'RATIO', value: 0.1 }, confidence: 80, reason: 'golden cross' }
+    if (fast < slow) return { action: 'CLOSE_LONG', reason: 'death cross' }
+    return { action: 'NOOP', reason: 'wait' }
+  },
+}
+strategy`,
+      })
+    mockRepo.createSession.mockResolvedValue({ id: 's5-compiled' })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v-compiled' })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '短均线上穿长均线（金叉）时做多，短均线下穿长均线（死叉）时平多',
+    })
+
+    mockRepo.findById.mockResolvedValue({
+      id: 's5-compiled',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        entryRules: ['短均线上穿长均线（金叉）时做多'],
+        exitRules: ['短均线下穿长均线（死叉）时平多'],
+      },
+      constraintPack: {},
+    })
+
+    await service.continueSession('s5-compiled', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: started.canonicalDigest ?? undefined,
+    })
+
+    await waitForTerminalStatus('s5-compiled')
+
+    expect(mockRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      specSnapshot: expect.objectContaining({
+        version: 3,
+        status: 'confirmed',
+      }),
+      compiledIr: expect.objectContaining({
+        irVersion: 'csi.v1',
+        source: expect.objectContaining({
+          specHash: expect.stringMatching(/^sha256:/),
+        }),
+      }),
+      irSnapshot: expect.objectContaining({
+        irVersion: 'csi.v1',
+      }),
+      astSnapshot: expect.objectContaining({
+        astVersion: 'csa.v1',
+      }),
+      executionEnvelope: expect.objectContaining({
+        positionMode: 'long_only',
+      }),
+      scriptSnapshot: expect.stringContaining('COMPILED_MANIFEST'),
+      snapshotVersion: 2,
+    }))
+  })
+
   it('rejects confirmGenerate when confirmedCanonicalDigest does not match the current semantic view', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 'session-1',

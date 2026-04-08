@@ -8,9 +8,13 @@ import { PublishedStrategySnapshotsRepository } from './repositories/published-s
 import { CallerIdentityService } from './services/caller-identity.service'
 import { CanonicalSpecBuilderService } from './services/canonical-spec-builder.service'
 import { CanonicalSpecV2DigestService } from './services/canonical-spec-v2-digest.service'
+import { CanonicalSpecV2IrCompilerService } from './services/canonical-spec-v2-ir-compiler.service'
 import { CanonicalSpecV2ValidatorService } from './services/canonical-spec-v2-validator.service'
+import { CanonicalStrategyAstCompilerService } from './services/canonical-strategy-ast-compiler.service'
 import { CompiledPublicationGateService } from './services/compiled-publication-gate.service'
 import { CompiledScriptParserService } from './services/compiled-script-parser.service'
+import { CompiledScriptEmitterService } from './services/compiled-script-emitter.service'
+import { CompiledScriptExecutionEnvelopeService } from './services/compiled-script-execution-envelope.service'
 import { ChecklistGateService } from './services/checklist-gate.service'
 import { CodegenConversationService } from './services/codegen-conversation.service'
 import { RecommendationIndexService } from './services/recommendation-index.service'
@@ -36,7 +40,11 @@ import { StrategySummaryBuilderService } from './services/strategy-summary-build
     CanonicalSpecBuilderService,
     CanonicalSpecV2DigestService,
     CanonicalSpecV2ValidatorService,
+    CanonicalSpecV2IrCompilerService,
+    CanonicalStrategyAstCompilerService,
     CompiledScriptParserService,
+    CompiledScriptEmitterService,
+    CompiledScriptExecutionEnvelopeService,
     CompiledPublicationGateService,
     ScriptProfileExtractorService,
     StrategyConsistencyService,
