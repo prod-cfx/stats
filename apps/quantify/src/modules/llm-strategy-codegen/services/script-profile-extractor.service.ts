@@ -10,11 +10,13 @@ import type {
 import { Injectable } from '@nestjs/common'
 
 const ACTION_PATTERN = /action\s*:\s*['"]([A-Z_]+)['"]/g
+const GUARD_BREACH_ACTION_PATTERN = /onBreach\s*:\s*['"]([A-Z_]+)['"]/g
 const PARAM_PATTERN = /ctx\.params(?:Normalized)?\??\.([A-Za-z_]\w*)/g
 const DECISION_SIZE_PATTERN = /size\s*:\s*\{[^}]*mode\s*:\s*['"](RATIO|QUOTE|QTY)['"][^}]*value\s*:\s*([^,\n}]+)/
 const COMPILED_QUANTITY_PATTERN = /quantity\s*:\s*\{[^}]*mode\s*:\s*['"]([a-z_]+)['"][^}]*value\s*:\s*([^,\n}]+)/
 const LEGACY_RATIO_SIZE_PATTERN = /positionSizeRatio\s*:\s*([^,\n}]+)/
 const LEGACY_QUOTE_SIZE_PATTERN = /positionSizeQuote\s*:\s*([^,\n}]+)/
+const GUARD_PROGRAM_PATTERN = /kind\s*:\s*['"]([A-Z_]+)['"][^}]*onBreach\s*:\s*['"]([A-Z_]+)['"]/g
 
 @Injectable()
 export class ScriptProfileExtractorService {
@@ -100,6 +102,22 @@ export class ScriptProfileExtractorService {
         actions.add(action)
       }
     }
+    for (const match of scriptCode.matchAll(GUARD_BREACH_ACTION_PATTERN)) {
+      const action = match[1] as CanonicalAction
+      if (
+        action === 'OPEN_LONG'
+        || action === 'OPEN_SHORT'
+        || action === 'CLOSE_LONG'
+        || action === 'CLOSE_SHORT'
+        || action === 'REDUCE_LONG'
+        || action === 'REDUCE_SHORT'
+        || action === 'FORCE_EXIT'
+        || action === 'BLOCK_NEW_ENTRY'
+        || action === 'ADJUST_POSITION'
+      ) {
+        actions.add(action)
+      }
+    }
     return Array.from(actions)
   }
 
@@ -143,6 +161,25 @@ export class ScriptProfileExtractorService {
         push('ma.death_cross')
       }
     })
+
+    for (const match of scriptCode.matchAll(GUARD_PROGRAM_PATTERN)) {
+      const guardKind = match[1]
+      const action = match[2] as CanonicalAction
+      if (!this.isExecutableAction(action)) continue
+
+      if (guardKind === 'STOP_LOSS_PCT') {
+        const profile: StrategySemanticRuleProfile = {
+          key: 'position_loss_pct',
+          phase: 'risk',
+          sideScope: 'both',
+          action,
+        }
+        const ruleKey = `${profile.key}:${profile.phase}:${profile.sideScope}:${profile.action}`
+        if (!rules.has(ruleKey)) {
+          rules.set(ruleKey, profile)
+        }
+      }
+    }
 
     return Array.from(rules.values())
   }
