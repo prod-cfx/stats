@@ -343,18 +343,18 @@ describe('aiQuantProxyService', () => {
     quantifyClient.get.mockResolvedValue({ id: 'job-1', status: 'running' })
 
     const payload = { symbols: ['BTCUSDT'] }
-    await service.createBacktestJob('Bearer token-1', payload)
-    await service.getBacktestJob('Bearer token-1', 'job-1')
-    await service.getBacktestJobResult('Bearer token-1', 'job-1')
+    await service.createBacktestJob('user-1', 'Bearer token-1', payload)
+    await service.getBacktestJob('user-1', 'Bearer token-1', 'job-1')
+    await service.getBacktestJobResult('user-1', 'Bearer token-1', 'job-1')
 
     expect(quantifyClient.post).toHaveBeenCalledWith('/backtesting/jobs', payload, {
-      headers: { authorization: 'Bearer token-1' },
+      headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
     })
     expect(quantifyClient.get).toHaveBeenNthCalledWith(1, '/backtesting/jobs/job-1', {
-      headers: { authorization: 'Bearer token-1' },
+      headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
     })
     expect(quantifyClient.get).toHaveBeenNthCalledWith(2, '/backtesting/jobs/job-1/result', {
-      headers: { authorization: 'Bearer token-1' },
+      headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
     })
   })
 
@@ -362,7 +362,7 @@ describe('aiQuantProxyService', () => {
     const { service, quantifyClient } = createService()
     quantifyClient.post.mockResolvedValue({ status: 'supported' })
 
-    await expect(service.checkBacktestSymbolSupport('Bearer token-1', {
+    await expect(service.checkBacktestSymbolSupport('user-1', 'Bearer token-1', {
       exchange: 'okx',
       symbol: 'ETHUSDC',
     })).resolves.toEqual({ status: 'supported' })
@@ -371,7 +371,7 @@ describe('aiQuantProxyService', () => {
       exchange: 'okx',
       symbol: 'ETHUSDC',
     }, {
-      headers: { authorization: 'Bearer token-1' },
+      headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
     })
   })
 
@@ -380,18 +380,18 @@ describe('aiQuantProxyService', () => {
     quantifyClient.post.mockResolvedValue({ id: 'job-1', status: 'queued' })
     quantifyClient.get.mockResolvedValue({ id: 'job-1', status: 'running' })
 
-    await service.createBacktestJob('Bearer token-1', { symbols: ['BTCUSDT'] }, 'req-1')
-    await service.getBacktestJob('Bearer token-1', 'job-1', 'req-1')
-    await service.getBacktestJobResult('Bearer token-1', 'job-1', 'req-1')
+    await service.createBacktestJob('user-1', 'Bearer token-1', { symbols: ['BTCUSDT'] }, 'req-1')
+    await service.getBacktestJob('user-1', 'Bearer token-1', 'job-1', 'req-1')
+    await service.getBacktestJobResult('user-1', 'Bearer token-1', 'job-1', 'req-1')
 
     expect(quantifyClient.post).toHaveBeenCalledWith('/backtesting/jobs', { symbols: ['BTCUSDT'] }, {
-      headers: { authorization: 'Bearer token-1', 'x-request-id': 'req-1' },
+      headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1', 'x-request-id': 'req-1' },
     })
     expect(quantifyClient.get).toHaveBeenNthCalledWith(1, '/backtesting/jobs/job-1', {
-      headers: { authorization: 'Bearer token-1', 'x-request-id': 'req-1' },
+      headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1', 'x-request-id': 'req-1' },
     })
     expect(quantifyClient.get).toHaveBeenNthCalledWith(2, '/backtesting/jobs/job-1/result', {
-      headers: { authorization: 'Bearer token-1', 'x-request-id': 'req-1' },
+      headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1', 'x-request-id': 'req-1' },
     })
   })
 
@@ -399,7 +399,7 @@ describe('aiQuantProxyService', () => {
     const { service, quantifyClient } = createService()
     quantifyClient.post.mockResolvedValue({ status: 'supported' })
 
-    await service.checkBacktestSymbolSupport('Bearer token-1', {
+    await service.checkBacktestSymbolSupport('user-1', 'Bearer token-1', {
       exchange: 'okx',
       symbol: 'ETHUSDC',
     }, 'req-1')
@@ -408,7 +408,7 @@ describe('aiQuantProxyService', () => {
       exchange: 'okx',
       symbol: 'ETHUSDC',
     }, {
-      headers: { authorization: 'Bearer token-1', 'x-request-id': 'req-1' },
+      headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1', 'x-request-id': 'req-1' },
     })
   })
 
@@ -416,7 +416,7 @@ describe('aiQuantProxyService', () => {
     const { service, quantifyClient } = createService()
     quantifyClient.post.mockRejectedValue(new QuantifyClientError('upstream timeout', 502, 'UPSTREAM_REQUEST_FAILED'))
 
-    await expect(service.createBacktestJob('Bearer token-1', { symbols: ['BTCUSDT'] })).rejects.toMatchObject({
+    await expect(service.createBacktestJob('user-1', 'Bearer token-1', { symbols: ['BTCUSDT'] })).rejects.toMatchObject({
       status: 503,
       code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
     })
@@ -426,7 +426,7 @@ describe('aiQuantProxyService', () => {
     const { service, quantifyClient } = createService()
     quantifyClient.get.mockRejectedValue(new QuantifyClientError('gateway', 503, 'UPSTREAM_REQUEST_FAILED'))
 
-    await expect(service.getBacktestJob('Bearer token-1', 'job-1')).rejects.toMatchObject({
+    await expect(service.getBacktestJob('user-1', 'Bearer token-1', 'job-1')).rejects.toMatchObject({
       status: 503,
       code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
     })
@@ -436,7 +436,7 @@ describe('aiQuantProxyService', () => {
     const { service, quantifyClient } = createService()
     quantifyClient.get.mockRejectedValue(new QuantifyClientError('gateway', 502, 'UPSTREAM_INVALID_RESPONSE'))
 
-    await expect(service.getBacktestJobResult('Bearer token-1', 'job-1')).rejects.toMatchObject({
+    await expect(service.getBacktestJobResult('user-1', 'Bearer token-1', 'job-1')).rejects.toMatchObject({
       status: 503,
       code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
     })
@@ -451,7 +451,7 @@ describe('aiQuantProxyService', () => {
       { reasonMessage: 'bad request' },
     ))
 
-    await expect(service.createBacktestJob('Bearer token-1', { symbols: ['BTCUSDT'] })).rejects.toMatchObject({
+    await expect(service.createBacktestJob('user-1', 'Bearer token-1', { symbols: ['BTCUSDT'] })).rejects.toMatchObject({
       status: 400,
       code: ErrorCode.BAD_REQUEST,
       message: 'bad request',

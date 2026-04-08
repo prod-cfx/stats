@@ -38,9 +38,10 @@ export class BacktestingController {
   @Post('run')
   async run(
     @Headers('authorization') authorization: string | undefined,
+    @Headers('x-user-id') forwardedUserId: string | undefined,
     @Body() dto: RunBacktestDto,
   ) {
-    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     const strategy = await this.resolveStrategy(dto, callerUserId)
     return this.runner.run({ ...dto, strategy, bars: dto.bars ?? [] } as BacktestRunInput)
   }
@@ -49,11 +50,12 @@ export class BacktestingController {
   @Post('jobs')
   async createJob(
     @Headers('authorization') authorization: string | undefined,
+    @Headers('x-user-id') forwardedUserId: string | undefined,
     @Headers('x-request-id') requestId: string | undefined,
     @Body() dto: RunBacktestDto,
   ) {
     try {
-      const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+      const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
       const strategy = await this.resolveStrategy(dto, callerUserId)
       return this.jobsService.createJob({ ...dto, strategy, bars: dto.bars ?? [] } as BacktestRunInput, callerUserId)
     } catch (error) {
@@ -79,18 +81,20 @@ export class BacktestingController {
   @Get('jobs/:id')
   async getJob(
     @Headers('authorization') authorization: string | undefined,
+    @Headers('x-user-id') forwardedUserId: string | undefined,
     @Param('id') id: string,
   ) {
-    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.jobsService.getJob(id, callerUserId)
   }
 
   @Get('jobs/:id/result')
   async getJobResult(
     @Headers('authorization') authorization: string | undefined,
+    @Headers('x-user-id') forwardedUserId: string | undefined,
     @Param('id') id: string,
   ) {
-    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.jobsService.getJobResult(id, callerUserId)
   }
 
@@ -122,10 +126,11 @@ export class BacktestingController {
   @Post('symbols/check')
   async checkSymbolSupport(
     @Headers('authorization') authorization: string | undefined,
+    @Headers('x-user-id') forwardedUserId: string | undefined,
     @Headers('x-request-id') requestId: string | undefined,
     @Body() dto: CheckBacktestSymbolDto,
   ) {
-    await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     try {
       return await this.symbolSupportService.checkSupport(dto.exchange, dto.symbol)
     } catch (error) {

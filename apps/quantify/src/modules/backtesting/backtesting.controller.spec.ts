@@ -60,7 +60,7 @@ jest.mock('@nestjs/throttler', () => ({
 describe('backtestingController', () => {
   it('retains runtime DTO metadata for symbol support requests', () => {
     const paramTypes = Reflect.getMetadata('design:paramtypes', BacktestingController.prototype, 'checkSymbolSupport')
-    expect(paramTypes?.[2]?.name).toBe('CheckBacktestSymbolDto')
+    expect(paramTypes?.[3]?.name).toBe('CheckBacktestSymbolDto')
   })
 
   it('should expose run and jobs endpoint methods', async () => {
@@ -150,19 +150,19 @@ describe('backtestingController', () => {
       bars: [],
     }
 
-    await c.run('Bearer token', dto)
-    await c.createJob('Bearer token', 'req-job-1', dto)
-    await c.getJob('Bearer token', 'job-1')
-    await c.getJobResult('Bearer token', 'job-1')
+    await c.run('Bearer token', 'user-1', dto)
+    await c.createJob('Bearer token', 'user-1', 'req-job-1', dto)
+    await c.getJob('Bearer token', 'user-1', 'job-1')
+    await c.getJobResult('Bearer token', 'user-1', 'job-1')
     await c.getCapabilities('req-1')
-    await c.checkSymbolSupport('Bearer token', 'req-3', { exchange: 'okx', symbol: 'ETHUSDC' })
+    await c.checkSymbolSupport('Bearer token', 'user-1', 'req-3', { exchange: 'okx', symbol: 'ETHUSDC' })
 
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenCalledTimes(5)
-    expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(1, 'Bearer token')
-    expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(2, 'Bearer token')
-    expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(3, 'Bearer token')
-    expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(4, 'Bearer token')
-    expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(5, 'Bearer token')
+    expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(1, 'Bearer token', 'user-1')
+    expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(2, 'Bearer token', 'user-1')
+    expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(3, 'Bearer token', 'user-1')
+    expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(4, 'Bearer token', 'user-1')
+    expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(5, 'Bearer token', 'user-1')
     expect(snapshotLoader.load).toHaveBeenCalledTimes(2)
     expect(snapshotLoader.load).toHaveBeenCalledWith({
       id: 's1',
@@ -215,8 +215,8 @@ describe('backtestingController', () => {
       bars: [],
     }
 
-    await c.run('Bearer token', dto)
-    await c.createJob('Bearer token', 'req-job-1', dto)
+    await c.run('Bearer token', 'user-1', dto)
+    await c.createJob('Bearer token', 'user-1', 'req-job-1', dto)
 
     expect(snapshotLoader.load).toHaveBeenCalledTimes(2)
     expect(snapshotLoader.load).toHaveBeenCalledWith({
@@ -286,7 +286,7 @@ describe('backtestingController', () => {
 
     const c = mod.get(BacktestingController)
 
-    await expect(c.checkSymbolSupport('Bearer token', 'req-4', { exchange: 'okx', symbol: 'BTCUSDT' })).rejects.toMatchObject({
+    await expect(c.checkSymbolSupport('Bearer token', 'user-1', 'req-4', { exchange: 'okx', symbol: 'BTCUSDT' })).rejects.toMatchObject({
       code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
       status: HttpStatus.SERVICE_UNAVAILABLE,
       args: { exchange: 'okx', symbol: 'BTCUSDT', reasonMessage: 'catalog crashed' },
@@ -328,7 +328,7 @@ describe('backtestingController', () => {
       bars: [],
     }
 
-    await expect(c.createJob('Bearer token', 'req-job-2', dto)).rejects.toMatchObject({
+    await expect(c.createJob('Bearer token', 'user-1', 'req-job-2', dto)).rejects.toMatchObject({
       code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
       status: HttpStatus.SERVICE_UNAVAILABLE,
       args: {

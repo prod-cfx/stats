@@ -248,27 +248,37 @@ export class AiQuantProxyService {
     }
   }
 
-  async createBacktestJob(authorization: string | undefined, body: Record<string, unknown>, requestId?: string) {
+  async createBacktestJob(
+    userId: string,
+    authorization: string | undefined,
+    body: Record<string, unknown>,
+    requestId?: string,
+  ) {
     return this.quantifyClient.post('/backtesting/jobs', body, {
-      headers: this.proxyHeaders(authorization, requestId),
+      headers: this.userProxyHeaders(userId, authorization, requestId),
     }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
 
-  async checkBacktestSymbolSupport(authorization: string | undefined, body: Record<string, unknown>, requestId?: string) {
+  async checkBacktestSymbolSupport(
+    userId: string,
+    authorization: string | undefined,
+    body: Record<string, unknown>,
+    requestId?: string,
+  ) {
     return this.quantifyClient.post('/backtesting/symbols/check', body, {
-      headers: this.proxyHeaders(authorization, requestId),
+      headers: this.userProxyHeaders(userId, authorization, requestId),
     }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
 
-  async getBacktestJob(authorization: string | undefined, id: string, requestId?: string) {
+  async getBacktestJob(userId: string, authorization: string | undefined, id: string, requestId?: string) {
     return this.quantifyClient.get(`/backtesting/jobs/${encodeURIComponent(id)}`, {
-      headers: this.proxyHeaders(authorization, requestId),
+      headers: this.userProxyHeaders(userId, authorization, requestId),
     }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
 
-  async getBacktestJobResult(authorization: string | undefined, id: string, requestId?: string) {
+  async getBacktestJobResult(userId: string, authorization: string | undefined, id: string, requestId?: string) {
     return this.quantifyClient.get(`/backtesting/jobs/${encodeURIComponent(id)}/result`, {
-      headers: this.proxyHeaders(authorization, requestId),
+      headers: this.userProxyHeaders(userId, authorization, requestId),
     }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
 
@@ -296,6 +306,13 @@ export class AiQuantProxyService {
   private proxyHeaders(authorization: string | undefined, requestId?: string) {
     return {
       ...(authorization ? { authorization } : {}),
+      ...(requestId ? { 'x-request-id': requestId } : {}),
+    }
+  }
+
+  private userProxyHeaders(userId: string, authorization: string | undefined, requestId?: string) {
+    return {
+      ...this.userHeaders(userId, authorization),
       ...(requestId ? { 'x-request-id': requestId } : {}),
     }
   }
