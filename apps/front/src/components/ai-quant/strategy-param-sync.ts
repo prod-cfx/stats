@@ -14,6 +14,46 @@ export interface StrategyParamSyncResult {
   executionTags: string[]
 }
 
+interface CanonicalRuleCondition {
+  key?: string
+  value?: unknown
+}
+
+interface CanonicalRuleAction {
+  type?: string
+  sizing?: {
+    mode?: string
+    value?: unknown
+  }
+}
+
+interface CanonicalRule {
+  phase?: string
+  condition?: CanonicalRuleCondition
+  actions?: CanonicalRuleAction[]
+}
+
+function deriveEntryRulesFromCanonicalRules(rules: CanonicalRule[]): string[] {
+  return rules
+    .filter(rule => rule.phase === 'entry')
+    .flatMap((rule) => {
+      switch (rule.condition?.key) {
+        case 'bollinger.upper_break':
+          return ['突破布林带上轨']
+        case 'bollinger.lower_break':
+          return ['突破布林带下轨']
+        default:
+          return []
+      }
+    })
+}
+
+function deriveExitRulesFromCanonicalRules(rules: CanonicalRule[]): string[] {
+  return rules
+    .filter(rule => rule.phase === 'exit')
+    .flatMap(rule => rule.condition?.key === 'bollinger.middle_revert' ? ['价格回到布林带中轨（MA20）平仓'] : [])
+}
+
 const STRATEGY_PARAM_KEYS = new Set([
   'exchange',
   'marketType',
@@ -81,7 +121,7 @@ function inferExchange(text: string, fallback: StrategyParamSyncFallback['exchan
 }
 
 function inferMarketType(text: string): 'spot' | 'perp' | null {
-  if (/永续|perp|perpetual|swap|合约/i.test(text)) return 'perp'
+  if (/永续|perpetual|perp|swap|合约/i.test(text)) return 'perp'
   if (/现货|spot/i.test(text)) return 'spot'
   return null
 }
@@ -120,24 +160,24 @@ function setNumberField(
 }
 
 function extractWindowDropRule(rule: string): { windowMin: number, pct: number } | null {
-  const match = rule.match(/(\d+)\s*m\s*内下跌\s*([0-9]+(?:\.[0-9]+)?)%/i)
+  const match = rule.match(/(\d+)\s*m\s*内下跌\s*(\d+(?:\.\d+)?)%/i)
   if (!match) return null
   return { windowMin: Number(match[1]), pct: Number(match[2]) }
 }
 
 function extractWindowRiseRule(rule: string): { windowMin: number, pct: number } | null {
-  const match = rule.match(/(\d+)\s*m\s*内上涨\s*([0-9]+(?:\.[0-9]+)?)%/i)
+  const match = rule.match(/(\d+)\s*m\s*内上涨\s*(\d+(?:\.\d+)?)%/i)
   if (!match) return null
   return { windowMin: Number(match[1]), pct: Number(match[2]) }
 }
 
 function extractPriceRule(rule: string): number | null {
-  const match = rule.match(/价格(?:达到|到达|上涨到|涨到|跌到|触及)\s*([0-9]+(?:\.[0-9]+)?)/)
+  const match = rule.match(/价格(?:达到|到达|上涨到|涨到|跌到|触及)\s*(\d+(?:\.\d+)?)/)
   return match ? Number(match[1]) : null
 }
 
 function extractPriceRange(text: string): { lower: number, upper: number } | null {
-  const match = text.match(/([0-9]+(?:\.[0-9]+)?)\s*[-~到至]\s*([0-9]+(?:\.[0-9]+)?)/)
+  const match = text.match(/(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)/)
   if (!match?.[1] || !match[2]) return null
   const lower = Number(match[1])
   const upper = Number(match[2])
@@ -167,10 +207,52 @@ export function syncStrategyParamsFromCodegen(args: {
   contextText?: string
 }): StrategyParamSyncResult {
   const typed = asObject(args.spec) ?? {}
-  const market = asObject(typed.market) ?? {}
-  const riskRules = asObject(typed.riskRules) ?? {}
-  const entryRules = asStringArray(typed.entryRules)
-  const exitRules = asStringArray(typed.exitRules)
+  const canonicalSpec = asObject(typed.canonicalSpec) ?? {}
+  const canonicalMarket = asObject(canonicalSpec.market) ?? {}
+  const topLevelRules = Array.isArray(typed.rules) ? typed.rules as CanonicalRule[] : []
+  const market = asObject(typed.market) ?? canonicalMarket
+  const derivedRiskRules = (() => {
+    if (topLevelRules.length === 0) return {}
+    const next: Record<string, unknown> = {}
+    const lockedParams = asObject(typed.lockedParams)
+    const exchange = parseString(lockedParams?.exchange) ?? parseString(canonicalMarket.exchange)
+    if (exchange) next.exchange = exchange
+    const marketType = parseString(canonicalMarket.marketType)
+    if (marketType) next.marketType = marketType
+    const positionPct = parseNumber(lockedParams?.positionPct)
+      ?? (() => {
+        const openAction = topLevelRules.flatMap(rule => rule.actions ?? []).find(action => action.sizing)
+        const sizingValue = parseNumber(openAction?.sizing?.value)
+        if (sizingValue === null) return null
+        return sizingValue <= 1 ? sizingValue * 100 : sizingValue
+      })()
+    if (positionPct !== null) next.positionPct = positionPct
+
+    for (const rule of topLevelRules) {
+      if (rule.phase !== 'risk') continue
+      if (rule.condition?.key === 'position_loss_pct') {
+        const stopLossPct = parseNumber(rule.condition.value)
+        if (stopLossPct !== null) {
+          next.stopLossPct = stopLossPct <= 1 ? stopLossPct * 100 : stopLossPct
+        }
+      }
+      if (rule.condition?.key === 'bollinger.bars_outside') {
+        const bars = parseNumber(rule.condition.value) ?? 3
+        const actions = (rule.actions ?? [])
+          .map(action => action.type)
+          .filter((value): value is string => typeof value === 'string')
+        next.earlyStop = `价格连续${bars}根K线在轨外时${actions.includes('FORCE_EXIT') ? '提前止损' : '减仓'}`
+      }
+    }
+    return next
+  })()
+  const riskRules = asObject(typed.riskRules) ?? derivedRiskRules
+  const entryRules = topLevelRules.length > 0
+    ? deriveEntryRulesFromCanonicalRules(topLevelRules)
+    : asStringArray(typed.entryRules)
+  const exitRules = topLevelRules.length > 0
+    ? deriveExitRulesFromCanonicalRules(topLevelRules)
+    : asStringArray(typed.exitRules)
   const marketSymbols = asStringArray(market.symbols)
   const marketTimeframes = asStringArray(market.timeframes)
   const allowedSymbols = args.capabilities?.allowedSymbols ?? []
@@ -185,7 +267,7 @@ export function syncStrategyParamsFromCodegen(args: {
   const symbolEnum = [nextSymbol, ...allowedSymbols.filter(item => item !== nextSymbol)]
   const nextBaseTimeframe = inferBaseTimeframe(marketTimeframes, args.fallback.baseTimeframe, allowedBaseTimeframes)
   const parsedPositionPct = parseNumber(riskRules.positionPct)
-    ?? parseNumber(contextText.match(/([0-9]+(?:\.[0-9]+)?)%\s*(?:仓位|总仓位|仓位的)/)?.[1])
+    ?? parseNumber(contextText.match(/(\d+(?:\.\d+)?)%\s*(?:总仓位|仓位)/)?.[1])
     ?? args.fallback.positionPct
   const nextMarketType = (() => {
     const fromRiskRules = parseString(riskRules.marketType)?.toLowerCase()

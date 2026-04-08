@@ -263,4 +263,68 @@ describe('strategy-param-sync', () => {
     expect(result.paramValues.gridStepPct).toBe(1.67)
     expect((result.paramSchema.properties as Record<string, any>).marketType.title).toBe('Market Type')
   })
+
+  it('syncs params from canonical specDesc rules and locked params', () => {
+    const result = syncStrategyParamsFromCodegen({
+      spec: {
+        rules: [
+          {
+            phase: 'entry',
+            condition: { key: 'bollinger.upper_break' },
+            actions: [{ type: 'OPEN_SHORT', sizing: { mode: 'RATIO', value: 0.1 } }],
+          },
+          {
+            phase: 'entry',
+            condition: { key: 'bollinger.lower_break' },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.1 } }],
+          },
+          {
+            phase: 'exit',
+            condition: { key: 'bollinger.middle_revert' },
+            actions: [{ type: 'CLOSE_LONG' }, { type: 'CLOSE_SHORT' }],
+          },
+          {
+            phase: 'risk',
+            condition: { key: 'position_loss_pct', value: 0.05 },
+            actions: [{ type: 'FORCE_EXIT' }],
+          },
+        ],
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+        lockedParams: {
+          exchange: 'okx',
+          positionPct: 10,
+          stopLossPct: 5,
+        },
+        canonicalSpec: {
+          market: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+            marketType: 'spot',
+          },
+        },
+      },
+      fallback: {
+        exchange: 'binance',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '1h',
+        positionPct: 25,
+      },
+      capabilities: {
+        allowedSymbols: ['BTCUSDT', 'ETHUSDT'],
+        allowedBaseTimeframes: ['15m', '1h'],
+      },
+      contextText: '在okx交易所，交易对BTCUSDT 15分钟图上，突破布林带上轨做空、突破下轨做多，仓位10%；出场条件为价格回到布林带中轨（MA20）平仓、亏损≥5%强制止损。',
+    })
+
+    expect(result.paramValues.exchange).toBe('okx')
+    expect(result.paramValues.symbol).toBe('BTCUSDT')
+    expect(result.paramValues.baseTimeframe).toBe('15m')
+    expect(result.paramValues.positionPct).toBe(10)
+    expect(result.paramValues.marketType).toBe('spot')
+    expect(result.paramValues.stopLossPct).toBe(5)
+  })
 })
