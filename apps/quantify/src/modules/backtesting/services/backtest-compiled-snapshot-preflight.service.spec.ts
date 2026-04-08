@@ -1,7 +1,13 @@
 import type { CanonicalStrategyIrV1 } from '@/modules/llm-strategy-codegen/types/canonical-strategy-ir'
+import type { PublishedStrategySnapshot } from '@/prisma/prisma.types'
 import { CanonicalStrategyAstCompilerService } from '@/modules/llm-strategy-codegen/services/canonical-strategy-ast-compiler.service'
 import { CompiledScriptEmitterService } from '@/modules/llm-strategy-codegen/services/compiled-script-emitter.service'
 import { BacktestCompiledSnapshotPreflightService } from './backtest-compiled-snapshot-preflight.service'
+
+type BacktestCompiledSnapshotInput = Pick<
+  PublishedStrategySnapshot,
+  'id' | 'scriptSnapshot' | 'irSnapshot' | 'astSnapshot' | 'compiledManifest'
+>
 
 function createCompiledSnapshotFixture() {
   const ir = createIrFixture()
@@ -32,17 +38,20 @@ describe('backtestCompiledSnapshotPreflightService', () => {
 
   it('accepts bare hex digests in snapshot manifests after sha256 normalization', () => {
     const fixture = createCompiledSnapshotFixture()
-
-    expect(() => service.validate({
+    const snapshot: BacktestCompiledSnapshotInput = {
       ...fixture,
+      irSnapshot: fixture.irSnapshot as unknown as BacktestCompiledSnapshotInput['irSnapshot'],
+      astSnapshot: fixture.astSnapshot as unknown as BacktestCompiledSnapshotInput['astSnapshot'],
       compiledManifest: {
         ...fixture.compiledManifest,
         specHash: fixture.compiledManifest.specHash.replace('sha256:', ''),
         irHash: fixture.compiledManifest.irHash.replace('sha256:', ''),
         astDigest: fixture.compiledManifest.astDigest.replace('sha256:', ''),
         structuralDigest: fixture.compiledManifest.structuralDigest.replace('sha256:', ''),
-      },
-    })).not.toThrow()
+      } as unknown as BacktestCompiledSnapshotInput['compiledManifest'],
+    }
+
+    expect(() => service.validate(snapshot)).not.toThrow()
   })
 })
 
