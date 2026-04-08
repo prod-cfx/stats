@@ -3,12 +3,16 @@ import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires value import with emitDecoratorMetadata
 import { EnvService } from '@/common/services/env.service'
+import { UserIdMismatchException } from '../exceptions'
 
 @Injectable()
 export class AccountStrategyCallerIdentityService {
   constructor(private readonly env: EnvService) {}
 
-  async resolveCallerUserIdFromAuthorization(authorization: string | undefined): Promise<string> {
+  async resolveCallerUserIdFromAuthorization(
+    authorization: string | undefined,
+    forwardedUserId?: string | undefined,
+  ): Promise<string> {
     const normalizedAuth = authorization?.trim()
     if (!normalizedAuth) {
       throw new DomainException('account_strategy.missing_authorization_header', {
@@ -32,6 +36,18 @@ export class AccountStrategyCallerIdentityService {
         code: ErrorCode.UNAUTHORIZED,
         status: HttpStatus.UNAUTHORIZED,
       })
+    }
+
+    const jwtUserId = this.extractUserIdFromJwtPayload(payload)
+    const normalizedForwardedUserId = forwardedUserId?.trim()
+    if (normalizedForwardedUserId) {
+      if (!jwtUserId || jwtUserId !== normalizedForwardedUserId) {
+        throw new UserIdMismatchException({
+          authUserId: jwtUserId ?? undefined,
+          inputUserId: normalizedForwardedUserId,
+        })
+      }
+      return normalizedForwardedUserId
     }
 
     const callerUserId = await this.verifyTokenByBackendAuth(token)
@@ -101,6 +117,22 @@ export class AccountStrategyCallerIdentityService {
     const directId = record.id
     if (typeof directId === 'string' && directId.trim()) {
       return directId.trim()
+    }
+    return null
+  }
+
+  private extractUserIdFromJwtPayload(payload: Record<string, unknown>): string | null {
+    const sub = payload.sub
+    if (typeof sub === 'string' && sub.trim()) {
+      return sub.trim()
+    }
+    const userId = payload.userId
+    if (typeof userId === 'string' && userId.trim()) {
+      return userId.trim()
+    }
+    const id = payload.id
+    if (typeof id === 'string' && id.trim()) {
+      return id.trim()
     }
     return null
   }

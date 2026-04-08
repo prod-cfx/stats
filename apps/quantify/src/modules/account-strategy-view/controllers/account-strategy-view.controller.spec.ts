@@ -30,9 +30,9 @@ describe('accountStrategyViewController', () => {
       userId: 'attacker',
       subscribedOnly: true,
       excludeDraft: true,
-    } as any, 'Bearer token')
+    } as any, 'Bearer token', 'caller-u1')
 
-    expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token')
+    expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token', 'caller-u1')
     expect(service.listStrategies).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'caller-u1',
@@ -48,9 +48,9 @@ describe('accountStrategyViewController', () => {
     }
     const { controller, callerIdentityService } = createController(service)
 
-    await controller.detail('inst-1', 'Bearer token')
+    await controller.detail('inst-1', 'Bearer token', 'caller-u1')
 
-    expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token')
+    expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token', 'caller-u1')
     expect(service.getStrategyDetail).toHaveBeenCalledWith('caller-u1', 'inst-1')
   })
 
@@ -64,9 +64,10 @@ describe('accountStrategyViewController', () => {
       'inst-1',
       { action: AccountStrategyAction.RUN, userId: 'attacker' } as any,
       'Bearer token',
+      'caller-u1',
     )
 
-    expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token')
+    expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token', 'caller-u1')
     expect(service.performAction).toHaveBeenCalledWith(
       'inst-1',
       expect.objectContaining({ userId: 'caller-u1', action: AccountStrategyAction.RUN }),
@@ -90,9 +91,10 @@ describe('accountStrategyViewController', () => {
         deployRequestId: 'req-1',
       } as any,
       'Bearer token',
+      'caller-u1',
     )
 
-    expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token')
+    expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token', 'caller-u1')
     expect(service.deployStrategy).toHaveBeenCalledWith(
       expect.objectContaining({
         userId: 'caller-u1',
@@ -107,9 +109,9 @@ describe('accountStrategyViewController', () => {
     }
     const { controller, callerIdentityService } = createController(service)
 
-    await controller.remove('inst-1', 'Bearer token')
+    await controller.remove('inst-1', 'Bearer token', 'caller-u1')
 
-    expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token')
+    expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token', 'caller-u1')
     expect(service.deleteStrategy).toHaveBeenCalledWith('caller-u1', 'inst-1')
   })
 })
