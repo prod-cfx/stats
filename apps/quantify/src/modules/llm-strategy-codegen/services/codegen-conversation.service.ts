@@ -1816,12 +1816,22 @@ export class CodegenConversationService {
   }
 
   private mergeChecklistSnapshots(base: ChecklistPayload, patch: ChecklistPayload): ChecklistPayload {
+    const mergedRiskRules = (() => {
+      const baseRiskRules = base.riskRules ?? {}
+      const patchRiskRules = patch.riskRules ?? {}
+      const merged = {
+        ...baseRiskRules,
+        ...patchRiskRules,
+      }
+      return Object.keys(merged).length > 0 ? merged : undefined
+    })()
+
     const merged = {
       symbols: patch.symbols && patch.symbols.length > 0 ? patch.symbols : base.symbols,
       timeframes: patch.timeframes && patch.timeframes.length > 0 ? patch.timeframes : base.timeframes,
       entryRules: patch.entryRules && patch.entryRules.length > 0 ? patch.entryRules : base.entryRules,
       exitRules: patch.exitRules && patch.exitRules.length > 0 ? patch.exitRules : base.exitRules,
-      riskRules: patch.riskRules && Object.keys(patch.riskRules).length > 0 ? patch.riskRules : base.riskRules,
+      riskRules: mergedRiskRules,
     }
     return this.normalizeChecklist(merged)
   }
