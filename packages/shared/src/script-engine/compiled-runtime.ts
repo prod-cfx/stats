@@ -1,6 +1,6 @@
 export { canonicalSerialize } from './compiled-runtime/canonical-serialize'
 export { buildCompiledManifest } from './compiled-runtime/build-compiled-manifest'
+export { runOrderPrograms } from './compiled-runtime/run-order-programs'
 export { evaluateExprPool } from './compiled-runtime/evaluate-expr-pool'
 export { evaluateGuards } from './compiled-runtime/evaluate-guards'
 export { runDecisionPrograms } from './compiled-runtime/run-decision-programs'
-export { runOrderPrograms } from './compiled-runtime/run-order-programs'
