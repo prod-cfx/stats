@@ -2,6 +2,7 @@ import { describe, expect, it } from '@jest/globals'
 import {
   buildAutoAdvanceMessage,
   buildLockedChecklistFromGraph,
+  buildLockedChecklistFromSpecDesc,
   isAssistantDraftLikeMessage,
   isShortConfirmationMessage,
   resolveChecklistPayload,
@@ -108,6 +109,81 @@ describe('ai-quant session-loop', () => {
       '价格向下突破布林带下轨时做多',
     ])
     expect(payload.exitRules).toEqual(['价格回到布林带中轨（MA20）'])
+  })
+
+  it('prefers specDesc canonical rules when confirmGenerate rebuilds checklist', () => {
+    const payload = resolveChecklistPayload({
+      usePresetRules: false,
+      confirmGenerate: true,
+      message: '确认',
+      sessionId: 'session-1',
+      graph,
+      specDesc: {
+        rules: [
+          {
+            phase: 'entry',
+            condition: { key: 'bollinger.upper_break' },
+          },
+          {
+            phase: 'entry',
+            condition: { key: 'bollinger.lower_break' },
+          },
+          {
+            phase: 'exit',
+            condition: { key: 'bollinger.middle_revert' },
+          },
+        ],
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+        lockedParams: {
+          exchange: 'okx',
+          positionPct: 10,
+          stopLossPct: 5,
+        },
+      },
+      params: baseParams,
+      paramValues: {
+        exchange: 'okx',
+        positionPct: 10,
+        stopLossPct: 5,
+      },
+    } as any)
+
+    expect(payload.entryRules).toEqual([
+      '价格向上突破布林带上轨时做空',
+      '价格向下突破布林带下轨时做多',
+    ])
+    expect(payload.exitRules).toEqual(['价格回到布林带中轨（MA20）'])
+    expect(payload.symbols).toEqual(['BTCUSDT'])
+    expect(payload.timeframes).toEqual(['15m'])
+  })
+
+  it('builds locked checklist directly from specDesc canonical rules', () => {
+    const payload = buildLockedChecklistFromSpecDesc({
+      rules: [
+        { phase: 'entry', condition: { key: 'bollinger.upper_break' } },
+        { phase: 'entry', condition: { key: 'bollinger.lower_break' } },
+        { phase: 'exit', condition: { key: 'bollinger.middle_revert' } },
+      ],
+      market: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+      },
+      lockedParams: {
+        exchange: 'okx',
+        positionPct: 10,
+      },
+    }, baseParams)
+
+    expect(payload.entryRules).toEqual([
+      '价格向上突破布林带上轨时做空',
+      '价格向下突破布林带下轨时做多',
+    ])
+    expect(payload.exitRules).toEqual(['价格回到布林带中轨（MA20）'])
+    expect(payload.symbols).toEqual(['BTCUSDT'])
+    expect(payload.timeframes).toEqual(['15m'])
   })
 
   it('recognizes short confirmation messages', () => {

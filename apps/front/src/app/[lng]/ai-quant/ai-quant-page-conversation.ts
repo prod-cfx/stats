@@ -101,6 +101,7 @@ export interface ConversationState {
   paramValues: Record<string, unknown>
   backtestResult: BacktestResult | null
   logicGraph: StrategyLogicGraph | null
+  codegenSpecDesc: Record<string, unknown> | null
   semanticGraph: LlmSemanticGraph | null
   validationReport: LlmSemanticGraphValidationReport | null
   pendingCanonicalDigest: string | null
@@ -423,6 +424,7 @@ export function createConversation(translate: (key: string) => string, now = Dat
     paramValues: { ...DEFAULT_PARAM_VALUES },
     backtestResult: null,
     logicGraph: null,
+    codegenSpecDesc: null,
     semanticGraph: null,
     validationReport: null,
     pendingCanonicalDigest: null,
@@ -474,6 +476,10 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
     paramValues: normalizedBacktestExecutionConfig.paramValues,
     backtestResult: item.backtestResult ?? null,
     logicGraph: item.logicGraph ?? null,
+    codegenSpecDesc:
+      item.codegenSpecDesc && typeof item.codegenSpecDesc === 'object' && !Array.isArray(item.codegenSpecDesc)
+        ? item.codegenSpecDesc
+        : null,
     semanticGraph:
       item.semanticGraph && typeof item.semanticGraph === 'object' && !Array.isArray(item.semanticGraph)
         ? item.semanticGraph

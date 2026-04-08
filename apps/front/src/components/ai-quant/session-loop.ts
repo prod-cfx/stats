@@ -37,6 +37,25 @@ export interface SessionLoopResolveError {
 
 type SessionLoopResolveResult = SessionChecklistPayload | SessionLoopResolveError
 
+interface CanonicalRuleCondition {
+  key?: string
+  value?: unknown
+}
+
+interface CanonicalRuleAction {
+  type?: string
+  sizing?: {
+    mode?: string
+    value?: unknown
+  }
+}
+
+interface CanonicalRule {
+  phase?: string
+  condition?: CanonicalRuleCondition
+  actions?: CanonicalRuleAction[]
+}
+
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === 'string' && value.trim().length > 0
 }
@@ -181,6 +200,65 @@ export function buildLockedChecklistFromGraph(
   }
 }
 
+export function buildLockedChecklistFromSpecDesc(
+  specDesc: Record<string, unknown> | null | undefined,
+  params: SessionLoopParams,
+  paramValues?: Record<string, unknown> | null,
+): SessionChecklistPayload {
+  const typed = specDesc && typeof specDesc === 'object' && !Array.isArray(specDesc)
+    ? specDesc
+    : null
+  if (!typed) {
+    return buildLockedChecklistFromGraph(null, params, paramValues)
+  }
+
+  const rules = Array.isArray((typed as { rules?: unknown }).rules)
+    ? ((typed as { rules: CanonicalRule[] }).rules)
+    : []
+  const market = (typed as { market?: { symbols?: unknown, timeframes?: unknown } }).market
+  const lockedParams = (typed as { lockedParams?: Record<string, unknown> }).lockedParams
+
+  const entryRules = rules
+    .filter(rule => rule.phase === 'entry')
+    .flatMap((rule) => {
+      switch (rule.condition?.key) {
+        case 'bollinger.upper_break':
+          return ['价格向上突破布林带上轨时做空']
+        case 'bollinger.lower_break':
+          return ['价格向下突破布林带下轨时做多']
+        default:
+          return []
+      }
+    })
+  const exitRules = rules
+    .filter(rule => rule.phase === 'exit')
+    .flatMap((rule) => {
+      switch (rule.condition?.key) {
+        case 'bollinger.middle_revert':
+          return ['价格回到布林带中轨（MA20）']
+        default:
+          return []
+      }
+    })
+
+  const locked = deriveLockedChecklist(params, {
+    ...paramValues,
+    symbol: typeof lockedParams?.symbol === 'string' ? lockedParams.symbol : paramValues?.symbol,
+    symbols: Array.isArray(market?.symbols) ? market.symbols : paramValues?.symbols,
+    timeframes: Array.isArray(market?.timeframes) ? market.timeframes : paramValues?.timeframes,
+    riskRules: {
+      ...(paramValues?.riskRules && typeof paramValues.riskRules === 'object' ? paramValues.riskRules as Record<string, unknown> : {}),
+      ...(lockedParams ?? {}),
+    },
+  })
+
+  return {
+    entryRules: entryRules.length > 0 ? entryRules : undefined,
+    exitRules: exitRules.length > 0 ? exitRules : undefined,
+    ...locked,
+  }
+}
+
 export function isStrategyModificationIntent(message: string): boolean {
   const text = message.trim().toLowerCase()
   if (!text) return false
@@ -193,6 +271,7 @@ export function resolveChecklistPayload(input: {
   message: string
   sessionId: string | null
   graph: StrategyLogicGraph | null | undefined
+  specDesc?: Record<string, unknown> | null
   params: SessionLoopParams
   paramSchema?: Record<string, unknown> | null
   paramValues?: Record<string, unknown> | null
@@ -234,8 +313,13 @@ export function resolveChecklistPayload(input: {
     }
   }
 
-  if (input.confirmGenerate && input.graph) {
-    return buildLockedChecklistFromGraph(input.graph, input.params, input.paramValues)
+  if (input.confirmGenerate) {
+    if (input.specDesc) {
+      return buildLockedChecklistFromSpecDesc(input.specDesc, input.params, input.paramValues)
+    }
+    if (input.graph) {
+      return buildLockedChecklistFromGraph(input.graph, input.params, input.paramValues)
+    }
   }
 
   const shouldReuseGraphChecklist = Boolean(input.sessionId) || isStrategyModificationIntent(input.message)

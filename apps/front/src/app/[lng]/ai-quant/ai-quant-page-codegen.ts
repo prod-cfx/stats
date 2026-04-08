@@ -491,6 +491,10 @@ export async function requestAiQuantCodegen(args: {
         return {
           ...conv,
           llmCodegenSessionId: shouldReuseCodegenSession ? activeSessionId : null,
+          codegenSpecDesc:
+            response.specDesc && typeof response.specDesc === 'object' && !Array.isArray(response.specDesc)
+              ? response.specDesc
+              : conv.codegenSpecDesc,
           publishedStrategyInstanceId: resolvePublishedStrategyInstanceId({
             response,
             isStartingNewSession: !activeSessionId,
@@ -526,6 +530,7 @@ export async function requestAiQuantCodegen(args: {
       message: trimmedMessage,
       sessionId,
       graph: currentConversation?.logicGraph,
+      specDesc: currentConversation?.codegenSpecDesc ?? null,
       params: targetParams,
       paramSchema: currentConversation?.paramSchema ?? null,
       paramValues: currentConversation?.paramValues ?? null,
