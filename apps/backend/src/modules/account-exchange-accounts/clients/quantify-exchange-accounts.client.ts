@@ -2,6 +2,7 @@ import type { AccountExchangeAccountResponseDto } from '../dto/account-exchange-
 import type { CreateAccountExchangeAccountDto } from '../dto/create-account-exchange-account.dto'
 import type { AuthenticatedUser } from '@/common/types/authenticated-user.type'
 import { Inject, Injectable } from '@nestjs/common'
+import { normalizeAppEnv } from '@/common/env/env.accessor'
 import { EnvService } from '@/common/services/env.service'
 
 interface QuantifyErrorPayload {
@@ -14,6 +15,11 @@ interface QuantifyErrorPayload {
 }
 
 const ENV_PLACEHOLDER = '__SET_IN_env.local__'
+const INTERNAL_QUANTIFY_API_BASE_URL = 'http://127.0.0.1:3010/api/v1'
+const STAGING_PUBLIC_QUANTIFY_HOSTS = new Set([
+  'cfx-quantify-staging.devbase.cloud',
+  'cfx-quantify-stg.devbase.cloud',
+])
 
 function tryParseJson<T>(raw: string): T | null {
   if (!raw.trim()) {
@@ -42,6 +48,20 @@ function normalizeConfiguredUrl(value: string | undefined): string | undefined {
     return undefined
   }
   return normalized
+}
+
+function shouldBypassPublicQuantifyGateway(appEnv: string | undefined, configuredUrl: string | undefined): boolean {
+  if (!configuredUrl) {
+    return false
+  }
+  if (normalizeAppEnv(appEnv) !== 'staging') {
+    return false
+  }
+  try {
+    return STAGING_PUBLIC_QUANTIFY_HOSTS.has(new URL(configuredUrl).hostname)
+  } catch {
+    return false
+  }
 }
 
 export class QuantifyClientError extends Error {
@@ -154,11 +174,17 @@ export class QuantifyExchangeAccountsClient {
 
   private baseUrl(): string {
     const explicitApiBase = normalizeConfiguredUrl(this.env.getString('QUANTIFY_API_BASE_URL'))
+    if (shouldBypassPublicQuantifyGateway(this.env.getString('APP_ENV'), explicitApiBase)) {
+      return INTERNAL_QUANTIFY_API_BASE_URL
+    }
     if (explicitApiBase) {
       return normalizeQuantifyBaseUrl(explicitApiBase)
     }
 
     const base = normalizeConfiguredUrl(this.env.getString('QUANTIFY_BASE_URL'))
+    if (shouldBypassPublicQuantifyGateway(this.env.getString('APP_ENV'), base)) {
+      return INTERNAL_QUANTIFY_API_BASE_URL
+    }
     if (base) {
       return normalizeQuantifyBaseUrl(base)
     }

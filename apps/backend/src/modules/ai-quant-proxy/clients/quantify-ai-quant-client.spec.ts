@@ -116,6 +116,30 @@ describe('quantifyAiQuantClient', () => {
     )
   })
 
+  it('falls back to localhost when staging config points to the public quantify domain', async () => {
+    const envWithPublicStagingDomain = {
+      getString: jest.fn((key: string) => {
+        if (key === 'APP_ENV') return 'staging'
+        if (key === 'QUANTIFY_API_BASE_URL') return 'https://cfx-quantify-staging.devbase.cloud/api/v1'
+        return undefined
+      }),
+      getNumber: jest.fn(() => undefined),
+    }
+
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ data: { ok: true } }),
+    } as Response)
+
+    const client = new QuantifyAiQuantClient(envWithPublicStagingDomain as any)
+    await expect(client.get('/llm-strategy-instances')).resolves.toEqual({ ok: true })
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://127.0.0.1:3010/api/v1/llm-strategy-instances',
+      expect.objectContaining({ method: 'GET' }),
+    )
+  })
+
   it('converts request timeouts into QuantifyClientError without leaking raw Error construction', async () => {
     jest.useFakeTimers()
     const abort = jest.spyOn(AbortController.prototype, 'abort')
