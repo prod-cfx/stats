@@ -34,6 +34,51 @@ describe('backtestCompiledRuntimeCompat', () => {
     expect(values.entry_cross).toBe(true)
   })
 
+  it('evaluates CROSS_OVER correctly for EMA series inputs', () => {
+    const values = evaluateExprPool(
+      {
+        bars: [
+          { time: 1, open: 100, high: 101, low: 99, close: 100 },
+          { time: 2, open: 100, high: 101, low: 99, close: 100 },
+          { time: 3, open: 100, high: 101, low: 99, close: 100 },
+          { time: 4, open: 110, high: 111, low: 109, close: 110 },
+        ],
+      } as any,
+      [
+        {
+          id: 'close_now',
+          nodeType: 'series',
+          sourceRef: 'close_1h',
+          payload: { kind: 'PRICE', field: 'close', timeframe: '1h' },
+        },
+        {
+          id: 'ema_fast',
+          nodeType: 'series',
+          sourceRef: 'ema_2',
+          deps: ['close_now'],
+          payload: { kind: 'EMA', inputs: ['close_1h'], params: { period: 2 } },
+        },
+        {
+          id: 'ema_slow',
+          nodeType: 'series',
+          sourceRef: 'ema_3',
+          deps: ['close_now'],
+          payload: { kind: 'EMA', inputs: ['close_1h'], params: { period: 3 } },
+        },
+        {
+          id: 'entry_cross',
+          nodeType: 'predicate',
+          deps: ['ema_fast', 'ema_slow'],
+          payload: { kind: 'CROSS_OVER' },
+        },
+      ] as any,
+      ['close_now', 'ema_fast', 'ema_slow', 'entry_cross'],
+    )
+
+    expect(values.ema_fast).toBeGreaterThan(values.ema_slow as number)
+    expect(values.entry_cross).toBe(true)
+  })
+
   it('converts REDUCE_SHORT into a valid ADJUST_POSITION delta decision', () => {
     const decision = runDecisionPrograms(
       {

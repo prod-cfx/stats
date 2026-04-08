@@ -1,6 +1,6 @@
 import type { Bar } from '../helpers'
 import type { StrategyExecutionContextV1 } from '../../strategy-protocol'
-import { bollingerBands } from '../helpers/technical-indicators'
+import { bollingerBands, ema, sma } from '../helpers/technical-indicators'
 
 export type CompiledRuntimeValue =
   | number
@@ -71,10 +71,12 @@ function evaluateSeries(
   switch (node.payload.kind) {
     case 'CONST':
       return typeof node.payload.value === 'number' ? node.payload.value : null
-    case 'PRICE':
-    case 'UPPER_BAND':
-    case 'MID_BAND':
-    case 'LOWER_BAND':
+      case 'PRICE':
+      case 'EMA':
+      case 'SMA':
+      case 'UPPER_BAND':
+      case 'MID_BAND':
+      case 'LOWER_BAND':
     case 'BOLLINGER_BARS_OUTSIDE':
       return resolveSeriesValueAt(node.id, 0, ctx, executionModel, exprIndex, seriesMemo)
     default: {
@@ -225,6 +227,16 @@ function resolveSeriesValueAt(
           (node.payload.offsetBars ?? 0) + offset,
           executionModel,
         )
+      case 'EMA':
+      case 'SMA': {
+        const inputId = resolveSeriesInputNodeId(node, exprIndex)
+        const period = readNumericParam(node.payload.params, 'period') ?? 20
+        const history = collectSeriesHistory(inputId, offset + (node.payload.offsetBars ?? 0), ctx, executionModel, exprIndex, seriesMemo)
+        if (node.payload.kind === 'EMA') {
+          return ema(history, period)
+        }
+        return sma(history, period)
+      }
       case 'UPPER_BAND':
       case 'MID_BAND':
       case 'LOWER_BAND': {
@@ -276,6 +288,26 @@ function resolveSeriesValueAt(
 
   seriesMemo?.set(memoKey, resolved)
   return resolved
+}
+
+function collectSeriesHistory(
+  nodeId: string | undefined,
+  offset: number,
+  ctx: StrategyExecutionContextV1,
+  executionModel?: Record<string, unknown>,
+  exprIndex?: ReadonlyMap<string, CompiledExprNode>,
+  seriesMemo?: Map<string, number | null>,
+): number[] {
+  const bars = Array.isArray(ctx.bars) ? ctx.bars : []
+  if (bars.length === 0 || offset < 0 || offset >= bars.length) return []
+
+  const result: number[] = []
+  for (let relative = bars.length - 1; relative >= offset; relative -= 1) {
+    const value = resolveSeriesValueAt(nodeId, relative, ctx, executionModel, exprIndex, seriesMemo)
+    if (value == null) return []
+    result.push(value)
+  }
+  return result
 }
 
 function collectSeriesWindow(
