@@ -114,4 +114,27 @@ describe('canonicalSpecBuilderService', () => {
       }),
     ]))
   })
+
+  it('uses checklist riskRules.exchange as canonical market exchange when provided', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['短均线上穿长均线时做多'],
+      exitRules: ['短均线下穿长均线时平多'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+      },
+    })
+
+    expect(spec.market).toEqual({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      marketType: 'perp',
+      timeframe: '15m',
+    })
+  })
 })

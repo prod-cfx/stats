@@ -32,6 +32,10 @@ import {
 } from '@/components/ai-quant/backtest-payload-builder'
 import { checkBacktestSymbolSupport } from '@/components/ai-quant/backtest-symbol-support-client'
 import { BacktestSummaryCard } from '@/components/ai-quant/BacktestSummaryCard'
+import {
+  canConfirmSemanticView,
+  readCanonicalDigest,
+} from '@/components/ai-quant/canonical-confirmation'
 import { ConversationSidebar } from '@/components/ai-quant/ConversationSidebar'
 import { DeployDialog } from '@/components/ai-quant/DeployDialog'
 import { GuestAiQuantLanding } from '@/components/ai-quant/GuestAiQuantLanding'
@@ -163,6 +167,7 @@ interface ConversationState {
   logicGraph: StrategyLogicGraph | null
   semanticGraph: LlmSemanticGraph | null
   validationReport: LlmSemanticGraphValidationReport | null
+  pendingCanonicalDigest: string | null
   llmCodegenSessionId: string | null
   publishedStrategyInstanceId: string | null
   publishedSnapshotId: string | null
@@ -497,6 +502,7 @@ function invalidateConversationPublication(
       markGraphDraft && conversation.logicGraph
         ? { ...conversation.logicGraph, status: 'draft' }
         : conversation.logicGraph,
+    pendingCanonicalDigest: null,
     publishedStrategyInstanceId: null,
     publishedSnapshotId: null,
     publishedScriptCode: null,
@@ -689,6 +695,7 @@ export function AiQuantPageClient() {
       logicGraph: null,
       semanticGraph: null,
       validationReport: null,
+      pendingCanonicalDigest: null,
       llmCodegenSessionId: null,
       publishedStrategyInstanceId: null,
       publishedSnapshotId: null,
@@ -786,6 +793,10 @@ export function AiQuantPageClient() {
           validationReport:
             item.validationReport && typeof item.validationReport === 'object' && !Array.isArray(item.validationReport)
               ? item.validationReport
+              : null,
+          pendingCanonicalDigest:
+            typeof item.pendingCanonicalDigest === 'string' && item.pendingCanonicalDigest.trim()
+              ? item.pendingCanonicalDigest.trim()
               : null,
           llmCodegenSessionId: item.llmCodegenSessionId ?? null,
           publishedStrategyInstanceId: item.publishedStrategyInstanceId ?? null,
@@ -1022,9 +1033,10 @@ export function AiQuantPageClient() {
     return activeConversation.backtestResult.maxDrawdownPct <= 20
   }, [activeConversation?.backtestResult])
   const graphConfirmed = activeConversation?.logicGraph?.status === 'confirmed'
-  const semanticGraphExecutable = Boolean(
-    activeConversation?.semanticGraph && activeConversation.validationReport?.ok === true,
-  )
+  const semanticViewConfirmable = canConfirmSemanticView({
+    logicGraph: activeConversation?.logicGraph,
+    pendingCanonicalDigest: activeConversation?.pendingCanonicalDigest,
+  })
   const codegenBusy = activeConversation
     ? codegenBusyConversationIds.includes(activeConversation.id)
     : false
@@ -1107,6 +1119,7 @@ export function AiQuantPageClient() {
     sessionId: string | null
     usePresetRules?: boolean
     confirmGenerate?: boolean
+    confirmedCanonicalDigest?: string
   }) => {
     const {
       conversationId,
@@ -1115,6 +1128,7 @@ export function AiQuantPageClient() {
       sessionId,
       usePresetRules = false,
       confirmGenerate = false,
+      confirmedCanonicalDigest,
     } = args
     if (!session?.userId) return
     if (codegenRequestMutexRef.current.has(conversationId)) return
@@ -1276,6 +1290,12 @@ export function AiQuantPageClient() {
           const nextValidationReport = hasSemanticGraphPayload(response, 'validationReport')
             ? (response.validationReport ?? null)
             : conv.validationReport
+          const nextPendingCanonicalDigest = (() => {
+            if (typeof response.canonicalDigest === 'string' && response.canonicalDigest.trim()) {
+              return response.canonicalDigest.trim()
+            }
+            return readCanonicalDigest(response.specDesc)
+          })()
           const publishedReply = response.scriptCode
             ? `${
                 confirmGenerate
@@ -1330,6 +1350,7 @@ export function AiQuantPageClient() {
             logicGraph: nextGraph,
             semanticGraph: nextSemanticGraph,
             validationReport: nextValidationReport,
+            pendingCanonicalDigest: nextPendingCanonicalDigest ?? conv.pendingCanonicalDigest,
             backtestResult: null,
             latestSignalMessage: null,
             messages: [
@@ -1401,6 +1422,7 @@ export function AiQuantPageClient() {
         continueLlmCodegenSession(id, {
           message: trimmedMessage,
           confirmGenerate,
+          confirmedCanonicalDigest,
           ...checklistPayload,
         })
 
@@ -1546,7 +1568,7 @@ export function AiQuantPageClient() {
     const confirmPattern =
       /^(?:确认逻辑图|\/confirm|确认|可以|好的?|行|ok|okay|yes|同意|没问题)[。.!！?？\s]*$/i
     if (currentGraphStatus === 'draft' && confirmPattern.test(trimmedInput)) {
-      if (!semanticGraphExecutable) {
+      if (!semanticViewConfirmable) {
         appendSemanticGraphGuardMessage(currentConversationId)
         return
       }
@@ -1570,12 +1592,13 @@ export function AiQuantPageClient() {
         sessionId: currentSessionId,
         usePresetRules: false,
         confirmGenerate: true,
+        confirmedCanonicalDigest: activeConversation.pendingCanonicalDigest ?? undefined,
       })
       return
     }
 
     if (autoAdvance) {
-      if (!semanticGraphExecutable) {
+      if (!semanticViewConfirmable) {
         appendSemanticGraphGuardMessage(currentConversationId)
         return
       }
@@ -1586,6 +1609,7 @@ export function AiQuantPageClient() {
         sessionId: currentSessionId,
         usePresetRules: false,
         confirmGenerate: true,
+        confirmedCanonicalDigest: activeConversation.pendingCanonicalDigest ?? undefined,
       })
       return
     }
@@ -2155,13 +2179,13 @@ export function AiQuantPageClient() {
                 confirmDisabled={
                   codegenBusy ||
                   activeConversation.logicGraph.status === 'confirmed' ||
-                  !semanticGraphExecutable
+                  !semanticViewConfirmable
                 }
                 onConfirm={() => {
                   const currentConversationId = activeConversation.id
                   const currentParams = activeConversation.params
                   const currentSessionId = activeConversation.llmCodegenSessionId
-                  if (!semanticGraphExecutable) {
+                  if (!semanticViewConfirmable) {
                     appendSemanticGraphGuardMessage(currentConversationId)
                     return
                   }
@@ -2187,6 +2211,7 @@ export function AiQuantPageClient() {
                     sessionId: currentSessionId,
                     usePresetRules: false,
                     confirmGenerate: true,
+                    confirmedCanonicalDigest: activeConversation.pendingCanonicalDigest ?? undefined,
                   })
                 }}
                 onRevise={() => {

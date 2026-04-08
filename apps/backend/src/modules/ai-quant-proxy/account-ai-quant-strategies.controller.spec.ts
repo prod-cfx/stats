@@ -50,10 +50,7 @@ describe('accountAiQuantStrategiesController', () => {
     await controller.deploy('user-1', 'Bearer token-1', {
       name: 'My Strategy',
       deployRequestId: 'deploy-req-1',
-      exchange: 'binance',
-      symbol: 'BTCUSDT',
-      timeframe: '15m',
-      positionPct: 10,
+      publishedSnapshotId: 'snapshot-1',
       strategyInstanceId: 'strategy-instance-1',
       exchangeAccountId: 'exchange-account-1',
       exchangeAccountName: 'Binance Testnet',
@@ -62,10 +59,7 @@ describe('accountAiQuantStrategiesController', () => {
     expect(service.deployAccountStrategy).toHaveBeenCalledWith('user-1', 'Bearer token-1', {
       name: 'My Strategy',
       deployRequestId: 'deploy-req-1',
-      exchange: 'binance',
-      symbol: 'BTCUSDT',
-      timeframe: '15m',
-      positionPct: 10,
+      publishedSnapshotId: 'snapshot-1',
       strategyInstanceId: 'strategy-instance-1',
       exchangeAccountId: 'exchange-account-1',
       exchangeAccountName: 'Binance Testnet',

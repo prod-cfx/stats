@@ -2105,6 +2105,7 @@ export interface LlmCodegenSessionResponse {
   missingFields?: string[]
   scriptCode?: string | null
   publishedSnapshotId?: string | null
+  canonicalDigest?: string | null
   consistencyReport?: Record<string, unknown> | null
   specDesc?: Record<string, unknown> | null
   semanticGraph?: LlmSemanticGraph | null
@@ -2168,6 +2169,7 @@ export interface StartLlmCodegenSessionPayload {
 export interface ContinueLlmCodegenSessionPayload {
   message: string
   confirmGenerate?: boolean
+  confirmedCanonicalDigest?: string
   symbols?: string[]
   timeframes?: string[]
   entryRules?: string[]

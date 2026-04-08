@@ -70,11 +70,21 @@ export class AiQuantProxyService {
   ) {
     await this.assertExchangeAccountExists(userId, body.exchangeAccountId)
 
+    const payload: Record<string, unknown> = {
+      userId,
+      name: body.name,
+      deployRequestId: body.deployRequestId,
+      publishedSnapshotId: body.publishedSnapshotId,
+    }
+    if (body.strategyInstanceId !== undefined) payload.strategyInstanceId = body.strategyInstanceId
+    if (body.exchangeAccountId !== undefined) payload.exchangeAccountId = body.exchangeAccountId
+    if (body.exchangeAccountName !== undefined) payload.exchangeAccountName = body.exchangeAccountName
+
     for (let attempt = 1; attempt <= AiQuantProxyService.DEPLOY_RETRY_ATTEMPTS; attempt += 1) {
       try {
         return await this.quantifyClient.post(
           '/account/ai-quant/strategies/deploy',
-          { ...body, userId },
+          payload,
           { headers: this.userHeaders(userId, authorization) },
         )
       } catch (error) {

@@ -62,7 +62,7 @@ export class StrategyConsistencyService {
     strategySummary?: StrategySummary
     scriptSummary?: StrategySummary
   }): StrategyConsistencyReport {
-    const scriptProfile = this.scriptProfileExtractor.extract(input.scriptCode)
+    const scriptProfile = this.extractCompiledScriptProfile(input.scriptCode)
     const derivedScriptSummary = input.scriptSummary ?? this.buildScriptSummaryFromProfile(scriptProfile)
     const specProfile = this.specToProfile(input.canonicalSpec)
     const checks: StrategyConsistencyCheck[] = []
@@ -923,8 +923,31 @@ export class StrategyConsistencyService {
     predicateKind: string
     predicateId: string
   }): StrategySemanticRuleKey | null {
-    if (input.predicateKind === 'CROSS_OVER') return 'bollinger.upper_break'
-    if (input.predicateKind === 'CROSS_UNDER') return 'bollinger.lower_break'
+    const predicateId = input.predicateId.toLowerCase()
+    if (
+      input.predicateKind === 'CROSS_OVER'
+      && (predicateId.includes('golden_cross') || predicateId.includes('ma.golden_cross'))
+    ) {
+      return 'ma.golden_cross'
+    }
+    if (
+      input.predicateKind === 'CROSS_UNDER'
+      && (predicateId.includes('death_cross') || predicateId.includes('ma.death_cross'))
+    ) {
+      return 'ma.death_cross'
+    }
+    if (
+      input.predicateKind === 'CROSS_OVER'
+      && (predicateId.includes('upper') || predicateId.includes('bollinger'))
+    ) {
+      return 'bollinger.upper_break'
+    }
+    if (
+      input.predicateKind === 'CROSS_UNDER'
+      && (predicateId.includes('lower') || predicateId.includes('bollinger'))
+    ) {
+      return 'bollinger.lower_break'
+    }
     if (input.predicateKind === 'OR' && input.predicateId.includes('middle')) return 'bollinger.middle_revert'
     if (input.predicateId.includes('outside')) return 'bollinger.bars_outside'
     if (input.predicateId.includes('stop-loss') || input.predicateId.includes('loss')) return 'position_loss_pct'
