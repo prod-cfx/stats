@@ -7,9 +7,9 @@ import type { AiService } from '@/modules/ai/ai.service'
 import { restoreProcessEnv, setProcessEnvValue, snapshotProcessEnv } from '@/common/env/env.accessor'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2DigestService } from '../canonical-spec-v2-digest.service'
+import { CodegenConversationService } from '../codegen-conversation.service'
 import { CompiledPublicationGateService } from '../compiled-publication-gate.service'
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
-import { CodegenConversationService } from '../codegen-conversation.service'
 import { RuntimeGuardrailService } from '../runtime-guardrail.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
 import { SpecDescBuilderService } from '../spec-desc-builder.service'
@@ -176,6 +176,31 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       checklist: expect.objectContaining({
         entryRules: ['K线收盘后确认突破布林带上轨时做空'],
+      }),
+      clarificationState: expect.objectContaining({ status: 'CLEAR' }),
+    }))
+  })
+
+  it('captures exchange and risk clauses from natural language without bypassing clarification flow', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-real-pipeline-1' })
+
+    const result = await service.startSession({
+      userId: 'u-1',
+      initialMessage:
+        '在okx交易所，交易对BTCUSDT 15分钟图上，突破布林带上轨做空、突破下轨做多，仓位10%；出场条件为价格回到布林带中轨（MA20）平仓、亏损≥5%强制止损，以及价格连续3根K线在轨外时提前止损或减仓。',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      checklist: expect.objectContaining({
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        riskRules: expect.objectContaining({
+          exchange: 'okx',
+          positionPct: 10,
+          stopLossPct: 5,
+          earlyStop: expect.stringContaining('连续3根K线'),
+        }),
       }),
       clarificationState: expect.objectContaining({ status: 'CLEAR' }),
     }))

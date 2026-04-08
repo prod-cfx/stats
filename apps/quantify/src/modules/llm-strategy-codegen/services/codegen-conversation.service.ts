@@ -4,8 +4,8 @@ import type { CodegenSessionResponseDto } from '../dto/codegen-session.response.
 import type { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.dto'
 import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-test.response.dto'
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
-import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
+import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyConsistencyReport } from '../types/strategy-consistency-report'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 import type { Prisma } from '@/prisma/prisma.types'
@@ -20,28 +20,28 @@ import { AiService } from '@/modules/ai/ai.service'
 import { createDefaultConstraintPack } from '../constants/constraint-pack'
 import { buildConversationPlannerSystemPrompt } from '../prompts/conversation-planner-system.prompt'
 import { buildStrategyCodegenSystemPrompt } from '../prompts/strategy-codegen-system.prompt'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CodegenSessionsRepository } from '../repositories/codegen-sessions.repository'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
 import {
   STRATEGY_CLARIFICATION_ITEM_STATUSES,
   STRATEGY_CLARIFICATION_REASONS,
   STRATEGY_CLARIFICATION_STATUSES,
 } from '../types/strategy-clarification'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
-import { CodegenSessionsRepository } from '../repositories/codegen-sessions.repository'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
-import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
-import { CanonicalSpecV2IrCompilerService } from './canonical-spec-v2-ir-compiler.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+ 
+import { CanonicalSpecV2IrCompilerService } from './canonical-spec-v2-ir-compiler.service'
+ 
 import { CanonicalStrategyAstCompilerService } from './canonical-strategy-ast-compiler.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+ 
 import { CompiledPublicationGateService } from './compiled-publication-gate.service'
-import { CompiledScriptParserService } from './compiled-script-parser.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+ 
 import { CompiledScriptEmitterService } from './compiled-script-emitter.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+ 
 import { CompiledScriptExecutionEnvelopeService } from './compiled-script-execution-envelope.service'
+import { CompiledScriptParserService } from './compiled-script-parser.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RecommendationIndexService } from './recommendation-index.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -1159,17 +1159,36 @@ export class CodegenConversationService {
     }
 
     const riskRules: Record<string, unknown> = {}
+    if (/\bokx\b/i.test(text)) {
+      riskRules.exchange = 'okx'
+    } else if (/hyperliquid/i.test(text)) {
+      riskRules.exchange = 'hyperliquid'
+    } else if (/binance/i.test(text)) {
+      riskRules.exchange = 'binance'
+    }
+
+    if (/永续|perp|swap|合约/i.test(text)) {
+      riskRules.marketType = 'perp'
+    } else if (/现货|spot/i.test(text)) {
+      riskRules.marketType = 'spot'
+    }
+
     const positionMatch = text.match(/仓位\s*(\d+(?:\.\d+)?)\s*%/)
     if (positionMatch?.[1]) {
       riskRules.positionPct = Number(positionMatch[1])
     }
-    const stopLossMatch = text.match(/止损\s*(\d+(?:\.\d+)?)\s*%/)
+    const stopLossMatch = text.match(/止损[^%\n]{0,12}?(\d+(?:\.\d+)?)\s*%/)
+      ?? text.match(/亏损[≥>=]?\s*(\d+(?:\.\d+)?)\s*%/)
     if (stopLossMatch?.[1]) {
       riskRules.stopLossPct = Number(stopLossMatch[1])
     }
     const drawdownMatch = text.match(/最大回撤\s*(\d+(?:\.\d+)?)\s*%/)
     if (drawdownMatch?.[1]) {
       riskRules.maxDrawdownPct = Number(drawdownMatch[1])
+    }
+    const earlyStopMatch = text.match(/((?:价格)?连续\s*3\s*根K线[^。；;\n]{0,40}?轨外[^。；;\n]{0,40}?(?:提前止损|减仓|全平|平仓))/i)
+    if (earlyStopMatch?.[1]) {
+      riskRules.earlyStop = earlyStopMatch[1].trim()
     }
 
     return {
@@ -1190,7 +1209,7 @@ export class CodegenConversationService {
 
     const PRE_WINDOW = 6
     const POST_WINDOW = 10
-    const CLAUSE_SPLITTER = /(后|然后|再|并且|并|且|回到|中轨|止盈|止损|平仓|离场|出场)/u
+    const CLAUSE_SPLITTER = /然后|并且|回到|中轨|止盈|止损|平仓|离场|出场|[后再并且]/u
     const start = match.index
     const end = start + match[0].length
 

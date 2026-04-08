@@ -12,6 +12,7 @@ import { Injectable } from '@nestjs/common'
 const ACTION_PATTERN = /action\s*:\s*['"]([A-Z_]+)['"]/g
 const PARAM_PATTERN = /ctx\.params(?:Normalized)?\??\.([A-Za-z_]\w*)/g
 const DECISION_SIZE_PATTERN = /size\s*:\s*\{[^}]*mode\s*:\s*['"](RATIO|QUOTE|QTY)['"][^}]*value\s*:\s*([^,\n}]+)/
+const COMPILED_QUANTITY_PATTERN = /quantity\s*:\s*\{[^}]*mode\s*:\s*['"]([a-z_]+)['"][^}]*value\s*:\s*([^,\n}]+)/
 const LEGACY_RATIO_SIZE_PATTERN = /positionSizeRatio\s*:\s*([^,\n}]+)/
 const LEGACY_QUOTE_SIZE_PATTERN = /positionSizeQuote\s*:\s*([^,\n}]+)/
 
@@ -147,6 +148,15 @@ export class ScriptProfileExtractorService {
   }
 
   private extractSizing(scriptCode: string): StrategySemanticProfile['sizing'] {
+    const compiledQuantityMatch = scriptCode.match(COMPILED_QUANTITY_PATTERN)
+    if (compiledQuantityMatch?.[1] && compiledQuantityMatch[2]) {
+      return this.resolveCompiledQuantityExpression({
+        scriptCode,
+        mode: compiledQuantityMatch[1],
+        expression: compiledQuantityMatch[2],
+      })
+    }
+
     const decisionMatch = scriptCode.match(DECISION_SIZE_PATTERN)
     if (decisionMatch?.[1] && decisionMatch[2]) {
       return this.resolveSizingExpression({
@@ -175,6 +185,50 @@ export class ScriptProfileExtractorService {
     }
 
     return null
+  }
+
+  private resolveCompiledQuantityExpression(input: {
+    scriptCode: string
+    mode: string
+    expression: string
+  }): StrategySemanticSizing {
+    const normalizedMode = this.normalizeCompiledQuantityMode(input.mode)
+    if (!normalizedMode) {
+      return {
+        mode: 'RATIO',
+        value: null,
+        source: 'unknown',
+      }
+    }
+
+    const resolved = this.resolveSizingExpression({
+      scriptCode: input.scriptCode,
+      mode: normalizedMode,
+      expression: input.expression,
+    })
+
+    if (resolved.source === 'literal' && typeof resolved.value === 'number') {
+      return {
+        ...resolved,
+        value: this.normalizeCompiledQuantityValue(input.mode, resolved.value),
+      }
+    }
+
+    return resolved
+  }
+
+  private normalizeCompiledQuantityMode(mode: string): CanonicalSizingMode | null {
+    if (mode === 'pct_equity' || mode === 'position_pct') return 'RATIO'
+    if (mode === 'fixed_quote') return 'QUOTE'
+    if (mode === 'fixed_base') return 'QTY'
+    return null
+  }
+
+  private normalizeCompiledQuantityValue(mode: string, value: number): number {
+    if ((mode === 'pct_equity' || mode === 'position_pct') && value > 1) {
+      return Number((value / 100).toFixed(4))
+    }
+    return value
   }
 
   private extractRequiredParams(scriptCode: string): string[] {

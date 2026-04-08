@@ -68,6 +68,20 @@ strategy`)
     expect(profile.sizing).toBeNull()
   })
 
+  it('normalizes compiled pct_equity quantity literals back to ratio semantics', () => {
+    const service = new ScriptProfileExtractorService()
+    const profile = service.extract(`
+const DECISION_PROGRAMS = [
+  {
+    id: 'decision_01_entry',
+    actions: [{ kind: 'OPEN_SHORT', quantity: { mode: 'pct_equity', value: 10 } }],
+  },
+]
+`)
+
+    expect(profile.sizing).toEqual({ mode: 'RATIO', value: 0.1, source: 'literal' })
+  })
+
   it('binds moving-average crossover rules to executable actions instead of preceding NOOP guards', () => {
     const service = new ScriptProfileExtractorService()
     const profile = service.extract(`
