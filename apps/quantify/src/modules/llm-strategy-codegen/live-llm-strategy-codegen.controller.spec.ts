@@ -91,7 +91,7 @@ describe('liveLlmStrategyCodegenController', () => {
     }).compile()
     const controller = moduleRef.get(LiveLlmStrategyCodegenController)
 
-    await expect(controller.startSession(undefined, { userId: 'u1' })).rejects.toBeInstanceOf(DomainException)
+    await expect(controller.startSession(undefined, undefined, { userId: 'u1' })).rejects.toBeInstanceOf(DomainException)
     expect(service.startSession).not.toHaveBeenCalled()
   })
 
