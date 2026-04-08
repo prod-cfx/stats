@@ -283,47 +283,10 @@ export class CodegenConversationService {
         args: { sessionId, status: session.status },
       })
     }
+    if (dto.confirmGenerate === true) {
+      return this.continueConfirmedSession(session, dto, sessionUserId)
+    }
     if (PROCESSING_SESSION_STATUSES.includes(session.status)) {
-      if (dto.confirmGenerate === true) {
-        const checklist = this.readChecklist(session.checklist)
-        const specDesc = this.specDescBuilder.build(checklist, '')
-        const canonicalDigest = this.readCanonicalDigest(specDesc)
-        const confirmedCanonicalDigest = dto.confirmedCanonicalDigest?.trim() ?? ''
-        if (!canonicalDigest || confirmedCanonicalDigest !== canonicalDigest) {
-          throw new DomainException('codegen.confirmation_digest_mismatch', {
-            code: ErrorCode.BAD_REQUEST,
-            status: HttpStatus.BAD_REQUEST,
-            args: {
-              expectedCanonicalDigest: canonicalDigest,
-              confirmedCanonicalDigest: confirmedCanonicalDigest || null,
-            },
-          })
-        }
-
-        const providerCode = this.resolveProviderCode(dto.providerCode)
-        const requeued = await this.sessionsRepo.tryRequeueFromProcessing(session.id, {
-          status: 'GENERATING',
-          rejectReason: null,
-        })
-        if (requeued) {
-          void this.runGenerationPipeline({
-            sessionId: session.id,
-            userId: sessionUserId,
-            checklist,
-            message: dto.message,
-            providerCode,
-            model: dto.model,
-            temperature: dto.temperature,
-            maxTokens: dto.maxTokens,
-            existingStrategyInstanceId: session.strategyInstanceId ?? null,
-          })
-          return {
-            id: session.id,
-            status: 'GENERATING',
-            missingFields: [],
-          }
-        }
-      }
       return this.toSessionSnapshotResponse(session)
     }
 
@@ -390,61 +353,106 @@ export class CodegenConversationService {
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
     const canonicalDigest = this.readCanonicalDigest(specDesc)
 
-    if (dto.confirmGenerate === true) {
-      const confirmedCanonicalDigest = dto.confirmedCanonicalDigest?.trim() ?? ''
-      if (!canonicalDigest || confirmedCanonicalDigest !== canonicalDigest) {
-        throw new DomainException('codegen.confirmation_digest_mismatch', {
-          code: ErrorCode.BAD_REQUEST,
-          status: HttpStatus.BAD_REQUEST,
-          args: {
-            expectedCanonicalDigest: canonicalDigest,
-            confirmedCanonicalDigest: confirmedCanonicalDigest || null,
-          },
-        })
-      }
-    }
-
-    if (dto.confirmGenerate !== true) {
-      if (!plan.logicReady) {
-        await this.sessionsRepo.updateSession(session.id, {
-          status: 'DRAFTING',
-          checklist: mergedChecklist as Prisma.InputJsonValue,
-          clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
-          constraintPack: {
-            ...nextConstraintPack,
-            conversationHistory: historyAfterPlanner,
-          } as unknown as Prisma.InputJsonValue,
-        })
-
-        return {
-          id: session.id,
-          status: 'DRAFTING',
-          missingFields: [],
-          assistantPrompt: plan.assistantPrompt,
-          clarificationState,
-        }
-      }
-
+    if (!plan.logicReady) {
       await this.sessionsRepo.updateSession(session.id, {
-        status: 'CHECKLIST_GATE',
+        status: 'DRAFTING',
         checklist: mergedChecklist as Prisma.InputJsonValue,
         clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
         constraintPack: {
           ...nextConstraintPack,
           conversationHistory: historyAfterPlanner,
         } as unknown as Prisma.InputJsonValue,
-        latestSpecDesc: specDesc as Prisma.InputJsonValue,
       })
 
       return {
         id: session.id,
-        status: 'CHECKLIST_GATE',
+        status: 'DRAFTING',
         missingFields: [],
-        specDesc,
-        canonicalDigest,
-        assistantPrompt: `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`,
+        assistantPrompt: plan.assistantPrompt,
         clarificationState,
       }
+    }
+
+    await this.sessionsRepo.updateSession(session.id, {
+      status: 'CHECKLIST_GATE',
+      checklist: mergedChecklist as Prisma.InputJsonValue,
+      clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
+      constraintPack: {
+        ...nextConstraintPack,
+        conversationHistory: historyAfterPlanner,
+      } as unknown as Prisma.InputJsonValue,
+      latestSpecDesc: specDesc as Prisma.InputJsonValue,
+    })
+
+    return {
+      id: session.id,
+      status: 'CHECKLIST_GATE',
+      missingFields: [],
+      specDesc,
+      canonicalDigest,
+      assistantPrompt: `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`,
+      clarificationState,
+    }
+  }
+
+  private async continueConfirmedSession(
+    session: {
+      id: string
+      userId: string
+      status: LlmCodegenSessionStatus
+      checklist: Prisma.JsonValue | null
+      clarificationState?: Prisma.JsonValue | null
+      constraintPack: Prisma.JsonValue | null
+      strategyInstanceId?: string | null
+    },
+    dto: ContinueCodegenSessionDto,
+    sessionUserId: string,
+  ): Promise<CodegenSessionResponseDto> {
+    const baseChecklist = this.readChecklist(session.checklist)
+    const messageChecklist = this.normalizeChecklist(this.extractChecklist(dto))
+    const mergedChecklist = this.mergeChecklistSnapshots(baseChecklist, messageChecklist)
+    const clarificationState = this.clarificationRules.detect(mergedChecklist)
+    const clarificationPrompt = this.clarificationQuestion.build(clarificationState)
+    const constraintPack = this.readConstraintPack(session.constraintPack)
+    const historyAfterConfirm = this.appendConversationHistory(
+      constraintPack.conversationHistory ?? [],
+      dto.message,
+    )
+
+    if (clarificationState.status === 'NEEDS_CLARIFICATION') {
+      const assistantPrompt = clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。'
+      await this.sessionsRepo.updateSession(session.id, {
+        status: 'DRAFTING',
+        checklist: mergedChecklist as Prisma.InputJsonValue,
+        clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
+        constraintPack: {
+          ...constraintPack,
+          conversationHistory: historyAfterConfirm,
+        } as unknown as Prisma.InputJsonValue,
+      })
+
+      return {
+        id: session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt,
+        clarificationState,
+      }
+    }
+
+    const canonicalSpec = this.canonicalSpecBuilder.build(mergedChecklist)
+    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
+    const canonicalDigest = this.readCanonicalDigest(specDesc)
+    const confirmedCanonicalDigest = dto.confirmedCanonicalDigest?.trim() ?? ''
+    if (!canonicalDigest || confirmedCanonicalDigest !== canonicalDigest) {
+      throw new DomainException('codegen.confirmation_digest_mismatch', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: {
+          expectedCanonicalDigest: canonicalDigest,
+          confirmedCanonicalDigest: confirmedCanonicalDigest || null,
+        },
+      })
     }
 
     const missingFields = this.resolveChecklistMissingFields(mergedChecklist)
@@ -454,33 +462,36 @@ export class CodegenConversationService {
         checklist: mergedChecklist as Prisma.InputJsonValue,
         clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
         constraintPack: {
-          ...nextConstraintPack,
-          conversationHistory: historyAfterPlanner,
+          ...constraintPack,
+          conversationHistory: historyAfterConfirm,
         } as unknown as Prisma.InputJsonValue,
+        latestSpecDesc: specDesc as Prisma.InputJsonValue,
       })
 
       return {
         id: session.id,
         status: 'DRAFTING',
         missingFields,
-        assistantPrompt: plan.assistantPrompt || '请先补全入场和出场规则，再确认生成代码。',
+        assistantPrompt: '请先补全入场和出场规则，再确认生成代码。',
         clarificationState,
       }
     }
 
-    const providerCode = this.resolveProviderCode(dto.providerCode)
-    const markedGenerating = await this.sessionsRepo.tryMarkGenerating(session.id, {
-      status: 'GENERATING',
+    const markGeneratingInput = {
+      status: 'GENERATING' as const,
       checklist: mergedChecklist as Prisma.InputJsonValue,
+      clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
       constraintPack: {
-        ...nextConstraintPack,
-        conversationHistory: this.appendConversationHistory(
-          constraintPack.conversationHistory ?? [],
-          dto.message,
-        ),
+        ...constraintPack,
+        conversationHistory: historyAfterConfirm,
       } as unknown as Prisma.InputJsonValue,
+      latestSpecDesc: specDesc as Prisma.InputJsonValue,
       rejectReason: null,
-    })
+    }
+
+    const markedGenerating = PROCESSING_SESSION_STATUSES.includes(session.status)
+      ? await this.sessionsRepo.tryRequeueFromProcessing(session.id, markGeneratingInput)
+      : await this.sessionsRepo.tryMarkGenerating(session.id, markGeneratingInput)
 
     if (!markedGenerating) {
       const latest = await this.sessionsRepo.findById(session.id)
@@ -488,21 +499,18 @@ export class CodegenConversationService {
         throw new DomainException('codegen.session_not_found', {
           code: ErrorCode.NOT_FOUND,
           status: HttpStatus.NOT_FOUND,
-          args: { sessionId },
+          args: { sessionId: session.id },
         })
       }
       return this.toSessionSnapshotResponse(latest)
     }
 
-    void this.runGenerationPipeline({
+    void this.runConfirmedPublicationPipeline({
       sessionId: session.id,
       userId: sessionUserId,
       checklist: mergedChecklist,
       message: dto.message,
-      providerCode,
       model: dto.model,
-      temperature: dto.temperature,
-      maxTokens: dto.maxTokens,
       existingStrategyInstanceId: session.strategyInstanceId ?? null,
     })
 
@@ -513,15 +521,12 @@ export class CodegenConversationService {
     }
   }
 
-  private async runGenerationPipeline(args: {
+  private async runConfirmedPublicationPipeline(args: {
     sessionId: string
     userId: string
     checklist: ChecklistPayload
     message: string
-    providerCode: string
     model?: string
-    temperature?: number
-    maxTokens?: number
     existingStrategyInstanceId?: string | null
   }): Promise<void> {
     const {
@@ -529,195 +534,30 @@ export class CodegenConversationService {
       userId,
       checklist,
       message,
-      providerCode,
       model,
-      temperature,
-      maxTokens,
       existingStrategyInstanceId,
     } = args
     try {
-      let lastScriptCode = ''
-      let lastRejectReason = ''
-      let finalValidation: ScriptValidationResult | null = null
-      let generationMessage = message
-      const maxAttempts = MAX_CODEGEN_AUTO_REPAIR_RETRIES + 1
-
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        const isRepairAttempt = attempt > 1
-        const generatedScript = await this.generateScript(checklist, generationMessage, {
-          providerCode,
-          model,
-          // 修复回合降低随机性，优先最小改动修复语法/类型错误
-          temperature: isRepairAttempt ? 0 : temperature,
-          maxTokens: maxTokens ?? 1400,
-        })
-        lastScriptCode = generatedScript
-
-        await this.sessionsRepo.updateSession(sessionId, {
-          status: 'VALIDATING_STATIC',
-          latestDraftCode: generatedScript,
-        })
-
-        const validation = await this.validateGeneratedScript(generatedScript)
-        if (validation.passed) {
-          finalValidation = validation
-          break
-        }
-
-        lastRejectReason = validation.reason ?? '脚本校验失败'
-        await this.sessionsRepo.createVersion({
-          session: { connect: { id: sessionId } },
-          scriptCode: validation.scriptCode,
-          specDesc: {} as Prisma.InputJsonValue,
-          staticPassed: validation.staticPassed,
-          runtimePassed: validation.runtimePassed,
-          outputPassed: validation.outputPassed,
-        })
-
-        if (attempt >= maxAttempts) {
-          const fallbackScript = this.buildTypeSafeFallbackScript(checklist)
-          const fallbackValidation = await this.validateGeneratedScript(fallbackScript)
-          const rejectReason = fallbackValidation.passed
-            ? `${lastRejectReason}（自动修复重试后仅得到通用 fallback 脚本，已禁止发布）`
-            : `${lastRejectReason}（已自动修复重试 ${MAX_CODEGEN_AUTO_REPAIR_RETRIES} 次仍失败）`
-          await this.sessionsRepo.updateSession(sessionId, {
-            status: 'REJECTED',
-            rejectReason,
-            latestDraftCode: lastScriptCode || null,
-          })
-          return
-        }
-
-        generationMessage = this.buildRepairGenerationMessage({
-          originalMessage: message,
-          checklist,
-          scriptCode: validation.scriptCode,
-          rejectReason: lastRejectReason,
-          attempt,
-        })
-      }
-
-      if (!finalValidation) {
-        const rejectReason = `${lastRejectReason || '脚本校验失败'}（已自动修复重试 ${MAX_CODEGEN_AUTO_REPAIR_RETRIES} 次仍失败）`
-        await this.sessionsRepo.updateSession(sessionId, {
-          status: 'REJECTED',
-          rejectReason,
-          latestDraftCode: lastScriptCode || null,
-        })
-        return
-      }
-
-      const finalScriptCode = finalValidation.scriptCode
-
-      await this.sessionsRepo.updateSession(sessionId, {
-        status: 'VALIDATING_RUNTIME',
-      })
-
-      await this.sessionsRepo.updateSession(sessionId, {
-        status: 'VALIDATING_OUTPUT',
-      })
-
       const canonicalSpec = this.canonicalSpecBuilder.build(checklist)
-      const baseSpecDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, finalScriptCode)
+      const semanticView = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
       const userIntentSummary = this.strategySummaryBuilder.buildUserIntentSummary({
         checklist,
         message,
       })
       const strategySummary = this.strategySummaryBuilder.buildStrategySummary(canonicalSpec)
-      const scriptSummary = this.strategySummaryBuilder.buildScriptSummary({
-        scriptCode: finalScriptCode,
-      })
       const lockedParams = this.buildLockedParams(checklist)
-      await this.sessionsRepo.updateSession(sessionId, {
-        status: 'VALIDATING_CONSISTENCY',
-      })
-
-      if (canonicalSpec.version !== 2) {
-        await this.sessionsRepo.updateSession(sessionId, {
-          status: 'CONSISTENCY_FAILED',
-          latestSpecDesc: {
-            ...baseSpecDesc,
-            canonicalSpec,
-          } as unknown as Prisma.InputJsonValue,
-          latestDraftCode: finalScriptCode,
-          rejectReason: 'canonical_spec_v2_required_for_publication',
-          strategyInstanceId: existingStrategyInstanceId ?? null,
-        })
-        return
-      }
-
-      const consistencyReport = this.strategyConsistencyService.evaluate({
-        canonicalSpec,
-        scriptCode: finalScriptCode,
-        userIntentSummary,
-        strategySummary,
-        scriptSummary,
-      })
-      const specDesc = {
-        ...baseSpecDesc,
-        canonicalSpec,
-        userIntentSummary,
-        strategySummary,
-        scriptSummary,
-        lockedParams,
-        consistencyReport,
-      } satisfies Record<string, unknown>
-
-      const version = await this.sessionsRepo.createVersion({
-        session: { connect: { id: sessionId } },
-        scriptCode: finalScriptCode,
-        specDesc: specDesc as unknown as Prisma.InputJsonValue,
-        staticPassed: true,
-        runtimePassed: true,
-        outputPassed: true,
-      })
-
-      await this.recommendationIndex.onSpecDescPersisted({
-        versionId: version.id,
-        specDesc: baseSpecDesc,
-      })
-
-      if (consistencyReport.status !== 'PASSED') {
-        await this.sessionsRepo.updateSession(sessionId, {
-          status: 'CONSISTENCY_FAILED',
-          latestSpecDesc: specDesc as unknown as Prisma.InputJsonValue,
-          latestDraftCode: finalScriptCode,
-          rejectReason: this.buildConsistencyRejectReason(consistencyReport),
-          strategyInstanceId: existingStrategyInstanceId ?? null,
-        })
-        return
-      }
-
       let strategyInstanceId = existingStrategyInstanceId
         ?? await this.sessionsRepo.findSessionStrategyInstanceId(sessionId)
-      let strategyTemplateId: string | null = null
       const publishInput = this.buildPublishedStrategyInput({
         sessionId,
         userId,
         checklist,
         message,
         model,
-        scriptCode: finalScriptCode,
-        specDesc,
+        scriptCode: '',
+        specDesc: semanticView,
         lockedParams,
       })
-      if (!strategyInstanceId) {
-        try {
-          const bound = await this.sessionsRepo.ensureDraftStrategyInstanceBoundForPublishedSession(publishInput)
-          strategyTemplateId = bound.strategyTemplateId || null
-          strategyInstanceId = bound.strategyInstanceId
-        } catch (publishError) {
-          const publishReason = publishError instanceof Error ? publishError.message : String(publishError)
-          await this.sessionsRepo.updateSession(sessionId, {
-            status: 'REJECTED',
-            latestSpecDesc: specDesc as unknown as Prisma.InputJsonValue,
-            latestDraftCode: finalScriptCode,
-            rejectReason: publishReason,
-            strategyInstanceId: null,
-          })
-          return
-        }
-      }
 
       const compiled = this.canonicalSpecV2IrCompiler.compile({
         canonicalSpec,
@@ -733,16 +573,88 @@ export class CodegenConversationService {
         ast,
         executionEnvelope,
       })
+      const semanticConsistency = this.strategyConsistencyService.evaluate({
+        canonicalSpec,
+        scriptCode: compiledScript,
+        userIntentSummary,
+        strategySummary,
+      })
+      const scriptSummary = this.strategySummaryBuilder.buildScriptSummary({
+        scriptProfile: semanticConsistency.scriptProfile,
+      })
+      const sessionSpecDesc = {
+        ...semanticView,
+        canonicalSpec,
+        userIntentSummary,
+        strategySummary,
+        scriptSummary,
+        lockedParams,
+        consistencyReport: semanticConsistency,
+      } satisfies Record<string, unknown>
+
+      await this.sessionsRepo.updateSession(sessionId, {
+        status: 'VALIDATING_CONSISTENCY',
+        latestDraftCode: compiledScript,
+      })
+
+      const version = await this.sessionsRepo.createVersion({
+        session: { connect: { id: sessionId } },
+        scriptCode: compiledScript,
+        specDesc: sessionSpecDesc as unknown as Prisma.InputJsonValue,
+        staticPassed: true,
+        runtimePassed: true,
+        outputPassed: true,
+      })
+
+      await this.recommendationIndex.onSpecDescPersisted({
+        versionId: version.id,
+        specDesc: semanticView,
+      })
+
+      if (semanticConsistency.status !== 'PASSED') {
+        await this.sessionsRepo.updateSession(sessionId, {
+          status: 'CONSISTENCY_FAILED',
+          latestSpecDesc: sessionSpecDesc as unknown as Prisma.InputJsonValue,
+          latestDraftCode: compiledScript,
+          rejectReason: this.buildConsistencyRejectReason(semanticConsistency),
+          strategyInstanceId: existingStrategyInstanceId ?? null,
+        })
+        return
+      }
+
+      let strategyTemplateId: string | null = null
+      publishInput.scriptCode = compiledScript
+      publishInput.specDesc = sessionSpecDesc
+      if (!strategyInstanceId) {
+        try {
+          const bound = await this.sessionsRepo.ensureDraftStrategyInstanceBoundForPublishedSession(publishInput)
+          strategyTemplateId = bound.strategyTemplateId || null
+          strategyInstanceId = bound.strategyInstanceId
+        } catch (publishError) {
+          const publishReason = publishError instanceof Error ? publishError.message : String(publishError)
+          await this.sessionsRepo.updateSession(sessionId, {
+            status: 'REJECTED',
+            latestSpecDesc: sessionSpecDesc as unknown as Prisma.InputJsonValue,
+            latestDraftCode: compiledScript,
+            rejectReason: publishReason,
+            strategyInstanceId: null,
+          })
+          return
+        }
+      }
 
       const snapshot = await this.compiledPublicationGate.publish({
         sessionId,
         strategyTemplateId,
         strategyInstanceId: strategyInstanceId ?? null,
+        canonicalSnapshot: canonicalSpec as unknown as Record<string, unknown>,
+        semanticView,
         graphSnapshot: compiled.graphSnapshot,
         ir: compiled.ir,
         ast,
         executionEnvelope,
         script: compiledScript,
+        semanticConsistencyReport: semanticConsistency as unknown as Record<string, unknown>,
         userIntentSummary: userIntentSummary as unknown as Record<string, unknown>,
         strategySummary: strategySummary as unknown as Record<string, unknown>,
         scriptSummary: scriptSummary as unknown as Record<string, unknown>,
@@ -752,8 +664,9 @@ export class CodegenConversationService {
       await this.sessionsRepo.updateSession(sessionId, {
         status: 'PUBLISHED',
         latestSpecDesc: {
-          ...specDesc,
-          publishedSnapshotId: snapshot.id,
+          ...sessionSpecDesc,
+          consistencyReport: snapshot.consistencyReport,
+          publishedSnapshotId: snapshot.snapshotId,
         } as unknown as Prisma.InputJsonValue,
         latestDraftCode: compiledScript,
         rejectReason: null,

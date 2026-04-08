@@ -1,7 +1,6 @@
 import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
 import type { CanonicalStrategyIrV1 } from '../types/canonical-strategy-ir'
 import type { StrategyAstV1 } from '../types/canonical-strategy-ast'
-import type { SemanticStrategyGraph } from '../types/semantic-strategy-graph'
 import type { StrategyClarificationState } from '../types/strategy-clarification'
 import type { CompiledScriptExecutionEnvelope } from '../types/compiled-script-projection'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -10,22 +9,20 @@ import { Injectable } from '@nestjs/common'
 import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CompiledScriptParserService } from './compiled-script-parser.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
-import { ScriptProfileExtractorService } from './script-profile-extractor.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
-import { StrategyConsistencyService } from './strategy-consistency.service'
 
 interface PublishCompiledSnapshotInput {
   sessionId: string
   strategyTemplateId?: string | null
   strategyInstanceId?: string | null
+  canonicalSnapshot: Record<string, unknown>
+  semanticView: Record<string, unknown>
   graphSnapshot: StrategyLogicGraphSnapshot
   clarificationState?: StrategyClarificationState | null
-  semanticGraph?: SemanticStrategyGraph
   ir: CanonicalStrategyIrV1
   ast: StrategyAstV1
   executionEnvelope: CompiledScriptExecutionEnvelope
   script: string
+  semanticConsistencyReport: Record<string, unknown>
   userIntentSummary: Record<string, unknown>
   strategySummary: Record<string, unknown>
   scriptSummary: Record<string, unknown>
@@ -37,10 +34,6 @@ export class CompiledPublicationGateService {
   constructor(
     private readonly publishedSnapshotsRepo: PublishedStrategySnapshotsRepository,
     private readonly scriptParser: CompiledScriptParserService = new CompiledScriptParserService(),
-    private readonly strategyConsistency: StrategyConsistencyService = new StrategyConsistencyService(
-      new ScriptProfileExtractorService(),
-      new CompiledScriptParserService(),
-    ),
   ) {}
 
   async publish(input: PublishCompiledSnapshotInput): Promise<{
@@ -53,15 +46,24 @@ export class CompiledPublicationGateService {
 
     const parsed = this.scriptParser.parse(input.script)
     const manifest = parsed.compiledManifest
-    const consistencyReport = this.buildConsistencyReport(input, parsed)
+    const compilerConsistency = this.buildCompilerConsistency(input, parsed)
+    const semanticStatus = input.semanticConsistencyReport.status
+    const consistencyReport = {
+      status:
+        semanticStatus === 'PASSED' && compilerConsistency.status === 'PASSED'
+          ? 'PASSED'
+          : 'FAILED',
+      semanticConsistency: input.semanticConsistencyReport,
+      compilerConsistency,
+    }
 
     const snapshot = await this.publishedSnapshotsRepo.create({
       sessionId: input.sessionId,
       strategyTemplateId: input.strategyTemplateId ?? null,
       strategyInstanceId: input.strategyInstanceId ?? null,
       scriptSnapshot: input.script,
-      specSnapshot: input.graphSnapshot as unknown as Record<string, unknown>,
-      semanticGraph: input.semanticGraph as unknown as Record<string, unknown> | null | undefined,
+      specSnapshot: input.canonicalSnapshot,
+      semanticGraph: input.semanticView,
       compiledIr: input.ir as unknown as Record<string, unknown>,
       irSnapshot: input.ir as unknown as Record<string, unknown>,
       astSnapshot: input.ast as unknown as Record<string, unknown>,
@@ -71,7 +73,7 @@ export class CompiledPublicationGateService {
       strategySummary: input.strategySummary,
       scriptSummary: input.scriptSummary,
       lockedParams: input.lockedParams,
-      snapshotVersion: 2,
+      snapshotVersion: 3,
       paramsSnapshot: {
         symbol: input.ir.market.symbol,
         timeframe: input.ir.market.timeframes[0] ?? null,
@@ -88,23 +90,13 @@ export class CompiledPublicationGateService {
     }
   }
 
-  private buildConsistencyReport(
+  private buildCompilerConsistency(
     input: PublishCompiledSnapshotInput,
     parsed: ReturnType<CompiledScriptParserService['parse']>,
   ): Record<string, unknown> {
-    if (input.semanticGraph) {
-      return this.strategyConsistency.audit({
-        semanticGraph: input.semanticGraph,
-        ir: input.ir,
-        scriptCode: input.script,
-      }) as unknown as Record<string, unknown>
-    }
-
     const graphVsIrPassed = input.ir.source.graphDigest === input.ir.source.specHash
     const irVsScriptPassed = parsed.compiledManifest.irHash === input.ast.manifest.irHash
-      && parsed.compiledManifest.structuralDigest === input.ast.manifest.structuralDigest
-    const manifestSelfCheckPassed = parsed.compiledManifest.irHash === input.ast.manifest.irHash
-      && parsed.compiledManifest.specHash === input.ast.manifest.specHash
+    const manifestSelfCheckPassed = parsed.compiledManifest.specHash === input.ast.manifest.specHash
 
     return {
       status: graphVsIrPassed && irVsScriptPassed && manifestSelfCheckPassed ? 'PASSED' : 'FAILED',
@@ -116,7 +108,7 @@ export class CompiledPublicationGateService {
       irVsScript: {
         passed: irVsScriptPassed,
         irHash: parsed.compiledManifest.irHash,
-        structuralDigest: parsed.compiledManifest.structuralDigest,
+        astDigest: parsed.compiledManifest.astDigest,
       },
       manifestSelfCheck: {
         passed: manifestSelfCheckPassed,

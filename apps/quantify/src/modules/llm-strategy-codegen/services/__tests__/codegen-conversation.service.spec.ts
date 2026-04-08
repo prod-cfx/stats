@@ -98,6 +98,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.tryRequeueFromProcessing.mockResolvedValue(false)
     mockRepo.findSessionStrategyInstanceId.mockResolvedValue(null)
     mockRepo.bindStrategyInstanceIfEmpty.mockResolvedValue(true)
+    mockRepo.createVersion.mockResolvedValue({ id: 'version-1' })
     mockRepo.create.mockResolvedValue({
       id: 'snapshot-1',
       consistencyReport: {},
@@ -458,7 +459,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
-  it('publishes after confirmGenerate with planner+generator pipeline', async () => {
+  it('publishes after confirmGenerate without making a second llm codegen call', async () => {
     mockAi.chat
       .mockResolvedValueOnce({
         content: JSON.stringify({
@@ -470,31 +471,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             exitRules: ['短均线下穿长均线（死叉）时平多'],
           },
         }),
-      })
-      .mockResolvedValueOnce({
-        content: JSON.stringify({
-          related: true,
-          logicReady: true,
-          assistantPrompt: '已确认逻辑，开始生成。',
-        }),
-      })
-      .mockResolvedValueOnce({
-        content: `const strategy: StrategyAdapterV1 = {
-  protocolVersion: 'v1',
-  onBar(ctx): StrategyDecisionV1 {
-    const bars = Array.isArray(ctx.bars) ? ctx.bars : []
-    if (bars.length < 20) return { action: 'NOOP', reason: 'insufficient bars' }
-    const closes = bars.map(item => item?.close).filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
-    if (closes.length < 20) return { action: 'NOOP', reason: 'insufficient closes' }
-    const fast = ctx.helpers?.ta?.sma(closes, 5)
-    const slow = ctx.helpers?.ta?.sma(closes, 20)
-    if (typeof fast !== 'number' || typeof slow !== 'number') return { action: 'NOOP', reason: 'sma unavailable' }
-    if (fast > slow) return { action: 'OPEN_LONG', size: { mode: 'RATIO', value: 0.1 }, confidence: 80, reason: 'golden cross' }
-    if (fast < slow) return { action: 'CLOSE_LONG', reason: 'death cross' }
-    return { action: 'NOOP', reason: 'wait' }
-  },
-}
-strategy`,
       })
     mockRepo.createSession.mockResolvedValue({ id: 's5' })
     mockRepo.createVersion.mockResolvedValue({ id: 'v1' })
@@ -527,8 +503,11 @@ strategy`,
     const result = await service.continueSession('s5', dto)
 
     expect(result.status).toBe('GENERATING')
-    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith('s5', expect.not.objectContaining({
-      clarificationState: expect.anything(),
+    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith('s5', expect.objectContaining({
+      status: 'GENERATING',
+      latestSpecDesc: expect.objectContaining({
+        viewType: 'canonical-semantic-view.v1',
+      }),
     }))
     await waitForTerminalStatus('s5')
 
@@ -536,9 +515,10 @@ strategy`,
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s5', expect.objectContaining({
       status: 'PUBLISHED',
     }))
+    expect(mockAi.chat).toHaveBeenCalledTimes(1)
   })
 
-  it('publishes compiled artifacts instead of raw canonical spec snapshots after confirmGenerate', async () => {
+  it('publishes canonical snapshot, semantic view, and compiled artifacts after confirmGenerate', async () => {
     mockAi.chat
       .mockResolvedValueOnce({
         content: JSON.stringify({
@@ -550,31 +530,6 @@ strategy`,
             exitRules: ['短均线下穿长均线（死叉）时平多'],
           },
         }),
-      })
-      .mockResolvedValueOnce({
-        content: JSON.stringify({
-          related: true,
-          logicReady: true,
-          assistantPrompt: '已确认逻辑，开始生成。',
-        }),
-      })
-      .mockResolvedValueOnce({
-        content: `const strategy: StrategyAdapterV1 = {
-  protocolVersion: 'v1',
-  onBar(ctx): StrategyDecisionV1 {
-    const bars = Array.isArray(ctx.bars) ? ctx.bars : []
-    if (bars.length < 20) return { action: 'NOOP', reason: 'insufficient bars' }
-    const closes = bars.map(item => item?.close).filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
-    if (closes.length < 20) return { action: 'NOOP', reason: 'insufficient closes' }
-    const fast = ctx.helpers?.ta?.sma(closes, 5)
-    const slow = ctx.helpers?.ta?.sma(closes, 20)
-    if (typeof fast !== 'number' || typeof slow !== 'number') return { action: 'NOOP', reason: 'sma unavailable' }
-    if (fast > slow) return { action: 'OPEN_LONG', size: { mode: 'RATIO', value: 0.1 }, confidence: 80, reason: 'golden cross' }
-    if (fast < slow) return { action: 'CLOSE_LONG', reason: 'death cross' }
-    return { action: 'NOOP', reason: 'wait' }
-  },
-}
-strategy`,
       })
     mockRepo.createSession.mockResolvedValue({ id: 's5-compiled' })
     mockRepo.createVersion.mockResolvedValue({ id: 'v-compiled' })
@@ -606,8 +561,11 @@ strategy`,
 
     expect(mockRepo.create).toHaveBeenCalledWith(expect.objectContaining({
       specSnapshot: expect.objectContaining({
-        version: 3,
-        status: 'confirmed',
+        version: 2,
+      }),
+      semanticGraph: expect.objectContaining({
+        viewType: 'canonical-semantic-view.v1',
+        canonicalDigest: started.canonicalDigest,
       }),
       compiledIr: expect.objectContaining({
         irVersion: 'csi.v1',
@@ -625,8 +583,13 @@ strategy`,
         positionMode: 'long_only',
       }),
       scriptSnapshot: expect.stringContaining('COMPILED_MANIFEST'),
-      snapshotVersion: 2,
+      consistencyReport: expect.objectContaining({
+        semanticConsistency: expect.any(Object),
+        compilerConsistency: expect.any(Object),
+      }),
+      snapshotVersion: 3,
     }))
+    expect(mockAi.chat).toHaveBeenCalledTimes(1)
   })
 
   it('rejects confirmGenerate when confirmedCanonicalDigest does not match the current semantic view', async () => {
@@ -776,7 +739,7 @@ strategy`,
     }))
   })
 
-  it('returns rejected payload instead of throwing 500 when generation pipeline throws', async () => {
+  it('returns rejected payload instead of throwing 500 when compiler-first publication setup throws', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's8',
       userId: 'u1',
@@ -787,15 +750,7 @@ strategy`,
       },
       constraintPack: {},
     })
-    mockAi.chat
-      .mockResolvedValueOnce({
-        content: JSON.stringify({
-          related: true,
-          logicReady: true,
-          assistantPrompt: '逻辑已确认，可以生成。',
-        }),
-      })
-      .mockRejectedValueOnce(new Error('provider timeout'))
+    mockRepo.createVersion.mockRejectedValueOnce(new Error('version write failed'))
 
     const result = await service.continueSession('s8', {
       userId: 'u1',
@@ -812,7 +767,7 @@ strategy`,
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s8', expect.objectContaining({
       status: 'REJECTED',
-      rejectReason: expect.stringContaining('provider timeout'),
+      rejectReason: expect.stringContaining('version write failed'),
     }))
   })
 
@@ -865,153 +820,41 @@ strategy`,
     }))
   })
 
-  it('auto-repairs a TypeScript-invalid script and publishes on next attempt', async () => {
-    const brokenScriptFromRealCase = `
-const strategy: StrategyAdapterV1 = {
-  protocolVersion: 'v1',
-  onBar(ctx) {
-    const primaryLeg = ctx.legs?.find(leg => leg.role === 'primary');
-    const params = ctx.paramsNormalized || {};
-    if (!ctx.bars || ctx.bars.length < 20) {
-      return { action: 'NOOP', reason: '数据不足' };
-    }
-    const risk = helpers.signal.buildRiskByAtr({
-      side: 'LONG',
-      entryPrice: ctx.currentPrice || 0,
-      atr: 10,
-      atrMultipleStop: params.stopLossPct,
-      atrMultipleTake: params.takeProfitPct,
-    });
-    return {
-      action: 'OPEN_LONG',
-      size: { mode: 'RATIO', value: params.positionPct },
-      confidence: 78,
-      reason: 'breakout',
-      risk: {
-        stopLoss: risk.stopLoss,
-        takeProfit: risk.takeProfit,
-      },
-    }
-  },
-}
-,`
-    const repairedScript = `
-const strategy: StrategyAdapterV1 = {
-  protocolVersion: 'v1',
-  onBar(ctx): StrategyDecisionV1 {
-    const bars = ctx.bars ?? []
-    if (bars.length < 20) return { action: 'NOOP', reason: '数据不足' }
-    const positionPct = ctx.paramsNormalized?.positionPct
-    const ratio = typeof positionPct === 'number' && positionPct > 0
-      ? Math.min(positionPct / 100, 1)
-      : 0.1
-    return {
-      action: 'OPEN_LONG',
-      size: { mode: 'RATIO', value: ratio },
-      confidence: 78,
-      reason: 'breakout',
-    }
-  },
-}
-strategy
-`
+  it('publishes without calling ai codegen even when strict mode flags are enabled', async () => {
+    setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'true')
+    setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'false')
+
     mockRepo.findById.mockResolvedValue({
       id: 's9',
       userId: 'u1',
       status: 'CHECKLIST_GATE',
       checklist: {
-        entryRules: ['价格收盘确认突破阻力位入场'],
-        exitRules: ['跌破最近支撑位出场'],
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
       },
       constraintPack: {},
     })
-    mockAi.chat
-      .mockResolvedValueOnce({
-        content: JSON.stringify({
-          related: true,
-          logicReady: true,
-          assistantPrompt: '逻辑已确认，可以生成。',
-        }),
-      })
-      .mockResolvedValueOnce({ content: brokenScriptFromRealCase })
-      .mockResolvedValueOnce({ content: repairedScript })
-    mockRepo.createVersion.mockResolvedValue({ id: 'v4' })
 
     const result = await service.continueSession('s9', {
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
       confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
-        entryRules: ['价格收盘确认突破阻力位入场'],
-        exitRules: ['跌破最近支撑位出场'],
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
       }),
+      providerCode: 'uniapi',
+      model: 'gpt-4',
     })
 
     expect(result.status).toBe('GENERATING')
     await waitForTerminalStatus('s9')
 
-    expect(mockAi.chat).toHaveBeenCalledTimes(3)
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s9', expect.objectContaining({
       status: 'PUBLISHED',
     }))
-    const repairPrompt = (mockAi.chat.mock.calls[2]?.[0] as { messages: Array<{ role: string; content: string }> })?.messages?.[1]?.content
-    expect(repairPrompt).toContain('自动修复')
-  }, 15_000)
-
-  it('returns consistency failed after exhausting auto-repair retries and blocks fallback publish', async () => {
-    const brokenScript = `
-const strategy: StrategyAdapterV1 = {
-  protocolVersion: 'v1',
-  onBar(ctx) {
-    return { action: 'OPEN_LONG', size: { mode: 'RATIO', value: 0.1 }, reason: 'x' }
-  },
-}
-,`
-    mockRepo.findById.mockResolvedValue({
-      id: 's10',
-      userId: 'u1',
-      status: 'CHECKLIST_GATE',
-      checklist: {
-        entryRules: ['价格突破阻力位入场'],
-        exitRules: ['跌破支撑位出场'],
-      },
-      constraintPack: {},
-    })
-    mockAi.chat
-      .mockResolvedValueOnce({
-        content: JSON.stringify({
-          related: true,
-          logicReady: true,
-          assistantPrompt: '逻辑已确认，可以生成。',
-        }),
-      })
-      .mockResolvedValueOnce({ content: brokenScript })
-      .mockResolvedValueOnce({ content: brokenScript })
-      .mockResolvedValueOnce({ content: brokenScript })
-    mockRepo.createVersion.mockResolvedValue({ id: 'v5' })
-
-    const result = await service.continueSession('s10', {
-      userId: 'u1',
-      message: '确认并生成',
-      confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
-        entryRules: ['价格突破阻力位入场'],
-        exitRules: ['跌破支撑位出场'],
-      }),
-    })
-
-    expect(result.status).toBe('GENERATING')
-    await waitForTerminalStatus('s10')
-
-    const hasRejectedOrConsistencyFailed = mockRepo.updateSession.mock.calls.some(call =>
-      call[0] === 's10' && ['CONSISTENCY_FAILED', 'REJECTED'].includes((call[1] as { status?: string }).status ?? ''),
-    )
-    const hasPublished = mockRepo.updateSession.mock.calls.some(call =>
-      call[0] === 's10' && (call[1] as { status?: string }).status === 'PUBLISHED',
-    )
-    expect(hasRejectedOrConsistencyFailed).toBe(true)
-    expect(hasPublished).toBe(false)
-  }, 15_000)
+    expect(mockAi.chat).not.toHaveBeenCalled()
+  })
 
   it('marks session as consistency failed when validated script does not match checklist semantics', async () => {
     mockRepo.findById.mockResolvedValue({
@@ -1170,370 +1013,6 @@ strategy`,
     })).rejects.toThrow('canonical_spec_v2_required')
 
     buildSpy.mockRestore()
-  })
-
-  it('uses strict json schema response in codegen and publishes when code is returned', async () => {
-    setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'true')
-    setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'false')
-
-    mockRepo.findById.mockResolvedValue({
-      id: 's11',
-      userId: 'u1',
-      status: 'CHECKLIST_GATE',
-      checklist: {
-        entryRules: ['价格突破阻力位入场'],
-        exitRules: ['跌破支撑位出场'],
-      },
-      constraintPack: {},
-    })
-    mockAi.chat
-      .mockResolvedValueOnce({
-        content: JSON.stringify({
-          related: true,
-          logicReady: true,
-          assistantPrompt: '逻辑已确认，可以生成。',
-        }),
-      })
-      .mockResolvedValueOnce({
-        content: JSON.stringify({
-          code: 'const strategy: StrategyAdapterV1 = { protocolVersion: "v1", onBar(): StrategyDecisionV1 { return { action: "NOOP" } } }\nstrategy',
-        }),
-      })
-    mockRepo.createVersion.mockResolvedValue({ id: 'v6' })
-
-    const result = await service.continueSession('s11', {
-      userId: 'u1',
-      message: '确认并生成',
-      confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
-        entryRules: ['价格突破阻力位入场'],
-        exitRules: ['跌破支撑位出场'],
-      }),
-      providerCode: 'uniapi',
-      model: 'gpt-4',
-    })
-
-    expect(result.status).toBe('GENERATING')
-    await waitForTerminalStatus('s11')
-
-    expect(mockRepo.updateSession).toHaveBeenCalledWith('s11', expect.objectContaining({
-      status: 'PUBLISHED',
-    }))
-    const codegenCall = mockAi.chat.mock.calls[1]?.[0] as { responseFormat?: unknown }
-    expect(codegenCall.responseFormat).toBeDefined()
-  })
-
-  it('rejects when strict mode returns payload without code and fallback is disabled', async () => {
-    setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'true')
-    setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'false')
-
-    mockRepo.findById.mockResolvedValue({
-      id: 's12',
-      userId: 'u1',
-      status: 'CHECKLIST_GATE',
-      checklist: {
-        entryRules: ['价格突破阻力位入场'],
-        exitRules: ['跌破支撑位出场'],
-      },
-      constraintPack: {},
-    })
-    mockAi.chat
-      .mockResolvedValueOnce({
-        content: JSON.stringify({
-          related: true,
-          logicReady: true,
-          assistantPrompt: '逻辑已确认，可以生成。',
-        }),
-      })
-      .mockResolvedValueOnce({
-        content: JSON.stringify({
-          message: 'missing code',
-        }),
-      })
-
-    const result = await service.continueSession('s12', {
-      userId: 'u1',
-      message: '确认并生成',
-      confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
-        entryRules: ['价格突破阻力位入场'],
-        exitRules: ['跌破支撑位出场'],
-      }),
-      providerCode: 'uniapi',
-      model: 'gpt-4',
-    })
-
-    expect(result.status).toBe('GENERATING')
-    await waitForTerminalStatus('s12')
-
-    expect(mockRepo.updateSession).toHaveBeenCalledWith('s12', expect.objectContaining({
-      status: 'REJECTED',
-      rejectReason: expect.stringContaining('no_code_returned'),
-    }))
-  })
-
-  it('skips strict response_format for deepseek model and uses plain generation directly', async () => {
-    setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'true')
-    setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'false')
-
-    mockRepo.findById.mockResolvedValue({
-      id: 's13',
-      userId: 'u1',
-      status: 'CHECKLIST_GATE',
-      checklist: {
-        entryRules: ['价格突破阻力位入场'],
-        exitRules: ['跌破支撑位出场'],
-      },
-      constraintPack: {},
-    })
-    mockAi.chat
-      .mockResolvedValueOnce({
-        content: JSON.stringify({
-          related: true,
-          logicReady: true,
-          assistantPrompt: '逻辑已确认，可以生成。',
-        }),
-      })
-      .mockResolvedValueOnce({
-        content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 75, entryPrice: 62000, stopLoss: 61000, takeProfit: 64000, reasoning: "breakout", positionSizeRatio: 0.1 }',
-      })
-    mockRepo.createVersion.mockResolvedValue({ id: 'v7' })
-
-    const result = await service.continueSession('s13', {
-      userId: 'u1',
-      message: '确认并生成',
-      confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
-        entryRules: ['价格突破阻力位入场'],
-        exitRules: ['跌破支撑位出场'],
-      }),
-      model: 'deepseek-chat',
-    })
-
-    expect(result.status).toBe('GENERATING')
-    await waitForTerminalStatus('s13')
-
-    expect(mockRepo.updateSession).toHaveBeenCalledWith('s13', expect.objectContaining({
-      status: 'PUBLISHED',
-    }))
-    const codegenCall = mockAi.chat.mock.calls[1]?.[0] as { responseFormat?: unknown }
-    expect(codegenCall.responseFormat).toBeUndefined()
-  })
-
-  it('skips strict response_format for strategy-codegen provider when model is not explicitly provided', async () => {
-    setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'true')
-    setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'false')
-
-    mockRepo.findById.mockResolvedValue({
-      id: 's14',
-      userId: 'u1',
-      status: 'CHECKLIST_GATE',
-      checklist: {
-        entryRules: ['价格突破阻力位入场'],
-        exitRules: ['跌破支撑位出场'],
-      },
-      constraintPack: {},
-    })
-    mockAi.chat
-      .mockResolvedValueOnce({
-        content: JSON.stringify({
-          related: true,
-          logicReady: true,
-          assistantPrompt: '逻辑已确认，可以生成。',
-        }),
-      })
-      .mockResolvedValueOnce({
-        content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 75, entryPrice: 62000, stopLoss: 61000, takeProfit: 64000, reasoning: "breakout", positionSizeRatio: 0.1 }',
-      })
-    mockRepo.createVersion.mockResolvedValue({ id: 'v8' })
-
-    const result = await service.continueSession('s14', {
-      userId: 'u1',
-      message: '确认并生成',
-      confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
-        entryRules: ['价格突破阻力位入场'],
-        exitRules: ['跌破支撑位出场'],
-      }),
-      providerCode: 'strategy-codegen',
-    })
-
-    expect(result.status).toBe('GENERATING')
-    await waitForTerminalStatus('s14')
-
-    expect(mockRepo.updateSession).toHaveBeenCalledWith('s14', expect.objectContaining({
-      status: 'PUBLISHED',
-    }))
-    const codegenCall = mockAi.chat.mock.calls[1]?.[0] as { responseFormat?: unknown }
-    expect(codegenCall.responseFormat).toBeUndefined()
-  })
-
-  it('does not disable strict for other models after one model is marked unsupported', async () => {
-    setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'true')
-    setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'false')
-    setProcessEnvValue('LLM_CODEGEN_STRICT_UNSUPPORTED_TTL_MS', '600000')
-
-    mockRepo.findById
-      .mockResolvedValueOnce({
-        id: 's15',
-        userId: 'u1',
-        status: 'CHECKLIST_GATE',
-        checklist: {
-          entryRules: ['价格突破阻力位入场'],
-          exitRules: ['跌破支撑位出场'],
-        },
-        constraintPack: {},
-      })
-      .mockResolvedValueOnce({
-        id: 's16',
-        userId: 'u1',
-        status: 'CHECKLIST_GATE',
-        checklist: {
-          entryRules: ['价格突破阻力位入场'],
-          exitRules: ['跌破支撑位出场'],
-        },
-        constraintPack: {},
-      })
-
-    const plannerPayload = {
-      content: JSON.stringify({
-        related: true,
-        logicReady: true,
-        assistantPrompt: '逻辑已确认，可以生成。',
-      }),
-    }
-
-    mockAi.chat
-      .mockResolvedValueOnce(plannerPayload)
-      .mockRejectedValueOnce(new Error('This response_format type is unavailable now'))
-      .mockResolvedValueOnce(plannerPayload)
-      .mockResolvedValueOnce({
-        content: JSON.stringify({
-          code: 'const strategy: StrategyAdapterV1 = { protocolVersion: "v1", onBar(): StrategyDecisionV1 { return { action: "NOOP" } } }\nstrategy',
-        }),
-      })
-    mockRepo.createVersion.mockResolvedValue({ id: 'v9' })
-
-    const first = await service.continueSession('s15', {
-      userId: 'u1',
-      message: '确认并生成',
-      confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
-        entryRules: ['价格突破阻力位入场'],
-        exitRules: ['跌破支撑位出场'],
-      }),
-      providerCode: 'uniapi',
-      model: 'gpt-4',
-    })
-    expect(first.status).toBe('GENERATING')
-    await waitForTerminalStatus('s15')
-
-    expect(mockRepo.updateSession).toHaveBeenCalledWith('s15', expect.objectContaining({
-      status: 'REJECTED',
-    }))
-
-    const second = await service.continueSession('s16', {
-      userId: 'u1',
-      message: '确认并生成',
-      confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
-        entryRules: ['价格突破阻力位入场'],
-        exitRules: ['跌破支撑位出场'],
-      }),
-      providerCode: 'uniapi',
-      model: 'gpt-4o',
-    })
-    expect(second.status).toBe('GENERATING')
-    await waitForTerminalStatus('s16')
-
-    expect(mockRepo.updateSession).toHaveBeenCalledWith('s16', expect.objectContaining({
-      status: 'PUBLISHED',
-    }))
-
-    const secondCodegenCall = mockAi.chat.mock.calls[3]?.[0] as { responseFormat?: unknown }
-    expect(secondCodegenCall.responseFormat).toBeDefined()
-  })
-
-  it('caches strict unsupported at provider level when model is omitted', async () => {
-    setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'true')
-    setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'false')
-    setProcessEnvValue('LLM_CODEGEN_STRICT_UNSUPPORTED_TTL_MS', '600000')
-
-    mockRepo.findById
-      .mockResolvedValueOnce({
-        id: 's17',
-        userId: 'u1',
-        status: 'CHECKLIST_GATE',
-        checklist: {
-          entryRules: ['价格突破阻力位入场'],
-          exitRules: ['跌破支撑位出场'],
-        },
-        constraintPack: {},
-      })
-      .mockResolvedValueOnce({
-        id: 's18',
-        userId: 'u1',
-        status: 'CHECKLIST_GATE',
-        checklist: {
-          entryRules: ['价格突破阻力位入场'],
-          exitRules: ['跌破支撑位出场'],
-        },
-        constraintPack: {},
-      })
-
-    const plannerPayload = {
-      content: JSON.stringify({
-        related: true,
-        logicReady: true,
-        assistantPrompt: '逻辑已确认，可以生成。',
-      }),
-    }
-
-    mockAi.chat
-      .mockResolvedValueOnce(plannerPayload)
-      .mockRejectedValueOnce(new Error('This response_format type is unavailable now'))
-      .mockResolvedValueOnce(plannerPayload)
-      .mockResolvedValueOnce({
-        content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 75, entryPrice: 62000, stopLoss: 61000, takeProfit: 64000, reasoning: "breakout", positionSizeRatio: 0.1 }',
-      })
-    mockRepo.createVersion.mockResolvedValue({ id: 'v10' })
-
-    const first = await service.continueSession('s17', {
-      userId: 'u1',
-      message: '确认并生成',
-      confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
-        entryRules: ['价格突破阻力位入场'],
-        exitRules: ['跌破支撑位出场'],
-      }),
-      providerCode: 'unit-no-model-provider',
-    })
-    expect(first.status).toBe('GENERATING')
-    await waitForTerminalStatus('s17')
-
-    expect(mockRepo.updateSession).toHaveBeenCalledWith('s17', expect.objectContaining({
-      status: 'REJECTED',
-    }))
-
-    const second = await service.continueSession('s18', {
-      userId: 'u1',
-      message: '确认并生成',
-      confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
-        entryRules: ['价格突破阻力位入场'],
-        exitRules: ['跌破支撑位出场'],
-      }),
-      providerCode: 'unit-no-model-provider',
-    })
-    expect(second.status).toBe('GENERATING')
-    await waitForTerminalStatus('s18')
-
-    expect(mockRepo.updateSession).toHaveBeenCalledWith('s18', expect.objectContaining({
-      status: 'PUBLISHED',
-    }))
-
-    const secondCodegenCall = mockAi.chat.mock.calls[3]?.[0] as { responseFormat?: unknown }
-    expect(secondCodegenCall.responseFormat).toBeUndefined()
   })
 
   it('creates strategy instance on publish and returns it in published snapshot', async () => {

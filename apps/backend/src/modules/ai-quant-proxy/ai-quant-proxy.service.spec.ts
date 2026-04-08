@@ -68,7 +68,7 @@ describe('aiQuantProxyService', () => {
     )
   })
 
-  it('forwards deploy payload including deployRequestId with backend user identity', async () => {
+  it('forwards deploy payload with publishedSnapshotId as runtime truth', async () => {
     const { service, quantifyClient, exchangeAccountsService } = createService()
     quantifyClient.post.mockResolvedValue({ id: 'strategy-1', status: 'draft' })
     exchangeAccountsService.list.mockResolvedValue([{ id: 'acc-1' }])
@@ -76,10 +76,7 @@ describe('aiQuantProxyService', () => {
     await service.deployAccountStrategy('user-1', 'Bearer token-1', {
       name: 'My Strategy',
       deployRequestId: 'deploy-req-1',
-      exchange: 'binance',
-      symbol: 'BTCUSDT',
-      timeframe: '3m/15m',
-      positionPct: 10,
+      publishedSnapshotId: 'snapshot-1',
       exchangeAccountId: 'acc-1',
     })
 
@@ -89,10 +86,7 @@ describe('aiQuantProxyService', () => {
         userId: 'user-1',
         name: 'My Strategy',
         deployRequestId: 'deploy-req-1',
-        exchange: 'binance',
-        symbol: 'BTCUSDT',
-        timeframe: '3m/15m',
-        positionPct: 10,
+        publishedSnapshotId: 'snapshot-1',
         exchangeAccountId: 'acc-1',
       },
       {
@@ -110,10 +104,7 @@ describe('aiQuantProxyService', () => {
     await expect(service.deployAccountStrategy('user-1', 'Bearer token-1', {
       name: 'My Strategy',
       deployRequestId: 'deploy-req-retry-1',
-      exchange: 'binance',
-      symbol: 'BTCUSDT',
-      timeframe: '3m/15m',
-      positionPct: 10,
+      publishedSnapshotId: 'snapshot-retry-1',
     })).resolves.toEqual({ id: 'strategy-1', status: 'draft' })
 
     expect(quantifyClient.post).toHaveBeenCalledTimes(2)
@@ -131,10 +122,7 @@ describe('aiQuantProxyService', () => {
     await expect(service.deployAccountStrategy('user-1', 'Bearer token-1', {
       name: 'My Strategy',
       deployRequestId: 'deploy-req-bad-1',
-      exchange: 'binance',
-      symbol: 'BTCUSDT',
-      timeframe: '3m/15m',
-      positionPct: 10,
+      publishedSnapshotId: 'snapshot-bad-1',
     })).rejects.toMatchObject({
       status: 400,
       code: ErrorCode.BAD_REQUEST,
@@ -150,10 +138,7 @@ describe('aiQuantProxyService', () => {
     await expect(service.deployAccountStrategy('user-1', 'Bearer token-1', {
       name: 'My Strategy',
       deployRequestId: 'deploy-req-account-not-found',
-      exchange: 'binance',
-      symbol: 'BTCUSDT',
-      timeframe: '3m/15m',
-      positionPct: 10,
+      publishedSnapshotId: 'snapshot-account-missing',
       exchangeAccountId: 'missing-acc',
     })).rejects.toMatchObject({
       status: 404,
