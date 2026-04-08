@@ -44,7 +44,14 @@ describe('backtestSnapshotLoaderService', () => {
           exchange: 'okx',
           positionPct: 25,
         },
-        executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+        executionPolicy: {
+          signalEvaluation: 'bar_close',
+          fillPolicy: 'next_bar_open',
+          timeframeAlignment: 'strict',
+          orderTypeDefault: 'market',
+          timeInForce: 'gtc',
+          allowPartialFill: false,
+        },
         dataRequirements: { primary: ['15m'] },
         irSnapshot: compiledSnapshot.ir,
         astSnapshot: compiledSnapshot.ast,
@@ -115,7 +122,11 @@ describe('backtestSnapshotLoaderService', () => {
       astSnapshot: compiledSnapshot.ast,
       executionEnvelope: compiledSnapshot.executionEnvelope,
       bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
-      executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+        noNextBarHandling: 'KEEP_PENDING',
+      },
       riskRules: {
         maxFloatingLossPct: 5,
         outsideBand: expect.objectContaining({
@@ -127,6 +138,94 @@ describe('backtestSnapshotLoaderService', () => {
       },
       dataRequirements: { primary: ['15m'] },
       specSnapshot: { market: { exchange: 'okx' } },
+    })
+  })
+
+  it('derives backtest risk rules from graph snapshot triggers when published spec snapshot is not canonical spec', async () => {
+    const compiledSnapshot = createBollingerCompiledSnapshotFixture()
+    const snapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-graph-spec',
+        strategyInstanceId: 'instance-graph-spec',
+        strategyTemplateId: 'template-graph-spec',
+        snapshotHash: 'snapshot-hash',
+        scriptHash: 'script-hash',
+        specHash: compiledSnapshot.compiledManifest.specHash,
+        irHash: compiledSnapshot.compiledManifest.irHash,
+        astDigest: compiledSnapshot.compiledManifest.astDigest,
+        structuralDigest: compiledSnapshot.compiledManifest.structuralDigest,
+        scriptSnapshot: compiledSnapshot.scriptSnapshot,
+        paramsSnapshot: {
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+          marketType: 'spot',
+        },
+        lockedParams: {
+          exchange: 'okx',
+          positionPct: 10,
+        },
+        executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+        dataRequirements: { primary: ['15m'] },
+        irSnapshot: compiledSnapshot.ir,
+        astSnapshot: compiledSnapshot.ast,
+        compiledManifest: compiledSnapshot.compiledManifest,
+        executionEnvelope: compiledSnapshot.executionEnvelope,
+        specSnapshot: {
+          version: 1,
+          status: 'confirmed',
+          meta: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+            positionPct: 10,
+            executionTags: [],
+          },
+          risk: ['positionPct: 10'],
+          actions: [
+            { id: 'action-buy-1', action: 'BUY', amount: '10%', target: 'BTCUSDT' },
+            { id: 'action-sell-1', action: 'SELL', amount: '10%', target: 'BTCUSDT' },
+          ],
+          trigger: [
+            { id: 'trigger-entry-1-0', phase: 'entry', operator: '突破布林带上轨做空' },
+            { id: 'trigger-entry-1-1', phase: 'entry', join: 'AND', operator: '突破布林带下轨做多' },
+            { id: 'trigger-exit-1-0', phase: 'exit', join: 'AND', operator: '价格回到布林带中轨（MA20）平仓' },
+            { id: 'trigger-exit-1-1', phase: 'exit', join: 'AND', operator: '亏损≥5%强制止损' },
+            { id: 'trigger-exit-1-2', phase: 'exit', join: 'AND', operator: '连续3根K线都在轨外时，先减仓50%；如果第4根K线收盘时仍未回到布林带轨内，则全部平仓止损' },
+          ],
+        },
+      }),
+    }
+    const strategyAdapter = {
+      build: jest.fn().mockResolvedValue({
+        id: 'strategy-graph-spec',
+        params: { positionPct: 10, exchange: 'okx' },
+        fn: jest.fn(),
+      }),
+    }
+    const service = new BacktestSnapshotLoaderService(snapshotsRepository as never, strategyAdapter as never)
+
+    await expect(service.load({
+      id: 'strategy-graph-spec',
+      protocolVersion: 'v1',
+      publishedSnapshotId: 'snapshot-graph-spec',
+      userId: 'user-1',
+    })).resolves.toMatchObject({
+      id: 'instance-graph-spec',
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+        noNextBarHandling: 'KEEP_PENDING',
+      },
+      riskRules: {
+        maxFloatingLossPct: 5,
+        outsideBand: expect.objectContaining({
+          mode: 'BOLLINGER_BANDS',
+          indicator: { kind: 'bollingerBands', period: 20, stdDev: 2 },
+          consecutiveBars: 3,
+          action: 'REDUCE',
+          reduceRatio: 0.5,
+        }),
+      },
     })
   })
 
@@ -243,6 +342,79 @@ describe('backtestSnapshotLoaderService', () => {
     })
     expect(strategyAdapter.build).not.toHaveBeenCalled()
   })
+
+  it('accepts legacy snapshots whose spec hash was stored without the sha256 prefix', async () => {
+    const baseIr = createIrFixture()
+    const ir: CanonicalStrategyIrV1 = {
+      ...baseIr,
+      source: {
+        ...baseIr.source,
+        graphDigest: `sha256:${'1'.repeat(64)}`,
+        specHash: `sha256:${'2'.repeat(64)}`,
+      },
+    }
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = createExecutionEnvelope()
+    const emitter = new CompiledScriptEmitterService()
+    const scriptSnapshot = emitter.emit({ ast, executionEnvelope })
+    const compiledManifest = emitter.buildProjection({ ast, executionEnvelope }).compiledManifest
+    const snapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-legacy-spec-hash',
+        strategyInstanceId: 'instance-1',
+        strategyTemplateId: 'template-1',
+        snapshotHash: 'snapshot-hash',
+        scriptHash: 'script-hash',
+        specHash: compiledManifest.specHash.replace(/^sha256:/u, ''),
+        irHash: compiledManifest.irHash,
+        astDigest: compiledManifest.astDigest,
+        structuralDigest: compiledManifest.structuralDigest,
+        scriptSnapshot,
+        paramsSnapshot: {
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+          marketType: 'spot',
+        },
+        lockedParams: {
+          exchange: 'okx',
+          positionPct: 25,
+        },
+        executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+        dataRequirements: { primary: ['15m'] },
+        irSnapshot: ir,
+        astSnapshot: ast,
+        compiledManifest: {
+          ...compiledManifest,
+          specHash: compiledManifest.specHash.replace(/^sha256:/u, ''),
+        },
+        executionEnvelope,
+        specSnapshot: {
+          market: { exchange: 'okx' },
+          indicators: [],
+          riskRules: [],
+        },
+      }),
+    }
+    const strategyAdapter = {
+      build: jest.fn().mockResolvedValue({
+        id: 'strategy-1',
+        params: { positionPct: 25, exchange: 'okx' },
+        fn: jest.fn(),
+      }),
+    }
+    const service = new BacktestSnapshotLoaderService(snapshotsRepository as never, strategyAdapter as never)
+
+    await expect(service.load({
+      id: 'strategy-1',
+      protocolVersion: 'v1',
+      publishedSnapshotId: 'snapshot-legacy-spec-hash',
+      userId: 'user-1',
+    })).resolves.toMatchObject({
+      id: 'instance-1',
+      specHash: compiledManifest.specHash,
+    })
+    expect(strategyAdapter.build).toHaveBeenCalled()
+  })
 })
 
 function createIrFixture(): CanonicalStrategyIrV1 {
@@ -329,5 +501,112 @@ function createExecutionEnvelope() {
     pricePrecision: 2,
     quantityPrecision: 6,
     fillAssumption: 'strict' as const,
+  }
+}
+
+function createBollingerCompiledSnapshotFixture() {
+  const ir: CanonicalStrategyIrV1 = {
+    irVersion: 'csi.v1',
+    source: {
+      graphVersion: 1,
+      graphDigest: `sha256:${'3'.repeat(64)}`,
+      specHash: `sha256:${'4'.repeat(64)}`,
+    },
+    market: {
+      venue: 'okx',
+      instrumentType: 'spot',
+      symbol: 'BTCUSDT',
+      timeframes: ['15m'],
+      priceFeed: 'close',
+    },
+    portfolio: {
+      positionMode: 'long_short',
+      sizing: { mode: 'position_pct', value: 10 },
+      maxConcurrentPositions: 1,
+      allowPyramiding: false,
+      maxPyramidingLayers: 1,
+    },
+    dataRequirements: {
+      warmupBars: 1,
+      maxLookback: 1,
+      requiredTimeframes: ['15m'],
+    },
+    signalCatalog: {
+      series: [
+        { id: 'bollinger_bars_outside_risk-bollinger-outside-3', kind: 'BOLLINGER_BARS_OUTSIDE', timeframe: '15m', params: { bars: 3, bandSide: 'outside' } },
+        { id: 'close_15m_0', kind: 'PRICE', timeframe: '15m', field: 'close', offsetBars: 0 },
+        { id: 'const_3', kind: 'CONST', value: 3 },
+        { id: 'lower_band_15m_20_2', kind: 'LOWER_BAND', timeframe: '15m', inputs: ['close_15m_0'], params: { period: 20, stdDev: 2 } },
+        { id: 'mid_band_15m_20_2', kind: 'MID_BAND', timeframe: '15m', inputs: ['close_15m_0'], params: { period: 20, stdDev: 2 } },
+        { id: 'upper_band_15m_20_2', kind: 'UPPER_BAND', timeframe: '15m', inputs: ['close_15m_0'], params: { period: 20, stdDev: 2 } },
+      ],
+      levelSets: [],
+      predicates: [
+        { id: 'entry_and_predicate_entry-boll-upper-short-1_predicate_entry-boll-lower-long-2', kind: 'AND', args: ['predicate_entry-boll-upper-short-1', 'predicate_entry-boll-lower-long-2'] },
+        { id: 'predicate_entry-boll-lower-long-2', kind: 'CROSS_UNDER', args: ['close_15m_0', 'lower_band_15m_20_2'] },
+        { id: 'predicate_entry-boll-upper-short-1', kind: 'CROSS_OVER', args: ['close_15m_0', 'upper_band_15m_20_2'] },
+        { id: 'predicate_exit-boll-middle-close-3', kind: 'OR', args: ['predicate_exit-boll-middle-close-3_above', 'predicate_exit-boll-middle-close-3_below'] },
+        { id: 'predicate_exit-boll-middle-close-3_above', kind: 'CROSS_OVER', args: ['close_15m_0', 'mid_band_15m_20_2'] },
+        { id: 'predicate_exit-boll-middle-close-3_below', kind: 'CROSS_UNDER', args: ['close_15m_0', 'mid_band_15m_20_2'] },
+        { id: 'predicate_risk-bollinger-outside-3', kind: 'GTE', args: ['bollinger_bars_outside_risk-bollinger-outside-3', 'const_3'] },
+      ],
+    },
+    ruleBlocks: [
+      {
+        id: 'entry_rule',
+        when: 'entry_and_predicate_entry-boll-upper-short-1_predicate_entry-boll-lower-long-2',
+        phase: 'entry',
+        actions: [
+          { kind: 'OPEN_LONG', quantity: { mode: 'position_pct', value: 10 } },
+          { kind: 'OPEN_SHORT', quantity: { mode: 'position_pct', value: 10 } },
+        ],
+        priority: 200,
+      },
+      {
+        id: 'exit_rule',
+        when: 'predicate_exit-boll-middle-close-3',
+        phase: 'exit',
+        actions: [
+          { kind: 'CLOSE_LONG', quantity: { mode: 'position_pct', value: 100 } },
+          { kind: 'CLOSE_SHORT', quantity: { mode: 'position_pct', value: 100 } },
+        ],
+        priority: 100,
+      },
+      {
+        id: 'rebalance_risk-bollinger-outside-3',
+        when: 'predicate_risk-bollinger-outside-3',
+        phase: 'rebalance',
+        actions: [
+          { kind: 'REDUCE_LONG', quantity: { mode: 'position_pct', value: 50 } },
+          { kind: 'REDUCE_SHORT', quantity: { mode: 'position_pct', value: 50 } },
+        ],
+        priority: 50,
+      },
+    ],
+    orderPrograms: [],
+    riskPolicy: {
+      guards: [],
+    },
+    executionPolicy: {
+      signalEvaluation: 'bar_close',
+      fillPolicy: 'next_bar_open',
+      timeframeAlignment: 'strict',
+      orderTypeDefault: 'market',
+      timeInForce: 'gtc',
+      allowPartialFill: false,
+    },
+  }
+  const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+  const executionEnvelope = createExecutionEnvelope()
+  const emitter = new CompiledScriptEmitterService()
+  const scriptSnapshot = emitter.emit({ ast, executionEnvelope })
+  const projection = emitter.buildProjection({ ast, executionEnvelope })
+
+  return {
+    ir,
+    ast,
+    executionEnvelope,
+    scriptSnapshot,
+    compiledManifest: projection.compiledManifest,
   }
 }
