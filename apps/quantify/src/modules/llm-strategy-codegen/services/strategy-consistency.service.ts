@@ -269,12 +269,32 @@ export class StrategyConsistencyService {
       }
     }
 
+    for (const guard of projection.guards) {
+      const normalizedAction = this.normalizeAction(guard.payload.onBreach)
+      if (!normalizedAction) continue
+
+      const key = this.inferRuleKeyFromGuard(guard.payload.kind)
+      if (!key) continue
+
+      pushRule({
+        key,
+        action: normalizedAction,
+        phase: 'risk',
+        sideScope: this.resolveRuleSideScope('both', normalizedAction),
+      })
+    }
+
     const actions = Array.from(new Set(
-      projection.decisionPrograms.flatMap(program =>
-        program.actions
-          .map(action => this.normalizeAction(action.kind))
+      [
+        ...projection.decisionPrograms.flatMap(program =>
+          program.actions
+            .map(action => this.normalizeAction(action.kind))
+            .filter((action): action is CanonicalAction => action !== null),
+        ),
+        ...projection.guards
+          .map(guard => this.normalizeAction(guard.payload.onBreach))
           .filter((action): action is CanonicalAction => action !== null),
-      ),
+      ],
     ))
 
     const firstOpenAction = projection.decisionPrograms
@@ -951,6 +971,13 @@ export class StrategyConsistencyService {
     if (input.predicateKind === 'OR' && input.predicateId.includes('middle')) return 'bollinger.middle_revert'
     if (input.predicateId.includes('outside')) return 'bollinger.bars_outside'
     if (input.predicateId.includes('stop-loss') || input.predicateId.includes('loss')) return 'position_loss_pct'
+    return null
+  }
+
+  private inferRuleKeyFromGuard(kind: string): StrategySemanticRuleKey | null {
+    if (kind === 'STOP_LOSS_PCT' || kind === 'MAX_SINGLE_LOSS_PCT') {
+      return 'position_loss_pct'
+    }
     return null
   }
 

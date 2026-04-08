@@ -81,7 +81,7 @@ strategy
         '跌破布林带下轨时做多',
       ],
       exitRules: ['回到中轨时平仓'],
-      riskRules: { positionPct: 10, exchange: 'okx', marketType: 'spot' },
+      riskRules: { positionPct: 10, stopLossPct: 5, exchange: 'okx', marketType: 'spot' },
     })
 
     const compiled = new CanonicalSpecV2IrCompilerService().compile({
@@ -106,6 +106,8 @@ strategy
 
     expect(report.status).toBe('PASSED')
     expect(report.checks.some(check => check.key === 'sizing.mode' && check.status === 'passed')).toBe(true)
+    expect(report.checks.some(check => check.key === 'actions.required' && check.status === 'passed')).toBe(true)
+    expect(report.checks.some(check => check.key === 'rules.mapping' && check.status === 'passed')).toBe(true)
   })
 
   it('fails when compiled script no longer matches ir manifest', () => {
