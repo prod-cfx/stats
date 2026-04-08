@@ -83,6 +83,33 @@ describe('ai-quant session-loop', () => {
     expect(payload.riskRules).toEqual({ positionPct: 10, maxDrawdownPct: 20 })
   })
 
+  it('preserves directional bollinger entry semantics when rebuilding checklist from graph ids', () => {
+    const directionalGraph = {
+      version: 2,
+      status: 'confirmed',
+      trigger: [
+        { id: 'trigger-entry-upper-1', operator: '价格向上突破布林带上轨' },
+        { id: 'trigger-entry-lower-2', operator: '价格向下突破布林带下轨' },
+        { id: 'trigger-exit-middle-1', operator: '价格回到布林带中轨（MA20）' },
+      ],
+      risk: [],
+      actions: [],
+      meta: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+      },
+    } as any
+
+    const payload = buildLockedChecklistFromGraph(directionalGraph, baseParams)
+    expect(payload.entryRules).toEqual([
+      '价格向上突破布林带上轨时做空',
+      '价格向下突破布林带下轨时做多',
+    ])
+    expect(payload.exitRules).toEqual(['价格回到布林带中轨（MA20）'])
+  })
+
   it('recognizes short confirmation messages', () => {
     expect(isShortConfirmationMessage('可以')).toBe(true)
     expect(isShortConfirmationMessage('继续')).toBe(true)

@@ -144,7 +144,13 @@ export function inferChecklistFromGraph(
   for (const node of graph.trigger) {
     const id = node.id.toLowerCase()
     if (id.includes('entry') || id.includes('buy')) {
-      entryRules.push(node.operator)
+      if (id.includes('upper') && /上轨/.test(node.operator)) {
+        entryRules.push(`${node.operator}时做空`)
+      } else if (id.includes('lower') && /下轨/.test(node.operator)) {
+        entryRules.push(`${node.operator}时做多`)
+      } else {
+        entryRules.push(node.operator)
+      }
       continue
     }
     if (id.includes('exit') || id.includes('sell')) {

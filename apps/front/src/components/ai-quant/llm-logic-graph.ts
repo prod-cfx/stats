@@ -126,15 +126,15 @@ export function buildLogicGraphFromCodegenSpec(
 ): StrategyLogicGraph {
   const typed = (spec && typeof spec === 'object' ? spec : {}) as CodegenSpec
   const topLevelRules = Array.isArray(typed.rules) ? typed.rules : []
+  const entryPhaseRules = topLevelRules.filter(rule => rule.phase === 'entry')
+  const exitPhaseRules = topLevelRules.filter(rule => rule.phase === 'exit')
   const entryRules = topLevelRules.length > 0
-    ? topLevelRules
-        .filter(rule => rule.phase === 'entry')
+    ? entryPhaseRules
         .map(rule => describeRuleCondition(rule.condition))
         .filter((rule): rule is string => typeof rule === 'string' && rule.trim().length > 0)
     : asStringList(typed.entryRules)
   const exitRules = topLevelRules.length > 0
-    ? topLevelRules
-        .filter(rule => rule.phase === 'exit')
+    ? exitPhaseRules
         .map(rule => describeRuleCondition(rule.condition))
         .filter((rule): rule is string => typeof rule === 'string' && rule.trim().length > 0)
     : asStringList(typed.exitRules)
@@ -159,14 +159,18 @@ export function buildLogicGraphFromCodegenSpec(
   const positionPct = extractPositionPct(typed, fallback)
   const trigger = [
     ...entryRules.map((rule, idx) => ({
-      id: `trigger-entry-${version}-${idx}`,
+      id: entryPhaseRules[idx]?.id
+        ? `trigger-${entryPhaseRules[idx].id}`
+        : `trigger-entry-${version}-${idx}`,
       subject: symbol,
       operator: rule,
       value: 'true',
       join: (idx > 0 ? 'AND' : undefined) as 'AND' | undefined,
     })),
     ...exitRules.map((rule, idx) => ({
-      id: `trigger-exit-${version}-${idx}`,
+      id: exitPhaseRules[idx]?.id
+        ? `trigger-${exitPhaseRules[idx].id}`
+        : `trigger-exit-${version}-${idx}`,
       subject: symbol,
       operator: rule,
       value: 'true',
@@ -186,7 +190,9 @@ export function buildLogicGraphFromCodegenSpec(
             const mappedAction = mapRuleAction(action)
             if (!mappedAction) return null
             return {
-              id: `action-${version}-${ruleIndex}-${actionIndex}`,
+              id: rule.id
+                ? `action-${rule.id}-${actionIndex}`
+                : `action-${version}-${ruleIndex}-${actionIndex}`,
               action: mappedAction,
               target: symbol,
               amount: `${positionPct}%`,
