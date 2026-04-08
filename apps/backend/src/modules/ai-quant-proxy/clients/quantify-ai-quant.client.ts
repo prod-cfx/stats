@@ -1,6 +1,6 @@
 import { Inject, Injectable } from '@nestjs/common'
-import { EnvService } from '@/common/services/env.service'
 import { normalizeAppEnv } from '@/common/env/env.accessor'
+import { EnvService } from '@/common/services/env.service'
 
 interface QuantifyErrorPayload {
   status?: number
