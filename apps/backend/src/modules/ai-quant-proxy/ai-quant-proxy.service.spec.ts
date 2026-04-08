@@ -191,14 +191,16 @@ describe('aiQuantProxyService', () => {
 
     await service.continueCodegen('Bearer token-1', 'session-1', {
       message: '继续',
-      confirmGenerate: false,
+      confirmGenerate: true,
+      confirmedCanonicalDigest: 'sha256:canonical-1',
     })
 
     expect(quantifyClient.post).toHaveBeenCalledWith(
       '/llm-strategy-codegen/sessions/session-1/messages',
       {
         message: '继续',
-        confirmGenerate: false,
+        confirmGenerate: true,
+        confirmedCanonicalDigest: 'sha256:canonical-1',
       },
       {
         timeoutMs: codegenTimeoutMs,
