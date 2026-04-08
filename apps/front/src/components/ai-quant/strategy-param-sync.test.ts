@@ -327,4 +327,36 @@ describe('strategy-param-sync', () => {
     expect(result.paramValues.marketType).toBe('spot')
     expect(result.paramValues.stopLossPct).toBe(5)
   })
+
+  it('infers exchange from assistant/context text when checklist gate specDesc has only canonical rules', () => {
+    const result = syncStrategyParamsFromCodegen({
+      spec: {
+        rules: [
+          {
+            phase: 'entry',
+            condition: { key: 'bollinger.upper_break' },
+            actions: [{ type: 'OPEN_SHORT', sizing: { mode: 'RATIO', value: 0.1 } }],
+          },
+        ],
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+      },
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      capabilities: {
+        allowedSymbols: ['BTCUSDT'],
+        allowedBaseTimeframes: ['15m'],
+      },
+      contextText: '策略逻辑已完整。风险规则包括交易所为OKX，仓位10%。',
+    })
+
+    expect(result.paramValues.exchange).toBe('okx')
+    expect(result.normalized.exchange).toBe('okx')
+  })
 })
