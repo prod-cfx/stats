@@ -304,7 +304,7 @@ export class CodegenConversationService {
       providerCode: this.resolveProviderCode(dto.providerCode),
       model: dto.model,
     }, constraintPack.conversationHistory ?? [])
-    if (!plan.related && dto.confirmGenerate !== true) {
+    if (!plan.related) {
       return {
         id: session.id,
         status: 'DRAFTING',

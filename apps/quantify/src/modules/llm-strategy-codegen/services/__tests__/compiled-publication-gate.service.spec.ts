@@ -11,9 +11,6 @@ describe('CompiledPublicationGateService', () => {
     const gate = new CompiledPublicationGateService(
       publishedSnapshotsRepo as never,
       undefined,
-      {
-        audit: jest.fn().mockReturnValue({ status: 'PASSED' }),
-      } as never,
     )
     const ir = createIrFixture()
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)
@@ -267,9 +264,6 @@ describe('CompiledPublicationGateService', () => {
     const gate = new CompiledPublicationGateService(
       publishedSnapshotsRepo as never,
       undefined,
-      {
-        audit: jest.fn().mockReturnValue({ status: 'FAILED', reasons: ['mismatch'] }),
-      } as never,
     )
     const ir = createIrFixture()
     const ast = new CanonicalStrategyAstCompilerService().compile(ir)

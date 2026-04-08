@@ -184,7 +184,8 @@ export class CanonicalSpecV2IrCompilerService {
       version: 3,
       status: 'confirmed',
       trigger: input.canonicalSpec.rules
-        .filter(rule => rule.phase === 'entry' || rule.phase === 'exit')
+        .filter((rule): rule is CanonicalRuleV2 & { phase: 'entry' | 'exit' } =>
+          rule.phase === 'entry' || rule.phase === 'exit')
         .map((rule, index) => ({
           id: `trigger-${rule.id}`,
           phase: rule.phase,
@@ -281,7 +282,11 @@ export class CanonicalSpecV2IrCompilerService {
       return this.upsertPredicate(context.predicateMap, `${seed}_not`, 'NOT', [childRef])
     }
 
-    return this.compileAtom(condition, context, seed)
+    if (this.isConditionAtom(condition)) {
+      return this.compileAtom(condition, context, seed)
+    }
+
+    throw new Error('codegen.canonical_spec_v2_condition_unsupported')
   }
 
   private compileAtom(atom: CanonicalConditionAtom, context: CompileContext, seed: string): string {
@@ -622,6 +627,10 @@ export class CanonicalSpecV2IrCompilerService {
       return `NOT(${this.describeCondition(condition.children[0] ?? { kind: 'atom', key: 'unknown' }, config)})`
     }
 
+    if (!this.isConditionAtom(condition)) {
+      return 'unsupported'
+    }
+
     switch (condition.key) {
       case 'ma.golden_cross':
       case 'ma.death_cross': {
@@ -680,11 +689,15 @@ export class CanonicalSpecV2IrCompilerService {
   }
 
   private resolveComparisonKind(op: CanonicalConditionAtom['op']): Extract<PredicateDef['kind'], 'GT' | 'GTE' | 'LT' | 'LTE' | 'EQ'> {
-    if (op === 'GT' || op === 'GTE' || op === 'LT' || op === 'LTE' || op === 'EQ') {
+    if (op === 'GTE' || op === 'LTE' || op === 'EQ') {
       return op
     }
 
     return 'GTE'
+  }
+
+  private isConditionAtom(node: CanonicalConditionNode): node is CanonicalConditionAtom {
+    return node.kind === 'atom'
   }
 
   private normalizeNumberToken(value: number): string {
