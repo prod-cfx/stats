@@ -30,7 +30,18 @@ import { CodegenSessionsRepository } from '../repositories/codegen-sessions.repo
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CanonicalSpecV2IrCompilerService } from './canonical-spec-v2-ir-compiler.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CanonicalStrategyAstCompilerService } from './canonical-strategy-ast-compiler.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CompiledPublicationGateService } from './compiled-publication-gate.service'
+import { CompiledScriptParserService } from './compiled-script-parser.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CompiledScriptEmitterService } from './compiled-script-emitter.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CompiledScriptExecutionEnvelopeService } from './compiled-script-execution-envelope.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RecommendationIndexService } from './recommendation-index.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -158,6 +169,14 @@ export class CodegenConversationService {
     private readonly clarificationRules: StrategyClarificationRulesService,
     private readonly clarificationQuestion: StrategyClarificationQuestionService,
     private readonly strategySummaryBuilder: StrategySummaryBuilderService,
+    private readonly canonicalSpecV2IrCompiler: CanonicalSpecV2IrCompilerService = new CanonicalSpecV2IrCompilerService(),
+    private readonly canonicalStrategyAstCompiler: CanonicalStrategyAstCompilerService = new CanonicalStrategyAstCompilerService(),
+    private readonly compiledScriptEmitter: CompiledScriptEmitterService = new CompiledScriptEmitterService(),
+    private readonly compiledScriptExecutionEnvelope: CompiledScriptExecutionEnvelopeService = new CompiledScriptExecutionEnvelopeService(),
+    private readonly compiledScriptParser: CompiledScriptParserService = new CompiledScriptParserService(),
+    private readonly compiledPublicationGate: CompiledPublicationGateService = new CompiledPublicationGateService(
+      publishedSnapshotsRepo,
+    ),
   ) {}
 
   async startSession(
@@ -192,6 +211,7 @@ export class CodegenConversationService {
 
     const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
     const initialSpecDesc = shouldGateChecklist ? this.specDescBuilder.build(checklist, '') : null
+    const initialCanonicalDigest = this.readCanonicalDigest(initialSpecDesc)
     const assistantPrompt = clarificationState.status === 'NEEDS_CLARIFICATION' && clarificationPrompt
       ? clarificationPrompt
       : (shouldGateChecklist
@@ -219,6 +239,7 @@ export class CodegenConversationService {
       status,
       missingFields: [],
       specDesc: initialSpecDesc,
+      canonicalDigest: initialCanonicalDigest,
       assistantPrompt,
       clarificationState,
     }
@@ -264,33 +285,10 @@ export class CodegenConversationService {
         args: { sessionId, status: session.status },
       })
     }
+    if (dto.confirmGenerate === true) {
+      return this.continueConfirmedSession(session, dto, sessionUserId)
+    }
     if (PROCESSING_SESSION_STATUSES.includes(session.status)) {
-      if (dto.confirmGenerate === true) {
-        const providerCode = this.resolveProviderCode(dto.providerCode)
-        const requeued = await this.sessionsRepo.tryRequeueFromProcessing(session.id, {
-          status: 'GENERATING',
-          rejectReason: null,
-        })
-        if (requeued) {
-          const checklist = this.readChecklist(session.checklist)
-          void this.runGenerationPipeline({
-            sessionId: session.id,
-            userId: sessionUserId,
-            checklist,
-            message: dto.message,
-            providerCode,
-            model: dto.model,
-            temperature: dto.temperature,
-            maxTokens: dto.maxTokens,
-            existingStrategyInstanceId: session.strategyInstanceId ?? null,
-          })
-          return {
-            id: session.id,
-            status: 'GENERATING',
-            missingFields: [],
-          }
-        }
-      }
       return this.toSessionSnapshotResponse(session)
     }
 
@@ -306,7 +304,7 @@ export class CodegenConversationService {
       providerCode: this.resolveProviderCode(dto.providerCode),
       model: dto.model,
     }, constraintPack.conversationHistory ?? [])
-    if (!plan.related && dto.confirmGenerate !== true) {
+    if (!plan.related) {
       return {
         id: session.id,
         status: 'DRAFTING',
@@ -353,48 +351,110 @@ export class CodegenConversationService {
       dto.message,
       plan.assistantPrompt,
     )
+    const canonicalSpec = this.canonicalSpecBuilder.build(mergedChecklist)
+    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
+    const canonicalDigest = this.readCanonicalDigest(specDesc)
 
-    if (dto.confirmGenerate !== true) {
-      if (!plan.logicReady) {
-        await this.sessionsRepo.updateSession(session.id, {
-          status: 'DRAFTING',
-          checklist: mergedChecklist as Prisma.InputJsonValue,
-          clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
-          constraintPack: {
-            ...nextConstraintPack,
-            conversationHistory: historyAfterPlanner,
-          } as unknown as Prisma.InputJsonValue,
-        })
-
-        return {
-          id: session.id,
-          status: 'DRAFTING',
-          missingFields: [],
-          assistantPrompt: plan.assistantPrompt,
-          clarificationState,
-        }
-      }
-
-      const specDesc = this.specDescBuilder.build(mergedChecklist, '')
+    if (!plan.logicReady) {
       await this.sessionsRepo.updateSession(session.id, {
-        status: 'CHECKLIST_GATE',
+        status: 'DRAFTING',
         checklist: mergedChecklist as Prisma.InputJsonValue,
         clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
         constraintPack: {
           ...nextConstraintPack,
           conversationHistory: historyAfterPlanner,
         } as unknown as Prisma.InputJsonValue,
-        latestSpecDesc: specDesc as Prisma.InputJsonValue,
       })
 
       return {
         id: session.id,
-        status: 'CHECKLIST_GATE',
+        status: 'DRAFTING',
         missingFields: [],
-        specDesc,
-        assistantPrompt: `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`,
+        assistantPrompt: plan.assistantPrompt,
         clarificationState,
       }
+    }
+
+    await this.sessionsRepo.updateSession(session.id, {
+      status: 'CHECKLIST_GATE',
+      checklist: mergedChecklist as Prisma.InputJsonValue,
+      clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
+      constraintPack: {
+        ...nextConstraintPack,
+        conversationHistory: historyAfterPlanner,
+      } as unknown as Prisma.InputJsonValue,
+      latestSpecDesc: specDesc as Prisma.InputJsonValue,
+    })
+
+    return {
+      id: session.id,
+      status: 'CHECKLIST_GATE',
+      missingFields: [],
+      specDesc,
+      canonicalDigest,
+      assistantPrompt: `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`,
+      clarificationState,
+    }
+  }
+
+  private async continueConfirmedSession(
+    session: {
+      id: string
+      userId: string
+      status: LlmCodegenSessionStatus
+      checklist: Prisma.JsonValue | null
+      clarificationState?: Prisma.JsonValue | null
+      constraintPack: Prisma.JsonValue | null
+      strategyInstanceId?: string | null
+    },
+    dto: ContinueCodegenSessionDto,
+    sessionUserId: string,
+  ): Promise<CodegenSessionResponseDto> {
+    const baseChecklist = this.readChecklist(session.checklist)
+    const messageChecklist = this.normalizeChecklist(this.extractChecklist(dto))
+    const mergedChecklist = this.mergeChecklistSnapshots(baseChecklist, messageChecklist)
+    const clarificationState = this.clarificationRules.detect(mergedChecklist)
+    const clarificationPrompt = this.clarificationQuestion.build(clarificationState)
+    const constraintPack = this.readConstraintPack(session.constraintPack)
+    const historyAfterConfirm = this.appendConversationHistory(
+      constraintPack.conversationHistory ?? [],
+      dto.message,
+    )
+
+    if (clarificationState.status === 'NEEDS_CLARIFICATION') {
+      const assistantPrompt = clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。'
+      await this.sessionsRepo.updateSession(session.id, {
+        status: 'DRAFTING',
+        checklist: mergedChecklist as Prisma.InputJsonValue,
+        clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
+        constraintPack: {
+          ...constraintPack,
+          conversationHistory: historyAfterConfirm,
+        } as unknown as Prisma.InputJsonValue,
+      })
+
+      return {
+        id: session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt,
+        clarificationState,
+      }
+    }
+
+    const canonicalSpec = this.canonicalSpecBuilder.build(mergedChecklist)
+    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
+    const canonicalDigest = this.readCanonicalDigest(specDesc)
+    const confirmedCanonicalDigest = dto.confirmedCanonicalDigest?.trim() ?? ''
+    if (!canonicalDigest || confirmedCanonicalDigest !== canonicalDigest) {
+      throw new DomainException('codegen.confirmation_digest_mismatch', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: {
+          expectedCanonicalDigest: canonicalDigest,
+          confirmedCanonicalDigest: confirmedCanonicalDigest || null,
+        },
+      })
     }
 
     const missingFields = this.resolveChecklistMissingFields(mergedChecklist)
@@ -404,33 +464,36 @@ export class CodegenConversationService {
         checklist: mergedChecklist as Prisma.InputJsonValue,
         clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
         constraintPack: {
-          ...nextConstraintPack,
-          conversationHistory: historyAfterPlanner,
+          ...constraintPack,
+          conversationHistory: historyAfterConfirm,
         } as unknown as Prisma.InputJsonValue,
+        latestSpecDesc: specDesc as Prisma.InputJsonValue,
       })
 
       return {
         id: session.id,
         status: 'DRAFTING',
         missingFields,
-        assistantPrompt: plan.assistantPrompt || '请先补全入场和出场规则，再确认生成代码。',
+        assistantPrompt: '请先补全入场和出场规则，再确认生成代码。',
         clarificationState,
       }
     }
 
-    const providerCode = this.resolveProviderCode(dto.providerCode)
-    const markedGenerating = await this.sessionsRepo.tryMarkGenerating(session.id, {
-      status: 'GENERATING',
+    const markGeneratingInput = {
+      status: 'GENERATING' as const,
       checklist: mergedChecklist as Prisma.InputJsonValue,
+      clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
       constraintPack: {
-        ...nextConstraintPack,
-        conversationHistory: this.appendConversationHistory(
-          constraintPack.conversationHistory ?? [],
-          dto.message,
-        ),
+        ...constraintPack,
+        conversationHistory: historyAfterConfirm,
       } as unknown as Prisma.InputJsonValue,
+      latestSpecDesc: specDesc as Prisma.InputJsonValue,
       rejectReason: null,
-    })
+    }
+
+    const markedGenerating = PROCESSING_SESSION_STATUSES.includes(session.status)
+      ? await this.sessionsRepo.tryRequeueFromProcessing(session.id, markGeneratingInput)
+      : await this.sessionsRepo.tryMarkGenerating(session.id, markGeneratingInput)
 
     if (!markedGenerating) {
       const latest = await this.sessionsRepo.findById(session.id)
@@ -438,21 +501,18 @@ export class CodegenConversationService {
         throw new DomainException('codegen.session_not_found', {
           code: ErrorCode.NOT_FOUND,
           status: HttpStatus.NOT_FOUND,
-          args: { sessionId },
+          args: { sessionId: session.id },
         })
       }
       return this.toSessionSnapshotResponse(latest)
     }
 
-    void this.runGenerationPipeline({
+    void this.runConfirmedPublicationPipeline({
       sessionId: session.id,
       userId: sessionUserId,
       checklist: mergedChecklist,
       message: dto.message,
-      providerCode,
       model: dto.model,
-      temperature: dto.temperature,
-      maxTokens: dto.maxTokens,
       existingStrategyInstanceId: session.strategyInstanceId ?? null,
     })
 
@@ -463,15 +523,12 @@ export class CodegenConversationService {
     }
   }
 
-  private async runGenerationPipeline(args: {
+  private async runConfirmedPublicationPipeline(args: {
     sessionId: string
     userId: string
     checklist: ChecklistPayload
     message: string
-    providerCode: string
     model?: string
-    temperature?: number
-    maxTokens?: number
     existingStrategyInstanceId?: string | null
   }): Promise<void> {
     const {
@@ -479,178 +536,108 @@ export class CodegenConversationService {
       userId,
       checklist,
       message,
-      providerCode,
       model,
-      temperature,
-      maxTokens,
       existingStrategyInstanceId,
     } = args
     try {
-      let lastScriptCode = ''
-      let lastRejectReason = ''
-      let finalValidation: ScriptValidationResult | null = null
-      let generationMessage = message
-      const maxAttempts = MAX_CODEGEN_AUTO_REPAIR_RETRIES + 1
-
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        const isRepairAttempt = attempt > 1
-        const generatedScript = await this.generateScript(checklist, generationMessage, {
-          providerCode,
-          model,
-          // 修复回合降低随机性，优先最小改动修复语法/类型错误
-          temperature: isRepairAttempt ? 0 : temperature,
-          maxTokens: maxTokens ?? 1400,
-        })
-        lastScriptCode = generatedScript
-
-        await this.sessionsRepo.updateSession(sessionId, {
-          status: 'VALIDATING_STATIC',
-          latestDraftCode: generatedScript,
-        })
-
-        const validation = await this.validateGeneratedScript(generatedScript)
-        if (validation.passed) {
-          finalValidation = validation
-          break
-        }
-
-        lastRejectReason = validation.reason ?? '脚本校验失败'
-        await this.sessionsRepo.createVersion({
-          session: { connect: { id: sessionId } },
-          scriptCode: validation.scriptCode,
-          specDesc: {} as Prisma.InputJsonValue,
-          staticPassed: validation.staticPassed,
-          runtimePassed: validation.runtimePassed,
-          outputPassed: validation.outputPassed,
-        })
-
-        if (attempt >= maxAttempts) {
-          const fallbackScript = this.buildTypeSafeFallbackScript(checklist)
-          const fallbackValidation = await this.validateGeneratedScript(fallbackScript)
-          const rejectReason = fallbackValidation.passed
-            ? `${lastRejectReason}（自动修复重试后仅得到通用 fallback 脚本，已禁止发布）`
-            : `${lastRejectReason}（已自动修复重试 ${MAX_CODEGEN_AUTO_REPAIR_RETRIES} 次仍失败）`
-          await this.sessionsRepo.updateSession(sessionId, {
-            status: 'REJECTED',
-            rejectReason,
-            latestDraftCode: lastScriptCode || null,
-          })
-          return
-        }
-
-        generationMessage = this.buildRepairGenerationMessage({
-          originalMessage: message,
-          checklist,
-          scriptCode: validation.scriptCode,
-          rejectReason: lastRejectReason,
-          attempt,
-        })
-      }
-
-      if (!finalValidation) {
-        const rejectReason = `${lastRejectReason || '脚本校验失败'}（已自动修复重试 ${MAX_CODEGEN_AUTO_REPAIR_RETRIES} 次仍失败）`
-        await this.sessionsRepo.updateSession(sessionId, {
-          status: 'REJECTED',
-          rejectReason,
-          latestDraftCode: lastScriptCode || null,
-        })
-        return
-      }
-
-      const finalScriptCode = finalValidation.scriptCode
-
-      await this.sessionsRepo.updateSession(sessionId, {
-        status: 'VALIDATING_RUNTIME',
-      })
-
-      await this.sessionsRepo.updateSession(sessionId, {
-        status: 'VALIDATING_OUTPUT',
-      })
-
-      const baseSpecDesc = this.specDescBuilder.build(checklist, finalScriptCode)
       const canonicalSpec = this.canonicalSpecBuilder.build(checklist)
+      const semanticView = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
       const userIntentSummary = this.strategySummaryBuilder.buildUserIntentSummary({
         checklist,
         message,
       })
       const strategySummary = this.strategySummaryBuilder.buildStrategySummary(canonicalSpec)
-      const scriptSummary = this.strategySummaryBuilder.buildScriptSummary({
-        scriptCode: finalScriptCode,
-      })
       const lockedParams = this.buildLockedParams(checklist)
-      await this.sessionsRepo.updateSession(sessionId, {
-        status: 'VALIDATING_CONSISTENCY',
-      })
-
-      if (canonicalSpec.version !== 2) {
-        await this.sessionsRepo.updateSession(sessionId, {
-          status: 'CONSISTENCY_FAILED',
-          latestSpecDesc: {
-            ...baseSpecDesc,
-            canonicalSpec,
-          } as unknown as Prisma.InputJsonValue,
-          latestDraftCode: finalScriptCode,
-          rejectReason: 'canonical_spec_v2_required_for_publication',
-          strategyInstanceId: existingStrategyInstanceId ?? null,
-        })
-        return
-      }
-
-      const consistencyReport = this.strategyConsistencyService.evaluate({
-        canonicalSpec,
-        scriptCode: finalScriptCode,
-        userIntentSummary,
-        strategySummary,
-        scriptSummary,
-      })
-      const specDesc = {
-        ...baseSpecDesc,
-        canonicalSpec,
-        userIntentSummary,
-        strategySummary,
-        scriptSummary,
-        lockedParams,
-        consistencyReport,
-      } satisfies Record<string, unknown>
-
-      const version = await this.sessionsRepo.createVersion({
-        session: { connect: { id: sessionId } },
-        scriptCode: finalScriptCode,
-        specDesc: specDesc as unknown as Prisma.InputJsonValue,
-        staticPassed: true,
-        runtimePassed: true,
-        outputPassed: true,
-      })
-
-      await this.recommendationIndex.onSpecDescPersisted({
-        versionId: version.id,
-        specDesc: baseSpecDesc,
-      })
-
-      if (consistencyReport.status !== 'PASSED') {
-        await this.sessionsRepo.updateSession(sessionId, {
-          status: 'CONSISTENCY_FAILED',
-          latestSpecDesc: specDesc as unknown as Prisma.InputJsonValue,
-          latestDraftCode: finalScriptCode,
-          rejectReason: this.buildConsistencyRejectReason(consistencyReport),
-          strategyInstanceId: existingStrategyInstanceId ?? null,
-        })
-        return
-      }
-
       let strategyInstanceId = existingStrategyInstanceId
         ?? await this.sessionsRepo.findSessionStrategyInstanceId(sessionId)
-      let strategyTemplateId: string | null = null
       const publishInput = this.buildPublishedStrategyInput({
         sessionId,
         userId,
         checklist,
         message,
         model,
-        scriptCode: finalScriptCode,
-        specDesc,
+        scriptCode: '',
+        specDesc: semanticView,
         lockedParams,
       })
+
+      const compiled = this.canonicalSpecV2IrCompiler.compile({
+        canonicalSpec,
+        fallback: this.buildCompiledIrFallback({
+          checklist,
+          lockedParams,
+          publishParams: publishInput.params,
+        }),
+      })
+      const executionEnvelope = this.compiledScriptExecutionEnvelope.build(canonicalSpec)
+      const ast = this.canonicalStrategyAstCompiler.compile(compiled.ir)
+      let compiledScript = this.compiledScriptEmitter.emit({
+        ast,
+        executionEnvelope,
+      })
+      const compiledValidation = await this.validateCompiledScript(compiledScript)
+      if (!compiledValidation.passed) {
+        await this.sessionsRepo.updateSession(sessionId, {
+          status: 'REJECTED',
+          latestDraftCode: compiledValidation.scriptCode,
+          rejectReason: compiledValidation.reason,
+          strategyInstanceId: strategyInstanceId ?? null,
+        })
+        return
+      }
+      compiledScript = compiledValidation.scriptCode
+      const semanticConsistency = this.strategyConsistencyService.evaluate({
+        canonicalSpec,
+        scriptCode: compiledScript,
+        userIntentSummary,
+        strategySummary,
+      })
+      const scriptSummary = this.strategySummaryBuilder.buildScriptSummary({
+        scriptProfile: semanticConsistency.scriptProfile,
+      })
+      const sessionSpecDesc = {
+        ...semanticView,
+        canonicalSpec,
+        userIntentSummary,
+        strategySummary,
+        scriptSummary,
+        lockedParams,
+        consistencyReport: semanticConsistency,
+      } satisfies Record<string, unknown>
+
+      await this.sessionsRepo.updateSession(sessionId, {
+        status: 'VALIDATING_CONSISTENCY',
+        latestDraftCode: compiledScript,
+      })
+
+      const version = await this.sessionsRepo.createVersion({
+        session: { connect: { id: sessionId } },
+        scriptCode: compiledScript,
+        specDesc: sessionSpecDesc as unknown as Prisma.InputJsonValue,
+        staticPassed: compiledValidation.staticPassed,
+        runtimePassed: compiledValidation.runtimePassed,
+        outputPassed: compiledValidation.outputPassed,
+      })
+
+      await this.recommendationIndex.onSpecDescPersisted({
+        versionId: version.id,
+        specDesc: semanticView,
+      })
+
+      if (semanticConsistency.status !== 'PASSED') {
+        await this.sessionsRepo.updateSession(sessionId, {
+          status: 'CONSISTENCY_FAILED',
+          latestSpecDesc: sessionSpecDesc as unknown as Prisma.InputJsonValue,
+          latestDraftCode: compiledScript,
+          rejectReason: this.buildConsistencyRejectReason(semanticConsistency),
+          strategyInstanceId: existingStrategyInstanceId ?? null,
+        })
+        return
+      }
+
+      let strategyTemplateId: string | null = null
+      publishInput.scriptCode = compiledScript
+      publishInput.specDesc = sessionSpecDesc
       if (!strategyInstanceId) {
         try {
           const bound = await this.sessionsRepo.ensureDraftStrategyInstanceBoundForPublishedSession(publishInput)
@@ -660,8 +647,8 @@ export class CodegenConversationService {
           const publishReason = publishError instanceof Error ? publishError.message : String(publishError)
           await this.sessionsRepo.updateSession(sessionId, {
             status: 'REJECTED',
-            latestSpecDesc: specDesc as unknown as Prisma.InputJsonValue,
-            latestDraftCode: finalScriptCode,
+            latestSpecDesc: sessionSpecDesc as unknown as Prisma.InputJsonValue,
+            latestDraftCode: compiledScript,
             rejectReason: publishReason,
             strategyInstanceId: null,
           })
@@ -669,29 +656,45 @@ export class CodegenConversationService {
         }
       }
 
-      const snapshot = await this.publishedSnapshotsRepo.create({
+      const snapshot = await this.compiledPublicationGate.publish({
         sessionId,
         strategyTemplateId,
         strategyInstanceId: strategyInstanceId ?? null,
-        scriptSnapshot: finalScriptCode,
-        specSnapshot: canonicalSpec as unknown as Record<string, unknown>,
-        consistencyReport: consistencyReport as unknown as Record<string, unknown>,
+        canonicalSnapshot: canonicalSpec as unknown as Record<string, unknown>,
+        semanticView,
+        graphSnapshot: compiled.graphSnapshot,
+        ir: compiled.ir,
+        ast,
+        executionEnvelope,
+        script: compiledScript,
+        semanticConsistencyReport: semanticConsistency as unknown as Record<string, unknown>,
         userIntentSummary: userIntentSummary as unknown as Record<string, unknown>,
         strategySummary: strategySummary as unknown as Record<string, unknown>,
         scriptSummary: scriptSummary as unknown as Record<string, unknown>,
         lockedParams,
-        paramsSnapshot: publishInput.params,
-        executionPolicy: canonicalSpec.executionPolicy,
-        dataRequirements: canonicalSpec.dataRequirements,
       })
+      if (this.readPublishedConsistencyStatus(snapshot.consistencyReport) !== 'PASSED') {
+        await this.sessionsRepo.updateSession(sessionId, {
+          status: 'CONSISTENCY_FAILED',
+          latestSpecDesc: {
+            ...sessionSpecDesc,
+            consistencyReport: snapshot.consistencyReport,
+          } as unknown as Prisma.InputJsonValue,
+          latestDraftCode: compiledScript,
+          rejectReason: this.buildCompiledPublishRejectReason(snapshot.consistencyReport),
+          strategyInstanceId: strategyInstanceId ?? null,
+        })
+        return
+      }
 
       await this.sessionsRepo.updateSession(sessionId, {
         status: 'PUBLISHED',
         latestSpecDesc: {
-          ...specDesc,
-          publishedSnapshotId: snapshot.id,
+          ...sessionSpecDesc,
+          consistencyReport: snapshot.consistencyReport,
+          publishedSnapshotId: snapshot.snapshotId,
         } as unknown as Prisma.InputJsonValue,
-        latestDraftCode: finalScriptCode,
+        latestDraftCode: compiledScript,
         rejectReason: null,
         strategyInstanceId: strategyInstanceId ?? null,
       })
@@ -710,6 +713,27 @@ export class CodegenConversationService {
     }
 
     return this.normalizeChecklist(payload as Record<string, unknown>)
+  }
+
+  private readCanonicalDigest(specDesc: Record<string, unknown> | null): string | null {
+    if (!specDesc || typeof specDesc !== 'object' || Array.isArray(specDesc)) {
+      return null
+    }
+
+    const directCanonicalDigest = specDesc.canonicalDigest
+    if (typeof directCanonicalDigest === 'string' && directCanonicalDigest.trim().length > 0) {
+      return directCanonicalDigest.trim()
+    }
+
+    const confirmation = specDesc.confirmation
+    if (!confirmation || typeof confirmation !== 'object' || Array.isArray(confirmation)) {
+      return null
+    }
+    const digest = (confirmation as { digest?: unknown }).digest
+    if (typeof digest !== 'string' || digest.trim().length === 0) {
+      return null
+    }
+    return digest.trim()
   }
 
   private async toSessionSnapshotResponse(session: {
@@ -744,6 +768,7 @@ export class CodegenConversationService {
             ? sessionConsistencyReport as Record<string, unknown>
             : null),
       specDesc: sessionSpecDesc,
+      canonicalDigest: this.readCanonicalDigest(sessionSpecDesc),
       strategyInstanceId: session.strategyInstanceId ?? null,
       clarificationState: this.readClarificationState(session.clarificationState),
       rejectReason: session.rejectReason,
@@ -841,6 +866,38 @@ export class CodegenConversationService {
     }
   }
 
+  private buildCompiledIrFallback(args: {
+    checklist: ChecklistPayload
+    lockedParams: Record<string, unknown>
+    publishParams: Record<string, unknown>
+  }): {
+    exchange: 'binance' | 'okx' | 'hyperliquid'
+    symbol: string
+    baseTimeframe: string
+    positionPct: number
+    executionTags?: string[]
+  } {
+    const exchange = args.lockedParams.exchange
+    const symbol = args.publishParams.symbol
+    const timeframe = args.publishParams.timeframe
+    const positionPct = args.lockedParams.positionPct
+
+    return {
+      exchange: exchange === 'binance' || exchange === 'okx' || exchange === 'hyperliquid'
+        ? exchange
+        : 'binance',
+      symbol: typeof symbol === 'string' && symbol.trim().length > 0
+        ? symbol.trim()
+        : normalizePublishedSymbol(args.checklist.symbols?.[0] ?? 'BTCUSDT'),
+      baseTimeframe: typeof timeframe === 'string' && timeframe.trim().length > 0
+        ? timeframe.trim()
+        : (args.checklist.timeframes?.[0] ?? '5m'),
+      positionPct: typeof positionPct === 'number' && Number.isFinite(positionPct)
+        ? positionPct
+        : 10,
+    }
+  }
+
   private buildLockedParams(checklist: ChecklistPayload): Record<string, unknown> {
     const riskRules = checklist.riskRules ?? {}
     const locked: Record<string, unknown> = {}
@@ -896,6 +953,42 @@ export class CodegenConversationService {
       return '策略脚本与策略描述一致性校验失败'
     }
     return `策略脚本与策略描述不一致：${failedChecks.join('；')}`
+  }
+
+  private buildCompiledPublishRejectReason(report: Record<string, unknown>): string {
+    const compilerConsistency = this.readRecord(report.compilerConsistency)
+    const reasons: string[] = []
+
+    const graphVsIr = this.readRecord(compilerConsistency?.graphVsIr)
+    if (graphVsIr?.passed === false) {
+      reasons.push('semantic view 与 IR 摘要不一致')
+    }
+
+    const irVsScript = this.readRecord(compilerConsistency?.irVsScript)
+    if (irVsScript?.passed === false) {
+      reasons.push('IR 与 compiled script 摘要不一致')
+    }
+
+    const manifestSelfCheck = this.readRecord(compilerConsistency?.manifestSelfCheck)
+    if (manifestSelfCheck?.passed === false) {
+      reasons.push('compiled manifest 自校验失败')
+    }
+
+    return reasons.length > 0
+      ? `编译发布一致性校验失败：${reasons.join('；')}`
+      : '编译发布一致性校验失败'
+  }
+
+  private readPublishedConsistencyStatus(report: Record<string, unknown>): string | null {
+    return typeof report.status === 'string' ? report.status : null
+  }
+
+  private readRecord(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null
+    }
+
+    return value as Record<string, unknown>
   }
 
   async testEngine(dto: TestLlmCodegenEngineDto): Promise<LlmCodegenEngineTestResponseDto> {
@@ -1472,6 +1565,28 @@ export class CodegenConversationService {
       staticPassed: true,
       runtimePassed: runtimeResult.runtimePassed,
       outputPassed: runtimeResult.outputPassed,
+    }
+  }
+
+  private async validateCompiledScript(scriptCode: string): Promise<ScriptValidationResult> {
+    try {
+      this.compiledScriptParser.parse(scriptCode)
+      return {
+        passed: true,
+        scriptCode,
+        staticPassed: true,
+        runtimePassed: true,
+        outputPassed: true,
+      }
+    } catch (error) {
+      return {
+        passed: false,
+        scriptCode,
+        reason: `编译脚本结构校验失败: ${error instanceof Error ? error.message : 'unknown'}`,
+        staticPassed: true,
+        runtimePassed: false,
+        outputPassed: false,
+      }
     }
   }
 

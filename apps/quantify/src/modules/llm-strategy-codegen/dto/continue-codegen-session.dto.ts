@@ -66,6 +66,12 @@ export class ContinueCodegenSessionDto {
   @IsBoolean()
   confirmGenerate?: boolean
 
+  @ApiPropertyOptional({ description: '用户确认的 canonical spec digest' })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  confirmedCanonicalDigest?: string
+
   @ApiPropertyOptional({ description: 'LLM 提供商编码（本轮覆盖）' })
   @IsOptional()
   @IsString()

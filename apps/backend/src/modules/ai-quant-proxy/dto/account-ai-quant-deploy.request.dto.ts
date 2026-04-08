@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsIn, IsNotEmpty, IsNumber, IsOptional, IsString } from 'class-validator'
+import { IsNotEmpty, IsOptional, IsString } from 'class-validator'
 
 export class AccountAiQuantDeployRequestDto {
   @ApiProperty()
@@ -12,23 +12,10 @@ export class AccountAiQuantDeployRequestDto {
   @IsNotEmpty()
   deployRequestId!: string
 
-  @ApiProperty({ enum: ['binance', 'okx', 'hyperliquid'] })
-  @IsIn(['binance', 'okx', 'hyperliquid'])
-  exchange!: 'binance' | 'okx' | 'hyperliquid'
-
-  @ApiProperty()
+  @ApiProperty({ description: 'Published snapshot that owns the runtime settings' })
   @IsString()
   @IsNotEmpty()
-  symbol!: string
-
-  @ApiProperty()
-  @IsString()
-  @IsNotEmpty()
-  timeframe!: string
-
-  @ApiProperty()
-  @IsNumber()
-  positionPct!: number
+  publishedSnapshotId!: string
 
   @ApiPropertyOptional()
   @IsOptional()

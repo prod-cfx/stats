@@ -35,7 +35,7 @@
     "@nestjs/bull": "^11.0.4",
     "@nestjs/common": "^11.1.16",
     "@nestjs/config": "^4.0.3",
-    "@nestjs/core": "^11.1.16",
+    "@nestjs/core": "^11.1.18",
     "@nestjs/event-emitter": "^3.0.1",
     "@nestjs/platform-express": "^11.1.16",
     "@nestjs/schedule": "^6.1.1",

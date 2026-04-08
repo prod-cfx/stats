@@ -59,6 +59,9 @@ export class CodegenSessionResponseDto {
   @ApiPropertyOptional({ description: '结构化策略描述（用于推荐）', type: 'object', additionalProperties: true })
   specDesc?: Record<string, unknown> | null
 
+  @ApiPropertyOptional({ description: '当前待确认 canonical spec digest' })
+  canonicalDigest?: string | null
+
   @ApiPropertyOptional({ description: '结构化语义图（确认与编译真源）', type: 'object', additionalProperties: true })
   semanticGraph?: Record<string, unknown> | null
 

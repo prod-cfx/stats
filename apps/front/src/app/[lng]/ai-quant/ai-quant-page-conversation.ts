@@ -103,6 +103,7 @@ export interface ConversationState {
   logicGraph: StrategyLogicGraph | null
   semanticGraph: LlmSemanticGraph | null
   validationReport: LlmSemanticGraphValidationReport | null
+  pendingCanonicalDigest: string | null
   llmCodegenSessionId: string | null
   publishedStrategyInstanceId: string | null
   publishedSnapshotId: string | null
@@ -291,6 +292,7 @@ export function invalidateConversationPublication(
     publishedSnapshotId: null,
     publishedScriptCode: null,
     publishedScriptGraphVersion: null,
+    pendingCanonicalDigest: null,
     backtestResult: null,
     latestSignalMessage: null,
     backtestExecutionState: 'idle',
@@ -423,6 +425,7 @@ export function createConversation(translate: (key: string) => string, now = Dat
     logicGraph: null,
     semanticGraph: null,
     validationReport: null,
+    pendingCanonicalDigest: null,
     llmCodegenSessionId: null,
     publishedStrategyInstanceId: null,
     publishedSnapshotId: null,
@@ -480,6 +483,10 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
       && typeof item.validationReport === 'object'
       && !Array.isArray(item.validationReport)
         ? item.validationReport
+        : null,
+    pendingCanonicalDigest:
+      typeof item.pendingCanonicalDigest === 'string' && item.pendingCanonicalDigest.trim()
+        ? item.pendingCanonicalDigest.trim()
         : null,
     llmCodegenSessionId: item.llmCodegenSessionId ?? null,
     publishedStrategyInstanceId: item.publishedStrategyInstanceId ?? null,

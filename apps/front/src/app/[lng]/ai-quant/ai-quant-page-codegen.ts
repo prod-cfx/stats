@@ -4,6 +4,7 @@ import {
   buildAiQuantStageFallbackMessage,
   parseAiQuantErrorMeta,
 } from '@/components/ai-quant/ai-quant-error-stage'
+import { readCanonicalDigest } from '@/components/ai-quant/canonical-confirmation'
 import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-graph'
 import {
   resolveChecklistPayload,
@@ -248,6 +249,7 @@ export async function requestAiQuantCodegen(args: {
   callingMessage: (elapsedSec: number) => string
   codegenRequestMutexRef: MutableRefObject<Set<string>>
   confirmGenerate?: boolean
+  confirmedCanonicalDigest?: string
   conversationId: string
   conversations: ConversationState[]
   message: string
@@ -264,6 +266,7 @@ export async function requestAiQuantCodegen(args: {
     callingMessage,
     codegenRequestMutexRef,
     confirmGenerate = false,
+    confirmedCanonicalDigest,
     conversationId,
     conversations,
     message,
@@ -438,6 +441,12 @@ export async function requestAiQuantCodegen(args: {
         const nextValidationReport = hasSemanticGraphPayload(response, 'validationReport')
           ? (response.validationReport ?? null)
           : conv.validationReport
+        const nextPendingCanonicalDigest = (() => {
+          if (typeof response.canonicalDigest === 'string' && response.canonicalDigest.trim()) {
+            return response.canonicalDigest.trim()
+          }
+          return readCanonicalDigest(response.specDesc)
+        })()
         const publishedReply = response.scriptCode
           ? `${
               confirmGenerate
@@ -492,6 +501,7 @@ export async function requestAiQuantCodegen(args: {
           logicGraph: nextGraph,
           semanticGraph: nextSemanticGraph,
           validationReport: nextValidationReport,
+          pendingCanonicalDigest: nextPendingCanonicalDigest ?? conv.pendingCanonicalDigest,
           backtestResult: null,
           latestSignalMessage: null,
           messages: [
@@ -558,6 +568,7 @@ export async function requestAiQuantCodegen(args: {
       continueLlmCodegenSession(id, {
         message: trimmedMessage,
         confirmGenerate,
+        confirmedCanonicalDigest,
         ...checklistPayload,
       })
 

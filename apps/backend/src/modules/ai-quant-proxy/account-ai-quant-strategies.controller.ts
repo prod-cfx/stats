@@ -70,10 +70,7 @@ export class AccountAiQuantStrategiesController {
     return this.service.deployAccountStrategy(userId, authorization, {
       name: dto.name,
       deployRequestId: dto.deployRequestId,
-      exchange: dto.exchange,
-      symbol: dto.symbol,
-      timeframe: dto.timeframe,
-      positionPct: dto.positionPct,
+      publishedSnapshotId: dto.publishedSnapshotId,
       strategyInstanceId: dto.strategyInstanceId,
       exchangeAccountId: dto.exchangeAccountId,
       exchangeAccountName: dto.exchangeAccountName,

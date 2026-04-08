@@ -54,6 +54,7 @@ export class LlmStrategyCodegenController {
       riskRules: dto.riskRules,
       guideConfig: dto.guideConfig,
       confirmGenerate: dto.confirmGenerate,
+      confirmedCanonicalDigest: dto.confirmedCanonicalDigest,
       providerCode: dto.providerCode,
       model: dto.model,
       temperature: dto.temperature,

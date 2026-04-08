@@ -1,4 +1,6 @@
+import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
 import { Injectable } from '@nestjs/common'
+import { CanonicalSpecV2DigestService } from './canonical-spec-v2-digest.service'
 import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
 
 interface SpecDescChecklistSnapshot {
@@ -13,13 +15,19 @@ interface SpecDescChecklistSnapshot {
 export class SpecDescBuilderService {
   constructor(
     private readonly canonicalSpecBuilder: CanonicalSpecBuilderService = new CanonicalSpecBuilderService(),
+    private readonly digest: CanonicalSpecV2DigestService = new CanonicalSpecV2DigestService(),
   ) {}
 
   build(checklist: SpecDescChecklistSnapshot, scriptCode: string): Record<string, unknown> {
-    const symbols = Array.isArray(checklist.symbols) ? checklist.symbols : []
-    const timeframes = Array.isArray(checklist.timeframes) ? checklist.timeframes : []
     const canonicalSpec = this.canonicalSpecBuilder.build(checklist)
+    return this.buildFromCanonicalSpec(canonicalSpec, scriptCode)
+  }
+
+  buildFromCanonicalSpec(canonicalSpec: CanonicalStrategySpec, scriptCode: string): Record<string, unknown> {
+    const canonicalDigest = this.digest.hash(canonicalSpec)
     const rules = canonicalSpec.version === 2 ? canonicalSpec.rules : []
+    const symbols = canonicalSpec.version === 2 && canonicalSpec.market.symbol ? [canonicalSpec.market.symbol] : []
+    const timeframes = canonicalSpec.version === 2 && canonicalSpec.market.timeframe ? [canonicalSpec.market.timeframe] : []
 
     const scriptLower = scriptCode.toLowerCase()
     const features = ['rsi', 'sma', 'ema', 'atr', 'macd', 'bollinger', 'crossover', 'crossunder']
@@ -44,9 +52,9 @@ export class SpecDescBuilderService {
       phaseCounts[rule.phase] += 1
     }
 
-    const totalRules = rules.length
-
     return {
+      viewType: 'canonical-semantic-view.v1',
+      canonicalDigest,
       version: 2,
       market: {
         symbols,
@@ -54,9 +62,13 @@ export class SpecDescBuilderService {
         session: '24x7',
       },
       rules,
+      confirmation: {
+        required: true,
+        digest: canonicalDigest,
+      },
       ruleSummary: {
         ...phaseCounts,
-        total: totalRules,
+        total: rules.length,
       },
       features,
       styleTags,
@@ -64,7 +76,7 @@ export class SpecDescBuilderService {
         runtime: 'current_script_engine',
         allowedHelpersOnly: true,
       },
-      summary: `策略规则共 ${totalRules} 条（入场 ${phaseCounts.entry}、出场 ${phaseCounts.exit}、风控 ${phaseCounts.risk}）`,
+      summary: `策略规则共 ${rules.length} 条（入场 ${phaseCounts.entry}、出场 ${phaseCounts.exit}、风控 ${phaseCounts.risk}）`,
       embedding: null,
     }
   }
