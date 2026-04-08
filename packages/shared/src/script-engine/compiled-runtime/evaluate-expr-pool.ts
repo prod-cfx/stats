@@ -1,5 +1,5 @@
-import type { Bar } from '../helpers'
 import type { StrategyExecutionContextV1 } from '../../strategy-protocol'
+import type { Bar } from '../helpers'
 import { bollingerBands, ema, sma } from '../helpers/technical-indicators'
 
 export type CompiledRuntimeValue =
