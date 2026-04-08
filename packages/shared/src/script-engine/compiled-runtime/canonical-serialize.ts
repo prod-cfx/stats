@@ -1,6 +1,6 @@
 function canonicalNumber(value: number): string {
   if (!Number.isFinite(value)) {
-    throw new Error('non-finite numbers are not allowed')
+    throw new TypeError('non-finite numbers are not allowed')
   }
 
   if (Object.is(value, -0)) return '0'
@@ -10,7 +10,7 @@ function canonicalNumber(value: number): string {
 
 export function canonicalSerialize(value: unknown): string {
   if (value === undefined) {
-    throw new Error('undefined is not allowed')
+    throw new TypeError('undefined is not allowed')
   }
 
   if (value === null) return 'null'
