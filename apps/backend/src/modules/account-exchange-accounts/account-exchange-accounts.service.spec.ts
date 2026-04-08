@@ -69,6 +69,31 @@ describe('accountExchangeAccountsService', () => {
     await expect(service.list('user-1', { degradeOnTransientFailure: true })).resolves.toEqual([])
   })
 
+  it('maps transient exchange account upsert transport failures to service unavailable', async () => {
+    const { service, client } = createService()
+    client.upsert.mockRejectedValue(new QuantifyClientError(
+      'Quantify returned a non-JSON error response',
+      502,
+      'UPSTREAM_INVALID_RESPONSE',
+      { upstreamBody: '<html>502 Bad Gateway</html>' },
+    ))
+
+    await expect(service.upsert(authenticatedUser, {
+      exchangeId: 'okx',
+      apiKey: 'key',
+      apiSecret: 'secret',
+      passphrase: 'pass',
+    })).rejects.toMatchObject<Partial<DomainException>>({
+      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+      message: '量化服务暂时不可用，请稍后重试',
+      args: expect.objectContaining({
+        reasonMessage: '量化服务暂时不可用，请稍后重试',
+        retryable: true,
+        upstreamCode: 'UPSTREAM_INVALID_RESPONSE',
+      }),
+    })
+  })
+
   it('maps quantify credential validation errors into stable backend args', async () => {
     const { service, client } = createService()
     client.upsert.mockRejectedValue({

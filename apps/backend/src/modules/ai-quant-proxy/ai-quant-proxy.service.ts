@@ -300,6 +300,10 @@ export class AiQuantProxyService {
   }
 
   private mapQuantifyError(error: unknown): DomainException {
+    if (this.isTransientUpstreamFailure(error)) {
+      return this.buildTransientUnavailableException(error)
+    }
+
     if (error instanceof QuantifyClientError) {
       return this.toDomainException(error.status, error.code, error.args, error.message)
     }
@@ -315,6 +319,18 @@ export class AiQuantProxyService {
     return new DomainException('Quantify request failed', {
       code: ErrorCode.INTERNAL_SERVER_ERROR,
       status: HttpStatus.INTERNAL_SERVER_ERROR,
+    })
+  }
+
+  private buildTransientUnavailableException(error: unknown): DomainException {
+    return new DomainException('量化服务暂时不可用，请稍后重试', {
+      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+      args: {
+        reasonMessage: '量化服务暂时不可用，请稍后重试',
+        retryable: true,
+        upstreamCode: this.getQuantifyErrorCode(error),
+      },
     })
   }
 

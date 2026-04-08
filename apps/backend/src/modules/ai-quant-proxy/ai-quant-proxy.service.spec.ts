@@ -227,6 +227,32 @@ describe('aiQuantProxyService', () => {
     })
   })
 
+  it('maps transient account strategy list upstream failures to service unavailable', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.get.mockRejectedValue(new QuantifyClientError(
+      'Quantify returned a non-JSON error response',
+      502,
+      'UPSTREAM_INVALID_RESPONSE',
+      { upstreamBody: '<html>502 Bad Gateway</html>' },
+    ))
+
+    await expect(service.listAccountStrategies('user-1', 'Bearer token-1', {
+      page: 1,
+      limit: 20,
+      subscribedOnly: true,
+      excludeDraft: true,
+    })).rejects.toMatchObject({
+      status: 503,
+      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+      message: '量化服务暂时不可用，请稍后重试',
+      args: expect.objectContaining({
+        reasonMessage: '量化服务暂时不可用，请稍后重试',
+        retryable: true,
+        upstreamCode: 'UPSTREAM_INVALID_RESPONSE',
+      }),
+    })
+  })
+
   it('proxies backtesting capabilities with authorization header', async () => {
     const { service, quantifyClient } = createService()
     quantifyClient.get.mockResolvedValue({
