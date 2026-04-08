@@ -75,9 +75,12 @@ export class CompiledPublicationGateService {
       lockedParams: input.lockedParams,
       snapshotVersion: 3,
       paramsSnapshot: {
+        exchange: input.ir.market.venue,
         symbol: input.ir.market.symbol,
         timeframe: input.ir.market.timeframes[0] ?? null,
-        positionPct: input.executionEnvelope.positionMode === 'long_only' ? input.ir.portfolio.sizing.value : null,
+        positionPct: input.ir.portfolio.sizing.mode === 'pct_equity'
+          ? input.ir.portfolio.sizing.value
+          : null,
       },
       executionEnvelope: input.executionEnvelope as unknown as Record<string, unknown>,
       executionPolicy: input.ir.executionPolicy as unknown as Record<string, unknown>,
