@@ -8,7 +8,10 @@ import { EnvService } from '@/common/services/env.service'
 export class CallerIdentityService {
   constructor(private readonly env: EnvService) {}
 
-  async resolveCallerUserIdFromAuthorization(authorization: string | undefined): Promise<string> {
+  async resolveCallerUserIdFromAuthorization(
+    authorization: string | undefined,
+    forwardedUserId?: string | undefined,
+  ): Promise<string> {
     const normalizedAuth = authorization?.trim()
     if (!normalizedAuth) {
       throw new DomainException('codegen.missing_authorization_header', {
@@ -32,6 +35,22 @@ export class CallerIdentityService {
         code: ErrorCode.UNAUTHORIZED,
         status: HttpStatus.UNAUTHORIZED,
       })
+    }
+
+    const jwtUserId = this.extractUserIdFromJwtPayload(payload)
+    const normalizedForwardedUserId = forwardedUserId?.trim()
+    if (normalizedForwardedUserId) {
+      if (!jwtUserId || jwtUserId !== normalizedForwardedUserId) {
+        throw new DomainException('codegen.caller_user_id_mismatch', {
+          code: ErrorCode.UNAUTHORIZED,
+          status: HttpStatus.UNAUTHORIZED,
+          args: {
+            authUserId: jwtUserId ?? undefined,
+            inputUserId: normalizedForwardedUserId,
+          },
+        })
+      }
+      return normalizedForwardedUserId
     }
 
     const callerUserId = await this.verifyTokenByBackendAuth(token, payload)

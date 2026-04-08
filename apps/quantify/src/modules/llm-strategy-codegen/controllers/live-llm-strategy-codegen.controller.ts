@@ -28,9 +28,10 @@ export class LiveLlmStrategyCodegenController {
   @ApiResponse({ status: 201, type: CodegenSessionResponseDto })
   async startSession(
     @Headers('authorization') authorization: string | undefined,
+    @Headers('x-user-id') forwardedUserId: string | undefined,
     @Body() dto: StartCodegenSessionDto,
   ): Promise<CodegenSessionResponseDto> {
-    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.service.startSession(dto, callerUserId)
   }
 
@@ -40,10 +41,11 @@ export class LiveLlmStrategyCodegenController {
   @ApiResponse({ status: 202, type: CodegenSessionResponseDto })
   async continueSession(
     @Headers('authorization') authorization: string | undefined,
+    @Headers('x-user-id') forwardedUserId: string | undefined,
     @Param('id') id: string,
     @Body() dto: ContinueCodegenSessionDto,
   ): Promise<CodegenSessionResponseDto> {
-    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.service.continueSession(id, dto, callerUserId)
   }
 
@@ -53,8 +55,9 @@ export class LiveLlmStrategyCodegenController {
   async getSession(
     @Param('id') id: string,
     @Headers('authorization') authorization: string | undefined,
+    @Headers('x-user-id') forwardedUserId: string | undefined,
   ): Promise<CodegenSessionResponseDto> {
-    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.service.getSession(id, callerUserId)
   }
 

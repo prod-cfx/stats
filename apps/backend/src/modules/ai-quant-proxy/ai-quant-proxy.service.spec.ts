@@ -152,7 +152,7 @@ describe('aiQuantProxyService', () => {
     const { service, quantifyClient } = createService()
     quantifyClient.post.mockResolvedValue({ id: 'session-1', status: 'CHECKLIST_GATE' })
 
-    await service.startCodegen('Bearer token-1', {
+    await service.startCodegen('user-1', 'Bearer token-1', {
       initialMessage: 'build me a strategy',
       symbols: ['BTCUSDT'],
     })
@@ -165,7 +165,7 @@ describe('aiQuantProxyService', () => {
       },
       {
         timeoutMs: codegenTimeoutMs,
-        headers: { authorization: 'Bearer token-1' },
+        headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
       },
     )
   })
@@ -174,7 +174,7 @@ describe('aiQuantProxyService', () => {
     const { service, quantifyClient } = createService()
     quantifyClient.post.mockResolvedValue({ id: 'session-1', status: 'CHECKLIST_GATE' })
 
-    await service.continueCodegen('Bearer token-1', 'session-1', {
+    await service.continueCodegen('user-1', 'Bearer token-1', 'session-1', {
       message: '继续',
       confirmGenerate: true,
       confirmedCanonicalDigest: 'sha256:canonical-1',
@@ -189,7 +189,7 @@ describe('aiQuantProxyService', () => {
       },
       {
         timeoutMs: codegenTimeoutMs,
-        headers: { authorization: 'Bearer token-1' },
+        headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
       },
     )
   })
@@ -198,13 +198,13 @@ describe('aiQuantProxyService', () => {
     const { service, quantifyClient } = createService()
     quantifyClient.get.mockResolvedValue({ id: 'session-1', status: 'DRAFTING' })
 
-    await service.getCodegenSession('Bearer token-1', 'session-1')
+    await service.getCodegenSession('user-1', 'Bearer token-1', 'session-1')
 
     expect(quantifyClient.get).toHaveBeenCalledWith(
       '/llm-strategy-codegen/sessions/session-1',
       {
         timeoutMs: codegenTimeoutMs,
-        headers: { authorization: 'Bearer token-1' },
+        headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
       },
     )
   })

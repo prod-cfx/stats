@@ -132,28 +132,29 @@ export class AiQuantProxyService {
     ).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async startCodegen(authorization: string | undefined, body: Record<string, unknown>) {
+  async startCodegen(userId: string, authorization: string | undefined, body: Record<string, unknown>) {
     return this.quantifyClient.post('/llm-strategy-codegen/sessions', body, {
       timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
-      headers: this.authorizationHeaders(authorization),
+      headers: this.userHeaders(userId, authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async getCodegenSession(authorization: string | undefined, sessionId: string) {
+  async getCodegenSession(userId: string, authorization: string | undefined, sessionId: string) {
     return this.quantifyClient.get(`/llm-strategy-codegen/sessions/${encodeURIComponent(sessionId)}`, {
       timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
-      headers: this.authorizationHeaders(authorization),
+      headers: this.userHeaders(userId, authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
   async continueCodegen(
+    userId: string,
     authorization: string | undefined,
     sessionId: string,
     body: Record<string, unknown>,
   ) {
     return this.quantifyClient.post(`/llm-strategy-codegen/sessions/${encodeURIComponent(sessionId)}/messages`, body, {
       timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
-      headers: this.authorizationHeaders(authorization),
+      headers: this.userHeaders(userId, authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 

@@ -70,6 +70,7 @@ describe('liveLlmStrategyCodegenController', () => {
 
     const result = await controller.startSession(
       createBearerToken({ sub: 'caller-u1', principalType: 'user', exp: 4_102_444_800 }),
+      'caller-u1',
       { userId: 'request-u2' },
     )
 
@@ -109,6 +110,7 @@ describe('liveLlmStrategyCodegenController', () => {
 
     const result = await controller.continueSession(
       createBearerToken({ sub: 'caller-u1', principalType: 'user', exp: 4_102_444_800 }),
+      'caller-u1',
       's1',
       { userId: 'request-u2', message: '继续' },
     )
@@ -187,10 +189,10 @@ describe('liveLlmStrategyCodegenController', () => {
     }).compile()
     const controller = moduleRef.get(LiveLlmStrategyCodegenController)
 
-    const result = await controller.getSession('s1', createBearerToken({ sub: 'u1', principalType: 'user', exp: 4_102_444_800 }))
+    const result = await controller.getSession('s1', createBearerToken({ sub: 'u1', principalType: 'user', exp: 4_102_444_800 }), 'u1')
 
     expect(result.status).toBe('PUBLISHED')
-    expect(service.getSession).toHaveBeenCalledWith('s1', 'caller-u1')
+    expect(service.getSession).toHaveBeenCalledWith('s1', 'u1')
   })
 
   it('rejects getSession when authorization header is missing', async () => {
@@ -206,7 +208,7 @@ describe('liveLlmStrategyCodegenController', () => {
     }).compile()
     const controller = moduleRef.get(LiveLlmStrategyCodegenController)
 
-    await expect(controller.getSession('s1', undefined)).rejects.toBeInstanceOf(DomainException)
+    await expect(controller.getSession('s1', undefined, undefined)).rejects.toBeInstanceOf(DomainException)
     expect(service.getSession).not.toHaveBeenCalled()
   })
 
@@ -223,7 +225,7 @@ describe('liveLlmStrategyCodegenController', () => {
     }).compile()
     const controller = moduleRef.get(LiveLlmStrategyCodegenController)
 
-    await expect(controller.getSession('s1', createBearerToken({ sub: 'u1', principalType: 'admin' }))).rejects.toBeInstanceOf(DomainException)
+    await expect(controller.getSession('s1', createBearerToken({ sub: 'u1', principalType: 'admin' }), 'u1')).rejects.toBeInstanceOf(DomainException)
     expect(service.getSession).not.toHaveBeenCalled()
   })
 
@@ -245,7 +247,7 @@ describe('liveLlmStrategyCodegenController', () => {
       json: async () => ({}),
     })
 
-    await expect(controller.getSession('s1', createBearerToken({ sub: 'u1', principalType: 'user' }))).rejects.toBeInstanceOf(DomainException)
+    await expect(controller.getSession('s1', createBearerToken({ sub: 'u1', principalType: 'user' }), undefined)).rejects.toBeInstanceOf(DomainException)
     expect(service.getSession).not.toHaveBeenCalled()
   })
 })
