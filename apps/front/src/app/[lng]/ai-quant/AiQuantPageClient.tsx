@@ -1,42 +1,20 @@
 'use client'
 
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
-import type { BacktestRangeInput } from '@/components/ai-quant/backtest-range'
-import type { BacktestResult } from '@/components/ai-quant/BacktestSummaryCard'
 import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import type { QuantReturnIntentInput } from '@/components/ai-quant/intent-storage'
-import type { StrategyLogicGraph } from '@/components/ai-quant/logic-graph-model'
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
-import type {
-  LlmCodegenSessionResponse,
-  LlmSemanticGraph,
-  LlmSemanticGraphValidationReport,
-} from '@/lib/api'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import {
-  buildAiQuantStageFallbackMessage,
-  parseAiQuantErrorMeta,
-} from '@/components/ai-quant/ai-quant-error-stage'
 import { fetchBacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
-import {
-  createBacktestJob,
-  getBacktestJob,
-  getBacktestJobResult,
-} from '@/components/ai-quant/backtest-job-client'
-import {
-  buildBacktestPayload,
-  isBacktestPayloadBuilderError,
-} from '@/components/ai-quant/backtest-payload-builder'
-import { checkBacktestSymbolSupport } from '@/components/ai-quant/backtest-symbol-support-client'
+import { getBacktestJobResult } from '@/components/ai-quant/backtest-job-client'
 import { BacktestSummaryCard } from '@/components/ai-quant/BacktestSummaryCard'
 import { ConversationSidebar } from '@/components/ai-quant/ConversationSidebar'
 import { DeployDialog } from '@/components/ai-quant/DeployDialog'
 import { GuestAiQuantLanding } from '@/components/ai-quant/GuestAiQuantLanding'
 import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-storage'
-import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-graph'
 import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
 import { SemanticGraphCard } from '@/components/ai-quant/SemanticGraphCard'
@@ -44,623 +22,49 @@ import { SemanticGraphValidationAlert } from '@/components/ai-quant/SemanticGrap
 import {
   buildAutoAdvanceMessage,
   isStrategyModificationIntent,
-  resolveChecklistPayload,
   shouldAutoAdvanceOnConfirmation,
 } from '@/components/ai-quant/session-loop'
-import {
-  applyCapabilitiesToParamSchema,
-  syncStrategyParamsFromCodegen,
-} from '@/components/ai-quant/strategy-param-sync'
+import { applyCapabilitiesToParamSchema } from '@/components/ai-quant/strategy-param-sync'
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
 import { useAuth } from '@/hooks/use-auth'
-import {
-  deployAccountAiQuantStrategy,
-  continueLlmCodegenSession,
-  fetchUserExchangeAccountStatuses,
-  getLlmCodegenSession,
-  startLlmCodegenSession,
-  type UserExchangeAccountStatus,
-} from '@/lib/api'
+import { fetchUserExchangeAccountStatuses } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
+import {
+  BACKTEST_EXECUTION_PARAM_KEY_SET,
+  CONVERSATIONS_STORAGE_KEY,
+  buildApiConfigHref,
+  buildBacktestSummaryResult,
+  buildParamSchemaWithCapabilities,
+  createConversation,
+  hasLatestPublishedCode,
+  hydrateConversation,
+  invalidateConversationPublication,
+  mapExchangeStatusesToDeployAccounts,
+  normalizeParamsFromValues,
+  shouldInvalidatePublicationForParamChange,
+  type ConversationState,
+  type QuantParams,
+} from './ai-quant-page-conversation'
+import {
+  getSemanticGraphValidationMessage,
+  requestAiQuantCodegen,
+} from './ai-quant-page-codegen'
+import { runAiQuantBacktest } from './ai-quant-page-backtest'
+import {
+  confirmAiQuantDeploy,
+  createDeployRequestId,
+} from './ai-quant-page-deploy'
 
-export interface QuantParams {
-  exchange: 'binance' | 'okx' | 'hyperliquid'
-  symbol: string
-  baseTimeframe: string
-  buyWindowMin: number
-  buyDropPct: number
-  sellWindowMin: number
-  sellRisePct: number
-  positionPct: number
-}
+export { buildCodegenReplyContent, resolvePublishedStrategyInstanceId } from './ai-quant-page-codegen'
+export type { QuantParams } from './ai-quant-page-conversation'
 
-const DEFAULT_PARAMS: QuantParams = {
-  exchange: 'binance',
-  symbol: 'BTCUSDT',
-  baseTimeframe: '15m',
-  buyWindowMin: 3,
-  buyDropPct: 1,
-  sellWindowMin: 15,
-  sellRisePct: 2,
-  positionPct: 10,
-}
-
-const DEFAULT_PARAM_SCHEMA: Record<string, unknown> = {
-  type: 'object',
-  required: [
-    'exchange',
-    'symbol',
-    'baseTimeframe',
-    'buyWindowMin',
-    'buyDropPct',
-    'sellWindowMin',
-    'sellRisePct',
-    'positionPct',
-  ],
-  properties: {
-    exchange: {
-      type: 'string',
-      title: 'Exchange',
-      enum: ['binance', 'okx', 'hyperliquid'],
-    },
-    symbol: {
-      type: 'string',
-      title: 'Symbol',
-      enum: [DEFAULT_PARAMS.symbol],
-    },
-    baseTimeframe: {
-      type: 'string',
-      title: 'Base Timeframe',
-      enum: [DEFAULT_PARAMS.baseTimeframe],
-    },
-    buyWindowMin: {
-      type: 'number',
-      title: 'Buy Window (min)',
-      minimum: 1,
-    },
-    buyDropPct: {
-      type: 'number',
-      title: 'Buy Drop %',
-      minimum: 0,
-    },
-    sellWindowMin: {
-      type: 'number',
-      title: 'Sell Window (min)',
-      minimum: 1,
-    },
-    sellRisePct: {
-      type: 'number',
-      title: 'Sell Rise %',
-      minimum: 0,
-    },
-    positionPct: {
-      type: 'number',
-      title: 'Position %',
-      minimum: 1,
-      maximum: 100,
-    },
-  },
-}
-
-const DEFAULT_PARAM_VALUES: Record<string, unknown> = { ...DEFAULT_PARAMS }
 const CAPABILITY_FAILED_MESSAGE_KEY = 'aiQuant.messages.backtestCapabilityLoadFailed'
 const CAPABILITY_AUTO_CORRECTED_MESSAGE_KEY = 'aiQuant.messages.backtestCapabilityAutoCorrected'
 const CAPABILITY_AUTO_RETRY_DELAY_MS = 15_000
 
-const CONVERSATIONS_STORAGE_KEY = 'ai_quant_conversations_v1'
 const INTENT_TTL_MS = 30 * 60 * 1000
-const BACKTEST_JOB_POLL_INTERVAL_MS = 1500
-const BACKTEST_JOB_TIMEOUT_MS = 60_000
-
-interface ConversationState {
-  id: string
-  title: string
-  messages: QuantMessage[]
-  params: QuantParams
-  paramSchema: Record<string, unknown> | null
-  paramValues: Record<string, unknown>
-  backtestResult: BacktestResult | null
-  logicGraph: StrategyLogicGraph | null
-  semanticGraph: LlmSemanticGraph | null
-  validationReport: LlmSemanticGraphValidationReport | null
-  llmCodegenSessionId: string | null
-  publishedStrategyInstanceId: string | null
-  publishedSnapshotId: string | null
-  publishedScriptCode: string | null
-  publishedScriptGraphVersion: number | null
-  latestSignalMessage: string | null
-  backtestExecutionConfigExplicit?: boolean
-  backtestExecutionState: 'idle' | 'submitting' | 'running' | 'succeeded' | 'failed' | 'timeout'
-  updatedAt: number
-}
 
 type CapabilityState = 'loading' | 'ready' | 'failed'
-
-const CODEGEN_TERMINAL_STATUSES = new Set(['PUBLISHED', 'REJECTED'])
-const CODEGEN_PROCESSING_STATUSES = new Set([
-  'GENERATING',
-  'VALIDATING_STATIC',
-  'VALIDATING_RUNTIME',
-  'VALIDATING_OUTPUT',
-  'VALIDATING_CONSISTENCY',
-])
-const CODEGEN_RECOVERABLE_STATUSES = new Set([
-  ...CODEGEN_TERMINAL_STATUSES,
-  ...CODEGEN_PROCESSING_STATUSES,
-  'CHECKLIST_GATE',
-  'CONSISTENCY_FAILED',
-])
-
-function isCodegenTerminalStatus(status: string): boolean {
-  return CODEGEN_TERMINAL_STATUSES.has(status)
-}
-
-function isCodegenProcessingStatus(status: string): boolean {
-  return CODEGEN_PROCESSING_STATUSES.has(status)
-}
-
-function isRecoverableCodegenStatus(status: string): boolean {
-  return CODEGEN_RECOVERABLE_STATUSES.has(status)
-}
-
-function createDeployRequestId(): string {
-  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
-    return crypto.randomUUID()
-  }
-  return `deploy-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
-}
-
-export function buildCodegenReplyContent(args: {
-  response: LlmCodegenSessionResponse
-  confirmGenerate: boolean
-  publishedReply: string
-  graphGeneratedMessage: string
-  graphReviseMessage: string
-  checklistContinuedMessage: string
-  checklistUpdatedMessage: string
-  stillGeneratingPrefix: string
-  rejectedPrefix: string
-  rejectedWithoutReason: string
-}): string {
-  const {
-    response,
-    confirmGenerate,
-    publishedReply,
-    graphGeneratedMessage,
-    graphReviseMessage,
-    checklistContinuedMessage,
-    checklistUpdatedMessage,
-    stillGeneratingPrefix,
-    rejectedPrefix,
-    rejectedWithoutReason,
-  } = args
-  if (response.assistantPrompt) {
-    return response.assistantPrompt
-  }
-  if (response.status === 'PUBLISHED') {
-    if (response.rejectReason) {
-      return `${rejectedPrefix}：${response.rejectReason}`
-    }
-    return publishedReply
-  }
-  if (response.status === 'CHECKLIST_GATE') {
-    return confirmGenerate ? checklistContinuedMessage : checklistUpdatedMessage
-  }
-  if (isCodegenProcessingStatus(response.status)) {
-    return `${stillGeneratingPrefix}（${response.status}）`
-  }
-  if (response.status === 'REJECTED') {
-    return response.rejectReason
-      ? `${rejectedPrefix}：${response.rejectReason}`
-      : rejectedWithoutReason
-  }
-  if (response.status === 'CONSISTENCY_FAILED') {
-    return response.rejectReason
-      ? `${rejectedPrefix}：${response.rejectReason}`
-      : rejectedWithoutReason
-  }
-  return response.scriptCode ? graphGeneratedMessage : graphReviseMessage
-}
-
-function getSemanticGraphValidationMessage(
-  validationReport: LlmSemanticGraphValidationReport | null | undefined,
-  fallback: string,
-): string {
-  const message = validationReport?.errors.find(error => error.message.trim())?.message?.trim()
-  return message || fallback
-}
-
-function hasSemanticGraphPayload(
-  response: LlmCodegenSessionResponse,
-  key: 'semanticGraph' | 'validationReport',
-): boolean {
-  return Object.prototype.hasOwnProperty.call(response, key)
-}
-
-export function resolvePublishedStrategyInstanceId(args: {
-  response: LlmCodegenSessionResponse
-  isStartingNewSession: boolean
-}): string | null {
-  const { response, isStartingNewSession } = args
-  if (response.status === 'PUBLISHED' && !response.rejectReason) {
-    return response.strategyInstanceId ?? null
-  }
-  if (isStartingNewSession || response.status === 'REJECTED') {
-    return null
-  }
-  return null
-}
-
-function extractCodegenErrorMessage(error: unknown, fallback: string): string {
-  if (!(error instanceof ApiError)) {
-    return fallback
-  }
-
-  const details = error.details
-  const meta = parseAiQuantErrorMeta(details)
-
-  if (details && typeof details === 'object') {
-    const record = details as Record<string, unknown>
-    const directRejectReason = record.rejectReason
-    if (typeof directRejectReason === 'string' && directRejectReason.trim()) {
-      return directRejectReason.trim()
-    }
-
-    const data = record.data
-    if (data && typeof data === 'object') {
-      const nestedRejectReason = (data as Record<string, unknown>).rejectReason
-      if (typeof nestedRejectReason === 'string' && nestedRejectReason.trim()) {
-        return nestedRejectReason.trim()
-      }
-      const nestedMessage = (data as Record<string, unknown>).message
-      if (typeof nestedMessage === 'string' && nestedMessage.trim()) {
-        return nestedMessage.trim()
-      }
-    }
-  }
-
-  if (meta.message) {
-    return meta.message
-  }
-
-  if (error.message?.trim()) {
-    return error.message.trim()
-  }
-
-  return buildAiQuantStageFallbackMessage(fallback, error.statusCode ?? 500, {
-    ...meta,
-    code: meta.code ?? error.code,
-  })
-}
-
-function isTerminalSessionConflict(error: unknown): boolean {
-  if (!(error instanceof ApiError) || error.statusCode !== 409) {
-    return false
-  }
-
-  if (error.code === 'codegen.session_terminal_status') {
-    return true
-  }
-
-  if (
-    error.message.includes('会话已终态') ||
-    error.message.includes('codegen.session_terminal_status')
-  ) {
-    return true
-  }
-
-  const details = error.details
-  if (!details || typeof details !== 'object') {
-    return false
-  }
-
-  const detailRecord = details as Record<string, unknown>
-  const nestedError = detailRecord.error
-  if (!nestedError || typeof nestedError !== 'object') {
-    return false
-  }
-
-  const nestedCode = (nestedError as Record<string, unknown>).code
-  if (typeof nestedCode === 'string' && nestedCode === 'codegen.session_terminal_status') {
-    return true
-  }
-
-  const nestedMessage = (nestedError as Record<string, unknown>).message
-  if (typeof nestedMessage === 'string') {
-    return (
-      nestedMessage.includes('会话已终态') ||
-      nestedMessage.includes('codegen.session_terminal_status')
-    )
-  }
-
-  return false
-}
-
-function normalizeNumber(value: unknown, fallback: number): number {
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value)
-    if (Number.isFinite(parsed)) return parsed
-  }
-  return fallback
-}
-
-function normalizeParamsFromValues(
-  values: Record<string, unknown>,
-  fallback: QuantParams,
-): QuantParams {
-  const exchange =
-    values.exchange === 'okx'
-      ? 'okx'
-      : values.exchange === 'hyperliquid'
-        ? 'hyperliquid'
-        : 'binance'
-  return {
-    exchange,
-    symbol:
-      typeof values.symbol === 'string' && values.symbol.trim()
-        ? values.symbol.trim()
-        : fallback.symbol,
-    baseTimeframe:
-      typeof values.baseTimeframe === 'string' && values.baseTimeframe.trim()
-        ? values.baseTimeframe.trim()
-        : fallback.baseTimeframe,
-    buyWindowMin: normalizeNumber(values.buyWindowMin, fallback.buyWindowMin),
-    buyDropPct: normalizeNumber(values.buyDropPct, fallback.buyDropPct),
-    sellWindowMin: normalizeNumber(values.sellWindowMin, fallback.sellWindowMin),
-    sellRisePct: normalizeNumber(values.sellRisePct, fallback.sellRisePct),
-    positionPct: normalizeNumber(values.positionPct, fallback.positionPct),
-  }
-}
-
-function buildParamSchemaWithCapabilities(
-  capabilities: BacktestCapabilities | null,
-  currentSymbol = DEFAULT_PARAMS.symbol,
-): Record<string, unknown> {
-  const properties = (DEFAULT_PARAM_SCHEMA.properties ?? {}) as Record<string, unknown>
-  const symbolProperty = {
-    ...(properties.symbol as Record<string, unknown>),
-  }
-  const baseTimeframeProperty = {
-    ...(properties.baseTimeframe as Record<string, unknown>),
-  }
-
-  if (capabilities) {
-    symbolProperty.enum = [
-      currentSymbol,
-      ...capabilities.allowedSymbols.filter(item => item !== currentSymbol),
-    ]
-    baseTimeframeProperty.enum = capabilities.allowedBaseTimeframes
-  } else {
-    symbolProperty.enum = [currentSymbol]
-    baseTimeframeProperty.enum = [DEFAULT_PARAMS.baseTimeframe]
-  }
-
-  return {
-    ...DEFAULT_PARAM_SCHEMA,
-    properties: {
-      ...properties,
-      symbol: symbolProperty,
-      baseTimeframe: baseTimeframeProperty,
-    },
-  }
-}
-
-function normalizePublishedScriptCode(scriptCode: unknown): string | null {
-  if (typeof scriptCode !== 'string') {
-    return null
-  }
-  const normalized = scriptCode.trim()
-  return normalized.length > 0 ? normalized : null
-}
-
-function normalizePublishedSnapshotId(snapshotId: unknown): string | null {
-  if (typeof snapshotId !== 'string') {
-    return null
-  }
-  const normalized = snapshotId.trim()
-  return normalized.length > 0 ? normalized : null
-}
-
-function resolveHydratedPublishedScriptCode(item: Partial<ConversationState>): string | null {
-  const explicitScriptCode = normalizePublishedScriptCode(item.publishedScriptCode)
-  if (explicitScriptCode) {
-    return explicitScriptCode
-  }
-  if (item.logicGraph?.status !== 'confirmed') {
-    return null
-  }
-  return normalizePublishedScriptCode(extractLatestScriptCode(item.messages ?? []))
-}
-
-function hasLatestPublishedCode(conversation: ConversationState | null | undefined): boolean {
-  if (!conversation?.logicGraph) {
-    return false
-  }
-  if (conversation.publishedScriptGraphVersion !== conversation.logicGraph.version) {
-    return false
-  }
-  return typeof conversation.publishedSnapshotId === 'string' && conversation.publishedSnapshotId.trim().length > 0
-}
-
-function invalidateConversationPublication(
-  conversation: ConversationState,
-  options: {
-    markGraphDraft?: boolean
-  } = {},
-): ConversationState {
-  const { markGraphDraft = false } = options
-
-  return {
-    ...conversation,
-    logicGraph:
-      markGraphDraft && conversation.logicGraph
-        ? { ...conversation.logicGraph, status: 'draft' }
-        : conversation.logicGraph,
-    publishedStrategyInstanceId: null,
-    publishedSnapshotId: null,
-    publishedScriptCode: null,
-    publishedScriptGraphVersion: null,
-    backtestResult: null,
-    latestSignalMessage: null,
-    backtestExecutionState: 'idle',
-  }
-}
-
-const VALID_RANGE_PRESETS = ['7D', '30D', '90D', '1Y', 'CUSTOM'] as const
-type BacktestRangePresetValue = (typeof VALID_RANGE_PRESETS)[number]
-const SCRIPT_CODE_BLOCK_REGEX = /```(?:typescript|ts|javascript|js)?\r?\n([\s\S]*?)```/i
-const TRANSIENT_BACKTEST_STATES = new Set<ConversationState['backtestExecutionState']>([
-  'submitting',
-  'running',
-  'timeout',
-])
-const NON_STRATEGY_PARAM_KEYS = new Set([
-  'backtestRangePreset',
-  'backtestStart',
-  'backtestEnd',
-  'backtestInitialCash',
-  'backtestLeverage',
-  'backtestSlippageBps',
-  'backtestFeeBps',
-  'backtestPriceSource',
-  'backtestAllowPartial',
-])
-const BACKTEST_EXECUTION_PARAM_KEYS = [
-  'backtestInitialCash',
-  'backtestLeverage',
-  'backtestSlippageBps',
-  'backtestFeeBps',
-  'backtestPriceSource',
-  'backtestAllowPartial',
-] as const
-const BACKTEST_EXECUTION_PARAM_KEY_SET = new Set<string>(BACKTEST_EXECUTION_PARAM_KEYS)
-const LEGACY_IMPLICIT_BACKTEST_PARAM_VALUES = {
-  backtestInitialCash: 10000,
-  backtestLeverage: 1,
-  backtestSlippageBps: 10,
-  backtestFeeBps: 5,
-  backtestPriceSource: 'close',
-  backtestAllowPartial: true,
-} as const
-
-function normalizeHydratedBacktestExecutionState(
-  state: ConversationState['backtestExecutionState'] | undefined,
-): ConversationState['backtestExecutionState'] {
-  if (!state || TRANSIENT_BACKTEST_STATES.has(state)) {
-    return 'idle'
-  }
-  return state
-}
-
-function resolveBacktestRangeInput(values: Record<string, unknown>): BacktestRangeInput {
-  const presetRaw =
-    typeof values.backtestRangePreset === 'string'
-      ? values.backtestRangePreset.toUpperCase()
-      : '30D'
-  const preset = (VALID_RANGE_PRESETS as readonly string[]).includes(presetRaw)
-    ? (presetRaw as BacktestRangePresetValue)
-    : '30D'
-  if (preset !== 'CUSTOM') {
-    return { preset }
-  }
-
-  return {
-    preset: 'CUSTOM',
-    startAt: typeof values.backtestStart === 'string' ? values.backtestStart : '',
-    endAt: typeof values.backtestEnd === 'string' ? values.backtestEnd : '',
-  }
-}
-
-function shouldInvalidatePublicationForParamChange(key: string): boolean {
-  return !NON_STRATEGY_PARAM_KEYS.has(key)
-}
-
-function stripBacktestExecutionParamValues(
-  values: Record<string, unknown>,
-): Record<string, unknown> {
-  const nextValues = { ...values }
-  BACKTEST_EXECUTION_PARAM_KEYS.forEach((key) => {
-    delete nextValues[key]
-  })
-  return nextValues
-}
-
-function hasLegacyImplicitBacktestExecutionConfig(
-  values: Record<string, unknown>,
-): boolean {
-  return BACKTEST_EXECUTION_PARAM_KEYS.every((key) => values[key] === LEGACY_IMPLICIT_BACKTEST_PARAM_VALUES[key])
-}
-
-function normalizeHydratedBacktestExecutionConfig(input: {
-  paramValues: Record<string, unknown>
-  explicit: boolean
-}): {
-  paramValues: Record<string, unknown>
-  explicit: boolean
-} {
-  if (input.explicit) {
-    return input
-  }
-
-  if (!hasLegacyImplicitBacktestExecutionConfig(input.paramValues)) {
-    return input
-  }
-
-  return {
-    paramValues: stripBacktestExecutionParamValues(input.paramValues),
-    explicit: false,
-  }
-}
-
-function extractLatestScriptCode(messages: QuantMessage[]): string {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const message = messages[i]
-    if (message.role !== 'assistant') continue
-    const match = SCRIPT_CODE_BLOCK_REGEX.exec(message.content)
-    if (match?.[1]?.trim()) {
-      return match[1].trim()
-    }
-  }
-  return ''
-}
-
-function buildBacktestSummaryResult(
-  previous: BacktestResult,
-  summary: {
-    netProfitPct: number
-    maxDrawdownPct: number
-    winRate: number
-    totalTrades: number
-  },
-): BacktestResult {
-  const winRatePct = summary.winRate <= 1 ? summary.winRate * 100 : summary.winRate
-  return {
-    ...previous,
-    maxDrawdownPct: Number(summary.maxDrawdownPct.toFixed(2)),
-    totalReturnPct: Number(summary.netProfitPct.toFixed(2)),
-    winRatePct: Number(winRatePct.toFixed(2)),
-    tradeCount: summary.totalTrades,
-  }
-}
-
-function mapExchangeStatusesToDeployAccounts(
-  items: UserExchangeAccountStatus[],
-): DeployExchangeAccount[] {
-  return items
-    .filter(item => item.isBound && typeof item.id === 'string' && item.id.trim().length > 0)
-    .map(item => ({
-      accountId: item.id as string,
-      exchange: item.exchangeId,
-      accountName: item.name?.trim() || item.exchangeId.toUpperCase(),
-      apiKeyMask: item.maskedCredential?.trim() || '****',
-      status: 'available' as const,
-    }))
-}
-
-function buildApiConfigHref(lng: 'zh' | 'en') {
-  return `/${lng}/account?tab=ai-quant#exchange-api`
-}
 
 export function AiQuantPageClient() {
   const { t } = useTranslation()
@@ -670,42 +74,11 @@ export function AiQuantPageClient() {
   const { session, isLoading } = useAuth()
   const apiConfigHref = buildApiConfigHref(lng)
 
-  const createConversation = (): ConversationState => {
-    const now = Date.now()
-    return {
-      id: `conv-${now}-${Math.random().toString(16).slice(2, 8)}`,
-      title: t('aiQuant.newChat'),
-      messages: [
-        {
-          id: 'welcome',
-          role: 'assistant',
-          content: t('aiQuant.messages.welcome'),
-        },
-      ],
-      params: DEFAULT_PARAMS,
-      paramSchema: buildParamSchemaWithCapabilities(null),
-      paramValues: { ...DEFAULT_PARAM_VALUES },
-      backtestResult: null,
-      logicGraph: null,
-      semanticGraph: null,
-      validationReport: null,
-      llmCodegenSessionId: null,
-      publishedStrategyInstanceId: null,
-      publishedSnapshotId: null,
-      publishedScriptCode: null,
-      publishedScriptGraphVersion: null,
-      latestSignalMessage: null,
-      backtestExecutionConfigExplicit: false,
-      backtestExecutionState: 'idle',
-      updatedAt: now,
-    }
-  }
-
   // Initialize state lazily to avoid hydration mismatch if possible,
   // but here we need to read from localStorage which is a side effect.
   // We'll start with a default and update in useEffect.
   const [conversations, setConversations] = useState<ConversationState[]>(() => [
-    createConversation(),
+    createConversation(t),
   ])
   const [activeConversationId, setActiveConversationId] = useState<string>('')
   const [deployOpen, setDeployOpen] = useState(false)
@@ -743,7 +116,7 @@ export function AiQuantPageClient() {
   useEffect(() => {
     const raw = localStorage.getItem(CONVERSATIONS_STORAGE_KEY)
     if (!raw) {
-      const seed = createConversation()
+      const seed = createConversation(t)
       setConversations([seed])
       setActiveConversationId(seed.id)
       return
@@ -751,70 +124,11 @@ export function AiQuantPageClient() {
     try {
       const parsed = JSON.parse(raw) as ConversationState[]
       if (!Array.isArray(parsed) || parsed.length === 0) throw new Error('invalid')
-      const normalized = parsed.map(item => {
-        const baseParams =
-          item.params && typeof item.params === 'object' && !Array.isArray(item.params)
-            ? (item.params as Record<string, unknown>)
-            : {}
-        const storedValues =
-          item.paramValues && typeof item.paramValues === 'object' && !Array.isArray(item.paramValues)
-            ? item.paramValues
-            : {}
-        const nextParamValues = {
-          ...DEFAULT_PARAM_VALUES,
-          ...baseParams,
-          ...storedValues,
-        }
-        const normalizedBacktestExecutionConfig = normalizeHydratedBacktestExecutionConfig({
-          paramValues: nextParamValues,
-          explicit: item.backtestExecutionConfigExplicit === true,
-        })
-        const nextParams = item.params
-          ? normalizeParamsFromValues(normalizedBacktestExecutionConfig.paramValues, item.params)
-          : normalizeParamsFromValues(normalizedBacktestExecutionConfig.paramValues, DEFAULT_PARAMS)
-
-        return {
-          ...item,
-          paramSchema:
-            item.paramSchema ?? buildParamSchemaWithCapabilities(null, nextParams.symbol),
-          paramValues: normalizedBacktestExecutionConfig.paramValues,
-          params: nextParams,
-          semanticGraph:
-            item.semanticGraph && typeof item.semanticGraph === 'object' && !Array.isArray(item.semanticGraph)
-              ? item.semanticGraph
-              : null,
-          validationReport:
-            item.validationReport && typeof item.validationReport === 'object' && !Array.isArray(item.validationReport)
-              ? item.validationReport
-              : null,
-          llmCodegenSessionId: item.llmCodegenSessionId ?? null,
-          publishedStrategyInstanceId: item.publishedStrategyInstanceId ?? null,
-          publishedSnapshotId:
-            typeof item.publishedSnapshotId === 'string' && item.publishedSnapshotId.trim()
-              ? item.publishedSnapshotId.trim()
-              : null,
-          publishedScriptCode: resolveHydratedPublishedScriptCode(item),
-          publishedScriptGraphVersion: (() => {
-            if (typeof item.publishedScriptGraphVersion === 'number') {
-              return item.publishedScriptGraphVersion
-            }
-            const hydratedScriptCode = resolveHydratedPublishedScriptCode(item)
-            if (hydratedScriptCode && item.logicGraph?.status === 'confirmed') {
-              return item.logicGraph.version
-            }
-            return null
-          })(),
-          latestSignalMessage: item.latestSignalMessage ?? null,
-          backtestExecutionConfigExplicit: normalizedBacktestExecutionConfig.explicit,
-          backtestExecutionState: normalizeHydratedBacktestExecutionState(
-            item.backtestExecutionState,
-          ),
-        }
-      })
+      const normalized = parsed.map(item => hydrateConversation(item))
       setConversations(normalized)
       setActiveConversationId(normalized[0].id)
     } catch {
-      const seed = createConversation()
+      const seed = createConversation(t)
       setConversations([seed])
       setActiveConversationId(seed.id)
       localStorage.removeItem(CONVERSATIONS_STORAGE_KEY)
@@ -1108,398 +422,17 @@ export function AiQuantPageClient() {
     usePresetRules?: boolean
     confirmGenerate?: boolean
   }) => {
-    const {
-      conversationId,
-      message,
-      params: targetParams,
-      sessionId,
-      usePresetRules = false,
-      confirmGenerate = false,
-    } = args
-    if (!session?.userId) return
-    if (codegenRequestMutexRef.current.has(conversationId)) return
-    codegenRequestMutexRef.current.add(conversationId)
-    setCodegenBusyConversationIds(prev =>
-      prev.includes(conversationId) ? prev : [...prev, conversationId],
-    )
-    let activeSessionId = sessionId
-    const trimmedMessage = message.trim()
-    if (!trimmedMessage) {
-      codegenRequestMutexRef.current.delete(conversationId)
-      setCodegenBusyConversationIds(prev => prev.filter(id => id !== conversationId))
-      return
-    }
-    const loadingMessageId = `a-loading-${Date.now()}`
-    const startedAt = Date.now()
-
-    setConversations(prev =>
-      prev.map(conv => {
-        if (conv.id !== conversationId) return conv
-        return {
-          ...conv,
-          publishedStrategyInstanceId: activeSessionId ? conv.publishedStrategyInstanceId : null,
-          messages: [
-            ...conv.messages,
-            {
-              id: loadingMessageId,
-              role: 'assistant',
-              content: callingMessage(0),
-            },
-          ],
-          updatedAt: Date.now(),
-        }
-      }),
-    )
-
-    const loadingTimer = window.setInterval(() => {
-      const elapsedSec = Math.max(0, Math.floor((Date.now() - startedAt) / 1000))
-      setConversations(prev =>
-        prev.map(conv => {
-          if (conv.id !== conversationId) return conv
-          return {
-            ...conv,
-            messages: conv.messages.map(msg =>
-              msg.id === loadingMessageId ? { ...msg, content: callingMessage(elapsedSec) } : msg,
-            ),
-          }
-        }),
-      )
-    }, 1000)
-
-    const resolveProcessingSession = async (
-      id: string,
-      initial: LlmCodegenSessionResponse,
-    ): Promise<LlmCodegenSessionResponse> => {
-      if (!isCodegenProcessingStatus(initial.status)) {
-        return initial
-      }
-
-      let current = initial
-      const deadline = Date.now() + 120_000
-      while (isCodegenProcessingStatus(current.status) && Date.now() < deadline) {
-        await new Promise(resolve => window.setTimeout(resolve, 1500))
-        current = await getLlmCodegenSession(id)
-        if (isCodegenTerminalStatus(current.status) || current.status === 'CHECKLIST_GATE') {
-          return current
-        }
-      }
-
-      return current
-    }
-
-    const applyCodegenResponseToConversation = (
-      response: Awaited<ReturnType<typeof continueLlmCodegenSession>>,
-    ) => {
-      setConversations(prev =>
-        prev.map(conv => {
-          if (conv.id !== conversationId) return conv
-          const nextVersion = (conv.logicGraph?.version || 0) + 1
-          const shouldReuseCodegenSession = !isCodegenTerminalStatus(response.status)
-          const shouldUpdateGraph =
-            (response.status === 'CHECKLIST_GATE' || response.status === 'PUBLISHED') &&
-            Boolean(response.specDesc)
-          const syncResult = shouldUpdateGraph
-            ? syncStrategyParamsFromCodegen({
-                spec: response.specDesc,
-                fallback: {
-                  exchange: targetParams.exchange,
-                  symbol: targetParams.symbol,
-                  baseTimeframe: targetParams.baseTimeframe,
-                  positionPct: targetParams.positionPct,
-                },
-                currentValues: conv.paramValues,
-                capabilities: backtestCapabilities,
-                contextText: trimmedMessage,
-              })
-            : null
-          const nextParamValues = syncResult?.paramValues ?? conv.paramValues
-          const nextParamSchema = shouldUpdateGraph
-            ? applyCapabilitiesToParamSchema(syncResult?.paramSchema, backtestCapabilities)
-            : conv.paramSchema
-          const nextParams = syncResult
-            ? normalizeParamsFromValues(nextParamValues, conv.params)
-            : conv.params
-          const nextGraphStatus =
-            response.status === 'PUBLISHED' || confirmGenerate ? 'confirmed' : 'draft'
-          const nextGraph = shouldUpdateGraph
-            ? buildLogicGraphFromCodegenSpec(
-                response.specDesc,
-                {
-                  exchange: syncResult?.normalized.exchange ?? targetParams.exchange,
-                  symbol: syncResult?.normalized.symbol ?? targetParams.symbol,
-                  baseTimeframe: syncResult?.normalized.baseTimeframe ?? targetParams.baseTimeframe,
-                  positionPct: syncResult?.normalized.positionPct ?? targetParams.positionPct,
-                  executionTags: syncResult?.executionTags ?? [],
-                },
-                nextVersion,
-                nextGraphStatus,
-              )
-            : conv.logicGraph
-          const nextPublishedScriptCode = (() => {
-            if (response.status === 'PUBLISHED' && !response.rejectReason) {
-              const responseScriptCode = normalizePublishedScriptCode(response.scriptCode)
-              if (responseScriptCode) {
-                return responseScriptCode
-              }
-              if (!shouldUpdateGraph) {
-                return conv.publishedScriptCode
-              }
-              return null
-            }
-            if (shouldUpdateGraph) {
-              return null
-            }
-            return conv.publishedScriptCode
-          })()
-          const nextPublishedSnapshotId = (() => {
-            if (response.status === 'PUBLISHED' && !response.rejectReason) {
-              const snapshotId = normalizePublishedSnapshotId(response.publishedSnapshotId)
-              if (snapshotId) {
-                return snapshotId
-              }
-              if (!shouldUpdateGraph) {
-                return conv.publishedSnapshotId
-              }
-              return null
-            }
-            if (shouldUpdateGraph) {
-              return null
-            }
-            return conv.publishedSnapshotId
-          })()
-          const nextPublishedScriptGraphVersion = nextPublishedScriptCode
-            ? (nextGraph?.version ?? conv.publishedScriptGraphVersion)
-            : null
-          const nextSemanticGraph = hasSemanticGraphPayload(response, 'semanticGraph')
-            ? (response.semanticGraph ?? null)
-            : conv.semanticGraph
-          const nextValidationReport = hasSemanticGraphPayload(response, 'validationReport')
-            ? (response.validationReport ?? null)
-            : conv.validationReport
-          const publishedReply = response.scriptCode
-            ? `${
-                confirmGenerate
-                  ? t('aiQuant.messages.codeGeneratedBacktest', {
-                      defaultValue: 'Strategy code generated, ready to backtest.',
-                    })
-                  : t('aiQuant.messages.graphGenerated')
-              }\n\n${t('aiQuant.messages.generatedCodeTitle', { defaultValue: 'Generated strategy code:' })}\n\`\`\`javascript\n${response.scriptCode}\n\`\`\``
-            : confirmGenerate
-              ? t('aiQuant.messages.codeGeneratedBacktest', {
-                  defaultValue: 'Strategy code generated, ready to backtest.',
-                })
-              : t('aiQuant.messages.graphGenerated')
-          const replyContent = buildCodegenReplyContent({
-            response,
-            confirmGenerate,
-            publishedReply,
-            graphGeneratedMessage: t('aiQuant.messages.graphGenerated'),
-            graphReviseMessage: t('aiQuant.messages.graphRevise'),
-            checklistContinuedMessage: t('aiQuant.messages.checklistContinued', {
-              defaultValue:
-                'Continued generation based on current logic graph. Please review the latest result.',
-            }),
-            checklistUpdatedMessage: t('aiQuant.messages.checklistUpdated', {
-              defaultValue:
-                'Logic graph updated. Please confirm it before I generate strategy code.',
-            }),
-            stillGeneratingPrefix: t('aiQuant.messages.stillGenerating', {
-              defaultValue: 'Strategy code is still generating, please wait',
-            }),
-            rejectedPrefix: t('aiQuant.messages.generationFailedPrefix', {
-              defaultValue: 'Failed to generate strategy from current logic graph',
-            }),
-            rejectedWithoutReason: t('aiQuant.messages.generationFailedNoReason', {
-              defaultValue:
-                'Failed to generate strategy from current logic graph: backend did not return a detailed reason. Please check service logs.',
-            }),
-          })
-          return {
-            ...conv,
-            llmCodegenSessionId: shouldReuseCodegenSession ? activeSessionId : null,
-            publishedStrategyInstanceId: resolvePublishedStrategyInstanceId({
-              response,
-              isStartingNewSession: !activeSessionId,
-            }),
-            publishedSnapshotId: nextPublishedSnapshotId,
-            publishedScriptCode: nextPublishedScriptCode,
-            publishedScriptGraphVersion: nextPublishedScriptGraphVersion,
-            params: nextParams,
-            paramSchema: nextParamSchema,
-            paramValues: nextParamValues,
-            logicGraph: nextGraph,
-            semanticGraph: nextSemanticGraph,
-            validationReport: nextValidationReport,
-            backtestResult: null,
-            latestSignalMessage: null,
-            messages: [
-              ...conv.messages.map(msg =>
-                msg.id === loadingMessageId ? { ...msg, content: replyContent } : msg,
-              ),
-            ],
-            updatedAt: Date.now(),
-          }
-        }),
-      )
-    }
-
-    try {
-      const currentConversation = conversations.find(conv => conv.id === conversationId)
-      const checklistResult = resolveChecklistPayload({
-        usePresetRules,
-        confirmGenerate,
-        message: trimmedMessage,
-        sessionId,
-        graph: currentConversation?.logicGraph,
-        params: targetParams,
-        paramSchema: currentConversation?.paramSchema ?? null,
-        paramValues: currentConversation?.paramValues ?? null,
-      })
-      if ('error' in checklistResult) {
-        const errorMessage =
-          checklistResult.error.code === 'MISSING_REQUIRED_PARAMS'
-            ? t('aiQuant.messages.missingRequiredParams', {
-                keys: checklistResult.error.missingKeys.join(', '),
-                defaultValue: `Missing required parameters: ${checklistResult.error.missingKeys.join(', ')}`,
-              })
-            : t('aiQuant.messages.invalidParams', {
-                details: Object.entries(checklistResult.error.fieldErrors ?? {})
-                  .map(([key, reason]) => `${key}(${reason})`)
-                  .join(', '),
-                defaultValue: `Parameter validation failed: ${Object.entries(
-                  checklistResult.error.fieldErrors ?? {},
-                )
-                  .map(([key, reason]) => `${key}(${reason})`)
-                  .join(', ')}`,
-              })
-        setConversations(prev =>
-          prev.map(conv => {
-            if (conv.id !== conversationId) return conv
-            return {
-              ...conv,
-              latestSignalMessage: null,
-              messages: [
-                ...conv.messages.map(msg =>
-                  msg.id === loadingMessageId ? { ...msg, content: errorMessage } : msg,
-                ),
-              ],
-              updatedAt: Date.now(),
-            }
-          }),
-        )
-        return
-      }
-      const checklistPayload = checklistResult
-
-      const startNewSession = async () =>
-        startLlmCodegenSession({
-          initialMessage: trimmedMessage,
-          ...checklistPayload,
-        })
-
-      const continueSession = async (id: string) =>
-        continueLlmCodegenSession(id, {
-          message: trimmedMessage,
-          confirmGenerate,
-          ...checklistPayload,
-        })
-
-      const advanceConfirmGenerate = async (
-        id: string,
-        initial: Awaited<ReturnType<typeof continueSession>>,
-      ) => {
-        if (!confirmGenerate) {
-          return initial
-        }
-        let current = initial
-        let attempts = 0
-        while (current.status === 'CHECKLIST_GATE' && attempts < 2) {
-          current = await continueSession(id)
-          attempts += 1
-        }
-        return current
-      }
-
-      let continued
-      if (!activeSessionId) {
-        const created = await startNewSession()
-        activeSessionId = created.id
-        if (confirmGenerate) {
-          continued = await continueSession(activeSessionId)
-          continued = await advanceConfirmGenerate(activeSessionId, continued)
-          continued = await resolveProcessingSession(activeSessionId, continued)
-        } else {
-          continued = created
-        }
-      } else {
-        try {
-          continued = await continueSession(activeSessionId)
-          continued = await advanceConfirmGenerate(activeSessionId, continued)
-          continued = await resolveProcessingSession(activeSessionId, continued)
-        } catch (error) {
-          const isTerminalSessionError = isTerminalSessionConflict(error)
-          if (!isTerminalSessionError) {
-            throw error
-          }
-
-          let recovered: Awaited<ReturnType<typeof continueSession>> | null = null
-          try {
-            recovered = await getLlmCodegenSession(activeSessionId)
-          } catch {
-            recovered = null
-          }
-
-          if (recovered && (recovered.status === 'PUBLISHED' || recovered.status === 'REJECTED')) {
-            continued = recovered
-          } else {
-            const recreated = await startNewSession()
-            activeSessionId = recreated.id
-            if (confirmGenerate) {
-              continued = await continueSession(activeSessionId)
-              continued = await advanceConfirmGenerate(activeSessionId, continued)
-              continued = await resolveProcessingSession(activeSessionId, continued)
-            } else {
-              continued = recreated
-            }
-          }
-        }
-      }
-
-      applyCodegenResponseToConversation(continued)
-    } catch (error) {
-      if (activeSessionId) {
-        try {
-          let recovered = await getLlmCodegenSession(activeSessionId)
-          recovered = await resolveProcessingSession(activeSessionId, recovered)
-          if (isRecoverableCodegenStatus(recovered.status)) {
-            applyCodegenResponseToConversation(recovered)
-            return
-          }
-        } catch {
-          // keep original error branch
-        }
-      }
-      const message = extractCodegenErrorMessage(error, t('common.error'))
-      setConversations(prev =>
-        prev.map(conv => {
-          if (conv.id !== conversationId) return conv
-          return {
-            ...conv,
-            latestSignalMessage: null,
-            messages: [
-              ...conv.messages.map(msg =>
-                msg.id === loadingMessageId ? { ...msg, content: message } : msg,
-              ),
-            ],
-            updatedAt: Date.now(),
-          }
-        }),
-      )
-    } finally {
-      codegenRequestMutexRef.current.delete(conversationId)
-      setCodegenBusyConversationIds(prev => prev.filter(id => id !== conversationId))
-      window.clearInterval(loadingTimer)
-    }
+    await requestAiQuantCodegen({
+      ...args,
+      backtestCapabilities,
+      callingMessage,
+      codegenRequestMutexRef,
+      conversations,
+      sessionUserId: session?.userId,
+      setCodegenBusyConversationIds,
+      setConversations,
+      t,
+    })
   }
 
   const onSend = async (input: string) => {
@@ -1681,267 +614,19 @@ export function AiQuantPageClient() {
   }
 
   const onRunBacktest = () => {
-    const conversationId = activeConversation.id
-    if (backtestRunMutexRef.current.has(conversationId)) {
-      return
-    }
-    backtestRunMutexRef.current.add(conversationId)
-
-    if (backtestCapabilityState !== 'ready' || !backtestCapabilities) {
-      backtestRunMutexRef.current.delete(conversationId)
-      updateActiveConversation(curr => ({
-        ...curr,
-        messages: [
-          ...curr.messages,
-          {
-            id: `capability-guard-${Date.now()}`,
-            role: 'assistant',
-            content: CAPABILITY_FAILED_MESSAGE_KEY,
-          },
-        ],
-        updatedAt: Date.now(),
-      }))
-      return
-    }
-
-    if (
-      activeConversation.backtestExecutionState === 'submitting' ||
-      activeConversation.backtestExecutionState === 'running'
-    ) {
-      backtestRunMutexRef.current.delete(conversationId)
-      return
-    }
-
-    if (!canRunBacktest) {
-      backtestRunMutexRef.current.delete(conversationId)
-      updateActiveConversation(curr => ({
-        ...curr,
-        messages: [
-          ...curr.messages,
-          {
-            id: `backtest-guard-${Date.now()}`,
-            role: 'assistant',
-            content: !graphConfirmed
-              ? t('aiQuant.messages.graphGuard')
-              : t('aiQuant.messages.codegenGuard', {
-                  defaultValue: 'Please generate strategy code before running backtest.',
-                }),
-          },
-        ],
-        updatedAt: Date.now(),
-      }))
-      return
-    }
-
-    let payload: ReturnType<typeof buildBacktestPayload>
-    try {
-      const paramValues = activeConversation.paramValues
-      const backtestPriceSource = String(paramValues.backtestPriceSource ?? '')
-      payload = buildBacktestPayload({
-        symbol: activeConversation.params.symbol,
-        baseTimeframe: activeConversation.params.baseTimeframe,
-        capabilities: backtestCapabilities,
-        stateTimeframes: [activeConversation.params.baseTimeframe],
-        initialCash: Number(paramValues.backtestInitialCash),
-        leverage: Number(paramValues.backtestLeverage),
-        execution: {
-          slippageBps: Number(paramValues.backtestSlippageBps),
-          feeBps: Number(paramValues.backtestFeeBps),
-          priceSource: backtestPriceSource as 'open' | 'close' | 'mid',
-        },
-        strategy: {
-          id:
-            activeConversation.publishedStrategyInstanceId ??
-            activeConversation.llmCodegenSessionId ??
-            `mock-${Date.now()}`,
-          publishedSnapshotId: activeConversation.publishedSnapshotId ?? '',
-        },
-        range: resolveBacktestRangeInput(activeConversation.paramValues),
-        allowPartial: paramValues.backtestAllowPartial === true,
-      })
-    } catch (error) {
-      backtestRunMutexRef.current.delete(conversationId)
-      const message = (() => {
-        if (!isBacktestPayloadBuilderError(error)) {
-          return t('aiQuant.messages.backtestPayloadInvalid', { reason: 'unknown_error' })
-        }
-
-        switch (error.code) {
-          case 'missing_range':
-            return t('aiQuant.messages.backtestRangeMissing')
-          case 'start_after_end':
-            return t('aiQuant.messages.backtestRangeOrderInvalid')
-          case 'range_too_large':
-            return t('aiQuant.messages.backtestRangeTooLarge')
-          case 'missing_published_snapshot':
-            return t('aiQuant.messages.backtestMissingScriptCode')
-          case 'invalid_execution_config':
-            return t('aiQuant.messages.backtestPayloadInvalid', { reason: 'invalid_execution_config' })
-          case 'missing_symbol':
-          default:
-            return t('aiQuant.messages.backtestPayloadInvalid', { reason: error.code })
-        }
-      })()
-      updateActiveConversation(curr => ({
-        ...curr,
-        messages: [
-          ...curr.messages,
-          {
-            id: `bt-invalid-${Date.now()}`,
-            role: 'assistant',
-            content: message,
-          },
-        ],
-        updatedAt: Date.now(),
-      }))
-      return
-    }
-
-    const runToken = (backtestRunTokenRef.current.get(conversationId) ?? 0) + 1
-    backtestRunTokenRef.current.set(conversationId, runToken)
-    const backtestMessageId = `bt-${Date.now()}`
-    const updateBacktestMessage = (content: string) => {
-      updateConversationById(conversationId, curr => {
-        const hasBacktestMessage = curr.messages.some(message => message.id === backtestMessageId)
-        return {
-          ...curr,
-          messages: hasBacktestMessage
-            ? curr.messages.map(message =>
-                message.id === backtestMessageId ? { ...message, content } : message,
-              )
-            : [
-                ...curr.messages,
-                {
-                  id: backtestMessageId,
-                  role: 'assistant',
-                  content,
-                },
-              ],
-          updatedAt: Date.now(),
-        }
-      })
-    }
-    const toFailureMessage = (reason: string) =>
-      t('aiQuant.messages.backtestPayloadInvalid', { reason })
-    const canContinue = () =>
-      isMountedRef.current &&
-      backtestRunTokenRef.current.get(conversationId) === runToken &&
-      activeConversationIdRef.current === conversationId
-
-    setConversationBacktestExecutionState(conversationId, 'submitting')
-    updateConversationById(conversationId, curr => ({
-      ...curr,
-      backtestResult: null,
-      messages: [
-        ...curr.messages,
-        {
-          id: backtestMessageId,
-          role: 'assistant',
-          content: t('aiQuant.messages.backtestRunning', {
-            defaultValue: '正在回测中，请稍后...',
-          }),
-        },
-      ],
-      updatedAt: Date.now(),
-    }))
-
-    void (async () => {
-      try {
-        const support = await checkBacktestSymbolSupport({
-          exchange: activeConversation.params.exchange,
-          symbol: payload.symbols[0],
-        })
-        if (!canContinue()) {
-          return
-        }
-        if (support.status === 'not_supported') {
-          setConversationBacktestExecutionState(conversationId, 'failed')
-          updateBacktestMessage(toFailureMessage('symbol_not_supported'))
-          return
-        }
-
-        const createdJob = await createBacktestJob(payload)
-        if (!canContinue()) {
-          return
-        }
-        setConversationBacktestExecutionState(conversationId, 'running')
-
-        const deadline = Date.now() + BACKTEST_JOB_TIMEOUT_MS
-        let latestJob = createdJob
-
-        while (latestJob.status === 'queued' || latestJob.status === 'running') {
-          if (!canContinue()) {
-            return
-          }
-          if (Date.now() >= deadline) {
-            setConversationBacktestExecutionState(conversationId, 'timeout')
-            updateBacktestMessage(toFailureMessage('timeout'))
-            return
-          }
-          await new Promise(resolve => window.setTimeout(resolve, BACKTEST_JOB_POLL_INTERVAL_MS))
-          if (!canContinue()) {
-            return
-          }
-          latestJob = await getBacktestJob(createdJob.id)
-        }
-
-        if (!canContinue()) {
-          return
-        }
-        if (latestJob.status === 'failed') {
-          setConversationBacktestExecutionState(conversationId, 'failed')
-          updateBacktestMessage(toFailureMessage(latestJob.error ?? 'job_failed'))
-          return
-        }
-
-        const jobResult = await getBacktestJobResult(createdJob.id)
-        if (!canContinue()) {
-          return
-        }
-        const summary = jobResult.summary
-        const winRatePct = summary.winRate <= 1 ? summary.winRate * 100 : summary.winRate
-        const result: BacktestResult = {
-          id: createdJob.id,
-          maxDrawdownPct: Number(summary.maxDrawdownPct.toFixed(2)),
-          totalReturnPct: Number(summary.netProfitPct.toFixed(2)),
-          winRatePct: Number(winRatePct.toFixed(2)),
-          tradeCount: summary.totalTrades,
-          symbol: payload.symbols[0],
-          startAt: new Date(payload.dataRange.fromTs).toISOString(),
-          endAt: new Date(payload.dataRange.toTs).toISOString(),
-        }
-
-        setConversationBacktestExecutionState(conversationId, 'succeeded')
-        updateConversationById(conversationId, curr => ({
-          ...curr,
-          backtestResult: result,
-          messages: curr.messages.map(message =>
-            message.id === backtestMessageId
-              ? {
-                  ...message,
-                  content:
-                    result.maxDrawdownPct <= 20
-                      ? t('aiQuant.messages.backtestSuccess', { drawdown: result.maxDrawdownPct })
-                      : t('aiQuant.messages.backtestFail', { drawdown: result.maxDrawdownPct }),
-                }
-              : message,
-          ),
-          updatedAt: Date.now(),
-        }))
-      } catch (error) {
-        if (!canContinue()) {
-          return
-        }
-        setConversationBacktestExecutionState(conversationId, 'failed')
-        const message =
-          error instanceof ApiError
-            ? error.message?.trim() || toFailureMessage('unknown_error')
-            : toFailureMessage('unknown_error')
-        updateBacktestMessage(message)
-      } finally {
-        backtestRunMutexRef.current.delete(conversationId)
-      }
-    })()
+    void runAiQuantBacktest({
+      activeConversation,
+      activeConversationIdRef,
+      backtestCapabilities,
+      backtestCapabilityState,
+      backtestRunMutexRef,
+      backtestRunTokenRef,
+      graphConfirmed,
+      isMountedRef,
+      setConversationBacktestExecutionState,
+      t,
+      updateConversationById,
+    })
   }
 
   const goLoginWithIntent = (intent: QuantReturnIntentInput) => {
@@ -2090,7 +775,7 @@ export function AiQuantPageClient() {
           items={conversations.map(x => ({ id: x.id, title: x.title, updatedAt: x.updatedAt }))}
           activeId={activeConversation.id}
           onCreate={() => {
-            const next = createConversation()
+            const next = createConversation(t)
             setConversations(prev => [next, ...prev])
             setActiveConversationId(next.id)
           }}
@@ -2104,7 +789,7 @@ export function AiQuantPageClient() {
             setConversations(prev => {
               const next = prev.filter(conv => conv.id !== id)
               if (next.length === 0) {
-                const seed = createConversation()
+                const seed = createConversation(t)
                 setActiveConversationId(seed.id)
                 return [seed]
               }
@@ -2280,108 +965,22 @@ export function AiQuantPageClient() {
             return
           }
           if (!activeConversation.backtestResult || !session?.userId) return
-
-          const strategyName =
-            activeConversation.title ||
-            t('aiQuant.defaultStrategyName', { defaultValue: 'AI Strategy' })
-          const requestId = deployRequestId ?? createDeployRequestId()
-          if (!deployRequestId) {
-            setDeployRequestId(requestId)
-          }
-
-          try {
-            setDeploySubmitting(true)
-            const publishedSnapshotId = activeConversation.publishedSnapshotId?.trim() ?? ''
-            if (!publishedSnapshotId) {
-              updateActiveConversation(curr => ({
-                ...curr,
-                messages: [
-                  ...curr.messages,
-                  {
-                    id: `deploy-guard-${Date.now()}`,
-                    role: 'assistant',
-                    content: t('aiQuant.messages.codegenGuard', {
-                      defaultValue: 'Please generate strategy code before deploying.',
-                    }),
-                  },
-                ],
-                updatedAt: Date.now(),
-              }))
-              return
-            }
-            const latestExchangeAccounts = mapExchangeStatusesToDeployAccounts(
-              await fetchUserExchangeAccountStatuses(),
-            )
-            setExchangeAccounts(latestExchangeAccounts)
-            const latestAvailableAccounts = latestExchangeAccounts.filter(
-              item => item.exchange === selectedDeployExchange && item.status === 'available',
-            )
-            const account = latestAvailableAccounts.find(
-              item => item.accountId === selectedDeployAccountId,
-            )
-
-            if (!account) {
-              const nextAccountId = latestAvailableAccounts[0]?.accountId ?? ''
-              setSelectedDeployAccountId(nextAccountId)
-              if (!nextAccountId) {
-                router.push(apiConfigHref)
-              }
-              return
-            }
-
-            await deployAccountAiQuantStrategy({
-              userId: session.userId,
-              name: strategyName,
-              deployRequestId: requestId,
-              publishedSnapshotId,
-              exchangeAccountId: account.accountId,
-              exchangeAccountName: account.accountName,
-            })
-            setDeployOpen(false)
-            setDeployRequestId(null)
-            updateActiveConversation(curr => ({
-              ...curr,
-              messages: [
-                ...curr.messages,
-                {
-                  id: `deploy-ok-${Date.now()}`,
-                  role: 'assistant',
-                  content: t('aiQuant.messages.deploySuccess', {
-                    exchange: selectedDeployExchange.toUpperCase(),
-                    account: account.accountName,
-                  }),
-                },
-              ],
-              updatedAt: Date.now(),
-            }))
-          } catch (error) {
-            const deployErrorMessage = extractCodegenErrorMessage(
-              error,
-              t('aiQuant.messages.deployFailedFallback', {
-                defaultValue: 'Strategy deployment failed. Please try again later.',
-              }),
-            )
-            updateActiveConversation(curr => ({
-              ...curr,
-              messages: [
-                ...curr.messages,
-                {
-                  id: `deploy-fail-${Date.now()}`,
-                  role: 'assistant',
-                  content: t('aiQuant.messages.deployFailedWithReason', {
-                    reason: deployErrorMessage,
-                    defaultValue: `Strategy deployment failed: ${deployErrorMessage}`,
-                  }),
-                },
-              ],
-              updatedAt: Date.now(),
-            }))
-            throw error instanceof ApiError
-              ? error
-              : new ApiError(deployErrorMessage, 'AI_QUANT_DEPLOY_FAILED', 500, { error })
-          } finally {
-            setDeploySubmitting(false)
-          }
+          await confirmAiQuantDeploy({
+            activeConversation,
+            apiConfigHref,
+            deployRequestId,
+            selectedDeployAccountId,
+            selectedDeployExchange,
+            sessionUserId: session.userId,
+            setDeployOpen,
+            setDeployRequestId,
+            setDeploySubmitting,
+            setExchangeAccounts,
+            setSelectedDeployAccountId,
+            t,
+            updateActiveConversation,
+            push: router.push,
+          })
         }}
         lng={lng}
       />
