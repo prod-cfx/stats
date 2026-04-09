@@ -1,15 +1,16 @@
-import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
-import type { CanonicalStrategyIrV1 } from '../types/canonical-strategy-ir'
 import type { StrategyAstV1 } from '../types/canonical-strategy-ast'
-import type { StrategyClarificationState } from '../types/strategy-clarification'
+import type { CanonicalStrategyIrV1 } from '../types/canonical-strategy-ir'
 import type { CompiledScriptExecutionEnvelope } from '../types/compiled-script-projection'
 import type { PublicationGateCheck, PublicationGateReport } from '../types/publication-gate'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import type { StrategyClarificationState } from '../types/strategy-clarification'
+import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
 import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CompiledScriptParserService } from './compiled-script-parser.service'
+
+type ExprNode = StrategyAstV1['exprPool'][number]
+type RuntimeActionKind = CanonicalStrategyIrV1['ruleBlocks'][number]['actions'][number]['kind']
 
 interface PublishCompiledSnapshotInput {
   sessionId: string
@@ -213,8 +214,9 @@ export class CompiledPublicationGateService {
         .filter(series => series.kind === 'BOLLINGER_BARS_OUTSIDE')
         .map(series => typeof series.params?.bars === 'number' ? series.params.bars : 1),
     )
-    const scriptOutsideSeries = parsed.exprPool.filter((expr) =>
-      expr.nodeType === 'series' && expr.payload.kind === 'BOLLINGER_BARS_OUTSIDE')
+    const scriptOutsideSeries = parsed.exprPool
+      .filter(this.isSeriesExprNode)
+      .filter(expr => expr.payload.kind === 'BOLLINGER_BARS_OUTSIDE')
     const scriptOutsideBars = new Set(
       scriptOutsideSeries
         .map(series => typeof series.payload.params?.bars === 'number' ? series.payload.params.bars : 1),
@@ -222,12 +224,10 @@ export class CompiledPublicationGateService {
     const outsideSeriesIds = new Set(scriptOutsideSeries.map(series => series.id))
     const outsidePredicateIds = new Set(
       parsed.exprPool
-        .filter((expr) =>
-          expr.nodeType === 'predicate'
-          && (
-            expr.sourceRef.toLowerCase().includes('outside')
-            || expr.payload.args.some(arg => outsideSeriesIds.has(arg))
-          ))
+        .filter(this.isPredicateExprNode)
+        .filter(expr =>
+          expr.sourceRef.toLowerCase().includes('outside')
+          || expr.payload.args.some(arg => outsideSeriesIds.has(arg)))
         .map(expr => expr.id),
     )
     const scriptOutsideActions = new Set(
@@ -330,17 +330,29 @@ export class CompiledPublicationGateService {
     return record.children.flatMap(child => this.collectOutsideBandBars(child))
   }
 
-  private mapOutsideRuleActionsToRuntimeActions(action: string): string[] {
+  private mapOutsideRuleActionsToRuntimeActions(action: string): RuntimeActionKind[] {
+    const runtimeActions: RuntimeActionKind[] = []
     switch (action) {
       case 'FORCE_EXIT':
-        return ['CLOSE_LONG', 'CLOSE_SHORT']
+        runtimeActions.push('CLOSE_LONG', 'CLOSE_SHORT')
+        break
       case 'REDUCE_LONG':
       case 'REDUCE_SHORT':
       case 'CLOSE_LONG':
       case 'CLOSE_SHORT':
-        return [action]
+        runtimeActions.push(action)
+        break
       default:
-        return []
+        break
     }
+    return runtimeActions
+  }
+
+  private isSeriesExprNode(expr: ExprNode): expr is ExprNode & { nodeType: 'series', payload: CanonicalStrategyIrV1['signalCatalog']['series'][number] } {
+    return expr.nodeType === 'series'
+  }
+
+  private isPredicateExprNode(expr: ExprNode): expr is ExprNode & { nodeType: 'predicate', payload: CanonicalStrategyIrV1['signalCatalog']['predicates'][number] } {
+    return expr.nodeType === 'predicate'
   }
 }

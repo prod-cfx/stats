@@ -3,7 +3,7 @@ import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-c
 import { CompiledPublicationGateService } from '../compiled-publication-gate.service'
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
 
-describe('CompiledPublicationGateService', () => {
+describe('compiled publication gate service', () => {
   it('publishes canonical snapshot, semantic view, compiled artifacts, and merged consistency as one runtime snapshot', async () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-1' }),
@@ -385,6 +385,94 @@ describe('CompiledPublicationGateService', () => {
     expect(publishedSnapshotsRepo.create).not.toHaveBeenCalled()
   })
 
+  it('publishes when outside-band reduce rule is present in compiled artifact', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn().mockResolvedValue({ id: 'snapshot-outside-ok' }),
+    }
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never)
+    const ir = createIrFixtureWithOutsideBandRule()
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'long_short' as const,
+      marginMode: 'cash' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await expect(gate.publish({
+      sessionId: 'session-outside-rule-present',
+      canonicalSnapshot: {
+        version: 2,
+        market: { exchange: 'binance', symbol: 'BTCUSDT', marketType: 'spot', timeframe: '1h' },
+        rules: [
+          {
+            id: 'risk-outside-band-3-bars',
+            phase: 'risk',
+            sideScope: 'both',
+            priority: 110,
+            condition: {
+              kind: 'atom',
+              key: 'bollinger.bars_outside',
+              semanticScope: 'market',
+              op: 'GTE',
+              value: 3,
+              params: { bars: 3 },
+            },
+            actions: [{ type: 'REDUCE_LONG' }, { type: 'REDUCE_SHORT' }],
+          },
+        ],
+      },
+      semanticView: {
+        viewType: 'canonical-semantic-view.v1',
+        canonicalDigest: 'sha256:outside-band-present',
+      },
+      graphSnapshot: {
+        version: 3,
+        status: 'confirmed' as const,
+        trigger: [],
+        actions: [],
+        risk: ['价格连续3根K线在轨外时提前减仓'],
+        meta: {
+          exchange: 'binance' as const,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          positionPct: 25,
+          executionTags: [],
+        },
+      },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'outside-band-risk' },
+      scriptSummary: { indicators: ['EMA', 'BOLLINGER'] },
+      lockedParams: { positionPct: 25 },
+    })).resolves.toEqual({
+      snapshotId: 'snapshot-outside-ok',
+      consistencyReport: expect.objectContaining({
+        status: 'PASSED',
+        compilerConsistency: expect.objectContaining({
+          publicationGate: expect.objectContaining({
+            status: 'PASSED',
+            checks: expect.arrayContaining([
+              expect.objectContaining({
+                key: 'risk.bollinger_bars_outside',
+                status: 'passed',
+              }),
+            ]),
+          }),
+        }),
+      }),
+    })
+
+    expect(publishedSnapshotsRepo.create).toHaveBeenCalled()
+  })
+
   it('returns merged failed consistency report instead of throwing so caller can persist diagnostics', async () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-failed' }),
@@ -532,5 +620,50 @@ function createIrFixture(): CanonicalStrategyIrV1 {
       timeInForce: 'gtc',
       allowPartialFill: false,
     },
+  }
+}
+
+function createIrFixtureWithOutsideBandRule(): CanonicalStrategyIrV1 {
+  const base = createIrFixture()
+
+  return {
+    ...base,
+    portfolio: {
+      ...base.portfolio,
+      positionMode: 'long_short',
+    },
+    signalCatalog: {
+      series: [
+        ...base.signalCatalog.series,
+        {
+          id: 'outside_band_3',
+          kind: 'BOLLINGER_BARS_OUTSIDE',
+          inputs: ['close_1h'],
+          params: { bars: 3 },
+        },
+      ],
+      levelSets: base.signalCatalog.levelSets,
+      predicates: [
+        ...base.signalCatalog.predicates,
+        {
+          id: 'risk_outside_band_3',
+          kind: 'GTE',
+          args: ['outside_band_3'],
+        },
+      ],
+    },
+    ruleBlocks: [
+      ...base.ruleBlocks,
+      {
+        id: 'rebalance_outside_band_3',
+        phase: 'rebalance',
+        when: 'risk_outside_band_3',
+        priority: 110,
+        actions: [
+          { kind: 'REDUCE_LONG', quantity: { mode: 'position_pct', value: 50 } },
+          { kind: 'REDUCE_SHORT', quantity: { mode: 'position_pct', value: 50 } },
+        ],
+      },
+    ],
   }
 }
