@@ -409,7 +409,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.consistencyReport).toEqual({ status: 'PASSED' })
   })
 
-  it('returns null clarificationState when persisted items miss required blocking/field contract', async () => {
+  it('keeps legacy clarification items without field/blocking via backward-compatible normalization', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-invalid-clarification',
       userId: 'u1',
@@ -423,6 +423,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         status: 'NEEDS_CLARIFICATION',
         items: [
           {
+            key: 'entry.side',
+            reason: 'missing_side_scope',
+            question: '突破上轨时是只做空，还是也允许做多？',
+            status: 'pending',
+          },
+          {
             key: 'riskRules.earlyStop.action',
             reason: 'ambiguous_risk_effect',
             question: '轨外连续3根K线时，应执行减仓还是直接平仓？',
@@ -435,7 +441,26 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const result = await service.getSession('s-invalid-clarification', 'u1')
 
-    expect(result.clarificationState).toBeNull()
+    expect(result.clarificationState).toEqual({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        expect.objectContaining({
+          key: 'entry.side',
+          reason: 'missing_side_scope',
+          field: 'positionMode',
+          blocking: true,
+          status: 'pending',
+        }),
+        expect.objectContaining({
+          key: 'riskRules.earlyStop.action',
+          reason: 'ambiguous_risk_effect',
+          field: 'riskRules.earlyStop.action',
+          blocking: true,
+          allowedAnswers: ['reduce', 'close'],
+          status: 'pending',
+        }),
+      ],
+    })
   })
 
   it('keeps drafting and returns unrelated guidance when planner marks message unrelated', async () => {

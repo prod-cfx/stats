@@ -797,8 +797,6 @@ export class CodegenConversationService {
 
       if (typeof key !== 'string' || !key.trim()) return null
       if (!STRATEGY_CLARIFICATION_REASONS.includes(reason as never)) return null
-      if (!STRATEGY_CLARIFICATION_FIELDS.includes(field as never)) return null
-      if (blocking !== true) return null
       if (typeof question !== 'string' || !question.trim()) return null
       if (!STRATEGY_CLARIFICATION_ITEM_STATUSES.includes(status as never)) return null
       if (
@@ -810,11 +808,23 @@ export class CodegenConversationService {
       if (ruleId !== undefined && typeof ruleId !== 'string') return null
       if (answer !== undefined && typeof answer !== 'string') return null
       const typedReason = reason as StrategyClarificationItem['reason']
-      const typedField = field as StrategyClarificationItem['field']
+      const typedField = STRATEGY_CLARIFICATION_FIELDS.includes(field as never)
+        ? field as StrategyClarificationItem['field']
+        : this.inferClarificationField({
+          key,
+          reason: typedReason,
+          question,
+        })
+      if (!typedField) return null
+      const normalizedBlocking = blocking === undefined ? true : blocking
+      if (normalizedBlocking !== true) return null
       const typedStatus = status as StrategyClarificationItem['status']
-      const typedAllowedAnswers = Array.isArray(allowedAnswers)
+      const typedAllowedAnswers = (Array.isArray(allowedAnswers)
         ? allowedAnswers.map(item => item.trim()).filter(Boolean)
-        : undefined
+        : this.inferClarificationAllowedAnswers({
+          key,
+          reason: typedReason,
+        })) as string[] | undefined
 
       normalizedItems.push({
         key,
@@ -833,6 +843,63 @@ export class CodegenConversationService {
       status: rawStatus as StrategyClarificationState['status'],
       items: normalizedItems,
     }
+  }
+
+  private inferClarificationField(input: {
+    key: string
+    reason: StrategyClarificationItem['reason']
+    question: string
+  }): StrategyClarificationItem['field'] | null {
+    if (input.reason === 'missing_exchange') return 'exchange'
+    if (input.reason === 'missing_symbol') return 'symbol'
+    if (input.reason === 'missing_timeframe') return 'timeframe'
+    if (
+      input.reason === 'missing_market_type'
+      || input.reason === 'invalid_spot_short_combo'
+      || input.reason === 'conflicting_market_scope'
+    ) {
+      return 'marketType'
+    }
+    if (
+      input.reason === 'missing_position_mode'
+      || input.reason === 'missing_action_uniqueness'
+      || input.reason === 'missing_side_scope'
+      || input.reason === 'direction_ambiguous'
+    ) {
+      return 'positionMode'
+    }
+    if (input.reason === 'ambiguous_risk_effect') {
+      return 'riskRules.earlyStop.action'
+    }
+
+    const key = input.key.toLowerCase()
+    const question = input.question.toLowerCase()
+
+    if (key.includes('exchange') || /交易所/u.test(question)) return 'exchange'
+    if (key.includes('symbol') || /标的|交易对/u.test(question)) return 'symbol'
+    if (key.includes('timeframe') || /周期/u.test(question)) return 'timeframe'
+    if (key.includes('markettype') || /现货|合约|市场/u.test(question)) return 'marketType'
+    if (key.includes('earlystop') || key.includes('risk.effect') || /减仓|平仓|止损/u.test(question)) {
+      return 'riskRules.earlyStop.action'
+    }
+    if (key.includes('entry.side') || key.includes('action_uniqueness') || /方向|做多|做空/u.test(question)) {
+      return 'positionMode'
+    }
+
+    return null
+  }
+
+  private inferClarificationAllowedAnswers(input: {
+    key: string
+    reason: StrategyClarificationItem['reason']
+  }): string[] | undefined {
+    if (input.reason === 'ambiguous_risk_effect') {
+      return ['reduce', 'close']
+    }
+    if (input.key.toLowerCase() === 'risk.effect') {
+      return ['reduce', 'close']
+    }
+    return undefined
   }
 
   private buildPublishedStrategyInput(args: {
