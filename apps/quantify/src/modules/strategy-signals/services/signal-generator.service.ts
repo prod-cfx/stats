@@ -4,11 +4,13 @@ import type {
   StrategyDecisionV1, SignalSourceType, SignalStatus 
 } from '@ai/shared'
 import type {
-  LegTimeframeData,
   MultiLegStrategyContext,
 } from '@ai/shared/script-engine/helpers/context-builder'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
+import type { CronJob } from 'cron'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
+import type {IndicatorGroup, IndicatorSnapshot} from './signal-generation-candidate.stage';
+import type {GeneratedSignalPayload} from './signal-generation-decision.stage';
 import type { PrismaMarketTimeframe } from '@/common/utils/prisma-enum-mappers'
 import type { GatewayBar } from '@/modules/market-data/services/market-data-read.gateway'
 import type {
@@ -16,14 +18,7 @@ import type {
   StrategyExecutionConfig,
   StrategyLegDefinition,
 } from '@/modules/strategy-templates/types/strategy-template.types'
-import type {
-  IndicatorConfig,
-  Prisma,
-  PrismaClient,
-  StrategyInstance,
-  StrategyTemplate,
-  Symbol,
-} from '@/prisma/prisma.types'
+import type { Prisma, PrismaClient, StrategyInstance, StrategyTemplate, Symbol } from '@/prisma/prisma.types'
 import { fillPromptTemplate, parseAiSignalResponse, ErrorCode } from '@ai/shared'
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
 import {
@@ -39,7 +34,6 @@ import { ConfigService } from '@nestjs/config'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 SchedulerRegistry
 import { SchedulerRegistry } from '@nestjs/schedule'
-import { CronJob } from 'cron'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { EnvService } from '@/common/services/env.service'
@@ -49,16 +43,11 @@ import { AiService } from '@/modules/ai/ai.service'
 import { normalizeGatewayBars } from '@/modules/market-data/services/market-data-bar.mapper'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
-import { normalizeRequestedCode } from '@/modules/market-data/utils/market-symbol-code.util'
 import { resolveStrategyOutput, strategyDecisionToSignalPayload } from '@/modules/strategy-runtime/strategy-protocol.util'
 import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
-import { timeframeToMinutes } from '@/modules/strategy-templates/types/strategy-template.types'
 import {
-  mapLegDataRequirementTimeframes,
   parseDataRequirements,
 } from '@/modules/strategy-templates/utils/data-requirements-timeframe.mapper'
-import { StrategySignalEvents } from '../constants/strategy-signal.constants'
-import { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { SignalGeneratorRepository } from '../repositories/signal-generator.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -67,22 +56,17 @@ import { StrategySignalStateRepository } from '../repositories/strategy-signal-s
 import { TradingSignalRepository } from '../repositories/trading-signal.repository'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '../types/strategy-signals-config.type'
 import { ScriptDebugUtil } from '../utils/script-debug.util'
+import {
+  SignalGenerationCandidateStage
+} from './signal-generation-candidate.stage'
+import {
+  SignalGenerationDecisionStage
+} from './signal-generation-decision.stage'
+import { SignalGenerationPersistenceStage } from './signal-generation-persistence.stage'
+import { SignalGenerationSchedulerStage } from './signal-generation-scheduler.stage'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { SignalTelemetryService } from './signal-telemetry.service'
 
-interface IndicatorGroup {
-  symbol: Symbol
-  timeframe: PrismaMarketTimeframe
-  fields: Map<string, IndicatorConfig>
-}
-
-interface IndicatorSnapshot {
-  field: string
-  value: number
-  recordedAt: Date
-}
-
-const DEFAULT_RAW_RESPONSE_LIMIT = 4000
 const DEFAULT_BAR_LIMIT = 100
 const MAX_SCRIPT_TIMEOUT_MS = 5000
 
@@ -92,10 +76,6 @@ type StrategyInstanceWithTemplate = Prisma.StrategyInstanceGetPayload<{
   }
 }>
 
-type GeneratedSignalPayload =
-  | { type: 'signal'; payload: AiSignalPayload & { rawResponse: string } }
-  | { type: 'none'; reason: string }
-
 @Injectable()
 export class SignalGeneratorService {
   private readonly logger = new Logger(SignalGeneratorService.name)
@@ -103,6 +83,10 @@ export class SignalGeneratorService {
   private cronJob?: CronJob
   private isRunning = false
   private lastStrategyIndex = 0
+  private readonly schedulerStage: SignalGenerationSchedulerStage
+  private readonly candidateStage: SignalGenerationCandidateStage
+  private readonly decisionStage: SignalGenerationDecisionStage
+  private readonly persistenceStage: SignalGenerationPersistenceStage
   /**
    * 记录每个策略实例在 candidateGroups 中的轮询位置，
    * 避免多个实例共享同一模板的指针导致各自只覆盖一部分标的。
@@ -122,47 +106,47 @@ export class SignalGeneratorService {
     private readonly env: EnvService,
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
   ) {
+    this.schedulerStage = new SignalGenerationSchedulerStage(
+      this.schedulerRegistry,
+      this.logger,
+    )
+    this.candidateStage = new SignalGenerationCandidateStage(
+      this.generatorRepository,
+      this.marketDataReadGateway,
+    )
+    this.decisionStage = new SignalGenerationDecisionStage(this.aiService, this.logger)
+    this.persistenceStage = new SignalGenerationPersistenceStage(
+      this.generatorRepository,
+      this.tradingSignalRepository,
+      this.stateRepository,
+      this.eventEmitter,
+      this.telemetry,
+      this.txHost,
+      this.logger,
+    )
     this.registerCronJob()
   }
 
   private registerCronJob() {
     const config = this.getConfig()
-    if (this.cronJob) {
-      this.cronJob.stop()
-      this.schedulerRegistry.deleteCronJob(this.cronJobName)
-    }
-
-    // 使用带错误兜底的回调，避免 runGenerationCycle 中的异常变成未捕获拒绝导致进程崩溃
-    this.cronJob = new CronJob(config.cronExpression, async () => {
-      try {
-        await this.runGenerationCycle()
-      } catch (error) {
-        const detail = error instanceof Error ? (error.stack ?? error.message) : String(error)
-        this.logger.error(`Signal generation cron tick failed: ${detail}`)
-      }
-    })
-    this.schedulerRegistry.addCronJob(this.cronJobName, this.cronJob)
-    this.cronJob.start()
-    this.logger.log(`Strategy signal generator scheduled with cron ${config.cronExpression}`)
+    this.cronJob = this.schedulerStage.registerCronJob(
+      this.cronJobName,
+      config.cronExpression,
+      this.cronJob,
+      async () => this.runGenerationCycle(),
+    )
   }
 
   private async runGenerationCycle() {
     const config = this.getConfig()
-    if (!config.enabled) return
-
-    if (this.isRunning) {
-      this.logger.warn(
-        'Signal generator is still running from the previous cycle, skipping this tick',
-      )
-      return
-    }
-
-    this.isRunning = true
-    try {
-      await this.generateSignals(config)
-    } finally {
-      this.isRunning = false
-    }
+    await this.schedulerStage.runGenerationCycle(
+      config,
+      this.isRunning,
+      value => {
+        this.isRunning = value
+      },
+      async () => this.generateSignals(config),
+    )
   }
 
   async generateSignals(
@@ -355,37 +339,6 @@ export class SignalGeneratorService {
     }
 
     return config.debug?.enabled !== false
-  }
-
-  /**
-   * 记录脚本执行的调试信息
-   */
-  private logScriptDebug(
-    strategy: StrategyTemplate,
-    result?: { success: boolean; value?: any; error?: any },
-  ) {
-    if (!this.isDebugEnabled()) return
-
-    const config = this.getConfig()
-    const maxScriptLength = config.debug?.maxScriptLength ?? 1000
-    const maxValueLength = config.debug?.maxValueLength ?? 200
-
-    // 记录脚本内容
-    this.logger.debug(
-      `[Script Debug] Strategy ${strategy.id} script:\n` +
-        `${ScriptDebugUtil.formatScriptForLog(strategy.script, maxScriptLength)}\n` +
-        `[End Script]`,
-    )
-
-    // 如果提供了执行结果，记录结果
-    if (result) {
-      this.logger.debug(
-        `[Script Debug] Strategy ${strategy.id} result: ` +
-          `success=${result.success}, ` +
-          `valueType=${typeof result.value}, ` +
-          `value=${ScriptDebugUtil.formatValueForLog(result.value, maxValueLength)}`,
-      )
-    }
   }
 
   private async processStrategyInstance(
@@ -624,77 +577,15 @@ export class SignalGeneratorService {
     aiPayload: AiSignalPayload & { rawResponse: string },
     skipCooldown = false,
   ) {
-    const cooldownSince = new Date(Date.now() - config.cooldownMinutes * 60 * 1000)
-
-    const result = await this.txHost.withTransaction(async () => {
-      await this.generatorRepository.lockStrategyInstance(instance.id)
-
-      if (!skipCooldown) {
-        const existingCount = await this.generatorRepository.countRecentSignals(
-          strategy.id,
-          group.symbol.id,
-          cooldownSince,
-        )
-
-        if (existingCount > 0) {
-          return { created: false as const, signalId: null as string | null }
-        }
-      }
-
-      const signal = await this.tradingSignalRepository.create({
-        strategy: { connect: { id: strategy.id } },
-        strategyInstance: { connect: { id: instance.id } },
-        symbol: { connect: { id: group.symbol.id } },
-        sourceType: 'AI_GENERATED' satisfies SignalSourceType,
-        signalType: aiPayload.signalType,
-        direction: aiPayload.direction,
-        status: 'PENDING' satisfies SignalStatus,
-        confidence: aiPayload.confidence,
-        entryPrice: aiPayload.entryPrice,
-        stopLoss: aiPayload.stopLoss,
-        takeProfit: aiPayload.takeProfit,
-        positionSizeQuote: aiPayload.positionSizeQuote,
-        positionSizeRatio: aiPayload.positionSizeRatio,
-        aiModel: instance.llmModel,
-        aiReasoning: aiPayload.reasoning,
-        aiRawResponse: aiPayload.rawResponse,
-        marketContext: {
-          timeframe: reverseMapTimeframe(group.timeframe),
-          indicatorTimestamp: latestIndicatorTime?.toISOString() ?? null,
-          indicators: indicatorValues,
-        } satisfies Prisma.JsonValue,
-        metadata: {
-          generatorVersion: 'v1',
-        },
-      })
-
-      return { created: true as const, signalId: signal.id }
-    })
-
-    if (!result.created || !result.signalId) {
-      this.logger.debug(
-        `Recent signal already exists for strategy ${strategy.id} on ${group.symbol.code}, skipping due to cooldown`,
-      )
-      this.telemetry.recordGeneration({
-        strategyId: strategy.id,
-        symbolCode: group.symbol.code,
-        success: false,
-        reason: 'COOLDOWN',
-      })
-      return
-    }
-
-    this.logger.log(
-      `Generated signal ${result.signalId} for strategy ${strategy.id} on ${group.symbol.code}`,
-    )
-    this.telemetry.recordGeneration({
-      strategyId: strategy.id,
-      symbolCode: group.symbol.code,
-      success: true,
-    })
-    this.eventEmitter.emit(
-      StrategySignalEvents.CREATED,
-      new TradingSignalCreatedEvent(result.signalId),
+    await this.persistenceStage.createSignalWithCooldownAndLock(
+      instance,
+      strategy,
+      group,
+      config,
+      indicatorValues,
+      latestIndicatorTime,
+      aiPayload,
+      skipCooldown,
     )
   }
 
@@ -709,11 +600,8 @@ export class SignalGeneratorService {
     manualTrigger = false,
   ): Promise<(AiSignalPayload & { rawResponse: string }) | null> {
     const isStrictCodegen = this.isStrictPublishedCodegenTemplate(strategy)
-
-    // 准备填充 prompt 模板的数据
     let promptData: Record<string, any> = {}
 
-    // 如果策略有脚本，执行脚本准备数据
     if (strategy.script) {
       try {
         const engine = createScriptEngine()
@@ -729,7 +617,7 @@ export class SignalGeneratorService {
         } else {
           const marketBars = await this.loadRecentBars(symbol.id, timeframe, DEFAULT_BAR_LIMIT)
           const bars = normalizeGatewayBars(marketBars ?? [])
-          
+
           const scriptContext = buildStrategyContext({
             bars,
             symbol: symbol.code,
@@ -739,24 +627,20 @@ export class SignalGeneratorService {
             timestamp: Date.now(),
             params: this.buildEffectiveParams(strategy, instance),
           })
-          
-          // 执行脚本 - 智能重试机制
-          // 优先用标准模式（新脚本：最后表达式作为返回值）
+
           let result = await engine.execute(compiledScript.executableCode, {
             context: scriptContext,
             timeout: MAX_SCRIPT_TIMEOUT_MS,
             allowAsync: false,
           })
-        
-        // 检测到需要 async 上下文的语法错误，用 allowAsync 重试（旧脚本兼容）
-        // 包括：顶层 return、顶层 await 等
+
           if (!result.success && result.error?.message) {
             const errorMsg = result.error.message
-            const needsAsync = 
+            const needsAsync =
               errorMsg.includes('Illegal return statement') ||
               errorMsg.includes('await is only valid in async functions') ||
               errorMsg.includes('Unexpected reserved word')
-            
+
             if (needsAsync) {
               this.logger.warn(
                 `Strategy ${strategy.id} script needs async context (${errorMsg}), retrying with allowAsync`,
@@ -770,22 +654,19 @@ export class SignalGeneratorService {
           }
 
           if (result.success) {
-            // 始终调用 validateScriptOutput，即使 result.value 为 undefined
-            // 这样可以提供一致的错误提示，与调试接口和多leg路径保持一致
             const validation = validateScriptOutput(result.value, { allowEmpty: true })
-            
+
             if (!validation.valid || !validation.value) {
               this.logger.warn(
                 `Script for strategy ${strategy.id} returned invalid data. ` +
-                `Reason: ${validation.error ?? 'Unknown validation error'}. ` +
-                `Using indicators as fallback.`,
+                  `Reason: ${validation.error ?? 'Unknown validation error'}. ` +
+                  `Using indicators as fallback.`,
               )
               if (isStrictCodegen) {
                 return null
               }
               promptData = indicators
-            }
-            else {
+            } else {
               const resolved = await resolveStrategyOutput(
                 validation.value as Record<string, unknown>,
                 scriptContext as unknown as Record<string, unknown>,
@@ -811,15 +692,15 @@ export class SignalGeneratorService {
                 }
                 promptData = isStrictCodegen
                   ? this.buildStrictPublishedPromptDataFromDecision(
-                    resolved.decision,
-                    referencePrice || 0,
-                    decisionContext,
-                  )
-                  : strategyDecisionToSignalPayload(
-                    resolved.decision,
-                    referencePrice || 0,
-                    decisionContext,
-                  ) as Record<string, any>
+                      resolved.decision,
+                      referencePrice || 0,
+                      decisionContext,
+                    )
+                  : (strategyDecisionToSignalPayload(
+                      resolved.decision,
+                      referencePrice || 0,
+                      decisionContext,
+                    ) as Record<string, any>)
               } else {
                 promptData = (resolved.passthrough ?? validation.value) as Record<string, any>
               }
@@ -827,10 +708,10 @@ export class SignalGeneratorService {
                 `Script executed successfully for strategy ${strategy.id}, data: ${JSON.stringify(promptData)}`,
               )
             }
-          }
-          else {
-            this.logger.warn(`Script execution failed for strategy ${strategy.id}: ${result.error?.message}`)
-            // 脚本执行失败时，使用原始指标数据作为后备
+          } else {
+            this.logger.warn(
+              `Script execution failed for strategy ${strategy.id}: ${result.error?.message}`,
+            )
             if (isStrictCodegen) {
               return null
             }
@@ -841,14 +722,12 @@ export class SignalGeneratorService {
         this.logger.error(
           `Error executing script for strategy ${strategy.id}: ${(error as Error).message}`,
         )
-        // 出错时使用原始指标数据
         if (isStrictCodegen) {
           return null
         }
         promptData = indicators
       }
     } else {
-      // 没有脚本时，直接使用指标数据
       if (isStrictCodegen) {
         return null
       }
@@ -871,7 +750,6 @@ export class SignalGeneratorService {
       return null
     }
 
-    // 填充 prompt 模板中的占位符（使用 shared helper，保证与调试接口一致）
     const filledPrompt = fillPromptTemplate(strategy.promptTemplate, promptData)
 
     const systemPrompt =
@@ -935,79 +813,22 @@ export class SignalGeneratorService {
     return null
   }
 
-  private async findCandidateGroups(strategy: StrategyTemplate, requiredFields: string[]) {
-    if (!requiredFields.length) return []
-
-    const configs = await this.generatorRepository.findEnabledIndicatorConfigs(requiredFields)
-
-    const groups = new Map<string, IndicatorGroup>()
-
-    for (const config of configs) {
-      const key = `${config.symbolId}:${config.timeframe}`
-      if (!groups.has(key)) {
-        groups.set(key, {
-          symbol: config.symbol,
-          timeframe: config.timeframe,
-          fields: new Map(),
-        })
-      }
-      groups.get(key)?.fields.set(config.name, config)
-    }
-
-    return Array.from(groups.values()).filter(group =>
-      requiredFields.every(field => group.fields.has(field)),
-    )
+  private async findCandidateGroups(_strategy: StrategyTemplate, requiredFields: string[]) {
+    return this.candidateStage.findCandidateGroups(_strategy, requiredFields)
   }
 
   private async loadIndicatorSnapshots(
     group: IndicatorGroup,
     requiredFields: string[],
   ): Promise<IndicatorSnapshot[] | null> {
-    const configIds = requiredFields
-      .map(field => group.fields.get(field)?.id)
-      .filter((id): id is string => Boolean(id))
-
-    if (configIds.length !== requiredFields.length) {
-      return null
-    }
-
-    const grouped = await this.generatorRepository.groupLatestIndicatorValues(configIds)
-
-    if (!grouped.length) return null
-
-    const latestRecords = await this.generatorRepository.findLatestIndicatorValues(
-      grouped
-        .filter(item => item._max.time)
-        .map(item => ({
-          indicatorConfigId: item.indicatorConfigId,
-          time: item._max.time as Date,
-        })),
-    )
-
-    const result: IndicatorSnapshot[] = []
-    for (const field of requiredFields) {
-      const config = group.fields.get(field)
-      if (!config) return null
-      const match = latestRecords.find(value => value.indicatorConfigId === config.id)
-      if (!match || match.valueNumeric === null) return null
-
-      const numeric = Number(match.valueNumeric)
-      if (!Number.isFinite(numeric)) return null
-
-      result.push({ field, value: numeric, recordedAt: match.time })
-    }
-
-    return result
+    return this.candidateStage.loadIndicatorSnapshots(group, requiredFields)
   }
 
   private async loadLatestBar(
     symbolId: string,
     timeframe: PrismaMarketTimeframe,
   ): Promise<GatewayBar | null> {
-    return this.marketDataReadGateway.getLatestBarBySymbolId(
-      symbolId,
-      reverseMapTimeframe(timeframe),
-    )
+    return this.candidateStage.loadLatestBar(symbolId, timeframe)
   }
 
   private async loadRecentBars(
@@ -1015,176 +836,47 @@ export class SignalGeneratorService {
     timeframe: AppMarketTimeframe,
     limit: number = 100,
   ): Promise<GatewayBar[] | null> {
-    try {
-      return await this.marketDataReadGateway.getRecentBarsBySymbolId(symbolId, timeframe, limit)
-    } catch (error) {
-      this.logger.error(`Failed to load recent bars: ${(error as Error).message}`)
-      return null
-    }
+    return this.candidateStage.loadRecentBars(symbolId, timeframe, limit)
   }
 
   private buildPublishedCodegenSignalPayload(
     promptData: Record<string, unknown>,
     referencePrice: number | undefined,
     strategy: Pick<StrategyTemplate, 'promptTemplate' | 'defaultParams'>,
-    _instance: Pick<StrategyInstance, 'params'>,
+    instance: Pick<StrategyInstance, 'params'>,
   ): GeneratedSignalPayload | null {
-    if (!this.isStrictPublishedCodegenTemplate(strategy)) {
-      return null
-    }
-
-    const action = typeof promptData.action === 'string' ? promptData.action.trim().toLowerCase() : ''
-    if (!action) {
-      const normalizedSignal = this.buildPublishedCodegenNormalizedSignal(promptData)
-      if (normalizedSignal) {
-        return {
-          type: 'signal',
-          payload: {
-            ...normalizedSignal,
-            rawResponse: this.truncateRawResponse(JSON.stringify(promptData), this.getConfig()),
-          },
-        }
-      }
-      return { type: 'none', reason: 'INVALID_NORMALIZED_SIGNAL' }
-    }
-
-    if (action === 'hold' || action === 'wait' || action === 'none') {
-      return { type: 'none', reason: 'NO_ACTION' }
-    }
-
-    const metadata = this.asRecord(promptData.metadata)
-    const entryPrice = this.readNumeric(metadata.entryPrice) ?? referencePrice ?? 0
-    if (!(entryPrice > 0)) {
-      return { type: 'none', reason: 'MISSING_ENTRY_PRICE' }
-    }
-
-    const confidence =
-      this.readNumeric(promptData.confidence)
-      ?? this.readNumeric(metadata.confidence)
-    const stopLoss =
-      this.readNumeric(metadata.stopLossPrice)
-      ?? this.readNumeric(promptData.stopLoss)
-    const takeProfit =
-      this.readNumeric(metadata.takeProfitPrice)
-      ?? this.readNumeric(promptData.takeProfit)
-    if (confidence === undefined || stopLoss === undefined || takeProfit === undefined) {
-      return { type: 'none', reason: 'INVALID_NORMALIZED_SIGNAL' }
-    }
-
-    const positionSizeQuote = this.readNumeric(promptData.positionSizeQuote)
-    const positionSizeRatio = this.readNumeric(promptData.positionSizeRatio)
-    const rawResponse = this.truncateRawResponse(JSON.stringify(promptData), this.getConfig())
-
-    if (action === 'buy') {
-      const hasQuoteSize = typeof positionSizeQuote === 'number' && positionSizeQuote > 0
-      const hasRatioSize = typeof positionSizeRatio === 'number' && positionSizeRatio > 0
-      if (!hasQuoteSize && !hasRatioSize) {
-        return { type: 'none', reason: 'INVALID_NORMALIZED_SIGNAL' }
-      }
-      return {
-        type: 'signal',
-        payload: {
-          signalType: 'ENTRY',
-          direction: 'BUY',
-          confidence,
-          entryPrice,
-          stopLoss,
-          takeProfit,
-          positionSizeQuote: hasQuoteSize ? positionSizeQuote : undefined,
-          positionSizeRatio: hasRatioSize ? positionSizeRatio : undefined,
-          reasoning: 'AI codegen direct signal: buy',
-          rawResponse,
-        },
-      }
-    }
-
-    if (action === 'sell') {
-      return {
-        type: 'signal',
-        payload: {
-          signalType: 'EXIT',
-          direction: 'CLOSE_LONG',
-          confidence,
-          entryPrice: referencePrice ?? entryPrice,
-          stopLoss,
-          takeProfit,
-          reasoning: 'AI codegen direct signal: sell',
-          rawResponse,
-        },
-      }
-    }
-
-    return { type: 'none', reason: 'UNSUPPORTED_ACTION' }
+    return this.decisionStage.buildPublishedCodegenSignalPayload(
+      promptData,
+      referencePrice,
+      strategy,
+      instance,
+      this.getConfig(),
+    )
   }
 
   private buildPublishedCodegenNormalizedSignal(promptData: Record<string, unknown>): AiSignalPayload | null {
-    const direction = typeof promptData.direction === 'string' ? promptData.direction : null
-    const signalType = typeof promptData.signalType === 'string' ? promptData.signalType : null
-    const entryPrice = this.readNumeric(promptData.entryPrice)
-    const confidence = this.readNumeric(promptData.confidence)
-    const stopLoss = this.readNumeric(promptData.stopLoss)
-    const takeProfit = this.readNumeric(promptData.takeProfit)
-    const positionSizeQuote = this.readNumeric(promptData.positionSizeQuote)
-    const positionSizeRatio = this.readNumeric(promptData.positionSizeRatio)
-    const hasQuoteSize = typeof positionSizeQuote === 'number' && positionSizeQuote > 0
-    const hasRatioSize = typeof positionSizeRatio === 'number' && positionSizeRatio > 0
-
-    if (
-      !direction
-      || !['BUY', 'SELL', 'CLOSE_LONG', 'CLOSE_SHORT'].includes(direction)
-      || !signalType
-      || !['ENTRY', 'EXIT', 'ADJUSTMENT', 'ALERT'].includes(signalType)
-      || !(entryPrice && entryPrice > 0)
-      || confidence === undefined
-      || stopLoss === undefined
-      || takeProfit === undefined
-      || (signalType === 'ENTRY' && !hasQuoteSize && !hasRatioSize)
-    ) {
-      return null
-    }
-
-    return {
-      direction: direction as AiSignalPayload['direction'],
-      signalType: signalType as AiSignalPayload['signalType'],
-      confidence,
-      entryPrice,
-      stopLoss,
-      takeProfit,
-      positionSizeQuote: hasQuoteSize ? positionSizeQuote : undefined,
-      positionSizeRatio: hasRatioSize ? positionSizeRatio : undefined,
-      reasoning:
-        (typeof promptData.reasoning === 'string' && promptData.reasoning.trim())
-        || (typeof promptData.reason === 'string' && promptData.reason.trim())
-        || 'AI codegen direct signal',
-    }
+    return this.decisionStage.buildPublishedCodegenNormalizedSignal(promptData)
   }
 
   private truncateRawResponse(
     content: string | undefined,
     config: StrategySignalsRuntimeConfig,
   ): string {
-    if (!content) return ''
-    const limit = config.ai.maxRawResponseLength ?? DEFAULT_RAW_RESPONSE_LIMIT
-    if (content.length <= limit) return content
-    return `${content.slice(0, limit)}...`
+    return this.decisionStage.truncateRawResponse(content, config)
   }
 
   private asRecord(value: unknown): Record<string, unknown> {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      return {}
-    }
-    return value as Record<string, unknown>
+    return this.decisionStage.asRecord(value)
   }
 
   private readNumeric(value: unknown): number | undefined {
-    const numeric = Number(value)
-    return Number.isFinite(numeric) ? numeric : undefined
+    return this.decisionStage.readNumeric(value)
   }
 
   private isStrictPublishedCodegenTemplate(
     strategy: Pick<StrategyTemplate, 'promptTemplate'>,
   ): boolean {
-    return strategy.promptTemplate === 'AI_CODEGEN_PUBLISHED_TEMPLATE'
+    return this.decisionStage.isStrictPublishedCodegenTemplate(strategy)
   }
 
   private buildStrictPublishedPromptDataFromDecision(
@@ -1192,51 +884,7 @@ export class SignalGeneratorService {
     referencePrice: number,
     context?: { currentQty?: number; equity?: number; markPrice?: number },
   ): Record<string, unknown> {
-    if (decision.action === 'NOOP') {
-      return { action: 'hold' }
-    }
-
-    const payload = strategyDecisionToSignalPayload(
-      decision,
-      referencePrice,
-      context,
-    ) as Record<string, unknown>
-
-    const confidence = this.readNumeric(decision.confidence)
-    const stopLoss = this.readNumeric(decision.risk?.stopLoss)
-    const takeProfit = this.readNumeric(decision.risk?.takeProfit)
-
-    const strictPromptData: Record<string, unknown> = {
-      direction: payload.direction,
-      signalType: payload.signalType,
-      entryPrice: payload.entryPrice,
-    }
-
-    if (confidence !== undefined) {
-      strictPromptData.confidence = confidence
-    }
-    if (stopLoss !== undefined) {
-      strictPromptData.stopLoss = stopLoss
-    }
-    if (takeProfit !== undefined) {
-      strictPromptData.takeProfit = takeProfit
-    }
-    if (typeof decision.reason === 'string' && decision.reason.trim()) {
-      strictPromptData.reasoning = decision.reason.trim()
-    }
-
-    if (decision.size?.mode === 'QUOTE') {
-      strictPromptData.positionSizeQuote = Math.abs(decision.size.value)
-    } else if (decision.size?.mode === 'RATIO') {
-      strictPromptData.positionSizeRatio = Math.abs(decision.size.value)
-    } else if (decision.size?.mode === 'QTY') {
-      const entryPrice = this.readNumeric(payload.entryPrice)
-      if (entryPrice && entryPrice > 0) {
-        strictPromptData.positionSizeQuote = Math.abs(decision.size.value) * entryPrice
-      }
-    }
-
-    return strictPromptData
+    return this.decisionStage.buildStrictPublishedPromptDataFromDecision(decision, referencePrice, context)
   }
 
   private buildManualFallbackSignal(
@@ -1244,39 +892,18 @@ export class SignalGeneratorService {
     strategyId: string,
     symbolCode: string,
   ): (AiSignalPayload & { rawResponse: string }) | null {
-    if (!referencePrice || !Number.isFinite(referencePrice) || referencePrice <= 0) {
-      this.logger.warn(
-        `AI failed for strategy ${strategyId} on ${symbolCode}, but manual fallback is unavailable due to invalid reference price`,
-      )
-      return null
-    }
+    return this.decisionStage.buildManualFallbackSignal(referencePrice, strategyId, symbolCode)
+  }
 
-    const entryPrice = Number(referencePrice.toFixed(8))
-    const stopLoss = Number((referencePrice * 0.98).toFixed(8))
-    const takeProfit = Number((referencePrice * 1.02).toFixed(8))
-    const reasoning =
-      'AI provider unavailable during manual trigger; generated deterministic fallback signal'
+  private async handleStrategyFailure(
+    strategyInstanceId: string,
+    config: StrategySignalsRuntimeConfig,
+  ) {
+    await this.persistenceStage.handleStrategyFailure(strategyInstanceId, config)
+  }
 
-    return {
-      signalType: 'ENTRY',
-      direction: 'BUY',
-      confidence: 1,
-      entryPrice,
-      stopLoss,
-      takeProfit,
-      reasoning,
-      rawResponse: JSON.stringify({
-        fallback: true,
-        reason: 'AI_PROVIDER_UNAVAILABLE',
-        signalType: 'ENTRY',
-        direction: 'BUY',
-        confidence: 1,
-        entryPrice,
-        stopLoss,
-        takeProfit,
-        reasoning,
-      }),
-    }
+  private async resetStrategyFailure(strategyInstanceId: string) {
+    await this.persistenceStage.resetStrategyFailure(strategyInstanceId)
   }
 
   private async isStrategyLocked(strategyInstanceId: string) {
@@ -1285,136 +912,20 @@ export class SignalGeneratorService {
     return state.lockedUntil > new Date()
   }
 
-  private async handleStrategyFailure(
-    strategyInstanceId: string,
-    config: StrategySignalsRuntimeConfig,
-  ) {
-    const state = await this.stateRepository.findByStrategyInstanceId(strategyInstanceId)
-    const nextFailures = (state?.consecutiveFailures ?? 0) + 1
-
-    if (nextFailures >= config.ai.maxFailuresBeforeCooldown) {
-      const lockedUntil = new Date(Date.now() + config.ai.failureCooldownMinutes * 60 * 1000)
-      await this.stateRepository.incrementFailure(strategyInstanceId, { lockedUntil, reset: true })
-      this.logger.warn(
-        `Strategy instance ${strategyInstanceId} entered cooldown until ${lockedUntil.toISOString()}`,
-      )
-      return
-    }
-
-    await this.stateRepository.incrementFailure(strategyInstanceId)
-  }
-
-  private async resetStrategyFailure(strategyInstanceId: string) {
-    await this.stateRepository.reset(strategyInstanceId)
-  }
-
-  /**
-   * 计算当前实例下脚本可用的参数：
-   * - 模板 defaultParams 作为基础
-   * - 实例 params 覆盖同名字段
-   */
   private buildEffectiveParams(
     strategy: StrategyTemplate,
     instance: StrategyInstance | StrategyInstanceWithTemplate,
   ): Record<string, unknown> | null {
-    const templateParams = strategy.defaultParams as Record<string, unknown> | null | undefined
-    const instanceParams = instance.params as Record<string, unknown> | null | undefined
-
-    const isObject = (value: unknown): value is Record<string, unknown> =>
-      !!value && typeof value === 'object' && !Array.isArray(value)
-
-    const base = isObject(templateParams) ? templateParams : undefined
-    const override = isObject(instanceParams) ? instanceParams : undefined
-
-    if (!base && !override) return null
-
-    return {
-      ...(base ?? {}),
-      ...(override ?? {}),
-    }
+    return this.decisionStage.buildEffectiveParams(strategy, instance)
   }
 
-  /**
-   * 批量加载多 Leg 策略的所有数据（性能优化）
-   */
   private async loadMultiLegDataBatch(
     legs: StrategyLegDefinition[],
     dataRequirements: StrategyDataRequirements,
-  ): Promise<Record<string, Record<string, LegTimeframeData>>> {
-    // 1. 批量加载所有 symbols
-    const symbolCodes = legs.map(leg => leg.symbol)
-    const symbols = await this.generatorRepository.findSymbolsByCode(symbolCodes)
-    const symbolMap = new Map(symbols.map(s => [s.code, s]))
-
-    // 2. 收集所有需要加载的 (legId, symbolId, timeframe) 组合
-    interface DataRequest {
-      legId: string
-      symbolId: string
-      timeframe: AppMarketTimeframe
-      prismaTimeframe: PrismaMarketTimeframe
-    }
-
-    const dataRequests: DataRequest[] = []
-    for (const leg of legs) {
-      const normalizedLegSymbol = normalizeRequestedCode(leg.symbol)
-      const symbol = symbolMap.get(normalizedLegSymbol)
-      if (!symbol) {
-        this.logger.warn(`Symbol ${leg.symbol} not found for leg ${leg.id}`)
-        continue
-      }
-
-      const timeframes = mapLegDataRequirementTimeframes(dataRequirements, leg.id)
-      if (timeframes.length === 0) {
-        this.logger.warn(`No timeframes defined for leg ${leg.id}`)
-        continue
-      }
-
-      for (const timeframe of timeframes) {
-        dataRequests.push({
-          legId: leg.id,
-          symbolId: symbol.id,
-          timeframe: timeframe.appTimeframe,
-          prismaTimeframe: timeframe.prismaTimeframe,
-        })
-      }
-    }
-
-    // 3. 并行加载所有 bars 数据
-    const barsPromises = dataRequests.map(async req => {
-      const bars = await this.loadRecentBars(req.symbolId, req.timeframe, DEFAULT_BAR_LIMIT)
-      return { ...req, bars }
-    })
-
-    const allBarsData = await Promise.all(barsPromises)
-
-    // 4. 构建结果
-    const result: Record<string, Record<string, LegTimeframeData>> = {}
-
-    for (const data of allBarsData) {
-      if (!result[data.legId]) {
-        result[data.legId] = {}
-      }
-
-      const bars = normalizeGatewayBars(data.bars ?? [])
-
-      const currentPrice = bars.length > 0 ? bars[bars.length - 1].close : 0
-
-      // TODO: 加载指标数据（需要扩展 IndicatorConfig 以支持按 leg 查询）
-      const indicators: Record<string, number> = {}
-
-      result[data.legId][data.timeframe] = {
-        bars,
-        indicators,
-        currentPrice,
-      }
-    }
-
-    return result
+  ): Promise<Record<string, Record<string, any>>> {
+    return this.candidateStage.loadMultiLegDataBatch(legs, dataRequirements)
   }
 
-  /**
-   * 为使用新架构的多 Leg 策略生成信号
-   */
   private async generateSignalForMultiLegStrategy(
     instance: StrategyInstanceWithTemplate,
     strategy: StrategyTemplate,
@@ -1523,196 +1034,25 @@ export class SignalGeneratorService {
       return
     }
 
-    try {
-      const engine = createScriptEngine()
-      const compiledScript = compileStrategyScriptForVm(strategy.script)
-      if (!compiledScript.ok) {
-        this.logger.error(
-          `TypeScript check failed for multi-leg strategy ${strategy.id}: ${compiledScript.error ?? 'Unknown error'}`,
-        )
-        await this.handleStrategyFailure(instance.id, config)
-        this.telemetry.recordGeneration({
-          strategyId: strategy.id,
-          symbolCode: primaryLeg.symbol,
-          success: false,
-          reason: 'TS_TYPECHECK_FAILED',
-        })
-        return
-      }
-      const ctx = buildMultiLegStrategyContext(scriptContext)
-
-      // 调试日志：打印脚本内容（仅在启用调试时）
-      this.logScriptDebug(strategy)
-
-      // 智能重试机制：优先标准模式，遇到需要 async 上下文的语法错误则用 allowAsync 重试
-      let result = await engine.execute(compiledScript.executableCode, {
-        context: ctx,
-        timeout: MAX_SCRIPT_TIMEOUT_MS,
-        allowAsync: false,
-      })
-
-      // 调试日志：打印执行结果（仅在启用调试时）
-      this.logScriptDebug(strategy, result)
-
-      // 检测到需要 async 上下文的语法错误，用 allowAsync 重试（旧脚本兼容）
-      // 包括：顶层 return、顶层 await 等
-      if (!result.success && result.error?.message) {
-        const errorMsg = result.error.message
-        const needsAsync =
-          errorMsg.includes('Illegal return statement') ||
-          errorMsg.includes('await is only valid in async functions') ||
-          errorMsg.includes('Unexpected reserved word')
-
-        if (needsAsync) {
-          this.logger.warn(
-            `Multi-leg strategy ${strategy.id} script needs async context (${errorMsg}), retrying with allowAsync`,
-          )
-          result = await engine.execute(compiledScript.executableCode, {
-            context: ctx,
-            timeout: MAX_SCRIPT_TIMEOUT_MS,
-            allowAsync: true,
-          })
-        }
-      }
-
-      // 脚本引擎执行失败（语法错误等）
-      if (!result.success) {
-        this.logger.error(
-          `Multi-leg script execution failed for strategy ${strategy.id}: ${result.error?.message || 'Unknown error'}. ` +
-            `Cannot generate signal without valid prompt data.`,
-        )
-        await this.handleStrategyFailure(instance.id, config)
-        this.telemetry.recordGeneration({
-          strategyId: strategy.id,
-          symbolCode: primaryLeg.symbol,
-          success: false,
-          reason: 'SCRIPT_EXECUTION_FAILED',
-        })
-        return
-      }
-
-      const rawValue = result.value
-
-      // 只接受"普通对象"作为脚本结果，防止字符串/数组等类型导致后续 fillPromptTemplate 报错
-      if (!rawValue || typeof rawValue !== 'object' || Array.isArray(rawValue)) {
-        // 使用工具函数安全地序列化实际返回值
-        const config = this.getConfig()
-        const maxValueLength = config.debug?.maxValueLength ?? 200
-        const valuePreview = ScriptDebugUtil.formatValueForLog(rawValue, maxValueLength)
-
-        this.logger.error(
-          `Multi-leg script for strategy ${strategy.id} returned non-object value (type: ${typeof rawValue}). ` +
-            `Cannot generate signal without an object of prompt variables.\n` +
-            `Actual value: ${valuePreview}`,
-        )
-        await this.handleStrategyFailure(instance.id, config)
-        this.telemetry.recordGeneration({
-          strategyId: strategy.id,
-          symbolCode: primaryLeg.symbol,
-          success: false,
-          reason: 'INVALID_SCRIPT_RESULT',
-        })
-        return
-      }
-
-      // 脚本执行成功，但需要校验返回值（即使为 undefined）
-      // 与单 Leg 路径和调试接口保持一致，提供结构化的错误信息
-      const validation = validateScriptOutput(result.value, { allowEmpty: false })
-
-      if (!validation.valid || !validation.value) {
-        const reason =
-          validation.code === 'EMPTY_OBJECT' ? 'EMPTY_SCRIPT_DATA' : 'INVALID_SCRIPT_RETURN_TYPE'
-
-        this.logger.error(
-          `Multi-leg script for strategy ${strategy.id} returned invalid data. ` +
-            `Reason: ${validation.error ?? 'Unknown validation error'}. ` +
-            `Cannot generate signal without valid prompt data.`,
-        )
-        await this.handleStrategyFailure(instance.id, config)
-        this.telemetry.recordGeneration({
-          strategyId: strategy.id,
-          symbolCode: primaryLeg.symbol,
-          success: false,
-          reason,
-        })
-        return
-      }
-      
-      const resolved = await resolveStrategyOutput(
-        validation.value as Record<string, unknown>,
-        this.buildResolvedStrategyContextForMultiLeg(
-          strategy,
-          execution,
-          primaryLeg,
-          multiLegData,
-          scriptContext,
-        ),
-      )
-      if (resolved.error) {
-        this.logger.error(
-          `Multi-leg script adapter resolution failed for strategy ${strategy.id}: ${resolved.error}`,
-        )
-        await this.handleStrategyFailure(instance.id, config)
-        this.telemetry.recordGeneration({
-          strategyId: strategy.id,
-          symbolCode: primaryLeg.symbol,
-          success: false,
-          reason: 'INVALID_SCRIPT_PROTOCOL',
-        })
-        return
-      }
-
-      if (resolved.decision) {
-        const adapterReferencePrice =
-          multiLegData[primaryLeg.id]?.[execution.timeframe]?.currentPrice ?? 0
-        const primaryIndicators = multiLegData[primaryLeg.id]?.[execution.timeframe]?.indicators ?? {}
-        const decisionContext = this.buildDecisionContext(primaryIndicators, adapterReferencePrice)
-        if (
-          this.requiresExplicitDecisionContext(resolved.decision) &&
-          !this.hasExplicitDecisionContext(decisionContext)
-        ) {
-          this.logger.error(
-            `Multi-leg strategy ${strategy.id} returned ADJUST_POSITION without explicit context (currentQty/equity/markPrice). Rejecting decision.`,
-          )
-          await this.handleStrategyFailure(instance.id, config)
-          this.telemetry.recordGeneration({
-            strategyId: strategy.id,
-            symbolCode: primaryLeg.symbol,
-            success: false,
-            reason: 'ADJUST_POSITION_CONTEXT_REQUIRED',
-          })
-          return
-        }
-        promptData = this.isStrictPublishedCodegenTemplate(strategy)
-          ? this.buildStrictPublishedPromptDataFromDecision(
-            resolved.decision,
-            adapterReferencePrice,
-            decisionContext,
-          )
-          : strategyDecisionToSignalPayload(
-            resolved.decision,
-            adapterReferencePrice,
-            decisionContext,
-          ) as Record<string, any>
-      } else {
-        promptData = (resolved.passthrough ?? validation.value) as Record<string, any>
-      }
-      
-      this.logger.debug(`Multi-leg script executed successfully for strategy ${strategy.id}`)
-    } catch (error) {
-      this.logger.error(
-        `Error executing multi-leg script for strategy ${strategy.id}: ${(error as Error).message}. ` +
-          `Cannot generate signal.`,
-      )
+    const scriptPromptData = await this.decisionStage.resolveMultiLegScriptPromptData(
+      strategy,
+      execution,
+      primaryLeg,
+      multiLegData,
+      scriptContext,
+    )
+    if (scriptPromptData.ok === false) {
       await this.handleStrategyFailure(instance.id, config)
       this.telemetry.recordGeneration({
         strategyId: strategy.id,
         symbolCode: primaryLeg.symbol,
         success: false,
-        reason: 'SCRIPT_ERROR',
+        reason: scriptPromptData.reason,
       })
       return
     }
+    promptData = scriptPromptData.promptData
+    this.logger.debug(`Multi-leg script executed successfully for strategy ${strategy.id}`)
 
     const primaryTimeframeData = multiLegData[primaryLeg.id]?.[execution.timeframe]
 
@@ -1949,37 +1289,6 @@ export class SignalGeneratorService {
     })
   }
 
-  private buildResolvedStrategyContextForMultiLeg(
-    strategy: Pick<StrategyTemplate, 'promptTemplate'>,
-    execution: Pick<StrategyExecutionConfig, 'timeframe'>,
-    primaryLeg: Pick<StrategyLegDefinition, 'id' | 'symbol'>,
-    multiLegData: Record<string, Record<string, LegTimeframeData>>,
-    scriptContext: MultiLegStrategyContext,
-  ): Record<string, unknown> {
-    if (strategy.promptTemplate !== 'AI_CODEGEN_PUBLISHED_TEMPLATE') {
-      return scriptContext as unknown as Record<string, unknown>
-    }
-
-    const primaryTimeframeData = multiLegData[primaryLeg.id]?.[execution.timeframe]
-    if (!primaryTimeframeData?.bars?.length) {
-      return scriptContext as unknown as Record<string, unknown>
-    }
-
-    return buildStrategyContext({
-      bars: primaryTimeframeData.bars,
-      symbol: primaryLeg.symbol,
-      timeframe: execution.timeframe,
-      indicators: primaryTimeframeData.indicators ?? {},
-      currentPrice: primaryTimeframeData.currentPrice,
-      timestamp: scriptContext.timestamp,
-      params: scriptContext.params ?? {},
-    })
-  }
-
-  /**
-   * 创建多 Leg 策略的信号
-   * @returns 返回创建结果，包含是否创建成功、信号ID和原因
-   */
   private async createMultiLegSignal(
     instance: StrategyInstanceWithTemplate,
     strategy: StrategyTemplate,
@@ -1990,84 +1299,27 @@ export class SignalGeneratorService {
     config: StrategySignalsRuntimeConfig,
     skipCooldown = false,
   ): Promise<{ created: boolean; signalId: string | null; reason?: string }> {
-    // 确定冷却时间：无条件保证 >= timeframe 对应的分钟数
-    const configuredCooldown = execution.cooldownMinutes ?? config.cooldownMinutes
-    const minimumCooldown = timeframeToMinutes(execution.timeframe)
-    const cooldownMinutes = Math.max(configuredCooldown, minimumCooldown)
-    const cooldownSince = new Date(Date.now() - cooldownMinutes * 60 * 1000)
-
-    const result = await this.txHost.withTransaction(async () => {
-      await this.generatorRepository.lockStrategyInstance(instance.id)
-
-      if (!skipCooldown) {
-        const recentSignal = await this.generatorRepository.findRecentSignalForCooldown(
-          strategy.id,
-          primarySymbol.id,
-          instance.id,
-          cooldownSince,
-        )
-
-        if (recentSignal) {
-          return { created: false as const, signalId: null, reason: 'COOLDOWN' }
-        }
-      }
-
-      const newSignal = await this.tradingSignalRepository.create({
-        strategy: { connect: { id: strategy.id } },
-        strategyInstance: { connect: { id: instance.id } },
-        symbol: { connect: { id: primarySymbol.id } },
-        sourceType: 'AI_GENERATED' satisfies SignalSourceType,
-        direction: aiPayload.direction,
-        signalType: aiPayload.signalType,
-        status: 'PENDING' satisfies SignalStatus,
-        confidence: aiPayload.confidence,
-        entryPrice: aiPayload.entryPrice,
-        stopLoss: aiPayload.stopLoss,
-        takeProfit: aiPayload.takeProfit,
-        positionSizeQuote: aiPayload.positionSizeQuote,
-        positionSizeRatio: aiPayload.positionSizeRatio,
-        aiModel: instance.llmModel,
-        aiReasoning: aiPayload.reasoning,
-        aiRawResponse: aiPayload.rawResponse,
-        marketContext: this.toJsonSafe({
-          ...indicators,
-          timeframe: execution.timeframe,
-        }) satisfies Prisma.JsonValue,
-        metadata: {
-          generatorVersion: 'v2-multi-leg',
-        },
-      })
-
-      return { created: true as const, signalId: newSignal.id }
-    })
-
-    if (result.created && result.signalId) {
-      this.eventEmitter.emit(
-        StrategySignalEvents.CREATED,
-        new TradingSignalCreatedEvent(result.signalId),
-      )
-    }
-
-    return result
+    return this.persistenceStage.createMultiLegSignal(
+      instance,
+      strategy,
+      primarySymbol,
+      execution,
+      indicators,
+      aiPayload,
+      config,
+      skipCooldown,
+    )
   }
 
-  /**
-   * 将任意值转换为 JSON-safe 的值
-   * 处理 Date、undefined、NaN、Infinity、循环引用等非 JSON-safe 的值
-   */
   private buildDecisionContext(
     indicators: Record<string, unknown>,
     markPrice: number | undefined,
   ): { currentQty?: number; equity?: number; markPrice?: number } {
-    return {
-      currentQty: this.readFiniteNumber(indicators.currentQty),
-      equity: this.readFiniteNumber(indicators.equity),
-      markPrice: this.readFiniteNumber(markPrice),
-    }
+    return this.decisionStage.buildDecisionContext(indicators, markPrice)
   }
 
   private requiresExplicitDecisionContext(decision: StrategyDecisionV1): boolean {
-    return decision.action === 'ADJUST_POSITION'
+    return this.decisionStage.requiresExplicitDecisionContext(decision)
   }
 
   private hasExplicitDecisionContext(context: {
@@ -2075,60 +1327,6 @@ export class SignalGeneratorService {
     equity?: number
     markPrice?: number
   }): context is { currentQty: number; equity: number; markPrice: number } {
-    return (
-      typeof context.currentQty === 'number' &&
-      Number.isFinite(context.currentQty) &&
-      typeof context.equity === 'number' &&
-      Number.isFinite(context.equity) &&
-      typeof context.markPrice === 'number' &&
-      Number.isFinite(context.markPrice)
-    )
-  }
-
-  private readFiniteNumber(value: unknown): number | undefined {
-    return typeof value === 'number' && Number.isFinite(value) ? value : undefined
-  }
-
-  private toJsonSafe(value: any): any {
-    // 处理基本类型
-    if (value === null || value === undefined) {
-      return null
-    }
-
-    if (typeof value === 'number') {
-      // 处理 NaN、Infinity
-      if (!Number.isFinite(value)) {
-        return String(value)
-      }
-      return value
-    }
-
-    if (typeof value === 'string' || typeof value === 'boolean') {
-      return value
-    }
-
-    // 处理 Date
-    if (value instanceof Date) {
-      return value.toISOString()
-    }
-
-    // 处理数组
-    if (Array.isArray(value)) {
-      return value.map(item => this.toJsonSafe(item))
-    }
-
-    // 处理对象
-    if (typeof value === 'object') {
-      const result: Record<string, any> = {}
-      for (const key in value) {
-        if (Object.prototype.hasOwnProperty.call(value, key)) {
-          result[key] = this.toJsonSafe(value[key])
-        }
-      }
-      return result
-    }
-
-    // 其他类型（如 Function、Symbol）转换为字符串
-    return String(value)
+    return this.decisionStage.hasExplicitDecisionContext(context)
   }
 }
