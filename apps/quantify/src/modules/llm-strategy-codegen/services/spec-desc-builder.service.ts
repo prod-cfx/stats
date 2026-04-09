@@ -1,7 +1,7 @@
 import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
 import { Injectable } from '@nestjs/common'
-import { CanonicalSpecV2DigestService } from './canonical-spec-v2-digest.service'
 import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
+import { CanonicalSpecV2DigestService } from './canonical-spec-v2-digest.service'
 
 interface SpecDescChecklistSnapshot {
   symbols?: unknown

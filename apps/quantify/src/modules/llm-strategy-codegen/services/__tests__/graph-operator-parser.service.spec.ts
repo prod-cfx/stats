@@ -1,6 +1,6 @@
 import { GraphOperatorParserService } from '../graph-operator-parser.service'
 
-describe('GraphOperatorParserService', () => {
+describe('graphOperatorParserService', () => {
   it('parses nested operator calls within the whitelist', () => {
     const parser = new GraphOperatorParserService()
 

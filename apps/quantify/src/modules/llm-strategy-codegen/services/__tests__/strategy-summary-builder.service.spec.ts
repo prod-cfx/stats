@@ -34,7 +34,7 @@ describe('strategySummaryBuilderService', () => {
 
     expect(summary.strategyType).toBe('custom')
     expect(summary.indicators).toEqual([])
-    expect(summary.market).toEqual({})
+    expect(summary.market).toEqual({ marketType: 'spot' })
     expect(summary.sizing).toBeNull()
   })
 

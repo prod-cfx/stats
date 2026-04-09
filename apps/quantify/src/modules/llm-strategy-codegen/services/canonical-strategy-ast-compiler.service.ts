@@ -1,5 +1,5 @@
-import type { CanonicalStrategyIrV1, PredicateDef, SeriesDef } from '../types/canonical-strategy-ir'
 import type { DecisionProgramNode, ExprNode, GuardProgramNode, OrderProgramNode, StrategyAstV1 } from '../types/canonical-strategy-ast'
+import type { CanonicalStrategyIrV1, PredicateDef, SeriesDef } from '../types/canonical-strategy-ir'
 import { createHash } from 'node:crypto'
 import { Injectable } from '@nestjs/common'
 

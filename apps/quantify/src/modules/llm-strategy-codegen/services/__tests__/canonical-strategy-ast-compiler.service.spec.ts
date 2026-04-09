@@ -1,7 +1,7 @@
 import type { CanonicalStrategyIrV1 } from '../../types/canonical-strategy-ir'
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 
-describe('CanonicalStrategyAstCompilerService', () => {
+describe('canonicalStrategyAstCompilerService', () => {
   it('compiles canonical IR into deterministic AST topology', () => {
     const compiler = new CanonicalStrategyAstCompilerService()
 

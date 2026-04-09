@@ -3,7 +3,7 @@ import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-c
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
 import { CompiledScriptParserService } from '../compiled-script-parser.service'
 
-describe('CompiledScriptParserService', () => {
+describe('compiledScriptParserService', () => {
   it('parses a generated compiled script and returns its manifest projection', () => {
     const emitter = new CompiledScriptEmitterService()
     const parser = new CompiledScriptParserService()
