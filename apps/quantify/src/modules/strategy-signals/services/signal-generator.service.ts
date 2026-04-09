@@ -57,12 +57,9 @@ import { TradingSignalRepository } from '../repositories/trading-signal.reposito
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '../types/strategy-signals-config.type'
 import { ScriptDebugUtil } from '../utils/script-debug.util'
 import {
-  
-  
   SignalGenerationCandidateStage
 } from './signal-generation-candidate.stage'
 import {
-  
   SignalGenerationDecisionStage
 } from './signal-generation-decision.stage'
 import { SignalGenerationPersistenceStage } from './signal-generation-persistence.stage'
