@@ -46,9 +46,13 @@ function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex')
 }
 
+function sha256HashString(value: string): `sha256:${string}` {
+  return `sha256:${sha256(value)}`
+}
+
 function readManifestDigest(
   manifest: Record<string, unknown> | null | undefined,
-  key: 'irHash' | 'astDigest' | 'structuralDigest',
+  key: 'specHash' | 'irHash' | 'astDigest' | 'structuralDigest',
   fallback?: string,
 ): string | null {
   const value = manifest?.[key]
@@ -62,7 +66,7 @@ export class PublishedStrategySnapshotsRepository {
 
   async create(input: CreatePublishedStrategySnapshotInput): Promise<PublishedStrategySnapshot> {
     const snapshotVersion = input.snapshotVersion ?? 2
-    const normalizedScript = input.scriptSnapshot.trim()
+    const normalizedScript = input.scriptSnapshot
     const normalizedSpec = stableJsonStringify(input.specSnapshot)
     const normalizedSemanticGraph = input.semanticGraph ? stableJsonStringify(input.semanticGraph) : null
     const normalizedCompiledIr = input.compiledIr ? stableJsonStringify(input.compiledIr) : null
@@ -80,7 +84,8 @@ export class PublishedStrategySnapshotsRepository {
     const normalizedDataRequirements = input.dataRequirements ? stableJsonStringify(input.dataRequirements) : null
 
     const scriptHash = sha256(normalizedScript)
-    const specHash = sha256(normalizedSpec)
+    const specHash = readManifestDigest(input.compiledManifest, 'specHash', sha256HashString(normalizedSpec))
+      ?? sha256HashString(normalizedSpec)
     const irHash = readManifestDigest(input.compiledManifest, 'irHash', normalizedIr ? sha256(normalizedIr) : undefined)
     const astDigest = readManifestDigest(input.compiledManifest, 'astDigest', normalizedAst ? sha256(normalizedAst) : undefined)
     const structuralDigest = readManifestDigest(input.compiledManifest, 'structuralDigest', normalizedManifest ? sha256(normalizedManifest) : undefined)

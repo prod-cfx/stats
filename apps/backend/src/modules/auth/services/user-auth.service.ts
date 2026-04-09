@@ -938,12 +938,23 @@ export class UserAuthService {
   private generateVerificationCode(): string {
     // 仅在本地开发和单元测试环境使用固定验证码
     // staging/e2e/production 等环境使用随机验证码以保证安全性
-    const useFixedCode = this.envService.isDev() ||
-      (this.configService.get<string>('app.appEnv') === 'test')
+    const appEnv = this.configService.get<string>('app.appEnv')
+    const useFixedCode = this.envService.isDev() || appEnv === 'test'
 
     if (useFixedCode) {
       this.logger.debug('Using fixed verification code for local development/testing')
       return FIXED_VERIFICATION_CODE_FOR_TEST
+    }
+
+    const isStaging = appEnv === 'staging'
+    const stagingFixedOtpEnabled = isStaging && this.envService.getBoolean('STAGING_FIXED_EMAIL_OTP_ENABLED', false) === true
+    if (stagingFixedOtpEnabled) {
+      const configuredCode = this.envService.getString('STAGING_FIXED_EMAIL_OTP_CODE')?.trim()
+      const fixedCode = /^\d{6}$/.test(configuredCode ?? '')
+        ? configuredCode!
+        : FIXED_VERIFICATION_CODE_FOR_TEST
+      this.logger.warn('Using fixed verification code for staging because STAGING_FIXED_EMAIL_OTP_ENABLED=true')
+      return fixedCode
     }
 
     this.logger.debug('Using random verification code for non-development environments')

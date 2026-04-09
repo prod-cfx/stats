@@ -1,6 +1,8 @@
+import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
+import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
-import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
+import { CompiledScriptExecutionEnvelopeService } from '../compiled-script-execution-envelope.service'
 import { CompiledScriptParserService } from '../compiled-script-parser.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
 import { SemanticGraphCompilerService } from '../semantic-graph-compiler.service'
@@ -68,6 +70,44 @@ strategy
 
     expect(report.status).toBe('PASSED')
     expect(report.checks.every(check => check.status === 'passed')).toBe(true)
+  })
+
+  it('passes when canonical spec v2 compiles into a published-aligned script with ratio sizing', () => {
+    const canonicalSpec = canonicalBuilder.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: [
+        '突破布林带上轨时做空',
+        '跌破布林带下轨时做多',
+      ],
+      exitRules: ['回到中轨时平仓'],
+      riskRules: { positionPct: 10, stopLossPct: 5, exchange: 'okx', marketType: 'spot' },
+    })
+
+    const compiled = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+    const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
+    const script = new CompiledScriptEmitterService().emit({
+      ast,
+      executionEnvelope: new CompiledScriptExecutionEnvelopeService().build(canonicalSpec),
+    })
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+    })
+
+    expect(report.status).toBe('PASSED')
+    expect(report.checks.some(check => check.key === 'sizing.mode' && check.status === 'passed')).toBe(true)
+    expect(report.checks.some(check => check.key === 'actions.required' && check.status === 'passed')).toBe(true)
+    expect(report.checks.some(check => check.key === 'rules.mapping' && check.status === 'passed')).toBe(true)
   })
 
   it('fails when compiled script no longer matches ir manifest', () => {

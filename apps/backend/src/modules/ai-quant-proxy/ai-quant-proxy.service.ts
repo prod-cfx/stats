@@ -132,28 +132,29 @@ export class AiQuantProxyService {
     ).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async startCodegen(authorization: string | undefined, body: Record<string, unknown>) {
+  async startCodegen(userId: string, authorization: string | undefined, body: Record<string, unknown>) {
     return this.quantifyClient.post('/llm-strategy-codegen/sessions', body, {
       timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
-      headers: this.authorizationHeaders(authorization),
+      headers: this.userHeaders(userId, authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async getCodegenSession(authorization: string | undefined, sessionId: string) {
+  async getCodegenSession(userId: string, authorization: string | undefined, sessionId: string) {
     return this.quantifyClient.get(`/llm-strategy-codegen/sessions/${encodeURIComponent(sessionId)}`, {
       timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
-      headers: this.authorizationHeaders(authorization),
+      headers: this.userHeaders(userId, authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
   async continueCodegen(
+    userId: string,
     authorization: string | undefined,
     sessionId: string,
     body: Record<string, unknown>,
   ) {
     return this.quantifyClient.post(`/llm-strategy-codegen/sessions/${encodeURIComponent(sessionId)}/messages`, body, {
       timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
-      headers: this.authorizationHeaders(authorization),
+      headers: this.userHeaders(userId, authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
@@ -247,27 +248,37 @@ export class AiQuantProxyService {
     }
   }
 
-  async createBacktestJob(authorization: string | undefined, body: Record<string, unknown>, requestId?: string) {
+  async createBacktestJob(
+    userId: string,
+    authorization: string | undefined,
+    body: Record<string, unknown>,
+    requestId?: string,
+  ) {
     return this.quantifyClient.post('/backtesting/jobs', body, {
-      headers: this.proxyHeaders(authorization, requestId),
+      headers: this.userProxyHeaders(userId, authorization, requestId),
     }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
 
-  async checkBacktestSymbolSupport(authorization: string | undefined, body: Record<string, unknown>, requestId?: string) {
+  async checkBacktestSymbolSupport(
+    userId: string,
+    authorization: string | undefined,
+    body: Record<string, unknown>,
+    requestId?: string,
+  ) {
     return this.quantifyClient.post('/backtesting/symbols/check', body, {
-      headers: this.proxyHeaders(authorization, requestId),
+      headers: this.userProxyHeaders(userId, authorization, requestId),
     }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
 
-  async getBacktestJob(authorization: string | undefined, id: string, requestId?: string) {
+  async getBacktestJob(userId: string, authorization: string | undefined, id: string, requestId?: string) {
     return this.quantifyClient.get(`/backtesting/jobs/${encodeURIComponent(id)}`, {
-      headers: this.proxyHeaders(authorization, requestId),
+      headers: this.userProxyHeaders(userId, authorization, requestId),
     }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
 
-  async getBacktestJobResult(authorization: string | undefined, id: string, requestId?: string) {
+  async getBacktestJobResult(userId: string, authorization: string | undefined, id: string, requestId?: string) {
     return this.quantifyClient.get(`/backtesting/jobs/${encodeURIComponent(id)}/result`, {
-      headers: this.proxyHeaders(authorization, requestId),
+      headers: this.userProxyHeaders(userId, authorization, requestId),
     }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
 
@@ -299,7 +310,18 @@ export class AiQuantProxyService {
     }
   }
 
+  private userProxyHeaders(userId: string, authorization: string | undefined, requestId?: string) {
+    return {
+      ...this.userHeaders(userId, authorization),
+      ...(requestId ? { 'x-request-id': requestId } : {}),
+    }
+  }
+
   private mapQuantifyError(error: unknown): DomainException {
+    if (this.isTransientUpstreamFailure(error)) {
+      return this.buildTransientUnavailableException(error)
+    }
+
     if (error instanceof QuantifyClientError) {
       return this.toDomainException(error.status, error.code, error.args, error.message)
     }
@@ -315,6 +337,18 @@ export class AiQuantProxyService {
     return new DomainException('Quantify request failed', {
       code: ErrorCode.INTERNAL_SERVER_ERROR,
       status: HttpStatus.INTERNAL_SERVER_ERROR,
+    })
+  }
+
+  private buildTransientUnavailableException(error: unknown): DomainException {
+    return new DomainException('量化服务暂时不可用，请稍后重试', {
+      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+      args: {
+        reasonMessage: '量化服务暂时不可用，请稍后重试',
+        retryable: true,
+        upstreamCode: this.getQuantifyErrorCode(error),
+      },
     })
   }
 

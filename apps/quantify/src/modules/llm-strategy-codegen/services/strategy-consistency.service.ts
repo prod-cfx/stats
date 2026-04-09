@@ -1,10 +1,10 @@
+import type { CanonicalStrategyIrV1 } from '../types/canonical-strategy-ir'
 import type {
   CanonicalAction,
   CanonicalRuleV2,
   CanonicalStrategySpec,
   CanonicalStrategySpecV2,
 } from '../types/canonical-strategy-spec'
-import type { CanonicalStrategyIrV1 } from '../types/canonical-strategy-ir'
 import type { SemanticStrategyGraph } from '../types/semantic-strategy-graph'
 import type { StrategyConsistencyCheck, StrategyConsistencyReport } from '../types/strategy-consistency-report'
 import type {
@@ -14,10 +14,10 @@ import type {
   StrategySemanticRuleProfile,
 } from '../types/strategy-semantic-profile'
 import type { StrategySummary } from '../types/strategy-summary'
-import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { createHash } from 'node:crypto'
+import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { Injectable } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+ 
 import { CompiledScriptParserService } from './compiled-script-parser.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { ScriptProfileExtractorService } from './script-profile-extractor.service'
@@ -183,7 +183,7 @@ export class StrategyConsistencyService {
       rules,
       sizing: {
         mode: this.mapSizingMode(ir.portfolio.sizing.mode),
-        value: ir.portfolio.sizing.value,
+        value: this.normalizeSizingValue(ir.portfolio.sizing.mode, ir.portfolio.sizing.value),
         source: 'literal',
       },
       requiredParams: [],
@@ -269,12 +269,32 @@ export class StrategyConsistencyService {
       }
     }
 
+    for (const guard of projection.guards) {
+      const normalizedAction = this.normalizeAction(guard.payload.onBreach)
+      if (!normalizedAction) continue
+
+      const key = this.inferRuleKeyFromGuard(guard.payload.kind)
+      if (!key) continue
+
+      pushRule({
+        key,
+        action: normalizedAction,
+        phase: 'risk',
+        sideScope: this.resolveRuleSideScope('both', normalizedAction),
+      })
+    }
+
     const actions = Array.from(new Set(
-      projection.decisionPrograms.flatMap(program =>
-        program.actions
-          .map(action => this.normalizeAction(action.kind))
+      [
+        ...projection.decisionPrograms.flatMap(program =>
+          program.actions
+            .map(action => this.normalizeAction(action.kind))
+            .filter((action): action is CanonicalAction => action !== null),
+        ),
+        ...projection.guards
+          .map(guard => this.normalizeAction(guard.payload.onBreach))
           .filter((action): action is CanonicalAction => action !== null),
-      ),
+      ],
     ))
 
     const firstOpenAction = projection.decisionPrograms
@@ -289,7 +309,7 @@ export class StrategyConsistencyService {
       sizing: firstOpenAction
         ? {
             mode: this.mapSizingMode(firstOpenAction.quantity.mode),
-            value: firstOpenAction.quantity.value,
+            value: this.normalizeSizingValue(firstOpenAction.quantity.mode, firstOpenAction.quantity.value),
             source: 'literal',
           }
         : null,
@@ -954,6 +974,13 @@ export class StrategyConsistencyService {
     return null
   }
 
+  private inferRuleKeyFromGuard(kind: string): StrategySemanticRuleKey | null {
+    if (kind === 'STOP_LOSS_PCT' || kind === 'MAX_SINGLE_LOSS_PCT') {
+      return 'position_loss_pct'
+    }
+    return null
+  }
+
   private mapSizingMode(
     mode: 'pct_equity' | 'fixed_quote' | 'fixed_base' | 'position_pct',
   ): NonNullable<StrategySemanticProfile['sizing']>['mode'] {
@@ -966,6 +993,17 @@ export class StrategyConsistencyService {
       case 'fixed_base':
         return 'QTY'
     }
+  }
+
+  private normalizeSizingValue(
+    mode: 'pct_equity' | 'fixed_quote' | 'fixed_base' | 'position_pct',
+    value: number,
+  ): number {
+    if (mode === 'pct_equity' || mode === 'position_pct') {
+      return value > 1 ? Number((value / 100).toFixed(4)) : value
+    }
+
+    return value
   }
 
   private hashCanonicalJson(value: unknown): `sha256:${string}` {

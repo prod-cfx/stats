@@ -11,10 +11,6 @@ import { CompiledScriptParserService } from '@/modules/llm-strategy-codegen/serv
 type BacktestCompiledSnapshot = Pick<
   PublishedStrategySnapshot,
   | 'id'
-  | 'specHash'
-  | 'irHash'
-  | 'astDigest'
-  | 'structuralDigest'
   | 'scriptSnapshot'
   | 'irSnapshot'
   | 'astSnapshot'
@@ -60,14 +56,10 @@ export class BacktestCompiledSnapshotPreflightService {
     }
 
     if (
-      snapshot.specHash !== manifest.specHash
-      || snapshot.irHash !== manifest.irHash
-      || snapshot.astDigest !== manifest.astDigest
-      || snapshot.structuralDigest !== manifest.structuralDigest
-      || snapshotManifest.specHash !== manifest.specHash
-      || snapshotManifest.irHash !== manifest.irHash
-      || snapshotManifest.astDigest !== manifest.astDigest
-      || snapshotManifest.structuralDigest !== manifest.structuralDigest
+      normalizeHashString(snapshotManifest.specHash) !== manifest.specHash
+      || normalizeHashString(snapshotManifest.irHash) !== manifest.irHash
+      || normalizeHashString(snapshotManifest.astDigest) !== manifest.astDigest
+      || normalizeHashString(snapshotManifest.structuralDigest) !== manifest.structuralDigest
     ) {
       this.raiseInvalid('manifest_mismatch')
     }
@@ -176,4 +168,13 @@ function stableJsonStringify(value: unknown): string {
 function hashStableJson(value: unknown): `sha256:${string}` {
   const digest = createHash('sha256').update(stableJsonStringify(value)).digest('hex')
   return `sha256:${digest}`
+}
+
+function normalizeHashString(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const normalized = value.trim()
+  if (!normalized) return null
+  if (normalized.startsWith('sha256:')) return normalized
+  if (/^[a-f0-9]{64}$/u.test(normalized)) return `sha256:${normalized}`
+  return normalized
 }

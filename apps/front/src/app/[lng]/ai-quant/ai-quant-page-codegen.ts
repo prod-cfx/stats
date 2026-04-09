@@ -1,5 +1,8 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
+import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
+import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
+import type {LlmCodegenSessionResponse} from '@/lib/api';
 import {
   buildAiQuantStageFallbackMessage,
   parseAiQuantErrorMeta,
@@ -13,16 +16,14 @@ import {
   applyCapabilitiesToParamSchema,
   syncStrategyParamsFromCodegen,
 } from '@/components/ai-quant/strategy-param-sync'
-import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import {
   continueLlmCodegenSession,
   getLlmCodegenSession,
-  startLlmCodegenSession,
-  type LlmCodegenSessionResponse,
+  startLlmCodegenSession
+  
 } from '@/lib/api'
-import { ApiError } from '@/lib/errors'
 
-import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
+import { ApiError } from '@/lib/errors'
 import { normalizeParamsFromValues } from './ai-quant-page-conversation'
 
 const CODEGEN_TERMINAL_STATUSES = new Set(['PUBLISHED', 'REJECTED'])
@@ -374,7 +375,9 @@ export async function requestAiQuantCodegen(args: {
               },
               currentValues: conv.paramValues,
               capabilities: backtestCapabilities,
-              contextText: trimmedMessage,
+              contextText: [trimmedMessage, response.assistantPrompt]
+                .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+                .join(' '),
             })
           : null
         const nextParamValues = syncResult?.paramValues ?? conv.paramValues
@@ -488,6 +491,10 @@ export async function requestAiQuantCodegen(args: {
         return {
           ...conv,
           llmCodegenSessionId: shouldReuseCodegenSession ? activeSessionId : null,
+          codegenSpecDesc:
+            response.specDesc && typeof response.specDesc === 'object' && !Array.isArray(response.specDesc)
+              ? response.specDesc
+              : conv.codegenSpecDesc,
           publishedStrategyInstanceId: resolvePublishedStrategyInstanceId({
             response,
             isStartingNewSession: !activeSessionId,
@@ -523,6 +530,7 @@ export async function requestAiQuantCodegen(args: {
       message: trimmedMessage,
       sessionId,
       graph: currentConversation?.logicGraph,
+      specDesc: currentConversation?.codegenSpecDesc ?? null,
       params: targetParams,
       paramSchema: currentConversation?.paramSchema ?? null,
       paramValues: currentConversation?.paramValues ?? null,

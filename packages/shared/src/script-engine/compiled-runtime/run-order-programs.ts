@@ -1,6 +1,6 @@
 import type { StrategyExecutionContextV1 } from '../../strategy-protocol'
-import type { CompiledGuardState } from './evaluate-guards'
 import type { CompiledRuntimeValue } from './evaluate-expr-pool'
+import type { CompiledGuardState } from './evaluate-guards'
 
 interface OrderProgramNode {
   id: string

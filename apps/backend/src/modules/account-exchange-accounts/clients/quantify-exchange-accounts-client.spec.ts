@@ -97,4 +97,27 @@ describe('quantifyExchangeAccountsClient', () => {
       expect.any(Object),
     )
   })
+
+  it('falls back to localhost when staging config points to the public quantify domain', async () => {
+    const envWithPublicStagingDomain = {
+      getString: jest.fn((key: string) => {
+        if (key === 'APP_ENV') return 'staging'
+        if (key === 'QUANTIFY_API_BASE_URL') return 'https://cfx-quantify-staging.devbase.cloud/api/v1'
+        return undefined
+      }),
+    }
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ data: [] }),
+    } as Response)
+
+    const client = new QuantifyExchangeAccountsClient(envWithPublicStagingDomain as never)
+    await client.list('user-1')
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      expect.stringContaining('http://127.0.0.1:3010/api/v1/exchange-accounts?userId=user-1'),
+      expect.any(Object),
+    )
+  })
 })

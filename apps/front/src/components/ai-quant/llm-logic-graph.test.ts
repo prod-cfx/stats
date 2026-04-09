@@ -80,4 +80,71 @@ describe('buildLogicGraphFromCodegenSpec', () => {
 
     expect(graph.status).toBe('confirmed')
   })
+
+  it('builds graph from canonical specDesc rules and locked params', () => {
+    const graph = buildLogicGraphFromCodegenSpec(
+      {
+        rules: [
+          {
+            id: 'entry-upper-1',
+            phase: 'entry',
+            condition: { key: 'bollinger.upper_break', op: 'CROSS_OVER' },
+            actions: [{ type: 'OPEN_SHORT', sizing: { mode: 'RATIO', value: 0.1 } }],
+          },
+          {
+            id: 'entry-lower-2',
+            phase: 'entry',
+            condition: { key: 'bollinger.lower_break', op: 'CROSS_UNDER' },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.1 } }],
+          },
+          {
+            id: 'exit-middle-1',
+            phase: 'exit',
+            condition: { key: 'bollinger.middle_revert' },
+            actions: [{ type: 'CLOSE_LONG' }, { type: 'CLOSE_SHORT' }],
+          },
+          {
+            id: 'risk-stop-loss',
+            phase: 'risk',
+            condition: { key: 'position_loss_pct', value: 0.05 },
+            actions: [{ type: 'FORCE_EXIT' }],
+          },
+        ],
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+        lockedParams: {
+          exchange: 'okx',
+          positionPct: 10,
+        },
+        canonicalSpec: {
+          market: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+          },
+        },
+      },
+      {
+        exchange: 'binance',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '1h',
+        positionPct: 25,
+      },
+      11,
+    )
+
+    expect(graph.meta.exchange).toBe('okx')
+    expect(graph.meta.symbol).toBe('BTCUSDT')
+    expect(graph.meta.timeframe).toBe('15m')
+    expect(graph.meta.positionPct).toBe(10)
+    expect(graph.trigger.map(item => item.operator)).toEqual(expect.arrayContaining([
+      '价格向上突破布林带上轨',
+      '价格向下突破布林带下轨',
+      '价格回到布林带中轨（MA20）',
+    ]))
+    expect(graph.risk).toContain('亏损达到 5% -> FORCE_EXIT')
+    expect(graph.actions.map(item => item.action)).toEqual(expect.arrayContaining(['SELL', 'BUY', 'CLOSE']))
+  })
 })

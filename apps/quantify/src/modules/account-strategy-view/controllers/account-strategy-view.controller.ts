@@ -29,8 +29,9 @@ export class AccountStrategyViewController {
   async list(
     @Query() query: AccountStrategyListQueryDto,
     @Headers('authorization') authorization?: string,
+    @Headers('x-user-id') forwardedUserId?: string,
   ): Promise<BasePaginationResponseDto<AccountStrategyListItemDto>> {
-    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.service.listStrategies({
       ...query,
       userId,
@@ -41,8 +42,9 @@ export class AccountStrategyViewController {
   async detail(
     @Param('id') id: string,
     @Headers('authorization') authorization?: string,
+    @Headers('x-user-id') forwardedUserId?: string,
   ): Promise<AccountStrategyDetailResponseDto> {
-    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.service.getStrategyDetail(userId, id)
   }
 
@@ -52,8 +54,9 @@ export class AccountStrategyViewController {
     @Param('id') id: string,
     @Body() dto: AccountStrategyActionDto,
     @Headers('authorization') authorization?: string,
+    @Headers('x-user-id') forwardedUserId?: string,
   ): Promise<AccountStrategyDetailResponseDto> {
-    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.service.performAction(id, {
       ...dto,
       userId,
@@ -65,8 +68,9 @@ export class AccountStrategyViewController {
   async deploy(
     @Body() dto: AccountStrategyDeployDto,
     @Headers('authorization') authorization?: string,
+    @Headers('x-user-id') forwardedUserId?: string,
   ): Promise<AccountStrategyDetailResponseDto> {
-    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.service.deployStrategy({
       ...dto,
       userId,
@@ -78,8 +82,9 @@ export class AccountStrategyViewController {
   async remove(
     @Param('id') id: string,
     @Headers('authorization') authorization?: string,
+    @Headers('x-user-id') forwardedUserId?: string,
   ): Promise<void> {
-    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization)
+    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.service.deleteStrategy(userId, id)
   }
 }

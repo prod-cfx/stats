@@ -11,19 +11,21 @@ import { CanonicalSpecV2DigestService } from './services/canonical-spec-v2-diges
 import { CanonicalSpecV2IrCompilerService } from './services/canonical-spec-v2-ir-compiler.service'
 import { CanonicalSpecV2ValidatorService } from './services/canonical-spec-v2-validator.service'
 import { CanonicalStrategyAstCompilerService } from './services/canonical-strategy-ast-compiler.service'
-import { CompiledPublicationGateService } from './services/compiled-publication-gate.service'
-import { CompiledScriptParserService } from './services/compiled-script-parser.service'
-import { CompiledScriptEmitterService } from './services/compiled-script-emitter.service'
-import { CompiledScriptExecutionEnvelopeService } from './services/compiled-script-execution-envelope.service'
+import { CanonicalStrategyIrCanonicalizerService } from './services/canonical-strategy-ir-canonicalizer.service'
+import { CanonicalStrategyIrValidatorService } from './services/canonical-strategy-ir-validator.service'
 import { ChecklistGateService } from './services/checklist-gate.service'
 import { CodegenConversationService } from './services/codegen-conversation.service'
+import { CompiledPublicationGateService } from './services/compiled-publication-gate.service'
+import { CompiledScriptEmitterService } from './services/compiled-script-emitter.service'
+import { CompiledScriptExecutionEnvelopeService } from './services/compiled-script-execution-envelope.service'
+import { CompiledScriptParserService } from './services/compiled-script-parser.service'
 import { RecommendationIndexService } from './services/recommendation-index.service'
 import { RuntimeGuardrailService } from './services/runtime-guardrail.service'
 import { ScriptProfileExtractorService } from './services/script-profile-extractor.service'
-import { StrategyClarificationQuestionService } from './services/strategy-clarification-question.service'
-import { StrategyClarificationRulesService } from './services/strategy-clarification-rules.service'
 import { SpecDescBuilderService } from './services/spec-desc-builder.service'
 import { StaticGuardrailService } from './services/static-guardrail.service'
+import { StrategyClarificationQuestionService } from './services/strategy-clarification-question.service'
+import { StrategyClarificationRulesService } from './services/strategy-clarification-rules.service'
 import { StrategyConsistencyService } from './services/strategy-consistency.service'
 import { StrategySummaryBuilderService } from './services/strategy-summary-builder.service'
 
@@ -40,6 +42,8 @@ import { StrategySummaryBuilderService } from './services/strategy-summary-build
     CanonicalSpecBuilderService,
     CanonicalSpecV2DigestService,
     CanonicalSpecV2ValidatorService,
+    CanonicalStrategyIrValidatorService,
+    CanonicalStrategyIrCanonicalizerService,
     CanonicalSpecV2IrCompilerService,
     CanonicalStrategyAstCompilerService,
     CompiledScriptParserService,

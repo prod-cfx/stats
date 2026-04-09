@@ -7,13 +7,14 @@ describe('llmStrategyCodegenController', () => {
     }
     const controller = new LlmStrategyCodegenController(service as never)
 
-    await controller.continueSession('Bearer token-1', 'session-1', {
+    await controller.continueSession('user-1', 'Bearer token-1', 'session-1', {
       message: '确认逻辑图',
       confirmGenerate: true,
       confirmedCanonicalDigest: 'sha256:canonical-1',
     })
 
     expect(service.continueCodegen).toHaveBeenCalledWith(
+      'user-1',
       'Bearer token-1',
       'session-1',
       expect.objectContaining({

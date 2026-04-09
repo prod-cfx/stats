@@ -8,7 +8,10 @@ import { EnvService } from '@/common/services/env.service'
 export class BacktestCallerIdentityService {
   constructor(private readonly env: EnvService) {}
 
-  async resolveCallerUserIdFromAuthorization(authorization: string | undefined): Promise<string> {
+  async resolveCallerUserIdFromAuthorization(
+    authorization: string | undefined,
+    forwardedUserId?: string | undefined,
+  ): Promise<string> {
     const normalizedAuth = authorization?.trim()
     if (!normalizedAuth) {
       throw new DomainException('backtest.missing_authorization_header', {
@@ -32,6 +35,22 @@ export class BacktestCallerIdentityService {
         code: ErrorCode.UNAUTHORIZED,
         status: HttpStatus.UNAUTHORIZED,
       })
+    }
+
+    const jwtUserId = this.extractUserIdFromJwtPayload(payload)
+    const normalizedForwardedUserId = forwardedUserId?.trim()
+    if (normalizedForwardedUserId) {
+      if (!jwtUserId || jwtUserId !== normalizedForwardedUserId) {
+        throw new DomainException('backtest.caller_user_id_mismatch', {
+          code: ErrorCode.UNAUTHORIZED,
+          status: HttpStatus.UNAUTHORIZED,
+          args: {
+            authUserId: jwtUserId ?? undefined,
+            inputUserId: normalizedForwardedUserId,
+          },
+        })
+      }
+      return normalizedForwardedUserId
     }
 
     const callerUserId = await this.verifyTokenByBackendAuth(token)
@@ -102,6 +121,22 @@ export class BacktestCallerIdentityService {
     const directId = record.id
     if (typeof directId === 'string' && directId.trim()) {
       return directId.trim()
+    }
+    return null
+  }
+
+  private extractUserIdFromJwtPayload(payload: Record<string, unknown>): string | null {
+    const sub = payload.sub
+    if (typeof sub === 'string' && sub.trim()) {
+      return sub.trim()
+    }
+    const userId = payload.userId
+    if (typeof userId === 'string' && userId.trim()) {
+      return userId.trim()
+    }
+    const id = payload.id
+    if (typeof id === 'string' && id.trim()) {
+      return id.trim()
     }
     return null
   }

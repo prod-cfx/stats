@@ -25,4 +25,22 @@ describe('callerIdentityService', () => {
       service.resolveCallerUserIdFromAuthorization(`Bearer ${invalidPayloadToken}`),
     ).rejects.toBeInstanceOf(DomainException)
   })
+
+  it('trusts forwarded x-user-id only when it matches jwt subject', async () => {
+    const service = new CallerIdentityService({} as never)
+    const token = `header.${encodeJwtPart({ sub: 'user-1', principalType: 'user' })}.signature`
+
+    await expect(
+      service.resolveCallerUserIdFromAuthorization(`Bearer ${token}`, 'user-1'),
+    ).resolves.toBe('user-1')
+  })
+
+  it('rejects forwarded x-user-id when it does not match jwt subject', async () => {
+    const service = new CallerIdentityService({} as never)
+    const token = `header.${encodeJwtPart({ sub: 'user-1', principalType: 'user' })}.signature`
+
+    await expect(
+      service.resolveCallerUserIdFromAuthorization(`Bearer ${token}`, 'user-2'),
+    ).rejects.toBeInstanceOf(DomainException)
+  })
 })

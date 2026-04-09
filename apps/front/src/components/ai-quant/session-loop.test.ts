@@ -2,6 +2,7 @@ import { describe, expect, it } from '@jest/globals'
 import {
   buildAutoAdvanceMessage,
   buildLockedChecklistFromGraph,
+  buildLockedChecklistFromSpecDesc,
   isAssistantDraftLikeMessage,
   isShortConfirmationMessage,
   resolveChecklistPayload,
@@ -81,6 +82,108 @@ describe('ai-quant session-loop', () => {
     expect(payload.symbols).toEqual(['BTCUSDT'])
     expect(payload.timeframes).toEqual(['3m', '15m'])
     expect(payload.riskRules).toEqual({ positionPct: 10, maxDrawdownPct: 20 })
+  })
+
+  it('preserves directional bollinger entry semantics when rebuilding checklist from graph ids', () => {
+    const directionalGraph = {
+      version: 2,
+      status: 'confirmed',
+      trigger: [
+        { id: 'trigger-entry-upper-1', operator: '价格向上突破布林带上轨' },
+        { id: 'trigger-entry-lower-2', operator: '价格向下突破布林带下轨' },
+        { id: 'trigger-exit-middle-1', operator: '价格回到布林带中轨（MA20）' },
+      ],
+      risk: [],
+      actions: [],
+      meta: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+      },
+    } as any
+
+    const payload = buildLockedChecklistFromGraph(directionalGraph, baseParams)
+    expect(payload.entryRules).toEqual([
+      '价格向上突破布林带上轨时做空',
+      '价格向下突破布林带下轨时做多',
+    ])
+    expect(payload.exitRules).toEqual(['价格回到布林带中轨（MA20）'])
+  })
+
+  it('prefers specDesc canonical rules when confirmGenerate rebuilds checklist', () => {
+    const payload = resolveChecklistPayload({
+      usePresetRules: false,
+      confirmGenerate: true,
+      message: '确认',
+      sessionId: 'session-1',
+      graph,
+      specDesc: {
+        rules: [
+          {
+            phase: 'entry',
+            condition: { key: 'bollinger.upper_break' },
+          },
+          {
+            phase: 'entry',
+            condition: { key: 'bollinger.lower_break' },
+          },
+          {
+            phase: 'exit',
+            condition: { key: 'bollinger.middle_revert' },
+          },
+        ],
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+        lockedParams: {
+          exchange: 'okx',
+          positionPct: 10,
+          stopLossPct: 5,
+        },
+      },
+      params: baseParams,
+      paramValues: {
+        exchange: 'okx',
+        positionPct: 10,
+        stopLossPct: 5,
+      },
+    } as any)
+
+    expect(payload.entryRules).toEqual([
+      '价格向上突破布林带上轨时做空',
+      '价格向下突破布林带下轨时做多',
+    ])
+    expect(payload.exitRules).toEqual(['价格回到布林带中轨（MA20）'])
+    expect(payload.symbols).toEqual(['BTCUSDT'])
+    expect(payload.timeframes).toEqual(['15m'])
+  })
+
+  it('builds locked checklist directly from specDesc canonical rules', () => {
+    const payload = buildLockedChecklistFromSpecDesc({
+      rules: [
+        { phase: 'entry', condition: { key: 'bollinger.upper_break' } },
+        { phase: 'entry', condition: { key: 'bollinger.lower_break' } },
+        { phase: 'exit', condition: { key: 'bollinger.middle_revert' } },
+      ],
+      market: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+      },
+      lockedParams: {
+        exchange: 'okx',
+        positionPct: 10,
+      },
+    }, baseParams)
+
+    expect(payload.entryRules).toEqual([
+      '价格向上突破布林带上轨时做空',
+      '价格向下突破布林带下轨时做多',
+    ])
+    expect(payload.exitRules).toEqual(['价格回到布林带中轨（MA20）'])
+    expect(payload.symbols).toEqual(['BTCUSDT'])
+    expect(payload.timeframes).toEqual(['15m'])
   })
 
   it('recognizes short confirmation messages', () => {

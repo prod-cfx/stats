@@ -68,6 +68,35 @@ strategy`)
     expect(profile.sizing).toBeNull()
   })
 
+  it('normalizes compiled pct_equity quantity literals back to ratio semantics', () => {
+    const service = new ScriptProfileExtractorService()
+    const profile = service.extract(`
+const DECISION_PROGRAMS = [
+  {
+    id: 'decision_01_entry',
+    actions: [{ kind: 'OPEN_SHORT', quantity: { mode: 'pct_equity', value: 10 } }],
+  },
+]
+`)
+
+    expect(profile.sizing).toEqual({ mode: 'RATIO', value: 0.1, source: 'literal' })
+  })
+
+  it('extracts risk guard breach actions and stop-loss rule mappings from compiled guard programs', () => {
+    const service = new ScriptProfileExtractorService()
+    const profile = service.extract(`
+const GUARD_PROGRAMS = [
+  {
+    id: 'guard_01_guard_risk-stop-loss',
+    payload: { id: 'guard_risk-stop-loss', kind: 'STOP_LOSS_PCT', onBreach: 'FORCE_EXIT', scope: 'position', value: 5 },
+  },
+]
+`)
+
+    expect(profile.actions).toContain('FORCE_EXIT')
+    expect(profile.ruleMappings).toContainEqual({ key: 'position_loss_pct', action: 'FORCE_EXIT' })
+  })
+
   it('binds moving-average crossover rules to executable actions instead of preceding NOOP guards', () => {
     const service = new ScriptProfileExtractorService()
     const profile = service.extract(`
