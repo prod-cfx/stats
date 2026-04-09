@@ -51,7 +51,11 @@ export class CompiledPublicationGateService {
     const publicationGate = this.buildPublicationGateReport(input, parsed)
     const blockingChecks = publicationGate.checks.filter(check => check.blocking && check.status === 'failed')
     if (blockingChecks.length > 0) {
-      throw new Error(`publication gate blocked: ${blockingChecks.map(check => check.message).join('；')}`)
+      const error = new Error(`publication gate blocked: ${blockingChecks.map(check => check.message).join('；')}`) as Error & {
+        publicationGate?: PublicationGateReport
+      }
+      error.publicationGate = publicationGate
+      throw error
     }
 
     const compilerConsistency = this.buildCompilerConsistency(input, parsed, publicationGate)

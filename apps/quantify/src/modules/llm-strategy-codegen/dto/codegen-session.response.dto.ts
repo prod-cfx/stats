@@ -55,6 +55,28 @@ class StrategyClarificationGateDto {
   pendingItems!: StrategyClarificationItemDto[]
 }
 
+class PublicationGateMismatchDto {
+  @ApiProperty({ description: '不一致字段' })
+  field!: string
+
+  @ApiProperty({ description: '期望值' })
+  expected!: string
+
+  @ApiProperty({ description: '实际值' })
+  actual!: string
+
+  @ApiProperty({ description: '阻断原因' })
+  reason!: string
+}
+
+class PublicationGateDto {
+  @ApiProperty({ description: '发布门禁是否通过', example: true })
+  passed!: boolean
+
+  @ApiProperty({ description: '阻断性不一致明细', type: [PublicationGateMismatchDto] })
+  blockingMismatches!: PublicationGateMismatchDto[]
+}
+
 export class CodegenSessionResponseDto {
   @ApiProperty({ description: '会话 ID' })
   id!: string
@@ -112,6 +134,17 @@ export class CodegenSessionResponseDto {
     items: StrategyClarificationItem[]
     pendingItems: StrategyClarificationItem[]
   }
+
+  @ApiPropertyOptional({ description: '发布门禁结果', type: PublicationGateDto })
+  publicationGate?: {
+    passed: boolean
+    blockingMismatches: Array<{
+      field: string
+      expected: string
+      actual: string
+      reason: string
+    }>
+  } | null
 
   @ApiPropertyOptional({ description: '拒绝原因' })
   rejectReason?: string | null

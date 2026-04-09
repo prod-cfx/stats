@@ -588,6 +588,47 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('surfaces publicationGate at the top level when stored in latestSpecDesc', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-publication-gate',
+      userId: 'u1',
+      status: 'REJECTED',
+      checklist: {},
+      latestSpecDesc: {
+        publicationGate: {
+          passed: false,
+          blockingMismatches: [
+            {
+              field: 'exchange',
+              expected: 'okx',
+              actual: 'binance',
+              reason: 'confirmed snapshot and compiled artifact exchange mismatch',
+            },
+          ],
+        },
+      },
+      rejectReason: 'publication gate blocked',
+      clarificationState: {
+        status: 'CLEAR',
+        items: [],
+      },
+      strategyInstanceId: null,
+    })
+
+    const result = await service.getSession('s-publication-gate', 'u1')
+
+    expect((result as any).publicationGate).toEqual({
+      passed: false,
+      blockingMismatches: [
+        expect.objectContaining({
+          field: 'exchange',
+          expected: 'okx',
+          actual: 'binance',
+        }),
+      ],
+    })
+  })
+
   it('keeps drafting and returns unrelated guidance when planner marks message unrelated', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's3',
@@ -1183,6 +1224,81 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       latestSpecDesc: expect.any(Object),
       rejectReason: expect.stringContaining('Unable to start a transaction'),
       strategyInstanceId: null,
+    }))
+  })
+
+  it('persists publicationGate in session payload when compiled publication gate blocks publish', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's8-publication-blocked',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['1h'],
+        entryRules: ['突破关键阻力位后入场'],
+        exitRules: ['跌破最近支撑位出场'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+        },
+      },
+      constraintPack: {},
+    })
+    jest.spyOn(CompiledPublicationGateService.prototype, 'publish').mockRejectedValue(
+      Object.assign(new Error('publication gate blocked: confirmed exchange=okx，but IR=binance、script=binance'), {
+        publicationGate: {
+          status: 'FAILED',
+          checks: [
+            {
+              key: 'market.exchange',
+              blocking: true,
+              status: 'failed',
+              expected: 'okx',
+              actual: {
+                ir: 'binance',
+                script: 'binance',
+              },
+              message: 'confirmed exchange=okx，but IR=binance、script=binance',
+            },
+          ],
+        },
+      }),
+    )
+
+    const result = await service.continueSession('s8-publication-blocked', {
+      userId: 'u1',
+      message: '确认，直接生成代码',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+        symbols: ['BTCUSDT'],
+        timeframes: ['1h'],
+        entryRules: ['突破关键阻力位后入场'],
+        exitRules: ['跌破最近支撑位出场'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+        },
+      }),
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await waitForTerminalStatus('s8-publication-blocked')
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s8-publication-blocked', expect.objectContaining({
+      status: 'REJECTED',
+      latestSpecDesc: expect.objectContaining({
+        publicationGate: {
+          passed: false,
+          blockingMismatches: [
+            expect.objectContaining({
+              field: 'exchange',
+              expected: 'okx',
+              actual: 'binance',
+            }),
+          ],
+        },
+      }),
+      rejectReason: expect.stringContaining('publication gate blocked'),
     }))
   })
 

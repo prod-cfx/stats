@@ -668,23 +668,48 @@ export class CodegenConversationService {
         }
       }
 
-      const snapshot = await this.compiledPublicationGate.publish({
-        sessionId,
-        strategyTemplateId,
-        strategyInstanceId: strategyInstanceId ?? null,
-        canonicalSnapshot: canonicalSpec as unknown as Record<string, unknown>,
-        semanticView,
-        graphSnapshot: compiled.graphSnapshot,
-        ir: compiled.ir,
-        ast,
-        executionEnvelope,
-        script: compiledScript,
-        semanticConsistencyReport: semanticConsistency as unknown as Record<string, unknown>,
-        userIntentSummary: userIntentSummary as unknown as Record<string, unknown>,
-        strategySummary: strategySummary as unknown as Record<string, unknown>,
-        scriptSummary: scriptSummary as unknown as Record<string, unknown>,
-        lockedParams,
-      })
+      let snapshot: {
+        snapshotId: string
+        consistencyReport: Record<string, unknown>
+      }
+      try {
+        snapshot = await this.compiledPublicationGate.publish({
+          sessionId,
+          strategyTemplateId,
+          strategyInstanceId: strategyInstanceId ?? null,
+          canonicalSnapshot: canonicalSpec as unknown as Record<string, unknown>,
+          semanticView,
+          graphSnapshot: compiled.graphSnapshot,
+          ir: compiled.ir,
+          ast,
+          executionEnvelope,
+          script: compiledScript,
+          semanticConsistencyReport: semanticConsistency as unknown as Record<string, unknown>,
+          userIntentSummary: userIntentSummary as unknown as Record<string, unknown>,
+          strategySummary: strategySummary as unknown as Record<string, unknown>,
+          scriptSummary: scriptSummary as unknown as Record<string, unknown>,
+          lockedParams,
+        })
+      } catch (error) {
+        const publicationGate = this.readPublicationGate(
+          (error as { publicationGate?: unknown } | null)?.publicationGate,
+        )
+        if (publicationGate) {
+          const reason = error instanceof Error ? error.message : String(error)
+          await this.sessionsRepo.updateSession(sessionId, {
+            status: 'REJECTED',
+            latestSpecDesc: {
+              ...sessionSpecDesc,
+              publicationGate,
+            } as unknown as Prisma.InputJsonValue,
+            latestDraftCode: compiledScript,
+            rejectReason: reason,
+            strategyInstanceId: strategyInstanceId ?? null,
+          })
+          return
+        }
+        throw error
+      }
       if (this.readPublishedConsistencyStatus(snapshot.consistencyReport) !== 'PASSED') {
         await this.sessionsRepo.updateSession(sessionId, {
           status: 'CONSISTENCY_FAILED',
@@ -783,6 +808,10 @@ export class CodegenConversationService {
       canonicalDigest: this.readCanonicalDigest(sessionSpecDesc),
       strategyInstanceId: session.strategyInstanceId ?? null,
       clarificationState: this.readClarificationState(session.clarificationState),
+      publicationGate:
+        this.readPublicationGate(sessionSpecDesc?.publicationGate)
+        ?? this.readPublicationGate(latestSnapshot?.consistencyReport)
+        ?? this.readPublicationGate(sessionConsistencyReport),
       rejectReason: session.rejectReason,
     })
   }
@@ -793,17 +822,20 @@ export class CodegenConversationService {
     },
   ): CodegenSessionResponseDto {
     const clarificationGate = response.clarificationGate ?? this.buildClarificationGate(response.clarificationState)
+    const publicationGate = response.publicationGate ?? this.readPublicationGate(response.consistencyReport)
 
     if (!clarificationGate.blocked) {
       return {
         ...response,
         clarificationGate,
+        publicationGate,
       }
     }
 
     return {
       ...response,
       clarificationGate,
+      publicationGate,
       specDesc: null,
       canonicalDigest: null,
       semanticGraph: null,
@@ -1269,6 +1301,121 @@ export class CodegenConversationService {
 
   private readPublishedConsistencyStatus(report: Record<string, unknown>): string | null {
     return typeof report.status === 'string' ? report.status : null
+  }
+
+  private readPublicationGate(value: unknown): CodegenSessionResponseDto['publicationGate'] | null {
+    const direct = this.normalizePublicationGate(value)
+    if (direct) {
+      return direct
+    }
+
+    const report = this.readRecord(value)
+    const compilerConsistency = this.readRecord(report?.compilerConsistency)
+    return this.normalizePublicationGate(compilerConsistency?.publicationGate)
+  }
+
+  private normalizePublicationGate(value: unknown): CodegenSessionResponseDto['publicationGate'] | null {
+    const record = this.readRecord(value)
+    if (!record) {
+      return null
+    }
+
+    if (typeof record.passed === 'boolean' && Array.isArray(record.blockingMismatches)) {
+      return {
+        passed: record.passed,
+        blockingMismatches: record.blockingMismatches
+          .map(item => this.normalizePublicationGateMismatch(this.readRecord(item)))
+          .filter((item): item is NonNullable<CodegenSessionResponseDto['publicationGate']>['blockingMismatches'][number] => item !== null),
+      }
+    }
+
+    if (typeof record.status === 'string' && Array.isArray(record.checks)) {
+      const blockingMismatches = record.checks
+        .map(item => this.readRecord(item))
+        .filter((item): item is Record<string, unknown> => item !== null)
+        .filter(item => item.blocking === true && item.status === 'failed')
+        .map(item => ({
+          field: this.normalizePublicationGateField(item.key),
+          expected: this.stringifyPublicationGateValue(item.expected),
+          actual: this.stringifyPublicationGateValue(item.actual),
+          reason:
+            typeof item.message === 'string' && item.message.trim()
+              ? item.message.trim()
+              : 'publication gate blocked',
+        }))
+
+      return {
+        passed: blockingMismatches.length === 0,
+        blockingMismatches,
+      }
+    }
+
+    return null
+  }
+
+  private normalizePublicationGateMismatch(
+    value: Record<string, unknown> | null,
+  ): NonNullable<CodegenSessionResponseDto['publicationGate']>['blockingMismatches'][number] | null {
+    if (!value) {
+      return null
+    }
+
+    const field = typeof value.field === 'string' && value.field.trim()
+      ? value.field.trim()
+      : null
+    const reason = typeof value.reason === 'string' && value.reason.trim()
+      ? value.reason.trim()
+      : null
+    if (!field || !reason) {
+      return null
+    }
+
+    return {
+      field,
+      expected: this.stringifyPublicationGateValue(value.expected),
+      actual: this.stringifyPublicationGateValue(value.actual),
+      reason,
+    }
+  }
+
+  private normalizePublicationGateField(value: unknown): string {
+    if (typeof value !== 'string' || !value.trim()) {
+      return 'unknown'
+    }
+
+    const normalized = value.trim()
+    return normalized.startsWith('market.')
+      ? normalized.slice('market.'.length)
+      : normalized
+  }
+
+  private stringifyPublicationGateValue(value: unknown): string {
+    if (typeof value === 'string') {
+      return value
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value)
+    }
+
+    const record = this.readRecord(value)
+    if (record) {
+      if (typeof record.script === 'string' && record.script.trim()) {
+        return record.script.trim()
+      }
+      if (typeof record.ir === 'string' && record.ir.trim()) {
+        return record.ir.trim()
+      }
+    }
+
+    if (value === null || value === undefined) {
+      return ''
+    }
+
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return String(value)
+    }
   }
 
   private readRecord(value: unknown): Record<string, unknown> | null {
