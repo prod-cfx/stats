@@ -1,4 +1,8 @@
 import type { StrategySignalsRuntimeConfig } from '../../types/strategy-signals-config.type'
+jest.mock('@/common/utils/prisma-enum-mappers', () => ({
+  reverseMapTimeframe: (value: string) => value,
+}))
+
 import { SignalGeneratorService } from '../signal-generator.service'
 
 describe('signal generator market-data gateway smoke', () => {
@@ -75,8 +79,8 @@ describe('signal generator market-data gateway smoke', () => {
 
   it('loads recent BTCUSDT 1h bars through gateway in ascending order', async () => {
     mockGateway.getRecentBarsBySymbolId.mockResolvedValue([
-      { time: new Date('2026-03-17T10:00:00Z'), open: 1, high: 2, low: 0.5, close: 1.5, volume: 10 },
-      { time: new Date('2026-03-17T11:00:00Z'), open: 1.5, high: 2.5, low: 1, close: 2, volume: 12 },
+      { time: new Date('2026-03-17T10:00:00Z'), open: 1, high: 2, low: 0.5, close: 1.5, volume: 10, isFinal: true },
+      { time: new Date('2026-03-17T11:00:00Z'), open: 1.5, high: 2.5, low: 1, close: 2, volume: 12, isFinal: true },
     ])
 
     const bars = await (service as any).loadRecentBars('symbol-1', '1h', 50)
@@ -87,5 +91,36 @@ describe('signal generator market-data gateway smoke', () => {
       '2026-03-17T10:00:00.000Z',
       '2026-03-17T11:00:00.000Z',
     ])
+  })
+
+  it('drops the latest unfinished bar when bar-close evaluation requires a finalized latest bar', async () => {
+    mockGateway.getRecentBarsBySymbolId.mockResolvedValue([
+      {
+        timestamp: 1,
+        time: new Date('2026-04-09T10:00:00Z'),
+        open: 1,
+        high: 2,
+        low: 1,
+        close: 1.5,
+        volume: 10,
+        isFinal: true,
+      },
+      {
+        timestamp: 2,
+        time: new Date('2026-04-09T10:15:00Z'),
+        open: 1.5,
+        high: 2.2,
+        low: 1.3,
+        close: 2,
+        volume: 11,
+        isFinal: false,
+      },
+    ])
+
+    const bars = await (service as any).loadRecentBars('symbol-1', '15m', 50, {
+      requireFinalLatestBar: true,
+    })
+
+    expect(bars.map((bar: any) => bar.timestamp)).toEqual([1])
   })
 })

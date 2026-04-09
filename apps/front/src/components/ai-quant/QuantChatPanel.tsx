@@ -1,6 +1,7 @@
 'use client'
 
 import type { DynamicParamSchema, DynamicParamValues } from './dynamic-params'
+import type { LlmClarificationGate, LlmPublicationGate } from '@/lib/api'
 import { ArrowUp, Bot, Check, Copy, Play, Settings2, User } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -11,6 +12,8 @@ import {
   parseDynamicParamInputValue,
   validateDynamicParamValues,
 } from './dynamic-params'
+import { ClarificationGateCard } from './ClarificationGateCard'
+import { PublicationGateCard } from './PublicationGateCard'
 
 export interface QuantMessage {
   id: string
@@ -22,7 +25,10 @@ interface QuantChatPanelProps {
   messages: QuantMessage[]
   paramSchema: DynamicParamSchema | null
   paramValues: DynamicParamValues
+  clarificationGate?: LlmClarificationGate | null
+  publicationGate?: LlmPublicationGate | null
   compactMode?: boolean // Kept for compatibility but ignored in new design
+  onClarificationAnswer?: (itemKey: string, value: string) => void
   onParamChange: (key: string, value: unknown) => void
   onSend: (input: string) => void
   onRunBacktest: () => void
@@ -66,6 +72,9 @@ export function QuantChatPanel({
   messages,
   paramSchema,
   paramValues,
+  clarificationGate,
+  publicationGate,
+  onClarificationAnswer,
   onParamChange,
   onSend,
   onRunBacktest,
@@ -291,6 +300,10 @@ export function QuantChatPanel({
       {/* Chat Area */}
       <div ref={chatScrollRef} className="min-w-0 flex-1 overflow-y-auto bg-[color:var(--cf-bg)] p-4">
         <div className="space-y-6">
+          {clarificationGate?.blocked && onClarificationAnswer && (
+            <ClarificationGateCard gate={clarificationGate} onAnswer={onClarificationAnswer} />
+          )}
+          {publicationGate && <PublicationGateCard gate={publicationGate} />}
           {messages.map(message => (
             <div
               key={message.id}

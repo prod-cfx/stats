@@ -1,4 +1,8 @@
 import type { StrategySignalsRuntimeConfig } from '../../types/strategy-signals-config.type'
+jest.mock('@/common/utils/prisma-enum-mappers', () => ({
+  reverseMapTimeframe: (value: string) => value,
+}))
+
 import { SignalGeneratorService } from '../signal-generator.service'
 
 describe('signal generator strict AI codegen fail-fast', () => {
@@ -144,5 +148,32 @@ describe('signal generator strict AI codegen fail-fast', () => {
     expect(aiService.chat).not.toHaveBeenCalled()
     expect(createMultiLegSignal).not.toHaveBeenCalled()
     expect(handleStrategyFailure).toHaveBeenCalledTimes(1)
+  })
+
+  it('filters the latest unfinished bar for bar-close runtime normalization', () => {
+    const bars = (service as any).normalizeRuntimeBars([
+      {
+        open: 100,
+        high: 101,
+        low: 99,
+        close: 100,
+        volume: 10,
+        timestamp: 1,
+        isFinal: true,
+      },
+      {
+        open: 101,
+        high: 102,
+        low: 100,
+        close: 101,
+        volume: 11,
+        timestamp: 2,
+        isFinal: false,
+      },
+    ], {
+      requireFinalLatestBar: true,
+    })
+
+    expect(bars.map((bar: any) => bar.timestamp)).toEqual([1])
   })
 })

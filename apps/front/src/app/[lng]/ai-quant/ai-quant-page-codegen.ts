@@ -80,6 +80,9 @@ export function buildCodegenReplyContent(args: {
   if (response.assistantPrompt) {
     return response.assistantPrompt
   }
+  if (response.publicationGate?.passed === false) {
+    return rejectedWithoutReason
+  }
   if (response.status === 'PUBLISHED') {
     if (response.rejectReason) {
       return `${rejectedPrefix}：${response.rejectReason}`
@@ -249,6 +252,7 @@ export async function requestAiQuantCodegen(args: {
   backtestCapabilities: BacktestCapabilities | null
   callingMessage: (elapsedSec: number) => string
   codegenRequestMutexRef: MutableRefObject<Set<string>>
+  clarificationAnswers?: Record<string, string>
   confirmGenerate?: boolean
   confirmedCanonicalDigest?: string
   conversationId: string
@@ -266,6 +270,7 @@ export async function requestAiQuantCodegen(args: {
     backtestCapabilities,
     callingMessage,
     codegenRequestMutexRef,
+    clarificationAnswers,
     confirmGenerate = false,
     confirmedCanonicalDigest,
     conversationId,
@@ -444,6 +449,8 @@ export async function requestAiQuantCodegen(args: {
         const nextValidationReport = hasSemanticGraphPayload(response, 'validationReport')
           ? (response.validationReport ?? null)
           : conv.validationReport
+        const nextClarificationGate = response.clarificationGate ?? conv.clarificationGate
+        const nextPublicationGate = response.publicationGate ?? conv.publicationGate
         const nextPendingCanonicalDigest = (() => {
           if (typeof response.canonicalDigest === 'string' && response.canonicalDigest.trim()) {
             return response.canonicalDigest.trim()
@@ -508,6 +515,8 @@ export async function requestAiQuantCodegen(args: {
           logicGraph: nextGraph,
           semanticGraph: nextSemanticGraph,
           validationReport: nextValidationReport,
+          clarificationGate: nextClarificationGate,
+          publicationGate: nextPublicationGate,
           pendingCanonicalDigest: nextPendingCanonicalDigest ?? conv.pendingCanonicalDigest,
           backtestResult: null,
           latestSignalMessage: null,
@@ -577,6 +586,7 @@ export async function requestAiQuantCodegen(args: {
         message: trimmedMessage,
         confirmGenerate,
         confirmedCanonicalDigest,
+        clarificationAnswers,
         ...checklistPayload,
       })
 

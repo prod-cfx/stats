@@ -220,4 +220,48 @@ describe('QuantChatPanel range settings', () => {
 
     expect(onSend).not.toHaveBeenCalled()
   })
+
+  it('renders clarification and publication gate cards when provided', async () => {
+    await act(async () => {
+      root?.render(
+        <QuantChatPanel
+          messages={[{ id: 'm1', role: 'assistant', content: 'hello' }]}
+          paramSchema={null}
+          paramValues={{}}
+          clarificationGate={{
+            blocked: true,
+            items: [
+              {
+                key: 'market.marketType',
+                field: 'marketType',
+                reason: 'missing_market_type',
+                question: '这条策略包含做空，请确认使用现货还是合约/永续？',
+                allowedAnswers: ['spot', 'perp'],
+                blocking: true,
+                status: 'pending',
+              },
+            ],
+          }}
+          publicationGate={{
+            passed: false,
+            blockingMismatches: [
+              {
+                field: 'exchange',
+                expected: 'okx',
+                actual: 'binance',
+                reason: 'confirmed snapshot and compiled artifact exchange mismatch',
+              },
+            ],
+          }}
+          onClarificationAnswer={() => {}}
+          onParamChange={() => {}}
+          onSend={() => {}}
+          onRunBacktest={() => {}}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('这条策略包含做空，请确认使用现货还是合约/永续？')
+    expect(container.textContent).toContain('confirmed snapshot and compiled artifact exchange mismatch')
+  })
 })

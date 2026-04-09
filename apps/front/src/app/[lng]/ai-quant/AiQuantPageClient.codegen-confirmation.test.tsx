@@ -90,22 +90,48 @@ jest.mock('@/components/ai-quant/BacktestSummaryCard', () => ({
 jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
   QuantChatPanel: ({
     messages,
+    clarificationGate,
+    publicationGate,
     onSend,
     onRunBacktest,
     canRunBacktest,
     onParamChange,
+    onClarificationAnswer,
   }: {
     messages: Array<{ id: string; role: string; content: string }>
+    clarificationGate?: {
+      blocked: boolean
+      items: Array<{ key: string; question: string; allowedAnswers?: string[]; status: string }>
+    } | null
+    publicationGate?: {
+      passed: boolean
+      blockingMismatches: Array<{ field: string; expected: string; actual: string; reason: string }>
+    } | null
     onSend: (input: string) => void
     onRunBacktest: () => void
     canRunBacktest?: boolean
     onParamChange?: (key: string, value: unknown) => void
+    onClarificationAnswer?: (itemKey: string, value: string) => void
   }) => {
     const [input, setInput] = React.useState('')
 
     return (
       <div>
         <div data-testid="messages">{messages.map(message => message.content).join('\n')}</div>
+        <div data-testid="clarification-question">
+          {clarificationGate?.items.find(item => item.status === 'pending')?.question ?? ''}
+        </div>
+        <button
+          data-testid="clarification-answer"
+          onClick={() => onClarificationAnswer?.('market.marketType', 'perp')}
+        >
+          answer clarification
+        </button>
+        <div data-testid="publication-gate">
+          {publicationGate?.blockingMismatches
+            ?.map(item => `${item.field}:${item.expected}:${item.actual}:${item.reason}`)
+            .join('\n') ?? ''}
+        </div>
         <input
           data-testid="chat-input"
           value={input}
@@ -182,6 +208,8 @@ function seedDraftConversation(
       errors: Array<{ code: string; message: string }>
     } | null
     pendingCanonicalDigest?: string | null
+    clarificationGate?: Record<string, unknown> | null
+    publicationGate?: Record<string, unknown> | null
   },
 ) {
   localStorage.setItem(
@@ -233,6 +261,8 @@ function seedDraftConversation(
         pendingCanonicalDigest: overrides?.pendingCanonicalDigest === undefined
           ? 'sha256:canonical-1'
           : overrides.pendingCanonicalDigest,
+        clarificationGate: overrides?.clarificationGate === undefined ? null : overrides.clarificationGate,
+        publicationGate: overrides?.publicationGate === undefined ? null : overrides.publicationGate,
         llmCodegenSessionId: 'session-1',
         publishedStrategyInstanceId: null,
         latestSignalMessage: null,
@@ -515,6 +545,61 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       '[data-testid="run-backtest"]',
     ) as HTMLButtonElement | null
     expect(runButton?.disabled).toBe(false)
+  })
+
+  it('renders a blocking clarification card and disables confirm while marketType is unresolved', async () => {
+    seedDraftConversation(Date.now(), {
+      clarificationGate: {
+        blocked: true,
+        items: [
+          {
+            key: 'market.marketType',
+            field: 'marketType',
+            reason: 'missing_market_type',
+            question: '这条策略包含做空，请确认使用现货还是合约/永续？',
+            allowedAnswers: ['spot', 'perp'],
+            blocking: true,
+            status: 'pending',
+          },
+        ],
+      },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="clarification-question"]')?.textContent).toContain(
+      '这条策略包含做空，请确认使用现货还是合约/永续？',
+    )
+    expect(
+      (container.querySelector('[data-testid="confirm-graph"]') as HTMLButtonElement | null)?.disabled,
+    ).toBe(true)
+  })
+
+  it('renders publication gate mismatch details when publish gate is blocked', async () => {
+    seedDraftConversation(Date.now(), {
+      publicationGate: {
+        passed: false,
+        blockingMismatches: [
+          {
+            field: 'exchange',
+            expected: 'okx',
+            actual: 'binance',
+            reason: 'confirmed snapshot and compiled artifact exchange mismatch',
+          },
+        ],
+      },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="publication-gate"]')?.textContent).toContain('okx')
+    expect(container.querySelector('[data-testid="publication-gate"]')?.textContent).toContain('binance')
   })
 
   it('re-enables backtest after revise and reconfirm flow', async () => {

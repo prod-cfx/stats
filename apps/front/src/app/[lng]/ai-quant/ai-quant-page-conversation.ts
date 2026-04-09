@@ -5,6 +5,8 @@ import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import type { StrategyLogicGraph } from '@/components/ai-quant/logic-graph-model'
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
 import type {
+  LlmClarificationGate,
+  LlmPublicationGate,
   LlmSemanticGraph,
   LlmSemanticGraphValidationReport,
   UserExchangeAccountStatus,
@@ -104,6 +106,8 @@ export interface ConversationState {
   codegenSpecDesc: Record<string, unknown> | null
   semanticGraph: LlmSemanticGraph | null
   validationReport: LlmSemanticGraphValidationReport | null
+  clarificationGate: LlmClarificationGate | null
+  publicationGate: LlmPublicationGate | null
   pendingCanonicalDigest: string | null
   llmCodegenSessionId: string | null
   publishedStrategyInstanceId: string | null
@@ -289,6 +293,8 @@ export function invalidateConversationPublication(
       markGraphDraft && conversation.logicGraph
         ? { ...conversation.logicGraph, status: 'draft' }
         : conversation.logicGraph,
+    clarificationGate: null,
+    publicationGate: null,
     publishedStrategyInstanceId: null,
     publishedSnapshotId: null,
     publishedScriptCode: null,
@@ -427,6 +433,8 @@ export function createConversation(translate: (key: string) => string, now = Dat
     codegenSpecDesc: null,
     semanticGraph: null,
     validationReport: null,
+    clarificationGate: null,
+    publicationGate: null,
     pendingCanonicalDigest: null,
     llmCodegenSessionId: null,
     publishedStrategyInstanceId: null,
@@ -489,6 +497,14 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
       && typeof item.validationReport === 'object'
       && !Array.isArray(item.validationReport)
         ? item.validationReport
+        : null,
+    clarificationGate:
+      item.clarificationGate && typeof item.clarificationGate === 'object' && !Array.isArray(item.clarificationGate)
+        ? item.clarificationGate as LlmClarificationGate
+        : null,
+    publicationGate:
+      item.publicationGate && typeof item.publicationGate === 'object' && !Array.isArray(item.publicationGate)
+        ? item.publicationGate as LlmPublicationGate
         : null,
     pendingCanonicalDigest:
       typeof item.pendingCanonicalDigest === 'string' && item.pendingCanonicalDigest.trim()
