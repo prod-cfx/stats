@@ -120,6 +120,23 @@ export interface ConversationState {
   updatedAt: number
 }
 
+export function normalizeClarificationGate(input: unknown): LlmClarificationGate | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return null
+  }
+
+  const gate = input as Record<string, unknown>
+  const items = Array.isArray(gate.items)
+    ? gate.items
+    : (Array.isArray(gate.pendingItems) ? gate.pendingItems : [])
+
+  return {
+    blocked: gate.blocked === true || items.length > 0,
+    items: items as LlmClarificationGate['items'],
+    pendingItems: items as LlmClarificationGate['items'],
+  }
+}
+
 const VALID_RANGE_PRESETS = ['7D', '30D', '90D', '1Y', 'CUSTOM'] as const
 type BacktestRangePresetValue = (typeof VALID_RANGE_PRESETS)[number]
 const SCRIPT_CODE_BLOCK_REGEX = /```(?:typescript|ts|javascript|js)?\r?\n([\s\S]*?)```/i
@@ -498,10 +515,7 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
       && !Array.isArray(item.validationReport)
         ? item.validationReport
         : null,
-    clarificationGate:
-      item.clarificationGate && typeof item.clarificationGate === 'object' && !Array.isArray(item.clarificationGate)
-        ? item.clarificationGate as LlmClarificationGate
-        : null,
+    clarificationGate: normalizeClarificationGate(item.clarificationGate),
     publicationGate:
       item.publicationGate && typeof item.publicationGate === 'object' && !Array.isArray(item.publicationGate)
         ? item.publicationGate as LlmPublicationGate

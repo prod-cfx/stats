@@ -2131,6 +2131,7 @@ export interface LlmClarificationGateItem {
 export interface LlmClarificationGate {
   blocked: boolean
   items: LlmClarificationGateItem[]
+  pendingItems?: LlmClarificationGateItem[]
 }
 
 export interface LlmPublicationGateMismatch {

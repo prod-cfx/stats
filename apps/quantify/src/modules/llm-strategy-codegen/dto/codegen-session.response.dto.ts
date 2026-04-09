@@ -48,6 +48,9 @@ class StrategyClarificationGateDto {
   @ApiProperty({ description: '当前是否存在阻断性澄清项', example: false })
   blocked!: boolean
 
+  @ApiProperty({ description: '标准化后的阻断性澄清项列表', type: [StrategyClarificationItemDto] })
+  items!: StrategyClarificationItemDto[]
+
   @ApiProperty({ description: '仍待回答的阻断性澄清项', type: [StrategyClarificationItemDto] })
   pendingItems!: StrategyClarificationItemDto[]
 }
@@ -106,6 +109,7 @@ export class CodegenSessionResponseDto {
   @ApiProperty({ description: '结构化澄清门控状态', type: StrategyClarificationGateDto })
   clarificationGate!: {
     blocked: boolean
+    items: StrategyClarificationItem[]
     pendingItems: StrategyClarificationItem[]
   }
 

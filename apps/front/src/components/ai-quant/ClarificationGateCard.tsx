@@ -11,7 +11,8 @@ export function ClarificationGateCard({
   onAnswer: (itemKey: string, value: string) => void
 }) {
   const { t } = useTranslation()
-  const current = gate.items.find(item => item.status === 'pending')
+  const items = gate.items ?? gate.pendingItems ?? []
+  const current = items.find(item => item.status === 'pending')
   if (!current) return null
 
   return (

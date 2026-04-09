@@ -24,7 +24,7 @@ import {
 } from '@/lib/api'
 
 import { ApiError } from '@/lib/errors'
-import { normalizeParamsFromValues } from './ai-quant-page-conversation'
+import { normalizeClarificationGate, normalizeParamsFromValues } from './ai-quant-page-conversation'
 
 const CODEGEN_TERMINAL_STATUSES = new Set(['PUBLISHED', 'REJECTED'])
 const CODEGEN_PROCESSING_STATUSES = new Set([
@@ -449,7 +449,7 @@ export async function requestAiQuantCodegen(args: {
         const nextValidationReport = hasSemanticGraphPayload(response, 'validationReport')
           ? (response.validationReport ?? null)
           : conv.validationReport
-        const nextClarificationGate = response.clarificationGate ?? conv.clarificationGate
+        const nextClarificationGate = normalizeClarificationGate(response.clarificationGate) ?? conv.clarificationGate
         const nextPublicationGate = response.publicationGate ?? conv.publicationGate
         const nextPendingCanonicalDigest = (() => {
           if (typeof response.canonicalDigest === 'string' && response.canonicalDigest.trim()) {

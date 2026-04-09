@@ -819,6 +819,7 @@ export class CodegenConversationService {
 
     return {
       blocked: pendingItems.length > 0,
+      items: pendingItems,
       pendingItems,
     }
   }

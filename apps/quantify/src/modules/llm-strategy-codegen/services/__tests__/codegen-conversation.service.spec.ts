@@ -503,6 +503,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect((result as any).clarificationGate).toEqual({
       blocked: true,
+      items: [
+        expect.objectContaining({
+          key: 'entry.side',
+          status: 'pending',
+          blocking: true,
+        }),
+      ],
       pendingItems: [
         expect.objectContaining({
           key: 'entry.side',
@@ -568,6 +575,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
     expect((result as any).clarificationGate).toEqual({
       blocked: false,
+      items: [],
       pendingItems: [],
     })
     expect(result.specDesc).toBeTruthy()
