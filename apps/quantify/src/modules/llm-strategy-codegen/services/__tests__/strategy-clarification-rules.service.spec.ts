@@ -53,8 +53,10 @@ describe('strategyClarificationRulesService', () => {
 
   it('blocks short-side bollinger strategy when marketType is missing', () => {
     const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
       entryRules: ['突破布林带上轨时做空'],
-      market: {},
+      riskRules: { exchange: 'binance' },
     })
 
     expect(state.status).toBe('NEEDS_CLARIFICATION')
@@ -71,8 +73,10 @@ describe('strategyClarificationRulesService', () => {
 
   it('blocks short-side strategy with spot marketType as invalid spot-short combo', () => {
     const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
       entryRules: ['突破布林带上轨时做空'],
-      market: { marketType: 'spot' },
+      riskRules: { exchange: 'binance', marketType: 'spot' },
     })
 
     expect(state.status).toBe('NEEDS_CLARIFICATION')
@@ -84,6 +88,47 @@ describe('strategyClarificationRulesService', () => {
         blocking: true,
         status: 'pending',
       }),
+    ]))
+  })
+
+  it('blocks short-side strategy when exchange is missing', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['突破布林带上轨时做空'],
+      riskRules: { marketType: 'perp' },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'market.exchange',
+        reason: 'missing_exchange',
+        field: 'exchange',
+        blocking: true,
+        status: 'pending',
+      }),
+    ]))
+  })
+
+  it('does not emit market blockers before action uniqueness is resolved', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['突破后同时做多和做空'],
+      riskRules: {},
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'missing_action_uniqueness',
+      }),
+    ]))
+    expect(state.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'missing_market_type' }),
+      expect.objectContaining({ reason: 'missing_exchange' }),
+      expect.objectContaining({ reason: 'invalid_spot_short_combo' }),
     ]))
   })
 
@@ -109,9 +154,12 @@ describe('strategyClarificationRulesService', () => {
 
   it('returns CLEAR for unambiguous rules', () => {
     const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
       entryRules: ['突破布林带上轨时做空'],
-      market: { marketType: 'perp' },
       riskRules: {
+        exchange: 'binance',
+        marketType: 'perp',
         stopLossPct: 5,
       },
     })

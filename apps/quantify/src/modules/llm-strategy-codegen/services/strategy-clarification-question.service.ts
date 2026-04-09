@@ -2,14 +2,14 @@ import type { StrategyClarificationItem, StrategyClarificationState } from '../t
 import { Injectable } from '@nestjs/common'
 
 const REASON_PRIORITY: Record<StrategyClarificationItem['reason'], number> = {
-  missing_exchange: 1,
-  missing_symbol: 1,
-  missing_timeframe: 1,
-  missing_market_type: 1,
-  missing_position_mode: 1,
-  conflicting_market_scope: 1,
-  invalid_spot_short_combo: 1,
-  missing_action_uniqueness: 2,
+  missing_action_uniqueness: 1,
+  missing_exchange: 2,
+  missing_symbol: 2,
+  missing_timeframe: 2,
+  missing_market_type: 2,
+  missing_position_mode: 2,
+  conflicting_market_scope: 2,
+  invalid_spot_short_combo: 2,
   missing_side_scope: 3,
   direction_ambiguous: 3,
   ambiguous_risk_effect: 4,

@@ -1,18 +1,11 @@
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import { Injectable } from '@nestjs/common'
 
-interface MarketChecklistInput {
-  exchange?: unknown
-  symbol?: unknown
-  timeframe?: unknown
-  marketType?: unknown
-  positionMode?: unknown
-}
-
 interface ClarificationChecklistInput {
+  symbols?: string[]
+  timeframes?: string[]
   entryRules?: string[]
   riskRules?: Record<string, unknown>
-  market?: MarketChecklistInput
 }
 
 const LONG_DIRECTION_PATTERN = /做多|多单|开多|long|买入/u
@@ -26,7 +19,7 @@ export class StrategyClarificationRulesService {
     const entryDetection = this.detectEntryItems(input.entryRules ?? [])
     const items: StrategyClarificationItem[] = [
       ...entryDetection.items,
-      ...this.detectMarketItems(input, entryDetection.hasShortEntry),
+      ...this.detectMarketItems(input, entryDetection.hasShortEntry, entryDetection.hasActionUniquenessConflict),
       ...this.detectRiskItems(input.riskRules ?? {}),
     ]
 
@@ -43,10 +36,11 @@ export class StrategyClarificationRulesService {
     }
   }
 
-  private detectEntryItems(entryRules: string[]): { items: StrategyClarificationItem[] } & { hasShortEntry: boolean } {
+  private detectEntryItems(entryRules: string[]): { items: StrategyClarificationItem[] } & { hasActionUniquenessConflict: boolean, hasShortEntry: boolean } {
     const items: StrategyClarificationItem[] = []
     let sideQuestionAdded = false
     let hasShortEntry = false
+    let hasActionUniquenessConflict = false
 
     for (const [index, rawRule] of entryRules.entries()) {
       const rule = rawRule.trim()
@@ -59,6 +53,7 @@ export class StrategyClarificationRulesService {
       }
 
       if (hasLongDirection && hasShortDirection) {
+        hasActionUniquenessConflict = true
         items.push({
           key: `entry.action_uniqueness.${index + 1}`,
           ruleId: `entry-${index + 1}`,
@@ -103,6 +98,7 @@ export class StrategyClarificationRulesService {
 
     return {
       items,
+      hasActionUniquenessConflict,
       hasShortEntry,
     }
   }
@@ -110,43 +106,92 @@ export class StrategyClarificationRulesService {
   private detectMarketItems(
     input: ClarificationChecklistInput,
     hasShortEntry: boolean,
+    hasActionUniquenessConflict: boolean,
   ): StrategyClarificationItem[] {
-    if (!hasShortEntry) return []
+    if (!hasShortEntry || hasActionUniquenessConflict) return []
 
-    const marketType = this.readMarketType(input)
+    const items: StrategyClarificationItem[] = []
+
+    if (!this.hasPrimaryValue(input.symbols)) {
+      items.push({
+        key: 'market.symbol',
+        reason: 'missing_symbol',
+        field: 'symbol',
+        blocking: true,
+        question: '请确认策略交易标的（例如 BTCUSDT）。',
+        status: 'pending',
+      })
+    }
+
+    if (!this.hasPrimaryValue(input.timeframes)) {
+      items.push({
+        key: 'market.timeframe',
+        reason: 'missing_timeframe',
+        field: 'timeframe',
+        blocking: true,
+        question: '请确认策略主周期（例如 15m 或 1h）。',
+        status: 'pending',
+      })
+    }
+
+    const exchange = this.readExchange(input.riskRules)
+    if (!exchange) {
+      items.push({
+        key: 'market.exchange',
+        reason: 'missing_exchange',
+        field: 'exchange',
+        blocking: true,
+        question: '请确认交易所（binance / okx / hyperliquid）。',
+        status: 'pending',
+      })
+    }
+
+    const marketType = this.readMarketType(input.riskRules)
     if (!marketType) {
-      return [{
+      items.push({
         key: 'market.marketType',
         reason: 'missing_market_type',
         field: 'marketType',
         blocking: true,
         question: '该策略运行在现货还是合约市场？',
         status: 'pending',
-      }]
+      })
+      return items
     }
 
     if (marketType === 'spot') {
-      return [{
+      items.push({
         key: 'market.marketType',
         reason: 'invalid_spot_short_combo',
         field: 'marketType',
         blocking: true,
         question: '现货市场不支持做空，请改为合约市场(perp)或移除做空规则。',
         status: 'pending',
-      }]
+      })
     }
 
-    return []
+    return items
   }
 
-  private readMarketType(input: ClarificationChecklistInput): 'spot' | 'perp' | null {
-    const candidates = [input.market?.marketType, input.riskRules?.marketType]
-    for (const raw of candidates) {
-      if (typeof raw !== 'string') continue
-      const normalized = raw.trim().toLowerCase()
-      if (normalized === 'spot' || normalized === 'perp') {
-        return normalized
-      }
+  private hasPrimaryValue(list: string[] | undefined): boolean {
+    return typeof list?.[0] === 'string' && list[0].trim().length > 0
+  }
+
+  private readMarketType(riskRules: Record<string, unknown> | undefined): 'spot' | 'perp' | null {
+    const raw = riskRules?.marketType
+    if (typeof raw !== 'string') return null
+    const normalized = raw.trim().toLowerCase()
+    return normalized === 'spot' || normalized === 'perp' ? normalized : null
+  }
+
+  private readExchange(
+    riskRules: Record<string, unknown> | undefined,
+  ): 'binance' | 'okx' | 'hyperliquid' | null {
+    const raw = riskRules?.exchange
+    if (typeof raw !== 'string') return null
+    const normalized = raw.trim().toLowerCase()
+    if (normalized === 'binance' || normalized === 'okx' || normalized === 'hyperliquid') {
+      return normalized
     }
     return null
   }

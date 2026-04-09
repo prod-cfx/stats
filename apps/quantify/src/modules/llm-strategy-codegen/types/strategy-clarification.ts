@@ -19,13 +19,15 @@ export const STRATEGY_CLARIFICATION_STATUSES = ['CLEAR', 'NEEDS_CLARIFICATION'] 
 export type StrategyClarificationReason = typeof STRATEGY_CLARIFICATION_REASONS[number]
 export type StrategyClarificationItemStatus = typeof STRATEGY_CLARIFICATION_ITEM_STATUSES[number]
 export type StrategyClarificationStatus = typeof STRATEGY_CLARIFICATION_STATUSES[number]
-export type StrategyClarificationField
-  = 'exchange'
-    | 'symbol'
-    | 'timeframe'
-    | 'marketType'
-    | 'positionMode'
-    | 'riskRules.earlyStop.action'
+export const STRATEGY_CLARIFICATION_FIELDS = [
+  'exchange',
+  'symbol',
+  'timeframe',
+  'marketType',
+  'positionMode',
+  'riskRules.earlyStop.action',
+] as const
+export type StrategyClarificationField = typeof STRATEGY_CLARIFICATION_FIELDS[number]
 
 export interface StrategyClarificationItem {
   key: string

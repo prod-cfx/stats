@@ -25,6 +25,7 @@ import { CodegenSessionsRepository } from '../repositories/codegen-sessions.repo
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
 import {
+  STRATEGY_CLARIFICATION_FIELDS,
   STRATEGY_CLARIFICATION_ITEM_STATUSES,
   STRATEGY_CLARIFICATION_REASONS,
   STRATEGY_CLARIFICATION_STATUSES,
@@ -786,25 +787,43 @@ export class CodegenConversationService {
       if (!rawItem || typeof rawItem !== 'object' || Array.isArray(rawItem)) return null
       const key = (rawItem as { key?: unknown }).key
       const reason = (rawItem as { reason?: unknown }).reason
+      const field = (rawItem as { field?: unknown }).field
+      const blocking = (rawItem as { blocking?: unknown }).blocking
       const question = (rawItem as { question?: unknown }).question
       const status = (rawItem as { status?: unknown }).status
+      const allowedAnswers = (rawItem as { allowedAnswers?: unknown }).allowedAnswers
       const ruleId = (rawItem as { ruleId?: unknown }).ruleId
       const answer = (rawItem as { answer?: unknown }).answer
 
       if (typeof key !== 'string' || !key.trim()) return null
       if (!STRATEGY_CLARIFICATION_REASONS.includes(reason as never)) return null
+      if (!STRATEGY_CLARIFICATION_FIELDS.includes(field as never)) return null
+      if (blocking !== true) return null
       if (typeof question !== 'string' || !question.trim()) return null
       if (!STRATEGY_CLARIFICATION_ITEM_STATUSES.includes(status as never)) return null
+      if (
+        allowedAnswers !== undefined
+        && (!Array.isArray(allowedAnswers) || allowedAnswers.some(item => typeof item !== 'string' || !item.trim()))
+      ) {
+        return null
+      }
       if (ruleId !== undefined && typeof ruleId !== 'string') return null
       if (answer !== undefined && typeof answer !== 'string') return null
       const typedReason = reason as StrategyClarificationItem['reason']
+      const typedField = field as StrategyClarificationItem['field']
       const typedStatus = status as StrategyClarificationItem['status']
+      const typedAllowedAnswers = Array.isArray(allowedAnswers)
+        ? allowedAnswers.map(item => item.trim()).filter(Boolean)
+        : undefined
 
       normalizedItems.push({
         key,
         reason: typedReason,
+        field: typedField,
+        blocking: true,
         question,
         status: typedStatus,
+        ...(typedAllowedAnswers && typedAllowedAnswers.length > 0 ? { allowedAnswers: typedAllowedAnswers } : {}),
         ...(typeof ruleId === 'string' ? { ruleId } : {}),
         ...(typeof answer === 'string' ? { answer } : {}),
       })
