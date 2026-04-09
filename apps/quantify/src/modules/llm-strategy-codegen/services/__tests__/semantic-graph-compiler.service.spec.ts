@@ -1,6 +1,6 @@
 import { SemanticGraphCompilerService } from '../semantic-graph-compiler.service'
 
-describe('SemanticGraphCompilerService', () => {
+describe('semanticGraphCompilerService', () => {
   const compiler = new SemanticGraphCompilerService()
 
   it('compiles price-change and position-pnl nodes into canonical IR', () => {

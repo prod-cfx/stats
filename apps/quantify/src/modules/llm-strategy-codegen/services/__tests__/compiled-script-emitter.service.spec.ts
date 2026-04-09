@@ -2,7 +2,7 @@ import type { CanonicalStrategyIrV1 } from '../../types/canonical-strategy-ir'
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
 
-describe('CompiledScriptEmitterService', () => {
+describe('compiledScriptEmitterService', () => {
   it('emits byte-identical script for the same AST twice', () => {
     const emitter = new CompiledScriptEmitterService()
     const ast = createAstFixture()

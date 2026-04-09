@@ -1,6 +1,6 @@
 import type { SignalDirection as SignalDirectionType, SignalType as SignalTypeType } from '@ai/shared'
-import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
 import { SignalDirection, SignalType } from '@ai/shared'
+import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
 import { buildStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import { Injectable } from '@nestjs/common'
 import { resolveStrategyOutput, validateStrategyDecision } from '@/modules/strategy-runtime/strategy-protocol.util'

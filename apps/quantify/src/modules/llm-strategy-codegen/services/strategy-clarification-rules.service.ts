@@ -8,8 +8,8 @@ interface ClarificationChecklistInput {
 
 const LONG_DIRECTION_PATTERN = /做多|多单|开多|long|买入/u
 const SHORT_DIRECTION_PATTERN = /做空|空单|开空|short|卖出/u
-const UPPER_BAND_PATTERN = /(布林|bollinger).{0,8}(上轨|upper)|(上轨|upper).{0,8}(布林|bollinger)|突破.{0,8}(上轨|upper)/iu
-const LOWER_BAND_PATTERN = /(布林|bollinger).{0,8}(下轨|lower)|(下轨|lower).{0,8}(布林|bollinger)|跌破.{0,8}(下轨|lower)|突破.{0,8}(下轨|lower)/iu
+const UPPER_BAND_PATTERN = /(?:布林|bollinger).{0,8}(?:上轨|upper)|(?:上轨|upper).{0,8}(?:布林|bollinger)|突破.{0,8}(?:上轨|upper)/iu
+const LOWER_BAND_PATTERN = /(?:布林|bollinger).{0,8}(?:下轨|lower)|(?:下轨|lower).{0,8}(?:布林|bollinger)|跌破.{0,8}(?:下轨|lower)|突破.{0,8}(?:下轨|lower)/iu
 
 @Injectable()
 export class StrategyClarificationRulesService {
@@ -89,7 +89,7 @@ export class StrategyClarificationRulesService {
 
     const hasAmbiguousEffect = riskTexts.some((text) => {
       const hasOutsideBand = /轨外|outside/iu.test(text)
-      const hasThreeBars = /连续\s*3|3\s*根|三根/iu.test(text)
+      const hasThreeBars = /连续\s*3|3\s*根|三根/u.test(text)
       const hasForceExit = /全平|全部平仓|清仓|强平|force\s*exit|force\s*close/iu.test(text)
       const hasReduce = /减仓|reduce/iu.test(text)
       return hasOutsideBand && hasThreeBars && hasForceExit && hasReduce

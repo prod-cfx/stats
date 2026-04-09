@@ -91,7 +91,7 @@ jobs:
       - name: 部署 front 到 Vercel
         run: |
           unset NO_COLOR
-          npx -y @ranger1/dx@${{ env.DX_VERSION }} deploy front ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }} -Y
+          ./scripts/ci/vercel-deploy-with-retry.sh front ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }}
 
   # ============================================
   # Job 2: 部署 admin 到 Vercel
@@ -154,7 +154,7 @@ jobs:
       - name: 部署 admin 到 Vercel
         run: |
           unset NO_COLOR
-          npx -y @ranger1/dx@${{ env.DX_VERSION }} deploy admin ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }} -Y
+          ./scripts/ci/vercel-deploy-with-retry.sh admin ${{ secrets.DEPLOY_ENVIRONMENT == 'prod' && '--prod' || '--staging' }}
 
   # ============================================
   # Job 3: 制品部署 backend 到 AWS 服务器

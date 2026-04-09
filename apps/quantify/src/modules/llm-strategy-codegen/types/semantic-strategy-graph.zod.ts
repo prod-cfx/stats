@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-export const timeframeSchema = z.string().regex(/^\d+(m|h|d)$/u)
+export const timeframeSchema = z.string().regex(/^\d+([mhd])$/u)
 export const phaseSchema = z.enum(['entry', 'exit', 'risk'])
 export const actionKindSchema = z.enum(['OPEN_LONG', 'CLOSE_LONG', 'OPEN_SHORT', 'CLOSE_SHORT', 'REDUCE_POSITION'])
 export const riskKindSchema = z.enum(['STOP_LOSS_PCT', 'TAKE_PROFIT_PCT', 'MAX_SINGLE_LOSS_PCT'])

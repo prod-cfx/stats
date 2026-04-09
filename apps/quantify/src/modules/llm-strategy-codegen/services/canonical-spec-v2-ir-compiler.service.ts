@@ -15,9 +15,9 @@ import type {
 } from '../types/canonical-strategy-spec'
 import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
 import { Injectable } from '@nestjs/common'
+import { CanonicalSpecV2DigestService } from './canonical-spec-v2-digest.service'
 import { CanonicalStrategyIrCanonicalizerService } from './canonical-strategy-ir-canonicalizer.service'
 import { CanonicalStrategyIrValidatorService } from './canonical-strategy-ir-validator.service'
-import { CanonicalSpecV2DigestService } from './canonical-spec-v2-digest.service'
 import { SpecDescBuilderService } from './spec-desc-builder.service'
 
 interface CompileCanonicalSpecV2ToIrInput {
@@ -443,7 +443,7 @@ export class CanonicalSpecV2IrCompilerService {
       return existing.id
     }
 
-    const id = baseId.replace(/[^a-zA-Z0-9_]+/g, '_')
+    const id = baseId.replace(/\W+/g, '_')
     predicateMap.set(id, {
       id,
       kind,

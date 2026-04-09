@@ -1,6 +1,6 @@
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 
-describe('CanonicalSpecV2IrCompilerService', () => {
+describe('canonicalSpecV2IrCompilerService', () => {
   it('compiles canonical spec v2 into deterministic graphSnapshot and IR without reading UI state', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 

@@ -1,7 +1,7 @@
 import type { StrategyAstV1 } from '../types/canonical-strategy-ast'
 import type { CompiledScriptExecutionEnvelope, CompiledScriptProjection, CompiledStrategyManifest } from '../types/compiled-script-projection'
-import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { createHash } from 'node:crypto'
+import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { Injectable } from '@nestjs/common'
 
 export const FIXED_IMPORT_BLOCK = [
