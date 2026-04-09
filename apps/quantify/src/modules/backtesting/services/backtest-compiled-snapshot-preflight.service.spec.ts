@@ -1,13 +1,15 @@
 import type { CanonicalStrategyIrV1 } from '@/modules/llm-strategy-codegen/types/canonical-strategy-ir'
-import type { PublishedStrategySnapshot } from '@/prisma/prisma.types'
 import { CanonicalStrategyAstCompilerService } from '@/modules/llm-strategy-codegen/services/canonical-strategy-ast-compiler.service'
 import { CompiledScriptEmitterService } from '@/modules/llm-strategy-codegen/services/compiled-script-emitter.service'
 import { BacktestCompiledSnapshotPreflightService } from './backtest-compiled-snapshot-preflight.service'
 
-type BacktestCompiledSnapshotInput = Pick<
-  PublishedStrategySnapshot,
-  'id' | 'scriptSnapshot' | 'irSnapshot' | 'astSnapshot' | 'compiledManifest'
->
+interface BacktestCompiledSnapshotInput {
+  id: string
+  scriptSnapshot: string
+  irSnapshot?: unknown
+  astSnapshot?: unknown
+  compiledManifest?: unknown
+}
 
 function createCompiledSnapshotFixture() {
   const ir = createIrFixture()
