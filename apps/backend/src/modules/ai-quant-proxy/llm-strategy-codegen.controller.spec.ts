@@ -24,4 +24,32 @@ describe('llmStrategyCodegenController', () => {
       }),
     )
   })
+
+  it('forwards clarificationAnswers on continueSession', async () => {
+    const service = {
+      continueCodegen: jest.fn().mockResolvedValue({ id: 'session-1', status: 'DRAFTING' }),
+    }
+    const controller = new LlmStrategyCodegenController(service as never)
+
+    await controller.continueSession('user-1', 'Bearer token-1', 'session-1', {
+      message: '回答澄清',
+      clarificationAnswers: {
+        'entry.side': 'short',
+        'market.marketType': 'perp',
+      },
+    } as never)
+
+    expect(service.continueCodegen).toHaveBeenCalledWith(
+      'user-1',
+      'Bearer token-1',
+      'session-1',
+      expect.objectContaining({
+        message: '回答澄清',
+        clarificationAnswers: {
+          'entry.side': 'short',
+          'market.marketType': 'perp',
+        },
+      }),
+    )
+  })
 })

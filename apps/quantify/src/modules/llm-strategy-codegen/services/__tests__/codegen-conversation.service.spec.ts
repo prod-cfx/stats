@@ -463,6 +463,123 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
   })
 
+  it('hides semantic confirmation fields when blocking clarification items remain in snapshot', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-blocked-clarification',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {
+        entryRules: ['突破布林带上轨交易'],
+        exitRules: ['价格回到布林带中轨(MA20)时平仓'],
+      },
+      constraintPack: {},
+      latestDraftCode: null,
+      latestSpecDesc: {
+        viewType: 'canonical-semantic-view.v1',
+        canonicalDigest: 'sha256:blocked',
+        confirmation: {
+          required: true,
+          digest: 'sha256:blocked',
+        },
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'entry.side',
+            reason: 'missing_side_scope',
+            field: 'positionMode',
+            blocking: true,
+            question: '突破上轨时是只做空，还是也允许做多？',
+            status: 'pending',
+          },
+        ],
+      },
+      strategyInstanceId: null,
+      rejectReason: null,
+    })
+
+    const result = await service.getSession('s-blocked-clarification', 'u1')
+
+    expect((result as any).clarificationGate).toEqual({
+      blocked: true,
+      pendingItems: [
+        expect.objectContaining({
+          key: 'entry.side',
+          status: 'pending',
+          blocking: true,
+        }),
+      ],
+    })
+    expect(result.specDesc).toBeNull()
+    expect(result.canonicalDigest).toBeNull()
+    expect(result.semanticGraph).toBeNull()
+  })
+
+  it('applies clarificationAnswers before semantic readiness evaluation', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-clarification-answers',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['突破布林带上轨交易'],
+        exitRules: ['价格回到布林带中轨(MA20)时平仓'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+        },
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'entry.side',
+            reason: 'missing_side_scope',
+            field: 'positionMode',
+            blocking: true,
+            question: '突破上轨时是只做空，还是也允许做多？',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+      }),
+    })
+
+    const result = await service.continueSession('s-clarification-answers', {
+      userId: 'u1',
+      message: '继续',
+      clarificationAnswers: {
+        'entry.side': 'short',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.clarificationState).toEqual(expect.objectContaining({
+      status: 'CLEAR',
+    }))
+    expect((result as any).clarificationGate).toEqual({
+      blocked: false,
+      pendingItems: [],
+    })
+    expect(result.specDesc).toBeTruthy()
+    expect(result.canonicalDigest).toMatch(/^sha256:/)
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-clarification-answers', expect.objectContaining({
+      status: 'CHECKLIST_GATE',
+      checklist: expect.objectContaining({
+        entryRules: expect.arrayContaining([expect.stringContaining('做空')]),
+      }),
+    }))
+  })
+
   it('keeps drafting and returns unrelated guidance when planner marks message unrelated', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's3',

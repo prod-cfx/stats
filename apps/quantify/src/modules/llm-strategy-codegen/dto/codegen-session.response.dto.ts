@@ -5,7 +5,7 @@ import {
   STRATEGY_CLARIFICATION_REASONS,
   STRATEGY_CLARIFICATION_STATUSES,
 } from '../types/strategy-clarification'
-import type { StrategyClarificationState } from '../types/strategy-clarification'
+import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 
 class StrategyClarificationItemDto {
   @ApiProperty({ description: '澄清项唯一键' })
@@ -42,6 +42,14 @@ class StrategyClarificationStateDto {
 
   @ApiProperty({ description: '澄清项列表', type: [StrategyClarificationItemDto] })
   items!: StrategyClarificationItemDto[]
+}
+
+class StrategyClarificationGateDto {
+  @ApiProperty({ description: '当前是否存在阻断性澄清项', example: false })
+  blocked!: boolean
+
+  @ApiProperty({ description: '仍待回答的阻断性澄清项', type: [StrategyClarificationItemDto] })
+  pendingItems!: StrategyClarificationItemDto[]
 }
 
 export class CodegenSessionResponseDto {
@@ -94,6 +102,12 @@ export class CodegenSessionResponseDto {
 
   @ApiPropertyOptional({ description: '规则语义澄清状态', type: StrategyClarificationStateDto })
   clarificationState?: StrategyClarificationState | null
+
+  @ApiProperty({ description: '结构化澄清门控状态', type: StrategyClarificationGateDto })
+  clarificationGate!: {
+    blocked: boolean
+    pendingItems: StrategyClarificationItem[]
+  }
 
   @ApiPropertyOptional({ description: '拒绝原因' })
   rejectReason?: string | null

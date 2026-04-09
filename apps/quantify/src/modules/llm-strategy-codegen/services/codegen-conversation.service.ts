@@ -235,7 +235,7 @@ export class CodegenConversationService {
       strategyInstanceId: null,
     })
 
-    return {
+    return this.finalizeSessionResponse({
       id: session.id,
       status,
       missingFields: [],
@@ -243,7 +243,7 @@ export class CodegenConversationService {
       canonicalDigest: initialCanonicalDigest,
       assistantPrompt,
       clarificationState,
-    }
+    })
   }
 
   async getSession(sessionId: string, userId: string): Promise<CodegenSessionResponseDto> {
@@ -293,7 +293,12 @@ export class CodegenConversationService {
       return this.toSessionSnapshotResponse(session)
     }
 
-    const baseChecklist = this.readChecklist(session.checklist)
+    const baseClarificationState = this.readClarificationState(session.clarificationState)
+    const baseChecklist = this.applyClarificationAnswers(
+      this.readChecklist(session.checklist),
+      baseClarificationState,
+      dto.clarificationAnswers,
+    )
     const messageChecklist = this.normalizeChecklist({
       ...this.inferChecklistFromMessage(dto.message),
       ...this.extractChecklist(dto),
@@ -306,12 +311,12 @@ export class CodegenConversationService {
       model: dto.model,
     }, constraintPack.conversationHistory ?? [])
     if (!plan.related) {
-      return {
+      return this.finalizeSessionResponse({
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt: plan.assistantPrompt || '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
-      }
+      })
     }
     const mergedChecklist = this.mergeChecklistSnapshots(preMergedChecklist, plan.logic ?? {})
     const clarificationState = this.clarificationRules.detect(mergedChecklist)
@@ -339,13 +344,13 @@ export class CodegenConversationService {
         } as unknown as Prisma.InputJsonValue,
       })
 
-      return {
+      return this.finalizeSessionResponse({
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt,
         clarificationState,
-      }
+      })
     }
     const historyAfterPlanner = this.appendConversationHistory(
       constraintPack.conversationHistory ?? [],
@@ -367,13 +372,13 @@ export class CodegenConversationService {
         } as unknown as Prisma.InputJsonValue,
       })
 
-      return {
+      return this.finalizeSessionResponse({
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt: plan.assistantPrompt,
         clarificationState,
-      }
+      })
     }
 
     await this.sessionsRepo.updateSession(session.id, {
@@ -387,7 +392,7 @@ export class CodegenConversationService {
       latestSpecDesc: specDesc as Prisma.InputJsonValue,
     })
 
-    return {
+    return this.finalizeSessionResponse({
       id: session.id,
       status: 'CHECKLIST_GATE',
       missingFields: [],
@@ -395,7 +400,7 @@ export class CodegenConversationService {
       canonicalDigest,
       assistantPrompt: `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`,
       clarificationState,
-    }
+    })
   }
 
   private async continueConfirmedSession(
@@ -411,7 +416,12 @@ export class CodegenConversationService {
     dto: ContinueCodegenSessionDto,
     sessionUserId: string,
   ): Promise<CodegenSessionResponseDto> {
-    const baseChecklist = this.readChecklist(session.checklist)
+    const baseClarificationState = this.readClarificationState(session.clarificationState)
+    const baseChecklist = this.applyClarificationAnswers(
+      this.readChecklist(session.checklist),
+      baseClarificationState,
+      dto.clarificationAnswers,
+    )
     const messageChecklist = this.normalizeChecklist(this.extractChecklist(dto))
     const mergedChecklist = this.mergeChecklistSnapshots(baseChecklist, messageChecklist)
     const clarificationState = this.clarificationRules.detect(mergedChecklist)
@@ -434,13 +444,13 @@ export class CodegenConversationService {
         } as unknown as Prisma.InputJsonValue,
       })
 
-      return {
+      return this.finalizeSessionResponse({
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt,
         clarificationState,
-      }
+      })
     }
 
     const canonicalSpec = this.canonicalSpecBuilder.build(mergedChecklist)
@@ -471,13 +481,13 @@ export class CodegenConversationService {
         latestSpecDesc: specDesc as Prisma.InputJsonValue,
       })
 
-      return {
+      return this.finalizeSessionResponse({
         id: session.id,
         status: 'DRAFTING',
         missingFields,
         assistantPrompt: '请先补全入场和出场规则，再确认生成代码。',
         clarificationState,
-      }
+      })
     }
 
     const markGeneratingInput = {
@@ -517,11 +527,12 @@ export class CodegenConversationService {
       existingStrategyInstanceId: session.strategyInstanceId ?? null,
     })
 
-    return {
+    return this.finalizeSessionResponse({
       id: session.id,
       status: 'GENERATING',
       missingFields: [],
-    }
+      clarificationState,
+    })
   }
 
   private async runConfirmedPublicationPipeline(args: {
@@ -757,7 +768,7 @@ export class CodegenConversationService {
       ? sessionSpecDesc.publishedSnapshotId
       : null
 
-    return {
+    return this.finalizeSessionResponse({
       id: session.id,
       status: session.status,
       missingFields: [],
@@ -773,7 +784,197 @@ export class CodegenConversationService {
       strategyInstanceId: session.strategyInstanceId ?? null,
       clarificationState: this.readClarificationState(session.clarificationState),
       rejectReason: session.rejectReason,
+    })
+  }
+
+  private finalizeSessionResponse(
+    response: Omit<CodegenSessionResponseDto, 'clarificationGate'> & {
+      clarificationGate?: CodegenSessionResponseDto['clarificationGate']
+    },
+  ): CodegenSessionResponseDto {
+    const clarificationGate = response.clarificationGate ?? this.buildClarificationGate(response.clarificationState)
+
+    if (!clarificationGate.blocked) {
+      return {
+        ...response,
+        clarificationGate,
+      }
     }
+
+    return {
+      ...response,
+      clarificationGate,
+      specDesc: null,
+      canonicalDigest: null,
+      semanticGraph: null,
+    }
+  }
+
+  private buildClarificationGate(
+    clarificationState?: StrategyClarificationState | null,
+  ): CodegenSessionResponseDto['clarificationGate'] {
+    const pendingItems = clarificationState?.status === 'NEEDS_CLARIFICATION'
+      ? clarificationState.items.filter(item => item.blocking && item.status === 'pending')
+      : []
+
+    return {
+      blocked: pendingItems.length > 0,
+      pendingItems,
+    }
+  }
+
+  private applyClarificationAnswers(
+    checklist: ChecklistPayload,
+    clarificationState: StrategyClarificationState | null,
+    answers?: Record<string, string>,
+  ): ChecklistPayload {
+    if (!answers || Object.keys(answers).length === 0) {
+      return checklist
+    }
+
+    let nextChecklist = this.normalizeChecklist({
+      ...checklist,
+      riskRules: checklist.riskRules ? { ...checklist.riskRules } : undefined,
+    })
+
+    for (const item of clarificationState?.items ?? []) {
+      const rawAnswer = answers[item.key]
+      if (typeof rawAnswer !== 'string' || !rawAnswer.trim()) {
+        continue
+      }
+
+      nextChecklist = this.applyClarificationAnswer(nextChecklist, item, rawAnswer.trim())
+    }
+
+    return this.normalizeChecklist(nextChecklist)
+  }
+
+  private applyClarificationAnswer(
+    checklist: ChecklistPayload,
+    item: StrategyClarificationItem,
+    answer: string,
+  ): ChecklistPayload {
+    if (item.key === 'entry.side') {
+      return this.applyEntrySideClarification(checklist, answer)
+    }
+
+    if (item.key === 'market.symbol' || item.field === 'symbol') {
+      const symbol = normalizePublishedSymbol(answer)
+      return this.normalizeChecklist({
+        ...checklist,
+        symbols: symbol ? [symbol] : checklist.symbols,
+      })
+    }
+
+    if (item.key === 'market.timeframe' || item.field === 'timeframe') {
+      const timeframe = answer.trim()
+      return this.normalizeChecklist({
+        ...checklist,
+        timeframes: timeframe ? [timeframe] : checklist.timeframes,
+      })
+    }
+
+    if (item.key === 'market.exchange' || item.field === 'exchange') {
+      const exchange = this.normalizeExchangeClarificationAnswer(answer)
+      if (!exchange) return checklist
+      return this.normalizeChecklist({
+        ...checklist,
+        riskRules: {
+          ...(checklist.riskRules ?? {}),
+          exchange,
+        },
+      })
+    }
+
+    if (item.key === 'market.marketType' || item.field === 'marketType') {
+      const marketType = this.normalizeMarketTypeClarificationAnswer(answer)
+      if (!marketType) return checklist
+      return this.normalizeChecklist({
+        ...checklist,
+        riskRules: {
+          ...(checklist.riskRules ?? {}),
+          marketType,
+        },
+      })
+    }
+
+    if (item.key === 'riskRules.earlyStop.action' || item.field === 'riskRules.earlyStop.action') {
+      const action = this.normalizeEarlyStopClarificationAnswer(answer)
+      if (!action) return checklist
+      return this.normalizeChecklist({
+        ...checklist,
+        riskRules: {
+          ...(checklist.riskRules ?? {}),
+          earlyStop: action === 'reduce'
+            ? '价格连续3根K线在轨外时提前减仓'
+            : '价格连续3根K线在轨外时提前全平',
+        },
+      })
+    }
+
+    return checklist
+  }
+
+  private applyEntrySideClarification(checklist: ChecklistPayload, answer: string): ChecklistPayload {
+    const direction = this.normalizeDirectionClarificationAnswer(answer)
+    if (!direction || !checklist.entryRules || checklist.entryRules.length === 0) {
+      return checklist
+    }
+
+    const actionText = direction === 'short' ? '做空' : '做多'
+    const entryRules = checklist.entryRules.map((rule) => {
+      const normalized = rule.trim()
+      if (!normalized) return rule
+      if (/做多|多单|开多|long|买入/i.test(normalized) || /做空|空单|开空|short|卖出/i.test(normalized)) {
+        return normalized
+      }
+      if (/上轨|upper/i.test(normalized)) {
+        return `K线收盘后确认突破布林带上轨时${actionText}`
+      }
+      if (/下轨|lower/i.test(normalized)) {
+        return `K线收盘后确认突破布林带下轨时${actionText}`
+      }
+      return normalized
+    })
+
+    return this.normalizeChecklist({
+      ...checklist,
+      entryRules,
+    })
+  }
+
+  private normalizeDirectionClarificationAnswer(answer: string): 'long' | 'short' | null {
+    const hasLong = /做多|多单|开多|long/i.test(answer)
+    const hasShort = /做空|空单|开空|short/i.test(answer)
+    if (hasLong === hasShort) {
+      return null
+    }
+    return hasLong ? 'long' : 'short'
+  }
+
+  private normalizeExchangeClarificationAnswer(
+    answer: string,
+  ): 'binance' | 'okx' | 'hyperliquid' | null {
+    const normalized = answer.trim().toLowerCase()
+    if (normalized === 'binance' || normalized === 'okx' || normalized === 'hyperliquid') {
+      return normalized
+    }
+    return null
+  }
+
+  private normalizeMarketTypeClarificationAnswer(answer: string): 'spot' | 'perp' | null {
+    if (/现货|spot/i.test(answer)) return 'spot'
+    if (/永续|合约|perp|swap/i.test(answer)) return 'perp'
+    return null
+  }
+
+  private normalizeEarlyStopClarificationAnswer(answer: string): 'reduce' | 'close' | null {
+    const hasReduce = /减仓|reduce/i.test(answer)
+    const hasClose = /全平|平仓|止损|close|exit/i.test(answer)
+    if (hasReduce === hasClose) {
+      return null
+    }
+    return hasReduce ? 'reduce' : 'close'
   }
 
   private readClarificationState(payload: Prisma.JsonValue | null | undefined): StrategyClarificationState | null {

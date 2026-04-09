@@ -67,4 +67,74 @@ describe('CanonicalSpecV2IrCompilerService', () => {
       canonicalDigest: result.ir.source.specHash,
     }))
   })
+
+  it('compiles bollinger outside-band reduce rule with okx perp market metadata', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const result = compiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        indicators: [{ kind: 'bollingerBands', params: { period: 20, stdDev: 2 } }],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['15m'],
+        },
+        rules: [
+          {
+            id: 'risk-outside-band-3-bars',
+            phase: 'risk',
+            sideScope: 'both',
+            priority: 110,
+            condition: {
+              kind: 'atom',
+              key: 'bollinger.bars_outside',
+              semanticScope: 'market',
+              op: 'GTE',
+              value: 3,
+              params: { bars: 3 },
+            },
+            actions: [{ type: 'REDUCE_LONG' }, { type: 'REDUCE_SHORT' }],
+          },
+        ],
+      },
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.market).toEqual(expect.objectContaining({
+      venue: 'okx',
+      instrumentType: 'perpetual',
+      symbol: 'BTCUSDT',
+      timeframes: ['15m'],
+    }))
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'BOLLINGER_BARS_OUTSIDE',
+        params: expect.objectContaining({ bars: 3 }),
+      }),
+    ]))
+    expect(result.ir.ruleBlocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'rebalance',
+        actions: expect.arrayContaining([
+          expect.objectContaining({ kind: 'REDUCE_LONG' }),
+          expect.objectContaining({ kind: 'REDUCE_SHORT' }),
+        ]),
+      }),
+    ]))
+  })
 })

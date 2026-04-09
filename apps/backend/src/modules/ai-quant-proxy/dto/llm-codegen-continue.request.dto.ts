@@ -35,6 +35,11 @@ export class LlmCodegenContinueRequestDto {
   @IsObject()
   riskRules?: Record<string, unknown>
 
+  @ApiPropertyOptional({ type: 'object', additionalProperties: { type: 'string' } })
+  @IsOptional()
+  @IsObject()
+  clarificationAnswers?: Record<string, string>
+
   @ApiPropertyOptional({ type: 'object', additionalProperties: true })
   @IsOptional()
   @IsObject()

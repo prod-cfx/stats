@@ -55,6 +55,15 @@ export class ContinueCodegenSessionDto {
   @IsObject()
   riskRules?: Record<string, unknown>
 
+  @ApiPropertyOptional({
+    description: '结构化澄清回答（key=澄清项 key，value=回答）',
+    type: 'object',
+    additionalProperties: { type: 'string' },
+  })
+  @IsOptional()
+  @IsObject()
+  clarificationAnswers?: Record<string, string>
+
   @ApiPropertyOptional({ description: '增量更新会话引导参数配置', type: CodegenGuideConfigDto })
   @IsOptional()
   @ValidateNested()

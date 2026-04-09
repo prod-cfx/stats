@@ -257,6 +257,134 @@ describe('CompiledPublicationGateService', () => {
     expect(publishedSnapshotsRepo.create).not.toHaveBeenCalled()
   })
 
+  it('rejects publish when confirmed exchange is okx but compiled artifact venue is binance', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn(),
+    }
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never)
+    const ir = createIrFixture()
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'long_only' as const,
+      marginMode: 'cash' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await expect(gate.publish({
+      sessionId: 'session-exchange-drift',
+      canonicalSnapshot: {
+        version: 2,
+        market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'spot', timeframe: '1h' },
+        rules: [],
+      },
+      semanticView: {
+        viewType: 'canonical-semantic-view.v1',
+        canonicalDigest: 'sha256:exchange-drift',
+      },
+      graphSnapshot: {
+        version: 3,
+        status: 'confirmed' as const,
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'okx' as const,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          positionPct: 25,
+          executionTags: [],
+        },
+      },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'ma-crossover' },
+      scriptSummary: { indicators: ['EMA'] },
+      lockedParams: { positionPct: 25 },
+    })).rejects.toThrow('publication gate blocked')
+
+    expect(publishedSnapshotsRepo.create).not.toHaveBeenCalled()
+  })
+
+  it('rejects publish when early-stop reduce rule is absent from compiled artifact', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn(),
+    }
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never)
+    const ir = createIrFixture()
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'long_only' as const,
+      marginMode: 'cash' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await expect(gate.publish({
+      sessionId: 'session-outside-rule-missing',
+      canonicalSnapshot: {
+        version: 2,
+        market: { exchange: 'binance', symbol: 'BTCUSDT', marketType: 'spot', timeframe: '1h' },
+        rules: [
+          {
+            id: 'risk-outside-band-3-bars',
+            phase: 'risk',
+            sideScope: 'both',
+            priority: 110,
+            condition: {
+              kind: 'atom',
+              key: 'bollinger.bars_outside',
+              semanticScope: 'market',
+              op: 'GTE',
+              value: 3,
+              params: { bars: 3 },
+            },
+            actions: [{ type: 'REDUCE_LONG' }, { type: 'REDUCE_SHORT' }],
+          },
+        ],
+      },
+      semanticView: {
+        viewType: 'canonical-semantic-view.v1',
+        canonicalDigest: 'sha256:outside-band-missing',
+      },
+      graphSnapshot: {
+        version: 3,
+        status: 'confirmed' as const,
+        trigger: [],
+        actions: [],
+        risk: ['价格连续3根K线在轨外时提前减仓'],
+        meta: {
+          exchange: 'binance' as const,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          positionPct: 25,
+          executionTags: [],
+        },
+      },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'outside-band-risk' },
+      scriptSummary: { indicators: ['EMA'] },
+      lockedParams: { positionPct: 25 },
+    })).rejects.toThrow('publication gate blocked')
+
+    expect(publishedSnapshotsRepo.create).not.toHaveBeenCalled()
+  })
+
   it('returns merged failed consistency report instead of throwing so caller can persist diagnostics', async () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-failed' }),
