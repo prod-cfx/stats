@@ -7,8 +7,8 @@ describe('strategyClarificationQuestionService', () => {
     const prompt = questionService.build({
       status: 'NEEDS_CLARIFICATION',
       items: [
-        { key: 'risk.effect', reason: 'ambiguous_risk_effect', question: '轨外3根时是全平还是减仓？', status: 'pending' },
-        { key: 'entry.side', reason: 'missing_side_scope', question: '突破上轨时是只做空还是也允许做多？', status: 'pending' },
+        { key: 'riskRules.earlyStop.action', reason: 'ambiguous_risk_effect', field: 'riskRules.earlyStop.action', blocking: true, question: '轨外3根时是全平还是减仓？', status: 'pending' },
+        { key: 'entry.side', reason: 'missing_side_scope', field: 'positionMode', blocking: true, question: '突破上轨时是只做空还是也允许做多？', status: 'pending' },
       ],
     })
 
@@ -19,5 +19,19 @@ describe('strategyClarificationQuestionService', () => {
 
   it('returns empty prompt when no clarification is needed', () => {
     expect(questionService.build({ status: 'CLEAR', items: [] })).toBe('')
+  })
+
+  it('prioritizes market blockers before ambiguous wording clarifications', () => {
+    const prompt = questionService.build({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        { key: 'riskRules.earlyStop.action', reason: 'ambiguous_risk_effect', field: 'riskRules.earlyStop.action', blocking: true, question: '轨外3根时是全平还是减仓？', status: 'pending' },
+        { key: 'market.marketType', reason: 'missing_market_type', field: 'marketType', blocking: true, question: '该策略运行在现货还是合约市场？', status: 'pending' },
+      ],
+    })
+
+    expect(prompt).toContain('市场')
+    expect(prompt).toContain('该策略运行在现货还是合约市场？')
+    expect(prompt).not.toContain('轨外3根时是全平还是减仓')
   })
 })

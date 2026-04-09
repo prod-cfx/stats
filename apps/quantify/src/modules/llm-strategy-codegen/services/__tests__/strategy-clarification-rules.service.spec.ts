@@ -42,9 +42,67 @@ describe('strategyClarificationRulesService', () => {
     expect(state.status).toBe('NEEDS_CLARIFICATION')
     expect(state.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'risk.effect',
+        key: 'riskRules.earlyStop.action',
         reason: 'ambiguous_risk_effect',
-        question: '轨外3根时是全平还是减仓？',
+        field: 'riskRules.earlyStop.action',
+        allowedAnswers: ['reduce', 'close'],
+        blocking: true,
+      }),
+    ]))
+  })
+
+  it('blocks short-side bollinger strategy when marketType is missing', () => {
+    const state = service.detect({
+      entryRules: ['突破布林带上轨时做空'],
+      market: {},
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'market.marketType',
+        reason: 'missing_market_type',
+        field: 'marketType',
+        blocking: true,
+        status: 'pending',
+      }),
+    ]))
+  })
+
+  it('blocks short-side strategy with spot marketType as invalid spot-short combo', () => {
+    const state = service.detect({
+      entryRules: ['突破布林带上轨时做空'],
+      market: { marketType: 'spot' },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'market.marketType',
+        reason: 'invalid_spot_short_combo',
+        field: 'marketType',
+        blocking: true,
+        status: 'pending',
+      }),
+    ]))
+  })
+
+  it('blocks early-stop rule when action is ambiguous between close and reduce', () => {
+    const state = service.detect({
+      riskRules: {
+        earlyStop: '价格连续3根K线在轨外时提前止损或减仓',
+      },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'riskRules.earlyStop.action',
+        reason: 'ambiguous_risk_effect',
+        field: 'riskRules.earlyStop.action',
+        allowedAnswers: ['reduce', 'close'],
+        blocking: true,
+        status: 'pending',
       }),
     ]))
   })
@@ -52,6 +110,7 @@ describe('strategyClarificationRulesService', () => {
   it('returns CLEAR for unambiguous rules', () => {
     const state = service.detect({
       entryRules: ['突破布林带上轨时做空'],
+      market: { marketType: 'perp' },
       riskRules: {
         stopLossPct: 5,
       },
