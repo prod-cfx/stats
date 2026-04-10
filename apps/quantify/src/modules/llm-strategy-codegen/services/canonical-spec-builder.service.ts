@@ -48,6 +48,7 @@ export class CanonicalSpecBuilderService {
         const breakoutRule = this.buildBreakoutRule({
           ruleText,
           index,
+          phase: 'entry',
           actionType: openAction?.type ?? 'OPEN_LONG',
           sideScope: openAction?.sideScope ?? 'long',
           sizing,
@@ -190,6 +191,20 @@ export class CanonicalSpecBuilderService {
         })
         if (macdRule) {
           rules.push(macdRule)
+        }
+      }
+
+      if (closeAction && this.isBreakoutRule(ruleText)) {
+        const breakoutRule = this.buildBreakoutRule({
+          ruleText,
+          index,
+          phase: 'exit',
+          actionType: closeAction.type,
+          sideScope: closeAction.sideScope,
+          sizing,
+        })
+        if (breakoutRule) {
+          rules.push(breakoutRule)
         }
       }
 
@@ -405,8 +420,10 @@ export class CanonicalSpecBuilderService {
         indicators.push(indicator)
       }
     }
+    const hasDonchianBreakout = allTexts.some(text => /唐奇安|donchian/iu.test(text))
+      && allTexts.some(text => /上轨|下轨|breakout|breakdown|highest|lowest/iu.test(text))
 
-    if (allTexts.some(text => /布林|bollinger|上轨|下轨|中轨/iu.test(text))) {
+    if (!hasDonchianBreakout && allTexts.some(text => /布林|bollinger|上轨|下轨|中轨/iu.test(text))) {
       pushIndicator({
         kind: 'bollingerBands',
         params: { ...DEFAULT_INDICATOR_PARAMS.bollingerBands },
@@ -431,6 +448,13 @@ export class CanonicalSpecBuilderService {
       pushIndicator({
         kind: 'macd',
         params: { ...DEFAULT_INDICATOR_PARAMS.macd },
+      })
+    }
+
+    if (hasDonchianBreakout) {
+      pushIndicator({
+        kind: 'custom',
+        params: { family: 'breakout' },
       })
     }
 
@@ -491,7 +515,7 @@ export class CanonicalSpecBuilderService {
   }
 
   private isBreakoutRule(text: string): boolean {
-    return /前高|前低|最高价|最低价|通道上轨|通道下轨|breakout|breakdown|highest|lowest/i.test(text)
+    return /前高|前低|最高价|最低价|通道上轨|通道下轨|唐奇安|donchian|breakout|breakdown|highest|lowest/i.test(text)
   }
 
   private buildMovingAverageRule(input: {
@@ -633,24 +657,25 @@ export class CanonicalSpecBuilderService {
   private buildBreakoutRule(input: {
     ruleText: string
     index: number
-    actionType: 'OPEN_LONG' | 'OPEN_SHORT'
+    phase: 'entry' | 'exit'
+    actionType: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
     sideScope: 'long' | 'short'
     sizing: { mode: 'RATIO'; value: number } | null
   }): CanonicalRuleV2 | null {
     const period = this.resolveBreakoutPeriod(input.ruleText)
-    const isHighBreak = /前高|最高价|通道上轨|breakout|highest/i.test(input.ruleText)
-    const isLowBreak = /前低|最低价|通道下轨|breakdown|lowest/i.test(input.ruleText)
+    const isHighBreak = /前高|最高价|通道上轨|唐奇安.*上轨|donchian.*upper|breakout|highest/i.test(input.ruleText)
+    const isLowBreak = /前低|最低价|通道下轨|唐奇安.*下轨|donchian.*lower|breakdown|lowest/i.test(input.ruleText)
     const key = isHighBreak
       ? 'breakout.channel_high_break'
       : (isLowBreak ? 'breakout.channel_low_break' : null)
     if (!key) return null
 
     return {
-      id: `entry-${key.replace(/\./g, '-')}-${input.index + 1}`,
-      phase: 'entry',
+      id: `${input.phase}-${key.replace(/\./g, '-')}-${input.index + 1}`,
+      phase: input.phase,
       sideScope: input.sideScope,
-      priority: 165 - input.index,
-      cooldownBars: this.resolveCooldownBars(input.ruleText),
+      priority: input.phase === 'entry' ? 165 - input.index : 118 - input.index,
+      cooldownBars: input.phase === 'entry' ? this.resolveCooldownBars(input.ruleText) : undefined,
       condition: {
         kind: 'atom',
         key,
@@ -658,7 +683,9 @@ export class CanonicalSpecBuilderService {
         op: key === 'breakout.channel_high_break' ? 'CROSS_OVER' : 'CROSS_UNDER',
         params: { period },
       },
-      actions: [this.buildOpenAction(input.actionType, input.sizing)],
+      actions: [input.phase === 'entry'
+        ? this.buildOpenAction(input.actionType as 'OPEN_LONG' | 'OPEN_SHORT', input.sizing)
+        : { type: input.actionType as 'CLOSE_LONG' | 'CLOSE_SHORT' }],
     }
   }
 
@@ -851,7 +878,8 @@ export class CanonicalSpecBuilderService {
       if (matched?.[1]) {
         return {
           pct: Number(matched[1]),
-          ...this.resolveExitActionSemantics(text, { allowReduce: false }),
+          sideScope: 'both',
+          actions: [{ type: 'FORCE_EXIT' }],
         }
       }
     }
@@ -866,7 +894,7 @@ export class CanonicalSpecBuilderService {
     actions: CanonicalRuleV2['actions']
   } | null {
     for (const text of texts) {
-      const matched = text.match(/持仓(?:超过|达到)?\s*(\d+)\s*根?K?线?.{0,8}(?:平仓|离场|出场)/u)
+      const matched = text.match(/持仓(?:超过|达到)?\s*(\d+)\s*根?K?线?.{0,8}(?:平仓|平多|平空|离场|出场)/u)
       if (matched?.[1]) {
         return {
           bars: Number(matched[1]),

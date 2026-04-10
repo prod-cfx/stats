@@ -863,6 +863,40 @@ strategy
     expect(report.scriptProfile.rules.some(rule => rule.key === 'breakout.channel_high_break')).toBe(true)
   })
 
+  it('passes when Donchian breakout aliases map into breakout semantic rules', () => {
+    const canonicalSpec = canonicalBuilder.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['1h'],
+      entryRules: ['突破唐奇安上轨时做多'],
+      exitRules: ['跌破唐奇安下轨时平多'],
+      riskRules: { positionPct: 10, exchange: 'binance', marketType: 'spot' },
+    })
+
+    const compiled = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+    })
+    const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
+    const script = new CompiledScriptEmitterService().emit({
+      ast,
+      executionEnvelope: new CompiledScriptExecutionEnvelopeService().build(canonicalSpec),
+    })
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+      strategySummary: summaryBuilder.buildStrategySummary(canonicalSpec),
+    })
+
+    expect(report.status).toBe('PASSED')
+    expect(report.specProfile.rules.some(rule => rule.key === 'breakout.channel_high_break')).toBe(true)
+  })
+
   it('passes when canonical spec v2 compiles take-profit, trailing-stop and time-stop semantics', () => {
     const canonicalSpec = canonicalBuilder.build({
       symbols: ['BTCUSDT'],
@@ -898,6 +932,45 @@ strategy
     expect(compiled.ir.riskPolicy.guards.some(guard => guard.kind === 'TRAILING_STOP_PCT')).toBe(true)
     expect(report.specProfile.rules.some(rule => rule.key === 'risk.time_stop_bars')).toBe(true)
     expect(report.scriptProfile.rules.some(rule => rule.key === 'risk.time_stop_bars')).toBe(true)
+  })
+
+  it('passes when canonical spec v2 compiles short breakout and short-side trade management', () => {
+    const canonicalSpec = canonicalBuilder.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['1h'],
+      entryRules: ['跌破前20根K线最低价时做空，冷却 5 根K线'],
+      exitRules: ['空单止盈 5%', '移动止损 10% 平空', '持仓超过 12 根K线平空'],
+      riskRules: { positionPct: 10, exchange: 'binance', marketType: 'perp' },
+    })
+
+    const compiled = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+    })
+    const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
+    const script = new CompiledScriptEmitterService().emit({
+      ast,
+      executionEnvelope: new CompiledScriptExecutionEnvelopeService().build(canonicalSpec),
+    })
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+      strategySummary: summaryBuilder.buildStrategySummary(canonicalSpec),
+    })
+
+    expect(report.status).toBe('PASSED')
+    expect(report.specProfile.rules.some(rule => rule.key === 'breakout.channel_low_break' && rule.sideScope === 'short')).toBe(true)
+    expect(report.scriptProfile.rules.some(rule => rule.key === 'breakout.channel_low_break' && rule.sideScope === 'short')).toBe(true)
+    expect(report.specProfile.rules.some(rule => rule.key === 'risk.take_profit_pct' && rule.sideScope === 'short')).toBe(true)
+    expect(report.scriptProfile.rules.some(rule => rule.key === 'risk.take_profit_pct' && rule.sideScope === 'short')).toBe(true)
+    expect(report.specProfile.rules.some(rule => rule.key === 'risk.trailing_stop_pct' && rule.sideScope === 'both')).toBe(true)
+    expect(report.scriptProfile.rules.some(rule => rule.key === 'risk.trailing_stop_pct' && rule.sideScope === 'both')).toBe(true)
   })
 
   it('passes when canonical spec v2 compiles partial take-profit into reduce actions', () => {

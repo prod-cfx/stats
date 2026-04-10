@@ -1286,10 +1286,10 @@ export class StrategyConsistencyService {
       if (/网格/u.test(trigger)) {
         mappings.set('grid.range_rebalance', action)
       }
-      if ((/\bhighest(?:high)?\b/i.test(trigger) || /通道上轨|通道上沿|前高|breakout/i.test(trigger)) && (/>=|>|上穿|突破|breakout/i.test(trigger))) {
+      if ((/\bhighest(?:high)?\b/i.test(trigger) || /通道上轨|通道上沿|前高|唐奇安.*上轨|donchian.*upper|breakout/i.test(trigger)) && (/>=|>|上穿|突破|breakout/i.test(trigger))) {
         mappings.set('breakout.channel_high_break', action)
       }
-      if ((/\blowest(?:low)?\b/i.test(trigger) || /通道下轨|通道下沿|前低|breakdown/i.test(trigger)) && (/<=|<|下穿|跌破|breakdown/i.test(trigger))) {
+      if ((/\blowest(?:low)?\b/i.test(trigger) || /通道下轨|通道下沿|前低|唐奇安.*下轨|donchian.*lower|breakdown/i.test(trigger)) && (/<=|<|下穿|跌破|breakdown/i.test(trigger))) {
         mappings.set('breakout.channel_low_break', action)
       }
       if (/金叉|上穿/.test(trigger) && /均线|\bma\b|\bsma\b|\bema\b/i.test(trigger)) {
@@ -1375,10 +1375,26 @@ export class StrategyConsistencyService {
 
     return keys.flatMap(key => rule.actions.map((action) => ({
       key,
-      phase: rule.phase,
+      phase: this.resolveRuleProfilePhase(rule, action.type as CanonicalAction, key),
       sideScope: this.resolveRuleSideScope(rule.sideScope ?? 'both', action.type as CanonicalAction),
       action: action.type as CanonicalAction,
     })))
+  }
+
+  private resolveRuleProfilePhase(
+    rule: CanonicalRuleV2,
+    action: CanonicalAction,
+    key: StrategySemanticRuleKey,
+  ): StrategySemanticRuleProfile['phase'] {
+    if (
+      rule.phase === 'risk'
+      && key === 'risk.take_profit_pct'
+      && (action === 'CLOSE_LONG' || action === 'CLOSE_SHORT')
+    ) {
+      return 'exit'
+    }
+
+    return rule.phase
   }
 
   private collectRuleKeys(condition: CanonicalRuleV2['condition']): StrategySemanticRuleKey[] {
@@ -1411,10 +1427,10 @@ export class StrategyConsistencyService {
     if (/中轨|middle|ma20/i.test(trigger)) return 'bollinger.middle_revert'
     if (/轨外|outside/i.test(trigger)) return 'bollinger.bars_outside'
     if (/网格/u.test(trigger)) return 'grid.range_rebalance'
-    if ((/\bhighest(?:high)?\b/i.test(trigger) || /通道上轨|通道上沿|前高|breakout/i.test(trigger)) && (/>=|>|上穿|突破|breakout/i.test(trigger))) {
+    if ((/\bhighest(?:high)?\b/i.test(trigger) || /通道上轨|通道上沿|前高|唐奇安.*上轨|donchian.*upper|breakout/i.test(trigger)) && (/>=|>|上穿|突破|breakout/i.test(trigger))) {
       return 'breakout.channel_high_break'
     }
-    if ((/\blowest(?:low)?\b/i.test(trigger) || /通道下轨|通道下沿|前低|breakdown/i.test(trigger)) && (/<=|<|下穿|跌破|breakdown/i.test(trigger))) {
+    if ((/\blowest(?:low)?\b/i.test(trigger) || /通道下轨|通道下沿|前低|唐奇安.*下轨|donchian.*lower|breakdown/i.test(trigger)) && (/<=|<|下穿|跌破|breakdown/i.test(trigger))) {
       return 'breakout.channel_low_break'
     }
     if (/金叉|上穿/.test(trigger) && /均线|\bma\b|\bsma\b|\bema\b/i.test(trigger)) return 'ma.golden_cross'

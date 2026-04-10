@@ -697,7 +697,8 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     if (rule.condition.key === 'risk.take_profit_pct') {
-      if (hasReduceAction) return null
+      const hasSpecificCloseAction = rule.actions.every(action => action.type === 'CLOSE_LONG' || action.type === 'CLOSE_SHORT')
+      if (hasReduceAction || hasSpecificCloseAction) return null
       return {
         id: `guard_${rule.id}`,
         kind: 'TAKE_PROFIT_PCT',

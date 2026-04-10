@@ -1,12 +1,12 @@
 import type { schemas } from '@ai/api-contracts'
 import type { StrategyInstanceStatus } from '@ai/shared'
 import type { ZodTypeAny } from 'zod'
-
 import type {
   TraderFullDataResponse,
   UserFillsResponse,
   UserPortfolioResponse,
 } from './hyperliquid-api'
+import { buildBearerAuthHeaders, getErrorHttpStatus, unwrapTransportResponse } from '@ai/shared'
 import {
   deleteStrategyById as deleteMockStrategyById,
   getStrategyById,
@@ -50,14 +50,7 @@ function getHttpStatusFromError(error: unknown): number | undefined {
   if (error instanceof ApiError && typeof error.statusCode === 'number') {
     return error.statusCode
   }
-  if (!error || typeof error !== 'object') return undefined
-  if (!('response' in error)) return undefined
-
-  const response = (error as { response?: unknown }).response
-  if (!response || typeof response !== 'object') return undefined
-
-  const status = (response as { status?: unknown }).status
-  return typeof status === 'number' ? status : undefined
+  return getErrorHttpStatus(error)
 }
 
 function shouldFallbackToMock(error: unknown): boolean {
@@ -155,7 +148,7 @@ interface PaginatedItemsResponse<T> {
 
 // 使用统一的unwrapApiResponse
 function unwrapResponse<T>(response: T | BaseResponse<T>): T {
-  return unwrapApiResponse(response)
+  return unwrapTransportResponse(response)
 }
 
 function unwrapPaginatedItems<T>(
@@ -263,7 +256,7 @@ function requireAuthHeaders() {
     throw new AuthenticationError('INVALID_TOKEN')
   }
 
-  return { Authorization: `Bearer ${token}` }
+  return buildBearerAuthHeaders(token)
 }
 
 /**
@@ -283,7 +276,7 @@ function optionalAuthHeaders(): Record<string, string> {
     return {}
   }
 
-  return { Authorization: `Bearer ${token}` }
+  return buildBearerAuthHeaders(token)
 }
 
 /**

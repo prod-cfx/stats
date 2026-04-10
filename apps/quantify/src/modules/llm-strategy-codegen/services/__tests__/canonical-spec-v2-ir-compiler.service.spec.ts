@@ -500,6 +500,98 @@ describe('canonicalSpecV2IrCompilerService', () => {
     ]))
   })
 
+  it('compiles short breakout and short-side trade management into deterministic IR', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const result = compiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '1h',
+        },
+        indicators: [{ kind: 'custom', params: { family: 'breakout' } }],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['1h'],
+        },
+        rules: [
+          {
+            id: 'entry-breakout-low',
+            phase: 'entry',
+            sideScope: 'short',
+            priority: 200,
+            cooldownBars: 5,
+            condition: {
+              kind: 'atom',
+              key: 'breakout.channel_low_break',
+              semanticScope: 'market',
+              op: 'CROSS_UNDER',
+              params: { period: 20 },
+            },
+            actions: [{ type: 'OPEN_SHORT', sizing: { mode: 'RATIO', value: 0.1 } }],
+          },
+          {
+            id: 'risk-take-profit-short',
+            phase: 'risk',
+            sideScope: 'short',
+            priority: 110,
+            condition: {
+              kind: 'atom',
+              key: 'risk.take_profit_pct',
+              semanticScope: 'position',
+              op: 'GTE',
+              value: 0.05,
+            },
+            actions: [{ type: 'CLOSE_SHORT' }],
+          },
+          {
+            id: 'risk-trailing-stop-short',
+            phase: 'risk',
+            sideScope: 'short',
+            priority: 100,
+            condition: {
+              kind: 'atom',
+              key: 'risk.trailing_stop_pct',
+              semanticScope: 'position',
+              op: 'GTE',
+              value: 0.1,
+            },
+            actions: [{ type: 'CLOSE_SHORT' }],
+          },
+        ],
+      },
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.portfolio.positionMode).toBe('long_short')
+    expect(result.ir.riskPolicy.guards).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'TRAILING_STOP_PCT', value: 10 }),
+    ]))
+    expect(result.ir.ruleBlocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        cooldownBars: 5,
+        actions: [expect.objectContaining({ kind: 'OPEN_SHORT' })],
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        actions: [expect.objectContaining({ kind: 'CLOSE_SHORT' })],
+      }),
+    ]))
+  })
+
   it('compiles partial take-profit into rebalance reduce actions instead of a force-exit guard', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 

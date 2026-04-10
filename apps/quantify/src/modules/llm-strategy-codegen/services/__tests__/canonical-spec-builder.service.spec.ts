@@ -390,6 +390,81 @@ describe('canonicalSpecBuilderService', () => {
     ]))
   })
 
+  it('builds Donchian breakout aliases into canonical spec v2', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['1h'],
+      entryRules: ['突破唐奇安上轨时做多'],
+      exitRules: ['跌破唐奇安下轨时平多'],
+      riskRules: { positionPct: 10 },
+    })
+
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'long',
+        condition: expect.objectContaining({ key: 'breakout.channel_high_break' }),
+      }),
+      expect.objectContaining({
+        phase: 'entry',
+      }),
+    ]))
+  })
+
+  it('builds short breakout and short-side trade management rules into canonical spec v2', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['1h'],
+      entryRules: ['跌破前20根K线最低价时做空，冷却 5 根K线'],
+      exitRules: ['空单止盈 5%', '移动止损 10% 平空', '持仓超过 12 根K线平空'],
+      riskRules: { positionPct: 10, marketType: 'perp' as any },
+    })
+
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'short',
+        cooldownBars: 5,
+        condition: expect.objectContaining({
+          key: 'breakout.channel_low_break',
+          params: expect.objectContaining({ period: 20 }),
+        }),
+        actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
+      }),
+      expect.objectContaining({
+        phase: 'risk',
+        sideScope: 'short',
+        condition: expect.objectContaining({
+          key: 'risk.take_profit_pct',
+          value: 0.05,
+        }),
+        actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
+      }),
+      expect.objectContaining({
+        phase: 'risk',
+        sideScope: 'both',
+        condition: expect.objectContaining({
+          key: 'risk.trailing_stop_pct',
+          value: 0.1,
+        }),
+        actions: [expect.objectContaining({ type: 'FORCE_EXIT' })],
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        sideScope: 'short',
+        condition: expect.objectContaining({
+          key: 'risk.time_stop_bars',
+          value: 12,
+        }),
+        actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
+      }),
+    ]))
+  })
+
   it('builds partial take-profit rules into canonical spec v2 using reduce actions', () => {
     const service = new CanonicalSpecBuilderService()
 
