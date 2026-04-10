@@ -631,6 +631,7 @@ export class CodegenConversationService {
       return this.normalizeChecklist({
         ...checklist,
         symbols: symbol ? [symbol] : checklist.symbols,
+        riskRules: this.clearMarketScopeConflicts(checklist.riskRules, 'symbol'),
       })
     }
 
@@ -639,6 +640,7 @@ export class CodegenConversationService {
       return this.normalizeChecklist({
         ...checklist,
         timeframes: timeframe ? [timeframe] : checklist.timeframes,
+        riskRules: this.clearMarketScopeConflicts(checklist.riskRules, 'timeframe'),
       })
     }
 
@@ -648,7 +650,7 @@ export class CodegenConversationService {
       return this.normalizeChecklist({
         ...checklist,
         riskRules: {
-          ...(checklist.riskRules ?? {}),
+          ...this.clearMarketScopeConflicts(checklist.riskRules, 'exchange'),
           exchange,
         },
       })
@@ -660,7 +662,7 @@ export class CodegenConversationService {
       return this.normalizeChecklist({
         ...checklist,
         riskRules: {
-          ...(checklist.riskRules ?? {}),
+          ...this.clearMarketScopeConflicts(checklist.riskRules, 'marketType'),
           marketType,
         },
       })
@@ -735,6 +737,30 @@ export class CodegenConversationService {
     }
 
     return parsed - 1
+  }
+
+  private clearMarketScopeConflicts(
+    riskRules: ChecklistPayload['riskRules'],
+    field: 'exchange' | 'marketType' | 'symbol' | 'timeframe',
+  ): Record<string, unknown> {
+    const next = { ...(riskRules ?? {}) }
+    const rawConflicts = next._marketScopeConflicts
+    if (!Array.isArray(rawConflicts)) {
+      return next
+    }
+
+    const filtered = rawConflicts.filter((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return false
+      return (item as { field?: unknown }).field !== field
+    })
+
+    if (filtered.length > 0) {
+      next._marketScopeConflicts = filtered
+    } else {
+      delete next._marketScopeConflicts
+    }
+
+    return next
   }
 
   private async continueWithStructuredClarificationAnswers(args: {
@@ -1757,9 +1783,11 @@ export class CodegenConversationService {
     const mergedRiskRules = (() => {
       const baseRiskRules = base.riskRules ?? {}
       const patchRiskRules = patch.riskRules ?? {}
+      const marketScopeConflicts = this.collectMarketScopeConflicts(base, patch)
       const merged = {
         ...baseRiskRules,
         ...patchRiskRules,
+        ...(marketScopeConflicts.length > 0 ? { _marketScopeConflicts: marketScopeConflicts } : {}),
       }
       return Object.keys(merged).length > 0 ? merged : undefined
     })()
@@ -1772,6 +1800,41 @@ export class CodegenConversationService {
       riskRules: mergedRiskRules,
     }
     return this.normalizeChecklist(merged)
+  }
+
+  private collectMarketScopeConflicts(base: ChecklistPayload, patch: ChecklistPayload): Array<{
+    field: 'exchange' | 'marketType' | 'symbol' | 'timeframe'
+    previous: string
+    next: string
+  }> {
+    const conflicts: Array<{
+      field: 'exchange' | 'marketType' | 'symbol' | 'timeframe'
+      previous: string
+      next: string
+    }> = []
+    const pushConflict = (
+      field: 'exchange' | 'marketType' | 'symbol' | 'timeframe',
+      previous: string | undefined,
+      next: string | undefined,
+    ) => {
+      if (!previous || !next || previous === next) return
+      conflicts.push({ field, previous, next })
+    }
+
+    pushConflict('symbol', base.symbols?.[0], patch.symbols?.[0])
+    pushConflict('timeframe', base.timeframes?.[0], patch.timeframes?.[0])
+    pushConflict(
+      'exchange',
+      typeof base.riskRules?.exchange === 'string' ? base.riskRules.exchange : undefined,
+      typeof patch.riskRules?.exchange === 'string' ? patch.riskRules.exchange : undefined,
+    )
+    pushConflict(
+      'marketType',
+      typeof base.riskRules?.marketType === 'string' ? base.riskRules.marketType : undefined,
+      typeof patch.riskRules?.marketType === 'string' ? patch.riskRules.marketType : undefined,
+    )
+
+    return conflicts
   }
 
   private appendConversationHistory(

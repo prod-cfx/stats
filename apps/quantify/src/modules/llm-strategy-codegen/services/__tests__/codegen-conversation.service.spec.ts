@@ -286,7 +286,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         assistantPrompt: '策略逻辑已完整，请确认逻辑图。',
         logic: {
           symbols: ['BTCUSDT'],
-          timeframes: ['15m'],
+          timeframes: ['3m', '5m'],
           entryRules: ['3m 内下跌 1% 买入'],
           exitRules: ['5m 内上涨 2% 卖出'],
           riskRules: {
@@ -811,6 +811,49 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         }),
       }),
     )
+  })
+
+  it('turns merged market metadata drift into a blocking clarification item', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-market-scope-conflict',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: withRequiredMarketContext({
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+        logic: {
+          riskRules: {
+            exchange: 'binance',
+          },
+        },
+      }),
+    })
+
+    const result = await service.continueSession('s-market-scope-conflict', {
+      userId: 'u1',
+      message: '改成 Binance',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.clarificationState).toEqual(expect.objectContaining({
+      status: 'NEEDS_CLARIFICATION',
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'market.conflict.exchange',
+          reason: 'conflicting_market_scope',
+          allowedAnswers: ['okx', 'binance'],
+        }),
+      ]),
+    }))
   })
 
   it('keeps drafting when structured clarification answers still leave required fields missing', async () => {
