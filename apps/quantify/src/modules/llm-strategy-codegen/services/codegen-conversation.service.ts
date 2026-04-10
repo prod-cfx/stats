@@ -6,12 +6,13 @@ import type { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.
 import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-test.response.dto'
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
+import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant-conversations.repository'
 import type { ChecklistPayload } from '../types/codegen-checklist'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
-import type { Prisma } from '@/prisma/prisma.types'
 
+import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { getHelperDocs } from '@ai/shared/script-engine/helpers'
 import { HttpStatus, Injectable } from '@nestjs/common'
@@ -22,7 +23,6 @@ import { AiService } from '@/modules/ai/ai.service'
 import { createDefaultConstraintPack } from '../constants/constraint-pack'
 import { buildConversationPlannerSystemPrompt } from '../prompts/conversation-planner-system.prompt'
 import { buildStrategyCodegenSystemPrompt } from '../prompts/strategy-codegen-system.prompt'
-import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant-conversations.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { AiQuantConversationsRepository } from '../repositories/ai-quant-conversations.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -565,8 +565,8 @@ export class CodegenConversationService {
       conversationMessages,
       status: session.status,
       missingFields: [],
-      createdAt: session.createdAt.toISOString(),
-      updatedAt: session.updatedAt.toISOString(),
+      createdAt: session.createdAt instanceof Date ? session.createdAt.toISOString() : undefined,
+      updatedAt: session.updatedAt instanceof Date ? session.updatedAt.toISOString() : undefined,
       scriptCode: typeof session.latestDraftCode === 'string' ? session.latestDraftCode : null,
       publishedSnapshotId: latestSnapshot?.id ?? sessionPublishedSnapshotId ?? null,
       consistencyReport: latestSnapshot?.consistencyReport && typeof latestSnapshot.consistencyReport === 'object' && !Array.isArray(latestSnapshot.consistencyReport)
@@ -980,6 +980,9 @@ export class CodegenConversationService {
   ): Promise<void> {
     const session = await this.sessionsRepo.findById(sessionId)
     if (!session) {
+      return
+    }
+    if (!(session.createdAt instanceof Date) || !(session.updatedAt instanceof Date)) {
       return
     }
 
