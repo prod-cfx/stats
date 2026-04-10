@@ -1795,11 +1795,75 @@ export class CodegenConversationService {
     const merged = {
       symbols: patch.symbols && patch.symbols.length > 0 ? patch.symbols : base.symbols,
       timeframes: patch.timeframes && patch.timeframes.length > 0 ? patch.timeframes : base.timeframes,
-      entryRules: patch.entryRules && patch.entryRules.length > 0 ? patch.entryRules : base.entryRules,
-      exitRules: patch.exitRules && patch.exitRules.length > 0 ? patch.exitRules : base.exitRules,
+      entryRules: this.mergeRuleArrays(base.entryRules, patch.entryRules),
+      exitRules: this.mergeRuleArrays(base.exitRules, patch.exitRules),
       riskRules: mergedRiskRules,
     }
     return this.normalizeChecklist(merged)
+  }
+
+  private mergeRuleArrays(baseRules?: string[], patchRules?: string[]): string[] | undefined {
+    if (!patchRules || patchRules.length === 0) {
+      return baseRules
+    }
+
+    const merged = [...(baseRules ?? [])]
+
+    for (const patchRule of patchRules) {
+      const existingIndex = merged.findIndex(baseRule => this.isLikelySameRule(baseRule, patchRule))
+      if (existingIndex >= 0) {
+        merged[existingIndex] = patchRule
+        continue
+      }
+      if (!merged.includes(patchRule)) {
+        merged.push(patchRule)
+      }
+    }
+
+    return merged.length > 0 ? merged : undefined
+  }
+
+  private isLikelySameRule(baseRule: string, patchRule: string): boolean {
+    if (baseRule === patchRule) {
+      return true
+    }
+
+    const baseSignature = this.inferRuleMergeSignature(baseRule)
+    const patchSignature = this.inferRuleMergeSignature(patchRule)
+
+    return Boolean(baseSignature && patchSignature && baseSignature === patchSignature)
+  }
+
+  private inferRuleMergeSignature(rule: string): string | null {
+    const text = rule.trim()
+    if (!text) {
+      return null
+    }
+    if ((/连续\s*3|3\s*根/u.test(text)) && /轨外|outside/iu.test(text)) {
+      return 'outside-band-3-bars'
+    }
+    if (/中轨|MA20|middle/iu.test(text)) {
+      return 'bollinger-middle'
+    }
+    if ((/金叉|上穿/u.test(text)) && /均线|\bma\b|\bsma\b|\bema\b/iu.test(text)) {
+      return 'ma-golden-cross'
+    }
+    if ((/死叉|下穿/u.test(text)) && /均线|\bma\b|\bsma\b|\bema\b/iu.test(text)) {
+      return 'ma-death-cross'
+    }
+    if (/止损|亏损|stop\s*loss/iu.test(text)) {
+      return 'stop-loss'
+    }
+    if (/止盈|take\s*profit/iu.test(text)) {
+      return 'take-profit'
+    }
+    if (/布林带上轨/iu.test(text)) {
+      return 'bollinger-upper'
+    }
+    if (/布林带下轨/iu.test(text)) {
+      return 'bollinger-lower'
+    }
+    return null
   }
 
   private collectMarketScopeConflicts(base: ChecklistPayload, patch: ChecklistPayload): Array<{

@@ -213,6 +213,41 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(systemPrompt).not.toContain('必须直接给出完整入场+出场规则草案')
   })
 
+  it('preserves untouched sibling rules when planner updates one exit rule', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-merge-rules',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: completeChecklist({
+        entryRules: ['K线收盘后确认突破布林带上轨时做空', 'K线收盘后确认突破布林带下轨时做多'],
+        exitRules: ['价格回到布林带中轨(MA20)时平仓', '价格连续3根K线在轨外时直接减仓'],
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我已按你的澄清更新规则。',
+        logic: {
+          exitRules: ['价格连续3根K线在轨外时直接平仓'],
+        },
+      }),
+    })
+
+    await service.continueSession('s-merge-rules', {
+      userId: 'u1',
+      message: '轨外 3 根不是减仓，是直接平仓',
+    })
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-merge-rules', expect.objectContaining({
+      checklist: expect.objectContaining({
+        exitRules: ['价格回到布林带中轨(MA20)时平仓', '价格连续3根K线在轨外时直接平仓'],
+      }),
+    }))
+  })
+
   it('passes exact strong-rule semantics into the script generation call', async () => {
     mockAi.chat.mockResolvedValue({
       content: 'const strategy: StrategyAdapterV1 = { protocolVersion: "v1", onBar() { return { action: "NOOP" } } }\nstrategy',
