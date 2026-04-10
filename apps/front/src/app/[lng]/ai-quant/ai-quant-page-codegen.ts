@@ -2,7 +2,7 @@ import type { Dispatch, MutableRefObject, SetStateAction } from 'react'
 
 import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
-import type {LlmCodegenSessionResponse} from '@/lib/api';
+import type { LlmCodegenSessionResponse } from '@/lib/api'
 import {
   buildAiQuantStageFallbackMessage,
   parseAiQuantErrorMeta,
@@ -20,11 +20,15 @@ import {
   continueLlmCodegenSession,
   getLlmCodegenSession,
   startLlmCodegenSession
-  
 } from '@/lib/api'
 
 import { ApiError } from '@/lib/errors'
-import { normalizeClarificationGate, normalizeParamsFromValues } from './ai-quant-page-conversation'
+import { getCodegenSessionReconciliationAction } from './ai-quant-page-codegen-reconciliation'
+import {
+  invalidateConversationPublication,
+  normalizeClarificationGate,
+  normalizeParamsFromValues,
+} from './ai-quant-page-conversation'
 
 const CODEGEN_TERMINAL_STATUSES = new Set(['PUBLISHED', 'REJECTED'])
 const CODEGEN_PROCESSING_STATUSES = new Set([
@@ -153,6 +157,272 @@ function normalizePublishedSnapshotId(snapshotId: unknown): string | null {
   }
   const normalized = snapshotId.trim()
   return normalized.length > 0 ? normalized : null
+}
+
+function resetConversationForFreshCodegenSession(conversation: ConversationState): ConversationState {
+  return invalidateConversationPublication({
+    ...conversation,
+    codegenSpecDesc: null,
+    semanticGraph: null,
+    validationReport: null,
+    llmCodegenSessionId: null,
+  }, { markGraphDraft: true })
+}
+
+export function applyCodegenResponseToConversationState(args: {
+  conversation: ConversationState
+  response: Awaited<ReturnType<typeof continueLlmCodegenSession>> | LlmCodegenSessionResponse
+  confirmGenerate: boolean
+  targetParams: QuantParams
+  backtestCapabilities: BacktestCapabilities | null
+  activeSessionId: string | null
+  trimmedMessage: string
+  t: (key: string, options?: Record<string, unknown>) => string
+  loadingMessageId?: string | null
+}): ConversationState {
+  const {
+    conversation,
+    response,
+    confirmGenerate,
+    targetParams,
+    backtestCapabilities,
+    activeSessionId,
+    trimmedMessage,
+    t,
+    loadingMessageId = null,
+  } = args
+
+  const nextVersion = (conversation.logicGraph?.version || 0) + 1
+  const shouldReuseCodegenSession = !isCodegenTerminalStatus(response.status)
+  const shouldUpdateGraph =
+    (response.status === 'CHECKLIST_GATE' || response.status === 'PUBLISHED')
+    && Boolean(response.specDesc)
+  const syncResult = shouldUpdateGraph
+    ? syncStrategyParamsFromCodegen({
+        spec: response.specDesc,
+        fallback: {
+          exchange: targetParams.exchange,
+          symbol: targetParams.symbol,
+          baseTimeframe: targetParams.baseTimeframe,
+          positionPct: targetParams.positionPct,
+        },
+        currentValues: conversation.paramValues,
+        capabilities: backtestCapabilities,
+        contextText: [trimmedMessage, response.assistantPrompt]
+          .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          .join(' '),
+      })
+    : null
+  const nextParamValues = syncResult?.paramValues ?? conversation.paramValues
+  const nextParamSchema = shouldUpdateGraph
+    ? applyCapabilitiesToParamSchema(syncResult?.paramSchema, backtestCapabilities)
+    : conversation.paramSchema
+  const nextParams = syncResult
+    ? normalizeParamsFromValues(nextParamValues, conversation.params)
+    : conversation.params
+  const nextGraphStatus =
+    response.status === 'PUBLISHED' || confirmGenerate ? 'confirmed' : 'draft'
+  const nextGraph = shouldUpdateGraph
+    ? buildLogicGraphFromCodegenSpec(
+        response.specDesc,
+        {
+          exchange: syncResult?.normalized.exchange ?? targetParams.exchange,
+          symbol: syncResult?.normalized.symbol ?? targetParams.symbol,
+          baseTimeframe: syncResult?.normalized.baseTimeframe ?? targetParams.baseTimeframe,
+          positionPct: syncResult?.normalized.positionPct ?? targetParams.positionPct,
+          executionTags: syncResult?.executionTags ?? [],
+        },
+        nextVersion,
+        nextGraphStatus,
+      )
+    : conversation.logicGraph
+  const nextPublishedScriptCode = (() => {
+    if (response.status === 'PUBLISHED' && !response.rejectReason) {
+      const responseScriptCode = normalizePublishedScriptCode(response.scriptCode)
+      if (responseScriptCode) {
+        return responseScriptCode
+      }
+      if (!shouldUpdateGraph) {
+        return conversation.publishedScriptCode
+      }
+      return null
+    }
+    if (shouldUpdateGraph) {
+      return null
+    }
+    return conversation.publishedScriptCode
+  })()
+  const nextPublishedSnapshotId = (() => {
+    if (response.status === 'PUBLISHED' && !response.rejectReason) {
+      const snapshotId = normalizePublishedSnapshotId(response.publishedSnapshotId)
+      if (snapshotId) {
+        return snapshotId
+      }
+      if (!shouldUpdateGraph) {
+        return conversation.publishedSnapshotId
+      }
+      return null
+    }
+    if (shouldUpdateGraph) {
+      return null
+    }
+    return conversation.publishedSnapshotId
+  })()
+  const nextPublishedScriptGraphVersion = nextPublishedScriptCode
+    ? (nextGraph?.version ?? conversation.publishedScriptGraphVersion)
+    : null
+  const nextSemanticGraph = hasCodegenPayload(response, 'semanticGraph')
+    ? (response.semanticGraph ?? null)
+    : conversation.semanticGraph
+  const nextValidationReport = hasCodegenPayload(response, 'validationReport')
+    ? (response.validationReport ?? null)
+    : conversation.validationReport
+  const nextClarificationGate = normalizeClarificationGate(response.clarificationGate) ?? conversation.clarificationGate
+  const nextPublicationGate = hasCodegenPayload(response, 'publicationGate')
+    ? (response.publicationGate ?? null)
+    : conversation.publicationGate
+  const nextPendingCanonicalDigest = (() => {
+    if (nextClarificationGate?.blocked) {
+      return null
+    }
+    if (typeof response.canonicalDigest === 'string' && response.canonicalDigest.trim()) {
+      return response.canonicalDigest.trim()
+    }
+    return readCanonicalDigest(response.specDesc)
+  })()
+  const publishedReply = response.scriptCode
+    ? `${
+        confirmGenerate
+          ? t('aiQuant.messages.codeGeneratedBacktest', {
+              defaultValue: 'Strategy code generated, ready to backtest.',
+            })
+          : t('aiQuant.messages.graphGenerated')
+      }\n\n${t('aiQuant.messages.generatedCodeTitle', { defaultValue: 'Generated strategy code:' })}\n\`\`\`javascript\n${response.scriptCode}\n\`\`\``
+    : confirmGenerate
+      ? t('aiQuant.messages.codeGeneratedBacktest', {
+          defaultValue: 'Strategy code generated, ready to backtest.',
+        })
+      : t('aiQuant.messages.graphGenerated')
+  const replyContent = buildCodegenReplyContent({
+    response,
+    confirmGenerate,
+    publishedReply,
+    graphGeneratedMessage: t('aiQuant.messages.graphGenerated'),
+    graphReviseMessage: t('aiQuant.messages.graphRevise'),
+    checklistContinuedMessage: t('aiQuant.messages.checklistContinued', {
+      defaultValue:
+        'Continued generation based on current logic graph. Please review the latest result.',
+    }),
+    checklistUpdatedMessage: t('aiQuant.messages.checklistUpdated', {
+      defaultValue:
+        'Logic graph updated. Please confirm it before I generate strategy code.',
+    }),
+    stillGeneratingPrefix: t('aiQuant.messages.stillGenerating', {
+      defaultValue: 'Strategy code is still generating, please wait',
+    }),
+    rejectedPrefix: t('aiQuant.messages.generationFailedPrefix', {
+      defaultValue: 'Failed to generate strategy from current logic graph',
+    }),
+    rejectedWithoutReason: t('aiQuant.messages.generationFailedNoReason', {
+      defaultValue:
+        'Failed to generate strategy from current logic graph: backend did not return a detailed reason. Please check service logs.',
+    }),
+  })
+
+  return {
+    ...conversation,
+    llmCodegenSessionId: shouldReuseCodegenSession ? activeSessionId : null,
+    codegenSpecDesc:
+      response.specDesc && typeof response.specDesc === 'object' && !Array.isArray(response.specDesc)
+        ? response.specDesc
+        : conversation.codegenSpecDesc,
+    publishedStrategyInstanceId: resolvePublishedStrategyInstanceId({
+      response,
+      isStartingNewSession: !activeSessionId,
+    }),
+    publishedSnapshotId: nextPublishedSnapshotId,
+    publishedScriptCode: nextPublishedScriptCode,
+    publishedScriptGraphVersion: nextPublishedScriptGraphVersion,
+    params: nextParams,
+    paramSchema: nextParamSchema,
+    paramValues: nextParamValues,
+    logicGraph: nextGraph,
+    semanticGraph: nextSemanticGraph,
+    validationReport: nextValidationReport,
+    clarificationGate: nextClarificationGate,
+    publicationGate: nextPublicationGate,
+    pendingCanonicalDigest:
+      nextPendingCanonicalDigest !== undefined
+        ? nextPendingCanonicalDigest
+        : conversation.pendingCanonicalDigest,
+    backtestResult: null,
+    latestSignalMessage: null,
+    messages: loadingMessageId
+      ? conversation.messages.map(msg =>
+          msg.id === loadingMessageId ? { ...msg, content: replyContent } : msg,
+        )
+      : conversation.messages,
+    updatedAt: Date.now(),
+  }
+}
+
+export async function reconcilePersistedActiveCodegenSession(args: {
+  conversation: ConversationState
+  backtestCapabilities: BacktestCapabilities | null
+  setConversations: Dispatch<SetStateAction<ConversationState[]>>
+  t: (key: string, options?: Record<string, unknown>) => string
+}): Promise<'unchanged' | 'applied' | 'restarted'> {
+  const {
+    conversation,
+    backtestCapabilities,
+    setConversations,
+    t,
+  } = args
+  const activeSessionId = conversation.llmCodegenSessionId
+  if (!activeSessionId) {
+    return 'unchanged'
+  }
+
+  let snapshot: LlmCodegenSessionResponse
+  try {
+    snapshot = await getLlmCodegenSession(activeSessionId)
+  } catch {
+    return 'unchanged'
+  }
+  if (!snapshot || typeof snapshot.status !== 'string') {
+    return 'unchanged'
+  }
+
+  const action = getCodegenSessionReconciliationAction({
+    conversation,
+    response: snapshot,
+  })
+  if (action === 'reuse') {
+    return 'unchanged'
+  }
+
+  setConversations(prev =>
+    prev.map(conv => {
+      if (conv.id !== conversation.id || conv.llmCodegenSessionId !== activeSessionId) {
+        return conv
+      }
+      if (action === 'restart') {
+        return resetConversationForFreshCodegenSession(conv)
+      }
+      return applyCodegenResponseToConversationState({
+        conversation: conv,
+        response: snapshot,
+        confirmGenerate: false,
+        targetParams: conv.params,
+        backtestCapabilities,
+        activeSessionId,
+        trimmedMessage: '',
+        t,
+      })
+    }),
+  )
+
+  return action === 'restart' ? 'restarted' : 'applied'
 }
 
 export function extractCodegenErrorMessage(error: unknown, fallback: string): string {
@@ -366,177 +636,17 @@ export async function requestAiQuantCodegen(args: {
     setConversations(prev =>
       prev.map(conv => {
         if (conv.id !== conversationId) return conv
-        const nextVersion = (conv.logicGraph?.version || 0) + 1
-        const shouldReuseCodegenSession = !isCodegenTerminalStatus(response.status)
-        const shouldUpdateGraph =
-          (response.status === 'CHECKLIST_GATE' || response.status === 'PUBLISHED')
-          && Boolean(response.specDesc)
-        const syncResult = shouldUpdateGraph
-          ? syncStrategyParamsFromCodegen({
-              spec: response.specDesc,
-              fallback: {
-                exchange: targetParams.exchange,
-                symbol: targetParams.symbol,
-                baseTimeframe: targetParams.baseTimeframe,
-                positionPct: targetParams.positionPct,
-              },
-              currentValues: conv.paramValues,
-              capabilities: backtestCapabilities,
-              contextText: [trimmedMessage, response.assistantPrompt]
-                .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-                .join(' '),
-            })
-          : null
-        const nextParamValues = syncResult?.paramValues ?? conv.paramValues
-        const nextParamSchema = shouldUpdateGraph
-          ? applyCapabilitiesToParamSchema(syncResult?.paramSchema, backtestCapabilities)
-          : conv.paramSchema
-        const nextParams = syncResult
-          ? normalizeParamsFromValues(nextParamValues, conv.params)
-          : conv.params
-        const nextGraphStatus =
-          response.status === 'PUBLISHED' || confirmGenerate ? 'confirmed' : 'draft'
-        const nextGraph = shouldUpdateGraph
-          ? buildLogicGraphFromCodegenSpec(
-              response.specDesc,
-              {
-                exchange: syncResult?.normalized.exchange ?? targetParams.exchange,
-                symbol: syncResult?.normalized.symbol ?? targetParams.symbol,
-                baseTimeframe: syncResult?.normalized.baseTimeframe ?? targetParams.baseTimeframe,
-                positionPct: syncResult?.normalized.positionPct ?? targetParams.positionPct,
-                executionTags: syncResult?.executionTags ?? [],
-              },
-              nextVersion,
-              nextGraphStatus,
-            )
-          : conv.logicGraph
-        const nextPublishedScriptCode = (() => {
-          if (response.status === 'PUBLISHED' && !response.rejectReason) {
-            const responseScriptCode = normalizePublishedScriptCode(response.scriptCode)
-            if (responseScriptCode) {
-              return responseScriptCode
-            }
-            if (!shouldUpdateGraph) {
-              return conv.publishedScriptCode
-            }
-            return null
-          }
-          if (shouldUpdateGraph) {
-            return null
-          }
-          return conv.publishedScriptCode
-        })()
-        const nextPublishedSnapshotId = (() => {
-          if (response.status === 'PUBLISHED' && !response.rejectReason) {
-            const snapshotId = normalizePublishedSnapshotId(response.publishedSnapshotId)
-            if (snapshotId) {
-              return snapshotId
-            }
-            if (!shouldUpdateGraph) {
-              return conv.publishedSnapshotId
-            }
-            return null
-          }
-          if (shouldUpdateGraph) {
-            return null
-          }
-          return conv.publishedSnapshotId
-        })()
-        const nextPublishedScriptGraphVersion = nextPublishedScriptCode
-          ? (nextGraph?.version ?? conv.publishedScriptGraphVersion)
-          : null
-        const nextSemanticGraph = hasCodegenPayload(response, 'semanticGraph')
-          ? (response.semanticGraph ?? null)
-          : conv.semanticGraph
-        const nextValidationReport = hasCodegenPayload(response, 'validationReport')
-          ? (response.validationReport ?? null)
-          : conv.validationReport
-        const nextClarificationGate = normalizeClarificationGate(response.clarificationGate) ?? conv.clarificationGate
-        const nextPublicationGate = hasCodegenPayload(response, 'publicationGate')
-          ? (response.publicationGate ?? null)
-          : conv.publicationGate
-        const nextPendingCanonicalDigest = (() => {
-          if (nextClarificationGate?.blocked) {
-            return null
-          }
-          if (typeof response.canonicalDigest === 'string' && response.canonicalDigest.trim()) {
-            return response.canonicalDigest.trim()
-          }
-          return readCanonicalDigest(response.specDesc)
-        })()
-        const publishedReply = response.scriptCode
-          ? `${
-              confirmGenerate
-                ? t('aiQuant.messages.codeGeneratedBacktest', {
-                    defaultValue: 'Strategy code generated, ready to backtest.',
-                  })
-                : t('aiQuant.messages.graphGenerated')
-            }\n\n${t('aiQuant.messages.generatedCodeTitle', { defaultValue: 'Generated strategy code:' })}\n\`\`\`javascript\n${response.scriptCode}\n\`\`\``
-          : confirmGenerate
-            ? t('aiQuant.messages.codeGeneratedBacktest', {
-                defaultValue: 'Strategy code generated, ready to backtest.',
-              })
-            : t('aiQuant.messages.graphGenerated')
-        const replyContent = buildCodegenReplyContent({
+        return applyCodegenResponseToConversationState({
+          conversation: conv,
           response,
           confirmGenerate,
-          publishedReply,
-          graphGeneratedMessage: t('aiQuant.messages.graphGenerated'),
-          graphReviseMessage: t('aiQuant.messages.graphRevise'),
-          checklistContinuedMessage: t('aiQuant.messages.checklistContinued', {
-            defaultValue:
-              'Continued generation based on current logic graph. Please review the latest result.',
-          }),
-          checklistUpdatedMessage: t('aiQuant.messages.checklistUpdated', {
-            defaultValue:
-              'Logic graph updated. Please confirm it before I generate strategy code.',
-          }),
-          stillGeneratingPrefix: t('aiQuant.messages.stillGenerating', {
-            defaultValue: 'Strategy code is still generating, please wait',
-          }),
-          rejectedPrefix: t('aiQuant.messages.generationFailedPrefix', {
-            defaultValue: 'Failed to generate strategy from current logic graph',
-          }),
-          rejectedWithoutReason: t('aiQuant.messages.generationFailedNoReason', {
-            defaultValue:
-              'Failed to generate strategy from current logic graph: backend did not return a detailed reason. Please check service logs.',
-          }),
+          targetParams,
+          backtestCapabilities,
+          activeSessionId,
+          trimmedMessage,
+          t,
+          loadingMessageId,
         })
-        return {
-          ...conv,
-          llmCodegenSessionId: shouldReuseCodegenSession ? activeSessionId : null,
-          codegenSpecDesc:
-            response.specDesc && typeof response.specDesc === 'object' && !Array.isArray(response.specDesc)
-              ? response.specDesc
-              : conv.codegenSpecDesc,
-          publishedStrategyInstanceId: resolvePublishedStrategyInstanceId({
-            response,
-            isStartingNewSession: !activeSessionId,
-          }),
-          publishedSnapshotId: nextPublishedSnapshotId,
-          publishedScriptCode: nextPublishedScriptCode,
-          publishedScriptGraphVersion: nextPublishedScriptGraphVersion,
-          params: nextParams,
-          paramSchema: nextParamSchema,
-          paramValues: nextParamValues,
-          logicGraph: nextGraph,
-          semanticGraph: nextSemanticGraph,
-          validationReport: nextValidationReport,
-          clarificationGate: nextClarificationGate,
-          publicationGate: nextPublicationGate,
-          pendingCanonicalDigest:
-            nextPendingCanonicalDigest !== undefined
-              ? nextPendingCanonicalDigest
-              : conv.pendingCanonicalDigest,
-          backtestResult: null,
-          latestSignalMessage: null,
-          messages: [
-            ...conv.messages.map(msg =>
-              msg.id === loadingMessageId ? { ...msg, content: replyContent } : msg,
-            ),
-          ],
-          updatedAt: Date.now(),
-        }
       }),
     )
   }
@@ -628,6 +738,55 @@ export async function requestAiQuantCodegen(args: {
         continued = created
       }
     } else {
+      if (confirmGenerate) {
+        try {
+          const snapshot = await getLlmCodegenSession(activeSessionId)
+          if (!snapshot || typeof snapshot.status !== 'string') {
+            throw new Error('invalid_reconciliation_snapshot')
+          }
+          const action = getCodegenSessionReconciliationAction({
+            conversation: currentConversation ?? conversations.find(conv => conv.id === conversationId) ?? {
+              clarificationGate: null,
+              codegenSpecDesc: null,
+              pendingCanonicalDigest: null,
+              publishedSnapshotId: null,
+            } as ConversationState,
+            response: snapshot,
+          })
+
+          if (action === 'apply-server') {
+            if (snapshot.status !== 'PUBLISHED' && snapshot.status !== 'REJECTED') {
+              applyCodegenResponseToConversation(snapshot)
+              return
+            }
+          }
+
+          if (action === 'restart') {
+            setConversations(prev =>
+              prev.map(conv =>
+                conv.id === conversationId
+                  ? resetConversationForFreshCodegenSession(conv)
+                  : conv,
+              ),
+            )
+            activeSessionId = null
+          }
+        } catch {
+          // preserve the locally coherent draft on transient reconciliation failure
+        }
+      }
+
+      if (!activeSessionId) {
+        const recreated = await startNewSession()
+        activeSessionId = recreated.id
+        if (confirmGenerate) {
+          continued = await continueSession(activeSessionId)
+          continued = await advanceConfirmGenerate(activeSessionId, continued)
+          continued = await resolveProcessingSession(activeSessionId, continued)
+        } else {
+          continued = recreated
+        }
+      } else {
       try {
         continued = await continueSession(activeSessionId)
         continued = await advanceConfirmGenerate(activeSessionId, continued)
@@ -658,6 +817,7 @@ export async function requestAiQuantCodegen(args: {
             continued = recreated
           }
         }
+      }
       }
     }
 

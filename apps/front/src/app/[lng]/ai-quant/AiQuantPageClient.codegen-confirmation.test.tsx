@@ -7,6 +7,8 @@ import { AiQuantPageClient } from './AiQuantPageClient'
 
 const mockContinueLlmCodegenSession = jest.fn()
 const mockFetchBacktestCapabilities = jest.fn()
+const mockGetLlmCodegenSession = jest.fn()
+const mockStartLlmCodegenSession = jest.fn()
 const validSemanticGraph = {
   version: 1,
   market: {
@@ -38,6 +40,7 @@ const translationMap: Record<string, string> = {
   'aiQuant.messages.graphGenerated': '我已把你的自然语言转换为逻辑图。请先确认逻辑图，再开始回测。',
   'aiQuant.messages.codeGeneratedBacktest': '策略代码已生成，现在可以开始回测。',
   'aiQuant.messages.generatedCodeTitle': '生成的策略代码：',
+  'aiQuant.messages.staleConversationRecovered': '检测到本地会话已过期，已为你重建一个干净的对话，请重新确认并生成策略。',
 }
 
 function readStoredConversations<T>(): T[] {
@@ -231,8 +234,8 @@ jest.mock('@/lib/api', () => ({
   deployAccountAiQuantStrategy: jest.fn(),
   continueLlmCodegenSession: (...args: unknown[]) => mockContinueLlmCodegenSession(...args),
   fetchUserExchangeAccountStatuses: jest.fn(async () => []),
-  getLlmCodegenSession: jest.fn(),
-  startLlmCodegenSession: jest.fn(),
+  getLlmCodegenSession: (...args: unknown[]) => mockGetLlmCodegenSession(...args),
+  startLlmCodegenSession: (...args: unknown[]) => mockStartLlmCodegenSession(...args),
 }))
 
 function seedDraftConversation(
@@ -381,12 +384,34 @@ function seedPublishedConversation(now = Date.now()) {
   )
 }
 
+function seedStoredConversations(conversations: unknown[]) {
+  localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(conversations))
+}
+
 function createDeferred<T>() {
   let resolve!: (value: T) => void
   const promise = new Promise<T>(innerResolve => {
     resolve = innerResolve
   })
   return { promise, resolve }
+}
+
+function readStoredConversations() {
+  const parsed = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]') as Array<{
+    id: string
+    llmCodegenSessionId?: string | null
+    messages: Array<{ id: string; role: string; content: string }>
+    publishedSnapshotId?: string | null
+  }> | { conversations?: Array<{
+    id: string
+    llmCodegenSessionId?: string | null
+    messages: Array<{ id: string; role: string; content: string }>
+    publishedSnapshotId?: string | null
+  }> }
+  if (Array.isArray(parsed)) {
+    return parsed
+  }
+  return Array.isArray(parsed?.conversations) ? parsed.conversations : []
 }
 
 async function waitForAssertion(
@@ -427,6 +452,8 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       allowedSymbols: ['BTCUSDT'],
       allowedBaseTimeframes: ['15m'],
     })
+    mockGetLlmCodegenSession.mockReset()
+    mockStartLlmCodegenSession.mockReset()
     mockContinueLlmCodegenSession.mockResolvedValue({
       id: 'session-1',
       status: 'PUBLISHED',
@@ -459,6 +486,8 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
   })
 
   it('shows generating copy immediately after graph confirmation and enables backtest after codegen is published', async () => {
+    mockGetLlmCodegenSession.mockRejectedValueOnce(new Error('skip preload reconcile'))
+
     const deferred = createDeferred({
       id: 'session-1',
       status: 'PUBLISHED' as const,
@@ -543,7 +572,56 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     expect(runButton?.disabled).toBe(false)
   })
 
+  it('reconciles only the active persisted conversation session on restore', async () => {
+    const stored = readStoredConversations()
+    localStorage.setItem(
+      'ai_quant_conversations_v1',
+      JSON.stringify([
+        stored[0],
+        {
+          ...stored[0],
+          id: 'conv-2',
+          title: 'conv-2',
+          llmCodegenSessionId: 'session-2',
+          pendingCanonicalDigest: 'sha256:canonical-2',
+          updatedAt: stored[0].updatedAt - 1,
+        },
+      ]),
+    )
+
+    mockGetLlmCodegenSession.mockResolvedValueOnce({
+      id: 'session-1',
+      status: 'PUBLISHED',
+      strategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
+      canonicalDigest: 'sha256:canonical-1',
+      scriptCode: 'return { ok: true }',
+      semanticGraph: validSemanticGraph,
+      validationReport: { ok: true, errors: [] },
+      specDesc: {
+        canonicalDigest: 'sha256:canonical-1',
+        entryRules: ['价格达到 66830 时买入'],
+        exitRules: ['价格上涨到 66890 时卖出'],
+        riskRules: { positionPct: 10, maxDrawdownPct: 20 },
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+      },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await waitForAssertion(() => {
+      expect(mockGetLlmCodegenSession.mock.calls).toEqual([['session-1']])
+    })
+  })
+
   it('enables backtest even when published response has null strategyInstanceId', async () => {
+    mockGetLlmCodegenSession.mockRejectedValueOnce(new Error('skip preload reconcile'))
     mockContinueLlmCodegenSession.mockResolvedValueOnce({
       id: 'session-1',
       status: 'PUBLISHED',
@@ -612,6 +690,222 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     expect(
       (container.querySelector('[data-testid="confirm-graph"]') as HTMLButtonElement | null)?.disabled,
     ).toBe(true)
+  })
+
+  it('silently repairs the active stored conversation from a terminal remote session on restore', async () => {
+    seedDraftConversation(Date.now(), {
+      pendingCanonicalDigest: 'sha256:canonical-stale',
+    })
+    mockGetLlmCodegenSession.mockResolvedValueOnce({
+      id: 'session-1',
+      status: 'PUBLISHED',
+      strategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-remote',
+      canonicalDigest: 'sha256:canonical-remote',
+      scriptCode: 'return { repaired: true }',
+      semanticGraph: validSemanticGraph,
+      validationReport: { ok: true, errors: [] },
+      specDesc: {
+        entryRules: ['价格达到 66830 时买入'],
+        exitRules: ['价格上涨到 66890 时卖出'],
+        riskRules: { positionPct: 10, maxDrawdownPct: 20 },
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+      },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await waitForAssertion(() => {
+      expect(mockGetLlmCodegenSession).toHaveBeenCalledWith('session-1')
+      expect(container.querySelector('[data-testid="graph-status"]')?.textContent).toBe('confirmed')
+      expect(
+        (container.querySelector('[data-testid="run-backtest"]') as HTMLButtonElement | null)?.disabled,
+      ).toBe(false)
+    })
+
+    expect(container.textContent).not.toContain(translationMap['aiQuant.messages.staleConversationRecovered'])
+    const stored = readStoredConversations<{
+      llmCodegenSessionId?: string | null
+      pendingCanonicalDigest?: string | null
+      publishedSnapshotId?: string | null
+    }>()
+    expect(stored[0]?.llmCodegenSessionId ?? null).toBeNull()
+    expect(stored[0]?.pendingCanonicalDigest ?? null).toBe('sha256:canonical-remote')
+    expect(stored[0]?.publishedSnapshotId ?? null).toBe('snapshot-remote')
+  })
+
+  it('preserves a locally coherent draft when reconciliation fails transiently', async () => {
+    mockGetLlmCodegenSession.mockRejectedValueOnce(new Error('network down'))
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await waitForAssertion(() => {
+      expect(mockGetLlmCodegenSession).toHaveBeenCalledWith('session-1')
+      expect(container.querySelector('[data-testid="graph-status"]')?.textContent).toBe('draft')
+    })
+
+    expect(container.textContent).not.toContain(translationMap['aiQuant.messages.staleConversationRecovered'])
+    const stored = readStoredConversations<{ llmCodegenSessionId?: string | null }>()
+    expect(stored[0]?.llmCodegenSessionId ?? null).toBe('session-1')
+  })
+
+  it('replaces an irreparable stored conversation with a clean recovery notice', async () => {
+    mockGetLlmCodegenSession.mockResolvedValueOnce({
+      id: 'session-1',
+      status: 'PUBLISHED',
+      canonicalDigest: null,
+      scriptCode: null,
+      publishedSnapshotId: null,
+      semanticGraph: null,
+      validationReport: null,
+      specDesc: null,
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await waitForAssertion(() => {
+      expect(container.textContent).toContain(
+        translationMap['aiQuant.messages.staleConversationRecovered'],
+      )
+    })
+
+    const stored = readStoredConversations<{
+      llmCodegenSessionId?: string | null
+      publishedSnapshotId?: string | null
+      messages?: Array<{ content: string }>
+    }>()
+    expect(stored[0]?.llmCodegenSessionId ?? null).toBeNull()
+    expect(stored[0]?.publishedSnapshotId ?? null).toBeNull()
+    expect(stored[0]?.messages?.some(message =>
+      message.content === translationMap['aiQuant.messages.staleConversationRecovered'])).toBe(true)
+  })
+
+  it('reconciles only the active stored conversation on restore', async () => {
+    seedStoredConversations([
+      {
+        id: 'conv-1',
+        title: 'conv-1',
+        messages: [{ id: 'm-1', role: 'assistant', content: 'hello' }],
+        params: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+        paramSchema: null,
+        paramValues: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+        backtestResult: null,
+        logicGraph: {
+          version: 1,
+          status: 'draft',
+          trigger: [],
+          actions: [],
+          risk: [],
+          meta: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+            positionPct: 10,
+          },
+        },
+        semanticGraph: validSemanticGraph,
+        validationReport: { ok: true, errors: [] },
+        pendingCanonicalDigest: 'sha256:canonical-1',
+        clarificationGate: null,
+        publicationGate: null,
+        llmCodegenSessionId: 'session-1',
+        publishedStrategyInstanceId: null,
+        latestSignalMessage: null,
+        backtestExecutionState: 'idle',
+        updatedAt: Date.now(),
+      },
+      {
+        id: 'conv-2',
+        title: 'conv-2',
+        messages: [{ id: 'm-2', role: 'assistant', content: 'hello again' }],
+        params: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+        paramSchema: null,
+        paramValues: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+        backtestResult: null,
+        logicGraph: {
+          version: 1,
+          status: 'draft',
+          trigger: [],
+          actions: [],
+          risk: [],
+          meta: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+            positionPct: 10,
+          },
+        },
+        semanticGraph: validSemanticGraph,
+        validationReport: { ok: true, errors: [] },
+        pendingCanonicalDigest: 'sha256:canonical-2',
+        clarificationGate: null,
+        publicationGate: null,
+        llmCodegenSessionId: 'session-2',
+        publishedStrategyInstanceId: null,
+        latestSignalMessage: null,
+        backtestExecutionState: 'idle',
+        updatedAt: Date.now() - 1,
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await waitForAssertion(() => {
+      expect(mockGetLlmCodegenSession).toHaveBeenCalledTimes(1)
+    })
+    expect(mockGetLlmCodegenSession).toHaveBeenCalledWith('session-1')
+    expect(mockGetLlmCodegenSession).not.toHaveBeenCalledWith('session-2')
   })
 
   it('clears pending canonical digest when backend returns a blocking clarification gate', async () => {
@@ -816,6 +1110,72 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
 
     const stored = readStoredConversations<{ publicationGate?: Record<string, unknown> | null }>()
     expect(stored[0]).toHaveProperty('publicationGate', null)
+  })
+
+  it('replaces an irreparable stale persisted conversation with a fresh conversation notice', async () => {
+    localStorage.setItem(
+      'ai_quant_conversations_v1',
+      JSON.stringify([
+        {
+          id: 'conv-stale',
+          title: 'stale',
+          messages: [{ id: 'welcome', role: 'assistant', content: 'hello' }],
+          params: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            baseTimeframe: '15m',
+            buyWindowMin: 3,
+            buyDropPct: 1,
+            sellWindowMin: 15,
+            sellRisePct: 2,
+            positionPct: 10,
+          },
+          paramSchema: null,
+          paramValues: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            baseTimeframe: '15m',
+            buyWindowMin: 3,
+            buyDropPct: 1,
+            sellWindowMin: 15,
+            sellRisePct: 2,
+            positionPct: 10,
+          },
+          backtestResult: null,
+          logicGraph: null,
+          codegenSpecDesc: {
+            canonicalDigest: 'sha256:canonical-2',
+          },
+          semanticGraph: validSemanticGraph,
+          validationReport: { ok: true, errors: [] },
+          clarificationGate: null,
+          publicationGate: null,
+          pendingCanonicalDigest: 'sha256:canonical-1',
+          llmCodegenSessionId: 'session-stale',
+          publishedStrategyInstanceId: 'strategy-stale',
+          publishedSnapshotId: 'snapshot-stale',
+          publishedScriptCode: 'return { stale: true }',
+          publishedScriptGraphVersion: 99,
+          latestSignalMessage: null,
+          backtestExecutionState: 'idle',
+          updatedAt: Date.now(),
+        },
+      ]),
+    )
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await waitForAssertion(() => {
+      const stored = readStoredConversations()
+      expect(stored).toHaveLength(1)
+      expect(stored[0]?.id).not.toBe('conv-stale')
+      expect(stored[0]?.llmCodegenSessionId ?? null).toBeNull()
+      expect(stored[0]?.messages[0]?.content).toBe('aiQuant.messages.welcome')
+      expect(stored[0]?.messages.length).toBeGreaterThan(1)
+    })
   })
 
   it('renders publication gate mismatch details when publish gate is blocked', async () => {
