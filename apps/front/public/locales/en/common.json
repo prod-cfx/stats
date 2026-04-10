@@ -215,6 +215,7 @@
       "graphConfirmed": "Logic graph confirmed, generating strategy code...",
       "publicationGateBlocked": "Publish-time consistency checks failed. Please resolve the blocking mismatches below.",
       "codeGeneratedBacktest": "Strategy code generated, ready to backtest.",
+      "staleConversationRecovered": "Your local conversation was stale, so I rebuilt a clean chat. Please confirm and generate the strategy again.",
       "graphRevise": "Okay, please continue describing the conditions you want to modify in the chat box.",
       "aiDisclaimer": "AI generated content may be inaccurate, please be sure to fully backtest before live trading.",
       "backtestDrawdownLimit": "Max drawdown <= 20% required for one-click deployment",

@@ -1,7 +1,9 @@
 import { describe, expect, it } from '@jest/globals'
 
 import {
+  AI_QUANT_PERSISTED_SCHEMA_VERSION,
   hydrateConversation,
+  hydrateConversations,
   invalidateConversationPublication,
 } from './ai-quant-page-conversation'
 
@@ -298,5 +300,87 @@ describe('ai-quant-page-conversation', () => {
 
     expect(conversation.clarificationGate?.blocked).toBe(true)
     expect(conversation.clarificationGate?.items[0]?.key).toBe('market.marketType')
+  })
+
+  it('clears stale confirmation artifacts when stored canonical digest disagrees with codegenSpecDesc', () => {
+    const conversation = hydrateConversation({
+      id: 'conv-stale-digest',
+      title: 'test',
+      messages: [{ id: 'welcome', role: 'assistant', content: 'hello' }],
+      params: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+      },
+      paramSchema: null,
+      paramValues: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+      },
+      backtestResult: null,
+      logicGraph: {
+        version: 4,
+        status: 'confirmed',
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+          positionPct: 10,
+        },
+      },
+      codegenSpecDesc: {
+        canonicalDigest: 'sha256:canonical-2',
+      },
+      semanticGraph: {
+        version: 1,
+        market: {
+          symbol: 'BTCUSDT',
+          primaryTimeframe: '15m',
+        },
+        nodes: [],
+        actions: [],
+        risk: [],
+      } as any,
+      validationReport: {
+        ok: true,
+        errors: [],
+      },
+      clarificationGate: null,
+      publicationGate: null,
+      pendingCanonicalDigest: 'sha256:canonical-1',
+      llmCodegenSessionId: 'session-stale',
+      publishedStrategyInstanceId: null,
+      publishedSnapshotId: 'snapshot-stale',
+      publishedScriptCode: 'return { stale: true }',
+      publishedScriptGraphVersion: 4,
+      latestSignalMessage: null,
+      backtestExecutionState: 'idle',
+      updatedAt: 1,
+    } as any)
+
+    expect(conversation.codegenSpecDesc).toEqual({
+      canonicalDigest: 'sha256:canonical-2',
+    })
+    expect(conversation.semanticGraph).toBeNull()
+    expect(conversation.validationReport).toBeNull()
+    expect(conversation.pendingCanonicalDigest).toBeNull()
+    expect(conversation.llmCodegenSessionId).toBeNull()
+    expect(conversation.publishedSnapshotId).toBeNull()
+    expect(conversation.publishedScriptCode).toBeNull()
+    expect(conversation.publishedScriptGraphVersion).toBeNull()
   })
 })
