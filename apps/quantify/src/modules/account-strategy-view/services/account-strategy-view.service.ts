@@ -475,7 +475,7 @@ export class AccountStrategyViewService {
         initialBalanceQuote: exchangeBalance?.total,
         accountBalanceQuote: exchangeBalance?.free,
         mode: dto.mode,
-        strategyInstanceId: dto.strategyInstanceId,
+        strategyInstanceId: dto.strategyInstanceId ?? resolvedDeploy.sourceStrategyInstanceId ?? undefined,
         exchangeAccountId: dto.exchangeAccountId,
         exchangeAccountName: dto.exchangeAccountName,
       })

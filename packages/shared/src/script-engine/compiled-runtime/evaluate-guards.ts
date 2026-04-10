@@ -4,6 +4,9 @@ import type { CompiledRuntimeValue } from './evaluate-expr-pool'
 interface GuardProgramNode {
   id: string
   payload: {
+    kind?: 'STOP_LOSS_PCT' | 'TAKE_PROFIT_PCT' | 'TRAILING_STOP_PCT'
+    scope?: 'position' | 'strategy' | 'order_program'
+    value?: number
     onBreach: 'BLOCK_NEW_ENTRY' | 'FORCE_EXIT' | 'HALT_STRATEGY' | 'CANCEL_ORDER_PROGRAMS'
   }
 }
@@ -17,7 +20,7 @@ export interface CompiledGuardState {
 }
 
 export function evaluateGuards(
-  _ctx: StrategyExecutionContextV1,
+  ctx: StrategyExecutionContextV1,
   guards: readonly GuardProgramNode[],
   _exprValues: Readonly<Record<string, CompiledRuntimeValue>>,
   guardOrder: readonly string[],
@@ -34,19 +37,23 @@ export function evaluateGuards(
   for (const guardId of guardOrder) {
     const guard = guardIndex.get(guardId)
     if (!guard) continue
+    const breached = isGuardBreached(ctx, guard)
+    if (!breached) continue
+
+    state.triggered = [...state.triggered, guardId]
 
     switch (guard.payload.onBreach) {
       case 'HALT_STRATEGY':
-        state.strategyHalt = state.strategyHalt || false
+        state.strategyHalt = true
         break
       case 'BLOCK_NEW_ENTRY':
-        state.blockNewEntry = state.blockNewEntry || false
+        state.blockNewEntry = true
         break
       case 'FORCE_EXIT':
-        state.forceExit = state.forceExit || false
+        state.forceExit = true
         break
       case 'CANCEL_ORDER_PROGRAMS':
-        state.cancelOrderPrograms = state.cancelOrderPrograms || false
+        state.cancelOrderPrograms = true
         break
     }
   }
@@ -55,4 +62,119 @@ export function evaluateGuards(
     ...state,
     triggered: Object.freeze([...state.triggered]),
   })
+}
+
+function isGuardBreached(
+  ctx: StrategyExecutionContextV1,
+  guard: GuardProgramNode,
+): boolean {
+  const qty = readPositionQty(ctx)
+  const entryPrice = readEntryPrice(ctx)
+  const currentPrice = readCurrentPrice(ctx)
+  const thresholdPct = readThresholdPct(guard)
+
+  if (qty === 0 || entryPrice == null || currentPrice == null || thresholdPct == null) {
+    return false
+  }
+
+  switch (guard.payload.kind) {
+    case 'STOP_LOSS_PCT':
+      return thresholdPct > 0 && readPositionPnlPct(qty, entryPrice, currentPrice) <= -thresholdPct
+    case 'TAKE_PROFIT_PCT':
+      return thresholdPct > 0 && readPositionPnlPct(qty, entryPrice, currentPrice) >= thresholdPct
+    case 'TRAILING_STOP_PCT': {
+      const trailingAnchor = readTrailingAnchor(ctx, qty)
+      if (trailingAnchor == null) return false
+
+      if (qty > 0) {
+        if (trailingAnchor <= entryPrice) return false
+        return currentPrice <= trailingAnchor * (1 - thresholdPct / 100)
+      }
+
+      if (trailingAnchor >= entryPrice) return false
+      return currentPrice >= trailingAnchor * (1 + thresholdPct / 100)
+    }
+    default:
+      return false
+  }
+}
+
+function readThresholdPct(guard: GuardProgramNode): number | null {
+  const value = guard.payload.value
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+}
+
+function readPositionQty(ctx: StrategyExecutionContextV1): number {
+  const value = ctx.position?.qty
+  return typeof value === 'number' && Number.isFinite(value) ? value : 0
+}
+
+function readEntryPrice(ctx: StrategyExecutionContextV1): number | null {
+  const candidates = [
+    ctx.position?.avgEntryPrice,
+    ctx.position?.entryPrice,
+    ctx.position?.avgPrice,
+  ]
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate > 0) {
+      return candidate
+    }
+  }
+
+  return null
+}
+
+function readCurrentPrice(ctx: StrategyExecutionContextV1): number | null {
+  const candidates = [
+    ctx.currentPrice,
+    ctx.baseTimeframeBar?.close,
+    Array.isArray(ctx.bars) && ctx.bars.length > 0 ? ctx.bars[ctx.bars.length - 1]?.close : null,
+  ]
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate > 0) {
+      return candidate
+    }
+  }
+
+  return null
+}
+
+function readPositionPnlPct(
+  qty: number,
+  entryPrice: number,
+  currentPrice: number,
+): number {
+  if (!(entryPrice > 0)) return 0
+  return qty > 0
+    ? ((currentPrice - entryPrice) / entryPrice) * 100
+    : ((entryPrice - currentPrice) / entryPrice) * 100
+}
+
+function readTrailingAnchor(
+  ctx: StrategyExecutionContextV1,
+  qty: number,
+): number | null {
+  const longCandidates = [
+    ctx.position?.highestPriceSinceEntry,
+    ctx.position?.peakPriceSinceEntry,
+    ctx.position?.peakPrice,
+    ctx.position?.maxPriceSinceEntry,
+  ]
+  const shortCandidates = [
+    ctx.position?.lowestPriceSinceEntry,
+    ctx.position?.troughPriceSinceEntry,
+    ctx.position?.troughPrice,
+    ctx.position?.minPriceSinceEntry,
+  ]
+  const candidates = qty > 0 ? longCandidates : shortCandidates
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate > 0) {
+      return candidate
+    }
+  }
+
+  return null
 }

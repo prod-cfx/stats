@@ -10,9 +10,22 @@ export type StrategySemanticRuleKey =
   | 'bollinger.lower_break'
   | 'bollinger.middle_revert'
   | 'bollinger.bars_outside'
+  | 'breakout.channel_high_break'
+  | 'breakout.channel_low_break'
+  | 'grid.range_rebalance'
   | 'ma.golden_cross'
   | 'ma.death_cross'
+  | 'rsi.threshold_lte'
+  | 'rsi.threshold_gte'
+  | 'rsi.cross_over'
+  | 'rsi.cross_under'
+  | 'macd.golden_cross'
+  | 'macd.death_cross'
   | 'position_loss_pct'
+  | 'risk.take_profit_pct'
+  | 'risk.trailing_stop_pct'
+  | 'risk.cooldown_bars'
+  | 'risk.time_stop_bars'
 
 export interface StrategySemanticRuleMapping {
   key: StrategySemanticRuleKey

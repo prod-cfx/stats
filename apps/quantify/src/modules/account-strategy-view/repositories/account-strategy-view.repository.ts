@@ -42,6 +42,12 @@ interface DeployStrategyInput {
   exchangeAccountName?: string
 }
 
+interface ExistingInstanceSnapshotBinding {
+  bindingSource?: unknown
+  publishedSnapshotId?: unknown
+  snapshotHash?: unknown
+}
+
 @Injectable()
 export class AccountStrategyViewRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
@@ -107,10 +113,14 @@ export class AccountStrategyViewRepository {
         })
       }
 
-      if (input.strategyInstanceId) {
+      const reusableStrategyInstanceId = input.strategyInstanceId
+        ?? input.publishedSnapshotBinding?.sourceStrategyInstanceId
+        ?? null
+
+      if (reusableStrategyInstanceId) {
         const existingInstance = await tx.strategyInstance.findFirst({
           where: {
-            id: input.strategyInstanceId,
+            id: reusableStrategyInstanceId,
             createdBy: input.userId,
           },
           select: {
@@ -122,7 +132,17 @@ export class AccountStrategyViewRepository {
         })
 
         if (!existingInstance) {
-          throw new DeployStrategyInstanceNotFoundException({ strategyInstanceId: input.strategyInstanceId })
+          throw new DeployStrategyInstanceNotFoundException({ strategyInstanceId: reusableStrategyInstanceId })
+        }
+
+        const snapshotBinding = this.readExistingSnapshotBinding(existingInstance.metadata)
+        if (input.publishedSnapshotBinding) {
+          this.assertSnapshotBindingMatchesExistingInstance({
+            strategyInstanceId: existingInstance.id,
+            existingBinding: snapshotBinding,
+            expectedPublishedSnapshotId: input.publishedSnapshotBinding.publishedSnapshotId,
+            expectedSnapshotHash: input.publishedSnapshotBinding.snapshotHash,
+          })
         }
 
         const mergedParams = {
@@ -222,85 +242,53 @@ export class AccountStrategyViewRepository {
         }
       }
 
-      const templateName = `AI量化快捷模板-${input.userId}`
-      const existingTemplate = await tx.strategyTemplate.findUnique({
-        where: { name: templateName },
-        select: { id: true },
+      throw new DeployStrategyInstanceNotFoundException({
+        strategyInstanceId: input.strategyInstanceId ?? input.publishedSnapshotBinding?.sourceStrategyInstanceId ?? undefined,
       })
-      const strategyTemplateId = existingTemplate?.id
-        ?? (await tx.strategyTemplate.create({
-            data: {
-              name: templateName,
-              description: '用于 AI 量化一键部署验证的自动模板',
-              llmModel: 'gpt-4',
-              promptTemplate: 'AUTO_DEPLOY_TEMPLATE',
-              paramsSchema: {},
-              defaultParams: {
-                exchange: input.exchange,
-                symbol: input.symbol,
-                timeframe: input.timeframe,
-                positionPct: input.positionPct,
-              },
-              requiredFields: [],
-              status: 'live',
-              createdBy: input.userId,
-              updatedBy: input.userId,
-              metadata: { source: 'account-ai-quant-deploy' },
-            },
-            select: { id: true },
-          })).id
-
-      const instanceName = `${normalizedName}-${Date.now()}`
-      const params = {
-        exchange: input.exchange,
-        symbol: input.symbol,
-        timeframe: input.timeframe,
-        positionPct: input.positionPct,
-        ...(typeof input.initialBalanceQuote === 'number' && Number.isFinite(input.initialBalanceQuote)
-          ? { initialBalanceQuote: input.initialBalanceQuote }
-          : {}),
-        ...(typeof input.accountBalanceQuote === 'number' && Number.isFinite(input.accountBalanceQuote)
-          ? { accountBalanceQuote: input.accountBalanceQuote }
-          : {}),
-      }
-
-      const strategyInstance = await tx.strategyInstance.create({
-        data: {
-          strategyTemplateId,
-          name: instanceName,
-          description: `一键部署 - ${input.symbol}`,
-          llmModel: 'gpt-4',
-          params,
-          status: 'running',
-          mode: resolvedMode,
-          startedAt: new Date(),
-          createdBy: input.userId,
-          updatedBy: input.userId,
-          metadata: {
-            source: 'account-ai-quant-deploy',
-            ...this.buildSnapshotBindingMetadata(input),
-          },
-        },
-        select: { id: true },
-      })
-
-      await tx.userStrategySubscription.create({
-        data: {
-          userId: input.userId,
-          strategyInstanceId: strategyInstance.id,
-          status: 'active',
-          customParams: params,
-          exchangeAccountId: resolvedExchangeAccountId,
-        },
-      })
-
-      return {
-        strategyInstanceId: strategyInstance.id,
-        mode: resolvedMode,
-      }
     })
 
     return strategyInstanceId
+  }
+
+  private readExistingSnapshotBinding(metadata: unknown): ExistingInstanceSnapshotBinding {
+    const record = this.asRecord(metadata)
+    return {
+      bindingSource: record.bindingSource,
+      publishedSnapshotId: record.publishedSnapshotId,
+      snapshotHash: record.snapshotHash,
+    }
+  }
+
+  private assertSnapshotBindingMatchesExistingInstance(input: {
+    strategyInstanceId: string
+    existingBinding: ExistingInstanceSnapshotBinding
+    expectedPublishedSnapshotId: string
+    expectedSnapshotHash: string
+  }): void {
+    const existingPublishedSnapshotId = typeof input.existingBinding.publishedSnapshotId === 'string'
+      ? input.existingBinding.publishedSnapshotId.trim()
+      : ''
+    const existingSnapshotHash = typeof input.existingBinding.snapshotHash === 'string'
+      ? input.existingBinding.snapshotHash.trim()
+      : ''
+    const existingBindingSource = typeof input.existingBinding.bindingSource === 'string'
+      ? input.existingBinding.bindingSource.trim()
+      : ''
+
+    if (!existingPublishedSnapshotId || !existingSnapshotHash || existingBindingSource !== 'PUBLISHED_SNAPSHOT') {
+      throw new DeployStrategyInstanceNotFoundException({
+        strategyInstanceId: input.strategyInstanceId,
+      })
+    }
+
+    if (
+      existingPublishedSnapshotId !== input.expectedPublishedSnapshotId
+      || existingSnapshotHash !== input.expectedSnapshotHash
+    ) {
+      throw new DeployStrategyInstanceNotFoundException({
+        strategyInstanceId: input.strategyInstanceId,
+      })
+    }
   }
 
   async listStrategiesForUser(query: ListStrategiesQuery) {

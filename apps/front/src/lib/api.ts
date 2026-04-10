@@ -1,5 +1,5 @@
-import type { StrategyInstanceStatus } from '@ai/shared'
 import type { schemas } from '@ai/api-contracts'
+import type { StrategyInstanceStatus } from '@ai/shared'
 import type { ZodTypeAny } from 'zod'
 
 import type {
@@ -1812,6 +1812,7 @@ export async function deployAccountAiQuantStrategy(
         name: payload.name.trim(),
         deployRequestId: payload.deployRequestId.trim(),
         publishedSnapshotId: payload.publishedSnapshotId.trim(),
+        strategyInstanceId: payload.strategyInstanceId?.trim() || undefined,
         exchangeAccountId: payload.exchangeAccountId,
         exchangeAccountName: payload.exchangeAccountName,
       }),

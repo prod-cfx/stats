@@ -42,6 +42,7 @@ export interface CanonicalRuleV2 {
   phase: CanonicalRulePhase
   sideScope?: CanonicalRuleSideScope
   priority: number
+  cooldownBars?: number
   condition: CanonicalConditionNode
   actions: CanonicalRuleAction[]
   metadata?: Record<string, unknown>

@@ -24,6 +24,18 @@ import { ScriptProfileExtractorService } from './script-profile-extractor.servic
 
 const ENTRY_ACTIONS = new Set(['OPEN_LONG', 'OPEN_SHORT'])
 const EXIT_ACTIONS = new Set(['CLOSE_LONG', 'CLOSE_SHORT', 'ADJUST_POSITION'])
+const ENTRY_ADVANCED_RULE_KEYS = new Set([
+  'grid.range_rebalance',
+  'breakout.channel_high_break',
+  'breakout.channel_low_break',
+  'risk.cooldown_bars',
+])
+const EXIT_ADVANCED_RULE_KEYS = new Set([
+  'grid.range_rebalance',
+  'risk.take_profit_pct',
+  'risk.trailing_stop_pct',
+  'risk.time_stop_bars',
+])
 
 @Injectable()
 export class StrategyConsistencyService {
@@ -183,6 +195,20 @@ export class StrategyConsistencyService {
       }
     }
 
+    for (const ruleBlock of ir.ruleBlocks) {
+      if (typeof ruleBlock.cooldownBars !== 'number' || ruleBlock.cooldownBars <= 0) continue
+      for (const action of ruleBlock.actions) {
+        const normalizedAction = this.normalizeAction(action.kind)
+        if (!normalizedAction) continue
+        pushRule({
+          key: 'risk.cooldown_bars',
+          action: normalizedAction,
+          phase: this.resolvePhaseFromAction(normalizedAction),
+          sideScope: this.resolveRuleSideScope('both', normalizedAction),
+        })
+      }
+    }
+
     const actions = Array.from(new Set(
       ir.ruleBlocks.flatMap(rule =>
         rule.actions
@@ -277,6 +303,20 @@ export class StrategyConsistencyService {
         if (!normalizedAction) continue
         pushRule({
           key,
+          action: normalizedAction,
+          phase: this.resolvePhaseFromAction(normalizedAction),
+          sideScope: this.resolveRuleSideScope('both', normalizedAction),
+        })
+      }
+    }
+
+    for (const program of projection.decisionPrograms) {
+      if (typeof program.cooldownBars !== 'number' || program.cooldownBars <= 0) continue
+      for (const action of program.actions) {
+        const normalizedAction = this.normalizeAction(action.kind)
+        if (!normalizedAction) continue
+        pushRule({
+          key: 'risk.cooldown_bars',
           action: normalizedAction,
           phase: this.resolvePhaseFromAction(normalizedAction),
           sideScope: this.resolveRuleSideScope('both', normalizedAction),
@@ -1029,6 +1069,18 @@ export class StrategyConsistencyService {
     const predicateId = input.predicateId.toLowerCase()
     if (
       input.predicateKind === 'CROSS_OVER'
+      && (predicateId.includes('macd_golden_cross') || predicateId.includes('macd.golden_cross'))
+    ) {
+      return 'macd.golden_cross'
+    }
+    if (
+      input.predicateKind === 'CROSS_UNDER'
+      && (predicateId.includes('macd_death_cross') || predicateId.includes('macd.death_cross'))
+    ) {
+      return 'macd.death_cross'
+    }
+    if (
+      input.predicateKind === 'CROSS_OVER'
       && (predicateId.includes('golden_cross') || predicateId.includes('ma.golden_cross'))
     ) {
       return 'ma.golden_cross'
@@ -1051,8 +1103,30 @@ export class StrategyConsistencyService {
     ) {
       return 'bollinger.lower_break'
     }
+    if (
+      (input.predicateKind === 'CROSS_OVER' || input.predicateKind === 'GT' || input.predicateKind === 'GTE')
+      && (predicateId.includes('channel_high_break') || predicateId.includes('breakout.channel_high_break'))
+    ) {
+      return 'breakout.channel_high_break'
+    }
+    if (
+      (input.predicateKind === 'CROSS_UNDER' || input.predicateKind === 'LT' || input.predicateKind === 'LTE')
+      && (predicateId.includes('channel_low_break') || predicateId.includes('breakout.channel_low_break'))
+    ) {
+      return 'breakout.channel_low_break'
+    }
+    if (input.predicateKind === 'TOUCH_LEVEL_UP' || input.predicateKind === 'TOUCH_LEVEL_DOWN') {
+      return 'grid.range_rebalance'
+    }
     if (input.predicateKind === 'OR' && input.predicateId.includes('middle')) return 'bollinger.middle_revert'
     if (input.predicateId.includes('outside')) return 'bollinger.bars_outside'
+    if (predicateId.includes('rsi_threshold_lte')) return 'rsi.threshold_lte'
+    if (predicateId.includes('rsi_threshold_gte')) return 'rsi.threshold_gte'
+    if (predicateId.includes('rsi_cross_over')) return 'rsi.cross_over'
+    if (predicateId.includes('rsi_cross_under')) return 'rsi.cross_under'
+    if (predicateId.includes('time_stop_bars') || predicateId.includes('risk.time_stop_bars')) return 'risk.time_stop_bars'
+    if (predicateId.includes('cooldown_bars') || predicateId.includes('risk.cooldown_bars')) return 'risk.cooldown_bars'
+    if (predicateId.includes('take_profit') || predicateId.includes('risk.take_profit_pct')) return 'risk.take_profit_pct'
     if (input.predicateId.includes('stop-loss') || input.predicateId.includes('loss')) return 'position_loss_pct'
     return null
   }
@@ -1060,6 +1134,12 @@ export class StrategyConsistencyService {
   private inferRuleKeyFromGuard(kind: string): StrategySemanticRuleKey | null {
     if (kind === 'STOP_LOSS_PCT' || kind === 'MAX_SINGLE_LOSS_PCT') {
       return 'position_loss_pct'
+    }
+    if (kind === 'TAKE_PROFIT_PCT') {
+      return 'risk.take_profit_pct'
+    }
+    if (kind === 'TRAILING_STOP_PCT') {
+      return 'risk.trailing_stop_pct'
     }
     return null
   }
@@ -1152,6 +1232,10 @@ export class StrategyConsistencyService {
     const hasMiddleRule = profile.ruleMappings.some(item => item.key === 'bollinger.middle_revert')
     const movingAverageEntryRule = this.resolveMovingAverageSummaryRule(profile, ENTRY_ACTIONS)
     const movingAverageExitRule = this.resolveMovingAverageSummaryRule(profile, EXIT_ACTIONS)
+    const momentumEntryRule = this.resolveMomentumSummaryRule(profile, ENTRY_ACTIONS)
+    const momentumExitRule = this.resolveMomentumSummaryRule(profile, EXIT_ACTIONS)
+    const advancedEntryRule = this.resolveAdvancedSummaryRule(profile, ENTRY_ACTIONS)
+    const advancedExitRule = this.resolveAdvancedSummaryRule(profile, EXIT_ACTIONS)
 
     const entryRule = upperRule?.action === 'OPEN_SHORT'
       ? 'bollinger.upper_break_short'
@@ -1159,12 +1243,16 @@ export class StrategyConsistencyService {
           ? 'bollinger.lower_break_long'
           : (strategyType === 'movingAverage' && movingAverageEntryRule)
               ? movingAverageEntryRule
-              : 'custom'
+              : (strategyType === 'momentum' && momentumEntryRule)
+                  ? momentumEntryRule
+              : advancedEntryRule || 'custom'
     const exitRule = hasMiddleRule
       ? 'bollinger.middle_revert'
       : (strategyType === 'movingAverage' && movingAverageExitRule)
           ? movingAverageExitRule
-          : 'custom'
+          : (strategyType === 'momentum' && momentumExitRule)
+              ? momentumExitRule
+          : advancedExitRule || 'custom'
 
     return {
       strategyType,
@@ -1184,12 +1272,6 @@ export class StrategyConsistencyService {
   }
 
   private buildLegacyRuleMappings(spec: Exclude<CanonicalStrategySpec, CanonicalStrategySpecV2>): StrategySemanticRuleMapping[] {
-    const hasBollinger = spec.indicators.some(item => item.kind === 'bollingerBands')
-    const hasMovingAverage = spec.indicators.some(item => item.kind === 'sma' || item.kind === 'ema')
-    if (!hasBollinger && !hasMovingAverage) {
-      return []
-    }
-
     const mappings = new Map<StrategySemanticRuleKey, CanonicalAction>()
     const register = (trigger: string, action: CanonicalAction) => {
       if (/上轨|upper/i.test(trigger)) {
@@ -1201,11 +1283,32 @@ export class StrategyConsistencyService {
       if (/中轨|middle|ma20/i.test(trigger)) {
         mappings.set('bollinger.middle_revert', action)
       }
+      if (/网格/u.test(trigger)) {
+        mappings.set('grid.range_rebalance', action)
+      }
+      if ((/\bhighest(?:high)?\b/i.test(trigger) || /通道上轨|通道上沿|前高|breakout/i.test(trigger)) && (/>=|>|上穿|突破|breakout/i.test(trigger))) {
+        mappings.set('breakout.channel_high_break', action)
+      }
+      if ((/\blowest(?:low)?\b/i.test(trigger) || /通道下轨|通道下沿|前低|breakdown/i.test(trigger)) && (/<=|<|下穿|跌破|breakdown/i.test(trigger))) {
+        mappings.set('breakout.channel_low_break', action)
+      }
       if (/金叉|上穿/.test(trigger) && /均线|\bma\b|\bsma\b|\bema\b/i.test(trigger)) {
         mappings.set('ma.golden_cross', action)
       }
       if (/死叉|下穿/.test(trigger) && /均线|\bma\b|\bsma\b|\bema\b/i.test(trigger)) {
         mappings.set('ma.death_cross', action)
+      }
+      if (/止盈|take[_\s-]?profit/i.test(trigger)) {
+        mappings.set('risk.take_profit_pct', action)
+      }
+      if (/移动止损|trailing[_\s-]?stop/i.test(trigger)) {
+        mappings.set('risk.trailing_stop_pct', action)
+      }
+      if (/冷却|cooldown/i.test(trigger)) {
+        mappings.set('risk.cooldown_bars', action)
+      }
+      if (/time[_\s-]?stop/i.test(trigger) || /持仓.{0,12}(?:bar|k|根)/iu.test(trigger)) {
+        mappings.set('risk.time_stop_bars', action)
       }
     }
 
@@ -1228,6 +1331,42 @@ export class StrategyConsistencyService {
     ))
 
     return matchedKeys.length === 1 ? matchedKeys[0] : null
+  }
+
+  private resolveMomentumSummaryRule(
+    profile: StrategySemanticProfile,
+    actionSet: Set<string>,
+  ): 'rsi.threshold_lte' | 'rsi.threshold_gte' | 'rsi.cross_over' | 'rsi.cross_under' | 'macd.golden_cross' | 'macd.death_cross' | null {
+    const matchedKeys = Array.from(new Set(
+      profile.ruleMappings
+        .filter(item => actionSet.has(item.action))
+        .map(item => item.key)
+        .filter((key): key is 'rsi.threshold_lte' | 'rsi.threshold_gte' | 'rsi.cross_over' | 'rsi.cross_under' | 'macd.golden_cross' | 'macd.death_cross' =>
+          key === 'rsi.threshold_lte'
+          || key === 'rsi.threshold_gte'
+          || key === 'rsi.cross_over'
+          || key === 'rsi.cross_under'
+          || key === 'macd.golden_cross'
+          || key === 'macd.death_cross'),
+    ))
+
+    return matchedKeys.length === 1 ? matchedKeys[0] : null
+  }
+
+  private resolveAdvancedSummaryRule(
+    profile: StrategySemanticProfile,
+    actionSet: Set<string>,
+  ): 'grid.range_rebalance' | 'breakout.channel_high_break' | 'breakout.channel_low_break' | 'risk.take_profit_pct' | 'risk.trailing_stop_pct' | 'risk.cooldown_bars' | 'risk.time_stop_bars' | null {
+    const allowedKeys = actionSet === ENTRY_ACTIONS ? ENTRY_ADVANCED_RULE_KEYS : EXIT_ADVANCED_RULE_KEYS
+    const matchedKeys = Array.from(new Set(
+      profile.ruleMappings
+        .filter(item => actionSet.has(item.action) && allowedKeys.has(item.key))
+        .map(item => item.key),
+    ))
+
+    return matchedKeys.length === 1
+      ? matchedKeys[0] as 'grid.range_rebalance' | 'breakout.channel_high_break' | 'breakout.channel_low_break' | 'risk.take_profit_pct' | 'risk.trailing_stop_pct' | 'risk.cooldown_bars' | 'risk.time_stop_bars'
+      : null
   }
 
   private flattenV2Rule(rule: CanonicalRuleV2): StrategySemanticRuleProfile[] {
@@ -1271,8 +1410,29 @@ export class StrategyConsistencyService {
     if (/下轨|lower/i.test(trigger)) return 'bollinger.lower_break'
     if (/中轨|middle|ma20/i.test(trigger)) return 'bollinger.middle_revert'
     if (/轨外|outside/i.test(trigger)) return 'bollinger.bars_outside'
+    if (/网格/u.test(trigger)) return 'grid.range_rebalance'
+    if ((/\bhighest(?:high)?\b/i.test(trigger) || /通道上轨|通道上沿|前高|breakout/i.test(trigger)) && (/>=|>|上穿|突破|breakout/i.test(trigger))) {
+      return 'breakout.channel_high_break'
+    }
+    if ((/\blowest(?:low)?\b/i.test(trigger) || /通道下轨|通道下沿|前低|breakdown/i.test(trigger)) && (/<=|<|下穿|跌破|breakdown/i.test(trigger))) {
+      return 'breakout.channel_low_break'
+    }
     if (/金叉|上穿/.test(trigger) && /均线|\bma\b|\bsma\b|\bema\b/i.test(trigger)) return 'ma.golden_cross'
     if (/死叉|下穿/.test(trigger) && /均线|\bma\b|\bsma\b|\bema\b/i.test(trigger)) return 'ma.death_cross'
+    if (/\brsi\b|相对强弱|超买|超卖/iu.test(trigger)) {
+      if (/上穿|突破/u.test(trigger)) return 'rsi.cross_over'
+      if (/下穿|跌破/u.test(trigger)) return 'rsi.cross_under'
+      if (/<=|＜=|小于等于|低于|小于|超卖|低位/u.test(trigger)) return 'rsi.threshold_lte'
+      if (/>=|＞=|大于等于|高于|大于|超买|高位/u.test(trigger)) return 'rsi.threshold_gte'
+    }
+    if (/\bmacd\b|指数平滑异同/iu.test(trigger)) {
+      if (/金叉|上穿/u.test(trigger)) return 'macd.golden_cross'
+      if (/死叉|下穿/u.test(trigger)) return 'macd.death_cross'
+    }
+    if (/止盈|take[_\s-]?profit/i.test(trigger)) return 'risk.take_profit_pct'
+    if (/移动止损|trailing[_\s-]?stop/i.test(trigger)) return 'risk.trailing_stop_pct'
+    if (/冷却|cooldown/i.test(trigger)) return 'risk.cooldown_bars'
+    if (/time[_\s-]?stop/i.test(trigger) || /持仓.{0,12}(?:bar|k|根)/iu.test(trigger)) return 'risk.time_stop_bars'
     if (/止损|亏损|loss/i.test(trigger)) return 'position_loss_pct'
     return null
   }
@@ -1316,8 +1476,21 @@ export class StrategyConsistencyService {
       || key === 'bollinger.lower_break'
       || key === 'bollinger.middle_revert'
       || key === 'bollinger.bars_outside'
+      || key === 'breakout.channel_high_break'
+      || key === 'breakout.channel_low_break'
+      || key === 'grid.range_rebalance'
       || key === 'ma.golden_cross'
       || key === 'ma.death_cross'
+      || key === 'rsi.threshold_lte'
+      || key === 'rsi.threshold_gte'
+      || key === 'rsi.cross_over'
+      || key === 'rsi.cross_under'
+      || key === 'macd.golden_cross'
+      || key === 'macd.death_cross'
       || key === 'position_loss_pct'
+      || key === 'risk.take_profit_pct'
+      || key === 'risk.trailing_stop_pct'
+      || key === 'risk.cooldown_bars'
+      || key === 'risk.time_stop_bars'
   }
 }

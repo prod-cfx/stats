@@ -1,14 +1,13 @@
 import type { Dispatch, SetStateAction } from 'react'
 
+import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
 import {
   deployAccountAiQuantStrategy,
   fetchUserExchangeAccountStatuses,
 } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
-
-import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
-import { mapExchangeStatusesToDeployAccounts } from './ai-quant-page-conversation'
 import { extractCodegenErrorMessage } from './ai-quant-page-codegen'
+import { mapExchangeStatusesToDeployAccounts } from './ai-quant-page-conversation'
 
 type Translate = (key: string, options?: Record<string, unknown>) => string
 
@@ -110,6 +109,7 @@ export async function confirmAiQuantDeploy(args: {
       name: strategyName,
       deployRequestId: requestId,
       publishedSnapshotId,
+      strategyInstanceId: activeConversation.publishedStrategyInstanceId ?? undefined,
       exchangeAccountId: account.accountId,
       exchangeAccountName: account.accountName,
     })
