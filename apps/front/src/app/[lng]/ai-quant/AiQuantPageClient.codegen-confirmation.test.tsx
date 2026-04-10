@@ -397,12 +397,21 @@ function createDeferred<T>() {
 }
 
 function readStoredConversations() {
-  return JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]') as Array<{
+  const parsed = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]') as Array<{
     id: string
     llmCodegenSessionId?: string | null
     messages: Array<{ id: string; role: string; content: string }>
     publishedSnapshotId?: string | null
-  }>
+  }> | { conversations?: Array<{
+    id: string
+    llmCodegenSessionId?: string | null
+    messages: Array<{ id: string; role: string; content: string }>
+    publishedSnapshotId?: string | null
+  }> }
+  if (Array.isArray(parsed)) {
+    return parsed
+  }
+  return Array.isArray(parsed?.conversations) ? parsed.conversations : []
 }
 
 async function waitForAssertion(
@@ -721,13 +730,11 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     })
 
     expect(container.textContent).not.toContain(translationMap['aiQuant.messages.staleConversationRecovered'])
-    const stored = JSON.parse(
-      localStorage.getItem('ai_quant_conversations_v1') ?? '[]',
-    ) as Array<{
+    const stored = readStoredConversations<{
       llmCodegenSessionId?: string | null
       pendingCanonicalDigest?: string | null
       publishedSnapshotId?: string | null
-    }>
+    }>()
     expect(stored[0]?.llmCodegenSessionId ?? null).toBeNull()
     expect(stored[0]?.pendingCanonicalDigest ?? null).toBe('sha256:canonical-remote')
     expect(stored[0]?.publishedSnapshotId ?? null).toBe('snapshot-remote')
@@ -747,9 +754,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     })
 
     expect(container.textContent).not.toContain(translationMap['aiQuant.messages.staleConversationRecovered'])
-    const stored = JSON.parse(
-      localStorage.getItem('ai_quant_conversations_v1') ?? '[]',
-    ) as Array<{ llmCodegenSessionId?: string | null }>
+    const stored = readStoredConversations<{ llmCodegenSessionId?: string | null }>()
     expect(stored[0]?.llmCodegenSessionId ?? null).toBe('session-1')
   })
 
@@ -776,13 +781,11 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       )
     })
 
-    const stored = JSON.parse(
-      localStorage.getItem('ai_quant_conversations_v1') ?? '[]',
-    ) as Array<{
+    const stored = readStoredConversations<{
       llmCodegenSessionId?: string | null
       publishedSnapshotId?: string | null
       messages?: Array<{ content: string }>
-    }>
+    }>()
     expect(stored[0]?.llmCodegenSessionId ?? null).toBeNull()
     expect(stored[0]?.publishedSnapshotId ?? null).toBeNull()
     expect(stored[0]?.messages?.some(message =>

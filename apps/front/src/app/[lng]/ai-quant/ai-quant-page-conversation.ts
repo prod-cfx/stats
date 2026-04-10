@@ -796,6 +796,19 @@ export function hydrateConversations(
   }
 }
 
+function restoreHydratedConversationList(
+  items: Partial<ConversationState>[],
+  translate: (key: string) => string,
+): ConversationState[] {
+  return items.map((item, index) => {
+    const hydrated = hydrateConversation(item)
+    if (!shouldResetIrrecoverableHydratedConversation(item, hydrated)) {
+      return hydrated
+    }
+    return createRecoveryConversation(translate, hydrated.updatedAt || Date.now() + index)
+  })
+}
+
 function normalizeConversationStorageVersion(version: string): string {
   const normalized = version.trim()
   return normalized.length > 0 ? normalized : 'unknown'
@@ -837,7 +850,7 @@ export function readPersistedConversations(input: {
         throw new Error('empty legacy conversations')
       }
       return {
-        conversations: parsed.map(item => hydrateConversation(item)),
+        conversations: restoreHydratedConversationList(parsed, translate),
         shouldPersist: true,
       }
     }
@@ -863,7 +876,7 @@ export function readPersistedConversations(input: {
     }
 
     return {
-      conversations: storedConversations.map(item => hydrateConversation(item)),
+      conversations: restoreHydratedConversationList(storedConversations, translate),
       shouldPersist: false,
     }
   } catch {
