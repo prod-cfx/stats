@@ -1,21 +1,33 @@
-import type { CodegenSessionsRepository } from '../repositories/codegen-sessions.repository'
 import type { ChecklistPayload } from '../types/codegen-checklist'
-import type { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
-import type { CanonicalSpecV2IrCompilerService } from './canonical-spec-v2-ir-compiler.service'
-import type { CanonicalStrategyAstCompilerService } from './canonical-strategy-ast-compiler.service'
-import type { CompiledPublicationGateService } from './compiled-publication-gate.service'
-import type { CompiledScriptEmitterService } from './compiled-script-emitter.service'
-import type { CompiledScriptExecutionEnvelopeService } from './compiled-script-execution-envelope.service'
-import type { CompiledScriptParserService } from './compiled-script-parser.service'
-import type { RecommendationIndexService } from './recommendation-index.service'
-import type { SpecDescBuilderService } from './spec-desc-builder.service'
-import type { StrategyConsistencyService } from './strategy-consistency.service'
-import type { StrategySummaryBuilderService } from './strategy-summary-builder.service'
 
 import { Injectable } from '@nestjs/common'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CodegenSessionsRepository } from '../repositories/codegen-sessions.repository'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CanonicalSpecV2IrCompilerService } from './canonical-spec-v2-ir-compiler.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CanonicalStrategyAstCompilerService } from './canonical-strategy-ast-compiler.service'
 import { CodegenConversationStateMachine } from './codegen-conversation-state-machine'
 import { CodegenPublicationGenerationStage } from './codegen-publication-generation.stage'
 import { CodegenPublicationPersistenceStage } from './codegen-publication-persistence.stage'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CompiledPublicationGateService } from './compiled-publication-gate.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CompiledScriptEmitterService } from './compiled-script-emitter.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CompiledScriptExecutionEnvelopeService } from './compiled-script-execution-envelope.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CompiledScriptParserService } from './compiled-script-parser.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { RecommendationIndexService } from './recommendation-index.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { SpecDescBuilderService } from './spec-desc-builder.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { StrategyConsistencyService } from './strategy-consistency.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { StrategySummaryBuilderService } from './strategy-summary-builder.service'
 
 const DEFAULT_MODEL = 'gpt-4'
 
