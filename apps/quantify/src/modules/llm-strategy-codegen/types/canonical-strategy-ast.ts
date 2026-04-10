@@ -57,6 +57,7 @@ export interface DecisionProgramNode {
   phase: 'entry' | 'exit' | 'rebalance'
   when: string
   priority: number
+  cooldownBars?: number
   actions: ActionDef[]
 }
 
