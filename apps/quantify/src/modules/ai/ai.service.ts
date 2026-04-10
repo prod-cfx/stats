@@ -56,15 +56,28 @@ export class AiService {
       throw new AiProviderNotFoundException({ providerCode })
     }
 
-    // 本地联调用：允许在未配置真实 provider 时仍能产出 tool call 信号。
-    if (this.isMockAiEnabled()) {
-      return this.buildMockCompletion(options)
-    }
-
     const aiConfig = this.configService.get('ai')
     const providerConfig = providerCode === AiService.STRATEGY_CODEGEN_PROVIDER_CODE
       ? aiConfig?.strategyCodegen
       : aiConfig?.uniapi
+    const mockEnabled = this.isMockAiEnabled()
+    const baseUrl = providerConfig?.baseUrl || 'https://api.uniapi.io'
+    const model = options.model ?? providerConfig?.defaultModel ?? AiService.DEFAULT_MODEL
+    if (this.isPromptLoggingEnabled()) {
+      this.logger.debug(this.buildOutboundPromptLog({
+        providerCode,
+        model,
+        baseUrl,
+        options,
+        mockEnabled,
+      }))
+    }
+
+    // 本地联调用：允许在未配置真实 provider 时仍能产出 tool call 信号。
+    if (mockEnabled) {
+      return this.buildMockCompletion(options)
+    }
+
     const apiKey = providerConfig?.apiKey
     if (!apiKey) {
       const missingKeyName = providerCode === AiService.STRATEGY_CODEGEN_PROVIDER_CODE
@@ -74,8 +87,6 @@ export class AiService {
       throw new AiProviderErrorException({ providerCode, reason: 'NO_API_KEY', detail: `${missingKeyName} is not configured` })
     }
 
-    const baseUrl = providerConfig?.baseUrl || 'https://api.uniapi.io'
-    const model = options.model ?? providerConfig?.defaultModel ?? AiService.DEFAULT_MODEL
     this.logger.debug(`AI request: model=${model}, baseUrl=${baseUrl}, messages=${options.messages.length}`)
 
     const adapter: LlmProviderAdapter = new OpenAiCompatibleAdapter({
@@ -114,6 +125,15 @@ export class AiService {
     const raw = this.configService.get<string>('QUANTIFY_AI_MOCK_ENABLED')
     if (!raw) return false
     return raw === '1' || raw.toLowerCase() === 'true'
+  }
+
+  private isPromptLoggingEnabled(): boolean {
+    const raw = this.configService.get<string>('QUANTIFY_AI_PROMPT_LOG_ENABLED')
+    if (!raw) {
+      return process.env.NODE_ENV === 'development'
+    }
+    const normalized = raw.trim().toLowerCase()
+    return normalized === '1' || normalized === 'true'
   }
 
   private extractSymbolFromMessages(messages: ChatMessage[]): string {
@@ -172,5 +192,29 @@ export class AiService {
         },
       ],
     }
+  }
+
+  private buildOutboundPromptLog(args: {
+    providerCode: string
+    model: string
+    baseUrl: string
+    options: AiChatOptions
+    mockEnabled: boolean
+  }): string {
+    const payload = {
+      providerCode: args.providerCode,
+      model: args.model,
+      baseUrl: args.baseUrl,
+      mockEnabled: args.mockEnabled,
+      messageCount: args.options.messages.length,
+      messages: args.options.messages,
+      temperature: args.options.temperature ?? null,
+      maxTokens: args.options.maxTokens ?? null,
+      tools: args.options.tools ?? null,
+      toolChoice: args.options.toolChoice ?? null,
+      responseFormat: args.options.responseFormat ?? null,
+    }
+
+    return `event=ai_outbound_prompt payload=${JSON.stringify(payload)}`
   }
 }
