@@ -124,7 +124,11 @@ export class OpenAiCompatibleAdapter implements LlmProviderAdapter {
               model: options.model,
               messages: payloadMessages,
               temperature: options.temperature,
-              max_tokens: options.maxTokens,
+              ...(options.maxTokens != null
+                ? this.shouldUseMaxCompletionTokens(options.model)
+                  ? { max_completion_tokens: options.maxTokens }
+                  : { max_tokens: options.maxTokens }
+                : {}),
               stream: false,
               // OpenAI tools / tool_choice 语义，保持一层透传
               tools: options.tools,
@@ -223,5 +227,10 @@ export class OpenAiCompatibleAdapter implements LlmProviderAdapter {
   private buildUrl(path: string): string {
     const base = this.config.baseUrl.endsWith('/') ? this.config.baseUrl : `${this.config.baseUrl}/`
     return new URL(path, base).toString()
+  }
+
+  private shouldUseMaxCompletionTokens(model?: string): boolean {
+    if (!model) return false
+    return /^gpt-5/i.test(model.trim())
   }
 }

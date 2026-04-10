@@ -61,5 +61,30 @@ describe('openAiCompatibleAdapter retry', () => {
     expect(result.content).toBe('OK2')
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
-})
 
+  it('uses max_completion_tokens for gpt-5 models', async () => {
+    const fetchMock = jest.fn()
+      .mockResolvedValueOnce(mockResponse(200, { choices: [{ message: { content: 'OK3' } }] }))
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const adapter = new OpenAiCompatibleAdapter({
+      baseUrl: 'https://api.example.com',
+      apiKey: 'k',
+      timeoutMs: 1000,
+      maxRetries: 0,
+      retryDelayMs: 0,
+    })
+
+    await adapter.sendChatCompletion({
+      model: 'gpt-5.4',
+      messages: [{ role: 'user', content: 'hello' }],
+      maxTokens: 321,
+    })
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const payload = JSON.parse(String(init.body))
+    expect(payload.max_completion_tokens).toBe(321)
+    expect(payload.max_tokens).toBeUndefined()
+  })
+})
