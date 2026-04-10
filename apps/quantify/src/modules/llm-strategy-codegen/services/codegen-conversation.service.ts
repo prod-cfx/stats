@@ -704,13 +704,7 @@ export class CodegenConversationService {
       if (/做多|多单|开多|long|买入/i.test(normalized) || /做空|空单|开空|short|卖出/i.test(normalized)) {
         return this.replaceRuleDirection(normalized, actionText)
       }
-      if (/上轨|upper/i.test(normalized)) {
-        return `K线收盘后确认突破布林带上轨时${actionText}`
-      }
-      if (/下轨|lower/i.test(normalized)) {
-        return `K线收盘后确认突破布林带下轨时${actionText}`
-      }
-      return normalized
+      return `${normalized}，${actionText}`
     })
 
     return this.normalizeChecklist({
@@ -783,6 +777,28 @@ export class CodegenConversationService {
     const canonicalSpec = this.canonicalSpecBuilder.build(args.checklist)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
     const canonicalDigest = this.readCanonicalDigest(specDesc)
+    const missingFields = this.resolveChecklistMissingFields(args.checklist)
+
+    if (missingFields.length > 0) {
+      await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
+        status: 'DRAFTING',
+        checklist: args.checklist,
+        clarificationState: args.clarificationState,
+        constraintPack: {
+          ...args.constraintPack,
+          conversationHistory: historyAfterAnswer,
+        },
+        latestSpecDesc: specDesc,
+      }))
+
+      return this.finalizeSessionResponse({
+        id: args.session.id,
+        status: 'DRAFTING',
+        missingFields,
+        assistantPrompt: '请先补全入场和出场规则，再确认生成代码。',
+        clarificationState: args.clarificationState,
+      })
+    }
 
     await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
       status: 'CHECKLIST_GATE',

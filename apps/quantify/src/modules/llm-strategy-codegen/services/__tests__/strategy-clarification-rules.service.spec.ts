@@ -114,6 +114,21 @@ describe('strategyClarificationRulesService', () => {
     ]))
   })
 
+  it('does not block long-only spot strategy as invalid spot-short combo', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['跌破布林带下轨时做多'],
+      riskRules: { exchange: 'binance', marketType: 'spot' },
+    })
+
+    expect(state.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'invalid_spot_short_combo',
+      }),
+    ]))
+  })
+
   it('blocks short-side strategy when exchange is missing', () => {
     const state = service.detect({
       symbols: ['BTCUSDT'],

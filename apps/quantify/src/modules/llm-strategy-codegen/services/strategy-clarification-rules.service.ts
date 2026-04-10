@@ -176,7 +176,7 @@ export class StrategyClarificationRulesService {
       return items
     }
 
-    if (marketType === 'spot') {
+    if (marketType === 'spot' && hasShortEntry) {
       items.push({
         key: 'market.marketType',
         reason: 'invalid_spot_short_combo',

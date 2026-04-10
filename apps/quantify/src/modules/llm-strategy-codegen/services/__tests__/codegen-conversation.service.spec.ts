@@ -692,6 +692,61 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
   })
 
+  it('preserves extra rule conditions when applying entry-side clarification answers', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-clarification-extra-condition',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: withRequiredMarketContext({
+        entryRules: ['突破布林带上轨且 RSI > 70 时交易'],
+        exitRules: ['价格回到布林带中轨(MA20)时平仓'],
+      }),
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'entry.side.1',
+            ruleId: 'entry-1',
+            reason: 'missing_side_scope',
+            field: 'positionMode',
+            allowedAnswers: ['long', 'short'],
+            blocking: true,
+            question: '突破上轨时是只做空，还是也允许做多？',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+      }),
+    })
+
+    await service.continueSession('s-clarification-extra-condition', {
+      userId: 'u1',
+      message: '继续',
+      clarificationAnswers: {
+        'entry.side.1': 'short',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-clarification-extra-condition',
+      expect.objectContaining({
+        checklist: expect.objectContaining({
+          entryRules: expect.arrayContaining([
+            expect.stringContaining('RSI > 70'),
+            expect.stringContaining('做空'),
+          ]),
+        }),
+      }),
+    )
+  })
+
   it('persists structured clarification answers even when planner marks the short reply unrelated', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-clarification-unrelated-answer',
@@ -756,6 +811,58 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         }),
       }),
     )
+  })
+
+  it('keeps drafting when structured clarification answers still leave required fields missing', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-clarification-missing-fields',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['突破布林带上轨交易'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+        },
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'entry.side.1',
+            ruleId: 'entry-1',
+            reason: 'missing_side_scope',
+            field: 'positionMode',
+            allowedAnswers: ['long', 'short'],
+            blocking: true,
+            question: '突破上轨时是只做空，还是也允许做多？',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-clarification-missing-fields', {
+      userId: 'u1',
+      message: 'short',
+      clarificationAnswers: {
+        'entry.side.1': 'short',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.missingFields).toEqual(expect.arrayContaining(['exitRules']))
+    expect(result.canonicalDigest ?? null).toBeNull()
   })
 
   it('surfaces publicationGate at the top level when stored in latestSpecDesc', async () => {
