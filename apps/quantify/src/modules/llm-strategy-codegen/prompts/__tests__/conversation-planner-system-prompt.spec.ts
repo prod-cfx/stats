@@ -10,7 +10,7 @@ describe('conversationPlannerSystemPrompt', () => {
     expect(prompt).toContain('禁止对规则进行抽象、总结或泛化')
     expect(prompt).toContain('对于包含数量/序列条件的规则（如“连续N根K线”），必须完整写入 logic')
     expect(prompt).toContain('如果某条规则无法清晰表达，应优先保持原始描述')
-    expect(prompt).toContain('若缺少退出规则或止盈止损等关键出场条件，logicReady=false')
+    expect(prompt).toContain('若缺少核心出场语义')
     expect(prompt).toContain('成对出现的多空规则必须完整保留')
     expect(prompt).toContain('“直接平仓”不能改写成“减仓”')
     expect(prompt).toContain('只允许你代为补齐交易所、周期、仓位等非核心元数据')

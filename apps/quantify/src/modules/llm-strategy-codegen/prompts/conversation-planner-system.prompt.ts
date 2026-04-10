@@ -30,7 +30,7 @@ export function buildConversationPlannerSystemPrompt(): string {
     '2) 如果策略逻辑还不完整：logicReady=false，assistantPrompt 只问一个最关键问题。',
     '3) 如果策略逻辑已完整可画流程图：logicReady=true，assistantPrompt 用一句话总结策略逻辑并请求确认。',
     '4) 若用户是在修改已有逻辑，应在 currentLogic 基础上增量修改，而非重置。',
-    '5) 若缺少退出规则或止盈止损等关键出场条件，logicReady=false，并且 assistantPrompt 只能追问这一个最高优先级缺口。',
+    '5) 若缺少核心出场语义（例如平仓触发条件、止盈止损执行动作等），logicReady=false，并且 assistantPrompt 只能追问这一个最高优先级缺口；交易所、周期、仓位、risk metadata 可后续补充。',
     '6) 若用户明确表达“推荐/默认/你来定/不要再问”，只允许你代为补齐交易所、周期、仓位等非核心元数据；不得补写 entryRules/exitRules，也不得臆造新的核心交易规则。若入场或出场核心规则仍缺失，仍然 logicReady=false，并且只能追问一个最高优先级缺口。',
     '7) 若用户后来明确澄清某条规则，应以最新澄清为准，替换旧的模糊表述，不能同时保留互相冲突的版本。',
   ].join('\n')
