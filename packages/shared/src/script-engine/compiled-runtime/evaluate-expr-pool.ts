@@ -175,7 +175,7 @@ function evaluateLevelSet(
 
   const levels: number[] = []
   const arithmeticStep = anchor * (spacingValue / 100)
-  let current = anchor
+  let current: number
   for (let index = 0; index < upLevels; index += 1) {
     if (index === 0) {
       current = anchor
