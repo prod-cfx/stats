@@ -930,6 +930,7 @@ export class StrategyConsistencyService {
       marketType: typeof spec.market.marketType === 'string' ? spec.market.marketType : null,
       symbol: typeof spec.market.symbol === 'string' ? spec.market.symbol : null,
       timeframe: typeof spec.market.timeframe === 'string' ? spec.market.timeframe : null,
+      positionMode: this.resolveExpectedPositionMode(spec),
     }
 
     if (!projection) {
@@ -948,6 +949,7 @@ export class StrategyConsistencyService {
       marketType: projection.executionModel.instrumentType === 'perpetual' ? 'perp' : 'spot',
       symbol: projection.executionModel.symbol,
       timeframe: projection.executionModel.primaryTimeframe,
+      positionMode: projection.executionModel.positionMode,
     }
 
     const comparableFields = (Object.entries(expected) as Array<[keyof typeof expected, string | null]>)
@@ -987,6 +989,23 @@ export class StrategyConsistencyService {
       actual,
       message: '脚本执行市场元数据与 canonical spec 一致。',
     }
+  }
+
+  private resolveExpectedPositionMode(
+    spec: CanonicalStrategySpec,
+  ): 'long_only' | 'long_short' {
+    if (spec.version === 2) {
+      const hasShortExposure = spec.rules.some(rule => rule.actions.some(action => (
+        action.type === 'OPEN_SHORT'
+        || action.type === 'REDUCE_SHORT'
+      )))
+      return hasShortExposure ? 'long_short' : 'long_only'
+    }
+
+    const hasShortExposure = spec.entries.some(rule =>
+      rule.action === 'OPEN_SHORT',
+    )
+    return hasShortExposure ? 'long_short' : 'long_only'
   }
 
   private buildSummary(checks: StrategyConsistencyCheck[]): StrategyConsistencyReport['summary'] {
