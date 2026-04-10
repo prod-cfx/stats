@@ -18,6 +18,12 @@ describe('compiledScriptParserService', () => {
         irVersion: 'csi.v1',
         astVersion: 'csa.v1',
       }),
+      decisionPrograms: expect.arrayContaining([
+        expect.objectContaining({
+          sourceRef: 'entry_long',
+          cooldownBars: 5,
+        }),
+      ]),
     }))
   })
 
@@ -82,6 +88,7 @@ function createAstFixture() {
         phase: 'entry',
         when: 'entry_cross',
         priority: 200,
+        cooldownBars: 5,
         actions: [
           { kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 25 } },
         ],

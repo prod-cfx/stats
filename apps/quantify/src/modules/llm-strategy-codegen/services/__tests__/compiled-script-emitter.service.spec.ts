@@ -14,6 +14,7 @@ describe('compiledScriptEmitterService', () => {
     expect(first).toBe(second)
     expect(first).toContain("import type { StrategyAdapterV1 } from '@ai/shared'")
     expect(first).toContain("} from '@ai/shared/script-engine/compiled-runtime'")
+    expect(first).toContain('"cooldownBars":5')
     expect(first).not.toContain('突破布林带上轨做空')
     expect(first.endsWith('\n')).toBe(true)
   })
@@ -66,6 +67,7 @@ function createAstFixture() {
         phase: 'entry',
         when: 'entry_cross',
         priority: 200,
+        cooldownBars: 5,
         actions: [
           { kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 25 } },
         ],
