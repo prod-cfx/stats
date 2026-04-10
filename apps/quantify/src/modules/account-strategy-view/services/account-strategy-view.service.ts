@@ -315,23 +315,23 @@ export class AccountStrategyViewService {
       todayPnl,
       equitySeries: derivedEquitySeries,
       snapshot: {
-        exchange: detailSnapshot.snapshotParams
-          ? this.readString(detailSnapshot.snapshotParams, ['exchange', 'provider', 'exchangeId'])
+        publishedSnapshotId: resolvedSnapshot.publishedSnapshotId,
+        snapshotHash: resolvedSnapshot.snapshotHash,
+        exchange: resolvedSnapshot.paramValues
+          ? this.readString(resolvedSnapshot.paramValues, ['exchange', 'provider', 'exchangeId'])
           : null,
-        symbol: detailSnapshot.snapshotParams
-          ? this.readString(detailSnapshot.snapshotParams, ['symbol'])
+        symbol: resolvedSnapshot.paramValues
+          ? this.readString(resolvedSnapshot.paramValues, ['symbol'])
           : null,
-        timeframe: detailSnapshot.snapshotParams
-          ? this.readString(detailSnapshot.snapshotParams, ['timeframe', 'period'])
+        timeframe: resolvedSnapshot.paramValues
+          ? this.readString(resolvedSnapshot.paramValues, ['timeframe', 'period'])
           : null,
-        positionPct: detailSnapshot.snapshotParams
-          ? this.readNumber(detailSnapshot.snapshotParams, ['positionPct', 'positionSizeRatioPercent'])
+        positionPct: resolvedSnapshot.paramValues
+          ? this.readNumber(resolvedSnapshot.paramValues, ['positionPct', 'positionSizeRatioPercent'])
           : null,
-        publishedSnapshotId: detailSnapshot.publishedSnapshotId,
-        snapshotHash: detailSnapshot.snapshotHash,
-        paramSchema: detailSnapshot.dynamicParams.paramSchema,
-        paramValues: detailSnapshot.dynamicParams.paramValues,
-        schemaVersion: detailSnapshot.dynamicParams.schemaVersion,
+        paramSchema: dynamicParams.paramSchema,
+        paramValues: resolvedSnapshot.paramValues,
+        schemaVersion: dynamicParams.schemaVersion,
         deployAccountName: sub?.exchangeAccount?.name ?? null,
         deployAt: sub?.subscribedAt?.toISOString() ?? row.startedAt?.toISOString() ?? null,
       },
