@@ -7,6 +7,7 @@ interface DecisionProgramNode {
   phase: 'entry' | 'exit' | 'rebalance'
   priority: number
   when: string
+  cooldownBars?: number
   actions: Array<{
     kind: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | 'REDUCE_LONG' | 'REDUCE_SHORT'
     quantity: {
@@ -29,9 +30,11 @@ export function runDecisionPrograms(
   guardState: Readonly<CompiledGuardState>,
   decisionOrder: readonly string[],
 ): Readonly<StrategyDecisionV1> {
+  const compiledState = ensureCompiledDecisionState(ctx)
   if (guardState.forceExit) {
+    const currentQty = readCurrentQty(ctx)
     return Object.freeze({
-      action: 'CLOSE_LONG',
+      action: currentQty < 0 ? 'CLOSE_SHORT' : 'CLOSE_LONG',
       reason: 'compiled.force_exit',
     })
   }
@@ -52,12 +55,22 @@ export function runDecisionPrograms(
       continue
     }
 
+    if (
+      typeof program.cooldownBars === 'number'
+      && program.cooldownBars > 0
+      && typeof compiledState.lastTriggeredByProgram[program.id] === 'number'
+      && (compiledState.barIndex - compiledState.lastTriggeredByProgram[program.id] < program.cooldownBars)
+    ) {
+      continue
+    }
+
     if (exprValues[program.when] !== true) {
       continue
     }
 
     const action = program.actions[0]
     if (!action) continue
+    compiledState.lastTriggeredByProgram[program.id] = compiledState.barIndex
 
     return Object.freeze(buildDecision(action, ctx, program.id))
   }
@@ -66,6 +79,31 @@ export function runDecisionPrograms(
     action: 'NOOP',
     reason: 'compiled.noop',
   })
+}
+
+function ensureCompiledDecisionState(
+  ctx: StrategyExecutionContextV1,
+): {
+  barIndex: number
+  lastTriggeredByProgram: Record<string, number>
+} {
+  const current = (ctx as Record<string, unknown>).__compiledDecisionState
+  if (
+    current
+    && typeof current === 'object'
+    && !Array.isArray(current)
+    && typeof (current as { barIndex?: unknown }).barIndex === 'number'
+    && typeof (current as { lastTriggeredByProgram?: unknown }).lastTriggeredByProgram === 'object'
+  ) {
+    return current as {
+      barIndex: number
+      lastTriggeredByProgram: Record<string, number>
+    }
+  }
+
+  const fallback = { barIndex: 0, lastTriggeredByProgram: {} as Record<string, number> }
+  ;(ctx as Record<string, unknown>).__compiledDecisionState = fallback
+  return fallback
 }
 
 function buildDecision(

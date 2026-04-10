@@ -44,6 +44,11 @@ interface PendingOrder {
   reasonSource: BacktestReasonSource
 }
 
+interface CompiledDecisionRuntimeState {
+  barIndex: number
+  lastTriggeredByProgram: Record<string, number>
+}
+
 interface PositionRuntimeState {
   side: 'LONG' | 'SHORT'
   barsHeld: number
@@ -87,6 +92,7 @@ export class BacktestRunnerService {
     let stateCursor = 0
     const historyBarsBySymbolTimeframe = new Map<string, HistorySeries>()
     const pendingOrdersBySymbol = new Map<string, PendingOrder>()
+    const compiledDecisionStateBySymbol = new Map<string, CompiledDecisionRuntimeState>()
     const positionRuntimeStateBySymbol = new Map<string, PositionRuntimeState>()
     const strictSnapshotPath = this.isStrictSnapshotPath(input.strategy)
     const executionPolicy = this.resolveExecutionPolicy(input.strategy.executionPolicy, strictSnapshotPath)
@@ -131,6 +137,7 @@ export class BacktestRunnerService {
       ledger.markToMarket({ [bar.symbol]: bar.close })
       const snapshot = ledger.snapshot()
       const position = ledger.getPosition(bar.symbol)
+      const compiledDecisionState = this.bumpCompiledDecisionState(compiledDecisionStateBySymbol, bar.symbol)
       const positionRuntimeState = this.syncPositionRuntimeState(positionRuntimeStateBySymbol, position, bar)
       const htfState = this.stateEngine.getLatestByTimeframes(bar.symbol, input.stateTimeframes)
       const strategyContext = this.buildScriptContext({
@@ -138,6 +145,7 @@ export class BacktestRunnerService {
         input,
         htfState,
         historyBarsBySymbolTimeframe,
+        compiledDecisionState,
         portfolio: {
           cash: snapshot.cash,
           equity: snapshot.equity,
@@ -496,6 +504,7 @@ export class BacktestRunnerService {
     htfState: StrategyContext['htfState']
     position: StrategyContext['position']
     positionRuntimeState: PositionRuntimeState | null
+    compiledDecisionState: CompiledDecisionRuntimeState
     portfolio: StrategyContext['portfolio']
     input: BacktestRunInput
     historyBarsBySymbolTimeframe: Map<string, HistorySeries>
@@ -538,8 +547,19 @@ export class BacktestRunnerService {
       },
       portfolio,
       params: input.input.strategy.params,
+      __compiledDecisionState: input.compiledDecisionState,
       ...runtimeContext,
     }
+  }
+
+  private bumpCompiledDecisionState(
+    store: Map<string, CompiledDecisionRuntimeState>,
+    symbol: string,
+  ): CompiledDecisionRuntimeState {
+    const current = store.get(symbol) ?? { barIndex: 0, lastTriggeredByProgram: {} }
+    current.barIndex += 1
+    store.set(symbol, current)
+    return current
   }
 
   private syncPositionRuntimeState(

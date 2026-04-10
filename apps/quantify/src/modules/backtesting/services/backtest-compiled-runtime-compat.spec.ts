@@ -457,4 +457,76 @@ describe('backtestCompiledRuntimeCompat', () => {
 
     expect(values.held_bars).toBe(12)
   })
+
+  it('forces exit using the active short position side when guards trigger', () => {
+    const decision = runDecisionPrograms(
+      {
+        currentPrice: 100,
+        baseTimeframeBar: { close: 100 },
+        position: { qty: -2 },
+        portfolio: { equity: 10000 },
+      } as any,
+      [],
+      {},
+      {
+        blockNewEntry: false,
+        forceExit: true,
+        strategyHalt: false,
+        cancelOrderPrograms: false,
+        triggered: ['guard-trailing'],
+      },
+      [],
+    )
+
+    expect(decision).toEqual({
+      action: 'CLOSE_SHORT',
+      reason: 'compiled.force_exit',
+    })
+  })
+
+  it('skips entry programs while cooldown bars are still in effect', () => {
+    const decision = runDecisionPrograms(
+      {
+        currentPrice: 100,
+        baseTimeframeBar: { close: 100 },
+        position: { qty: 0 },
+        portfolio: { equity: 10000 },
+        __compiledDecisionState: {
+          barIndex: 6,
+          lastTriggeredByProgram: {
+            decision_entry: 4,
+          },
+        },
+      } as any,
+      [
+        {
+          id: 'decision_entry',
+          phase: 'entry',
+          priority: 10,
+          when: 'expr_entry',
+          cooldownBars: 3,
+          actions: [
+            {
+              kind: 'OPEN_LONG',
+              quantity: { mode: 'pct_equity', value: 25 },
+            },
+          ],
+        },
+      ],
+      { expr_entry: true },
+      {
+        blockNewEntry: false,
+        forceExit: false,
+        strategyHalt: false,
+        cancelOrderPrograms: false,
+        triggered: [],
+      },
+      ['decision_entry'],
+    )
+
+    expect(decision).toEqual({
+      action: 'NOOP',
+      reason: 'compiled.noop',
+    })
+  })
 })

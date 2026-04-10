@@ -469,6 +469,43 @@ describe('backtestRunnerService', () => {
     ])
   })
 
+  it('injects compiled decision runtime state for cooldown bookkeeping', async () => {
+    const runner = createRunner()
+    const seen: Array<{ ts: number; barIndex?: number }> = []
+
+    await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['5m'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-compiled-state',
+        params: {},
+        fn: (ctx: any): StrategyDecisionV1 => {
+          seen.push({
+            ts: ctx.ts,
+            barIndex: ctx.__compiledDecisionState?.barIndex,
+          })
+          return { action: 'NOOP' }
+        },
+      },
+      dataRange: { fromTs: 1, toTs: 3 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, close: 101 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 3, close: 102 }),
+      ],
+    })
+
+    expect(seen).toEqual([
+      { ts: 1, barIndex: 1 },
+      { ts: 2, barIndex: 2 },
+      { ts: 3, barIndex: 3 },
+    ])
+  })
+
   it('fails fast when strict snapshot strategy is missing execution policy', async () => {
     const runner = createRunner()
 
