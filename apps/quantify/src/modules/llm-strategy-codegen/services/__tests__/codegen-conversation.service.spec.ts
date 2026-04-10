@@ -248,6 +248,41 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('does not overwrite distinct stop-loss siblings when a new stop-loss rule is added', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-stoploss-siblings',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: completeChecklist({
+        entryRules: ['K线收盘后确认突破布林带上轨时做空'],
+        exitRules: ['多单亏损达到5%时平仓', '空单亏损达到8%时平仓'],
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我已按你的澄清补充规则。',
+        logic: {
+          exitRules: ['多单亏损达到6%时平仓'],
+        },
+      }),
+    })
+
+    await service.continueSession('s-stoploss-siblings', {
+      userId: 'u1',
+      message: '把多单止损改成 6%',
+    })
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-stoploss-siblings', expect.objectContaining({
+      checklist: expect.objectContaining({
+        exitRules: ['多单亏损达到5%时平仓', '空单亏损达到8%时平仓', '多单亏损达到6%时平仓'],
+      }),
+    }))
+  })
+
   it('passes exact strong-rule semantics into the script generation call', async () => {
     mockAi.chat.mockResolvedValue({
       content: 'const strategy: StrategyAdapterV1 = { protocolVersion: "v1", onBar() { return { action: "NOOP" } } }\nstrategy',

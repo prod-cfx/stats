@@ -1851,12 +1851,6 @@ export class CodegenConversationService {
     if ((/死叉|下穿/u.test(text)) && /均线|\bma\b|\bsma\b|\bema\b/iu.test(text)) {
       return 'ma-death-cross'
     }
-    if (/止损|亏损|stop\s*loss/iu.test(text)) {
-      return 'stop-loss'
-    }
-    if (/止盈|take\s*profit/iu.test(text)) {
-      return 'take-profit'
-    }
     if (/布林带上轨/iu.test(text)) {
       return 'bollinger-upper'
     }

@@ -298,8 +298,8 @@ export class CanonicalSpecBuilderService {
 
     const earlyStopText = typeof riskRules.earlyStop === 'string' ? riskRules.earlyStop : ''
     const outsideBandSourceText = [
-      earlyStopText,
       ...exitTexts,
+      earlyStopText,
     ].find(text => /连续\s*3|3\s*根/.test(text) && /轨外|outside/i.test(text)) ?? ''
 
     if (outsideBandSourceText) {
