@@ -476,7 +476,7 @@ export class CanonicalSpecBuilderService {
   }
 
   private resolveOutsideBandRiskActions(text: string): CanonicalRuleV2['actions'] | null {
-    if (/全平|全部平仓|清仓|强平|force\s*exit|force\s*close/iu.test(text)) {
+    if (/全平|全部平仓|直接平仓|清仓|强平|force\s*exit|force\s*close/iu.test(text)) {
       return [{ type: 'FORCE_EXIT' }]
     }
 
