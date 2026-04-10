@@ -436,8 +436,8 @@ describe('backtestCompiledRuntimeCompat', () => {
       ['high_break', 'low_break'],
     )
 
-    expect(values.high_break).toBe(106)
-    expect(values.low_break).toBe(98)
+    expect(values.high_break).toBe(105)
+    expect(values.low_break).toBe(99)
   })
 
   it('evaluates position held bars as numeric runtime values', () => {

@@ -354,13 +354,13 @@ function resolveSeriesValueAt(
       }
       case 'HIGHEST_HIGH': {
         const period = readNumericParam(node.payload.params, 'period') ?? 20
-        const window = collectBarHistory(period, offset + (node.payload.offsetBars ?? 0), bars)
+        const window = collectBarHistory(period, offset + (node.payload.offsetBars ?? 0) + 1, bars)
         if (window.length === 0) return null
         return Math.max(...window.map(bar => bar.high))
       }
       case 'LOWEST_LOW': {
         const period = readNumericParam(node.payload.params, 'period') ?? 20
-        const window = collectBarHistory(period, offset + (node.payload.offsetBars ?? 0), bars)
+        const window = collectBarHistory(period, offset + (node.payload.offsetBars ?? 0) + 1, bars)
         if (window.length === 0) return null
         return Math.min(...window.map(bar => bar.low))
       }
