@@ -29,7 +29,7 @@ function buildValidPayload() {
     leverage: number
     execution: { slippageBps: number; feeBps: number; priceSource: string }
     strategy: {
-      id: string
+      id?: string
       protocolVersion: string
       publishedSnapshotId?: string
       params?: Record<string, unknown>
@@ -104,6 +104,16 @@ describe('runBacktestDto', () => {
   it('accepts snapshot-backed payload without strategy params', async () => {
     const payload = buildValidPayload()
     delete payload.strategy.params
+
+    const dto = plainToInstance(RunBacktestDto, payload)
+    const errors = await validate(dto)
+
+    expect(errors).toHaveLength(0)
+  })
+
+  it('accepts snapshot-backed payload without strategy id', async () => {
+    const payload = buildValidPayload()
+    delete payload.strategy.id
 
     const dto = plainToInstance(RunBacktestDto, payload)
     const errors = await validate(dto)
