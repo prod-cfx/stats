@@ -445,9 +445,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         status: 'NEEDS_CLARIFICATION',
         items: [
           {
-            key: 'entry.side',
+            key: 'entry.side.1',
             reason: 'missing_side_scope',
             question: '突破上轨时是只做空，还是也允许做多？',
+            allowedAnswers: ['long', 'short'],
             status: 'pending',
           },
           {
@@ -467,10 +468,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       status: 'NEEDS_CLARIFICATION',
       items: [
         expect.objectContaining({
-          key: 'entry.side',
+          key: 'entry.side.1',
           reason: 'missing_side_scope',
           field: 'positionMode',
           blocking: true,
+          allowedAnswers: ['long', 'short'],
           status: 'pending',
         }),
         expect.objectContaining({
@@ -508,11 +510,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         status: 'NEEDS_CLARIFICATION',
         items: [
           {
-            key: 'entry.side',
+            key: 'entry.side.1',
             reason: 'missing_side_scope',
             field: 'positionMode',
             blocking: true,
             question: '突破上轨时是只做空，还是也允许做多？',
+            allowedAnswers: ['long', 'short'],
             status: 'pending',
           },
         ],
@@ -527,14 +530,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       blocked: true,
       items: [
         expect.objectContaining({
-          key: 'entry.side',
+          key: 'entry.side.1',
           status: 'pending',
           blocking: true,
         }),
       ],
       pendingItems: [
         expect.objectContaining({
-          key: 'entry.side',
+          key: 'entry.side.1',
           status: 'pending',
           blocking: true,
         }),
@@ -564,11 +567,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         status: 'NEEDS_CLARIFICATION',
         items: [
           {
-            key: 'entry.side',
+            key: 'entry.side.1',
             reason: 'missing_side_scope',
             field: 'positionMode',
             blocking: true,
             question: '突破上轨时是只做空，还是也允许做多？',
+            allowedAnswers: ['long', 'short'],
             status: 'pending',
           },
         ],
@@ -587,7 +591,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '继续',
       clarificationAnswers: {
-        'entry.side': 'short',
+        'entry.side.1': 'short',
       },
     } as ContinueCodegenSessionDto)
 
@@ -608,6 +612,68 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         entryRules: expect.arrayContaining([expect.stringContaining('做空')]),
       }),
     }))
+  })
+
+  it('applies action uniqueness clarification to the targeted entry rule only', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-clarification-action-uniqueness',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['突破后同时做多和做空', '跌破下轨时做多'],
+        exitRules: ['价格回到布林带中轨(MA20)时平仓'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+        },
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'entry.action_uniqueness.1',
+            ruleId: 'entry-1',
+            reason: 'missing_action_uniqueness',
+            field: 'positionMode',
+            allowedAnswers: ['long', 'short'],
+            blocking: true,
+            question: '这条入场规则同时包含做多和做空，请确认最终只保留哪个方向？',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+      }),
+    })
+
+    const result = await service.continueSession('s-clarification-action-uniqueness', {
+      userId: 'u1',
+      message: '继续',
+      clarificationAnswers: {
+        'entry.action_uniqueness.1': 'short',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-clarification-action-uniqueness',
+      expect.objectContaining({
+        checklist: expect.objectContaining({
+          entryRules: expect.arrayContaining([
+            expect.stringContaining('做空'),
+            '跌破下轨时做多',
+          ]),
+        }),
+      }),
+    )
   })
 
   it('surfaces publicationGate at the top level when stored in latestSpecDesc', async () => {

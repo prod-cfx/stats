@@ -8,7 +8,7 @@ describe('strategyClarificationQuestionService', () => {
       status: 'NEEDS_CLARIFICATION',
       items: [
         { key: 'riskRules.earlyStop.action', reason: 'ambiguous_risk_effect', field: 'riskRules.earlyStop.action', blocking: true, question: '轨外3根时是全平还是减仓？', status: 'pending' },
-        { key: 'entry.side', reason: 'missing_side_scope', field: 'positionMode', blocking: true, question: '突破上轨时是只做空还是也允许做多？', status: 'pending' },
+        { key: 'entry.side.1', reason: 'missing_side_scope', field: 'positionMode', blocking: true, question: '突破上轨时是只做空还是也允许做多？', status: 'pending' },
       ],
     })
 

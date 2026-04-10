@@ -59,6 +59,7 @@ export class StrategyClarificationRulesService {
           ruleId: `entry-${index + 1}`,
           reason: 'missing_action_uniqueness',
           field: 'positionMode',
+          allowedAnswers: ['long', 'short'],
           blocking: true,
           question: '这条入场规则同时包含做多和做空，请确认最终只保留哪个方向？',
           status: 'pending',
@@ -70,10 +71,11 @@ export class StrategyClarificationRulesService {
 
       if (UPPER_BAND_PATTERN.test(rule)) {
         items.push({
-          key: 'entry.side',
+          key: `entry.side.${index + 1}`,
           ruleId: `entry-${index + 1}`,
           reason: 'missing_side_scope',
           field: 'positionMode',
+          allowedAnswers: ['long', 'short'],
           blocking: true,
           question: '突破上轨时是只做空，还是也允许做多？',
           status: 'pending',
@@ -84,10 +86,11 @@ export class StrategyClarificationRulesService {
 
       if (LOWER_BAND_PATTERN.test(rule)) {
         items.push({
-          key: 'entry.side',
+          key: `entry.side.${index + 1}`,
           ruleId: `entry-${index + 1}`,
           reason: 'missing_side_scope',
           field: 'positionMode',
+          allowedAnswers: ['long', 'short'],
           blocking: true,
           question: '跌破下轨时是只做多，还是也允许做空？',
           status: 'pending',

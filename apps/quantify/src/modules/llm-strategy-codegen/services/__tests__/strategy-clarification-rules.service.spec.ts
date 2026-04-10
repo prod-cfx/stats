@@ -11,8 +11,9 @@ describe('strategyClarificationRulesService', () => {
     expect(state.status).toBe('NEEDS_CLARIFICATION')
     expect(state.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'entry.side',
+        key: 'entry.side.1',
         reason: 'missing_side_scope',
+        allowedAnswers: ['long', 'short'],
         status: 'pending',
       }),
     ]))
@@ -26,7 +27,9 @@ describe('strategyClarificationRulesService', () => {
     expect(state.status).toBe('NEEDS_CLARIFICATION')
     expect(state.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
+        key: 'entry.action_uniqueness.1',
         reason: 'missing_action_uniqueness',
+        allowedAnswers: ['long', 'short'],
         status: 'pending',
       }),
     ]))

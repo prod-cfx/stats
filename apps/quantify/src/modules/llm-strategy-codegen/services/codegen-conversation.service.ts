@@ -606,8 +606,8 @@ export class CodegenConversationService {
     item: StrategyClarificationItem,
     answer: string,
   ): ChecklistPayload {
-    if (item.key === 'entry.side') {
-      return this.applyEntrySideClarification(checklist, answer)
+    if (item.key.startsWith('entry.side.') || item.key.startsWith('entry.action_uniqueness.')) {
+      return this.applyEntryRuleDirectionClarification(checklist, item, answer)
     }
 
     if (item.key === 'market.symbol' || item.field === 'symbol') {
@@ -667,18 +667,26 @@ export class CodegenConversationService {
     return checklist
   }
 
-  private applyEntrySideClarification(checklist: ChecklistPayload, answer: string): ChecklistPayload {
+  private applyEntryRuleDirectionClarification(
+    checklist: ChecklistPayload,
+    item: StrategyClarificationItem,
+    answer: string,
+  ): ChecklistPayload {
     const direction = this.normalizeDirectionClarificationAnswer(answer)
-    if (!direction || !checklist.entryRules || checklist.entryRules.length === 0) {
+    const ruleIndex = this.readClarificationRuleIndex(item)
+    if (!direction || ruleIndex === null || !checklist.entryRules || checklist.entryRules.length === 0) {
       return checklist
     }
 
     const actionText = direction === 'short' ? '做空' : '做多'
-    const entryRules = checklist.entryRules.map((rule) => {
+    const entryRules = checklist.entryRules.map((rule, index) => {
       const normalized = rule.trim()
+      if (index !== ruleIndex) {
+        return normalized || rule
+      }
       if (!normalized) return rule
       if (/做多|多单|开多|long|买入/i.test(normalized) || /做空|空单|开空|short|卖出/i.test(normalized)) {
-        return normalized
+        return this.replaceRuleDirection(normalized, actionText)
       }
       if (/上轨|upper/i.test(normalized)) {
         return `K线收盘后确认突破布林带上轨时${actionText}`
@@ -693,6 +701,30 @@ export class CodegenConversationService {
       ...checklist,
       entryRules,
     })
+  }
+
+  private replaceRuleDirection(rule: string, actionText: '做多' | '做空'): string {
+    const replaced = rule
+      .replace(/做多|多单|开多|long|买入/iu, actionText)
+      .replace(/做空|空单|开空|short|卖出/iu, actionText)
+      .replace(/做多和做多|做空和做空/iu, actionText)
+      .replace(/同时做多|同时做空/iu, actionText)
+
+    return replaced.trim()
+  }
+
+  private readClarificationRuleIndex(item: StrategyClarificationItem): number | null {
+    const fromRuleId = item.ruleId?.match(/^entry-(\d+)$/u)?.[1]
+    const fromKey = item.key.match(/\.(\d+)$/u)?.[1]
+    const rawIndex = fromRuleId ?? fromKey
+    if (!rawIndex) return null
+
+    const parsed = Number.parseInt(rawIndex, 10)
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return null
+    }
+
+    return parsed - 1
   }
 
   private normalizeDirectionClarificationAnswer(answer: string): 'long' | 'short' | null {
