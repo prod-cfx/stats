@@ -738,6 +738,25 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
   })
 
+  it('uses publishedSnapshotId as strategy id fallback instead of generating a mock id', async () => {
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(expect.objectContaining({
+      strategy: expect.objectContaining({
+        id: 'snapshot-1',
+        publishedSnapshotId: 'snapshot-1',
+      }),
+    }))
+  })
+
   it('unmount while running does not emit react unmount update warning', async () => {
     const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
     let resolvePoll: ((value: unknown) => void) | null = null

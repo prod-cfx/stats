@@ -2,16 +2,19 @@
 
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 
+const listMockStrategies = jest.fn()
 const getStrategyById = jest.fn()
+const updateStrategyStatus = jest.fn()
+const deleteStrategyById = jest.fn()
 const originalFetch = globalThis.fetch
 const originalMockFallbackEnv = process.env.NEXT_PUBLIC_ACCOUNT_AI_QUANT_MOCK_FALLBACK
 const originalAppEnv = process.env.NEXT_PUBLIC_APP_ENV
 
 jest.mock('@/components/account/ai-quant-strategy-store', () => ({
-  deleteStrategyById: jest.fn(),
+  deleteStrategyById,
   getStrategyById,
-  listStrategies: jest.fn(() => []),
-  updateStrategyStatus: jest.fn(),
+  listStrategies: listMockStrategies,
+  updateStrategyStatus,
 }))
 
 jest.mock('./api-cache', () => ({
@@ -50,10 +53,15 @@ jest.mock('@ai/shared', () => ({
   unwrapTransportResponse: (value: unknown) => value,
 }), { virtual: true })
 
-describe('fetchAccountAiQuantStrategyDetail', () => {
+describe('account ai-quant detail/action mock fallback guard', () => {
   beforeEach(() => {
-    getStrategyById.mockReset()
     jest.resetModules()
+    listMockStrategies.mockReset()
+    getStrategyById.mockReset()
+    updateStrategyStatus.mockReset()
+    deleteStrategyById.mockReset()
+    process.env.NEXT_PUBLIC_ACCOUNT_AI_QUANT_MOCK_FALLBACK = 'true'
+    process.env.NEXT_PUBLIC_APP_ENV = 'development'
   })
 
   afterEach(() => {
@@ -75,17 +83,33 @@ describe('fetchAccountAiQuantStrategyDetail', () => {
     }
   })
 
-  it('does not fallback to local mock detail when backend detail request fails', async () => {
-    process.env.NEXT_PUBLIC_ACCOUNT_AI_QUANT_MOCK_FALLBACK = 'true'
-    process.env.NEXT_PUBLIC_APP_ENV = 'development'
-
-    const fetchMock = jest.fn().mockRejectedValue(new TypeError('fetch failed'))
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+  it('does not fallback to mock strategy detail when remote detail request fails', async () => {
+    getStrategyById.mockReturnValue({
+      id: 'mock-strategy',
+      status: 'running',
+    })
+    globalThis.fetch = jest.fn().mockRejectedValue(new TypeError('fetch failed')) as unknown as typeof fetch
 
     const { fetchAccountAiQuantStrategyDetail } = await import('./api')
 
-    await expect(fetchAccountAiQuantStrategyDetail('strategy-1', 'user-1')).rejects.toThrow('fetch failed')
+    await expect(fetchAccountAiQuantStrategyDetail('strategy-1', 'user-1')).rejects.toMatchObject({
+      message: 'fetch failed',
+    })
     expect(getStrategyById).not.toHaveBeenCalled()
-    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not fallback to mock action updates when remote action request fails', async () => {
+    globalThis.fetch = jest.fn().mockRejectedValue(new TypeError('fetch failed')) as unknown as typeof fetch
+
+    const { performAccountAiQuantStrategyAction } = await import('./api')
+
+    await expect(performAccountAiQuantStrategyAction('strategy-1', {
+      userId: 'user-1',
+      action: 'run',
+    })).rejects.toMatchObject({
+      message: 'fetch failed',
+    })
+    expect(updateStrategyStatus).not.toHaveBeenCalled()
+    expect(getStrategyById).not.toHaveBeenCalled()
   })
 })

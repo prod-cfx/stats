@@ -140,7 +140,7 @@ export async function runAiQuantBacktest(args: {
           activeConversation.publishedStrategyInstanceId
           ?? activeConversation.llmCodegenSessionId
           ?? activeConversation.publishedSnapshotId
-          ?? conversationId,
+          ?? '',
         publishedSnapshotId: activeConversation.publishedSnapshotId ?? '',
       },
       range: resolveBacktestRangeInput(activeConversation.paramValues),
