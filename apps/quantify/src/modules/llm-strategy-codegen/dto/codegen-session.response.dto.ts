@@ -1,3 +1,4 @@
+import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import {
   STRATEGY_CLARIFICATION_FIELDS,
@@ -5,7 +6,6 @@ import {
   STRATEGY_CLARIFICATION_REASONS,
   STRATEGY_CLARIFICATION_STATUSES,
 } from '../types/strategy-clarification'
-import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 
 class StrategyClarificationItemDto {
   @ApiProperty({ description: '澄清项唯一键' })
