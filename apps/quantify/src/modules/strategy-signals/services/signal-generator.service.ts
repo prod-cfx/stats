@@ -615,9 +615,13 @@ export class SignalGeneratorService {
           }
           promptData = indicators
         } else {
-          const marketBars = await this.loadRecentBars(symbol.id, timeframe, DEFAULT_BAR_LIMIT)
-          const bars = normalizeGatewayBars(marketBars ?? [])
-
+          const requireFinalLatestBar = isStrictCodegen
+          const marketBars = await this.loadRecentBars(symbol.id, timeframe, DEFAULT_BAR_LIMIT, {
+            requireFinalLatestBar,
+          })
+          const bars = this.normalizeRuntimeBars(marketBars ?? [], {
+            requireFinalLatestBar,
+          })
           const scriptContext = buildStrategyContext({
             bars,
             symbol: symbol.code,
@@ -835,8 +839,49 @@ export class SignalGeneratorService {
     symbolId: string,
     timeframe: AppMarketTimeframe,
     limit: number = 100,
+    options?: {
+      requireFinalLatestBar?: boolean
+    },
   ): Promise<GatewayBar[] | null> {
-    return this.candidateStage.loadRecentBars(symbolId, timeframe, limit)
+    const bars = await this.candidateStage.loadRecentBars(symbolId, timeframe, limit)
+    return this.filterLatestGatewayBar(bars ?? [], options)
+  }
+
+  private filterLatestGatewayBar(
+    bars: readonly GatewayBar[],
+    options: {
+      requireFinalLatestBar?: boolean
+    } = {},
+  ): GatewayBar[] {
+    if (!options.requireFinalLatestBar || bars.length === 0) {
+      return [...bars]
+    }
+
+    const latestBar = bars[bars.length - 1]
+    if (latestBar.isFinal ?? true) {
+      return [...bars]
+    }
+
+    return bars.slice(0, -1)
+  }
+
+  private normalizeRuntimeBars(
+    bars: readonly GatewayBar[],
+    options: {
+      requireFinalLatestBar?: boolean
+    } = {},
+  ) {
+    const normalizedBars = normalizeGatewayBars(bars)
+    if (!options.requireFinalLatestBar || normalizedBars.length === 0) {
+      return normalizedBars
+    }
+
+    const latestBar = normalizedBars[normalizedBars.length - 1]
+    if (latestBar.isFinal) {
+      return normalizedBars
+    }
+
+    return normalizedBars.slice(0, -1)
   }
 
   private buildPublishedCodegenSignalPayload(

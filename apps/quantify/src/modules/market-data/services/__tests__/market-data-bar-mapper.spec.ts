@@ -9,6 +9,7 @@ describe('market data bar mapper', () => {
       low: 0.5,
       close: 1.5,
       volume: null,
+      isFinal: false,
     })
 
     expect(normalized).toEqual({
@@ -18,6 +19,7 @@ describe('market data bar mapper', () => {
       close: 1.5,
       volume: 0,
       timestamp: 1000,
+      isFinal: false,
     })
   })
 
@@ -30,6 +32,7 @@ describe('market data bar mapper', () => {
         low: 0.5,
         close: 1.5,
         volume: 10,
+        isFinal: true,
       },
       {
         timestamp: 2,
@@ -38,12 +41,13 @@ describe('market data bar mapper', () => {
         low: 1,
         close: 2,
         volume: 12,
+        isFinal: false,
       },
     ])
 
     expect(normalized).toEqual([
-      { open: 1, high: 2, low: 0.5, close: 1.5, volume: 10, timestamp: 1 },
-      { open: 1.5, high: 2.5, low: 1, close: 2, volume: 12, timestamp: 2 },
+      { open: 1, high: 2, low: 0.5, close: 1.5, volume: 10, timestamp: 1, isFinal: true },
+      { open: 1.5, high: 2.5, low: 1, close: 2, volume: 12, timestamp: 2, isFinal: false },
     ])
   })
 })

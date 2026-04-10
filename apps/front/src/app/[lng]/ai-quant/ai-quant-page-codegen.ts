@@ -24,7 +24,7 @@ import {
 } from '@/lib/api'
 
 import { ApiError } from '@/lib/errors'
-import { normalizeParamsFromValues } from './ai-quant-page-conversation'
+import { normalizeClarificationGate, normalizeParamsFromValues } from './ai-quant-page-conversation'
 
 const CODEGEN_TERMINAL_STATUSES = new Set(['PUBLISHED', 'REJECTED'])
 const CODEGEN_PROCESSING_STATUSES = new Set([
@@ -80,6 +80,11 @@ export function buildCodegenReplyContent(args: {
   if (response.assistantPrompt) {
     return response.assistantPrompt
   }
+  if (response.publicationGate?.passed === false) {
+    return response.rejectReason
+      ? `${rejectedPrefix}：${response.rejectReason}`
+      : rejectedWithoutReason
+  }
   if (response.status === 'PUBLISHED') {
     if (response.rejectReason) {
       return `${rejectedPrefix}：${response.rejectReason}`
@@ -113,9 +118,9 @@ export function getSemanticGraphValidationMessage(
   return message || fallback
 }
 
-function hasSemanticGraphPayload(
+function hasCodegenPayload(
   response: LlmCodegenSessionResponse,
-  key: 'semanticGraph' | 'validationReport',
+  key: 'semanticGraph' | 'validationReport' | 'publicationGate',
 ): boolean {
   return Object.prototype.hasOwnProperty.call(response, key)
 }
@@ -249,6 +254,7 @@ export async function requestAiQuantCodegen(args: {
   backtestCapabilities: BacktestCapabilities | null
   callingMessage: (elapsedSec: number) => string
   codegenRequestMutexRef: MutableRefObject<Set<string>>
+  clarificationAnswers?: Record<string, string>
   confirmGenerate?: boolean
   confirmedCanonicalDigest?: string
   conversationId: string
@@ -266,6 +272,7 @@ export async function requestAiQuantCodegen(args: {
     backtestCapabilities,
     callingMessage,
     codegenRequestMutexRef,
+    clarificationAnswers,
     confirmGenerate = false,
     confirmedCanonicalDigest,
     conversationId,
@@ -438,13 +445,20 @@ export async function requestAiQuantCodegen(args: {
         const nextPublishedScriptGraphVersion = nextPublishedScriptCode
           ? (nextGraph?.version ?? conv.publishedScriptGraphVersion)
           : null
-        const nextSemanticGraph = hasSemanticGraphPayload(response, 'semanticGraph')
+        const nextSemanticGraph = hasCodegenPayload(response, 'semanticGraph')
           ? (response.semanticGraph ?? null)
           : conv.semanticGraph
-        const nextValidationReport = hasSemanticGraphPayload(response, 'validationReport')
+        const nextValidationReport = hasCodegenPayload(response, 'validationReport')
           ? (response.validationReport ?? null)
           : conv.validationReport
+        const nextClarificationGate = normalizeClarificationGate(response.clarificationGate) ?? conv.clarificationGate
+        const nextPublicationGate = hasCodegenPayload(response, 'publicationGate')
+          ? (response.publicationGate ?? null)
+          : conv.publicationGate
         const nextPendingCanonicalDigest = (() => {
+          if (nextClarificationGate?.blocked) {
+            return null
+          }
           if (typeof response.canonicalDigest === 'string' && response.canonicalDigest.trim()) {
             return response.canonicalDigest.trim()
           }
@@ -508,7 +522,12 @@ export async function requestAiQuantCodegen(args: {
           logicGraph: nextGraph,
           semanticGraph: nextSemanticGraph,
           validationReport: nextValidationReport,
-          pendingCanonicalDigest: nextPendingCanonicalDigest ?? conv.pendingCanonicalDigest,
+          clarificationGate: nextClarificationGate,
+          publicationGate: nextPublicationGate,
+          pendingCanonicalDigest:
+            nextPendingCanonicalDigest !== undefined
+              ? nextPendingCanonicalDigest
+              : conv.pendingCanonicalDigest,
           backtestResult: null,
           latestSignalMessage: null,
           messages: [
@@ -577,6 +596,7 @@ export async function requestAiQuantCodegen(args: {
         message: trimmedMessage,
         confirmGenerate,
         confirmedCanonicalDigest,
+        clarificationAnswers,
         ...checklistPayload,
       })
 

@@ -155,23 +155,47 @@ export class CodegenSessionPublicationPipelineService {
         }
       }
 
-      const snapshot = await this.persistenceStage.publish({
-        sessionId: args.sessionId,
-        strategyTemplateId,
-        strategyInstanceId: strategyInstanceId ?? null,
-        canonicalSnapshot: artifacts.canonicalSpec as unknown as Record<string, unknown>,
-        semanticView: artifacts.semanticView,
-        graphSnapshot: artifacts.compiled.graphSnapshot as unknown as Record<string, unknown>,
-        ir: artifacts.compiled.ir as unknown as Record<string, unknown>,
-        ast: artifacts.ast as unknown as Record<string, unknown>,
-        executionEnvelope: artifacts.executionEnvelope as unknown as Record<string, unknown>,
-        script: artifacts.compiledScript,
-        semanticConsistencyReport: artifacts.semanticConsistency as unknown as Record<string, unknown>,
-        userIntentSummary: artifacts.userIntentSummary as unknown as Record<string, unknown>,
-        strategySummary: artifacts.strategySummary as unknown as Record<string, unknown>,
-        scriptSummary: artifacts.scriptSummary as unknown as Record<string, unknown>,
-        lockedParams: artifacts.lockedParams,
-      })
+      let snapshot: { snapshotId: string, consistencyReport: Record<string, unknown> }
+      try {
+        snapshot = await this.persistenceStage.publish({
+          sessionId: args.sessionId,
+          strategyTemplateId,
+          strategyInstanceId: strategyInstanceId ?? null,
+          canonicalSnapshot: artifacts.canonicalSpec as unknown as Record<string, unknown>,
+          semanticView: artifacts.semanticView,
+          graphSnapshot: artifacts.compiled.graphSnapshot as unknown as Record<string, unknown>,
+          ir: artifacts.compiled.ir as unknown as Record<string, unknown>,
+          ast: artifacts.ast as unknown as Record<string, unknown>,
+          executionEnvelope: artifacts.executionEnvelope as unknown as Record<string, unknown>,
+          script: artifacts.compiledScript,
+          semanticConsistencyReport: artifacts.semanticConsistency as unknown as Record<string, unknown>,
+          userIntentSummary: artifacts.userIntentSummary as unknown as Record<string, unknown>,
+          strategySummary: artifacts.strategySummary as unknown as Record<string, unknown>,
+          scriptSummary: artifacts.scriptSummary as unknown as Record<string, unknown>,
+          lockedParams: artifacts.lockedParams,
+        })
+      } catch (error) {
+        const publicationGate = this.normalizePublicationGate(
+          (error as { publicationGate?: unknown } | null)?.publicationGate,
+        )
+        if (publicationGate) {
+          const reason = error instanceof Error ? error.message : String(error)
+          await this.sessionsRepo.updateSession(
+            args.sessionId,
+            this.stateMachine.buildRejectedUpdate({
+              latestSpecDesc: {
+                ...artifacts.sessionSpecDesc,
+                publicationGate,
+              },
+              latestDraftCode: artifacts.compiledScript,
+              rejectReason: reason,
+              strategyInstanceId: strategyInstanceId ?? null,
+            }),
+          )
+          return
+        }
+        throw error
+      }
 
       if (this.stateMachine.readPublishedConsistencyStatus(snapshot.consistencyReport) !== 'PASSED') {
         await this.sessionsRepo.updateSession(
@@ -264,6 +288,91 @@ export class CodegenSessionPublicationPipelineService {
         confirmMessage: args.message,
         lockedParams: args.lockedParams,
       },
+    }
+  }
+
+  private readRecord(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null
+    }
+
+    return value as Record<string, unknown>
+  }
+
+  private normalizePublicationGate(value: unknown): Record<string, unknown> | null {
+    const record = this.readRecord(value)
+    if (!record) {
+      return null
+    }
+
+    if (typeof record.passed === 'boolean' && Array.isArray(record.blockingMismatches)) {
+      return {
+        passed: record.passed,
+        blockingMismatches: record.blockingMismatches,
+      }
+    }
+
+    if (typeof record.status !== 'string' || !Array.isArray(record.checks)) {
+      return null
+    }
+
+    const blockingMismatches = record.checks
+      .map(item => this.readRecord(item))
+      .filter((item): item is Record<string, unknown> => item !== null)
+      .filter(item => item.blocking === true && item.status === 'failed')
+      .map(item => ({
+        field: this.normalizePublicationGateField(item.key),
+        expected: this.stringifyPublicationGateValue(item.expected),
+        actual: this.stringifyPublicationGateValue(item.actual),
+        reason:
+          typeof item.message === 'string' && item.message.trim()
+            ? item.message.trim()
+            : 'publication gate blocked',
+      }))
+
+    return {
+      passed: blockingMismatches.length === 0,
+      blockingMismatches,
+    }
+  }
+
+  private normalizePublicationGateField(value: unknown): string {
+    if (typeof value !== 'string' || !value.trim()) {
+      return 'unknown'
+    }
+
+    const normalized = value.trim()
+    return normalized.startsWith('market.')
+      ? normalized.slice('market.'.length)
+      : normalized
+  }
+
+  private stringifyPublicationGateValue(value: unknown): string {
+    if (typeof value === 'string') {
+      return value
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value)
+    }
+
+    const record = this.readRecord(value)
+    if (record) {
+      if (typeof record.script === 'string' && record.script.trim()) {
+        return record.script.trim()
+      }
+      if (typeof record.ir === 'string' && record.ir.trim()) {
+        return record.ir.trim()
+      }
+    }
+
+    if (value === null || value === undefined) {
+      return ''
+    }
+
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return String(value)
     }
   }
 }

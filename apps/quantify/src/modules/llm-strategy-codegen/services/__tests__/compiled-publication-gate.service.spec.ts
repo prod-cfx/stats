@@ -257,6 +257,392 @@ describe('compiledPublicationGateService', () => {
     expect(publishedSnapshotsRepo.create).not.toHaveBeenCalled()
   })
 
+  it('rejects publish when confirmed exchange is okx but compiled artifact venue is binance', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn(),
+    }
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never)
+    const ir = createIrFixture()
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'long_only' as const,
+      marginMode: 'cash' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await expect(gate.publish({
+      sessionId: 'session-exchange-drift',
+      canonicalSnapshot: {
+        version: 2,
+        market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'spot', timeframe: '1h' },
+        rules: [],
+      },
+      semanticView: {
+        viewType: 'canonical-semantic-view.v1',
+        canonicalDigest: 'sha256:exchange-drift',
+      },
+      graphSnapshot: {
+        version: 3,
+        status: 'confirmed' as const,
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'okx' as const,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          positionPct: 25,
+          executionTags: [],
+        },
+      },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'ma-crossover' },
+      scriptSummary: { indicators: ['EMA'] },
+      lockedParams: { positionPct: 25 },
+    })).rejects.toThrow('publication gate blocked')
+
+    expect(publishedSnapshotsRepo.create).not.toHaveBeenCalled()
+  })
+
+  it('rejects publish when confirmed single-direction positionMode drifts to long_short in compiled script', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn(),
+    }
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never)
+    const ir = createIrFixture()
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'long_short' as const,
+      marginMode: 'cash' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await expect(gate.publish({
+      sessionId: 'session-position-mode-drift',
+      canonicalSnapshot: {
+        version: 2,
+        market: { exchange: 'binance', symbol: 'BTCUSDT', marketType: 'spot', timeframe: '1h' },
+        rules: [
+          {
+            id: 'entry-long',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 200,
+            condition: {
+              kind: 'atom',
+              key: 'ma.golden_cross',
+              semanticScope: 'market',
+            },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.25 } }],
+          },
+          {
+            id: 'exit-long',
+            phase: 'exit',
+            sideScope: 'long',
+            priority: 100,
+            condition: {
+              kind: 'atom',
+              key: 'ma.death_cross',
+              semanticScope: 'market',
+            },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+      },
+      semanticView: {
+        viewType: 'canonical-semantic-view.v1',
+        canonicalDigest: 'sha256:position-mode-drift',
+      },
+      graphSnapshot: {
+        version: 3,
+        status: 'confirmed' as const,
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'binance' as const,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          positionPct: 25,
+          executionTags: [],
+        },
+      },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'long-only' },
+      scriptSummary: { indicators: ['EMA'] },
+      lockedParams: { positionPct: 25 },
+    })).rejects.toThrow('publication gate blocked')
+
+    expect(publishedSnapshotsRepo.create).not.toHaveBeenCalled()
+  })
+
+  it('publishes when confirmed short_only positionMode matches IR and compiled script', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn().mockResolvedValue({ id: 'snapshot-short-only' }),
+    }
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never)
+    const ir = createShortOnlyIrFixture()
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'short_only' as const,
+      marginMode: 'isolated' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await expect(gate.publish({
+      sessionId: 'session-short-only',
+      canonicalSnapshot: {
+        version: 2,
+        market: { exchange: 'binance', symbol: 'BTCUSDT', marketType: 'perp', timeframe: '1h' },
+        rules: [
+          {
+            id: 'entry-short',
+            phase: 'entry',
+            sideScope: 'short',
+            priority: 200,
+            condition: {
+              kind: 'atom',
+              key: 'ma.death_cross',
+              semanticScope: 'market',
+            },
+            actions: [{ type: 'OPEN_SHORT', sizing: { mode: 'RATIO', value: 0.25 } }],
+          },
+          {
+            id: 'exit-short',
+            phase: 'exit',
+            sideScope: 'short',
+            priority: 100,
+            condition: {
+              kind: 'atom',
+              key: 'ma.golden_cross',
+              semanticScope: 'market',
+            },
+            actions: [{ type: 'CLOSE_SHORT' }],
+          },
+        ],
+      },
+      semanticView: {
+        viewType: 'canonical-semantic-view.v1',
+        canonicalDigest: 'sha256:canonical-short-only',
+        confirmation: {
+          required: true,
+          digest: 'sha256:canonical-short-only',
+        },
+      },
+      graphSnapshot: {
+        version: 3,
+        status: 'confirmed' as const,
+        trigger: [
+          { id: 'trigger-entry-short', phase: 'entry' as const, operator: 'CROSS_UNDER(EMA(CLOSE,7),EMA(CLOSE,21))' },
+        ],
+        actions: [
+          { id: 'action-sell-1', action: 'SELL' as const, target: 'BTCUSDT', amount: '25%' },
+        ],
+        risk: [],
+        meta: {
+          exchange: 'binance' as const,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          positionPct: 25,
+          executionTags: [],
+        },
+      },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'short-only mean reversion' },
+      scriptSummary: { indicators: ['EMA'] },
+      lockedParams: { positionPct: 25 },
+    })).resolves.toEqual(expect.objectContaining({ snapshotId: 'snapshot-short-only' }))
+
+    expect(publishedSnapshotsRepo.create).toHaveBeenCalled()
+  })
+
+  it('rejects publish when early-stop reduce rule is absent from compiled artifact', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn(),
+    }
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never)
+    const ir = createIrFixture()
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'long_only' as const,
+      marginMode: 'cash' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await expect(gate.publish({
+      sessionId: 'session-outside-rule-missing',
+      canonicalSnapshot: {
+        version: 2,
+        market: { exchange: 'binance', symbol: 'BTCUSDT', marketType: 'spot', timeframe: '1h' },
+        rules: [
+          {
+            id: 'risk-outside-band-3-bars',
+            phase: 'risk',
+            sideScope: 'both',
+            priority: 110,
+            condition: {
+              kind: 'atom',
+              key: 'bollinger.bars_outside',
+              semanticScope: 'market',
+              op: 'GTE',
+              value: 3,
+              params: { bars: 3 },
+            },
+            actions: [{ type: 'REDUCE_LONG' }, { type: 'REDUCE_SHORT' }],
+          },
+        ],
+      },
+      semanticView: {
+        viewType: 'canonical-semantic-view.v1',
+        canonicalDigest: 'sha256:outside-band-missing',
+      },
+      graphSnapshot: {
+        version: 3,
+        status: 'confirmed' as const,
+        trigger: [],
+        actions: [],
+        risk: ['价格连续3根K线在轨外时提前减仓'],
+        meta: {
+          exchange: 'binance' as const,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          positionPct: 25,
+          executionTags: [],
+        },
+      },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'outside-band-risk' },
+      scriptSummary: { indicators: ['EMA'] },
+      lockedParams: { positionPct: 25 },
+    })).rejects.toThrow('publication gate blocked')
+
+    expect(publishedSnapshotsRepo.create).not.toHaveBeenCalled()
+  })
+
+  it('publishes when outside-band reduce rule is present in compiled artifact', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn().mockResolvedValue({ id: 'snapshot-outside-ok' }),
+    }
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never)
+    const ir = createIrFixtureWithOutsideBandRule()
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'long_short' as const,
+      marginMode: 'cash' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await expect(gate.publish({
+      sessionId: 'session-outside-rule-present',
+      canonicalSnapshot: {
+        version: 2,
+        market: { exchange: 'binance', symbol: 'BTCUSDT', marketType: 'spot', timeframe: '1h' },
+        rules: [
+          {
+            id: 'risk-outside-band-3-bars',
+            phase: 'risk',
+            sideScope: 'both',
+            priority: 110,
+            condition: {
+              kind: 'atom',
+              key: 'bollinger.bars_outside',
+              semanticScope: 'market',
+              op: 'GTE',
+              value: 3,
+              params: { bars: 3 },
+            },
+            actions: [{ type: 'REDUCE_LONG' }, { type: 'REDUCE_SHORT' }],
+          },
+        ],
+      },
+      semanticView: {
+        viewType: 'canonical-semantic-view.v1',
+        canonicalDigest: 'sha256:outside-band-present',
+      },
+      graphSnapshot: {
+        version: 3,
+        status: 'confirmed' as const,
+        trigger: [],
+        actions: [],
+        risk: ['价格连续3根K线在轨外时提前减仓'],
+        meta: {
+          exchange: 'binance' as const,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          positionPct: 25,
+          executionTags: [],
+        },
+      },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'outside-band-risk' },
+      scriptSummary: { indicators: ['EMA', 'BOLLINGER'] },
+      lockedParams: { positionPct: 25 },
+    })).resolves.toEqual({
+      snapshotId: 'snapshot-outside-ok',
+      consistencyReport: expect.objectContaining({
+        status: 'PASSED',
+        compilerConsistency: expect.objectContaining({
+          publicationGate: expect.objectContaining({
+            status: 'PASSED',
+            checks: expect.arrayContaining([
+              expect.objectContaining({
+                key: 'risk.bollinger_bars_outside',
+                status: 'passed',
+              }),
+            ]),
+          }),
+        }),
+      }),
+    })
+
+    expect(publishedSnapshotsRepo.create).toHaveBeenCalled()
+  })
+
   it('returns merged failed consistency report instead of throwing so caller can persist diagnostics', async () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-failed' }),
@@ -404,5 +790,86 @@ function createIrFixture(): CanonicalStrategyIrV1 {
       timeInForce: 'gtc',
       allowPartialFill: false,
     },
+  }
+}
+
+function createShortOnlyIrFixture(): CanonicalStrategyIrV1 {
+  const base = createIrFixture()
+
+  return {
+    ...base,
+    market: {
+      ...base.market,
+      instrumentType: 'perpetual',
+    },
+    portfolio: {
+      ...base.portfolio,
+      positionMode: 'short_only',
+    },
+    ruleBlocks: [
+      {
+        id: 'entry_short',
+        phase: 'entry',
+        when: 'entry_cross',
+        priority: 200,
+        actions: [
+          { kind: 'OPEN_SHORT', quantity: { mode: 'pct_equity', value: 25 } },
+        ],
+      },
+      {
+        id: 'exit_short',
+        phase: 'exit',
+        when: 'exit_cross',
+        priority: 100,
+        actions: [
+          { kind: 'CLOSE_SHORT', quantity: { mode: 'position_pct', value: 100 } },
+        ],
+      },
+    ],
+  }
+}
+
+function createIrFixtureWithOutsideBandRule(): CanonicalStrategyIrV1 {
+  const base = createIrFixture()
+
+  return {
+    ...base,
+    portfolio: {
+      ...base.portfolio,
+      positionMode: 'long_short',
+    },
+    signalCatalog: {
+      series: [
+        ...base.signalCatalog.series,
+        {
+          id: 'outside_band_3',
+          kind: 'BOLLINGER_BARS_OUTSIDE',
+          inputs: ['close_1h'],
+          params: { bars: 3 },
+        },
+      ],
+      levelSets: base.signalCatalog.levelSets,
+      predicates: [
+        ...base.signalCatalog.predicates,
+        {
+          id: 'risk_outside_band_3',
+          kind: 'GTE',
+          args: ['outside_band_3'],
+        },
+      ],
+    },
+    ruleBlocks: [
+      ...base.ruleBlocks,
+      {
+        id: 'rebalance_outside_band_3',
+        phase: 'rebalance',
+        when: 'risk_outside_band_3',
+        priority: 110,
+        actions: [
+          { kind: 'REDUCE_LONG', quantity: { mode: 'position_pct', value: 50 } },
+          { kind: 'REDUCE_SHORT', quantity: { mode: 'position_pct', value: 50 } },
+        ],
+      },
+    ],
   }
 }

@@ -56,6 +56,7 @@ export class LlmStrategyCodegenController {
       entryRules: dto.entryRules,
       exitRules: dto.exitRules,
       riskRules: dto.riskRules,
+      clarificationAnswers: dto.clarificationAnswers,
       guideConfig: dto.guideConfig,
       confirmGenerate: dto.confirmGenerate,
       confirmedCanonicalDigest: dto.confirmedCanonicalDigest,

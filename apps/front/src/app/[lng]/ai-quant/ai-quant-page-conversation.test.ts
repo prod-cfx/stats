@@ -187,4 +187,116 @@ describe('ai-quant-page-conversation', () => {
     expect(next.latestSignalMessage).toBeNull()
     expect(next.backtestExecutionState).toBe('idle')
   })
+
+  it('hydrates clarificationGate and publicationGate from stored conversation state', () => {
+    const conversation = hydrateConversation({
+      id: 'conv-1',
+      title: 'test',
+      messages: [],
+      params: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+      },
+      paramSchema: null,
+      paramValues: {},
+      backtestResult: null,
+      logicGraph: null,
+      semanticGraph: null,
+      validationReport: null,
+      clarificationGate: {
+        blocked: true,
+        items: [
+          {
+            key: 'market.marketType',
+            field: 'marketType',
+            reason: 'missing_market_type',
+            question: '这条策略包含做空，请确认使用现货还是合约/永续？',
+            allowedAnswers: ['spot', 'perp'],
+            blocking: true,
+            status: 'pending',
+          },
+        ],
+      },
+      publicationGate: {
+        passed: false,
+        blockingMismatches: [
+          {
+            field: 'exchange',
+            expected: 'okx',
+            actual: 'binance',
+            reason: 'confirmed snapshot and compiled artifact exchange mismatch',
+          },
+        ],
+      },
+      llmCodegenSessionId: 'session-1',
+      publishedStrategyInstanceId: null,
+      publishedSnapshotId: null,
+      publishedScriptCode: null,
+      publishedScriptGraphVersion: null,
+      latestSignalMessage: null,
+      backtestExecutionState: 'idle',
+      updatedAt: 1,
+    } as any)
+
+    expect(conversation.clarificationGate?.blocked).toBe(true)
+    expect(conversation.clarificationGate?.items[0]?.key).toBe('market.marketType')
+    expect(conversation.publicationGate?.passed).toBe(false)
+    expect(conversation.publicationGate?.blockingMismatches[0]?.actual).toBe('binance')
+  })
+
+  it('normalizes legacy clarificationGate.pendingItems into items during hydration', () => {
+    const conversation = hydrateConversation({
+      id: 'conv-legacy-gate',
+      title: 'test',
+      messages: [],
+      params: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+      },
+      paramSchema: null,
+      paramValues: {},
+      backtestResult: null,
+      logicGraph: null,
+      semanticGraph: null,
+      validationReport: null,
+      clarificationGate: {
+        blocked: true,
+        pendingItems: [
+          {
+            key: 'market.marketType',
+            field: 'marketType',
+            reason: 'missing_market_type',
+            question: '这条策略包含做空，请确认使用现货还是合约/永续？',
+            allowedAnswers: ['spot', 'perp'],
+            blocking: true,
+            status: 'pending',
+          },
+        ],
+      },
+      publicationGate: null,
+      llmCodegenSessionId: 'session-legacy',
+      publishedStrategyInstanceId: null,
+      publishedSnapshotId: null,
+      publishedScriptCode: null,
+      publishedScriptGraphVersion: null,
+      latestSignalMessage: null,
+      backtestExecutionState: 'idle',
+      updatedAt: 1,
+    } as any)
+
+    expect(conversation.clarificationGate?.blocked).toBe(true)
+    expect(conversation.clarificationGate?.items[0]?.key).toBe('market.marketType')
+  })
 })

@@ -145,4 +145,38 @@ describe('AiQuantPageClient codegen P1 guards', () => {
     expect(content).toContain('create instance failed')
     expect(content).not.toBe('发布成功')
   })
+
+  it('prefers rejectReason when publication gate blocks publish', () => {
+    const content = buildCodegenReplyContent({
+      response: {
+        id: 's4',
+        status: 'REJECTED',
+        rejectReason: 'positionMode mismatch',
+        publicationGate: {
+          passed: false,
+          blockingMismatches: [
+            {
+              field: 'positionMode',
+              expected: 'long_only',
+              actual: 'long_short',
+              reason: 'confirmed positionMode and compiled artifact mismatch',
+            },
+          ],
+        },
+      },
+      confirmGenerate: true,
+      publishedReply: '发布成功',
+      graphGeneratedMessage: '已生成',
+      graphReviseMessage: '请继续补充',
+      checklistContinuedMessage: '继续检查',
+      checklistUpdatedMessage: '已更新逻辑图',
+      stillGeneratingPrefix: '生成中',
+      rejectedPrefix: '生成失败',
+      rejectedWithoutReason: '失败（无原因）',
+    })
+
+    expect(content).toContain('生成失败')
+    expect(content).toContain('positionMode mismatch')
+    expect(content).not.toBe('失败（无原因）')
+  })
 })

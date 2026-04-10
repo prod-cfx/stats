@@ -7,9 +7,14 @@ export interface GatewayBarLike {
   close: number
   volume: number | null
   timestamp: number
+  isFinal?: boolean
 }
 
-export function normalizeGatewayBar(bar: GatewayBarLike): Bar {
+export interface RuntimeBar extends Bar {
+  isFinal: boolean
+}
+
+export function normalizeGatewayBar(bar: GatewayBarLike): RuntimeBar {
   return {
     open: bar.open,
     high: bar.high,
@@ -17,9 +22,10 @@ export function normalizeGatewayBar(bar: GatewayBarLike): Bar {
     close: bar.close,
     volume: bar.volume ?? 0,
     timestamp: bar.timestamp,
+    isFinal: bar.isFinal ?? true,
   }
 }
 
-export function normalizeGatewayBars(bars: readonly GatewayBarLike[]): Bar[] {
+export function normalizeGatewayBars(bars: readonly GatewayBarLike[]): RuntimeBar[] {
   return bars.map(normalizeGatewayBar)
 }

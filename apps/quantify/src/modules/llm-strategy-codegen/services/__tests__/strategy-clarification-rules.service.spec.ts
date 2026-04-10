@@ -11,8 +11,9 @@ describe('strategyClarificationRulesService', () => {
     expect(state.status).toBe('NEEDS_CLARIFICATION')
     expect(state.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'entry.side',
+        key: 'entry.side.1',
         reason: 'missing_side_scope',
+        allowedAnswers: ['long', 'short'],
         status: 'pending',
       }),
     ]))
@@ -26,7 +27,9 @@ describe('strategyClarificationRulesService', () => {
     expect(state.status).toBe('NEEDS_CLARIFICATION')
     expect(state.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
+        key: 'entry.action_uniqueness.1',
         reason: 'missing_action_uniqueness',
+        allowedAnswers: ['long', 'short'],
         status: 'pending',
       }),
     ]))
@@ -42,17 +45,190 @@ describe('strategyClarificationRulesService', () => {
     expect(state.status).toBe('NEEDS_CLARIFICATION')
     expect(state.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'risk.effect',
+        key: 'riskRules.earlyStop.action',
         reason: 'ambiguous_risk_effect',
-        question: '轨外3根时是全平还是减仓？',
+        field: 'riskRules.earlyStop.action',
+        allowedAnswers: ['reduce', 'close'],
+        blocking: true,
+      }),
+    ]))
+  })
+
+  it('blocks short-side bollinger strategy when marketType is missing', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['突破布林带上轨时做空'],
+      riskRules: { exchange: 'binance' },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'market.marketType',
+        reason: 'missing_market_type',
+        field: 'marketType',
+        blocking: true,
+        status: 'pending',
+      }),
+    ]))
+  })
+
+  it('blocks long-side strategy when marketType is missing', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['跌破布林带下轨时做多'],
+      riskRules: { exchange: 'binance' },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'market.marketType',
+        reason: 'missing_market_type',
+        field: 'marketType',
+        blocking: true,
+        status: 'pending',
+      }),
+    ]))
+  })
+
+  it('blocks short-side strategy with spot marketType as invalid spot-short combo', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['突破布林带上轨时做空'],
+      riskRules: { exchange: 'binance', marketType: 'spot' },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'market.marketType',
+        reason: 'invalid_spot_short_combo',
+        field: 'marketType',
+        blocking: true,
+        status: 'pending',
+      }),
+    ]))
+  })
+
+  it('does not block long-only spot strategy as invalid spot-short combo', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['跌破布林带下轨时做多'],
+      riskRules: { exchange: 'binance', marketType: 'spot' },
+    })
+
+    expect(state.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'invalid_spot_short_combo',
+      }),
+    ]))
+  })
+
+  it('blocks conflicting market scope when session merges two different exchanges', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['跌破布林带下轨时做多'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        _marketScopeConflicts: [
+          {
+            field: 'exchange',
+            previous: 'okx',
+            next: 'binance',
+          },
+        ],
+      },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'market.conflict.exchange',
+        reason: 'conflicting_market_scope',
+        field: 'exchange',
+        allowedAnswers: ['okx', 'binance'],
+        blocking: true,
+        status: 'pending',
+      }),
+    ]))
+  })
+
+  it('blocks short-side strategy when exchange is missing', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['突破布林带上轨时做空'],
+      riskRules: { marketType: 'perp' },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'market.exchange',
+        reason: 'missing_exchange',
+        field: 'exchange',
+        blocking: true,
+        status: 'pending',
+      }),
+    ]))
+  })
+
+  it('does not emit market blockers before action uniqueness is resolved', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['突破后同时做多和做空'],
+      riskRules: {},
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'missing_action_uniqueness',
+      }),
+    ]))
+    expect(state.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'missing_market_type' }),
+      expect.objectContaining({ reason: 'missing_exchange' }),
+      expect.objectContaining({ reason: 'invalid_spot_short_combo' }),
+    ]))
+  })
+
+  it('blocks early-stop rule when action is ambiguous between close and reduce', () => {
+    const state = service.detect({
+      riskRules: {
+        earlyStop: '价格连续3根K线在轨外时提前止损或减仓',
+      },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'riskRules.earlyStop.action',
+        reason: 'ambiguous_risk_effect',
+        field: 'riskRules.earlyStop.action',
+        allowedAnswers: ['reduce', 'close'],
+        blocking: true,
+        status: 'pending',
       }),
     ]))
   })
 
   it('returns CLEAR for unambiguous rules', () => {
     const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
       entryRules: ['突破布林带上轨时做空'],
       riskRules: {
+        exchange: 'binance',
+        marketType: 'perp',
         stopLossPct: 5,
       },
     })

@@ -1,6 +1,7 @@
-import type { StrategyClarificationState } from '../types/strategy-clarification'
+import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import {
+  STRATEGY_CLARIFICATION_FIELDS,
   STRATEGY_CLARIFICATION_ITEM_STATUSES,
   STRATEGY_CLARIFICATION_REASONS,
   STRATEGY_CLARIFICATION_STATUSES,
@@ -12,6 +13,15 @@ class StrategyClarificationItemDto {
 
   @ApiProperty({ description: '澄清触发原因', enum: STRATEGY_CLARIFICATION_REASONS })
   reason!: string
+
+  @ApiProperty({ description: '澄清字段', enum: STRATEGY_CLARIFICATION_FIELDS })
+  field!: string
+
+  @ApiProperty({ description: '是否阻断主流程', example: true })
+  blocking!: boolean
+
+  @ApiPropertyOptional({ description: '可选回答集合', type: [String] })
+  allowedAnswers?: string[]
 
   @ApiPropertyOptional({ description: '规则 ID' })
   ruleId?: string
@@ -32,6 +42,39 @@ class StrategyClarificationStateDto {
 
   @ApiProperty({ description: '澄清项列表', type: [StrategyClarificationItemDto] })
   items!: StrategyClarificationItemDto[]
+}
+
+class StrategyClarificationGateDto {
+  @ApiProperty({ description: '当前是否存在阻断性澄清项', example: false })
+  blocked!: boolean
+
+  @ApiProperty({ description: '标准化后的阻断性澄清项列表', type: [StrategyClarificationItemDto] })
+  items!: StrategyClarificationItemDto[]
+
+  @ApiProperty({ description: '仍待回答的阻断性澄清项', type: [StrategyClarificationItemDto] })
+  pendingItems!: StrategyClarificationItemDto[]
+}
+
+class PublicationGateMismatchDto {
+  @ApiProperty({ description: '不一致字段' })
+  field!: string
+
+  @ApiProperty({ description: '期望值' })
+  expected!: string
+
+  @ApiProperty({ description: '实际值' })
+  actual!: string
+
+  @ApiProperty({ description: '阻断原因' })
+  reason!: string
+}
+
+class PublicationGateDto {
+  @ApiProperty({ description: '发布门禁是否通过', example: true })
+  passed!: boolean
+
+  @ApiProperty({ description: '阻断性不一致明细', type: [PublicationGateMismatchDto] })
+  blockingMismatches!: PublicationGateMismatchDto[]
 }
 
 export class CodegenSessionResponseDto {
@@ -84,6 +127,24 @@ export class CodegenSessionResponseDto {
 
   @ApiPropertyOptional({ description: '规则语义澄清状态', type: StrategyClarificationStateDto })
   clarificationState?: StrategyClarificationState | null
+
+  @ApiProperty({ description: '结构化澄清门控状态', type: StrategyClarificationGateDto })
+  clarificationGate!: {
+    blocked: boolean
+    items: StrategyClarificationItem[]
+    pendingItems: StrategyClarificationItem[]
+  }
+
+  @ApiPropertyOptional({ description: '发布门禁结果', type: PublicationGateDto })
+  publicationGate?: {
+    passed: boolean
+    blockingMismatches: Array<{
+      field: string
+      expected: string
+      actual: string
+      reason: string
+    }>
+  } | null
 
   @ApiPropertyOptional({ description: '拒绝原因' })
   rejectReason?: string | null

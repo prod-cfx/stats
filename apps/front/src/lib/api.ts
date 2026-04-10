@@ -2107,6 +2107,37 @@ export interface LlmCodegenSessionResponse {
   strategyInstanceId?: string | null
   rejectReason?: string | null
   assistantPrompt?: string
+  clarificationGate?: LlmClarificationGate | null
+  publicationGate?: LlmPublicationGate | null
+}
+
+export interface LlmClarificationGateItem {
+  key: string
+  field: 'exchange' | 'symbol' | 'timeframe' | 'marketType' | 'positionMode' | 'riskRules.earlyStop.action'
+  reason: string
+  question: string
+  allowedAnswers?: string[]
+  blocking: true
+  status: 'pending' | 'answered'
+  answer?: string
+}
+
+export interface LlmClarificationGate {
+  blocked: boolean
+  items: LlmClarificationGateItem[]
+  pendingItems?: LlmClarificationGateItem[]
+}
+
+export interface LlmPublicationGateMismatch {
+  field: string
+  expected: string
+  actual: string
+  reason: string
+}
+
+export interface LlmPublicationGate {
+  passed: boolean
+  blockingMismatches: LlmPublicationGateMismatch[]
 }
 
 export interface LlmSemanticGraphNode {
@@ -2164,6 +2195,7 @@ export interface ContinueLlmCodegenSessionPayload {
   message: string
   confirmGenerate?: boolean
   confirmedCanonicalDigest?: string
+  clarificationAnswers?: Record<string, string>
   symbols?: string[]
   timeframes?: string[]
   entryRules?: string[]

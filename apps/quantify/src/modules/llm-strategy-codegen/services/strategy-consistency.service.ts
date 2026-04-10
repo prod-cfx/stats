@@ -62,7 +62,8 @@ export class StrategyConsistencyService {
     strategySummary?: StrategySummary
     scriptSummary?: StrategySummary
   }): StrategyConsistencyReport {
-    const scriptProfile = this.extractCompiledScriptProfile(input.scriptCode)
+    const parsedProjection = this.tryParseCompiledProjection(input.scriptCode)
+    const scriptProfile = this.extractCompiledScriptProfile(input.scriptCode, parsedProjection)
     const derivedScriptSummary = input.scriptSummary ?? this.buildScriptSummaryFromProfile(scriptProfile)
     const specProfile = this.specToProfile(input.canonicalSpec)
     const checks: StrategyConsistencyCheck[] = []
@@ -77,6 +78,7 @@ export class StrategyConsistencyService {
     checks.push(this.checkRuleMappings(specProfile, scriptProfile))
     checks.push(this.checkActions(specProfile, scriptProfile))
     checks.push(this.checkSizing(specProfile, scriptProfile))
+    checks.push(this.checkMarketMetadata(input.canonicalSpec, parsedProjection))
 
     const summary = this.buildSummary(checks)
 
@@ -89,12 +91,25 @@ export class StrategyConsistencyService {
     }
   }
 
-  private extractCompiledScriptProfile(scriptCode: string): StrategySemanticProfile {
+  private extractCompiledScriptProfile(
+    scriptCode: string,
+    parsedProjection: ReturnType<CompiledScriptParserService['parse']> | null = null,
+  ): StrategySemanticProfile {
     try {
-      const parsed = this.compiledScriptParser.parse(scriptCode)
+      const parsed = parsedProjection ?? this.compiledScriptParser.parse(scriptCode)
       return this.projectionToProfile(parsed)
     } catch {
       return this.scriptProfileExtractor.extract(scriptCode)
+    }
+  }
+
+  private tryParseCompiledProjection(
+    scriptCode: string,
+  ): ReturnType<CompiledScriptParserService['parse']> | null {
+    try {
+      return this.compiledScriptParser.parse(scriptCode)
+    } catch {
+      return null
     }
   }
 
@@ -904,6 +919,106 @@ export class StrategyConsistencyService {
       actual: scriptProfile.sizing,
       message: '仓位语义与 canonical spec 一致。',
     }
+  }
+
+  private checkMarketMetadata(
+    spec: CanonicalStrategySpec,
+    projection: ReturnType<CompiledScriptParserService['parse']> | null,
+  ): StrategyConsistencyCheck {
+    const expected = {
+      exchange: typeof spec.market.exchange === 'string' ? spec.market.exchange : null,
+      marketType: typeof spec.market.marketType === 'string' ? spec.market.marketType : null,
+      symbol: typeof spec.market.symbol === 'string' ? spec.market.symbol : null,
+      timeframe: typeof spec.market.timeframe === 'string' ? spec.market.timeframe : null,
+      positionMode: this.resolveExpectedPositionMode(spec),
+    }
+
+    if (!projection) {
+      return {
+        key: 'market.execution_model',
+        level: 'warning',
+        status: 'unprovable',
+        expected,
+        actual: null,
+        message: '脚本不是可解析的 compiled artifact，跳过市场元数据强校验。',
+      }
+    }
+
+    const actual = {
+      exchange: projection.executionModel.venue,
+      marketType: projection.executionModel.instrumentType === 'perpetual' ? 'perp' : 'spot',
+      symbol: projection.executionModel.symbol,
+      timeframe: projection.executionModel.primaryTimeframe,
+      positionMode: projection.executionModel.positionMode,
+    }
+
+    const comparableFields = (Object.entries(expected) as Array<[keyof typeof expected, string | null]>)
+      .filter(([, value]) => typeof value === 'string' && value.trim().length > 0)
+
+    if (comparableFields.length === 0) {
+      return {
+        key: 'market.execution_model',
+        level: 'warning',
+        status: 'unprovable',
+        expected,
+        actual,
+        message: 'canonical spec 未提供可验证的市场元数据，跳过强校验。',
+      }
+    }
+
+    const mismatches = comparableFields
+      .filter(([field, value]) => actual[field] !== value)
+      .map(([field, value]) => `${field}: expected=${value}, actual=${actual[field]}`)
+
+    if (mismatches.length > 0) {
+      return {
+        key: 'market.execution_model',
+        level: 'critical',
+        status: 'failed',
+        expected,
+        actual,
+        message: `脚本执行市场元数据与 canonical spec 不一致：${mismatches.join(' | ')}`,
+      }
+    }
+
+    return {
+      key: 'market.execution_model',
+      level: 'critical',
+      status: 'passed',
+      expected,
+      actual,
+      message: '脚本执行市场元数据与 canonical spec 一致。',
+    }
+  }
+
+  private resolveExpectedPositionMode(
+    spec: CanonicalStrategySpec,
+  ): 'long_only' | 'short_only' | 'long_short' {
+    if (spec.version === 2) {
+      const hasLongExposure = spec.rules.some(rule => rule.actions.some(action => (
+        action.type === 'OPEN_LONG'
+        || action.type === 'CLOSE_LONG'
+        || action.type === 'REDUCE_LONG'
+      )))
+      const hasShortExposure = spec.rules.some(rule => rule.actions.some(action => (
+        action.type === 'OPEN_SHORT'
+        || action.type === 'CLOSE_SHORT'
+        || action.type === 'REDUCE_SHORT'
+      )))
+      if (hasLongExposure && hasShortExposure) return 'long_short'
+      if (hasShortExposure) return 'short_only'
+      return 'long_only'
+    }
+
+    const hasLongExposure = spec.entries.some(rule =>
+      rule.action === 'OPEN_LONG',
+    )
+    const hasShortExposure = spec.entries.some(rule =>
+      rule.action === 'OPEN_SHORT',
+    )
+    if (hasLongExposure && hasShortExposure) return 'long_short'
+    if (hasShortExposure) return 'short_only'
+    return 'long_only'
   }
 
   private buildSummary(checks: StrategyConsistencyCheck[]): StrategyConsistencyReport['summary'] {

@@ -26,6 +26,7 @@ import { CodegenSessionsRepository } from '../repositories/codegen-sessions.repo
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { PublishedStrategySnapshotsRepository } from '../repositories/published-strategy-snapshots.repository'
 import {
+  STRATEGY_CLARIFICATION_FIELDS,
   STRATEGY_CLARIFICATION_ITEM_STATUSES,
   STRATEGY_CLARIFICATION_REASONS,
   STRATEGY_CLARIFICATION_STATUSES,
@@ -82,6 +83,10 @@ const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
       minLength: 1,
     },
   },
+}
+
+function normalizePublishedSymbol(raw: string): string {
+  return raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
 }
 
 @Injectable()
@@ -160,7 +165,7 @@ export class CodegenConversationService {
       strategyInstanceId: null,
     } as unknown as Prisma.LlmStrategyCodegenSessionCreateInput)
 
-    return {
+    return this.finalizeSessionResponse({
       id: session.id,
       status,
       missingFields: [],
@@ -168,7 +173,7 @@ export class CodegenConversationService {
       canonicalDigest: initialCanonicalDigest,
       assistantPrompt,
       clarificationState,
-    }
+    })
   }
 
   async getSession(sessionId: string, userId: string): Promise<CodegenSessionResponseDto> {
@@ -218,7 +223,18 @@ export class CodegenConversationService {
       return this.toSessionSnapshotResponse(session)
     }
 
-    const baseChecklist = this.readChecklist(session.checklist)
+    const baseClarificationState = this.readClarificationState(session.clarificationState)
+    const hasStructuredClarificationAnswers = Boolean(
+      dto.clarificationAnswers && Object.keys(dto.clarificationAnswers).length > 0,
+    )
+    const baseChecklist = this.applyClarificationAnswers(
+      this.readChecklist(session.checklist),
+      baseClarificationState,
+      dto.clarificationAnswers,
+    )
+    const clarificationStateAfterAnswers = hasStructuredClarificationAnswers
+      ? this.clarificationRules.detect(baseChecklist)
+      : baseClarificationState
     const messageChecklist = this.normalizeChecklist({
       ...this.inferChecklistFromMessage(dto.message),
       ...this.extractChecklist(dto),
@@ -231,12 +247,22 @@ export class CodegenConversationService {
       model: dto.model,
     }, constraintPack.conversationHistory ?? [])
     if (!plan.related) {
-      return {
+      if (hasStructuredClarificationAnswers) {
+        return this.continueWithStructuredClarificationAnswers({
+          session,
+          checklist: baseChecklist,
+          clarificationState: clarificationStateAfterAnswers,
+          constraintPack,
+          message: dto.message,
+        })
+      }
+      return this.finalizeSessionResponse({
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt: plan.assistantPrompt || '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
-      }
+        clarificationState: clarificationStateAfterAnswers,
+      })
     }
     const mergedChecklist = this.mergeChecklistSnapshots(preMergedChecklist, plan.logic ?? {})
     const clarificationState = this.clarificationRules.detect(mergedChecklist)
@@ -264,13 +290,13 @@ export class CodegenConversationService {
         },
       }))
 
-      return {
+      return this.finalizeSessionResponse({
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt,
         clarificationState,
-      }
+      })
     }
     const historyAfterPlanner = this.appendConversationHistory(
       constraintPack.conversationHistory ?? [],
@@ -292,13 +318,13 @@ export class CodegenConversationService {
         },
       }))
 
-      return {
+      return this.finalizeSessionResponse({
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt: plan.assistantPrompt,
         clarificationState,
-      }
+      })
     }
 
     await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
@@ -312,7 +338,7 @@ export class CodegenConversationService {
       latestSpecDesc: specDesc,
     }))
 
-    return {
+    return this.finalizeSessionResponse({
       id: session.id,
       status: 'CHECKLIST_GATE',
       missingFields: [],
@@ -320,7 +346,7 @@ export class CodegenConversationService {
       canonicalDigest,
       assistantPrompt: `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`,
       clarificationState,
-    }
+    })
   }
 
   private async continueConfirmedSession(
@@ -336,7 +362,12 @@ export class CodegenConversationService {
     dto: ContinueCodegenSessionDto,
     sessionUserId: string,
   ): Promise<CodegenSessionResponseDto> {
-    const baseChecklist = this.readChecklist(session.checklist)
+    const baseClarificationState = this.readClarificationState(session.clarificationState)
+    const baseChecklist = this.applyClarificationAnswers(
+      this.readChecklist(session.checklist),
+      baseClarificationState,
+      dto.clarificationAnswers,
+    )
     const messageChecklist = this.normalizeChecklist(this.extractChecklist(dto))
     const mergedChecklist = this.mergeChecklistSnapshots(baseChecklist, messageChecklist)
     const clarificationState = this.clarificationRules.detect(mergedChecklist)
@@ -359,13 +390,13 @@ export class CodegenConversationService {
         },
       }))
 
-      return {
+      return this.finalizeSessionResponse({
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt,
         clarificationState,
-      }
+      })
     }
 
     const canonicalSpec = this.canonicalSpecBuilder.build(mergedChecklist)
@@ -396,13 +427,13 @@ export class CodegenConversationService {
         latestSpecDesc: specDesc,
       }))
 
-      return {
+      return this.finalizeSessionResponse({
         id: session.id,
         status: 'DRAFTING',
         missingFields,
         assistantPrompt: '请先补全入场和出场规则，再确认生成代码。',
         clarificationState,
-      }
+      })
     }
 
     const markGeneratingInput = this.stateMachine.buildGeneratingUpdate({
@@ -440,11 +471,12 @@ export class CodegenConversationService {
       existingStrategyInstanceId: session.strategyInstanceId ?? null,
     })
 
-    return {
+    return this.finalizeSessionResponse({
       id: session.id,
       status: 'GENERATING',
       missingFields: [],
-    }
+      clarificationState,
+    })
   }
 
   private readChecklist(payload: Prisma.JsonValue | null): ChecklistPayload {
@@ -496,7 +528,7 @@ export class CodegenConversationService {
       ? sessionSpecDesc.publishedSnapshotId
       : null
 
-    return {
+    return this.finalizeSessionResponse({
       id: session.id,
       status: session.status,
       missingFields: [],
@@ -511,8 +543,343 @@ export class CodegenConversationService {
       canonicalDigest: this.readCanonicalDigest(sessionSpecDesc),
       strategyInstanceId: session.strategyInstanceId ?? null,
       clarificationState: this.readClarificationState(session.clarificationState),
+      publicationGate:
+        this.readPublicationGate(sessionSpecDesc?.publicationGate)
+        ?? this.readPublicationGate(latestSnapshot?.consistencyReport)
+        ?? this.readPublicationGate(sessionConsistencyReport),
       rejectReason: session.rejectReason,
+    })
+  }
+
+  private finalizeSessionResponse(
+    response: Omit<CodegenSessionResponseDto, 'clarificationGate'> & {
+      clarificationGate?: CodegenSessionResponseDto['clarificationGate']
+    },
+  ): CodegenSessionResponseDto {
+    const clarificationGate = response.clarificationGate ?? this.buildClarificationGate(response.clarificationState)
+    const publicationGate = response.publicationGate ?? this.readPublicationGate(response.consistencyReport)
+
+    if (!clarificationGate.blocked) {
+      return {
+        ...response,
+        clarificationGate,
+        publicationGate,
+      }
     }
+
+    return {
+      ...response,
+      clarificationGate,
+      publicationGate,
+      specDesc: null,
+      canonicalDigest: null,
+      semanticGraph: null,
+    }
+  }
+
+  private buildClarificationGate(
+    clarificationState?: StrategyClarificationState | null,
+  ): CodegenSessionResponseDto['clarificationGate'] {
+    const pendingItems = clarificationState?.status === 'NEEDS_CLARIFICATION'
+      ? clarificationState.items.filter(item => item.blocking && item.status === 'pending')
+      : []
+
+    return {
+      blocked: pendingItems.length > 0,
+      items: pendingItems,
+      pendingItems,
+    }
+  }
+
+  private applyClarificationAnswers(
+    checklist: ChecklistPayload,
+    clarificationState: StrategyClarificationState | null,
+    answers?: Record<string, string>,
+  ): ChecklistPayload {
+    if (!answers || Object.keys(answers).length === 0) {
+      return checklist
+    }
+
+    let nextChecklist = this.normalizeChecklist({
+      ...checklist,
+      riskRules: checklist.riskRules ? { ...checklist.riskRules } : undefined,
+    })
+
+    for (const item of clarificationState?.items ?? []) {
+      const rawAnswer = answers[item.key]
+      if (typeof rawAnswer !== 'string' || !rawAnswer.trim()) {
+        continue
+      }
+
+      nextChecklist = this.applyClarificationAnswer(nextChecklist, item, rawAnswer.trim())
+    }
+
+    return this.normalizeChecklist(nextChecklist)
+  }
+
+  private applyClarificationAnswer(
+    checklist: ChecklistPayload,
+    item: StrategyClarificationItem,
+    answer: string,
+  ): ChecklistPayload {
+    if (item.key.startsWith('entry.side.') || item.key.startsWith('entry.action_uniqueness.')) {
+      return this.applyEntryRuleDirectionClarification(checklist, item, answer)
+    }
+
+    if (item.key === 'market.symbol' || item.field === 'symbol') {
+      const symbol = normalizePublishedSymbol(answer)
+      return this.normalizeChecklist({
+        ...checklist,
+        symbols: symbol ? [symbol] : checklist.symbols,
+        riskRules: this.clearMarketScopeConflicts(checklist.riskRules, 'symbol'),
+      })
+    }
+
+    if (item.key === 'market.timeframe' || item.field === 'timeframe') {
+      const timeframe = answer.trim()
+      return this.normalizeChecklist({
+        ...checklist,
+        timeframes: timeframe ? [timeframe] : checklist.timeframes,
+        riskRules: this.clearMarketScopeConflicts(checklist.riskRules, 'timeframe'),
+      })
+    }
+
+    if (item.key === 'market.exchange' || item.field === 'exchange') {
+      const exchange = this.normalizeExchangeClarificationAnswer(answer)
+      if (!exchange) return checklist
+      return this.normalizeChecklist({
+        ...checklist,
+        riskRules: {
+          ...this.clearMarketScopeConflicts(checklist.riskRules, 'exchange'),
+          exchange,
+        },
+      })
+    }
+
+    if (item.key === 'market.marketType' || item.field === 'marketType') {
+      const marketType = this.normalizeMarketTypeClarificationAnswer(answer)
+      if (!marketType) return checklist
+      return this.normalizeChecklist({
+        ...checklist,
+        riskRules: {
+          ...this.clearMarketScopeConflicts(checklist.riskRules, 'marketType'),
+          marketType,
+        },
+      })
+    }
+
+    if (item.key === 'riskRules.earlyStop.action' || item.field === 'riskRules.earlyStop.action') {
+      const action = this.normalizeEarlyStopClarificationAnswer(answer)
+      if (!action) return checklist
+      return this.normalizeChecklist({
+        ...checklist,
+        riskRules: {
+          ...(checklist.riskRules ?? {}),
+          earlyStop: action === 'reduce'
+            ? '价格连续3根K线在轨外时提前减仓'
+            : '价格连续3根K线在轨外时提前全平',
+        },
+      })
+    }
+
+    return checklist
+  }
+
+  private applyEntryRuleDirectionClarification(
+    checklist: ChecklistPayload,
+    item: StrategyClarificationItem,
+    answer: string,
+  ): ChecklistPayload {
+    const direction = this.normalizeDirectionClarificationAnswer(answer)
+    const ruleIndex = this.readClarificationRuleIndex(item)
+    if (!direction || ruleIndex === null || !checklist.entryRules || checklist.entryRules.length === 0) {
+      return checklist
+    }
+
+    const actionText = direction === 'short' ? '做空' : '做多'
+    const entryRules = checklist.entryRules.map((rule, index) => {
+      const normalized = rule.trim()
+      if (index !== ruleIndex) {
+        return normalized || rule
+      }
+      if (!normalized) return rule
+      if (/做多|多单|开多|long|买入/i.test(normalized) || /做空|空单|开空|short|卖出/i.test(normalized)) {
+        return this.replaceRuleDirection(normalized, actionText)
+      }
+      return `${normalized}，${actionText}`
+    })
+
+    return this.normalizeChecklist({
+      ...checklist,
+      entryRules,
+    })
+  }
+
+  private replaceRuleDirection(rule: string, actionText: '做多' | '做空'): string {
+    const replaced = rule
+      .replace(/做多|多单|开多|long|买入/iu, actionText)
+      .replace(/做空|空单|开空|short|卖出/iu, actionText)
+      .replace(/做多和做多|做空和做空/iu, actionText)
+      .replace(/同时做多|同时做空/iu, actionText)
+
+    return replaced.trim()
+  }
+
+  private readClarificationRuleIndex(item: StrategyClarificationItem): number | null {
+    const fromRuleId = item.ruleId?.match(/^entry-(\d+)$/u)?.[1]
+    const fromKey = item.key.match(/\.(\d+)$/u)?.[1]
+    const rawIndex = fromRuleId ?? fromKey
+    if (!rawIndex) return null
+
+    const parsed = Number.parseInt(rawIndex, 10)
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return null
+    }
+
+    return parsed - 1
+  }
+
+  private clearMarketScopeConflicts(
+    riskRules: ChecklistPayload['riskRules'],
+    field: 'exchange' | 'marketType' | 'symbol' | 'timeframe',
+  ): Record<string, unknown> {
+    const next = { ...(riskRules ?? {}) }
+    const rawConflicts = next._marketScopeConflicts
+    if (!Array.isArray(rawConflicts)) {
+      return next
+    }
+
+    const filtered = rawConflicts.filter((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return false
+      return (item as { field?: unknown }).field !== field
+    })
+
+    if (filtered.length > 0) {
+      next._marketScopeConflicts = filtered
+    } else {
+      delete next._marketScopeConflicts
+    }
+
+    return next
+  }
+
+  private async continueWithStructuredClarificationAnswers(args: {
+    session: {
+      id: string
+      status: LlmCodegenSessionStatus
+    }
+    checklist: ChecklistPayload
+    clarificationState: StrategyClarificationState
+    constraintPack: ReturnType<CodegenConversationService['readConstraintPack']>
+    message: string
+  }): Promise<CodegenSessionResponseDto> {
+    const historyAfterAnswer = this.appendConversationHistory(
+      args.constraintPack.conversationHistory ?? [],
+      args.message,
+    )
+
+    if (args.clarificationState.status === 'NEEDS_CLARIFICATION') {
+      const assistantPrompt = this.clarificationQuestion.build(args.clarificationState)
+        || '请先澄清这条规则，我再继续完善逻辑图。'
+      await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
+        status: 'DRAFTING',
+        checklist: args.checklist,
+        clarificationState: args.clarificationState,
+        constraintPack: {
+          ...args.constraintPack,
+          conversationHistory: historyAfterAnswer,
+        },
+      }))
+
+      return this.finalizeSessionResponse({
+        id: args.session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt,
+        clarificationState: args.clarificationState,
+      })
+    }
+
+    const canonicalSpec = this.canonicalSpecBuilder.build(args.checklist)
+    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
+    const canonicalDigest = this.readCanonicalDigest(specDesc)
+    const missingFields = this.resolveChecklistMissingFields(args.checklist)
+
+    if (missingFields.length > 0) {
+      await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
+        status: 'DRAFTING',
+        checklist: args.checklist,
+        clarificationState: args.clarificationState,
+        constraintPack: {
+          ...args.constraintPack,
+          conversationHistory: historyAfterAnswer,
+        },
+        latestSpecDesc: specDesc,
+      }))
+
+      return this.finalizeSessionResponse({
+        id: args.session.id,
+        status: 'DRAFTING',
+        missingFields,
+        assistantPrompt: '请先补全入场和出场规则，再确认生成代码。',
+        clarificationState: args.clarificationState,
+      })
+    }
+
+    await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
+      status: 'CHECKLIST_GATE',
+      checklist: args.checklist,
+      clarificationState: args.clarificationState,
+      constraintPack: {
+        ...args.constraintPack,
+        conversationHistory: historyAfterAnswer,
+      },
+      latestSpecDesc: specDesc,
+    }))
+
+    return this.finalizeSessionResponse({
+      id: args.session.id,
+      status: 'CHECKLIST_GATE',
+      missingFields: [],
+      assistantPrompt: '逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。',
+      clarificationState: args.clarificationState,
+      specDesc,
+      canonicalDigest,
+    })
+  }
+
+  private normalizeDirectionClarificationAnswer(answer: string): 'long' | 'short' | null {
+    const hasLong = /做多|多单|开多|long/i.test(answer)
+    const hasShort = /做空|空单|开空|short/i.test(answer)
+    if (hasLong === hasShort) {
+      return null
+    }
+    return hasLong ? 'long' : 'short'
+  }
+
+  private normalizeExchangeClarificationAnswer(
+    answer: string,
+  ): 'binance' | 'okx' | 'hyperliquid' | null {
+    const normalized = answer.trim().toLowerCase()
+    if (normalized === 'binance' || normalized === 'okx' || normalized === 'hyperliquid') {
+      return normalized
+    }
+    return null
+  }
+
+  private normalizeMarketTypeClarificationAnswer(answer: string): 'spot' | 'perp' | null {
+    if (/现货|spot/i.test(answer)) return 'spot'
+    if (/永续|合约|perp|swap/i.test(answer)) return 'perp'
+    return null
+  }
+
+  private normalizeEarlyStopClarificationAnswer(answer: string): 'reduce' | 'close' | null {
+    const hasReduce = /减仓|reduce/i.test(answer)
+    const hasClose = /全平|平仓|止损|close|exit/i.test(answer)
+    if (hasReduce === hasClose) {
+      return null
+    }
+    return hasReduce ? 'reduce' : 'close'
   }
 
   private readClarificationState(payload: Prisma.JsonValue | null | undefined): StrategyClarificationState | null {
@@ -526,8 +893,11 @@ export class CodegenConversationService {
       if (!rawItem || typeof rawItem !== 'object' || Array.isArray(rawItem)) return null
       const key = (rawItem as { key?: unknown }).key
       const reason = (rawItem as { reason?: unknown }).reason
+      const field = (rawItem as { field?: unknown }).field
+      const blocking = (rawItem as { blocking?: unknown }).blocking
       const question = (rawItem as { question?: unknown }).question
       const status = (rawItem as { status?: unknown }).status
+      const allowedAnswers = (rawItem as { allowedAnswers?: unknown }).allowedAnswers
       const ruleId = (rawItem as { ruleId?: unknown }).ruleId
       const answer = (rawItem as { answer?: unknown }).answer
 
@@ -535,16 +905,41 @@ export class CodegenConversationService {
       if (!STRATEGY_CLARIFICATION_REASONS.includes(reason as never)) return null
       if (typeof question !== 'string' || !question.trim()) return null
       if (!STRATEGY_CLARIFICATION_ITEM_STATUSES.includes(status as never)) return null
+      if (
+        allowedAnswers !== undefined
+        && (!Array.isArray(allowedAnswers) || allowedAnswers.some(item => typeof item !== 'string' || !item.trim()))
+      ) {
+        return null
+      }
       if (ruleId !== undefined && typeof ruleId !== 'string') return null
       if (answer !== undefined && typeof answer !== 'string') return null
       const typedReason = reason as StrategyClarificationItem['reason']
+      const typedField = STRATEGY_CLARIFICATION_FIELDS.includes(field as never)
+        ? field as StrategyClarificationItem['field']
+        : this.inferClarificationField({
+          key,
+          reason: typedReason,
+          question,
+        })
+      if (!typedField) return null
+      const normalizedBlocking = blocking === undefined ? true : blocking
+      if (normalizedBlocking !== true) return null
       const typedStatus = status as StrategyClarificationItem['status']
+      const typedAllowedAnswers = (Array.isArray(allowedAnswers)
+        ? allowedAnswers.map(item => item.trim()).filter(Boolean)
+        : this.inferClarificationAllowedAnswers({
+          key,
+          reason: typedReason,
+        })) as string[] | undefined
 
       normalizedItems.push({
         key,
         reason: typedReason,
+        field: typedField,
+        blocking: true,
         question,
         status: typedStatus,
+        ...(typedAllowedAnswers && typedAllowedAnswers.length > 0 ? { allowedAnswers: typedAllowedAnswers } : {}),
         ...(typeof ruleId === 'string' ? { ruleId } : {}),
         ...(typeof answer === 'string' ? { answer } : {}),
       })
@@ -554,6 +949,186 @@ export class CodegenConversationService {
       status: rawStatus as StrategyClarificationState['status'],
       items: normalizedItems,
     }
+  }
+
+  private inferClarificationField(input: {
+    key: string
+    reason: StrategyClarificationItem['reason']
+    question: string
+  }): StrategyClarificationItem['field'] | null {
+    if (input.reason === 'missing_exchange') return 'exchange'
+    if (input.reason === 'missing_symbol') return 'symbol'
+    if (input.reason === 'missing_timeframe') return 'timeframe'
+    if (
+      input.reason === 'missing_market_type'
+      || input.reason === 'invalid_spot_short_combo'
+      || input.reason === 'conflicting_market_scope'
+    ) {
+      return 'marketType'
+    }
+    if (
+      input.reason === 'missing_position_mode'
+      || input.reason === 'missing_action_uniqueness'
+      || input.reason === 'missing_side_scope'
+      || input.reason === 'direction_ambiguous'
+    ) {
+      return 'positionMode'
+    }
+    if (input.reason === 'ambiguous_risk_effect') {
+      return 'riskRules.earlyStop.action'
+    }
+
+    const key = input.key.toLowerCase()
+    const question = input.question.toLowerCase()
+
+    if (key.includes('exchange') || /交易所/u.test(question)) return 'exchange'
+    if (key.includes('symbol') || /标的|交易对/u.test(question)) return 'symbol'
+    if (key.includes('timeframe') || /周期/u.test(question)) return 'timeframe'
+    if (key.includes('markettype') || /现货|合约|市场/u.test(question)) return 'marketType'
+    if (key.includes('earlystop') || key.includes('risk.effect') || /减仓|平仓|止损/u.test(question)) {
+      return 'riskRules.earlyStop.action'
+    }
+    if (key.includes('entry.side') || key.includes('action_uniqueness') || /方向|做多|做空/u.test(question)) {
+      return 'positionMode'
+    }
+
+    return null
+  }
+
+  private inferClarificationAllowedAnswers(input: {
+    key: string
+    reason: StrategyClarificationItem['reason']
+  }): string[] | undefined {
+    if (input.reason === 'ambiguous_risk_effect') {
+      return ['reduce', 'close']
+    }
+    if (input.key.toLowerCase() === 'risk.effect') {
+      return ['reduce', 'close']
+    }
+    return undefined
+  }
+
+  private readPublicationGate(value: unknown): CodegenSessionResponseDto['publicationGate'] | null {
+    const direct = this.normalizePublicationGate(value)
+    if (direct) {
+      return direct
+    }
+
+    const report = this.readRecord(value)
+    const compilerConsistency = this.readRecord(report?.compilerConsistency)
+    return this.normalizePublicationGate(compilerConsistency?.publicationGate)
+  }
+
+  private normalizePublicationGate(value: unknown): CodegenSessionResponseDto['publicationGate'] | null {
+    const record = this.readRecord(value)
+    if (!record) {
+      return null
+    }
+
+    if (typeof record.passed === 'boolean' && Array.isArray(record.blockingMismatches)) {
+      return {
+        passed: record.passed,
+        blockingMismatches: record.blockingMismatches
+          .map(item => this.normalizePublicationGateMismatch(this.readRecord(item)))
+          .filter((item): item is NonNullable<CodegenSessionResponseDto['publicationGate']>['blockingMismatches'][number] => item !== null),
+      }
+    }
+
+    if (typeof record.status === 'string' && Array.isArray(record.checks)) {
+      const blockingMismatches = record.checks
+        .map(item => this.readRecord(item))
+        .filter((item): item is Record<string, unknown> => item !== null)
+        .filter(item => item.blocking === true && item.status === 'failed')
+        .map(item => ({
+          field: this.normalizePublicationGateField(item.key),
+          expected: this.stringifyPublicationGateValue(item.expected),
+          actual: this.stringifyPublicationGateValue(item.actual),
+          reason:
+            typeof item.message === 'string' && item.message.trim()
+              ? item.message.trim()
+              : 'publication gate blocked',
+        }))
+
+      return {
+        passed: blockingMismatches.length === 0,
+        blockingMismatches,
+      }
+    }
+
+    return null
+  }
+
+  private normalizePublicationGateMismatch(
+    value: Record<string, unknown> | null,
+  ): NonNullable<CodegenSessionResponseDto['publicationGate']>['blockingMismatches'][number] | null {
+    if (!value) {
+      return null
+    }
+
+    const field = typeof value.field === 'string' && value.field.trim()
+      ? value.field.trim()
+      : null
+    const reason = typeof value.reason === 'string' && value.reason.trim()
+      ? value.reason.trim()
+      : null
+    if (!field || !reason) {
+      return null
+    }
+
+    return {
+      field,
+      expected: this.stringifyPublicationGateValue(value.expected),
+      actual: this.stringifyPublicationGateValue(value.actual),
+      reason,
+    }
+  }
+
+  private normalizePublicationGateField(value: unknown): string {
+    if (typeof value !== 'string' || !value.trim()) {
+      return 'unknown'
+    }
+
+    const normalized = value.trim()
+    return normalized.startsWith('market.')
+      ? normalized.slice('market.'.length)
+      : normalized
+  }
+
+  private stringifyPublicationGateValue(value: unknown): string {
+    if (typeof value === 'string') {
+      return value
+    }
+    if (typeof value === 'number' || typeof value === 'boolean') {
+      return String(value)
+    }
+
+    const record = this.readRecord(value)
+    if (record) {
+      if (typeof record.script === 'string' && record.script.trim()) {
+        return record.script.trim()
+      }
+      if (typeof record.ir === 'string' && record.ir.trim()) {
+        return record.ir.trim()
+      }
+    }
+
+    if (value === null || value === undefined) {
+      return ''
+    }
+
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return String(value)
+    }
+  }
+
+  private readRecord(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null
+    }
+
+    return value as Record<string, unknown>
   }
 
   async testEngine(dto: TestLlmCodegenEngineDto): Promise<LlmCodegenEngineTestResponseDto> {
@@ -1208,9 +1783,11 @@ export class CodegenConversationService {
     const mergedRiskRules = (() => {
       const baseRiskRules = base.riskRules ?? {}
       const patchRiskRules = patch.riskRules ?? {}
+      const marketScopeConflicts = this.collectMarketScopeConflicts(base, patch)
       const merged = {
         ...baseRiskRules,
         ...patchRiskRules,
+        ...(marketScopeConflicts.length > 0 ? { _marketScopeConflicts: marketScopeConflicts } : {}),
       }
       return Object.keys(merged).length > 0 ? merged : undefined
     })()
@@ -1223,6 +1800,41 @@ export class CodegenConversationService {
       riskRules: mergedRiskRules,
     }
     return this.normalizeChecklist(merged)
+  }
+
+  private collectMarketScopeConflicts(base: ChecklistPayload, patch: ChecklistPayload): Array<{
+    field: 'exchange' | 'marketType' | 'symbol' | 'timeframe'
+    previous: string
+    next: string
+  }> {
+    const conflicts: Array<{
+      field: 'exchange' | 'marketType' | 'symbol' | 'timeframe'
+      previous: string
+      next: string
+    }> = []
+    const pushConflict = (
+      field: 'exchange' | 'marketType' | 'symbol' | 'timeframe',
+      previous: string | undefined,
+      next: string | undefined,
+    ) => {
+      if (!previous || !next || previous === next) return
+      conflicts.push({ field, previous, next })
+    }
+
+    pushConflict('symbol', base.symbols?.[0], patch.symbols?.[0])
+    pushConflict('timeframe', base.timeframes?.[0], patch.timeframes?.[0])
+    pushConflict(
+      'exchange',
+      typeof base.riskRules?.exchange === 'string' ? base.riskRules.exchange : undefined,
+      typeof patch.riskRules?.exchange === 'string' ? patch.riskRules.exchange : undefined,
+    )
+    pushConflict(
+      'marketType',
+      typeof base.riskRules?.marketType === 'string' ? base.riskRules.marketType : undefined,
+      typeof patch.riskRules?.marketType === 'string' ? patch.riskRules.marketType : undefined,
+    )
+
+    return conflicts
   }
 
   private appendConversationHistory(

@@ -340,10 +340,11 @@ export function AiQuantPageClient() {
     return activeConversation.backtestResult.maxDrawdownPct <= 20
   }, [activeConversation?.backtestResult])
   const graphConfirmed = activeConversation?.logicGraph?.status === 'confirmed'
+  const clarificationBlocked = activeConversation?.clarificationGate?.blocked === true
   const semanticViewConfirmable = canConfirmSemanticView({
     logicGraph: activeConversation?.logicGraph,
     pendingCanonicalDigest: activeConversation?.pendingCanonicalDigest,
-  })
+  }) && !clarificationBlocked
   const codegenBusy = activeConversation
     ? codegenBusyConversationIds.includes(activeConversation.id)
     : false
@@ -427,6 +428,7 @@ export function AiQuantPageClient() {
     usePresetRules?: boolean
     confirmGenerate?: boolean
     confirmedCanonicalDigest?: string
+    clarificationAnswers?: Record<string, string>
   }) => {
     await requestAiQuantCodegen({
       ...args,
@@ -538,6 +540,21 @@ export function AiQuantPageClient() {
       sessionId: currentSessionId,
       usePresetRules: false,
       confirmGenerate: false,
+    })
+  }
+
+  const onClarificationAnswer = async (itemKey: string, value: string) => {
+    if (!activeConversation) return
+    await requestBackendGraphGeneration({
+      conversationId: activeConversation.id,
+      message: value,
+      params: activeConversation.params,
+      sessionId: activeConversation.llmCodegenSessionId,
+      usePresetRules: false,
+      confirmGenerate: false,
+      clarificationAnswers: {
+        [itemKey]: value,
+      },
     })
   }
 
@@ -813,7 +830,10 @@ export function AiQuantPageClient() {
             messages={activeConversation.messages}
             paramSchema={activeConversation.paramSchema}
             paramValues={activeConversation.paramValues}
+            clarificationGate={activeConversation.clarificationGate}
+            publicationGate={activeConversation.publicationGate}
             compactMode={compactMode}
+            onClarificationAnswer={onClarificationAnswer}
             onParamChange={(key, value) =>
               updateActiveConversation(curr => {
                 const nextValues = { ...curr.paramValues, [key]: value }

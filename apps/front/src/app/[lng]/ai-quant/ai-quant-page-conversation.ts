@@ -5,6 +5,8 @@ import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import type { StrategyLogicGraph } from '@/components/ai-quant/logic-graph-model'
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
 import type {
+  LlmClarificationGate,
+  LlmPublicationGate,
   LlmSemanticGraph,
   LlmSemanticGraphValidationReport,
   UserExchangeAccountStatus,
@@ -104,6 +106,8 @@ export interface ConversationState {
   codegenSpecDesc: Record<string, unknown> | null
   semanticGraph: LlmSemanticGraph | null
   validationReport: LlmSemanticGraphValidationReport | null
+  clarificationGate: LlmClarificationGate | null
+  publicationGate: LlmPublicationGate | null
   pendingCanonicalDigest: string | null
   llmCodegenSessionId: string | null
   publishedStrategyInstanceId: string | null
@@ -114,6 +118,23 @@ export interface ConversationState {
   backtestExecutionConfigExplicit?: boolean
   backtestExecutionState: 'idle' | 'submitting' | 'running' | 'succeeded' | 'failed' | 'timeout'
   updatedAt: number
+}
+
+export function normalizeClarificationGate(input: unknown): LlmClarificationGate | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return null
+  }
+
+  const gate = input as Record<string, unknown>
+  const items = Array.isArray(gate.items)
+    ? gate.items
+    : (Array.isArray(gate.pendingItems) ? gate.pendingItems : [])
+
+  return {
+    blocked: gate.blocked === true || items.length > 0,
+    items: items as LlmClarificationGate['items'],
+    pendingItems: items as LlmClarificationGate['items'],
+  }
 }
 
 const VALID_RANGE_PRESETS = ['7D', '30D', '90D', '1Y', 'CUSTOM'] as const
@@ -289,6 +310,8 @@ export function invalidateConversationPublication(
       markGraphDraft && conversation.logicGraph
         ? { ...conversation.logicGraph, status: 'draft' }
         : conversation.logicGraph,
+    clarificationGate: null,
+    publicationGate: null,
     publishedStrategyInstanceId: null,
     publishedSnapshotId: null,
     publishedScriptCode: null,
@@ -427,6 +450,8 @@ export function createConversation(translate: (key: string) => string, now = Dat
     codegenSpecDesc: null,
     semanticGraph: null,
     validationReport: null,
+    clarificationGate: null,
+    publicationGate: null,
     pendingCanonicalDigest: null,
     llmCodegenSessionId: null,
     publishedStrategyInstanceId: null,
@@ -489,6 +514,11 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
       && typeof item.validationReport === 'object'
       && !Array.isArray(item.validationReport)
         ? item.validationReport
+        : null,
+    clarificationGate: normalizeClarificationGate(item.clarificationGate),
+    publicationGate:
+      item.publicationGate && typeof item.publicationGate === 'object' && !Array.isArray(item.publicationGate)
+        ? item.publicationGate as LlmPublicationGate
         : null,
     pendingCanonicalDigest:
       typeof item.pendingCanonicalDigest === 'string' && item.pendingCanonicalDigest.trim()

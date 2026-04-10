@@ -3,10 +3,17 @@ import { Injectable } from '@nestjs/common'
 
 const REASON_PRIORITY: Record<StrategyClarificationItem['reason'], number> = {
   missing_action_uniqueness: 1,
-  missing_side_scope: 2,
-  direction_ambiguous: 2,
-  ambiguous_risk_effect: 3,
-  ambiguous_condition_basis: 4,
+  missing_exchange: 2,
+  missing_symbol: 2,
+  missing_timeframe: 2,
+  missing_market_type: 2,
+  missing_position_mode: 2,
+  conflicting_market_scope: 2,
+  invalid_spot_short_combo: 2,
+  missing_side_scope: 3,
+  direction_ambiguous: 3,
+  ambiguous_risk_effect: 4,
+  ambiguous_condition_basis: 5,
 }
 
 @Injectable()
@@ -31,6 +38,18 @@ export class StrategyClarificationQuestionService {
   }
 
   private renderLead(item: StrategyClarificationItem): string {
+    if (
+      item.reason === 'missing_exchange'
+      || item.reason === 'missing_symbol'
+      || item.reason === 'missing_timeframe'
+      || item.reason === 'missing_market_type'
+      || item.reason === 'missing_position_mode'
+    ) {
+      return '当前策略缺少关键市场约束信息。'
+    }
+    if (item.reason === 'conflicting_market_scope' || item.reason === 'invalid_spot_short_combo') {
+      return '当前策略的市场约束与方向条件存在冲突。'
+    }
     if (item.reason === 'missing_side_scope' || item.reason === 'direction_ambiguous') {
       return '当前这条规则还缺少方向约束。'
     }

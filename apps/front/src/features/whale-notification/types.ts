@@ -1,5 +1,7 @@
 import type { WhaleNotificationRuleType } from '@ai/shared'
 
+export type { WhaleNotificationRuleType } from '@ai/shared'
+
 export interface WhaleNotificationChannels {
   web: boolean
   email: boolean

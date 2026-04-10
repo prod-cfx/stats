@@ -51,6 +51,49 @@ describe('canonicalSpecBuilderService', () => {
     expect(entryRules).toHaveLength(2)
   })
 
+  it('builds outside-band reduce rules when earlyStop asks to reduce exposure', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: [
+        '突破布林带上轨做空',
+        '突破布林带下轨做多',
+      ],
+      exitRules: [
+        '价格回到布林带中轨平仓',
+      ],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        stopLossPct: 5,
+        earlyStop: '价格连续3根K线在轨外时提前减仓',
+        positionPct: 10,
+      },
+    })
+
+    expect(spec.market).toEqual({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      marketType: 'perp',
+      timeframe: '15m',
+    })
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'risk-outside-band-3-bars',
+        phase: 'risk',
+        condition: expect.objectContaining({
+          key: 'bollinger.bars_outside',
+        }),
+        actions: expect.arrayContaining([
+          expect.objectContaining({ type: 'REDUCE_LONG' }),
+          expect.objectContaining({ type: 'REDUCE_SHORT' }),
+        ]),
+      }),
+    ]))
+  })
+
   it('emits empty v2 rules when checklist has no recognizable trigger patterns', () => {
     const service = new CanonicalSpecBuilderService()
 
