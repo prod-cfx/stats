@@ -267,6 +267,16 @@ function seedVersionedConversation(version: string, now = Date.now()) {
   )
 }
 
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve
+    reject = innerReject
+  })
+  return { promise, resolve, reject }
+}
+
 describe('AiQuantPageClient backtest range integration', () => {
   let container: HTMLDivElement
   let root: ReturnType<typeof createRoot> | null
@@ -473,6 +483,54 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(listAiQuantConversations).toHaveBeenCalled()
     expect(listLlmCodegenSessions).not.toHaveBeenCalled()
     expect(container.textContent).toContain('server-message')
+    expect(container.textContent).not.toContain('persisted-message')
+  })
+
+  it('shows a dedicated loading state while server-owned conversations are syncing', async () => {
+    localStorage.clear()
+    seedVersionedConversation('deploy-current', Date.now())
+
+    const { listAiQuantConversations } = jest.requireMock('@/lib/api') as {
+      listAiQuantConversations: jest.Mock
+    }
+    const deferred = createDeferred<Array<Record<string, unknown>>>()
+    listAiQuantConversations.mockReturnValue(deferred.promise)
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" serverOwnedConversations />)
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="conversation-sync-loading"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="sidebar"]')).toBeNull()
+    expect(container.textContent).not.toContain('persisted-message')
+
+    await act(async () => {
+      deferred.resolve([])
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="conversation-sync-loading"]')).toBeNull()
+  })
+
+  it('clears stale local cache and shows an error state when server conversation hydration fails', async () => {
+    localStorage.clear()
+    seedVersionedConversation('deploy-current', Date.now())
+
+    const { listAiQuantConversations } = jest.requireMock('@/lib/api') as {
+      listAiQuantConversations: jest.Mock
+    }
+    listAiQuantConversations.mockRejectedValue(new Error('gateway'))
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(localStorage.getItem('ai_quant_conversations_v1')).toBeNull()
+    expect(container.querySelector('[data-testid="conversation-sync-error"]')).toBeTruthy()
     expect(container.textContent).not.toContain('persisted-message')
   })
 })

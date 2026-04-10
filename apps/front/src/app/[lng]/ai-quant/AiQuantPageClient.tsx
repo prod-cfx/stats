@@ -1,5 +1,6 @@
 'use client'
 
+import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import type { QuantReturnIntentInput } from '@/components/ai-quant/intent-storage'
@@ -31,7 +32,6 @@ import {
 import { applyCapabilitiesToParamSchema } from '@/components/ai-quant/strategy-param-sync'
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
 import { useAuth } from '@/hooks/use-auth'
-import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
 import { fetchUserExchangeAccountStatuses, listAiQuantConversations } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
 import { runAiQuantBacktest } from './ai-quant-page-backtest'
@@ -73,6 +73,7 @@ const CAPABILITY_AUTO_RETRY_DELAY_MS = 15_000
 const INTENT_TTL_MS = 30 * 60 * 1000
 
 type CapabilityState = 'loading' | 'ready' | 'failed'
+type ConversationSyncState = 'idle' | 'loading' | 'ready' | 'error'
 
 interface AiQuantPageClientProps {
   deployVersion?: string
@@ -109,6 +110,7 @@ export function AiQuantPageClient({
     null,
   )
   const [conversationStorageReady, setConversationStorageReady] = useState(false)
+  const [conversationSyncState, setConversationSyncState] = useState<ConversationSyncState>('idle')
   const [backtestCapabilityRetryNonce, setBacktestCapabilityRetryNonce] = useState(0)
   const [codegenBusyConversationIds, setCodegenBusyConversationIds] = useState<string[]>([])
   const isMountedRef = useRef(true)
@@ -134,15 +136,17 @@ export function AiQuantPageClient({
   useEffect(() => {
     if (serverOwnedConversations) {
       let cancelled = false
+      setConversationSyncState('loading')
+      localStorage.removeItem(CONVERSATIONS_STORAGE_KEY)
       void listAiQuantConversations()
         .then((serverConversations) => {
           if (cancelled) return
-          localStorage.removeItem(CONVERSATIONS_STORAGE_KEY)
           const restored = serverConversations.length > 0
             ? serverConversations.map(conversation => createConversationFromServerConversation(conversation, t))
             : [createConversation(t)]
           setConversations(restored)
           setActiveConversationId(restored[0].id)
+          setConversationSyncState('ready')
           setConversationStorageReady(true)
         })
         .catch(() => {
@@ -150,6 +154,7 @@ export function AiQuantPageClient({
           const fallback = [createConversation(t)]
           setConversations(fallback)
           setActiveConversationId(fallback[0].id)
+          setConversationSyncState('error')
           setConversationStorageReady(true)
         })
       return () => {
@@ -166,6 +171,7 @@ export function AiQuantPageClient({
 
     setConversations(result.conversations)
     setActiveConversationId(result.conversations[0].id)
+    setConversationSyncState('ready')
 
     if (result.shouldPersist) {
       localStorage.setItem(
@@ -845,6 +851,21 @@ export function AiQuantPageClient({
     )
   }
 
+  if (serverOwnedConversations && conversationSyncState === 'loading') {
+    return (
+      <main className="mx-auto flex w-full max-w-[1120px] flex-1 items-center px-4 py-8 md:px-8">
+        <div
+          data-testid="conversation-sync-loading"
+          className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-3 text-sm text-[color:var(--cf-muted)]"
+        >
+          {t('aiQuant.messages.loadingConversations', {
+            defaultValue: 'Syncing your AI Quant conversations…',
+          })}
+        </div>
+      </main>
+    )
+  }
+
   if (!activeConversation) return null
 
   return (
@@ -871,6 +892,17 @@ export function AiQuantPageClient({
           </Link>
         </div>
       </div>
+
+      {serverOwnedConversations && conversationSyncState === 'error' && (
+        <div
+          data-testid="conversation-sync-error"
+          className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          {t('aiQuant.messages.conversationSyncFailed', {
+            defaultValue: 'Unable to load saved AI Quant conversations. A fresh chat has been opened.',
+          })}
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-[280px_minmax(0,1fr)]">
         <ConversationSidebar
