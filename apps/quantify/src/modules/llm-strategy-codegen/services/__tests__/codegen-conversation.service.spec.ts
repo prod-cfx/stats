@@ -83,6 +83,16 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   const buildConfirmedCanonicalDigest = (checklist: Record<string, unknown>): string => {
     return canonicalDigestService.hash(canonicalSpecBuilder.build(checklist))
   }
+  const withRequiredMarketContext = (checklist: Record<string, unknown>): Record<string, unknown> => ({
+    symbols: ['BTCUSDT'],
+    timeframes: ['15m'],
+    ...checklist,
+    riskRules: {
+      exchange: 'okx',
+      marketType: 'perp',
+      ...((checklist.riskRules as Record<string, unknown> | undefined) ?? {}),
+    },
+  })
 
   const service = new CodegenConversationService(
     mockAi as unknown as AiService,
@@ -176,7 +186,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const result = await service.startSession({
       userId: 'u-1',
-      initialMessage: '在BTCUSDT 15分钟图上，突破布林带上轨交易，仓位10%',
+      initialMessage: '在okx合约市场的BTCUSDT 15分钟图上，突破布林带上轨交易，仓位10%',
     })
 
     expect(result.status).toBe('DRAFTING')
@@ -208,7 +218,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const result = await service.startSession({
       userId: 'u-1',
       initialMessage:
-        '在okx交易所，交易对BTCUSDT 15分钟图上，突破布林带上轨做空、突破下轨做多，仓位10%；出场条件为价格回到布林带中轨（MA20）平仓、亏损≥5%强制止损，以及价格连续3根K线在轨外时提前止损或减仓。',
+        '在okx交易所合约市场，交易对BTCUSDT 15分钟图上，突破布林带上轨做空、突破下轨做多，仓位10%；出场条件为价格回到布林带中轨（MA20）平仓、亏损≥5%强制止损，以及价格连续3根K线在轨外时提前止损或减仓。',
     })
 
     expect(result.status).toBe('DRAFTING')
@@ -233,7 +243,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const result = await service.startSession({
       userId: 'u-1',
-      initialMessage: '在BTCUSDT 15分钟图上，突破布林带上轨交易，回到中轨卖出，仓位10%',
+      initialMessage: '在okx合约市场的BTCUSDT 15分钟图上，突破布林带上轨交易，回到中轨卖出，仓位10%',
     })
 
     expect(result.status).toBe('DRAFTING')
@@ -251,7 +261,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const result = await service.startSession({
       userId: 'u-1',
-      initialMessage: '在BTCUSDT 15分钟图上，突破布林带上轨交易后回到中轨卖出，仓位10%',
+      initialMessage: '在okx合约市场的BTCUSDT 15分钟图上，突破布林带上轨交易后回到中轨卖出，仓位10%',
     })
 
     expect(result.status).toBe('DRAFTING')
@@ -275,8 +285,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         logicReady: true,
         assistantPrompt: '策略逻辑已完整，请确认逻辑图。',
         logic: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
           entryRules: ['3m 内下跌 1% 买入'],
           exitRules: ['5m 内上涨 2% 卖出'],
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'perp',
+          },
         },
       }),
     })
@@ -846,7 +862,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       id: 's4',
       userId: 'u1',
       status: 'DRAFTING',
-      checklist: {},
+      checklist: withRequiredMarketContext({}),
       constraintPack: {},
     })
     mockAi.chat.mockResolvedValue({
@@ -879,7 +895,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       id: 's4-clarify',
       userId: 'u1',
       status: 'DRAFTING',
-      checklist: {},
+      checklist: withRequiredMarketContext({}),
       constraintPack: {},
     })
     mockAi.chat.mockResolvedValue({
@@ -923,8 +939,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           logicReady: true,
           assistantPrompt: '已确认逻辑，开始生成。',
           logic: {
+            symbols: ['BTCUSDT'],
+            timeframes: ['15m'],
             entryRules: ['短均线上穿长均线（金叉）时做多'],
             exitRules: ['短均线下穿长均线（死叉）时平多'],
+            riskRules: {
+              exchange: 'okx',
+              marketType: 'perp',
+            },
           },
         }),
       })
@@ -943,10 +965,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       id: 's5',
       userId: 'u1',
       status: 'CHECKLIST_GATE',
-      checklist: {
+      checklist: withRequiredMarketContext({
         entryRules: ['短均线上穿长均线（金叉）时做多'],
         exitRules: ['短均线下穿长均线（死叉）时平多'],
-      },
+      }),
       constraintPack: {},
     })
 
@@ -982,8 +1004,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           logicReady: true,
           assistantPrompt: '已确认逻辑，开始生成。',
           logic: {
+            symbols: ['BTCUSDT'],
+            timeframes: ['15m'],
             entryRules: ['短均线上穿长均线（金叉）时做多'],
             exitRules: ['短均线下穿长均线（死叉）时平多'],
+            riskRules: {
+              exchange: 'okx',
+              marketType: 'perp',
+            },
           },
         }),
       })
@@ -999,10 +1027,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       id: 's5-compiled',
       userId: 'u1',
       status: 'CHECKLIST_GATE',
-      checklist: {
+      checklist: withRequiredMarketContext({
         entryRules: ['短均线上穿长均线（金叉）时做多'],
         exitRules: ['短均线下穿长均线（死叉）时平多'],
-      },
+      }),
       constraintPack: {},
     })
 
@@ -1063,7 +1091,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         timeframes: ['15m'],
         entryRules: ['EMA7 上穿 EMA21 做多'],
         exitRules: ['EMA7 下穿 EMA21 平多'],
-        riskRules: { positionPct: 10 },
+        riskRules: { positionPct: 10, exchange: 'okx', marketType: 'perp' },
       },
       clarificationState: { status: 'CLEAR', items: [] },
       constraintPack: {},
@@ -1078,7 +1106,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         timeframes: ['15m'],
         entryRules: ['EMA7 上穿 EMA21 做多'],
         exitRules: ['EMA7 下穿 EMA21 平多'],
-        riskRules: { positionPct: 10 },
+        riskRules: { positionPct: 10, exchange: 'okx', marketType: 'perp' },
       }),
     })
 
@@ -1146,7 +1174,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         timeframes: ['15m'],
         entryRules: ['EMA7 上穿 EMA21 做多'],
         exitRules: ['EMA7 下穿 EMA21 平多'],
-        riskRules: { positionPct: 10 },
+        riskRules: { positionPct: 10, exchange: 'okx', marketType: 'perp' },
       },
       clarificationState: { status: 'CLEAR', items: [] },
       constraintPack: {},
@@ -1161,7 +1189,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         timeframes: ['15m'],
         entryRules: ['EMA7 上穿 EMA21 做多'],
         exitRules: ['EMA7 下穿 EMA21 平多'],
-        riskRules: { positionPct: 10 },
+        riskRules: { positionPct: 10, exchange: 'okx', marketType: 'perp' },
       }),
     })
 
@@ -1195,7 +1223,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         timeframes: ['15m'],
         entryRules: ['EMA7 上穿 EMA21 做多'],
         exitRules: ['EMA7 下穿 EMA21 平多'],
-        riskRules: { positionPct: 10 },
+        riskRules: { positionPct: 10, exchange: 'okx', marketType: 'perp' },
       },
       clarificationState: { status: 'CLEAR', items: [] },
       constraintPack: {},
@@ -1223,7 +1251,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         timeframes: ['15m'],
         entryRules: ['EMA7 上穿 EMA21 做多'],
         exitRules: ['EMA7 下穿 EMA21 平多'],
-        riskRules: { positionPct: 10 },
+        riskRules: { positionPct: 10, exchange: 'okx', marketType: 'perp' },
       },
       clarificationState: { status: 'CLEAR', items: [] },
       constraintPack: {},
@@ -1248,10 +1276,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       id: 's6',
       userId: 'u1',
       status: 'CHECKLIST_GATE',
-      checklist: {
+      checklist: withRequiredMarketContext({
         entryRules: ['rsi < 30'],
         exitRules: ['atr stop'],
-      },
+      }),
       constraintPack: {},
     })
     mockAi.chat
@@ -1271,10 +1299,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(withRequiredMarketContext({
         entryRules: ['rsi < 30'],
         exitRules: ['atr stop'],
-      }),
+      })),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -1295,10 +1323,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       id: 's7',
       userId: 'u1',
       status: 'DRAFTING',
-      checklist: {
+      checklist: withRequiredMarketContext({
         entryRules: ['突破关键阻力位后入场'],
         exitRules: ['跌破最近支撑位出场'],
-      },
+      }),
       constraintPack: {},
     })
     mockAi.chat
@@ -1318,10 +1346,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认，直接生成代码',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(withRequiredMarketContext({
         entryRules: ['突破关键阻力位后入场'],
         exitRules: ['跌破最近支撑位出场'],
-      }),
+      })),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -1337,10 +1365,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       id: 's8',
       userId: 'u1',
       status: 'CHECKLIST_GATE',
-      checklist: {
+      checklist: withRequiredMarketContext({
         entryRules: ['突破关键阻力位后入场'],
         exitRules: ['跌破最近支撑位出场'],
-      },
+      }),
       constraintPack: {},
     })
     mockRepo.createVersion.mockRejectedValueOnce(new Error('version write failed'))
@@ -1349,10 +1377,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认，直接生成代码',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(withRequiredMarketContext({
         entryRules: ['突破关键阻力位后入场'],
         exitRules: ['跌破最近支撑位出场'],
-      }),
+      })),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -1369,10 +1397,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       id: 's8-publish-fail',
       userId: 'u1',
       status: 'CHECKLIST_GATE',
-      checklist: {
+      checklist: withRequiredMarketContext({
         entryRules: ['突破关键阻力位后入场'],
         exitRules: ['跌破最近支撑位出场'],
-      },
+      }),
       constraintPack: {},
     })
     mockAi.chat
@@ -1395,10 +1423,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认，直接生成代码',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(withRequiredMarketContext({
         entryRules: ['突破关键阻力位后入场'],
         exitRules: ['跌破最近支撑位出场'],
-      }),
+      })),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -1496,10 +1524,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       id: 's9',
       userId: 'u1',
       status: 'CHECKLIST_GATE',
-      checklist: {
+      checklist: withRequiredMarketContext({
         entryRules: ['价格突破阻力位入场'],
         exitRules: ['跌破支撑位出场'],
-      },
+      }),
       constraintPack: {},
     })
 
@@ -1507,10 +1535,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(withRequiredMarketContext({
         entryRules: ['价格突破阻力位入场'],
         exitRules: ['跌破支撑位出场'],
-      }),
+      })),
       providerCode: 'uniapi',
       model: 'gpt-4',
     })
@@ -1683,12 +1711,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       status: 'CHECKLIST_GATE',
       strategyInstanceId: null,
-      checklist: {
+      checklist: withRequiredMarketContext({
         symbols: ['BTCUSDT'],
         timeframes: ['5m'],
         entryRules: ['价格突破阻力位入场'],
         exitRules: ['跌破支撑位出场'],
-      },
+      }),
       constraintPack: {},
     })
     mockAi.chat
@@ -1709,12 +1737,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(withRequiredMarketContext({
         symbols: ['BTCUSDT'],
         timeframes: ['5m'],
         entryRules: ['价格突破阻力位入场'],
         exitRules: ['跌破支撑位出场'],
-      }),
+      })),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -1811,12 +1839,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       status: 'CHECKLIST_GATE',
       strategyInstanceId: 'instance-existing',
-      checklist: {
+      checklist: withRequiredMarketContext({
         symbols: ['BTCUSDT'],
         timeframes: ['15m'],
         entryRules: ['价格突破阻力位入场'],
         exitRules: ['跌破支撑位出场'],
-      },
+      }),
       constraintPack: {},
     })
     mockAi.chat
@@ -1837,12 +1865,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(withRequiredMarketContext({
         symbols: ['BTCUSDT'],
         timeframes: ['15m'],
         entryRules: ['价格突破阻力位入场'],
         exitRules: ['跌破支撑位出场'],
-      }),
+      })),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -1861,12 +1889,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       status: 'CHECKLIST_GATE',
       strategyInstanceId: null,
-      checklist: {
+      checklist: withRequiredMarketContext({
         symbols: ['BTCUSDT'],
         timeframes: ['5m'],
         entryRules: ['价格突破阻力位入场'],
         exitRules: ['跌破支撑位出场'],
-      },
+      }),
       constraintPack: {},
     })
     mockAi.chat
@@ -1888,12 +1916,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认并生成',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(withRequiredMarketContext({
         symbols: ['BTCUSDT'],
         timeframes: ['5m'],
         entryRules: ['价格突破阻力位入场'],
         exitRules: ['跌破支撑位出场'],
-      }),
+      })),
     })
 
     expect(result.status).toBe('GENERATING')
