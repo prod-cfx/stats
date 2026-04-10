@@ -268,7 +268,7 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
         clarificationState,
       }),
     }))
-    expect(created.clarificationState).toEqual({
+    expect((created as any).clarificationState).toEqual({
       status: 'NEEDS_CLARIFICATION',
       items: [
         expect.objectContaining({
@@ -277,7 +277,7 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
         }),
       ],
     })
-    expect(loaded?.clarificationState).toEqual({
+    expect((loaded as any)?.clarificationState).toEqual({
       status: 'NEEDS_CLARIFICATION',
       items: [
         expect.objectContaining({

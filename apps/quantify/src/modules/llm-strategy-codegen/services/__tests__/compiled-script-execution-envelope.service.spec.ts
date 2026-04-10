@@ -1,6 +1,6 @@
 import { CompiledScriptExecutionEnvelopeService } from '../compiled-script-execution-envelope.service'
 
-describe('CompiledScriptExecutionEnvelopeService', () => {
+describe('compiledScriptExecutionEnvelopeService', () => {
   const service = new CompiledScriptExecutionEnvelopeService()
 
   it('builds a long_short envelope when canonical spec opens short positions', () => {

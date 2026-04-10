@@ -847,7 +847,6 @@ export class CanonicalSpecV2IrCompilerService {
   private resolvePositionMode(rules: CanonicalRuleV2[]): CanonicalStrategyIrV1['portfolio']['positionMode'] {
     const hasShort = rules.some(rule => rule.actions.some(action => (
       action.type === 'OPEN_SHORT'
-      || action.type === 'CLOSE_SHORT'
       || action.type === 'REDUCE_SHORT'
     )))
 

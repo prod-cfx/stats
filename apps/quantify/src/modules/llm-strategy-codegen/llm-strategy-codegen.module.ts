@@ -15,6 +15,7 @@ import { CanonicalStrategyIrCanonicalizerService } from './services/canonical-st
 import { CanonicalStrategyIrValidatorService } from './services/canonical-strategy-ir-validator.service'
 import { ChecklistGateService } from './services/checklist-gate.service'
 import { CodegenConversationService } from './services/codegen-conversation.service'
+import { CodegenSessionPublicationPipelineService } from './services/codegen-session-publication-pipeline.service'
 import { CompiledPublicationGateService } from './services/compiled-publication-gate.service'
 import { CompiledScriptEmitterService } from './services/compiled-script-emitter.service'
 import { CompiledScriptExecutionEnvelopeService } from './services/compiled-script-execution-envelope.service'
@@ -57,6 +58,7 @@ import { StrategySummaryBuilderService } from './services/strategy-summary-build
     StrategyClarificationQuestionService,
     RecommendationIndexService,
     CallerIdentityService,
+    CodegenSessionPublicationPipelineService,
     CodegenConversationService,
   ],
   exports: [CodegenConversationService],

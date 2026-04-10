@@ -1,6 +1,6 @@
 import { SemanticGraphBuilderService } from '../semantic-graph-builder.service'
 
-describe('SemanticGraphBuilderService', () => {
+describe('semanticGraphBuilderService', () => {
   const builder = new SemanticGraphBuilderService()
 
   it('assigns multi-timeframe context to entry/exit nodes when rule text has no explicit timeframe', () => {

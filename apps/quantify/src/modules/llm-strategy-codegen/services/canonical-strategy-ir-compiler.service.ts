@@ -1,10 +1,10 @@
 import type { ActionDef, CanonicalStrategyIrV1, PredicateDef, RiskGuard, SeriesDef } from '../types/canonical-strategy-ir'
 import type { ParsedOperatorNode, StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
+import type { CanonicalStrategyIrCanonicalizerService } from './canonical-strategy-ir-canonicalizer.service'
+import type { CanonicalStrategyIrValidatorService } from './canonical-strategy-ir-validator.service'
+import type { GraphOperatorParserService } from './graph-operator-parser.service'
+import type { GraphSemanticProjectionService } from './graph-semantic-projection.service'
 import { Injectable } from '@nestjs/common'
-import { CanonicalStrategyIrCanonicalizerService } from './canonical-strategy-ir-canonicalizer.service'
-import { CanonicalStrategyIrValidatorService } from './canonical-strategy-ir-validator.service'
-import { GraphOperatorParserService } from './graph-operator-parser.service'
-import { GraphSemanticProjectionService } from './graph-semantic-projection.service'
 
 interface CompiledSignals {
   series: SeriesDef[]

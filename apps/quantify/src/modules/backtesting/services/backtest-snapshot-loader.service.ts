@@ -5,9 +5,31 @@ import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- runtime DI required
 import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
+import { BacktestCompiledSnapshotPreflightService } from './backtest-compiled-snapshot-preflight.service'
 // eslint-disable-next-line ts/consistent-type-imports -- runtime DI required
 import { BacktestStrategyAdapterService } from './backtest-strategy-adapter.service'
-import { BacktestCompiledSnapshotPreflightService } from './backtest-compiled-snapshot-preflight.service'
+
+interface PublishedSnapshotRecord {
+  id: string
+  strategyInstanceId: string | null
+  strategyTemplateId: string | null
+  snapshotHash: string
+  scriptHash: string
+  specHash: string
+  scriptSnapshot: string
+  compiledManifest?: unknown
+  specSnapshot?: unknown
+  paramsSnapshot?: unknown
+  lockedParams?: unknown
+  executionPolicy?: unknown
+  dataRequirements?: unknown
+  irSnapshot?: unknown
+  astSnapshot?: unknown
+  executionEnvelope?: unknown
+  irHash?: string | null
+  astDigest?: string | null
+  structuralDigest?: string | null
+}
 
 export interface SnapshotBacktestStrategyInput {
   id: string
@@ -34,47 +56,52 @@ export class BacktestSnapshotLoaderService {
         args: { snapshotId: input.publishedSnapshotId },
       })
     }
-    const strictParams = this.resolveStrictParams(snapshot)
-    this.compiledSnapshotPreflight.validate(snapshot)
+    const publishedSnapshot = snapshot as unknown as PublishedSnapshotRecord
+    const strictParams = this.resolveStrictParams({
+      id: publishedSnapshot.id,
+      paramsSnapshot: publishedSnapshot.paramsSnapshot,
+      lockedParams: publishedSnapshot.lockedParams,
+    })
+    this.compiledSnapshotPreflight.validate(publishedSnapshot)
 
     const strategy = await this.strategyAdapter.build({
-      id: this.resolveStrategyId(snapshot, input.id),
+      id: this.resolveStrategyId(publishedSnapshot, input.id),
       protocolVersion: input.protocolVersion,
-      scriptCode: snapshot.scriptSnapshot,
+      scriptCode: publishedSnapshot.scriptSnapshot,
       params: strictParams,
     })
 
-    const specSnapshot = this.readJsonRecord(snapshot.specSnapshot) ?? undefined
-    const irSnapshot = this.readJsonRecord(snapshot.irSnapshot) ?? undefined
+    const specSnapshot = this.readJsonRecord(publishedSnapshot.specSnapshot) ?? undefined
+    const irSnapshot = this.readJsonRecord(publishedSnapshot.irSnapshot) ?? undefined
 
     return {
       ...strategy,
-      id: this.resolveStrategyId(snapshot, input.id),
+      id: this.resolveStrategyId(publishedSnapshot, input.id),
       params: strictParams,
-      strategyInstanceId: snapshot.strategyInstanceId ?? undefined,
-      strategyTemplateId: snapshot.strategyTemplateId ?? undefined,
-      snapshotId: snapshot.id,
-      snapshotHash: snapshot.snapshotHash,
-      scriptHash: snapshot.scriptHash,
-      specHash: this.resolveSpecHash(snapshot),
-      irHash: typeof snapshot.irHash === 'string' ? snapshot.irHash : undefined,
-      astDigest: typeof snapshot.astDigest === 'string' ? snapshot.astDigest : undefined,
-      structuralDigest: typeof snapshot.structuralDigest === 'string' ? snapshot.structuralDigest : undefined,
+      strategyInstanceId: publishedSnapshot.strategyInstanceId ?? undefined,
+      strategyTemplateId: publishedSnapshot.strategyTemplateId ?? undefined,
+      snapshotId: publishedSnapshot.id,
+      snapshotHash: publishedSnapshot.snapshotHash,
+      scriptHash: publishedSnapshot.scriptHash,
+      specHash: this.resolveSpecHash(publishedSnapshot),
+      irHash: typeof publishedSnapshot.irHash === 'string' ? publishedSnapshot.irHash : undefined,
+      astDigest: typeof publishedSnapshot.astDigest === 'string' ? publishedSnapshot.astDigest : undefined,
+      structuralDigest: typeof publishedSnapshot.structuralDigest === 'string' ? publishedSnapshot.structuralDigest : undefined,
       bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
-      executionPolicy: this.resolveExecutionPolicy(snapshot.executionPolicy),
+      executionPolicy: this.resolveExecutionPolicy(publishedSnapshot.executionPolicy),
       riskRules: specSnapshot ? this.buildRiskRules(specSnapshot, irSnapshot) : undefined,
       irSnapshot,
-      astSnapshot: this.readJsonRecord(snapshot.astSnapshot) ?? undefined,
-      executionEnvelope: this.readJsonRecord(snapshot.executionEnvelope) ?? undefined,
-      dataRequirements: snapshot.dataRequirements ?? undefined,
+      astSnapshot: this.readJsonRecord(publishedSnapshot.astSnapshot) ?? undefined,
+      executionEnvelope: this.readJsonRecord(publishedSnapshot.executionEnvelope) ?? undefined,
+      dataRequirements: publishedSnapshot.dataRequirements ?? undefined,
       specSnapshot,
     } as BacktestRunInput['strategy']
   }
 
   private resolveStrictParams(snapshot: {
     id: string
-    paramsSnapshot: unknown
-    lockedParams: unknown
+    paramsSnapshot?: unknown
+    lockedParams?: unknown
   }): Record<string, unknown> {
     const paramsSnapshot = this.readJsonRecord(snapshot.paramsSnapshot)
     const lockedParams = this.readJsonRecord(snapshot.lockedParams)
@@ -114,7 +141,7 @@ export class BacktestSnapshotLoaderService {
 
   private resolveSpecHash(snapshot: {
     specHash: string
-    compiledManifest: unknown
+    compiledManifest?: unknown
   }): string {
     const manifest = this.readJsonRecord(snapshot.compiledManifest)
     const manifestSpecHash = manifest?.specHash
@@ -293,8 +320,8 @@ export class BacktestSnapshotLoaderService {
     const trigger = typeof rule === 'string' ? rule : rule?.trigger
     if (!trigger) return undefined
     const match = trigger.match(/lossPct\s*>=\s*([0-9.]+)/i)
-      ?? trigger.match(/亏损\s*[≥>=]+\s*([0-9.]+)\s*%/iu)
-      ?? trigger.match(/([0-9.]+)\s*%\s*(?:强制)?止损/iu)
+      ?? trigger.match(/亏损\s*[≥>=]+\s*([0-9.]+)\s*%/u)
+      ?? trigger.match(/([0-9.]+)\s*%\s*(?:强制)?止损/u)
     const value = Number(match?.[1] ?? '')
     if (!Number.isFinite(value) || value <= 0) return undefined
     return value <= 1 ? value * 100 : value
@@ -320,7 +347,7 @@ export class BacktestSnapshotLoaderService {
   }
 
   private parseReduceRatio(trigger: string): number | undefined {
-    const match = trigger.match(/减仓\s*([0-9.]+)\s*%/iu)
+    const match = trigger.match(/减仓\s*([0-9.]+)\s*%/u)
       ?? trigger.match(/reduce(?:\s+position)?\s*([0-9.]+)\s*%/iu)
     const value = Number(match?.[1] ?? '')
     if (!Number.isFinite(value) || value <= 0) return undefined

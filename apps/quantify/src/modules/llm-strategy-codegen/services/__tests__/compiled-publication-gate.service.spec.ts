@@ -3,7 +3,7 @@ import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-c
 import { CompiledPublicationGateService } from '../compiled-publication-gate.service'
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
 
-describe('compiled publication gate service', () => {
+describe('compiledPublicationGateService', () => {
   it('publishes canonical snapshot, semantic view, compiled artifacts, and merged consistency as one runtime snapshot', async () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-1' }),
@@ -306,6 +306,87 @@ describe('compiled publication gate service', () => {
       semanticConsistencyReport: { status: 'PASSED', checks: [] },
       userIntentSummary: { marketScope: ['BTCUSDT'] },
       strategySummary: { thesis: 'ma-crossover' },
+      scriptSummary: { indicators: ['EMA'] },
+      lockedParams: { positionPct: 25 },
+    })).rejects.toThrow('publication gate blocked')
+
+    expect(publishedSnapshotsRepo.create).not.toHaveBeenCalled()
+  })
+
+  it('rejects publish when confirmed single-direction positionMode drifts to long_short in compiled script', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn(),
+    }
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never)
+    const ir = createIrFixture()
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'long_short' as const,
+      marginMode: 'cash' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await expect(gate.publish({
+      sessionId: 'session-position-mode-drift',
+      canonicalSnapshot: {
+        version: 2,
+        market: { exchange: 'binance', symbol: 'BTCUSDT', marketType: 'spot', timeframe: '1h' },
+        rules: [
+          {
+            id: 'entry-long',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 200,
+            condition: {
+              kind: 'atom',
+              key: 'ma.golden_cross',
+              semanticScope: 'market',
+            },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.25 } }],
+          },
+          {
+            id: 'exit-long',
+            phase: 'exit',
+            sideScope: 'long',
+            priority: 100,
+            condition: {
+              kind: 'atom',
+              key: 'ma.death_cross',
+              semanticScope: 'market',
+            },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+      },
+      semanticView: {
+        viewType: 'canonical-semantic-view.v1',
+        canonicalDigest: 'sha256:position-mode-drift',
+      },
+      graphSnapshot: {
+        version: 3,
+        status: 'confirmed' as const,
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'binance' as const,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          positionPct: 25,
+          executionTags: [],
+        },
+      },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'long-only' },
       scriptSummary: { indicators: ['EMA'] },
       lockedParams: { positionPct: 25 },
     })).rejects.toThrow('publication gate blocked')

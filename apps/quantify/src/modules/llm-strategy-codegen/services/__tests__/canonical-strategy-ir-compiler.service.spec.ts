@@ -1,11 +1,11 @@
 import type { StrategyLogicGraphSnapshot } from '../../types/strategy-logic-graph-snapshot'
-import { CanonicalStrategyIrCompilerService } from '../canonical-strategy-ir-compiler.service'
 import { CanonicalStrategyIrCanonicalizerService } from '../canonical-strategy-ir-canonicalizer.service'
+import { CanonicalStrategyIrCompilerService } from '../canonical-strategy-ir-compiler.service'
 import { CanonicalStrategyIrValidatorService } from '../canonical-strategy-ir-validator.service'
 import { GraphOperatorParserService } from '../graph-operator-parser.service'
 import { GraphSemanticProjectionService } from '../graph-semantic-projection.service'
 
-describe('CanonicalStrategyIrCompilerService', () => {
+describe('canonicalStrategyIrCompilerService', () => {
   const buildCompiler = () => new CanonicalStrategyIrCompilerService(
     new GraphOperatorParserService(),
     new GraphSemanticProjectionService(),

@@ -11,8 +11,9 @@ describe('strategyClarificationRulesService', () => {
     expect(state.status).toBe('NEEDS_CLARIFICATION')
     expect(state.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        key: 'entry.side',
+        key: 'entry.side.1',
         reason: 'missing_side_scope',
+        allowedAnswers: ['long', 'short'],
         status: 'pending',
       }),
     ]))
@@ -26,7 +27,9 @@ describe('strategyClarificationRulesService', () => {
     expect(state.status).toBe('NEEDS_CLARIFICATION')
     expect(state.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
+        key: 'entry.action_uniqueness.1',
         reason: 'missing_action_uniqueness',
+        allowedAnswers: ['long', 'short'],
         status: 'pending',
       }),
     ]))
@@ -56,6 +59,26 @@ describe('strategyClarificationRulesService', () => {
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['突破布林带上轨时做空'],
+      riskRules: { exchange: 'binance' },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'market.marketType',
+        reason: 'missing_market_type',
+        field: 'marketType',
+        blocking: true,
+        status: 'pending',
+      }),
+    ]))
+  })
+
+  it('blocks long-side strategy when marketType is missing', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['跌破布林带下轨时做多'],
       riskRules: { exchange: 'binance' },
     })
 

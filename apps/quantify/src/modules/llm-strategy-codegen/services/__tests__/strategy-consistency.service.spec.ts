@@ -156,6 +156,46 @@ strategy
     expect(report.checks.some(check => check.key === 'market.execution_model' && check.status === 'failed')).toBe(true)
   })
 
+  it('fails when compiled execution positionMode drifts from canonical spec intent', () => {
+    const canonicalSpec = canonicalBuilder.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['突破布林带下轨时做多'],
+      exitRules: ['回到中轨时平仓'],
+      riskRules: { positionPct: 10, exchange: 'binance', marketType: 'spot' },
+    })
+
+    const compiled = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+    const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
+    const script = new CompiledScriptEmitterService().emit({
+      ast,
+      executionEnvelope: {
+        ...new CompiledScriptExecutionEnvelopeService().build(canonicalSpec),
+        positionMode: 'long_short',
+      },
+    })
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+    })
+
+    expect(report.status).toBe('FAILED')
+    expect(report.checks.some(check => check.key === 'market.execution_model' && check.status === 'failed')).toBe(true)
+    expect(report.checks.some(
+      check => check.key === 'market.execution_model'
+        && String(check.message).includes('positionMode'),
+    )).toBe(true)
+  })
+
   it('fails when compiled script no longer matches ir manifest', () => {
     const semanticGraph = createBollingerSemanticGraph()
     const ir = new SemanticGraphCompilerService().compile(semanticGraph)

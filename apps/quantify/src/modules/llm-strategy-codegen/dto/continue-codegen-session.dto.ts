@@ -1,3 +1,4 @@
+import type { ValidationArguments, ValidatorConstraintInterface } from 'class-validator'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import {
@@ -11,9 +12,24 @@ import {
   IsString,
   Max,
   Min,
+  Validate,
   ValidateNested,
+  ValidatorConstraint,
 } from 'class-validator'
 import { CodegenGuideConfigDto } from './codegen-guide-config.dto'
+
+@ValidatorConstraint({ name: 'codegenStringRecord', async: false })
+class CodegenStringRecordConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean {
+    if (value === undefined || value === null) return true
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+    return Object.values(value as Record<string, unknown>).every(item => typeof item === 'string')
+  }
+
+  defaultMessage(args: ValidationArguments): string {
+    return `${args.property} 必须是 value 全为 string 的对象`
+  }
+}
 
 export class ContinueCodegenSessionDto {
   @ApiPropertyOptional({ description: '业务用户 ID（可选，优先使用鉴权主体）' })
@@ -62,6 +78,7 @@ export class ContinueCodegenSessionDto {
   })
   @IsOptional()
   @IsObject()
+  @Validate(CodegenStringRecordConstraint)
   clarificationAnswers?: Record<string, string>
 
   @ApiPropertyOptional({ description: '增量更新会话引导参数配置', type: CodegenGuideConfigDto })

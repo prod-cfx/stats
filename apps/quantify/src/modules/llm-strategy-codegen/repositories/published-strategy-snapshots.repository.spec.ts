@@ -139,9 +139,6 @@ describe('publishedStrategySnapshotsRepository', () => {
         semanticGraph: { version: 1, nodes: [{ id: 'entry-1' }] },
         compiledIr: { irVersion: 'csi.v1', rules: [{ id: 'rule-1' }] },
         specHash: 'sha256:spec',
-        irHash: 'sha256:ir',
-        astDigest: 'sha256:ast',
-        structuralDigest: 'sha256:struct',
         irSnapshot: { irVersion: 'csi.v1' },
         astSnapshot: { astVersion: 'csa.v1' },
         executionEnvelope: expect.objectContaining({
@@ -149,7 +146,10 @@ describe('publishedStrategySnapshotsRepository', () => {
           marginMode: 'cash',
         }),
         compiledManifest: expect.objectContaining({
+          astDigest: 'sha256:ast',
           compileVersion: 'compiler.v1',
+          irHash: 'sha256:ir',
+          specHash: 'sha256:spec',
           structuralDigest: 'sha256:struct',
         }),
       }),

@@ -10,8 +10,8 @@ interface ClarificationChecklistInput {
 
 const LONG_DIRECTION_PATTERN = /做多|多单|开多|long|买入/u
 const SHORT_DIRECTION_PATTERN = /做空|空单|开空|short|卖出/u
-const UPPER_BAND_PATTERN = /(布林|bollinger).{0,8}(上轨|upper)|(上轨|upper).{0,8}(布林|bollinger)|突破.{0,8}(上轨|upper)/iu
-const LOWER_BAND_PATTERN = /(布林|bollinger).{0,8}(下轨|lower)|(下轨|lower).{0,8}(布林|bollinger)|跌破.{0,8}(下轨|lower)|突破.{0,8}(下轨|lower)/iu
+const UPPER_BAND_PATTERN = /(?:布林|bollinger).{0,8}(?:上轨|upper)|(?:上轨|upper).{0,8}(?:布林|bollinger)|突破.{0,8}(?:上轨|upper)/iu
+const LOWER_BAND_PATTERN = /(?:布林|bollinger).{0,8}(?:下轨|lower)|(?:下轨|lower).{0,8}(?:布林|bollinger)|跌破.{0,8}(?:下轨|lower)|突破.{0,8}(?:下轨|lower)/iu
 
 @Injectable()
 export class StrategyClarificationRulesService {
@@ -19,7 +19,12 @@ export class StrategyClarificationRulesService {
     const entryDetection = this.detectEntryItems(input.entryRules ?? [])
     const items: StrategyClarificationItem[] = [
       ...entryDetection.items,
-      ...this.detectMarketItems(input, entryDetection.hasShortEntry, entryDetection.hasActionUniquenessConflict),
+      ...this.detectMarketItems(
+        input,
+        entryDetection.hasEntryRules,
+        entryDetection.hasShortEntry,
+        entryDetection.hasActionUniquenessConflict,
+      ),
       ...this.detectRiskItems(input.riskRules ?? {}),
     ]
 
@@ -36,15 +41,22 @@ export class StrategyClarificationRulesService {
     }
   }
 
-  private detectEntryItems(entryRules: string[]): { items: StrategyClarificationItem[] } & { hasActionUniquenessConflict: boolean, hasShortEntry: boolean } {
+  private detectEntryItems(entryRules: string[]): {
+    items: StrategyClarificationItem[]
+    hasActionUniquenessConflict: boolean
+    hasEntryRules: boolean
+    hasShortEntry: boolean
+  } {
     const items: StrategyClarificationItem[] = []
     let sideQuestionAdded = false
     let hasShortEntry = false
     let hasActionUniquenessConflict = false
+    let hasEntryRules = false
 
     for (const [index, rawRule] of entryRules.entries()) {
       const rule = rawRule.trim()
       if (!rule) continue
+      hasEntryRules = true
 
       const hasLongDirection = LONG_DIRECTION_PATTERN.test(rule)
       const hasShortDirection = SHORT_DIRECTION_PATTERN.test(rule)
@@ -59,6 +71,7 @@ export class StrategyClarificationRulesService {
           ruleId: `entry-${index + 1}`,
           reason: 'missing_action_uniqueness',
           field: 'positionMode',
+          allowedAnswers: ['long', 'short'],
           blocking: true,
           question: '这条入场规则同时包含做多和做空，请确认最终只保留哪个方向？',
           status: 'pending',
@@ -70,10 +83,11 @@ export class StrategyClarificationRulesService {
 
       if (UPPER_BAND_PATTERN.test(rule)) {
         items.push({
-          key: 'entry.side',
+          key: `entry.side.${index + 1}`,
           ruleId: `entry-${index + 1}`,
           reason: 'missing_side_scope',
           field: 'positionMode',
+          allowedAnswers: ['long', 'short'],
           blocking: true,
           question: '突破上轨时是只做空，还是也允许做多？',
           status: 'pending',
@@ -84,10 +98,11 @@ export class StrategyClarificationRulesService {
 
       if (LOWER_BAND_PATTERN.test(rule)) {
         items.push({
-          key: 'entry.side',
+          key: `entry.side.${index + 1}`,
           ruleId: `entry-${index + 1}`,
           reason: 'missing_side_scope',
           field: 'positionMode',
+          allowedAnswers: ['long', 'short'],
           blocking: true,
           question: '跌破下轨时是只做多，还是也允许做空？',
           status: 'pending',
@@ -99,16 +114,18 @@ export class StrategyClarificationRulesService {
     return {
       items,
       hasActionUniquenessConflict,
+      hasEntryRules,
       hasShortEntry,
     }
   }
 
   private detectMarketItems(
     input: ClarificationChecklistInput,
+    hasEntryRules: boolean,
     hasShortEntry: boolean,
     hasActionUniquenessConflict: boolean,
   ): StrategyClarificationItem[] {
-    if (!hasShortEntry || hasActionUniquenessConflict) return []
+    if (!hasEntryRules || hasActionUniquenessConflict) return []
 
     const items: StrategyClarificationItem[] = []
 
@@ -203,7 +220,7 @@ export class StrategyClarificationRulesService {
     const hasAmbiguousEffect = riskTexts.some((text) => {
       const hasOutsideBand = /轨外|outside/iu.test(text)
       const hasThreeBars = /连续\s*3|3\s*根|三根/iu.test(text)
-      const hasCloseAction = /提前止损|止损|全平|全部平仓|清仓|强平|平仓|close|exit/iu.test(text)
+      const hasCloseAction = /提前止损|止损|全平|全部平仓|清仓|强平|平仓|force\s*exit|force\s*close|close|exit/iu.test(text)
       const hasReduce = /减仓|reduce/iu.test(text)
       return hasOutsideBand && hasThreeBars && hasCloseAction && hasReduce
     })

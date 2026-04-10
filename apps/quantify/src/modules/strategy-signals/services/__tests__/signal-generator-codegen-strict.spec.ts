@@ -1,9 +1,9 @@
 import type { StrategySignalsRuntimeConfig } from '../../types/strategy-signals-config.type'
+import { SignalGeneratorService } from '../signal-generator.service'
+
 jest.mock('@/common/utils/prisma-enum-mappers', () => ({
   reverseMapTimeframe: (value: string) => value,
 }))
-
-import { SignalGeneratorService } from '../signal-generator.service'
 
 describe('signal generator strict AI codegen fail-fast', () => {
   const config: StrategySignalsRuntimeConfig = {

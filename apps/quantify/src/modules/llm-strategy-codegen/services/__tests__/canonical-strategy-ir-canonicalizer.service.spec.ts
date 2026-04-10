@@ -1,7 +1,7 @@
 import type { CanonicalStrategyIrV1 } from '../../types/canonical-strategy-ir'
 import { CanonicalStrategyIrCanonicalizerService } from '../canonical-strategy-ir-canonicalizer.service'
 
-describe('CanonicalStrategyIrCanonicalizerService', () => {
+describe('canonicalStrategyIrCanonicalizerService', () => {
   it('sorts semantically identical IR into a stable canonical order', () => {
     const service = new CanonicalStrategyIrCanonicalizerService()
 

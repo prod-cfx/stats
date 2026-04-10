@@ -146,6 +146,7 @@ export class CompiledPublicationGateService {
   ): PublicationGateReport {
     const checks: PublicationGateCheck[] = [
       ...this.buildMarketMetadataChecks(input, parsed),
+      ...this.buildPositionModeChecks(input, parsed),
       ...this.buildOutsideBandRiskChecks(input, parsed),
     ]
 
@@ -271,6 +272,31 @@ export class CompiledPublicationGateService {
     }]
   }
 
+  private buildPositionModeChecks(
+    input: PublishCompiledSnapshotInput,
+    parsed: ReturnType<CompiledScriptParserService['parse']>,
+  ): PublicationGateCheck[] {
+    const expected = this.readCanonicalPositionMode(input.canonicalSnapshot)
+    if (!expected) return []
+
+    const actual = {
+      ir: input.ir.portfolio.positionMode,
+      script: parsed.executionModel.positionMode,
+    }
+    const passed = actual.ir === expected && actual.script === expected
+
+    return [{
+      key: 'portfolio.positionMode',
+      blocking: true,
+      status: passed ? 'passed' : 'failed',
+      expected,
+      actual,
+      message: passed
+        ? 'confirmed positionMode 与 IR/脚本一致。'
+        : `confirmed positionMode=${expected}，但 IR=${actual.ir}、script=${actual.script}`,
+    }]
+  }
+
   private readCanonicalMarket(snapshot: Record<string, unknown>): {
     exchange: string | null
     marketType: string | null
@@ -314,6 +340,27 @@ export class CompiledPublicationGateService {
 
       return barsValues.map(bars => ({ bars, actions }))
     })
+  }
+
+  private readCanonicalPositionMode(
+    snapshot: Record<string, unknown>,
+  ): 'long_only' | 'long_short' | null {
+    const rules = snapshot.rules
+    if (!Array.isArray(rules) || rules.length === 0) return null
+
+    const hasShortExposure = rules.some((rule) => {
+      if (!rule || typeof rule !== 'object' || Array.isArray(rule)) return false
+      const actions = (rule as Record<string, unknown>).actions
+      if (!Array.isArray(actions)) return false
+
+      return actions.some((action) => {
+        if (!action || typeof action !== 'object' || Array.isArray(action)) return false
+        const type = (action as Record<string, unknown>).type
+        return type === 'OPEN_SHORT' || type === 'REDUCE_SHORT'
+      })
+    })
+
+    return hasShortExposure ? 'long_short' : 'long_only'
   }
 
   private collectOutsideBandBars(condition: unknown): number[] {
