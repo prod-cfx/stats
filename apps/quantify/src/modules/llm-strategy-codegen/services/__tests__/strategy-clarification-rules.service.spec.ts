@@ -74,6 +74,26 @@ describe('strategyClarificationRulesService', () => {
     ]))
   })
 
+  it('blocks long-side strategy when marketType is missing', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['跌破布林带下轨时做多'],
+      riskRules: { exchange: 'binance' },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'market.marketType',
+        reason: 'missing_market_type',
+        field: 'marketType',
+        blocking: true,
+        status: 'pending',
+      }),
+    ]))
+  })
+
   it('blocks short-side strategy with spot marketType as invalid spot-short combo', () => {
     const state = service.detect({
       symbols: ['BTCUSDT'],

@@ -19,7 +19,12 @@ export class StrategyClarificationRulesService {
     const entryDetection = this.detectEntryItems(input.entryRules ?? [])
     const items: StrategyClarificationItem[] = [
       ...entryDetection.items,
-      ...this.detectMarketItems(input, entryDetection.hasShortEntry, entryDetection.hasActionUniquenessConflict),
+      ...this.detectMarketItems(
+        input,
+        entryDetection.hasEntryRules,
+        entryDetection.hasShortEntry,
+        entryDetection.hasActionUniquenessConflict,
+      ),
       ...this.detectRiskItems(input.riskRules ?? {}),
     ]
 
@@ -36,15 +41,22 @@ export class StrategyClarificationRulesService {
     }
   }
 
-  private detectEntryItems(entryRules: string[]): { items: StrategyClarificationItem[] } & { hasActionUniquenessConflict: boolean, hasShortEntry: boolean } {
+  private detectEntryItems(entryRules: string[]): {
+    items: StrategyClarificationItem[]
+    hasActionUniquenessConflict: boolean
+    hasEntryRules: boolean
+    hasShortEntry: boolean
+  } {
     const items: StrategyClarificationItem[] = []
     let sideQuestionAdded = false
     let hasShortEntry = false
     let hasActionUniquenessConflict = false
+    let hasEntryRules = false
 
     for (const [index, rawRule] of entryRules.entries()) {
       const rule = rawRule.trim()
       if (!rule) continue
+      hasEntryRules = true
 
       const hasLongDirection = LONG_DIRECTION_PATTERN.test(rule)
       const hasShortDirection = SHORT_DIRECTION_PATTERN.test(rule)
@@ -102,16 +114,18 @@ export class StrategyClarificationRulesService {
     return {
       items,
       hasActionUniquenessConflict,
+      hasEntryRules,
       hasShortEntry,
     }
   }
 
   private detectMarketItems(
     input: ClarificationChecklistInput,
+    hasEntryRules: boolean,
     hasShortEntry: boolean,
     hasActionUniquenessConflict: boolean,
   ): StrategyClarificationItem[] {
-    if (!hasShortEntry || hasActionUniquenessConflict) return []
+    if (!hasEntryRules || hasActionUniquenessConflict) return []
 
     const items: StrategyClarificationItem[] = []
 
