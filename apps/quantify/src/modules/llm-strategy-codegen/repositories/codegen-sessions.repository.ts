@@ -5,6 +5,10 @@ import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 import { toSymbolCode } from '@/modules/market-data/utils/market-symbol-code.util'
 import { timeframeToMinutes } from '@/modules/strategy-templates/types/strategy-template.types'
+import {
+  CODEGEN_CONFIRMABLE_SESSION_STATUSES,
+  CODEGEN_REQUEUEABLE_SESSION_STATUSES,
+} from '../types/codegen-session-status'
 
 const SESSION_SELECT_BASE = {
   id: true,
@@ -122,7 +126,7 @@ export class CodegenSessionsRepository {
     const result = await this.txHost.tx.llmStrategyCodegenSession.updateMany({
       where: {
         id,
-        status: { in: ['DRAFTING', 'CHECKLIST_GATE'] },
+        status: { in: [...CODEGEN_CONFIRMABLE_SESSION_STATUSES] },
       },
       data,
     })
@@ -136,7 +140,7 @@ export class CodegenSessionsRepository {
     const result = await this.txHost.tx.llmStrategyCodegenSession.updateMany({
       where: {
         id,
-        status: { in: ['VALIDATING_STATIC', 'VALIDATING_RUNTIME', 'VALIDATING_OUTPUT', 'VALIDATING_CONSISTENCY'] },
+        status: { in: [...CODEGEN_REQUEUEABLE_SESSION_STATUSES] },
       },
       data,
     })

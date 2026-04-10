@@ -3,7 +3,7 @@ import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-c
 import { CompiledPublicationGateService } from '../compiled-publication-gate.service'
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
 
-describe('compiled publication gate service', () => {
+describe('compiledPublicationGateService', () => {
   it('publishes canonical snapshot, semantic view, compiled artifacts, and merged consistency as one runtime snapshot', async () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-1' }),

@@ -245,14 +245,14 @@ export class CanonicalSpecBuilderService {
       .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
     const allTexts = [...entryTexts, ...exitTexts, ...riskTexts]
 
-    if (allTexts.some(text => /(布林|bollinger|上轨|下轨|中轨)/iu.test(text))) {
+    if (allTexts.some(text => /布林|bollinger|上轨|下轨|中轨/iu.test(text))) {
       return [{
         kind: 'bollingerBands',
         params: { period: 20, stdDev: 2 },
       }]
     }
 
-    if (allTexts.some(text => /(均线|moving average|\bsma\b|\bema\b|金叉|死叉|上穿|下穿)/iu.test(text))) {
+    if (allTexts.some(text => /均线|moving average|\bsma\b|\bema\b|金叉|死叉|上穿|下穿/iu.test(text))) {
       return [{
         kind: 'sma',
         params: { period: 20 },
@@ -296,7 +296,7 @@ export class CanonicalSpecBuilderService {
   }
 
   private isMovingAverageRule(text: string): boolean {
-    return /(均线|moving average|\bsma\b|\bema\b|金叉|死叉|上穿|下穿)/iu.test(text)
+    return /均线|moving average|\bsma\b|\bema\b|金叉|死叉|上穿|下穿/iu.test(text)
   }
 
   private buildMovingAverageRule(input: {
@@ -307,9 +307,9 @@ export class CanonicalSpecBuilderService {
     sideScope: 'long' | 'short'
     sizing: { mode: 'RATIO'; value: number } | null
   }): CanonicalRuleV2 | null {
-    const ruleKey = /金叉|上穿/iu.test(input.ruleText)
+    const ruleKey = /金叉|上穿/u.test(input.ruleText)
       ? 'ma.golden_cross'
-      : /死叉|下穿/iu.test(input.ruleText)
+      : /死叉|下穿/u.test(input.ruleText)
           ? 'ma.death_cross'
           : null
     if (!ruleKey) return null

@@ -1,21 +1,19 @@
-import type { PublishedStrategySnapshot } from '@/prisma/prisma.types'
 import type { StrategyAstV1 } from '@/modules/llm-strategy-codegen/types/canonical-strategy-ast'
 import type { CompiledScriptProjection, CompiledStrategyManifest } from '@/modules/llm-strategy-codegen/types/compiled-script-projection'
-import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
-import { ErrorCode } from '@ai/shared'
-import { HttpStatus, Injectable } from '@nestjs/common'
 import { createHash } from 'node:crypto'
+import { ErrorCode } from '@ai/shared'
+import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
+import { HttpStatus, Injectable } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { CompiledScriptParserService } from '@/modules/llm-strategy-codegen/services/compiled-script-parser.service'
 
-type BacktestCompiledSnapshot = Pick<
-  PublishedStrategySnapshot,
-  | 'id'
-  | 'scriptSnapshot'
-  | 'irSnapshot'
-  | 'astSnapshot'
-  | 'compiledManifest'
->
+interface BacktestCompiledSnapshot {
+  id: string
+  scriptSnapshot: string
+  irSnapshot?: unknown
+  astSnapshot?: unknown
+  compiledManifest?: unknown
+}
 
 @Injectable()
 export class BacktestCompiledSnapshotPreflightService {

@@ -1,7 +1,7 @@
 import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
+import { createHash } from 'node:crypto'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { Injectable } from '@nestjs/common'
-import { createHash } from 'node:crypto'
 
 @Injectable()
 export class CanonicalSpecV2DigestService {

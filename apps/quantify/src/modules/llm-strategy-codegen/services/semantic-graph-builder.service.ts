@@ -190,15 +190,15 @@ export class SemanticGraphBuilderService {
     let created = false
     for (const rule of entryRules) {
       let valuePct: number | null = null
-      let matched = rule.match(/当前K线收盘价相对于上一根K线收盘价下跌\s*(?:≥|>=|大于等于)?\s*(\d+(?:\.\d+)?)\s*%/u)
+      let matched = rule.match(/当前K线收盘价相对于上一根K线收盘价下跌\s*(?:(?:≥|>=|大于等于)\s*)?(\d+(?:\.\d+)?)\s*%/u)
       if (matched?.[1]) {
         valuePct = Number(matched[1])
       } else {
-        matched = rule.match(/(?:跌|下跌|回撤)\s*(?:≥|>=|大于等于)?\s*(\d+(?:\.\d+)?)\s*%/u)
+        matched = rule.match(/(?:跌|下跌|回撤)\s*(?:(?:≥|>=|大于等于)\s*)?(\d+(?:\.\d+)?)\s*%/u)
         if (matched?.[1]) valuePct = Number(matched[1])
       }
       if (valuePct === null) continue
-      if (!/(买入|开仓|入场)/u.test(rule)) continue
+      if (!/买入|开仓|入场/u.test(rule)) continue
 
       const nodeId = `entry-drop-${nodes.length + 1}`
       nodes.push({
@@ -226,12 +226,12 @@ export class SemanticGraphBuilderService {
   ): boolean {
     let created = false
     for (const rule of exitRules) {
-      if (/(开仓均价|收益率|盈亏|pnl)/iu.test(rule)) {
+      if (/开仓均价|收益率|盈亏|pnl/iu.test(rule)) {
         continue
       }
-      const match = rule.match(/(?:涨|上涨|反弹)\s*(?:≥|>=|大于等于)?\s*(\d+(?:\.\d+)?)\s*%/u)
+      const match = rule.match(/(?:涨|上涨|反弹)\s*(?:(?:≥|>=|大于等于)\s*)?(\d+(?:\.\d+)?)\s*%/u)
       if (!match?.[1]) continue
-      if (!/(卖出|平仓|止盈|离场|出场)/u.test(rule)) continue
+      if (!/卖出|平仓|止盈|离场|出场/u.test(rule)) continue
 
       nodes.push({
         id: `exit-rise-${nodes.length + 1}`,
@@ -257,12 +257,12 @@ export class SemanticGraphBuilderService {
   ): boolean {
     let created = false
     for (const rule of exitRules) {
-      let match = rule.match(/当前K线收盘价相对于开仓均价上涨\s*(?:≥|>=|大于等于)?\s*(\d+(?:\.\d+)?)\s*%/u)
+      let match = rule.match(/当前K线收盘价相对于开仓均价上涨\s*(?:(?:≥|>=|大于等于)\s*)?(\d+(?:\.\d+)?)\s*%/u)
       if (!match?.[1]) {
         match = rule.match(/(?:持仓|仓位)?[^，。；;\n]{0,12}?(?:收益率|收益|盈利|盈亏)[^，。；;\n]{0,12}?(?:达到|大于等于|>=|超过|≥)?\s*(\d+(?:\.\d+)?)\s*%/u)
       }
       if (!match?.[1]) continue
-      if (!/(止盈|平仓|卖出|离场|出场)/u.test(rule)) continue
+      if (!/止盈|平仓|卖出|离场|出场/u.test(rule)) continue
 
       nodes.push({
         id: `exit-pnl-${nodes.length + 1}`,
@@ -292,8 +292,8 @@ export class SemanticGraphBuilderService {
     const combined = `${entryText} ${exitText}`
     if (!/网格/u.test(combined)) return { hasEntry: false, hasExit: false }
 
-    const wantsEntry = /(固定区间|网格买入|区间网格买入)/u.test(entryText)
-    const wantsExit = /(上方网格卖出|网格卖出)/u.test(exitText)
+    const wantsEntry = /固定区间|网格买入|区间网格买入/u.test(entryText)
+    const wantsExit = /上方网格卖出|网格卖出/u.test(exitText)
     const rangeMatch = combined.match(/(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)/u)
     const stepMatch = combined.match(/(?:步长|网格步长)\s*(\d+(?:\.\d+)?)\s*%/u)
     const levelMatch = combined.match(/(?:共|总计)?\s*(\d+)\s*格/u)
@@ -350,8 +350,8 @@ export class SemanticGraphBuilderService {
     nodes: Array<SemanticStrategyGraph['nodes'][number]>,
   ): { hasLongEntry: boolean; hasShortEntry: boolean; hasMiddleExit: boolean; hasOutsideRisk: boolean } {
     const timeframe = this.extractTimeframe(text) ?? fallbackTimeframe
-    const hasUpperShort = /布林(?:带)?[^。；;\n]{0,24}上轨[^。；;\n]{0,16}(做空|开空)/u.test(text)
-    const hasLowerLong = /布林(?:带)?[^。；;\n]{0,24}下轨[^。；;\n]{0,16}(做多|开多)/u.test(text)
+    const hasUpperShort = /布林带?[^。；;\n]{0,24}上轨[^。；;\n]{0,16}(?:做空|开空)/u.test(text)
+    const hasLowerLong = /布林带?[^。；;\n]{0,24}下轨[^。；;\n]{0,16}(?:做多|开多)/u.test(text)
     const hasMiddleExit = /中轨[^。；;\n]{0,16}(?:平仓|止盈|出场|离场)/u.test(text)
     const hasOutsideRisk = /连续\s*3\s*根[^。；;\n]{0,20}轨外/u.test(text) || /3\s*根[^。；;\n]{0,20}轨外/u.test(text)
 
@@ -416,21 +416,21 @@ export class SemanticGraphBuilderService {
       // Treat middle-band aliases like "布林带中轨(MA20)" as supported bollinger
       // semantics instead of unsupported moving-average strategies.
       .replace(
-        /布林(?:带)?[^。；;\n]{0,24}中轨\s*[（(]?\s*(?:MA\s*20|20\s*(?:日|周期)?均线)\s*[)）]?/giu,
+        /布林带?[^。；;\n]{0,24}中轨\s*(?:[（(]\s*)?(?:MA\s*20|20\s*(?:日|周期)?均线)\s*[)）]?/giu,
         '布林带中轨',
       )
 
     const unsupported = new Set<string>()
-    if (/(金叉|死叉|均线|EMA|MA)/iu.test(normalizedForUnsupportedScan)) {
+    if (/金叉|死叉|均线|EMA|MA/iu.test(normalizedForUnsupportedScan)) {
       unsupported.add('均线交叉类语义')
     }
-    if (/(^|[^a-z])RSI([^a-z]|$)|相对强弱/iu.test(normalizedForUnsupportedScan)) {
+    if (/(?:^|[^a-z])RSI(?:[^a-z]|$)|相对强弱/iu.test(normalizedForUnsupportedScan)) {
       unsupported.add('RSI 指标语义')
     }
-    if (/(^|[^a-z])MACD([^a-z]|$)|指数平滑异同/iu.test(normalizedForUnsupportedScan)) {
+    if (/(?:^|[^a-z])MACD(?:[^a-z]|$)|指数平滑异同/iu.test(normalizedForUnsupportedScan)) {
       unsupported.add('MACD 指标语义')
     }
-    if (/(^|[^a-z])ATR([^a-z]|$)|平均真实波幅/iu.test(normalizedForUnsupportedScan)) {
+    if (/(?:^|[^a-z])ATR(?:[^a-z]|$)|平均真实波幅/iu.test(normalizedForUnsupportedScan)) {
       unsupported.add('ATR 指标语义')
     }
     return [...unsupported]
@@ -444,7 +444,7 @@ export class SemanticGraphBuilderService {
   }
 
   private extractTimeframe(text: string): string | null {
-    const matched = text.match(/(\d{1,4})\s*(m|min|分钟|h|小时|d|天)/iu)
+    const matched = text.match(/(\d{1,4})\s*(min|分钟|小时|[mhd天])/iu)
     if (!matched?.[1] || !matched[2]) return null
     return this.normalizeTimeframe(matched[1], matched[2])
   }

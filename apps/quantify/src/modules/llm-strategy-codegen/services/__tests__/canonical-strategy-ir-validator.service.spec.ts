@@ -1,7 +1,7 @@
 import type { CanonicalStrategyIrV1 } from '../../types/canonical-strategy-ir'
 import { CanonicalStrategyIrValidatorService } from '../canonical-strategy-ir-validator.service'
 
-describe('CanonicalStrategyIrValidatorService', () => {
+describe('canonicalStrategyIrValidatorService', () => {
   it('rejects predicates that mix timeframes under strict alignment', () => {
     const validator = new CanonicalStrategyIrValidatorService()
 

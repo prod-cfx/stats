@@ -1,6 +1,6 @@
 import type { CompiledScriptProjection } from '../types/compiled-script-projection'
-import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { createHash } from 'node:crypto'
+import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { Injectable } from '@nestjs/common'
 import { FIXED_IMPORT_BLOCK, FIXED_STRATEGY_WRAPPER } from './compiled-script-emitter.service'
 

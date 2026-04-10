@@ -1,0 +1,261 @@
+import type { CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec-v2'
+import type { ChecklistPayload } from '../types/codegen-checklist'
+import type { StrategyConsistencyReport } from '../types/strategy-consistency-report'
+import type { StrategySummary } from '../types/strategy-summary'
+import type { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
+import type { CanonicalSpecV2IrCompilerService } from './canonical-spec-v2-ir-compiler.service'
+import type { CanonicalStrategyAstCompilerService } from './canonical-strategy-ast-compiler.service'
+import type { CompiledScriptEmitterService } from './compiled-script-emitter.service'
+import type { CompiledScriptExecutionEnvelopeService } from './compiled-script-execution-envelope.service'
+import type { CompiledScriptParserService } from './compiled-script-parser.service'
+import type { SpecDescBuilderService } from './spec-desc-builder.service'
+import type { StrategyConsistencyService } from './strategy-consistency.service'
+import type { StrategySummaryBuilderService } from './strategy-summary-builder.service'
+
+export interface CompiledScriptValidationResult {
+  passed: boolean
+  scriptCode: string
+  reason?: string
+  staticPassed: boolean
+  runtimePassed: boolean
+  outputPassed: boolean
+}
+
+function normalizePublishedSymbol(raw: string): string {
+  return raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
+}
+
+function inferPublishedMarketType(args: {
+  symbol: string
+  checklist: ChecklistPayload
+  message: string
+}): 'spot' | 'perp' {
+  if (args.symbol.endsWith(':PERP')) return 'perp'
+  if (args.symbol.endsWith(':SPOT')) return 'spot'
+  const riskRules = args.checklist.riskRules ?? {}
+  const marketType = typeof riskRules.marketType === 'string' ? riskRules.marketType.trim().toLowerCase() : ''
+  if (marketType === 'perp' || marketType === 'spot') return marketType
+  return /永续|perp|swap|合约/i.test(args.message) ? 'perp' : 'spot'
+}
+
+export interface CodegenPublicationArtifacts {
+  canonicalSpec: CanonicalStrategySpecV2
+  semanticView: Record<string, unknown>
+  sessionSpecDesc: Record<string, unknown>
+  compiled: ReturnType<CanonicalSpecV2IrCompilerService['compile']>
+  executionEnvelope: ReturnType<CompiledScriptExecutionEnvelopeService['build']>
+  ast: ReturnType<CanonicalStrategyAstCompilerService['compile']>
+  compiledScript: string
+  validation: CompiledScriptValidationResult
+  semanticConsistency: StrategyConsistencyReport
+  userIntentSummary: StrategySummary
+  strategySummary: StrategySummary
+  scriptSummary: StrategySummary
+  lockedParams: Record<string, unknown>
+  publishParams: {
+    symbol: string
+    timeframe: string
+    marketType: 'spot' | 'perp'
+  }
+}
+
+export class CodegenPublicationGenerationStage {
+  constructor(
+    private readonly canonicalSpecBuilder: CanonicalSpecBuilderService,
+    private readonly specDescBuilder: SpecDescBuilderService,
+    private readonly strategySummaryBuilder: StrategySummaryBuilderService,
+    private readonly strategyConsistencyService: StrategyConsistencyService,
+    private readonly canonicalSpecV2IrCompiler: CanonicalSpecV2IrCompilerService,
+    private readonly canonicalStrategyAstCompiler: CanonicalStrategyAstCompilerService,
+    private readonly compiledScriptEmitter: CompiledScriptEmitterService,
+    private readonly compiledScriptExecutionEnvelope: CompiledScriptExecutionEnvelopeService,
+    private readonly compiledScriptParser: CompiledScriptParserService,
+  ) {}
+
+  async generate(input: {
+    checklist: ChecklistPayload
+    message: string
+  }): Promise<CodegenPublicationArtifacts> {
+    const canonicalSpec = this.canonicalSpecBuilder.build(input.checklist)
+    const semanticView = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
+    const userIntentSummary = this.strategySummaryBuilder.buildUserIntentSummary({
+      checklist: input.checklist,
+      message: input.message,
+    })
+    const strategySummary = this.strategySummaryBuilder.buildStrategySummary(canonicalSpec)
+    const lockedParams = this.buildLockedParams(input.checklist)
+    const publishParams = this.buildPublishParams({
+      checklist: input.checklist,
+      message: input.message,
+    })
+    const compiled = this.canonicalSpecV2IrCompiler.compile({
+      canonicalSpec,
+      fallback: this.buildCompiledIrFallback({
+        checklist: input.checklist,
+        lockedParams,
+        publishParams,
+      }),
+    })
+    const executionEnvelope = this.compiledScriptExecutionEnvelope.build(canonicalSpec)
+    const ast = this.canonicalStrategyAstCompiler.compile(compiled.ir)
+    let compiledScript = this.compiledScriptEmitter.emit({
+      ast,
+      executionEnvelope,
+    })
+    const validation = this.validateCompiledScript(compiledScript)
+    compiledScript = validation.scriptCode
+    const semanticConsistency = this.strategyConsistencyService.evaluate({
+      canonicalSpec,
+      scriptCode: compiledScript,
+      userIntentSummary,
+      strategySummary,
+    })
+    const scriptSummary = this.strategySummaryBuilder.buildScriptSummary({
+      scriptProfile: semanticConsistency.scriptProfile,
+    })
+    const sessionSpecDesc = {
+      ...semanticView,
+      canonicalSpec,
+      userIntentSummary,
+      strategySummary,
+      scriptSummary,
+      lockedParams,
+      consistencyReport: semanticConsistency,
+    } satisfies Record<string, unknown>
+
+    return {
+      canonicalSpec,
+      semanticView,
+      sessionSpecDesc,
+      compiled,
+      executionEnvelope,
+      ast,
+      compiledScript,
+      validation,
+      semanticConsistency,
+      userIntentSummary,
+      strategySummary,
+      scriptSummary,
+      lockedParams,
+      publishParams,
+    }
+  }
+
+  validateCompiledScript(scriptCode: string): CompiledScriptValidationResult {
+    try {
+      this.compiledScriptParser.parse(scriptCode)
+      return {
+        passed: true,
+        scriptCode,
+        staticPassed: true,
+        runtimePassed: true,
+        outputPassed: true,
+      }
+    } catch (error) {
+      return {
+        passed: false,
+        scriptCode,
+        reason: `编译脚本结构校验失败: ${error instanceof Error ? error.message : 'unknown'}`,
+        staticPassed: true,
+        runtimePassed: false,
+        outputPassed: false,
+      }
+    }
+  }
+
+  private buildPublishParams(args: {
+    checklist: ChecklistPayload
+    message: string
+  }): {
+    symbol: string
+    timeframe: string
+    marketType: 'spot' | 'perp'
+  } {
+    const rawSymbol = args.checklist.symbols?.[0] ?? 'BTCUSDT'
+    return {
+      symbol: normalizePublishedSymbol(rawSymbol),
+      timeframe: args.checklist.timeframes?.[0] ?? '5m',
+      marketType: inferPublishedMarketType({
+        symbol: rawSymbol,
+        checklist: args.checklist,
+        message: args.message,
+      }),
+    }
+  }
+
+  private buildCompiledIrFallback(args: {
+    checklist: ChecklistPayload
+    lockedParams: Record<string, unknown>
+    publishParams: {
+      symbol: string
+      timeframe: string
+      marketType: 'spot' | 'perp'
+    }
+  }): {
+    exchange: 'binance' | 'okx' | 'hyperliquid'
+    symbol: string
+    baseTimeframe: string
+    positionPct: number
+    executionTags?: string[]
+  } {
+    const exchange = args.lockedParams.exchange
+    const positionPct = args.lockedParams.positionPct
+
+    return {
+      exchange: exchange === 'binance' || exchange === 'okx' || exchange === 'hyperliquid'
+        ? exchange
+        : 'binance',
+      symbol: args.publishParams.symbol,
+      baseTimeframe: args.publishParams.timeframe,
+      positionPct: typeof positionPct === 'number' && Number.isFinite(positionPct)
+        ? positionPct
+        : 10,
+    }
+  }
+
+  private buildLockedParams(checklist: ChecklistPayload): Record<string, unknown> {
+    const riskRules = checklist.riskRules ?? {}
+    const locked: Record<string, unknown> = {}
+
+    const rawSymbol = checklist.symbols?.[0]
+    if (typeof rawSymbol === 'string' && rawSymbol.trim()) {
+      locked.symbol = normalizePublishedSymbol(rawSymbol)
+    }
+
+    const rawTimeframe = checklist.timeframes?.[0]
+    if (typeof rawTimeframe === 'string' && rawTimeframe.trim()) {
+      locked.timeframe = rawTimeframe.trim()
+    }
+
+    const marketType = typeof riskRules.marketType === 'string'
+      ? riskRules.marketType.trim().toLowerCase()
+      : ''
+    if (marketType === 'spot' || marketType === 'perp') {
+      locked.marketType = marketType
+    }
+
+    const exchange = typeof riskRules.exchange === 'string'
+      ? riskRules.exchange.trim().toLowerCase()
+      : ''
+    if (exchange === 'binance' || exchange === 'okx' || exchange === 'hyperliquid') {
+      locked.exchange = exchange
+    }
+
+    if (typeof riskRules.positionPct === 'number' && Number.isFinite(riskRules.positionPct)) {
+      locked.positionPct = riskRules.positionPct
+    }
+
+    const stopLossPct = typeof riskRules.stopLossPct === 'number'
+      ? riskRules.stopLossPct
+      : (typeof riskRules.stopLoss === 'number' ? riskRules.stopLoss : null)
+    if (typeof stopLossPct === 'number' && Number.isFinite(stopLossPct)) {
+      locked.stopLossPct = stopLossPct
+    }
+
+    if (typeof riskRules.maxDrawdownPct === 'number' && Number.isFinite(riskRules.maxDrawdownPct)) {
+      locked.maxDrawdownPct = riskRules.maxDrawdownPct
+    }
+
+    return locked
+  }
+}

@@ -51,4 +51,11 @@ describe('api-client env resolution', () => {
 
     expect(SERVER_API_BASE_URL).toBe('https://api.example.com/api/v1')
   })
+
+  it('unwraps both transport envelopes and raw payloads', async () => {
+    const { unwrapApiResponse } = await loadApiClient()
+
+    expect(unwrapApiResponse({ data: { id: 'wrapped' } })).toEqual({ id: 'wrapped' })
+    expect(unwrapApiResponse({ id: 'raw' })).toEqual({ id: 'raw' })
+  })
 })

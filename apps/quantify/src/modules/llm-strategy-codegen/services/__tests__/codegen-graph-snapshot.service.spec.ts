@@ -1,6 +1,6 @@
 import { CodegenGraphSnapshotService } from '../codegen-graph-snapshot.service'
 
-describe('CodegenGraphSnapshotService', () => {
+describe('codegenGraphSnapshotService', () => {
   it('builds a server-side graph snapshot matching checklist gate semantics', () => {
     const service = new CodegenGraphSnapshotService()
 

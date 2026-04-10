@@ -1,7 +1,7 @@
 import type { SemanticStrategyGraph } from '../../types/semantic-strategy-graph'
 import { SemanticGraphValidatorService } from '../semantic-graph-validator.service'
 
-describe('SemanticGraphValidatorService', () => {
+describe('semanticGraphValidatorService', () => {
   const validator = new SemanticGraphValidatorService()
 
   it('returns incomplete when graph is empty', () => {

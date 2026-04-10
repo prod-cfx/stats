@@ -7,9 +7,14 @@ import type { AiService } from '@/modules/ai/ai.service'
 import { restoreProcessEnv, setProcessEnvValue, snapshotProcessEnv } from '@/common/env/env.accessor'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2DigestService } from '../canonical-spec-v2-digest.service'
+import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
+import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CodegenConversationService } from '../codegen-conversation.service'
+import { CodegenSessionPublicationPipelineService } from '../codegen-session-publication-pipeline.service'
 import { CompiledPublicationGateService } from '../compiled-publication-gate.service'
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
+import { CompiledScriptExecutionEnvelopeService } from '../compiled-script-execution-envelope.service'
+import { CompiledScriptParserService } from '../compiled-script-parser.service'
 import { RuntimeGuardrailService } from '../runtime-guardrail.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
 import { SpecDescBuilderService } from '../spec-desc-builder.service'
@@ -18,6 +23,10 @@ import { StrategyClarificationQuestionService } from '../strategy-clarification-
 import { StrategyClarificationRulesService } from '../strategy-clarification-rules.service'
 import { StrategyConsistencyService } from '../strategy-consistency.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
+
+jest.mock('../../repositories/published-strategy-snapshots.repository', () => ({
+  PublishedStrategySnapshotsRepository: class PublishedStrategySnapshotsRepository {},
+}))
 
 describe('codegenConversationService (llm orchestrated flow)', () => {
   jest.setTimeout(120_000)
@@ -57,6 +66,20 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   const canonicalSpecBuilder = new CanonicalSpecBuilderService()
   const canonicalDigestService = new CanonicalSpecV2DigestService()
   const specDescBuilder = new SpecDescBuilderService(canonicalSpecBuilder)
+  const publicationPipeline = new CodegenSessionPublicationPipelineService(
+    mockRepo as unknown as CodegenSessionsRepository,
+    mockRecommendation as unknown as RecommendationIndexService,
+    canonicalSpecBuilder,
+    specDescBuilder,
+    new StrategyConsistencyService(new ScriptProfileExtractorService()),
+    new StrategySummaryBuilderService(new ScriptProfileExtractorService()),
+    new CanonicalSpecV2IrCompilerService(),
+    new CanonicalStrategyAstCompilerService(),
+    new CompiledScriptEmitterService(),
+    new CompiledScriptExecutionEnvelopeService(),
+    new CompiledScriptParserService(),
+    new CompiledPublicationGateService(mockRepo as unknown as PublishedStrategySnapshotsRepository),
+  )
   const buildConfirmedCanonicalDigest = (checklist: Record<string, unknown>): string => {
     return canonicalDigestService.hash(canonicalSpecBuilder.build(checklist))
   }
@@ -69,11 +92,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     new RuntimeGuardrailService(),
     specDescBuilder,
     canonicalSpecBuilder,
-    new StrategyConsistencyService(new ScriptProfileExtractorService()),
-    mockRecommendation as unknown as RecommendationIndexService,
     new StrategyClarificationRulesService(),
     new StrategyClarificationQuestionService(),
-    new StrategySummaryBuilderService(new ScriptProfileExtractorService()),
+    publicationPipeline,
   )
   const waitForTerminalStatus = async (
     sessionId: string,
@@ -191,6 +212,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('缺少方向约束')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       checklist: expect.objectContaining({
         symbols: ['BTCUSDT'],
@@ -1338,7 +1360,39 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockAi.chat).not.toHaveBeenCalled()
   })
 
-  it('reaches terminal status after confirmed generation on short-side checklist with complete market metadata', async () => {
+  it('marks session as consistency failed when validated script does not match checklist semantics', async () => {
+    jest.spyOn(StrategyConsistencyService.prototype, 'evaluate').mockReturnValue({
+      status: 'FAILED',
+      checks: [
+        {
+          key: 'entry',
+          level: 'critical',
+          status: 'failed',
+          expected: '布林带上轨做空 / 下轨做多',
+          actual: '双均线趋势跟随',
+          message: '策略语义与确认逻辑图不一致',
+        },
+      ],
+      summary: { criticalFailed: 1, warningFailed: 0, unprovable: 0 },
+      specProfile: {
+        indicators: [],
+        actions: [],
+        ruleMappings: [],
+        rules: [],
+        sizing: null,
+        requiredParams: [],
+        fallbackDetected: false,
+      },
+      scriptProfile: {
+        indicators: [],
+        actions: [],
+        ruleMappings: [],
+        rules: [],
+        sizing: null,
+        requiredParams: [],
+        fallbackDetected: false,
+      },
+    } as never)
     mockRepo.findById.mockResolvedValue({
       id: 's-consistency',
       userId: 'u1',
@@ -1346,58 +1400,18 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       checklist: {
         symbols: ['BTCUSDT'],
         timeframes: ['15m'],
-        entryRules: ['K线收盘后确认突破布林带上轨时做空'],
+        entryRules: ['K线收盘后确认突破布林带上轨时做空', 'K线收盘后确认突破布林带下轨时做多'],
         exitRules: ['价格回到布林带中轨(MA20)时平仓'],
         riskRules: {
           exchange: 'okx',
           marketType: 'perp',
           positionPct: 10,
           stopLossPct: 5,
-          earlyStop: '价格连续3根K线在轨外时考虑提前止损',
+          earlyStop: '价格连续3根K线在轨外时直接减仓',
         },
       },
       constraintPack: {},
     })
-    mockAi.chat
-      .mockResolvedValueOnce({
-        content: JSON.stringify({
-          related: true,
-          logicReady: true,
-          assistantPrompt: '逻辑已确认，可以生成。',
-        }),
-      })
-      .mockResolvedValueOnce({
-        content: `const strategy: StrategyAdapterV1 = {
-  protocolVersion: 'v1',
-  onBar(ctx): StrategyDecisionV1 {
-    const bars = Array.isArray(ctx.bars) ? ctx.bars : []
-    if (bars.length < 20) return { action: 'NOOP', reason: 'fallback: insufficient bars' }
-    const closes = bars.map(item => item?.close).filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
-    const fast = ctx.helpers?.ta?.sma(closes, 5)
-    const slow = ctx.helpers?.ta?.sma(closes, 20)
-    const size: StrategyDecisionV1['size'] = { mode: 'RATIO', value: 0.1 }
-    if (fast > slow) return { action: 'OPEN_LONG', size, confidence: 55, reason: 'fallback: fast SMA above slow SMA' }
-    return { action: 'NOOP', reason: 'fallback: neutral trend' }
-  },
-}
-strategy`,
-      })
-      .mockResolvedValueOnce({
-        content: `const strategy: StrategyAdapterV1 = {
-  protocolVersion: 'v1',
-  onBar(ctx): StrategyDecisionV1 {
-    const bars = Array.isArray(ctx.bars) ? ctx.bars : []
-    if (bars.length < 20) return { action: 'NOOP', reason: 'fallback: insufficient bars' }
-    const closes = bars.map(item => item?.close).filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
-    const fast = ctx.helpers?.ta?.sma(closes, 5)
-    const slow = ctx.helpers?.ta?.sma(closes, 20)
-    const size: StrategyDecisionV1['size'] = { mode: 'RATIO', value: 0.1 }
-    if (fast > slow) return { action: 'OPEN_LONG', size, confidence: 55, reason: 'fallback: fast SMA above slow SMA' }
-    return { action: 'NOOP', reason: 'fallback: neutral trend' }
-  },
-}
-strategy`,
-      })
     mockRepo.createVersion.mockResolvedValue({ id: 'v-consistency' })
 
     const result = await service.continueSession('s-consistency', {
@@ -1407,14 +1421,14 @@ strategy`,
       confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
         symbols: ['BTCUSDT'],
         timeframes: ['15m'],
-        entryRules: ['K线收盘后确认突破布林带上轨时做空'],
+        entryRules: ['K线收盘后确认突破布林带上轨时做空', 'K线收盘后确认突破布林带下轨时做多'],
         exitRules: ['价格回到布林带中轨(MA20)时平仓'],
         riskRules: {
           exchange: 'okx',
           marketType: 'perp',
           positionPct: 10,
           stopLossPct: 5,
-          earlyStop: '价格连续3根K线在轨外时考虑提前止损',
+          earlyStop: '价格连续3根K线在轨外时直接减仓',
         },
       }),
     })
@@ -1423,12 +1437,14 @@ strategy`,
     await waitForTerminalStatus('s-consistency')
 
     const hasRejectedOrConsistencyFailed = mockRepo.updateSession.mock.calls.some(call =>
-      call[0] === 's-consistency' && ['CONSISTENCY_FAILED', 'REJECTED'].includes((call[1] as { status?: string }).status ?? ''),
+      call[0] === 's-consistency' && (call[1] as { status?: string }).status === 'CONSISTENCY_FAILED',
     )
     const hasPublished = mockRepo.updateSession.mock.calls.some(call =>
       call[0] === 's-consistency' && (call[1] as { status?: string }).status === 'PUBLISHED',
     )
-    expect(hasRejectedOrConsistencyFailed || hasPublished).toBe(true)
+    expect(hasRejectedOrConsistencyFailed).toBe(true)
+    expect(hasPublished).toBe(false)
+    expect(mockRepo.ensureDraftStrategyInstanceBoundForPublishedSession).not.toHaveBeenCalled()
   }, 15_000)
 
   it('rejects continueSession when canonical spec version is not 2', async () => {

@@ -1,35 +1,18 @@
 import type { schemas } from '@ai/api-contracts'
 import type { z } from 'zod'
 import { createApiClient } from '@ai/api-contracts'
+import { buildBearerAuthHeaders, getErrorHttpStatus, unwrapTransportItems, unwrapTransportResponse } from '@ai/shared'
 
 import { resolveApiBaseUrl } from './api-base-url'
 import { useAuthStore } from './auth-store'
 import { getToken } from './session'
 
-interface BaseResponse<T> {
-  data?: T
-  message?: string
-}
-
-function unwrapResponse<T>(response: T | BaseResponse<T>): T {
-  if (response && typeof response === 'object' && 'data' in response) {
-    const data = (response as BaseResponse<T>).data
-    if (data !== undefined) {
-      return data
-    }
-  }
-  return response as T
-}
-
 function unwrapListResponse<T>(response: unknown): T[] {
-  const unwrapped = unwrapResponse(response) as any
-  if (Array.isArray(unwrapped)) {
-    return unwrapped as T[]
-  }
-  if (unwrapped && typeof unwrapped === 'object' && Array.isArray(unwrapped.items)) {
-    return unwrapped.items as T[]
-  }
-  return []
+  return unwrapTransportItems<T>(response as { data?: { items?: T[] } } | { items?: T[] } | T[])
+}
+
+function unwrapResponse<T>(response: T | { data?: T; message?: string }): T {
+  return unwrapTransportResponse(response)
 }
 
 const API_BASE_URL = resolveApiBaseUrl(
@@ -91,14 +74,14 @@ const SYSTEM_PROMPT_CATEGORY = 'system_prompt'
 function requireAuthHeaders() {
   const token = getToken()
   if (!token) throw new Error('登录状态已失效，请重新登录')
-  return { Authorization: `Bearer ${token}` }
+  return buildBearerAuthHeaders(token)
 }
 
 async function withAuthErrorHandling<T>(operation: () => Promise<T>): Promise<T> {
   try {
     return await operation()
   } catch (error: any) {
-    const status = error?.response?.status ?? error?.status
+    const status = getErrorHttpStatus(error)
 
     // 401 未授权：登录态失效，统一清理会话并跳转登录
     if (status === 401) {
@@ -311,17 +294,11 @@ export async function updateSystemPromptSetting(
  */
 export async function fetchRegisteredJobKeys(): Promise<string[]> {
   return withAuthErrorHandling(async () => {
-    const response = await fetch(`${API_BASE_URL}/admin/data-pull-tasks/registered-keys`, {
+    const response = await client.AdminDataPullTaskController_getRegisteredKeys({
       headers: requireAuthHeaders(),
     })
-    if (!response.ok) {
-      throw Object.assign(new Error('获取已注册 key 列表失败'), {
-        status: response.status,
-        response,
-      })
-    }
-    const data = await response.json()
-    return data?.keys ?? data?.data?.keys ?? []
+    const data = unwrapResponse<{ keys?: string[] }>(response as { data?: { keys?: string[] } } | { keys?: string[] })
+    return Array.isArray(data?.keys) ? data.keys : []
   })
 }
 
@@ -410,19 +387,21 @@ export async function fetchDataPullTaskExecutions(
   page = 1,
   limit = 20,
 ): Promise<_PaginationResult<DataPullExecutionLog>> {
-  const response = await client.AdminDataPullTaskController_listExecutions({
-    headers: requireAuthHeaders(),
-    params: { id: taskId },
-    queries: { page, limit },
-  })
-  const payload = unwrapResponse<any>(response as any)
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminDataPullTaskController_listExecutions({
+      headers: requireAuthHeaders(),
+      params: { id: taskId },
+      queries: { page, limit },
+    })
+    const payload = unwrapResponse<any>(response as any)
 
-  return {
-    total: payload.total ?? 0,
-    page: payload.page ?? page,
-    limit: payload.limit ?? limit,
-    items: Array.isArray(payload.items) ? (payload.items as DataPullExecutionLog[]) : [],
-  }
+    return {
+      total: payload.total ?? 0,
+      page: payload.page ?? page,
+      limit: payload.limit ?? limit,
+      items: Array.isArray(payload.items) ? (payload.items as DataPullExecutionLog[]) : [],
+    }
+  })
 }
 
 export interface CreateDataPullTaskPayload {
@@ -545,7 +524,7 @@ export async function interruptDataPullTask(id: number): Promise<InterruptDataPu
       params: { id },
     })
     return unwrapResponse<InterruptDataPullTaskResult>(
-      response as BaseResponse<InterruptDataPullTaskResult>,
+      response as { data?: InterruptDataPullTaskResult; message?: string },
     )
   })
 }
