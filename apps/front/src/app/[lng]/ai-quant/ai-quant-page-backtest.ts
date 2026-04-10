@@ -7,6 +7,7 @@ import {
   getBacktestJobResult,
 } from '@/components/ai-quant/backtest-job-client'
 import {
+  BacktestPayloadBuilderError,
   buildBacktestPayload,
   isBacktestPayloadBuilderError,
 } from '@/components/ai-quant/backtest-payload-builder'
@@ -119,6 +120,9 @@ export async function runAiQuantBacktest(args: {
   try {
     const paramValues = activeConversation.paramValues
     const executionConfig = resolveBacktestExecutionConfig(paramValues)
+    if (!executionConfig.allowPartialValid) {
+      throw new BacktestPayloadBuilderError('invalid_execution_config')
+    }
     payload = buildBacktestPayload({
       symbol: activeConversation.params.symbol,
       baseTimeframe: activeConversation.params.baseTimeframe,

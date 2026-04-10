@@ -188,6 +188,7 @@ export interface ResolvedBacktestExecutionConfig {
   feeBps: number
   priceSource: string
   allowPartial: boolean
+  allowPartialValid: boolean
 }
 
 export const DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES = {
@@ -234,25 +235,30 @@ function resolveBacktestExecutionPriceSource(
 function resolveBacktestAllowPartial(
   value: unknown,
   fallback: boolean,
-): boolean {
+): { value: boolean, valid: boolean } {
   if (value === undefined || value === null) {
-    return fallback
+    return { value: fallback, valid: true }
   }
   if (typeof value === 'boolean') {
-    return value
+    return { value, valid: true }
   }
   if (value === 'true') {
-    return true
+    return { value: true, valid: true }
   }
   if (value === 'false') {
-    return false
+    return { value: false, valid: true }
   }
-  return fallback
+  return { value: fallback, valid: false }
 }
 
 export function resolveBacktestExecutionConfig(
   values: Record<string, unknown>,
 ): ResolvedBacktestExecutionConfig {
+  const allowPartial = resolveBacktestAllowPartial(
+    values.backtestAllowPartial,
+    DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES.backtestAllowPartial,
+  )
+
   return {
     initialCash: parseBacktestExecutionNumber(
       values.backtestInitialCash,
@@ -274,10 +280,8 @@ export function resolveBacktestExecutionConfig(
       values.backtestPriceSource,
       DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES.backtestPriceSource,
     ),
-    allowPartial: resolveBacktestAllowPartial(
-      values.backtestAllowPartial,
-      DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES.backtestAllowPartial,
-    ),
+    allowPartial: allowPartial.value,
+    allowPartialValid: allowPartial.valid,
   }
 }
 

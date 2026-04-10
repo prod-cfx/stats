@@ -659,6 +659,28 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
   })
 
+  it('fails fast when allowPartial is present but invalid', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    seeded[0].paramValues = {
+      ...seeded[0].paramValues,
+      backtestAllowPartial: 'maybe',
+    }
+    localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(seeded))
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mockCreateBacktestJob).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestPayloadInvalid')
+  })
+
   it('keeps exact default execution values when the conversation marked them as explicit', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
     seeded[0].backtestExecutionConfigExplicit = true
