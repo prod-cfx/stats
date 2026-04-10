@@ -182,6 +182,142 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('sends the non-contradictory planner prompt to ai service', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '请补充退出条件。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-planner-prompt' })
+
+    await service.startSession({
+      userId: 'u1',
+      initialMessage: '帮我做一个布林带策略',
+    })
+
+    expect(mockAi.chat).toHaveBeenCalledWith(expect.objectContaining({
+      messages: expect.arrayContaining([
+        expect.objectContaining({
+          role: 'system',
+          content: expect.stringContaining('只允许你代为补齐交易所、周期、仓位等非核心元数据'),
+        }),
+      ]),
+    }))
+
+    const chatCall = mockAi.chat.mock.calls[0]?.[0] as { messages?: Array<{ role?: string; content?: string }> }
+    const systemPrompt = chatCall.messages?.find(message => message.role === 'system')?.content ?? ''
+
+    expect(systemPrompt).toContain('不得补写 entryRules/exitRules')
+    expect(systemPrompt).not.toContain('必须直接给出完整入场+出场规则草案')
+  })
+
+  it('preserves untouched sibling rules when planner updates one exit rule', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-merge-rules',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: completeChecklist({
+        entryRules: ['K线收盘后确认突破布林带上轨时做空', 'K线收盘后确认突破布林带下轨时做多'],
+        exitRules: ['价格回到布林带中轨(MA20)时平仓', '价格连续3根K线在轨外时直接减仓'],
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我已按你的澄清更新规则。',
+        logic: {
+          exitRules: ['价格连续3根K线在轨外时直接平仓'],
+        },
+      }),
+    })
+
+    await service.continueSession('s-merge-rules', {
+      userId: 'u1',
+      message: '轨外 3 根不是减仓，是直接平仓',
+    })
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-merge-rules', expect.objectContaining({
+      checklist: expect.objectContaining({
+        exitRules: ['价格回到布林带中轨(MA20)时平仓', '价格连续3根K线在轨外时直接平仓'],
+      }),
+    }))
+  })
+
+  it('does not overwrite distinct stop-loss siblings when a new stop-loss rule is added', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-stoploss-siblings',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: completeChecklist({
+        entryRules: ['K线收盘后确认突破布林带上轨时做空'],
+        exitRules: ['多单亏损达到5%时平仓', '空单亏损达到8%时平仓'],
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '我已按你的澄清补充规则。',
+        logic: {
+          exitRules: ['多单亏损达到6%时平仓'],
+        },
+      }),
+    })
+
+    await service.continueSession('s-stoploss-siblings', {
+      userId: 'u1',
+      message: '把多单止损改成 6%',
+    })
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-stoploss-siblings', expect.objectContaining({
+      checklist: expect.objectContaining({
+        exitRules: ['多单亏损达到5%时平仓', '空单亏损达到8%时平仓', '多单亏损达到6%时平仓'],
+      }),
+    }))
+  })
+
+  it('passes exact strong-rule semantics into the script generation call', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: 'const strategy: StrategyAdapterV1 = { protocolVersion: "v1", onBar() { return { action: "NOOP" } } }\nstrategy',
+    })
+
+    await (service as any).generateScript(completeChecklist({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['K线收盘后确认突破布林带上轨时做空', 'K线收盘后确认突破布林带下轨时做多'],
+      exitRules: ['价格回到布林带中轨(MA20)时平仓', '价格连续3根K线在轨外时直接平仓'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+        stopLossPct: 5,
+      },
+    }), '确认并生成', {
+      providerCode: 'strategy-codegen',
+      model: 'gpt-4',
+    })
+
+    const chatCall = mockAi.chat.mock.calls[0]?.[0] as {
+      messages?: Array<{ role?: string; content?: string }>
+    }
+    const systemPrompt = chatCall.messages?.find(message => message.role === 'system')?.content ?? ''
+    const userPrompt = chatCall.messages?.find(message => message.role === 'user')?.content ?? ''
+
+    expect(systemPrompt).toContain('会影响运行时决策的 riskRules')
+    expect(systemPrompt).toContain('不要为了“覆盖”而伪造无意义的运行时代码分支')
+    expect(userPrompt).toContain('价格连续3根K线在轨外时直接平仓')
+    expect(userPrompt).not.toContain('价格连续3根K线在轨外时直接减仓')
+    expect(userPrompt).toContain('"exchange":"okx"')
+    expect(userPrompt).toContain('"marketType":"perp"')
+  })
+
   it('stays in DRAFTING when an entry rule can resolve to both OPEN_LONG and OPEN_SHORT', async () => {
     mockRepo.createSession.mockResolvedValue({ id: 's-clarify-1' })
 

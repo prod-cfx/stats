@@ -199,6 +199,100 @@ describe('canonicalSpecV2IrCompilerService', () => {
     ]))
   })
 
+  it('keeps middle-close, stop-loss, and outside-band full close as distinct compiled triggers', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const result = compiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        indicators: [{ kind: 'bollingerBands', params: { period: 20, stdDev: 2 } }],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['15m'],
+        },
+        rules: [
+          {
+            id: 'exit-middle-1',
+            phase: 'exit',
+            sideScope: 'both',
+            priority: 140,
+            condition: {
+              kind: 'atom',
+              key: 'bollinger.middle_revert',
+              semanticScope: 'market',
+            },
+            actions: [{ type: 'CLOSE_LONG' }, { type: 'CLOSE_SHORT' }],
+          },
+          {
+            id: 'risk-stop-loss',
+            phase: 'risk',
+            sideScope: 'both',
+            priority: 120,
+            condition: {
+              kind: 'atom',
+              key: 'position_loss_pct',
+              semanticScope: 'position',
+              op: 'GTE',
+              value: 0.05,
+            },
+            actions: [{ type: 'FORCE_EXIT' }],
+          },
+          {
+            id: 'risk-outside-band-3-bars',
+            phase: 'risk',
+            sideScope: 'both',
+            priority: 110,
+            condition: {
+              kind: 'atom',
+              key: 'bollinger.bars_outside',
+              semanticScope: 'market',
+              op: 'GTE',
+              value: 3,
+              params: { bars: 3 },
+            },
+            actions: [{ type: 'FORCE_EXIT' }],
+          },
+        ],
+      },
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.riskPolicy.guards).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'STOP_LOSS_PCT', value: 5 }),
+    ]))
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'BOLLINGER_BARS_OUTSIDE',
+        params: expect.objectContaining({ bars: 3 }),
+      }),
+    ]))
+    expect(result.ir.ruleBlocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'exit',
+        actions: expect.arrayContaining([
+          expect.objectContaining({ kind: 'CLOSE_LONG' }),
+          expect.objectContaining({ kind: 'CLOSE_SHORT' }),
+        ]),
+      }),
+    ]))
+    expect(result.ir.ruleBlocks.filter(block => block.phase === 'exit')).toHaveLength(2)
+  })
+
   it('compiles RSI threshold rules into RSI series and graph operators', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 

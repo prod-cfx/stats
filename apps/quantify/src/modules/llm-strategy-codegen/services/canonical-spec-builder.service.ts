@@ -297,8 +297,13 @@ export class CanonicalSpecBuilderService {
     }
 
     const earlyStopText = typeof riskRules.earlyStop === 'string' ? riskRules.earlyStop : ''
-    if (/连续\s*3|3\s*根/.test(earlyStopText) && /轨外|outside/i.test(earlyStopText)) {
-      const outsideBandActions = this.resolveOutsideBandRiskActions(earlyStopText)
+    const outsideBandSourceText = [
+      ...exitTexts,
+      earlyStopText,
+    ].find(text => /连续\s*3|3\s*根/.test(text) && /轨外|outside/i.test(text)) ?? ''
+
+    if (outsideBandSourceText) {
+      const outsideBandActions = this.resolveOutsideBandRiskActions(outsideBandSourceText)
 
       if (outsideBandActions) {
         rules.push({
@@ -315,7 +320,7 @@ export class CanonicalSpecBuilderService {
             params: { bars: 3 },
           },
           actions: outsideBandActions,
-          metadata: { source: 'riskRules.earlyStop' },
+          metadata: { source: outsideBandSourceText === earlyStopText ? 'riskRules.earlyStop' : 'exitRules' },
         })
       }
     }
@@ -476,7 +481,7 @@ export class CanonicalSpecBuilderService {
   }
 
   private resolveOutsideBandRiskActions(text: string): CanonicalRuleV2['actions'] | null {
-    if (/全平|全部平仓|清仓|强平|force\s*exit|force\s*close/iu.test(text)) {
+    if (/全平|全部平仓|直接平仓|清仓|强平|force\s*exit|force\s*close/iu.test(text)) {
       return [{ type: 'FORCE_EXIT' }]
     }
 
