@@ -596,7 +596,7 @@ export class CodegenConversationService {
       activeCodegenSessionId: session && !this.stateMachine.isTerminalStatus(session.status) ? session.id : null,
       conversationTitle: conversation.title,
       conversationMessages: conversation.messages,
-      status: snapshot?.status,
+      status: snapshot?.status as LlmCodegenSessionStatus | undefined,
       createdAt: conversation.createdAt.toISOString(),
       updatedAt: conversation.updatedAt.toISOString(),
       canonicalDigest: snapshot?.canonicalDigest ?? null,
@@ -640,19 +640,27 @@ export class CodegenConversationService {
   private toConversationMessages(
     history: string[] | undefined,
   ): Array<{ role: 'user' | 'assistant', content: string }> {
-    return (history ?? []).flatMap((entry) => {
+    const messages: Array<{ role: 'user' | 'assistant', content: string }> = []
+
+    for (const entry of history ?? []) {
       const normalized = entry.trim()
-      if (!normalized) return []
+      if (!normalized) continue
       if (normalized.startsWith('U:')) {
         const content = normalized.slice(2).trim()
-        return content ? [{ role: 'user' as const, content }] : []
+        if (content) {
+          messages.push({ role: 'user', content })
+        }
+        continue
       }
       if (normalized.startsWith('A:')) {
         const content = normalized.slice(2).trim()
-        return content ? [{ role: 'assistant' as const, content }] : []
+        if (content) {
+          messages.push({ role: 'assistant', content })
+        }
       }
-      return []
-    })
+    }
+
+    return messages
   }
 
   private deriveConversationTitle(
