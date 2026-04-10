@@ -85,6 +85,10 @@ const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
   },
 }
 
+function normalizePublishedSymbol(raw: string): string {
+  return raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
+}
+
 @Injectable()
 export class CodegenConversationService {
   private readonly strictUnsupportedTargets = new Map<string, number>()
