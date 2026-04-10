@@ -993,19 +993,32 @@ export class StrategyConsistencyService {
 
   private resolveExpectedPositionMode(
     spec: CanonicalStrategySpec,
-  ): 'long_only' | 'long_short' {
+  ): 'long_only' | 'short_only' | 'long_short' {
     if (spec.version === 2) {
+      const hasLongExposure = spec.rules.some(rule => rule.actions.some(action => (
+        action.type === 'OPEN_LONG'
+        || action.type === 'CLOSE_LONG'
+        || action.type === 'REDUCE_LONG'
+      )))
       const hasShortExposure = spec.rules.some(rule => rule.actions.some(action => (
         action.type === 'OPEN_SHORT'
+        || action.type === 'CLOSE_SHORT'
         || action.type === 'REDUCE_SHORT'
       )))
-      return hasShortExposure ? 'long_short' : 'long_only'
+      if (hasLongExposure && hasShortExposure) return 'long_short'
+      if (hasShortExposure) return 'short_only'
+      return 'long_only'
     }
 
+    const hasLongExposure = spec.entries.some(rule =>
+      rule.action === 'OPEN_LONG',
+    )
     const hasShortExposure = spec.entries.some(rule =>
       rule.action === 'OPEN_SHORT',
     )
-    return hasShortExposure ? 'long_short' : 'long_only'
+    if (hasLongExposure && hasShortExposure) return 'long_short'
+    if (hasShortExposure) return 'short_only'
+    return 'long_only'
   }
 
   private buildSummary(checks: StrategyConsistencyCheck[]): StrategyConsistencyReport['summary'] {

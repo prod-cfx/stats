@@ -68,6 +68,67 @@ describe('canonicalSpecV2IrCompilerService', () => {
     }))
   })
 
+  it('preserves short_only positionMode when canonical spec only trades the short side', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const result = compiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        indicators: [{ kind: 'ema', params: { fast: 7, slow: 21 } }],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['15m'],
+        },
+        rules: [
+          {
+            id: 'entry-short',
+            phase: 'entry',
+            sideScope: 'short',
+            priority: 200,
+            condition: {
+              kind: 'atom',
+              key: 'ma.death_cross',
+              semanticScope: 'market',
+              op: 'CROSS_UNDER',
+            },
+            actions: [{ type: 'OPEN_SHORT', sizing: { mode: 'RATIO', value: 0.1 } }],
+          },
+          {
+            id: 'exit-short',
+            phase: 'exit',
+            sideScope: 'short',
+            priority: 100,
+            condition: {
+              kind: 'atom',
+              key: 'ma.golden_cross',
+              semanticScope: 'market',
+              op: 'CROSS_OVER',
+            },
+            actions: [{ type: 'CLOSE_SHORT' }],
+          },
+        ],
+      },
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.portfolio.positionMode).toBe('short_only')
+  })
+
   it('compiles bollinger outside-band reduce rule with okx perp market metadata', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 

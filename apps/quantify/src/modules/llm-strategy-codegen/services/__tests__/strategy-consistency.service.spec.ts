@@ -157,14 +157,52 @@ strategy
   })
 
   it('fails when compiled execution positionMode drifts from canonical spec intent', () => {
-    const canonicalSpec = canonicalBuilder.build({
-      symbols: ['BTCUSDT'],
-      timeframes: ['15m'],
-      entryRules: ['突破布林带下轨时做多'],
-      exitRules: ['回到中轨时平仓'],
-      riskRules: { positionPct: 10, exchange: 'binance', marketType: 'spot' },
-    })
-
+    const canonicalSpec = {
+      version: 2 as const,
+      market: {
+        exchange: 'binance' as const,
+        symbol: 'BTCUSDT',
+        marketType: 'spot' as const,
+        timeframe: '15m',
+      },
+      indicators: [{ kind: 'ema' as const, params: { fast: 7, slow: 21 } }],
+      sizing: { mode: 'RATIO' as const, value: 0.1 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE' as const,
+        fillTiming: 'NEXT_BAR_OPEN' as const,
+      },
+      dataRequirements: {
+        requiredTimeframes: ['15m'],
+      },
+      rules: [
+        {
+          id: 'entry-long',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          priority: 200,
+          condition: {
+            kind: 'atom' as const,
+            key: 'ma.golden_cross',
+            semanticScope: 'market' as const,
+            op: 'CROSS_OVER' as const,
+          },
+          actions: [{ type: 'OPEN_LONG' as const, sizing: { mode: 'RATIO' as const, value: 0.1 } }],
+        },
+        {
+          id: 'exit-long',
+          phase: 'exit' as const,
+          sideScope: 'long' as const,
+          priority: 100,
+          condition: {
+            kind: 'atom' as const,
+            key: 'ma.death_cross',
+            semanticScope: 'market' as const,
+            op: 'CROSS_UNDER' as const,
+          },
+          actions: [{ type: 'CLOSE_LONG' as const }],
+        },
+      ],
+    }
     const compiled = new CanonicalSpecV2IrCompilerService().compile({
       canonicalSpec,
       fallback: {
@@ -193,6 +231,79 @@ strategy
     expect(report.checks.some(
       check => check.key === 'market.execution_model'
         && String(check.message).includes('positionMode'),
+    )).toBe(true)
+  })
+
+  it('passes when compiled execution keeps short_only positionMode aligned with canonical spec intent', () => {
+    const canonicalSpec = {
+      version: 2 as const,
+      market: {
+        exchange: 'binance' as const,
+        symbol: 'BTCUSDT',
+        marketType: 'perp' as const,
+        timeframe: '15m',
+      },
+      indicators: [{ kind: 'ema' as const, params: { fast: 7, slow: 21 } }],
+      sizing: { mode: 'RATIO' as const, value: 0.1 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE' as const,
+        fillTiming: 'NEXT_BAR_OPEN' as const,
+      },
+      dataRequirements: {
+        requiredTimeframes: ['15m'],
+      },
+      rules: [
+        {
+          id: 'entry-short',
+          phase: 'entry' as const,
+          sideScope: 'short' as const,
+          priority: 200,
+          condition: {
+            kind: 'atom' as const,
+            key: 'ma.death_cross',
+            semanticScope: 'market' as const,
+            op: 'CROSS_UNDER' as const,
+          },
+          actions: [{ type: 'OPEN_SHORT' as const, sizing: { mode: 'RATIO' as const, value: 0.1 } }],
+        },
+        {
+          id: 'exit-short',
+          phase: 'exit' as const,
+          sideScope: 'short' as const,
+          priority: 100,
+          condition: {
+            kind: 'atom' as const,
+            key: 'ma.golden_cross',
+            semanticScope: 'market' as const,
+            op: 'CROSS_OVER' as const,
+          },
+          actions: [{ type: 'CLOSE_SHORT' as const }],
+        },
+      ],
+    }
+    const compiled = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+    const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
+    const script = new CompiledScriptEmitterService().emit({
+      ast,
+      executionEnvelope: new CompiledScriptExecutionEnvelopeService().build(canonicalSpec),
+    })
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+    })
+
+    expect(report.status).toBe('PASSED')
+    expect(report.checks.some(
+      check => check.key === 'market.execution_model' && check.status === 'passed',
     )).toBe(true)
   })
 
