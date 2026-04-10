@@ -71,7 +71,7 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.publishedScriptGraphVersion).toBe(3)
   })
 
-  it('resets transient backtest state and clears legacy implicit execution config during hydration', () => {
+  it('resets transient backtest state and normalizes legacy execution defaults for direct-run hydration', () => {
     const conversation = hydrateConversation({
       id: 'conv-1',
       title: 'test',
@@ -120,12 +120,12 @@ describe('ai-quant-page-conversation', () => {
 
     expect(conversation.backtestExecutionState).toBe('idle')
     expect(conversation.backtestExecutionConfigExplicit).toBe(false)
-    expect(conversation.paramValues.backtestInitialCash).toBeUndefined()
-    expect(conversation.paramValues.backtestLeverage).toBeUndefined()
-    expect(conversation.paramValues.backtestSlippageBps).toBeUndefined()
-    expect(conversation.paramValues.backtestFeeBps).toBeUndefined()
-    expect(conversation.paramValues.backtestPriceSource).toBeUndefined()
-    expect(conversation.paramValues.backtestAllowPartial).toBeUndefined()
+    expect(conversation.paramValues.backtestInitialCash).toBe(10000)
+    expect(conversation.paramValues.backtestLeverage).toBe(1)
+    expect(conversation.paramValues.backtestSlippageBps).toBe(10)
+    expect(conversation.paramValues.backtestFeeBps).toBe(5)
+    expect(conversation.paramValues.backtestPriceSource).toBe('close')
+    expect(conversation.paramValues.backtestAllowPartial).toBe(true)
   })
 
   it('invalidates published artifacts and optionally marks the logic graph as draft', () => {

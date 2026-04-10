@@ -179,7 +179,18 @@ export const BACKTEST_EXECUTION_PARAM_KEYS = [
   'backtestAllowPartial',
 ] as const
 export const BACKTEST_EXECUTION_PARAM_KEY_SET = new Set<string>(BACKTEST_EXECUTION_PARAM_KEYS)
-const LEGACY_IMPLICIT_BACKTEST_PARAM_VALUES = {
+export type BacktestExecutionPriceSource = 'open' | 'close' | 'mid'
+
+export interface ResolvedBacktestExecutionConfig {
+  initialCash: number
+  leverage: number
+  slippageBps: number
+  feeBps: number
+  priceSource: string
+  allowPartial: boolean
+}
+
+export const DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES = {
   backtestInitialCash: 10000,
   backtestLeverage: 1,
   backtestSlippageBps: 10,
@@ -187,6 +198,88 @@ const LEGACY_IMPLICIT_BACKTEST_PARAM_VALUES = {
   backtestPriceSource: 'close',
   backtestAllowPartial: true,
 } as const
+
+function parseBacktestExecutionNumber(
+  value: unknown,
+  fallback: number,
+): number {
+  if (value === undefined || value === null) {
+    return fallback
+  }
+  if (typeof value === 'number') {
+    return value
+  }
+  if (typeof value === 'string') {
+    if (!value.trim()) {
+      return Number.NaN
+    }
+    return Number(value)
+  }
+  return Number.NaN
+}
+
+function resolveBacktestExecutionPriceSource(
+  value: unknown,
+  fallback: BacktestExecutionPriceSource,
+): string {
+  if (value === undefined || value === null) {
+    return fallback
+  }
+  if (typeof value === 'string') {
+    return value.trim()
+  }
+  return String(value)
+}
+
+function resolveBacktestAllowPartial(
+  value: unknown,
+  fallback: boolean,
+): boolean {
+  if (value === undefined || value === null) {
+    return fallback
+  }
+  if (typeof value === 'boolean') {
+    return value
+  }
+  if (value === 'true') {
+    return true
+  }
+  if (value === 'false') {
+    return false
+  }
+  return fallback
+}
+
+export function resolveBacktestExecutionConfig(
+  values: Record<string, unknown>,
+): ResolvedBacktestExecutionConfig {
+  return {
+    initialCash: parseBacktestExecutionNumber(
+      values.backtestInitialCash,
+      DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES.backtestInitialCash,
+    ),
+    leverage: parseBacktestExecutionNumber(
+      values.backtestLeverage,
+      DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES.backtestLeverage,
+    ),
+    slippageBps: parseBacktestExecutionNumber(
+      values.backtestSlippageBps,
+      DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES.backtestSlippageBps,
+    ),
+    feeBps: parseBacktestExecutionNumber(
+      values.backtestFeeBps,
+      DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES.backtestFeeBps,
+    ),
+    priceSource: resolveBacktestExecutionPriceSource(
+      values.backtestPriceSource,
+      DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES.backtestPriceSource,
+    ),
+    allowPartial: resolveBacktestAllowPartial(
+      values.backtestAllowPartial,
+      DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES.backtestAllowPartial,
+    ),
+  }
+}
 
 function normalizeNumber(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -537,8 +630,32 @@ function hasLegacyImplicitBacktestExecutionConfig(
   values: Record<string, unknown>,
 ): boolean {
   return BACKTEST_EXECUTION_PARAM_KEYS.every(
-    key => values[key] === LEGACY_IMPLICIT_BACKTEST_PARAM_VALUES[key],
+    key => values[key] === DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES[key],
   )
+}
+
+function applyBacktestExecutionParamDefaults(
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  const nextValues = { ...values }
+  BACKTEST_EXECUTION_PARAM_KEYS.forEach((key) => {
+    if (nextValues[key] === undefined || nextValues[key] === null) {
+      nextValues[key] = DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES[key]
+    }
+  })
+  return nextValues
+}
+
+function stripImplicitBacktestExecutionParamValues(
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  const nextValues = { ...values }
+  BACKTEST_EXECUTION_PARAM_KEYS.forEach((key) => {
+    if (nextValues[key] === DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES[key]) {
+      delete nextValues[key]
+    }
+  })
+  return nextValues
 }
 
 function normalizeHydratedBacktestExecutionConfig(input: {
@@ -548,16 +665,15 @@ function normalizeHydratedBacktestExecutionConfig(input: {
   paramValues: Record<string, unknown>
   explicit: boolean
 } {
-  if (input.explicit) {
-    return input
-  }
-
-  if (!hasLegacyImplicitBacktestExecutionConfig(input.paramValues)) {
-    return input
+  if (input.explicit || !hasLegacyImplicitBacktestExecutionConfig(input.paramValues)) {
+    return {
+      paramValues: applyBacktestExecutionParamDefaults(input.paramValues),
+      explicit: input.explicit,
+    }
   }
 
   return {
-    paramValues: stripBacktestExecutionParamValues(input.paramValues),
+    paramValues: applyBacktestExecutionParamDefaults(input.paramValues),
     explicit: false,
   }
 }
@@ -613,7 +729,7 @@ export function createConversation(translate: (key: string) => string, now = Dat
     ],
     params: DEFAULT_PARAMS,
     paramSchema: buildParamSchemaWithCapabilities(null),
-    paramValues: { ...DEFAULT_PARAM_VALUES },
+    paramValues: applyBacktestExecutionParamDefaults({ ...DEFAULT_PARAM_VALUES }),
     backtestResult: null,
     logicGraph: null,
     codegenSpecDesc: null,
@@ -820,7 +936,15 @@ export function serializePersistedConversations(
 ): string {
   const envelope: PersistedConversationEnvelope = {
     version: normalizeConversationStorageVersion(version),
-    conversations,
+    conversations: conversations.map((conversation) => {
+      if (conversation.backtestExecutionConfigExplicit) {
+        return conversation
+      }
+      return {
+        ...conversation,
+        paramValues: stripImplicitBacktestExecutionParamValues(conversation.paramValues),
+      }
+    }),
   }
   return JSON.stringify(envelope)
 }

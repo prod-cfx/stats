@@ -297,7 +297,6 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
   it('passes allowPartial to the backtest payload builder when submitting a job', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
-    seeded[0].backtestExecutionConfigExplicit = true
     seeded[0].paramValues = {
       ...seeded[0].paramValues,
       backtestInitialCash: 10000,
@@ -406,6 +405,9 @@ describe('AiQuantPageClient backtest jobs integration', () => {
         },
         llmCodegenSessionId: null,
         publishedStrategyInstanceId: null,
+        publishedSnapshotId: 'snapshot-1',
+        publishedScriptCode: 'return { ok: true }',
+        publishedScriptGraphVersion: 1,
         latestSignalMessage: null,
         backtestExecutionState: 'idle',
         updatedAt: now,
@@ -427,8 +429,15 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
     })
+    let summary: Element | null = null
+    for (let attempt = 0; attempt < 3 && !summary; attempt += 1) {
+      await act(async () => {
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      summary = container.querySelector('[data-testid="backtest-summary"]')
+    }
 
-    const summary = container.querySelector('[data-testid="backtest-summary"]')
     expect(summary?.textContent).toContain('job-1')
     expect(summary?.textContent).toContain('|9.6|12.5|61|18')
     expect(mockGetBacktestJobResult).toHaveBeenCalledWith('job-1')
@@ -589,23 +598,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestMissingScriptCode')
   })
 
-  it('fails fast when conversation does not contain explicit backtest execution config', async () => {
-    mockBuildBacktestPayload.mockImplementation((input: any) => {
-      if (
-        !Number.isFinite(input.initialCash)
-        || !Number.isFinite(input.leverage)
-        || !Number.isFinite(input.execution?.slippageBps)
-        || !Number.isFinite(input.execution?.feeBps)
-        || (input.execution?.priceSource !== 'open' && input.execution?.priceSource !== 'close' && input.execution?.priceSource !== 'mid')
-      ) {
-        const error = new Error('invalid_execution_config')
-        ;(error as Error & { __builderError: boolean; code: string }).__builderError = true
-        ;(error as Error & { __builderError: boolean; code: string }).code = 'invalid_execution_config'
-        throw error
-      }
-      return defaultPayload()
-    })
-
+  it('resolves canonical execution defaults when conversation omits explicit execution config', async () => {
     await act(async () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
@@ -616,12 +609,22 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       await Promise.resolve()
     })
 
-    expect(mockCreateBacktestJob).not.toHaveBeenCalled()
-    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestPayloadInvalid')
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(expect.objectContaining({
+      initialCash: 10000,
+      leverage: 1,
+      execution: expect.objectContaining({
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+      }),
+      allowPartial: true,
+    }))
+    expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
   })
 
-  it('strips legacy hydrated backtest defaults so cached conversations also fail fast', async () => {
+  it('keeps legacy hydrated defaults runnable under the direct-run model', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    seeded[0].backtestExecutionConfigExplicit = false
     seeded[0].paramValues = {
       ...seeded[0].paramValues,
       backtestInitialCash: 10000,
@@ -633,22 +636,6 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     }
     localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(seeded))
 
-    mockBuildBacktestPayload.mockImplementation((input: any) => {
-      if (
-        !Number.isFinite(input.initialCash)
-        || !Number.isFinite(input.leverage)
-        || !Number.isFinite(input.execution?.slippageBps)
-        || !Number.isFinite(input.execution?.feeBps)
-        || (input.execution?.priceSource !== 'open' && input.execution?.priceSource !== 'close' && input.execution?.priceSource !== 'mid')
-      ) {
-        const error = new Error('invalid_execution_config')
-        ;(error as Error & { __builderError: boolean; code: string }).__builderError = true
-        ;(error as Error & { __builderError: boolean; code: string }).code = 'invalid_execution_config'
-        throw error
-      }
-      return defaultPayload()
-    })
-
     await act(async () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
@@ -659,8 +646,17 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       await Promise.resolve()
     })
 
-    expect(mockCreateBacktestJob).not.toHaveBeenCalled()
-    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestPayloadInvalid')
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(expect.objectContaining({
+      initialCash: 10000,
+      leverage: 1,
+      execution: expect.objectContaining({
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+      }),
+      allowPartial: true,
+    }))
+    expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
   })
 
   it('keeps exact default execution values when the conversation marked them as explicit', async () => {
