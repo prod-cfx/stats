@@ -204,6 +204,73 @@ function seedConfirmedConversation(now = Date.now()) {
   ]))
 }
 
+function buildPersistedConversation(now = Date.now()) {
+  return {
+    id: 'conv-1',
+    title: 'persisted-conv',
+    messages: [{ id: 'persisted', role: 'assistant', content: 'persisted-message' }],
+    params: {
+      exchange: 'binance',
+      symbol: 'ETHUSDT',
+      baseTimeframe: '15m',
+      buyWindowMin: 3,
+      buyDropPct: 1,
+      sellWindowMin: 15,
+      sellRisePct: 2,
+      positionPct: 10,
+    },
+    paramSchema: null,
+    paramValues: {
+      exchange: 'binance',
+      symbol: 'ETHUSDT',
+      baseTimeframe: '15m',
+      buyWindowMin: 3,
+      buyDropPct: 1,
+      sellWindowMin: 15,
+      sellRisePct: 2,
+      positionPct: 10,
+      backtestInitialCash: 10000,
+      backtestLeverage: 1,
+      backtestSlippageBps: 10,
+      backtestFeeBps: 5,
+      backtestPriceSource: 'close',
+      backtestAllowPartial: true,
+    },
+    backtestResult: null,
+    logicGraph: {
+      version: 1,
+      status: 'confirmed',
+      trigger: [],
+      actions: [],
+      risk: [],
+      meta: {
+        exchange: 'binance',
+        symbol: 'ETHUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+      },
+    },
+    llmCodegenSessionId: null,
+    publishedStrategyInstanceId: 'strategy-1',
+    publishedSnapshotId: 'snapshot-1',
+    publishedScriptGraphVersion: 1,
+    backtestExecutionConfigExplicit: true,
+    latestSignalMessage: null,
+    backtestExecutionState: 'idle',
+    updatedAt: now,
+  }
+}
+
+function seedVersionedConversation(version: string, now = Date.now()) {
+  localStorage.setItem(
+    'ai_quant_conversations_v1',
+    JSON.stringify({
+      version,
+      conversations: [buildPersistedConversation(now)],
+    }),
+  )
+}
+
 describe('AiQuantPageClient backtest range integration', () => {
   let container: HTMLDivElement
   let root: ReturnType<typeof createRoot> | null
@@ -351,5 +418,33 @@ describe('AiQuantPageClient backtest range integration', () => {
 
     const contentColumn = grid?.lastElementChild
     expect(contentColumn?.className).toContain('min-w-0')
+  })
+
+  it('restores persisted conversations when the stored deploy version matches', async () => {
+    localStorage.clear()
+    seedVersionedConversation('deploy-current', Date.now())
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).toContain('persisted-message')
+    expect(container.textContent).toContain('"symbol":"ETHUSDT"')
+  })
+
+  it('drops persisted conversations when the stored deploy version is stale', async () => {
+    localStorage.clear()
+    seedVersionedConversation('deploy-old', Date.now())
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).not.toContain('persisted-message')
+    expect(container.textContent).toContain('"symbol":"BTCUSDT"')
   })
 })
