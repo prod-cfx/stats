@@ -43,6 +43,20 @@ const translationMap: Record<string, string> = {
   'aiQuant.messages.staleConversationRecovered': '检测到本地会话已过期，已为你重建一个干净的对话，请重新确认并生成策略。',
 }
 
+function readStoredConversations<T>(): T[] {
+  const raw = localStorage.getItem('ai_quant_conversations_v1')
+  if (!raw) {
+    return []
+  }
+
+  const parsed = JSON.parse(raw) as T[] | { conversations?: T[] }
+  if (Array.isArray(parsed)) {
+    return parsed
+  }
+
+  return Array.isArray(parsed?.conversations) ? parsed.conversations : []
+}
+
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({ t: (key: string) => translationMap[key] ?? key }),
 }))
@@ -944,9 +958,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     })
 
     await waitForAssertion(() => {
-      const stored = JSON.parse(
-        localStorage.getItem('ai_quant_conversations_v1') ?? '[]',
-      ) as Array<{ pendingCanonicalDigest?: string | null }>
+      const stored = readStoredConversations<{ pendingCanonicalDigest?: string | null }>()
       expect(stored[0]?.pendingCanonicalDigest ?? null).toBeNull()
       expect(
         (container.querySelector('[data-testid="confirm-graph"]') as HTMLButtonElement | null)?.disabled,
@@ -1093,9 +1105,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       expect(container.querySelector('[data-testid="publication-gate"]')?.textContent).toBe('')
     })
 
-    const stored = JSON.parse(
-      localStorage.getItem('ai_quant_conversations_v1') ?? '[]',
-    ) as Array<{ publicationGate?: Record<string, unknown> | null }>
+    const stored = readStoredConversations<{ publicationGate?: Record<string, unknown> | null }>()
     expect(stored[0]).toHaveProperty('publicationGate', null)
   })
 

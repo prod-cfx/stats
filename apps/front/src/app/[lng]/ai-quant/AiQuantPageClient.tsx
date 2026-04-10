@@ -49,10 +49,11 @@ import {
   createConversation,
   createRecoveryConversation,
   hasLatestPublishedCode,
-  hydrateConversations,
   invalidateConversationPublication,
   mapExchangeStatusesToDeployAccounts,
   normalizeParamsFromValues,
+  readPersistedConversations,
+  serializePersistedConversations,
   shouldInvalidatePublicationForParamChange,
 } from './ai-quant-page-conversation'
 import {
@@ -71,7 +72,13 @@ const INTENT_TTL_MS = 30 * 60 * 1000
 
 type CapabilityState = 'loading' | 'ready' | 'failed'
 
-export function AiQuantPageClient() {
+interface AiQuantPageClientProps {
+  deployVersion?: string
+}
+
+export function AiQuantPageClient({
+  deployVersion = 'local-dev',
+}: AiQuantPageClientProps = {}) {
   const { t } = useTranslation()
   const params = useParams<{ lng: string }>()
   const lng = params?.lng === 'en' ? 'en' : 'zh'
@@ -97,6 +104,7 @@ export function AiQuantPageClient() {
   const [backtestCapabilities, setBacktestCapabilities] = useState<BacktestCapabilities | null>(
     null,
   )
+  const [conversationStorageReady, setConversationStorageReady] = useState(false)
   const [backtestCapabilityRetryNonce, setBacktestCapabilityRetryNonce] = useState(0)
   const [codegenBusyConversationIds, setCodegenBusyConversationIds] = useState<string[]>([])
   const isMountedRef = useRef(true)
@@ -121,30 +129,32 @@ export function AiQuantPageClient() {
 
   useEffect(() => {
     const raw = localStorage.getItem(CONVERSATIONS_STORAGE_KEY)
-    if (!raw) {
-      const seed = createConversation(t)
-      setConversations([seed])
-      setActiveConversationId(seed.id)
-      return
+    const result = readPersistedConversations({
+      raw,
+      translate: t,
+      version: deployVersion,
+    })
+
+    setConversations(result.conversations)
+    setActiveConversationId(result.conversations[0].id)
+
+    if (result.shouldPersist) {
+      localStorage.setItem(
+        CONVERSATIONS_STORAGE_KEY,
+        serializePersistedConversations(result.conversations, deployVersion),
+      )
     }
-    try {
-      const normalized = hydrateConversations(raw, t)
-      if (!Array.isArray(normalized) || normalized.length === 0) throw new Error('invalid')
-      setConversations(normalized)
-      setActiveConversationId(normalized[0].id)
-    } catch {
-      const seed = createConversation(t)
-      setConversations([seed])
-      setActiveConversationId(seed.id)
-      localStorage.removeItem(CONVERSATIONS_STORAGE_KEY)
-    }
+    setConversationStorageReady(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [deployVersion])
 
   useEffect(() => {
-    if (!conversations.length) return
-    localStorage.setItem(CONVERSATIONS_STORAGE_KEY, JSON.stringify(conversations))
-  }, [conversations])
+    if (!conversationStorageReady || !conversations.length) return
+    localStorage.setItem(
+      CONVERSATIONS_STORAGE_KEY,
+      serializePersistedConversations(conversations, deployVersion),
+    )
+  }, [conversationStorageReady, conversations, deployVersion])
 
   useEffect(() => {
     if (!session?.userId) return

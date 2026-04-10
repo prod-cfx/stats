@@ -97,6 +97,11 @@ export const CONVERSATIONS_STORAGE_KEY = 'ai_quant_conversations_v1'
 export const AI_QUANT_PERSISTED_SCHEMA_VERSION = 2
 export const STALE_CONVERSATION_RECOVERY_MESSAGE_KEY = 'aiQuant.messages.staleConversationRecovered'
 
+interface PersistedConversationEnvelope {
+  version: string
+  conversations: ConversationState[]
+}
+
 export interface ConversationState {
   id: string
   schemaVersion: number
@@ -788,5 +793,83 @@ export function hydrateConversations(
     })
   } catch {
     return [createConversation(translate)]
+  }
+}
+
+function normalizeConversationStorageVersion(version: string): string {
+  const normalized = version.trim()
+  return normalized.length > 0 ? normalized : 'unknown'
+}
+
+export function serializePersistedConversations(
+  conversations: ConversationState[],
+  version: string,
+): string {
+  const envelope: PersistedConversationEnvelope = {
+    version: normalizeConversationStorageVersion(version),
+    conversations,
+  }
+  return JSON.stringify(envelope)
+}
+
+export function readPersistedConversations(input: {
+  raw: string | null
+  translate: (key: string) => string
+  version: string
+}): {
+  conversations: ConversationState[]
+  shouldPersist: boolean
+} {
+  const { raw, translate, version } = input
+  const fallback = [createConversation(translate)]
+  if (!raw) {
+    return {
+      conversations: fallback,
+      shouldPersist: false,
+    }
+  }
+
+  try {
+    const parsed = JSON.parse(raw) as ConversationState[] | PersistedConversationEnvelope
+
+    if (Array.isArray(parsed)) {
+      if (parsed.length === 0) {
+        throw new Error('empty legacy conversations')
+      }
+      return {
+        conversations: parsed.map(item => hydrateConversation(item)),
+        shouldPersist: true,
+      }
+    }
+
+    const storedVersion =
+      typeof parsed?.version === 'string'
+        ? normalizeConversationStorageVersion(parsed.version)
+        : null
+    const normalizedVersion = normalizeConversationStorageVersion(version)
+    const storedConversations = Array.isArray(parsed?.conversations)
+      ? parsed.conversations
+      : null
+
+    if (!storedVersion || !storedConversations || storedConversations.length === 0) {
+      throw new Error('invalid conversation envelope')
+    }
+
+    if (storedVersion !== normalizedVersion) {
+      return {
+        conversations: fallback,
+        shouldPersist: true,
+      }
+    }
+
+    return {
+      conversations: storedConversations.map(item => hydrateConversation(item)),
+      shouldPersist: false,
+    }
+  } catch {
+    return {
+      conversations: fallback,
+      shouldPersist: true,
+    }
   }
 }
