@@ -4,6 +4,7 @@
  */
 
 import { createApiClient as createZodiosClient } from '@ai/api-contracts'
+import { unwrapTransportResponse } from '@ai/shared'
 
 function normalizePublicUrlEnv(value?: string): string | undefined {
   const normalized = value?.trim()
@@ -194,11 +195,5 @@ export function buildCachedFetchOptions(
  * 处理 { data: T } 和直接返回 T 两种格式
  */
 export function unwrapApiResponse<T>(response: T | { data?: T; message?: string }): T {
-  if (response && typeof response === 'object' && 'data' in response) {
-    const data = (response as { data?: T }).data
-    if (data !== undefined) {
-      return data
-    }
-  }
-  return response as T
+  return unwrapTransportResponse(response)
 }

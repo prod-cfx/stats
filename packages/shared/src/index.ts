@@ -28,6 +28,7 @@ export * from './types/market-data'
 export * from './types/orderbook'
 export * from './types/setting-value'
 export * from './types/trading-pair'
+export * from './utils/api-transport'
 export * from './utils/number'
 export * from './utils/url-validation'
 
