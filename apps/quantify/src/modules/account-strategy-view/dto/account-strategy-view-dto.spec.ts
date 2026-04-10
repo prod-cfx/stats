@@ -70,11 +70,16 @@ describe('accountStrategyViewDtos', () => {
     const snapshotValuesMetadataKeys = Reflect.getMetadataKeys(AccountStrategySnapshotDto.prototype, 'paramValues')
     const snapshotVersionMetadataKeys = Reflect.getMetadataKeys(AccountStrategySnapshotDto.prototype, 'schemaVersion')
 
+    const snapshotIdMetadataKeys = Reflect.getMetadataKeys(AccountStrategySnapshotDto.prototype, 'publishedSnapshotId')
+    const snapshotHashMetadataKeys = Reflect.getMetadataKeys(AccountStrategySnapshotDto.prototype, 'snapshotHash')
+
     expect(listItemMetadataKeys.length).toBeGreaterThan(0)
     expect(listItemValuesMetadataKeys.length).toBeGreaterThan(0)
     expect(listItemVersionMetadataKeys.length).toBeGreaterThan(0)
     expect(snapshotSchemaMetadataKeys.length).toBeGreaterThan(0)
     expect(snapshotValuesMetadataKeys.length).toBeGreaterThan(0)
     expect(snapshotVersionMetadataKeys.length).toBeGreaterThan(0)
+    expect(snapshotIdMetadataKeys.length).toBeGreaterThan(0)
+    expect(snapshotHashMetadataKeys.length).toBeGreaterThan(0)
   })
 })

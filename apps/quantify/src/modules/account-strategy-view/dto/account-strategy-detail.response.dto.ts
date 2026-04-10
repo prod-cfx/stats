@@ -102,6 +102,12 @@ export class AccountStrategySnapshotDto {
   @ApiPropertyOptional({ nullable: true })
   positionPct!: number | null
 
+  @ApiPropertyOptional({ nullable: true })
+  publishedSnapshotId!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  snapshotHash!: string | null
+
   @ApiPropertyOptional({ nullable: true, type: 'object', additionalProperties: true })
   paramSchema!: Record<string, unknown> | null
 

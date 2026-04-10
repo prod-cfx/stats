@@ -145,10 +145,18 @@ export class AccountStrategyViewService {
       ...(row.params as Record<string, unknown> ?? {}),
       ...(sub?.customParams as Record<string, unknown> ?? {}),
     } as Record<string, unknown>
+    const strategySchema = this.resolveStrategySchema(row)
+    const schemaVersion = this.resolveSchemaVersion(row)
     const dynamicParams = this.buildDynamicParams({
-      strategySchema: this.resolveStrategySchema(row),
+      strategySchema,
       mergedParams,
-      schemaVersion: this.resolveSchemaVersion(row),
+      schemaVersion,
+    })
+    const detailSnapshot = await this.resolveDetailSnapshotView({
+      userId,
+      row,
+      strategySchema,
+      schemaVersion,
     })
 
     const symbol = this.readString(mergedParams, ['symbol'])
@@ -307,23 +315,23 @@ export class AccountStrategyViewService {
       todayPnl,
       equitySeries: derivedEquitySeries,
       snapshot: {
-        publishedSnapshotId: resolvedSnapshot.publishedSnapshotId,
-        snapshotHash: resolvedSnapshot.snapshotHash,
-        exchange: resolvedSnapshot.paramValues
-          ? this.readString(resolvedSnapshot.paramValues, ['exchange', 'provider', 'exchangeId'])
+        exchange: detailSnapshot.snapshotParams
+          ? this.readString(detailSnapshot.snapshotParams, ['exchange', 'provider', 'exchangeId'])
           : null,
-        symbol: resolvedSnapshot.paramValues
-          ? this.readString(resolvedSnapshot.paramValues, ['symbol'])
+        symbol: detailSnapshot.snapshotParams
+          ? this.readString(detailSnapshot.snapshotParams, ['symbol'])
           : null,
-        timeframe: resolvedSnapshot.paramValues
-          ? this.readString(resolvedSnapshot.paramValues, ['timeframe', 'period'])
+        timeframe: detailSnapshot.snapshotParams
+          ? this.readString(detailSnapshot.snapshotParams, ['timeframe', 'period'])
           : null,
-        positionPct: resolvedSnapshot.paramValues
-          ? this.readNumber(resolvedSnapshot.paramValues, ['positionPct', 'positionSizeRatioPercent'])
+        positionPct: detailSnapshot.snapshotParams
+          ? this.readNumber(detailSnapshot.snapshotParams, ['positionPct', 'positionSizeRatioPercent'])
           : null,
-        paramSchema: dynamicParams.paramSchema,
-        paramValues: resolvedSnapshot.paramValues,
-        schemaVersion: dynamicParams.schemaVersion,
+        publishedSnapshotId: detailSnapshot.publishedSnapshotId,
+        snapshotHash: detailSnapshot.snapshotHash,
+        paramSchema: detailSnapshot.dynamicParams.paramSchema,
+        paramValues: detailSnapshot.dynamicParams.paramValues,
+        schemaVersion: detailSnapshot.dynamicParams.schemaVersion,
         deployAccountName: sub?.exchangeAccount?.name ?? null,
         deployAt: sub?.subscribedAt?.toISOString() ?? row.startedAt?.toISOString() ?? null,
       },
@@ -1405,6 +1413,87 @@ export class AccountStrategyViewService {
       sourceStrategyInstanceId: snapshot.strategyInstanceId,
       sourceStrategyTemplateId: snapshot.strategyTemplateId,
     }
+  }
+
+  private async resolveDetailSnapshotView(input: {
+    userId: string
+    row: unknown
+    strategySchema: Record<string, unknown> | null
+    schemaVersion: string | null
+  }): Promise<{
+    publishedSnapshotId: string | null
+    snapshotHash: string | null
+    snapshotParams: Record<string, unknown> | null
+    dynamicParams: {
+      paramSchema: Record<string, unknown> | null
+      paramValues: Record<string, unknown> | null
+      schemaVersion: string | null
+    }
+  }> {
+    const binding = this.readStrategySnapshotBinding(input.row)
+    const emptyDynamicParams = this.buildDynamicParams({
+      strategySchema: input.strategySchema,
+      mergedParams: {},
+      schemaVersion: input.schemaVersion,
+    })
+
+    if (!binding.publishedSnapshotId || !this.publishedSnapshotsRepository) {
+      return {
+        publishedSnapshotId: binding.publishedSnapshotId,
+        snapshotHash: binding.snapshotHash,
+        snapshotParams: null,
+        dynamicParams: emptyDynamicParams,
+      }
+    }
+
+    const snapshot = await this.publishedSnapshotsRepository.findByIdForUser(binding.publishedSnapshotId, input.userId)
+    if (!snapshot) {
+      return {
+        publishedSnapshotId: binding.publishedSnapshotId,
+        snapshotHash: binding.snapshotHash,
+        snapshotParams: null,
+        dynamicParams: emptyDynamicParams,
+      }
+    }
+
+    try {
+      const snapshotParams = this.resolveSnapshotParamsForDeploy(snapshot)
+      return {
+        publishedSnapshotId: snapshot.id,
+        snapshotHash: snapshot.snapshotHash,
+        snapshotParams,
+        dynamicParams: this.buildDynamicParams({
+          strategySchema: input.strategySchema,
+          mergedParams: snapshotParams,
+          schemaVersion: input.schemaVersion,
+        }),
+      }
+    } catch {
+      return {
+        publishedSnapshotId: snapshot.id,
+        snapshotHash: snapshot.snapshotHash,
+        snapshotParams: null,
+        dynamicParams: emptyDynamicParams,
+      }
+    }
+  }
+
+  private readStrategySnapshotBinding(source: unknown): {
+    publishedSnapshotId: string | null
+    snapshotHash: string | null
+  } {
+    const root = this.readRecord(source)
+    const metadata = this.readRecord(root?.metadata)
+    return {
+      publishedSnapshotId: this.normalizeOptionalString(metadata?.publishedSnapshotId),
+      snapshotHash: this.normalizeOptionalString(metadata?.snapshotHash),
+    }
+  }
+
+  private normalizeOptionalString(value: unknown): string | null {
+    if (typeof value !== 'string') return null
+    const normalized = value.trim()
+    return normalized.length > 0 ? normalized : null
   }
 
   private resolveSnapshotParamsForDeploy(snapshot: {

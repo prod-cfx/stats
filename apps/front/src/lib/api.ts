@@ -1454,6 +1454,8 @@ export interface AccountAiQuantStrategySnapshot {
   symbol: string | null
   timeframe: string | null
   positionPct: number | null
+  publishedSnapshotId: string | null
+  snapshotHash: string | null
   paramSchema: AccountAiQuantParamSchema | null
   paramValues: AccountAiQuantParamValues | null
   schemaVersion: string | null
@@ -1581,6 +1583,8 @@ function mapMockStrategyToDetail(item: ReturnType<typeof getStrategyById>): Acco
       symbol: item.symbol,
       timeframe: item.timeframe,
       positionPct: item.positionPct,
+      publishedSnapshotId: null,
+      snapshotHash: null,
       paramSchema: item.paramSchema ?? null,
       paramValues: item.paramSchema ? (item.paramValues ?? {}) : null,
       schemaVersion: item.schemaVersion ?? null,
@@ -1710,12 +1714,7 @@ export async function fetchAccountAiQuantStrategyDetail(
       return detail
     }, 'FETCH_ACCOUNT_AI_QUANT_STRATEGY_DETAIL')
   } catch (error) {
-    if (!shouldFallbackToAccountAiQuantMock(error)) throw error
-    const fallback = getStrategyById(strategyId)
-    if (!fallback || fallback.status === 'draft') {
-      throw new ApiError('策略详情不存在', 'ACCOUNT_AI_QUANT_NOT_FOUND', 404)
-    }
-    return mapMockStrategyToDetail(fallback)
+    throw error
   }
 }
 

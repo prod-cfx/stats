@@ -79,7 +79,9 @@ export function mapAccountStrategyListItemToRecord(
 export function mapAccountStrategyDetailToRecord(
   detail: AccountAiQuantStrategyDetail,
 ): AiQuantStrategyRecord {
-  const exchange = detail.exchange === 'okx' ? 'okx' : 'binance'
+  const snapshotExchange = detail.snapshot.exchange
+  const resolvedExchange = snapshotExchange ?? detail.exchange
+  const exchange = resolvedExchange === 'okx' ? 'okx' : resolvedExchange === 'hyperliquid' ? 'hyperliquid' : 'binance'
   const initialCapital = detail.accountOverview?.initialBalance
     ?? detail.equitySeries[0]?.value
     ?? 10000
@@ -94,9 +96,9 @@ export function mapAccountStrategyDetailToRecord(
     name: detail.name,
     status: normalizeStatus(detail.status),
     exchange,
-    symbol: detail.symbol ?? '--',
-    timeframe: detail.timeframe ?? '--',
-    positionPct: normalizeNumber(detail.positionPct),
+    symbol: detail.snapshot.symbol ?? detail.symbol ?? '--',
+    timeframe: detail.snapshot.timeframe ?? detail.timeframe ?? '--',
+    positionPct: normalizeNumber(detail.snapshot.positionPct ?? detail.positionPct),
     initialCapital,
     metrics: {
       returnPct: normalizeNumber(detail.metrics.returnPct),
@@ -105,6 +107,8 @@ export function mapAccountStrategyDetailToRecord(
       tradeCount: normalizeNumber(detail.metrics.tradeCount),
     },
     ...dynamicParams,
+    publishedSnapshotId: detail.snapshot.publishedSnapshotId ?? null,
+    snapshotHash: detail.snapshot.snapshotHash ?? null,
     totalPnl: detail.totalPnl ?? null,
     todayPnl: detail.todayPnl ?? null,
     accountOverview: detail.accountOverview

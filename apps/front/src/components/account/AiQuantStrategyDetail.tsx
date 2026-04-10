@@ -67,9 +67,18 @@ function formatOptionalAmount(value: number | null | undefined) {
 interface AiQuantStrategyDetailProps {
   lng: 'zh' | 'en'
   strategy: AiQuantStrategyRecord | null
+  onRunBacktest?: () => void
+  isBacktestRunning?: boolean
+  backtestError?: string | null
 }
 
-export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailProps) {
+export function AiQuantStrategyDetail({
+  lng,
+  strategy,
+  onRunBacktest,
+  isBacktestRunning = false,
+  backtestError = null,
+}: AiQuantStrategyDetailProps) {
   const { t } = useTranslation()
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const series = strategy?.equitySeries ?? []
@@ -91,6 +100,8 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
     () => buildDynamicParamRows(strategy?.paramSchema ?? null, strategy?.paramValues ?? null),
     [strategy?.paramSchema, strategy?.paramValues],
   )
+
+  const canRunBacktest = !!strategy?.publishedSnapshotId && !isBacktestRunning
 
   if (!strategy) {
     return (
@@ -122,6 +133,14 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
           <span className={`rounded-lg border px-2 py-1 text-xs ${STATUS_CLASS[strategy.status]}`}>
             {STATUS_LABEL[strategy.status]}
           </span>
+          <button
+            type="button"
+            onClick={onRunBacktest}
+            disabled={!canRunBacktest || !onRunBacktest}
+            className="rounded-lg border border-cyan-500/30 px-3 py-1.5 text-xs font-semibold text-cyan-300 disabled:cursor-not-allowed disabled:border-[color:var(--cf-border)] disabled:text-[color:var(--cf-muted)]"
+          >
+            {isBacktestRunning ? '回测中…' : '运行回测'}
+          </button>
           <Link
             href={`/${lng}/account?tab=ai-quant`}
             className="rounded-lg border border-[color:var(--cf-border)] px-3 py-1.5 text-xs font-semibold text-[color:var(--cf-text-strong)]"
@@ -130,6 +149,12 @@ export function AiQuantStrategyDetail({ lng, strategy }: AiQuantStrategyDetailPr
           </Link>
         </div>
       </section>
+
+      {backtestError && (
+        <section className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+          {backtestError}
+        </section>
+      )}
 
       <section className="grid gap-3 md:grid-cols-5">
         <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-4">

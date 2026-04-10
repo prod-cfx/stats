@@ -325,6 +325,92 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(publishedSnapshotsRepository.findByIdForUser).not.toHaveBeenCalled()
   })
 
+  it('exposes bound snapshot identity and returns snapshot-truth params for detail backtest entry', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-snapshot',
+        name: 'Snapshot strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        params: { exchange: 'okx', symbol: 'ETHUSDT', timeframe: '5m', positionPct: 5, riskMode: 'live-override' },
+        metadata: { publishedSnapshotId: 'snapshot-1', snapshotHash: 'stale-hash' },
+        strategyTemplateId: 'tpl-snapshot',
+        strategyTemplate: {
+          defaultParams: { riskMode: 'balanced' },
+          paramsSchema: {
+            type: 'object',
+            properties: {
+              riskMode: { type: 'string' },
+              positionPct: { type: 'number' },
+            },
+          },
+          rulesVersion: 8,
+        },
+        subscriptions: [{
+          userId: 'user-1',
+          status: 'active',
+          customParams: { riskMode: 'live-override' },
+          subscribedAt: new Date('2026-03-20T10:00:00.000Z'),
+          exchangeAccount: { name: '主账户' },
+        }],
+        startedAt: new Date('2026-03-20T10:01:00.000Z'),
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue(null),
+      findLatestExecutedAccountByUserAndSymbol: jest.fn().mockResolvedValue(null),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-03-18T10:00:00.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const statsService = { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() }
+    const strategyInstancesService = { updateInstance: jest.fn() }
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+    const publishedSnapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        paramsSnapshot: { exchange: 'binance', symbol: 'BTCUSDT', timeframe: '15m', riskMode: 'snapshot' },
+        lockedParams: { positionPct: 12 },
+      }),
+    }
+
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+      undefined,
+      undefined,
+      undefined,
+      publishedSnapshotsRepository as any,
+    )
+
+    const detail = await service.getStrategyDetail('user-1', 'inst-snapshot')
+
+    expect(detail.exchange).toBe('okx')
+    expect(detail.symbol).toBe('ETHUSDT')
+    expect(detail.snapshot.publishedSnapshotId).toBe('snapshot-1')
+    expect(detail.snapshot.snapshotHash).toBe('snapshot-hash-1')
+    expect(detail.snapshot.exchange).toBe('binance')
+    expect(detail.snapshot.symbol).toBe('BTCUSDT')
+    expect(detail.snapshot.timeframe).toBe('15m')
+    expect(detail.snapshot.positionPct).toBe(12)
+    expect(detail.snapshot.paramValues).toEqual({
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      riskMode: 'snapshot',
+      positionPct: 12,
+    })
+    expect(detail.snapshot.paramValues).not.toEqual(detail.paramValues)
+  })
+
   it('rejects detail when strategy is not actively subscribed', async () => {
     const repo = {
       findStrategyForUser: jest.fn().mockResolvedValue({
