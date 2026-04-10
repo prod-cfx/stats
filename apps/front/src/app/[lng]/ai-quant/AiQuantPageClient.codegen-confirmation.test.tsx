@@ -578,6 +578,65 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     ).toBe(true)
   })
 
+  it('clears pending canonical digest when backend returns a blocking clarification gate', async () => {
+    localStorage.clear()
+    seedDraftConversation(Date.now(), {
+      pendingCanonicalDigest: 'sha256:canonical-1',
+    })
+    mockContinueLlmCodegenSession.mockResolvedValueOnce({
+      id: 'session-1',
+      status: 'DRAFTING',
+      clarificationGate: {
+        blocked: true,
+        items: [
+          {
+            key: 'market.marketType',
+            field: 'marketType',
+            reason: 'missing_market_type',
+            question: '该策略运行在现货还是合约市场？',
+            allowedAnswers: ['spot', 'perp'],
+            blocking: true,
+            status: 'pending',
+          },
+        ],
+        pendingItems: [
+          {
+            key: 'market.marketType',
+            field: 'marketType',
+            reason: 'missing_market_type',
+            question: '该策略运行在现货还是合约市场？',
+            allowedAnswers: ['spot', 'perp'],
+            blocking: true,
+            status: 'pending',
+          },
+        ],
+      },
+      canonicalDigest: null,
+      specDesc: null,
+      semanticGraph: null,
+      validationReport: null,
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="clarification-answer"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const stored = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]') as Array<{ pendingCanonicalDigest?: string | null }>
+    expect(stored[0]?.pendingCanonicalDigest ?? null).toBeNull()
+    expect(
+      (container.querySelector('[data-testid="confirm-graph"]') as HTMLButtonElement | null)?.disabled,
+    ).toBe(true)
+  })
+
   it('renders publication gate mismatch details when publish gate is blocked', async () => {
     seedDraftConversation(Date.now(), {
       publicationGate: {

@@ -452,6 +452,9 @@ export async function requestAiQuantCodegen(args: {
         const nextClarificationGate = normalizeClarificationGate(response.clarificationGate) ?? conv.clarificationGate
         const nextPublicationGate = response.publicationGate ?? conv.publicationGate
         const nextPendingCanonicalDigest = (() => {
+          if (nextClarificationGate?.blocked) {
+            return null
+          }
           if (typeof response.canonicalDigest === 'string' && response.canonicalDigest.trim()) {
             return response.canonicalDigest.trim()
           }
@@ -517,7 +520,10 @@ export async function requestAiQuantCodegen(args: {
           validationReport: nextValidationReport,
           clarificationGate: nextClarificationGate,
           publicationGate: nextPublicationGate,
-          pendingCanonicalDigest: nextPendingCanonicalDigest ?? conv.pendingCanonicalDigest,
+          pendingCanonicalDigest:
+            nextPendingCanonicalDigest !== undefined
+              ? nextPendingCanonicalDigest
+              : conv.pendingCanonicalDigest,
           backtestResult: null,
           latestSignalMessage: null,
           messages: [

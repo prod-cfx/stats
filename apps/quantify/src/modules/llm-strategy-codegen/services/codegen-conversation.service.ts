@@ -224,11 +224,17 @@ export class CodegenConversationService {
     }
 
     const baseClarificationState = this.readClarificationState(session.clarificationState)
+    const hasStructuredClarificationAnswers = Boolean(
+      dto.clarificationAnswers && Object.keys(dto.clarificationAnswers).length > 0,
+    )
     const baseChecklist = this.applyClarificationAnswers(
       this.readChecklist(session.checklist),
       baseClarificationState,
       dto.clarificationAnswers,
     )
+    const clarificationStateAfterAnswers = hasStructuredClarificationAnswers
+      ? this.clarificationRules.detect(baseChecklist)
+      : baseClarificationState
     const messageChecklist = this.normalizeChecklist({
       ...this.inferChecklistFromMessage(dto.message),
       ...this.extractChecklist(dto),
@@ -241,11 +247,21 @@ export class CodegenConversationService {
       model: dto.model,
     }, constraintPack.conversationHistory ?? [])
     if (!plan.related) {
+      if (hasStructuredClarificationAnswers) {
+        return this.continueWithStructuredClarificationAnswers({
+          session,
+          checklist: baseChecklist,
+          clarificationState: clarificationStateAfterAnswers,
+          constraintPack,
+          message: dto.message,
+        })
+      }
       return this.finalizeSessionResponse({
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt: plan.assistantPrompt || '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+        clarificationState: clarificationStateAfterAnswers,
       })
     }
     const mergedChecklist = this.mergeChecklistSnapshots(preMergedChecklist, plan.logic ?? {})
@@ -725,6 +741,69 @@ export class CodegenConversationService {
     }
 
     return parsed - 1
+  }
+
+  private async continueWithStructuredClarificationAnswers(args: {
+    session: {
+      id: string
+      status: LlmCodegenSessionStatus
+    }
+    checklist: ChecklistPayload
+    clarificationState: StrategyClarificationState
+    constraintPack: ReturnType<CodegenConversationService['readConstraintPack']>
+    message: string
+  }): Promise<CodegenSessionResponseDto> {
+    const historyAfterAnswer = this.appendConversationHistory(
+      args.constraintPack.conversationHistory ?? [],
+      args.message,
+    )
+
+    if (args.clarificationState.status === 'NEEDS_CLARIFICATION') {
+      const assistantPrompt = this.clarificationQuestion.build(args.clarificationState)
+        || '请先澄清这条规则，我再继续完善逻辑图。'
+      await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
+        status: 'DRAFTING',
+        checklist: args.checklist,
+        clarificationState: args.clarificationState,
+        constraintPack: {
+          ...args.constraintPack,
+          conversationHistory: historyAfterAnswer,
+        },
+      }))
+
+      return this.finalizeSessionResponse({
+        id: args.session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt,
+        clarificationState: args.clarificationState,
+      })
+    }
+
+    const canonicalSpec = this.canonicalSpecBuilder.build(args.checklist)
+    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
+    const canonicalDigest = this.readCanonicalDigest(specDesc)
+
+    await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
+      status: 'CHECKLIST_GATE',
+      checklist: args.checklist,
+      clarificationState: args.clarificationState,
+      constraintPack: {
+        ...args.constraintPack,
+        conversationHistory: historyAfterAnswer,
+      },
+      latestSpecDesc: specDesc,
+    }))
+
+    return this.finalizeSessionResponse({
+      id: args.session.id,
+      status: 'CHECKLIST_GATE',
+      missingFields: [],
+      assistantPrompt: '逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。',
+      clarificationState: args.clarificationState,
+      specDesc,
+      canonicalDigest,
+    })
   }
 
   private normalizeDirectionClarificationAnswer(answer: string): 'long' | 'short' | null {

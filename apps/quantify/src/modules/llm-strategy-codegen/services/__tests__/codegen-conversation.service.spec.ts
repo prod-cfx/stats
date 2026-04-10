@@ -676,6 +676,72 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
   })
 
+  it('persists structured clarification answers even when planner marks the short reply unrelated', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-clarification-unrelated-answer',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['突破布林带上轨交易'],
+        exitRules: ['价格回到布林带中轨(MA20)时平仓'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+        },
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'entry.side.1',
+            ruleId: 'entry-1',
+            reason: 'missing_side_scope',
+            field: 'positionMode',
+            allowedAnswers: ['long', 'short'],
+            blocking: true,
+            question: '突破上轨时是只做空，还是也允许做多？',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-clarification-unrelated-answer', {
+      userId: 'u1',
+      message: 'short',
+      clarificationAnswers: {
+        'entry.side.1': 'short',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.canonicalDigest).toMatch(/^sha256:/)
+    expect((result as any).clarificationGate).toEqual({
+      blocked: false,
+      items: [],
+      pendingItems: [],
+    })
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-clarification-unrelated-answer',
+      expect.objectContaining({
+        status: 'CHECKLIST_GATE',
+        checklist: expect.objectContaining({
+          entryRules: expect.arrayContaining([expect.stringContaining('做空')]),
+        }),
+      }),
+    )
+  })
+
   it('surfaces publicationGate at the top level when stored in latestSpecDesc', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-publication-gate',
@@ -723,6 +789,20 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       status: 'DRAFTING',
       checklist: {},
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'market.marketType',
+            reason: 'missing_market_type',
+            field: 'marketType',
+            blocking: true,
+            allowedAnswers: ['spot', 'perp'],
+            question: '该策略运行在现货还是合约市场？',
+            status: 'pending',
+          },
+        ],
+      },
       constraintPack: {},
     })
     mockAi.chat.mockResolvedValue({
@@ -740,6 +820,24 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(result.status).toBe('DRAFTING')
     expect(result.assistantPrompt).toContain('无关')
+    expect((result as any).clarificationGate).toEqual({
+      blocked: true,
+      items: [
+        expect.objectContaining({
+          key: 'market.marketType',
+          status: 'pending',
+          blocking: true,
+        }),
+      ],
+      pendingItems: [
+        expect.objectContaining({
+          key: 'market.marketType',
+          status: 'pending',
+          blocking: true,
+        }),
+      ],
+    })
+    expect(result.canonicalDigest).toBeNull()
     expect(mockRepo.updateSession).not.toHaveBeenCalled()
   })
 
