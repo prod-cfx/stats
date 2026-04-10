@@ -176,6 +176,8 @@ function seedDeployableConversation(now = Date.now()) {
       llmCodegenSessionId: null,
       publishedStrategyInstanceId: 'strategy-1',
       publishedSnapshotId: 'snapshot-1',
+      publishedScriptCode: 'return { ok: true }',
+      publishedScriptGraphVersion: 1,
       latestSignalMessage: null,
       backtestExecutionState: 'idle',
       updatedAt: now,

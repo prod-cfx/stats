@@ -7,6 +7,7 @@ import {
   getBacktestJobResult,
 } from '@/components/ai-quant/backtest-job-client'
 import {
+  BacktestPayloadBuilderError,
   buildBacktestPayload,
   isBacktestPayloadBuilderError,
 } from '@/components/ai-quant/backtest-payload-builder'
@@ -17,6 +18,7 @@ import type { ConversationState } from './ai-quant-page-conversation'
 import {
   buildBacktestSummaryResult,
   hasLatestPublishedCode,
+  resolveBacktestExecutionConfig,
   resolveBacktestRangeInput,
 } from './ai-quant-page-conversation'
 
@@ -117,18 +119,21 @@ export async function runAiQuantBacktest(args: {
   let payload: ReturnType<typeof buildBacktestPayload>
   try {
     const paramValues = activeConversation.paramValues
-    const backtestPriceSource = String(paramValues.backtestPriceSource ?? '')
+    const executionConfig = resolveBacktestExecutionConfig(paramValues)
+    if (!executionConfig.allowPartialValid) {
+      throw new BacktestPayloadBuilderError('invalid_execution_config')
+    }
     payload = buildBacktestPayload({
       symbol: activeConversation.params.symbol,
       baseTimeframe: activeConversation.params.baseTimeframe,
       capabilities: backtestCapabilities,
       stateTimeframes: [activeConversation.params.baseTimeframe],
-      initialCash: Number(paramValues.backtestInitialCash),
-      leverage: Number(paramValues.backtestLeverage),
+      initialCash: executionConfig.initialCash,
+      leverage: executionConfig.leverage,
       execution: {
-        slippageBps: Number(paramValues.backtestSlippageBps),
-        feeBps: Number(paramValues.backtestFeeBps),
-        priceSource: backtestPriceSource as 'open' | 'close' | 'mid',
+        slippageBps: executionConfig.slippageBps,
+        feeBps: executionConfig.feeBps,
+        priceSource: executionConfig.priceSource as 'open' | 'close' | 'mid',
       },
       strategy: {
         id:
@@ -138,7 +143,7 @@ export async function runAiQuantBacktest(args: {
         publishedSnapshotId: activeConversation.publishedSnapshotId ?? '',
       },
       range: resolveBacktestRangeInput(activeConversation.paramValues),
-      allowPartial: paramValues.backtestAllowPartial === true,
+      allowPartial: executionConfig.allowPartial,
     })
   } catch (error) {
     releaseMutex()

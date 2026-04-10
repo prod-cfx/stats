@@ -80,7 +80,7 @@ export function LogicGraphPreview({
               : 'bg-gradient-to-r from-primary to-secondary'
           } disabled:cursor-not-allowed disabled:opacity-60`}
         >
-          {graph.status === 'confirmed' ? t('aiQuant.messages.confirmedBacktest') : t('aiQuant.messages.confirmBacktest')}
+          {graph.status === 'confirmed' ? t('aiQuant.messages.confirmedGraph') : t('aiQuant.messages.confirmGraph')}
         </button>
         <button
           type="button"

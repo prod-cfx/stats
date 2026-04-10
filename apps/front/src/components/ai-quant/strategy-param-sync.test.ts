@@ -44,6 +44,43 @@ describe('strategy-param-sync', () => {
       'exitPrice: 66890',
       'maxDrawdownPct: 20',
     ]))
+    expect(result.executionTags).not.toContain('backtestRangePreset: 30D')
+  })
+
+  it('keeps backtest defaults in paramValues without leaking them into execution tags', () => {
+    const result = syncStrategyParamsFromCodegen({
+      spec: {
+        riskRules: { positionPct: 10 },
+        market: { symbols: ['BTCUSDT'], timeframes: ['15m'] },
+      },
+      fallback: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 5,
+      },
+      currentValues: {
+        backtestInitialCash: 10000,
+        backtestLeverage: 1,
+        backtestSlippageBps: 10,
+        backtestFeeBps: 5,
+        backtestPriceSource: 'close',
+        backtestAllowPartial: true,
+      },
+      capabilities: {
+        allowedSymbols: ['BTCUSDT'],
+        allowedBaseTimeframes: ['15m'],
+      },
+      contextText: '保持 10% 仓位',
+    })
+
+    expect(result.paramValues.backtestInitialCash).toBe(10000)
+    expect(result.paramValues.backtestAllowPartial).toBe(true)
+    expect(result.executionTags).not.toEqual(expect.arrayContaining([
+      'backtestInitialCash: 10000',
+      'backtestLeverage: 1',
+      'backtestAllowPartial: true',
+    ]))
   })
 
   it('refreshes symbol and timeframe enums from capabilities without dropping dynamic fields', () => {

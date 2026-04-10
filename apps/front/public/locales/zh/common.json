@@ -215,6 +215,7 @@
       "graphConfirmed": "逻辑图已确认，正在生成策略代码...",
       "publicationGateBlocked": "发布前一致性校验未通过，请先处理下方阻断项。",
       "codeGeneratedBacktest": "策略代码已生成，现在可以开始回测。",
+      "staleConversationRecovered": "检测到本地会话已过期，已为你重建一个干净的对话，请重新确认并生成策略。",
       "graphRevise": "好的，请在对话框继续描述你要修改的条件。",
       "aiDisclaimer": "AI 生成的内容可能不准确，请务必在实盘前进行充分回测。",
       "backtestDrawdownLimit": "最大回撤 <= 20% 才能一键部署",
@@ -228,8 +229,8 @@
       "graphTitle": "策略逻辑图确认",
       "version": "版本",
       "status": "状态",
-      "confirmedBacktest": "已确认，可回测",
-      "confirmBacktest": "确认并回测",
+      "confirmedGraph": "逻辑图已确认",
+      "confirmGraph": "确认逻辑图",
       "returnRevise": "返回对话修改"
     },
     "strategies": {

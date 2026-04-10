@@ -31,8 +31,15 @@ import {
 import { applyCapabilitiesToParamSchema } from '@/components/ai-quant/strategy-param-sync'
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
 import { useAuth } from '@/hooks/use-auth'
+import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
 import { fetchUserExchangeAccountStatuses } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
+import { runAiQuantBacktest } from './ai-quant-page-backtest'
+import {
+  getSemanticGraphValidationMessage,
+  reconcilePersistedActiveCodegenSession,
+  requestAiQuantCodegen,
+} from './ai-quant-page-codegen'
 import {
   BACKTEST_EXECUTION_PARAM_KEY_SET,
   CONVERSATIONS_STORAGE_KEY,
@@ -40,6 +47,8 @@ import {
   buildBacktestSummaryResult,
   buildParamSchemaWithCapabilities,
   createConversation,
+  createRecoveryConversation,
+  hasExplicitBacktestExecutionOverrides,
   hasLatestPublishedCode,
   invalidateConversationPublication,
   mapExchangeStatusesToDeployAccounts,
@@ -47,14 +56,7 @@ import {
   readPersistedConversations,
   serializePersistedConversations,
   shouldInvalidatePublicationForParamChange,
-  type ConversationState,
-  type QuantParams,
 } from './ai-quant-page-conversation'
-import {
-  getSemanticGraphValidationMessage,
-  requestAiQuantCodegen,
-} from './ai-quant-page-codegen'
-import { runAiQuantBacktest } from './ai-quant-page-backtest'
 import {
   confirmAiQuantDeploy,
   createDeployRequestId,
@@ -113,6 +115,7 @@ export function AiQuantPageClient({
   const backtestRunMutexRef = useRef(new Set<string>())
   const backtestSummarySyncRef = useRef(new Set<string>())
   const codegenRequestMutexRef = useRef(new Set<string>())
+  const restoredSessionReconciliationRef = useRef(new Set<string>())
 
   const activeConversation = useMemo(() => {
     if (!activeConversationId) return conversations[0]
@@ -267,6 +270,48 @@ export function AiQuantPageClient({
   }, [session?.userId, backtestCapabilityRetryNonce])
 
   useEffect(() => {
+    if (!session?.userId || !activeConversation?.llmCodegenSessionId) {
+      return
+    }
+
+    const reconciliationKey = `${activeConversation.id}:${activeConversation.llmCodegenSessionId}`
+    if (restoredSessionReconciliationRef.current.has(reconciliationKey)) {
+      return
+    }
+    restoredSessionReconciliationRef.current.add(reconciliationKey)
+
+    void reconcilePersistedActiveCodegenSession({
+      conversation: activeConversation,
+      backtestCapabilities,
+      setConversations,
+      t,
+    }).then((result) => {
+      if (result !== 'restarted') {
+        return
+      }
+      setConversations(prev =>
+        prev.map(conv => {
+          if (conv.id !== activeConversation.id) {
+            return conv
+          }
+          const recovered = createRecoveryConversation(t)
+          return {
+            ...recovered,
+            id: conv.id,
+            updatedAt: Date.now(),
+          }
+        }),
+      )
+    })
+  }, [
+    activeConversation,
+    backtestCapabilities,
+    setConversations,
+    session?.userId,
+    t,
+  ])
+
+  useEffect(() => {
     activeConversationIdRef.current = activeConversationId
     const previousId = previousActiveConversationIdRef.current
     if (
@@ -357,12 +402,6 @@ export function AiQuantPageClient({
   const codegenBusy = activeConversation
     ? codegenBusyConversationIds.includes(activeConversation.id)
     : false
-  const semanticGraphGuardMessage = getSemanticGraphValidationMessage(
-    activeConversation?.validationReport,
-    t('aiQuant.messages.semanticGraphInvalid', {
-      defaultValue: 'The current strategy graph is not yet executable.',
-    }),
-  )
   const canRunBacktest = useMemo(() => {
     if (!activeConversation) return false
     if (backtestCapabilityState !== 'ready') return false
@@ -851,7 +890,9 @@ export function AiQuantPageClient({
                   paramValues: nextValues,
                   params: normalizeParamsFromValues(nextValues, curr.params),
                   backtestExecutionConfigExplicit:
-                    BACKTEST_EXECUTION_PARAM_KEY_SET.has(key) ? true : curr.backtestExecutionConfigExplicit,
+                    BACKTEST_EXECUTION_PARAM_KEY_SET.has(key)
+                      ? hasExplicitBacktestExecutionOverrides(nextValues)
+                      : curr.backtestExecutionConfigExplicit,
                   updatedAt: Date.now(),
                 }
                 return shouldInvalidatePublicationForParamChange(key)

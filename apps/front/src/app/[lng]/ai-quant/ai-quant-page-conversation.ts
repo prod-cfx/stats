@@ -1,6 +1,7 @@
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import type { BacktestRangeInput } from '@/components/ai-quant/backtest-range'
 import type { BacktestResult } from '@/components/ai-quant/BacktestSummaryCard'
+import { readCanonicalDigest } from '@/components/ai-quant/canonical-confirmation'
 import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import type { StrategyLogicGraph } from '@/components/ai-quant/logic-graph-model'
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
@@ -93,6 +94,8 @@ export const DEFAULT_PARAM_SCHEMA: Record<string, unknown> = {
 
 export const DEFAULT_PARAM_VALUES: Record<string, unknown> = { ...DEFAULT_PARAMS }
 export const CONVERSATIONS_STORAGE_KEY = 'ai_quant_conversations_v1'
+export const AI_QUANT_PERSISTED_SCHEMA_VERSION = 2
+export const STALE_CONVERSATION_RECOVERY_MESSAGE_KEY = 'aiQuant.messages.staleConversationRecovered'
 
 interface PersistedConversationEnvelope {
   version: string
@@ -101,6 +104,7 @@ interface PersistedConversationEnvelope {
 
 export interface ConversationState {
   id: string
+  schemaVersion: number
   title: string
   messages: QuantMessage[]
   params: QuantParams
@@ -124,6 +128,11 @@ export interface ConversationState {
   backtestExecutionState: 'idle' | 'submitting' | 'running' | 'succeeded' | 'failed' | 'timeout'
   updatedAt: number
 }
+
+export type ConversationIntegrityIssue =
+  | 'clarification_blocked'
+  | 'digest_mismatch'
+  | 'publication_mismatch'
 
 export function normalizeClarificationGate(input: unknown): LlmClarificationGate | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) {
@@ -170,7 +179,19 @@ export const BACKTEST_EXECUTION_PARAM_KEYS = [
   'backtestAllowPartial',
 ] as const
 export const BACKTEST_EXECUTION_PARAM_KEY_SET = new Set<string>(BACKTEST_EXECUTION_PARAM_KEYS)
-const LEGACY_IMPLICIT_BACKTEST_PARAM_VALUES = {
+export type BacktestExecutionPriceSource = 'open' | 'close' | 'mid'
+
+export interface ResolvedBacktestExecutionConfig {
+  initialCash: number
+  leverage: number
+  slippageBps: number
+  feeBps: number
+  priceSource: string
+  allowPartial: boolean
+  allowPartialValid: boolean
+}
+
+export const DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES = {
   backtestInitialCash: 10000,
   backtestLeverage: 1,
   backtestSlippageBps: 10,
@@ -178,6 +199,97 @@ const LEGACY_IMPLICIT_BACKTEST_PARAM_VALUES = {
   backtestPriceSource: 'close',
   backtestAllowPartial: true,
 } as const
+
+export function hasExplicitBacktestExecutionOverrides(values: Record<string, unknown>): boolean {
+  return BACKTEST_EXECUTION_PARAM_KEYS.some(
+    key => values[key] !== DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES[key],
+  )
+}
+
+function parseBacktestExecutionNumber(
+  value: unknown,
+  fallback: number,
+): number {
+  if (value === undefined || value === null) {
+    return fallback
+  }
+  if (typeof value === 'number') {
+    return value
+  }
+  if (typeof value === 'string') {
+    if (!value.trim()) {
+      return Number.NaN
+    }
+    return Number(value)
+  }
+  return Number.NaN
+}
+
+function resolveBacktestExecutionPriceSource(
+  value: unknown,
+  fallback: BacktestExecutionPriceSource,
+): string {
+  if (value === undefined || value === null) {
+    return fallback
+  }
+  if (typeof value === 'string') {
+    return value.trim()
+  }
+  return String(value)
+}
+
+function resolveBacktestAllowPartial(
+  value: unknown,
+  fallback: boolean,
+): { value: boolean, valid: boolean } {
+  if (value === undefined || value === null) {
+    return { value: fallback, valid: true }
+  }
+  if (typeof value === 'boolean') {
+    return { value, valid: true }
+  }
+  if (value === 'true') {
+    return { value: true, valid: true }
+  }
+  if (value === 'false') {
+    return { value: false, valid: true }
+  }
+  return { value: fallback, valid: false }
+}
+
+export function resolveBacktestExecutionConfig(
+  values: Record<string, unknown>,
+): ResolvedBacktestExecutionConfig {
+  const allowPartial = resolveBacktestAllowPartial(
+    values.backtestAllowPartial,
+    DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES.backtestAllowPartial,
+  )
+
+  return {
+    initialCash: parseBacktestExecutionNumber(
+      values.backtestInitialCash,
+      DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES.backtestInitialCash,
+    ),
+    leverage: parseBacktestExecutionNumber(
+      values.backtestLeverage,
+      DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES.backtestLeverage,
+    ),
+    slippageBps: parseBacktestExecutionNumber(
+      values.backtestSlippageBps,
+      DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES.backtestSlippageBps,
+    ),
+    feeBps: parseBacktestExecutionNumber(
+      values.backtestFeeBps,
+      DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES.backtestFeeBps,
+    ),
+    priceSource: resolveBacktestExecutionPriceSource(
+      values.backtestPriceSource,
+      DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES.backtestPriceSource,
+    ),
+    allowPartial: allowPartial.value,
+    allowPartialValid: allowPartial.valid,
+  }
+}
 
 function normalizeNumber(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
@@ -263,6 +375,160 @@ export function normalizePublishedSnapshotId(snapshotId: unknown): string | null
   }
   const normalized = snapshotId.trim()
   return normalized.length > 0 ? normalized : null
+}
+
+function normalizeCodegenSessionId(sessionId: unknown): string | null {
+  if (typeof sessionId !== 'string') {
+    return null
+  }
+  const normalized = sessionId.trim()
+  return normalized.length > 0 ? normalized : null
+}
+
+function hasExplicitSchemaVersionMismatch(item: Partial<ConversationState>): boolean {
+  const schemaVersion = (item as { schemaVersion?: unknown }).schemaVersion
+  return typeof schemaVersion === 'number' && schemaVersion !== AI_QUANT_PERSISTED_SCHEMA_VERSION
+}
+
+function hasPublicationArtifacts(conversation: ConversationState): boolean {
+  return Boolean(
+    conversation.publishedStrategyInstanceId
+      || conversation.publishedSnapshotId
+      || conversation.publishedScriptCode
+      || conversation.publishedScriptGraphVersion !== null
+      || conversation.backtestResult
+      || conversation.latestSignalMessage,
+  )
+}
+
+function clearPublicationArtifacts(conversation: ConversationState): ConversationState {
+  return {
+    ...conversation,
+    publicationGate: null,
+    publishedStrategyInstanceId: null,
+    publishedSnapshotId: null,
+    publishedScriptCode: null,
+    publishedScriptGraphVersion: null,
+    backtestResult: null,
+    latestSignalMessage: null,
+    backtestExecutionState: 'idle',
+  }
+}
+
+function hasClarificationBlockedConflict(conversation: ConversationState): boolean {
+  return conversation.clarificationGate?.blocked === true
+    && Boolean(
+      conversation.codegenSpecDesc
+        || conversation.semanticGraph
+        || conversation.validationReport
+        || conversation.pendingCanonicalDigest
+        || conversation.llmCodegenSessionId
+        || hasPublicationArtifacts(conversation)
+        || conversation.backtestExecutionState !== 'idle',
+    )
+}
+
+function hasPublicationMismatch(conversation: ConversationState): boolean {
+  if (!hasPublicationArtifacts(conversation)) {
+    return false
+  }
+  if (conversation.logicGraph?.status !== 'confirmed') {
+    return true
+  }
+  if (!conversation.publishedSnapshotId || !conversation.publishedScriptCode) {
+    return true
+  }
+  return conversation.publishedScriptGraphVersion !== conversation.logicGraph.version
+}
+
+function hasDigestMismatch(conversation: ConversationState): boolean {
+  if (conversation.clarificationGate?.blocked) {
+    return false
+  }
+  const digestFromSpec = readCanonicalDigest(conversation.codegenSpecDesc)
+  return Boolean(
+    digestFromSpec
+      && conversation.pendingCanonicalDigest
+      && digestFromSpec !== conversation.pendingCanonicalDigest,
+  )
+}
+
+export function collectConversationIntegrityIssues(
+  conversation: ConversationState,
+): ConversationIntegrityIssue[] {
+  const issues: ConversationIntegrityIssue[] = []
+  if (hasClarificationBlockedConflict(conversation)) {
+    issues.push('clarification_blocked')
+  }
+  if (hasPublicationMismatch(conversation)) {
+    issues.push('publication_mismatch')
+  }
+  if (hasDigestMismatch(conversation)) {
+    issues.push('digest_mismatch')
+  }
+  return issues
+}
+
+export function hasConversationIntegrityIssues(conversation: ConversationState): boolean {
+  return collectConversationIntegrityIssues(conversation).length > 0
+}
+
+function normalizeBlockedClarificationState(conversation: ConversationState): ConversationState {
+  if (!hasClarificationBlockedConflict(conversation)) {
+    return conversation
+  }
+  const clearedArtifacts = clearPublicationArtifacts(conversation)
+  return {
+    ...clearedArtifacts,
+    codegenSpecDesc: null,
+    semanticGraph: null,
+    validationReport: null,
+    clarificationGate: conversation.clarificationGate,
+    publicationGate: conversation.publicationGate,
+    pendingCanonicalDigest: null,
+    llmCodegenSessionId: conversation.llmCodegenSessionId,
+  }
+}
+
+function normalizePublicationState(conversation: ConversationState): ConversationState {
+  if (!hasPublicationMismatch(conversation)) {
+    return conversation
+  }
+  return clearPublicationArtifacts(conversation)
+}
+
+function normalizeDigestState(conversation: ConversationState): ConversationState {
+  if (conversation.clarificationGate?.blocked) {
+    return conversation
+  }
+  const digestFromSpec = readCanonicalDigest(conversation.codegenSpecDesc)
+  if (!digestFromSpec) {
+    return conversation
+  }
+  if (!conversation.pendingCanonicalDigest) {
+    return {
+      ...conversation,
+      pendingCanonicalDigest: digestFromSpec,
+    }
+  }
+  if (digestFromSpec === conversation.pendingCanonicalDigest) {
+    return conversation
+  }
+  return {
+    ...clearPublicationArtifacts(conversation),
+    semanticGraph: null,
+    validationReport: null,
+    pendingCanonicalDigest: null,
+    llmCodegenSessionId: null,
+  }
+}
+
+export function normalizeHydratedConversationState(
+  conversation: ConversationState,
+): ConversationState {
+  const normalizedClarification = normalizeBlockedClarificationState(conversation)
+  const normalizedPublication = normalizePublicationState(normalizedClarification)
+  return normalizeDigestState(normalizedPublication)
 }
 
 export function extractLatestScriptCode(messages: QuantMessage[]): string {
@@ -374,8 +640,32 @@ function hasLegacyImplicitBacktestExecutionConfig(
   values: Record<string, unknown>,
 ): boolean {
   return BACKTEST_EXECUTION_PARAM_KEYS.every(
-    key => values[key] === LEGACY_IMPLICIT_BACKTEST_PARAM_VALUES[key],
+    key => values[key] === DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES[key],
   )
+}
+
+function applyBacktestExecutionParamDefaults(
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  const nextValues = { ...values }
+  BACKTEST_EXECUTION_PARAM_KEYS.forEach((key) => {
+    if (nextValues[key] === undefined || nextValues[key] === null) {
+      nextValues[key] = DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES[key]
+    }
+  })
+  return nextValues
+}
+
+function stripImplicitBacktestExecutionParamValues(
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  const nextValues = { ...values }
+  BACKTEST_EXECUTION_PARAM_KEYS.forEach((key) => {
+    if (nextValues[key] === DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES[key]) {
+      delete nextValues[key]
+    }
+  })
+  return nextValues
 }
 
 function normalizeHydratedBacktestExecutionConfig(input: {
@@ -385,16 +675,15 @@ function normalizeHydratedBacktestExecutionConfig(input: {
   paramValues: Record<string, unknown>
   explicit: boolean
 } {
-  if (input.explicit) {
-    return input
-  }
-
-  if (!hasLegacyImplicitBacktestExecutionConfig(input.paramValues)) {
-    return input
+  if (input.explicit || !hasLegacyImplicitBacktestExecutionConfig(input.paramValues)) {
+    return {
+      paramValues: applyBacktestExecutionParamDefaults(input.paramValues),
+      explicit: input.explicit,
+    }
   }
 
   return {
-    paramValues: stripBacktestExecutionParamValues(input.paramValues),
+    paramValues: applyBacktestExecutionParamDefaults(input.paramValues),
     explicit: false,
   }
 }
@@ -439,6 +728,7 @@ export function buildApiConfigHref(lng: 'zh' | 'en') {
 export function createConversation(translate: (key: string) => string, now = Date.now()): ConversationState {
   return {
     id: `conv-${now}-${Math.random().toString(16).slice(2, 8)}`,
+    schemaVersion: AI_QUANT_PERSISTED_SCHEMA_VERSION,
     title: translate('aiQuant.newChat'),
     messages: [
       {
@@ -449,7 +739,7 @@ export function createConversation(translate: (key: string) => string, now = Dat
     ],
     params: DEFAULT_PARAMS,
     paramSchema: buildParamSchemaWithCapabilities(null),
-    paramValues: { ...DEFAULT_PARAM_VALUES },
+    paramValues: applyBacktestExecutionParamDefaults({ ...DEFAULT_PARAM_VALUES }),
     backtestResult: null,
     logicGraph: null,
     codegenSpecDesc: null,
@@ -468,6 +758,58 @@ export function createConversation(translate: (key: string) => string, now = Dat
     backtestExecutionState: 'idle',
     updatedAt: now,
   }
+}
+
+export function createRecoveryConversation(
+  translate: (key: string) => string,
+  now = Date.now(),
+): ConversationState {
+  const conversation = createConversation(translate, now)
+  return {
+    ...conversation,
+    messages: [
+      ...conversation.messages,
+      {
+        id: `recovery-${now}`,
+        role: 'assistant',
+        content: translate(STALE_CONVERSATION_RECOVERY_MESSAGE_KEY),
+      },
+    ],
+    updatedAt: now,
+  }
+}
+
+function hadPersistedCodegenArtifacts(item: Partial<ConversationState>): boolean {
+  return Boolean(
+    item.codegenSpecDesc
+      || item.semanticGraph
+      || item.validationReport
+      || item.pendingCanonicalDigest
+      || item.llmCodegenSessionId
+      || item.publishedStrategyInstanceId
+      || item.publishedSnapshotId
+      || item.publishedScriptCode
+      || typeof item.publishedScriptGraphVersion === 'number'
+      || item.publicationGate,
+  )
+}
+
+export function shouldResetIrrecoverableHydratedConversation(
+  item: Partial<ConversationState>,
+  conversation: ConversationState,
+): boolean {
+  if (!hadPersistedCodegenArtifacts(item)) {
+    return false
+  }
+  return Boolean(
+    !conversation.logicGraph
+      && !conversation.semanticGraph
+      && !conversation.validationReport
+      && !conversation.pendingCanonicalDigest
+      && !conversation.llmCodegenSessionId
+      && !conversation.publicationGate
+      && !hasPublicationArtifacts(conversation),
+  )
 }
 
 export function hydrateConversation(item: Partial<ConversationState>): ConversationState {
@@ -497,8 +839,9 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
     fallbackParams,
   )
 
-  return {
+  return normalizeHydratedConversationState({
     id: item.id ?? `conv-${Date.now()}`,
+    schemaVersion: AI_QUANT_PERSISTED_SCHEMA_VERSION,
     title: item.title ?? '',
     messages: Array.isArray(item.messages) ? item.messages : [],
     params: nextParams,
@@ -529,7 +872,7 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
       typeof item.pendingCanonicalDigest === 'string' && item.pendingCanonicalDigest.trim()
         ? item.pendingCanonicalDigest.trim()
         : null,
-    llmCodegenSessionId: item.llmCodegenSessionId ?? null,
+    llmCodegenSessionId: normalizeCodegenSessionId(item.llmCodegenSessionId),
     publishedStrategyInstanceId: item.publishedStrategyInstanceId ?? null,
     publishedSnapshotId: normalizePublishedSnapshotId(item.publishedSnapshotId),
     publishedScriptCode: resolveHydratedPublishedScriptCode(item),
@@ -547,7 +890,7 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
     backtestExecutionConfigExplicit: normalizedBacktestExecutionConfig.explicit,
     backtestExecutionState: normalizeHydratedBacktestExecutionState(item.backtestExecutionState),
     updatedAt: item.updatedAt ?? Date.now(),
-  }
+  })
 }
 
 export function hydrateConversations(
@@ -563,10 +906,33 @@ export function hydrateConversations(
     if (!Array.isArray(parsed) || parsed.length === 0) {
       throw new Error('invalid conversation payload')
     }
-    return parsed.map(item => hydrateConversation(item))
+    const compatible = parsed.filter(item => !hasExplicitSchemaVersionMismatch(item))
+    if (compatible.length === 0) {
+      throw new Error('invalid conversation payload')
+    }
+    return compatible.map((item, index) => {
+      const hydrated = hydrateConversation(item)
+      if (!shouldResetIrrecoverableHydratedConversation(item, hydrated)) {
+        return hydrated
+      }
+      return createRecoveryConversation(translate, hydrated.updatedAt || Date.now() + index)
+    })
   } catch {
     return [createConversation(translate)]
   }
+}
+
+function restoreHydratedConversationList(
+  items: Partial<ConversationState>[],
+  translate: (key: string) => string,
+): ConversationState[] {
+  return items.map((item, index) => {
+    const hydrated = hydrateConversation(item)
+    if (!shouldResetIrrecoverableHydratedConversation(item, hydrated)) {
+      return hydrated
+    }
+    return createRecoveryConversation(translate, hydrated.updatedAt || Date.now() + index)
+  })
 }
 
 function normalizeConversationStorageVersion(version: string): string {
@@ -580,7 +946,15 @@ export function serializePersistedConversations(
 ): string {
   const envelope: PersistedConversationEnvelope = {
     version: normalizeConversationStorageVersion(version),
-    conversations,
+    conversations: conversations.map((conversation) => {
+      if (conversation.backtestExecutionConfigExplicit) {
+        return conversation
+      }
+      return {
+        ...conversation,
+        paramValues: stripImplicitBacktestExecutionParamValues(conversation.paramValues),
+      }
+    }),
   }
   return JSON.stringify(envelope)
 }
@@ -610,7 +984,7 @@ export function readPersistedConversations(input: {
         throw new Error('empty legacy conversations')
       }
       return {
-        conversations: parsed.map(item => hydrateConversation(item)),
+        conversations: restoreHydratedConversationList(parsed, translate),
         shouldPersist: true,
       }
     }
@@ -636,7 +1010,7 @@ export function readPersistedConversations(input: {
     }
 
     return {
-      conversations: storedConversations.map(item => hydrateConversation(item)),
+      conversations: restoreHydratedConversationList(storedConversations, translate),
       shouldPersist: false,
     }
   } catch {
