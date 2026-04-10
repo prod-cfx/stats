@@ -48,6 +48,7 @@ import {
   buildParamSchemaWithCapabilities,
   createConversation,
   createRecoveryConversation,
+  hasExplicitBacktestExecutionOverrides,
   hasLatestPublishedCode,
   invalidateConversationPublication,
   mapExchangeStatusesToDeployAccounts,
@@ -889,7 +890,9 @@ export function AiQuantPageClient({
                   paramValues: nextValues,
                   params: normalizeParamsFromValues(nextValues, curr.params),
                   backtestExecutionConfigExplicit:
-                    BACKTEST_EXECUTION_PARAM_KEY_SET.has(key) ? true : curr.backtestExecutionConfigExplicit,
+                    BACKTEST_EXECUTION_PARAM_KEY_SET.has(key)
+                      ? hasExplicitBacktestExecutionOverrides(nextValues)
+                      : curr.backtestExecutionConfigExplicit,
                   updatedAt: Date.now(),
                 }
                 return shouldInvalidatePublicationForParamChange(key)

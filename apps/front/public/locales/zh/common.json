@@ -229,8 +229,8 @@
       "graphTitle": "策略逻辑图确认",
       "version": "版本",
       "status": "状态",
-      "confirmedBacktest": "已确认，可回测",
-      "confirmBacktest": "确认并回测",
+      "confirmedGraph": "逻辑图已确认",
+      "confirmGraph": "确认逻辑图",
       "returnRevise": "返回对话修改"
     },
     "strategies": {

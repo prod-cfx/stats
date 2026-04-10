@@ -229,8 +229,8 @@
       "graphTitle": "Strategy Logic Graph Confirmation",
       "version": "Version",
       "status": "Status",
-      "confirmedBacktest": "Confirmed, Ready to Backtest",
-      "confirmBacktest": "Confirm & Backtest",
+      "confirmedGraph": "Logic Graph Confirmed",
+      "confirmGraph": "Confirm Logic Graph",
       "returnRevise": "Return to Chat to Revise"
     },
     "strategies": {

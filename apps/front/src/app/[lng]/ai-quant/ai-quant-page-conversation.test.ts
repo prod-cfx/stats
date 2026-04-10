@@ -2,9 +2,12 @@ import { describe, expect, it } from '@jest/globals'
 
 import {
   AI_QUANT_PERSISTED_SCHEMA_VERSION,
+  hasExplicitBacktestExecutionOverrides,
   hydrateConversation,
   hydrateConversations,
   invalidateConversationPublication,
+  resolveBacktestExecutionConfig,
+  serializePersistedConversations,
 } from './ai-quant-page-conversation'
 
 describe('ai-quant-page-conversation', () => {
@@ -71,7 +74,7 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.publishedScriptGraphVersion).toBe(3)
   })
 
-  it('resets transient backtest state and clears legacy implicit execution config during hydration', () => {
+  it('resets transient backtest state and normalizes legacy execution defaults for direct-run hydration', () => {
     const conversation = hydrateConversation({
       id: 'conv-1',
       title: 'test',
@@ -120,12 +123,12 @@ describe('ai-quant-page-conversation', () => {
 
     expect(conversation.backtestExecutionState).toBe('idle')
     expect(conversation.backtestExecutionConfigExplicit).toBe(false)
-    expect(conversation.paramValues.backtestInitialCash).toBeUndefined()
-    expect(conversation.paramValues.backtestLeverage).toBeUndefined()
-    expect(conversation.paramValues.backtestSlippageBps).toBeUndefined()
-    expect(conversation.paramValues.backtestFeeBps).toBeUndefined()
-    expect(conversation.paramValues.backtestPriceSource).toBeUndefined()
-    expect(conversation.paramValues.backtestAllowPartial).toBeUndefined()
+    expect(conversation.paramValues.backtestInitialCash).toBe(10000)
+    expect(conversation.paramValues.backtestLeverage).toBe(1)
+    expect(conversation.paramValues.backtestSlippageBps).toBe(10)
+    expect(conversation.paramValues.backtestFeeBps).toBe(5)
+    expect(conversation.paramValues.backtestPriceSource).toBe('close')
+    expect(conversation.paramValues.backtestAllowPartial).toBe(true)
   })
 
   it('invalidates published artifacts and optionally marks the logic graph as draft', () => {
@@ -383,4 +386,131 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.publishedScriptCode).toBeNull()
     expect(conversation.publishedScriptGraphVersion).toBeNull()
   })
+
+  it('round-trips sparse direct-run execution defaults through serialize and hydrate', () => {
+    const raw = serializePersistedConversations([
+      {
+        id: 'conv-roundtrip',
+        schemaVersion: AI_QUANT_PERSISTED_SCHEMA_VERSION,
+        title: 'roundtrip',
+        messages: [],
+        params: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+        paramSchema: null,
+        paramValues: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+          backtestInitialCash: 10000,
+          backtestLeverage: 1,
+          backtestSlippageBps: 10,
+          backtestFeeBps: 5,
+          backtestPriceSource: 'close',
+          backtestAllowPartial: true,
+        },
+        backtestResult: null,
+        logicGraph: null,
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: null,
+        llmCodegenSessionId: null,
+        publishedStrategyInstanceId: null,
+        publishedSnapshotId: null,
+        publishedScriptCode: null,
+        publishedScriptGraphVersion: null,
+        latestSignalMessage: null,
+        backtestExecutionConfigExplicit: false,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+      },
+    ], 'test')
+
+    expect(raw).not.toContain('backtestInitialCash')
+
+    const hydrated = hydrateConversations(raw, key => key)
+    expect(hydrated[0]?.paramValues.backtestInitialCash).toBe(10000)
+    expect(hydrated[0]?.paramValues.backtestAllowPartial).toBe(true)
+  })
+
+  it('treats invalid persisted allowPartial as invalid instead of silently normalizing it', () => {
+    const conversation = hydrateConversation({
+      id: 'conv-invalid-allow-partial',
+      title: 'test',
+      messages: [],
+      params: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+      },
+      paramSchema: null,
+      paramValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+        backtestAllowPartial: 'maybe',
+      },
+      backtestResult: null,
+      logicGraph: null,
+      semanticGraph: null,
+      validationReport: null,
+      llmCodegenSessionId: null,
+      publishedStrategyInstanceId: null,
+      publishedSnapshotId: null,
+      publishedScriptCode: null,
+      publishedScriptGraphVersion: null,
+      latestSignalMessage: null,
+      backtestExecutionState: 'idle',
+      updatedAt: 1,
+    })
+
+    expect(conversation.paramValues.backtestAllowPartial).toBe('maybe')
+    expect(resolveBacktestExecutionConfig(conversation.paramValues).allowPartialValid).toBe(false)
+  })
+
+  it('drops explicit execution flag when values are reset back to canonical defaults', () => {
+    expect(hasExplicitBacktestExecutionOverrides({
+      backtestInitialCash: 10000,
+      backtestLeverage: 1,
+      backtestSlippageBps: 10,
+      backtestFeeBps: 5,
+      backtestPriceSource: 'close',
+      backtestAllowPartial: true,
+    })).toBe(false)
+
+    expect(hasExplicitBacktestExecutionOverrides({
+      backtestInitialCash: 25000,
+      backtestLeverage: 1,
+      backtestSlippageBps: 10,
+      backtestFeeBps: 5,
+      backtestPriceSource: 'close',
+      backtestAllowPartial: true,
+    })).toBe(true)
+  })
+
 })
