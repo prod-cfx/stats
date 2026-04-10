@@ -27,6 +27,9 @@ export interface PositionView {
   avgEntryPrice: number
   realizedPnl: number
   unrealizedPnl: number
+  barsHeld?: number
+  highestPriceSinceEntry?: number
+  lowestPriceSinceEntry?: number
 }
 
 export interface PortfolioView {

@@ -44,6 +44,13 @@ interface PendingOrder {
   reasonSource: BacktestReasonSource
 }
 
+interface PositionRuntimeState {
+  side: 'LONG' | 'SHORT'
+  barsHeld: number
+  highestPriceSinceEntry: number
+  lowestPriceSinceEntry: number
+}
+
 @Injectable()
 export class BacktestRunnerService {
   constructor(
@@ -80,6 +87,7 @@ export class BacktestRunnerService {
     let stateCursor = 0
     const historyBarsBySymbolTimeframe = new Map<string, HistorySeries>()
     const pendingOrdersBySymbol = new Map<string, PendingOrder>()
+    const positionRuntimeStateBySymbol = new Map<string, PositionRuntimeState>()
     const strictSnapshotPath = this.isStrictSnapshotPath(input.strategy)
     const executionPolicy = this.resolveExecutionPolicy(input.strategy.executionPolicy, strictSnapshotPath)
 
@@ -123,6 +131,7 @@ export class BacktestRunnerService {
       ledger.markToMarket({ [bar.symbol]: bar.close })
       const snapshot = ledger.snapshot()
       const position = ledger.getPosition(bar.symbol)
+      const positionRuntimeState = this.syncPositionRuntimeState(positionRuntimeStateBySymbol, position, bar)
       const htfState = this.stateEngine.getLatestByTimeframes(bar.symbol, input.stateTimeframes)
       const strategyContext = this.buildScriptContext({
         bar,
@@ -136,6 +145,7 @@ export class BacktestRunnerService {
           realizedPnl: snapshot.realizedPnl,
         },
         position,
+        positionRuntimeState,
       })
       const intent = await input.strategy.fn({
         ...strategyContext,
@@ -485,11 +495,12 @@ export class BacktestRunnerService {
     bar: Bar
     htfState: StrategyContext['htfState']
     position: StrategyContext['position']
+    positionRuntimeState: PositionRuntimeState | null
     portfolio: StrategyContext['portfolio']
     input: BacktestRunInput
     historyBarsBySymbolTimeframe: Map<string, HistorySeries>
   }) {
-    const { bar, htfState, position, portfolio } = input
+    const { bar, htfState, portfolio } = input
     const primaryLegId = 'primary'
     const requestedTimeframes = Array.from(new Set([input.input.baseTimeframe, ...input.input.stateTimeframes]))
     const dataForPrimary: Record<string, { bars: ScriptRuntimeBar[]; indicators: Record<string, number>; currentPrice: number }> = {}
@@ -519,11 +530,46 @@ export class BacktestRunnerService {
       symbol: bar.symbol,
       baseTimeframeBar: bar,
       htfState,
-      position,
+      position: {
+        ...input.position,
+        barsHeld: input.positionRuntimeState?.barsHeld,
+        highestPriceSinceEntry: input.positionRuntimeState?.highestPriceSinceEntry,
+        lowestPriceSinceEntry: input.positionRuntimeState?.lowestPriceSinceEntry,
+      },
       portfolio,
       params: input.input.strategy.params,
       ...runtimeContext,
     }
+  }
+
+  private syncPositionRuntimeState(
+    store: Map<string, PositionRuntimeState>,
+    position: StrategyContext['position'],
+    bar: Bar,
+  ): PositionRuntimeState | null {
+    if (!position || position.qty === 0) {
+      store.delete(bar.symbol)
+      return null
+    }
+
+    const side: PositionRuntimeState['side'] = position.qty > 0 ? 'LONG' : 'SHORT'
+    const existing = store.get(bar.symbol)
+    const next = !existing || existing.side !== side
+      ? {
+          side,
+          barsHeld: 1,
+          highestPriceSinceEntry: bar.high,
+          lowestPriceSinceEntry: bar.low,
+        }
+      : {
+          side,
+          barsHeld: existing.barsHeld + 1,
+          highestPriceSinceEntry: Math.max(existing.highestPriceSinceEntry, bar.high),
+          lowestPriceSinceEntry: Math.min(existing.lowestPriceSinceEntry, bar.low),
+        }
+
+    store.set(bar.symbol, next)
+    return next
   }
 
   private buildHistoryKey(symbol: string, timeframe: string): string {

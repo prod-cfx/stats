@@ -426,6 +426,49 @@ describe('backtestRunnerService', () => {
     expect(report.openPositions?.[0]?.avgEntryPrice).toBeCloseTo(110)
   })
 
+  it('injects backtest position runtime state for held bars and trailing anchors', async () => {
+    const runner = createRunner()
+    const seen: Array<{ ts: number; barsHeld?: number; highest?: number; lowest?: number }> = []
+
+    await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['5m'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-runtime-state',
+        params: {},
+        fn: (ctx): StrategyDecisionV1 => {
+          if (ctx.ts === 1) {
+            return { action: 'OPEN_LONG', size: { mode: 'QTY', value: 1 }, confidence: 90, reason: 'open' }
+          }
+          seen.push({
+            ts: ctx.ts,
+            barsHeld: ctx.position?.barsHeld,
+            highest: ctx.position?.highestPriceSinceEntry,
+            lowest: ctx.position?.lowestPriceSinceEntry,
+          })
+          return { action: 'NOOP' }
+        },
+      },
+      dataRange: { fromTs: 1, toTs: 4 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, high: 101, low: 99, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, open: 100, high: 110, low: 98, close: 109 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 3, open: 109, high: 112, low: 97, close: 108 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 4, open: 108, high: 111, low: 96, close: 107 }),
+      ],
+    })
+
+    expect(seen).toEqual([
+      { ts: 2, barsHeld: 1, highest: 110, lowest: 98 },
+      { ts: 3, barsHeld: 2, highest: 112, lowest: 97 },
+      { ts: 4, barsHeld: 3, highest: 112, lowest: 96 },
+    ])
+  })
+
   it('fails fast when strict snapshot strategy is missing execution policy', async () => {
     const runner = createRunner()
 
