@@ -4,6 +4,7 @@ import { AiModule } from '@/modules/ai/ai.module'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { AccountAiQuantConversationsController } from './controllers/account-ai-quant-conversations.controller'
 import { LiveLlmStrategyCodegenController } from './controllers/live-llm-strategy-codegen.controller'
+import { AiQuantConversationsRepository } from './repositories/ai-quant-conversations.repository'
 import { CodegenSessionsRepository } from './repositories/codegen-sessions.repository'
 import { PublishedStrategySnapshotsRepository } from './repositories/published-strategy-snapshots.repository'
 import { CallerIdentityService } from './services/caller-identity.service'
@@ -35,6 +36,7 @@ import { StrategySummaryBuilderService } from './services/strategy-summary-build
   imports: [PrismaModule, AiModule],
   controllers: [AccountAiQuantConversationsController, LiveLlmStrategyCodegenController],
   providers: [
+    AiQuantConversationsRepository,
     CodegenSessionsRepository,
     PublishedStrategySnapshotsRepository,
     ChecklistGateService,
