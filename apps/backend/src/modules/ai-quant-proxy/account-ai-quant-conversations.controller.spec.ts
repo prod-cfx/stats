@@ -1,3 +1,4 @@
+import { DECORATORS } from '@nestjs/swagger/dist/constants'
 import { AccountAiQuantConversationsController } from './account-ai-quant-conversations.controller'
 
 describe('accountAiQuantConversationsController', () => {
@@ -11,5 +12,15 @@ describe('accountAiQuantConversationsController', () => {
 
     expect(result).toEqual([{ id: 'conv-1', activeCodegenSessionId: 'session-1' }])
     expect(service.listAiQuantConversations).toHaveBeenCalledWith('user-1', 'Bearer token-1')
+  })
+
+  it('declares swagger metadata for the conversation list contract', () => {
+    const operation = Reflect.getMetadata(DECORATORS.API_OPERATION, AccountAiQuantConversationsController.prototype.list)
+    const response = Reflect.getMetadata(DECORATORS.API_RESPONSE, AccountAiQuantConversationsController.prototype.list)
+
+    expect(operation).toMatchObject({
+      summary: 'List AI Quant conversations from the backend proxy facade',
+    })
+    expect(response).toBeDefined()
   })
 })
