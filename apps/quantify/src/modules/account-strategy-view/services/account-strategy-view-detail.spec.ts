@@ -282,6 +282,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         updatedAt: new Date('2026-03-20T10:02:00.000Z'),
       }),
       findUserStrategyAccount: jest.fn().mockResolvedValue(null),
+      findLatestExecutedAccountByUserAndSymbol: jest.fn().mockResolvedValue(null),
       loadEquitySeries: jest.fn().mockResolvedValue([]),
       loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
       loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),

@@ -85,6 +85,12 @@ export class AccountStrategyLatestOrderDto {
 
 export class AccountStrategySnapshotDto {
   @ApiPropertyOptional({ nullable: true })
+  publishedSnapshotId!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  snapshotHash!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
   exchange!: string | null
 
   @ApiPropertyOptional({ nullable: true })

@@ -32,7 +32,7 @@ interface PublishedSnapshotRecord {
 }
 
 export interface SnapshotBacktestStrategyInput {
-  id: string
+  id?: string
   protocolVersion: 'v1'
   publishedSnapshotId: string
   userId: string
@@ -129,9 +129,9 @@ export class BacktestSnapshotLoaderService {
       strategyInstanceId: string | null
       strategyTemplateId: string | null
     },
-    fallbackId: string,
+    fallbackId?: string,
   ): string {
-    return snapshot.strategyInstanceId ?? snapshot.strategyTemplateId ?? snapshot.id ?? fallbackId
+    return snapshot.strategyInstanceId ?? snapshot.strategyTemplateId ?? fallbackId ?? snapshot.id
   }
 
   private readJsonRecord(raw: unknown): Record<string, unknown> | null {

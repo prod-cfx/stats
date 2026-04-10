@@ -37,9 +37,10 @@ class BacktestStrategyPayloadConstraint implements ValidatorConstraintInterface 
 }
 
 export class BacktestStrategyInputDto {
+  @IsOptional()
   @IsString()
   @IsNotEmpty()
-  id!: string
+  id?: string
 
   @IsIn(['v1'])
   protocolVersion!: 'v1'
