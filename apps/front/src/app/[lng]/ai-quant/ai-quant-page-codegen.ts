@@ -81,7 +81,9 @@ export function buildCodegenReplyContent(args: {
     return response.assistantPrompt
   }
   if (response.publicationGate?.passed === false) {
-    return rejectedWithoutReason
+    return response.rejectReason
+      ? `${rejectedPrefix}：${response.rejectReason}`
+      : rejectedWithoutReason
   }
   if (response.status === 'PUBLISHED') {
     if (response.rejectReason) {
