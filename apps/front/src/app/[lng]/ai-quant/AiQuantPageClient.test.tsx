@@ -171,6 +171,12 @@ function seedConfirmedConversation(now = Date.now()) {
         sellWindowMin: 15,
         sellRisePct: 2,
         positionPct: 10,
+        backtestInitialCash: 10000,
+        backtestLeverage: 1,
+        backtestSlippageBps: 10,
+        backtestFeeBps: 5,
+        backtestPriceSource: 'close',
+        backtestAllowPartial: true,
       },
       backtestResult: null,
       logicGraph: {
@@ -190,6 +196,7 @@ function seedConfirmedConversation(now = Date.now()) {
       publishedStrategyInstanceId: 'strategy-1',
       publishedSnapshotId: 'snapshot-1',
       publishedScriptGraphVersion: 1,
+      backtestExecutionConfigExplicit: true,
       latestSignalMessage: null,
       backtestExecutionState: 'idle',
       updatedAt: now,
@@ -241,6 +248,7 @@ function buildPersistedConversation(now = Date.now()) {
     publishedStrategyInstanceId: 'strategy-1',
     publishedSnapshotId: 'snapshot-1',
     publishedScriptGraphVersion: 1,
+    backtestExecutionConfigExplicit: true,
     latestSignalMessage: null,
     backtestExecutionState: 'idle',
     updatedAt: now,
@@ -392,22 +400,6 @@ describe('AiQuantPageClient backtest range integration', () => {
 
     expect(container.querySelector('[data-testid="backtest-confirm"]')).toBeNull()
     expect(container.querySelector('[data-testid="backtest-summary"]')).toBeTruthy()
-  })
-
-  it('surfaces canonical execution defaults for sparse direct-run conversations', async () => {
-    await act(async () => {
-      root?.render(<AiQuantPageClient />)
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-
-    const renderedParams = container.querySelector('[data-testid="params"]')?.textContent ?? ''
-    expect(renderedParams).toContain('"backtestInitialCash":10000')
-    expect(renderedParams).toContain('"backtestLeverage":1')
-    expect(renderedParams).toContain('"backtestSlippageBps":10')
-    expect(renderedParams).toContain('"backtestFeeBps":5')
-    expect(renderedParams).toContain('"backtestPriceSource":"close"')
-    expect(renderedParams).toContain('"backtestAllowPartial":true')
   })
 
   it('uses shrink-safe layout classes for the chat column', async () => {

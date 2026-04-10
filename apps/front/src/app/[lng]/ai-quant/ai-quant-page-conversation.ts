@@ -211,7 +211,7 @@ function parseBacktestExecutionNumber(
   fallback: number,
 ): number {
   if (value === undefined || value === null) {
-    return fallback
+    return Number.NaN
   }
   if (typeof value === 'number') {
     return value
@@ -230,7 +230,7 @@ function resolveBacktestExecutionPriceSource(
   fallback: BacktestExecutionPriceSource,
 ): string {
   if (value === undefined || value === null) {
-    return fallback
+    return ''
   }
   if (typeof value === 'string') {
     return value.trim()
@@ -243,7 +243,7 @@ function resolveBacktestAllowPartial(
   fallback: boolean,
 ): { value: boolean, valid: boolean } {
   if (value === undefined || value === null) {
-    return { value: fallback, valid: true }
+    return { value: fallback, valid: false }
   }
   if (typeof value === 'boolean') {
     return { value, valid: true }
@@ -644,18 +644,6 @@ function hasLegacyImplicitBacktestExecutionConfig(
   )
 }
 
-function applyBacktestExecutionParamDefaults(
-  values: Record<string, unknown>,
-): Record<string, unknown> {
-  const nextValues = { ...values }
-  BACKTEST_EXECUTION_PARAM_KEYS.forEach((key) => {
-    if (nextValues[key] === undefined || nextValues[key] === null) {
-      nextValues[key] = DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES[key]
-    }
-  })
-  return nextValues
-}
-
 function stripImplicitBacktestExecutionParamValues(
   values: Record<string, unknown>,
 ): Record<string, unknown> {
@@ -675,15 +663,16 @@ function normalizeHydratedBacktestExecutionConfig(input: {
   paramValues: Record<string, unknown>
   explicit: boolean
 } {
-  if (input.explicit || !hasLegacyImplicitBacktestExecutionConfig(input.paramValues)) {
-    return {
-      paramValues: applyBacktestExecutionParamDefaults(input.paramValues),
-      explicit: input.explicit,
-    }
+  if (input.explicit) {
+    return input
+  }
+
+  if (!hasLegacyImplicitBacktestExecutionConfig(input.paramValues)) {
+    return input
   }
 
   return {
-    paramValues: applyBacktestExecutionParamDefaults(input.paramValues),
+    paramValues: stripBacktestExecutionParamValues(input.paramValues),
     explicit: false,
   }
 }
@@ -739,7 +728,7 @@ export function createConversation(translate: (key: string) => string, now = Dat
     ],
     params: DEFAULT_PARAMS,
     paramSchema: buildParamSchemaWithCapabilities(null),
-    paramValues: applyBacktestExecutionParamDefaults({ ...DEFAULT_PARAM_VALUES }),
+    paramValues: { ...DEFAULT_PARAM_VALUES },
     backtestResult: null,
     logicGraph: null,
     codegenSpecDesc: null,
