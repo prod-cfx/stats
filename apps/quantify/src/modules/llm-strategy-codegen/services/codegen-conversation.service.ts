@@ -719,8 +719,8 @@ export class CodegenConversationService {
     const replaced = rule
       .replace(/做多|多单|开多|long|买入/iu, actionText)
       .replace(/做空|空单|开空|short|卖出/iu, actionText)
-      .replace(/做多和做多|做空和做空/iu, actionText)
-      .replace(/同时做多|同时做空/iu, actionText)
+      .replace(/做多和做多|做空和做空/u, actionText)
+      .replace(/同时做多|同时做空/u, actionText)
 
     return replaced.trim()
   }
@@ -1851,10 +1851,10 @@ export class CodegenConversationService {
     if ((/死叉|下穿/u.test(text)) && /均线|\bma\b|\bsma\b|\bema\b/iu.test(text)) {
       return 'ma-death-cross'
     }
-    if (/布林带上轨/iu.test(text)) {
+    if (/布林带上轨/u.test(text)) {
       return 'bollinger-upper'
     }
-    if (/布林带下轨/iu.test(text)) {
+    if (/布林带下轨/u.test(text)) {
       return 'bollinger-lower'
     }
     return null
