@@ -118,9 +118,9 @@ export function getSemanticGraphValidationMessage(
   return message || fallback
 }
 
-function hasSemanticGraphPayload(
+function hasCodegenPayload(
   response: LlmCodegenSessionResponse,
-  key: 'semanticGraph' | 'validationReport',
+  key: 'semanticGraph' | 'validationReport' | 'publicationGate',
 ): boolean {
   return Object.prototype.hasOwnProperty.call(response, key)
 }
@@ -445,14 +445,16 @@ export async function requestAiQuantCodegen(args: {
         const nextPublishedScriptGraphVersion = nextPublishedScriptCode
           ? (nextGraph?.version ?? conv.publishedScriptGraphVersion)
           : null
-        const nextSemanticGraph = hasSemanticGraphPayload(response, 'semanticGraph')
+        const nextSemanticGraph = hasCodegenPayload(response, 'semanticGraph')
           ? (response.semanticGraph ?? null)
           : conv.semanticGraph
-        const nextValidationReport = hasSemanticGraphPayload(response, 'validationReport')
+        const nextValidationReport = hasCodegenPayload(response, 'validationReport')
           ? (response.validationReport ?? null)
           : conv.validationReport
         const nextClarificationGate = normalizeClarificationGate(response.clarificationGate) ?? conv.clarificationGate
-        const nextPublicationGate = response.publicationGate ?? conv.publicationGate
+        const nextPublicationGate = hasCodegenPayload(response, 'publicationGate')
+          ? (response.publicationGate ?? null)
+          : conv.publicationGate
         const nextPendingCanonicalDigest = (() => {
           if (nextClarificationGate?.blocked) {
             return null
