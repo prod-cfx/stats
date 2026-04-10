@@ -8,6 +8,12 @@ interface ClarificationChecklistInput {
   riskRules?: Record<string, unknown>
 }
 
+interface MarketScopeConflict {
+  field: 'exchange' | 'marketType' | 'symbol' | 'timeframe'
+  previous: string
+  next: string
+}
+
 const LONG_DIRECTION_PATTERN = /做多|多单|开多|long|买入/u
 const SHORT_DIRECTION_PATTERN = /做空|空单|开空|short|卖出/u
 const UPPER_BAND_PATTERN = /(?:布林|bollinger).{0,8}(?:上轨|upper)|(?:上轨|upper).{0,8}(?:布林|bollinger)|突破.{0,8}(?:上轨|upper)/iu
@@ -127,6 +133,19 @@ export class StrategyClarificationRulesService {
   ): StrategyClarificationItem[] {
     if (!hasEntryRules || hasActionUniquenessConflict) return []
 
+    const conflicts = this.readMarketScopeConflicts(input.riskRules)
+    if (conflicts.length > 0) {
+      return conflicts.map((conflict) => ({
+        key: `market.conflict.${conflict.field}`,
+        reason: 'conflicting_market_scope',
+        field: conflict.field,
+        allowedAnswers: [conflict.previous, conflict.next],
+        blocking: true,
+        question: `当前会话里的${this.renderMarketFieldLabel(conflict.field)}存在冲突：之前是 ${conflict.previous}，本轮变成了 ${conflict.next}。请确认最终以哪个为准？`,
+        status: 'pending',
+      }))
+    }
+
     const items: StrategyClarificationItem[] = []
 
     if (!this.hasPrimaryValue(input.symbols)) {
@@ -176,7 +195,7 @@ export class StrategyClarificationRulesService {
       return items
     }
 
-    if (marketType === 'spot') {
+    if (marketType === 'spot' && hasShortEntry) {
       items.push({
         key: 'market.marketType',
         reason: 'invalid_spot_short_combo',
@@ -236,5 +255,41 @@ export class StrategyClarificationRulesService {
       question: '轨外连续3根K线时，应执行减仓还是直接平仓？',
       status: 'pending',
     }]
+  }
+
+  private readMarketScopeConflicts(
+    riskRules: Record<string, unknown> | undefined,
+  ): MarketScopeConflict[] {
+    const raw = riskRules?._marketScopeConflicts
+    if (!Array.isArray(raw)) return []
+
+    return raw.flatMap((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return []
+      const field = (item as { field?: unknown }).field
+      const previous = (item as { previous?: unknown }).previous
+      const next = (item as { next?: unknown }).next
+      if (
+        (field !== 'exchange' && field !== 'marketType' && field !== 'symbol' && field !== 'timeframe')
+        || typeof previous !== 'string'
+        || typeof next !== 'string'
+        || !previous.trim()
+        || !next.trim()
+      ) {
+        return []
+      }
+
+      return [{
+        field,
+        previous: previous.trim(),
+        next: next.trim(),
+      }]
+    })
+  }
+
+  private renderMarketFieldLabel(field: MarketScopeConflict['field']): string {
+    if (field === 'exchange') return '交易所'
+    if (field === 'marketType') return '市场类型'
+    if (field === 'symbol') return '交易标的'
+    return '主周期'
   }
 }

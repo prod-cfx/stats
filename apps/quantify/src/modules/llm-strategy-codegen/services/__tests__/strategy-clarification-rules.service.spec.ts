@@ -114,6 +114,52 @@ describe('strategyClarificationRulesService', () => {
     ]))
   })
 
+  it('does not block long-only spot strategy as invalid spot-short combo', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['跌破布林带下轨时做多'],
+      riskRules: { exchange: 'binance', marketType: 'spot' },
+    })
+
+    expect(state.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'invalid_spot_short_combo',
+      }),
+    ]))
+  })
+
+  it('blocks conflicting market scope when session merges two different exchanges', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['跌破布林带下轨时做多'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        _marketScopeConflicts: [
+          {
+            field: 'exchange',
+            previous: 'okx',
+            next: 'binance',
+          },
+        ],
+      },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'market.conflict.exchange',
+        reason: 'conflicting_market_scope',
+        field: 'exchange',
+        allowedAnswers: ['okx', 'binance'],
+        blocking: true,
+        status: 'pending',
+      }),
+    ]))
+  })
+
   it('blocks short-side strategy when exchange is missing', () => {
     const state = service.detect({
       symbols: ['BTCUSDT'],

@@ -9,13 +9,22 @@ export class CompiledScriptExecutionEnvelopeService {
       throw new Error('canonical_spec_v2_required')
     }
 
+    const hasLongExposure = spec.rules.some(rule => rule.actions.some(action => (
+      action.type === 'OPEN_LONG'
+      || action.type === 'CLOSE_LONG'
+      || action.type === 'REDUCE_LONG'
+    )))
     const hasShortExposure = spec.rules.some(rule => rule.actions.some(action => (
       action.type === 'OPEN_SHORT'
       || action.type === 'REDUCE_SHORT'
     )))
 
     return {
-      positionMode: hasShortExposure ? 'long_short' : 'long_only',
+      positionMode: hasLongExposure && hasShortExposure
+        ? 'long_short'
+        : hasShortExposure
+            ? 'short_only'
+            : 'long_only',
       marginMode: spec.market.marketType === 'perp' ? 'isolated' : 'cash',
       tickSize: 0.01,
       pricePrecision: 2,

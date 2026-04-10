@@ -631,6 +631,7 @@ export class CodegenConversationService {
       return this.normalizeChecklist({
         ...checklist,
         symbols: symbol ? [symbol] : checklist.symbols,
+        riskRules: this.clearMarketScopeConflicts(checklist.riskRules, 'symbol'),
       })
     }
 
@@ -639,6 +640,7 @@ export class CodegenConversationService {
       return this.normalizeChecklist({
         ...checklist,
         timeframes: timeframe ? [timeframe] : checklist.timeframes,
+        riskRules: this.clearMarketScopeConflicts(checklist.riskRules, 'timeframe'),
       })
     }
 
@@ -648,7 +650,7 @@ export class CodegenConversationService {
       return this.normalizeChecklist({
         ...checklist,
         riskRules: {
-          ...(checklist.riskRules ?? {}),
+          ...this.clearMarketScopeConflicts(checklist.riskRules, 'exchange'),
           exchange,
         },
       })
@@ -660,7 +662,7 @@ export class CodegenConversationService {
       return this.normalizeChecklist({
         ...checklist,
         riskRules: {
-          ...(checklist.riskRules ?? {}),
+          ...this.clearMarketScopeConflicts(checklist.riskRules, 'marketType'),
           marketType,
         },
       })
@@ -704,13 +706,7 @@ export class CodegenConversationService {
       if (/做多|多单|开多|long|买入/i.test(normalized) || /做空|空单|开空|short|卖出/i.test(normalized)) {
         return this.replaceRuleDirection(normalized, actionText)
       }
-      if (/上轨|upper/i.test(normalized)) {
-        return `K线收盘后确认突破布林带上轨时${actionText}`
-      }
-      if (/下轨|lower/i.test(normalized)) {
-        return `K线收盘后确认突破布林带下轨时${actionText}`
-      }
-      return normalized
+      return `${normalized}，${actionText}`
     })
 
     return this.normalizeChecklist({
@@ -741,6 +737,30 @@ export class CodegenConversationService {
     }
 
     return parsed - 1
+  }
+
+  private clearMarketScopeConflicts(
+    riskRules: ChecklistPayload['riskRules'],
+    field: 'exchange' | 'marketType' | 'symbol' | 'timeframe',
+  ): Record<string, unknown> {
+    const next = { ...(riskRules ?? {}) }
+    const rawConflicts = next._marketScopeConflicts
+    if (!Array.isArray(rawConflicts)) {
+      return next
+    }
+
+    const filtered = rawConflicts.filter((item) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return false
+      return (item as { field?: unknown }).field !== field
+    })
+
+    if (filtered.length > 0) {
+      next._marketScopeConflicts = filtered
+    } else {
+      delete next._marketScopeConflicts
+    }
+
+    return next
   }
 
   private async continueWithStructuredClarificationAnswers(args: {
@@ -783,6 +803,28 @@ export class CodegenConversationService {
     const canonicalSpec = this.canonicalSpecBuilder.build(args.checklist)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
     const canonicalDigest = this.readCanonicalDigest(specDesc)
+    const missingFields = this.resolveChecklistMissingFields(args.checklist)
+
+    if (missingFields.length > 0) {
+      await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
+        status: 'DRAFTING',
+        checklist: args.checklist,
+        clarificationState: args.clarificationState,
+        constraintPack: {
+          ...args.constraintPack,
+          conversationHistory: historyAfterAnswer,
+        },
+        latestSpecDesc: specDesc,
+      }))
+
+      return this.finalizeSessionResponse({
+        id: args.session.id,
+        status: 'DRAFTING',
+        missingFields,
+        assistantPrompt: '请先补全入场和出场规则，再确认生成代码。',
+        clarificationState: args.clarificationState,
+      })
+    }
 
     await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
       status: 'CHECKLIST_GATE',
@@ -1741,9 +1783,11 @@ export class CodegenConversationService {
     const mergedRiskRules = (() => {
       const baseRiskRules = base.riskRules ?? {}
       const patchRiskRules = patch.riskRules ?? {}
+      const marketScopeConflicts = this.collectMarketScopeConflicts(base, patch)
       const merged = {
         ...baseRiskRules,
         ...patchRiskRules,
+        ...(marketScopeConflicts.length > 0 ? { _marketScopeConflicts: marketScopeConflicts } : {}),
       }
       return Object.keys(merged).length > 0 ? merged : undefined
     })()
@@ -1756,6 +1800,41 @@ export class CodegenConversationService {
       riskRules: mergedRiskRules,
     }
     return this.normalizeChecklist(merged)
+  }
+
+  private collectMarketScopeConflicts(base: ChecklistPayload, patch: ChecklistPayload): Array<{
+    field: 'exchange' | 'marketType' | 'symbol' | 'timeframe'
+    previous: string
+    next: string
+  }> {
+    const conflicts: Array<{
+      field: 'exchange' | 'marketType' | 'symbol' | 'timeframe'
+      previous: string
+      next: string
+    }> = []
+    const pushConflict = (
+      field: 'exchange' | 'marketType' | 'symbol' | 'timeframe',
+      previous: string | undefined,
+      next: string | undefined,
+    ) => {
+      if (!previous || !next || previous === next) return
+      conflicts.push({ field, previous, next })
+    }
+
+    pushConflict('symbol', base.symbols?.[0], patch.symbols?.[0])
+    pushConflict('timeframe', base.timeframes?.[0], patch.timeframes?.[0])
+    pushConflict(
+      'exchange',
+      typeof base.riskRules?.exchange === 'string' ? base.riskRules.exchange : undefined,
+      typeof patch.riskRules?.exchange === 'string' ? patch.riskRules.exchange : undefined,
+    )
+    pushConflict(
+      'marketType',
+      typeof base.riskRules?.marketType === 'string' ? base.riskRules.marketType : undefined,
+      typeof patch.riskRules?.marketType === 'string' ? patch.riskRules.marketType : undefined,
+    )
+
+    return conflicts
   }
 
   private appendConversationHistory(

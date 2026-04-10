@@ -114,19 +114,41 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
     onClarificationAnswer?: (itemKey: string, value: string) => void
   }) => {
     const [input, setInput] = React.useState('')
+    const [clarificationInput, setClarificationInput] = React.useState('')
+    const pendingClarification = clarificationGate?.items.find(item => item.status === 'pending')
+    const hasAllowedAnswers = (pendingClarification?.allowedAnswers?.length ?? 0) > 0
 
     return (
       <div>
         <div data-testid="messages">{messages.map(message => message.content).join('\n')}</div>
         <div data-testid="clarification-question">
-          {clarificationGate?.items.find(item => item.status === 'pending')?.question ?? ''}
+          {pendingClarification?.question ?? ''}
         </div>
         <button
           data-testid="clarification-answer"
-          onClick={() => onClarificationAnswer?.('market.marketType', 'perp')}
+          onClick={() => onClarificationAnswer?.(pendingClarification?.key ?? 'market.marketType', 'perp')}
         >
           answer clarification
         </button>
+        {!hasAllowedAnswers && (
+          <>
+            <input
+              data-testid="clarification-freeform-input"
+              value={clarificationInput}
+              onChange={event => setClarificationInput(event.target.value)}
+            />
+            <button
+              data-testid="clarification-freeform-submit"
+              onClick={() =>
+                onClarificationAnswer?.(
+                  pendingClarification?.key ?? 'market.marketType',
+                  clarificationInput,
+                )}
+            >
+              submit clarification
+            </button>
+          </>
+        )}
         <div data-testid="publication-gate">
           {publicationGate?.blockingMismatches
             ?.map(item => `${item.field}:${item.expected}:${item.actual}:${item.reason}`)
@@ -630,11 +652,160 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       await Promise.resolve()
     })
 
-    const stored = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]') as Array<{ pendingCanonicalDigest?: string | null }>
-    expect(stored[0]?.pendingCanonicalDigest ?? null).toBeNull()
-    expect(
-      (container.querySelector('[data-testid="confirm-graph"]') as HTMLButtonElement | null)?.disabled,
-    ).toBe(true)
+    await waitForAssertion(() => {
+      const stored = JSON.parse(
+        localStorage.getItem('ai_quant_conversations_v1') ?? '[]',
+      ) as Array<{ pendingCanonicalDigest?: string | null }>
+      expect(stored[0]?.pendingCanonicalDigest ?? null).toBeNull()
+      expect(
+        (container.querySelector('[data-testid="confirm-graph"]') as HTMLButtonElement | null)?.disabled,
+      ).toBe(true)
+    })
+  })
+
+  it('submits free-form clarification answers when a clarification item has no allowedAnswers', async () => {
+    seedDraftConversation(Date.now(), {
+      clarificationGate: {
+        blocked: true,
+        items: [
+          {
+            key: 'riskRules.earlyStop.action',
+            field: 'riskRules.earlyStop.action',
+            reason: 'missing_early_stop_action',
+            question: '请补充连续 3 根 K 线跌破布林带下轨时的处理动作',
+            blocking: true,
+            status: 'pending',
+          },
+        ],
+      },
+    })
+
+    mockContinueLlmCodegenSession.mockResolvedValueOnce({
+      id: 'session-1',
+      status: 'CHECKLIST_GATE',
+      clarificationGate: null,
+      canonicalDigest: 'sha256:canonical-2',
+      semanticGraph: validSemanticGraph,
+      validationReport: { ok: true, errors: [] },
+      specDesc: {
+        entryRules: ['价格回踩 5 日均线买入'],
+        exitRules: ['价格跌破 10 日均线卖出'],
+        riskRules: { positionPct: 8, maxDrawdownPct: 15 },
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+      },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      const input = container.querySelector(
+        '[data-testid="clarification-freeform-input"]',
+      ) as HTMLInputElement | null
+      if (input) {
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')
+          ?.set
+          ?.call(input, '减半仓位')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        input.dispatchEvent(new Event('change', { bubbles: true }))
+      }
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="clarification-freeform-submit"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockContinueLlmCodegenSession).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        message: '减半仓位',
+        clarificationAnswers: {
+          'riskRules.earlyStop.action': '减半仓位',
+        },
+      }),
+    )
+  })
+
+  it('clears a stale publication gate when backend explicitly returns publicationGate null', async () => {
+    seedDraftConversation(Date.now(), {
+      clarificationGate: {
+        blocked: true,
+        items: [
+          {
+            key: 'market.marketType',
+            field: 'marketType',
+            reason: 'missing_market_type',
+            question: '该策略运行在现货还是合约市场？',
+            allowedAnswers: ['spot', 'perp'],
+            blocking: true,
+            status: 'pending',
+          },
+        ],
+      },
+      publicationGate: {
+        passed: false,
+        blockingMismatches: [
+          {
+            field: 'exchange',
+            expected: 'okx',
+            actual: 'binance',
+            reason: 'confirmed snapshot and compiled artifact exchange mismatch',
+          },
+        ],
+      },
+    })
+
+    mockContinueLlmCodegenSession.mockResolvedValueOnce({
+      id: 'session-1',
+      status: 'CHECKLIST_GATE',
+      publicationGate: null,
+      canonicalDigest: 'sha256:canonical-2',
+      semanticGraph: validSemanticGraph,
+      validationReport: { ok: true, errors: [] },
+      specDesc: {
+        entryRules: ['价格达到 66830 时买入'],
+        exitRules: ['价格上涨到 66890 时卖出'],
+        riskRules: { positionPct: 10, maxDrawdownPct: 20 },
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+      },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="publication-gate"]')?.textContent).toContain('binance')
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="clarification-answer"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitForAssertion(() => {
+      expect(container.querySelector('[data-testid="publication-gate"]')?.textContent).toBe('')
+    })
+
+    const stored = JSON.parse(
+      localStorage.getItem('ai_quant_conversations_v1') ?? '[]',
+    ) as Array<{ publicationGate?: Record<string, unknown> | null }>
+    expect(stored[0]).toHaveProperty('publicationGate', null)
   })
 
   it('renders publication gate mismatch details when publish gate is blocked', async () => {

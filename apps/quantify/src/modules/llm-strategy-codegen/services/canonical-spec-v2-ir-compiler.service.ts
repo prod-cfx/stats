@@ -845,12 +845,19 @@ export class CanonicalSpecV2IrCompilerService {
   }
 
   private resolvePositionMode(rules: CanonicalRuleV2[]): CanonicalStrategyIrV1['portfolio']['positionMode'] {
+    const hasLong = rules.some(rule => rule.actions.some(action => (
+      action.type === 'OPEN_LONG'
+      || action.type === 'CLOSE_LONG'
+      || action.type === 'REDUCE_LONG'
+    )))
     const hasShort = rules.some(rule => rule.actions.some(action => (
       action.type === 'OPEN_SHORT'
       || action.type === 'REDUCE_SHORT'
     )))
 
-    return hasShort ? 'long_short' : 'long_only'
+    if (hasLong && hasShort) return 'long_short'
+    if (hasShort) return 'short_only'
+    return 'long_only'
   }
 
   private resolveMaxLookback(seriesMap: Map<string, SeriesDef>): number {

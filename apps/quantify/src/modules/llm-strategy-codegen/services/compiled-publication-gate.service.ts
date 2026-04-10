@@ -344,10 +344,21 @@ export class CompiledPublicationGateService {
 
   private readCanonicalPositionMode(
     snapshot: Record<string, unknown>,
-  ): 'long_only' | 'long_short' | null {
+  ): 'long_only' | 'short_only' | 'long_short' | null {
     const rules = snapshot.rules
     if (!Array.isArray(rules) || rules.length === 0) return null
 
+    const hasLongExposure = rules.some((rule) => {
+      if (!rule || typeof rule !== 'object' || Array.isArray(rule)) return false
+      const actions = (rule as Record<string, unknown>).actions
+      if (!Array.isArray(actions)) return false
+
+      return actions.some((action) => {
+        if (!action || typeof action !== 'object' || Array.isArray(action)) return false
+        const type = (action as Record<string, unknown>).type
+        return type === 'OPEN_LONG' || type === 'CLOSE_LONG' || type === 'REDUCE_LONG'
+      })
+    })
     const hasShortExposure = rules.some((rule) => {
       if (!rule || typeof rule !== 'object' || Array.isArray(rule)) return false
       const actions = (rule as Record<string, unknown>).actions
@@ -356,11 +367,13 @@ export class CompiledPublicationGateService {
       return actions.some((action) => {
         if (!action || typeof action !== 'object' || Array.isArray(action)) return false
         const type = (action as Record<string, unknown>).type
-        return type === 'OPEN_SHORT' || type === 'REDUCE_SHORT'
+        return type === 'OPEN_SHORT' || type === 'CLOSE_SHORT' || type === 'REDUCE_SHORT'
       })
     })
 
-    return hasShortExposure ? 'long_short' : 'long_only'
+    if (hasLongExposure && hasShortExposure) return 'long_short'
+    if (hasShortExposure) return 'short_only'
+    return 'long_only'
   }
 
   private collectOutsideBandBars(condition: unknown): number[] {
