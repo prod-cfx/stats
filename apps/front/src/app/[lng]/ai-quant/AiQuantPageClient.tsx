@@ -32,7 +32,7 @@ import { applyCapabilitiesToParamSchema } from '@/components/ai-quant/strategy-p
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
 import { useAuth } from '@/hooks/use-auth'
 import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
-import { fetchUserExchangeAccountStatuses } from '@/lib/api'
+import { fetchUserExchangeAccountStatuses, listAiQuantConversations } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
 import { runAiQuantBacktest } from './ai-quant-page-backtest'
 import {
@@ -47,6 +47,7 @@ import {
   buildBacktestSummaryResult,
   buildParamSchemaWithCapabilities,
   createConversation,
+  createConversationFromServerConversation,
   createRecoveryConversation,
   hasExplicitBacktestExecutionOverrides,
   hasLatestPublishedCode,
@@ -75,10 +76,12 @@ type CapabilityState = 'loading' | 'ready' | 'failed'
 
 interface AiQuantPageClientProps {
   deployVersion?: string
+  serverOwnedConversations?: boolean
 }
 
 export function AiQuantPageClient({
   deployVersion = 'local-dev',
+  serverOwnedConversations = false,
 }: AiQuantPageClientProps = {}) {
   const { t } = useTranslation()
   const params = useParams<{ lng: string }>()
@@ -129,6 +132,31 @@ export function AiQuantPageClient({
   }, [activeConversationId, conversations])
 
   useEffect(() => {
+    if (serverOwnedConversations) {
+      let cancelled = false
+      void listAiQuantConversations()
+        .then((serverConversations) => {
+          if (cancelled) return
+          localStorage.removeItem(CONVERSATIONS_STORAGE_KEY)
+          const restored = serverConversations.length > 0
+            ? serverConversations.map(conversation => createConversationFromServerConversation(conversation, t))
+            : [createConversation(t)]
+          setConversations(restored)
+          setActiveConversationId(restored[0].id)
+          setConversationStorageReady(true)
+        })
+        .catch(() => {
+          if (cancelled) return
+          const fallback = [createConversation(t)]
+          setConversations(fallback)
+          setActiveConversationId(fallback[0].id)
+          setConversationStorageReady(true)
+        })
+      return () => {
+        cancelled = true
+      }
+    }
+
     const raw = localStorage.getItem(CONVERSATIONS_STORAGE_KEY)
     const result = readPersistedConversations({
       raw,
@@ -147,15 +175,16 @@ export function AiQuantPageClient({
     }
     setConversationStorageReady(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deployVersion])
+  }, [deployVersion, serverOwnedConversations])
 
   useEffect(() => {
+    if (serverOwnedConversations) return
     if (!conversationStorageReady || !conversations.length) return
     localStorage.setItem(
       CONVERSATIONS_STORAGE_KEY,
       serializePersistedConversations(conversations, deployVersion),
     )
-  }, [conversationStorageReady, conversations, deployVersion])
+  }, [conversationStorageReady, conversations, deployVersion, serverOwnedConversations])
 
   useEffect(() => {
     if (!session?.userId) return

@@ -209,6 +209,21 @@ describe('aiQuantProxyService', () => {
     )
   })
 
+  it('proxies AI Quant conversation list with authorization header', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.get.mockResolvedValue([{ id: 'conv-1', activeCodegenSessionId: 'session-1' }])
+
+    await service.listAiQuantConversations('user-1', 'Bearer token-1')
+
+    expect(quantifyClient.get).toHaveBeenCalledWith(
+      '/account/ai-quant/conversations',
+      {
+        timeoutMs: codegenTimeoutMs,
+        headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
+      },
+    )
+  })
+
   it('maps quantify client errors into domain exceptions', async () => {
     const { service, quantifyClient } = createService()
     quantifyClient.post.mockRejectedValue(new QuantifyClientError(

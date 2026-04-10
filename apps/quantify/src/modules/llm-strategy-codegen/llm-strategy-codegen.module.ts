@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common'
 
 import { AiModule } from '@/modules/ai/ai.module'
 import { PrismaModule } from '@/prisma/prisma.module'
+import { AccountAiQuantConversationsController } from './controllers/account-ai-quant-conversations.controller'
 import { LiveLlmStrategyCodegenController } from './controllers/live-llm-strategy-codegen.controller'
 import { CodegenSessionsRepository } from './repositories/codegen-sessions.repository'
 import { PublishedStrategySnapshotsRepository } from './repositories/published-strategy-snapshots.repository'
@@ -32,7 +33,7 @@ import { StrategySummaryBuilderService } from './services/strategy-summary-build
 
 @Module({
   imports: [PrismaModule, AiModule],
-  controllers: [LiveLlmStrategyCodegenController],
+  controllers: [AccountAiQuantConversationsController, LiveLlmStrategyCodegenController],
   providers: [
     CodegenSessionsRepository,
     PublishedStrategySnapshotsRepository,

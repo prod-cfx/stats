@@ -141,7 +141,9 @@ jest.mock('@/lib/api', () => ({
   deployAccountAiQuantStrategy: jest.fn(),
   continueLlmCodegenSession: jest.fn(),
   fetchUserExchangeAccountStatuses: jest.fn(async () => []),
+  listAiQuantConversations: jest.fn(async () => []),
   getLlmCodegenSession: jest.fn(),
+  listLlmCodegenSessions: jest.fn(async () => []),
   startLlmCodegenSession: jest.fn(),
 }))
 
@@ -440,5 +442,37 @@ describe('AiQuantPageClient backtest range integration', () => {
 
     expect(container.textContent).not.toContain('persisted-message')
     expect(container.textContent).toContain('"symbol":"BTCUSDT"')
+  })
+
+  it('prefers backend-owned sessions over persisted local AI Quant conversations', async () => {
+    localStorage.clear()
+    seedVersionedConversation('deploy-current', Date.now())
+
+    const { listAiQuantConversations, listLlmCodegenSessions } = jest.requireMock('@/lib/api') as {
+      listAiQuantConversations: jest.Mock
+      listLlmCodegenSessions: jest.Mock
+    }
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'session-1',
+        status: 'CHECKLIST_GATE',
+        updatedAt: '2026-04-10T12:00:00.000Z',
+        conversationTitle: 'server-conv',
+        conversationMessages: [
+          { role: 'assistant', content: 'server-message' },
+        ],
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(listAiQuantConversations).toHaveBeenCalled()
+    expect(listLlmCodegenSessions).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('server-message')
+    expect(container.textContent).not.toContain('persisted-message')
   })
 })

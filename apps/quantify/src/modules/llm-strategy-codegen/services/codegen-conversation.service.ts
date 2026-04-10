@@ -1,4 +1,5 @@
 import type { CodegenGuidePromptConfigSnapshot, ConstraintPackSnapshot } from '../constants/constraint-pack'
+import type { AiQuantConversationResponseDto } from '../dto/ai-quant-conversation.response.dto'
 import type { CodegenGuideConfigDto } from '../dto/codegen-guide-config.dto'
 import type { CodegenSessionResponseDto } from '../dto/codegen-session.response.dto'
 import type { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.dto'
@@ -187,6 +188,11 @@ export class CodegenConversationService {
     }
 
     return this.toSessionSnapshotResponse(session)
+  }
+
+  async listConversations(userId: string): Promise<AiQuantConversationResponseDto[]> {
+    const sessions = await this.sessionsRepo.listByUser(userId)
+    return Promise.all(sessions.map(session => this.toConversationResponse(session)))
   }
 
   async continueSession(
@@ -513,7 +519,10 @@ export class CodegenConversationService {
     status: LlmCodegenSessionStatus
     latestDraftCode: Prisma.JsonValue | null
     latestSpecDesc: Prisma.JsonValue | null
+    constraintPack?: Prisma.JsonValue | null
     rejectReason: string | null
+    createdAt: Date
+    updatedAt: Date
     strategyInstanceId?: string | null
     clarificationState?: Prisma.JsonValue | null
   }): Promise<CodegenSessionResponseDto> {
@@ -527,11 +536,18 @@ export class CodegenConversationService {
     const sessionPublishedSnapshotId = typeof sessionSpecDesc?.publishedSnapshotId === 'string'
       ? sessionSpecDesc.publishedSnapshotId
       : null
+    const constraintPack = this.readConstraintPack(session.constraintPack ?? null)
+    const conversationMessages = this.toConversationMessages(constraintPack.conversationHistory)
+    const conversationTitle = this.deriveConversationTitle(conversationMessages)
 
     return this.finalizeSessionResponse({
       id: session.id,
+      conversationTitle,
+      conversationMessages,
       status: session.status,
       missingFields: [],
+      createdAt: session.createdAt.toISOString(),
+      updatedAt: session.updatedAt.toISOString(),
       scriptCode: typeof session.latestDraftCode === 'string' ? session.latestDraftCode : null,
       publishedSnapshotId: latestSnapshot?.id ?? sessionPublishedSnapshotId ?? null,
       consistencyReport: latestSnapshot?.consistencyReport && typeof latestSnapshot.consistencyReport === 'object' && !Array.isArray(latestSnapshot.consistencyReport)
@@ -549,6 +565,39 @@ export class CodegenConversationService {
         ?? this.readPublicationGate(sessionConsistencyReport),
       rejectReason: session.rejectReason,
     })
+  }
+
+  private async toConversationResponse(session: {
+    id: string
+    status: LlmCodegenSessionStatus
+    latestDraftCode: Prisma.JsonValue | null
+    latestSpecDesc: Prisma.JsonValue | null
+    constraintPack?: Prisma.JsonValue | null
+    rejectReason: string | null
+    createdAt: Date
+    updatedAt: Date
+    strategyInstanceId?: string | null
+    clarificationState?: Prisma.JsonValue | null
+  }): Promise<AiQuantConversationResponseDto> {
+    const snapshot = await this.toSessionSnapshotResponse(session)
+    return {
+      id: session.id,
+      activeCodegenSessionId: this.stateMachine.isTerminalStatus(session.status) ? null : session.id,
+      conversationTitle: snapshot.conversationTitle,
+      conversationMessages: snapshot.conversationMessages,
+      status: snapshot.status,
+      createdAt: snapshot.createdAt,
+      updatedAt: snapshot.updatedAt,
+      canonicalDigest: snapshot.canonicalDigest,
+      specDesc: snapshot.specDesc,
+      semanticGraph: snapshot.semanticGraph,
+      validationReport: snapshot.validationReport,
+      clarificationGate: snapshot.clarificationGate,
+      publicationGate: snapshot.publicationGate,
+      scriptCode: snapshot.scriptCode,
+      publishedSnapshotId: snapshot.publishedSnapshotId,
+      strategyInstanceId: snapshot.strategyInstanceId,
+    }
   }
 
   private finalizeSessionResponse(
@@ -575,6 +624,31 @@ export class CodegenConversationService {
       canonicalDigest: null,
       semanticGraph: null,
     }
+  }
+
+  private toConversationMessages(
+    history: string[] | undefined,
+  ): Array<{ role: 'user' | 'assistant', content: string }> {
+    return (history ?? []).flatMap((entry) => {
+      const normalized = entry.trim()
+      if (!normalized) return []
+      if (normalized.startsWith('U:')) {
+        const content = normalized.slice(2).trim()
+        return content ? [{ role: 'user' as const, content }] : []
+      }
+      if (normalized.startsWith('A:')) {
+        const content = normalized.slice(2).trim()
+        return content ? [{ role: 'assistant' as const, content }] : []
+      }
+      return []
+    })
+  }
+
+  private deriveConversationTitle(
+    messages: Array<{ role: 'user' | 'assistant', content: string }>,
+  ): string {
+    const firstUser = messages.find(message => message.role === 'user' && message.content.trim())
+    return firstUser?.content.trim().slice(0, 16) || '新对话'
   }
 
   private buildClarificationGate(

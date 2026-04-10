@@ -2095,7 +2095,14 @@ export interface UserLlmStrategyInstanceResponse {
 
 export interface LlmCodegenSessionResponse {
   id: string
+  conversationTitle?: string
+  conversationMessages?: Array<{
+    role: 'user' | 'assistant'
+    content: string
+  }>
   status: string
+  createdAt?: string
+  updatedAt?: string
   missingFields?: string[]
   scriptCode?: string | null
   publishedSnapshotId?: string | null
@@ -2107,6 +2114,30 @@ export interface LlmCodegenSessionResponse {
   strategyInstanceId?: string | null
   rejectReason?: string | null
   assistantPrompt?: string
+  clarificationGate?: LlmClarificationGate | null
+  publicationGate?: LlmPublicationGate | null
+}
+
+export interface AiQuantConversationResponse {
+  id: string
+  conversationTitle?: string
+  conversationMessages?: Array<{
+    role: 'user' | 'assistant'
+    content: string
+  }>
+  activeCodegenSessionId?: string | null
+  status?: string
+  createdAt?: string
+  updatedAt?: string
+  scriptCode?: string | null
+  publishedSnapshotId?: string | null
+  canonicalDigest?: string | null
+  consistencyReport?: Record<string, unknown> | null
+  specDesc?: Record<string, unknown> | null
+  semanticGraph?: LlmSemanticGraph | null
+  validationReport?: LlmSemanticGraphValidationReport | null
+  strategyInstanceId?: string | null
+  rejectReason?: string | null
   clarificationGate?: LlmClarificationGate | null
   publicationGate?: LlmPublicationGate | null
 }
@@ -2253,6 +2284,25 @@ export async function startLlmCodegenSession(
   payload: StartLlmCodegenSessionPayload,
 ): Promise<LlmCodegenSessionResponse> {
   return postLlmCodegen<LlmCodegenSessionResponse>('/sessions', payload)
+}
+
+export async function listAiQuantConversations(): Promise<AiQuantConversationResponse[]> {
+  const authHeaders = requireAuthHeaders()
+  const response = await fetch(`${API_BASE_URL}/account/ai-quant/conversations`, {
+    method: 'GET',
+    headers: authHeaders,
+  })
+  let json: unknown = null
+  try {
+    json = await response.json()
+  } catch {
+    json = null
+  }
+  if (!response.ok) {
+    const message = parseApiErrorMessage(response.status, json, '查询 AI Quant 会话列表失败')
+    throw new ApiError(message, 'AI_QUANT_CONVERSATION_ERROR', response.status, json)
+  }
+  return unwrapResponse<AiQuantConversationResponse[]>(json as AiQuantConversationResponse[] | BaseResponse<AiQuantConversationResponse[]>)
 }
 
 export async function continueLlmCodegenSession(

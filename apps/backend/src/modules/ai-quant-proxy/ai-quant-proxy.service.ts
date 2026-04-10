@@ -139,6 +139,13 @@ export class AiQuantProxyService {
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
+  async listAiQuantConversations(userId: string, authorization: string | undefined) {
+    return this.quantifyClient.get('/account/ai-quant/conversations', {
+      timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
+      headers: this.userHeaders(userId, authorization),
+    }).catch(error => { throw this.mapQuantifyError(error) })
+  }
+
   async getCodegenSession(userId: string, authorization: string | undefined, sessionId: string) {
     return this.quantifyClient.get(`/llm-strategy-codegen/sessions/${encodeURIComponent(sessionId)}`, {
       timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
