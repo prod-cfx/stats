@@ -74,6 +74,18 @@ const STRATEGY_PARAM_KEYS = new Set([
   'gridStepPct',
 ])
 
+const EXECUTION_TAG_EXCLUDED_KEYS = new Set([
+  'backtestRangePreset',
+  'backtestStart',
+  'backtestEnd',
+  'backtestInitialCash',
+  'backtestLeverage',
+  'backtestSlippageBps',
+  'backtestFeeBps',
+  'backtestPriceSource',
+  'backtestAllowPartial',
+])
+
 function asObject(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
   return value as Record<string, unknown>
@@ -351,6 +363,7 @@ export function syncStrategyParamsFromCodegen(args: {
 
   const executionTags = Object.entries(values)
     .filter(([key]) => !['exchange', 'symbol', 'baseTimeframe'].includes(key))
+    .filter(([key]) => !EXECUTION_TAG_EXCLUDED_KEYS.has(key))
     .filter(([, value]) => ['string', 'number', 'boolean'].includes(typeof value))
     .map(([key, value]) => `${key}: ${String(value)}`)
 

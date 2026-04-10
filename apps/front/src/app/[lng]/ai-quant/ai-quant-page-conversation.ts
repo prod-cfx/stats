@@ -200,6 +200,12 @@ export const DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES = {
   backtestAllowPartial: true,
 } as const
 
+export function hasExplicitBacktestExecutionOverrides(values: Record<string, unknown>): boolean {
+  return BACKTEST_EXECUTION_PARAM_KEYS.some(
+    key => values[key] !== DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES[key],
+  )
+}
+
 function parseBacktestExecutionNumber(
   value: unknown,
   fallback: number,
