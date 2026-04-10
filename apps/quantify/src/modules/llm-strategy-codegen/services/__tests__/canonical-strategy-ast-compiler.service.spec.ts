@@ -49,6 +49,7 @@ describe('canonicalStrategyAstCompilerService', () => {
           phase: 'entry',
           when: 'entry_cross',
           priority: 200,
+          cooldownBars: 5,
           actions: [
             { kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 25 } },
           ],
@@ -93,6 +94,10 @@ describe('canonicalStrategyAstCompilerService', () => {
       'decision_01_entry_long',
       'decision_02_exit_long',
     ])
+    expect(ast.decisionPrograms[0]).toEqual(expect.objectContaining({
+      sourceRef: 'entry_long',
+      cooldownBars: 5,
+    }))
     expect(ast.manifest.structuralDigest).toMatch(/^sha256:/)
     expect(ast.manifest.irHash).toMatch(/^sha256:/)
   })

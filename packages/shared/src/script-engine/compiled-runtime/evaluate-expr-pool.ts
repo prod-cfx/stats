@@ -1,6 +1,6 @@
 import type { StrategyExecutionContextV1 } from '../../strategy-protocol'
 import type { Bar } from '../helpers'
-import { bollingerBands, ema, sma } from '../helpers/technical-indicators'
+import { atr, bollingerBands, ema, macd, rsi, sma } from '../helpers/technical-indicators'
 
 export type CompiledRuntimeValue =
   | number
@@ -12,7 +12,7 @@ export type CompiledRuntimeValue =
 
 interface CompiledExprNode {
   id: string
-  nodeType: 'series' | 'predicate'
+  nodeType: 'series' | 'level_set' | 'predicate'
   deps?: string[]
   sourceRef?: string
   payload: {
@@ -57,6 +57,10 @@ function evaluateNode(
     return evaluateSeries(node, values, ctx, executionModel, exprIndex, seriesMemo)
   }
 
+  if (node.nodeType === 'level_set') {
+    return evaluateLevelSet(node, values)
+  }
+
   return evaluatePredicate(node, values, ctx, executionModel, exprIndex, seriesMemo)
 }
 
@@ -71,12 +75,21 @@ function evaluateSeries(
   switch (node.payload.kind) {
     case 'CONST':
       return typeof node.payload.value === 'number' ? node.payload.value : null
-      case 'PRICE':
-      case 'EMA':
-      case 'SMA':
-      case 'UPPER_BAND':
-      case 'MID_BAND':
-      case 'LOWER_BAND':
+    case 'PRICE':
+    case 'EMA':
+    case 'SMA':
+    case 'RSI':
+    case 'ATR':
+    case 'MACD_LINE':
+    case 'MACD_SIGNAL':
+    case 'HIGHEST_HIGH':
+    case 'LOWEST_LOW':
+    case 'POSITION_BARS_HELD':
+    case 'POSITION_AVG_PRICE':
+    case 'POSITION_PNL_PCT':
+    case 'UPPER_BAND':
+    case 'MID_BAND':
+    case 'LOWER_BAND':
     case 'BOLLINGER_BARS_OUTSIDE':
       return resolveSeriesValueAt(node.id, 0, ctx, executionModel, exprIndex, seriesMemo)
     default: {
@@ -119,9 +132,62 @@ function evaluatePredicate(
       return crossesOver(leftId, rightId, ctx, executionModel, exprIndex, seriesMemo)
     case 'CROSS_UNDER':
       return crossesUnder(leftId, rightId, ctx, executionModel, exprIndex, seriesMemo)
+    case 'TOUCH_LEVEL_DOWN':
+      return touchesLevel(leftId, rightId, values, ctx, executionModel, exprIndex, seriesMemo, 'down')
+    case 'TOUCH_LEVEL_UP':
+      return touchesLevel(leftId, rightId, values, ctx, executionModel, exprIndex, seriesMemo, 'up')
     default:
       return false
   }
+}
+
+function evaluateLevelSet(
+  node: CompiledExprNode,
+  values: Record<string, CompiledRuntimeValue>,
+): CompiledRuntimeValue {
+  const anchor = node.deps?.[0] ? values[node.deps[0]] : null
+  const lowerBound = node.deps?.[1] ? values[node.deps[1]] : null
+  const upperBound = node.deps?.[2] ? values[node.deps[2]] : null
+  if (typeof anchor !== 'number') {
+    return { levels: [] }
+  }
+
+  const payload = node.payload as Record<string, any>
+  const spacingMode = payload.params?.mode ?? payload.spacing?.mode
+  const spacingValueRaw = payload.params?.value ?? payload.spacing?.value
+  const spacingValue = typeof spacingValueRaw === 'number'
+    ? spacingValueRaw
+    : typeof spacingValueRaw === 'string'
+      ? Number(spacingValueRaw)
+      : null
+  const upLevelsRaw = payload.params?.up ?? payload.levelsPerSide?.up
+  const upLevels = typeof upLevelsRaw === 'number'
+    ? upLevelsRaw
+    : typeof upLevelsRaw === 'string'
+      ? Number(upLevelsRaw)
+      : 0
+
+  const lower = typeof lowerBound === 'number' ? lowerBound : null
+  const upper = typeof upperBound === 'number' ? upperBound : null
+  if (spacingMode !== 'pct' || typeof spacingValue !== 'number' || spacingValue <= 0 || upLevels <= 0) {
+    return { levels: [] }
+  }
+
+  const levels: number[] = []
+  const arithmeticStep = anchor * (spacingValue / 100)
+  let current: number
+  for (let index = 0; index < upLevels; index += 1) {
+    if (index === 0) {
+      current = anchor
+    } else {
+      current = anchor + arithmeticStep * index
+    }
+    if (lower !== null && current < lower) continue
+    if (upper !== null && current > upper) break
+    levels.push(current)
+  }
+
+  return { levels }
 }
 
 function crossesOver(
@@ -183,6 +249,33 @@ function compare(
   return predicate(left, right)
 }
 
+function touchesLevel(
+  priceExprId: string | undefined,
+  levelSetExprId: string | undefined,
+  values: Record<string, CompiledRuntimeValue>,
+  ctx: StrategyExecutionContextV1,
+  executionModel?: Record<string, unknown>,
+  exprIndex?: ReadonlyMap<string, CompiledExprNode>,
+  seriesMemo?: Map<string, number | null>,
+  direction?: 'up' | 'down',
+): boolean {
+  const currentPrice = resolveSeriesValueAt(priceExprId, 0, ctx, executionModel, exprIndex, seriesMemo)
+  const previousPrice = resolveSeriesValueAt(priceExprId, 1, ctx, executionModel, exprIndex, seriesMemo)
+  const levelSetNode = levelSetExprId && exprIndex ? exprIndex.get(levelSetExprId) : null
+  if (!levelSetNode) return false
+  const levelSet = evaluateLevelSet(levelSetNode, values)
+  if (typeof currentPrice !== 'number' || typeof previousPrice !== 'number' || !levelSet || typeof levelSet !== 'object' || !Array.isArray(levelSet.levels)) {
+    return false
+  }
+
+  return levelSet.levels.some((level) => {
+    if (direction === 'down') {
+      return previousPrice > level && currentPrice <= level
+    }
+    return previousPrice < level && currentPrice >= level
+  })
+}
+
 function readLatestPrice(
   field: 'open' | 'high' | 'low' | 'close',
   latestBar: Pick<Bar, 'open' | 'high' | 'low' | 'close'> | null,
@@ -237,6 +330,48 @@ function resolveSeriesValueAt(
         }
         return sma(history, period)
       }
+      case 'RSI': {
+        const inputId = resolveSeriesInputNodeId(node, exprIndex)
+        const period = readNumericParam(node.payload.params, 'period') ?? 14
+        const history = collectSeriesHistory(inputId, offset + (node.payload.offsetBars ?? 0), ctx, executionModel, exprIndex, seriesMemo)
+        return rsi(history, period)
+      }
+      case 'ATR': {
+        const period = readNumericParam(node.payload.params, 'period') ?? 14
+        const barHistory = collectBarHistory(period + 1, offset + (node.payload.offsetBars ?? 0), bars)
+        return atr(barHistory, period)
+      }
+      case 'MACD_LINE':
+      case 'MACD_SIGNAL': {
+        const inputId = resolveSeriesInputNodeId(node, exprIndex)
+        const fastPeriod = readNumericParam(node.payload.params, 'fastPeriod') ?? 12
+        const slowPeriod = readNumericParam(node.payload.params, 'slowPeriod') ?? 26
+        const signalPeriod = readNumericParam(node.payload.params, 'signalPeriod') ?? 9
+        const history = collectSeriesHistory(inputId, offset + (node.payload.offsetBars ?? 0), ctx, executionModel, exprIndex, seriesMemo)
+        const result = macd(history, fastPeriod, slowPeriod, signalPeriod)
+        if (!result) return null
+        return node.payload.kind === 'MACD_LINE' ? result.macd : result.signal
+      }
+      case 'HIGHEST_HIGH': {
+        const period = readNumericParam(node.payload.params, 'period') ?? 20
+        const window = collectBarHistory(period, offset + (node.payload.offsetBars ?? 0) + 1, bars)
+        if (window.length === 0) return null
+        return Math.max(...window.map(bar => bar.high))
+      }
+      case 'LOWEST_LOW': {
+        const period = readNumericParam(node.payload.params, 'period') ?? 20
+        const window = collectBarHistory(period, offset + (node.payload.offsetBars ?? 0) + 1, bars)
+        if (window.length === 0) return null
+        return Math.min(...window.map(bar => bar.low))
+      }
+      case 'POSITION_BARS_HELD': {
+        const raw = (ctx.position as Record<string, unknown> | undefined)?.barsHeld
+        return typeof raw === 'number' && Number.isFinite(raw) ? raw : null
+      }
+      case 'POSITION_AVG_PRICE':
+        return readPositionAvgPrice(ctx)
+      case 'POSITION_PNL_PCT':
+        return readPositionPnlPct(ctx, executionModel)
       case 'UPPER_BAND':
       case 'MID_BAND':
       case 'LOWER_BAND': {
@@ -342,6 +477,29 @@ function collectPriceWindow(period: number, offset: number, bars: readonly Bar[]
   return result
 }
 
+function collectBarHistory(
+  period: number,
+  offset: number,
+  bars: readonly Pick<Bar, 'open' | 'high' | 'low' | 'close'>[],
+): Bar[] {
+  if (!Number.isFinite(period) || period <= 0) return []
+
+  const result: Bar[] = []
+  for (let relative = period - 1 + offset; relative >= offset; relative -= 1) {
+    const bar = bars[bars.length - 1 - relative]
+    if (!bar) return []
+    result.push({
+      open: bar.open,
+      high: bar.high,
+      low: bar.low,
+      close: bar.close,
+      volume: 0,
+      timestamp: 0,
+    })
+  }
+  return result
+}
+
 function readPriceAtOffset(
   field: 'open' | 'high' | 'low' | 'close',
   bars: readonly Pick<Bar, 'open' | 'high' | 'low' | 'close'>[],
@@ -392,4 +550,45 @@ function resolveSeriesInputNodeId(
   }
 
   return node.deps?.[0] ?? node.payload.inputs?.[0]
+}
+
+function readPositionAvgPrice(ctx: StrategyExecutionContextV1): number | null {
+  const candidates = [
+    ctx.position?.avgEntryPrice,
+    ctx.position?.entryPrice,
+    ctx.position?.avgPrice,
+  ]
+
+  for (const candidate of candidates) {
+    if (typeof candidate === 'number' && Number.isFinite(candidate) && candidate > 0) {
+      return candidate
+    }
+  }
+
+  return null
+}
+
+function readPositionPnlPct(
+  ctx: StrategyExecutionContextV1,
+  executionModel?: Record<string, unknown>,
+): number | null {
+  const avgEntryPrice = readPositionAvgPrice(ctx)
+  const qty = ctx.position?.qty
+  const currentPrice = readLatestPrice('close', ctx.baseTimeframeBar ?? null, executionModel)
+
+  if (
+    avgEntryPrice == null
+    || typeof qty !== 'number'
+    || !Number.isFinite(qty)
+    || qty === 0
+    || currentPrice == null
+  ) {
+    return null
+  }
+
+  if (qty > 0) {
+    return ((currentPrice - avgEntryPrice) / avgEntryPrice) * 100
+  }
+
+  return ((avgEntryPrice - currentPrice) / avgEntryPrice) * 100
 }

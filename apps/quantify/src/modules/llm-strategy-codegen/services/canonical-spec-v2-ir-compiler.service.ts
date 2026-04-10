@@ -5,6 +5,7 @@ import type {
   RiskGuard,
   RuleBlock,
   SeriesDef,
+  LevelSetDef,
 } from '../types/canonical-strategy-ir'
 import type {
   CanonicalConditionAtom,
@@ -15,6 +16,7 @@ import type {
 } from '../types/canonical-strategy-spec'
 import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
 import { Injectable } from '@nestjs/common'
+import { CANONICAL_RULE_KEYS, DEFAULT_INDICATOR_PARAMS } from '../constants/canonical-strategy-capabilities'
 import { CanonicalSpecV2DigestService } from './canonical-spec-v2-digest.service'
 import { CanonicalStrategyIrCanonicalizerService } from './canonical-strategy-ir-canonicalizer.service'
 import { CanonicalStrategyIrValidatorService } from './canonical-strategy-ir-validator.service'
@@ -40,11 +42,20 @@ interface CompileCanonicalSpecV2ToIrResult {
 interface CompileContext {
   timeframe: string
   seriesMap: Map<string, SeriesDef>
+  levelSetMap: Map<string, LevelSetDef>
   predicateMap: Map<string, PredicateDef>
   movingAverage: {
     kind: 'EMA' | 'SMA'
     fast: number
     slow: number
+  }
+  rsi: {
+    period: number
+  }
+  macd: {
+    fastPeriod: number
+    slowPeriod: number
+    signalPeriod: number
   }
   bollinger: {
     period: number
@@ -89,12 +100,16 @@ export class CanonicalSpecV2IrCompilerService {
     const timeframe = input.canonicalSpec.market.timeframe || input.fallback.baseTimeframe
     const requiredTimeframes = this.resolveRequiredTimeframes(input.canonicalSpec, timeframe)
     const seriesMap = new Map<string, SeriesDef>()
+    const levelSetMap = new Map<string, LevelSetDef>()
     const predicateMap = new Map<string, PredicateDef>()
     const context: CompileContext = {
       timeframe,
       seriesMap,
+      levelSetMap,
       predicateMap,
       movingAverage: this.resolveMovingAverageConfig(input.canonicalSpec),
+      rsi: this.resolveRsiConfig(input.canonicalSpec),
+      macd: this.resolveMacdConfig(input.canonicalSpec),
       bollinger: this.resolveBollingerConfig(input.canonicalSpec),
     }
 
@@ -119,6 +134,7 @@ export class CanonicalSpecV2IrCompilerService {
         phase: this.mapRulePhase(rule, actions),
         when,
         priority: rule.priority,
+        cooldownBars: typeof rule.cooldownBars === 'number' && rule.cooldownBars > 0 ? rule.cooldownBars : undefined,
         actions,
       })
     }
@@ -154,7 +170,7 @@ export class CanonicalSpecV2IrCompilerService {
       },
       signalCatalog: {
         series: [...seriesMap.values()],
-        levelSets: [],
+        levelSets: [...levelSetMap.values()],
         predicates: [...predicateMap.values()],
       },
       ruleBlocks,
@@ -178,6 +194,8 @@ export class CanonicalSpecV2IrCompilerService {
     const timeframe = input.canonicalSpec.market.timeframe || input.fallback.baseTimeframe
     const positionPct = this.resolvePositionPct(input.canonicalSpec.sizing, input.fallback.positionPct)
     const movingAverage = this.resolveMovingAverageConfig(input.canonicalSpec)
+    const rsi = this.resolveRsiConfig(input.canonicalSpec)
+    const macd = this.resolveMacdConfig(input.canonicalSpec)
     const bollinger = this.resolveBollingerConfig(input.canonicalSpec)
 
     return {
@@ -189,7 +207,7 @@ export class CanonicalSpecV2IrCompilerService {
         .map((rule, index) => ({
           id: `trigger-${rule.id}`,
           phase: rule.phase,
-          operator: this.describeCondition(rule.condition, { movingAverage, bollinger }),
+          operator: this.describeCondition(rule.condition, { movingAverage, rsi, macd, bollinger }),
           join: index > 0 ? 'AND' : undefined,
         })),
       actions: input.canonicalSpec.rules.flatMap((rule, ruleIndex) => {
@@ -211,7 +229,7 @@ export class CanonicalSpecV2IrCompilerService {
       }),
       risk: input.canonicalSpec.rules
         .filter(rule => rule.phase === 'risk')
-        .map(rule => `${rule.id}: ${this.describeCondition(rule.condition, { movingAverage, bollinger })}`),
+        .map(rule => `${rule.id}: ${this.describeCondition(rule.condition, { movingAverage, rsi, macd, bollinger })}`),
       meta: {
         exchange: input.canonicalSpec.market.exchange || input.fallback.exchange,
         symbol,
@@ -262,6 +280,22 @@ export class CanonicalSpecV2IrCompilerService {
     }
   }
 
+  private resolveRsiConfig(spec: CanonicalStrategySpecV2): CompileContext['rsi'] {
+    const rsi = spec.indicators.find(indicator => indicator.kind === 'rsi')
+    return {
+      period: this.readNumber([rsi?.params.period], DEFAULT_INDICATOR_PARAMS.rsi.period),
+    }
+  }
+
+  private resolveMacdConfig(spec: CanonicalStrategySpecV2): CompileContext['macd'] {
+    const macd = spec.indicators.find(indicator => indicator.kind === 'macd')
+    return {
+      fastPeriod: this.readNumber([macd?.params.fastPeriod], DEFAULT_INDICATOR_PARAMS.macd.fastPeriod),
+      slowPeriod: this.readNumber([macd?.params.slowPeriod], DEFAULT_INDICATOR_PARAMS.macd.slowPeriod),
+      signalPeriod: this.readNumber([macd?.params.signalPeriod], DEFAULT_INDICATOR_PARAMS.macd.signalPeriod),
+    }
+  }
+
   private compileCondition(
     condition: CanonicalConditionNode,
     context: CompileContext,
@@ -302,6 +336,98 @@ export class CanonicalSpecV2IrCompilerService {
           `${seed}_${atom.key.replace(/\./g, '_')}`,
           atom.key === 'ma.golden_cross' ? 'CROSS_OVER' : 'CROSS_UNDER',
           [fastRef, slowRef],
+        )
+      }
+
+      case 'rsi.threshold_lte':
+      case 'rsi.threshold_gte':
+      case 'rsi.cross_over':
+      case 'rsi.cross_under': {
+        const rsiRef = this.ensureRsiSeries(
+          context,
+          this.readNumber([atom.params?.period], context.rsi.period),
+        )
+        const thresholdRef = this.ensureConstSeries(context, this.readNumber([atom.value], 50))
+        if (atom.key === CANONICAL_RULE_KEYS.rsiCrossOver || atom.key === CANONICAL_RULE_KEYS.rsiCrossUnder) {
+          return this.upsertPredicate(
+            context.predicateMap,
+            `${seed}_${atom.key.replace(/\./g, '_')}`,
+            atom.key === CANONICAL_RULE_KEYS.rsiCrossOver ? 'CROSS_OVER' : 'CROSS_UNDER',
+            [rsiRef, thresholdRef],
+          )
+        }
+
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}`,
+          this.resolveComparisonKind(atom.op),
+          [rsiRef, thresholdRef],
+        )
+      }
+
+      case 'macd.golden_cross':
+      case 'macd.death_cross': {
+        const macdLineRef = this.ensureMacdSeries(context, 'MACD_LINE')
+        const macdSignalRef = this.ensureMacdSeries(context, 'MACD_SIGNAL')
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}`,
+          atom.key === CANONICAL_RULE_KEYS.macdGoldenCross ? 'CROSS_OVER' : 'CROSS_UNDER',
+          [macdLineRef, macdSignalRef],
+        )
+      }
+
+      case 'grid.range_rebalance': {
+        const closeRef = this.ensurePriceSeries(context, 'close')
+        const levelSetId = this.ensureGridLevelSet(context, atom)
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}`,
+          atom.op === 'GTE' ? 'TOUCH_LEVEL_UP' : 'TOUCH_LEVEL_DOWN',
+          [closeRef, levelSetId],
+        )
+      }
+
+      case 'breakout.channel_high_break':
+      case 'breakout.channel_low_break': {
+        const closeRef = this.ensurePriceSeries(context, 'close')
+        const period = this.readNumber([atom.params?.period], 20)
+        const channelRef = atom.key === 'breakout.channel_high_break'
+          ? this.ensureChannelSeries(context, 'HIGHEST_HIGH', period)
+          : this.ensureChannelSeries(context, 'LOWEST_LOW', period)
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}`,
+          atom.key === 'breakout.channel_high_break' ? 'CROSS_OVER' : 'CROSS_UNDER',
+          [closeRef, channelRef],
+        )
+      }
+
+      case 'risk.time_stop_bars': {
+        const heldBarsRef = this.ensurePositionHeldBarsSeries(context)
+        const thresholdRef = this.ensureConstSeries(context, this.readNumber([atom.value], 0))
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}`,
+          this.resolveComparisonKind(atom.op),
+          [heldBarsRef, thresholdRef],
+        )
+      }
+
+      case 'risk.take_profit_pct': {
+        const pnlRef = 'position_pnl_pct'
+        if (!context.seriesMap.has(pnlRef)) {
+          context.seriesMap.set(pnlRef, {
+            id: pnlRef,
+            kind: 'POSITION_PNL_PCT',
+          })
+        }
+        const thresholdRef = this.ensureConstSeries(context, this.readNumber([atom.value], 0))
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}`,
+          this.resolveComparisonKind(atom.op),
+          [pnlRef, thresholdRef],
         )
       }
 
@@ -399,6 +525,103 @@ export class CanonicalSpecV2IrCompilerService {
     return id
   }
 
+  private ensureRsiSeries(context: CompileContext, period: number): string {
+    const closeRef = this.ensurePriceSeries(context, 'close')
+    const id = `rsi_${period}_${context.timeframe}`
+    if (!context.seriesMap.has(id)) {
+      context.seriesMap.set(id, {
+        id,
+        kind: 'RSI',
+        inputs: [closeRef],
+        params: { period },
+      })
+    }
+    return id
+  }
+
+  private ensureMacdSeries(
+    context: CompileContext,
+    kind: Extract<SeriesDef['kind'], 'MACD_LINE' | 'MACD_SIGNAL'>,
+  ): string {
+    const closeRef = this.ensurePriceSeries(context, 'close')
+    const id = `${kind.toLowerCase()}_${context.macd.fastPeriod}_${context.macd.slowPeriod}_${context.macd.signalPeriod}_${context.timeframe}`
+    if (!context.seriesMap.has(id)) {
+      context.seriesMap.set(id, {
+        id,
+        kind,
+        inputs: [closeRef],
+        params: {
+          fastPeriod: context.macd.fastPeriod,
+          slowPeriod: context.macd.slowPeriod,
+          signalPeriod: context.macd.signalPeriod,
+        },
+      })
+    }
+    return id
+  }
+
+  private ensureGridLevelSet(
+    context: CompileContext,
+    atom: CanonicalConditionAtom,
+  ): string {
+    const rangeMin = this.readNumber([atom.params?.rangeMin], 0)
+    const rangeMax = this.readNumber([atom.params?.rangeMax], rangeMin)
+    const stepPct = this.readNumber([atom.params?.stepPct], 1)
+    const levelCount = this.readNumber([atom.params?.levelCount], 1)
+    const lowerRef = this.ensureConstSeries(context, rangeMin)
+    const upperRef = this.ensureConstSeries(context, rangeMax)
+    const id = `grid_${context.timeframe}_${this.normalizeNumberToken(rangeMin)}_${this.normalizeNumberToken(rangeMax)}_${this.normalizeNumberToken(stepPct)}_${this.normalizeNumberToken(levelCount)}`
+    if (!context.levelSetMap.has(id)) {
+      context.levelSetMap.set(id, {
+        id,
+        kind: 'ARITHMETIC_LEVEL_SET',
+        anchorRef: lowerRef,
+        spacing: {
+          mode: 'pct',
+          value: stepPct,
+        },
+        levelsPerSide: {
+          down: 0,
+          up: Math.max(0, levelCount - 1),
+        },
+        hardBounds: {
+          lowerRef,
+          upperRef,
+        },
+      })
+    }
+    return id
+  }
+
+  private ensureChannelSeries(
+    context: CompileContext,
+    kind: Extract<SeriesDef['kind'], 'HIGHEST_HIGH' | 'LOWEST_LOW'>,
+    period: number,
+  ): string {
+    const id = `${kind.toLowerCase()}_${period}_${context.timeframe}`
+    if (!context.seriesMap.has(id)) {
+      context.seriesMap.set(id, {
+        id,
+        kind,
+        timeframe: context.timeframe,
+        params: { period },
+      })
+    }
+    return id
+  }
+
+  private ensurePositionHeldBarsSeries(context: CompileContext): string {
+    const id = `position_bars_held_${context.timeframe}`
+    if (!context.seriesMap.has(id)) {
+      context.seriesMap.set(id, {
+        id,
+        kind: 'POSITION_BARS_HELD',
+        timeframe: context.timeframe,
+      })
+    }
+    return id
+  }
+
   private ensureBollingerSeries(
     context: CompileContext,
     kind: Extract<SeriesDef['kind'], 'UPPER_BAND' | 'MID_BAND' | 'LOWER_BAND'>,
@@ -453,7 +676,7 @@ export class CanonicalSpecV2IrCompilerService {
   }
 
   private tryCompileRiskGuard(rule: CanonicalRuleV2): RiskGuard | null {
-    if (rule.phase !== 'risk' || rule.condition.kind !== 'atom' || rule.condition.key !== 'position_loss_pct') {
+    if (rule.phase !== 'risk' || rule.condition.kind !== 'atom') {
       return null
     }
 
@@ -461,14 +684,41 @@ export class CanonicalSpecV2IrCompilerService {
     const onBreach = rule.actions.some(action => action.type === 'BLOCK_NEW_ENTRY')
       ? 'BLOCK_NEW_ENTRY'
       : 'FORCE_EXIT'
+    const hasReduceAction = rule.actions.some(action => action.type === 'REDUCE_LONG' || action.type === 'REDUCE_SHORT')
 
-    return {
-      id: `guard_${rule.id}`,
-      kind: 'STOP_LOSS_PCT',
-      scope: 'position',
-      value: threshold <= 1 ? Number((threshold * 100).toFixed(4)) : threshold,
-      onBreach,
+    if (rule.condition.key === 'position_loss_pct') {
+      return {
+        id: `guard_${rule.id}`,
+        kind: 'STOP_LOSS_PCT',
+        scope: 'position',
+        value: threshold <= 1 ? Number((threshold * 100).toFixed(4)) : threshold,
+        onBreach,
+      }
     }
+
+    if (rule.condition.key === 'risk.take_profit_pct') {
+      const hasSpecificCloseAction = rule.actions.every(action => action.type === 'CLOSE_LONG' || action.type === 'CLOSE_SHORT')
+      if (hasReduceAction || hasSpecificCloseAction) return null
+      return {
+        id: `guard_${rule.id}`,
+        kind: 'TAKE_PROFIT_PCT',
+        scope: 'position',
+        value: threshold <= 1 ? Number((threshold * 100).toFixed(4)) : threshold,
+        onBreach,
+      }
+    }
+
+    if (rule.condition.key === 'risk.trailing_stop_pct') {
+      return {
+        id: `guard_${rule.id}`,
+        kind: 'TRAILING_STOP_PCT',
+        scope: 'position',
+        value: threshold <= 1 ? Number((threshold * 100).toFixed(4)) : threshold,
+        onBreach,
+      }
+    }
+
+    return null
   }
 
   private compileActions(
@@ -602,7 +852,6 @@ export class CanonicalSpecV2IrCompilerService {
     )))
     const hasShort = rules.some(rule => rule.actions.some(action => (
       action.type === 'OPEN_SHORT'
-      || action.type === 'CLOSE_SHORT'
       || action.type === 'REDUCE_SHORT'
     )))
 
@@ -615,7 +864,9 @@ export class CanonicalSpecV2IrCompilerService {
     return Math.max(1, ...[...seriesMap.values()].map(series => {
       const period = typeof series.params?.period === 'number' ? series.params.period : 1
       const bars = typeof series.params?.bars === 'number' ? series.params.bars : 1
-      return Math.max(period, bars)
+      const slowPeriod = typeof series.params?.slowPeriod === 'number' ? series.params.slowPeriod : 1
+      const signalPeriod = typeof series.params?.signalPeriod === 'number' ? series.params.signalPeriod : 1
+      return Math.max(period, bars, slowPeriod + signalPeriod)
     }))
   }
 
@@ -623,6 +874,8 @@ export class CanonicalSpecV2IrCompilerService {
     condition: CanonicalConditionNode,
     config: {
       movingAverage: CompileContext['movingAverage']
+      rsi: CompileContext['rsi']
+      macd: CompileContext['macd']
       bollinger: CompileContext['bollinger']
     },
   ): string {
@@ -644,6 +897,36 @@ export class CanonicalSpecV2IrCompilerService {
         const operator = condition.key === 'ma.golden_cross' ? 'CROSS_OVER' : 'CROSS_UNDER'
         return `${operator}(${config.movingAverage.kind}(CLOSE,${config.movingAverage.fast}),${config.movingAverage.kind}(CLOSE,${config.movingAverage.slow}))`
       }
+
+      case 'rsi.threshold_lte':
+        return `LTE(RSI(CLOSE,${config.rsi.period}),${this.readNumber([condition.value], 30)})`
+
+      case 'rsi.threshold_gte':
+        return `GTE(RSI(CLOSE,${config.rsi.period}),${this.readNumber([condition.value], 70)})`
+
+      case 'rsi.cross_over':
+        return `CROSS_OVER(RSI(CLOSE,${config.rsi.period}),${this.readNumber([condition.value], 50)})`
+
+      case 'rsi.cross_under':
+        return `CROSS_UNDER(RSI(CLOSE,${config.rsi.period}),${this.readNumber([condition.value], 50)})`
+
+      case 'macd.golden_cross':
+      case 'macd.death_cross': {
+        const operator = condition.key === 'macd.golden_cross' ? 'CROSS_OVER' : 'CROSS_UNDER'
+        return `${operator}(MACD_LINE(CLOSE,${config.macd.fastPeriod},${config.macd.slowPeriod},${config.macd.signalPeriod}),MACD_SIGNAL(CLOSE,${config.macd.fastPeriod},${config.macd.slowPeriod},${config.macd.signalPeriod}))`
+      }
+
+      case 'breakout.channel_high_break':
+        return `CROSS_OVER(CLOSE,HIGHEST_HIGH(${this.readNumber([condition.params?.period], 20)}))`
+
+      case 'breakout.channel_low_break':
+        return `CROSS_UNDER(CLOSE,LOWEST_LOW(${this.readNumber([condition.params?.period], 20)}))`
+
+      case 'risk.time_stop_bars':
+        return `GTE(POSITION_BARS_HELD,${this.readNumber([condition.value], 0)})`
+
+      case 'risk.take_profit_pct':
+        return `GTE(POSITION_PNL_PCT,${this.readNumber([condition.value], 0)})`
 
       case 'bollinger.upper_break':
         return `CROSS_OVER(CLOSE,UPPER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`

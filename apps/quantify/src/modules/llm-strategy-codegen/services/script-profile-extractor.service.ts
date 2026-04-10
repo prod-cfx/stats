@@ -17,6 +17,7 @@ const COMPILED_QUANTITY_PATTERN = /quantity\s*:\s*\{[^}]*mode\s*:\s*['"]([a-z_]+
 const LEGACY_RATIO_SIZE_PATTERN = /positionSizeRatio\s*:\s*([^,\n}]+)/
 const LEGACY_QUOTE_SIZE_PATTERN = /positionSizeQuote\s*:\s*([^,\n}]+)/
 const GUARD_PROGRAM_PATTERN = /kind\s*:\s*['"]([A-Z_]+)['"][^}]*onBreach\s*:\s*['"]([A-Z_]+)['"]/g
+const COOLDOWN_BARS_PATTERN = /cooldownBars\s*:\s*\d+/g
 
 @Injectable()
 export class ScriptProfileExtractorService {
@@ -154,11 +155,45 @@ export class ScriptProfileExtractorService {
       if (/bars_outside|outside|轨外/.test(window)) {
         push('bollinger.bars_outside')
       }
+      if (/\bgrid\b|网格|touch_level|level[_\s]?set/.test(window)) {
+        push('grid.range_rebalance')
+      }
       if (this.hasMovingAverageCrossEvidence(window, 'up')) {
         push('ma.golden_cross')
       }
       if (this.hasMovingAverageCrossEvidence(window, 'down')) {
         push('ma.death_cross')
+      }
+      if (/\brsi\b|相对强弱|超买|超卖/.test(window)) {
+        if (/cross[_\s]?over|上穿|突破/.test(window)) {
+          push('rsi.cross_over')
+        }
+        if (/cross[_\s]?under|下穿|跌破/.test(window)) {
+          push('rsi.cross_under')
+        }
+        if (/<=|<|低于|小于|超卖|oversold/.test(window)) {
+          push('rsi.threshold_lte')
+        }
+        if (/>=|>|高于|大于|超买|overbought/.test(window)) {
+          push('rsi.threshold_gte')
+        }
+      }
+      if (/\bmacd\b|指数平滑异同/.test(window)) {
+        if (/golden[_\s]?cross|金叉|上穿/.test(window)) {
+          push('macd.golden_cross')
+        }
+        if (/death[_\s]?cross|死叉|下穿/.test(window)) {
+          push('macd.death_cross')
+        }
+      }
+      if (this.hasChannelBreakEvidence(window, 'high')) {
+        push('breakout.channel_high_break')
+      }
+      if (this.hasChannelBreakEvidence(window, 'low')) {
+        push('breakout.channel_low_break')
+      }
+      if (this.hasTimeStopEvidence(window)) {
+        push('risk.time_stop_bars')
       }
     })
 
@@ -179,6 +214,37 @@ export class ScriptProfileExtractorService {
           rules.set(ruleKey, profile)
         }
       }
+      if (guardKind === 'TAKE_PROFIT_PCT' || guardKind === 'TRAILING_STOP_PCT') {
+        const profile: StrategySemanticRuleProfile = {
+          key: guardKind === 'TAKE_PROFIT_PCT' ? 'risk.take_profit_pct' : 'risk.trailing_stop_pct',
+          phase: 'risk',
+          sideScope: 'both',
+          action,
+        }
+        const ruleKey = `${profile.key}:${profile.phase}:${profile.sideScope}:${profile.action}`
+        if (!rules.has(ruleKey)) {
+          rules.set(ruleKey, profile)
+        }
+      }
+    }
+
+    if (COOLDOWN_BARS_PATTERN.test(scriptCode)) {
+      COOLDOWN_BARS_PATTERN.lastIndex = 0
+      actionMatches.forEach((match) => {
+        const action = match[1] as CanonicalAction
+        if (!this.isExecutableAction(action)) return
+
+        const statementWindow = typeof match.index === 'number'
+          ? this.extractStatementWindow(scriptCode, match.index)
+          : scriptCode
+        const profile = this.createRuleProfile('risk.cooldown_bars', action, statementWindow)
+        if (!profile) return
+
+        const ruleKey = `${profile.key}:${profile.phase}:${profile.sideScope}:${profile.action}`
+        if (!rules.has(ruleKey)) {
+          rules.set(ruleKey, profile)
+        }
+      })
     }
 
     return Array.from(rules.values())
@@ -469,6 +535,29 @@ export class ScriptProfileExtractorService {
 
     if (/死叉|death\s+cross|cross(?:over)?\s+down/.test(window)) return true
     return /\b(?:fast|short|ma\d+|sma\d+|ema\d+)\b[\s\S]{0,40}(?:<|<=)[\s\S]{0,20}\b(?:slow|long|ma\d+|sma\d+|ema\d+)\b/.test(window)
+  }
+
+  private hasChannelBreakEvidence(window: string, direction: 'high' | 'low'): boolean {
+    if (direction === 'high') {
+      return (
+        (/\bhighest(?:high)?\b|\bchannel[_\s]?high\b|通道上轨|通道上沿|前高/.test(window)
+          || (/\bdonchian\b/.test(window) && /\bupper\b/.test(window)))
+        && (/>=|>|上穿|突破|breakout/.test(window))
+      )
+    }
+
+    return (
+      (/\blowest(?:low)?\b|\bchannel[_\s]?low\b|通道下轨|通道下沿|前低/.test(window)
+        || (/\bdonchian\b/.test(window) && /\blower\b/.test(window)))
+      && (/<=|<|下穿|跌破|breakdown/.test(window))
+    )
+  }
+
+  private hasTimeStopEvidence(window: string): boolean {
+    return (
+      /\b(?:barsheld|heldbars|positionbars|holdbars|time[_\s-]?stop)\b/.test(window)
+      || /持仓.{0,12}(?:bar|k|根)|超时平仓/u.test(window)
+    ) && (/>=|>|达到|超过/u.test(window))
   }
 
   private isExecutableAction(action: CanonicalAction): action is

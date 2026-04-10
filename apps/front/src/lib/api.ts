@@ -1,13 +1,12 @@
-import type { StrategyInstanceStatus } from '@ai/shared'
 import type { schemas } from '@ai/api-contracts'
-import { buildBearerAuthHeaders, getErrorHttpStatus, unwrapTransportResponse } from '@ai/shared'
+import type { StrategyInstanceStatus } from '@ai/shared'
 import type { ZodTypeAny } from 'zod'
-
 import type {
   TraderFullDataResponse,
   UserFillsResponse,
   UserPortfolioResponse,
 } from './hyperliquid-api'
+import { buildBearerAuthHeaders, getErrorHttpStatus, unwrapTransportResponse } from '@ai/shared'
 import {
   deleteStrategyById as deleteMockStrategyById,
   getStrategyById,
@@ -1806,6 +1805,7 @@ export async function deployAccountAiQuantStrategy(
         name: payload.name.trim(),
         deployRequestId: payload.deployRequestId.trim(),
         publishedSnapshotId: payload.publishedSnapshotId.trim(),
+        strategyInstanceId: payload.strategyInstanceId?.trim() || undefined,
         exchangeAccountId: payload.exchangeAccountId,
         exchangeAccountName: payload.exchangeAccountName,
       }),

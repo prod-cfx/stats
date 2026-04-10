@@ -1,4 +1,5 @@
 /** @jest-environment jsdom */
+/* eslint-disable react-hooks-extra/no-unnecessary-use-prefix */
 
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React, { act } from 'react'
@@ -301,6 +302,7 @@ describe('AiQuantPageClient deploy guard', () => {
 
     expect(mockDeployAccountAiQuantStrategy).toHaveBeenCalledWith(
       expect.objectContaining({
+        strategyInstanceId: 'strategy-1',
         publishedSnapshotId: 'snapshot-1',
         exchangeAccountId: 'acct-hyper-1',
         exchangeAccountName: 'Hyper Testnet',

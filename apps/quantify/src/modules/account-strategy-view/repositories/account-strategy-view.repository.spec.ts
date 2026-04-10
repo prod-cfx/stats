@@ -154,7 +154,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
     }))
   })
 
-  it('writes snapshot binding metadata to strategy instance on create path', async () => {
+  it('reuses sourceStrategyInstanceId from published snapshot when explicit strategyInstanceId is missing', async () => {
     const tx = {
       user: {
         findUnique: jest.fn().mockResolvedValue({ id: 'user-1' }),
@@ -163,20 +163,34 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true }),
       },
       strategyTemplate: {
-        findUnique: jest.fn().mockResolvedValue(null),
-        create: jest.fn().mockResolvedValue({ id: 'template-1' }),
+        findUnique: jest.fn(),
+        create: jest.fn(),
       },
       strategyInstance: {
-        findFirst: jest.fn(),
-        update: jest.fn(),
-        create: jest.fn().mockResolvedValue({ id: 'created-instance-1' }),
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'strategy-instance-snapshot',
+          createdBy: 'user-1',
+          strategyTemplateId: 'template-1',
+          params: {
+            symbol: 'SOLUSDT',
+            timeframe: '5m',
+            positionPct: 10,
+          },
+          metadata: {
+            bindingSource: 'PUBLISHED_SNAPSHOT',
+            publishedSnapshotId: 'snapshot-created',
+            snapshotHash: 'snapshot-hash-created',
+          },
+        }),
+        update: jest.fn().mockResolvedValue({ id: 'strategy-instance-snapshot' }),
+        create: jest.fn(),
       },
       userStrategySubscription: {
-        findFirst: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn(),
       },
       userStrategyAccount: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'account-1' }),
+        findUnique: jest.fn().mockResolvedValue(null),
         create: jest.fn(),
       },
     }
@@ -195,12 +209,13 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         bindingSource: 'PUBLISHED_SNAPSHOT',
         publishedSnapshotId: 'snapshot-created',
         snapshotHash: 'snapshot-hash-created',
-        sourceStrategyInstanceId: null,
+        sourceStrategyInstanceId: 'strategy-instance-snapshot',
         sourceStrategyTemplateId: 'template-1',
       },
     } as any)
 
-    expect(tx.strategyInstance.create).toHaveBeenCalledWith(expect.objectContaining({
+    expect(tx.strategyInstance.update).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'strategy-instance-snapshot' },
       data: expect.objectContaining({
         metadata: expect.objectContaining({
           bindingSource: 'PUBLISHED_SNAPSHOT',
@@ -210,13 +225,58 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         }),
       }),
     }))
-    expect(tx.strategyTemplate.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
-        metadata: expect.not.objectContaining({
-          publishedSnapshotId: expect.anything(),
-        }),
-      }),
-    }))
+    expect(tx.strategyInstance.create).not.toHaveBeenCalled()
+    expect(tx.strategyTemplate.create).not.toHaveBeenCalled()
+  })
+
+  it('rejects deploy when neither explicit nor snapshot-derived strategy instance is available', async () => {
+    const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'user-1' }),
+      },
+      exchangeAccount: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true }),
+      },
+      strategyTemplate: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+      },
+      strategyInstance: {
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        create: jest.fn(),
+      },
+      userStrategySubscription: {
+        findFirst: jest.fn(),
+        create: jest.fn(),
+      },
+      userStrategyAccount: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+      },
+    }
+
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
+
+    await expect(repo.deployStrategyForUser({
+      userId: 'user-1',
+      name: 'snapshot deploy',
+      exchange: 'okx',
+      symbol: 'SOLUSDT',
+      timeframe: '5m',
+      positionPct: 10,
+      exchangeAccountId: 'exchange-account-1',
+      publishedSnapshotBinding: {
+        bindingSource: 'PUBLISHED_SNAPSHOT',
+        publishedSnapshotId: 'snapshot-created',
+        snapshotHash: 'snapshot-hash-created',
+        sourceStrategyInstanceId: null,
+        sourceStrategyTemplateId: 'template-1',
+      },
+    } as any)).rejects.toThrow('Strategy instance not found')
+
+    expect(tx.strategyInstance.create).not.toHaveBeenCalled()
+    expect(tx.strategyTemplate.create).not.toHaveBeenCalled()
   })
 
   it('uses provided exchange balance quotes when seeding the internal strategy account', async () => {
@@ -368,6 +428,71 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
 
     expect(tx.exchangeAccount.create).not.toHaveBeenCalled()
     expect(tx.userStrategySubscription.create).not.toHaveBeenCalled()
+  })
+
+  it('rejects reusing a strategy instance when its snapshot binding does not match the requested published snapshot', async () => {
+    const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'user-1' }),
+      },
+      exchangeAccount: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true }),
+      },
+      strategyTemplate: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+      },
+      strategyInstance: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'strategy-instance-1',
+          createdBy: 'user-1',
+          strategyTemplateId: 'template-1',
+          params: {
+            symbol: 'SOLUSDT',
+            timeframe: '5m',
+            positionPct: 10,
+          },
+          metadata: {
+            bindingSource: 'PUBLISHED_SNAPSHOT',
+            publishedSnapshotId: 'snapshot-old',
+            snapshotHash: 'snapshot-hash-old',
+          },
+        }),
+        update: jest.fn(),
+        create: jest.fn(),
+      },
+      userStrategySubscription: {
+        findFirst: jest.fn(),
+        create: jest.fn(),
+      },
+      userStrategyAccount: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+      },
+    }
+
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
+
+    await expect(repo.deployStrategyForUser({
+      userId: 'user-1',
+      name: 'OKX SOLUSDT 5m AI策略',
+      exchange: 'okx',
+      symbol: 'SOLUSDT',
+      timeframe: '5m',
+      positionPct: 10,
+      publishedSnapshotBinding: {
+        bindingSource: 'PUBLISHED_SNAPSHOT',
+        publishedSnapshotId: 'snapshot-new',
+        snapshotHash: 'snapshot-hash-new',
+        sourceStrategyInstanceId: 'strategy-instance-1',
+        sourceStrategyTemplateId: 'template-1',
+      },
+      exchangeAccountId: 'exchange-account-1',
+      strategyInstanceId: 'strategy-instance-1',
+    })).rejects.toThrow('Strategy instance not found')
+
+    expect(tx.strategyInstance.update).not.toHaveBeenCalled()
+    expect(tx.strategyInstance.create).not.toHaveBeenCalled()
   })
 })
 

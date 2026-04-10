@@ -1,5 +1,6 @@
 import type { CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
 import { Injectable } from '@nestjs/common'
+import { CANONICAL_RULE_KEYS, DEFAULT_INDICATOR_PARAMS } from '../constants/canonical-strategy-capabilities'
 
 interface ChecklistSnapshot {
   symbols?: unknown
@@ -19,6 +20,7 @@ export class CanonicalSpecBuilderService {
       : {}
     const entryTexts = entryRules.map(item => String(item))
     const exitTexts = exitRules.map(item => String(item))
+    const sharedGridParams = this.resolveGridParams([...entryTexts, ...exitTexts].join(' '))
     const sizing = this.resolveSizing(riskRules)
     const market = this.resolveMarket(checklist, riskRules)
     const indicators = this.resolveIndicators(entryTexts, exitTexts, riskRules)
@@ -28,6 +30,35 @@ export class CanonicalSpecBuilderService {
 
     entryTexts.forEach((ruleText, index) => {
       const openAction = this.detectOpenAction(ruleText)
+      const gridEntryRule = this.buildGridRule({
+        ruleText,
+        index,
+        phase: 'entry',
+        actionType: openAction?.type ?? null,
+        sideScope: openAction?.sideScope ?? null,
+        sizing,
+        sharedGridParams,
+      })
+      if (gridEntryRule) {
+        rules.push(gridEntryRule)
+        return
+      }
+
+      if (this.isBreakoutRule(ruleText)) {
+        const breakoutRule = this.buildBreakoutRule({
+          ruleText,
+          index,
+          phase: 'entry',
+          actionType: openAction?.type ?? 'OPEN_LONG',
+          sideScope: openAction?.sideScope ?? 'long',
+          sizing,
+        })
+        if (breakoutRule) {
+          rules.push(breakoutRule)
+          return
+        }
+      }
+
       if (!openAction) return
 
       if (this.isMovingAverageRule(ruleText)) {
@@ -41,6 +72,34 @@ export class CanonicalSpecBuilderService {
         })
         if (movingAverageRule) {
           rules.push(movingAverageRule)
+        }
+      }
+
+      if (this.isRsiRule(ruleText)) {
+        const rsiRule = this.buildRsiRule({
+          ruleText,
+          index,
+          phase: 'entry',
+          actionType: openAction.type,
+          sideScope: openAction.sideScope,
+          sizing,
+        })
+        if (rsiRule) {
+          rules.push(rsiRule)
+        }
+      }
+
+      if (this.isMacdRule(ruleText)) {
+        const macdRule = this.buildMacdRule({
+          ruleText,
+          index,
+          phase: 'entry',
+          actionType: openAction.type,
+          sideScope: openAction.sideScope,
+          sizing,
+        })
+        if (macdRule) {
+          rules.push(macdRule)
         }
       }
 
@@ -78,6 +137,20 @@ export class CanonicalSpecBuilderService {
     })
 
     exitTexts.forEach((ruleText, index) => {
+      const gridExitRule = this.buildGridRule({
+        ruleText,
+        index,
+        phase: 'exit',
+        actionType: null,
+        sideScope: null,
+        sizing,
+        sharedGridParams,
+      })
+      if (gridExitRule) {
+        rules.push(gridExitRule)
+        return
+      }
+
       const closeAction = this.detectCloseAction(ruleText)
       if (closeAction && this.isMovingAverageRule(ruleText)) {
         const movingAverageRule = this.buildMovingAverageRule({
@@ -90,6 +163,48 @@ export class CanonicalSpecBuilderService {
         })
         if (movingAverageRule) {
           rules.push(movingAverageRule)
+        }
+      }
+
+      if (closeAction && this.isRsiRule(ruleText)) {
+        const rsiRule = this.buildRsiRule({
+          ruleText,
+          index,
+          phase: 'exit',
+          actionType: closeAction.type,
+          sideScope: closeAction.sideScope,
+          sizing,
+        })
+        if (rsiRule) {
+          rules.push(rsiRule)
+        }
+      }
+
+      if (closeAction && this.isMacdRule(ruleText)) {
+        const macdRule = this.buildMacdRule({
+          ruleText,
+          index,
+          phase: 'exit',
+          actionType: closeAction.type,
+          sideScope: closeAction.sideScope,
+          sizing,
+        })
+        if (macdRule) {
+          rules.push(macdRule)
+        }
+      }
+
+      if (closeAction && this.isBreakoutRule(ruleText)) {
+        const breakoutRule = this.buildBreakoutRule({
+          ruleText,
+          index,
+          phase: 'exit',
+          actionType: closeAction.type,
+          sideScope: closeAction.sideScope,
+          sizing,
+        })
+        if (breakoutRule) {
+          rules.push(breakoutRule)
         }
       }
 
@@ -124,6 +239,60 @@ export class CanonicalSpecBuilderService {
           value: Number((stopLossPct / 100).toFixed(4)),
         },
         actions: [{ type: 'FORCE_EXIT' }],
+      })
+    }
+
+    const takeProfitRule = this.resolveTakeProfitRule([...exitTexts, ...Object.values(riskRules).map(item => String(item))])
+    if (takeProfitRule) {
+      rules.push({
+        id: 'risk-take-profit',
+        phase: 'risk',
+        sideScope: takeProfitRule.sideScope,
+        priority: 115,
+        condition: {
+          kind: 'atom',
+          key: 'risk.take_profit_pct',
+          semanticScope: 'position',
+          op: 'GTE',
+          value: Number((takeProfitRule.pct / 100).toFixed(4)),
+        },
+        actions: takeProfitRule.actions,
+      })
+    }
+
+    const trailingStopRule = this.resolveTrailingStopRule([...exitTexts, ...Object.values(riskRules).map(item => String(item))])
+    if (trailingStopRule) {
+      rules.push({
+        id: 'risk-trailing-stop',
+        phase: 'risk',
+        sideScope: trailingStopRule.sideScope,
+        priority: 114,
+        condition: {
+          kind: 'atom',
+          key: 'risk.trailing_stop_pct',
+          semanticScope: 'position',
+          op: 'GTE',
+          value: Number((trailingStopRule.pct / 100).toFixed(4)),
+        },
+        actions: trailingStopRule.actions,
+      })
+    }
+
+    const timeStopRule = this.resolveTimeStopRule(exitTexts)
+    if (timeStopRule) {
+      rules.push({
+        id: 'exit-time-stop-bars',
+        phase: 'exit',
+        sideScope: timeStopRule.sideScope,
+        priority: 113,
+        condition: {
+          kind: 'atom',
+          key: 'risk.time_stop_bars',
+          semanticScope: 'position',
+          op: 'GTE',
+          value: timeStopRule.bars,
+        },
+        actions: timeStopRule.actions,
       })
     }
 
@@ -245,21 +414,58 @@ export class CanonicalSpecBuilderService {
       .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
     const allTexts = [...entryTexts, ...exitTexts, ...riskTexts]
 
-    if (allTexts.some(text => /布林|bollinger|上轨|下轨|中轨/iu.test(text))) {
-      return [{
+    const indicators: CanonicalStrategySpecV2['indicators'] = []
+    const pushIndicator = (indicator: CanonicalStrategySpecV2['indicators'][number]) => {
+      if (!indicators.some(item => item.kind === indicator.kind)) {
+        indicators.push(indicator)
+      }
+    }
+    const hasDonchianBreakout = allTexts.some(text => /唐奇安|donchian/iu.test(text))
+      && allTexts.some(text => /上轨|下轨|breakout|breakdown|highest|lowest/iu.test(text))
+
+    if (!hasDonchianBreakout && allTexts.some(text => /布林|bollinger|上轨|下轨|中轨/iu.test(text))) {
+      pushIndicator({
         kind: 'bollingerBands',
-        params: { period: 20, stdDev: 2 },
-      }]
+        params: { ...DEFAULT_INDICATOR_PARAMS.bollingerBands },
+      })
     }
 
-    if (allTexts.some(text => /均线|moving average|\bsma\b|\bema\b|金叉|死叉|上穿|下穿/iu.test(text))) {
-      return [{
+    if (allTexts.some(text => this.isMovingAverageRule(text))) {
+      pushIndicator({
         kind: 'sma',
-        params: { period: 20 },
-      }]
+        params: { ...DEFAULT_INDICATOR_PARAMS.sma },
+      })
     }
 
-    return []
+    if (allTexts.some(text => /\brsi\b|相对强弱|超买|超卖/iu.test(text))) {
+      pushIndicator({
+        kind: 'rsi',
+        params: { period: this.resolveRsiPeriod(allTexts) },
+      })
+    }
+
+    if (allTexts.some(text => /\bmacd\b|指数平滑异同|快线|慢线/iu.test(text))) {
+      pushIndicator({
+        kind: 'macd',
+        params: { ...DEFAULT_INDICATOR_PARAMS.macd },
+      })
+    }
+
+    if (hasDonchianBreakout) {
+      pushIndicator({
+        kind: 'custom',
+        params: { family: 'breakout' },
+      })
+    }
+
+    if (allTexts.some(text => /网格/u.test(text))) {
+      pushIndicator({
+        kind: 'custom',
+        params: { family: 'grid' },
+      })
+    }
+
+    return indicators
   }
 
   private resolveRequiredTimeframes(checklist: ChecklistSnapshot): string[] {
@@ -296,7 +502,20 @@ export class CanonicalSpecBuilderService {
   }
 
   private isMovingAverageRule(text: string): boolean {
-    return /均线|moving average|\bsma\b|\bema\b|金叉|死叉|上穿|下穿/iu.test(text)
+    return /均线|moving average|\bsma\b|\bema\b/iu.test(text)
+      || ((/金叉|死叉|上穿|下穿/u.test(text)) && /均线|\bma\b|\bsma\b|\bema\b/i.test(text))
+  }
+
+  private isRsiRule(text: string): boolean {
+    return /\brsi\b|相对强弱|超买|超卖/iu.test(text)
+  }
+
+  private isMacdRule(text: string): boolean {
+    return /\bmacd\b|指数平滑异同|快线|慢线/iu.test(text)
+  }
+
+  private isBreakoutRule(text: string): boolean {
+    return /前高|前低|最高价|最低价|通道上轨|通道下轨|唐奇安|donchian|breakout|breakdown|highest|lowest/i.test(text)
   }
 
   private buildMovingAverageRule(input: {
@@ -330,6 +549,460 @@ export class CanonicalSpecBuilderService {
       actions: [input.phase === 'entry'
         ? this.buildOpenAction(input.actionType as 'OPEN_LONG' | 'OPEN_SHORT', input.sizing)
         : { type: input.actionType }],
+    }
+  }
+
+  private buildRsiRule(input: {
+    ruleText: string
+    index: number
+    phase: 'entry' | 'exit'
+    actionType: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
+    sideScope: 'long' | 'short'
+    sizing: { mode: 'RATIO'; value: number } | null
+  }): CanonicalRuleV2 | null {
+    const threshold = this.resolveRsiThreshold(input.ruleText)
+    if (!threshold) return null
+
+    return {
+      id: `${input.phase}-${threshold.key.replace('.', '-')}-${input.index + 1}`,
+      phase: input.phase,
+      sideScope: input.sideScope,
+      priority: input.phase === 'entry' ? 180 - input.index : 130 - input.index,
+      condition: {
+        kind: 'atom',
+        key: threshold.key,
+        semanticScope: 'market',
+        op: threshold.op,
+        value: threshold.value,
+        params: { period: this.resolveRsiPeriod([input.ruleText]) },
+      },
+      actions: [input.phase === 'entry'
+        ? this.buildOpenAction(input.actionType as 'OPEN_LONG' | 'OPEN_SHORT', input.sizing)
+        : { type: input.actionType }],
+    }
+  }
+
+  private buildMacdRule(input: {
+    ruleText: string
+    index: number
+    phase: 'entry' | 'exit'
+    actionType: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
+    sideScope: 'long' | 'short'
+    sizing: { mode: 'RATIO'; value: number } | null
+  }): CanonicalRuleV2 | null {
+    const ruleKey = /金叉|上穿/u.test(input.ruleText)
+      ? CANONICAL_RULE_KEYS.macdGoldenCross
+      : /死叉|下穿/u.test(input.ruleText)
+          ? CANONICAL_RULE_KEYS.macdDeathCross
+          : null
+    if (!ruleKey) return null
+
+    return {
+      id: `${input.phase}-${ruleKey.replace('.', '-')}-${input.index + 1}`,
+      phase: input.phase,
+      sideScope: input.sideScope,
+      priority: input.phase === 'entry' ? 175 - input.index : 125 - input.index,
+      condition: {
+        kind: 'atom',
+        key: ruleKey,
+        semanticScope: 'market',
+        op: ruleKey === CANONICAL_RULE_KEYS.macdGoldenCross ? 'CROSS_OVER' : 'CROSS_UNDER',
+        params: { ...DEFAULT_INDICATOR_PARAMS.macd },
+      },
+      actions: [input.phase === 'entry'
+        ? this.buildOpenAction(input.actionType as 'OPEN_LONG' | 'OPEN_SHORT', input.sizing)
+        : { type: input.actionType }],
+    }
+  }
+
+  private buildGridRule(input: {
+    ruleText: string
+    index: number
+    phase: 'entry' | 'exit'
+    actionType: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | null
+    sideScope: 'long' | 'short' | null
+    sizing: { mode: 'RATIO'; value: number } | null
+    sharedGridParams: {
+      rangeMin: number
+      rangeMax: number
+      stepPct: number
+      levelCount: number
+    } | null
+  }): CanonicalRuleV2 | null {
+    if (!/网格/u.test(input.ruleText)) return null
+
+    const params = this.resolveGridParams(input.ruleText) ?? input.sharedGridParams
+    if (!params) return null
+
+    const semantics = this.resolveGridSemantics(input.ruleText, input.phase, input.actionType, input.sideScope)
+
+    return {
+      id: `${input.phase}-grid-level-touch-${input.index + 1}`,
+      phase: input.phase,
+      sideScope: semantics.sideScope,
+      priority: input.phase === 'entry' ? 170 - input.index : 120 - input.index,
+      condition: {
+        kind: 'atom',
+        key: 'grid.range_rebalance',
+        semanticScope: 'market',
+        op: semantics.op,
+        params,
+      },
+      actions: [input.phase === 'entry'
+        ? this.buildOpenAction(semantics.action as 'OPEN_LONG' | 'OPEN_SHORT', input.sizing)
+        : { type: semantics.action as 'CLOSE_LONG' | 'CLOSE_SHORT' }],
+    }
+  }
+
+  private buildBreakoutRule(input: {
+    ruleText: string
+    index: number
+    phase: 'entry' | 'exit'
+    actionType: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
+    sideScope: 'long' | 'short'
+    sizing: { mode: 'RATIO'; value: number } | null
+  }): CanonicalRuleV2 | null {
+    const period = this.resolveBreakoutPeriod(input.ruleText)
+    const isHighBreak = /前高|最高价|通道上轨|唐奇安.*上轨|donchian.*upper|breakout|highest/i.test(input.ruleText)
+    const isLowBreak = /前低|最低价|通道下轨|唐奇安.*下轨|donchian.*lower|breakdown|lowest/i.test(input.ruleText)
+    const key = isHighBreak
+      ? 'breakout.channel_high_break'
+      : (isLowBreak ? 'breakout.channel_low_break' : null)
+    if (!key) return null
+
+    return {
+      id: `${input.phase}-${key.replace(/\./g, '-')}-${input.index + 1}`,
+      phase: input.phase,
+      sideScope: input.sideScope,
+      priority: input.phase === 'entry' ? 165 - input.index : 118 - input.index,
+      cooldownBars: input.phase === 'entry' ? this.resolveCooldownBars(input.ruleText) : undefined,
+      condition: {
+        kind: 'atom',
+        key,
+        semanticScope: 'market',
+        op: key === 'breakout.channel_high_break' ? 'CROSS_OVER' : 'CROSS_UNDER',
+        params: { period },
+      },
+      actions: [input.phase === 'entry'
+        ? this.buildOpenAction(input.actionType as 'OPEN_LONG' | 'OPEN_SHORT', input.sizing)
+        : { type: input.actionType as 'CLOSE_LONG' | 'CLOSE_SHORT' }],
+    }
+  }
+
+  private resolveRsiThreshold(text: string): {
+    key:
+      | typeof CANONICAL_RULE_KEYS.rsiThresholdLte
+      | typeof CANONICAL_RULE_KEYS.rsiThresholdGte
+      | typeof CANONICAL_RULE_KEYS.rsiCrossOver
+      | typeof CANONICAL_RULE_KEYS.rsiCrossUnder
+    op: 'LTE' | 'GTE' | 'CROSS_OVER' | 'CROSS_UNDER'
+    value: number
+  } | null {
+    const operatorThreshold = text.match(/(?:<=|＜=|>=|＞=|低于|小于|高于|大于|上穿|下穿|突破|跌破)\s*(\d{1,3})/u)
+    const numericTokens = Array.from(text.matchAll(/(\d{1,3})/g))
+      .map(match => Number(match[1]))
+      .filter(value => Number.isFinite(value) && value >= 0 && value <= 100)
+    const explicitThreshold = operatorThreshold?.[1]
+      ? Number(operatorThreshold[1])
+      : numericTokens.length >= 2
+      ? numericTokens[numericTokens.length - 1]
+      : (numericTokens.length === 1 ? numericTokens[0] : null)
+    const threshold = explicitThreshold
+      ?? (/超卖/u.test(text) ? 30 : (/超买/u.test(text) ? 70 : null))
+
+    if (threshold === null) return null
+
+    if (/上穿|突破/u.test(text)) {
+      return {
+        key: CANONICAL_RULE_KEYS.rsiCrossOver,
+        op: 'CROSS_OVER',
+        value: threshold,
+      }
+    }
+
+    if (/下穿|跌破/u.test(text)) {
+      return {
+        key: CANONICAL_RULE_KEYS.rsiCrossUnder,
+        op: 'CROSS_UNDER',
+        value: threshold,
+      }
+    }
+
+    if (/<=|＜=|小于等于|低于|小于|超卖|低位/u.test(text)) {
+      return {
+        key: CANONICAL_RULE_KEYS.rsiThresholdLte,
+        op: 'LTE',
+        value: threshold,
+      }
+    }
+
+    if (/>=|＞=|大于等于|高于|大于|超买|高位/u.test(text)) {
+      return {
+        key: CANONICAL_RULE_KEYS.rsiThresholdGte,
+        op: 'GTE',
+        value: threshold,
+      }
+    }
+
+    return null
+  }
+
+  private resolveRsiPeriod(texts: string[]): number {
+    for (const text of texts) {
+      const matched = text.match(/(?:RSI|相对强弱)\D{0,4}(\d{1,2})/iu)
+      if (matched?.[1]) {
+        const period = Number(matched[1])
+        if (Number.isFinite(period) && period > 0) {
+          return period
+        }
+      }
+    }
+
+    return DEFAULT_INDICATOR_PARAMS.rsi.period
+  }
+
+  private resolveGridParams(text: string): {
+    rangeMin: number
+    rangeMax: number
+    stepPct: number
+    levelCount: number
+  } | null {
+    const rangeMatch = text.match(/(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)/u)
+    const stepMatch = text.match(/(?:步长|网格步长)\s*(\d+(?:\.\d+)?)\s*%/u)
+    const levelMatch = text.match(/(?:共|总计)?\s*(\d+)\s*格/u)
+    if (!rangeMatch?.[1] || !rangeMatch[2] || !stepMatch?.[1] || !levelMatch?.[1]) {
+      return null
+    }
+
+    return {
+      rangeMin: Number(rangeMatch[1]),
+      rangeMax: Number(rangeMatch[2]),
+      stepPct: Number(stepMatch[1]),
+      levelCount: Number(levelMatch[1]),
+    }
+  }
+
+  private resolveGridSemantics(
+    text: string,
+    phase: 'entry' | 'exit',
+    fallbackAction: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | null,
+    fallbackSideScope: 'long' | 'short' | null,
+  ): {
+    action: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT'
+    sideScope: 'long' | 'short'
+    op: 'LTE' | 'GTE'
+  } {
+    const upperBias = /上方网格|上轨|上沿|上层/u.test(text)
+    const lowerBias = /下方网格|下轨|下沿|下层/u.test(text)
+    const shortEntry = /做空|开空|卖出开空|sell short/u.test(text)
+    const shortExit = /买回|平空|回补/u.test(text)
+
+    if (phase === 'entry') {
+      if (shortEntry || upperBias || fallbackAction === 'OPEN_SHORT' || fallbackSideScope === 'short') {
+        return {
+          action: 'OPEN_SHORT',
+          sideScope: 'short',
+          op: 'GTE',
+        }
+      }
+
+      return {
+        action: 'OPEN_LONG',
+        sideScope: 'long',
+        op: 'LTE',
+      }
+    }
+
+    if (shortExit || lowerBias || fallbackAction === 'CLOSE_SHORT' || fallbackSideScope === 'short') {
+      return {
+        action: 'CLOSE_SHORT',
+        sideScope: 'short',
+        op: 'LTE',
+      }
+    }
+
+    return {
+      action: 'CLOSE_LONG',
+      sideScope: 'long',
+      op: upperBias ? 'GTE' : (lowerBias ? 'LTE' : 'GTE'),
+    }
+  }
+
+  private resolveBreakoutPeriod(text: string): number {
+    const matched = text.match(/前\s*(\d+)\s*根?K?线?/u)
+    return matched?.[1] ? Number(matched[1]) : 20
+  }
+
+  private resolveCooldownBars(text: string): number | undefined {
+    const matched = text.match(/冷却\s*(\d+)\s*根?K?线?/u)
+    if (!matched?.[1]) return undefined
+    const value = Number(matched[1])
+    return Number.isFinite(value) && value > 0 ? value : undefined
+  }
+
+  private resolveTakeProfitRule(
+    texts: string[],
+  ): {
+    pct: number
+    sideScope: 'long' | 'short' | 'both'
+    actions: CanonicalRuleV2['actions']
+  } | null {
+    for (const text of texts) {
+      const matched = text.match(/(?:止盈|take[_\s-]?profit)\D{0,8}(\d+(?:\.\d+)?)\s*%/iu)
+      if (matched?.[1]) {
+        return {
+          pct: Number(matched[1]),
+          ...this.resolveExitActionSemantics(text),
+        }
+      }
+      const fallback = text.match(/收益率\D{0,12}(?:达到|大于等于|>=|超过|≥)?\s*(\d+(?:\.\d+)?)\s*%/u)
+      if (fallback?.[1] && /止盈/u.test(text)) {
+        return {
+          pct: Number(fallback[1]),
+          ...this.resolveExitActionSemantics(text),
+        }
+      }
+    }
+    return null
+  }
+
+  private resolveTrailingStopRule(
+    texts: string[],
+  ): {
+    pct: number
+    sideScope: 'long' | 'short' | 'both'
+    actions: CanonicalRuleV2['actions']
+  } | null {
+    for (const text of texts) {
+      const matched = text.match(/(?:移动止损|trailing[_\s-]?stop)\D{0,8}(\d+(?:\.\d+)?)\s*%/iu)
+      if (matched?.[1]) {
+        return {
+          pct: Number(matched[1]),
+          sideScope: 'both',
+          actions: [{ type: 'FORCE_EXIT' }],
+        }
+      }
+    }
+    return null
+  }
+
+  private resolveTimeStopRule(
+    texts: string[],
+  ): {
+    bars: number
+    sideScope: 'long' | 'short' | 'both'
+    actions: CanonicalRuleV2['actions']
+  } | null {
+    for (const text of texts) {
+      const matched = text.match(/持仓(?:超过|达到)?\s*(\d+)\s*根?K?线?.{0,8}(?:平仓|平多|平空|离场|出场)/u)
+      if (matched?.[1]) {
+        return {
+          bars: Number(matched[1]),
+          ...this.resolveTimeStopActionSemantics(text),
+        }
+      }
+      const fallback = text.match(/time[_\s-]?stop\D{0,8}(\d+)/iu)
+      if (fallback?.[1]) {
+        return {
+          bars: Number(fallback[1]),
+          ...this.resolveTimeStopActionSemantics(text),
+        }
+      }
+    }
+    return null
+  }
+
+  private resolveExitActionSemantics(
+    text: string,
+    options: { allowReduce?: boolean } = {},
+  ): {
+    sideScope: 'long' | 'short' | 'both'
+    actions: CanonicalRuleV2['actions']
+  } {
+    const closeAction = this.detectCloseAction(text)
+    const allowReduce = options.allowReduce !== false
+    const reduceSizing = this.resolveReduceSizing(text)
+    const wantsReduce = allowReduce && /减仓|部分止盈|partial/i.test(text)
+
+    if (wantsReduce) {
+      if (closeAction?.sideScope === 'long') {
+        return {
+          sideScope: 'long',
+          actions: [{ type: 'REDUCE_LONG', ...(reduceSizing ? { sizing: reduceSizing } : {}) }],
+        }
+      }
+      if (closeAction?.sideScope === 'short') {
+        return {
+          sideScope: 'short',
+          actions: [{ type: 'REDUCE_SHORT', ...(reduceSizing ? { sizing: reduceSizing } : {}) }],
+        }
+      }
+      return {
+        sideScope: 'both',
+        actions: [
+          { type: 'REDUCE_LONG', ...(reduceSizing ? { sizing: reduceSizing } : {}) },
+          { type: 'REDUCE_SHORT', ...(reduceSizing ? { sizing: reduceSizing } : {}) },
+        ],
+      }
+    }
+
+    if (closeAction?.type === 'CLOSE_LONG') {
+      return {
+        sideScope: 'long',
+        actions: [{ type: 'CLOSE_LONG' }],
+      }
+    }
+    if (closeAction?.type === 'CLOSE_SHORT') {
+      return {
+        sideScope: 'short',
+        actions: [{ type: 'CLOSE_SHORT' }],
+      }
+    }
+
+    return {
+      sideScope: 'both',
+      actions: [{ type: 'FORCE_EXIT' }],
+    }
+  }
+
+  private resolveReduceSizing(text: string): { mode: 'RATIO'; value: number } | null {
+    if (/减半|一半|half/u.test(text)) {
+      return { mode: 'RATIO', value: 0.5 }
+    }
+
+    const matched = text.match(/减仓\s*(\d+(?:\.\d+)?)\s*%/u)
+    if (!matched?.[1]) return null
+    const value = Number(matched[1])
+    if (!Number.isFinite(value) || value <= 0) return null
+    return {
+      mode: 'RATIO',
+      value: value > 1 ? Number((value / 100).toFixed(4)) : value,
+    }
+  }
+
+  private resolveTimeStopActionSemantics(
+    text: string,
+  ): {
+    sideScope: 'long' | 'short' | 'both'
+    actions: CanonicalRuleV2['actions']
+  } {
+    const closeAction = this.detectCloseAction(text)
+    if (closeAction?.type === 'CLOSE_LONG') {
+      return {
+        sideScope: 'long',
+        actions: [{ type: 'CLOSE_LONG' }],
+      }
+    }
+    if (closeAction?.type === 'CLOSE_SHORT') {
+      return {
+        sideScope: 'short',
+        actions: [{ type: 'CLOSE_SHORT' }],
+      }
+    }
+
+    return {
+      sideScope: 'both',
+      actions: [{ type: 'CLOSE_LONG' }, { type: 'CLOSE_SHORT' }],
     }
   }
 }

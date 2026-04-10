@@ -126,6 +126,7 @@ export class CanonicalStrategyAstCompilerService {
       phase: ruleBlock.phase,
       when: this.exprIdFor(ruleBlock.when, ir),
       priority: ruleBlock.priority,
+      cooldownBars: ruleBlock.cooldownBars,
       actions: ruleBlock.actions,
     }))
   }
