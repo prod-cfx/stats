@@ -50,4 +50,59 @@ describe('signalGenerationPersistenceStage', () => {
       expect.objectContaining({ reset: true, lockedUntil: expect.any(Date) }),
     )
   })
+
+  it('persists runtime provenance into generated signal metadata', async () => {
+    const tradingSignalRepository = {
+      create: jest.fn().mockResolvedValue({ id: 'signal-1' }),
+    }
+    const generatorRepository = {
+      lockStrategyInstance: jest.fn().mockResolvedValue(undefined),
+      countRecentSignals: jest.fn().mockResolvedValue(0),
+    }
+    const txHost = { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) }
+    const stage = new SignalGenerationPersistenceStage(
+      generatorRepository as any,
+      tradingSignalRepository as any,
+      { findByStrategyInstanceId: jest.fn(), incrementFailure: jest.fn(), reset: jest.fn() } as any,
+      { emit: jest.fn() } as any,
+      { recordGeneration: jest.fn() } as any,
+      txHost as any,
+    )
+
+    await stage.createSignalWithCooldownAndLock(
+      { id: 'instance-1', llmModel: 'gpt-4o-mini' } as any,
+      { id: 'strategy-1' } as any,
+      { symbol: { id: 'symbol-1', code: 'BTCUSDT' }, timeframe: 'm15' } as any,
+      config,
+      { rsi: 60 },
+      new Date('2026-04-10T10:00:00.000Z'),
+      {
+        signalType: 'ENTRY',
+        direction: 'BUY',
+        confidence: 88,
+        entryPrice: 100,
+        stopLoss: 90,
+        takeProfit: 110,
+        reasoning: 'snapshot signal',
+        rawResponse: '{"action":"buy"}',
+      } as any,
+      {
+        bindingSource: 'PUBLISHED_SNAPSHOT',
+        publishedSnapshotId: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        executionContentSource: 'PUBLISHED_SNAPSHOT',
+      },
+      false,
+    )
+
+    expect(tradingSignalRepository.create).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        generatorVersion: 'v1',
+        runtimeProvenance: expect.objectContaining({
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+        }),
+      }),
+    }))
+  })
 })

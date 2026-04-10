@@ -50,6 +50,7 @@ describe('signalGeneratorService coordinator behavior', () => {
       } as any,
       { isProd: jest.fn().mockReturnValue(false) } as any,
       { withTransaction: jest.fn() } as any,
+      overrides.publishedSnapshotsRepository as any,
     )
 
     return { service, generatorRepository }
@@ -94,5 +95,48 @@ describe('signalGeneratorService coordinator behavior', () => {
     expect(processStrategyInstance.mock.calls[0]?.[0]).toBe(instances[0])
     expect(processStrategyInstance.mock.calls[1]?.[0]).toBe(instances[1])
     expect((service as any).lastStrategyIndex).toBe(2)
+  })
+
+  it('uses the bound published snapshot script as the runtime execution source', async () => {
+    const publishedSnapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyInstanceId: 'source-instance-1',
+        strategyTemplateId: 'template-1',
+        scriptSnapshot: 'return "snapshot-script"',
+      }),
+    }
+    const { service } = createService({ publishedSnapshotsRepository })
+
+    const runtimeSource = await (service as any).resolveRuntimeStrategySource(
+      {
+        id: 'instance-1',
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+        },
+      },
+      {
+        id: 'template-1',
+        script: 'return "template-script"',
+        promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+      },
+    )
+
+    expect(runtimeSource).toMatchObject({
+      strategy: {
+        script: 'return "snapshot-script"',
+      },
+      provenance: {
+        bindingSource: 'PUBLISHED_SNAPSHOT',
+        publishedSnapshotId: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        executionContentSource: 'PUBLISHED_SNAPSHOT',
+        controlPlaneSource: 'STRATEGY_TEMPLATE',
+      },
+    })
+    expect(publishedSnapshotsRepository.findById).toHaveBeenCalledWith('snapshot-1')
   })
 })

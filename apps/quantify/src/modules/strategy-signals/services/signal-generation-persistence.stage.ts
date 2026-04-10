@@ -64,6 +64,7 @@ export class SignalGenerationPersistenceStage {
     indicatorValues: Record<string, number>,
     latestIndicatorTime: Date | undefined,
     aiPayload: AiSignalPayload & { rawResponse: string },
+    runtimeProvenance: Prisma.JsonObject,
     skipCooldown = false,
   ) {
     const cooldownSince = new Date(Date.now() - config.cooldownMinutes * 60 * 1000)
@@ -107,6 +108,7 @@ export class SignalGenerationPersistenceStage {
         } satisfies Prisma.JsonValue,
         metadata: {
           generatorVersion: 'v1',
+          runtimeProvenance,
         },
       })
 
@@ -148,6 +150,7 @@ export class SignalGenerationPersistenceStage {
     indicators: Record<string, any>,
     aiPayload: AiSignalPayload & { rawResponse: string },
     config: StrategySignalsRuntimeConfig,
+    runtimeProvenance: Prisma.JsonObject,
     skipCooldown = false,
   ): Promise<{ created: boolean; signalId: string | null; reason?: string }> {
     const configuredCooldown = execution.cooldownMinutes ?? config.cooldownMinutes
@@ -194,6 +197,7 @@ export class SignalGenerationPersistenceStage {
         }) satisfies Prisma.JsonValue,
         metadata: {
           generatorVersion: 'v2-multi-leg',
+          runtimeProvenance,
         },
       })
 
