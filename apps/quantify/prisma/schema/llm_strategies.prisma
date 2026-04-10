@@ -35,6 +35,11 @@ enum LlmCodegenSessionStatus {
   REJECTED
 }
 
+enum AiQuantConversationMessageRole {
+  user
+  assistant
+}
+
 model LlmStrategy {
   id                    String            @id @default(cuid())
   name                  String            @unique
@@ -137,10 +142,42 @@ model LlmStrategyCodegenSession {
 
   versions           LlmStrategyCodeVersion[]
   publishedSnapshots PublishedStrategySnapshot[]
+  conversation       AiQuantConversation?
 
   @@index([userId, status, createdAt], map: "idx_llm_codegen_sessions_user_status_created_at")
   @@index([status, createdAt], map: "idx_llm_codegen_sessions_status_created_at")
   @@map("llm_strategy_codegen_sessions")
+}
+
+model AiQuantConversation {
+  id               String   @id @default(cuid())
+  userId           String   @map("user_id")
+  codegenSessionId String   @unique @map("codegen_session_id")
+  title            String
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+
+  codegenSession LlmStrategyCodegenSession    @relation(fields: [codegenSessionId], references: [id], onDelete: Cascade)
+  messages       AiQuantConversationMessage[]
+
+  @@index([userId, updatedAt], map: "idx_ai_quant_conversations_user_updated_at")
+  @@map("ai_quant_conversations")
+}
+
+model AiQuantConversationMessage {
+  id             String                        @id @default(cuid())
+  conversationId String                        @map("conversation_id")
+  role           AiQuantConversationMessageRole
+  content        String                        @db.Text
+  sortOrder      Int                           @map("sort_order")
+  createdAt      DateTime                      @default(now()) @map("created_at")
+  updatedAt      DateTime                      @default(now()) @updatedAt @map("updated_at")
+
+  conversation AiQuantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@unique([conversationId, sortOrder], map: "uniq_ai_quant_conversation_messages_conversation_sort_order")
+  @@index([conversationId, createdAt], map: "idx_ai_quant_conversation_messages_conversation_created_at")
+  @@map("ai_quant_conversation_messages")
 }
 
 model LlmStrategyCodeVersion {
