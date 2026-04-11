@@ -52,7 +52,7 @@ await engine.execute('add(1, 2)', {
 
 这样做是为了避免通过函数对象的 `.constructor` 等路径逃逸到宿主环境。
 
-如果脚本需要辅助函数，应该通过 [helpers/context-builder.ts](/Users/a1/work/stats/packages/shared/src/script-engine/helpers/context-builder.ts) 提供的上下文构建器注入 `helpers` 命名空间。该命名空间会先经过 [helpers/safe-helpers.ts](/Users/a1/work/stats/packages/shared/src/script-engine/helpers/safe-helpers.ts) 包装和冻结，而不是直接把宿主函数裸传入上下文。
+如果脚本需要辅助函数，应该通过 [helpers/context-builder.ts](helpers/context-builder.ts) 提供的上下文构建器注入 `helpers` 命名空间。该命名空间会先经过 [helpers/safe-helpers.ts](helpers/safe-helpers.ts) 包装和冻结，而不是直接把宿主函数裸传入上下文。
 
 ## 基本用法
 
@@ -141,9 +141,9 @@ console.log(result.logs)
 
 量化策略场景通常不要手写原始 `context`，而是使用：
 
-- [helpers/README.md](/Users/a1/work/stats/packages/shared/src/script-engine/helpers/README.md)
-- [QUICKSTART.md](/Users/a1/work/stats/packages/shared/src/script-engine/QUICKSTART.md)
-- [IMPLEMENTATION.md](/Users/a1/work/stats/packages/shared/src/script-engine/IMPLEMENTATION.md)
+- [helpers/README.md](helpers/README.md)
+- [QUICKSTART.md](QUICKSTART.md)
+- [IMPLEMENTATION.md](IMPLEMENTATION.md)
 
 典型方式：
 

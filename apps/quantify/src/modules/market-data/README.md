@@ -15,8 +15,8 @@
 
 真实接口定义以：
 
-- [controllers/market-data.controller.ts](/Users/a1/work/stats/apps/quantify/src/modules/market-data/controllers/market-data.controller.ts)
-- [controllers/ops-market-symbols.controller.ts](/Users/a1/work/stats/apps/quantify/src/modules/market-data/controllers/ops-market-symbols.controller.ts)
+- [controllers/market-data.controller.ts](controllers/market-data.controller.ts)
+- [controllers/ops-market-symbols.controller.ts](controllers/ops-market-symbols.controller.ts)
 
 为准。
 

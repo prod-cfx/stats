@@ -6,8 +6,8 @@
 
 当前实现以这两处代码为准：
 
-- [llm-strategy-instance-scheduler.service.ts](/Users/a1/work/stats/apps/quantify/src/modules/llm-strategies/services/llm-strategy-instance-scheduler.service.ts)
-- [llm-strategy-instances.service.ts](/Users/a1/work/stats/apps/quantify/src/modules/llm-strategies/services/llm-strategy-instances.service.ts)
+- [llm-strategy-instance-scheduler.service.ts](services/llm-strategy-instance-scheduler.service.ts)
+- [llm-strategy-instances.service.ts](services/llm-strategy-instances.service.ts)
 
 ## 核心行为
 

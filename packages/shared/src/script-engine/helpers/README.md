@@ -18,9 +18,9 @@ helpers/
 
 当前真实导出以这些文件为准：
 
-- [index.ts](/Users/a1/work/stats/packages/shared/src/script-engine/helpers/index.ts)
-- [context-builder.ts](/Users/a1/work/stats/packages/shared/src/script-engine/helpers/context-builder.ts)
-- [safe-helpers.ts](/Users/a1/work/stats/packages/shared/src/script-engine/helpers/safe-helpers.ts)
+- [index.ts](index.ts)
+- [context-builder.ts](context-builder.ts)
+- [safe-helpers.ts](safe-helpers.ts)
 
 ## 提供什么
 

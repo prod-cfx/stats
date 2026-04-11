@@ -30,15 +30,15 @@ dx/
 
 这几部分分别负责：
 
-- [commands.json](/Users/a1/work/stats/dx/config/commands.json)
+- [commands.json](config/commands.json)
   定义命令树、执行方式、帮助信息
-- [env-layers.json](/Users/a1/work/stats/dx/config/env-layers.json)
+- [env-layers.json](config/env-layers.json)
   定义每个环境加载哪些 `.env` 文件
-- [env-policy.jsonc](/Users/a1/work/stats/dx/config/env-policy.jsonc)
+- [env-policy.jsonc](config/env-policy.jsonc)
   定义环境变量治理规则
-- [ecosystem.backend.config.cjs](/Users/a1/work/stats/dx/deploy/ecosystem.backend.config.cjs)
+- [ecosystem.backend.config.cjs](deploy/ecosystem.backend.config.cjs)
   backend 远端 PM2 配置
-- [ecosystem.quantify.config.cjs](/Users/a1/work/stats/dx/deploy/ecosystem.quantify.config.cjs)
+- [ecosystem.quantify.config.cjs](deploy/ecosystem.quantify.config.cjs)
   quantify 远端 PM2 配置
 
 ## 当前采用的 strict 规范
@@ -81,7 +81,7 @@ dx/
 
 ## `commands.json` 怎么看
 
-[commands.json](/Users/a1/work/stats/dx/config/commands.json) 是核心文件。
+[commands.json](config/commands.json) 是核心文件。
 
 这里同时放两类内容：
 
@@ -257,7 +257,7 @@ dx deploy admin --staging
 
 ## `env-layers.json` 怎么看
 
-[env-layers.json](/Users/a1/work/stats/dx/config/env-layers.json) 定义每个环境加载哪些 `.env` 文件。
+[env-layers.json](config/env-layers.json) 定义每个环境加载哪些 `.env` 文件。
 
 当前项目是：
 
@@ -273,7 +273,7 @@ dx deploy admin --staging
 
 ## `env-policy.jsonc` 怎么看
 
-[env-policy.jsonc](/Users/a1/work/stats/dx/config/env-policy.jsonc) 负责环境变量治理。
+[env-policy.jsonc](config/env-policy.jsonc) 负责环境变量治理。
 
 重点看：
 
@@ -321,14 +321,14 @@ dx deploy admin --staging
 
 相关配置在：
 
-- [ecosystem.backend.config.cjs](/Users/a1/work/stats/dx/deploy/ecosystem.backend.config.cjs)
-- [ecosystem.quantify.config.cjs](/Users/a1/work/stats/dx/deploy/ecosystem.quantify.config.cjs)
+- [ecosystem.backend.config.cjs](deploy/ecosystem.backend.config.cjs)
+- [ecosystem.quantify.config.cjs](deploy/ecosystem.quantify.config.cjs)
 
 ## 前端部署说明
 
 `front` 和 `admin` 走 Vercel CLI。
 
-相关命令在 [commands.json](/Users/a1/work/stats/dx/config/commands.json) 的 `deploy.front` / `deploy.admin` 中定义。
+相关命令在 [commands.json](config/commands.json) 的 `deploy.front` / `deploy.admin` 中定义。
 
 ## 给同事的结论
 
