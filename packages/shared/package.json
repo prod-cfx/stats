@@ -27,7 +27,7 @@
     }
   },
   "scripts": {
-    "build": "rm -f tsconfig.tsbuildinfo && tsc --project tsconfig.json",
-    "dev": "tsc --project tsconfig.json --watch"
+    "build": "rm -f tsconfig.tsbuildinfo && pnpm exec tsc --project tsconfig.json",
+    "dev": "pnpm exec tsc --project tsconfig.json --watch"
   }
 }
