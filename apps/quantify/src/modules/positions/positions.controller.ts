@@ -1,7 +1,3 @@
-import type { TriggerPositionSyncDto } from './dto/position-sync.dto'
-import type { PositionsQueryDto } from './dto/positions-query.dto'
-import type { QuotesUpdateDto } from './dto/quotes-update.dto'
-import type { RecordTradeDto } from './dto/record-trade.dto'
 import { PositionStatus } from '@ai/shared'
 import { Transactional } from '@nestjs-cls/transactional'
 import {
@@ -25,7 +21,11 @@ import { StrategyAccountNotFoundException } from '@/modules/accounts/exceptions/
 import { ClosePositionDto, ClosePositionResponseDto } from './dto/close-position.dto'
 import { PositionSyncResultDto } from './dto/position-sync.dto'
 import { PositionResponseDto } from './dto/position.response.dto'
+import { PositionsQueryDto } from './dto/positions-query.dto'
+import { QuotesUpdateDto } from './dto/quotes-update.dto'
+import { RecordTradeDto } from './dto/record-trade.dto'
 import { TradeResponseDto } from './dto/trade.response.dto'
+import { TriggerPositionSyncDto } from './dto/position-sync.dto'
 // Nest DI 需要运行时引用 service
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PositionSyncService } from './position-sync.service'
@@ -47,6 +47,7 @@ export class PositionsController {
   @Transactional()
   @Post('fills')
   @ApiOperation({ summary: '记录成交（内部使用）' })
+  @ApiBody({ type: RecordTradeDto })
   @ApiOkResponse({ type: TradeResponseDto })
   async recordTrade(@Body() dto: RecordTradeDto) {
     return this.positionsService.recordTrade(dto)
@@ -55,6 +56,7 @@ export class PositionsController {
   @Transactional()
   @Post('quotes')
   @ApiOperation({ summary: '推送行情快照并更新未实现盈亏（内部使用）' })
+  @ApiBody({ type: QuotesUpdateDto })
   async applyQuotes(@Body() dto: QuotesUpdateDto) {
     return this.valuationService.applyQuotes(dto)
   }
@@ -113,6 +115,7 @@ export class PositionsController {
     summary: '手动触发仓位同步',
     description: '从交易所获取实际仓位并与本地数据对比同步。',
   })
+  @ApiBody({ type: TriggerPositionSyncDto })
   @ApiOkResponse({ type: PositionSyncResultDto })
   async triggerPositionSync(@Body() dto: TriggerPositionSyncDto) {
     const account = await this.positionsService.findUserStrategyAccountById(dto.userStrategyAccountId)

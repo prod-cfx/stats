@@ -160,10 +160,7 @@ const AccountAiQuantDeployRequestDto = z
   .object({
     name: z.string(),
     deployRequestId: z.string(),
-    exchange: z.enum(['binance', 'okx', 'hyperliquid']),
-    symbol: z.string(),
-    timeframe: z.string(),
-    positionPct: z.number(),
+    publishedSnapshotId: z.string(),
     exchangeAccountId: z.string().optional(),
     strategyInstanceId: z.string().optional(),
     exchangeAccountName: z.string().optional(),
@@ -189,8 +186,10 @@ const LlmCodegenContinueRequestDto = z
     entryRules: z.array(z.string()).optional(),
     exitRules: z.array(z.string()).optional(),
     riskRules: z.object({}).partial().passthrough().optional(),
+    clarificationAnswers: z.record(z.string()).optional(),
     guideConfig: z.object({}).partial().passthrough().optional(),
     confirmGenerate: z.boolean().optional(),
+    confirmedCanonicalDigest: z.string().optional(),
     providerCode: z.string().optional(),
     model: z.string().optional(),
     temperature: z.number().optional(),
@@ -3062,6 +3061,25 @@ const endpoints = makeApi([
       {
         name: 'id',
         type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'post',
+    path: '/backtesting/symbols/check',
+    alias: 'BacktestingProxyController_checkSymbolSupport',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'x-request-id',
+        type: 'Header',
         schema: z.string(),
       },
     ],

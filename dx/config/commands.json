@@ -125,7 +125,7 @@
       }
     },
     "contracts": {
-      "command": "bash -lc 'set -euo pipefail; npx nx run backend:swagger; node scripts/generate-backend-contracts.mjs'",
+      "command": "bash -lc 'set -euo pipefail; npx nx run backend:swagger; npx nx run quantify:swagger; node scripts/generate-backend-contracts.mjs; node scripts/generate-quantify-contracts.mjs'",
       "app": "backend",
       "description": "生成 API 合约 (packages/api-contracts)"
     }

@@ -89,7 +89,7 @@ dx/
   - 只放跨端可复用的纯函数、常量、类型与脚本引擎等通用能力
   - 通过 `./node` 暴露 Node 专属导出，供服务端按需使用
 - `packages/api-contracts`
-  - 由 `backend:swagger` + `scripts/generate-backend-contracts.mjs` 生成
+  - 由 `backend:swagger` + `quantify:swagger` 以及对应的 contracts 生成脚本产出
   - 为前端与管理端提供类型安全的接口模型与客户端
 - `packages/config`
   - 封装环境变量加载、展开与 zod 校验
@@ -101,11 +101,11 @@ dx/
 - Quantify Prisma Schema：`apps/quantify/prisma/schema/*.prisma`
 - Backend OpenAPI 导出：`apps/backend/src/swagger/export-openapi.ts`
 - Quantify OpenAPI 导出：`apps/quantify/src/swagger/export-openapi.ts`
-- 合约生成产物：`packages/api-contracts/src/generated/backend.ts`
+- 合约生成产物：`packages/api-contracts/src/generated/backend.ts`、`packages/api-contracts/src/generated/quantify.ts`
 
 说明：
 
-- 当前 `api-contracts` 主要由 `backend` OpenAPI 驱动，`quantify` 已具备单独导出 OpenAPI 的能力，但尚未接入同一份前端合约产物
+- 当前 `api-contracts` 同时承载 `backend` 与 `quantify` 的 OpenAPI 生成产物；消费侧应优先通过该包提供的类型安全客户端访问对应服务
 
 ## 命令与运行形态
 

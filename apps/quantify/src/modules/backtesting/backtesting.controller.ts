@@ -1,11 +1,23 @@
 import type { BacktestRunInput } from './types/backtesting.types'
 import { ErrorCode } from '@ai/shared'
 import { Body, Controller, Get, Headers, HttpStatus, Logger, Param, Post, UseGuards } from '@nestjs/common'
+import {
+  ApiHeader,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger'
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestRunnerService } from './core/backtest-runner.service'
 // eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时类元数据
+import {
+  BacktestCapabilitiesResponseDto,
+  BacktestJobResponseDto,
+  BacktestReportResponseDto,
+  BacktestSymbolSupportResponseDto,
+} from './dto/backtest.response.dto'
 import { CheckBacktestSymbolDto } from './dto/check-backtest-symbol.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时类元数据
 import { RunBacktestDto } from './dto/run-backtest.dto'
@@ -20,6 +32,7 @@ import { BacktestSnapshotLoaderService } from './services/backtest-snapshot-load
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestSymbolSupportService } from './services/backtest-symbol-support.service'
 
+@ApiTags('backtesting')
 @Controller('backtesting')
 @UseGuards(ThrottlerGuard)
 export class BacktestingController {
@@ -36,6 +49,10 @@ export class BacktestingController {
 
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('run')
+  @ApiOperation({ summary: '同步执行一次回测' })
+  @ApiHeader({ name: 'authorization', required: false })
+  @ApiHeader({ name: 'x-user-id', required: false })
+  @ApiOkResponse({ type: BacktestReportResponseDto })
   async run(
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-user-id') forwardedUserId: string | undefined,
@@ -48,6 +65,11 @@ export class BacktestingController {
 
   @Throttle({ default: { limit: 5, ttl: 60_000 } })
   @Post('jobs')
+  @ApiOperation({ summary: '创建异步回测任务' })
+  @ApiHeader({ name: 'authorization', required: false })
+  @ApiHeader({ name: 'x-user-id', required: false })
+  @ApiHeader({ name: 'x-request-id', required: false })
+  @ApiOkResponse({ type: BacktestJobResponseDto })
   async createJob(
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-user-id') forwardedUserId: string | undefined,
@@ -79,6 +101,10 @@ export class BacktestingController {
   }
 
   @Get('jobs/:id')
+  @ApiOperation({ summary: '获取回测任务状态' })
+  @ApiHeader({ name: 'authorization', required: false })
+  @ApiHeader({ name: 'x-user-id', required: false })
+  @ApiOkResponse({ type: BacktestJobResponseDto })
   async getJob(
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-user-id') forwardedUserId: string | undefined,
@@ -89,6 +115,10 @@ export class BacktestingController {
   }
 
   @Get('jobs/:id/result')
+  @ApiOperation({ summary: '获取回测任务结果' })
+  @ApiHeader({ name: 'authorization', required: false })
+  @ApiHeader({ name: 'x-user-id', required: false })
+  @ApiOkResponse({ type: BacktestReportResponseDto })
   async getJobResult(
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-user-id') forwardedUserId: string | undefined,
@@ -99,6 +129,9 @@ export class BacktestingController {
   }
 
   @Get('capabilities')
+  @ApiOperation({ summary: '获取当前回测能力配置' })
+  @ApiHeader({ name: 'x-request-id', required: false })
+  @ApiOkResponse({ type: BacktestCapabilitiesResponseDto })
   async getCapabilities(
     @Headers('x-request-id') requestId: string | undefined,
   ) {
@@ -124,6 +157,11 @@ export class BacktestingController {
 
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
   @Post('symbols/check')
+  @ApiOperation({ summary: '检查回测标的是否受支持' })
+  @ApiHeader({ name: 'authorization', required: false })
+  @ApiHeader({ name: 'x-user-id', required: false })
+  @ApiHeader({ name: 'x-request-id', required: false })
+  @ApiOkResponse({ type: BacktestSymbolSupportResponseDto })
   async checkSymbolSupport(
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-user-id') forwardedUserId: string | undefined,

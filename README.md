@@ -10,7 +10,7 @@
 共享包与基础设施：
 
 - `packages/shared`：跨端常量、类型、工具与脚本引擎能力
-- `packages/api-contracts`：由后端 OpenAPI 生成的 Zod 模型与 HTTP Client
+- `packages/api-contracts`：由 backend / quantify OpenAPI 生成的 Zod 模型与 HTTP Client
 - `packages/config`：环境变量加载与校验
 - `dx/config`：统一开发命令、环境分层与环境策略
 - `ruler/`：仓库开发规范、架构说明与协作约束
