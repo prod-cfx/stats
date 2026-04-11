@@ -25,6 +25,8 @@ import {
 import { ApiError } from '@/lib/errors'
 import { getCodegenSessionReconciliationAction } from './ai-quant-page-codegen-reconciliation'
 import {
+  BACKTEST_EXECUTION_PARAM_KEYS,
+  hasExplicitBacktestExecutionOverrides,
   invalidateConversationPublication,
   normalizeClarificationGate,
   normalizeParamsFromValues,
@@ -55,6 +57,48 @@ function isCodegenProcessingStatus(status: string): boolean {
 
 function isRecoverableCodegenStatus(status: string): boolean {
   return CODEGEN_RECOVERABLE_STATUSES.has(status)
+}
+
+function normalizePublishedSnapshotParamValues(
+  value: unknown,
+): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+
+  const normalized = { ...(value as Record<string, unknown>) }
+  const timeframe = typeof normalized.timeframe === 'string' ? normalized.timeframe.trim() : ''
+  const baseTimeframe = typeof normalized.baseTimeframe === 'string' ? normalized.baseTimeframe.trim() : ''
+  if (timeframe && !baseTimeframe) {
+    normalized.baseTimeframe = timeframe
+  }
+  return normalized
+}
+
+function mergeSnapshotBoundParamValues(input: {
+  currentValues: Record<string, unknown>
+  snapshotParamValues: Record<string, unknown> | null
+}): {
+  paramValues: Record<string, unknown>
+  explicit: boolean
+} {
+  const { currentValues, snapshotParamValues } = input
+  if (!snapshotParamValues) {
+    return {
+      paramValues: currentValues,
+      explicit: hasExplicitBacktestExecutionOverrides(currentValues),
+    }
+  }
+
+  const nextValues = {
+    ...currentValues,
+    ...snapshotParamValues,
+  }
+
+  return {
+    paramValues: nextValues,
+    explicit: BACKTEST_EXECUTION_PARAM_KEYS.every(key => nextValues[key] !== undefined),
+  }
 }
 
 function buildTerminalFailureReply(args: {
@@ -357,13 +401,18 @@ export function applyCodegenResponseToConversationState(args: {
           .join(' '),
       })
     : null
-  const nextParamValues = syncResult?.paramValues ?? conversation.paramValues
+  const mergedSnapshotParamValues = mergeSnapshotBoundParamValues({
+    currentValues: syncResult?.paramValues ?? conversation.paramValues,
+    snapshotParamValues:
+      response.status === 'PUBLISHED'
+        ? normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
+        : null,
+  })
+  const nextParamValues = mergedSnapshotParamValues.paramValues
   const nextParamSchema = shouldUpdateGraph
     ? applyCapabilitiesToParamSchema(syncResult?.paramSchema, backtestCapabilities)
     : conversation.paramSchema
-  const nextParams = syncResult
-    ? normalizeParamsFromValues(nextParamValues, conversation.params)
-    : conversation.params
+  const nextParams = normalizeParamsFromValues(nextParamValues, conversation.params)
   const nextGraphStatus =
     response.status === 'PUBLISHED' || confirmGenerate ? 'confirmed' : 'draft'
   const nextGraph = shouldUpdateGraph
@@ -529,6 +578,7 @@ export function applyCodegenResponseToConversationState(args: {
       nextPendingCanonicalDigest !== undefined
         ? nextPendingCanonicalDigest
         : conversation.pendingCanonicalDigest,
+    backtestExecutionConfigExplicit: mergedSnapshotParamValues.explicit,
     backtestResult: null,
     latestSignalMessage: null,
     messages: nextMessages,
