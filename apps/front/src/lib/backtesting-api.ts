@@ -98,13 +98,16 @@ function waitRetryDelay(signal?: AbortSignal): Promise<void> {
       return
     }
 
+    let timer: ReturnType<typeof setTimeout> | null = null
     const onAbort = () => {
-      globalThis.clearTimeout(timer)
+      if (timer) {
+        globalThis.clearTimeout(timer)
+      }
       signal?.removeEventListener('abort', onAbort)
       reject(new ApiError('Request aborted', 'API_ERROR'))
     }
 
-    const timer = globalThis.setTimeout(() => {
+    timer = globalThis.setTimeout(() => {
       signal?.removeEventListener('abort', onAbort)
       resolve()
     }, BACKTEST_CAPABILITY_RETRY_DELAY_MS)
