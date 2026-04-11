@@ -14,7 +14,14 @@ const mockFetchBacktestCapabilities = jest.fn()
 const mockCheckBacktestSymbolSupport = jest.fn()
 
 jest.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string, options?: Record<string, unknown>) => {
+      if (key === 'aiQuant.messages.backtestPayloadInvalid' && typeof options?.reason === 'string') {
+        return `${key}:${options.reason}`
+      }
+      return key
+    },
+  }),
 }))
 
 jest.mock('next/navigation', () => ({
@@ -110,6 +117,16 @@ jest.mock('@/components/ai-quant/BacktestSummaryCard', () => ({
 }))
 
 jest.mock('@/components/ai-quant/backtest-payload-builder', () => ({
+  BacktestPayloadBuilderError: class BacktestPayloadBuilderError extends Error {
+    __builderError = true
+    code: string
+
+    constructor(code: string) {
+      super(code)
+      this.code = code
+      this.name = 'BacktestPayloadBuilderError'
+    }
+  },
   buildBacktestPayload: (...args: unknown[]) => mockBuildBacktestPayload(...args),
   isBacktestPayloadBuilderError: (error: unknown) => Boolean((error as { __builderError?: boolean })?.__builderError),
 }))
@@ -644,6 +661,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
     expect(mockCreateBacktestJob).not.toHaveBeenCalled()
     expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestPayloadInvalid')
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('missing_explicit_execution_config')
   })
 
   it('strips legacy hydrated backtest defaults so cached conversations also fail fast', async () => {
@@ -688,6 +706,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
     expect(mockCreateBacktestJob).not.toHaveBeenCalled()
     expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestPayloadInvalid')
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('missing_explicit_execution_config')
   })
 
   it('fails fast when allowPartial is present but invalid', async () => {
@@ -710,6 +729,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
     expect(mockCreateBacktestJob).not.toHaveBeenCalled()
     expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestPayloadInvalid')
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('invalid_allow_partial')
   })
 
   it('keeps exact default execution values when the conversation marked them as explicit', async () => {
