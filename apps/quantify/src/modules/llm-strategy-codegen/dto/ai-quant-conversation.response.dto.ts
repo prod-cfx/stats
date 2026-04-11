@@ -59,6 +59,9 @@ export class AiQuantConversationResponseDto {
   @ApiPropertyOptional({ description: '最近一次一致性通过并发布的快照 ID' })
   publishedSnapshotId?: string | null
 
+  @ApiPropertyOptional({ description: '已发布快照绑定的参数视图（用于前端回测/展示对齐）', type: 'object', additionalProperties: true })
+  publishedSnapshotParamValues?: CodegenSessionResponseDto['publishedSnapshotParamValues']
+
   @ApiPropertyOptional({ description: '发布后生成的策略实例 ID' })
   strategyInstanceId?: string | null
 }
