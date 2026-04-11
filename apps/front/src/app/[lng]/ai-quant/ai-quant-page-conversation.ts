@@ -754,6 +754,50 @@ export function createConversation(translate: (key: string) => string, now = Dat
   }
 }
 
+function buildServerTerminalCodegenReply(args: {
+  response: AiQuantConversationResponse
+  translate: (key: string, options?: Record<string, unknown>) => string
+}): string | null {
+  const { response, translate } = args
+  const rejectedPrefix = translate('aiQuant.messages.generationFailedPrefix', {
+    defaultValue: 'Failed to generate strategy from current logic graph',
+  })
+  const rejectedWithoutReason = translate('aiQuant.messages.generationFailedNoReason', {
+    defaultValue:
+      'Failed to generate strategy from current logic graph: backend did not return a detailed reason. Please check service logs.',
+  })
+  const reason = typeof response.rejectReason === 'string' ? response.rejectReason.trim() : ''
+
+  const isTerminalFailure =
+    response.status === 'CONSISTENCY_FAILED'
+    || response.status === 'REJECTED'
+    || response.publicationGate?.passed === false
+
+  if (isTerminalFailure) {
+    const stage =
+      response.publicationGate?.passed === false
+        ? 'PUBLICATION_GATE_BLOCKED'
+        : response.status || 'UNKNOWN'
+    const explanation =
+      response.status === 'CONSISTENCY_FAILED'
+        ? '脚本已生成，但没有通过一致性校验，因此不会发布，也不能进入回测。'
+        : response.publicationGate?.passed === false
+          ? '脚本已生成，但发布门校验没有通过，因此不会发布，也不能进入回测。'
+          : '后端拒绝了当前策略生成结果，因此不会发布，也不能进入回测。'
+    return `${rejectedPrefix}（${stage}）\n说明：${explanation}\n后端返回：${reason || rejectedWithoutReason}`
+  }
+
+  if (response.status === 'PUBLISHED' && typeof response.scriptCode === 'string' && response.scriptCode.trim()) {
+    return `${translate('aiQuant.messages.codeGeneratedBacktest', {
+      defaultValue: 'Strategy code generated, ready to backtest.',
+    })}\n\n${translate('aiQuant.messages.generatedCodeTitle', {
+      defaultValue: 'Generated strategy code:',
+    })}\n\`\`\`javascript\n${response.scriptCode}\n\`\`\``
+  }
+
+  return null
+}
+
 export function createRecoveryConversation(
   translate: (key: string) => string,
   now = Date.now(),
@@ -810,16 +854,36 @@ export function createConversationFromServerConversation(
           executionTags: syncResult?.executionTags ?? [],
         },
         graphVersion,
-        response.status === 'PUBLISHED' ? 'confirmed' : 'draft',
+        response.status === 'PUBLISHED'
+        || response.status === 'CONSISTENCY_FAILED'
+        || response.status === 'REJECTED'
+        || response.publicationGate?.passed === false
+          ? 'confirmed'
+          : 'draft',
       )
     : null
-  const messages = response.conversationMessages?.length
+  const responseMessages = response.conversationMessages?.length
     ? response.conversationMessages.map((message, index) => ({
         id: `${response.id}-msg-${index}`,
         role: message.role,
         content: message.content,
       }))
     : seed.messages
+  const derivedReply = buildServerTerminalCodegenReply({ response, translate })
+  const messages =
+    derivedReply
+    && !responseMessages.some(
+      message => message.role === 'assistant' && message.content.trim() === derivedReply.trim(),
+    )
+      ? [
+          ...responseMessages,
+          {
+            id: `${response.id}-derived-terminal-reply`,
+            role: 'assistant' as const,
+            content: derivedReply,
+          },
+        ]
+      : responseMessages
   const updatedAt = response.updatedAt ? Date.parse(response.updatedAt) : Date.now()
 
   return {

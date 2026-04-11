@@ -2,6 +2,7 @@ import { describe, expect, it } from '@jest/globals'
 
 import {
   AI_QUANT_PERSISTED_SCHEMA_VERSION,
+  createConversationFromServerConversation,
   hasExplicitBacktestExecutionOverrides,
   hydrateConversation,
   hydrateConversations,
@@ -387,7 +388,59 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.publishedScriptGraphVersion).toBeNull()
   })
 
+  it('hydrates failed server conversations with a terminal failure summary and keeps the graph confirmed', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'server-conv-1',
+      conversationTitle: '失败会话',
+      conversationMessages: [
+        { role: 'user', content: '用户消息' },
+        { role: 'assistant', content: '请确认逻辑图' },
+        { role: 'user', content: 'Confirm code generation' },
+      ],
+      status: 'CONSISTENCY_FAILED',
+      canonicalDigest: 'sha256:canonical-1',
+      rejectReason: '策略脚本与策略描述不一致：脚本缺少关键规则映射: bollinger.bars_outside:risk:both',
+      publicationGate: { passed: true, blockingMismatches: [] },
+      scriptCode: 'export default function strategy() { return true }',
+      publishedSnapshotId: null,
+      specDesc: {
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+        rules: [],
+      },
+    } as any, (key: string, options?: Record<string, unknown>) => String(options?.defaultValue ?? key))
 
+    expect(conversation.logicGraph?.status).toBe('confirmed')
+    expect(conversation.messages.at(-1)?.content).toContain('CONSISTENCY_FAILED')
+    expect(conversation.messages.at(-1)?.content).toContain('脚本已生成，但没有通过一致性校验')
+    expect(conversation.messages.at(-1)?.content).toContain('脚本缺少关键规则映射')
+  })
 
+  it('hydrates published server conversations with a generated code summary when history lacks it', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'server-conv-2',
+      conversationTitle: '成功会话',
+      conversationMessages: [
+        { role: 'user', content: '用户消息' },
+      ],
+      status: 'PUBLISHED',
+      canonicalDigest: 'sha256:canonical-2',
+      scriptCode: 'export default function strategy() { return true }',
+      publishedSnapshotId: 'snapshot-1',
+      specDesc: {
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+        rules: [],
+      },
+    } as any, (key: string, options?: Record<string, unknown>) => String(options?.defaultValue ?? key))
+
+    expect(conversation.logicGraph?.status).toBe('confirmed')
+    expect(conversation.messages.at(-1)?.content).toContain('Strategy code generated, ready to backtest.')
+    expect(conversation.messages.at(-1)?.content).toContain('export default function strategy()')
+  })
 
 })
