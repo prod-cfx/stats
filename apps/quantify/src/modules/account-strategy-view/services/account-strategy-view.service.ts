@@ -152,12 +152,6 @@ export class AccountStrategyViewService {
       mergedParams,
       schemaVersion,
     })
-    const detailSnapshot = await this.resolveDetailSnapshotView({
-      userId,
-      row,
-      strategySchema,
-      schemaVersion,
-    })
 
     const symbol = this.readString(mergedParams, ['symbol'])
     const normalizedSymbol = symbol?.split(':')[0] ?? null
@@ -1413,87 +1407,6 @@ export class AccountStrategyViewService {
       sourceStrategyInstanceId: snapshot.strategyInstanceId,
       sourceStrategyTemplateId: snapshot.strategyTemplateId,
     }
-  }
-
-  private async resolveDetailSnapshotView(input: {
-    userId: string
-    row: unknown
-    strategySchema: Record<string, unknown> | null
-    schemaVersion: string | null
-  }): Promise<{
-    publishedSnapshotId: string | null
-    snapshotHash: string | null
-    snapshotParams: Record<string, unknown> | null
-    dynamicParams: {
-      paramSchema: Record<string, unknown> | null
-      paramValues: Record<string, unknown> | null
-      schemaVersion: string | null
-    }
-  }> {
-    const binding = this.readStrategySnapshotBinding(input.row)
-    const emptyDynamicParams = this.buildDynamicParams({
-      strategySchema: input.strategySchema,
-      mergedParams: {},
-      schemaVersion: input.schemaVersion,
-    })
-
-    if (!binding.publishedSnapshotId || !this.publishedSnapshotsRepository) {
-      return {
-        publishedSnapshotId: binding.publishedSnapshotId,
-        snapshotHash: binding.snapshotHash,
-        snapshotParams: null,
-        dynamicParams: emptyDynamicParams,
-      }
-    }
-
-    const snapshot = await this.publishedSnapshotsRepository.findByIdForUser(binding.publishedSnapshotId, input.userId)
-    if (!snapshot) {
-      return {
-        publishedSnapshotId: binding.publishedSnapshotId,
-        snapshotHash: binding.snapshotHash,
-        snapshotParams: null,
-        dynamicParams: emptyDynamicParams,
-      }
-    }
-
-    try {
-      const snapshotParams = this.resolveSnapshotParamsForDeploy(snapshot)
-      return {
-        publishedSnapshotId: snapshot.id,
-        snapshotHash: snapshot.snapshotHash,
-        snapshotParams,
-        dynamicParams: this.buildDynamicParams({
-          strategySchema: input.strategySchema,
-          mergedParams: snapshotParams,
-          schemaVersion: input.schemaVersion,
-        }),
-      }
-    } catch {
-      return {
-        publishedSnapshotId: snapshot.id,
-        snapshotHash: snapshot.snapshotHash,
-        snapshotParams: null,
-        dynamicParams: emptyDynamicParams,
-      }
-    }
-  }
-
-  private readStrategySnapshotBinding(source: unknown): {
-    publishedSnapshotId: string | null
-    snapshotHash: string | null
-  } {
-    const root = this.readRecord(source)
-    const metadata = this.readRecord(root?.metadata)
-    return {
-      publishedSnapshotId: this.normalizeOptionalString(metadata?.publishedSnapshotId),
-      snapshotHash: this.normalizeOptionalString(metadata?.snapshotHash),
-    }
-  }
-
-  private normalizeOptionalString(value: unknown): string | null {
-    if (typeof value !== 'string') return null
-    const normalized = value.trim()
-    return normalized.length > 0 ? normalized : null
   }
 
   private resolveSnapshotParamsForDeploy(snapshot: {
