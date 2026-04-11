@@ -1,4 +1,3 @@
-import { API_BASE_URL } from '@/lib/api-client'
 import { ApiError, AuthenticationError } from '@/lib/errors'
 import {
   BACKTEST_CAPABILITY_REQUEST_TIMEOUT_MS,
@@ -7,33 +6,33 @@ import {
 
 const mockGetToken = jest.fn()
 
+jest.mock('@/lib/api-client', () => ({
+  client: {
+    BacktestingProxyController_capabilities: jest.fn(),
+  },
+  unwrapApiResponse: (response: unknown) => {
+    if (response && typeof response === 'object' && 'data' in response) {
+      return (response as { data: unknown }).data
+    }
+    return response
+  },
+}))
+
 jest.mock('@/lib/auth-storage', () => ({
   getToken: () => mockGetToken(),
 }))
 
-interface MockFetchResponseInit {
-  ok: boolean
-  status: number
-  statusText?: string
-  body?: unknown
-  jsonRejects?: boolean
-}
-
-function mockFetchResponse(init: MockFetchResponseInit) {
-  ;(globalThis.fetch as jest.Mock).mockResolvedValue({
-    ok: init.ok,
-    status: init.status,
-    statusText: init.statusText ?? '',
-    json: init.jsonRejects
-      ? jest.fn().mockRejectedValue(new Error('invalid json'))
-      : jest.fn().mockResolvedValue(init.body),
-  } as unknown as Response)
+const { client: mockClient } = jest.requireMock('@/lib/api-client') as {
+  client: {
+    BacktestingProxyController_capabilities: jest.Mock
+  }
 }
 
 describe('backtest-capability-client', () => {
   beforeEach(() => {
-    globalThis.fetch = jest.fn()
+    mockGetToken.mockReset()
     mockGetToken.mockReturnValue('header.payload.signature')
+    mockClient.BacktestingProxyController_capabilities.mockReset()
   })
 
   afterEach(() => {
@@ -42,14 +41,10 @@ describe('backtest-capability-client', () => {
   })
 
   it('success returns allowedSymbols and allowedBaseTimeframes', async () => {
-    mockFetchResponse({
-      ok: true,
-      status: 200,
-      body: {
-        data: {
-          allowedSymbols: ['BTCUSDT', 'ETHUSDT'],
-          allowedBaseTimeframes: ['1m', '5m'],
-        },
+    mockClient.BacktestingProxyController_capabilities.mockResolvedValue({
+      data: {
+        allowedSymbols: ['BTCUSDT', 'ETHUSDT'],
+        allowedBaseTimeframes: ['1m', '5m'],
       },
     })
 
@@ -58,26 +53,20 @@ describe('backtest-capability-client', () => {
       allowedBaseTimeframes: ['1m', '5m'],
     })
 
-    expect(globalThis.fetch).toHaveBeenCalledWith(`${API_BASE_URL}/backtesting/capabilities`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
+    expect(mockClient.BacktestingProxyController_capabilities).toHaveBeenCalledWith({
+      headers: expect.objectContaining({
         Authorization: 'Bearer header.payload.signature',
-      },
-      cache: 'no-store',
-      signal: expect.any(AbortSignal),
+        'x-request-id': expect.stringContaining('front-backtest:capabilities:'),
+      }),
+      signal: expect.anything(),
     })
   })
 
   it('empty sets are recognized as unavailable and throw ApiError', async () => {
-    mockFetchResponse({
-      ok: true,
-      status: 200,
-      body: {
-        data: {
-          allowedSymbols: [],
-          allowedBaseTimeframes: [],
-        },
+    mockClient.BacktestingProxyController_capabilities.mockResolvedValue({
+      data: {
+        allowedSymbols: [],
+        allowedBaseTimeframes: [],
       },
     })
 
@@ -88,16 +77,18 @@ describe('backtest-capability-client', () => {
   })
 
   it('non-2xx converts to ApiError', async () => {
-    mockFetchResponse({
-      ok: false,
-      status: 502,
-      statusText: 'Bad Gateway',
-      body: {
-        error: {
-          args: { reasonMessage: 'upstream failed by reason message' },
-          message: 'should not win',
+    mockClient.BacktestingProxyController_capabilities.mockRejectedValue({
+      response: {
+        status: 502,
+        statusText: 'Bad Gateway',
+        data: {
+          error: {
+            args: { reasonMessage: 'upstream failed by reason message' },
+            message: 'should not win',
+          },
         },
       },
+      message: 'Request failed',
     })
 
     const request = fetchBacktestCapabilities()
@@ -109,29 +100,26 @@ describe('backtest-capability-client', () => {
   })
 
   it('retries transient 502 and succeeds on next attempt', async () => {
-    ;(globalThis.fetch as jest.Mock)
+    mockClient.BacktestingProxyController_capabilities
+      .mockRejectedValueOnce({
+        response: {
+          status: 502,
+          statusText: 'Bad Gateway',
+          data: { message: 'upstream down' },
+        },
+      })
       .mockResolvedValueOnce({
-        ok: false,
-        status: 502,
-        statusText: 'Bad Gateway',
-        json: jest.fn().mockResolvedValue({ message: 'upstream down' }),
-      } as unknown as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: jest.fn().mockResolvedValue({
-          data: {
-            allowedSymbols: ['BTCUSDT'],
-            allowedBaseTimeframes: ['15m'],
-          },
-        }),
-      } as unknown as Response)
+        data: {
+          allowedSymbols: ['BTCUSDT'],
+          allowedBaseTimeframes: ['15m'],
+        },
+      })
 
     await expect(fetchBacktestCapabilities()).resolves.toEqual({
       allowedSymbols: ['BTCUSDT'],
       allowedBaseTimeframes: ['15m'],
     })
-    expect(globalThis.fetch).toHaveBeenCalledTimes(2)
+    expect(mockClient.BacktestingProxyController_capabilities).toHaveBeenCalledTimes(2)
   })
 
   it('throws auth error when token is missing', async () => {
@@ -143,7 +131,7 @@ describe('backtest-capability-client', () => {
       code: 'UNAUTHENTICATED',
       statusCode: 401,
     })
-    expect(globalThis.fetch).not.toHaveBeenCalled()
+    expect(mockClient.BacktestingProxyController_capabilities).not.toHaveBeenCalled()
   })
 
   it('throws auth error when token format is invalid', async () => {
@@ -155,19 +143,19 @@ describe('backtest-capability-client', () => {
       code: 'INVALID_TOKEN',
       statusCode: 401,
     })
-    expect(globalThis.fetch).not.toHaveBeenCalled()
+    expect(mockClient.BacktestingProxyController_capabilities).not.toHaveBeenCalled()
   })
 
   it('throws timeout ApiError when request hangs', async () => {
     jest.useFakeTimers()
-    ;(globalThis.fetch as jest.Mock).mockImplementation((_url: string, init?: RequestInit) => {
-      const signal = init?.signal as AbortSignal | undefined
-      return new Promise((_resolve, reject) => {
-        signal?.addEventListener('abort', () => {
-          reject(new DOMException('The operation was aborted.', 'AbortError'))
-        })
-      })
-    })
+    mockClient.BacktestingProxyController_capabilities.mockImplementation(
+      ({ signal }: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => {
+            reject(new DOMException('The operation was aborted.', 'AbortError'))
+          })
+        }),
+    )
 
     const assertion = expect(fetchBacktestCapabilities()).rejects.toMatchObject({
       code: 'API_TIMEOUT',
@@ -178,14 +166,14 @@ describe('backtest-capability-client', () => {
   })
 
   it('upstream abort follows backtest client semantics and maps to API_ERROR', async () => {
-    ;(globalThis.fetch as jest.Mock).mockImplementation((_url: string, init?: RequestInit) => {
-      const signal = init?.signal as AbortSignal | undefined
-      return new Promise((_resolve, reject) => {
-        signal?.addEventListener('abort', () => {
-          reject(new DOMException('The operation was aborted.', 'AbortError'))
-        })
-      })
-    })
+    mockClient.BacktestingProxyController_capabilities.mockImplementation(
+      ({ signal }: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => {
+            reject(new DOMException('The operation was aborted.', 'AbortError'))
+          })
+        }),
+    )
 
     const controller = new AbortController()
     const assertion = expect(fetchBacktestCapabilities({ signal: controller.signal })).rejects.toMatchObject({
@@ -194,29 +182,16 @@ describe('backtest-capability-client', () => {
     })
     controller.abort()
     await assertion
-    expect(globalThis.fetch).toHaveBeenCalledTimes(1)
-  })
-
-  it('uses statusText fallback when error body is non-JSON', async () => {
-    mockFetchResponse({
-      ok: false,
-      status: 502,
-      statusText: 'Bad Gateway',
-      jsonRejects: true,
-    })
-
-    await expect(fetchBacktestCapabilities()).rejects.toMatchObject({
-      message: expect.stringContaining('Bad Gateway'),
-      statusCode: 502,
-    })
+    expect(mockClient.BacktestingProxyController_capabilities).toHaveBeenCalledTimes(1)
   })
 
   it('uses statusText fallback when error body is empty', async () => {
-    mockFetchResponse({
-      ok: false,
-      status: 503,
-      statusText: 'Service Unavailable',
-      body: null,
+    mockClient.BacktestingProxyController_capabilities.mockRejectedValue({
+      response: {
+        status: 503,
+        statusText: 'Service Unavailable',
+        data: null,
+      },
     })
 
     await expect(fetchBacktestCapabilities()).rejects.toMatchObject({

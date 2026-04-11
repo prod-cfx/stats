@@ -71,6 +71,7 @@ describe('StrategyDetailPageClient', () => {
   let root: ReturnType<typeof createRoot>
 
   beforeEach(() => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -156,17 +157,19 @@ describe('StrategyDetailPageClient', () => {
   })
 
   it('runs snapshot-driven backtest from strategy detail without conversation defaults or mock ids', async () => {
-    await act(async () => {
+    act(() => {
       root.render(<StrategyDetailPageClient lng="zh" id="inst-1" />)
     })
 
-    await act(async () => {
-      await Promise.resolve()
-    })
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await new Promise(resolve => setTimeout(resolve, 0))
 
-    await act(async () => {
+    act(() => {
       container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
+
+    await new Promise(resolve => setTimeout(resolve, 0))
+    await new Promise(resolve => setTimeout(resolve, 0))
 
     expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -185,5 +188,5 @@ describe('StrategyDetailPageClient', () => {
     )
     expect(mockGetBacktestJob).not.toHaveBeenCalled()
     expect(container.querySelector('[data-testid="backtest-error"]')?.textContent).toBe('')
-  })
+  }, 10000)
 })

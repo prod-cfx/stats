@@ -1,7 +1,7 @@
 import type { TelegramDesktopIntentKind } from '@ai/shared'
 import type { AuthLoginMethod, AuthSession } from './types'
 import type { AuthResponseDto } from '@/types/auth'
-import { API_BASE_URL, unwrapApiResponse } from '@/lib/api-client'
+import { client, unwrapApiResponse } from '@/lib/api-client'
 import { buildSession } from '@/lib/auth-storage'
 
 type TelegramDesktopIntentPollState = 'pending' | 'confirmed' | 'expired'
@@ -14,41 +14,41 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase()
 }
 
-async function postJson<T>(path: string, payload: unknown, token?: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    body: JSON.stringify(payload),
-  })
-
-  const data = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    const msg = data?.error?.message || data?.message || `HTTP_${response.status}`
-    throw new Error(msg)
-  }
-
-  return unwrapApiResponse<T>(data)
+function authHeader(token?: string): { Authorization?: string } {
+  return token ? { Authorization: `Bearer ${token}` } : {}
 }
 
-async function getJson<T>(path: string, token?: string): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    headers: token
-      ? {
-          Authorization: `Bearer ${token}`,
-        }
-      : undefined,
-  })
-
-  const data = await response.json().catch(() => ({}))
-  if (!response.ok) {
-    const msg = data?.error?.message || data?.message || `HTTP_${response.status}`
-    throw new Error(msg)
+async function callClient<T>(operation: () => Promise<unknown>): Promise<T> {
+  try {
+    const response = await operation()
+    return unwrapApiResponse<T>(response as T | { data?: T; message?: string })
+  } catch (error) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'response' in error &&
+      error.response &&
+      typeof error.response === 'object'
+    ) {
+      const response = error.response as {
+        status?: number
+        data?: { error?: { message?: unknown }; message?: unknown }
+      }
+      const message =
+        typeof response.data?.error?.message === 'string'
+          ? response.data.error.message
+          : typeof response.data?.message === 'string'
+            ? response.data.message
+            : typeof response.status === 'number'
+              ? `HTTP_${response.status}`
+              : undefined
+      if (message?.trim()) {
+        throw new Error(message)
+      }
+    }
+    const message = error instanceof Error && error.message.trim() ? error.message : 'API_ERROR'
+    throw new Error(message)
   }
-
-  return unwrapApiResponse<T>(data)
 }
 
 function mergeLoginMethod(session: AuthSession, method: AuthLoginMethod): AuthSession {
@@ -67,7 +67,7 @@ export async function sendEmailCodeRequest(email: string): Promise<void> {
   }
 
   try {
-    await postJson('/auth/email/send-code', { email: normalized })
+    await callClient<void>(() => client.AuthController_sendEmailLoginCode({ email: normalized }))
   } catch (error) {
     const msg = error instanceof Error ? error.message : ''
     if (DEV_MODE && msg.startsWith('HTTP_5')) {
@@ -93,10 +93,12 @@ export async function verifyEmailCodeRequest(email: string, code: string): Promi
     }
   }
 
-  const authResponse = await postJson<AuthResponseDto>('/auth/email/verify-code', {
-    email: normalized,
-    code: normalizedCode,
-  })
+  const authResponse = await callClient<AuthResponseDto>(() =>
+    client.AuthController_verifyEmailLoginCode({
+      email: normalized,
+      code: normalizedCode,
+    }),
+  )
 
   const session = buildSession(authResponse)
   return {
@@ -115,16 +117,18 @@ export async function completeTelegramLogin(payload: {
   username?: string
   photoUrl?: string
 }): Promise<AuthSession> {
-  const authResponse = await postJson<AuthResponseDto>('/auth/telegram/exchange', {
-    telegramId: payload.telegramId,
-    authDate: payload.authDate,
-    hash: payload.hash,
-    firstName: payload.firstName,
-    lastName: payload.lastName,
-    username: payload.username,
-    photoUrl: payload.photoUrl,
-    source: payload.source,
-  })
+  const authResponse = await callClient<AuthResponseDto>(() =>
+    client.AuthController_telegramExchange({
+      telegramId: payload.telegramId,
+      authDate: payload.authDate,
+      hash: payload.hash,
+      firstName: payload.firstName,
+      lastName: payload.lastName,
+      username: payload.username,
+      photoUrl: payload.photoUrl,
+      source: payload.source,
+    }),
+  )
 
   const session = buildSession(authResponse)
   return {
@@ -155,7 +159,7 @@ export async function createTelegramDesktopIntentRequest(payload: {
   callbackUrl: string
   expiresInSeconds: number
 }> {
-  return postJson('/auth/telegram/desktop/intent', payload)
+  return callClient(() => client.AuthController_createTelegramDesktopIntent(payload))
 }
 
 export async function getTelegramWebAuthorizeUrlRequest(payload: {
@@ -163,24 +167,37 @@ export async function getTelegramWebAuthorizeUrlRequest(payload: {
   lng: 'zh' | 'en'
   redirect?: string
 }): Promise<{ authorizeUrl: string }> {
-  const query = new URLSearchParams({
-    intent: payload.intent,
-    lng: payload.lng,
-  })
-  if (payload.redirect) {
-    query.set('redirect', payload.redirect)
-  }
-  return getJson(`/auth/telegram/web/authorize-url?${query.toString()}`)
+  return callClient(() =>
+    client.AuthController_getTelegramWebAuthorizeUrl({
+      queries: {
+        intent: payload.intent,
+        lng: payload.lng,
+        ...(payload.redirect ? { redirect: payload.redirect } : {}),
+      } as any,
+    }),
+  )
 }
 
 export async function getTelegramDesktopIntentStatusRequest(intentId: string): Promise<{
   status: TelegramDesktopIntentPollState
 }> {
-  return getJson(`/auth/telegram/desktop/intent/${encodeURIComponent(intentId)}`)
+  return callClient(() =>
+    client.AuthController_getTelegramDesktopIntentStatus({
+      params: { intentId },
+    }),
+  )
+}
+
+export async function getTelegramLoginConfigRequest(): Promise<{
+  botName?: string | null
+}> {
+  return callClient(() => client.AuthController_getTelegramLoginConfig())
 }
 
 export async function completeTelegramDesktopLoginRequest(intentId: string): Promise<AuthSession> {
-  const authResponse = await postJson<AuthResponseDto>('/auth/telegram/desktop/exchange', { intentId })
+  const authResponse = await callClient<AuthResponseDto>(() =>
+    client.AuthController_telegramDesktopExchange({ intentId }),
+  )
   const session = buildSession(authResponse)
   return mergeLoginMethod(
     {
@@ -202,13 +219,16 @@ export async function bindEmailRequest(
   }
 
   try {
-    const authResponse = await postJson<AuthResponseDto>(
-      '/auth/bind/email',
-      {
-        email: normalized,
-        code,
-      },
-      session.accessToken,
+    const authResponse = await callClient<AuthResponseDto>(() =>
+      client.AuthController_bindEmail(
+        {
+          email: normalized,
+          code,
+        },
+        {
+          headers: authHeader(session.accessToken),
+        },
+      ),
     )
 
     const next = buildSession(authResponse)
@@ -246,18 +266,21 @@ export async function bindTelegramRequest(
     photoUrl?: string
   },
 ): Promise<AuthSession> {
-  const authResponse = await postJson<AuthResponseDto>(
-    '/auth/bind/telegram',
-    {
-      telegramId: payload.telegramId,
-      authDate: payload.authDate,
-      hash: payload.hash,
-      firstName: payload.firstName,
-      lastName: payload.lastName,
-      username: payload.username,
-      photoUrl: payload.photoUrl,
-    },
-    session.accessToken,
+  const authResponse = await callClient<AuthResponseDto>(() =>
+    client.AuthController_bindTelegram(
+      {
+        telegramId: payload.telegramId,
+        authDate: payload.authDate,
+        hash: payload.hash,
+        firstName: payload.firstName,
+        lastName: payload.lastName,
+        username: payload.username,
+        photoUrl: payload.photoUrl,
+      },
+      {
+        headers: authHeader(session.accessToken),
+      },
+    ),
   )
 
   const next = buildSession(authResponse)
@@ -282,10 +305,13 @@ export async function bindTelegramByDesktopIntentRequest(
   session: AuthSession,
   intentId: string,
 ): Promise<AuthSession> {
-  const authResponse = await postJson<AuthResponseDto>(
-    '/auth/bind/telegram/desktop',
-    { intentId },
-    session.accessToken,
+  const authResponse = await callClient<AuthResponseDto>(() =>
+    client.AuthController_bindTelegramByDesktopIntent(
+      { intentId },
+      {
+        headers: authHeader(session.accessToken),
+      },
+    ),
   )
 
   const next = buildSession(authResponse)

@@ -6,6 +6,7 @@ import type {
   UserFillsResponse,
   UserPortfolioResponse,
 } from './hyperliquid-api'
+import type { MarketDataCatalogItem } from './market-data/catalog-types'
 import { buildBearerAuthHeaders, getErrorHttpStatus, unwrapTransportResponse } from '@ai/shared'
 import {
   deleteStrategyById as deleteMockStrategyById,
@@ -24,6 +25,7 @@ import {
   fetchUserFillsFromHyperliquid,
   fetchUserPortfolioFromHyperliquid,
 } from './hyperliquid-api'
+import { FALLBACK_MARKET_DATA_CATALOG } from './market-data/catalog-fallback'
 
 // Re-export types for external use
 export type {
@@ -45,6 +47,8 @@ const IS_NON_PROD =
 const ACCOUNT_AI_QUANT_MOCK_FALLBACK_ENABLED =
   IS_NON_PROD && process.env.NEXT_PUBLIC_ACCOUNT_AI_QUANT_MOCK_FALLBACK === 'true'
 const BACKTEST_SYMBOL_SUPPORT_REQUEST_TIMEOUT_MS = 12_000
+export const BACKTEST_CAPABILITY_REQUEST_TIMEOUT_MS = BACKTEST_SYMBOL_SUPPORT_REQUEST_TIMEOUT_MS
+export const BACKTEST_REQUEST_TIMEOUT_MS = BACKTEST_SYMBOL_SUPPORT_REQUEST_TIMEOUT_MS
 
 function getHttpStatusFromError(error: unknown): number | undefined {
   if (error instanceof ApiError && typeof error.statusCode === 'number') {
@@ -83,6 +87,28 @@ function shouldFallbackDeleteAccountAiQuantMock(error: unknown): boolean {
   }
 
   return false
+}
+
+function waitRetryDelay(signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(new ApiError('Request aborted', 'API_ERROR'))
+      return
+    }
+
+    const timer = globalThis.setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, 400)
+
+    const onAbort = () => {
+      globalThis.clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
+      reject(new ApiError('Request aborted', 'API_ERROR'))
+    }
+
+    signal?.addEventListener('abort', onAbort)
+  })
 }
 
 function mulberry32(seed: number) {
@@ -177,36 +203,49 @@ function extractBackendErrorMessage(payload: unknown, fallback: string): string 
   return fallback
 }
 
-async function requestAccountExchangeAccounts<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}/account/exchange-accounts${path}`, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...requireAuthHeaders(),
-      ...(init?.headers ?? {}),
-    },
-  })
+async function requestAccountExchangeAccounts<T>(
+  operation: 'list' | 'upsert' | 'delete',
+  options?: { exchangeId?: string; payload?: unknown },
+): Promise<T> {
+  const accountExchangeClient = client as any
+  const authHeaders = requireAuthHeaders()
+  try {
+    if (operation === 'list') {
+      const response = await accountExchangeClient.AccountExchangeAccountsController_list({
+        headers: authHeaders,
+      })
+      return unwrapResponse(response as T | BaseResponse<T>)
+    }
 
-  if (!response.ok) {
-    const payload = await response.json().catch(() => null)
-    const code = payload && typeof payload === 'object' && 'error' in payload && payload.error && typeof payload.error === 'object' && 'code' in payload.error
-      ? String((payload.error as { code?: unknown }).code ?? 'API_ERROR')
-      : 'API_ERROR'
-    const message = extractBackendErrorMessage(payload, response.statusText || '操作失败')
-    throw new ApiError(message, code, response.status, payload)
+    if (operation === 'upsert') {
+      const response = await accountExchangeClient.AccountExchangeAccountsController_upsert(options?.payload, {
+        headers: authHeaders,
+      })
+      return unwrapResponse(response as T | BaseResponse<T>)
+    }
+
+    if (!options?.exchangeId) {
+      throw new ApiError('exchangeId is required', 'INVALID_INPUT')
+    }
+
+    const response = await accountExchangeClient.AccountExchangeAccountsController_delete({
+      headers: authHeaders,
+      params: { exchangeId: options.exchangeId },
+    })
+
+    return unwrapResponse(response as T | BaseResponse<T>)
+  } catch (error) {
+    const status = getHttpStatusFromError(error) ?? 500
+    const payload = error instanceof ApiError ? error.details : null
+    const message = extractBackendErrorMessage(payload, error instanceof Error ? error.message : '操作失败')
+    const code = error instanceof ApiError ? error.code : 'API_ERROR'
+    throw new ApiError(message, code, status, payload)
   }
-
-  if (response.status === 204) {
-    return undefined as T
-  }
-
-  const payload = await response.json()
-  return unwrapApiResponse(payload) as T
 }
 
 export async function fetchUserExchangeAccountStatuses(): Promise<UserExchangeAccountStatus[]> {
   return apiCall(
-    () => requestAccountExchangeAccounts<UserExchangeAccountStatus[]>(''),
+    () => requestAccountExchangeAccounts<UserExchangeAccountStatus[]>('list'),
     'FETCH_USER_EXCHANGE_ACCOUNT_STATUSES',
   )
 }
@@ -215,21 +254,14 @@ export async function upsertUserExchangeAccount(
   payload: UpsertUserExchangeAccountPayload,
 ): Promise<UserExchangeAccountStatus> {
   return apiCall(
-    () =>
-      requestAccountExchangeAccounts<UserExchangeAccountStatus>('', {
-        method: 'POST',
-        body: JSON.stringify(payload),
-      }),
+    () => requestAccountExchangeAccounts<UserExchangeAccountStatus>('upsert', { payload }),
     'UPSERT_USER_EXCHANGE_ACCOUNT',
   )
 }
 
 export async function deleteUserExchangeAccount(exchangeId: UserExchangeId): Promise<void> {
   return apiCall(
-    () =>
-      requestAccountExchangeAccounts<void>(`/${exchangeId}`, {
-        method: 'DELETE',
-      }),
+    () => requestAccountExchangeAccounts<void>('delete', { exchangeId }),
     'DELETE_USER_EXCHANGE_ACCOUNT',
   )
 }
@@ -341,6 +373,89 @@ interface BacktestSymbolSupportCheckPayload {
   status: string
 }
 
+export interface BacktestCapabilities {
+  allowedSymbols: string[]
+  allowedBaseTimeframes: string[]
+}
+
+export interface FetchBacktestCapabilitiesOptions {
+  signal?: AbortSignal
+}
+
+export type BacktestJobPhase = 'queued' | 'running' | 'succeeded' | 'failed'
+
+export interface CreateBacktestJobPayload {
+  symbols: string[]
+  baseTimeframe: string
+  stateTimeframes: string[]
+  initialCash: number
+  leverage: number
+  execution: {
+    slippageBps: number
+    feeBps: number
+    priceSource: 'open' | 'close' | 'mid'
+  }
+  strategy: {
+    id: string
+    protocolVersion?: 'v1'
+    publishedSnapshotId?: string
+    params?: Record<string, unknown>
+  }
+  dataRange: {
+    fromTs: number
+    toTs: number
+  }
+  allowPartial?: boolean
+  bars?: unknown[]
+}
+
+export interface BacktestJob {
+  id: string
+  status: BacktestJobPhase
+  createdAt: string
+  startedAt?: string
+  finishedAt?: string
+  error?: string
+  resultSummary?: BacktestJobResult['summary']
+}
+
+export interface BacktestJobResult {
+  summary: {
+    netProfit: number
+    netProfitPct: number
+    maxDrawdownPct: number
+    winRate: number
+    profitFactor: number
+    totalTrades: number
+  }
+  equityCurve?: Array<{
+    ts: number
+    equity: number
+  }>
+  trades?: Array<{
+    id: string
+    symbol?: string
+    side: 'LONG' | 'SHORT'
+    entryTs?: number
+    entryPrice?: number
+    exitTs: number
+    exitPrice: number
+    qty?: number
+    fee?: number
+    pnl?: number
+    returnPct: number
+    reasonOpen?: string
+    reasonClose?: string
+  }>
+}
+
+const VALID_BACKTEST_JOB_PHASES = new Set<BacktestJobPhase>([
+  'queued',
+  'running',
+  'succeeded',
+  'failed',
+])
+
 function extractAiQuantErrorMessage(payload: unknown, fallback: string): string {
   const meta = parseAiQuantErrorMeta(payload)
   return meta.message ?? fallback
@@ -349,6 +464,57 @@ function extractAiQuantErrorMessage(payload: unknown, fallback: string): string 
 function extractAiQuantErrorCode(payload: unknown): string {
   const meta = parseAiQuantErrorMeta(payload)
   return meta.code ?? 'API_ERROR'
+}
+
+function parseStringArray(value: unknown, field: string): string[] {
+  if (!Array.isArray(value) || value.some(item => typeof item !== 'string')) {
+    throw new ApiError(`Invalid ${field}`, 'API_ERROR', 500, { field, value })
+  }
+  return value
+}
+
+function parseCapabilities(payload: unknown): BacktestCapabilities {
+  if (!payload || typeof payload !== 'object') {
+    throw new ApiError('Invalid capabilities payload', 'API_ERROR', 500, { payload })
+  }
+
+  const candidate = payload as Record<string, unknown>
+  const allowedSymbols = parseStringArray(candidate.allowedSymbols, 'allowedSymbols')
+  const allowedBaseTimeframes = parseStringArray(candidate.allowedBaseTimeframes, 'allowedBaseTimeframes')
+
+  if (allowedSymbols.length === 0 || allowedBaseTimeframes.length === 0) {
+    throw new ApiError('Backtest capability unavailable', 'CAPABILITY_UNAVAILABLE', 503, {
+      allowedSymbols,
+      allowedBaseTimeframes,
+    })
+  }
+
+  return { allowedSymbols, allowedBaseTimeframes }
+}
+
+function normalizeJobId(jobId: string): string {
+  const trimmed = jobId.trim()
+  if (!trimmed) {
+    throw new ApiError('jobId is required', 'VALIDATION_ERROR', 400, { jobId })
+  }
+  return encodeURIComponent(trimmed)
+}
+
+function assertBacktestJobPhase(status: unknown, context: string): asserts status is BacktestJobPhase {
+  if (typeof status === 'string' && VALID_BACKTEST_JOB_PHASES.has(status as BacktestJobPhase)) {
+    return
+  }
+
+  throw new ApiError(`Unexpected backtest job status: ${String(status)}`, 'API_ERROR', 500, {
+    context,
+    status,
+  })
+}
+
+function parseBacktestJob(payload: unknown, context: string): BacktestJob {
+  const job = payload as BacktestJob
+  assertBacktestJobPhase(job?.status, context)
+  return job
 }
 
 async function requestBacktestingJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -426,6 +592,67 @@ export async function postBacktestSymbolSupportCheck(
       }),
     'CHECK_BACKTEST_SYMBOL_SUPPORT',
   )
+}
+
+export async function fetchBacktestCapabilities(
+  options?: FetchBacktestCapabilitiesOptions,
+): Promise<BacktestCapabilities> {
+  let lastError: unknown
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      const payload = await requestBacktestingJson<BacktestCapabilities>('/backtesting/capabilities', {
+        method: 'GET',
+        signal: options?.signal,
+      })
+      return parseCapabilities(payload)
+    } catch (error) {
+      lastError = error
+      if (!(error instanceof ApiError)) {
+        throw error
+      }
+
+      if (options?.signal?.aborted) {
+        throw error
+      }
+
+      const isTransientUpstream =
+        error.statusCode === 502 || error.statusCode === 503 || error.code === 'API_ERROR'
+      const isLastAttempt = attempt >= 3
+      if (!isTransientUpstream || isLastAttempt) {
+        throw error
+      }
+
+      await waitRetryDelay(options?.signal)
+    }
+  }
+
+  throw lastError instanceof Error
+    ? lastError
+    : new ApiError('Failed to fetch backtest capabilities', 'API_ERROR')
+}
+
+export async function createBacktestJob(payload: CreateBacktestJobPayload): Promise<BacktestJob> {
+  const job = await requestBacktestingJson<BacktestJob>('/backtesting/jobs', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  return parseBacktestJob(job, 'createBacktestJob')
+}
+
+export async function getBacktestJob(jobId: string): Promise<BacktestJob> {
+  const safeJobId = normalizeJobId(jobId)
+  const job = await requestBacktestingJson<BacktestJob>(`/backtesting/jobs/${safeJobId}`, {
+    method: 'GET',
+  })
+  return parseBacktestJob(job, 'getBacktestJob')
+}
+
+export function getBacktestJobResult(jobId: string): Promise<BacktestJobResult> {
+  const safeJobId = normalizeJobId(jobId)
+  return requestBacktestingJson<BacktestJobResult>(`/backtesting/jobs/${safeJobId}/result`, {
+    method: 'GET',
+  })
 }
 
 // ===== 鲸鱼持仓（whale-tracking/holdings）相关 API =====
@@ -1381,6 +1608,17 @@ export async function fetchProfile() {
 export async function sendVerificationCode(payload: SendVerificationCodePayload) {
   const response = await client.AuthController_sendVerificationCode(payload)
   return unwrapResponse(response)
+}
+
+export interface TelegramLoginConfigResponse {
+  botName?: string | null
+}
+
+export async function getTelegramLoginConfigRequest(): Promise<TelegramLoginConfigResponse> {
+  const response = await (client as any).AuthController_getTelegramLoginConfig()
+  return unwrapResponse<TelegramLoginConfigResponse>(
+    response as unknown as TelegramLoginConfigResponse | BaseResponse<TelegramLoginConfigResponse>,
+  )
 }
 
 // ===== 交易所账户管理相关 API =====
@@ -2890,4 +3128,32 @@ export async function fetchAggregatedVolume(
       items: [],
     }
   }
+}
+
+export async function fetchMarketDataCatalogItems(): Promise<MarketDataCatalogItem[]> {
+  if (process.env.NEXT_PUBLIC_MOCK_API === '1') {
+    return FALLBACK_MARKET_DATA_CATALOG
+  }
+
+  return cachedRequest(
+    'meta:market-data-catalog',
+    async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/meta/market-data-catalog`, {
+          method: 'GET',
+          headers: { 'Content-Type': 'application/json' },
+        })
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`)
+        }
+
+        const body = await response.json().catch(() => undefined)
+        const data = body && typeof body === 'object' && 'data' in body ? (body as { data: unknown }).data : body
+        return Array.isArray(data) ? (data as MarketDataCatalogItem[]) : FALLBACK_MARKET_DATA_CATALOG
+      } catch {
+        return FALLBACK_MARKET_DATA_CATALOG
+      }
+    },
+    CacheTTL.VERY_LONG,
+  )
 }

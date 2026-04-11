@@ -1,5 +1,10 @@
-import { SERVER_API_BASE_URL, unwrapApiResponse } from './api-client'
+import { createApiClient } from '@ai/api-contracts'
+import { getErrorHttpStatus, unwrapTransportResponse } from '@ai/shared'
+import { SERVER_API_BASE_URL } from './api-client'
 import { buildServerAuthHeaders, getServerAuthHeaders, getServerToken } from './server-auth'
+
+const serverClient = createApiClient(SERVER_API_BASE_URL, { validate: 'request' })
+const typedServerClient = serverClient as any
 
 export type UserLlmStrategyInstanceResponse = any
 
@@ -61,6 +66,36 @@ export interface BacktestJobServerResponse {
   resultSummary?: BacktestJobResultSummary
 }
 
+function unwrapResponse<T>(response: T | { data?: T; message?: string }): T {
+  return unwrapTransportResponse(response)
+}
+
+function buildBacktestServerHeaders(token: string | null, requestId: string): Record<string, string> {
+  return {
+    ...buildServerAuthHeaders(token),
+    'x-request-id': requestId,
+  }
+}
+
+async function callPublicServerApi<T>(
+  authorizedCall: () => Promise<unknown>,
+  anonymousCall: () => Promise<unknown>,
+  authHeaders: Record<string, string>,
+): Promise<T> {
+  try {
+    const response = await authorizedCall()
+    return unwrapResponse(response as T | { data?: T; message?: string })
+  } catch (error) {
+    const status = getErrorHttpStatus(error)
+    if ((status === 401 || status === 403) && authHeaders.Authorization) {
+      console.warn('[server-api] Token invalid, retrying as anonymous request')
+      const response = await anonymousCall()
+      return unwrapResponse(response as T | { data?: T; message?: string })
+    }
+    throw error
+  }
+}
+
 /**
  * 在服务端获取 LLM 策略实例列表
  * 支持匿名访问，登录用户会看到 isSubscribed 状态
@@ -72,57 +107,24 @@ export async function fetchLlmStrategyInstancesServer(
   params: PaginationParams,
 ): Promise<PaginatedResponse<UserLlmStrategyInstanceResponse>> {
   const authHeaders = await getServerAuthHeaders()
-
-  const url = new URL(`${SERVER_API_BASE_URL}/llm-strategy-instances`)
-  url.searchParams.set('page', params.page.toString())
-  url.searchParams.set('limit', params.limit.toString())
-
-  // 第一次请求：带上 Authorization（如果有）
-  const response = await fetch(url.toString(), {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders,
-    },
-    cache: 'no-store',
-  })
-
-  // 如果 token 失效（401/403），降级为匿名请求重试
-  // 这是公开接口，匿名访问是允许的，只是看不到 isSubscribed 状态
-  if ((response.status === 401 || response.status === 403) && authHeaders.Authorization) {
-    console.warn('[server-api] Token invalid, retrying as anonymous request')
-
-    const anonymousResponse = await fetch(url.toString(), {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        // 不带 Authorization
-      },
-      cache: 'no-store',
-    })
-
-    if (!anonymousResponse.ok) {
-      const error = new Error(
-        `Failed to fetch strategies: ${anonymousResponse.statusText}`,
-      ) as Error & { status?: number }
-      error.status = anonymousResponse.status
-      throw error
-    }
-
-    const json = await anonymousResponse.json()
-    return unwrapApiResponse(json) as PaginatedResponse<UserLlmStrategyInstanceResponse>
-  }
-
-  if (!response.ok) {
-    const error = new Error(`Failed to fetch strategies: ${response.statusText}`) as Error & {
-      status?: number
-    }
-    error.status = response.status
-    throw error
-  }
-
-  const json = await response.json()
-  return unwrapApiResponse(json) as PaginatedResponse<UserLlmStrategyInstanceResponse>
+  return callPublicServerApi<PaginatedResponse<UserLlmStrategyInstanceResponse>>(
+    () =>
+      typedServerClient.LlmStrategyInstancesController_list({
+        headers: authHeaders,
+        queries: {
+          page: params.page,
+          limit: params.limit,
+        },
+      }),
+    () =>
+      typedServerClient.LlmStrategyInstancesController_list({
+        queries: {
+          page: params.page,
+          limit: params.limit,
+        },
+      }),
+    authHeaders,
+  )
 }
 
 /**
@@ -136,115 +138,68 @@ export async function fetchLlmStrategyInstanceDetailServer(
   id: string,
 ): Promise<UserLlmStrategyInstanceResponse> {
   const authHeaders = await getServerAuthHeaders()
-
-  const url = `${SERVER_API_BASE_URL}/llm-strategy-instances/${id}`
-
-  // 第一次请求：带上 Authorization（如果有）
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders,
-    },
-    cache: 'no-store',
-  })
-
-  // 如果 token 失效（401/403），降级为匿名请求重试
-  // 这是公开接口，匿名访问是允许的，只是看不到 isSubscribed 状态
-  if ((response.status === 401 || response.status === 403) && authHeaders.Authorization) {
-    console.warn('[server-api] Token invalid, retrying as anonymous request')
-
-    const anonymousResponse = await fetch(url, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        // 不带 Authorization
-      },
-      cache: 'no-store',
-    })
-
-    if (!anonymousResponse.ok) {
-      const error = new Error(
-        `Failed to fetch strategy detail: ${anonymousResponse.statusText}`,
-      ) as Error & { status?: number }
-      error.status = anonymousResponse.status
-      throw error
-    }
-
-    const json = await anonymousResponse.json()
-    return unwrapApiResponse(json) as UserLlmStrategyInstanceResponse
-  }
-
-  if (!response.ok) {
-    const error = new Error(`Failed to fetch strategy detail: ${response.statusText}`) as Error & {
-      status?: number
-    }
-    error.status = response.status
-    throw error
-  }
-
-  const json = await response.json()
-  return unwrapApiResponse(json) as UserLlmStrategyInstanceResponse
+  return callPublicServerApi<UserLlmStrategyInstanceResponse>(
+    () =>
+      typedServerClient.LlmStrategyInstancesController_detail({
+        headers: authHeaders,
+        params: { id },
+      }),
+    () =>
+      typedServerClient.LlmStrategyInstancesController_detail({
+        params: { id },
+      }),
+    authHeaders,
+  )
 }
 
 export async function fetchBacktestJobResultServer(
   jobId: string,
 ): Promise<BacktestJobResultReport | null> {
   const token = await getServerToken()
-  const authHeaders = buildServerAuthHeaders(token)
+  const authHeaders = buildBacktestServerHeaders(token, `ssr-backtest-result:${jobId}`)
   if (!authHeaders.Authorization) {
     return null
   }
 
-  const url = `${SERVER_API_BASE_URL}/backtesting/jobs/${encodeURIComponent(jobId)}/result`
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders,
-    },
-    cache: 'no-store',
-  })
-
-  if (!response.ok) {
+  try {
+    const response = await typedServerClient.BacktestingProxyController_getJobResult({
+      headers: authHeaders,
+      params: { id: jobId },
+    })
+    const payload = unwrapResponse<BacktestJobResultReport | null>(
+      response as unknown as BacktestJobResultReport | { data?: BacktestJobResultReport | null; message?: string },
+    )
+    if (!payload?.summary) {
+      return null
+    }
+    return payload
+  } catch {
     return null
   }
-
-  const json = await response.json()
-  const payload = unwrapApiResponse(json) as BacktestJobResultReport
-  if (!payload?.summary) {
-    return null
-  }
-  return payload
 }
 
 export async function fetchBacktestJobServer(
   jobId: string,
 ): Promise<BacktestJobServerResponse | null> {
   const token = await getServerToken()
-  const authHeaders = buildServerAuthHeaders(token)
+  const authHeaders = buildBacktestServerHeaders(token, `ssr-backtest-job:${jobId}`)
   if (!authHeaders.Authorization) {
     return null
   }
 
-  const url = `${SERVER_API_BASE_URL}/backtesting/jobs/${encodeURIComponent(jobId)}`
-  const response = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'Content-Type': 'application/json',
-      ...authHeaders,
-    },
-    cache: 'no-store',
-  })
-
-  if (!response.ok) {
+  try {
+    const response = await typedServerClient.BacktestingProxyController_getJob({
+      headers: authHeaders,
+      params: { id: jobId },
+    })
+    const payload = unwrapResponse<BacktestJobServerResponse | null>(
+      response as unknown as BacktestJobServerResponse | { data?: BacktestJobServerResponse | null; message?: string },
+    )
+    if (!payload?.id || !payload?.status) {
+      return null
+    }
+    return payload
+  } catch {
     return null
   }
-
-  const json = await response.json()
-  const payload = unwrapApiResponse(json) as BacktestJobServerResponse
-  if (!payload?.id || !payload?.status) {
-    return null
-  }
-  return payload
 }

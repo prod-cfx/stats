@@ -1,15 +1,29 @@
-import { afterEach, describe, expect, it, jest } from '@jest/globals'
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import { buildServerAuthHeaders, getServerAuthHeaders, getServerToken } from './server-auth'
 
-jest.mock('./api-client', () => ({
-  API_BASE_URL: '/api/v1',
-  SERVER_API_BASE_URL: 'http://localhost:3000/api/v1',
-  unwrapApiResponse: (response: any) => {
+const mockServerClient = {
+  BacktestingProxyController_getJob: jest.fn(),
+  BacktestingProxyController_getJobResult: jest.fn(),
+  LlmStrategyInstancesController_detail: jest.fn(),
+  LlmStrategyInstancesController_list: jest.fn(),
+}
+
+jest.mock('@ai/api-contracts', () => ({
+  createApiClient: jest.fn(() => mockServerClient),
+}))
+
+jest.mock('@ai/shared', () => ({
+  getErrorHttpStatus: jest.fn((error: { status?: number }) => error?.status),
+  unwrapTransportResponse: jest.fn((response: any) => {
     if (response && typeof response === 'object' && 'data' in response) {
       return response.data
     }
     return response
-  },
+  }),
+}))
+
+jest.mock('./api-client', () => ({
+  SERVER_API_BASE_URL: 'http://localhost:3000/api/v1',
 }))
 
 jest.mock('./server-auth', () => ({
@@ -24,98 +38,124 @@ const mockBuildServerAuthHeaders = jest.mocked(buildServerAuthHeaders)
 const mockGetServerToken = jest.mocked(getServerToken)
 const mockGetServerAuthHeaders = jest.mocked(getServerAuthHeaders)
 
-describe('fetchBacktestJobResultServer', () => {
+describe('server-api backtest and llm transport', () => {
+  beforeEach(() => {
+    Object.values(mockServerClient).forEach(mock => mock.mockReset())
+    mockBuildServerAuthHeaders.mockClear()
+    mockGetServerToken.mockClear()
+    mockGetServerAuthHeaders.mockClear()
+  })
+
   afterEach(() => {
     jest.clearAllMocks()
   })
 
-  it('uses absolute URL for server-side fetch', async () => {
-    const fetchMock = jest.fn(async () => ({
-      ok: true,
-      json: async () => ({
-        data: {
-          summary: {
-            netProfit: 100,
-            netProfitPct: 1,
-            maxDrawdownPct: 2,
-            winRate: 60,
-            profitFactor: 1.5,
-            totalTrades: 10,
-          },
+  it('uses contract client for server-side backtest result fetch', async () => {
+    mockServerClient.BacktestingProxyController_getJobResult.mockResolvedValue({
+      data: {
+        summary: {
+          netProfit: 100,
+          netProfitPct: 1,
+          maxDrawdownPct: 2,
+          winRate: 60,
+          profitFactor: 1.5,
+          totalTrades: 10,
         },
-      }),
-    }))
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+      },
+    })
 
     const { fetchBacktestJobResultServer } = await import('./server-api')
     await fetchBacktestJobResultServer('btjob-1')
 
     expect(mockGetServerToken).toHaveBeenCalledTimes(1)
     expect(mockBuildServerAuthHeaders).toHaveBeenCalledWith('a.b.c')
-    expect(mockGetServerAuthHeaders).not.toHaveBeenCalled()
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(/^https?:\/\//),
-      expect.objectContaining({ method: 'GET' }),
-    )
+    expect(mockServerClient.BacktestingProxyController_getJobResult).toHaveBeenCalledWith({
+      headers: expect.objectContaining({
+        Authorization: 'Bearer a.b.c',
+        'x-request-id': 'ssr-backtest-result:btjob-1',
+      }),
+      params: { id: 'btjob-1' },
+    })
   })
 
   it('returns null before building auth headers when token is missing', async () => {
     mockGetServerToken.mockResolvedValueOnce(null)
-    mockGetServerAuthHeaders.mockResolvedValueOnce({ Authorization: 'Bearer a.b.c' })
-    const fetchMock = jest.fn(async () => ({
-      ok: true,
-      json: async () => ({
-        data: {
-          summary: {
-            netProfit: 100,
-            netProfitPct: 1,
-            maxDrawdownPct: 2,
-            winRate: 60,
-            profitFactor: 1.5,
-            totalTrades: 10,
-          },
-        },
-      }),
-    }))
-    globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const { fetchBacktestJobResultServer } = await import('./server-api')
     await expect(fetchBacktestJobResultServer('btjob-2')).resolves.toBeNull()
+
     expect(mockBuildServerAuthHeaders).toHaveBeenCalledWith(null)
-    expect(mockGetServerAuthHeaders).not.toHaveBeenCalled()
-    expect(fetchMock).not.toHaveBeenCalled()
+    expect(mockServerClient.BacktestingProxyController_getJobResult).not.toHaveBeenCalled()
   })
 
-  it('fetchBacktestJobServer uses absolute URL for summary requests', async () => {
-    const fetchMock = jest.fn(async () => ({
-      ok: true,
-      json: async () => ({
-        data: {
-          id: 'btjob-1',
-          status: 'succeeded',
-          createdAt: '2026-03-25T00:00:00.000Z',
-          resultSummary: {
-            netProfit: 100,
-            netProfitPct: 1,
-            maxDrawdownPct: 2,
-            winRate: 0.6,
-            profitFactor: 1.5,
-            totalTrades: 10,
-          },
+  it('uses contract client for server-side backtest summary requests', async () => {
+    mockServerClient.BacktestingProxyController_getJob.mockResolvedValue({
+      data: {
+        id: 'btjob-1',
+        status: 'succeeded',
+        createdAt: '2026-03-25T00:00:00.000Z',
+        resultSummary: {
+          netProfit: 100,
+          netProfitPct: 1,
+          maxDrawdownPct: 2,
+          winRate: 0.6,
+          profitFactor: 1.5,
+          totalTrades: 10,
         },
-      }),
-    }))
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+      },
+    })
 
     const { fetchBacktestJobServer } = await import('./server-api')
     await fetchBacktestJobServer('btjob-1')
 
     expect(mockGetServerToken).toHaveBeenCalledTimes(1)
     expect(mockBuildServerAuthHeaders).toHaveBeenCalledWith('a.b.c')
-    expect(mockGetServerAuthHeaders).not.toHaveBeenCalled()
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringMatching(/^https?:\/\/.*\/backtesting\/jobs\/btjob-1$/),
-      expect.objectContaining({ method: 'GET' }),
-    )
+    expect(mockServerClient.BacktestingProxyController_getJob).toHaveBeenCalledWith({
+      headers: expect.objectContaining({
+        Authorization: 'Bearer a.b.c',
+        'x-request-id': 'ssr-backtest-job:btjob-1',
+      }),
+      params: { id: 'btjob-1' },
+    })
+  })
+
+  it('returns null when backtest job transport fails', async () => {
+    mockServerClient.BacktestingProxyController_getJob.mockRejectedValue(new Error('boom'))
+
+    const { fetchBacktestJobServer } = await import('./server-api')
+    await expect(fetchBacktestJobServer('btjob-404')).resolves.toBeNull()
+  })
+
+  it('returns null when backtest result transport fails', async () => {
+    mockServerClient.BacktestingProxyController_getJobResult.mockRejectedValue(new Error('boom'))
+
+    const { fetchBacktestJobResultServer } = await import('./server-api')
+    await expect(fetchBacktestJobResultServer('btjob-404')).resolves.toBeNull()
+  })
+
+  it('retries llm strategy list anonymously after 401/403', async () => {
+    mockServerClient.LlmStrategyInstancesController_list
+      .mockRejectedValueOnce({ status: 401, message: 'expired' })
+      .mockResolvedValueOnce({
+        data: {
+          items: [],
+          total: 0,
+          page: 1,
+          limit: 20,
+          totalPages: 0,
+        },
+      })
+
+    const { fetchLlmStrategyInstancesServer } = await import('./server-api')
+    await fetchLlmStrategyInstancesServer({ page: 1, limit: 20 })
+
+    expect(mockGetServerAuthHeaders).toHaveBeenCalledTimes(1)
+    expect(mockServerClient.LlmStrategyInstancesController_list).toHaveBeenNthCalledWith(1, {
+      headers: { Authorization: 'Bearer a.b.c' },
+      queries: { page: 1, limit: 20 },
+    })
+    expect(mockServerClient.LlmStrategyInstancesController_list).toHaveBeenNthCalledWith(2, {
+      queries: { page: 1, limit: 20 },
+    })
   })
 })
