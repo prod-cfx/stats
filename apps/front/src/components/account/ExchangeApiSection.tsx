@@ -2,15 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import {
-  deleteUserExchangeAccount,
-  fetchUserExchangeAccountStatuses,
-  upsertUserExchangeAccount,
-} from '@/lib/api'
 import type {
   UpsertUserExchangeAccountPayload,
   UserExchangeAccountStatus,
   UserExchangeId,
+} from '@/lib/api'
+import {
+  deleteUserExchangeAccount,
+  fetchUserExchangeAccountStatuses,
+  upsertUserExchangeAccount,
 } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
 

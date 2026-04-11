@@ -107,7 +107,7 @@ describe('ExchangeApiSection', () => {
   function clickButton(scope: ParentNode, text: string) {
     const button = Array.from(scope.querySelectorAll('button')).find(node => node.textContent?.includes(text))
     if (!(button instanceof HTMLButtonElement)) {
-      throw new Error(`Unable to find button: ${text}`)
+      throw new TypeError(`Unable to find button: ${text}`)
     }
     button.click()
   }
