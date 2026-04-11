@@ -1,3 +1,4 @@
+import type { AiQuantConversationResponseDto } from './dto/ai-quant-conversation.response.dto'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
@@ -139,8 +140,8 @@ export class AiQuantProxyService {
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async listAiQuantConversations(userId: string, authorization: string | undefined) {
-    return this.quantifyClient.get('/account/ai-quant/conversations', {
+  async listAiQuantConversations(userId: string, authorization: string | undefined): Promise<AiQuantConversationResponseDto[]> {
+    return this.quantifyClient.get<AiQuantConversationResponseDto[]>('/account/ai-quant/conversations', {
       timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
       headers: this.userHeaders(userId, authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
