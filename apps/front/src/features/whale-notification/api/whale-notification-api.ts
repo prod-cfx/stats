@@ -68,6 +68,26 @@ function extractErrorMessage(payload: unknown, fallback: string): string {
   return fallback
 }
 
+function getErrorStatusCode(error: unknown): number | undefined {
+  if (error instanceof ApiError && typeof error.statusCode === 'number') {
+    return error.statusCode
+  }
+
+  if (
+    error &&
+    typeof error === 'object' &&
+    'response' in error &&
+    error.response &&
+    typeof error.response === 'object' &&
+    'status' in error.response &&
+    typeof (error.response as { status?: unknown }).status === 'number'
+  ) {
+    return (error.response as { status: number }).status
+  }
+
+  return undefined
+}
+
 async function requestWithFallback<T>(
   method: string,
   path: string,
@@ -116,8 +136,13 @@ async function requestWithFallback<T>(
       data: unwrapApiResponse<T | null>(response as T | { data?: T | null; message?: string }),
     }
   } catch (error) {
-    if (error instanceof ApiError && (error.statusCode === 401 || error.statusCode === 403)) {
-      throw error
+    const statusCode = getErrorStatusCode(error)
+    if (statusCode === 401 || statusCode === 403) {
+      const message = extractErrorMessage(
+        error instanceof ApiError ? error.details : null,
+        error instanceof Error ? error.message : 'Request failed',
+      )
+      throw new ApiError(message, statusCode === 401 ? 'UNAUTHENTICATED' : 'FORBIDDEN', statusCode)
     }
 
     if (error instanceof Error) {
@@ -125,7 +150,6 @@ async function requestWithFallback<T>(
         error instanceof ApiError ? error.details : null,
         error.message || 'Request failed',
       )
-      const statusCode = error instanceof ApiError ? error.statusCode : undefined
 
       if (statusCode === 404 || statusCode === 405 || (typeof statusCode === 'number' && statusCode >= 500)) {
         return { kind: 'fallback' }
@@ -330,6 +354,10 @@ export async function getWhaleNotificationUnreadCount(): Promise<number> {
       return outcome.data.unread
     }
   } catch (error) {
+    if (error instanceof ApiError && (error.statusCode === 401 || error.statusCode === 403)) {
+      throw error
+    }
+
     if (!(error instanceof ApiError)) {
       throw error
     }
