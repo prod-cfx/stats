@@ -347,24 +347,24 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const result = await service.listConversations('u1')
 
-    expect(result).toEqual([
-      expect.objectContaining({
-        id: 'conv-published',
-        publishedSnapshotId: 'snapshot-1',
-        publishedSnapshotParamValues: {
-          exchange: 'okx',
-          symbol: 'ETHUSDT',
-          timeframe: '1h',
-          positionPct: 25,
-          backtestInitialCash: 10000,
-          backtestLeverage: 1,
-          backtestSlippageBps: 10,
-          backtestFeeBps: 5,
-          backtestPriceSource: 'close',
-          backtestAllowPartial: false,
-        },
-      }),
-    ])
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      id: 'conv-published',
+      publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotParamValues: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        timeframe: '1h',
+        baseTimeframe: '1h',
+        positionPct: 25,
+        backtestInitialCash: 10000,
+        backtestLeverage: 1,
+        backtestSlippageBps: 10,
+        backtestFeeBps: 5,
+        backtestPriceSource: 'close',
+        backtestAllowPartial: false,
+      },
+    })
   })
 
   it('backfills only missing session projections and does not resurrect archived conversations', async () => {
@@ -745,6 +745,17 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       consistencyReport: {
         status: 'PASSED',
       },
+      paramsSnapshot: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+      },
+      lockedParams: {
+        positionPct: 10,
+      },
+      executionPolicy: {
+        allowPartialFill: false,
+      },
     })
     mockRepo.findById.mockResolvedValue({
       id: 's-snapshot',
@@ -809,6 +820,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       exchange: 'okx',
       symbol: 'BTCUSDT',
       timeframe: '15m',
+      baseTimeframe: '15m',
       positionPct: 10,
       backtestInitialCash: 10000,
       backtestLeverage: 1,
