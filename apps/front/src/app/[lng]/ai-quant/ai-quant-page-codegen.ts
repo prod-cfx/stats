@@ -342,6 +342,7 @@ export function applyCodegenResponseToConversationState(args: {
 
   return {
     ...conversation,
+    serverConversationId: response.conversationId ?? conversation.serverConversationId ?? null,
     title: response.conversationTitle?.trim() || conversation.title,
     llmCodegenSessionId: shouldReuseCodegenSession ? activeSessionId : null,
     codegenSpecDesc:

@@ -89,6 +89,9 @@ export class CodegenSessionResponseDto {
   @ApiProperty({ description: '会话 ID' })
   id!: string
 
+  @ApiPropertyOptional({ description: '当前服务端 conversation ID' })
+  conversationId?: string | null
+
   @ApiPropertyOptional({ description: '会话标题' })
   conversationTitle?: string
 

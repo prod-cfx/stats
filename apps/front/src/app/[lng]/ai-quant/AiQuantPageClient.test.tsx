@@ -596,4 +596,5 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(container.textContent).not.toContain('server-message-1')
     expect(container.textContent).toContain('server-message-2')
   })
+
 })

@@ -107,6 +107,7 @@ interface PersistedConversationEnvelope {
 
 export interface ConversationState {
   id: string
+  serverConversationId?: string | null
   schemaVersion: number
   title: string
   messages: QuantMessage[]
@@ -720,6 +721,7 @@ export function buildApiConfigHref(lng: 'zh' | 'en') {
 export function createConversation(translate: (key: string) => string, now = Date.now()): ConversationState {
   return {
     id: `conv-${now}-${Math.random().toString(16).slice(2, 8)}`,
+    serverConversationId: null,
     schemaVersion: AI_QUANT_PERSISTED_SCHEMA_VERSION,
     title: translate('aiQuant.newChat'),
     messages: [
@@ -823,6 +825,7 @@ export function createConversationFromServerConversation(
   return {
     ...seed,
     id: response.id,
+    serverConversationId: response.id,
     title: response.conversationTitle?.trim() || seed.title,
     messages,
     params: nextParams,

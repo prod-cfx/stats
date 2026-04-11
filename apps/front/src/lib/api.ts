@@ -2095,6 +2095,7 @@ export interface UserLlmStrategyInstanceResponse {
 
 export interface LlmCodegenSessionResponse {
   id: string
+  conversationId?: string | null
   conversationTitle?: string
   conversationMessages?: Array<{
     role: 'user' | 'assistant'

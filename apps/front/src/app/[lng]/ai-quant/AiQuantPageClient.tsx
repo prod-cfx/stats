@@ -921,7 +921,9 @@ export function AiQuantPageClient({
           }}
           onDelete={id => {
             if (serverOwnedConversations) {
-              void deleteAiQuantConversation(id)
+              const targetConversation = conversations.find(conv => conv.id === id)
+              const serverConversationId = targetConversation?.serverConversationId ?? id
+              void deleteAiQuantConversation(serverConversationId)
                 .then(() => {
                   setConversations(prev => {
                     const next = prev.filter(conv => conv.id !== id)
@@ -934,6 +936,7 @@ export function AiQuantPageClient({
                     return next
                   })
                 })
+                .catch(() => {})
               return
             }
             setConversations(prev => {

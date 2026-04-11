@@ -104,6 +104,38 @@ export class AiQuantConversationsRepository {
     return rows.map(row => row.codegenSessionId)
   }
 
+  async findByCodegenSessionId(codegenSessionId: string): Promise<AiQuantConversationSnapshotRecord | null> {
+    const conversation = await this.txHost.tx.aiQuantConversation.findUnique({
+      where: { codegenSessionId },
+      select: {
+        id: true,
+        userId: true,
+        codegenSessionId: true,
+        title: true,
+        archivedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        messages: {
+          orderBy: { sortOrder: 'asc' },
+          select: {
+            role: true,
+            content: true,
+          },
+        },
+      },
+    })
+
+    if (!conversation) return null
+
+    return {
+      ...conversation,
+      messages: conversation.messages.map(message => ({
+        role: message.role,
+        content: message.content,
+      })),
+    }
+  }
+
   async archiveByIdAndUser(id: string, userId: string): Promise<void> {
     await this.txHost.tx.aiQuantConversation.updateMany({
       where: { id, userId, archivedAt: null },

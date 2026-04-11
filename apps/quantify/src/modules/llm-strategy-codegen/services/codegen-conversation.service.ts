@@ -978,7 +978,11 @@ export class CodegenConversationService {
     response: CodegenSessionResponseDto,
   ): Promise<CodegenSessionResponseDto> {
     await this.persistConversationProjectionForSessionId(sessionId, userId)
-    return response
+    const conversation = await this.conversationsRepo.findByCodegenSessionId(sessionId)
+    return {
+      ...response,
+      conversationId: conversation?.id ?? response.conversationId ?? null,
+    }
   }
 
   private async persistConversationProjectionForSessionId(

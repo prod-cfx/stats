@@ -67,6 +67,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   const mockConversationsRepo = {
     listByUser: jest.fn(),
     listKnownSessionIdsByUser: jest.fn(),
+    findByCodegenSessionId: jest.fn(),
     upsertConversationSnapshot: jest.fn(),
     archiveByIdAndUser: jest.fn(),
   }
@@ -143,6 +144,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
     mockConversationsRepo.listByUser.mockResolvedValue([])
     mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue([])
+    mockConversationsRepo.findByCodegenSessionId.mockResolvedValue(null)
     mockConversationsRepo.upsertConversationSnapshot.mockResolvedValue(undefined)
     mockConversationsRepo.archiveByIdAndUser.mockResolvedValue(undefined)
     setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'false')
