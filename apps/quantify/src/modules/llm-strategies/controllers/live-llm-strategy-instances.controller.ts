@@ -4,6 +4,7 @@ import {
   ApiExtraModels,
   ApiOkResponse,
   ApiOperation,
+  ApiQuery,
   ApiResponse,
   ApiTags,
   getSchemaPath,
@@ -50,6 +51,7 @@ export class LiveLlmStrategyInstancesController {
 
   @Get(':id')
   @ApiOperation({ summary: '获取运行中的 LLM 策略实例详情（公开）' })
+  @ApiQuery({ name: 'userId', required: false, type: String })
   @ApiResponse({ status: 200, type: LlmStrategyInstancePublicResponseDto })
   async detail(
     @Param('id') id: string,

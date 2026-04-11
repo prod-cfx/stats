@@ -2210,7 +2210,7 @@ const endpoints = makeApi([
       {
         name: 'userId',
         type: 'Query',
-        schema: z.string(),
+        schema: z.string().optional(),
       },
     ],
     response: LlmStrategyInstancePublicResponseDto,
