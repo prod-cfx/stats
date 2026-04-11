@@ -825,13 +825,14 @@ function buildServerTerminalCodegenReply(args: {
       response.publicationGate?.passed === false
         ? 'PUBLICATION_GATE_BLOCKED'
         : response.status || 'UNKNOWN'
-    const explanation =
-      response.status === 'CONSISTENCY_FAILED'
-        ? '脚本已生成，但没有通过一致性校验，因此不会发布，也不能进入回测。'
-        : response.publicationGate?.passed === false
-          ? '脚本已生成，但发布门校验没有通过，因此不会发布，也不能进入回测。'
-          : '后端拒绝了当前策略生成结果，因此不会发布，也不能进入回测。'
-    return `${rejectedPrefix}（${stage}）\n说明：${explanation}\n后端返回：${reason || rejectedWithoutReason}`
+  const explanation =
+    response.status === 'CONSISTENCY_FAILED'
+      ? '脚本已生成，但没有通过一致性校验，因此不会发布，也不能进入回测。'
+      : response.publicationGate?.passed === false
+        ? '脚本已生成，但发布门校验没有通过，因此不会发布，也不能进入回测。'
+        : '后端拒绝了当前策略生成结果，因此不会发布，也不能进入回测。'
+  const humanizedReason = humanizeServerRejectReason(reason)
+  return `${rejectedPrefix}（${stage}）\n说明：${explanation}\n后端返回：${reason || rejectedWithoutReason}${humanizedReason ? `\n规则解释：${humanizedReason}` : ''}`
   }
 
   if (response.status === 'PUBLISHED' && typeof response.scriptCode === 'string' && response.scriptCode.trim()) {
@@ -843,6 +844,51 @@ function buildServerTerminalCodegenReply(args: {
   }
 
   return null
+}
+
+function humanizeServerRejectReason(reason: string): string | null {
+  const trimmed = reason.trim()
+  if (!trimmed) return null
+
+  const missingRuleMatch = trimmed.match(/脚本缺少关键规则映射:\s*(.+)$/)
+  if (!missingRuleMatch) {
+    return null
+  }
+
+  const rawMappings = missingRuleMatch[1]
+    .split(/[|,]/)
+    .map(item => item.trim())
+    .filter(Boolean)
+
+  if (rawMappings.length === 0) return null
+
+  const ruleKeyMap: Record<string, string> = {
+    'bollinger.bars_outside': '价格连续若干根 K 线位于布林带外',
+    'bollinger.upper_break': '价格向上突破布林带上轨',
+    'bollinger.lower_break': '价格向下突破布林带下轨',
+    'bollinger.middle_revert': '价格回到布林带中轨',
+  }
+  const phaseMap: Record<string, string> = {
+    entry: '入场规则',
+    exit: '出场规则',
+    risk: '风控规则',
+  }
+  const sideScopeMap: Record<string, string> = {
+    long: '只作用于多头',
+    short: '只作用于空头',
+    both: '同时作用于多头和空头',
+  }
+
+  const parts = rawMappings.map((mapping) => {
+    const [rawRuleKey, rawPhase, rawSideScope] = mapping.split(':').map(item => item.trim())
+    if (!rawRuleKey) return null
+    const ruleLabel = ruleKeyMap[rawRuleKey] ?? rawRuleKey
+    const phaseLabel = phaseMap[rawPhase] ?? rawPhase
+    const sideScopeLabel = sideScopeMap[rawSideScope] ?? rawSideScope
+    return `${phaseLabel}“${ruleLabel}”没有在最终脚本里正确实现（${sideScopeLabel}）`
+  }).filter((item): item is string => Boolean(item))
+
+  return parts.length > 0 ? parts.join('；') : null
 }
 
 export function createRecoveryConversation(

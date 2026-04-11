@@ -484,6 +484,7 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.messages.at(-1)?.content).toContain('CONSISTENCY_FAILED')
     expect(conversation.messages.at(-1)?.content).toContain('脚本已生成，但没有通过一致性校验')
     expect(conversation.messages.at(-1)?.content).toContain('脚本缺少关键规则映射')
+    expect(conversation.messages.at(-1)?.content).toContain('规则解释：风控规则“价格连续若干根 K 线位于布林带外”没有在最终脚本里正确实现（同时作用于多头和空头）')
   })
 
   it('hydrates published server conversations with a generated code summary when history lacks it', () => {
