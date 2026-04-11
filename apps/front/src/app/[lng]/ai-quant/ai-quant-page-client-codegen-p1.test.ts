@@ -338,4 +338,109 @@ describe('AiQuantPageClient codegen P1 guards', () => {
     expect(next.id).toBe('conv-local-temp')
     expect(next.serverConversationId).toBe('server-conv-1')
   })
+
+  it('appends rejectReason when terminal failure snapshot only returns historical conversationMessages', () => {
+    const next = applyCodegenResponseToConversationState({
+      conversation: {
+        id: 'conv-local-temp',
+        serverConversationId: 'server-conv-1',
+        title: '新对话',
+        messages: [{ id: 'loading', role: 'assistant', content: 'loading' }],
+        params: DEFAULT_PARAMS,
+        paramSchema: DEFAULT_PARAM_SCHEMA,
+        paramValues: DEFAULT_PARAM_VALUES,
+        backtestResult: null,
+        logicGraph: null,
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: null,
+        llmCodegenSessionId: 'session-1',
+        publishedStrategyInstanceId: null,
+        publishedSnapshotId: null,
+        publishedScriptCode: null,
+        publishedScriptGraphVersion: null,
+        latestSignalMessage: null,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+      } as any,
+      response: {
+        id: 'session-1',
+        conversationId: 'server-conv-1',
+        status: 'CONSISTENCY_FAILED',
+        rejectReason: '脚本缺少关键规则映射',
+        conversationMessages: [
+          { role: 'assistant', content: '请确认逻辑图' },
+          { role: 'user', content: 'Confirm code generation' },
+        ],
+      } as any,
+      confirmGenerate: true,
+      targetParams: DEFAULT_PARAMS,
+      backtestCapabilities: null,
+      activeSessionId: 'session-1',
+      trimmedMessage: 'Confirm code generation',
+      t: (key: string, options?: Record<string, unknown>) =>
+        options?.defaultValue ? String(options.defaultValue) : key,
+      loadingMessageId: 'loading',
+    })
+
+    expect(next.messages).toHaveLength(3)
+    expect(next.messages.at(-1)?.role).toBe('assistant')
+    expect(next.messages.at(-1)?.content).toContain('脚本缺少关键规则映射')
+  })
+
+  it('appends generated code reply when published snapshot returns only historical conversationMessages', () => {
+    const next = applyCodegenResponseToConversationState({
+      conversation: {
+        id: 'conv-local-temp',
+        serverConversationId: 'server-conv-1',
+        title: '新对话',
+        messages: [{ id: 'loading', role: 'assistant', content: 'loading' }],
+        params: DEFAULT_PARAMS,
+        paramSchema: DEFAULT_PARAM_SCHEMA,
+        paramValues: DEFAULT_PARAM_VALUES,
+        backtestResult: null,
+        logicGraph: null,
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: null,
+        llmCodegenSessionId: 'session-1',
+        publishedStrategyInstanceId: null,
+        publishedSnapshotId: null,
+        publishedScriptCode: null,
+        publishedScriptGraphVersion: null,
+        latestSignalMessage: null,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+      } as any,
+      response: {
+        id: 'session-1',
+        conversationId: 'server-conv-1',
+        status: 'PUBLISHED',
+        scriptCode: 'export default function strategy() { return true }',
+        publishedSnapshotId: 'snapshot-1',
+        conversationMessages: [
+          { role: 'assistant', content: '请确认逻辑图' },
+          { role: 'user', content: 'Confirm code generation' },
+        ],
+      } as any,
+      confirmGenerate: true,
+      targetParams: DEFAULT_PARAMS,
+      backtestCapabilities: null,
+      activeSessionId: 'session-1',
+      trimmedMessage: 'Confirm code generation',
+      t: (key: string, options?: Record<string, unknown>) =>
+        options?.defaultValue ? String(options.defaultValue) : key,
+      loadingMessageId: 'loading',
+    })
+
+    expect(next.messages).toHaveLength(3)
+    expect(next.messages.at(-1)?.content).toContain('Generated strategy code')
+    expect(next.messages.at(-1)?.content).toContain('export default function strategy()')
+  })
 })

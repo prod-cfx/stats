@@ -129,6 +129,53 @@ function hasCodegenPayload(
   return Object.prototype.hasOwnProperty.call(response, key)
 }
 
+function shouldAppendDerivedReply(args: {
+  response: LlmCodegenSessionResponse
+  replyContent: string
+  messages: Array<{ id: string, role: 'user' | 'assistant', content: string }>
+}): boolean {
+  const { response, replyContent, messages } = args
+  const normalizedReply = replyContent.trim()
+  if (!normalizedReply || messages.length === 0) {
+    return false
+  }
+
+  const isTerminalOutcome =
+    response.status === 'PUBLISHED'
+    || response.status === 'REJECTED'
+    || response.status === 'CONSISTENCY_FAILED'
+    || response.publicationGate?.passed === false
+
+  if (!isTerminalOutcome) {
+    return false
+  }
+
+  if (messages.some(message => message.role === 'assistant' && message.content.trim() === normalizedReply)) {
+    return false
+  }
+
+  const rejectReason = typeof response.rejectReason === 'string' ? response.rejectReason.trim() : ''
+  if (
+    rejectReason
+    && messages.some(message => message.role === 'assistant' && message.content.includes(rejectReason))
+  ) {
+    return false
+  }
+
+  const scriptSnippet =
+    typeof response.scriptCode === 'string' && response.scriptCode.trim()
+      ? response.scriptCode.trim().slice(0, 80)
+      : ''
+  if (
+    scriptSnippet
+    && messages.some(message => message.role === 'assistant' && message.content.includes(scriptSnippet))
+  ) {
+    return false
+  }
+
+  return true
+}
+
 export function resolvePublishedStrategyInstanceId(args: {
   response: LlmCodegenSessionResponse
   isStartingNewSession: boolean
@@ -328,17 +375,34 @@ export function applyCodegenResponseToConversationState(args: {
         'Failed to generate strategy from current logic graph: backend did not return a detailed reason. Please check service logs.',
     }),
   })
-  const nextMessages = response.conversationMessages?.length
+  const responseMessages = response.conversationMessages?.length
     ? response.conversationMessages.map((message, index) => ({
         id: `${response.id}-msg-${index}`,
         role: message.role,
         content: message.content,
       }))
-    : (loadingMessageId
-        ? conversation.messages.map(msg =>
-            msg.id === loadingMessageId ? { ...msg, content: replyContent } : msg,
-          )
-        : conversation.messages)
+    : null
+  const nextMessages = (() => {
+    if (responseMessages) {
+      if (!shouldAppendDerivedReply({ response, replyContent, messages: responseMessages })) {
+        return responseMessages
+      }
+      return [
+        ...responseMessages,
+        {
+          id: `${response.id}-derived-reply`,
+          role: 'assistant' as const,
+          content: replyContent,
+        },
+      ]
+    }
+
+    return loadingMessageId
+      ? conversation.messages.map(msg =>
+          msg.id === loadingMessageId ? { ...msg, content: replyContent } : msg,
+        )
+      : conversation.messages
+  })()
 
   return {
     ...conversation,
