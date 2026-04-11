@@ -132,6 +132,74 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.paramValues.backtestAllowPartial).toBeUndefined()
   })
 
+  it('preserves snapshot-bound default backtest execution params during hydration for published snapshots', () => {
+    const conversation = hydrateConversation({
+      id: 'conv-published-defaults',
+      title: 'published',
+      messages: [],
+      params: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+      },
+      paramSchema: null,
+      paramValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+        backtestInitialCash: 10000,
+        backtestLeverage: 1,
+        backtestSlippageBps: 10,
+        backtestFeeBps: 5,
+        backtestPriceSource: 'close',
+        backtestAllowPartial: true,
+      },
+      backtestResult: null,
+      logicGraph: {
+        version: 1,
+        status: 'confirmed',
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+          positionPct: 10,
+        },
+      },
+      semanticGraph: null,
+      validationReport: null,
+      llmCodegenSessionId: null,
+      publishedStrategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
+      publishedScriptCode: 'return { ok: true }',
+      publishedScriptGraphVersion: 1,
+      latestSignalMessage: null,
+      backtestExecutionConfigExplicit: false,
+      backtestExecutionState: 'idle',
+      updatedAt: 1,
+    })
+
+    expect(conversation.backtestExecutionConfigExplicit).toBe(false)
+    expect(conversation.paramValues.backtestInitialCash).toBe(10000)
+    expect(conversation.paramValues.backtestLeverage).toBe(1)
+    expect(conversation.paramValues.backtestSlippageBps).toBe(10)
+    expect(conversation.paramValues.backtestFeeBps).toBe(5)
+    expect(conversation.paramValues.backtestPriceSource).toBe('close')
+    expect(conversation.paramValues.backtestAllowPartial).toBe(true)
+  })
+
   it('invalidates published artifacts and optionally marks the logic graph as draft', () => {
     const next = invalidateConversationPublication(
       {
@@ -441,6 +509,81 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.logicGraph?.status).toBe('confirmed')
     expect(conversation.messages.at(-1)?.content).toContain('Strategy code generated, ready to backtest.')
     expect(conversation.messages.at(-1)?.content).toContain('export default function strategy()')
+  })
+
+  it('keeps published snapshot default backtest params when persisting conversations for reload parity', () => {
+    const serialized = serializePersistedConversations([
+      {
+        id: 'conv-persisted-published',
+        title: 'persisted',
+        messages: [],
+        params: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+        paramSchema: null,
+        paramValues: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+          backtestInitialCash: 10000,
+          backtestLeverage: 1,
+          backtestSlippageBps: 10,
+          backtestFeeBps: 5,
+          backtestPriceSource: 'close',
+          backtestAllowPartial: true,
+        },
+        backtestResult: null,
+        logicGraph: {
+          version: 1,
+          status: 'confirmed',
+          trigger: [],
+          actions: [],
+          risk: [],
+          meta: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+            positionPct: 10,
+          },
+        },
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: null,
+        llmCodegenSessionId: null,
+        publishedStrategyInstanceId: 'strategy-1',
+        publishedSnapshotId: 'snapshot-1',
+        publishedScriptCode: 'return { ok: true }',
+        publishedScriptGraphVersion: 1,
+        latestSignalMessage: null,
+        backtestExecutionConfigExplicit: false,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+        schemaVersion: AI_QUANT_PERSISTED_SCHEMA_VERSION,
+      },
+    ], 'deploy-2026-04-11')
+
+    const envelope = JSON.parse(serialized)
+    expect(envelope.conversations[0].paramValues.backtestInitialCash).toBe(10000)
+    expect(envelope.conversations[0].paramValues.backtestLeverage).toBe(1)
+    expect(envelope.conversations[0].paramValues.backtestSlippageBps).toBe(10)
+    expect(envelope.conversations[0].paramValues.backtestFeeBps).toBe(5)
+    expect(envelope.conversations[0].paramValues.backtestPriceSource).toBe('close')
+    expect(envelope.conversations[0].paramValues.backtestAllowPartial).toBe(true)
   })
 
 })
