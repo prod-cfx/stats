@@ -164,6 +164,11 @@
     "editApiConfig": "编辑配置",
     "cancelEdit": "取消编辑",
     "unbindApiConfig": "解绑",
+    "validation": {
+      "requiredBinanceCredentials": "请输入 Binance 的 API Key 和 Secret Key。",
+      "requiredOkxCredentials": "请输入 OKX 的 API Key、Secret Key 和 Passphrase。",
+      "requiredHyperliquidCredentials": "请输入 Hyperliquid 的主钱包地址和 Agent 私钥。"
+    },
     "binanceApi": "Binance API",
     "okxApi": "OKX API",
     "hyperliquidApi": "Hyperliquid API",
