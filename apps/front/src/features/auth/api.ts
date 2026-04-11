@@ -23,6 +23,29 @@ async function callClient<T>(operation: () => Promise<unknown>): Promise<T> {
     const response = await operation()
     return unwrapApiResponse<T>(response as T | { data?: T; message?: string })
   } catch (error) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'response' in error &&
+      error.response &&
+      typeof error.response === 'object'
+    ) {
+      const response = error.response as {
+        status?: number
+        data?: { error?: { message?: unknown }; message?: unknown }
+      }
+      const message =
+        typeof response.data?.error?.message === 'string'
+          ? response.data.error.message
+          : typeof response.data?.message === 'string'
+            ? response.data.message
+            : typeof response.status === 'number'
+              ? `HTTP_${response.status}`
+              : undefined
+      if (message?.trim()) {
+        throw new Error(message)
+      }
+    }
     const message = error instanceof Error && error.message.trim() ? error.message : 'API_ERROR'
     throw new Error(message)
   }

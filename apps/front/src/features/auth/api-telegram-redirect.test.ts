@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals
 const mockClient = {
   AuthController_createTelegramDesktopIntent: jest.fn(),
   AuthController_getTelegramWebAuthorizeUrl: jest.fn(),
+  AuthController_sendEmailLoginCode: jest.fn(),
 }
 
 jest.mock('@/lib/api-client', () => ({
@@ -20,6 +21,7 @@ describe('auth api telegram redirect passthrough', () => {
     jest.resetModules()
     mockClient.AuthController_createTelegramDesktopIntent.mockReset()
     mockClient.AuthController_getTelegramWebAuthorizeUrl.mockReset()
+    mockClient.AuthController_sendEmailLoginCode.mockReset()
   })
 
   afterEach(() => {
@@ -89,5 +91,17 @@ describe('auth api telegram redirect passthrough', () => {
       lng: 'zh',
       redirect: '/zh/ai-quant',
     })
+  })
+
+  it('sendEmailCodeRequest keeps dev fallback behavior for 5xx responses', async () => {
+    mockClient.AuthController_sendEmailLoginCode.mockRejectedValue({
+      response: {
+        status: 503,
+        data: {},
+      },
+    })
+
+    const { sendEmailCodeRequest } = await import('./api')
+    await expect(sendEmailCodeRequest('dev@example.com')).rejects.toThrow('DEV_EMAIL_FALLBACK_CODE_123456')
   })
 })
