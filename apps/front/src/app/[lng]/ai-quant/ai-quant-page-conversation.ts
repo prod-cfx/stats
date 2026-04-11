@@ -850,12 +850,13 @@ function humanizeServerRejectReason(reason: string): string | null {
   const trimmed = reason.trim()
   if (!trimmed) return null
 
-  const missingRuleMatch = trimmed.match(/脚本缺少关键规则映射:\s*(.+)$/)
-  if (!missingRuleMatch) {
+  const missingRulePrefix = '脚本缺少关键规则映射:'
+  const prefixIndex = trimmed.indexOf(missingRulePrefix)
+  if (prefixIndex === -1) {
     return null
   }
 
-  const rawMappings = missingRuleMatch[1]
+  const rawMappings = trimmed.slice(prefixIndex + missingRulePrefix.length).trim()
     .split(/[|,]/)
     .map(item => item.trim())
     .filter(Boolean)
@@ -915,6 +916,7 @@ export function createConversationFromServerConversation(
   translate: (key: string) => string,
 ): ConversationState {
   const seed = createConversation(translate)
+  const normalizedClarificationGate = normalizeClarificationGate(response.clarificationGate)
   const syncResult = response.specDesc
     ? syncStrategyParamsFromCodegen({
         spec: response.specDesc,
@@ -995,9 +997,12 @@ export function createConversationFromServerConversation(
     codegenSpecDesc: response.specDesc ?? null,
     semanticGraph: response.semanticGraph ?? null,
     validationReport: response.validationReport ?? null,
-    clarificationGate: response.clarificationGate ?? null,
+    clarificationGate: normalizedClarificationGate,
     publicationGate: response.publicationGate ?? null,
-    pendingCanonicalDigest: response.canonicalDigest ?? null,
+    pendingCanonicalDigest:
+      normalizedClarificationGate?.blocked
+        ? null
+        : (response.canonicalDigest ?? null),
     llmCodegenSessionId: response.activeCodegenSessionId ?? null,
     publishedStrategyInstanceId: response.strategyInstanceId ?? null,
     publishedSnapshotId: response.publishedSnapshotId ?? null,

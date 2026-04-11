@@ -512,6 +512,33 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.messages.at(-1)?.content).toContain('export default function strategy()')
   })
 
+  it('normalizes hydrated clarification gates so server-owned conversations preserve blocked parity', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'server-conv-clarification',
+      conversationTitle: '澄清会话',
+      status: 'CHECKLIST_GATE',
+      canonicalDigest: 'sha256:canonical-3',
+      clarificationGate: {
+        blocked: false,
+        pendingItems: [
+          {
+            key: 'market.marketType',
+            field: 'marketType',
+            reason: 'missing_market_type',
+            question: 'spot or perp?',
+            allowedAnswers: ['spot', 'perp'],
+            blocking: true,
+            status: 'pending',
+          },
+        ],
+      },
+    } as any, (key: string) => key)
+
+    expect(conversation.clarificationGate?.blocked).toBe(true)
+    expect(conversation.clarificationGate?.items).toHaveLength(1)
+    expect(conversation.pendingCanonicalDigest).toBeNull()
+  })
+
   it('keeps published snapshot default backtest params when persisting conversations for reload parity', () => {
     const serialized = serializePersistedConversations([
       {
