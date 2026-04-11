@@ -164,6 +164,11 @@
     "editApiConfig": "Edit Config",
     "cancelEdit": "Cancel",
     "unbindApiConfig": "Unbind",
+    "validation": {
+      "requiredBinanceCredentials": "Binance API key and secret are required.",
+      "requiredOkxCredentials": "OKX API key, secret, and passphrase are required.",
+      "requiredHyperliquidCredentials": "Hyperliquid wallet address and agent private key are required."
+    },
     "binanceApi": "Binance API",
     "okxApi": "OKX API",
     "hyperliquidApi": "Hyperliquid API",

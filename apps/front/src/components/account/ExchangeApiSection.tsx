@@ -71,6 +71,48 @@ function getTitleKey(exchangeId: UserExchangeId): string {
   return 'aiQuant.hyperliquidApi'
 }
 
+function trimToOptionalValue(value: string): string | undefined {
+  const trimmed = value.trim()
+  return trimmed ? trimmed : undefined
+}
+
+function buildValidationError(
+  exchangeId: UserExchangeId,
+  hasExistingBinding: boolean,
+  form: ExchangeFormState,
+  translate: (key: string, options?: { defaultValue?: string }) => string,
+): string | null {
+  if (hasExistingBinding) {
+    return null
+  }
+
+  if (exchangeId === 'binance') {
+    if (!trimToOptionalValue(form.apiKey) || !trimToOptionalValue(form.apiSecret)) {
+      return translate('aiQuant.validation.requiredBinanceCredentials', {
+        defaultValue: 'Binance API key and secret are required.',
+      })
+    }
+    return null
+  }
+
+  if (exchangeId === 'okx') {
+    if (!trimToOptionalValue(form.apiKey) || !trimToOptionalValue(form.apiSecret) || !trimToOptionalValue(form.passphrase)) {
+      return translate('aiQuant.validation.requiredOkxCredentials', {
+        defaultValue: 'OKX API key, secret, and passphrase are required.',
+      })
+    }
+    return null
+  }
+
+  if (!trimToOptionalValue(form.mainWalletAddress) || !trimToOptionalValue(form.agentPrivateKey)) {
+    return translate('aiQuant.validation.requiredHyperliquidCredentials', {
+      defaultValue: 'Hyperliquid wallet address and agent private key are required.',
+    })
+  }
+
+  return null
+}
+
 export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionProps) {
   const { t } = useTranslation()
   const [accounts, setAccounts] = useState<Record<UserExchangeId, UserExchangeAccountStatus>>({
@@ -165,14 +207,20 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
 
   function buildPayload(exchangeId: UserExchangeId): UpsertUserExchangeAccountPayload {
     const form = forms[exchangeId]
+    const name = trimToOptionalValue(form.name)
+    const apiKey = trimToOptionalValue(form.apiKey)
+    const apiSecret = trimToOptionalValue(form.apiSecret)
+    const passphrase = trimToOptionalValue(form.passphrase)
+    const mainWalletAddress = trimToOptionalValue(form.mainWalletAddress)
+    const agentPrivateKey = trimToOptionalValue(form.agentPrivateKey)
 
     if (exchangeId === 'binance') {
       return {
         exchangeId,
-        name: form.name || undefined,
+        name,
         isTestnet: form.isTestnet,
-        apiKey: form.apiKey,
-        apiSecret: form.apiSecret,
+        apiKey,
+        apiSecret,
         marketType: 'spot',
       }
     }
@@ -180,25 +228,34 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
     if (exchangeId === 'okx') {
       return {
         exchangeId,
-        name: form.name || undefined,
+        name,
         isTestnet: form.isTestnet,
-        apiKey: form.apiKey,
-        apiSecret: form.apiSecret,
-        passphrase: form.passphrase,
+        apiKey,
+        apiSecret,
+        passphrase,
         marketType: 'spot',
       }
     }
 
     return {
       exchangeId,
-      name: form.name || undefined,
+      name,
       isTestnet: form.isTestnet,
-      mainWalletAddress: form.mainWalletAddress,
-      agentPrivateKey: form.agentPrivateKey,
+      mainWalletAddress,
+      agentPrivateKey,
     }
   }
 
   async function save(exchangeId: UserExchangeId) {
+    const validationError = buildValidationError(exchangeId, accounts[exchangeId].isBound, forms[exchangeId], t)
+    if (validationError) {
+      setErrors(prev => ({
+        ...prev,
+        [exchangeId]: validationError,
+      }))
+      return
+    }
+
     setSubmittingExchange(exchangeId)
     setErrors(prev => ({ ...prev, [exchangeId]: null }))
     try {
