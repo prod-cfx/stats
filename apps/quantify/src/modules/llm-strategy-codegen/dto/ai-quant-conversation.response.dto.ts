@@ -64,4 +64,7 @@ export class AiQuantConversationResponseDto {
 
   @ApiPropertyOptional({ description: '发布后生成的策略实例 ID' })
   strategyInstanceId?: string | null
+
+  @ApiPropertyOptional({ description: '终态失败原因' })
+  rejectReason?: string | null
 }

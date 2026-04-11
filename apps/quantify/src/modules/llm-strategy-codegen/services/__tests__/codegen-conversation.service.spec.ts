@@ -791,7 +791,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           },
         ],
       },
-      rejectReason: null,
+      rejectReason: 'strategy detail reject reason',
     })
 
     const result = await service.getSession('s-snapshot', 'u1')
@@ -816,6 +816,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       ],
     })
     expect(result.publishedSnapshotId).toBe('snapshot-session-1')
+    expect(result.rejectReason).toBe('strategy detail reject reason')
     expect(result.publishedSnapshotParamValues).toEqual({
       exchange: 'okx',
       symbol: 'BTCUSDT',

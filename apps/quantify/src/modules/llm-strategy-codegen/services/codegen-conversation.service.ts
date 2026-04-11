@@ -617,6 +617,7 @@ export class CodegenConversationService {
       publishedSnapshotId: snapshot?.publishedSnapshotId ?? null,
       publishedSnapshotParamValues: snapshot?.publishedSnapshotParamValues ?? null,
       strategyInstanceId: snapshot?.strategyInstanceId ?? null,
+      rejectReason: snapshot?.rejectReason ?? null,
     }
   }
 
