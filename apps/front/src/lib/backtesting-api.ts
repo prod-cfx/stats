@@ -1,7 +1,7 @@
 import { client, unwrapApiResponse } from '@/lib/api-client'
 import { getToken } from '@/lib/auth-storage'
 import { ApiError, AuthenticationError } from '@/lib/errors'
-import { parseAiQuantErrorMeta } from '@/components/ai-quant/ai-quant-error-stage'
+import { buildAiQuantErrorMessage, parseAiQuantErrorMeta } from '@/components/ai-quant/ai-quant-error-stage'
 
 export interface BacktestCapabilities {
   allowedSymbols: string[]
@@ -113,11 +113,6 @@ function waitRetryDelay(signal?: AbortSignal): Promise<void> {
   })
 }
 
-function extractErrorMessage(payload: unknown, fallback: string): string {
-  const meta = parseAiQuantErrorMeta(payload)
-  return meta.message ?? fallback
-}
-
 function extractErrorCode(payload: unknown): string {
   const meta = parseAiQuantErrorMeta(payload)
   return meta.code ?? 'API_ERROR'
@@ -218,7 +213,11 @@ async function requestJson<T>(
     ) {
       const response = error.response as { status?: number; statusText?: string; data?: unknown }
       const payload = response.data
-      const message = extractErrorMessage(payload, response.statusText || 'Request failed')
+      const message = buildAiQuantErrorMessage(
+        response.statusText || 'Request failed',
+        response.status ?? 500,
+        parseAiQuantErrorMeta(payload),
+      )
       throw new ApiError(message, extractErrorCode(payload), response.status, payload)
     }
     const message = error instanceof Error && error.message.trim() ? error.message : 'Request failed'
