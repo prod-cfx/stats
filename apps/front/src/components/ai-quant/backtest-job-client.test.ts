@@ -1,4 +1,3 @@
-import { API_BASE_URL } from '@/lib/api-client'
 import { ApiError, AuthenticationError } from '@/lib/errors'
 import {
   BACKTEST_REQUEST_TIMEOUT_MS,
@@ -9,40 +8,47 @@ import {
 
 const mockGetToken = jest.fn()
 
+jest.mock('@/lib/api-client', () => ({
+  client: {
+    BacktestingProxyController_createJob: jest.fn(),
+    BacktestingProxyController_getJob: jest.fn(),
+    BacktestingProxyController_getJobResult: jest.fn(),
+  },
+  unwrapApiResponse: (response: unknown) => {
+    if (response && typeof response === 'object' && 'data' in response) {
+      return (response as { data: unknown }).data
+    }
+    return response
+  },
+}))
+
 jest.mock('@/lib/auth-storage', () => ({
   getToken: () => mockGetToken(),
 }))
 
-interface MockFetchResponseInit {
-  ok: boolean
-  status: number
-  statusText?: string
-  body?: unknown
-  jsonRejects?: boolean
-}
-
-function mockFetchResponse(init: MockFetchResponseInit) {
-  ;(globalThis.fetch as jest.Mock).mockResolvedValue({
-    ok: init.ok,
-    status: init.status,
-    statusText: init.statusText ?? '',
-    json: init.jsonRejects
-      ? jest.fn().mockRejectedValue(new Error('invalid json'))
-      : jest.fn().mockResolvedValue(init.body),
-  } as unknown as Response)
+const { client: mockClient } = jest.requireMock('@/lib/api-client') as {
+  client: {
+    BacktestingProxyController_createJob: jest.Mock
+    BacktestingProxyController_getJob: jest.Mock
+    BacktestingProxyController_getJobResult: jest.Mock
+  }
 }
 
 describe('backtest-job-client', () => {
   beforeEach(() => {
-    globalThis.fetch = jest.fn()
+    mockGetToken.mockReset()
     mockGetToken.mockReturnValue('header.payload.signature')
+    mockClient.BacktestingProxyController_createJob.mockReset()
+    mockClient.BacktestingProxyController_getJob.mockReset()
+    mockClient.BacktestingProxyController_getJobResult.mockReset()
   })
 
   afterEach(() => {
+    jest.useRealTimers()
     jest.resetAllMocks()
   })
 
-  it('createBacktestJob calls correct endpoint and payload', async () => {
+  it('createBacktestJob calls contract endpoint and payload', async () => {
     const payload = {
       symbols: ['BTCUSDT'],
       baseTimeframe: '15m',
@@ -60,24 +66,22 @@ describe('backtest-job-client', () => {
       bars: [],
     } as const
 
-    mockFetchResponse({
-      ok: true,
-      status: 200,
-      body: { data: { id: 'btjob-1', status: 'queued', createdAt: '2026-03-25T00:00:00.000Z' } },
+    mockClient.BacktestingProxyController_createJob.mockResolvedValue({
+      data: { id: 'btjob-1', status: 'queued', createdAt: '2026-03-25T00:00:00.000Z' },
     })
 
     const result = await createBacktestJob(payload)
 
-    expect(globalThis.fetch).toHaveBeenCalledWith(`${API_BASE_URL}/backtesting/jobs`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer header.payload.signature',
-      },
-      body: JSON.stringify(payload),
-      cache: 'no-store',
-      signal: expect.anything(),
-    })
+    expect(mockClient.BacktestingProxyController_createJob).toHaveBeenCalledWith(
+      payload,
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer header.payload.signature',
+          'x-request-id': expect.stringContaining('front-backtest:create-job:'),
+        }),
+        signal: expect.anything(),
+      }),
+    )
     expect(result).toEqual({
       id: 'btjob-1',
       status: 'queued',
@@ -89,47 +93,37 @@ describe('backtest-job-client', () => {
     const statuses = ['queued', 'running', 'succeeded', 'failed'] as const
 
     for (const status of statuses) {
-      mockFetchResponse({
-        ok: true,
-        status: 200,
-        body: { data: { id: 'btjob-1', status, createdAt: '2026-03-25T00:00:00.000Z' } },
+      mockClient.BacktestingProxyController_getJob.mockResolvedValueOnce({
+        data: { id: 'btjob-1', status, createdAt: '2026-03-25T00:00:00.000Z' },
       })
       const job = await getBacktestJob('btjob-1')
       expect(job.status).toBe(status)
     }
 
-    expect(globalThis.fetch).toHaveBeenCalledTimes(4)
-    expect(globalThis.fetch).toHaveBeenLastCalledWith(`${API_BASE_URL}/backtesting/jobs/btjob-1`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: 'Bearer header.payload.signature',
-      },
-      cache: 'no-store',
-      signal: expect.anything(),
-    })
+    expect(mockClient.BacktestingProxyController_getJob).toHaveBeenCalledTimes(4)
+    expect(mockClient.BacktestingProxyController_getJob).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer header.payload.signature',
+          'x-request-id': expect.stringContaining('front-backtest:job:btjob-1'),
+        }),
+        params: { id: 'btjob-1' },
+        signal: expect.anything(),
+      }),
+    )
   })
 
-  it('encodes jobId safely in URL path', async () => {
-    mockFetchResponse({
-      ok: true,
-      status: 200,
-      body: { data: { id: 'btjob-1', status: 'queued', createdAt: '2026-03-25T00:00:00.000Z' } },
+  it('encodes jobId safely in path params', async () => {
+    mockClient.BacktestingProxyController_getJob.mockResolvedValue({
+      data: { id: 'btjob-1', status: 'queued', createdAt: '2026-03-25T00:00:00.000Z' },
     })
 
     await getBacktestJob('job/with spaces?x=1')
 
-    expect(globalThis.fetch).toHaveBeenCalledWith(
-      `${API_BASE_URL}/backtesting/jobs/${encodeURIComponent('job/with spaces?x=1')}`,
-      {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer header.payload.signature',
-        },
-        cache: 'no-store',
-        signal: expect.anything(),
-      },
+    expect(mockClient.BacktestingProxyController_getJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        params: { id: encodeURIComponent('job/with spaces?x=1') },
+      }),
     )
   })
 
@@ -153,30 +147,26 @@ describe('backtest-job-client', () => {
       bars: [],
     })).rejects.toBeInstanceOf(AuthenticationError)
 
-    expect(globalThis.fetch).not.toHaveBeenCalled()
+    expect(mockClient.BacktestingProxyController_createJob).not.toHaveBeenCalled()
   })
 
   it('throws auth error when token is invalid', async () => {
     mockGetToken.mockReturnValueOnce('not-a-jwt')
 
     await expect(getBacktestJob('btjob-1')).rejects.toBeInstanceOf(AuthenticationError)
-    expect(globalThis.fetch).not.toHaveBeenCalled()
+    expect(mockClient.BacktestingProxyController_getJob).not.toHaveBeenCalled()
   })
 
   it('getBacktestJobResult returns summary', async () => {
-    mockFetchResponse({
-      ok: true,
-      status: 200,
-      body: {
-        data: {
-          summary: {
-            netProfit: 123,
-            netProfitPct: 12.3,
-            maxDrawdownPct: 4.5,
-            winRate: 0.61,
-            profitFactor: 1.8,
-            totalTrades: 10,
-          },
+    mockClient.BacktestingProxyController_getJobResult.mockResolvedValue({
+      data: {
+        summary: {
+          netProfit: 123,
+          netProfitPct: 12.3,
+          maxDrawdownPct: 4.5,
+          winRate: 0.61,
+          profitFactor: 1.8,
+          totalTrades: 10,
         },
       },
     })
@@ -193,11 +183,12 @@ describe('backtest-job-client', () => {
   })
 
   it('throws ApiError with statusCode and message on non-2xx', async () => {
-    mockFetchResponse({
-      ok: false,
-      status: 409,
-      statusText: 'Conflict',
-      body: { message: 'backtest.job_not_completed' },
+    mockClient.BacktestingProxyController_getJobResult.mockRejectedValue({
+      response: {
+        status: 409,
+        statusText: 'Conflict',
+        data: { message: 'backtest.job_not_completed' },
+      },
     })
 
     await expect(getBacktestJobResult('btjob-1')).rejects.toBeInstanceOf(ApiError)
@@ -208,10 +199,8 @@ describe('backtest-job-client', () => {
   })
 
   it('rejects unknown status with ApiError', async () => {
-    mockFetchResponse({
-      ok: true,
-      status: 200,
-      body: { data: { id: 'btjob-1', status: 'unknown', createdAt: '2026-03-25T00:00:00.000Z' } },
+    mockClient.BacktestingProxyController_getJob.mockResolvedValue({
+      data: { id: 'btjob-1', status: 'unknown', createdAt: '2026-03-25T00:00:00.000Z' },
     })
 
     await expect(getBacktestJob('btjob-1')).rejects.toBeInstanceOf(ApiError)
@@ -221,27 +210,13 @@ describe('backtest-job-client', () => {
     })
   })
 
-  it('uses statusText fallback when error body is non-JSON', async () => {
-    mockFetchResponse({
-      ok: false,
-      status: 502,
-      statusText: 'Bad Gateway',
-      jsonRejects: true,
-    })
-
-    await expect(getBacktestJobResult('btjob-1')).rejects.toBeInstanceOf(ApiError)
-    await expect(getBacktestJobResult('btjob-1')).rejects.toMatchObject({
-      message: expect.stringContaining('Bad Gateway'),
-      statusCode: 502,
-    })
-  })
-
   it('uses statusText fallback when error body is empty', async () => {
-    mockFetchResponse({
-      ok: false,
-      status: 503,
-      statusText: 'Service Unavailable',
-      body: null,
+    mockClient.BacktestingProxyController_getJobResult.mockRejectedValue({
+      response: {
+        status: 503,
+        statusText: 'Service Unavailable',
+        data: null,
+      },
     })
 
     await expect(getBacktestJobResult('btjob-1')).rejects.toBeInstanceOf(ApiError)
@@ -253,14 +228,14 @@ describe('backtest-job-client', () => {
 
   it('throws timeout ApiError when request hangs', async () => {
     jest.useFakeTimers()
-    ;(globalThis.fetch as jest.Mock).mockImplementation((_url: string, init?: RequestInit) => {
-      const signal = init?.signal as AbortSignal | undefined
-      return new Promise((_resolve, reject) => {
-        signal?.addEventListener('abort', () => {
-          reject(new DOMException('The operation was aborted.', 'AbortError'))
-        })
-      })
-    })
+    mockClient.BacktestingProxyController_getJobResult.mockImplementation(
+      ({ signal }: { signal?: AbortSignal }) =>
+        new Promise((_resolve, reject) => {
+          signal?.addEventListener('abort', () => {
+            reject(new DOMException('The operation was aborted.', 'AbortError'))
+          })
+        }),
+    )
 
     const assertion = expect(getBacktestJobResult('btjob-1')).rejects.toMatchObject({
       code: 'API_TIMEOUT',
@@ -268,6 +243,5 @@ describe('backtest-job-client', () => {
     })
     await jest.advanceTimersByTimeAsync(BACKTEST_REQUEST_TIMEOUT_MS)
     await assertion
-    jest.useRealTimers()
   })
 })

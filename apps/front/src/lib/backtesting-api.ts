@@ -1,4 +1,4 @@
-import { API_BASE_URL, unwrapApiResponse } from '@/lib/api-client'
+import { client, unwrapApiResponse } from '@/lib/api-client'
 import { getToken } from '@/lib/auth-storage'
 import { ApiError, AuthenticationError } from '@/lib/errors'
 import { parseAiQuantErrorMeta } from '@/components/ai-quant/ai-quant-error-stage'
@@ -185,9 +185,8 @@ function parseBacktestJob(payload: unknown, context: string): BacktestJob {
 }
 
 async function requestJson<T>(
-  path: string,
+  operation: (signal: AbortSignal) => Promise<unknown>,
   timeoutMs: number,
-  init?: RequestInit,
 ): Promise<T> {
   const timeoutController = new AbortController()
   let timedOut = false
@@ -196,76 +195,59 @@ async function requestJson<T>(
     timeoutController.abort()
   }, timeoutMs)
 
-  const upstreamSignal = init?.signal
-  const abortFromUpstream = () => timeoutController.abort()
-  if (upstreamSignal) {
-    if (upstreamSignal.aborted) {
-      timeoutController.abort()
-    } else {
-      upstreamSignal.addEventListener('abort', abortFromUpstream)
-    }
-  }
-
-  let response: Response
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
-      ...init,
-      headers: {
-        'Content-Type': 'application/json',
-        ...requireAuthHeaders(),
-        ...(init?.headers ?? {}),
-      },
-      cache: 'no-store',
-      signal: timeoutController.signal,
-    })
+    const response = await operation(timeoutController.signal)
+    return unwrapApiResponse(response as T | { data?: T; message?: string }) as T
   } catch (error) {
     if (timedOut) {
       throw new ApiError('Request timeout', 'API_TIMEOUT', 408, {
-        path,
         timeoutMs,
       })
     }
     if (error instanceof ApiError) {
       throw error
     }
+    if (
+      error &&
+      typeof error === 'object' &&
+      'response' in error &&
+      error.response &&
+      typeof error.response === 'object'
+    ) {
+      const response = error.response as { status?: number; statusText?: string; data?: unknown }
+      const payload = response.data
+      const message = extractErrorMessage(payload, response.statusText || 'Request failed')
+      throw new ApiError(message, extractErrorCode(payload), response.status, payload)
+    }
     const message = error instanceof Error && error.message.trim() ? error.message : 'Request failed'
     throw new ApiError(message, 'API_ERROR')
   } finally {
     globalThis.clearTimeout(timeout)
-    if (upstreamSignal) {
-      upstreamSignal.removeEventListener('abort', abortFromUpstream)
-    }
   }
+}
 
-  let payload: unknown = null
-  try {
-    payload = await response.json()
-  } catch {
-    payload = null
+function buildBacktestingHeaders(path: string): Record<string, string> {
+  return {
+    ...requireAuthHeaders(),
+    'x-request-id': `front-backtest:${path}:${Date.now()}`,
   }
-
-  if (!response.ok) {
-    const message = extractErrorMessage(payload, response.statusText || 'Request failed')
-    throw new ApiError(message, extractErrorCode(payload), response.status, payload)
-  }
-
-  return unwrapApiResponse(payload as T | { data?: T; message?: string }) as T
 }
 
 export async function fetchBacktestCapabilities(
   options?: FetchBacktestCapabilitiesOptions,
 ): Promise<BacktestCapabilities> {
   let lastError: unknown
+  const headers = buildBacktestingHeaders('capabilities')
 
   for (let attempt = 1; attempt <= BACKTEST_CAPABILITY_RETRY_ATTEMPTS; attempt += 1) {
     try {
       const payload = await requestJson<BacktestCapabilities>(
-        '/backtesting/capabilities',
+        signal =>
+          (client as any).BacktestingProxyController_capabilities({
+            headers,
+            signal: options?.signal ?? signal,
+          }),
         BACKTEST_CAPABILITY_REQUEST_TIMEOUT_MS,
-        {
-          method: 'GET',
-          signal: options?.signal,
-        },
       )
       return parseCapabilities(payload)
     } catch (error) {
@@ -294,28 +276,43 @@ export async function fetchBacktestCapabilities(
 }
 
 export async function createBacktestJob(payload: CreateBacktestJobPayload): Promise<BacktestJob> {
-  const job = await requestJson<BacktestJob>('/backtesting/jobs', BACKTEST_REQUEST_TIMEOUT_MS, {
-    method: 'POST',
-    body: JSON.stringify(payload),
-  })
+  const headers = buildBacktestingHeaders('create-job')
+  const job = await requestJson<BacktestJob>(
+    signal =>
+      (client as any).BacktestingProxyController_createJob(payload, {
+        headers,
+        signal,
+      }),
+    BACKTEST_REQUEST_TIMEOUT_MS,
+  )
   return parseBacktestJob(job, 'createBacktestJob')
 }
 
 export async function getBacktestJob(jobId: string): Promise<BacktestJob> {
   const safeJobId = normalizeJobId(jobId)
-  const job = await requestJson<BacktestJob>(`/backtesting/jobs/${safeJobId}`, BACKTEST_REQUEST_TIMEOUT_MS, {
-    method: 'GET',
-  })
+  const headers = buildBacktestingHeaders(`job:${safeJobId}`)
+  const job = await requestJson<BacktestJob>(
+    signal =>
+      (client as any).BacktestingProxyController_getJob({
+        headers,
+        params: { id: safeJobId },
+        signal,
+      }),
+    BACKTEST_REQUEST_TIMEOUT_MS,
+  )
   return parseBacktestJob(job, 'getBacktestJob')
 }
 
 export function getBacktestJobResult(jobId: string): Promise<BacktestJobResult> {
   const safeJobId = normalizeJobId(jobId)
+  const headers = buildBacktestingHeaders(`job-result:${safeJobId}`)
   return requestJson<BacktestJobResult>(
-    `/backtesting/jobs/${safeJobId}/result`,
+    signal =>
+      (client as any).BacktestingProxyController_getJobResult({
+        headers,
+        params: { id: safeJobId },
+        signal,
+      }),
     BACKTEST_REQUEST_TIMEOUT_MS,
-    {
-      method: 'GET',
-    },
   )
 }
