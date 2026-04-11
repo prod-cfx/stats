@@ -1,12 +1,12 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import type {
   UpsertUserExchangeAccountPayload,
   UserExchangeAccountStatus,
   UserExchangeId,
 } from '@/lib/api'
+import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   deleteUserExchangeAccount,
   fetchUserExchangeAccountStatuses,
