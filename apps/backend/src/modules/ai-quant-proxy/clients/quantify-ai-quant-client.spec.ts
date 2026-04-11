@@ -32,8 +32,9 @@ describe('quantifyAiQuantClient', () => {
   it('creates the quantify contract client with the configured api base url', () => {
     mockedCreateQuantifyApiClient.mockReturnValue(createContractMock() as never)
 
-    new QuantifyAiQuantClient(env as any)
+    const client = new QuantifyAiQuantClient(env as any)
 
+    expect(client).toBeInstanceOf(QuantifyAiQuantClient)
     expect(mockedCreateQuantifyApiClient).toHaveBeenCalledWith('http://quantify.test/api/v1', {
       validate: 'all',
     })
@@ -51,8 +52,9 @@ describe('quantifyAiQuantClient', () => {
       getNumber: jest.fn(() => undefined),
     }
 
-    new QuantifyAiQuantClient(envWithBaseOnly as any)
+    const client = new QuantifyAiQuantClient(envWithBaseOnly as any)
 
+    expect(client).toBeInstanceOf(QuantifyAiQuantClient)
     expect(mockedCreateQuantifyApiClient).toHaveBeenCalledWith('http://quantify.test/api/v1', {
       validate: 'all',
     })
@@ -66,8 +68,9 @@ describe('quantifyAiQuantClient', () => {
       getNumber: jest.fn(() => undefined),
     }
 
-    new QuantifyAiQuantClient(envWithPathBase as any)
+    const client = new QuantifyAiQuantClient(envWithPathBase as any)
 
+    expect(client).toBeInstanceOf(QuantifyAiQuantClient)
     expect(mockedCreateQuantifyApiClient).toHaveBeenCalledWith('http://quantify.test/gateway/v2', {
       validate: 'all',
     })
@@ -85,8 +88,9 @@ describe('quantifyAiQuantClient', () => {
       getNumber: jest.fn(() => undefined),
     }
 
-    new QuantifyAiQuantClient(envWithPlaceholder as any)
+    const client = new QuantifyAiQuantClient(envWithPlaceholder as any)
 
+    expect(client).toBeInstanceOf(QuantifyAiQuantClient)
     expect(mockedCreateQuantifyApiClient).toHaveBeenCalledWith('http://localhost:3010/api/v1', {
       validate: 'all',
     })
@@ -104,8 +108,9 @@ describe('quantifyAiQuantClient', () => {
       getNumber: jest.fn(() => undefined),
     }
 
-    new QuantifyAiQuantClient(envWithPublicStagingDomain as any)
+    const client = new QuantifyAiQuantClient(envWithPublicStagingDomain as any)
 
+    expect(client).toBeInstanceOf(QuantifyAiQuantClient)
     expect(mockedCreateQuantifyApiClient).toHaveBeenCalledWith('http://127.0.0.1:3010/api/v1', {
       validate: 'all',
     })
