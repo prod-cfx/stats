@@ -86,10 +86,10 @@ describe('ClarificationGateCard', () => {
             blocked: true,
             items: [
               {
-                key: 'symbol',
-                field: 'symbol',
-                reason: 'missing symbol',
-                question: '请确认交易对',
+                key: 'riskRules.earlyStop.action',
+                field: 'riskRules.earlyStop.action',
+                reason: 'missing_early_stop_action',
+                question: '请补充连续 3 根 K 线跌破布林带下轨时的处理动作',
                 blocking: true,
                 status: 'pending',
               },
