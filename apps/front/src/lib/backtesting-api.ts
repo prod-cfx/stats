@@ -187,6 +187,7 @@ function parseBacktestJob(payload: unknown, context: string): BacktestJob {
 async function requestJson<T>(
   operation: (signal: AbortSignal) => Promise<unknown>,
   timeoutMs: number,
+  upstreamSignal?: AbortSignal,
 ): Promise<T> {
   const timeoutController = new AbortController()
   let timedOut = false
@@ -194,9 +195,10 @@ async function requestJson<T>(
     timedOut = true
     timeoutController.abort()
   }, timeoutMs)
+  const signal = upstreamSignal ? AbortSignal.any([timeoutController.signal, upstreamSignal]) : timeoutController.signal
 
   try {
-    const response = await operation(timeoutController.signal)
+    const response = await operation(signal)
     return unwrapApiResponse(response as T | { data?: T; message?: string }) as T
   } catch (error) {
     if (timedOut) {
@@ -245,9 +247,10 @@ export async function fetchBacktestCapabilities(
         signal =>
           (client as any).BacktestingProxyController_capabilities({
             headers,
-            signal: options?.signal ?? signal,
+            signal,
           }),
         BACKTEST_CAPABILITY_REQUEST_TIMEOUT_MS,
+        options?.signal,
       )
       return parseCapabilities(payload)
     } catch (error) {
