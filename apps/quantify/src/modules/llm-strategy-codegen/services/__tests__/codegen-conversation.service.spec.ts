@@ -299,6 +299,74 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ])
   })
 
+  it('includes snapshot-bound param values when listing published conversations', async () => {
+    mockConversationsRepo.listByUser.mockResolvedValue([
+      {
+        id: 'conv-published',
+        userId: 'u1',
+        title: '已发布会话',
+        codegenSessionId: 'session-published',
+        createdAt: new Date('2026-04-10T20:00:00.000Z'),
+        updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+        messages: [
+          { role: 'assistant', content: '来自会话聚合的助手消息' },
+        ],
+      },
+    ])
+    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue(['session-published'])
+    mockRepo.listByUser.mockResolvedValue([])
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-published',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      checklist: {},
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: { conversationHistory: ['U: 原始 session 消息'] },
+      latestDraftCode: 'export default function strategy() { return true }',
+      latestSpecDesc: null,
+      rejectReason: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+      strategyInstanceId: 'instance-1',
+    })
+    mockRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-1',
+      consistencyReport: { status: 'PASSED' },
+      paramsSnapshot: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        timeframe: '1h',
+      },
+      lockedParams: {
+        positionPct: 25,
+      },
+      executionPolicy: {
+        allowPartialFill: false,
+      },
+    })
+
+    const result = await service.listConversations('u1')
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 'conv-published',
+        publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotParamValues: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          timeframe: '1h',
+          positionPct: 25,
+          backtestInitialCash: 10000,
+          backtestLeverage: 1,
+          backtestSlippageBps: 10,
+          backtestFeeBps: 5,
+          backtestPriceSource: 'close',
+          backtestAllowPartial: false,
+        },
+      }),
+    ])
+  })
+
   it('backfills only missing session projections and does not resurrect archived conversations', async () => {
     mockConversationsRepo.listByUser
       .mockResolvedValueOnce([])
@@ -737,6 +805,18 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       ],
     })
     expect(result.publishedSnapshotId).toBe('snapshot-session-1')
+    expect(result.publishedSnapshotParamValues).toEqual({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      positionPct: 10,
+      backtestInitialCash: 10000,
+      backtestLeverage: 1,
+      backtestSlippageBps: 10,
+      backtestFeeBps: 5,
+      backtestPriceSource: 'close',
+      backtestAllowPartial: false,
+    })
     expect(result.consistencyReport).toEqual({ status: 'PASSED' })
   })
 
