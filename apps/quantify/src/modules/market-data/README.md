@@ -2,7 +2,23 @@
 
 ## 概述
 
-本模块负责采集行情数据、写入存储，并通过 `GET /market/stream/ticker` 向内部调用方提供 SSE 实时推送。
+本模块负责采集行情数据、写入存储，并对内提供统一读接口与 SSE 推送能力。
+
+当前接口不止 `GET /market/stream/ticker`，还包括：
+
+- `GET /api/v1/market/symbols`
+- `GET /api/v1/market/bars`
+- `GET /api/v1/market/quote`
+- `GET /api/v1/market/stream/ticker`
+- `POST /api/v1/ops/market-symbols`
+- `PUT /api/v1/ops/market-symbols/:code`
+
+真实接口定义以：
+
+- [controllers/market-data.controller.ts](controllers/market-data.controller.ts)
+- [controllers/ops-market-symbols.controller.ts](controllers/ops-market-symbols.controller.ts)
+
+为准。
 
 ## 使用方式
 
@@ -40,11 +56,13 @@
 ## 特性
 
 - 行情采集与持久化
+- 提供 symbols / bars / quote 查询接口
 - SSE 实时推送
 - 面向内部调用方的统一接入方式
 - 支持多订阅方并发消费
 - 策略与 AI 读取市场数据统一通过 `MarketDataReadGateway`
 - 本地审查采用双层门禁：第一层真实链路正确性，第二层 mock 消费方 smoke
+- provider 由配置决定，当前支持 `binance`、`okx`、`hyperliquid`
 
 ## 本地审查
 
@@ -94,5 +112,5 @@ bash scripts/acceptance/quantify-min-acceptance.sh
 ## 故障排查
 
 - 连接失败：确认 quantify 服务已经启动，且调用方可访问 `/api/v1/market/stream/ticker`
-- 没有数据：检查 Binance WebSocket 连接状态与 market-data 模块日志
+- 没有数据：检查当前 provider 的 WS / REST 连接状态与 market-data 模块日志
 - 频繁断线：检查内部网络、代理超时与调用方重连逻辑
