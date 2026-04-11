@@ -70,6 +70,13 @@ function unwrapResponse<T>(response: T | { data?: T; message?: string }): T {
   return unwrapTransportResponse(response)
 }
 
+function buildBacktestServerHeaders(token: string | null, requestId: string): Record<string, string> {
+  return {
+    ...buildServerAuthHeaders(token),
+    'x-request-id': requestId,
+  }
+}
+
 async function callPublicServerApi<T>(
   authorizedCall: () => Promise<unknown>,
   anonymousCall: () => Promise<unknown>,
@@ -149,7 +156,7 @@ export async function fetchBacktestJobResultServer(
   jobId: string,
 ): Promise<BacktestJobResultReport | null> {
   const token = await getServerToken()
-  const authHeaders = buildServerAuthHeaders(token)
+  const authHeaders = buildBacktestServerHeaders(token, `ssr-backtest-result:${jobId}`)
   if (!authHeaders.Authorization) {
     return null
   }
@@ -171,7 +178,7 @@ export async function fetchBacktestJobServer(
   jobId: string,
 ): Promise<BacktestJobServerResponse | null> {
   const token = await getServerToken()
-  const authHeaders = buildServerAuthHeaders(token)
+  const authHeaders = buildBacktestServerHeaders(token, `ssr-backtest-job:${jobId}`)
   if (!authHeaders.Authorization) {
     return null
   }

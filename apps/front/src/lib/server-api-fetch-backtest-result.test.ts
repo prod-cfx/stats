@@ -70,7 +70,10 @@ describe('server-api backtest and llm transport', () => {
     expect(mockGetServerToken).toHaveBeenCalledTimes(1)
     expect(mockBuildServerAuthHeaders).toHaveBeenCalledWith('a.b.c')
     expect(mockServerClient.BacktestingProxyController_getJobResult).toHaveBeenCalledWith({
-      headers: { Authorization: 'Bearer a.b.c' },
+      headers: expect.objectContaining({
+        Authorization: 'Bearer a.b.c',
+        'x-request-id': 'ssr-backtest-result:btjob-1',
+      }),
       params: { id: 'btjob-1' },
     })
   })
@@ -108,7 +111,10 @@ describe('server-api backtest and llm transport', () => {
     expect(mockGetServerToken).toHaveBeenCalledTimes(1)
     expect(mockBuildServerAuthHeaders).toHaveBeenCalledWith('a.b.c')
     expect(mockServerClient.BacktestingProxyController_getJob).toHaveBeenCalledWith({
-      headers: { Authorization: 'Bearer a.b.c' },
+      headers: expect.objectContaining({
+        Authorization: 'Bearer a.b.c',
+        'x-request-id': 'ssr-backtest-job:btjob-1',
+      }),
       params: { id: 'btjob-1' },
     })
   })
