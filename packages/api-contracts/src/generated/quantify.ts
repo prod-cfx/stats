@@ -734,6 +734,9 @@ const QuoteInputDto = z
   })
   .passthrough()
 const QuotesUpdateDto = z.object({ quotes: z.array(QuoteInputDto) }).passthrough()
+const QuotesUpdateResponseDto = z
+  .object({ updatedPositions: z.number(), updatedAccounts: z.number() })
+  .passthrough()
 const PositionResponseDto = z
   .object({
     id: z.string(),
@@ -1391,6 +1394,7 @@ export const schemas = {
   TradeResponseDto,
   QuoteInputDto,
   QuotesUpdateDto,
+  QuotesUpdateResponseDto,
   PositionResponseDto,
   TriggerPositionSyncDto,
   PositionSyncResultDto,
@@ -3418,7 +3422,7 @@ const endpoints = makeApi([
         schema: QuotesUpdateDto,
       },
     ],
-    response: z.void(),
+    response: QuotesUpdateResponseDto,
   },
   {
     method: 'post',

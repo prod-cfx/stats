@@ -23,6 +23,7 @@ import { PositionSyncResultDto } from './dto/position-sync.dto'
 import { PositionResponseDto } from './dto/position.response.dto'
 import { PositionsQueryDto } from './dto/positions-query.dto'
 import { QuotesUpdateDto } from './dto/quotes-update.dto'
+import { QuotesUpdateResponseDto } from './dto/quotes-update.response.dto'
 import { RecordTradeDto } from './dto/record-trade.dto'
 import { TradeResponseDto } from './dto/trade.response.dto'
 import { TriggerPositionSyncDto } from './dto/position-sync.dto'
@@ -35,7 +36,14 @@ import { PositionsValuationService } from './positions-valuation.service'
 import { PositionsService } from './positions.service'
 
 @ApiTags('positions')
-@ApiExtraModels(BasePaginationResponseDto, PositionResponseDto, TradeResponseDto, PositionSyncResultDto, ClosePositionResponseDto)
+@ApiExtraModels(
+  BasePaginationResponseDto,
+  PositionResponseDto,
+  TradeResponseDto,
+  PositionSyncResultDto,
+  ClosePositionResponseDto,
+  QuotesUpdateResponseDto,
+)
 @Controller('positions')
 export class PositionsController {
   constructor(
@@ -57,6 +65,7 @@ export class PositionsController {
   @Post('quotes')
   @ApiOperation({ summary: '推送行情快照并更新未实现盈亏（内部使用）' })
   @ApiBody({ type: QuotesUpdateDto })
+  @ApiOkResponse({ type: QuotesUpdateResponseDto })
   async applyQuotes(@Body() dto: QuotesUpdateDto) {
     return this.valuationService.applyQuotes(dto)
   }
