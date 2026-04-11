@@ -108,7 +108,7 @@ return null
 
 - `returns`
 - `sharpeRatio`
-- `volatility`
+- `annualizedVolatility`
 - `maxDrawdown`
 
 ### `helpers.array`
