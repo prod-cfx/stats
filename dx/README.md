@@ -148,6 +148,7 @@ dx/
 - `quantify`
 - `front`
 - `admin`
+- `all`
 - `development`
 - `stack`
 - `stagewise-front`
@@ -165,6 +166,7 @@ dx/
 
 ```bash
 dx start
+dx start all
 dx start backend --dev
 dx start front --dev
 dx start stack
