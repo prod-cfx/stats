@@ -3,7 +3,9 @@
 ## Scope
 
 - Task lane: worker-3 deploy + real staging verification
-- Target branch/head: `codex/fix/744-ai-quant-staging-regressions` @ `3e237307ea16f1b114695ce623f2c4f2b7f0a1a4`
+- Deployed runtime code head: `codex/fix/744-ai-quant-staging-regressions` @ `3e237307ea16f1b114695ce623f2c4f2b7f0a1a4`
+- Current leader-integrated head in this worktree: `81d37fd82d37aaa0670373f0655638bd734a8def`
+- Head-diff note: `git diff --name-only 3e237307..81d37fd8` only reports this markdown file, so the deployed runtime code matches the current integrated code content for issue #744.
 - Deploy workflow run: `CI #745` / `24283847133`
 - Verification date: `2026-04-11`
 
@@ -36,6 +38,10 @@ This produced a real JWT and authenticated staging user session for live verific
 Local evidence files:
 - `tmp/issue-744-staging-evidence/send-code.json`
 - `tmp/issue-744-staging-evidence/verify-email.json`
+
+Durability note:
+- The `tmp/issue-744-staging-evidence/` files were local capture artifacts from the live verification session and are not committed into this repository/worktree.
+- This report is the durable branch record for the deploy result, staging screenshots, and API observations summarized below.
 
 ## Screenshots
 
