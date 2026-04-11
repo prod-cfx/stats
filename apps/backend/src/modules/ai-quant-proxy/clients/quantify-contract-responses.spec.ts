@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 describe('quantify contract generated responses', () => {
-  const generatedPath = '/Users/a1/work/stats/packages/api-contracts/src/generated/quantify.ts'
+  const generatedPath = resolve(__dirname, '../../../../../../packages/api-contracts/src/generated/quantify.ts')
 
   it('does not leave critical quantify aliases with z.void responses', () => {
     const source = readFileSync(generatedPath, 'utf8')
@@ -15,6 +16,7 @@ describe('quantify contract generated responses', () => {
       'BacktestingController_getJob',
       'BacktestingController_getJobResult',
       'BacktestingController_checkSymbolSupport',
+      'PositionsController_applyQuotes',
     ]
 
     for (const alias of aliases) {

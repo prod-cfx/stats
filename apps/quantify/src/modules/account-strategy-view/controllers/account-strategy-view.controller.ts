@@ -8,7 +8,7 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger'
-import { Body, Controller, Delete, Get, Headers, Param, Post, Query } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Post, Query } from '@nestjs/common'
 import { AccountStrategyActionDto } from '../dto/account-strategy-action.dto'
 import { AccountStrategyDetailResponseDto } from '../dto/account-strategy-detail.response.dto'
 import { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
@@ -120,6 +120,7 @@ export class AccountStrategyViewController {
 
   @Transactional()
   @Delete(':id')
+  @HttpCode(204)
   @ApiOperation({ summary: '删除当前用户的 AI Quant 策略' })
   @ApiHeader({ name: 'authorization', required: false })
   @ApiHeader({ name: 'x-user-id', required: false })
