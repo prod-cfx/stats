@@ -25,6 +25,7 @@ describe('quantifyAiQuantClient', () => {
 
   afterEach(() => {
     jest.useRealTimers()
+    jest.restoreAllMocks()
     jest.clearAllMocks()
   })
 
@@ -156,15 +157,21 @@ describe('quantifyAiQuantClient', () => {
     })
   })
 
-  it('returns payload.data for successful codegen responses', async () => {
+  it('uses the raw json transport for startCodegen when the contract lane is unavailable', async () => {
     const contract = createContractMock()
-    contract.LiveLlmStrategyCodegenController_startSession.mockResolvedValue({
-      data: {
-        id: 'session-1',
-        status: 'CHECKLIST_GATE',
-      },
-    })
+    contract.LiveLlmStrategyCodegenController_startSession.mockRejectedValue(new Error('zod parse failed'))
     mockedCreateQuantifyApiClient.mockReturnValue(contract as never)
+
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 201,
+      text: async () => JSON.stringify({
+        data: {
+          id: 'session-1',
+          status: 'CHECKLIST_GATE',
+        },
+      }),
+    } as Response)
 
     const client = new QuantifyAiQuantClient(env as any)
 
@@ -175,6 +182,100 @@ describe('quantifyAiQuantClient', () => {
       id: 'session-1',
       status: 'CHECKLIST_GATE',
     })
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://quantify.test/api/v1/llm-strategy-codegen/sessions',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'content-type': 'application/json',
+          'x-user-id': 'user-1',
+          authorization: 'Bearer test-token',
+        }),
+        body: JSON.stringify({ foo: 'bar' }),
+      }),
+    )
+  })
+
+  it('uses the raw json transport for getCodegenSession when the contract lane is unavailable', async () => {
+    const contract = createContractMock()
+    contract.LiveLlmStrategyCodegenController_getSession.mockRejectedValue(new Error('zod parse failed'))
+    mockedCreateQuantifyApiClient.mockReturnValue(contract as never)
+
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        data: {
+          id: 'session-1',
+          status: 'DRAFTING',
+          conversationId: null,
+        },
+      }),
+    } as Response)
+
+    const client = new QuantifyAiQuantClient(env as any)
+
+    await expect(client.getCodegenSession('session-1', {
+      userId: 'user-1',
+      headers: { authorization: 'Bearer test-token' },
+    })).resolves.toEqual({
+      id: 'session-1',
+      status: 'DRAFTING',
+      conversationId: null,
+    })
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://quantify.test/api/v1/llm-strategy-codegen/sessions/session-1',
+      expect.objectContaining({
+        method: 'GET',
+        headers: expect.objectContaining({
+          'content-type': 'application/json',
+          'x-user-id': 'user-1',
+          authorization: 'Bearer test-token',
+        }),
+      }),
+    )
+  })
+
+  it('uses the raw json transport for continueCodegen when the contract lane is unavailable', async () => {
+    const contract = createContractMock()
+    contract.LiveLlmStrategyCodegenController_continueSession.mockRejectedValue(new Error('zod parse failed'))
+    mockedCreateQuantifyApiClient.mockReturnValue(contract as never)
+
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockResolvedValue({
+      ok: true,
+      status: 202,
+      text: async () => JSON.stringify({
+        data: {
+          id: 'session-1',
+          status: 'GENERATING',
+        },
+      }),
+    } as Response)
+
+    const client = new QuantifyAiQuantClient(env as any)
+
+    await expect(client.continueCodegen('session-1', { confirmedCanonicalDigest: 'sha256:abc' }, {
+      userId: 'user-1',
+      headers: { authorization: 'Bearer test-token' },
+    })).resolves.toEqual({
+      id: 'session-1',
+      status: 'GENERATING',
+    })
+
+    expect(fetchSpy).toHaveBeenCalledWith(
+      'http://quantify.test/api/v1/llm-strategy-codegen/sessions/session-1/messages',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'content-type': 'application/json',
+          'x-user-id': 'user-1',
+          authorization: 'Bearer test-token',
+        }),
+        body: JSON.stringify({ confirmedCanonicalDigest: 'sha256:abc' }),
+      }),
+    )
   })
 
   it('throws a 502 client error when quantify returns non-json error bodies', async () => {
