@@ -18,6 +18,8 @@ import { ApiError } from '@/lib/errors'
 import {
   buildBacktestSummaryResult,
   hasLatestPublishedCode,
+  requiresRepublishForPublishedSnapshot,
+  resolveEffectivePublishedBacktestInputs,
   resolveBacktestExecutionConfig,
   resolveBacktestRangeInput,
 } from './ai-quant-page-conversation'
@@ -33,6 +35,24 @@ function buildInvalidExecutionConfigMessage(args: {
   t: Translate
 }): string {
   const { activeConversation, executionConfig, t } = args
+
+  if (activeConversation.publishedSnapshotId) {
+    if (!activeConversation.publishedSnapshotParamValues) {
+      return t('aiQuant.messages.backtestPayloadInvalid', {
+        reason: 'published_snapshot_params_missing：当前已发布快照缺少可证明的回测参数真相，请重新发布后再回测。',
+      })
+    }
+
+    if (!executionConfig.allowPartialValid) {
+      return t('aiQuant.messages.backtestPayloadInvalid', {
+        reason: 'invalid_allow_partial：是否允许部分成交只能是 true 或 false。',
+      })
+    }
+
+    return t('aiQuant.messages.backtestPayloadInvalid', {
+      reason: 'invalid_snapshot_execution_config：当前已发布快照中的执行参数不完整或无效，请重新发布后再回测。',
+    })
+  }
 
   if (activeConversation.backtestExecutionConfigExplicit !== true) {
     return t('aiQuant.messages.backtestPayloadInvalid', {
@@ -172,16 +192,36 @@ export async function runAiQuantBacktest(args: {
 
   let payload: ReturnType<typeof buildBacktestPayload>
   try {
-    const paramValues = activeConversation.paramValues
-    const executionConfig = resolveBacktestExecutionConfig(paramValues)
+    const effectiveInputs = resolveEffectivePublishedBacktestInputs({
+      publishedSnapshotId: activeConversation.publishedSnapshotId,
+      publishedSnapshotParamValues: activeConversation.publishedSnapshotParamValues,
+    })
+    if (!effectiveInputs) {
+      throw new ApiError(
+        '当前已发布快照缺少完整回测参数，请重新发布后再回测。',
+        'PUBLISHED_SNAPSHOT_PARAMS_MISSING',
+      )
+    }
+    if (requiresRepublishForPublishedSnapshot({
+      publishedSnapshotId: activeConversation.publishedSnapshotId,
+      publishedSnapshotParamValues: activeConversation.publishedSnapshotParamValues,
+      editableParamValues: activeConversation.paramValues,
+    })) {
+      throw new ApiError(
+        '当前参数已脱离已发布快照，请重新发布后再回测。',
+        'REPUBLISH_REQUIRED',
+      )
+    }
+
+    const executionConfig = effectiveInputs.executionConfig
     if (!executionConfig.allowPartialValid) {
       throw new BacktestPayloadBuilderError('invalid_execution_config')
     }
     payload = buildBacktestPayload({
-      symbol: activeConversation.params.symbol,
-      baseTimeframe: activeConversation.params.baseTimeframe,
+      symbol: effectiveInputs.symbol,
+      baseTimeframe: effectiveInputs.baseTimeframe,
       capabilities: backtestCapabilities,
-      stateTimeframes: [activeConversation.params.baseTimeframe],
+      stateTimeframes: [effectiveInputs.baseTimeframe],
       initialCash: executionConfig.initialCash,
       leverage: executionConfig.leverage,
       execution: {
@@ -203,6 +243,9 @@ export async function runAiQuantBacktest(args: {
   } catch (error) {
     releaseMutex()
     const message = (() => {
+      if (error instanceof ApiError && error.message.trim()) {
+        return error.message
+      }
       if (!isBacktestPayloadBuilderError(error)) {
         return t('aiQuant.messages.backtestPayloadInvalid', { reason: 'unknown_error' })
       }

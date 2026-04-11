@@ -125,6 +125,7 @@ export interface ConversationState {
   llmCodegenSessionId: string | null
   publishedStrategyInstanceId: string | null
   publishedSnapshotId: string | null
+  publishedSnapshotParamValues: Record<string, unknown> | null
   publishedScriptCode: string | null
   publishedScriptGraphVersion: number | null
   latestSignalMessage: string | null
@@ -167,13 +168,13 @@ const NON_STRATEGY_PARAM_KEYS = new Set([
   'backtestRangePreset',
   'backtestStart',
   'backtestEnd',
-  'backtestInitialCash',
-  'backtestLeverage',
-  'backtestSlippageBps',
-  'backtestFeeBps',
-  'backtestPriceSource',
-  'backtestAllowPartial',
 ])
+export const BACKTEST_RANGE_PARAM_KEYS = [
+  'backtestRangePreset',
+  'backtestStart',
+  'backtestEnd',
+] as const
+export const BACKTEST_RANGE_PARAM_KEY_SET = new Set<string>(BACKTEST_RANGE_PARAM_KEYS)
 export const BACKTEST_EXECUTION_PARAM_KEYS = [
   'backtestInitialCash',
   'backtestLeverage',
@@ -295,7 +296,7 @@ export function resolveBacktestExecutionConfig(
   }
 }
 
-function normalizePublishedSnapshotParamValues(
+export function normalizePublishedSnapshotParamValues(
   value: unknown,
 ): Record<string, unknown> | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -309,6 +310,100 @@ function normalizePublishedSnapshotParamValues(
     normalized.baseTimeframe = timeframe
   }
   return normalized
+}
+
+function normalizeComparableParamValue(value: unknown): unknown {
+  if (typeof value === 'string') {
+    return value.trim()
+  }
+  if (Array.isArray(value)) {
+    return value.map(item => normalizeComparableParamValue(item))
+  }
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .map(([key, item]) => [key, normalizeComparableParamValue(item)]),
+    )
+  }
+  return value
+}
+
+export function requiresRepublishForPublishedSnapshot(input: {
+  publishedSnapshotId: string | null
+  publishedSnapshotParamValues: Record<string, unknown> | null
+  editableParamValues: Record<string, unknown>
+}): boolean {
+  const {
+    publishedSnapshotId,
+    publishedSnapshotParamValues,
+    editableParamValues,
+  } = input
+
+  if (!publishedSnapshotId) {
+    return false
+  }
+  if (!publishedSnapshotParamValues) {
+    return true
+  }
+
+  for (const key of Object.keys(editableParamValues)) {
+    if (BACKTEST_RANGE_PARAM_KEY_SET.has(key)) {
+      continue
+    }
+
+    const snapshotValue = normalizeComparableParamValue(publishedSnapshotParamValues[key])
+    const editableValue = normalizeComparableParamValue(editableParamValues[key])
+    if (JSON.stringify(snapshotValue ?? null) !== JSON.stringify(editableValue ?? null)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+export interface EffectivePublishedBacktestInputs {
+  exchange: 'binance' | 'okx' | 'hyperliquid'
+  symbol: string
+  baseTimeframe: string
+  executionConfig: ResolvedBacktestExecutionConfig
+}
+
+export function resolveEffectivePublishedBacktestInputs(input: {
+  publishedSnapshotId: string | null
+  publishedSnapshotParamValues: Record<string, unknown> | null
+}): EffectivePublishedBacktestInputs | null {
+  const { publishedSnapshotId, publishedSnapshotParamValues } = input
+  if (!publishedSnapshotId || !publishedSnapshotParamValues) {
+    return null
+  }
+
+  const exchange =
+    publishedSnapshotParamValues.exchange === 'okx'
+      ? 'okx'
+      : publishedSnapshotParamValues.exchange === 'hyperliquid'
+        ? 'hyperliquid'
+        : publishedSnapshotParamValues.exchange === 'binance'
+          ? 'binance'
+          : null
+  const symbol =
+    typeof publishedSnapshotParamValues.symbol === 'string'
+      ? publishedSnapshotParamValues.symbol.trim()
+      : ''
+  const baseTimeframe =
+    typeof publishedSnapshotParamValues.baseTimeframe === 'string'
+      ? publishedSnapshotParamValues.baseTimeframe.trim()
+      : ''
+
+  if (!exchange || !symbol || !baseTimeframe) {
+    return null
+  }
+
+  return {
+    exchange,
+    symbol,
+    baseTimeframe,
+    executionConfig: resolveBacktestExecutionConfig(publishedSnapshotParamValues),
+  }
 }
 
 function mergeSnapshotBoundParamValues(input: {
@@ -440,6 +535,7 @@ function hasPublicationArtifacts(conversation: ConversationState): boolean {
   return Boolean(
     conversation.publishedStrategyInstanceId
       || conversation.publishedSnapshotId
+      || conversation.publishedSnapshotParamValues
       || conversation.publishedScriptCode
       || conversation.publishedScriptGraphVersion !== null
       || conversation.backtestResult
@@ -453,6 +549,7 @@ function clearPublicationArtifacts(conversation: ConversationState): Conversatio
     publicationGate: null,
     publishedStrategyInstanceId: null,
     publishedSnapshotId: null,
+    publishedSnapshotParamValues: null,
     publishedScriptCode: null,
     publishedScriptGraphVersion: null,
     backtestResult: null,
@@ -706,10 +803,18 @@ function normalizeHydratedBacktestExecutionConfig(input: {
   paramValues: Record<string, unknown>
   explicit: boolean
   publishedSnapshotId: string | null
+  publishedSnapshotParamValues: Record<string, unknown> | null
 }): {
   paramValues: Record<string, unknown>
   explicit: boolean
 } {
+  if (input.publishedSnapshotId && !input.publishedSnapshotParamValues) {
+    return {
+      paramValues: stripImplicitBacktestExecutionParamValues(input.paramValues),
+      explicit: false,
+    }
+  }
+
   if (input.explicit) {
     return input
   }
@@ -792,6 +897,7 @@ export function createConversation(translate: (key: string) => string, now = Dat
     llmCodegenSessionId: null,
     publishedStrategyInstanceId: null,
     publishedSnapshotId: null,
+    publishedSnapshotParamValues: null,
     publishedScriptCode: null,
     publishedScriptGraphVersion: null,
     latestSignalMessage: null,
@@ -1006,6 +1112,7 @@ export function createConversationFromServerConversation(
     llmCodegenSessionId: response.activeCodegenSessionId ?? null,
     publishedStrategyInstanceId: response.strategyInstanceId ?? null,
     publishedSnapshotId: response.publishedSnapshotId ?? null,
+    publishedSnapshotParamValues: snapshotParamValues,
     publishedScriptCode: response.scriptCode ?? null,
     publishedScriptGraphVersion:
       response.scriptCode && logicGraph?.status === 'confirmed'
@@ -1051,6 +1158,7 @@ export function shouldResetIrrecoverableHydratedConversation(
 
 export function hydrateConversation(item: Partial<ConversationState>): ConversationState {
   const publishedSnapshotId = normalizePublishedSnapshotId(item.publishedSnapshotId)
+  const publishedSnapshotParamValues = normalizePublishedSnapshotParamValues(item.publishedSnapshotParamValues)
   const baseParams =
     item.params && typeof item.params === 'object' && !Array.isArray(item.params)
       ? (item.params as unknown as Record<string, unknown>)
@@ -1068,6 +1176,7 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
     paramValues: nextParamValues,
     explicit: item.backtestExecutionConfigExplicit === true,
     publishedSnapshotId,
+    publishedSnapshotParamValues,
   })
   const fallbackParams =
     item.params && typeof item.params === 'object' && !Array.isArray(item.params)
@@ -1114,6 +1223,7 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
     llmCodegenSessionId: normalizeCodegenSessionId(item.llmCodegenSessionId),
     publishedStrategyInstanceId: item.publishedStrategyInstanceId ?? null,
     publishedSnapshotId,
+    publishedSnapshotParamValues,
     publishedScriptCode: resolveHydratedPublishedScriptCode(item),
     publishedScriptGraphVersion: (() => {
       if (typeof item.publishedScriptGraphVersion === 'number') {

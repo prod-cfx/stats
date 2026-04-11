@@ -32,6 +32,7 @@ export interface AiQuantStrategyRecord {
   timeline: StrategyTimelineEvent[]
   paramSchema: Record<string, unknown> | null
   paramValues: Record<string, unknown> | null
+  publishedSnapshotParamValues?: Record<string, unknown> | null
   schemaVersion: string | null
   supportsDynamicParams: boolean
   publishedSnapshotId?: string | null

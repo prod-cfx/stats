@@ -82,6 +82,15 @@ export function mapAccountStrategyDetailToRecord(
   const snapshotExchange = detail.snapshot.exchange
   const resolvedExchange = snapshotExchange ?? detail.exchange
   const exchange = resolvedExchange === 'okx' ? 'okx' : resolvedExchange === 'hyperliquid' ? 'hyperliquid' : 'binance'
+  const publishedSnapshotParamValues = detail.snapshot.publishedSnapshotId
+    ? {
+        exchange,
+        symbol: detail.snapshot.symbol ?? detail.symbol ?? '--',
+        baseTimeframe: detail.snapshot.timeframe ?? detail.timeframe ?? '--',
+        positionPct: normalizeNumber(detail.snapshot.positionPct ?? detail.positionPct),
+        ...(detail.snapshot.paramValues ?? {}),
+      }
+    : null
   const initialCapital = detail.accountOverview?.initialBalance
     ?? detail.equitySeries[0]?.value
     ?? 10000
@@ -107,6 +116,7 @@ export function mapAccountStrategyDetailToRecord(
       tradeCount: normalizeNumber(detail.metrics.tradeCount),
     },
     ...dynamicParams,
+    publishedSnapshotParamValues,
     publishedSnapshotId: detail.snapshot.publishedSnapshotId ?? null,
     snapshotHash: detail.snapshot.snapshotHash ?? null,
     totalPnl: detail.totalPnl ?? null,
