@@ -86,8 +86,32 @@ Keep writes documentation-only:
 ## Baseline verification on pre-change HEAD
 This review was produced against commit `039413f5` (`Hydrate AI Quant terminal server conversations without hiding outcomes`).
 
+### Commands run
+- `git diff --check`
+- `/data/stats/node_modules/.bin/eslint ...` on the reviewed front/backend/quantify files
+- `/data/stats/node_modules/.bin/jest --config apps/front/jest.config.ts --runTestsByPath ...`
+- `/data/stats/node_modules/.bin/jest --config apps/quantify/jest-unit.json ...`
+- `/data/stats/node_modules/.bin/tsc --noEmit --project apps/front/tsconfig.json && ...backend && ...quantify`
+
+### Results
+1. **Lint: FAIL (pre-existing)**
+   - `StrategyDetailPageClient.tsx`: import-order violations
+   - `ai-quant-page-backtest.ts`: import-order violation
+   - `apps/front/src/lib/api.ts`: one `consistent-type-imports` issue and one unused helper
+2. **Front focused Jest: FAIL (pre-existing)**
+   - Passed: `AiQuantPageClient.backtest-jobs.test.tsx`, `ai-quant-page-conversation.test.ts`, `ai-quant-strategy-api-adapter.test.ts`
+   - Failed: `StrategyDetailPageClient.test.tsx` due React `act(...)` environment warnings ending in a 5s timeout on the snapshot-driven backtest case
+3. **Quantify focused Jest: FAIL (environment/pre-existing)**
+   - Passed: `backtest-snapshot-loader.service.spec.ts`
+   - Failed: `account-strategy-view-detail.spec.ts` because `src/common/utils/prisma-enum-mappers.ts` cannot resolve `../../../generated/prisma` in the current worktree test environment
+4. **Typecheck: FAIL (environment-wide)**
+   - Front `tsc` stops immediately on missing workspace modules/types such as `next/*`, `lucide-react`, `@ai/api-contracts`, `recharts`, `socket.io-client`, and others in the current worker worktree
+
+### Verification interpretation
+These failures are useful review evidence rather than regressions introduced by this documentation change: the branch already has front lint debt, a flaky/failing detail-page snapshot-backtest test, a quantify generated-Prisma test environment gap, and missing front type dependencies in this worker worktree. They should be treated as integration risks when the implementation branch is validated.
+
 Expected next verification on the integrated branch:
 - front focused Jest around chat/detail backtest semantics
 - quantify/backend focused Jest for DTO + snapshot loading
-- typecheck for touched apps
+- typecheck for touched apps once workspace dependencies/generation are healthy
 - real staging smoke for published snapshot chat + reload + detail parity
