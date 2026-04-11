@@ -2,14 +2,22 @@
 
 ## 概述
 
-`LlmStrategyInstance` 支持实例级别的动态 Cron 调度。系统会基于实例上的 `scheduleCron` 字段，在实例启动、停止、更新和服务重启时自动维护调度任务。
+`LlmStrategyInstance` 支持实例级别的动态 Cron 调度。系统会在实例启动、停止、更新和服务重启时自动维护调度任务。
+
+当前实现以这两处代码为准：
+
+- [llm-strategy-instance-scheduler.service.ts](/Users/a1/work/stats/apps/quantify/src/modules/llm-strategies/services/llm-strategy-instance-scheduler.service.ts)
+- [llm-strategy-instances.service.ts](/Users/a1/work/stats/apps/quantify/src/modules/llm-strategies/services/llm-strategy-instances.service.ts)
 
 ## 核心行为
 
-- 实例启动且配置了 `scheduleCron` 时，自动创建并启动 Cron 任务
+- 实例从非 `running` 切到 `running` 时，会自动创建并启动 Cron 任务
+- 如果实例没有设置 `scheduleCron`，调度器会回退到默认表达式 `*/15 * * * *`
 - 实例停止或暂停时，自动停止并清理对应任务
-- 服务重启时，自动恢复处于 `running` 状态且配置了 `scheduleCron` 的实例
+- 服务重启时，自动恢复处于 `running` 状态且关联策略仍为 `live` 的实例
 - 更新 `scheduleCron` 时，若实例正在运行，则自动重建调度任务
+- 将 `scheduleCron` 清空时，若实例正在运行，会停止自动调度，但实例仍可保留 `running`
+- 同一实例存在执行锁；若上一次执行未结束，本次 cron tick 会被跳过以避免并发执行
 
 ## 调度服务职责
 
@@ -29,6 +37,8 @@
 
 实例创建后若状态为 `paused`，不会自动执行；切换到 `running` 后才会开始调度。
 
+如果创建时不传 `scheduleCron`，实例在进入 `running` 后会使用默认 Cron。
+
 ### 更新 Cron
 
 ```json
@@ -46,9 +56,11 @@
 ## 特点
 
 - 支持实例级别自定义调度频率
+- 未显式配置时可回退到默认 Cron
 - 支持热更新 Cron 表达式
 - 支持服务重启后的任务恢复
 - 支持手动触发，且手动触发可绕过调度限制
+- 支持运行中并发保护
 
 ## 监控建议
 

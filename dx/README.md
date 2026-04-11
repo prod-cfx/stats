@@ -148,7 +148,6 @@ dx/
 - `quantify`
 - `front`
 - `admin`
-- `telegram-bot`
 - `development`
 - `stack`
 - `stagewise-front`
@@ -165,7 +164,7 @@ dx/
 推荐命令：
 
 ```bash
-dx start --dev
+dx start
 dx start backend --dev
 dx start front --dev
 dx start stack
@@ -182,7 +181,7 @@ dx start stack
 - `admin`
 - `all`
 - `parallelWeb`
-- `api-contracts`
+- `contracts`
 - `affected`
 
 推荐命令：
@@ -212,7 +211,7 @@ dx build all --dev
 ```bash
 dx db migrate --dev --name init-stats-table
 dx db deploy --prod
-dx db script my-script --dev
+dx db script <script-name> --dev
 ```
 
 ### `deploy`
@@ -251,7 +250,6 @@ dx deploy admin --staging
 所以：
 
 - `dx start`
-- `dx start --dev`
 
 都会走默认开发套件。
 
