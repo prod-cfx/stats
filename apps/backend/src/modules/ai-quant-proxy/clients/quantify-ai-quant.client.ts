@@ -1,9 +1,10 @@
+import type { CodegenSessionResponseDto } from '../dto/codegen-session.response.dto'
+import type { QuantifyRequestOptions } from '@/common/clients/quantify-contract.shared'
 import { Inject, Injectable } from '@nestjs/common'
 import {
   createBackendQuantifyApiClient,
   createQuantifyAbortContext,
   QuantifyClientError,
-  QuantifyRequestOptions,
   resolveQuantifyBaseUrl,
   runQuantifyContractRequest,
 } from '@/common/clients/quantify-contract.shared'
@@ -107,7 +108,10 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async startCodegen(body: Record<string, unknown>, options: QuantifyRequestOptions & { userId: string }) {
+  async startCodegen(
+    body: Record<string, unknown>,
+    options: QuantifyRequestOptions & { userId: string },
+  ): Promise<CodegenSessionResponseDto> {
     return this.runTimedRequest(
       signal =>
         this.client.LiveLlmStrategyCodegenController_startSession(body, {
@@ -119,7 +123,10 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async getCodegenSession(sessionId: string, options: QuantifyRequestOptions & { userId: string }) {
+  async getCodegenSession(
+    sessionId: string,
+    options: QuantifyRequestOptions & { userId: string },
+  ): Promise<CodegenSessionResponseDto> {
     return this.runTimedRequest(
       signal =>
         this.client.LiveLlmStrategyCodegenController_getSession({
@@ -136,7 +143,7 @@ export class QuantifyAiQuantClient {
     sessionId: string,
     body: Record<string, unknown>,
     options: QuantifyRequestOptions & { userId: string },
-  ) {
+  ): Promise<CodegenSessionResponseDto> {
     return this.runTimedRequest(
       signal =>
         this.client.LiveLlmStrategyCodegenController_continueSession(body, {

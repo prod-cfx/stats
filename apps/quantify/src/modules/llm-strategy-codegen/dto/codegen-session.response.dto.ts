@@ -89,7 +89,7 @@ export class CodegenSessionResponseDto {
   @ApiProperty({ description: '会话 ID' })
   id!: string
 
-  @ApiPropertyOptional({ description: '当前服务端 conversation ID' })
+  @ApiPropertyOptional({ description: '当前服务端 conversation ID', nullable: true })
   conversationId?: string | null
 
   @ApiPropertyOptional({ description: '会话标题' })
@@ -110,31 +110,32 @@ export class CodegenSessionResponseDto {
   @ApiPropertyOptional({ description: '缺失字段列表', type: [String] })
   missingFields?: string[]
 
-  @ApiPropertyOptional({ description: '最终生成脚本' })
+  @ApiPropertyOptional({ description: '最终生成脚本', nullable: true })
   scriptCode?: string | null
 
-  @ApiPropertyOptional({ description: '最近一次一致性通过并发布的快照 ID' })
+  @ApiPropertyOptional({ description: '最近一次一致性通过并发布的快照 ID', nullable: true })
   publishedSnapshotId?: string | null
 
-  @ApiPropertyOptional({ description: '已发布快照绑定的参数视图（用于前端回测/展示对齐）', type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ description: '已发布快照绑定的参数视图（用于前端回测/展示对齐）', type: 'object', additionalProperties: true, nullable: true })
   publishedSnapshotParamValues?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: '策略一致性校验报告', type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ description: '策略一致性校验报告', type: 'object', additionalProperties: true, nullable: true })
   consistencyReport?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: '结构化策略描述（用于推荐）', type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ description: '结构化策略描述（用于推荐）', type: 'object', additionalProperties: true, nullable: true })
   specDesc?: Record<string, unknown> | null
 
-  @ApiPropertyOptional({ description: '当前待确认 canonical spec digest' })
+  @ApiPropertyOptional({ description: '当前待确认 canonical spec digest', nullable: true })
   canonicalDigest?: string | null
 
-  @ApiPropertyOptional({ description: '结构化语义图（确认与编译真源）', type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ description: '结构化语义图（确认与编译真源）', type: 'object', additionalProperties: true, nullable: true })
   semanticGraph?: Record<string, unknown> | null
 
   @ApiPropertyOptional({
     description: '语义图校验结果',
     type: 'object',
     additionalProperties: true,
+    nullable: true,
   })
   validationReport?: {
     ok: boolean
@@ -145,7 +146,7 @@ export class CodegenSessionResponseDto {
     }>
   } | null
 
-  @ApiPropertyOptional({ description: '发布后生成的策略实例 ID' })
+  @ApiPropertyOptional({ description: '发布后生成的策略实例 ID', nullable: true })
   strategyInstanceId?: string | null
 
   @ApiPropertyOptional({ description: '创建时间' })
@@ -154,7 +155,7 @@ export class CodegenSessionResponseDto {
   @ApiPropertyOptional({ description: '更新时间' })
   updatedAt?: string
 
-  @ApiPropertyOptional({ description: '规则语义澄清状态', type: StrategyClarificationStateDto })
+  @ApiPropertyOptional({ description: '规则语义澄清状态', type: StrategyClarificationStateDto, nullable: true })
   clarificationState?: StrategyClarificationState | null
 
   @ApiProperty({ description: '结构化澄清门控状态', type: StrategyClarificationGateDto })
@@ -164,7 +165,7 @@ export class CodegenSessionResponseDto {
     pendingItems: StrategyClarificationItem[]
   }
 
-  @ApiPropertyOptional({ description: '发布门禁结果', type: PublicationGateDto })
+  @ApiPropertyOptional({ description: '发布门禁结果', type: PublicationGateDto, nullable: true })
   publicationGate?: {
     passed: boolean
     blockingMismatches: Array<{
@@ -175,7 +176,7 @@ export class CodegenSessionResponseDto {
     }>
   } | null
 
-  @ApiPropertyOptional({ description: '拒绝原因' })
+  @ApiPropertyOptional({ description: '拒绝原因', nullable: true })
   rejectReason?: string | null
 
   @ApiPropertyOptional({ description: '引导提示' })
