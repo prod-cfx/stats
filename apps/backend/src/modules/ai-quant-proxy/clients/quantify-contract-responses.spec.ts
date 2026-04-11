@@ -1,0 +1,29 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
+
+describe('quantify contract generated responses', () => {
+  const generatedPath = resolve(__dirname, '../../../../../../packages/api-contracts/src/generated/quantify.ts')
+
+  it('does not leave critical quantify aliases with z.void responses', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+    const aliases = [
+      'AccountStrategyViewController_list',
+      'AccountStrategyViewController_detail',
+      'AccountStrategyViewController_action',
+      'AccountStrategyViewController_deploy',
+      'BacktestingController_getCapabilities',
+      'BacktestingController_createJob',
+      'BacktestingController_getJob',
+      'BacktestingController_getJobResult',
+      'BacktestingController_checkSymbolSupport',
+      'PositionsController_applyQuotes',
+    ]
+
+    for (const alias of aliases) {
+      const start = source.indexOf(`alias: '${alias}'`)
+      expect(start).toBeGreaterThanOrEqual(0)
+      const snippet = source.slice(start, start + 800)
+      expect(snippet).not.toContain('response: z.void()')
+    }
+  })
+})

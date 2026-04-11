@@ -33,21 +33,17 @@ export class AiQuantProxyService {
     authorization: string | undefined,
     query: Record<string, string | number | boolean | undefined>,
   ) {
-    return this.quantifyClient.get(this.buildPath('/account/ai-quant/strategies', {
+    return this.quantifyClient.listAccountStrategies(query, {
       userId,
-      page: query.page,
-      limit: query.limit,
-      status: query.status,
-      subscribedOnly: query.subscribedOnly,
-      excludeDraft: query.excludeDraft,
-    }), { headers: this.userHeaders(userId, authorization) }).catch(error => { throw this.mapQuantifyError(error) })
+      headers: this.userHeaders(userId, authorization),
+    }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
   async getAccountStrategyDetail(userId: string, authorization: string | undefined, strategyId: string) {
-    return this.quantifyClient.get(
-      this.buildPath(`/account/ai-quant/strategies/${encodeURIComponent(strategyId)}`, { userId }),
-      { headers: this.userHeaders(userId, authorization) },
-    ).catch(error => { throw this.mapQuantifyError(error) })
+    return this.quantifyClient.getAccountStrategyDetail(strategyId, {
+      userId,
+      headers: this.userHeaders(userId, authorization),
+    }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
   async performAccountStrategyAction(
@@ -56,10 +52,10 @@ export class AiQuantProxyService {
     strategyId: string,
     body: Record<string, unknown>,
   ) {
-    return this.quantifyClient.post(
-      `/account/ai-quant/strategies/${encodeURIComponent(strategyId)}/actions`,
+    return this.quantifyClient.performAccountStrategyAction(
+      strategyId,
       { ...body, userId },
-      { headers: this.userHeaders(userId, authorization) },
+      { userId, headers: this.userHeaders(userId, authorization) },
     ).catch(error => { throw this.mapQuantifyError(error) })
   }
 
@@ -82,10 +78,9 @@ export class AiQuantProxyService {
 
     for (let attempt = 1; attempt <= AiQuantProxyService.DEPLOY_RETRY_ATTEMPTS; attempt += 1) {
       try {
-        return await this.quantifyClient.post(
-          '/account/ai-quant/strategies/deploy',
+        return await this.quantifyClient.deployAccountStrategy(
           payload,
-          { headers: this.userHeaders(userId, authorization) },
+          { userId, headers: this.userHeaders(userId, authorization) },
         )
       } catch (error) {
         const isTransientUpstreamFailure = this.isTransientUpstreamFailure(error)
@@ -126,21 +121,23 @@ export class AiQuantProxyService {
     authorization: string | undefined,
     strategyId: string,
   ): Promise<void> {
-    await this.quantifyClient.delete<void>(
-      this.buildPath(`/account/ai-quant/strategies/${encodeURIComponent(strategyId)}`, { userId }),
-      { headers: this.userHeaders(userId, authorization) },
-    ).catch(error => { throw this.mapQuantifyError(error) })
+    await this.quantifyClient.deleteAccountStrategy(strategyId, {
+      userId,
+      headers: this.userHeaders(userId, authorization),
+    }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
   async startCodegen(userId: string, authorization: string | undefined, body: Record<string, unknown>) {
-    return this.quantifyClient.post('/llm-strategy-codegen/sessions', body, {
+    return this.quantifyClient.startCodegen(body, {
+      userId,
       timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
       headers: this.userHeaders(userId, authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
   async getCodegenSession(userId: string, authorization: string | undefined, sessionId: string) {
-    return this.quantifyClient.get(`/llm-strategy-codegen/sessions/${encodeURIComponent(sessionId)}`, {
+    return this.quantifyClient.getCodegenSession(sessionId, {
+      userId,
       timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
       headers: this.userHeaders(userId, authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
@@ -152,75 +149,70 @@ export class AiQuantProxyService {
     sessionId: string,
     body: Record<string, unknown>,
   ) {
-    return this.quantifyClient.post(`/llm-strategy-codegen/sessions/${encodeURIComponent(sessionId)}/messages`, body, {
+    return this.quantifyClient.continueCodegen(sessionId, body, {
+      userId,
       timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
       headers: this.userHeaders(userId, authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
   async listLlmInstances(userId: string | undefined, query: Record<string, string | number | undefined>) {
-    return this.quantifyClient.get(this.buildPath('/llm-strategy-instances', {
+    return this.quantifyClient.listLlmInstances({
       page: query.page,
       limit: query.limit,
       llmModel: query.llmModel,
       strategyId: query.strategyId,
       userId,
-    })).catch(error => { throw this.mapQuantifyError(error) })
+    }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
   async getLlmInstanceDetail(id: string, userId?: string) {
-    return this.quantifyClient.get(
-      this.buildPath(`/llm-strategy-instances/${encodeURIComponent(id)}`, { userId }),
-    ).catch(error => { throw this.mapQuantifyError(error) })
+    return this.quantifyClient.getLlmInstanceDetail(id, userId).catch(error => { throw this.mapQuantifyError(error) })
   }
 
   async listLlmInstanceSignals(userId: string, id: string, query: Record<string, string | number | undefined>) {
-    return this.quantifyClient.get(this.buildPath(`/llm-strategy-instances/${encodeURIComponent(id)}/signals`, {
+    return this.quantifyClient.listLlmInstanceSignals(id, {
       userId,
       page: query.page,
       limit: query.limit,
-    })).catch(error => { throw this.mapQuantifyError(error) })
+    }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
   async createLlmSubscription(userId: string, body: Record<string, unknown>) {
-    return this.quantifyClient.post('/llm-strategy-subscriptions', {
+    return this.quantifyClient.createLlmSubscription({
       ...body,
       userId,
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
   async listLlmSubscriptions(userId: string, query: Record<string, string | number | undefined>) {
-    return this.quantifyClient.get(this.buildPath('/llm-strategy-subscriptions', {
+    return this.quantifyClient.listLlmSubscriptions({
       userId,
       page: query.page,
       limit: query.limit,
       status: query.status,
-    })).catch(error => { throw this.mapQuantifyError(error) })
+    }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
   async getLlmSubscriptionDetail(userId: string, subscriptionId: string) {
-    return this.quantifyClient.get(this.buildPath(`/llm-strategy-subscriptions/${encodeURIComponent(subscriptionId)}`, {
-      userId,
-    })).catch(error => { throw this.mapQuantifyError(error) })
+    return this.quantifyClient.getLlmSubscriptionDetail(subscriptionId, userId).catch(error => { throw this.mapQuantifyError(error) })
   }
 
   async updateLlmSubscription(userId: string, subscriptionId: string, body: Record<string, unknown>) {
-    return this.quantifyClient.patch(`/llm-strategy-subscriptions/${encodeURIComponent(subscriptionId)}`, {
+    return this.quantifyClient.updateLlmSubscription(subscriptionId, {
       ...body,
       userId,
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
   async cancelLlmSubscription(userId: string, subscriptionId: string) {
-    return this.quantifyClient.delete(this.buildPath(`/llm-strategy-subscriptions/${encodeURIComponent(subscriptionId)}`, {
-      userId,
-    })).catch(error => { throw this.mapQuantifyError(error) })
+    return this.quantifyClient.cancelLlmSubscription(subscriptionId, userId).catch(error => { throw this.mapQuantifyError(error) })
   }
 
   async getBacktestCapabilities(authorization: string | undefined, requestId?: string) {
     for (let attempt = 1; attempt <= AiQuantProxyService.BACKTEST_CAPABILITIES_RETRY_ATTEMPTS; attempt += 1) {
       try {
-        return await this.quantifyClient.get('/backtesting/capabilities', {
+        return await this.quantifyClient.getBacktestCapabilities({
           headers: this.proxyHeaders(authorization, requestId),
         })
       } catch (error) {
@@ -254,7 +246,8 @@ export class AiQuantProxyService {
     body: Record<string, unknown>,
     requestId?: string,
   ) {
-    return this.quantifyClient.post('/backtesting/jobs', body, {
+    return this.quantifyClient.createBacktestJob(body, {
+      userId,
       headers: this.userProxyHeaders(userId, authorization, requestId),
     }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
@@ -265,31 +258,24 @@ export class AiQuantProxyService {
     body: Record<string, unknown>,
     requestId?: string,
   ) {
-    return this.quantifyClient.post('/backtesting/symbols/check', body, {
+    return this.quantifyClient.checkBacktestSymbolSupport(body, {
+      userId,
       headers: this.userProxyHeaders(userId, authorization, requestId),
     }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
 
   async getBacktestJob(userId: string, authorization: string | undefined, id: string, requestId?: string) {
-    return this.quantifyClient.get(`/backtesting/jobs/${encodeURIComponent(id)}`, {
+    return this.quantifyClient.getBacktestJob(id, {
+      userId,
       headers: this.userProxyHeaders(userId, authorization, requestId),
     }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
   }
 
   async getBacktestJobResult(userId: string, authorization: string | undefined, id: string, requestId?: string) {
-    return this.quantifyClient.get(`/backtesting/jobs/${encodeURIComponent(id)}/result`, {
+    return this.quantifyClient.getBacktestJobResult(id, {
+      userId,
       headers: this.userProxyHeaders(userId, authorization, requestId),
     }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
-  }
-
-  private buildPath(path: string, query: Record<string, string | number | boolean | undefined>) {
-    const params = new URLSearchParams()
-    for (const [key, value] of Object.entries(query)) {
-      if (value === undefined || value === null || value === '') continue
-      params.set(key, String(value))
-    }
-    const queryString = params.toString()
-    return queryString.length > 0 ? `${path}?${queryString}` : path
   }
 
   private userHeaders(userId: string, authorization: string | undefined) {

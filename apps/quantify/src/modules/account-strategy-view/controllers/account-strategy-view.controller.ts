@@ -1,16 +1,27 @@
-import type { AccountStrategyDetailResponseDto } from '../dto/account-strategy-detail.response.dto'
-import type { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
-import type { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { Transactional } from '@nestjs-cls/transactional'
-import { Body, Controller, Delete, Get, Headers, Param, Post, Query } from '@nestjs/common'
+import {
+  ApiExtraModels,
+  ApiHeader,
+  ApiNoContentResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiTags,
+  getSchemaPath,
+} from '@nestjs/swagger'
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Post, Query } from '@nestjs/common'
 import { AccountStrategyActionDto } from '../dto/account-strategy-action.dto'
+import { AccountStrategyDetailResponseDto } from '../dto/account-strategy-detail.response.dto'
 import { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
+import { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
 import { AccountStrategyListQueryDto } from '../dto/account-strategy-list-query.dto'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { AccountStrategyCallerIdentityService } from '../services/account-strategy-caller-identity.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { AccountStrategyViewService } from '../services/account-strategy-view.service'
 
+@ApiTags('account-ai-quant-strategies')
+@ApiExtraModels(BasePaginationResponseDto, AccountStrategyListItemDto, AccountStrategyDetailResponseDto)
 @Controller('account/ai-quant/strategies')
 export class AccountStrategyViewController {
   // Keep DTOs as runtime values so Nest can emit decorator metadata for body/query binding.
@@ -26,6 +37,24 @@ export class AccountStrategyViewController {
   ) {}
 
   @Get()
+  @ApiOperation({ summary: '获取当前用户的 AI Quant 策略列表' })
+  @ApiHeader({ name: 'authorization', required: false })
+  @ApiHeader({ name: 'x-user-id', required: false })
+  @ApiOkResponse({
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(BasePaginationResponseDto) },
+        {
+          properties: {
+            items: {
+              type: 'array',
+              items: { $ref: getSchemaPath(AccountStrategyListItemDto) },
+            },
+          },
+        },
+      ],
+    },
+  })
   async list(
     @Query() query: AccountStrategyListQueryDto,
     @Headers('authorization') authorization?: string,
@@ -39,6 +68,10 @@ export class AccountStrategyViewController {
   }
 
   @Get(':id')
+  @ApiOperation({ summary: '获取当前用户的 AI Quant 策略详情' })
+  @ApiHeader({ name: 'authorization', required: false })
+  @ApiHeader({ name: 'x-user-id', required: false })
+  @ApiOkResponse({ type: AccountStrategyDetailResponseDto })
   async detail(
     @Param('id') id: string,
     @Headers('authorization') authorization?: string,
@@ -50,6 +83,10 @@ export class AccountStrategyViewController {
 
   @Transactional()
   @Post(':id/actions')
+  @ApiOperation({ summary: '对当前用户的 AI Quant 策略执行操作' })
+  @ApiHeader({ name: 'authorization', required: false })
+  @ApiHeader({ name: 'x-user-id', required: false })
+  @ApiOkResponse({ type: AccountStrategyDetailResponseDto })
   async action(
     @Param('id') id: string,
     @Body() dto: AccountStrategyActionDto,
@@ -65,6 +102,10 @@ export class AccountStrategyViewController {
 
   @Transactional()
   @Post('deploy')
+  @ApiOperation({ summary: '部署当前用户的 AI Quant 策略' })
+  @ApiHeader({ name: 'authorization', required: false })
+  @ApiHeader({ name: 'x-user-id', required: false })
+  @ApiOkResponse({ type: AccountStrategyDetailResponseDto })
   async deploy(
     @Body() dto: AccountStrategyDeployDto,
     @Headers('authorization') authorization?: string,
@@ -79,6 +120,11 @@ export class AccountStrategyViewController {
 
   @Transactional()
   @Delete(':id')
+  @HttpCode(204)
+  @ApiOperation({ summary: '删除当前用户的 AI Quant 策略' })
+  @ApiHeader({ name: 'authorization', required: false })
+  @ApiHeader({ name: 'x-user-id', required: false })
+  @ApiNoContentResponse({ description: '删除成功' })
   async remove(
     @Param('id') id: string,
     @Headers('authorization') authorization?: string,

@@ -1,224 +1,329 @@
 import { Inject, Injectable } from '@nestjs/common'
-import { normalizeAppEnv } from '@/common/env/env.accessor'
+import {
+  createBackendQuantifyApiClient,
+  createQuantifyAbortContext,
+  QuantifyClientError,
+  QuantifyRequestOptions,
+  runQuantifyContractRequest,
+} from '@/common/clients/quantify-contract.shared'
 import { EnvService } from '@/common/services/env.service'
-
-interface QuantifyErrorPayload {
-  status?: number
-  error?: {
-    code?: string
-    args?: Record<string, unknown>
-  }
-  message?: string
-}
-
-interface QuantifyRequestOptions extends RequestInit {
-  timeoutMs?: number
-}
-
-const ENV_PLACEHOLDER = '__SET_IN_env.local__'
-const INTERNAL_QUANTIFY_API_BASE_URL = 'http://127.0.0.1:3010/api/v1'
-const STAGING_PUBLIC_QUANTIFY_HOSTS = new Set([
-  'cfx-quantify-staging.devbase.cloud',
-  'cfx-quantify-stg.devbase.cloud',
-])
-
-function tryParseJson<T>(raw: string): T | null {
-  if (!raw.trim()) return null
-  try {
-    return JSON.parse(raw) as T
-  }
-  catch {
-    return null
-  }
-}
-
-function normalizeQuantifyBaseUrl(raw: string): string {
-  const trimmed = raw.trim().replace(/\/+$/, '')
-  try {
-    const parsed = new URL(trimmed)
-    const normalizedPath = parsed.pathname.replace(/\/+$/, '')
-    if (/\/api\/v\d+$/i.test(normalizedPath)) {
-      return trimmed
-    }
-    if (normalizedPath === '' || normalizedPath === '/') {
-      return `${trimmed}/api/v1`
-    }
-    return trimmed
-  } catch {
-    if (/\/api\/v\d+$/i.test(trimmed)) {
-      return trimmed
-    }
-    if (!trimmed.includes('/')) {
-      return `${trimmed}/api/v1`
-    }
-    return trimmed
-  }
-}
-
-function normalizeConfiguredUrl(value: string | undefined): string | undefined {
-  const normalized = value?.trim()
-  if (!normalized || normalized === ENV_PLACEHOLDER) {
-    return undefined
-  }
-  return normalized
-}
-
-function shouldBypassPublicQuantifyGateway(appEnv: string | undefined, configuredUrl: string | undefined): boolean {
-  if (!configuredUrl) return false
-  if (normalizeAppEnv(appEnv) !== 'staging') return false
-  try {
-    return STAGING_PUBLIC_QUANTIFY_HOSTS.has(new URL(configuredUrl).hostname)
-  } catch {
-    return false
-  }
-}
-
-export class QuantifyClientError extends Error {
-  constructor(
-    message: string,
-    public readonly status: number,
-    public readonly code?: string,
-    public readonly args?: Record<string, unknown>,
-  ) {
-    super(message)
-    this.name = 'QuantifyClientError'
-  }
-}
 
 @Injectable()
 export class QuantifyAiQuantClient {
   private static readonly DEFAULT_REQUEST_TIMEOUT_MS = 10_000
   private static readonly MIN_REQUEST_TIMEOUT_MS = 1_000
+  private readonly client = createBackendQuantifyApiClient(this.env)
 
   constructor(@Inject(EnvService) private readonly env: EnvService) {}
 
-  async get<T>(path: string, init?: QuantifyRequestOptions): Promise<T> {
-    return this.request<T>(path, { method: 'GET', ...init })
+  async listAccountStrategies(
+    query: Record<string, string | number | boolean | undefined>,
+    options: QuantifyRequestOptions & { userId: string },
+  ) {
+    return this.runRequest(
+      signal =>
+        this.client.AccountStrategyViewController_list({
+          queries: {
+            userId: options.userId,
+            page: numberOrUndefined(query.page),
+            limit: numberOrUndefined(query.limit),
+            status: stringOrUndefined(query.status) as 'draft' | 'running' | 'stopped' | undefined,
+            subscribedOnly: booleanOrUndefined(query.subscribedOnly),
+            excludeDraft: booleanOrUndefined(query.excludeDraft),
+          },
+          headers: buildUserHeaders(options.userId, options.headers?.authorization),
+          signal,
+        }) as Promise<unknown>,
+      options,
+    )
   }
 
-  async post<T>(path: string, body?: unknown, init?: QuantifyRequestOptions): Promise<T> {
-    return this.request<T>(path, {
-      method: 'POST',
-      body: body === undefined ? undefined : JSON.stringify(body),
-      ...init,
-    })
+  async getAccountStrategyDetail(strategyId: string, options: QuantifyRequestOptions & { userId: string }) {
+    return this.runRequest(
+      signal =>
+        this.client.AccountStrategyViewController_detail({
+          params: { id: strategyId },
+          headers: buildUserHeaders(options.userId, options.headers?.authorization),
+          signal,
+        }) as Promise<unknown>,
+      options,
+    )
   }
 
-  async patch<T>(path: string, body?: unknown, init?: QuantifyRequestOptions): Promise<T> {
-    return this.request<T>(path, {
-      method: 'PATCH',
-      body: body === undefined ? undefined : JSON.stringify(body),
-      ...init,
-    })
+  async performAccountStrategyAction(
+    strategyId: string,
+    body: Record<string, unknown>,
+    options: QuantifyRequestOptions & { userId: string },
+  ) {
+    return this.runRequest(
+      signal =>
+        this.client.AccountStrategyViewController_action(body, {
+          params: { id: strategyId },
+          headers: buildUserHeaders(options.userId, options.headers?.authorization),
+          signal,
+        }) as Promise<unknown>,
+      options,
+    )
   }
 
-  async delete<T>(path: string, init?: QuantifyRequestOptions): Promise<T> {
-    return this.request<T>(path, { method: 'DELETE', ...init })
+  async deployAccountStrategy(body: Record<string, unknown>, options: QuantifyRequestOptions & { userId: string }) {
+    return this.runRequest(
+      signal =>
+        this.client.AccountStrategyViewController_deploy(body, {
+          headers: buildUserHeaders(options.userId, options.headers?.authorization),
+          signal,
+        }) as Promise<unknown>,
+      options,
+    )
   }
 
-  private async request<T>(path: string, init?: QuantifyRequestOptions): Promise<T> {
-    const { timeoutMs: timeoutOverrideMs, ...fetchInit } = init ?? {}
-    const timeoutMs = this.getRequestTimeoutMs(timeoutOverrideMs)
-    const timeoutController = new AbortController()
-    const upstreamSignal = fetchInit.signal
-    const onUpstreamAbort = () => timeoutController.abort(upstreamSignal?.reason)
-    if (upstreamSignal) {
-      if (upstreamSignal.aborted) {
-        timeoutController.abort(upstreamSignal.reason)
-      } else {
-        upstreamSignal.addEventListener('abort', onUpstreamAbort, { once: true })
-      }
-    }
-    const timeout = setTimeout(() => timeoutController.abort(`timeout after ${timeoutMs}ms`), timeoutMs)
+  async deleteAccountStrategy(strategyId: string, options: QuantifyRequestOptions & { userId: string }): Promise<void> {
+    await this.runRequest<void>(
+      signal =>
+        this.client.AccountStrategyViewController_remove(undefined, {
+          params: { id: strategyId },
+          headers: buildUserHeaders(options.userId, options.headers?.authorization),
+          signal,
+        }) as Promise<unknown>,
+      options,
+    )
+  }
 
-    let response: Response
+  async startCodegen(body: Record<string, unknown>, options: QuantifyRequestOptions & { userId: string }) {
+    return this.runTimedRequest(
+      signal =>
+        this.client.LiveLlmStrategyCodegenController_startSession(body, {
+          headers: buildUserHeaders(options.userId, options.headers?.authorization),
+          signal,
+        }),
+      options.timeoutMs,
+      options.signal,
+    )
+  }
+
+  async getCodegenSession(sessionId: string, options: QuantifyRequestOptions & { userId: string }) {
+    return this.runTimedRequest(
+      signal =>
+        this.client.LiveLlmStrategyCodegenController_getSession({
+          params: { id: sessionId },
+          headers: buildUserHeaders(options.userId, options.headers?.authorization),
+          signal,
+        }),
+      options.timeoutMs,
+      options.signal,
+    )
+  }
+
+  async continueCodegen(
+    sessionId: string,
+    body: Record<string, unknown>,
+    options: QuantifyRequestOptions & { userId: string },
+  ) {
+    return this.runTimedRequest(
+      signal =>
+        this.client.LiveLlmStrategyCodegenController_continueSession(body, {
+          params: { id: sessionId },
+          headers: buildUserHeaders(options.userId, options.headers?.authorization),
+          signal,
+        }),
+      options.timeoutMs,
+      options.signal,
+    )
+  }
+
+  async listLlmInstances(query: Record<string, string | number | undefined>) {
+    return this.runRequest(() =>
+      this.client.LiveLlmStrategyInstancesController_list({
+        queries: {
+          page: numberOrUndefined(query.page),
+          limit: numberOrUndefined(query.limit),
+          llmModel: stringOrUndefined(query.llmModel),
+          strategyId: stringOrUndefined(query.strategyId),
+          userId: stringOrUndefined(query.userId),
+        },
+      }),
+    )
+  }
+
+  async getLlmInstanceDetail(id: string, userId?: string) {
+    return this.runRequest(() =>
+      this.client.LiveLlmStrategyInstancesController_detail({
+        params: { id },
+        queries: { userId: stringOrUndefined(userId) },
+      }),
+    )
+  }
+
+  async listLlmInstanceSignals(
+    id: string,
+    query: Record<string, string | number | undefined> & { userId: string },
+  ) {
+    return this.runRequest(() =>
+      this.client.LiveLlmStrategyInstancesController_listSignals({
+        params: { id },
+        queries: {
+          userId: query.userId,
+          page: numberOrUndefined(query.page),
+          limit: numberOrUndefined(query.limit),
+        },
+      }),
+    )
+  }
+
+  async createLlmSubscription(body: Record<string, unknown>) {
+    return this.runRequest(() =>
+      this.client.LlmStrategySubscriptionsController_subscribe(body as never),
+    )
+  }
+
+  async listLlmSubscriptions(query: Record<string, string | number | undefined> & { userId: string }) {
+    return this.runRequest(() =>
+      this.client.LlmStrategySubscriptionsController_listMySubscriptions({
+        queries: {
+          userId: query.userId,
+          page: numberOrUndefined(query.page),
+          limit: numberOrUndefined(query.limit),
+          status: stringOrUndefined(query.status) as 'active' | 'paused' | 'cancelled' | undefined,
+        },
+      }),
+    )
+  }
+
+  async getLlmSubscriptionDetail(subscriptionId: string, userId: string) {
+    return this.runRequest(() =>
+      this.client.LlmStrategySubscriptionsController_detail({
+        params: { subscriptionId },
+        queries: { userId },
+      }),
+    )
+  }
+
+  async updateLlmSubscription(subscriptionId: string, body: Record<string, unknown>) {
+    return this.runRequest(() =>
+      this.client.LlmStrategySubscriptionsController_update(body as never, {
+        params: { subscriptionId },
+      }),
+    )
+  }
+
+  async cancelLlmSubscription(subscriptionId: string, userId: string): Promise<void> {
+    await this.runRequest<void>(() =>
+      this.client.LlmStrategySubscriptionsController_cancel(undefined, {
+        params: { subscriptionId },
+        queries: { userId },
+      }),
+    )
+  }
+
+  async getBacktestCapabilities(options: QuantifyRequestOptions) {
+    return this.runRequest(
+      signal =>
+        this.client.BacktestingController_getCapabilities({
+          headers: buildProxyHeaders(options.headers?.authorization, headerValue(options.headers, 'x-request-id')),
+          signal,
+        }) as Promise<unknown>,
+      options,
+    )
+  }
+
+  async createBacktestJob(
+    body: Record<string, unknown>,
+    options: QuantifyRequestOptions & { userId: string },
+  ) {
+    return this.runRequest(
+      signal =>
+        this.client.BacktestingController_createJob(body, {
+          headers: buildUserProxyHeaders(
+            options.userId,
+            options.headers?.authorization,
+            headerValue(options.headers, 'x-request-id'),
+          ),
+          signal,
+        }) as Promise<unknown>,
+      options,
+    )
+  }
+
+  async checkBacktestSymbolSupport(
+    body: Record<string, unknown>,
+    options: QuantifyRequestOptions & { userId: string },
+  ) {
+    return this.runRequest(
+      signal =>
+        this.client.BacktestingController_checkSymbolSupport(body, {
+          headers: buildUserProxyHeaders(
+            options.userId,
+            options.headers?.authorization,
+            headerValue(options.headers, 'x-request-id'),
+          ),
+          signal,
+        }) as Promise<unknown>,
+      options,
+    )
+  }
+
+  async getBacktestJob(id: string, options: QuantifyRequestOptions & { userId: string }) {
+    return this.runRequest(
+      signal =>
+        this.client.BacktestingController_getJob({
+          params: { id },
+          headers: buildUserProxyHeaders(
+            options.userId,
+            options.headers?.authorization,
+            headerValue(options.headers, 'x-request-id'),
+          ),
+          signal,
+        }) as Promise<unknown>,
+      options,
+    )
+  }
+
+  async getBacktestJobResult(id: string, options: QuantifyRequestOptions & { userId: string }) {
+    return this.runRequest(
+      signal =>
+        this.client.BacktestingController_getJobResult({
+          params: { id },
+          headers: buildUserProxyHeaders(
+            options.userId,
+            options.headers?.authorization,
+            headerValue(options.headers, 'x-request-id'),
+          ),
+          signal,
+        }) as Promise<unknown>,
+      options,
+    )
+  }
+
+  private async runRequest<T>(
+    request: (signal?: AbortSignal) => Promise<unknown>,
+    options?: QuantifyRequestOptions,
+  ): Promise<T> {
+    const abortContext = createQuantifyAbortContext(undefined, options?.signal)
     try {
-      response = await fetch(`${this.baseUrl()}${path}`, {
-        ...fetchInit,
-        signal: timeoutController.signal,
-        headers: {
-          'content-type': 'application/json',
-          ...(fetchInit.headers ?? {}),
-        },
-      })
-    }
-    catch (error) {
-      throw new QuantifyClientError(
-        'Quantify request failed',
-        502,
-        'UPSTREAM_REQUEST_FAILED',
-        {
-          cause: error instanceof Error ? error.message : String(error),
-        },
+      return await runQuantifyContractRequest<T>(
+        () => request(abortContext?.signal),
+        abortContext?.getAbortReason,
       )
+    } finally {
+      abortContext?.cleanup()
     }
-    finally {
-      clearTimeout(timeout)
-      if (upstreamSignal) {
-        upstreamSignal.removeEventListener('abort', onUpstreamAbort)
-      }
-    }
-
-    if (response.status === 204) {
-      return undefined as T
-    }
-
-    const rawPayload = await response.text()
-    const payload = tryParseJson<T | { data?: T } | QuantifyErrorPayload>(rawPayload)
-
-    if (!response.ok) {
-      if (!payload) {
-        throw new QuantifyClientError(
-          'Quantify returned a non-JSON error response',
-          response.status,
-          'UPSTREAM_INVALID_RESPONSE',
-          { upstreamBody: rawPayload.slice(0, 500) },
-        )
-      }
-
-      const errorPayload = payload as QuantifyErrorPayload
-      throw new QuantifyClientError(
-        errorPayload.message || 'Quantify request failed',
-        errorPayload.status || response.status,
-        errorPayload.error?.code,
-        errorPayload.error?.args,
-      )
-    }
-
-    if (!payload) {
-      throw new QuantifyClientError(
-        'Quantify returned a non-JSON success response',
-        502,
-        'UPSTREAM_INVALID_RESPONSE',
-        { upstreamBody: rawPayload.slice(0, 500) },
-      )
-    }
-
-    if (payload && typeof payload === 'object' && 'data' in payload) {
-      return (payload as { data: T }).data
-    }
-
-    return payload as T
   }
 
-  private baseUrl(): string {
-    const explicitApiBase = normalizeConfiguredUrl(this.env.getString('QUANTIFY_API_BASE_URL'))
-    if (shouldBypassPublicQuantifyGateway(this.env.getString('APP_ENV'), explicitApiBase)) {
-      return INTERNAL_QUANTIFY_API_BASE_URL
+  private async runTimedRequest<T>(
+    request: (signal?: AbortSignal) => Promise<unknown>,
+    timeoutMs?: number,
+    upstreamSignal?: AbortSignal,
+  ): Promise<T> {
+    const effectiveTimeoutMs = this.getRequestTimeoutMs(timeoutMs)
+    const abortContext = createQuantifyAbortContext(effectiveTimeoutMs, upstreamSignal)
+    try {
+      return await runQuantifyContractRequest<T>(
+        () => request(abortContext?.signal),
+        abortContext?.getAbortReason,
+      )
+    } finally {
+      abortContext?.cleanup()
     }
-    if (explicitApiBase) {
-      return normalizeQuantifyBaseUrl(explicitApiBase)
-    }
-
-    const base = normalizeConfiguredUrl(this.env.getString('QUANTIFY_BASE_URL'))
-    if (shouldBypassPublicQuantifyGateway(this.env.getString('APP_ENV'), base)) {
-      return INTERNAL_QUANTIFY_API_BASE_URL
-    }
-    if (base) {
-      return normalizeQuantifyBaseUrl(base)
-    }
-
-    return 'http://localhost:3010/api/v1'
   }
 
   private getRequestTimeoutMs(overrideMs?: number): number {
@@ -238,3 +343,47 @@ export class QuantifyAiQuantClient {
     )
   }
 }
+
+function buildUserHeaders(userId: string, authorization: string | undefined): Record<string, string> {
+  return {
+    'x-user-id': userId,
+    ...(authorization ? { authorization } : {}),
+  }
+}
+
+function buildProxyHeaders(authorization: string | undefined, requestId?: string): Record<string, string> {
+  return {
+    ...(authorization ? { authorization } : {}),
+    ...(requestId ? { 'x-request-id': requestId } : {}),
+  }
+}
+
+function buildUserProxyHeaders(userId: string, authorization: string | undefined, requestId?: string): Record<string, string> {
+  return {
+    ...buildUserHeaders(userId, authorization),
+    ...(requestId ? { 'x-request-id': requestId } : {}),
+  }
+}
+
+function headerValue(headers: Record<string, string> | undefined, name: string): string | undefined {
+  return headers?.[name]
+}
+
+function numberOrUndefined(value: string | number | boolean | undefined): number | undefined {
+  if (typeof value === 'number') return value
+  if (typeof value === 'string' && value.trim().length > 0) return Number(value)
+  return undefined
+}
+
+function booleanOrUndefined(value: string | number | boolean | undefined): boolean | undefined {
+  if (typeof value === 'boolean') return value
+  if (value === 'true' || value === '1' || value === 1) return true
+  if (value === 'false' || value === '0' || value === 0) return false
+  return undefined
+}
+
+function stringOrUndefined(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+export { QuantifyClientError }

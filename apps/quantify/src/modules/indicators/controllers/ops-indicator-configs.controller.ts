@@ -1,12 +1,9 @@
-import type {
-  CreateIndicatorConfigDto,
-  IndicatorConfigListQueryDto,
-  UpdateIndicatorConfigDto,
-} from '../dto/ops-indicator-config.dto'
 import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Delete, Get, HttpCode, Param, Patch, Post, Query } from '@nestjs/common'
 import {
+  ApiBody,
   ApiExtraModels,
+  ApiNoContentResponse,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
@@ -15,10 +12,19 @@ import {
 import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { mapIndicatorType, mapTimeframe, reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时注入 IndicatorConfigService
+import {
+  CreateIndicatorConfigDto,
+  IndicatorConfigListQueryDto,
+  UpdateIndicatorConfigDto,
+} from '../dto/ops-indicator-config.dto'
+import {
+  IndicatorConfigCacheReloadResponseDto,
+  IndicatorConfigResponseDto,
+} from '../dto/indicator-config.response.dto'
 import { IndicatorConfigService } from '../services/indicator-config.service'
 
 @ApiTags('ops-indicator-configs')
-@ApiExtraModels(BasePaginationResponseDto)
+@ApiExtraModels(BasePaginationResponseDto, IndicatorConfigResponseDto)
 @Controller('ops/indicator-configs')
 export class OpsIndicatorConfigsController {
   constructor(private readonly indicatorConfigService: IndicatorConfigService) {}
@@ -33,9 +39,7 @@ export class OpsIndicatorConfigsController {
           properties: {
             items: {
               type: 'array',
-              items: {
-                type: 'object',
-              },
+              items: { $ref: getSchemaPath(IndicatorConfigResponseDto) },
             },
           },
         },
@@ -64,6 +68,8 @@ export class OpsIndicatorConfigsController {
   @Transactional()
   @Post()
   @ApiOperation({ summary: '创建指标配置（运营接口）' })
+  @ApiBody({ type: CreateIndicatorConfigDto })
+  @ApiOkResponse({ type: IndicatorConfigResponseDto })
   async create(@Body() dto: CreateIndicatorConfigDto) {
     const created = await this.indicatorConfigService.create({
       symbolId: dto.symbolId,
@@ -84,6 +90,8 @@ export class OpsIndicatorConfigsController {
   @Transactional()
   @Patch(':id')
   @ApiOperation({ summary: '更新指标配置（运营接口）' })
+  @ApiBody({ type: UpdateIndicatorConfigDto })
+  @ApiOkResponse({ type: IndicatorConfigResponseDto })
   async update(@Param('id') id: string, @Body() dto: UpdateIndicatorConfigDto) {
     const updated = await this.indicatorConfigService.update(id, {
       symbolId: dto.symbolId,
@@ -105,6 +113,7 @@ export class OpsIndicatorConfigsController {
   @Delete(':id')
   @HttpCode(204)
   @ApiOperation({ summary: '删除指标配置（运营接口）' })
+  @ApiNoContentResponse({ description: '删除成功' })
   async remove(@Param('id') id: string) {
     await this.indicatorConfigService.delete(id)
   }
@@ -112,6 +121,7 @@ export class OpsIndicatorConfigsController {
   @Transactional()
   @Patch('reload/cache')
   @ApiOperation({ summary: '重新加载指标配置缓存（运营接口）' })
+  @ApiOkResponse({ type: IndicatorConfigCacheReloadResponseDto })
   async reloadCache() {
     await this.indicatorConfigService.reloadAllRuntimeConfigs()
     return { success: true }

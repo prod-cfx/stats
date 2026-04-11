@@ -1,9 +1,13 @@
 import { Body, Controller, Get, Headers, Inject, Param, Post, UseGuards } from '@nestjs/common'
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
+import { ApiBearerAuth, ApiBody, ApiHeader, ApiOkResponse, ApiTags } from '@nestjs/swagger'
 import { Throttle } from '@nestjs/throttler'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
 import { AuthRateLimitGuard } from '@/modules/auth/guards/auth-rate-limit.guard'
+import {
+  BacktestingSymbolSupportRequestDto,
+  BacktestingSymbolSupportResponseDto,
+} from './dto/backtesting-symbol-support.dto'
 import { AiQuantProxyService } from './ai-quant-proxy.service'
 
 @ApiTags('backtesting')
@@ -27,13 +31,16 @@ export class BacktestingProxyController {
   }
 
   @Post('symbols/check')
+  @ApiBody({ type: BacktestingSymbolSupportRequestDto })
+  @ApiHeader({ name: 'x-request-id', required: false })
+  @ApiOkResponse({ type: BacktestingSymbolSupportResponseDto })
   async checkSymbolSupport(
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-request-id') requestId: string | undefined,
-    @Body() body: Record<string, unknown>,
+    @Body() body: BacktestingSymbolSupportRequestDto,
   ): Promise<unknown> {
-    return this.service.checkBacktestSymbolSupport(userId, authorization, body, requestId)
+    return this.service.checkBacktestSymbolSupport(userId, authorization, body as unknown as Record<string, unknown>, requestId)
   }
 
   @Post('jobs')

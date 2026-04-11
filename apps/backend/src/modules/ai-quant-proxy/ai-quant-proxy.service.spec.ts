@@ -7,10 +7,18 @@ describe('aiQuantProxyService', () => {
 
   function createService() {
     const quantifyClient = {
-      get: jest.fn(),
-      post: jest.fn(),
-      patch: jest.fn(),
-      delete: jest.fn(),
+      listAccountStrategies: jest.fn(),
+      deleteAccountStrategy: jest.fn(),
+      deployAccountStrategy: jest.fn(),
+      startCodegen: jest.fn(),
+      continueCodegen: jest.fn(),
+      getCodegenSession: jest.fn(),
+      createLlmSubscription: jest.fn(),
+      getBacktestCapabilities: jest.fn(),
+      createBacktestJob: jest.fn(),
+      checkBacktestSymbolSupport: jest.fn(),
+      getBacktestJob: jest.fn(),
+      getBacktestJobResult: jest.fn(),
     }
     const exchangeAccountsService = {
       list: jest.fn().mockResolvedValue([]),
@@ -22,7 +30,7 @@ describe('aiQuantProxyService', () => {
 
   it('injects user identity and authorization into account strategy list requests', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.get.mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 })
+    quantifyClient.listAccountStrategies.mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 })
 
     await service.listAccountStrategies('user-1', 'Bearer token-1', {
       page: 1,
@@ -32,15 +40,21 @@ describe('aiQuantProxyService', () => {
       excludeDraft: true,
     })
 
-    expect(quantifyClient.get).toHaveBeenCalledWith(
-      '/account/ai-quant/strategies?userId=user-1&page=1&limit=20&status=running&subscribedOnly=true&excludeDraft=true',
-      { headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
+    expect(quantifyClient.listAccountStrategies).toHaveBeenCalledWith(
+      {
+        page: 1,
+        limit: 20,
+        status: 'running',
+        subscribedOnly: true,
+        excludeDraft: true,
+      },
+      { userId: 'user-1', headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
     )
   })
 
   it('keeps x-user-id header when authorization is absent', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.get.mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 })
+    quantifyClient.listAccountStrategies.mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 })
 
     await service.listAccountStrategies('user-1', undefined, {
       page: 1,
@@ -50,27 +64,33 @@ describe('aiQuantProxyService', () => {
       excludeDraft: true,
     })
 
-    expect(quantifyClient.get).toHaveBeenCalledWith(
-      '/account/ai-quant/strategies?userId=user-1&page=1&limit=20&status=running&subscribedOnly=true&excludeDraft=true',
-      { headers: { 'x-user-id': 'user-1' } },
+    expect(quantifyClient.listAccountStrategies).toHaveBeenCalledWith(
+      {
+        page: 1,
+        limit: 20,
+        status: 'running',
+        subscribedOnly: true,
+        excludeDraft: true,
+      },
+      { userId: 'user-1', headers: { 'x-user-id': 'user-1' } },
     )
   })
 
   it('injects user identity and authorization into account strategy delete requests', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.delete.mockResolvedValue(undefined)
+    quantifyClient.deleteAccountStrategy.mockResolvedValue(undefined)
 
     await service.deleteAccountStrategy('user-1', 'Bearer token-1', 'strategy-1')
 
-    expect(quantifyClient.delete).toHaveBeenCalledWith(
-      '/account/ai-quant/strategies/strategy-1?userId=user-1',
-      { headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
+    expect(quantifyClient.deleteAccountStrategy).toHaveBeenCalledWith(
+      'strategy-1',
+      { userId: 'user-1', headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
     )
   })
 
   it('forwards deploy payload with publishedSnapshotId as runtime truth', async () => {
     const { service, quantifyClient, exchangeAccountsService } = createService()
-    quantifyClient.post.mockResolvedValue({ id: 'strategy-1', status: 'draft' })
+    quantifyClient.deployAccountStrategy.mockResolvedValue({ id: 'strategy-1', status: 'draft' })
     exchangeAccountsService.list.mockResolvedValue([{ id: 'acc-1' }])
 
     await service.deployAccountStrategy('user-1', 'Bearer token-1', {
@@ -80,8 +100,7 @@ describe('aiQuantProxyService', () => {
       exchangeAccountId: 'acc-1',
     })
 
-    expect(quantifyClient.post).toHaveBeenCalledWith(
-      '/account/ai-quant/strategies/deploy',
+    expect(quantifyClient.deployAccountStrategy).toHaveBeenCalledWith(
       {
         userId: 'user-1',
         name: 'My Strategy',
@@ -89,15 +108,13 @@ describe('aiQuantProxyService', () => {
         publishedSnapshotId: 'snapshot-1',
         exchangeAccountId: 'acc-1',
       },
-      {
-        headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
-      },
+      { userId: 'user-1', headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
     )
   })
 
   it('retries deploy when quantify is transiently unavailable', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.post
+    quantifyClient.deployAccountStrategy
       .mockRejectedValueOnce(new QuantifyClientError('upstream timeout', 502, 'UPSTREAM_REQUEST_FAILED'))
       .mockResolvedValueOnce({ id: 'strategy-1', status: 'draft' })
 
@@ -107,12 +124,12 @@ describe('aiQuantProxyService', () => {
       publishedSnapshotId: 'snapshot-retry-1',
     })).resolves.toEqual({ id: 'strategy-1', status: 'draft' })
 
-    expect(quantifyClient.post).toHaveBeenCalledTimes(2)
+    expect(quantifyClient.deployAccountStrategy).toHaveBeenCalledTimes(2)
   })
 
   it('does not retry deploy for business validation errors', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.post.mockRejectedValue(new QuantifyClientError(
+    quantifyClient.deployAccountStrategy.mockRejectedValue(new QuantifyClientError(
       'bad request',
       400,
       ErrorCode.BAD_REQUEST,
@@ -128,7 +145,7 @@ describe('aiQuantProxyService', () => {
       code: ErrorCode.BAD_REQUEST,
     })
 
-    expect(quantifyClient.post).toHaveBeenCalledTimes(1)
+    expect(quantifyClient.deployAccountStrategy).toHaveBeenCalledTimes(1)
   })
 
   it('returns exchange account not found before calling quantify deploy', async () => {
@@ -145,25 +162,25 @@ describe('aiQuantProxyService', () => {
       code: ErrorCode.EXCHANGE_ACCOUNT_NOT_FOUND,
     })
 
-    expect(quantifyClient.post).not.toHaveBeenCalled()
+    expect(quantifyClient.deployAccountStrategy).not.toHaveBeenCalled()
   })
 
   it('forwards codegen start payload with authorization header', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.post.mockResolvedValue({ id: 'session-1', status: 'CHECKLIST_GATE' })
+    quantifyClient.startCodegen.mockResolvedValue({ id: 'session-1', status: 'CHECKLIST_GATE' })
 
     await service.startCodegen('user-1', 'Bearer token-1', {
       initialMessage: 'build me a strategy',
       symbols: ['BTCUSDT'],
     })
 
-    expect(quantifyClient.post).toHaveBeenCalledWith(
-      '/llm-strategy-codegen/sessions',
+    expect(quantifyClient.startCodegen).toHaveBeenCalledWith(
       {
         initialMessage: 'build me a strategy',
         symbols: ['BTCUSDT'],
       },
       {
+        userId: 'user-1',
         timeoutMs: codegenTimeoutMs,
         headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
       },
@@ -172,7 +189,7 @@ describe('aiQuantProxyService', () => {
 
   it('forwards codegen continue payload without injecting userId', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.post.mockResolvedValue({ id: 'session-1', status: 'CHECKLIST_GATE' })
+    quantifyClient.continueCodegen.mockResolvedValue({ id: 'session-1', status: 'CHECKLIST_GATE' })
 
     await service.continueCodegen('user-1', 'Bearer token-1', 'session-1', {
       message: '继续',
@@ -180,14 +197,15 @@ describe('aiQuantProxyService', () => {
       confirmedCanonicalDigest: 'sha256:canonical-1',
     })
 
-    expect(quantifyClient.post).toHaveBeenCalledWith(
-      '/llm-strategy-codegen/sessions/session-1/messages',
+    expect(quantifyClient.continueCodegen).toHaveBeenCalledWith(
+      'session-1',
       {
         message: '继续',
         confirmGenerate: true,
         confirmedCanonicalDigest: 'sha256:canonical-1',
       },
       {
+        userId: 'user-1',
         timeoutMs: codegenTimeoutMs,
         headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
       },
@@ -196,13 +214,14 @@ describe('aiQuantProxyService', () => {
 
   it('proxies codegen session retrieval with authorization header', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.get.mockResolvedValue({ id: 'session-1', status: 'DRAFTING' })
+    quantifyClient.getCodegenSession.mockResolvedValue({ id: 'session-1', status: 'DRAFTING' })
 
     await service.getCodegenSession('user-1', 'Bearer token-1', 'session-1')
 
-    expect(quantifyClient.get).toHaveBeenCalledWith(
-      '/llm-strategy-codegen/sessions/session-1',
+    expect(quantifyClient.getCodegenSession).toHaveBeenCalledWith(
+      'session-1',
       {
+        userId: 'user-1',
         timeoutMs: codegenTimeoutMs,
         headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
       },
@@ -211,7 +230,7 @@ describe('aiQuantProxyService', () => {
 
   it('maps quantify client errors into domain exceptions', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.post.mockRejectedValue(new QuantifyClientError(
+    quantifyClient.createLlmSubscription.mockRejectedValue(new QuantifyClientError(
       'exchange account not found',
       404,
       ErrorCode.EXCHANGE_ACCOUNT_NOT_FOUND,
@@ -229,7 +248,7 @@ describe('aiQuantProxyService', () => {
 
   it('maps transient account strategy list upstream failures to service unavailable', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.get.mockRejectedValue(new QuantifyClientError(
+    quantifyClient.listAccountStrategies.mockRejectedValue(new QuantifyClientError(
       'Quantify returned a non-JSON error response',
       502,
       'UPSTREAM_INVALID_RESPONSE',
@@ -255,35 +274,35 @@ describe('aiQuantProxyService', () => {
 
   it('proxies backtesting capabilities with authorization header', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.get.mockResolvedValue({
+    quantifyClient.getBacktestCapabilities.mockResolvedValue({
       allowedSymbols: ['BTCUSDT'],
       allowedBaseTimeframes: ['15m'],
     })
 
     await service.getBacktestCapabilities('Bearer token-1')
 
-    expect(quantifyClient.get).toHaveBeenCalledWith('/backtesting/capabilities', {
+    expect(quantifyClient.getBacktestCapabilities).toHaveBeenCalledWith({
       headers: { authorization: 'Bearer token-1' },
     })
   })
 
   it('forwards x-request-id header to backtesting capabilities proxy', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.get.mockResolvedValue({
+    quantifyClient.getBacktestCapabilities.mockResolvedValue({
       allowedSymbols: ['BTCUSDT'],
       allowedBaseTimeframes: ['15m'],
     })
 
     await service.getBacktestCapabilities('Bearer token-1', 'req-1')
 
-    expect(quantifyClient.get).toHaveBeenCalledWith('/backtesting/capabilities', {
+    expect(quantifyClient.getBacktestCapabilities).toHaveBeenCalledWith({
       headers: { authorization: 'Bearer token-1', 'x-request-id': 'req-1' },
     })
   })
 
   it('retries backtesting capabilities on transient upstream connection failure', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.get
+    quantifyClient.getBacktestCapabilities
       .mockRejectedValueOnce(new QuantifyClientError('Quantify request failed', 502, 'UPSTREAM_REQUEST_FAILED'))
       .mockResolvedValueOnce({
         allowedSymbols: ['BTCUSDT'],
@@ -296,23 +315,23 @@ describe('aiQuantProxyService', () => {
       allowedSymbols: ['BTCUSDT'],
       allowedBaseTimeframes: ['15m'],
     })
-    expect(quantifyClient.get).toHaveBeenCalledTimes(2)
+    expect(quantifyClient.getBacktestCapabilities).toHaveBeenCalledTimes(2)
   })
 
   it('returns empty capabilities when transient upstream errors persist', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.get.mockRejectedValue(new QuantifyClientError('Quantify request failed', 502, 'UPSTREAM_REQUEST_FAILED'))
+    quantifyClient.getBacktestCapabilities.mockRejectedValue(new QuantifyClientError('Quantify request failed', 502, 'UPSTREAM_REQUEST_FAILED'))
 
     await expect(service.getBacktestCapabilities('Bearer token-1')).resolves.toEqual({
       allowedSymbols: [],
       allowedBaseTimeframes: [],
     })
-    expect(quantifyClient.get).toHaveBeenCalledTimes(3)
+    expect(quantifyClient.getBacktestCapabilities).toHaveBeenCalledTimes(3)
   })
 
   it('keeps business error semantics for backtesting capabilities', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.get.mockRejectedValue(new QuantifyClientError(
+    quantifyClient.getBacktestCapabilities.mockRejectedValue(new QuantifyClientError(
       'not found',
       404,
       ErrorCode.NOT_FOUND,
@@ -328,7 +347,7 @@ describe('aiQuantProxyService', () => {
 
   it('does not degrade internal exceptions for backtesting capabilities', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.get.mockRejectedValue(new Error('unexpected'))
+    quantifyClient.getBacktestCapabilities.mockRejectedValue(new Error('unexpected'))
 
     await expect(service.getBacktestCapabilities('Bearer token-1')).rejects.toMatchObject({
       status: 500,
@@ -339,82 +358,92 @@ describe('aiQuantProxyService', () => {
 
   it('proxies backtesting jobs and result endpoints', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.post.mockResolvedValue({ id: 'job-1', status: 'queued' })
-    quantifyClient.get.mockResolvedValue({ id: 'job-1', status: 'running' })
+    quantifyClient.createBacktestJob.mockResolvedValue({ id: 'job-1', status: 'queued' })
+    quantifyClient.getBacktestJob.mockResolvedValue({ id: 'job-1', status: 'running' })
+    quantifyClient.getBacktestJobResult.mockResolvedValue({ id: 'job-1', status: 'running' })
 
     const payload = { symbols: ['BTCUSDT'] }
     await service.createBacktestJob('user-1', 'Bearer token-1', payload)
     await service.getBacktestJob('user-1', 'Bearer token-1', 'job-1')
     await service.getBacktestJobResult('user-1', 'Bearer token-1', 'job-1')
 
-    expect(quantifyClient.post).toHaveBeenCalledWith('/backtesting/jobs', payload, {
+    expect(quantifyClient.createBacktestJob).toHaveBeenCalledWith(payload, {
+      userId: 'user-1',
       headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
     })
-    expect(quantifyClient.get).toHaveBeenNthCalledWith(1, '/backtesting/jobs/job-1', {
+    expect(quantifyClient.getBacktestJob).toHaveBeenCalledWith('job-1', {
+      userId: 'user-1',
       headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
     })
-    expect(quantifyClient.get).toHaveBeenNthCalledWith(2, '/backtesting/jobs/job-1/result', {
+    expect(quantifyClient.getBacktestJobResult).toHaveBeenCalledWith('job-1', {
+      userId: 'user-1',
       headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
     })
   })
 
   it('proxies backtesting symbol support check', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.post.mockResolvedValue({ status: 'supported' })
+    quantifyClient.checkBacktestSymbolSupport.mockResolvedValue({ status: 'supported' })
 
     await expect(service.checkBacktestSymbolSupport('user-1', 'Bearer token-1', {
       exchange: 'okx',
       symbol: 'ETHUSDC',
     })).resolves.toEqual({ status: 'supported' })
 
-    expect(quantifyClient.post).toHaveBeenCalledWith('/backtesting/symbols/check', {
+    expect(quantifyClient.checkBacktestSymbolSupport).toHaveBeenCalledWith({
       exchange: 'okx',
       symbol: 'ETHUSDC',
     }, {
+      userId: 'user-1',
       headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
     })
   })
 
   it('forwards x-request-id header for backtesting jobs endpoints', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.post.mockResolvedValue({ id: 'job-1', status: 'queued' })
-    quantifyClient.get.mockResolvedValue({ id: 'job-1', status: 'running' })
+    quantifyClient.createBacktestJob.mockResolvedValue({ id: 'job-1', status: 'queued' })
+    quantifyClient.getBacktestJob.mockResolvedValue({ id: 'job-1', status: 'running' })
+    quantifyClient.getBacktestJobResult.mockResolvedValue({ id: 'job-1', status: 'running' })
 
     await service.createBacktestJob('user-1', 'Bearer token-1', { symbols: ['BTCUSDT'] }, 'req-1')
     await service.getBacktestJob('user-1', 'Bearer token-1', 'job-1', 'req-1')
     await service.getBacktestJobResult('user-1', 'Bearer token-1', 'job-1', 'req-1')
 
-    expect(quantifyClient.post).toHaveBeenCalledWith('/backtesting/jobs', { symbols: ['BTCUSDT'] }, {
+    expect(quantifyClient.createBacktestJob).toHaveBeenCalledWith({ symbols: ['BTCUSDT'] }, {
+      userId: 'user-1',
       headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1', 'x-request-id': 'req-1' },
     })
-    expect(quantifyClient.get).toHaveBeenNthCalledWith(1, '/backtesting/jobs/job-1', {
+    expect(quantifyClient.getBacktestJob).toHaveBeenCalledWith('job-1', {
+      userId: 'user-1',
       headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1', 'x-request-id': 'req-1' },
     })
-    expect(quantifyClient.get).toHaveBeenNthCalledWith(2, '/backtesting/jobs/job-1/result', {
+    expect(quantifyClient.getBacktestJobResult).toHaveBeenCalledWith('job-1', {
+      userId: 'user-1',
       headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1', 'x-request-id': 'req-1' },
     })
   })
 
   it('forwards x-request-id header for backtesting symbol support check', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.post.mockResolvedValue({ status: 'supported' })
+    quantifyClient.checkBacktestSymbolSupport.mockResolvedValue({ status: 'supported' })
 
     await service.checkBacktestSymbolSupport('user-1', 'Bearer token-1', {
       exchange: 'okx',
       symbol: 'ETHUSDC',
     }, 'req-1')
 
-    expect(quantifyClient.post).toHaveBeenCalledWith('/backtesting/symbols/check', {
+    expect(quantifyClient.checkBacktestSymbolSupport).toHaveBeenCalledWith({
       exchange: 'okx',
       symbol: 'ETHUSDC',
     }, {
+      userId: 'user-1',
       headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1', 'x-request-id': 'req-1' },
     })
   })
 
   it('maps transient upstream error to retryable error for create backtesting job', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.post.mockRejectedValue(new QuantifyClientError('upstream timeout', 502, 'UPSTREAM_REQUEST_FAILED'))
+    quantifyClient.createBacktestJob.mockRejectedValue(new QuantifyClientError('upstream timeout', 502, 'UPSTREAM_REQUEST_FAILED'))
 
     await expect(service.createBacktestJob('user-1', 'Bearer token-1', { symbols: ['BTCUSDT'] })).rejects.toMatchObject({
       status: 503,
@@ -424,7 +453,7 @@ describe('aiQuantProxyService', () => {
 
   it('maps transient upstream error to retryable error for get backtesting job', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.get.mockRejectedValue(new QuantifyClientError('gateway', 503, 'UPSTREAM_REQUEST_FAILED'))
+    quantifyClient.getBacktestJob.mockRejectedValue(new QuantifyClientError('gateway', 503, 'UPSTREAM_REQUEST_FAILED'))
 
     await expect(service.getBacktestJob('user-1', 'Bearer token-1', 'job-1')).rejects.toMatchObject({
       status: 503,
@@ -434,7 +463,7 @@ describe('aiQuantProxyService', () => {
 
   it('maps transient upstream error to retryable error for get backtesting job result', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.get.mockRejectedValue(new QuantifyClientError('gateway', 502, 'UPSTREAM_INVALID_RESPONSE'))
+    quantifyClient.getBacktestJobResult.mockRejectedValue(new QuantifyClientError('gateway', 502, 'UPSTREAM_INVALID_RESPONSE'))
 
     await expect(service.getBacktestJobResult('user-1', 'Bearer token-1', 'job-1')).rejects.toMatchObject({
       status: 503,
@@ -444,7 +473,7 @@ describe('aiQuantProxyService', () => {
 
   it('preserves business error when creating backtesting job fails', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.post.mockRejectedValue(new QuantifyClientError(
+    quantifyClient.createBacktestJob.mockRejectedValue(new QuantifyClientError(
       'bad request',
       400,
       ErrorCode.BAD_REQUEST,

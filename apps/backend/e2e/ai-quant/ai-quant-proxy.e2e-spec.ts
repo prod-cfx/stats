@@ -6,18 +6,14 @@ import { createApiClient, createTestingApp } from '../fixtures/fixtures'
 describe('AI Quant proxy HTTP (E2E)', () => {
   let app: INestApplication
   let quantifyClient: {
-    get: jest.Mock
-    post: jest.Mock
-    patch: jest.Mock
-    delete: jest.Mock
+    listAccountStrategies: jest.Mock
+    startCodegen: jest.Mock
   }
 
   beforeAll(async () => {
     quantifyClient = {
-      get: jest.fn(),
-      post: jest.fn(),
-      patch: jest.fn(),
-      delete: jest.fn(),
+      listAccountStrategies: jest.fn(),
+      startCodegen: jest.fn(),
     }
 
     const ctx = await createTestingApp({
@@ -56,7 +52,7 @@ describe('AI Quant proxy HTTP (E2E)', () => {
   })
 
   it('should ignore client-supplied userId when listing account strategies', async () => {
-    quantifyClient.get.mockResolvedValue({
+    quantifyClient.listAccountStrategies.mockResolvedValue({
       items: [],
       total: 0,
       page: 1,
@@ -70,14 +66,20 @@ describe('AI Quant proxy HTTP (E2E)', () => {
       .set('Authorization', 'Bearer test-token')
       .expect(200)
 
-    expect(quantifyClient.get).toHaveBeenCalledWith(
-      '/account/ai-quant/strategies?userId=e2e-user-id&page=1&limit=20&status=running',
-      { headers: { 'x-user-id': 'e2e-user-id' } },
+    expect(quantifyClient.listAccountStrategies).toHaveBeenCalledWith(
+      {
+        page: 1,
+        limit: 20,
+        status: 'running',
+        subscribedOnly: undefined,
+        excludeDraft: undefined,
+      },
+      { userId: 'e2e-user-id', headers: { 'x-user-id': 'e2e-user-id', authorization: 'Bearer test-token' } },
     )
   })
 
   it('should inject authenticated user id into codegen session creation', async () => {
-    quantifyClient.post.mockResolvedValue({
+    quantifyClient.startCodegen.mockResolvedValue({
       id: 'session-1',
       status: 'CHECKLIST_GATE',
     })
@@ -93,10 +95,17 @@ describe('AI Quant proxy HTTP (E2E)', () => {
       })
       .expect(201)
 
-    expect(quantifyClient.post).toHaveBeenCalledWith('/llm-strategy-codegen/sessions', {
-      userId: 'e2e-user-id',
+    expect(quantifyClient.startCodegen).toHaveBeenCalledWith({
       initialMessage: 'build me a strategy',
       symbols: ['BTCUSDT'],
-    })
+      timeframes: undefined,
+      entryRules: undefined,
+      exitRules: undefined,
+      riskRules: undefined,
+      guideConfig: undefined,
+    }, expect.objectContaining({
+      userId: 'e2e-user-id',
+      timeoutMs: 60_000,
+    }))
   })
 })

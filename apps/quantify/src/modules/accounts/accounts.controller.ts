@@ -1,14 +1,8 @@
-import type { AccountDetailQueryDto } from './dto/account-detail-query.dto'
-import type { CreateStrategyAccountDto } from './dto/create-strategy-account.dto'
-import type { GenerateDailyReportDto } from './dto/generate-daily-report.dto'
-import type { LedgerQueryDto } from './dto/ledger-query.dto'
-import type { MutateBalanceDto } from './dto/mutate-balance.dto'
-import type { StrategyAccountListQueryDto } from './dto/strategy-account-list-query.dto'
-import type { StrategyPnlDailyQueryDto } from './dto/strategy-pnl-daily-query.dto'
 import { ErrorCode } from '@ai/shared'
 import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common'
 import {
+  ApiBody,
   ApiExtraModels,
   ApiOkResponse,
   ApiOperation,
@@ -19,8 +13,15 @@ import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AccountsService } from './accounts.service'
+import { AccountDetailQueryDto } from './dto/account-detail-query.dto'
+import { CreateStrategyAccountDto } from './dto/create-strategy-account.dto'
+import { GenerateDailyReportDto } from './dto/generate-daily-report.dto'
 import { LedgerEntryResponseDto } from './dto/ledger-entry.response.dto'
+import { LedgerQueryDto } from './dto/ledger-query.dto'
+import { MutateBalanceDto } from './dto/mutate-balance.dto'
 import { StrategyAccountResponseDto } from './dto/strategy-account.response.dto'
+import { StrategyAccountListQueryDto } from './dto/strategy-account-list-query.dto'
+import { StrategyPnlDailyQueryDto } from './dto/strategy-pnl-daily-query.dto'
 import { StrategyPnlDailyResponseDto } from './dto/strategy-pnl-daily.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { StrategyPnlReportService } from './strategy-pnl-report.service'
@@ -42,6 +43,7 @@ export class AccountsController {
   @Transactional()
   @Post()
   @ApiOperation({ summary: '创建策略账户' })
+  @ApiBody({ type: CreateStrategyAccountDto })
   @ApiOkResponse({ type: StrategyAccountResponseDto })
   async createAccount(@Body() dto: CreateStrategyAccountDto) {
     return this.accountsService.createUserStrategyAccount(dto.userId, dto)
@@ -88,6 +90,7 @@ export class AccountsController {
   @Transactional()
   @Post(':accountId/deposit')
   @ApiOperation({ summary: '账户入金' })
+  @ApiBody({ type: MutateBalanceDto })
   @ApiOkResponse({ type: StrategyAccountResponseDto })
   async deposit(
     @Param('accountId') accountId: string,
@@ -100,6 +103,7 @@ export class AccountsController {
   @Transactional()
   @Post(':accountId/withdraw')
   @ApiOperation({ summary: '账户出金' })
+  @ApiBody({ type: MutateBalanceDto })
   @ApiOkResponse({ type: StrategyAccountResponseDto })
   async withdraw(
     @Param('accountId') accountId: string,
@@ -162,6 +166,7 @@ export class AccountsController {
   @Transactional()
   @Post('reports/daily')
   @ApiOperation({ summary: '生成指定日期的日度收益' })
+  @ApiBody({ type: GenerateDailyReportDto })
   async generateDailyReport(@Body() dto: GenerateDailyReportDto) {
     const date = dto.date ? new Date(dto.date) : undefined
     return this.strategyPnlReportService.generateDailyReport(date)
