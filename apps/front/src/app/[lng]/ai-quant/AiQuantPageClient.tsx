@@ -69,6 +69,7 @@ export type { QuantParams } from './ai-quant-page-conversation'
 const CAPABILITY_FAILED_MESSAGE_KEY = 'aiQuant.messages.backtestCapabilityLoadFailed'
 const CAPABILITY_AUTO_CORRECTED_MESSAGE_KEY = 'aiQuant.messages.backtestCapabilityAutoCorrected'
 const CAPABILITY_AUTO_RETRY_DELAY_MS = 15_000
+const CAPABILITY_FAILED_MESSAGE_DEFAULT = '回测能力加载失败，请稍后重试。'
 
 const INTENT_TTL_MS = 30 * 60 * 1000
 
@@ -85,6 +86,9 @@ export function AiQuantPageClient({
   serverOwnedConversations = false,
 }: AiQuantPageClientProps = {}) {
   const { t } = useTranslation()
+  const capabilityFailedMessage = t(CAPABILITY_FAILED_MESSAGE_KEY, {
+    defaultValue: CAPABILITY_FAILED_MESSAGE_DEFAULT,
+  })
   const params = useParams<{ lng: string }>()
   const lng = params?.lng === 'en' ? 'en' : 'zh'
   const router = useRouter()
@@ -255,7 +259,7 @@ export function AiQuantPageClient({
         setConversations(prev =>
           prev.map(conv => {
             const alreadyAppended = conv.messages.some(
-              msg => msg.content === CAPABILITY_FAILED_MESSAGE_KEY,
+              msg => msg.content === CAPABILITY_FAILED_MESSAGE_KEY || msg.content === capabilityFailedMessage,
             )
             if (alreadyAppended) return conv
             return {
@@ -273,7 +277,7 @@ export function AiQuantPageClient({
                 {
                   id: `capability-failed-${Date.now()}-${conv.id}`,
                   role: 'assistant',
-                  content: CAPABILITY_FAILED_MESSAGE_KEY,
+                  content: capabilityFailedMessage,
                 },
               ],
               updatedAt: Date.now(),
@@ -302,7 +306,7 @@ export function AiQuantPageClient({
         globalThis.clearTimeout(retryTimer)
       }
     }
-  }, [session?.userId, backtestCapabilityRetryNonce])
+  }, [session?.userId, backtestCapabilityRetryNonce, capabilityFailedMessage])
 
   useEffect(() => {
     if (!session?.userId || !activeConversation?.llmCodegenSessionId) {

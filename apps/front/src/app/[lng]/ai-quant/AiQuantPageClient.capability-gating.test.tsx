@@ -10,7 +10,9 @@ const mockCheckBacktestSymbolSupport = jest.fn()
 const mockCreateBacktestJob = jest.fn()
 
 jest.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  useTranslation: () => ({
+    t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
+  }),
 }))
 
 jest.mock('next/navigation', () => ({
@@ -230,7 +232,7 @@ describe('AiQuantPageClient capability gating', () => {
 
     const runButton = container.querySelector('[data-testid="run-backtest"]') as HTMLButtonElement | null
     expect(runButton?.disabled).toBe(true)
-    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestCapabilityLoadFailed')
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('回测能力加载失败，请稍后重试。')
   })
 
   it('ready keeps strategy symbol and allows timeframe updates even when capabilities are narrower', async () => {
