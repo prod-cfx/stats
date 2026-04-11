@@ -139,4 +139,93 @@ describe('signalGeneratorService coordinator behavior', () => {
     })
     expect(publishedSnapshotsRepository.findById).toHaveBeenCalledWith('snapshot-1')
   })
+
+  it('bypasses template indicator-group discovery for published snapshot runtime execution', async () => {
+    const publishedSnapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyInstanceId: 'source-instance-1',
+        strategyTemplateId: 'template-1',
+        scriptSnapshot: 'return "snapshot-script"',
+        paramsSnapshot: {
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+          positionPct: 10,
+        },
+        lockedParams: {},
+      }),
+    }
+    const { service, generatorRepository } = createService({
+      publishedSnapshotsRepository,
+      generatorRepository: {
+        findRunningInstances: jest.fn().mockResolvedValue([]),
+        findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-1', code: 'BTCUSDT' }),
+      },
+    })
+
+    const findCandidateGroups = jest.spyOn(service as any, 'findCandidateGroups')
+    jest.spyOn(service as any, 'loadLatestBar').mockResolvedValue({ close: 100, time: new Date(), timestamp: Date.now() })
+    jest.spyOn(service as any, 'generateSignalWithAi').mockResolvedValue({
+      signalType: 'ENTRY',
+      direction: 'BUY',
+      confidence: 88,
+      entryPrice: 100,
+      stopLoss: 90,
+      takeProfit: 110,
+      rawResponse: '{"direction":"BUY"}',
+    })
+    const createSignal = jest.spyOn(service as any, 'createSignalWithCooldownAndLock').mockResolvedValue(undefined)
+    jest.spyOn(service as any, 'isStrategyLocked').mockResolvedValue(false)
+    jest.spyOn(service as any, 'resetStrategyFailure').mockResolvedValue(undefined)
+
+    await (service as any).processStrategyInstance(
+      {
+        id: 'instance-1',
+        llmModel: 'gpt-5.4',
+        params: {
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+          positionPct: 10,
+        },
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+        },
+        strategyTemplate: {
+          id: 'template-1',
+          promptTemplate: 'CHANGED_TEMPLATE_SHOULD_NOT_MATTER',
+          requiredFields: ['rsi'],
+          script: 'return "template-script"',
+        },
+      },
+      config,
+    )
+
+    expect(generatorRepository.findSymbolByCode).toHaveBeenCalledWith('BTCUSDT')
+    expect(findCandidateGroups).not.toHaveBeenCalled()
+    expect(createSignal).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'instance-1' }),
+      expect.objectContaining({
+        promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+        script: 'return "snapshot-script"',
+      }),
+      expect.objectContaining({
+        symbol: expect.objectContaining({ code: 'BTCUSDT' }),
+      }),
+      expect.anything(),
+      expect.anything(),
+      expect.any(Date),
+      expect.objectContaining({
+        signalType: 'ENTRY',
+        direction: 'BUY',
+      }),
+      expect.objectContaining({
+        executionContentSource: 'PUBLISHED_SNAPSHOT',
+        publishedSnapshotId: 'snapshot-1',
+      }),
+      false,
+    )
+  })
 })
