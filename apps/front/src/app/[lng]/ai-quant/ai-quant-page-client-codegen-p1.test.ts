@@ -215,6 +215,7 @@ describe('AiQuantPageClient codegen P1 guards', () => {
     expect(content).toContain('生成失败（CONSISTENCY_FAILED）')
     expect(content).toContain('脚本已生成，但没有通过一致性校验')
     expect(content).toContain('后端返回：脚本缺少关键规则映射')
+    expect(content).toContain('规则解释：风控规则“价格连续若干根 K 线位于布林带外”没有在最终脚本里正确实现（同时作用于多头和空头）')
   })
 
   it('reconciles only the active session before confirmGenerate and does not fan out to unrelated sessions', async () => {
