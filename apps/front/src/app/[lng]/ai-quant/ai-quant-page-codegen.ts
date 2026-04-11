@@ -135,12 +135,14 @@ function humanizeRejectReason(reason: string): string | null {
   const trimmed = reason.trim()
   if (!trimmed) return null
 
-  const missingRuleMatch = trimmed.match(/脚本缺少关键规则映射:\s*(.+)$/)
-  if (!missingRuleMatch) {
+  const missingRulePrefix = '脚本缺少关键规则映射:'
+  if (!trimmed.startsWith(missingRulePrefix)) {
     return null
   }
 
-  const rawMappings = missingRuleMatch[1]
+  const rawMappings = trimmed
+    .slice(missingRulePrefix.length)
+    .trim()
     .split(/[|,]/)
     .map(item => item.trim())
     .filter(Boolean)
