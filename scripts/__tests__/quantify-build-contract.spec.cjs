@@ -22,3 +22,11 @@ test('quantify prisma client generates into app-local output', () => {
 
   assert.match(baseSchema, /output\s*=\s*"\.\.\/\.\.\/generated\/prisma"/)
 })
+
+test('quantify prisma generation prepares the generated output path first', () => {
+  const pkg = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, 'apps/quantify/package.json'), 'utf8'),
+  )
+
+  assert.match(pkg.scripts['prisma:generate'], /prepare-generated-dir\.cjs/)
+})
