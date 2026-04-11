@@ -146,3 +146,37 @@
 1. Re-run the same focused Jest packs above.
 2. Re-run a targeted ESLint pass on the touched AI Quant front/backend/quantify files.
 3. Retry the authenticated staging checklist in `docs/ai-quant-staging-e2e-checklist.md` after quantify availability stabilizes and after an exchange account is linked for the staging user.
+
+## Current-head closeout rerun on this worker worktree
+
+Closeout rerun target:
+- Current integrated head reviewed here: `81d37fd82d37aaa0670373f0655638bd734a8def`
+- Deploy parity note: `gh run view 24283847133` reports deployed head `3e237307ea16f1b114695ce623f2c4f2b7f0a1a4`, and `git diff --name-only 3e237307..81d37fd8` only reports the staging deploy report markdown file.
+
+### Fresh verification results
+
+1. **Deploy CI metadata**
+   - `gh run view 24283847133 --json databaseId,headSha,displayTitle,status,conclusion,jobs,url`
+   - Result: **PASS** — workflow `CI` concluded `success`; jobs `deploy-front`, `deploy-admin`, `deploy-backend`, and `deploy-quantify` all concluded `success`.
+2. **Front focused Jest**
+   - `/data/stats/node_modules/.bin/jest --config apps/front/jest.config.ts --runTestsByPath apps/front/src/components/ai-quant/ClarificationGateCard.test.tsx apps/front/src/app/[lng]/ai-quant/AiQuantPageClient.codegen-confirmation.test.tsx --runInBand`
+   - Result: **PASS** (`2` suites, `22` tests)
+3. **Quantify focused Jest**
+   - `/data/stats/node_modules/.bin/jest --config apps/quantify/jest-unit.json --runTestsByPath apps/quantify/src/modules/llm-strategy-codegen/account-ai-quant-conversations.controller.spec.ts apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-conversation.service.spec.ts apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-clarification-rules.service.spec.ts --runInBand`
+   - Result: **PASS** (`3` suites, `63` tests)
+4. **Backend focused Jest**
+   - `/data/stats/node_modules/.bin/jest --config apps/backend/jest-unit.json --runTestsByPath apps/backend/src/modules/ai-quant-proxy/clients/backend-contract-responses.spec.ts apps/backend/src/modules/ai-quant-proxy/clients/quantify-contract-responses.spec.ts apps/backend/src/modules/ai-quant-proxy/clients/quantify-ai-quant-client.spec.ts apps/backend/src/modules/ai-quant-proxy/ai-quant-proxy.service.spec.ts apps/backend/src/modules/ai-quant-proxy/llm-strategy-codegen.controller.spec.ts apps/backend/src/modules/ai-quant-proxy/account-ai-quant-conversations.controller.spec.ts --runInBand`
+   - Result: **FAIL**
+   - New observed failure on the integrated head: `quantify-ai-quant-client.spec.ts` now expects timeout normalization to preserve `message: "Quantify request failed"` and `args.cause: "timeout after 1000ms"`, but the current received error has `args.cause: "{}"` and no matching message field in the assertion output.
+   - Interpretation: the branch still carries a backend-side test regression in timeout error normalization, even though the staging runtime/deploy evidence for issue #744 is documented separately.
+5. **Project typecheck**
+   - `/data/stats/node_modules/.bin/tsc --noEmit --project apps/front/tsconfig.json`
+   - `/data/stats/node_modules/.bin/tsc --noEmit --project apps/backend/tsconfig.json`
+   - `/data/stats/node_modules/.bin/tsc --noEmit --project apps/quantify/tsconfig.json`
+   - Result: **FAIL (pre-existing repo/worktree debt)**
+   - Representative front failures: missing `next/*`, `lucide-react`, `recharts`, `react-markdown`, `remark-gfm`
+   - Representative backend failures: unrelated `admin-menu.service.ts`, `whale-notification-*`, missing generated Prisma / `@zodios/core`
+   - Representative quantify failures: missing generated Prisma types plus unrelated `account-strategy-view` / `strategy-instances` typing failures
+6. **Diff hygiene**
+   - `git diff --check`
+   - Result: **PASS**
