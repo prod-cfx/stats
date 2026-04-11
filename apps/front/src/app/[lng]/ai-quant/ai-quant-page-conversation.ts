@@ -1,7 +1,6 @@
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import type { BacktestRangeInput } from '@/components/ai-quant/backtest-range'
 import type { BacktestResult } from '@/components/ai-quant/BacktestSummaryCard'
-import { readCanonicalDigest } from '@/components/ai-quant/canonical-confirmation'
 import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import type { StrategyLogicGraph } from '@/components/ai-quant/logic-graph-model'
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
@@ -13,6 +12,7 @@ import type {
   LlmSemanticGraphValidationReport,
   UserExchangeAccountStatus,
 } from '@/lib/api'
+import { readCanonicalDigest } from '@/components/ai-quant/canonical-confirmation'
 import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-graph'
 import { syncStrategyParamsFromCodegen } from '@/components/ai-quant/strategy-param-sync'
 
@@ -211,7 +211,7 @@ export function hasExplicitBacktestExecutionOverrides(values: Record<string, unk
 
 function parseBacktestExecutionNumber(
   value: unknown,
-  fallback: number,
+  _fallback: number,
 ): number {
   if (value === undefined || value === null) {
     return Number.NaN
@@ -230,7 +230,7 @@ function parseBacktestExecutionNumber(
 
 function resolveBacktestExecutionPriceSource(
   value: unknown,
-  fallback: BacktestExecutionPriceSource,
+  _fallback: BacktestExecutionPriceSource,
 ): string {
   if (value === undefined || value === null) {
     return ''
