@@ -663,11 +663,16 @@ function stripImplicitBacktestExecutionParamValues(
 function normalizeHydratedBacktestExecutionConfig(input: {
   paramValues: Record<string, unknown>
   explicit: boolean
+  publishedSnapshotId: string | null
 }): {
   paramValues: Record<string, unknown>
   explicit: boolean
 } {
   if (input.explicit) {
+    return input
+  }
+
+  if (input.publishedSnapshotId) {
     return input
   }
 
@@ -948,6 +953,7 @@ export function shouldResetIrrecoverableHydratedConversation(
 }
 
 export function hydrateConversation(item: Partial<ConversationState>): ConversationState {
+  const publishedSnapshotId = normalizePublishedSnapshotId(item.publishedSnapshotId)
   const baseParams =
     item.params && typeof item.params === 'object' && !Array.isArray(item.params)
       ? (item.params as unknown as Record<string, unknown>)
@@ -964,6 +970,7 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
   const normalizedBacktestExecutionConfig = normalizeHydratedBacktestExecutionConfig({
     paramValues: nextParamValues,
     explicit: item.backtestExecutionConfigExplicit === true,
+    publishedSnapshotId,
   })
   const fallbackParams =
     item.params && typeof item.params === 'object' && !Array.isArray(item.params)
@@ -1009,7 +1016,7 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
         : null,
     llmCodegenSessionId: normalizeCodegenSessionId(item.llmCodegenSessionId),
     publishedStrategyInstanceId: item.publishedStrategyInstanceId ?? null,
-    publishedSnapshotId: normalizePublishedSnapshotId(item.publishedSnapshotId),
+    publishedSnapshotId,
     publishedScriptCode: resolveHydratedPublishedScriptCode(item),
     publishedScriptGraphVersion: (() => {
       if (typeof item.publishedScriptGraphVersion === 'number') {
@@ -1082,7 +1089,10 @@ export function serializePersistedConversations(
   const envelope: PersistedConversationEnvelope = {
     version: normalizeConversationStorageVersion(version),
     conversations: conversations.map((conversation) => {
-      if (conversation.backtestExecutionConfigExplicit) {
+      if (
+        conversation.backtestExecutionConfigExplicit
+        || (typeof conversation.publishedSnapshotId === 'string' && conversation.publishedSnapshotId.trim().length > 0)
+      ) {
         return conversation
       }
       return {
