@@ -467,4 +467,87 @@ describe('AiQuantPageClient codegen P1 guards', () => {
     expect(next.messages.at(-1)?.content).toContain('Generated strategy code')
     expect(next.messages.at(-1)?.content).toContain('export default function strategy()')
   })
+
+  it('hydrates published snapshot backtest params into the live conversation state', () => {
+    const next = applyCodegenResponseToConversationState({
+      conversation: {
+        id: 'conv-live',
+        serverConversationId: 'server-conv-1',
+        title: '新对话',
+        messages: [{ id: 'loading', role: 'assistant', content: 'loading' }],
+        params: DEFAULT_PARAMS,
+        paramSchema: DEFAULT_PARAM_SCHEMA,
+        paramValues: {
+          ...DEFAULT_PARAM_VALUES,
+          backtestRangePreset: '90D',
+        },
+        backtestResult: null,
+        logicGraph: null,
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: null,
+        llmCodegenSessionId: 'session-1',
+        publishedStrategyInstanceId: null,
+        publishedSnapshotId: null,
+        publishedScriptCode: null,
+        publishedScriptGraphVersion: null,
+        latestSignalMessage: null,
+        backtestExecutionConfigExplicit: false,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+      } as any,
+      response: {
+        id: 'session-1',
+        conversationId: 'server-conv-1',
+        status: 'PUBLISHED',
+        scriptCode: 'export default function strategy() { return true }',
+        publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotParamValues: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          baseTimeframe: '1h',
+          positionPct: 25,
+          backtestInitialCash: 20000,
+          backtestLeverage: 3,
+          backtestSlippageBps: 6,
+          backtestFeeBps: 2,
+          backtestPriceSource: 'mid',
+          backtestAllowPartial: false,
+        },
+      } as any,
+      confirmGenerate: true,
+      targetParams: DEFAULT_PARAMS,
+      backtestCapabilities: null,
+      activeSessionId: 'session-1',
+      trimmedMessage: 'Confirm code generation',
+      t: (key: string, options?: Record<string, unknown>) =>
+        options?.defaultValue ? String(options.defaultValue) : key,
+      loadingMessageId: 'loading',
+    })
+
+    expect(next.publishedSnapshotId).toBe('snapshot-1')
+    expect(next.backtestExecutionConfigExplicit).toBe(true)
+    expect(next.paramValues).toMatchObject({
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      baseTimeframe: '1h',
+      positionPct: 25,
+      backtestRangePreset: '90D',
+      backtestInitialCash: 20000,
+      backtestLeverage: 3,
+      backtestSlippageBps: 6,
+      backtestFeeBps: 2,
+      backtestPriceSource: 'mid',
+      backtestAllowPartial: false,
+    })
+    expect(next.params).toMatchObject({
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      baseTimeframe: '1h',
+      positionPct: 25,
+    })
+  })
 })

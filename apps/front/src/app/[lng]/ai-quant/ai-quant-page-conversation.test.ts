@@ -511,79 +511,59 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.messages.at(-1)?.content).toContain('export default function strategy()')
   })
 
-  it('keeps published snapshot default backtest params when persisting conversations for reload parity', () => {
-    const serialized = serializePersistedConversations([
-      {
-        id: 'conv-persisted-published',
-        title: 'persisted',
-        messages: [],
-        params: {
-          exchange: 'binance',
-          symbol: 'BTCUSDT',
-          baseTimeframe: '15m',
-          buyWindowMin: 3,
-          buyDropPct: 1,
-          sellWindowMin: 15,
-          sellRisePct: 2,
-          positionPct: 10,
-        },
-        paramSchema: null,
-        paramValues: {
-          exchange: 'binance',
-          symbol: 'BTCUSDT',
-          baseTimeframe: '15m',
-          buyWindowMin: 3,
-          buyDropPct: 1,
-          sellWindowMin: 15,
-          sellRisePct: 2,
-          positionPct: 10,
-          backtestInitialCash: 10000,
-          backtestLeverage: 1,
-          backtestSlippageBps: 10,
-          backtestFeeBps: 5,
-          backtestPriceSource: 'close',
-          backtestAllowPartial: true,
-        },
-        backtestResult: null,
-        logicGraph: {
-          version: 1,
-          status: 'confirmed',
-          trigger: [],
-          actions: [],
-          risk: [],
-          meta: {
-            exchange: 'binance',
-            symbol: 'BTCUSDT',
-            timeframe: '15m',
-            positionPct: 10,
-          },
-        },
-        codegenSpecDesc: null,
-        semanticGraph: null,
-        validationReport: null,
-        clarificationGate: null,
-        publicationGate: null,
-        pendingCanonicalDigest: null,
-        llmCodegenSessionId: null,
-        publishedStrategyInstanceId: 'strategy-1',
-        publishedSnapshotId: 'snapshot-1',
-        publishedScriptCode: 'return { ok: true }',
-        publishedScriptGraphVersion: 1,
-        latestSignalMessage: null,
-        backtestExecutionConfigExplicit: false,
-        backtestExecutionState: 'idle',
-        updatedAt: 1,
-        schemaVersion: AI_QUANT_PERSISTED_SCHEMA_VERSION,
+  it('hydrates published snapshot param values so reload keeps snapshot-bound backtest semantics', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'server-conv-3',
+      conversationTitle: '已发布会话',
+      conversationMessages: [
+        { role: 'user', content: '用户消息' },
+      ],
+      status: 'PUBLISHED',
+      canonicalDigest: 'sha256:canonical-3',
+      scriptCode: 'export default function strategy() { return true }',
+      publishedSnapshotId: 'snapshot-3',
+      publishedSnapshotParamValues: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '1h',
+        positionPct: 25,
+        backtestInitialCash: 20000,
+        backtestLeverage: 3,
+        backtestSlippageBps: 6,
+        backtestFeeBps: 2,
+        backtestPriceSource: 'mid',
+        backtestAllowPartial: false,
       },
-    ], 'deploy-2026-04-11')
+      specDesc: {
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+        rules: [],
+      },
+    } as any, (key: string, options?: Record<string, unknown>) => String(options?.defaultValue ?? key))
 
-    const envelope = JSON.parse(serialized)
-    expect(envelope.conversations[0].paramValues.backtestInitialCash).toBe(10000)
-    expect(envelope.conversations[0].paramValues.backtestLeverage).toBe(1)
-    expect(envelope.conversations[0].paramValues.backtestSlippageBps).toBe(10)
-    expect(envelope.conversations[0].paramValues.backtestFeeBps).toBe(5)
-    expect(envelope.conversations[0].paramValues.backtestPriceSource).toBe('close')
-    expect(envelope.conversations[0].paramValues.backtestAllowPartial).toBe(true)
+    expect(conversation.logicGraph?.status).toBe('confirmed')
+    expect(conversation.publishedSnapshotId).toBe('snapshot-3')
+    expect(conversation.backtestExecutionConfigExplicit).toBe(true)
+    expect(conversation.paramValues).toMatchObject({
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      baseTimeframe: '1h',
+      positionPct: 25,
+      backtestInitialCash: 20000,
+      backtestLeverage: 3,
+      backtestSlippageBps: 6,
+      backtestFeeBps: 2,
+      backtestPriceSource: 'mid',
+      backtestAllowPartial: false,
+    })
+    expect(conversation.params).toMatchObject({
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      baseTimeframe: '1h',
+      positionPct: 25,
+    })
   })
 
 })
