@@ -57,6 +57,33 @@ function isRecoverableCodegenStatus(status: string): boolean {
   return CODEGEN_RECOVERABLE_STATUSES.has(status)
 }
 
+function buildTerminalFailureReply(args: {
+  response: LlmCodegenSessionResponse
+  rejectedPrefix: string
+  rejectedWithoutReason: string
+}): string {
+  const { response, rejectedPrefix, rejectedWithoutReason } = args
+  const reason = typeof response.rejectReason === 'string' ? response.rejectReason.trim() : ''
+
+  const stage =
+    response.publicationGate?.passed === false
+      ? 'PUBLICATION_GATE_BLOCKED'
+      : response.status || 'UNKNOWN'
+
+  const explanation =
+    response.status === 'CONSISTENCY_FAILED'
+      ? '脚本已生成，但没有通过一致性校验，因此不会发布，也不能进入回测。'
+      : response.publicationGate?.passed === false
+        ? '脚本已生成，但发布门校验没有通过，因此不会发布，也不能进入回测。'
+        : '后端拒绝了当前策略生成结果，因此不会发布，也不能进入回测。'
+
+  if (!reason) {
+    return `${rejectedPrefix}（${stage}）\n说明：${explanation}\n后端返回：${rejectedWithoutReason}`
+  }
+
+  return `${rejectedPrefix}（${stage}）\n说明：${explanation}\n后端返回：${reason}`
+}
+
 export function buildCodegenReplyContent(args: {
   response: LlmCodegenSessionResponse
   confirmGenerate: boolean
@@ -85,13 +112,19 @@ export function buildCodegenReplyContent(args: {
     return response.assistantPrompt
   }
   if (response.publicationGate?.passed === false) {
-    return response.rejectReason
-      ? `${rejectedPrefix}：${response.rejectReason}`
-      : rejectedWithoutReason
+    return buildTerminalFailureReply({
+      response,
+      rejectedPrefix,
+      rejectedWithoutReason,
+    })
   }
   if (response.status === 'PUBLISHED') {
     if (response.rejectReason) {
-      return `${rejectedPrefix}：${response.rejectReason}`
+      return buildTerminalFailureReply({
+        response,
+        rejectedPrefix,
+        rejectedWithoutReason,
+      })
     }
     return publishedReply
   }
@@ -102,14 +135,18 @@ export function buildCodegenReplyContent(args: {
     return `${stillGeneratingPrefix}（${response.status}）`
   }
   if (response.status === 'REJECTED') {
-    return response.rejectReason
-      ? `${rejectedPrefix}：${response.rejectReason}`
-      : rejectedWithoutReason
+    return buildTerminalFailureReply({
+      response,
+      rejectedPrefix,
+      rejectedWithoutReason,
+    })
   }
   if (response.status === 'CONSISTENCY_FAILED') {
-    return response.rejectReason
-      ? `${rejectedPrefix}：${response.rejectReason}`
-      : rejectedWithoutReason
+    return buildTerminalFailureReply({
+      response,
+      rejectedPrefix,
+      rejectedWithoutReason,
+    })
   }
   return response.scriptCode ? graphGeneratedMessage : graphReviseMessage
 }

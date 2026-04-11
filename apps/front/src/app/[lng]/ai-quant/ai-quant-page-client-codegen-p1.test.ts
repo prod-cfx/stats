@@ -194,6 +194,29 @@ describe('AiQuantPageClient codegen P1 guards', () => {
     expect(content).not.toBe('失败（无原因）')
   })
 
+  it('formats consistency failures with stage, explanation, and backend reason', () => {
+    const content = buildCodegenReplyContent({
+      response: {
+        id: 's4b',
+        status: 'CONSISTENCY_FAILED',
+        rejectReason: '脚本缺少关键规则映射: bollinger.bars_outside:risk:both',
+      },
+      confirmGenerate: true,
+      publishedReply: '发布成功',
+      graphGeneratedMessage: '已生成',
+      graphReviseMessage: '请继续补充',
+      checklistContinuedMessage: '继续检查',
+      checklistUpdatedMessage: '已更新逻辑图',
+      stillGeneratingPrefix: '生成中',
+      rejectedPrefix: '生成失败',
+      rejectedWithoutReason: '失败（无原因）',
+    })
+
+    expect(content).toContain('生成失败（CONSISTENCY_FAILED）')
+    expect(content).toContain('脚本已生成，但没有通过一致性校验')
+    expect(content).toContain('后端返回：脚本缺少关键规则映射')
+  })
+
   it('reconciles only the active session before confirmGenerate and does not fan out to unrelated sessions', async () => {
     const primaryConversation = {
       id: 'conv-1',
