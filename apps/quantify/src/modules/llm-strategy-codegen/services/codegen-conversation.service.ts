@@ -1301,6 +1301,7 @@ export class CodegenConversationService {
     const lockedParams = this.readRecord(snapshot.lockedParams)
     const executionPolicy = this.readRecord(snapshot.executionPolicy)
     const merged = {
+      // Precedence: paramsSnapshot < lockedParams < executionPolicy-derived aliases.
       ...(paramsSnapshot ?? {}),
       ...(lockedParams ?? {}),
     }
@@ -1309,19 +1310,17 @@ export class CodegenConversationService {
       merged.baseTimeframe = merged.timeframe.trim()
     }
 
-    merged.backtestInitialCash = 10000
-    merged.backtestLeverage = 1
-    merged.backtestSlippageBps = 10
-    merged.backtestFeeBps = 5
-    merged.backtestPriceSource = 'close'
-    merged.backtestAllowPartial = this.readAllowPartialFill(executionPolicy)
+    const allowPartialFill = this.readAllowPartialFill(executionPolicy)
+    if (allowPartialFill !== null) {
+      merged.backtestAllowPartial = allowPartialFill
+    }
 
     return Object.keys(merged).length > 0 ? merged : null
   }
 
-  private readAllowPartialFill(executionPolicy: Record<string, unknown> | null): boolean {
+  private readAllowPartialFill(executionPolicy: Record<string, unknown> | null): boolean | null {
     if (!executionPolicy) {
-      return true
+      return null
     }
 
     const direct = executionPolicy.allowPartialFill
@@ -1335,7 +1334,7 @@ export class CodegenConversationService {
       return false
     }
 
-    return true
+    return null
   }
 
   private readRecord(value: unknown): Record<string, unknown> | null {

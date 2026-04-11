@@ -357,14 +357,69 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         timeframe: '1h',
         baseTimeframe: '1h',
         positionPct: 25,
-        backtestInitialCash: 10000,
-        backtestLeverage: 1,
-        backtestSlippageBps: 10,
-        backtestFeeBps: 5,
-        backtestPriceSource: 'close',
         backtestAllowPartial: false,
       },
     })
+  })
+
+  it('keeps published snapshot params faithful to snapshot sources without injecting default execution values', () => {
+    const result = (
+      service as unknown as {
+        buildPublishedSnapshotParamValues: (snapshot: {
+          paramsSnapshot?: unknown
+          lockedParams?: unknown
+          executionPolicy?: unknown
+        }) => Record<string, unknown> | null
+      }
+    ).buildPublishedSnapshotParamValues({
+      paramsSnapshot: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+      },
+      lockedParams: {
+        symbol: 'ETHUSDT',
+        leverage: 3,
+        backtestAllowPartial: true,
+      },
+      executionPolicy: {
+        allowPartialFill: false,
+      },
+    })
+
+    expect(result).toEqual({
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      timeframe: '15m',
+      baseTimeframe: '15m',
+      positionPct: 10,
+      leverage: 3,
+      backtestAllowPartial: false,
+    })
+    expect(result).not.toHaveProperty('backtestInitialCash')
+    expect(result).not.toHaveProperty('backtestLeverage')
+    expect(result).not.toHaveProperty('backtestSlippageBps')
+    expect(result).not.toHaveProperty('backtestFeeBps')
+    expect(result).not.toHaveProperty('backtestPriceSource')
+  })
+
+  it('keeps incomplete published snapshots incomplete instead of fabricating execution defaults', () => {
+    const result = (
+      service as unknown as {
+        buildPublishedSnapshotParamValues: (snapshot: {
+          paramsSnapshot?: unknown
+          lockedParams?: unknown
+          executionPolicy?: unknown
+        }) => Record<string, unknown> | null
+      }
+    ).buildPublishedSnapshotParamValues({
+      paramsSnapshot: null,
+      lockedParams: null,
+      executionPolicy: null,
+    })
+
+    expect(result).toBeNull()
   })
 
   it('backfills only missing session projections and does not resurrect archived conversations', async () => {
@@ -823,11 +878,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       timeframe: '15m',
       baseTimeframe: '15m',
       positionPct: 10,
-      backtestInitialCash: 10000,
-      backtestLeverage: 1,
-      backtestSlippageBps: 10,
-      backtestFeeBps: 5,
-      backtestPriceSource: 'close',
       backtestAllowPartial: false,
     })
     expect(result.consistencyReport).toEqual({ status: 'PASSED' })
