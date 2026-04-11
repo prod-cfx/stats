@@ -4,8 +4,7 @@ import { Send } from 'lucide-react'
 import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/use-auth'
-import { API_BASE_URL } from '@/lib/api-client'
-import { getTelegramWebAuthorizeUrlRequest } from '../api'
+import { getTelegramLoginConfigRequest, getTelegramWebAuthorizeUrlRequest } from '../api'
 import { canShowTelegramDesktopEntry, isTelegramWebAppEnv } from '../telegram-env'
 
 interface TelegramLoginButtonsProps {
@@ -36,9 +35,7 @@ export function TelegramLoginButtons({ lng, intent = 'login', redirect }: Telegr
 
     const loadTelegramConfig = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/auth/telegram/login-config`)
-        const data = await res.json()
-        const parsed = (data?.data || data) as TelegramConfigResponse
+        const parsed = await getTelegramLoginConfigRequest() as TelegramConfigResponse
         const name = parsed.botName?.trim()
         if (!isMounted) {
           return

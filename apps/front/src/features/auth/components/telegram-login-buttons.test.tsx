@@ -21,10 +21,6 @@ jest.mock('@/hooks/use-auth', () => ({
   }),
 }))
 
-jest.mock('@/lib/api-client', () => ({
-  API_BASE_URL: 'https://api.example.test',
-}))
-
 jest.mock('../telegram-env', () => ({
   canShowTelegramDesktopEntry: () => true,
   isTelegramWebAppEnv: () => false,
@@ -32,6 +28,9 @@ jest.mock('../telegram-env', () => ({
 
 jest.mock('../api', () => ({
   getTelegramWebAuthorizeUrlRequest: jest.fn(),
+  getTelegramLoginConfigRequest: jest.fn(async () => ({
+    botName: 'cfx_login_staging_bot',
+  })),
 }))
 
 describe('TelegramLoginButtons desktop flow', () => {
@@ -43,15 +42,6 @@ describe('TelegramLoginButtons desktop flow', () => {
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
-
-    globalThis.fetch = jest.fn(async () => ({
-      ok: true,
-      json: async () => ({
-        data: {
-          botName: 'cfx_login_staging_bot',
-        },
-      }),
-    })) as unknown as typeof fetch
 
     createTelegramDesktopIntentMock.mockResolvedValue({
       intentId: 'intent-1',

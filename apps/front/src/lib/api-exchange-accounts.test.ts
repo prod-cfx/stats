@@ -3,10 +3,12 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 
 const mockGetToken = jest.fn()
-const originalFetch = globalThis.fetch
+const mockClient = {
+  AccountExchangeAccountsController_list: jest.fn(),
+}
 
 jest.mock('@ai/api-contracts', () => ({
-  createApiClient: jest.fn(() => ({})),
+  createApiClient: jest.fn(() => mockClient),
 }))
 
 jest.mock('@/components/account/ai-quant-strategy-store', () => ({
@@ -50,33 +52,23 @@ describe('exchange account transport', () => {
 
   afterEach(() => {
     jest.restoreAllMocks()
-    if (originalFetch) {
-      globalThis.fetch = originalFetch
-    } else {
-      delete (globalThis as { fetch?: typeof fetch }).fetch
-    }
   })
 
   it('sends bearer auth headers and unwraps response envelopes for exchange accounts', async () => {
-    const fetchMock = jest.fn().mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
-        data: [
-          {
-            id: null,
-            exchangeId: 'binance',
-            isBound: false,
-            name: null,
-            maskedCredential: null,
-            isTestnet: null,
-            lastValidatedAt: null,
-            createdAt: null,
-          },
-        ],
-      }),
-    } as Response)
-    globalThis.fetch = fetchMock as unknown as typeof fetch
+    mockClient.AccountExchangeAccountsController_list.mockResolvedValue({
+      data: [
+        {
+          id: null,
+          exchangeId: 'binance',
+          isBound: false,
+          name: null,
+          maskedCredential: null,
+          isTestnet: null,
+          lastValidatedAt: null,
+          createdAt: null,
+        },
+      ],
+    })
 
     const { fetchUserExchangeAccountStatuses } = await import('./api')
     const result = await fetchUserExchangeAccountStatuses()
@@ -87,14 +79,10 @@ describe('exchange account transport', () => {
         isBound: false,
       }),
     ])
-    expect(fetchMock).toHaveBeenCalledWith(
-      expect.stringContaining('/account/exchange-accounts'),
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          'Content-Type': 'application/json',
-          Authorization: 'Bearer a.b.c',
-        }),
+    expect(mockClient.AccountExchangeAccountsController_list).toHaveBeenCalledWith({
+      headers: expect.objectContaining({
+        Authorization: 'Bearer a.b.c',
       }),
-    )
+    })
   })
 })

@@ -4,17 +4,12 @@ import type {
   WhaleNotificationInboxItem,
   WhaleNotificationRule,
 } from '../types'
-import { API_BASE_URL } from '@/lib/api-client'
+import { client, unwrapApiResponse } from '@/lib/api-client'
 import { getToken, loadStoredSession } from '@/lib/auth-storage'
 import { ApiError } from '@/lib/errors'
 
 const RULES_KEY = 'whale_notification_rules'
 const INBOX_KEY = 'whale_notification_inbox'
-
-const endpointCandidates = [
-  '/whale-notification',
-  '/whale-notifications',
-] as const
 
 type RequestOutcome<T> =
   | { kind: 'remote'; data: T | null }
@@ -78,72 +73,72 @@ async function requestWithFallback<T>(
   path: string,
   body?: unknown,
 ): Promise<RequestOutcome<T>> {
-  let hasFallbackCandidateFailure = false
-  let lastFailure: Error | null = null
+  try {
+    const whaleClient = client as any
+    const headers = authHeaders()
+    const options = Object.keys(headers).length > 0 ? { headers } : undefined
 
-  for (const basePath of endpointCandidates) {
-    try {
-      const response = await fetch(`${API_BASE_URL}${basePath}${path}`, {
-        method,
-        headers: {
-          'Content-Type': 'application/json',
-          ...authHeaders(),
-        },
-        body: body === undefined ? undefined : JSON.stringify(body),
+    let response: unknown
+    if (method === 'GET' && path === '/rules') {
+      response = await whaleClient.WhaleNotificationRulesController_list(options)
+    } else if (method === 'POST' && path === '/rules') {
+      response = await whaleClient.WhaleNotificationRulesController_create(body, options)
+    } else if (method === 'PUT' && path.startsWith('/rules/')) {
+      const id = path.slice('/rules/'.length)
+      response = await whaleClient.WhaleNotificationRulesController_update(
+        body,
+        { ...(options ?? {}), params: { id } },
+      )
+    } else if (method === 'DELETE' && path.startsWith('/rules/')) {
+      const id = path.slice('/rules/'.length)
+      response = await whaleClient.WhaleNotificationRulesController_delete(undefined, {
+        ...(options ?? {}),
+        params: { id },
       })
-
-      if (response.ok) {
-        if (response.status === 204) {
-          return { kind: 'remote', data: null }
-        }
-
-        const json = await response.json().catch(() => null)
-        if (json && typeof json === 'object' && 'data' in json) {
-          return { kind: 'remote', data: (json as { data: T }).data }
-        }
-        return { kind: 'remote', data: json as T }
-      }
-
-      const payload = await response.json().catch(() => null)
-      const message = extractErrorMessage(payload, response.statusText || 'Request failed')
-
-      if (response.status === 401) {
-        throw new ApiError(message, 'UNAUTHENTICATED', 401, payload)
-      }
-      if (response.status === 403) {
-        throw new ApiError(message, 'FORBIDDEN', 403, payload)
-      }
-
-      if (response.status === 404 || response.status === 405) {
-        hasFallbackCandidateFailure = true
-        lastFailure = new ApiError(message, 'API_ERROR', response.status, payload)
-        continue
-      }
-
-      if (response.status >= 400 && response.status < 500) {
-        throw new ApiError(message, 'API_ERROR', response.status, payload)
-      }
-
-      if (response.status >= 500) {
-        hasFallbackCandidateFailure = true
-        lastFailure = new ApiError(message, 'SERVER_ERROR', response.status, payload)
-        continue
-      }
-    } catch (error) {
-      if (error instanceof ApiError) {
-        throw error
-      }
-
-      hasFallbackCandidateFailure = true
-      lastFailure = error instanceof Error ? error : new Error(String(error))
+    } else if (method === 'GET' && path === '/notifications') {
+      response = await whaleClient.WhaleNotificationInboxController_list(options)
+    } else if (method === 'PATCH' && path.startsWith('/notifications/') && path.endsWith('/read')) {
+      const id = path.slice('/notifications/'.length, -'/read'.length)
+      response = await whaleClient.WhaleNotificationInboxController_markRead(undefined, {
+        ...(options ?? {}),
+        params: { id },
+      })
+    } else if (method === 'POST' && path === '/notifications/read-all') {
+      response = await whaleClient.WhaleNotificationInboxController_markAllRead(undefined, options)
+    } else if (method === 'GET' && path === '/notifications/unread-count') {
+      response = await whaleClient.WhaleNotificationInboxController_unreadCount(options)
+    } else {
+      return { kind: 'fallback' }
     }
-  }
 
-  if (hasFallbackCandidateFailure) {
+    return {
+      kind: 'remote',
+      data: unwrapApiResponse<T | null>(response as T | { data?: T | null; message?: string }),
+    }
+  } catch (error) {
+    if (error instanceof ApiError && (error.statusCode === 401 || error.statusCode === 403)) {
+      throw error
+    }
+
+    if (error instanceof Error) {
+      const message = extractErrorMessage(
+        error instanceof ApiError ? error.details : null,
+        error.message || 'Request failed',
+      )
+      const statusCode = error instanceof ApiError ? error.statusCode : undefined
+
+      if (statusCode === 404 || statusCode === 405 || (typeof statusCode === 'number' && statusCode >= 500)) {
+        return { kind: 'fallback' }
+      }
+
+      if (error instanceof ApiError) {
+        throw new ApiError(message, error.code, statusCode, error.details)
+      }
+      return { kind: 'fallback' }
+    }
+
     return { kind: 'fallback' }
   }
-
-  throw lastFailure ?? new ApiError('Request failed', 'API_ERROR')
 }
 
 function safeParse<T>(raw: string | null, fallback: T): T {

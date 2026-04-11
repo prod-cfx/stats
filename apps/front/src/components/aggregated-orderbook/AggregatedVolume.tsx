@@ -5,20 +5,7 @@ import { Check, ChevronDown } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SubTitle } from '@/components/ui/Typography';
-import { API_BASE_URL } from '@/lib/api-client';
-
-// Type definition matching backend AggregatedVolumeResponseDto
-interface AggregatedVolumeItem {
-  id: number;
-  exchange: string;
-  symbol: string;
-  instrumentType?: 'SPOT' | 'PERPETUAL';
-  volumeUsd: string;
-  dataTimestamp: string;
-  source: string;
-  createdAt: string;
-  updatedAt: string;
-}
+import { fetchAggregatedVolume, type AggregatedVolumeApiItem } from '@/lib/api';
 
 interface VolumeItem {
   name: string;
@@ -256,23 +243,15 @@ export const AggregatedVolume = ({ variant = 'default' }: { variant?: 'default' 
   // Fetch aggregated volume data from backend
   const fetchVolumeData = useCallback(async (symbol: string) => {
     try {
-      const res = await fetch(
-        `${API_BASE_URL}/markets/volume/aggregated?symbol=${symbol}&instrumentType=PERPETUAL&page=1&limit=50`,
-        {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        }
-      );
+      const response = await fetchAggregatedVolume({
+        symbol,
+        instrumentType: 'PERPETUAL',
+        page: 1,
+        limit: 50,
+      });
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-
-      const body = await res.json();
-      const response = body && typeof body === 'object' && 'data' in body ? body : { data: body };
-
-      if (response.data && response.data.items) {
-        const apiItems: AggregatedVolumeItem[] = response.data.items;
+      if (response.items) {
+        const apiItems: AggregatedVolumeApiItem[] = response.items;
 
         const totalRow = apiItems.find((item) => item.exchange === 'All')
         const exchangeRows = apiItems.filter((item) => item.exchange !== 'All')

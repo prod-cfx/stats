@@ -75,7 +75,8 @@ describe('backtest-job-client', () => {
         Authorization: 'Bearer header.payload.signature',
       },
       body: JSON.stringify(payload),
-      signal: expect.any(AbortSignal),
+      cache: 'no-store',
+      signal: expect.anything(),
     })
     expect(result).toEqual({
       id: 'btjob-1',
@@ -104,7 +105,8 @@ describe('backtest-job-client', () => {
         'Content-Type': 'application/json',
         Authorization: 'Bearer header.payload.signature',
       },
-      signal: expect.any(AbortSignal),
+      cache: 'no-store',
+      signal: expect.anything(),
     })
   })
 
@@ -125,7 +127,8 @@ describe('backtest-job-client', () => {
           'Content-Type': 'application/json',
           Authorization: 'Bearer header.payload.signature',
         },
-        signal: expect.any(AbortSignal),
+        cache: 'no-store',
+        signal: expect.anything(),
       },
     )
   })
