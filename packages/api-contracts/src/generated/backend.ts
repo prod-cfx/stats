@@ -166,6 +166,12 @@ const AccountAiQuantDeployRequestDto = z
     exchangeAccountName: z.string().optional(),
   })
   .passthrough()
+const BacktestingSymbolSupportRequestDto = z
+  .object({ exchange: z.enum(['binance', 'okx', 'hyperliquid']), symbol: z.string() })
+  .passthrough()
+const BacktestingSymbolSupportResponseDto = z
+  .object({ status: z.enum(['supported', 'refreshed_then_supported', 'not_supported']) })
+  .passthrough()
 const LlmCodegenStartRequestDto = z
   .object({
     initialMessage: z.string(),
@@ -1101,6 +1107,8 @@ export const schemas = {
   CreateAccountExchangeAccountDto,
   AccountAiQuantActionRequestDto,
   AccountAiQuantDeployRequestDto,
+  BacktestingSymbolSupportRequestDto,
+  BacktestingSymbolSupportResponseDto,
   LlmCodegenStartRequestDto,
   LlmCodegenContinueRequestDto,
   Function,
@@ -3073,6 +3081,11 @@ const endpoints = makeApi([
     requestFormat: 'json',
     parameters: [
       {
+        name: 'body',
+        type: 'Body',
+        schema: BacktestingSymbolSupportRequestDto,
+      },
+      {
         name: 'authorization',
         type: 'Header',
         schema: z.string(),
@@ -3083,7 +3096,7 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: BacktestingSymbolSupportResponseDto,
   },
   {
     method: 'get',
