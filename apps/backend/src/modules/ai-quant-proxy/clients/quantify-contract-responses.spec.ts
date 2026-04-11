@@ -27,6 +27,31 @@ describe('quantify contract generated responses', () => {
     }
   })
 
+  it('wraps exchange-account aliases in transport-envelope response schemas', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+
+    const createStart = source.indexOf(`alias: 'ExchangeAccountsController_create'`)
+    const listStart = source.indexOf(`alias: 'ExchangeAccountsController_list'`)
+    const deleteStart = source.indexOf(`alias: 'ExchangeAccountsController_delete'`)
+
+    expect(createStart).toBeGreaterThanOrEqual(0)
+    expect(listStart).toBeGreaterThanOrEqual(0)
+    expect(deleteStart).toBeGreaterThanOrEqual(0)
+
+    const createSnippet = source.slice(createStart, createStart + 600)
+    const listSnippet = source.slice(listStart, listStart + 600)
+    const deleteSnippet = source.slice(deleteStart, deleteStart + 600)
+
+    expect(createSnippet).toContain('data: ExchangeAccountResponseDto')
+    expect(createSnippet).toContain('message: z.string().optional()')
+    expect(createSnippet).toContain('.passthrough()')
+    expect(listSnippet).toContain('data: z.array(ExchangeAccountResponseDto)')
+    expect(listSnippet).toContain('message: z.string().optional()')
+    expect(listSnippet).toContain('.passthrough()')
+    expect(deleteSnippet).not.toContain('response: z.void()')
+    expect(deleteSnippet).toContain('data: z.null()')
+  })
+
   it('keeps nullable AI Quant codegen session fields nullable in the generated contracts', () => {
     const source = readFileSync(generatedPath, 'utf8')
     const start = source.indexOf('const CodegenSessionResponseDto = z')

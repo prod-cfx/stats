@@ -1037,6 +1037,31 @@ const LlmStrategyInstancePublicResponseDto = z
     updatedAt: z.string().datetime({ offset: true }),
   })
   .passthrough()
+const AiQuantConversationMessageDto = z
+  .object({ role: z.enum(['user', 'assistant']), content: z.string() })
+  .passthrough()
+const AiQuantConversationResponseDto = z
+  .object({
+    id: z.string(),
+    activeCodegenSessionId: z.string().optional(),
+    conversationTitle: z.string().optional(),
+    conversationMessages: z.array(AiQuantConversationMessageDto).optional(),
+    status: z.string().optional(),
+    createdAt: z.string().optional(),
+    updatedAt: z.string().optional(),
+    canonicalDigest: z.string().optional(),
+    specDesc: z.object({}).partial().passthrough().optional(),
+    semanticGraph: z.object({}).partial().passthrough().optional(),
+    validationReport: z.object({}).partial().passthrough().optional(),
+    clarificationGate: z.object({}).partial().passthrough().optional(),
+    publicationGate: z.object({}).partial().passthrough().optional(),
+    scriptCode: z.string().optional(),
+    publishedSnapshotId: z.string().optional(),
+    publishedSnapshotParamValues: z.object({}).partial().passthrough().optional(),
+    strategyInstanceId: z.string().optional(),
+    rejectReason: z.string().optional(),
+  })
+  .passthrough()
 const CodegenGuideConfigDto = z
   .object({
     symbolExample: z.string(),
@@ -1059,6 +1084,9 @@ const StartCodegenSessionDto = z
     guideConfig: CodegenGuideConfigDto,
   })
   .partial()
+  .passthrough()
+const CodegenConversationMessageDto = z
+  .object({ role: z.enum(['user', 'assistant']), content: z.string() })
   .passthrough()
 const StrategyClarificationItemDto = z
   .object({
@@ -1112,12 +1140,6 @@ const PublicationGateMismatchDto = z
 const PublicationGateDto = z
   .object({ passed: z.boolean(), blockingMismatches: z.array(PublicationGateMismatchDto) })
   .passthrough()
-const CodegenConversationMessageDto = z
-  .object({
-    role: z.enum(['user', 'assistant']),
-    content: z.string(),
-  })
-  .passthrough()
 const CodegenSessionResponseDto = z
   .object({
     id: z.string(),
@@ -1146,6 +1168,8 @@ const CodegenSessionResponseDto = z
     semanticGraph: z.object({}).partial().passthrough().nullish(),
     validationReport: z.object({}).partial().passthrough().nullish(),
     strategyInstanceId: z.string().nullish(),
+    createdAt: z.string().optional(),
+    updatedAt: z.string().optional(),
     clarificationState: StrategyClarificationStateDto.nullish(),
     clarificationGate: StrategyClarificationGateDto,
     publicationGate: PublicationGateDto.nullish(),
@@ -1424,8 +1448,11 @@ export const schemas = {
   UpdateLlmStrategyInstanceDto,
   LlmStrategyRunResponseDto,
   LlmStrategyInstancePublicResponseDto,
+  AiQuantConversationMessageDto,
+  AiQuantConversationResponseDto,
   CodegenGuideConfigDto,
   StartCodegenSessionDto,
+  CodegenConversationMessageDto,
   StrategyClarificationItemDto,
   StrategyClarificationStateDto,
   StrategyClarificationGateDto,
@@ -1451,6 +1478,49 @@ export const schemas = {
 }
 
 const endpoints = makeApi([
+  {
+    method: 'get',
+    path: '/account/ai-quant/conversations',
+    alias: 'AccountAiQuantConversationsController_list',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string(),
+      },
+    ],
+    response: z.array(AiQuantConversationResponseDto),
+  },
+  {
+    method: 'delete',
+    path: '/account/ai-quant/conversations/:id',
+    alias: 'AccountAiQuantConversationsController_remove',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
   {
     method: 'get',
     path: '/account/ai-quant/strategies',
@@ -2001,7 +2071,9 @@ const endpoints = makeApi([
         schema: CreateExchangeAccountDto,
       },
     ],
-    response: ExchangeAccountResponseDto,
+    response: z
+      .object({ data: ExchangeAccountResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'get',
@@ -2015,7 +2087,9 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.array(ExchangeAccountResponseDto),
+    response: z
+      .object({ data: z.array(ExchangeAccountResponseDto), message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'delete',
@@ -2034,7 +2108,7 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: z.object({ data: z.null(), message: z.string().optional() }).passthrough(),
   },
   {
     method: 'get',
