@@ -188,7 +188,7 @@ dx start stack
 
 ```bash
 dx build backend --prod
-dx build quantify --staging
+dx build quantify --prod
 dx build all --dev
 ```
 
