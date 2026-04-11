@@ -5,10 +5,12 @@ import { useTranslation } from 'react-i18next'
 import {
   deleteUserExchangeAccount,
   fetchUserExchangeAccountStatuses,
-  type UpsertUserExchangeAccountPayload,
-  type UserExchangeAccountStatus,
-  type UserExchangeId,
   upsertUserExchangeAccount,
+} from '@/lib/api'
+import type {
+  UpsertUserExchangeAccountPayload,
+  UserExchangeAccountStatus,
+  UserExchangeId,
 } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
 
@@ -73,7 +75,7 @@ function getTitleKey(exchangeId: UserExchangeId): string {
 
 function trimToOptionalValue(value: string): string | undefined {
   const trimmed = value.trim()
-  return trimmed ? trimmed : undefined
+  return trimmed || undefined
 }
 
 function buildValidationError(

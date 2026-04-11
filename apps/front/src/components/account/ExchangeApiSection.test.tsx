@@ -99,7 +99,7 @@ describe('ExchangeApiSection', () => {
   function findExchangeCard(title: string): HTMLElement {
     const article = Array.from(container.querySelectorAll('article')).find(node => node.textContent?.includes(title))
     if (!article) {
-      throw new Error(`Unable to find exchange card: ${title}`)
+      throw new TypeError(`Unable to find exchange card: ${title}`)
     }
     return article as HTMLElement
   }
@@ -115,7 +115,7 @@ describe('ExchangeApiSection', () => {
   function findInput(scope: ParentNode, placeholder: string): HTMLInputElement {
     const input = Array.from(scope.querySelectorAll('input')).find(node => node.getAttribute('placeholder') === placeholder)
     if (!(input instanceof HTMLInputElement)) {
-      throw new Error(`Unable to find input: ${placeholder}`)
+      throw new TypeError(`Unable to find input: ${placeholder}`)
     }
     return input
   }
