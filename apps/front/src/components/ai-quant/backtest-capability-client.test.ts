@@ -83,6 +83,9 @@ describe('backtest-capability-client', () => {
         statusText: 'Bad Gateway',
         data: {
           error: {
+            code: 'SERVICE_TEMPORARILY_UNAVAILABLE',
+            stage: 'capability',
+            requestId: 'cap-req-1',
             args: { reasonMessage: 'upstream failed by reason message' },
             message: 'should not win',
           },
@@ -94,7 +97,7 @@ describe('backtest-capability-client', () => {
     const request = fetchBacktestCapabilities()
     await expect(request).rejects.toBeInstanceOf(ApiError)
     await expect(request).rejects.toMatchObject({
-      message: expect.stringContaining('upstream failed by reason message'),
+      message: 'upstream failed by reason message capability (SERVICE_TEMPORARILY_UNAVAILABLE, HTTP 502, requestId cap-req-1)',
       statusCode: 502,
     })
   })

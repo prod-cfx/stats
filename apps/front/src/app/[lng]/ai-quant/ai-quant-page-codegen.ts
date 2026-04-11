@@ -4,6 +4,7 @@ import type { ConversationState, QuantParams } from './ai-quant-page-conversatio
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import type { LlmCodegenSessionResponse } from '@/lib/api'
 import {
+  buildAiQuantErrorMessage,
   buildAiQuantStageFallbackMessage,
   parseAiQuantErrorMeta,
 } from '@/components/ai-quant/ai-quant-error-stage'
@@ -674,7 +675,7 @@ export function extractCodegenErrorMessage(error: unknown, fallback: string): st
   }
 
   if (meta.message) {
-    return meta.message
+    return buildAiQuantErrorMessage(fallback, error.statusCode ?? 500, meta)
   }
 
   if (error.message?.trim()) {
