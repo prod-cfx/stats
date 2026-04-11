@@ -284,6 +284,7 @@ export class SignalExecutorService implements OnModuleInit {
       const tradeSide = this.mapTradeSide(direction)
       const positionSide = this.mapPositionSide(direction)
       if (!tradeSide || !positionSide) return 'skipped'
+      const runtimeProvenance = this.readSignalRuntimeProvenance(resolvedSignal)
 
       const preparation = await this.prepareExecution(resolvedSignal, account, config, tradeSide, positionSide)
       if (preparation.type === 'duplicate') {
@@ -518,6 +519,7 @@ export class SignalExecutorService implements OnModuleInit {
               metadata: {
                 signalId: signal.id,
                 executionId: execution.id,
+                ...(runtimeProvenance ? { runtimeProvenance } : {}),
               },
             })
 
@@ -599,6 +601,7 @@ export class SignalExecutorService implements OnModuleInit {
     | { type: 'ready'; execution: Prisma.UserSignalExecutionGetPayload<{ select: { id: true } }>; orderParams: OrderParams; reservedQuote: Decimal; reserveReference: string }
   > {
     return this.txHost.withTransaction(async () => {
+      const runtimeProvenance = this.readSignalRuntimeProvenance(signal)
       const existing = await this.executionRepository.findBySignalAndAccount(signal!.id, account.id)
 
       if (existing) {
@@ -712,10 +715,13 @@ export class SignalExecutorService implements OnModuleInit {
         orderSide,
         positionSide,
         reservedQuote: reservedQuoteForExecution.gt(0) ? reservedQuoteForExecution : undefined,
-        metadata: this.buildExecutionStageMetadata([
-          EXECUTION_STAGES[0],
-          EXECUTION_STAGES[1],
-        ]),
+        metadata: {
+          ...this.buildExecutionStageMetadata([
+            EXECUTION_STAGES[0],
+            EXECUTION_STAGES[1],
+          ]),
+          ...(runtimeProvenance ? { runtimeProvenance } : {}),
+        },
       })
 
       return {
@@ -1173,5 +1179,19 @@ export class SignalExecutorService implements OnModuleInit {
         at: now,
       })),
     }
+  }
+
+  private readSignalRuntimeProvenance(signal: { metadata?: Prisma.JsonValue | null }): Prisma.JsonObject | null {
+    const metadata = signal.metadata
+    if (!metadata || Array.isArray(metadata) || typeof metadata !== 'object') {
+      return null
+    }
+
+    const runtimeProvenance = (metadata as Prisma.JsonObject).runtimeProvenance
+    if (!runtimeProvenance || Array.isArray(runtimeProvenance) || typeof runtimeProvenance !== 'object') {
+      return null
+    }
+
+    return runtimeProvenance as Prisma.JsonObject
   }
 }

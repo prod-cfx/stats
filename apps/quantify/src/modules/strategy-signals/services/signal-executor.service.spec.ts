@@ -626,4 +626,158 @@ describe('signalExecutorService', () => {
     expect(executorRepository.findStrategyInstanceMode).toHaveBeenCalledWith('inst-paper-1')
     expect(executorRepository.findActiveSubscriptionNetwork).toHaveBeenCalledWith('user-paper-1', 'inst-paper-1')
   })
+
+  it('stores runtime provenance on execution records during preparation', async () => {
+    const executionRepository = {
+      findBySignalAndAccount: jest.fn().mockResolvedValue(null),
+      create: jest.fn().mockResolvedValue({ id: 'exec-1' }),
+    }
+    const accountsService = { applyLedgerDelta: jest.fn().mockResolvedValue(undefined) }
+    const service = new SignalExecutorService(
+      {} as any,
+      { get: jest.fn() } as any,
+      {} as any,
+      accountsService as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      executionRepository as any,
+      {} as any,
+      { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) } as any,
+    )
+
+    jest.spyOn(service as any, 'lockAccount').mockResolvedValue({
+      id: 'acct-1',
+      userId: 'user-1',
+      baseCurrency: 'USDT',
+      balance: new Prisma.Decimal(1000),
+    })
+    jest.spyOn(service as any, 'buildOrderParamsWithLockedAccount').mockReturnValue({
+      ok: true,
+      params: {
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        amount: 0.01,
+        price: 100,
+        reduceOnly: false,
+      },
+      quoteBudget: new Prisma.Decimal(10),
+    })
+
+    await (service as any).prepareExecution(
+      {
+        id: 'sig-1',
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        metadata: {
+          runtimeProvenance: {
+            publishedSnapshotId: 'snapshot-1',
+            snapshotHash: 'snapshot-hash-1',
+          },
+        },
+      },
+      { id: 'acct-1', userId: 'user-1' },
+      DEFAULT_STRATEGY_SIGNALS_CONFIG as any,
+      'BUY',
+      'LONG',
+    )
+
+    expect(executionRepository.create).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        runtimeProvenance: expect.objectContaining({
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+        }),
+      }),
+    }))
+  })
+
+  it('propagates runtime provenance into recorded trade metadata', async () => {
+    const tradingService = { placeOrder: jest.fn() }
+    const positionsService = { recordTrade: jest.fn().mockResolvedValue(undefined) }
+    const executionRepository = {
+      markStage: jest.fn(),
+      markExecuted: jest.fn(),
+      markFailed: jest.fn(),
+      markSkipped: jest.fn(),
+    }
+    const service = new SignalExecutorService(
+      {} as any,
+      { get: jest.fn() } as any,
+      tradingService as any,
+      { applyLedgerDelta: jest.fn() } as any,
+      {} as any,
+      positionsService as any,
+      {} as any,
+      executionRepository as any,
+      {} as any,
+      {} as any,
+    )
+
+    const filledOrder = {
+      id: 'ord-1',
+      symbol: 'BTC/USDT',
+      marketType: 'spot',
+      side: 'buy',
+      type: 'market',
+      status: 'closed',
+      amount: 0.01,
+      filled: 0.01,
+      price: 100,
+      createdAt: Date.now(),
+      raw: {},
+    }
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'ready',
+      execution: { id: 'exec-1' },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'BTC/USDT',
+        side: 'buy',
+        amount: 0.01,
+        price: 100,
+        reduceOnly: false,
+      },
+      reservedQuote: new Prisma.Decimal(10),
+      reserveReference: 'reserve-1',
+    })
+    ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(filledOrder)
+    ;(service as any).releaseReservation = jest.fn().mockResolvedValue(undefined)
+
+    tradingService.placeOrder.mockResolvedValue(filledOrder)
+
+    await (service as any).processAccount(
+      {
+        id: 'sig-1',
+        direction: 'BUY',
+        signalType: 'ENTRY',
+        symbol: {
+          quoteAsset: 'USDT',
+        },
+        metadata: {
+          runtimeProvenance: {
+            publishedSnapshotId: 'snapshot-1',
+            snapshotHash: 'snapshot-hash-1',
+          },
+        },
+      },
+      { id: 'acct-1', userId: 'user-1' },
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(positionsService.recordTrade).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        signalId: 'sig-1',
+        executionId: 'exec-1',
+        runtimeProvenance: expect.objectContaining({
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+        }),
+      }),
+    }))
+  })
 })

@@ -3,6 +3,7 @@ import { ConfigModule } from "@nestjs/config"
 
 import { strategySignalsConfig } from "@/config/configuration"
 import { AiModule } from "@/modules/ai/ai.module"
+import { PublishedStrategySnapshotsRepository } from "@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository"
 import { MarketDataModule } from "@/modules/market-data/market-data.module"
 import { PrismaModule } from "@/prisma/prisma.module"
 import { SignalGeneratorRepository } from "./repositories/signal-generator.repository"
@@ -13,7 +14,14 @@ import { SignalTelemetryService } from "./services/signal-telemetry.service"
 
 @Module({
   imports: [PrismaModule, AiModule, MarketDataModule, ConfigModule.forFeature(strategySignalsConfig)],
-  providers: [SignalGeneratorService, SignalTelemetryService, TradingSignalRepository, StrategySignalStateRepository, SignalGeneratorRepository],
+  providers: [
+    SignalGeneratorService,
+    SignalTelemetryService,
+    TradingSignalRepository,
+    StrategySignalStateRepository,
+    SignalGeneratorRepository,
+    PublishedStrategySnapshotsRepository,
+  ],
   exports: [SignalGeneratorService, SignalTelemetryService, TradingSignalRepository, StrategySignalStateRepository],
 })
 export class StrategySignalsGenerationModule {}

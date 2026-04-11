@@ -1454,6 +1454,8 @@ export interface AccountAiQuantStrategySnapshot {
   symbol: string | null
   timeframe: string | null
   positionPct: number | null
+  publishedSnapshotId: string | null
+  snapshotHash: string | null
   paramSchema: AccountAiQuantParamSchema | null
   paramValues: AccountAiQuantParamValues | null
   schemaVersion: string | null
@@ -1581,6 +1583,8 @@ function mapMockStrategyToDetail(item: ReturnType<typeof getStrategyById>): Acco
       symbol: item.symbol,
       timeframe: item.timeframe,
       positionPct: item.positionPct,
+      publishedSnapshotId: null,
+      snapshotHash: null,
       paramSchema: item.paramSchema ?? null,
       paramValues: item.paramSchema ? (item.paramValues ?? {}) : null,
       schemaVersion: item.schemaVersion ?? null,
@@ -1685,72 +1689,57 @@ export async function fetchAccountAiQuantStrategyDetail(
   strategyId: string,
   userId: string,
 ): Promise<AccountAiQuantStrategyDetail> {
-  try {
-    return await apiCall(async () => {
-      validateId(strategyId, 'strategy ID')
-      if (!userId?.trim()) {
-        throw new ApiError('userId is required', 'INVALID_INPUT')
-      }
-
-      const search = new URLSearchParams({ userId: userId.trim() })
-      const response = await fetch(
-        `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}?${search.toString()}`,
-        {
-          method: 'GET',
-          headers: buildAccountAiQuantHeaders(userId.trim()),
-        },
-      )
-      const json = await parseAccountAiQuantJson(response, '获取 AI 量化策略详情失败')
-      const detail = unwrapResponse<AccountAiQuantStrategyDetail | null>(
-        json as AccountAiQuantStrategyDetail | BaseResponse<AccountAiQuantStrategyDetail>,
-      )
-      if (!detail) {
-        throw new ApiError('策略详情不存在', 'ACCOUNT_AI_QUANT_NOT_FOUND', 404, json)
-      }
-      return detail
-    }, 'FETCH_ACCOUNT_AI_QUANT_STRATEGY_DETAIL')
-  } catch (error) {
-    if (!shouldFallbackToAccountAiQuantMock(error)) throw error
-    const fallback = getStrategyById(strategyId)
-    if (!fallback || fallback.status === 'draft') {
-      throw new ApiError('策略详情不存在', 'ACCOUNT_AI_QUANT_NOT_FOUND', 404)
+  return apiCall(async () => {
+    validateId(strategyId, 'strategy ID')
+    if (!userId?.trim()) {
+      throw new ApiError('userId is required', 'INVALID_INPUT')
     }
-    return mapMockStrategyToDetail(fallback)
-  }
+
+    const search = new URLSearchParams({ userId: userId.trim() })
+    const response = await fetch(
+      `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}?${search.toString()}`,
+      {
+        method: 'GET',
+        headers: buildAccountAiQuantHeaders(userId.trim()),
+      },
+    )
+    const json = await parseAccountAiQuantJson(response, '获取 AI 量化策略详情失败')
+    const detail = unwrapResponse<AccountAiQuantStrategyDetail | null>(
+      json as AccountAiQuantStrategyDetail | BaseResponse<AccountAiQuantStrategyDetail>,
+    )
+    if (!detail) {
+      throw new ApiError('策略详情不存在', 'ACCOUNT_AI_QUANT_NOT_FOUND', 404, json)
+    }
+    return detail
+  }, 'FETCH_ACCOUNT_AI_QUANT_STRATEGY_DETAIL')
 }
 
 export async function performAccountAiQuantStrategyAction(
   strategyId: string,
   payload: { userId: string; action: AccountAiQuantStrategyAction },
 ): Promise<AccountAiQuantStrategyDetail> {
-  try {
-    return await apiCall(async () => {
-      validateId(strategyId, 'strategy ID')
-      if (!payload.userId?.trim()) {
-        throw new ApiError('userId is required', 'INVALID_INPUT')
-      }
+  return apiCall(async () => {
+    validateId(strategyId, 'strategy ID')
+    if (!payload.userId?.trim()) {
+      throw new ApiError('userId is required', 'INVALID_INPUT')
+    }
 
-      const response = await fetch(
-        `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}/actions`,
-        {
-          method: 'POST',
-          headers: buildAccountAiQuantHeaders(payload.userId.trim()),
-          body: JSON.stringify({
-            userId: payload.userId.trim(),
-            action: payload.action,
-          }),
-        },
-      )
-      const json = await parseAccountAiQuantJson(response, '执行策略动作失败')
-      return unwrapResponse<AccountAiQuantStrategyDetail>(
-        json as AccountAiQuantStrategyDetail | BaseResponse<AccountAiQuantStrategyDetail>,
-      )
-    }, 'PERFORM_ACCOUNT_AI_QUANT_STRATEGY_ACTION')
-  } catch (error) {
-    if (!shouldFallbackToAccountAiQuantMock(error)) throw error
-    updateMockStrategyStatus(strategyId, payload.action === 'run' ? 'running' : 'stopped')
-    return mapMockStrategyToDetail(getStrategyById(strategyId))
-  }
+    const response = await fetch(
+      `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}/actions`,
+      {
+        method: 'POST',
+        headers: buildAccountAiQuantHeaders(payload.userId.trim()),
+        body: JSON.stringify({
+          userId: payload.userId.trim(),
+          action: payload.action,
+        }),
+      },
+    )
+    const json = await parseAccountAiQuantJson(response, '执行策略动作失败')
+    return unwrapResponse<AccountAiQuantStrategyDetail>(
+      json as AccountAiQuantStrategyDetail | BaseResponse<AccountAiQuantStrategyDetail>,
+    )
+  }, 'PERFORM_ACCOUNT_AI_QUANT_STRATEGY_ACTION')
 }
 
 export async function deleteAccountAiQuantStrategy(

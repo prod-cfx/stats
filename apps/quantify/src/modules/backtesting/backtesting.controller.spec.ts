@@ -227,6 +227,51 @@ describe('backtestingController', () => {
     })
   })
 
+  it('loads published snapshot strategy even when legacy strategy id is omitted', async () => {
+    const runner = { run: jest.fn().mockResolvedValue({ ok: true }) }
+    const jobs = { createJob: jest.fn(), getJob: jest.fn(), getJobResult: jest.fn() }
+    const snapshotLoader = { load: jest.fn().mockResolvedValue({ id: 'snapshot-strategy', params: {}, fn: jest.fn() }) }
+    const caller = { resolveCallerUserIdFromAuthorization: jest.fn().mockResolvedValue('user-1') }
+    const capabilities = { getCapabilities: jest.fn() }
+    const symbolSupport = { checkSymbolSupport: jest.fn() }
+
+    const mod = await Test.createTestingModule({
+      controllers: [BacktestingController],
+      providers: [
+        { provide: BacktestRunnerService, useValue: runner },
+        { provide: BacktestJobsService, useValue: jobs },
+        { provide: BacktestCallerIdentityService, useValue: caller },
+        { provide: BacktestCapabilitiesService, useValue: capabilities },
+        { provide: BacktestSnapshotLoaderService, useValue: snapshotLoader },
+        { provide: BacktestSymbolSupportService, useValue: { checkSupport: symbolSupport.checkSymbolSupport } },
+        { provide: BacktestStrategyAdapterService, useValue: { build: jest.fn() } },
+      ],
+    }).compile()
+
+    const c = mod.get(BacktestingController)
+    const dto: any = {
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: ['15m'],
+      initialCash: 10000,
+      leverage: 1,
+      execution: { slippageBps: 10, feeBps: 5, priceSource: 'close' },
+      strategy: { protocolVersion: 'v1', publishedSnapshotId: 'snapshot-1' },
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [],
+    }
+
+    await c.run('Bearer token', 'user-1', dto)
+
+    expect(snapshotLoader.load).toHaveBeenCalledWith({
+      id: '',
+      protocolVersion: 'v1',
+      publishedSnapshotId: 'snapshot-1',
+      userId: 'user-1',
+    })
+    expect(runner.run).toHaveBeenCalledTimes(1)
+  })
+
   it('maps capability upstream error to service unavailable domain exception', async () => {
     const runner = { run: jest.fn() }
     const jobs = { createJob: jest.fn(), getJob: jest.fn(), getJobResult: jest.fn() }

@@ -145,10 +145,12 @@ export class AccountStrategyViewService {
       ...(row.params as Record<string, unknown> ?? {}),
       ...(sub?.customParams as Record<string, unknown> ?? {}),
     } as Record<string, unknown>
+    const strategySchema = this.resolveStrategySchema(row)
+    const schemaVersion = this.resolveSchemaVersion(row)
     const dynamicParams = this.buildDynamicParams({
-      strategySchema: this.resolveStrategySchema(row),
+      strategySchema,
       mergedParams,
-      schemaVersion: this.resolveSchemaVersion(row),
+      schemaVersion,
     })
 
     const symbol = this.readString(mergedParams, ['symbol'])
@@ -279,6 +281,10 @@ export class AccountStrategyViewService {
           closedPositionRows,
         )
       : this.readStatsNumber(stats, 'todayPnl') ?? totalPnl
+    const resolvedSnapshot = await this.resolveBoundSnapshotDetail({
+      userId,
+      source: row,
+    })
 
     const detail: AccountStrategyDetailResponseDto = {
       id: row.id,
@@ -303,12 +309,22 @@ export class AccountStrategyViewService {
       todayPnl,
       equitySeries: derivedEquitySeries,
       snapshot: {
-        exchange: this.readString(mergedParams, ['exchange', 'provider', 'exchangeId']),
-        symbol,
-        timeframe: this.readString(mergedParams, ['timeframe', 'period']),
-        positionPct: this.readNumber(mergedParams, ['positionPct', 'positionSizeRatioPercent']),
+        publishedSnapshotId: resolvedSnapshot.publishedSnapshotId,
+        snapshotHash: resolvedSnapshot.snapshotHash,
+        exchange: resolvedSnapshot.paramValues
+          ? this.readString(resolvedSnapshot.paramValues, ['exchange', 'provider', 'exchangeId'])
+          : null,
+        symbol: resolvedSnapshot.paramValues
+          ? this.readString(resolvedSnapshot.paramValues, ['symbol'])
+          : null,
+        timeframe: resolvedSnapshot.paramValues
+          ? this.readString(resolvedSnapshot.paramValues, ['timeframe', 'period'])
+          : null,
+        positionPct: resolvedSnapshot.paramValues
+          ? this.readNumber(resolvedSnapshot.paramValues, ['positionPct', 'positionSizeRatioPercent'])
+          : null,
         paramSchema: dynamicParams.paramSchema,
-        paramValues: dynamicParams.paramValues,
+        paramValues: resolvedSnapshot.paramValues,
         schemaVersion: dynamicParams.schemaVersion,
         deployAccountName: sub?.exchangeAccount?.name ?? null,
         deployAt: sub?.subscribedAt?.toISOString() ?? row.startedAt?.toISOString() ?? null,
@@ -343,6 +359,60 @@ export class AccountStrategyViewService {
     }
 
     return detail
+  }
+
+  private async resolveBoundSnapshotDetail(input: {
+    userId: string
+    source: unknown
+  }): Promise<{
+    publishedSnapshotId: string | null
+    snapshotHash: string | null
+    paramValues: Record<string, unknown> | null
+  }> {
+    const root = this.readRecord(input.source)
+    const metadata = this.readRecord(root?.metadata)
+    const boundPublishedSnapshotId = typeof metadata?.publishedSnapshotId === 'string' && metadata.publishedSnapshotId.trim().length > 0
+      ? metadata.publishedSnapshotId.trim()
+      : null
+    const boundSnapshotHash = typeof metadata?.snapshotHash === 'string' && metadata.snapshotHash.trim().length > 0
+      ? metadata.snapshotHash.trim()
+      : null
+
+    if (!boundPublishedSnapshotId || !this.publishedSnapshotsRepository) {
+      return {
+        publishedSnapshotId: boundPublishedSnapshotId,
+        snapshotHash: boundSnapshotHash,
+        paramValues: null,
+      }
+    }
+
+    const snapshot = await this.publishedSnapshotsRepository.findByIdForUser(boundPublishedSnapshotId, input.userId)
+    if (!snapshot) {
+      return {
+        publishedSnapshotId: boundPublishedSnapshotId,
+        snapshotHash: boundSnapshotHash,
+        paramValues: null,
+      }
+    }
+
+    if (boundSnapshotHash && snapshot.snapshotHash !== boundSnapshotHash) {
+      return {
+        publishedSnapshotId: boundPublishedSnapshotId,
+        snapshotHash: boundSnapshotHash,
+        paramValues: null,
+      }
+    }
+
+    const paramValues = {
+      ...(this.readRecord(snapshot.paramsSnapshot) ?? {}),
+      ...(this.readRecord(snapshot.lockedParams) ?? {}),
+    }
+
+    return {
+      publishedSnapshotId: snapshot.id,
+      snapshotHash: snapshot.snapshotHash,
+      paramValues: Object.keys(paramValues).length > 0 ? paramValues : null,
+    }
   }
 
   async performAction(

@@ -34,10 +34,13 @@ import { ConfigService } from '@nestjs/config'
 import { EventEmitter2 } from '@nestjs/event-emitter'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 SchedulerRegistry
 import { SchedulerRegistry } from '@nestjs/schedule'
+import { Optional } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { EnvService } from '@/common/services/env.service'
-import { reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
+import { mapTimeframe, reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AiService } from '@/modules/ai/ai.service'
 import { normalizeGatewayBars } from '@/modules/market-data/services/market-data-bar.mapper'
@@ -76,6 +79,11 @@ type StrategyInstanceWithTemplate = Prisma.StrategyInstanceGetPayload<{
   }
 }>
 
+type RuntimeStrategySource = {
+  strategy: StrategyTemplate
+  provenance: Prisma.JsonObject
+}
+
 @Injectable()
 export class SignalGeneratorService {
   private readonly logger = new Logger(SignalGeneratorService.name)
@@ -105,6 +113,7 @@ export class SignalGeneratorService {
     private readonly marketDataReadGateway: MarketDataReadGateway,
     private readonly env: EnvService,
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
+    @Optional() private readonly publishedSnapshotsRepository?: PublishedStrategySnapshotsRepository,
   ) {
     this.schedulerStage = new SignalGenerationSchedulerStage(
       this.schedulerRegistry,
@@ -354,36 +363,55 @@ export class SignalGeneratorService {
       return
     }
 
+    const runtimeSource = await this.resolveRuntimeStrategySource(instance, strategy)
+    if (!runtimeSource) {
+      return
+    }
+    const runtimeStrategy = runtimeSource.strategy
+    const runtimeProvenance = runtimeSource.provenance
+
+    if (runtimeProvenance.executionContentSource === 'PUBLISHED_SNAPSHOT') {
+      await this.processPublishedSnapshotStrategyInstance(
+        instance,
+        runtimeStrategy,
+        runtimeProvenance,
+        config,
+        options,
+      )
+      return
+    }
+
     // 检查策略是否使用新架构（有 execution 和 dataRequirements）
-    const execution = strategy.execution as unknown as StrategyExecutionConfig | null | undefined
-    const dataRequirements = parseDataRequirements(strategy.dataRequirements)
-    const legs = strategy.legs as unknown as StrategyLegDefinition[] | null | undefined
+    const execution = runtimeStrategy.execution as unknown as StrategyExecutionConfig | null | undefined
+    const dataRequirements = parseDataRequirements(runtimeStrategy.dataRequirements)
+    const legs = runtimeStrategy.legs as unknown as StrategyLegDefinition[] | null | undefined
 
     if (execution && dataRequirements && legs && legs.length > 0) {
       // 新架构：使用 legs 和 dataRequirements
       return this.processStrategyWithLegsForInstance(
         instance,
-        strategy,
+        runtimeStrategy,
         execution,
         dataRequirements,
         legs,
         config,
         options,
+        runtimeProvenance,
       )
     }
 
     // 旧架构：使用 requiredFields
-    const requiredFields = strategy.requiredFields as string[] | null
+    const requiredFields = runtimeStrategy.requiredFields as string[] | null
     if (!requiredFields?.length) {
       this.logger.debug(
-        `Strategy ${strategy.id} has no required fields or legs, skipping signal generation`,
+        `Strategy ${runtimeStrategy.id} has no required fields or legs, skipping signal generation`,
       )
       return
     }
 
-    if (!instance.llmModel || !strategy.promptTemplate) {
+    if (!instance.llmModel || !runtimeStrategy.promptTemplate) {
       this.logger.debug(
-        `Strategy ${strategy.id} / instance ${instance.id} lacks llmModel or promptTemplate, skipping`,
+        `Strategy ${runtimeStrategy.id} / instance ${instance.id} lacks llmModel or promptTemplate, skipping`,
       )
       return
     }
@@ -393,11 +421,11 @@ export class SignalGeneratorService {
       return
     }
 
-    const candidateGroups = await this.findCandidateGroups(strategy, requiredFields)
+    const candidateGroups = await this.findCandidateGroups(runtimeStrategy, requiredFields)
     if (!candidateGroups.length) {
-      this.logger.debug(`Strategy ${strategy.id} has no indicator groups covering required fields`)
+      this.logger.debug(`Strategy ${runtimeStrategy.id} has no indicator groups covering required fields`)
       this.telemetry.recordGeneration({
-        strategyId: strategy.id,
+        strategyId: runtimeStrategy.id,
         symbolCode: 'N/A',
         success: false,
         reason: 'MISSING_INDICATORS',
@@ -408,7 +436,7 @@ export class SignalGeneratorService {
     const totalGroups = candidateGroups.length
     const maxPerTick = Math.min(config.maxSymbolsPerStrategy, totalGroups)
     if (maxPerTick <= 0) {
-      this.logger.debug(`Strategy ${strategy.id} has non-positive maxSymbolsPerStrategy, skipping`)
+      this.logger.debug(`Strategy ${runtimeStrategy.id} has non-positive maxSymbolsPerStrategy, skipping`)
       return
     }
 
@@ -421,15 +449,16 @@ export class SignalGeneratorService {
       try {
         await this.generateSignalForGroup(
           instance,
-          strategy,
+          runtimeStrategy,
           group,
           requiredFields,
+          runtimeProvenance,
           config,
           options,
         )
       } catch (error) {
         this.logger.error(
-          `Failed to generate signal for strategy ${strategy.id} / instance ${instance.id} and symbol ${group.symbol.code}: ${(error as Error).message}`,
+          `Failed to generate signal for strategy ${runtimeStrategy.id} / instance ${instance.id} and symbol ${group.symbol.code}: ${(error as Error).message}`,
           (error as Error).stack,
         )
       }
@@ -449,6 +478,7 @@ export class SignalGeneratorService {
     legs: StrategyLegDefinition[],
     config: StrategySignalsRuntimeConfig,
     options: { skipCooldown?: boolean } = {},
+    runtimeProvenance: Prisma.JsonObject = {},
   ) {
     if (!instance.llmModel || !strategy.promptTemplate) {
       this.logger.debug(
@@ -482,6 +512,7 @@ export class SignalGeneratorService {
         primaryLeg,
         config,
         options,
+        runtimeProvenance,
       )
     } catch (error) {
       this.logger.error(
@@ -496,6 +527,7 @@ export class SignalGeneratorService {
     strategy: StrategyTemplate,
     group: IndicatorGroup,
     requiredFields: string[],
+    runtimeProvenance: Prisma.JsonObject,
     config: StrategySignalsRuntimeConfig,
     options: { skipCooldown?: boolean } = {},
   ) {
@@ -556,6 +588,7 @@ export class SignalGeneratorService {
       indicatorValues,
       latestIndicatorTime,
       aiPayload,
+      runtimeProvenance,
       options.skipCooldown ?? false,
     )
   }
@@ -575,6 +608,7 @@ export class SignalGeneratorService {
     indicatorValues: Record<string, number>,
     latestIndicatorTime: Date | undefined,
     aiPayload: AiSignalPayload & { rawResponse: string },
+    runtimeProvenance: Prisma.JsonObject,
     skipCooldown = false,
   ) {
     await this.persistenceStage.createSignalWithCooldownAndLock(
@@ -585,6 +619,7 @@ export class SignalGeneratorService {
       indicatorValues,
       latestIndicatorTime,
       aiPayload,
+      runtimeProvenance,
       skipCooldown,
     )
   }
@@ -957,6 +992,202 @@ export class SignalGeneratorService {
     return state.lockedUntil > new Date()
   }
 
+  private async processPublishedSnapshotStrategyInstance(
+    instance: StrategyInstanceWithTemplate,
+    strategy: StrategyTemplate,
+    runtimeProvenance: Prisma.JsonObject,
+    config: StrategySignalsRuntimeConfig,
+    options: { skipCooldown?: boolean } = {},
+  ) {
+    if (!options.skipCooldown && (await this.isStrategyLocked(instance.id))) {
+      this.logger.debug(`Strategy instance ${instance.id} cooldown active, skipping generation`)
+      return
+    }
+
+    const params = this.buildEffectiveParams(strategy, instance) ?? {}
+    const symbolCode = this.readString(params.symbol)
+    const timeframe = this.readRuntimeTimeframe(params.timeframe ?? params.baseTimeframe)
+
+    if (!symbolCode || !timeframe) {
+      this.logger.warn(
+        `Published snapshot runtime params missing symbol/timeframe for instance ${instance.id}, skipping generation`,
+      )
+      await this.handleStrategyFailure(instance.id, config)
+      this.telemetry.recordGeneration({
+        strategyId: strategy.id,
+        symbolCode: symbolCode ?? 'N/A',
+        success: false,
+        reason: 'SNAPSHOT_RUNTIME_PARAMS_MISSING',
+      })
+      return
+    }
+
+    const symbol = await this.generatorRepository.findSymbolByCode(symbolCode)
+    if (!symbol) {
+      this.logger.warn(`Symbol ${symbolCode} not found for published snapshot runtime on instance ${instance.id}`)
+      await this.handleStrategyFailure(instance.id, config)
+      this.telemetry.recordGeneration({
+        strategyId: strategy.id,
+        symbolCode,
+        success: false,
+        reason: 'SYMBOL_NOT_FOUND',
+      })
+      return
+    }
+
+    const prismaTimeframe = mapTimeframe(timeframe)
+    const referenceBar = await this.loadLatestBar(symbol.id, prismaTimeframe)
+    const referencePrice = referenceBar ? Number(referenceBar.close) : undefined
+    const aiPayload = await this.generateSignalWithAi(
+      instance,
+      strategy,
+      symbol,
+      timeframe,
+      {},
+      config,
+      referencePrice,
+      options.skipCooldown ?? false,
+    )
+
+    if (!aiPayload) {
+      await this.handleStrategyFailure(instance.id, config)
+      this.telemetry.recordGeneration({
+        strategyId: strategy.id,
+        symbolCode,
+        success: false,
+        reason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+      })
+      return
+    }
+
+    await this.resetStrategyFailure(instance.id)
+
+    await this.createSignalWithCooldownAndLock(
+      instance,
+      strategy,
+      {
+        symbol,
+        timeframe: prismaTimeframe,
+        fields: new Map(),
+      },
+      config,
+      {},
+      referenceBar?.time,
+      aiPayload,
+      runtimeProvenance,
+      options.skipCooldown ?? false,
+    )
+  }
+
+  private async resolveRuntimeStrategySource(
+    instance: StrategyInstanceWithTemplate,
+    strategy: StrategyTemplate,
+  ): Promise<RuntimeStrategySource | null> {
+    const binding = this.readSnapshotBinding(instance.metadata)
+    const baseProvenance: Prisma.JsonObject = {
+      bindingSource: binding.bindingSource ?? 'STRATEGY_TEMPLATE',
+      publishedSnapshotId: binding.publishedSnapshotId,
+      snapshotHash: binding.snapshotHash,
+      sourceStrategyInstanceId: binding.sourceStrategyInstanceId,
+      sourceStrategyTemplateId: binding.sourceStrategyTemplateId ?? strategy.id,
+      runtimeStrategyInstanceId: instance.id,
+      runtimeStrategyTemplateId: strategy.id,
+      controlPlaneSource: 'STRATEGY_TEMPLATE',
+      executionContentSource: 'STRATEGY_TEMPLATE',
+    }
+
+    if (binding.bindingSource !== 'PUBLISHED_SNAPSHOT' || !binding.publishedSnapshotId) {
+      return {
+        strategy,
+        provenance: baseProvenance,
+      }
+    }
+
+    if (!this.publishedSnapshotsRepository) {
+      this.logger.warn(
+        `Strategy instance ${instance.id} requires published snapshot ${binding.publishedSnapshotId}, but snapshot repository is unavailable`,
+      )
+      return null
+    }
+
+    const snapshot = await this.publishedSnapshotsRepository.findById(binding.publishedSnapshotId)
+    if (!snapshot) {
+      this.logger.warn(
+        `Strategy instance ${instance.id} is bound to missing published snapshot ${binding.publishedSnapshotId}`,
+      )
+      return null
+    }
+
+    if (binding.snapshotHash && snapshot.snapshotHash !== binding.snapshotHash) {
+      this.logger.warn(
+        `Strategy instance ${instance.id} snapshot hash mismatch: expected ${binding.snapshotHash}, got ${snapshot.snapshotHash}`,
+      )
+      return null
+    }
+
+    return {
+      strategy: {
+        ...strategy,
+        script: snapshot.scriptSnapshot,
+        promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+        defaultParams: {
+          ...(this.readJsonRecord(snapshot.paramsSnapshot) ?? {}),
+          ...(this.readJsonRecord(snapshot.lockedParams) ?? {}),
+        } as Prisma.JsonObject,
+      },
+      provenance: {
+        ...baseProvenance,
+        publishedSnapshotId: snapshot.id,
+        snapshotHash: snapshot.snapshotHash,
+        sourceStrategyInstanceId: snapshot.strategyInstanceId ?? binding.sourceStrategyInstanceId,
+        sourceStrategyTemplateId: snapshot.strategyTemplateId ?? binding.sourceStrategyTemplateId ?? strategy.id,
+        executionContentSource: 'PUBLISHED_SNAPSHOT',
+      },
+    }
+  }
+
+  private readSnapshotBinding(metadata: unknown): {
+    bindingSource: 'PUBLISHED_SNAPSHOT' | 'STRATEGY_TEMPLATE' | null
+    publishedSnapshotId: string | null
+    snapshotHash: string | null
+    sourceStrategyInstanceId: string | null
+    sourceStrategyTemplateId: string | null
+  } {
+    const record = this.asRecord(metadata)
+    const rawBindingSource = this.readString(record.bindingSource)
+    return {
+      bindingSource: rawBindingSource === 'PUBLISHED_SNAPSHOT' ? 'PUBLISHED_SNAPSHOT' : null,
+      publishedSnapshotId: this.readString(record.publishedSnapshotId),
+      snapshotHash: this.readString(record.snapshotHash),
+      sourceStrategyInstanceId: this.readString(record.sourceStrategyInstanceId),
+      sourceStrategyTemplateId: this.readString(record.sourceStrategyTemplateId),
+    }
+  }
+
+  private readString(value: unknown): string | null {
+    if (typeof value !== 'string') return null
+    const normalized = value.trim()
+    return normalized.length > 0 ? normalized : null
+  }
+
+  private readRuntimeTimeframe(value: unknown): AppMarketTimeframe | null {
+    const normalized = this.readString(value)
+    if (!normalized) return null
+    const allowed = new Set<AppMarketTimeframe>([
+      '1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w',
+    ])
+    return allowed.has(normalized as AppMarketTimeframe)
+      ? (normalized as AppMarketTimeframe)
+      : null
+  }
+
+  private readJsonRecord(value: unknown): Record<string, unknown> | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return null
+    }
+    return value as Record<string, unknown>
+  }
+
   private buildEffectiveParams(
     strategy: StrategyTemplate,
     instance: StrategyInstance | StrategyInstanceWithTemplate,
@@ -980,6 +1211,7 @@ export class SignalGeneratorService {
     primaryLeg: StrategyLegDefinition,
     config: StrategySignalsRuntimeConfig,
     options: { skipCooldown?: boolean } = {},
+    runtimeProvenance: Prisma.JsonObject = {},
   ) {
     // 1. 查找 primary leg 的 symbol
     const primarySymbol = await this.generatorRepository.findSymbolByCode(primaryLeg.symbol)
@@ -1159,6 +1391,7 @@ export class SignalGeneratorService {
         promptData,
         directSignal.payload,
         config,
+        runtimeProvenance,
         options.skipCooldown ?? false,
       )
 
@@ -1265,6 +1498,7 @@ export class SignalGeneratorService {
         promptData,
         aiPayload,
         config,
+        runtimeProvenance,
         options.skipCooldown ?? false,
       )
 
@@ -1310,6 +1544,7 @@ export class SignalGeneratorService {
           promptData,
           fallback,
           config,
+          runtimeProvenance,
           options.skipCooldown ?? false,
         )
         if (signalResult.created && signalResult.signalId) {
@@ -1342,6 +1577,7 @@ export class SignalGeneratorService {
     indicators: Record<string, any>,
     aiPayload: AiSignalPayload & { rawResponse: string },
     config: StrategySignalsRuntimeConfig,
+    runtimeProvenance: Prisma.JsonObject,
     skipCooldown = false,
   ): Promise<{ created: boolean; signalId: string | null; reason?: string }> {
     return this.persistenceStage.createMultiLegSignal(
@@ -1352,6 +1588,7 @@ export class SignalGeneratorService {
       indicators,
       aiPayload,
       config,
+      runtimeProvenance,
       skipCooldown,
     )
   }

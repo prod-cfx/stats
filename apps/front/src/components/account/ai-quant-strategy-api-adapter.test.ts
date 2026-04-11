@@ -77,6 +77,8 @@ describe('ai-quant-strategy-api-adapter', () => {
         symbol: 'BTCUSDT',
         timeframe: '15m',
         positionPct: 10,
+        publishedSnapshotId: 'snapshot-2',
+        snapshotHash: 'snapshot-hash-2',
         deployAccountName: null,
         deployAt: null,
         paramSchema: null,
@@ -132,6 +134,8 @@ describe('ai-quant-strategy-api-adapter', () => {
     expect(record.latestOrders[0]?.orderId).toBe('ord-1')
     expect(record.status).toBe('running')
     expect(record.exchange).toBe('okx')
+    expect(record.publishedSnapshotId).toBe('snapshot-2')
+    expect(record.snapshotHash).toBe('snapshot-hash-2')
     expect(record.paramSchema).toBeNull()
     expect(record.paramValues).toBeNull()
     expect(record.schemaVersion).toBeNull()
@@ -233,4 +237,62 @@ describe('ai-quant-strategy-api-adapter', () => {
 
     expect(record.initialCapital).toBe(60000)
   })
+
+  it('prefers snapshot-truth display fields over drifted live fields', () => {
+    const record = mapAccountStrategyDetailToRecord({
+      id: 'inst-snapshot',
+      name: 'snapshot detail',
+      status: 'running',
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      timeframe: '5m',
+      positionPct: 5,
+      isSubscribed: true,
+      metrics: {
+        returnPct: 0,
+        maxDrawdownPct: 0,
+        winRatePct: 0,
+        tradeCount: 0,
+      },
+      updatedAt: '2026-03-20T00:00:00.000Z',
+      totalPnl: 0,
+      todayPnl: 0,
+      equitySeries: [{ ts: '2026-03-20T00:00:00.000Z', value: 10000 }],
+      snapshot: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 12,
+        publishedSnapshotId: 'snapshot-9',
+        snapshotHash: 'snapshot-hash-9',
+        deployAccountName: null,
+        deployAt: null,
+        paramSchema: null,
+        paramValues: null,
+        schemaVersion: null,
+      },
+      accountOverview: {
+        initialBalance: 10000,
+        totalEquity: 10000,
+        availableBalance: 10000,
+        totalPnl: 0,
+        todayPnl: 0,
+        baseCurrency: 'USDT',
+      },
+      positionOverview: {
+        openPositionsCount: 0,
+        closedPositionsCount: 0,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 0,
+      },
+      latestOrders: [],
+      timeline: [],
+    } as any)
+
+    expect(record.exchange).toBe('binance')
+    expect(record.symbol).toBe('BTCUSDT')
+    expect(record.timeframe).toBe('15m')
+    expect(record.positionPct).toBe(12)
+  })
+
 })

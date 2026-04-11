@@ -34,6 +34,8 @@ export interface AiQuantStrategyRecord {
   paramValues: Record<string, unknown> | null
   schemaVersion: string | null
   supportsDynamicParams: boolean
+  publishedSnapshotId?: string | null
+  snapshotHash?: string | null
   totalPnl?: number | null
   todayPnl?: number | null
   accountOverview?: {

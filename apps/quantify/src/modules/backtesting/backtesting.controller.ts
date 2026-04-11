@@ -163,7 +163,7 @@ export class BacktestingController {
     }
 
     return this.snapshotLoader.load({
-      id: dto.strategy.id,
+      id: dto.strategy.id?.trim() ?? '',
       protocolVersion: dto.strategy.protocolVersion,
       publishedSnapshotId,
       userId,

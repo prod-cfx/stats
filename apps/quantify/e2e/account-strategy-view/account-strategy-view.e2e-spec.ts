@@ -17,6 +17,8 @@ describe('account-strategy-view (E2E)', () => {
   let strategyRunningId: string
   let strategyPausedId: string
   let ownerBinanceAccountId: string
+  let codegenSessionId: string
+  let publishedSnapshotId: string
 
   function createTestUser(prisma: PrismaClient, emailPrefix: string, nickname: string) {
     return prisma.user.create({
@@ -151,6 +153,58 @@ describe('account-strategy-view (E2E)', () => {
     })
     strategyRunningId = running.id
 
+    const session = await prisma.llmStrategyCodegenSession.create({
+      data: {
+        userId: owner.id,
+        strategyInstanceId: running.id,
+        status: 'PUBLISHED',
+      },
+    })
+    codegenSessionId = session.id
+
+    const snapshot = await prisma.publishedStrategySnapshot.create({
+      data: {
+        sessionId: session.id,
+        strategyTemplateId: templateId,
+        strategyInstanceId: running.id,
+        snapshotHash: 'snapshot-hash-e2e',
+        scriptHash: 'script-hash-e2e',
+        specHash: 'spec-hash-e2e',
+        scriptSnapshot: 'export default {}',
+        specSnapshot: {},
+        consistencyReport: {},
+        userIntentSummary: {},
+        strategySummary: {},
+        scriptSummary: {},
+        lockedParams: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+          positionPct: 10,
+        },
+        paramsSnapshot: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+          positionPct: 10,
+        },
+      },
+    })
+    publishedSnapshotId = snapshot.id
+
+    await prisma.strategyInstance.update({
+      where: { id: running.id },
+      data: {
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: snapshot.id,
+          snapshotHash: snapshot.snapshotHash,
+          sourceStrategyInstanceId: running.id,
+          sourceStrategyTemplateId: templateId,
+        },
+      },
+    })
+
     const paused = await createTestStrategyInstance(prisma, {
       templateId,
       name: 'E2E-Account-Strategy-Paused',
@@ -210,6 +264,12 @@ describe('account-strategy-view (E2E)', () => {
           in: [owner.id, subscriber.id],
         },
       },
+    })
+    await prisma.publishedStrategySnapshot.deleteMany({
+      where: { id: publishedSnapshotId },
+    })
+    await prisma.llmStrategyCodegenSession.deleteMany({
+      where: { id: codegenSessionId },
     })
     await prisma.exchangeAccount.deleteMany({
       where: {
@@ -290,6 +350,7 @@ describe('account-strategy-view (E2E)', () => {
     const body = {
       name: 'E2E Deploy Idempotent',
       deployRequestId,
+      publishedSnapshotId,
       exchange: 'binance',
       symbol: 'BTCUSDT',
       timeframe: '15m',
