@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Headers, Inject, Param, Post, UseGuards } from '@nestjs/common'
-import { ApiBearerAuth, ApiBody, ApiOkResponse, ApiTags } from '@nestjs/swagger'
+import { ApiBearerAuth, ApiBody, ApiHeader, ApiOkResponse, ApiTags } from '@nestjs/swagger'
 import { Throttle } from '@nestjs/throttler'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
@@ -32,6 +32,7 @@ export class BacktestingProxyController {
 
   @Post('symbols/check')
   @ApiBody({ type: BacktestingSymbolSupportRequestDto })
+  @ApiHeader({ name: 'x-request-id', required: false })
   @ApiOkResponse({ type: BacktestingSymbolSupportResponseDto })
   async checkSymbolSupport(
     @CurrentUser('id') userId: string,

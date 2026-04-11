@@ -3093,7 +3093,7 @@ const endpoints = makeApi([
       {
         name: 'x-request-id',
         type: 'Header',
-        schema: z.string(),
+        schema: z.string().optional(),
       },
     ],
     response: BacktestingSymbolSupportResponseDto,
