@@ -48,6 +48,7 @@ describe('exchange account transport', () => {
     jest.resetModules()
     mockGetToken.mockReset()
     mockGetToken.mockReturnValue('a.b.c')
+    mockClient.AccountExchangeAccountsController_list.mockReset()
   })
 
   afterEach(() => {
@@ -84,5 +85,16 @@ describe('exchange account transport', () => {
         Authorization: 'Bearer a.b.c',
       }),
     })
+  })
+
+  it('preserves AuthenticationError when token is missing', async () => {
+    mockGetToken.mockReturnValueOnce(null)
+
+    const { fetchUserExchangeAccountStatuses } = await import('./api')
+    await expect(fetchUserExchangeAccountStatuses()).rejects.toMatchObject({
+      code: 'UNAUTHENTICATED',
+      statusCode: 401,
+    })
+    expect(mockClient.AccountExchangeAccountsController_list).not.toHaveBeenCalled()
   })
 })

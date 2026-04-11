@@ -208,17 +208,18 @@ async function requestAccountExchangeAccounts<T>(
   options?: { exchangeId?: string; payload?: unknown },
 ): Promise<T> {
   const accountExchangeClient = client as any
+  const authHeaders = requireAuthHeaders()
   try {
     if (operation === 'list') {
       const response = await accountExchangeClient.AccountExchangeAccountsController_list({
-        headers: requireAuthHeaders(),
+        headers: authHeaders,
       })
       return unwrapResponse(response as T | BaseResponse<T>)
     }
 
     if (operation === 'upsert') {
       const response = await accountExchangeClient.AccountExchangeAccountsController_upsert(options?.payload, {
-        headers: requireAuthHeaders(),
+        headers: authHeaders,
       })
       return unwrapResponse(response as T | BaseResponse<T>)
     }
@@ -228,7 +229,7 @@ async function requestAccountExchangeAccounts<T>(
     }
 
     const response = await accountExchangeClient.AccountExchangeAccountsController_delete({
-      headers: requireAuthHeaders(),
+      headers: authHeaders,
       params: { exchangeId: options.exchangeId },
     })
 
