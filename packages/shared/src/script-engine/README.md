@@ -162,3 +162,6 @@ const context = buildStrategyContext({
 
 const result = await engine.execute(strategyScript, { context, timeout: 5000 })
 ```
+
+这里展示的是当前公开可直接导入的兼容入口。
+如果你在维护多 leg / 多周期策略链路，需要继续参考 `helpers/context-builder.ts` 里的 `buildMultiLegStrategyContext()` 设计，而不是把 `buildStrategyContext()` 当成唯一主路径。

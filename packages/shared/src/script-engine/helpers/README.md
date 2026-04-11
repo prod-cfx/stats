@@ -41,6 +41,9 @@ helpers/
 
 ## 快速开始
 
+如果你在使用当前公开导出，仍然会先接触到兼容入口 `buildStrategyContext()`。
+但要注意：它在实现中已经被标记为旧版单 leg / 单周期构建器；核心运行路径已经演进到 `buildMultiLegStrategyContext()` 这套多 leg / 多周期模型。
+
 ```ts
 import { createScriptEngine } from '@ai/shared/script-engine'
 import { buildStrategyContext } from '@ai/shared/script-engine/helpers'
@@ -84,9 +87,15 @@ return null
 
 ## 上下文构建器
 
-当前主要构建器：
+当前公开构建器：
 
 - `buildStrategyContext(context)`
+
+说明：
+
+- 这是当前 `@ai/shared/script-engine/helpers` 对外仍可直接使用的兼容入口
+- 它对应旧版单 leg / 单周期上下文
+- `context-builder.ts` 内部已经提供新版 `buildMultiLegStrategyContext(context)`，用于多 leg / 多周期场景
 
 它会注入：
 
@@ -145,7 +154,8 @@ return null
 ## 安全说明
 
 - 不要直接把宿主函数塞进 `engine.execute({ context })`
-- 应通过 `buildStrategyContext()` 使用预包装后的 `helpers`
+- 单 leg / 兼容路径可通过 `buildStrategyContext()` 使用预包装后的 `helpers`
+- 多 leg / 多周期场景应优先参考 `context-builder.ts` 中的 `buildMultiLegStrategyContext()` 设计
 - `helpers` 底层由 `safe-helpers.ts` 包装、去原型并冻结
 
 ## 返回值约束
