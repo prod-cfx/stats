@@ -2305,6 +2305,24 @@ export async function listAiQuantConversations(): Promise<AiQuantConversationRes
   return unwrapResponse<AiQuantConversationResponse[]>(json as AiQuantConversationResponse[] | BaseResponse<AiQuantConversationResponse[]>)
 }
 
+export async function deleteAiQuantConversation(conversationId: string): Promise<void> {
+  const authHeaders = requireAuthHeaders()
+  const response = await fetch(`${API_BASE_URL}/account/ai-quant/conversations/${encodeURIComponent(conversationId)}`, {
+    method: 'DELETE',
+    headers: authHeaders,
+  })
+  let json: unknown = null
+  try {
+    json = await response.json()
+  } catch {
+    json = null
+  }
+  if (!response.ok) {
+    const message = parseApiErrorMessage(response.status, json, '删除 AI Quant 会话失败')
+    throw new ApiError(message, 'AI_QUANT_CONVERSATION_ERROR', response.status, json)
+  }
+}
+
 export async function continueLlmCodegenSession(
   sessionId: string,
   payload: ContinueLlmCodegenSessionPayload,

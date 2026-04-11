@@ -1,5 +1,5 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
-import { Controller, Get, Headers } from '@nestjs/common'
+import { Controller, Delete, Get, Headers, Param } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { AiQuantConversationResponseDto } from '../dto/ai-quant-conversation.response.dto'
 import { CallerIdentityService } from '../services/caller-identity.service'
@@ -22,5 +22,16 @@ export class AccountAiQuantConversationsController {
   ): Promise<AiQuantConversationResponseDto[]> {
     const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.service.listConversations(callerUserId)
+  }
+
+  @Delete(':id')
+  @ApiOperation({ summary: '删除当前用户的 AI Quant 会话' })
+  async remove(
+    @Headers('authorization') authorization: string | undefined,
+    @Headers('x-user-id') forwardedUserId: string | undefined,
+    @Param('id') id: string,
+  ): Promise<void> {
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
+    return this.service.deleteConversation(id, callerUserId)
   }
 }

@@ -14,6 +14,7 @@ export interface AiQuantConversationSnapshotRecord {
   userId: string
   codegenSessionId: string
   title: string
+  archivedAt: Date | null
   createdAt: Date
   updatedAt: Date
   messages: AiQuantConversationMessageSnapshot[]
@@ -65,13 +66,14 @@ export class AiQuantConversationsRepository {
 
   async listByUser(userId: string): Promise<AiQuantConversationSnapshotRecord[]> {
     const conversations = await this.txHost.tx.aiQuantConversation.findMany({
-      where: { userId },
+      where: { userId, archivedAt: null },
       orderBy: { updatedAt: 'desc' },
       select: {
         id: true,
         userId: true,
         codegenSessionId: true,
         title: true,
+        archivedAt: true,
         createdAt: true,
         updatedAt: true,
         messages: {
@@ -93,6 +95,22 @@ export class AiQuantConversationsRepository {
     }))
   }
 
+  async listKnownSessionIdsByUser(userId: string): Promise<string[]> {
+    const rows = await this.txHost.tx.aiQuantConversation.findMany({
+      where: { userId },
+      select: { codegenSessionId: true },
+    })
+
+    return rows.map(row => row.codegenSessionId)
+  }
+
+  async archiveByIdAndUser(id: string, userId: string): Promise<void> {
+    await this.txHost.tx.aiQuantConversation.updateMany({
+      where: { id, userId, archivedAt: null },
+      data: { archivedAt: new Date() },
+    })
+  }
+
   private async getByIdOrThrow(id: string): Promise<AiQuantConversationSnapshotRecord> {
     const conversation = await this.txHost.tx.aiQuantConversation.findUniqueOrThrow({
       where: { id },
@@ -101,6 +119,7 @@ export class AiQuantConversationsRepository {
         userId: true,
         codegenSessionId: true,
         title: true,
+        archivedAt: true,
         createdAt: true,
         updatedAt: true,
         messages: {

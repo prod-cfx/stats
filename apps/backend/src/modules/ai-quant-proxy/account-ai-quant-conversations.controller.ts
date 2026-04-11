@@ -1,5 +1,5 @@
 import type { AiQuantProxyService } from './ai-quant-proxy.service'
-import { Controller, Get, Headers, Inject } from '@nestjs/common'
+import { Controller, Delete, Get, Headers, Inject, Param } from '@nestjs/common'
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
@@ -24,5 +24,14 @@ export class AccountAiQuantConversationsController {
     @Headers('authorization') authorization: string | undefined,
   ): Promise<AiQuantConversationResponseDto[]> {
     return this.service.listAiQuantConversations(userId, authorization)
+  }
+
+  @Delete(':id')
+  async remove(
+    @CurrentUser('id') userId: string,
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+  ): Promise<void> {
+    return this.service.deleteAiQuantConversation(userId, authorization, id)
   }
 }

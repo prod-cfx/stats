@@ -38,7 +38,25 @@ jest.mock('@/components/account/ai-quant-strategy-store', () => ({
 }))
 
 jest.mock('@/components/ai-quant/ConversationSidebar', () => ({
-  ConversationSidebar: () => <div data-testid="sidebar" />,
+  ConversationSidebar: ({
+    items,
+    onDelete,
+  }: {
+    items: Array<{ id: string, title: string }>
+    onDelete?: (id: string) => void
+  }) => (
+    <div data-testid="sidebar">
+      {items.map(item => (
+        <button
+          key={`delete-${item.id}`}
+          data-testid={`delete-${item.id}`}
+          onClick={() => onDelete?.(item.id)}
+        >
+          delete-{item.title}
+        </button>
+      ))}
+    </div>
+  ),
 }))
 
 jest.mock('@/components/ai-quant/DeployDialog', () => ({
@@ -139,6 +157,7 @@ jest.mock('@/components/ai-quant/backtest-capability-client', () => ({
 
 jest.mock('@/lib/api', () => ({
   deployAccountAiQuantStrategy: jest.fn(),
+  deleteAiQuantConversation: jest.fn(async () => undefined),
   continueLlmCodegenSession: jest.fn(),
   fetchUserExchangeAccountStatuses: jest.fn(async () => []),
   listAiQuantConversations: jest.fn(async () => []),
@@ -532,5 +551,49 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(localStorage.getItem('ai_quant_conversations_v1')).toBeNull()
     expect(container.querySelector('[data-testid="conversation-sync-error"]')).toBeTruthy()
     expect(container.textContent).not.toContain('persisted-message')
+  })
+
+  it('deletes a server-owned conversation through the backend and keeps it removed locally', async () => {
+    localStorage.clear()
+
+    const { listAiQuantConversations, deleteAiQuantConversation } = jest.requireMock('@/lib/api') as {
+      listAiQuantConversations: jest.Mock
+      deleteAiQuantConversation: jest.Mock
+    }
+
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'conv-1',
+        status: 'CHECKLIST_GATE',
+        updatedAt: '2026-04-10T12:00:00.000Z',
+        conversationTitle: 'server-conv-1',
+        conversationMessages: [{ role: 'assistant', content: 'server-message-1' }],
+      },
+      {
+        id: 'conv-2',
+        status: 'CHECKLIST_GATE',
+        updatedAt: '2026-04-10T12:01:00.000Z',
+        conversationTitle: 'server-conv-2',
+        conversationMessages: [{ role: 'assistant', content: 'server-message-2' }],
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).toContain('server-message-1')
+
+    await act(async () => {
+      (container.querySelector('[data-testid="delete-conv-1"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(deleteAiQuantConversation).toHaveBeenCalledWith('conv-1')
+    expect(container.textContent).not.toContain('server-message-1')
+    expect(container.textContent).toContain('server-message-2')
   })
 })

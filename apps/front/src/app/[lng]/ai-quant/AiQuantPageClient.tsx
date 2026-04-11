@@ -32,7 +32,7 @@ import {
 import { applyCapabilitiesToParamSchema } from '@/components/ai-quant/strategy-param-sync'
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
 import { useAuth } from '@/hooks/use-auth'
-import { fetchUserExchangeAccountStatuses, listAiQuantConversations } from '@/lib/api'
+import { deleteAiQuantConversation, fetchUserExchangeAccountStatuses, listAiQuantConversations } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
 import { runAiQuantBacktest } from './ai-quant-page-backtest'
 import {
@@ -920,6 +920,22 @@ export function AiQuantPageClient({
             )
           }}
           onDelete={id => {
+            if (serverOwnedConversations) {
+              void deleteAiQuantConversation(id)
+                .then(() => {
+                  setConversations(prev => {
+                    const next = prev.filter(conv => conv.id !== id)
+                    if (next.length === 0) {
+                      const seed = createConversation(t)
+                      setActiveConversationId(seed.id)
+                      return [seed]
+                    }
+                    if (id === activeConversation.id) setActiveConversationId(next[0].id)
+                    return next
+                  })
+                })
+              return
+            }
             setConversations(prev => {
               const next = prev.filter(conv => conv.id !== id)
               if (next.length === 0) {

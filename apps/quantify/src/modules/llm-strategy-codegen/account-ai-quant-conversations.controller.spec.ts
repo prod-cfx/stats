@@ -56,4 +56,37 @@ describe('accountAiQuantConversationsController', () => {
     expect(result).toEqual([{ id: 'conv-1', activeCodegenSessionId: 'session-1' }])
     expect(service.listConversations).toHaveBeenCalledWith('caller-u1')
   })
+
+  it('deletes AI Quant conversations for the resolved caller identity', async () => {
+    const service = {
+      deleteConversation: jest.fn().mockResolvedValue(undefined),
+    }
+    const moduleRef = await Test.createTestingModule({
+      controllers: [AccountAiQuantConversationsController],
+      providers: [
+        { provide: CodegenConversationService, useValue: service },
+        {
+          provide: EnvService,
+          useValue: {
+            getString: jest.fn((key: string) => {
+              if (key === 'BACKEND_API_BASE_URL') return 'http://backend.test/api/v1'
+              return undefined
+            }),
+            getBoolean: jest.fn().mockReturnValue(false),
+            isDev: jest.fn().mockReturnValue(false),
+          },
+        },
+        CallerIdentityService,
+      ],
+    }).compile()
+    const controller = moduleRef.get(AccountAiQuantConversationsController)
+
+    await controller.remove(
+      createBearerToken({ sub: 'caller-u1', principalType: 'user', exp: 4_102_444_800 }),
+      'caller-u1',
+      'conv-1',
+    )
+
+    expect(service.deleteConversation).toHaveBeenCalledWith('conv-1', 'caller-u1')
+  })
 })

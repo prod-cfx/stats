@@ -66,7 +66,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   }
   const mockConversationsRepo = {
     listByUser: jest.fn(),
+    listKnownSessionIdsByUser: jest.fn(),
     upsertConversationSnapshot: jest.fn(),
+    archiveByIdAndUser: jest.fn(),
   }
   const canonicalSpecBuilder = new CanonicalSpecBuilderService()
   const canonicalDigestService = new CanonicalSpecV2DigestService()
@@ -140,7 +142,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       strategyInstanceId: 'instance-1',
     })
     mockConversationsRepo.listByUser.mockResolvedValue([])
+    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue([])
     mockConversationsRepo.upsertConversationSnapshot.mockResolvedValue(undefined)
+    mockConversationsRepo.archiveByIdAndUser.mockResolvedValue(undefined)
     setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'false')
     setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'true')
     service = new (CodegenConversationService as unknown as new (...args: any[]) => CodegenConversationService)(
@@ -258,6 +262,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         ],
       },
     ])
+    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue(['session-1'])
+    mockRepo.listByUser.mockResolvedValue([])
     mockRepo.findById.mockResolvedValue({
       id: 'session-1',
       userId: 'u1',
@@ -276,7 +282,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const result = await service.listConversations('u1')
 
     expect(mockConversationsRepo.listByUser).toHaveBeenCalledWith('u1')
-    expect(mockRepo.listByUser).not.toHaveBeenCalled()
+    expect(mockRepo.listByUser).toHaveBeenCalledWith('u1')
     expect(result).toEqual([
       expect.objectContaining({
         id: 'conv-1',
@@ -289,6 +295,50 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         status: 'CHECKLIST_GATE',
       }),
     ])
+  })
+
+  it('backfills only missing session projections and does not resurrect archived conversations', async () => {
+    mockConversationsRepo.listByUser
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue(['session-archived'])
+    mockRepo.listByUser.mockResolvedValue([
+      {
+        id: 'session-archived',
+        userId: 'u1',
+      },
+      {
+        id: 'session-missing',
+        userId: 'u1',
+      },
+    ])
+    mockRepo.findById.mockImplementation(async (id: string) => ({
+      id,
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {},
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: { conversationHistory: ['U: hi', 'A: hello'] },
+      latestDraftCode: null,
+      latestSpecDesc: null,
+      rejectReason: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+      strategyInstanceId: null,
+    }))
+
+    await service.listConversations('u1')
+
+    expect(mockConversationsRepo.upsertConversationSnapshot).toHaveBeenCalledTimes(1)
+    expect(mockConversationsRepo.upsertConversationSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+      codegenSessionId: 'session-missing',
+    }))
+  })
+
+  it('archives a conversation through the dedicated conversation repository', async () => {
+    await service.deleteConversation('conv-1', 'u1')
+
+    expect(mockConversationsRepo.archiveByIdAndUser).toHaveBeenCalledWith('conv-1', 'u1')
   })
 
   it('sends the non-contradictory planner prompt to ai service', async () => {

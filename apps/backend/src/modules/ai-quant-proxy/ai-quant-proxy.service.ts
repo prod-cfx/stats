@@ -147,6 +147,13 @@ export class AiQuantProxyService {
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
+  async deleteAiQuantConversation(userId: string, authorization: string | undefined, conversationId: string): Promise<void> {
+    return this.quantifyClient.delete<void>(`/account/ai-quant/conversations/${encodeURIComponent(conversationId)}`, {
+      timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
+      headers: this.userHeaders(userId, authorization),
+    }).catch(error => { throw this.mapQuantifyError(error) })
+  }
+
   async getCodegenSession(userId: string, authorization: string | undefined, sessionId: string) {
     return this.quantifyClient.get(`/llm-strategy-codegen/sessions/${encodeURIComponent(sessionId)}`, {
       timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,

@@ -23,4 +23,15 @@ describe('accountAiQuantConversationsController', () => {
     })
     expect(response).toBeDefined()
   })
+
+  it('forwards AI Quant conversation deletion through the proxy service', async () => {
+    const service = {
+      deleteAiQuantConversation: jest.fn().mockResolvedValue(undefined),
+    }
+    const controller = new AccountAiQuantConversationsController(service as never)
+
+    await controller.remove('user-1', 'Bearer token-1', 'conv-1')
+
+    expect(service.deleteAiQuantConversation).toHaveBeenCalledWith('user-1', 'Bearer token-1', 'conv-1')
+  })
 })

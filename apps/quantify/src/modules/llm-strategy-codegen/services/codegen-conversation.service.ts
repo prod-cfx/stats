@@ -197,13 +197,20 @@ export class CodegenConversationService {
 
   async listConversations(userId: string): Promise<AiQuantConversationResponseDto[]> {
     let conversations = await this.conversationsRepo.listByUser(userId)
-    if (conversations.length === 0) {
-      const sessions = await this.sessionsRepo.listByUser(userId)
-      await Promise.all(sessions.map(session => this.persistConversationProjectionForSessionId(session.id, userId)))
+    const knownSessionIds = new Set(await this.conversationsRepo.listKnownSessionIdsByUser(userId))
+    const sessions = await this.sessionsRepo.listByUser(userId)
+    const sessionsNeedingProjection = sessions.filter(session => !knownSessionIds.has(session.id))
+
+    if (sessionsNeedingProjection.length > 0) {
+      await Promise.all(sessionsNeedingProjection.map(session => this.persistConversationProjectionForSessionId(session.id, userId)))
       conversations = await this.conversationsRepo.listByUser(userId)
     }
 
     return Promise.all(conversations.map(conversation => this.toConversationResponse(conversation)))
+  }
+
+  async deleteConversation(conversationId: string, userId: string): Promise<void> {
+    await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
   }
 
   async continueSession(
