@@ -67,12 +67,16 @@ const result = await engine.execute(strategyScript, {
 
 ```js
 const closes = bars.map(b => b.close)
-const sma20 = helpers.ta.sma(closes, 20)
-const sma50 = helpers.ta.sma(closes, 50)
+const sma20Series = closes
+  .map((_, i) => helpers.ta.sma(closes.slice(0, i + 1), 20))
+  .filter(v => v !== null)
+const sma50Series = closes
+  .map((_, i) => helpers.ta.sma(closes.slice(0, i + 1), 50))
+  .filter(v => v !== null)
 const rsi14 = helpers.ta.rsi(closes, 14)
 const returns = helpers.finance.returns(closes)
 
-if (sma20 && sma50 && helpers.signal.crossOver([sma20], [sma50])) {
+if (helpers.signal.crossOver(sma20Series, sma50Series)) {
   return {
     direction: 'BUY',
     signalType: 'ENTRY',
