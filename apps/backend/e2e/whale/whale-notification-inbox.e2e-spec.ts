@@ -2,18 +2,13 @@ import type { INestApplication, ExecutionContext } from '@nestjs/common'
 import type { PrismaService } from '@/prisma/prisma.service'
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard'
 import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
-import { createAuthApiClient, createTestingApp, createUserRecord } from '../fixtures/fixtures'
-
-type WhaleNotificationRuleCreateData = Parameters<PrismaService['whaleNotificationRule']['create']>[0]['data']
-type WhaleNotificationDeliverySeedData = Parameters<PrismaService['whaleNotificationDelivery']['createMany']>[0]['data']
-
-const createWhaleNotificationRuleRecord = async (prisma: PrismaService, data: WhaleNotificationRuleCreateData) => {
-  return prisma.whaleNotificationRule.create({ data })
-}
-
-const createWhaleNotificationDeliveryRecords = async (prisma: PrismaService, data: WhaleNotificationDeliverySeedData) => {
-  await prisma.whaleNotificationDelivery.createMany({ data })
-}
+import { createAuthApiClient, createTestingApp } from '../fixtures/fixtures'
+import {
+  cleanupWhaleNotificationUser,
+  createWhaleNotificationDeliveryRecords,
+  createWhaleNotificationRuleRecord,
+  createWhaleNotificationTestUser,
+} from './whale-notification.helpers'
 
 describe('Whale notification inbox HTTP (E2E)', () => {
   let app: INestApplication
@@ -44,12 +39,10 @@ describe('Whale notification inbox HTTP (E2E)', () => {
 
     prisma = app.get(PrismaServiceToken)
 
-    await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
-    await prisma.whaleNotificationRule.deleteMany({ where: { userId } })
-    await prisma.user.deleteMany({ where: { id: userId } })
+    await cleanupWhaleNotificationUser(prisma, userId)
 
-    await createUserRecord(prisma, {
-      id: userId,
+    await createWhaleNotificationTestUser(prisma, {
+      userId,
       email: 'e2e-inbox-user@example.com',
       nickname: 'inbox-user',
     })
@@ -83,9 +76,7 @@ describe('Whale notification inbox HTTP (E2E)', () => {
 
   afterAll(async () => {
     if (prisma) {
-      await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
-      await prisma.whaleNotificationRule.deleteMany({ where: { userId } })
-      await prisma.user.deleteMany({ where: { id: userId } })
+      await cleanupWhaleNotificationUser(prisma, userId)
     }
 
     if (app) await app.close()

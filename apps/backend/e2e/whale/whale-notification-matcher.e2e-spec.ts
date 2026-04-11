@@ -1,15 +1,15 @@
 import type { INestApplication } from '@nestjs/common'
+import type { Prisma as PrismaTypes } from '@/prisma/prisma.types'
 import type { PrismaService } from '@/prisma/prisma.service'
 import { WhaleNotificationMatcherService } from '@/modules/whale-notification/services/whale-notification-matcher.service'
 import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
-import { createTestingApp, createUserRecord } from '../fixtures/fixtures'
-
-type WhaleNotificationRuleCreateData = Parameters<PrismaService['whaleNotificationRule']['create']>[0]['data']
-type WhaleNotificationRuleOverrideSeedData = Parameters<PrismaService['whaleNotificationRuleSymbolOverride']['createMany']>[0]['data']
-
-const createWhaleNotificationRuleRecord = async (prisma: PrismaService, data: WhaleNotificationRuleCreateData) => {
-  return prisma.whaleNotificationRule.create({ data })
-}
+import { createTestingApp } from '../fixtures/fixtures'
+import {
+  cleanupWhaleNotificationUser,
+  createWhaleNotificationRuleRecord,
+  createWhaleNotificationTestUser,
+} from './whale-notification.helpers'
+type WhaleNotificationRuleOverrideSeedData = PrismaTypes.WhaleNotificationRuleSymbolOverrideCreateManyInput[]
 
 const createWhaleNotificationRuleOverrideRecords = async (prisma: PrismaService, data: WhaleNotificationRuleOverrideSeedData) => {
   await prisma.whaleNotificationRuleSymbolOverride.createMany({ data })
@@ -30,11 +30,10 @@ describe('Whale notification matcher (service E2E)', () => {
     await prisma.whaleNotificationDelivery.deleteMany({ where: { userId: 'e2e-matcher-user' } })
     await prisma.whaleNotificationRuleSymbolOverride.deleteMany({ where: { rule: { userId: 'e2e-matcher-user' } } })
     await prisma.whaleNotificationRuleAddress.deleteMany({ where: { rule: { userId: 'e2e-matcher-user' } } })
-    await prisma.whaleNotificationRule.deleteMany({ where: { userId: 'e2e-matcher-user' } })
-    await prisma.user.deleteMany({ where: { id: 'e2e-matcher-user' } })
+    await cleanupWhaleNotificationUser(prisma, 'e2e-matcher-user')
 
-    await createUserRecord(prisma, {
-      id: 'e2e-matcher-user',
+    await createWhaleNotificationTestUser(prisma, {
+      userId: 'e2e-matcher-user',
       email: 'e2e-matcher-user@example.com',
       nickname: 'matcher-user',
     })
@@ -45,8 +44,7 @@ describe('Whale notification matcher (service E2E)', () => {
       await prisma.whaleNotificationDelivery.deleteMany({ where: { userId: 'e2e-matcher-user' } })
       await prisma.whaleNotificationRuleSymbolOverride.deleteMany({ where: { rule: { userId: 'e2e-matcher-user' } } })
       await prisma.whaleNotificationRuleAddress.deleteMany({ where: { rule: { userId: 'e2e-matcher-user' } } })
-      await prisma.whaleNotificationRule.deleteMany({ where: { userId: 'e2e-matcher-user' } })
-      await prisma.user.deleteMany({ where: { id: 'e2e-matcher-user' } })
+      await cleanupWhaleNotificationUser(prisma, 'e2e-matcher-user')
     }
 
     if (app) {
