@@ -305,6 +305,9 @@ importers:
 
   apps/backend:
     dependencies:
+      '@ai/api-contracts':
+        specifier: workspace:*
+        version: link:../../packages/api-contracts
       '@ai/shared':
         specifier: workspace:*
         version: link:../../packages/shared
@@ -16195,7 +16198,7 @@ snapshots:
 
   axios@1.14.0:
     dependencies:
-      follow-redirects: 1.15.11(debug@4.3.7)
+      follow-redirects: 1.15.11
       form-data: 4.0.5
       proxy-from-env: 2.1.0
     transitivePeerDependencies:
@@ -16203,7 +16206,7 @@ snapshots:
 
   axios@1.15.0:
     dependencies:
-      follow-redirects: 1.15.11(debug@4.3.7)
+      follow-redirects: 1.15.11
       form-data: 4.0.5
       proxy-from-env: 2.1.0
     transitivePeerDependencies:
@@ -18339,6 +18342,8 @@ snapshots:
 
   fn.name@1.1.0: {}
 
+  follow-redirects@1.15.11: {}
+
   follow-redirects@1.15.11(debug@4.3.7):
     optionalDependencies:
       debug: 4.3.7
@@ -18808,7 +18813,7 @@ snapshots:
   http-proxy@1.18.1:
     dependencies:
       eventemitter3: 4.0.7
-      follow-redirects: 1.15.11(debug@4.3.7)
+      follow-redirects: 1.15.11
       requires-port: 1.0.0
     transitivePeerDependencies:
       - debug

@@ -247,6 +247,12 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       timeframe: '15m',
       riskMode: 'snapshot-risk',
       positionPct: 25,
+      backtestInitialCash: 10000,
+      backtestLeverage: 1,
+      backtestSlippageBps: 10,
+      backtestFeeBps: 5,
+      backtestPriceSource: 'close',
+      backtestAllowPartial: true,
     })
     expect(detail.snapshot.schemaVersion).toBe('7')
     expect(publishedSnapshotsRepository.findByIdForUser).toHaveBeenCalledWith('snapshot-1', 'user-1')

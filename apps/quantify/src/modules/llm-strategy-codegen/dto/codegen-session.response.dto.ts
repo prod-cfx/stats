@@ -116,6 +116,9 @@ export class CodegenSessionResponseDto {
   @ApiPropertyOptional({ description: '最近一次一致性通过并发布的快照 ID' })
   publishedSnapshotId?: string | null
 
+  @ApiPropertyOptional({ description: '已发布快照绑定的参数视图（用于前端回测/展示对齐）', type: 'object', additionalProperties: true })
+  publishedSnapshotParamValues?: Record<string, unknown> | null
+
   @ApiPropertyOptional({ description: '策略一致性校验报告', type: 'object', additionalProperties: true })
   consistencyReport?: Record<string, unknown> | null
 

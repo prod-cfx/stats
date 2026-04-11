@@ -50,17 +50,16 @@ if (!options.output) {
 const readJson = (filePath) => JSON.parse(fs.readFileSync(filePath, 'utf8'));
 const appPkg = readJson(options.appPackage);
 const rootPkg = fs.existsSync(options.rootPackage) ? readJson(options.rootPackage) : {};
+const repoRoot = path.dirname(path.resolve(options.rootPackage));
 
 const appDeps = appPkg.dependencies ?? {};
 const appDevDeps = appPkg.devDependencies ?? {};
 const rootDevDeps = rootPkg.devDependencies ?? {};
 const dependencies = { ...appDeps };
+const workspacePackageMap = buildWorkspacePackageMap(repoRoot);
+const visitedWorkspacePackages = new Set();
 
-for (const [name, version] of Object.entries(dependencies)) {
-  if (String(version).startsWith('workspace:')) {
-    delete dependencies[name];
-  }
-}
+mergeWorkspaceDependencies(dependencies, workspacePackageMap, visitedWorkspacePackages);
 
 dependencies['dotenv-cli'] =
   dependencies['dotenv-cli'] ??
@@ -94,3 +93,42 @@ if (options.includePnpm && rootPkg.pnpm) {
 const outputDir = path.dirname(options.output);
 fs.mkdirSync(outputDir, { recursive: true });
 fs.writeFileSync(options.output, `${JSON.stringify(runtimePackage, null, 2)}\n`);
+
+function buildWorkspacePackageMap(rootDir) {
+  const packageMap = new Map();
+  for (const scopeDirName of ['apps', 'packages']) {
+    const scopeDir = path.join(rootDir, scopeDirName);
+    if (!fs.existsSync(scopeDir)) continue;
+    for (const entry of fs.readdirSync(scopeDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const packageJsonPath = path.join(scopeDir, entry.name, 'package.json');
+      if (!fs.existsSync(packageJsonPath)) continue;
+      const pkg = readJson(packageJsonPath);
+      if (typeof pkg.name === 'string' && pkg.name.length > 0) {
+        packageMap.set(pkg.name, {
+          packageJsonPath,
+          packageJson: pkg,
+        });
+      }
+    }
+  }
+  return packageMap;
+}
+
+function mergeWorkspaceDependencies(targetDependencies, workspacePackageMap, visitedWorkspacePackages) {
+  for (const [name, version] of Object.entries({ ...targetDependencies })) {
+    if (!String(version).startsWith('workspace:')) continue;
+    delete targetDependencies[name];
+    const workspacePackage = workspacePackageMap.get(name);
+    if (!workspacePackage || visitedWorkspacePackages.has(name)) continue;
+
+    visitedWorkspacePackages.add(name);
+    const workspaceDeps = workspacePackage.packageJson.dependencies ?? {};
+    for (const [dependencyName, dependencyVersion] of Object.entries(workspaceDeps)) {
+      if (!(dependencyName in targetDependencies)) {
+        targetDependencies[dependencyName] = dependencyVersion;
+      }
+    }
+    mergeWorkspaceDependencies(targetDependencies, workspacePackageMap, visitedWorkspacePackages);
+  }
+}

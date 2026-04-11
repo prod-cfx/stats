@@ -194,6 +194,30 @@ describe('AiQuantPageClient codegen P1 guards', () => {
     expect(content).not.toBe('失败（无原因）')
   })
 
+  it('formats consistency failures with stage, explanation, and backend reason', () => {
+    const content = buildCodegenReplyContent({
+      response: {
+        id: 's4b',
+        status: 'CONSISTENCY_FAILED',
+        rejectReason: '脚本缺少关键规则映射: bollinger.bars_outside:risk:both',
+      },
+      confirmGenerate: true,
+      publishedReply: '发布成功',
+      graphGeneratedMessage: '已生成',
+      graphReviseMessage: '请继续补充',
+      checklistContinuedMessage: '继续检查',
+      checklistUpdatedMessage: '已更新逻辑图',
+      stillGeneratingPrefix: '生成中',
+      rejectedPrefix: '生成失败',
+      rejectedWithoutReason: '失败（无原因）',
+    })
+
+    expect(content).toContain('生成失败（CONSISTENCY_FAILED）')
+    expect(content).toContain('脚本已生成，但没有通过一致性校验')
+    expect(content).toContain('后端返回：脚本缺少关键规则映射')
+    expect(content).toContain('规则解释：风控规则“价格连续若干根 K 线位于布林带外”没有在最终脚本里正确实现（同时作用于多头和空头）')
+  })
+
   it('reconciles only the active session before confirmGenerate and does not fan out to unrelated sessions', async () => {
     const primaryConversation = {
       id: 'conv-1',
@@ -337,5 +361,193 @@ describe('AiQuantPageClient codegen P1 guards', () => {
 
     expect(next.id).toBe('conv-local-temp')
     expect(next.serverConversationId).toBe('server-conv-1')
+  })
+
+  it('appends rejectReason when terminal failure snapshot only returns historical conversationMessages', () => {
+    const next = applyCodegenResponseToConversationState({
+      conversation: {
+        id: 'conv-local-temp',
+        serverConversationId: 'server-conv-1',
+        title: '新对话',
+        messages: [{ id: 'loading', role: 'assistant', content: 'loading' }],
+        params: DEFAULT_PARAMS,
+        paramSchema: DEFAULT_PARAM_SCHEMA,
+        paramValues: DEFAULT_PARAM_VALUES,
+        backtestResult: null,
+        logicGraph: null,
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: null,
+        llmCodegenSessionId: 'session-1',
+        publishedStrategyInstanceId: null,
+        publishedSnapshotId: null,
+        publishedScriptCode: null,
+        publishedScriptGraphVersion: null,
+        latestSignalMessage: null,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+      } as any,
+      response: {
+        id: 'session-1',
+        conversationId: 'server-conv-1',
+        status: 'CONSISTENCY_FAILED',
+        rejectReason: '脚本缺少关键规则映射',
+        conversationMessages: [
+          { role: 'assistant', content: '请确认逻辑图' },
+          { role: 'user', content: 'Confirm code generation' },
+        ],
+      } as any,
+      confirmGenerate: true,
+      targetParams: DEFAULT_PARAMS,
+      backtestCapabilities: null,
+      activeSessionId: 'session-1',
+      trimmedMessage: 'Confirm code generation',
+      t: (key: string, options?: Record<string, unknown>) =>
+        options?.defaultValue ? String(options.defaultValue) : key,
+      loadingMessageId: 'loading',
+    })
+
+    expect(next.messages).toHaveLength(3)
+    expect(next.messages.at(-1)?.role).toBe('assistant')
+    expect(next.messages.at(-1)?.content).toContain('脚本缺少关键规则映射')
+  })
+
+  it('appends generated code reply when published snapshot returns only historical conversationMessages', () => {
+    const next = applyCodegenResponseToConversationState({
+      conversation: {
+        id: 'conv-local-temp',
+        serverConversationId: 'server-conv-1',
+        title: '新对话',
+        messages: [{ id: 'loading', role: 'assistant', content: 'loading' }],
+        params: DEFAULT_PARAMS,
+        paramSchema: DEFAULT_PARAM_SCHEMA,
+        paramValues: DEFAULT_PARAM_VALUES,
+        backtestResult: null,
+        logicGraph: null,
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: null,
+        llmCodegenSessionId: 'session-1',
+        publishedStrategyInstanceId: null,
+        publishedSnapshotId: null,
+        publishedScriptCode: null,
+        publishedScriptGraphVersion: null,
+        latestSignalMessage: null,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+      } as any,
+      response: {
+        id: 'session-1',
+        conversationId: 'server-conv-1',
+        status: 'PUBLISHED',
+        scriptCode: 'export default function strategy() { return true }',
+        publishedSnapshotId: 'snapshot-1',
+        conversationMessages: [
+          { role: 'assistant', content: '请确认逻辑图' },
+          { role: 'user', content: 'Confirm code generation' },
+        ],
+      } as any,
+      confirmGenerate: true,
+      targetParams: DEFAULT_PARAMS,
+      backtestCapabilities: null,
+      activeSessionId: 'session-1',
+      trimmedMessage: 'Confirm code generation',
+      t: (key: string, options?: Record<string, unknown>) =>
+        options?.defaultValue ? String(options.defaultValue) : key,
+      loadingMessageId: 'loading',
+    })
+
+    expect(next.messages).toHaveLength(3)
+    expect(next.messages.at(-1)?.content).toContain('Generated strategy code')
+    expect(next.messages.at(-1)?.content).toContain('export default function strategy()')
+  })
+
+  it('hydrates published snapshot backtest params into the live conversation state', () => {
+    const next = applyCodegenResponseToConversationState({
+      conversation: {
+        id: 'conv-live',
+        serverConversationId: 'server-conv-1',
+        title: '新对话',
+        messages: [{ id: 'loading', role: 'assistant', content: 'loading' }],
+        params: DEFAULT_PARAMS,
+        paramSchema: DEFAULT_PARAM_SCHEMA,
+        paramValues: {
+          ...DEFAULT_PARAM_VALUES,
+          backtestRangePreset: '90D',
+        },
+        backtestResult: null,
+        logicGraph: null,
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: null,
+        llmCodegenSessionId: 'session-1',
+        publishedStrategyInstanceId: null,
+        publishedSnapshotId: null,
+        publishedScriptCode: null,
+        publishedScriptGraphVersion: null,
+        latestSignalMessage: null,
+        backtestExecutionConfigExplicit: false,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+      } as any,
+      response: {
+        id: 'session-1',
+        conversationId: 'server-conv-1',
+        status: 'PUBLISHED',
+        scriptCode: 'export default function strategy() { return true }',
+        publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotParamValues: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          baseTimeframe: '1h',
+          positionPct: 25,
+          backtestInitialCash: 20000,
+          backtestLeverage: 3,
+          backtestSlippageBps: 6,
+          backtestFeeBps: 2,
+          backtestPriceSource: 'mid',
+          backtestAllowPartial: false,
+        },
+      } as any,
+      confirmGenerate: true,
+      targetParams: DEFAULT_PARAMS,
+      backtestCapabilities: null,
+      activeSessionId: 'session-1',
+      trimmedMessage: 'Confirm code generation',
+      t: (key: string, options?: Record<string, unknown>) =>
+        options?.defaultValue ? String(options.defaultValue) : key,
+      loadingMessageId: 'loading',
+    })
+
+    expect(next.publishedSnapshotId).toBe('snapshot-1')
+    expect(next.backtestExecutionConfigExplicit).toBe(true)
+    expect(next.paramValues).toMatchObject({
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      baseTimeframe: '1h',
+      positionPct: 25,
+      backtestRangePreset: '90D',
+      backtestInitialCash: 20000,
+      backtestLeverage: 3,
+      backtestSlippageBps: 6,
+      backtestFeeBps: 2,
+      backtestPriceSource: 'mid',
+      backtestAllowPartial: false,
+    })
+    expect(next.params).toMatchObject({
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      baseTimeframe: '1h',
+      positionPct: 25,
+    })
   })
 })

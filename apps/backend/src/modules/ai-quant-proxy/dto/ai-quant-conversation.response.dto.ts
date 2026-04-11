@@ -57,6 +57,12 @@ export class AiQuantConversationResponseDto {
   @ApiPropertyOptional({ description: 'Published snapshot id' })
   publishedSnapshotId?: string | null
 
+  @ApiPropertyOptional({ description: 'Snapshot-bound param values for published backtest/display semantics', type: 'object', additionalProperties: true })
+  publishedSnapshotParamValues?: Record<string, unknown> | null
+
   @ApiPropertyOptional({ description: 'Published strategy instance id' })
   strategyInstanceId?: string | null
+
+  @ApiPropertyOptional({ description: 'Terminal reject reason' })
+  rejectReason?: string | null
 }

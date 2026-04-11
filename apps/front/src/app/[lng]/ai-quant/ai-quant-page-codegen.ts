@@ -25,6 +25,8 @@ import {
 import { ApiError } from '@/lib/errors'
 import { getCodegenSessionReconciliationAction } from './ai-quant-page-codegen-reconciliation'
 import {
+  BACKTEST_EXECUTION_PARAM_KEYS,
+  hasExplicitBacktestExecutionOverrides,
   invalidateConversationPublication,
   normalizeClarificationGate,
   normalizeParamsFromValues,
@@ -57,6 +59,135 @@ function isRecoverableCodegenStatus(status: string): boolean {
   return CODEGEN_RECOVERABLE_STATUSES.has(status)
 }
 
+function normalizePublishedSnapshotParamValues(
+  value: unknown,
+): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+
+  const normalized = { ...(value as Record<string, unknown>) }
+  const timeframe = typeof normalized.timeframe === 'string' ? normalized.timeframe.trim() : ''
+  const baseTimeframe = typeof normalized.baseTimeframe === 'string' ? normalized.baseTimeframe.trim() : ''
+  if (timeframe && !baseTimeframe) {
+    normalized.baseTimeframe = timeframe
+  }
+  return normalized
+}
+
+function mergeSnapshotBoundParamValues(input: {
+  currentValues: Record<string, unknown>
+  snapshotParamValues: Record<string, unknown> | null
+}): {
+  paramValues: Record<string, unknown>
+  explicit: boolean
+} {
+  const { currentValues, snapshotParamValues } = input
+  if (!snapshotParamValues) {
+    return {
+      paramValues: currentValues,
+      explicit: hasExplicitBacktestExecutionOverrides(currentValues),
+    }
+  }
+
+  const nextValues = {
+    ...currentValues,
+    ...snapshotParamValues,
+  }
+
+  return {
+    paramValues: nextValues,
+    explicit: BACKTEST_EXECUTION_PARAM_KEYS.every(key => nextValues[key] !== undefined),
+  }
+}
+
+function buildTerminalFailureReply(args: {
+  response: LlmCodegenSessionResponse
+  rejectedPrefix: string
+  rejectedWithoutReason: string
+}): string {
+  const { response, rejectedPrefix, rejectedWithoutReason } = args
+  const reason = typeof response.rejectReason === 'string' ? response.rejectReason.trim() : ''
+
+  const stage =
+    response.publicationGate?.passed === false
+      ? 'PUBLICATION_GATE_BLOCKED'
+      : response.status || 'UNKNOWN'
+
+  const explanation =
+    response.status === 'CONSISTENCY_FAILED'
+      ? '脚本已生成，但没有通过一致性校验，因此不会发布，也不能进入回测。'
+      : response.publicationGate?.passed === false
+        ? '脚本已生成，但发布门校验没有通过，因此不会发布，也不能进入回测。'
+        : '后端拒绝了当前策略生成结果，因此不会发布，也不能进入回测。'
+
+  const humanizedReason = humanizeRejectReason(reason)
+
+  if (!reason) {
+    return `${rejectedPrefix}（${stage}）\n说明：${explanation}\n后端返回：${rejectedWithoutReason}`
+  }
+
+  return `${rejectedPrefix}（${stage}）\n说明：${explanation}\n后端返回：${reason}${humanizedReason ? `\n规则解释：${humanizedReason}` : ''}`
+}
+
+function humanizeRejectReason(reason: string): string | null {
+  const trimmed = reason.trim()
+  if (!trimmed) return null
+
+  const missingRuleMatch = trimmed.match(/脚本缺少关键规则映射:\s*(.+)$/)
+  if (!missingRuleMatch) {
+    return null
+  }
+
+  const rawMappings = missingRuleMatch[1]
+    .split(/[|,]/)
+    .map(item => item.trim())
+    .filter(Boolean)
+
+  if (rawMappings.length === 0) {
+    return null
+  }
+
+  const parts = rawMappings.map(humanizeRuleMapping).filter((item): item is string => Boolean(item))
+  if (parts.length === 0) {
+    return null
+  }
+
+  return parts.join('；')
+}
+
+function humanizeRuleMapping(mapping: string): string | null {
+  const [rawRuleKey, rawPhase, rawSideScope] = mapping.split(':').map(item => item.trim())
+  if (!rawRuleKey) {
+    return null
+  }
+
+  const ruleKeyMap: Record<string, string> = {
+    'bollinger.bars_outside': '价格连续若干根 K 线位于布林带外',
+    'bollinger.upper_break': '价格向上突破布林带上轨',
+    'bollinger.lower_break': '价格向下突破布林带下轨',
+    'bollinger.middle_revert': '价格回到布林带中轨',
+  }
+
+  const phaseMap: Record<string, string> = {
+    entry: '入场规则',
+    exit: '出场规则',
+    risk: '风控规则',
+  }
+
+  const sideScopeMap: Record<string, string> = {
+    long: '只作用于多头',
+    short: '只作用于空头',
+    both: '同时作用于多头和空头',
+  }
+
+  const ruleLabel = ruleKeyMap[rawRuleKey] ?? rawRuleKey
+  const phaseLabel = phaseMap[rawPhase] ?? rawPhase
+  const sideScopeLabel = sideScopeMap[rawSideScope] ?? rawSideScope
+
+  return `${phaseLabel}“${ruleLabel}”没有在最终脚本里正确实现（${sideScopeLabel}）`
+}
+
 export function buildCodegenReplyContent(args: {
   response: LlmCodegenSessionResponse
   confirmGenerate: boolean
@@ -85,13 +216,19 @@ export function buildCodegenReplyContent(args: {
     return response.assistantPrompt
   }
   if (response.publicationGate?.passed === false) {
-    return response.rejectReason
-      ? `${rejectedPrefix}：${response.rejectReason}`
-      : rejectedWithoutReason
+    return buildTerminalFailureReply({
+      response,
+      rejectedPrefix,
+      rejectedWithoutReason,
+    })
   }
   if (response.status === 'PUBLISHED') {
     if (response.rejectReason) {
-      return `${rejectedPrefix}：${response.rejectReason}`
+      return buildTerminalFailureReply({
+        response,
+        rejectedPrefix,
+        rejectedWithoutReason,
+      })
     }
     return publishedReply
   }
@@ -102,14 +239,18 @@ export function buildCodegenReplyContent(args: {
     return `${stillGeneratingPrefix}（${response.status}）`
   }
   if (response.status === 'REJECTED') {
-    return response.rejectReason
-      ? `${rejectedPrefix}：${response.rejectReason}`
-      : rejectedWithoutReason
+    return buildTerminalFailureReply({
+      response,
+      rejectedPrefix,
+      rejectedWithoutReason,
+    })
   }
   if (response.status === 'CONSISTENCY_FAILED') {
-    return response.rejectReason
-      ? `${rejectedPrefix}：${response.rejectReason}`
-      : rejectedWithoutReason
+    return buildTerminalFailureReply({
+      response,
+      rejectedPrefix,
+      rejectedWithoutReason,
+    })
   }
   return response.scriptCode ? graphGeneratedMessage : graphReviseMessage
 }
@@ -127,6 +268,53 @@ function hasCodegenPayload(
   key: 'semanticGraph' | 'validationReport' | 'publicationGate',
 ): boolean {
   return Object.prototype.hasOwnProperty.call(response, key)
+}
+
+function shouldAppendDerivedReply(args: {
+  response: LlmCodegenSessionResponse
+  replyContent: string
+  messages: Array<{ id: string, role: 'user' | 'assistant', content: string }>
+}): boolean {
+  const { response, replyContent, messages } = args
+  const normalizedReply = replyContent.trim()
+  if (!normalizedReply || messages.length === 0) {
+    return false
+  }
+
+  const isTerminalOutcome =
+    response.status === 'PUBLISHED'
+    || response.status === 'REJECTED'
+    || response.status === 'CONSISTENCY_FAILED'
+    || response.publicationGate?.passed === false
+
+  if (!isTerminalOutcome) {
+    return false
+  }
+
+  if (messages.some(message => message.role === 'assistant' && message.content.trim() === normalizedReply)) {
+    return false
+  }
+
+  const rejectReason = typeof response.rejectReason === 'string' ? response.rejectReason.trim() : ''
+  if (
+    rejectReason
+    && messages.some(message => message.role === 'assistant' && message.content.includes(rejectReason))
+  ) {
+    return false
+  }
+
+  const scriptSnippet =
+    typeof response.scriptCode === 'string' && response.scriptCode.trim()
+      ? response.scriptCode.trim().slice(0, 80)
+      : ''
+  if (
+    scriptSnippet
+    && messages.some(message => message.role === 'assistant' && message.content.includes(scriptSnippet))
+  ) {
+    return false
+  }
+
+  return true
 }
 
 export function resolvePublishedStrategyInstanceId(args: {
@@ -213,13 +401,18 @@ export function applyCodegenResponseToConversationState(args: {
           .join(' '),
       })
     : null
-  const nextParamValues = syncResult?.paramValues ?? conversation.paramValues
+  const mergedSnapshotParamValues = mergeSnapshotBoundParamValues({
+    currentValues: syncResult?.paramValues ?? conversation.paramValues,
+    snapshotParamValues:
+      response.status === 'PUBLISHED'
+        ? normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
+        : null,
+  })
+  const nextParamValues = mergedSnapshotParamValues.paramValues
   const nextParamSchema = shouldUpdateGraph
     ? applyCapabilitiesToParamSchema(syncResult?.paramSchema, backtestCapabilities)
     : conversation.paramSchema
-  const nextParams = syncResult
-    ? normalizeParamsFromValues(nextParamValues, conversation.params)
-    : conversation.params
+  const nextParams = normalizeParamsFromValues(nextParamValues, conversation.params)
   const nextGraphStatus =
     response.status === 'PUBLISHED' || confirmGenerate ? 'confirmed' : 'draft'
   const nextGraph = shouldUpdateGraph
@@ -328,17 +521,34 @@ export function applyCodegenResponseToConversationState(args: {
         'Failed to generate strategy from current logic graph: backend did not return a detailed reason. Please check service logs.',
     }),
   })
-  const nextMessages = response.conversationMessages?.length
+  const responseMessages = response.conversationMessages?.length
     ? response.conversationMessages.map((message, index) => ({
         id: `${response.id}-msg-${index}`,
         role: message.role,
         content: message.content,
       }))
-    : (loadingMessageId
-        ? conversation.messages.map(msg =>
-            msg.id === loadingMessageId ? { ...msg, content: replyContent } : msg,
-          )
-        : conversation.messages)
+    : null
+  const nextMessages = (() => {
+    if (responseMessages) {
+      if (!shouldAppendDerivedReply({ response, replyContent, messages: responseMessages })) {
+        return responseMessages
+      }
+      return [
+        ...responseMessages,
+        {
+          id: `${response.id}-derived-reply`,
+          role: 'assistant' as const,
+          content: replyContent,
+        },
+      ]
+    }
+
+    return loadingMessageId
+      ? conversation.messages.map(msg =>
+          msg.id === loadingMessageId ? { ...msg, content: replyContent } : msg,
+        )
+      : conversation.messages
+  })()
 
   return {
     ...conversation,
@@ -368,6 +578,7 @@ export function applyCodegenResponseToConversationState(args: {
       nextPendingCanonicalDigest !== undefined
         ? nextPendingCanonicalDigest
         : conversation.pendingCanonicalDigest,
+    backtestExecutionConfigExplicit: mergedSnapshotParamValues.explicit,
     backtestResult: null,
     latestSignalMessage: null,
     messages: nextMessages,

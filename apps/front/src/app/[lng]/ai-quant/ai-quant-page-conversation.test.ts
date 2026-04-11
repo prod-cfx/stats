@@ -2,6 +2,7 @@ import { describe, expect, it } from '@jest/globals'
 
 import {
   AI_QUANT_PERSISTED_SCHEMA_VERSION,
+  createConversationFromServerConversation,
   hasExplicitBacktestExecutionOverrides,
   hydrateConversation,
   hydrateConversations,
@@ -129,6 +130,74 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.paramValues.backtestFeeBps).toBeUndefined()
     expect(conversation.paramValues.backtestPriceSource).toBeUndefined()
     expect(conversation.paramValues.backtestAllowPartial).toBeUndefined()
+  })
+
+  it('preserves snapshot-bound default backtest execution params during hydration for published snapshots', () => {
+    const conversation = hydrateConversation({
+      id: 'conv-published-defaults',
+      title: 'published',
+      messages: [],
+      params: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+      },
+      paramSchema: null,
+      paramValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+        backtestInitialCash: 10000,
+        backtestLeverage: 1,
+        backtestSlippageBps: 10,
+        backtestFeeBps: 5,
+        backtestPriceSource: 'close',
+        backtestAllowPartial: true,
+      },
+      backtestResult: null,
+      logicGraph: {
+        version: 1,
+        status: 'confirmed',
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+          positionPct: 10,
+        },
+      },
+      semanticGraph: null,
+      validationReport: null,
+      llmCodegenSessionId: null,
+      publishedStrategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
+      publishedScriptCode: 'return { ok: true }',
+      publishedScriptGraphVersion: 1,
+      latestSignalMessage: null,
+      backtestExecutionConfigExplicit: false,
+      backtestExecutionState: 'idle',
+      updatedAt: 1,
+    })
+
+    expect(conversation.backtestExecutionConfigExplicit).toBe(false)
+    expect(conversation.paramValues.backtestInitialCash).toBe(10000)
+    expect(conversation.paramValues.backtestLeverage).toBe(1)
+    expect(conversation.paramValues.backtestSlippageBps).toBe(10)
+    expect(conversation.paramValues.backtestFeeBps).toBe(5)
+    expect(conversation.paramValues.backtestPriceSource).toBe('close')
+    expect(conversation.paramValues.backtestAllowPartial).toBe(true)
   })
 
   it('invalidates published artifacts and optionally marks the logic graph as draft', () => {
@@ -387,7 +456,135 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.publishedScriptGraphVersion).toBeNull()
   })
 
+  it('hydrates failed server conversations with a terminal failure summary and keeps the graph confirmed', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'server-conv-1',
+      conversationTitle: '失败会话',
+      conversationMessages: [
+        { role: 'user', content: '用户消息' },
+        { role: 'assistant', content: '请确认逻辑图' },
+        { role: 'user', content: 'Confirm code generation' },
+      ],
+      status: 'CONSISTENCY_FAILED',
+      canonicalDigest: 'sha256:canonical-1',
+      rejectReason: '策略脚本与策略描述不一致：脚本缺少关键规则映射: bollinger.bars_outside:risk:both',
+      publicationGate: { passed: true, blockingMismatches: [] },
+      scriptCode: 'export default function strategy() { return true }',
+      publishedSnapshotId: null,
+      specDesc: {
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+        rules: [],
+      },
+    } as any, (key: string, options?: Record<string, unknown>) => String(options?.defaultValue ?? key))
 
+    expect(conversation.logicGraph?.status).toBe('confirmed')
+    expect(conversation.messages.at(-1)?.content).toContain('CONSISTENCY_FAILED')
+    expect(conversation.messages.at(-1)?.content).toContain('脚本已生成，但没有通过一致性校验')
+    expect(conversation.messages.at(-1)?.content).toContain('脚本缺少关键规则映射')
+    expect(conversation.messages.at(-1)?.content).toContain('规则解释：风控规则“价格连续若干根 K 线位于布林带外”没有在最终脚本里正确实现（同时作用于多头和空头）')
+  })
 
+  it('hydrates published server conversations with a generated code summary when history lacks it', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'server-conv-2',
+      conversationTitle: '成功会话',
+      conversationMessages: [
+        { role: 'user', content: '用户消息' },
+      ],
+      status: 'PUBLISHED',
+      canonicalDigest: 'sha256:canonical-2',
+      scriptCode: 'export default function strategy() { return true }',
+      publishedSnapshotId: 'snapshot-1',
+      specDesc: {
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+        rules: [],
+      },
+    } as any, (key: string, options?: Record<string, unknown>) => String(options?.defaultValue ?? key))
+
+    expect(conversation.logicGraph?.status).toBe('confirmed')
+    expect(conversation.messages.at(-1)?.content).toContain('Strategy code generated, ready to backtest.')
+    expect(conversation.messages.at(-1)?.content).toContain('export default function strategy()')
+  })
+
+  it('keeps published snapshot default backtest params when persisting conversations for reload parity', () => {
+    const serialized = serializePersistedConversations([
+      {
+        id: 'conv-persisted-published',
+        title: 'persisted',
+        messages: [],
+        params: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+        paramSchema: null,
+        paramValues: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+          backtestInitialCash: 10000,
+          backtestLeverage: 1,
+          backtestSlippageBps: 10,
+          backtestFeeBps: 5,
+          backtestPriceSource: 'close',
+          backtestAllowPartial: true,
+        },
+        backtestResult: null,
+        logicGraph: {
+          version: 1,
+          status: 'confirmed',
+          trigger: [],
+          actions: [],
+          risk: [],
+          meta: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+            positionPct: 10,
+          },
+        },
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: null,
+        llmCodegenSessionId: null,
+        publishedStrategyInstanceId: 'strategy-1',
+        publishedSnapshotId: 'snapshot-1',
+        publishedScriptCode: 'return { ok: true }',
+        publishedScriptGraphVersion: 1,
+        latestSignalMessage: null,
+        backtestExecutionConfigExplicit: false,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+        schemaVersion: AI_QUANT_PERSISTED_SCHEMA_VERSION,
+      },
+    ], 'deploy-2026-04-11')
+
+    const envelope = JSON.parse(serialized)
+    expect(envelope.conversations[0].paramValues.backtestInitialCash).toBe(10000)
+    expect(envelope.conversations[0].paramValues.backtestLeverage).toBe(1)
+    expect(envelope.conversations[0].paramValues.backtestSlippageBps).toBe(10)
+    expect(envelope.conversations[0].paramValues.backtestFeeBps).toBe(5)
+    expect(envelope.conversations[0].paramValues.backtestPriceSource).toBe('close')
+    expect(envelope.conversations[0].paramValues.backtestAllowPartial).toBe(true)
+  })
 
 })

@@ -8,6 +8,8 @@ describe('aiQuantProxyService', () => {
   function createService() {
     const quantifyClient = {
       listAccountStrategies: jest.fn(),
+      get: jest.fn(),
+      delete: jest.fn(),
       deleteAccountStrategy: jest.fn(),
       deployAccountStrategy: jest.fn(),
       startCodegen: jest.fn(),

@@ -27,6 +27,58 @@ export const BACKTEST_JOB_TIMEOUT_MS = 60_000
 
 type Translate = (key: string, options?: Record<string, unknown>) => string
 
+function buildInvalidExecutionConfigMessage(args: {
+  activeConversation: ConversationState
+  executionConfig: ReturnType<typeof resolveBacktestExecutionConfig>
+  t: Translate
+}): string {
+  const { activeConversation, executionConfig, t } = args
+
+  if (activeConversation.backtestExecutionConfigExplicit !== true) {
+    return t('aiQuant.messages.backtestPayloadInvalid', {
+      reason:
+        'missing_explicit_execution_config：当前会话还没有明确保存回测执行参数（初始资金、杠杆、滑点、手续费、成交价来源、是否允许部分成交），请先重新确认回测参数。',
+    })
+  }
+
+  if (!executionConfig.allowPartialValid) {
+    return t('aiQuant.messages.backtestPayloadInvalid', {
+      reason: 'invalid_allow_partial：是否允许部分成交只能是 true 或 false。',
+    })
+  }
+
+  const invalidFields: string[] = []
+  if (!Number.isFinite(executionConfig.initialCash) || executionConfig.initialCash <= 0) {
+    invalidFields.push('初始资金')
+  }
+  if (!Number.isFinite(executionConfig.leverage) || executionConfig.leverage <= 0) {
+    invalidFields.push('杠杆')
+  }
+  if (!Number.isFinite(executionConfig.slippageBps) || executionConfig.slippageBps < 0) {
+    invalidFields.push('滑点')
+  }
+  if (!Number.isFinite(executionConfig.feeBps) || executionConfig.feeBps < 0) {
+    invalidFields.push('手续费')
+  }
+  if (
+    executionConfig.priceSource !== 'open'
+    && executionConfig.priceSource !== 'close'
+    && executionConfig.priceSource !== 'mid'
+  ) {
+    invalidFields.push('成交价来源')
+  }
+
+  if (invalidFields.length > 0) {
+    return t('aiQuant.messages.backtestPayloadInvalid', {
+      reason: `invalid_execution_config：以下回测执行参数无效或缺失：${invalidFields.join('、')}。`,
+    })
+  }
+
+  return t('aiQuant.messages.backtestPayloadInvalid', {
+    reason: 'invalid_execution_config：回测执行参数无效，请重新检查后再试。',
+  })
+}
+
 export async function runAiQuantBacktest(args: {
   activeConversation: ConversationState
   activeConversationIdRef: MutableRefObject<string>
@@ -163,8 +215,10 @@ export async function runAiQuantBacktest(args: {
         case 'missing_published_snapshot':
           return t('aiQuant.messages.backtestMissingScriptCode')
         case 'invalid_execution_config':
-          return t('aiQuant.messages.backtestPayloadInvalid', {
-            reason: 'invalid_execution_config',
+          return buildInvalidExecutionConfigMessage({
+            activeConversation,
+            executionConfig: resolveBacktestExecutionConfig(activeConversation.paramValues),
+            t,
           })
         case 'missing_symbol':
         default:

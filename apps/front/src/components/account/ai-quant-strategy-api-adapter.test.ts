@@ -295,4 +295,88 @@ describe('ai-quant-strategy-api-adapter', () => {
     expect(record.positionPct).toBe(12)
   })
 
+  it('prefers snapshot-bound backtest execution params over drifted live param values', () => {
+    const record = mapAccountStrategyDetailToRecord({
+      id: 'inst-backtest-snapshot',
+      name: 'snapshot backtest detail',
+      status: 'running',
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      timeframe: '5m',
+      positionPct: 5,
+      isSubscribed: true,
+      metrics: {
+        returnPct: 0,
+        maxDrawdownPct: 0,
+        winRatePct: 0,
+        tradeCount: 0,
+      },
+      updatedAt: '2026-03-20T00:00:00.000Z',
+      totalPnl: 0,
+      todayPnl: 0,
+      equitySeries: [{ ts: '2026-03-20T00:00:00.000Z', value: 10000 }],
+      paramSchema: {
+        type: 'object',
+        properties: {
+          backtestInitialCash: { type: 'number' },
+        },
+      },
+      paramValues: {
+        backtestInitialCash: 99999,
+        backtestLeverage: 8,
+      },
+      snapshot: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 12,
+        publishedSnapshotId: 'snapshot-10',
+        snapshotHash: 'snapshot-hash-10',
+        deployAccountName: null,
+        deployAt: null,
+        paramSchema: {
+          type: 'object',
+          properties: {
+            backtestInitialCash: { type: 'number' },
+            backtestLeverage: { type: 'number' },
+          },
+        },
+        paramValues: {
+          backtestInitialCash: 15000,
+          backtestLeverage: 2,
+          backtestSlippageBps: 9,
+          backtestFeeBps: 4,
+          backtestPriceSource: 'mid',
+          backtestAllowPartial: false,
+        },
+        schemaVersion: 'v2',
+      },
+      timeline: [],
+      accountOverview: {
+        initialBalance: 10000,
+        totalEquity: 10000,
+        availableBalance: 10000,
+        totalPnl: 0,
+        todayPnl: 0,
+        baseCurrency: 'USDT',
+      },
+      positionOverview: {
+        openPositionsCount: 0,
+        closedPositionsCount: 0,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 0,
+      },
+      latestOrders: [],
+    } as any)
+
+    expect(record.paramValues).toEqual({
+      backtestInitialCash: 15000,
+      backtestLeverage: 2,
+      backtestSlippageBps: 9,
+      backtestFeeBps: 4,
+      backtestPriceSource: 'mid',
+      backtestAllowPartial: false,
+    })
+  })
+
 })

@@ -406,6 +406,12 @@ export class AccountStrategyViewService {
     const paramValues = {
       ...(this.readRecord(snapshot.paramsSnapshot) ?? {}),
       ...(this.readRecord(snapshot.lockedParams) ?? {}),
+      backtestInitialCash: 10000,
+      backtestLeverage: 1,
+      backtestSlippageBps: 10,
+      backtestFeeBps: 5,
+      backtestPriceSource: 'close',
+      backtestAllowPartial: this.readExecutionAllowPartial(snapshot.executionPolicy),
     }
 
     return {
@@ -413,6 +419,26 @@ export class AccountStrategyViewService {
       snapshotHash: snapshot.snapshotHash,
       paramValues: Object.keys(paramValues).length > 0 ? paramValues : null,
     }
+  }
+
+  private readExecutionAllowPartial(value: unknown): boolean {
+    const executionPolicy = this.readRecord(value)
+    if (!executionPolicy) {
+      return true
+    }
+
+    const direct = executionPolicy.allowPartialFill
+    if (typeof direct === 'boolean') {
+      return direct
+    }
+    if (direct === 'true') {
+      return true
+    }
+    if (direct === 'false') {
+      return false
+    }
+
+    return true
   }
 
   async performAction(

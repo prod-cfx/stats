@@ -4,9 +4,19 @@ import {
   createQuantifyAbortContext,
   QuantifyClientError,
   QuantifyRequestOptions,
+  resolveQuantifyBaseUrl,
   runQuantifyContractRequest,
 } from '@/common/clients/quantify-contract.shared'
 import { EnvService } from '@/common/services/env.service'
+
+interface QuantifyErrorPayload {
+  status?: number
+  error?: {
+    code?: string
+    args?: Record<string, unknown>
+  }
+  message?: string
+}
 
 @Injectable()
 export class QuantifyAiQuantClient {
@@ -15,6 +25,14 @@ export class QuantifyAiQuantClient {
   private readonly client = createBackendQuantifyApiClient(this.env)
 
   constructor(@Inject(EnvService) private readonly env: EnvService) {}
+
+  async get<T>(path: string, options?: QuantifyRequestOptions): Promise<T> {
+    return this.runUntypedRequest<T>(path, 'GET', options)
+  }
+
+  async delete<T>(path: string, options?: QuantifyRequestOptions): Promise<T> {
+    return this.runUntypedRequest<T>(path, 'DELETE', options)
+  }
 
   async listAccountStrategies(
     query: Record<string, string | number | boolean | undefined>,
@@ -326,6 +344,79 @@ export class QuantifyAiQuantClient {
     }
   }
 
+  private async runUntypedRequest<T>(
+    path: string,
+    method: 'GET' | 'DELETE',
+    options?: QuantifyRequestOptions,
+  ): Promise<T> {
+    const abortContext = createQuantifyAbortContext(this.getRequestTimeoutMs(options?.timeoutMs), options?.signal)
+    try {
+      let response: Response
+      try {
+        response = await fetch(`${resolveQuantifyBaseUrl(this.env)}${path}`, {
+          method,
+          signal: abortContext.signal,
+          headers: {
+            'content-type': 'application/json',
+            ...(options?.headers ?? {}),
+          },
+        })
+      } catch (error) {
+        throw new QuantifyClientError(
+          'Quantify request failed',
+          502,
+          'UPSTREAM_REQUEST_FAILED',
+          {
+            cause: stringifyCause(abortContext.getAbortReason() ?? error),
+          },
+        )
+      }
+
+      if (response.status === 204) {
+        return undefined as T
+      }
+
+      const rawPayload = await response.text()
+      const payload = tryParseJson<T | { data?: T } | QuantifyErrorPayload>(rawPayload)
+
+      if (!response.ok) {
+        if (!payload) {
+          throw new QuantifyClientError(
+            'Quantify returned a non-JSON error response',
+            response.status,
+            'UPSTREAM_INVALID_RESPONSE',
+            { upstreamBody: rawPayload.slice(0, 500) },
+          )
+        }
+
+        const errorPayload = payload as QuantifyErrorPayload
+        throw new QuantifyClientError(
+          errorPayload.message || 'Quantify request failed',
+          errorPayload.status || response.status,
+          errorPayload.error?.code,
+          errorPayload.error?.args,
+        )
+      }
+
+      if (!payload) {
+        throw new QuantifyClientError(
+          'Quantify returned a non-JSON success response',
+          502,
+          'UPSTREAM_INVALID_RESPONSE',
+          { upstreamBody: rawPayload.slice(0, 500) },
+        )
+      }
+
+      if (typeof payload === 'object' && payload !== null && 'data' in payload) {
+        return (payload as { data: T }).data
+      }
+
+      return payload as T
+    } finally {
+      abortContext.cleanup()
+    }
+  }
+
   private getRequestTimeoutMs(overrideMs?: number): number {
     if (overrideMs !== undefined && Number.isFinite(overrideMs)) {
       return Math.max(
@@ -384,6 +475,26 @@ function booleanOrUndefined(value: string | number | boolean | undefined): boole
 
 function stringOrUndefined(value: unknown): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined
+}
+
+function tryParseJson<T>(raw: string): T | null {
+  if (!raw.trim()) return null
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    return null
+  }
+}
+
+function stringifyCause(value: unknown): string {
+  if (typeof value === 'string') return value
+  if (value instanceof Error) return value.message
+  if (value === undefined) return 'unknown'
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
 }
 
 export { QuantifyClientError }

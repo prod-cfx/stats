@@ -576,6 +576,7 @@ export class CodegenConversationService {
       updatedAt: session.updatedAt instanceof Date ? session.updatedAt.toISOString() : undefined,
       scriptCode: typeof session.latestDraftCode === 'string' ? session.latestDraftCode : null,
       publishedSnapshotId: latestSnapshot?.id ?? sessionPublishedSnapshotId ?? null,
+      publishedSnapshotParamValues: this.buildPublishedSnapshotParamValues(latestSnapshot),
       consistencyReport: latestSnapshot?.consistencyReport && typeof latestSnapshot.consistencyReport === 'object' && !Array.isArray(latestSnapshot.consistencyReport)
         ? latestSnapshot.consistencyReport as Record<string, unknown>
         : (sessionConsistencyReport && typeof sessionConsistencyReport === 'object' && !Array.isArray(sessionConsistencyReport)
@@ -614,7 +615,9 @@ export class CodegenConversationService {
       publicationGate: snapshot?.publicationGate ?? null,
       scriptCode: snapshot?.scriptCode ?? null,
       publishedSnapshotId: snapshot?.publishedSnapshotId ?? null,
+      publishedSnapshotParamValues: snapshot?.publishedSnapshotParamValues ?? null,
       strategyInstanceId: snapshot?.strategyInstanceId ?? null,
+      rejectReason: snapshot?.rejectReason ?? null,
     }
   }
 
@@ -1281,6 +1284,58 @@ export class CodegenConversationService {
     } catch {
       return String(value)
     }
+  }
+
+  private buildPublishedSnapshotParamValues(
+    snapshot: {
+      paramsSnapshot?: unknown
+      lockedParams?: unknown
+      executionPolicy?: unknown
+    } | null | undefined,
+  ): Record<string, unknown> | null {
+    if (!snapshot) {
+      return null
+    }
+
+    const paramsSnapshot = this.readRecord(snapshot.paramsSnapshot)
+    const lockedParams = this.readRecord(snapshot.lockedParams)
+    const executionPolicy = this.readRecord(snapshot.executionPolicy)
+    const merged = {
+      ...(paramsSnapshot ?? {}),
+      ...(lockedParams ?? {}),
+    }
+
+    if (typeof merged.timeframe === 'string' && merged.timeframe.trim() && typeof merged.baseTimeframe !== 'string') {
+      merged.baseTimeframe = merged.timeframe.trim()
+    }
+
+    merged.backtestInitialCash = 10000
+    merged.backtestLeverage = 1
+    merged.backtestSlippageBps = 10
+    merged.backtestFeeBps = 5
+    merged.backtestPriceSource = 'close'
+    merged.backtestAllowPartial = this.readAllowPartialFill(executionPolicy)
+
+    return Object.keys(merged).length > 0 ? merged : null
+  }
+
+  private readAllowPartialFill(executionPolicy: Record<string, unknown> | null): boolean {
+    if (!executionPolicy) {
+      return true
+    }
+
+    const direct = executionPolicy.allowPartialFill
+    if (typeof direct === 'boolean') {
+      return direct
+    }
+    if (direct === 'true') {
+      return true
+    }
+    if (direct === 'false') {
+      return false
+    }
+
+    return true
   }
 
   private readRecord(value: unknown): Record<string, unknown> | null {

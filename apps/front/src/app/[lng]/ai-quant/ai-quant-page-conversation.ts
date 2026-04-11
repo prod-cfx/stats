@@ -295,6 +295,48 @@ export function resolveBacktestExecutionConfig(
   }
 }
 
+function normalizePublishedSnapshotParamValues(
+  value: unknown,
+): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+
+  const normalized = { ...(value as Record<string, unknown>) }
+  const timeframe = typeof normalized.timeframe === 'string' ? normalized.timeframe.trim() : ''
+  const baseTimeframe = typeof normalized.baseTimeframe === 'string' ? normalized.baseTimeframe.trim() : ''
+  if (timeframe && !baseTimeframe) {
+    normalized.baseTimeframe = timeframe
+  }
+  return normalized
+}
+
+function mergeSnapshotBoundParamValues(input: {
+  currentValues: Record<string, unknown>
+  snapshotParamValues: Record<string, unknown> | null
+}): {
+  paramValues: Record<string, unknown>
+  explicit: boolean
+} {
+  const { currentValues, snapshotParamValues } = input
+  if (!snapshotParamValues) {
+    return {
+      paramValues: currentValues,
+      explicit: hasExplicitBacktestExecutionOverrides(currentValues),
+    }
+  }
+
+  const nextValues = {
+    ...currentValues,
+    ...snapshotParamValues,
+  }
+
+  return {
+    paramValues: nextValues,
+    explicit: BACKTEST_EXECUTION_PARAM_KEYS.every(key => nextValues[key] !== undefined),
+  }
+}
+
 function normalizeNumber(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (typeof value === 'string' && value.trim()) {
@@ -663,11 +705,16 @@ function stripImplicitBacktestExecutionParamValues(
 function normalizeHydratedBacktestExecutionConfig(input: {
   paramValues: Record<string, unknown>
   explicit: boolean
+  publishedSnapshotId: string | null
 }): {
   paramValues: Record<string, unknown>
   explicit: boolean
 } {
   if (input.explicit) {
+    return input
+  }
+
+  if (input.publishedSnapshotId) {
     return input
   }
 
@@ -754,6 +801,96 @@ export function createConversation(translate: (key: string) => string, now = Dat
   }
 }
 
+function buildServerTerminalCodegenReply(args: {
+  response: AiQuantConversationResponse
+  translate: (key: string, options?: Record<string, unknown>) => string
+}): string | null {
+  const { response, translate } = args
+  const rejectedPrefix = translate('aiQuant.messages.generationFailedPrefix', {
+    defaultValue: 'Failed to generate strategy from current logic graph',
+  })
+  const rejectedWithoutReason = translate('aiQuant.messages.generationFailedNoReason', {
+    defaultValue:
+      'Failed to generate strategy from current logic graph: backend did not return a detailed reason. Please check service logs.',
+  })
+  const reason = typeof response.rejectReason === 'string' ? response.rejectReason.trim() : ''
+
+  const isTerminalFailure =
+    response.status === 'CONSISTENCY_FAILED'
+    || response.status === 'REJECTED'
+    || response.publicationGate?.passed === false
+
+  if (isTerminalFailure) {
+    const stage =
+      response.publicationGate?.passed === false
+        ? 'PUBLICATION_GATE_BLOCKED'
+        : response.status || 'UNKNOWN'
+  const explanation =
+    response.status === 'CONSISTENCY_FAILED'
+      ? '脚本已生成，但没有通过一致性校验，因此不会发布，也不能进入回测。'
+      : response.publicationGate?.passed === false
+        ? '脚本已生成，但发布门校验没有通过，因此不会发布，也不能进入回测。'
+        : '后端拒绝了当前策略生成结果，因此不会发布，也不能进入回测。'
+  const humanizedReason = humanizeServerRejectReason(reason)
+  return `${rejectedPrefix}（${stage}）\n说明：${explanation}\n后端返回：${reason || rejectedWithoutReason}${humanizedReason ? `\n规则解释：${humanizedReason}` : ''}`
+  }
+
+  if (response.status === 'PUBLISHED' && typeof response.scriptCode === 'string' && response.scriptCode.trim()) {
+    return `${translate('aiQuant.messages.codeGeneratedBacktest', {
+      defaultValue: 'Strategy code generated, ready to backtest.',
+    })}\n\n${translate('aiQuant.messages.generatedCodeTitle', {
+      defaultValue: 'Generated strategy code:',
+    })}\n\`\`\`javascript\n${response.scriptCode}\n\`\`\``
+  }
+
+  return null
+}
+
+function humanizeServerRejectReason(reason: string): string | null {
+  const trimmed = reason.trim()
+  if (!trimmed) return null
+
+  const missingRuleMatch = trimmed.match(/脚本缺少关键规则映射:\s*(.+)$/)
+  if (!missingRuleMatch) {
+    return null
+  }
+
+  const rawMappings = missingRuleMatch[1]
+    .split(/[|,]/)
+    .map(item => item.trim())
+    .filter(Boolean)
+
+  if (rawMappings.length === 0) return null
+
+  const ruleKeyMap: Record<string, string> = {
+    'bollinger.bars_outside': '价格连续若干根 K 线位于布林带外',
+    'bollinger.upper_break': '价格向上突破布林带上轨',
+    'bollinger.lower_break': '价格向下突破布林带下轨',
+    'bollinger.middle_revert': '价格回到布林带中轨',
+  }
+  const phaseMap: Record<string, string> = {
+    entry: '入场规则',
+    exit: '出场规则',
+    risk: '风控规则',
+  }
+  const sideScopeMap: Record<string, string> = {
+    long: '只作用于多头',
+    short: '只作用于空头',
+    both: '同时作用于多头和空头',
+  }
+
+  const parts = rawMappings.map((mapping) => {
+    const [rawRuleKey, rawPhase, rawSideScope] = mapping.split(':').map(item => item.trim())
+    if (!rawRuleKey) return null
+    const ruleLabel = ruleKeyMap[rawRuleKey] ?? rawRuleKey
+    const phaseLabel = phaseMap[rawPhase] ?? rawPhase
+    const sideScopeLabel = sideScopeMap[rawSideScope] ?? rawSideScope
+    return `${phaseLabel}“${ruleLabel}”没有在最终脚本里正确实现（${sideScopeLabel}）`
+  }).filter((item): item is string => Boolean(item))
+
+  return parts.length > 0 ? parts.join('；') : null
+}
+
 export function createRecoveryConversation(
   translate: (key: string) => string,
   now = Date.now(),
@@ -791,10 +928,13 @@ export function createConversationFromServerConversation(
         capabilities: null,
       })
     : null
-  const nextParamValues = syncResult?.paramValues ?? seed.paramValues
-  const nextParams = syncResult
-    ? normalizeParamsFromValues(nextParamValues, seed.params)
-    : seed.params
+  const snapshotParamValues = normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
+  const mergedSnapshotParamValues = mergeSnapshotBoundParamValues({
+    currentValues: syncResult?.paramValues ?? seed.paramValues,
+    snapshotParamValues,
+  })
+  const nextParamValues = mergedSnapshotParamValues.paramValues
+  const nextParams = normalizeParamsFromValues(nextParamValues, seed.params)
   const graphVersion =
     typeof response.semanticGraph?.version === 'number' && Number.isFinite(response.semanticGraph.version)
       ? response.semanticGraph.version
@@ -810,16 +950,36 @@ export function createConversationFromServerConversation(
           executionTags: syncResult?.executionTags ?? [],
         },
         graphVersion,
-        response.status === 'PUBLISHED' ? 'confirmed' : 'draft',
+        response.status === 'PUBLISHED'
+        || response.status === 'CONSISTENCY_FAILED'
+        || response.status === 'REJECTED'
+        || response.publicationGate?.passed === false
+          ? 'confirmed'
+          : 'draft',
       )
     : null
-  const messages = response.conversationMessages?.length
+  const responseMessages = response.conversationMessages?.length
     ? response.conversationMessages.map((message, index) => ({
         id: `${response.id}-msg-${index}`,
         role: message.role,
         content: message.content,
       }))
     : seed.messages
+  const derivedReply = buildServerTerminalCodegenReply({ response, translate })
+  const messages =
+    derivedReply
+    && !responseMessages.some(
+      message => message.role === 'assistant' && message.content.trim() === derivedReply.trim(),
+    )
+      ? [
+          ...responseMessages,
+          {
+            id: `${response.id}-derived-terminal-reply`,
+            role: 'assistant' as const,
+            content: derivedReply,
+          },
+        ]
+      : responseMessages
   const updatedAt = response.updatedAt ? Date.parse(response.updatedAt) : Date.now()
 
   return {
@@ -846,6 +1006,7 @@ export function createConversationFromServerConversation(
       response.scriptCode && logicGraph?.status === 'confirmed'
         ? logicGraph.version
         : null,
+    backtestExecutionConfigExplicit: mergedSnapshotParamValues.explicit,
     updatedAt,
   }
 }
@@ -884,6 +1045,7 @@ export function shouldResetIrrecoverableHydratedConversation(
 }
 
 export function hydrateConversation(item: Partial<ConversationState>): ConversationState {
+  const publishedSnapshotId = normalizePublishedSnapshotId(item.publishedSnapshotId)
   const baseParams =
     item.params && typeof item.params === 'object' && !Array.isArray(item.params)
       ? (item.params as unknown as Record<string, unknown>)
@@ -900,6 +1062,7 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
   const normalizedBacktestExecutionConfig = normalizeHydratedBacktestExecutionConfig({
     paramValues: nextParamValues,
     explicit: item.backtestExecutionConfigExplicit === true,
+    publishedSnapshotId,
   })
   const fallbackParams =
     item.params && typeof item.params === 'object' && !Array.isArray(item.params)
@@ -945,7 +1108,7 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
         : null,
     llmCodegenSessionId: normalizeCodegenSessionId(item.llmCodegenSessionId),
     publishedStrategyInstanceId: item.publishedStrategyInstanceId ?? null,
-    publishedSnapshotId: normalizePublishedSnapshotId(item.publishedSnapshotId),
+    publishedSnapshotId,
     publishedScriptCode: resolveHydratedPublishedScriptCode(item),
     publishedScriptGraphVersion: (() => {
       if (typeof item.publishedScriptGraphVersion === 'number') {
@@ -1018,7 +1181,10 @@ export function serializePersistedConversations(
   const envelope: PersistedConversationEnvelope = {
     version: normalizeConversationStorageVersion(version),
     conversations: conversations.map((conversation) => {
-      if (conversation.backtestExecutionConfigExplicit) {
+      if (
+        conversation.backtestExecutionConfigExplicit
+        || (typeof conversation.publishedSnapshotId === 'string' && conversation.publishedSnapshotId.trim().length > 0)
+      ) {
         return conversation
       }
       return {

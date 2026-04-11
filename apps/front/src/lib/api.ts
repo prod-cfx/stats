@@ -2334,6 +2334,7 @@ export interface LlmCodegenSessionResponse {
   missingFields?: string[]
   scriptCode?: string | null
   publishedSnapshotId?: string | null
+  publishedSnapshotParamValues?: Record<string, unknown> | null
   canonicalDigest?: string | null
   consistencyReport?: Record<string, unknown> | null
   specDesc?: Record<string, unknown> | null
@@ -2359,6 +2360,7 @@ export interface AiQuantConversationResponse {
   updatedAt?: string
   scriptCode?: string | null
   publishedSnapshotId?: string | null
+  publishedSnapshotParamValues?: Record<string, unknown> | null
   canonicalDigest?: string | null
   consistencyReport?: Record<string, unknown> | null
   specDesc?: Record<string, unknown> | null
