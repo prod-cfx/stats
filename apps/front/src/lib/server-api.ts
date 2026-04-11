@@ -161,17 +161,21 @@ export async function fetchBacktestJobResultServer(
     return null
   }
 
-  const response = await typedServerClient.BacktestingProxyController_getJobResult({
-    headers: authHeaders,
-    params: { id: jobId },
-  })
-  const payload = unwrapResponse<BacktestJobResultReport | null>(
-    response as unknown as BacktestJobResultReport | { data?: BacktestJobResultReport | null; message?: string },
-  )
-  if (!payload?.summary) {
+  try {
+    const response = await typedServerClient.BacktestingProxyController_getJobResult({
+      headers: authHeaders,
+      params: { id: jobId },
+    })
+    const payload = unwrapResponse<BacktestJobResultReport | null>(
+      response as unknown as BacktestJobResultReport | { data?: BacktestJobResultReport | null; message?: string },
+    )
+    if (!payload?.summary) {
+      return null
+    }
+    return payload
+  } catch {
     return null
   }
-  return payload
 }
 
 export async function fetchBacktestJobServer(
@@ -183,15 +187,19 @@ export async function fetchBacktestJobServer(
     return null
   }
 
-  const response = await typedServerClient.BacktestingProxyController_getJob({
-    headers: authHeaders,
-    params: { id: jobId },
-  })
-  const payload = unwrapResponse<BacktestJobServerResponse | null>(
-    response as unknown as BacktestJobServerResponse | { data?: BacktestJobServerResponse | null; message?: string },
-  )
-  if (!payload?.id || !payload?.status) {
+  try {
+    const response = await typedServerClient.BacktestingProxyController_getJob({
+      headers: authHeaders,
+      params: { id: jobId },
+    })
+    const payload = unwrapResponse<BacktestJobServerResponse | null>(
+      response as unknown as BacktestJobServerResponse | { data?: BacktestJobServerResponse | null; message?: string },
+    )
+    if (!payload?.id || !payload?.status) {
+      return null
+    }
+    return payload
+  } catch {
     return null
   }
-  return payload
 }

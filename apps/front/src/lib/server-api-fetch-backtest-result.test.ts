@@ -119,6 +119,20 @@ describe('server-api backtest and llm transport', () => {
     })
   })
 
+  it('returns null when backtest job transport fails', async () => {
+    mockServerClient.BacktestingProxyController_getJob.mockRejectedValue(new Error('boom'))
+
+    const { fetchBacktestJobServer } = await import('./server-api')
+    await expect(fetchBacktestJobServer('btjob-404')).resolves.toBeNull()
+  })
+
+  it('returns null when backtest result transport fails', async () => {
+    mockServerClient.BacktestingProxyController_getJobResult.mockRejectedValue(new Error('boom'))
+
+    const { fetchBacktestJobResultServer } = await import('./server-api')
+    await expect(fetchBacktestJobResultServer('btjob-404')).resolves.toBeNull()
+  })
+
   it('retries llm strategy list anonymously after 401/403', async () => {
     mockServerClient.LlmStrategyInstancesController_list
       .mockRejectedValueOnce({ status: 401, message: 'expired' })
