@@ -112,5 +112,5 @@ bash scripts/acceptance/quantify-min-acceptance.sh
 ## 故障排查
 
 - 连接失败：确认 quantify 服务已经启动，且调用方可访问 `/api/v1/market/stream/ticker`
-- 没有数据：检查 Binance WebSocket 连接状态与 market-data 模块日志
+- 没有数据：检查当前 provider 的 WS / REST 连接状态与 market-data 模块日志
 - 频繁断线：检查内部网络、代理超时与调用方重连逻辑
