@@ -1,18 +1,18 @@
 import type { INestApplication, ExecutionContext } from '@nestjs/common'
 import type { WhaleAlertService } from '@/modules/whale-alert/whale-alert.service'
+import type { WhaleNotificationDelivery } from '@/prisma/prisma.types'
 import type { PrismaService } from '@/prisma/prisma.service'
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard'
 import { WhaleAlertService as WhaleAlertServiceToken } from '@/modules/whale-alert/whale-alert.service'
 import { WhaleNotificationDeduplicatorService } from '@/modules/whale-notification/services/whale-notification-deduplicator.service'
 import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
-import { createTestingApp, createUserRecord } from '../fixtures/fixtures'
+import { createTestingApp } from '../fixtures/fixtures'
 import { restoreE2eEnv, setE2eEnvValue, snapshotE2eEnv } from '../helpers/setup-e2e-env'
-
-type WhaleNotificationRuleCreateData = Parameters<PrismaService['whaleNotificationRule']['create']>[0]['data']
-
-const createWhaleNotificationRuleRecord = async (prisma: PrismaService, data: WhaleNotificationRuleCreateData) => {
-  return prisma.whaleNotificationRule.create({ data })
-}
+import {
+  cleanupWhaleNotificationUser,
+  createWhaleNotificationRuleRecord,
+  createWhaleNotificationTestUser,
+} from './whale-notification.helpers'
 
 describe('Whale notification gray release allowlist placeholder (E2E)', () => {
   let app: INestApplication
@@ -63,12 +63,10 @@ describe('Whale notification gray release allowlist placeholder (E2E)', () => {
     prisma = app.get(PrismaServiceToken)
     whaleAlertService = app.get(WhaleAlertServiceToken)
 
-    await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
-    await prisma.whaleNotificationRule.deleteMany({ where: { userId } })
-    await prisma.user.deleteMany({ where: { id: userId } })
+    await cleanupWhaleNotificationUser(prisma, userId)
 
-    await createUserRecord(prisma, {
-      id: userId,
+    await createWhaleNotificationTestUser(prisma, {
+      userId,
       email: 'e2e-allowlist@example.com',
       nickname: 'allowlist-user',
     })
@@ -87,10 +85,8 @@ describe('Whale notification gray release allowlist placeholder (E2E)', () => {
 
   afterAll(async () => {
     if (prisma) {
-      await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
-      await prisma.whaleNotificationRule.deleteMany({ where: { userId } })
       await prisma.hyperliquidWhaleTrade.deleteMany({ where: { userAddress: '0xabc' } })
-      await prisma.user.deleteMany({ where: { id: userId } })
+      await cleanupWhaleNotificationUser(prisma, userId)
     }
 
     restoreE2eEnv(envSnapshot)
@@ -113,6 +109,6 @@ describe('Whale notification gray release allowlist placeholder (E2E)', () => {
     })
 
     expect(deliveries.length).toBeGreaterThan(0)
-    expect(deliveries.some(item => item.channel === 'WEB' && item.status === 'SENT')).toBe(true)
+    expect(deliveries.some((item: WhaleNotificationDelivery) => item.channel === 'WEB' && item.status === 'SENT')).toBe(true)
   })
 })

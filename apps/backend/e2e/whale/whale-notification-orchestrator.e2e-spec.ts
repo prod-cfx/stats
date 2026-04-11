@@ -1,16 +1,16 @@
 import type { INestApplication } from '@nestjs/common'
 import type { WhaleAlertService } from '@/modules/whale-alert/whale-alert.service'
+import type { WhaleNotificationDelivery } from '@/prisma/prisma.types'
 import type { PrismaService } from '@/prisma/prisma.service'
 import { WhaleAlertService as WhaleAlertServiceToken } from '@/modules/whale-alert/whale-alert.service'
 import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
-import { createApiClient, createTestingApp, createUserRecord } from '../fixtures/fixtures'
+import { createApiClient, createTestingApp } from '../fixtures/fixtures'
 import { restoreE2eEnv, setE2eEnvValue, snapshotE2eEnv } from '../helpers/setup-e2e-env'
-
-type WhaleNotificationRuleCreateData = Parameters<PrismaService['whaleNotificationRule']['create']>[0]['data']
-
-const createWhaleNotificationRuleRecord = async (prisma: PrismaService, data: WhaleNotificationRuleCreateData) => {
-  return prisma.whaleNotificationRule.create({ data })
-}
+import {
+  cleanupWhaleNotificationUser,
+  createWhaleNotificationRuleRecord,
+  createWhaleNotificationTestUser,
+} from './whale-notification.helpers'
 
 describe('Whale notification orchestrator via whale trade record (service E2E)', () => {
   let app: INestApplication
@@ -39,13 +39,11 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
         },
       },
     })
-    await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
-    await prisma.whaleNotificationRule.deleteMany({ where: { userId } })
     await prisma.hyperliquidWhaleTrade.deleteMany({ where: { userAddress: '0xorchestrator' } })
-    await prisma.user.deleteMany({ where: { id: userId } })
+    await cleanupWhaleNotificationUser(prisma, userId)
 
-    await createUserRecord(prisma, {
-      id: userId,
+    await createWhaleNotificationTestUser(prisma, {
+      userId,
       email: 'e2e-orchestrator-user@example.com',
       nickname: 'orchestrator-user',
     })
@@ -83,10 +81,8 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
           },
         },
       })
-      await prisma.whaleNotificationDelivery.deleteMany({ where: { userId } })
-      await prisma.whaleNotificationRule.deleteMany({ where: { userId } })
       await prisma.hyperliquidWhaleTrade.deleteMany({ where: { userAddress: '0xorchestrator' } })
-      await prisma.user.deleteMany({ where: { id: userId } })
+      await cleanupWhaleNotificationUser(prisma, userId)
     }
 
     if (app) {
@@ -124,8 +120,8 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
 
     expect(rows.length).toBe(4)
 
-    const sentRows = rows.filter(row => row.status === 'SENT')
-    const skippedRows = rows.filter(row => row.status === 'SKIPPED_COOLDOWN')
+    const sentRows = rows.filter((row: WhaleNotificationDelivery) => row.status === 'SENT')
+    const skippedRows = rows.filter((row: WhaleNotificationDelivery) => row.status === 'SKIPPED_COOLDOWN')
 
     expect(sentRows.length).toBe(2)
     expect(skippedRows.length).toBe(2)
@@ -197,8 +193,8 @@ describe('Whale notification orchestrator via whale trade record (service E2E)',
       where: { userId },
       orderBy: [{ createdAt: 'asc' }],
     })
-    const failedRows = rows.filter(row => row.status === 'FAILED')
-    const skippedRows = rows.filter(row => row.status === 'SKIPPED_COOLDOWN')
+    const failedRows = rows.filter((row: WhaleNotificationDelivery) => row.status === 'FAILED')
+    const skippedRows = rows.filter((row: WhaleNotificationDelivery) => row.status === 'SKIPPED_COOLDOWN')
 
     expect(rows.length).toBe(2)
     expect(failedRows.length).toBe(2)

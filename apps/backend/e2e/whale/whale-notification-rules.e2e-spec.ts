@@ -2,7 +2,11 @@ import type { INestApplication, ExecutionContext } from '@nestjs/common'
 import type { PrismaService } from '@/prisma/prisma.service'
 import { JwtAuthGuard } from '@/modules/auth/guards/jwt-auth.guard'
 import { PrismaService as PrismaServiceToken } from '@/prisma/prisma.service'
-import { createAuthApiClient, createTestingApp, createUserRecord } from '../fixtures/fixtures'
+import { createAuthApiClient, createTestingApp } from '../fixtures/fixtures'
+import {
+  cleanupWhaleNotificationUser,
+  createWhaleNotificationTestUser,
+} from './whale-notification.helpers'
 
 describe('Whale notification rules HTTP (E2E)', () => {
   let app: INestApplication
@@ -29,14 +33,9 @@ describe('Whale notification rules HTTP (E2E)', () => {
     app = ctx.app
 
     prisma = app.get(PrismaServiceToken)
-    await prisma.whaleNotificationRule.deleteMany({
-      where: { userId: 'e2e-user-whale-notify' },
-    })
-    await prisma.user.deleteMany({
-      where: { id: 'e2e-user-whale-notify' },
-    })
-    await createUserRecord(prisma, {
-      id: 'e2e-user-whale-notify',
+    await cleanupWhaleNotificationUser(prisma, 'e2e-user-whale-notify')
+    await createWhaleNotificationTestUser(prisma, {
+      userId: 'e2e-user-whale-notify',
       email: 'e2e-user-whale-notify@example.com',
       nickname: 'e2e-user',
     })
@@ -44,12 +43,7 @@ describe('Whale notification rules HTTP (E2E)', () => {
 
   afterAll(async () => {
     if (prisma) {
-      await prisma.whaleNotificationRule.deleteMany({
-        where: { userId: 'e2e-user-whale-notify' },
-      })
-      await prisma.user.deleteMany({
-        where: { id: 'e2e-user-whale-notify' },
-      })
+      await cleanupWhaleNotificationUser(prisma, 'e2e-user-whale-notify')
     }
     if (app) {
       await app.close()
