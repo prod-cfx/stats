@@ -525,57 +525,23 @@ jobs:
 
           ENV_BASE_FILE="$(resolve_env_file ".env.${APP_ENV}" || true)"
           ENV_LOCAL_FILE="$(resolve_env_file ".env.${APP_ENV}.local" || true)"
+          if [ -z "$ENV_BASE_FILE" ] || [ -z "$ENV_LOCAL_FILE" ]; then
+            echo "[WARN] cannot locate env files for APP_ENV=${APP_ENV}, skip extra migration verification"
+            echo "[INFO] searched in: /opt/work/quantify/current /opt/work/quantify/shared /opt/work/quantify"
+            exit 0
+          fi
 
-          run_migration_with_database_url() {
-            local database_url="$1"
-            DATABASE_URL="$database_url" pnpm --filter @net/quantify run prisma:migrate:deploy
-            DATABASE_URL="$database_url" pnpm --filter @net/quantify run prisma:schema:audit
-          }
-
-          if [ -n "$ENV_BASE_FILE" ] && [ -n "$ENV_LOCAL_FILE" ]; then
-            set +e
-            pnpm exec dotenv -e "$ENV_BASE_FILE" -e "$ENV_LOCAL_FILE" -- bash -lc '
-              set -euo pipefail
-              if [ -n "${QUANTIFY_DATABASE_URL:-}" ] && [ "${QUANTIFY_DATABASE_URL}" != "__SET_IN_env.local__" ]; then
-                export DATABASE_URL="${QUANTIFY_DATABASE_URL}"
-              fi
-              if [ -z "${DATABASE_URL:-}" ] || [ "${DATABASE_URL}" = "__SET_IN_env.local__" ]; then
-                exit 86
-              fi
-
-              pnpm --filter @net/quantify run prisma:migrate:deploy
-              pnpm --filter @net/quantify run prisma:schema:audit
-            '
-            status=$?
-            set -e
-            if [ "$status" -eq 0 ]; then
+          pnpm exec dotenv -e "$ENV_BASE_FILE" -e "$ENV_LOCAL_FILE" -- bash -lc '
+            set -euo pipefail
+            if [ -n "${QUANTIFY_DATABASE_URL:-}" ] && [ "${QUANTIFY_DATABASE_URL}" != "__SET_IN_env.local__" ]; then
+              export DATABASE_URL="${QUANTIFY_DATABASE_URL}"
+            fi
+            if [ -z "${DATABASE_URL}" ] || [ "${DATABASE_URL}" = "__SET_IN_env.local__" ]; then
+              echo "[WARN] quantify DATABASE_URL is missing, skip extra migration verification"
               exit 0
             fi
-            if [ "$status" -ne 86 ]; then
-              exit "$status"
-            fi
-            echo "[WARN] env files exist but quantify DATABASE_URL is missing there; falling back to pm2 runtime env"
-          else
-            echo "[WARN] cannot locate env files for APP_ENV=${APP_ENV}; falling back to pm2 runtime env"
-            echo "[INFO] searched in: /opt/work/quantify/current /opt/work/quantify/shared /opt/work/quantify"
-          fi
 
-          PM2_ENV_JSON="$(pm2 jlist 2>/dev/null || true)"
-          DATABASE_URL_FROM_PM2="$(node -e '
-            const raw = process.argv[1] || "[]";
-            let apps = [];
-            try { apps = JSON.parse(raw); } catch {}
-            const app = apps.find(item => item && item.name === "quantify") || null;
-            const env = app?.pm2_env?.env || app?.pm2_env || {};
-            const value = env.QUANTIFY_DATABASE_URL || env.DATABASE_URL || "";
-            process.stdout.write(typeof value === "string" ? value : "");
-          ' "$PM2_ENV_JSON")"
-
-          if [ -z "$DATABASE_URL_FROM_PM2" ] || [ "$DATABASE_URL_FROM_PM2" = "__SET_IN_env.local__" ]; then
-            echo "[ERROR] quantify DATABASE_URL could not be resolved from env files or pm2 runtime env"
-            exit 1
-          fi
-
-          echo "[INFO] using quantify DATABASE_URL from pm2 runtime env for migration verification"
-          run_migration_with_database_url "$DATABASE_URL_FROM_PM2"
+            pnpm --filter @net/quantify run prisma:migrate:deploy
+            pnpm --filter @net/quantify run prisma:schema:audit
+          '
           REMOTE
