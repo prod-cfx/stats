@@ -1,5 +1,17 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals'
 import { ApiError } from '@/lib/errors'
+import {
+  applyCodegenResponseToConversationState,
+  buildCodegenReplyContent,
+  extractCodegenErrorMessage,
+  requestAiQuantCodegen,
+  resolvePublishedStrategyInstanceId,
+} from './ai-quant-page-codegen'
+import {
+  DEFAULT_PARAMS,
+  DEFAULT_PARAM_SCHEMA,
+  DEFAULT_PARAM_VALUES,
+} from './ai-quant-page-conversation'
 
 const mockContinueLlmCodegenSession = jest.fn()
 const mockGetLlmCodegenSession = jest.fn()
@@ -99,19 +111,6 @@ jest.mock('@/lib/api', () => ({
   getLlmCodegenSession: (...args: unknown[]) => mockGetLlmCodegenSession(...args),
   startLlmCodegenSession: jest.fn(),
 }))
-
-import {
-  applyCodegenResponseToConversationState,
-  buildCodegenReplyContent,
-  extractCodegenErrorMessage,
-  resolvePublishedStrategyInstanceId,
-} from './ai-quant-page-codegen'
-import { requestAiQuantCodegen } from './ai-quant-page-codegen'
-import {
-  DEFAULT_PARAMS,
-  DEFAULT_PARAM_SCHEMA,
-  DEFAULT_PARAM_VALUES,
-} from './ai-quant-page-conversation'
 
 describe('AiQuantPageClient codegen P1 guards', () => {
   beforeEach(() => {

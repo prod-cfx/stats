@@ -1,7 +1,7 @@
+import { buildAiQuantErrorMessage, parseAiQuantErrorMeta } from '@/components/ai-quant/ai-quant-error-stage'
 import { client, unwrapApiResponse } from '@/lib/api-client'
 import { getToken } from '@/lib/auth-storage'
 import { ApiError, AuthenticationError } from '@/lib/errors'
-import { buildAiQuantErrorMessage, parseAiQuantErrorMeta } from '@/components/ai-quant/ai-quant-error-stage'
 
 export interface BacktestCapabilities {
   allowedSymbols: string[]
@@ -98,16 +98,16 @@ function waitRetryDelay(signal?: AbortSignal): Promise<void> {
       return
     }
 
-    const timer = globalThis.setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort)
-      resolve()
-    }, BACKTEST_CAPABILITY_RETRY_DELAY_MS)
-
     const onAbort = () => {
       globalThis.clearTimeout(timer)
       signal?.removeEventListener('abort', onAbort)
       reject(new ApiError('Request aborted', 'API_ERROR'))
     }
+
+    const timer = globalThis.setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, BACKTEST_CAPABILITY_RETRY_DELAY_MS)
 
     signal?.addEventListener('abort', onAbort)
   })
