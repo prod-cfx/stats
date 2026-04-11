@@ -13,6 +13,7 @@ const mockBuildBacktestPayload = jest.fn()
 const mockCheckBacktestSymbolSupport = jest.fn()
 const mockCreateBacktestJob = jest.fn()
 const mockGetBacktestJob = jest.fn()
+const stableSession = { userId: 'user-1' }
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
@@ -20,7 +21,7 @@ jest.mock('next/navigation', () => ({
 
 jest.mock('@/hooks/use-auth', () => ({
   useAuth: () => ({
-    session: { userId: 'user-1' },
+    session: stableSession,
     isLoading: false,
   }),
 }))
@@ -71,7 +72,7 @@ describe('StrategyDetailPageClient', () => {
   let root: ReturnType<typeof createRoot>
 
   beforeEach(() => {
-    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -148,8 +149,8 @@ describe('StrategyDetailPageClient', () => {
     })
   })
 
-  afterEach(() => {
-    act(() => {
+  afterEach(async () => {
+    await act(async () => {
       root.unmount()
     })
     container.remove()
@@ -157,19 +158,17 @@ describe('StrategyDetailPageClient', () => {
   })
 
   it('runs snapshot-driven backtest from strategy detail without conversation defaults or mock ids', async () => {
-    act(() => {
+    await act(async () => {
       root.render(<StrategyDetailPageClient lng="zh" id="inst-1" />)
     })
 
-    await new Promise(resolve => setTimeout(resolve, 0))
-    await new Promise(resolve => setTimeout(resolve, 0))
-
-    act(() => {
-      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    await act(async () => {
+      await Promise.resolve()
     })
 
-    await new Promise(resolve => setTimeout(resolve, 0))
-    await new Promise(resolve => setTimeout(resolve, 0))
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
 
     expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -188,5 +187,5 @@ describe('StrategyDetailPageClient', () => {
     )
     expect(mockGetBacktestJob).not.toHaveBeenCalled()
     expect(container.querySelector('[data-testid="backtest-error"]')?.textContent).toBe('')
-  }, 10000)
+  })
 })
