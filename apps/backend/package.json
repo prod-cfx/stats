@@ -11,7 +11,7 @@
     "start": "TS_NODE_BASEURL=./dist node -r tsconfig-paths/register dist/apps/backend/src/main.js",
     "build": "tsc --project tsconfig.json && tsc-alias -p tsconfig.json && node ../../scripts/copy-prisma-client-to-dist.cjs backend && pnpm run postbuild",
     "postbuild": "node ../../scripts/runtime/generate-backend-runtime-package.mjs --app-package ./package.json --root-package ../../package.json --output ./dist/package.json --include-pnpm && xattr -cr dist prisma/schema prisma.config.ts ../../pnpm-lock.yaml ../../dx/deploy 2>/dev/null || true",
-    "prisma:generate": "prisma generate",
+    "prisma:generate": "node ../../scripts/runtime/run-prisma-generate.cjs backend",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
     "prisma:migrate:reset": "prisma migrate reset --force",

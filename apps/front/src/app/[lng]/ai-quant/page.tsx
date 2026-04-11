@@ -9,6 +9,7 @@ const AI_QUANT_DEPLOY_VERSION =
   || process.env.VERCEL_GIT_COMMIT_SHA?.trim()
   || process.env.NEXT_PUBLIC_APP_ENV?.trim()
   || 'local-dev'
+const AI_QUANT_SERVER_OWNED_CONVERSATIONS = process.env.NEXT_PUBLIC_APP_ENV?.trim() === 'staging'
 
 export async function generateMetadata({
   params,
@@ -23,7 +24,10 @@ export default function AiQuantPage() {
   return (
     <div className="flex min-h-screen flex-col bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
       <Navbar />
-      <AiQuantPageClient deployVersion={AI_QUANT_DEPLOY_VERSION} />
+      <AiQuantPageClient
+        deployVersion={AI_QUANT_DEPLOY_VERSION}
+        serverOwnedConversations={AI_QUANT_SERVER_OWNED_CONVERSATIONS}
+      />
       <Footer />
     </div>
   )

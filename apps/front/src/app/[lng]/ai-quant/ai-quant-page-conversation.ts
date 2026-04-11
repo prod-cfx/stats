@@ -1,17 +1,20 @@
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import type { BacktestRangeInput } from '@/components/ai-quant/backtest-range'
 import type { BacktestResult } from '@/components/ai-quant/BacktestSummaryCard'
-import { readCanonicalDigest } from '@/components/ai-quant/canonical-confirmation'
 import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import type { StrategyLogicGraph } from '@/components/ai-quant/logic-graph-model'
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
 import type {
+  AiQuantConversationResponse,
   LlmClarificationGate,
   LlmPublicationGate,
   LlmSemanticGraph,
   LlmSemanticGraphValidationReport,
   UserExchangeAccountStatus,
 } from '@/lib/api'
+import { readCanonicalDigest } from '@/components/ai-quant/canonical-confirmation'
+import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-graph'
+import { syncStrategyParamsFromCodegen } from '@/components/ai-quant/strategy-param-sync'
 
 export interface QuantParams {
   exchange: 'binance' | 'okx' | 'hyperliquid'
@@ -104,6 +107,7 @@ interface PersistedConversationEnvelope {
 
 export interface ConversationState {
   id: string
+  serverConversationId?: string | null
   schemaVersion: number
   title: string
   messages: QuantMessage[]
@@ -208,7 +212,7 @@ export function hasExplicitBacktestExecutionOverrides(values: Record<string, unk
 
 function parseBacktestExecutionNumber(
   value: unknown,
-  fallback: number,
+  _fallback: number,
 ): number {
   if (value === undefined || value === null) {
     return Number.NaN
@@ -227,7 +231,7 @@ function parseBacktestExecutionNumber(
 
 function resolveBacktestExecutionPriceSource(
   value: unknown,
-  fallback: BacktestExecutionPriceSource,
+  _fallback: BacktestExecutionPriceSource,
 ): string {
   if (value === undefined || value === null) {
     return ''
@@ -717,6 +721,7 @@ export function buildApiConfigHref(lng: 'zh' | 'en') {
 export function createConversation(translate: (key: string) => string, now = Date.now()): ConversationState {
   return {
     id: `conv-${now}-${Math.random().toString(16).slice(2, 8)}`,
+    serverConversationId: null,
     schemaVersion: AI_QUANT_PERSISTED_SCHEMA_VERSION,
     title: translate('aiQuant.newChat'),
     messages: [
@@ -765,6 +770,83 @@ export function createRecoveryConversation(
       },
     ],
     updatedAt: now,
+  }
+}
+
+export function createConversationFromServerConversation(
+  response: AiQuantConversationResponse,
+  translate: (key: string) => string,
+): ConversationState {
+  const seed = createConversation(translate)
+  const syncResult = response.specDesc
+    ? syncStrategyParamsFromCodegen({
+        spec: response.specDesc,
+        fallback: {
+          exchange: seed.params.exchange,
+          symbol: seed.params.symbol,
+          baseTimeframe: seed.params.baseTimeframe,
+          positionPct: seed.params.positionPct,
+        },
+        currentValues: seed.paramValues,
+        capabilities: null,
+      })
+    : null
+  const nextParamValues = syncResult?.paramValues ?? seed.paramValues
+  const nextParams = syncResult
+    ? normalizeParamsFromValues(nextParamValues, seed.params)
+    : seed.params
+  const graphVersion =
+    typeof response.semanticGraph?.version === 'number' && Number.isFinite(response.semanticGraph.version)
+      ? response.semanticGraph.version
+      : 1
+  const logicGraph = response.specDesc
+    ? buildLogicGraphFromCodegenSpec(
+        response.specDesc,
+        {
+          exchange: syncResult?.normalized.exchange ?? nextParams.exchange,
+          symbol: syncResult?.normalized.symbol ?? nextParams.symbol,
+          baseTimeframe: syncResult?.normalized.baseTimeframe ?? nextParams.baseTimeframe,
+          positionPct: syncResult?.normalized.positionPct ?? nextParams.positionPct,
+          executionTags: syncResult?.executionTags ?? [],
+        },
+        graphVersion,
+        response.status === 'PUBLISHED' ? 'confirmed' : 'draft',
+      )
+    : null
+  const messages = response.conversationMessages?.length
+    ? response.conversationMessages.map((message, index) => ({
+        id: `${response.id}-msg-${index}`,
+        role: message.role,
+        content: message.content,
+      }))
+    : seed.messages
+  const updatedAt = response.updatedAt ? Date.parse(response.updatedAt) : Date.now()
+
+  return {
+    ...seed,
+    id: response.id,
+    serverConversationId: response.id,
+    title: response.conversationTitle?.trim() || seed.title,
+    messages,
+    params: nextParams,
+    paramSchema: syncResult?.paramSchema ?? seed.paramSchema,
+    paramValues: nextParamValues,
+    logicGraph,
+    codegenSpecDesc: response.specDesc ?? null,
+    semanticGraph: response.semanticGraph ?? null,
+    validationReport: response.validationReport ?? null,
+    clarificationGate: response.clarificationGate ?? null,
+    publicationGate: response.publicationGate ?? null,
+    pendingCanonicalDigest: response.canonicalDigest ?? null,
+    llmCodegenSessionId: response.activeCodegenSessionId ?? null,
+    publishedStrategyInstanceId: response.strategyInstanceId ?? null,
+    publishedSnapshotId: response.publishedSnapshotId ?? null,
+    publishedScriptCode: response.scriptCode ?? null,
+    publishedScriptGraphVersion:
+      response.scriptCode && logicGraph?.status === 'confirmed'
+        ? logicGraph.version
+        : null,
+    updatedAt,
   }
 }
 

@@ -328,9 +328,22 @@ export function applyCodegenResponseToConversationState(args: {
         'Failed to generate strategy from current logic graph: backend did not return a detailed reason. Please check service logs.',
     }),
   })
+  const nextMessages = response.conversationMessages?.length
+    ? response.conversationMessages.map((message, index) => ({
+        id: `${response.id}-msg-${index}`,
+        role: message.role,
+        content: message.content,
+      }))
+    : (loadingMessageId
+        ? conversation.messages.map(msg =>
+            msg.id === loadingMessageId ? { ...msg, content: replyContent } : msg,
+          )
+        : conversation.messages)
 
   return {
     ...conversation,
+    serverConversationId: response.conversationId ?? conversation.serverConversationId ?? null,
+    title: response.conversationTitle?.trim() || conversation.title,
     llmCodegenSessionId: shouldReuseCodegenSession ? activeSessionId : null,
     codegenSpecDesc:
       response.specDesc && typeof response.specDesc === 'object' && !Array.isArray(response.specDesc)
@@ -357,12 +370,8 @@ export function applyCodegenResponseToConversationState(args: {
         : conversation.pendingCanonicalDigest,
     backtestResult: null,
     latestSignalMessage: null,
-    messages: loadingMessageId
-      ? conversation.messages.map(msg =>
-          msg.id === loadingMessageId ? { ...msg, content: replyContent } : msg,
-        )
-      : conversation.messages,
-    updatedAt: Date.now(),
+    messages: nextMessages,
+    updatedAt: response.updatedAt ? Date.parse(response.updatedAt) : Date.now(),
   }
 }
 

@@ -228,6 +228,40 @@ describe('aiQuantProxyService', () => {
     )
   })
 
+  it('proxies AI Quant conversation list with authorization header', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.get.mockResolvedValue([{ id: 'conv-1', activeCodegenSessionId: 'session-1' }])
+
+    await service.listAiQuantConversations('user-1', 'Bearer token-1')
+
+    expect(quantifyClient.get).toHaveBeenCalledWith(
+      '/account/ai-quant/conversations',
+      {
+        timeoutMs: codegenTimeoutMs,
+        headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
+      },
+    )
+  })
+
+  it('maps transient AI Quant conversation list failures to service unavailable', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.get.mockRejectedValue(new QuantifyClientError(
+      'Quantify returned a non-JSON error response',
+      502,
+      'UPSTREAM_INVALID_RESPONSE',
+      { upstreamBody: '<html>502 Bad Gateway</html>' },
+    ))
+
+    await expect(service.listAiQuantConversations('user-1', 'Bearer token-1')).rejects.toMatchObject({
+      status: 503,
+      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+      args: expect.objectContaining({
+        retryable: true,
+        upstreamCode: 'UPSTREAM_INVALID_RESPONSE',
+      }),
+    })
+  })
+
   it('maps quantify client errors into domain exceptions', async () => {
     const { service, quantifyClient } = createService()
     quantifyClient.createLlmSubscription.mockRejectedValue(new QuantifyClientError(

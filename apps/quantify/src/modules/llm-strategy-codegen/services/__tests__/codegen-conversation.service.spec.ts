@@ -40,6 +40,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   const mockRepo = {
     createSession: jest.fn(),
     findById: jest.fn(),
+    listByUser: jest.fn(),
     updateSession: jest.fn(),
     tryMarkGenerating: jest.fn(),
     tryRequeueFromProcessing: jest.fn(),
@@ -62,6 +63,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   }
   const mockRecommendation = {
     onSpecDescPersisted: jest.fn(),
+  }
+  const mockConversationsRepo = {
+    listByUser: jest.fn(),
+    listKnownSessionIdsByUser: jest.fn(),
+    findByCodegenSessionId: jest.fn(),
+    upsertConversationSnapshot: jest.fn(),
+    archiveByIdAndUser: jest.fn(),
   }
   const canonicalSpecBuilder = new CanonicalSpecBuilderService()
   const canonicalDigestService = new CanonicalSpecV2DigestService()
@@ -94,19 +102,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     },
   })
   const withRequiredMarketContext = completeChecklist
-
-  const service = new CodegenConversationService(
-    mockAi as unknown as AiService,
-    mockRepo as unknown as CodegenSessionsRepository,
-    mockRepo as unknown as PublishedStrategySnapshotsRepository,
-    new StaticGuardrailService(),
-    new RuntimeGuardrailService(),
-    specDescBuilder,
-    canonicalSpecBuilder,
-    new StrategyClarificationRulesService(),
-    new StrategyClarificationQuestionService(),
-    publicationPipeline,
-  )
+  let service: CodegenConversationService
   const waitForTerminalStatus = async (
     sessionId: string,
     timeoutMs = 20_000,
@@ -146,8 +142,26 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       strategyTemplateId: 'template-1',
       strategyInstanceId: 'instance-1',
     })
+    mockConversationsRepo.listByUser.mockResolvedValue([])
+    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue([])
+    mockConversationsRepo.findByCodegenSessionId.mockResolvedValue(null)
+    mockConversationsRepo.upsertConversationSnapshot.mockResolvedValue(undefined)
+    mockConversationsRepo.archiveByIdAndUser.mockResolvedValue(undefined)
     setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'false')
     setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'true')
+    service = new (CodegenConversationService as unknown as new (...args: any[]) => CodegenConversationService)(
+      mockAi as unknown as AiService,
+      mockRepo as unknown as CodegenSessionsRepository,
+      mockRepo as unknown as PublishedStrategySnapshotsRepository,
+      mockConversationsRepo,
+      new StaticGuardrailService(),
+      new RuntimeGuardrailService(),
+      specDescBuilder,
+      canonicalSpecBuilder,
+      new StrategyClarificationRulesService(),
+      new StrategyClarificationQuestionService(),
+      publicationPipeline,
+    )
   })
 
   afterEach(() => {
@@ -180,6 +194,153 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       status: 'DRAFTING',
     }))
+  })
+
+  it('persists a dedicated conversation aggregate when starting a session', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '先确认入场条件：例如 5/20 金叉。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({
+      id: 's-conversation-projection',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {},
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: { conversationHistory: ['U: 帮我做一个均线策略', 'A: 先确认入场条件：例如 5/20 金叉。'] },
+      latestDraftCode: null,
+      latestSpecDesc: null,
+      rejectReason: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:00:00.000Z'),
+      strategyInstanceId: null,
+    })
+    mockRepo.findById.mockResolvedValue({
+      id: 's-conversation-projection',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {},
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: { conversationHistory: ['U: 帮我做一个均线策略', 'A: 先确认入场条件：例如 5/20 金叉。'] },
+      latestDraftCode: null,
+      latestSpecDesc: null,
+      rejectReason: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:00:00.000Z'),
+      strategyInstanceId: null,
+    })
+
+    await service.startSession({
+      userId: 'u1',
+      initialMessage: '帮我做一个均线策略',
+    })
+
+    expect(mockConversationsRepo.upsertConversationSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'u1',
+      codegenSessionId: 's-conversation-projection',
+      title: '帮我做一个均线策略',
+      messages: [
+        { role: 'user', content: '帮我做一个均线策略' },
+        { role: 'assistant', content: '先确认入场条件：例如 5/20 金叉。' },
+      ],
+    }))
+  })
+
+  it('lists conversations from the dedicated conversation aggregate instead of raw session rows', async () => {
+    mockConversationsRepo.listByUser.mockResolvedValue([
+      {
+        id: 'conv-1',
+        userId: 'u1',
+        title: '服务器会话',
+        codegenSessionId: 'session-1',
+        createdAt: new Date('2026-04-10T20:00:00.000Z'),
+        updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+        messages: [
+          { role: 'user', content: '来自会话聚合的用户消息' },
+          { role: 'assistant', content: '来自会话聚合的助手消息' },
+        ],
+      },
+    ])
+    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue(['session-1'])
+    mockRepo.listByUser.mockResolvedValue([])
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-1',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: {},
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: { conversationHistory: ['U: 原始 session 消息'] },
+      latestDraftCode: null,
+      latestSpecDesc: null,
+      rejectReason: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+      strategyInstanceId: null,
+    })
+
+    const result = await service.listConversations('u1')
+
+    expect(mockConversationsRepo.listByUser).toHaveBeenCalledWith('u1')
+    expect(mockRepo.listByUser).toHaveBeenCalledWith('u1')
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: 'conv-1',
+        activeCodegenSessionId: 'session-1',
+        conversationTitle: '服务器会话',
+        conversationMessages: [
+          { role: 'user', content: '来自会话聚合的用户消息' },
+          { role: 'assistant', content: '来自会话聚合的助手消息' },
+        ],
+        status: 'CHECKLIST_GATE',
+      }),
+    ])
+  })
+
+  it('backfills only missing session projections and does not resurrect archived conversations', async () => {
+    mockConversationsRepo.listByUser
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue(['session-archived'])
+    mockRepo.listByUser.mockResolvedValue([
+      {
+        id: 'session-archived',
+        userId: 'u1',
+      },
+      {
+        id: 'session-missing',
+        userId: 'u1',
+      },
+    ])
+    mockRepo.findById.mockImplementation(async (id: string) => ({
+      id,
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {},
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: { conversationHistory: ['U: hi', 'A: hello'] },
+      latestDraftCode: null,
+      latestSpecDesc: null,
+      rejectReason: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+      strategyInstanceId: null,
+    }))
+
+    await service.listConversations('u1')
+
+    expect(mockConversationsRepo.upsertConversationSnapshot).toHaveBeenCalledTimes(1)
+    expect(mockConversationsRepo.upsertConversationSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+      codegenSessionId: 'session-missing',
+    }))
+  })
+
+  it('archives a conversation through the dedicated conversation repository', async () => {
+    await service.deleteConversation('conv-1', 'u1')
+
+    expect(mockConversationsRepo.archiveByIdAndUser).toHaveBeenCalledWith('conv-1', 'u1')
   })
 
   it('sends the non-contradictory planner prompt to ai service', async () => {

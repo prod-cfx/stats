@@ -38,7 +38,25 @@ jest.mock('@/components/account/ai-quant-strategy-store', () => ({
 }))
 
 jest.mock('@/components/ai-quant/ConversationSidebar', () => ({
-  ConversationSidebar: () => <div data-testid="sidebar" />,
+  ConversationSidebar: ({
+    items,
+    onDelete,
+  }: {
+    items: Array<{ id: string, title: string }>
+    onDelete?: (id: string) => void
+  }) => (
+    <div data-testid="sidebar">
+      {items.map(item => (
+        <button
+          key={`delete-${item.id}`}
+          data-testid={`delete-${item.id}`}
+          onClick={() => onDelete?.(item.id)}
+        >
+          delete-{item.title}
+        </button>
+      ))}
+    </div>
+  ),
 }))
 
 jest.mock('@/components/ai-quant/DeployDialog', () => ({
@@ -139,9 +157,12 @@ jest.mock('@/components/ai-quant/backtest-capability-client', () => ({
 
 jest.mock('@/lib/api', () => ({
   deployAccountAiQuantStrategy: jest.fn(),
+  deleteAiQuantConversation: jest.fn(async () => undefined),
   continueLlmCodegenSession: jest.fn(),
   fetchUserExchangeAccountStatuses: jest.fn(async () => []),
+  listAiQuantConversations: jest.fn(async () => []),
   getLlmCodegenSession: jest.fn(),
+  listLlmCodegenSessions: jest.fn(async () => []),
   startLlmCodegenSession: jest.fn(),
 }))
 
@@ -263,6 +284,16 @@ function seedVersionedConversation(version: string, now = Date.now()) {
       conversations: [buildPersistedConversation(now)],
     }),
   )
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve
+    reject = innerReject
+  })
+  return { promise, resolve, reject }
 }
 
 describe('AiQuantPageClient backtest range integration', () => {
@@ -441,4 +472,129 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(container.textContent).not.toContain('persisted-message')
     expect(container.textContent).toContain('"symbol":"BTCUSDT"')
   })
+
+  it('prefers backend-owned sessions over persisted local AI Quant conversations', async () => {
+    localStorage.clear()
+    seedVersionedConversation('deploy-current', Date.now())
+
+    const { listAiQuantConversations, listLlmCodegenSessions } = jest.requireMock('@/lib/api') as {
+      listAiQuantConversations: jest.Mock
+      listLlmCodegenSessions: jest.Mock
+    }
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'session-1',
+        status: 'CHECKLIST_GATE',
+        updatedAt: '2026-04-10T12:00:00.000Z',
+        conversationTitle: 'server-conv',
+        conversationMessages: [
+          { role: 'assistant', content: 'server-message' },
+        ],
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(listAiQuantConversations).toHaveBeenCalled()
+    expect(listLlmCodegenSessions).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('server-message')
+    expect(container.textContent).not.toContain('persisted-message')
+  })
+
+  it('shows a dedicated loading state while server-owned conversations are syncing', async () => {
+    localStorage.clear()
+    seedVersionedConversation('deploy-current', Date.now())
+
+    const { listAiQuantConversations } = jest.requireMock('@/lib/api') as {
+      listAiQuantConversations: jest.Mock
+    }
+    const deferred = createDeferred<Array<Record<string, unknown>>>()
+    listAiQuantConversations.mockReturnValue(deferred.promise)
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" serverOwnedConversations />)
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="conversation-sync-loading"]')).toBeTruthy()
+    expect(container.querySelector('[data-testid="sidebar"]')).toBeNull()
+    expect(container.textContent).not.toContain('persisted-message')
+
+    await act(async () => {
+      deferred.resolve([])
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="conversation-sync-loading"]')).toBeNull()
+  })
+
+  it('clears stale local cache and shows an error state when server conversation hydration fails', async () => {
+    localStorage.clear()
+    seedVersionedConversation('deploy-current', Date.now())
+
+    const { listAiQuantConversations } = jest.requireMock('@/lib/api') as {
+      listAiQuantConversations: jest.Mock
+    }
+    listAiQuantConversations.mockRejectedValue(new Error('gateway'))
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(localStorage.getItem('ai_quant_conversations_v1')).toBeNull()
+    expect(container.querySelector('[data-testid="conversation-sync-error"]')).toBeTruthy()
+    expect(container.textContent).not.toContain('persisted-message')
+  })
+
+  it('deletes a server-owned conversation through the backend and keeps it removed locally', async () => {
+    localStorage.clear()
+
+    const { listAiQuantConversations, deleteAiQuantConversation } = jest.requireMock('@/lib/api') as {
+      listAiQuantConversations: jest.Mock
+      deleteAiQuantConversation: jest.Mock
+    }
+
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'conv-1',
+        status: 'CHECKLIST_GATE',
+        updatedAt: '2026-04-10T12:00:00.000Z',
+        conversationTitle: 'server-conv-1',
+        conversationMessages: [{ role: 'assistant', content: 'server-message-1' }],
+      },
+      {
+        id: 'conv-2',
+        status: 'CHECKLIST_GATE',
+        updatedAt: '2026-04-10T12:01:00.000Z',
+        conversationTitle: 'server-conv-2',
+        conversationMessages: [{ role: 'assistant', content: 'server-message-2' }],
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).toContain('server-message-1')
+
+    await act(async () => {
+      (container.querySelector('[data-testid="delete-conv-1"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(deleteAiQuantConversation).toHaveBeenCalledWith('conv-1')
+    expect(container.textContent).not.toContain('server-message-1')
+    expect(container.textContent).toContain('server-message-2')
+  })
+
 })

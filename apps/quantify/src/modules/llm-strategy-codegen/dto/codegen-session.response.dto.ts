@@ -77,9 +77,29 @@ class PublicationGateDto {
   blockingMismatches!: PublicationGateMismatchDto[]
 }
 
+class CodegenConversationMessageDto {
+  @ApiProperty({ description: '消息角色', enum: ['user', 'assistant'] })
+  role!: 'user' | 'assistant'
+
+  @ApiProperty({ description: '消息内容' })
+  content!: string
+}
+
 export class CodegenSessionResponseDto {
   @ApiProperty({ description: '会话 ID' })
   id!: string
+
+  @ApiPropertyOptional({ description: '当前服务端 conversation ID' })
+  conversationId?: string | null
+
+  @ApiPropertyOptional({ description: '会话标题' })
+  conversationTitle?: string
+
+  @ApiPropertyOptional({ description: '结构化会话消息', type: [CodegenConversationMessageDto] })
+  conversationMessages?: Array<{
+    role: 'user' | 'assistant'
+    content: string
+  }>
 
   @ApiProperty({
     description: '会话状态',
@@ -124,6 +144,12 @@ export class CodegenSessionResponseDto {
 
   @ApiPropertyOptional({ description: '发布后生成的策略实例 ID' })
   strategyInstanceId?: string | null
+
+  @ApiPropertyOptional({ description: '创建时间' })
+  createdAt?: string
+
+  @ApiPropertyOptional({ description: '更新时间' })
+  updatedAt?: string
 
   @ApiPropertyOptional({ description: '规则语义澄清状态', type: StrategyClarificationStateDto })
   clarificationState?: StrategyClarificationState | null

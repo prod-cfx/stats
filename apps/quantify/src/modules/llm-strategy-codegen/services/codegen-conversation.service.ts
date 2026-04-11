@@ -1,16 +1,18 @@
 import type { CodegenGuidePromptConfigSnapshot, ConstraintPackSnapshot } from '../constants/constraint-pack'
+import type { AiQuantConversationResponseDto } from '../dto/ai-quant-conversation.response.dto'
 import type { CodegenGuideConfigDto } from '../dto/codegen-guide-config.dto'
 import type { CodegenSessionResponseDto } from '../dto/codegen-session.response.dto'
 import type { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.dto'
 import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-test.response.dto'
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
+import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant-conversations.repository'
 import type { ChecklistPayload } from '../types/codegen-checklist'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
-import type { Prisma } from '@/prisma/prisma.types'
 
+import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { getHelperDocs } from '@ai/shared/script-engine/helpers'
 import { HttpStatus, Injectable } from '@nestjs/common'
@@ -21,6 +23,8 @@ import { AiService } from '@/modules/ai/ai.service'
 import { createDefaultConstraintPack } from '../constants/constraint-pack'
 import { buildConversationPlannerSystemPrompt } from '../prompts/conversation-planner-system.prompt'
 import { buildStrategyCodegenSystemPrompt } from '../prompts/strategy-codegen-system.prompt'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { AiQuantConversationsRepository } from '../repositories/ai-quant-conversations.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CodegenSessionsRepository } from '../repositories/codegen-sessions.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -98,6 +102,7 @@ export class CodegenConversationService {
     private readonly aiService: AiService,
     private readonly sessionsRepo: CodegenSessionsRepository,
     private readonly publishedSnapshotsRepo: PublishedStrategySnapshotsRepository,
+    private readonly conversationsRepo: AiQuantConversationsRepository,
     private readonly staticGuardrail: StaticGuardrailService,
     private readonly runtimeGuardrail: RuntimeGuardrailService,
     private readonly specDescBuilder: SpecDescBuilderService,
@@ -165,7 +170,7 @@ export class CodegenConversationService {
       strategyInstanceId: null,
     } as unknown as Prisma.LlmStrategyCodegenSessionCreateInput)
 
-    return this.finalizeSessionResponse({
+    const response = this.finalizeSessionResponse({
       id: session.id,
       status,
       missingFields: [],
@@ -174,6 +179,7 @@ export class CodegenConversationService {
       assistantPrompt,
       clarificationState,
     })
+    return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
   }
 
   async getSession(sessionId: string, userId: string): Promise<CodegenSessionResponseDto> {
@@ -186,7 +192,25 @@ export class CodegenConversationService {
       })
     }
 
-    return this.toSessionSnapshotResponse(session)
+    return this.returnPersistedSnapshotResponse(session, userId)
+  }
+
+  async listConversations(userId: string): Promise<AiQuantConversationResponseDto[]> {
+    let conversations = await this.conversationsRepo.listByUser(userId)
+    const knownSessionIds = new Set(await this.conversationsRepo.listKnownSessionIdsByUser(userId))
+    const sessions = await this.sessionsRepo.listByUser(userId)
+    const sessionsNeedingProjection = sessions.filter(session => !knownSessionIds.has(session.id))
+
+    if (sessionsNeedingProjection.length > 0) {
+      await Promise.all(sessionsNeedingProjection.map(session => this.persistConversationProjectionForSessionId(session.id, userId)))
+      conversations = await this.conversationsRepo.listByUser(userId)
+    }
+
+    return Promise.all(conversations.map(conversation => this.toConversationResponse(conversation)))
+  }
+
+  async deleteConversation(conversationId: string, userId: string): Promise<void> {
+    await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
   }
 
   async continueSession(
@@ -220,7 +244,7 @@ export class CodegenConversationService {
       return this.continueConfirmedSession(session, dto, sessionUserId)
     }
     if (this.stateMachine.isProcessingStatus(session.status)) {
-      return this.toSessionSnapshotResponse(session)
+      return this.returnPersistedSnapshotResponse(session, sessionUserId)
     }
 
     const baseClarificationState = this.readClarificationState(session.clarificationState)
@@ -254,15 +278,17 @@ export class CodegenConversationService {
           clarificationState: clarificationStateAfterAnswers,
           constraintPack,
           message: dto.message,
+          userId: sessionUserId,
         })
       }
-      return this.finalizeSessionResponse({
+      const response = this.finalizeSessionResponse({
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt: plan.assistantPrompt || '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
         clarificationState: clarificationStateAfterAnswers,
       })
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
     const mergedChecklist = this.mergeChecklistSnapshots(preMergedChecklist, plan.logic ?? {})
     const clarificationState = this.clarificationRules.detect(mergedChecklist)
@@ -290,13 +316,14 @@ export class CodegenConversationService {
         },
       }))
 
-      return this.finalizeSessionResponse({
+      const response = this.finalizeSessionResponse({
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt,
         clarificationState,
       })
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
     const historyAfterPlanner = this.appendConversationHistory(
       constraintPack.conversationHistory ?? [],
@@ -318,13 +345,14 @@ export class CodegenConversationService {
         },
       }))
 
-      return this.finalizeSessionResponse({
+      const response = this.finalizeSessionResponse({
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt: plan.assistantPrompt,
         clarificationState,
       })
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
     await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
@@ -338,7 +366,7 @@ export class CodegenConversationService {
       latestSpecDesc: specDesc,
     }))
 
-    return this.finalizeSessionResponse({
+    const response = this.finalizeSessionResponse({
       id: session.id,
       status: 'CHECKLIST_GATE',
       missingFields: [],
@@ -347,6 +375,7 @@ export class CodegenConversationService {
       assistantPrompt: `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`,
       clarificationState,
     })
+    return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
   }
 
   private async continueConfirmedSession(
@@ -390,13 +419,14 @@ export class CodegenConversationService {
         },
       }))
 
-      return this.finalizeSessionResponse({
+      const response = this.finalizeSessionResponse({
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt,
         clarificationState,
       })
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
     const canonicalSpec = this.canonicalSpecBuilder.build(mergedChecklist)
@@ -427,13 +457,14 @@ export class CodegenConversationService {
         latestSpecDesc: specDesc,
       }))
 
-      return this.finalizeSessionResponse({
+      const response = this.finalizeSessionResponse({
         id: session.id,
         status: 'DRAFTING',
         missingFields,
         assistantPrompt: '请先补全入场和出场规则，再确认生成代码。',
         clarificationState,
       })
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
     const markGeneratingInput = this.stateMachine.buildGeneratingUpdate({
@@ -459,7 +490,7 @@ export class CodegenConversationService {
           args: { sessionId: session.id },
         })
       }
-      return this.toSessionSnapshotResponse(latest)
+      return this.returnPersistedSnapshotResponse(latest, sessionUserId)
     }
 
     void this.publicationPipeline.run({
@@ -471,12 +502,13 @@ export class CodegenConversationService {
       existingStrategyInstanceId: session.strategyInstanceId ?? null,
     })
 
-    return this.finalizeSessionResponse({
+    const response = this.finalizeSessionResponse({
       id: session.id,
       status: 'GENERATING',
       missingFields: [],
       clarificationState,
     })
+    return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
   }
 
   private readChecklist(payload: Prisma.JsonValue | null): ChecklistPayload {
@@ -513,7 +545,10 @@ export class CodegenConversationService {
     status: LlmCodegenSessionStatus
     latestDraftCode: Prisma.JsonValue | null
     latestSpecDesc: Prisma.JsonValue | null
+    constraintPack?: Prisma.JsonValue | null
     rejectReason: string | null
+    createdAt: Date
+    updatedAt: Date
     strategyInstanceId?: string | null
     clarificationState?: Prisma.JsonValue | null
   }): Promise<CodegenSessionResponseDto> {
@@ -527,11 +562,18 @@ export class CodegenConversationService {
     const sessionPublishedSnapshotId = typeof sessionSpecDesc?.publishedSnapshotId === 'string'
       ? sessionSpecDesc.publishedSnapshotId
       : null
+    const constraintPack = this.readConstraintPack(session.constraintPack ?? null)
+    const conversationMessages = this.toConversationMessages(constraintPack.conversationHistory)
+    const conversationTitle = this.deriveConversationTitle(conversationMessages)
 
     return this.finalizeSessionResponse({
       id: session.id,
+      conversationTitle,
+      conversationMessages,
       status: session.status,
       missingFields: [],
+      createdAt: session.createdAt instanceof Date ? session.createdAt.toISOString() : undefined,
+      updatedAt: session.updatedAt instanceof Date ? session.updatedAt.toISOString() : undefined,
       scriptCode: typeof session.latestDraftCode === 'string' ? session.latestDraftCode : null,
       publishedSnapshotId: latestSnapshot?.id ?? sessionPublishedSnapshotId ?? null,
       consistencyReport: latestSnapshot?.consistencyReport && typeof latestSnapshot.consistencyReport === 'object' && !Array.isArray(latestSnapshot.consistencyReport)
@@ -549,6 +591,31 @@ export class CodegenConversationService {
         ?? this.readPublicationGate(sessionConsistencyReport),
       rejectReason: session.rejectReason,
     })
+  }
+
+  private async toConversationResponse(
+    conversation: AiQuantConversationSnapshotRecord,
+  ): Promise<AiQuantConversationResponseDto> {
+    const session = await this.sessionsRepo.findById(conversation.codegenSessionId)
+    const snapshot = session ? await this.toSessionSnapshotResponse(session) : null
+    return {
+      id: conversation.id,
+      activeCodegenSessionId: session && !this.stateMachine.isTerminalStatus(session.status) ? session.id : null,
+      conversationTitle: conversation.title,
+      conversationMessages: conversation.messages,
+      status: snapshot?.status as LlmCodegenSessionStatus | undefined,
+      createdAt: conversation.createdAt.toISOString(),
+      updatedAt: conversation.updatedAt.toISOString(),
+      canonicalDigest: snapshot?.canonicalDigest ?? null,
+      specDesc: snapshot?.specDesc ?? null,
+      semanticGraph: snapshot?.semanticGraph ?? null,
+      validationReport: snapshot?.validationReport ?? null,
+      clarificationGate: snapshot?.clarificationGate ?? null,
+      publicationGate: snapshot?.publicationGate ?? null,
+      scriptCode: snapshot?.scriptCode ?? null,
+      publishedSnapshotId: snapshot?.publishedSnapshotId ?? null,
+      strategyInstanceId: snapshot?.strategyInstanceId ?? null,
+    }
   }
 
   private finalizeSessionResponse(
@@ -575,6 +642,39 @@ export class CodegenConversationService {
       canonicalDigest: null,
       semanticGraph: null,
     }
+  }
+
+  private toConversationMessages(
+    history: string[] | undefined,
+  ): Array<{ role: 'user' | 'assistant', content: string }> {
+    const messages: Array<{ role: 'user' | 'assistant', content: string }> = []
+
+    for (const entry of history ?? []) {
+      const normalized = entry.trim()
+      if (!normalized) continue
+      if (normalized.startsWith('U:')) {
+        const content = normalized.slice(2).trim()
+        if (content) {
+          messages.push({ role: 'user', content })
+        }
+        continue
+      }
+      if (normalized.startsWith('A:')) {
+        const content = normalized.slice(2).trim()
+        if (content) {
+          messages.push({ role: 'assistant', content })
+        }
+      }
+    }
+
+    return messages
+  }
+
+  private deriveConversationTitle(
+    messages: Array<{ role: 'user' | 'assistant', content: string }>,
+  ): string {
+    const firstUser = messages.find(message => message.role === 'user' && message.content.trim())
+    return firstUser?.content.trim().slice(0, 16) || '新对话'
   }
 
   private buildClarificationGate(
@@ -772,6 +872,7 @@ export class CodegenConversationService {
     clarificationState: StrategyClarificationState
     constraintPack: ReturnType<CodegenConversationService['readConstraintPack']>
     message: string
+    userId: string
   }): Promise<CodegenSessionResponseDto> {
     const historyAfterAnswer = this.appendConversationHistory(
       args.constraintPack.conversationHistory ?? [],
@@ -791,13 +892,14 @@ export class CodegenConversationService {
         },
       }))
 
-      return this.finalizeSessionResponse({
+      const response = this.finalizeSessionResponse({
         id: args.session.id,
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt,
         clarificationState: args.clarificationState,
       })
+      return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
 
     const canonicalSpec = this.canonicalSpecBuilder.build(args.checklist)
@@ -817,13 +919,14 @@ export class CodegenConversationService {
         latestSpecDesc: specDesc,
       }))
 
-      return this.finalizeSessionResponse({
+      const response = this.finalizeSessionResponse({
         id: args.session.id,
         status: 'DRAFTING',
         missingFields,
         assistantPrompt: '请先补全入场和出场规则，再确认生成代码。',
         clarificationState: args.clarificationState,
       })
+      return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
 
     await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
@@ -837,7 +940,7 @@ export class CodegenConversationService {
       latestSpecDesc: specDesc,
     }))
 
-    return this.finalizeSessionResponse({
+    const response = this.finalizeSessionResponse({
       id: args.session.id,
       status: 'CHECKLIST_GATE',
       missingFields: [],
@@ -845,6 +948,63 @@ export class CodegenConversationService {
       clarificationState: args.clarificationState,
       specDesc,
       canonicalDigest,
+    })
+    return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
+  }
+
+  private async returnPersistedSnapshotResponse(
+    session: {
+      id: string
+      userId: string
+      status: LlmCodegenSessionStatus
+      latestDraftCode: Prisma.JsonValue | null
+      latestSpecDesc: Prisma.JsonValue | null
+      constraintPack?: Prisma.JsonValue | null
+      rejectReason: string | null
+      createdAt: Date
+      updatedAt: Date
+      strategyInstanceId?: string | null
+      clarificationState?: Prisma.JsonValue | null
+    },
+    userId: string,
+  ): Promise<CodegenSessionResponseDto> {
+    const response = await this.toSessionSnapshotResponse(session)
+    return this.returnPersistedSessionResponse(session.id, userId, response)
+  }
+
+  private async returnPersistedSessionResponse(
+    sessionId: string,
+    userId: string,
+    response: CodegenSessionResponseDto,
+  ): Promise<CodegenSessionResponseDto> {
+    await this.persistConversationProjectionForSessionId(sessionId, userId)
+    const conversation = await this.conversationsRepo.findByCodegenSessionId(sessionId)
+    return {
+      ...response,
+      conversationId: conversation?.id ?? response.conversationId ?? null,
+    }
+  }
+
+  private async persistConversationProjectionForSessionId(
+    sessionId: string,
+    fallbackUserId?: string,
+  ): Promise<void> {
+    const session = await this.sessionsRepo.findById(sessionId)
+    if (!session) {
+      return
+    }
+    if (!(session.createdAt instanceof Date) || !(session.updatedAt instanceof Date)) {
+      return
+    }
+
+    const snapshot = await this.toSessionSnapshotResponse(session)
+    const messages = snapshot.conversationMessages ?? []
+    const title = snapshot.conversationTitle?.trim() || this.deriveConversationTitle(messages)
+    await this.conversationsRepo.upsertConversationSnapshot({
+      userId: fallbackUserId ?? session.userId,
+      codegenSessionId: session.id,
+      title,
+      messages,
     })
   }
 

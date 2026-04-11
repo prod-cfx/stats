@@ -1,5 +1,6 @@
 'use client'
 
+import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import type { QuantReturnIntentInput } from '@/components/ai-quant/intent-storage'
@@ -31,8 +32,7 @@ import {
 import { applyCapabilitiesToParamSchema } from '@/components/ai-quant/strategy-param-sync'
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
 import { useAuth } from '@/hooks/use-auth'
-import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
-import { fetchUserExchangeAccountStatuses } from '@/lib/api'
+import { deleteAiQuantConversation, fetchUserExchangeAccountStatuses, listAiQuantConversations } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
 import { runAiQuantBacktest } from './ai-quant-page-backtest'
 import {
@@ -47,6 +47,7 @@ import {
   buildBacktestSummaryResult,
   buildParamSchemaWithCapabilities,
   createConversation,
+  createConversationFromServerConversation,
   createRecoveryConversation,
   hasExplicitBacktestExecutionOverrides,
   hasLatestPublishedCode,
@@ -72,13 +73,16 @@ const CAPABILITY_AUTO_RETRY_DELAY_MS = 15_000
 const INTENT_TTL_MS = 30 * 60 * 1000
 
 type CapabilityState = 'loading' | 'ready' | 'failed'
+type ConversationSyncState = 'idle' | 'loading' | 'ready' | 'error'
 
 interface AiQuantPageClientProps {
   deployVersion?: string
+  serverOwnedConversations?: boolean
 }
 
 export function AiQuantPageClient({
   deployVersion = 'local-dev',
+  serverOwnedConversations = false,
 }: AiQuantPageClientProps = {}) {
   const { t } = useTranslation()
   const params = useParams<{ lng: string }>()
@@ -106,6 +110,7 @@ export function AiQuantPageClient({
     null,
   )
   const [conversationStorageReady, setConversationStorageReady] = useState(false)
+  const [conversationSyncState, setConversationSyncState] = useState<ConversationSyncState>('idle')
   const [backtestCapabilityRetryNonce, setBacktestCapabilityRetryNonce] = useState(0)
   const [codegenBusyConversationIds, setCodegenBusyConversationIds] = useState<string[]>([])
   const isMountedRef = useRef(true)
@@ -129,6 +134,34 @@ export function AiQuantPageClient({
   }, [activeConversationId, conversations])
 
   useEffect(() => {
+    if (serverOwnedConversations) {
+      let cancelled = false
+      setConversationSyncState('loading')
+      localStorage.removeItem(CONVERSATIONS_STORAGE_KEY)
+      void listAiQuantConversations()
+        .then((serverConversations) => {
+          if (cancelled) return
+          const restored = serverConversations.length > 0
+            ? serverConversations.map(conversation => createConversationFromServerConversation(conversation, t))
+            : [createConversation(t)]
+          setConversations(restored)
+          setActiveConversationId(restored[0].id)
+          setConversationSyncState('ready')
+          setConversationStorageReady(true)
+        })
+        .catch(() => {
+          if (cancelled) return
+          const fallback = [createConversation(t)]
+          setConversations(fallback)
+          setActiveConversationId(fallback[0].id)
+          setConversationSyncState('error')
+          setConversationStorageReady(true)
+        })
+      return () => {
+        cancelled = true
+      }
+    }
+
     const raw = localStorage.getItem(CONVERSATIONS_STORAGE_KEY)
     const result = readPersistedConversations({
       raw,
@@ -138,6 +171,7 @@ export function AiQuantPageClient({
 
     setConversations(result.conversations)
     setActiveConversationId(result.conversations[0].id)
+    setConversationSyncState('ready')
 
     if (result.shouldPersist) {
       localStorage.setItem(
@@ -147,15 +181,16 @@ export function AiQuantPageClient({
     }
     setConversationStorageReady(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deployVersion])
+  }, [deployVersion, serverOwnedConversations])
 
   useEffect(() => {
+    if (serverOwnedConversations) return
     if (!conversationStorageReady || !conversations.length) return
     localStorage.setItem(
       CONVERSATIONS_STORAGE_KEY,
       serializePersistedConversations(conversations, deployVersion),
     )
-  }, [conversationStorageReady, conversations, deployVersion])
+  }, [conversationStorageReady, conversations, deployVersion, serverOwnedConversations])
 
   useEffect(() => {
     if (!session?.userId) return
@@ -816,6 +851,21 @@ export function AiQuantPageClient({
     )
   }
 
+  if (serverOwnedConversations && conversationSyncState === 'loading') {
+    return (
+      <main className="mx-auto flex w-full max-w-[1120px] flex-1 items-center px-4 py-8 md:px-8">
+        <div
+          data-testid="conversation-sync-loading"
+          className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-3 text-sm text-[color:var(--cf-muted)]"
+        >
+          {t('aiQuant.messages.loadingConversations', {
+            defaultValue: 'Syncing your AI Quant conversations…',
+          })}
+        </div>
+      </main>
+    )
+  }
+
   if (!activeConversation) return null
 
   return (
@@ -843,6 +893,17 @@ export function AiQuantPageClient({
         </div>
       </div>
 
+      {serverOwnedConversations && conversationSyncState === 'error' && (
+        <div
+          data-testid="conversation-sync-error"
+          className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900"
+        >
+          {t('aiQuant.messages.conversationSyncFailed', {
+            defaultValue: 'Unable to load saved AI Quant conversations. A fresh chat has been opened.',
+          })}
+        </div>
+      )}
+
       <div className="grid gap-4 md:grid-cols-[280px_minmax(0,1fr)]">
         <ConversationSidebar
           items={conversations.map(x => ({ id: x.id, title: x.title, updatedAt: x.updatedAt }))}
@@ -859,6 +920,25 @@ export function AiQuantPageClient({
             )
           }}
           onDelete={id => {
+            if (serverOwnedConversations) {
+              const targetConversation = conversations.find(conv => conv.id === id)
+              const serverConversationId = targetConversation?.serverConversationId ?? id
+              void deleteAiQuantConversation(serverConversationId)
+                .then(() => {
+                  setConversations(prev => {
+                    const next = prev.filter(conv => conv.id !== id)
+                    if (next.length === 0) {
+                      const seed = createConversation(t)
+                      setActiveConversationId(seed.id)
+                      return [seed]
+                    }
+                    if (id === activeConversation.id) setActiveConversationId(next[0].id)
+                    return next
+                  })
+                })
+                .catch(() => {})
+              return
+            }
             setConversations(prev => {
               const next = prev.filter(conv => conv.id !== id)
               if (next.length === 0) {

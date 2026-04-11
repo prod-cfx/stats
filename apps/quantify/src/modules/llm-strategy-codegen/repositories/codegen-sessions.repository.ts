@@ -90,6 +90,20 @@ export class CodegenSessionsRepository {
     }
   }
 
+  async listByUser(userId: string): Promise<LlmStrategyCodegenSession[]> {
+    try {
+      const rows = await this.txHost.tx.llmStrategyCodegenSession.findMany({
+        where: { userId },
+        orderBy: { updatedAt: 'desc' },
+        select: this.resolveSessionSelect(),
+      })
+      return rows.map(row => this.toSessionWithNullableOptionalColumns(row))
+    } catch (error) {
+      if (!this.markMissingOptionalSessionColumn(error)) throw error
+      return this.listByUser(userId)
+    }
+  }
+
   async findSessionStrategyInstanceId(id: string): Promise<string | null> {
     if (this.strategyInstanceColumnMissing) return null
     const row = await this.txHost.tx.llmStrategyCodegenSession.findUnique({

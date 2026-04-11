@@ -100,6 +100,7 @@ jest.mock('@/lib/api', () => ({
 }))
 
 import {
+  applyCodegenResponseToConversationState,
   buildCodegenReplyContent,
   resolvePublishedStrategyInstanceId,
 } from './ai-quant-page-codegen'
@@ -286,5 +287,55 @@ describe('AiQuantPageClient codegen P1 guards', () => {
 
     expect(mockGetLlmCodegenSession.mock.calls).toEqual([['session-1']])
     expect(mockContinueLlmCodegenSession).toHaveBeenCalled()
+  })
+
+  it('writes serverConversationId from codegen responses without replacing the local temporary conversation id', () => {
+    const next = applyCodegenResponseToConversationState({
+      conversation: {
+        id: 'conv-local-temp',
+        serverConversationId: null,
+        title: '新对话',
+        messages: [{ id: 'm-1', role: 'assistant', content: 'hello' }],
+        params: DEFAULT_PARAMS,
+        paramSchema: DEFAULT_PARAM_SCHEMA,
+        paramValues: DEFAULT_PARAM_VALUES,
+        backtestResult: null,
+        logicGraph: null,
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: null,
+        llmCodegenSessionId: null,
+        publishedStrategyInstanceId: null,
+        publishedSnapshotId: null,
+        publishedScriptCode: null,
+        publishedScriptGraphVersion: null,
+        latestSignalMessage: null,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+      } as any,
+      response: {
+        id: 'session-1',
+        conversationId: 'server-conv-1',
+        status: 'DRAFTING',
+        conversationTitle: '服务端会话',
+        conversationMessages: [
+          { role: 'user', content: 'test' },
+          { role: 'assistant', content: 'reply' },
+        ],
+      } as any,
+      confirmGenerate: false,
+      targetParams: DEFAULT_PARAMS,
+      backtestCapabilities: null,
+      activeSessionId: 'session-1',
+      trimmedMessage: 'test',
+      t: (key: string) => key,
+      loadingMessageId: null,
+    })
+
+    expect(next.id).toBe('conv-local-temp')
+    expect(next.serverConversationId).toBe('server-conv-1')
   })
 })
