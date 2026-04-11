@@ -12,6 +12,7 @@ describe('exchangeAccountsService', () => {
       }),
       findUserByEmail: jest.fn().mockResolvedValue(null),
       updateUserEmail: jest.fn().mockResolvedValue(undefined),
+      reassignUserId: jest.fn().mockResolvedValue(undefined),
       createUser: jest.fn().mockResolvedValue(undefined),
       findExchangeAccountFirst: jest.fn().mockResolvedValue(null),
       findExchangeAccountsByUser: jest.fn().mockResolvedValue([]),

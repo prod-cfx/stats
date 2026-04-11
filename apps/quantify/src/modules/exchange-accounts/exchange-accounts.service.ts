@@ -97,10 +97,8 @@ export class ExchangeAccountsService {
 
     const existingByEmail = await this.exchangeAccountRepository.findUserByEmail(userEmail)
     if (existingByEmail && existingByEmail.id !== userId) {
-      throw new DomainException('exchange_account.user_conflict', {
-        code: ErrorCode.EXCHANGE_ACCOUNT_USER_CONFLICT,
-        args: { userId, existingUserId: existingByEmail.id },
-      })
+      await this.exchangeAccountRepository.reassignUserId(existingByEmail.id, userId, userEmail)
+      return
     }
 
     await this.exchangeAccountRepository.createUser({
