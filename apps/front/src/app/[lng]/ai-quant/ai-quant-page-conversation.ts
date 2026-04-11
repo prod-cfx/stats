@@ -295,6 +295,48 @@ export function resolveBacktestExecutionConfig(
   }
 }
 
+function normalizePublishedSnapshotParamValues(
+  value: unknown,
+): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+
+  const normalized = { ...(value as Record<string, unknown>) }
+  const timeframe = typeof normalized.timeframe === 'string' ? normalized.timeframe.trim() : ''
+  const baseTimeframe = typeof normalized.baseTimeframe === 'string' ? normalized.baseTimeframe.trim() : ''
+  if (timeframe && !baseTimeframe) {
+    normalized.baseTimeframe = timeframe
+  }
+  return normalized
+}
+
+function mergeSnapshotBoundParamValues(input: {
+  currentValues: Record<string, unknown>
+  snapshotParamValues: Record<string, unknown> | null
+}): {
+  paramValues: Record<string, unknown>
+  explicit: boolean
+} {
+  const { currentValues, snapshotParamValues } = input
+  if (!snapshotParamValues) {
+    return {
+      paramValues: currentValues,
+      explicit: hasExplicitBacktestExecutionOverrides(currentValues),
+    }
+  }
+
+  const nextValues = {
+    ...currentValues,
+    ...snapshotParamValues,
+  }
+
+  return {
+    paramValues: nextValues,
+    explicit: BACKTEST_EXECUTION_PARAM_KEYS.every(key => nextValues[key] !== undefined),
+  }
+}
+
 function normalizeNumber(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (typeof value === 'string' && value.trim()) {
@@ -840,10 +882,13 @@ export function createConversationFromServerConversation(
         capabilities: null,
       })
     : null
-  const nextParamValues = syncResult?.paramValues ?? seed.paramValues
-  const nextParams = syncResult
-    ? normalizeParamsFromValues(nextParamValues, seed.params)
-    : seed.params
+  const snapshotParamValues = normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
+  const mergedSnapshotParamValues = mergeSnapshotBoundParamValues({
+    currentValues: syncResult?.paramValues ?? seed.paramValues,
+    snapshotParamValues,
+  })
+  const nextParamValues = mergedSnapshotParamValues.paramValues
+  const nextParams = normalizeParamsFromValues(nextParamValues, seed.params)
   const graphVersion =
     typeof response.semanticGraph?.version === 'number' && Number.isFinite(response.semanticGraph.version)
       ? response.semanticGraph.version
@@ -915,6 +960,7 @@ export function createConversationFromServerConversation(
       response.scriptCode && logicGraph?.status === 'confirmed'
         ? logicGraph.version
         : null,
+    backtestExecutionConfigExplicit: mergedSnapshotParamValues.explicit,
     updatedAt,
   }
 }
