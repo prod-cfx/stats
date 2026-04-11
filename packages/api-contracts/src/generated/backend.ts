@@ -202,6 +202,47 @@ const LlmCodegenContinueRequestDto = z
     maxTokens: z.number().optional(),
   })
   .passthrough()
+const CodegenConversationMessageResponseDto = z
+  .object({
+    role: z.enum(['user', 'assistant']),
+    content: z.string(),
+  })
+  .passthrough()
+const CodegenSessionResponseDto = z
+  .object({
+    id: z.string(),
+    conversationId: z.string().nullish(),
+    conversationTitle: z.string().optional(),
+    conversationMessages: z.array(CodegenConversationMessageResponseDto).optional(),
+    status: z.enum([
+      'DRAFTING',
+      'CHECKLIST_GATE',
+      'GENERATING',
+      'VALIDATING_STATIC',
+      'VALIDATING_RUNTIME',
+      'VALIDATING_OUTPUT',
+      'VALIDATING_CONSISTENCY',
+      'PUBLISHED',
+      'CONSISTENCY_FAILED',
+      'REJECTED',
+    ]),
+    missingFields: z.array(z.string()).optional(),
+    scriptCode: z.string().nullish(),
+    publishedSnapshotId: z.string().nullish(),
+    publishedSnapshotParamValues: z.object({}).partial().passthrough().nullish(),
+    consistencyReport: z.object({}).partial().passthrough().nullish(),
+    specDesc: z.object({}).partial().passthrough().nullish(),
+    canonicalDigest: z.string().nullish(),
+    semanticGraph: z.object({}).partial().passthrough().nullish(),
+    validationReport: z.object({}).partial().passthrough().nullish(),
+    clarificationState: z.object({}).partial().passthrough().nullish(),
+    clarificationGate: z.object({}).partial().passthrough(),
+    publicationGate: z.object({}).partial().passthrough().nullish(),
+    strategyInstanceId: z.string().nullish(),
+    rejectReason: z.string().nullish(),
+    assistantPrompt: z.string().optional(),
+  })
+  .passthrough()
 const Function = z.object({}).partial().passthrough()
 const AdminLoginDto = z.object({ username: z.string(), password: z.string() }).passthrough()
 const AdminProfileDto = z
@@ -1111,6 +1152,8 @@ export const schemas = {
   BacktestingSymbolSupportResponseDto,
   LlmCodegenStartRequestDto,
   LlmCodegenContinueRequestDto,
+  CodegenConversationMessageResponseDto,
+  CodegenSessionResponseDto,
   Function,
   AdminLoginDto,
   AdminProfileDto,
@@ -3229,7 +3272,7 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: CodegenSessionResponseDto,
   },
   {
     method: 'get',
@@ -3248,7 +3291,7 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: CodegenSessionResponseDto,
   },
   {
     method: 'post',
@@ -3272,7 +3315,7 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: CodegenSessionResponseDto,
   },
   {
     method: 'get',

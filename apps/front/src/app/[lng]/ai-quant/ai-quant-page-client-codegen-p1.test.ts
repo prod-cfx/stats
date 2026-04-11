@@ -1,4 +1,17 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals'
+import { ApiError } from '@/lib/errors'
+import {
+  applyCodegenResponseToConversationState,
+  buildCodegenReplyContent,
+  extractCodegenErrorMessage,
+  requestAiQuantCodegen,
+  resolvePublishedStrategyInstanceId,
+} from './ai-quant-page-codegen'
+import {
+  DEFAULT_PARAMS,
+  DEFAULT_PARAM_SCHEMA,
+  DEFAULT_PARAM_VALUES,
+} from './ai-quant-page-conversation'
 
 const mockContinueLlmCodegenSession = jest.fn()
 const mockGetLlmCodegenSession = jest.fn()
@@ -99,18 +112,6 @@ jest.mock('@/lib/api', () => ({
   startLlmCodegenSession: jest.fn(),
 }))
 
-import {
-  applyCodegenResponseToConversationState,
-  buildCodegenReplyContent,
-  resolvePublishedStrategyInstanceId,
-} from './ai-quant-page-codegen'
-import { requestAiQuantCodegen } from './ai-quant-page-codegen'
-import {
-  DEFAULT_PARAMS,
-  DEFAULT_PARAM_SCHEMA,
-  DEFAULT_PARAM_VALUES,
-} from './ai-quant-page-conversation'
-
 describe('AiQuantPageClient codegen P1 guards', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -158,6 +159,26 @@ describe('AiQuantPageClient codegen P1 guards', () => {
     expect(content).toContain('生成失败')
     expect(content).toContain('create instance failed')
     expect(content).not.toBe('发布成功')
+  })
+
+  it('preserves structured codegen runtime metadata in displayed error text', () => {
+    const message = extractCodegenErrorMessage(
+      new ApiError('LLM 策略生成请求失败', 'LLM_CODEGEN_ERROR', 503, {
+        error: {
+          code: 'SERVICE_TEMPORARILY_UNAVAILABLE',
+          stage: 'codegen',
+          requestId: 'codegen-req-1',
+          args: {
+            reasonMessage: '量化服务暂时不可用，请稍后重试',
+          },
+        },
+      }),
+      '默认错误',
+    )
+
+    expect(message).toBe(
+      '量化服务暂时不可用，请稍后重试 codegen (SERVICE_TEMPORARILY_UNAVAILABLE, HTTP 503, requestId codegen-req-1)',
+    )
   })
 
   it('prefers rejectReason when publication gate blocks publish', () => {

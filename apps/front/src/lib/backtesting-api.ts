@@ -1,7 +1,7 @@
+import { buildAiQuantErrorMessage, parseAiQuantErrorMeta } from '@/components/ai-quant/ai-quant-error-stage'
 import { client, unwrapApiResponse } from '@/lib/api-client'
 import { getToken } from '@/lib/auth-storage'
 import { ApiError, AuthenticationError } from '@/lib/errors'
-import { parseAiQuantErrorMeta } from '@/components/ai-quant/ai-quant-error-stage'
 
 export interface BacktestCapabilities {
   allowedSymbols: string[]
@@ -98,24 +98,22 @@ function waitRetryDelay(signal?: AbortSignal): Promise<void> {
       return
     }
 
-    const timer = globalThis.setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort)
-      resolve()
-    }, BACKTEST_CAPABILITY_RETRY_DELAY_MS)
-
+    let timer: ReturnType<typeof setTimeout> | null = null
     const onAbort = () => {
-      globalThis.clearTimeout(timer)
+      if (timer) {
+        globalThis.clearTimeout(timer)
+      }
       signal?.removeEventListener('abort', onAbort)
       reject(new ApiError('Request aborted', 'API_ERROR'))
     }
 
+    timer = globalThis.setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, BACKTEST_CAPABILITY_RETRY_DELAY_MS)
+
     signal?.addEventListener('abort', onAbort)
   })
-}
-
-function extractErrorMessage(payload: unknown, fallback: string): string {
-  const meta = parseAiQuantErrorMeta(payload)
-  return meta.message ?? fallback
 }
 
 function extractErrorCode(payload: unknown): string {
@@ -218,7 +216,11 @@ async function requestJson<T>(
     ) {
       const response = error.response as { status?: number; statusText?: string; data?: unknown }
       const payload = response.data
-      const message = extractErrorMessage(payload, response.statusText || 'Request failed')
+      const message = buildAiQuantErrorMessage(
+        response.statusText || 'Request failed',
+        response.status ?? 500,
+        parseAiQuantErrorMeta(payload),
+      )
       throw new ApiError(message, extractErrorCode(payload), response.status, payload)
     }
     const message = error instanceof Error && error.message.trim() ? error.message : 'Request failed'

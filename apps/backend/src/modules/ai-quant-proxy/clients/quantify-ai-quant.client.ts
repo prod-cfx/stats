@@ -1,9 +1,10 @@
+import type { CodegenSessionResponseDto } from '../dto/codegen-session.response.dto'
+import type { QuantifyRequestOptions } from '@/common/clients/quantify-contract.shared'
 import { Inject, Injectable } from '@nestjs/common'
 import {
   createBackendQuantifyApiClient,
   createQuantifyAbortContext,
   QuantifyClientError,
-  QuantifyRequestOptions,
   resolveQuantifyBaseUrl,
   runQuantifyContractRequest,
 } from '@/common/clients/quantify-contract.shared'
@@ -107,28 +108,32 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async startCodegen(body: Record<string, unknown>, options: QuantifyRequestOptions & { userId: string }) {
-    return this.runTimedRequest(
-      signal =>
-        this.client.LiveLlmStrategyCodegenController_startSession(body, {
-          headers: buildUserHeaders(options.userId, options.headers?.authorization),
-          signal,
-        }),
-      options.timeoutMs,
-      options.signal,
+  async startCodegen(
+    body: Record<string, unknown>,
+    options: QuantifyRequestOptions & { userId: string },
+  ): Promise<CodegenSessionResponseDto> {
+    return this.runUntypedJsonRequest(
+      '/llm-strategy-codegen/sessions',
+      'POST',
+      {
+        ...options,
+        headers: buildUserHeaders(options.userId, options.headers?.authorization),
+      },
+      body,
     )
   }
 
-  async getCodegenSession(sessionId: string, options: QuantifyRequestOptions & { userId: string }) {
-    return this.runTimedRequest(
-      signal =>
-        this.client.LiveLlmStrategyCodegenController_getSession({
-          params: { id: sessionId },
-          headers: buildUserHeaders(options.userId, options.headers?.authorization),
-          signal,
-        }),
-      options.timeoutMs,
-      options.signal,
+  async getCodegenSession(
+    sessionId: string,
+    options: QuantifyRequestOptions & { userId: string },
+  ): Promise<CodegenSessionResponseDto> {
+    return this.runUntypedJsonRequest(
+      `/llm-strategy-codegen/sessions/${encodeURIComponent(sessionId)}`,
+      'GET',
+      {
+        ...options,
+        headers: buildUserHeaders(options.userId, options.headers?.authorization),
+      },
     )
   }
 
@@ -136,16 +141,15 @@ export class QuantifyAiQuantClient {
     sessionId: string,
     body: Record<string, unknown>,
     options: QuantifyRequestOptions & { userId: string },
-  ) {
-    return this.runTimedRequest(
-      signal =>
-        this.client.LiveLlmStrategyCodegenController_continueSession(body, {
-          params: { id: sessionId },
-          headers: buildUserHeaders(options.userId, options.headers?.authorization),
-          signal,
-        }),
-      options.timeoutMs,
-      options.signal,
+  ): Promise<CodegenSessionResponseDto> {
+    return this.runUntypedJsonRequest(
+      `/llm-strategy-codegen/sessions/${encodeURIComponent(sessionId)}/messages`,
+      'POST',
+      {
+        ...options,
+        headers: buildUserHeaders(options.userId, options.headers?.authorization),
+      },
+      body,
     )
   }
 
@@ -327,27 +331,19 @@ export class QuantifyAiQuantClient {
     }
   }
 
-  private async runTimedRequest<T>(
-    request: (signal?: AbortSignal) => Promise<unknown>,
-    timeoutMs?: number,
-    upstreamSignal?: AbortSignal,
-  ): Promise<T> {
-    const effectiveTimeoutMs = this.getRequestTimeoutMs(timeoutMs)
-    const abortContext = createQuantifyAbortContext(effectiveTimeoutMs, upstreamSignal)
-    try {
-      return await runQuantifyContractRequest<T>(
-        () => request(abortContext?.signal),
-        abortContext?.getAbortReason,
-      )
-    } finally {
-      abortContext?.cleanup()
-    }
-  }
-
   private async runUntypedRequest<T>(
     path: string,
     method: 'GET' | 'DELETE',
     options?: QuantifyRequestOptions,
+  ): Promise<T> {
+    return this.runUntypedJsonRequest(path, method, options)
+  }
+
+  private async runUntypedJsonRequest<T>(
+    path: string,
+    method: 'GET' | 'POST' | 'DELETE',
+    options?: QuantifyRequestOptions,
+    body?: Record<string, unknown>,
   ): Promise<T> {
     const abortContext = createQuantifyAbortContext(this.getRequestTimeoutMs(options?.timeoutMs), options?.signal)
     try {
@@ -360,6 +356,7 @@ export class QuantifyAiQuantClient {
             'content-type': 'application/json',
             ...(options?.headers ?? {}),
           },
+          ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
         })
       } catch (error) {
         throw new QuantifyClientError(

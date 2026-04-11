@@ -1,7 +1,8 @@
-const test = require('node:test')
+/* eslint-disable ts/no-require-imports */
 const assert = require('node:assert/strict')
 const fs = require('node:fs')
 const path = require('node:path')
+const test = require('node:test')
 
 const repoRoot = path.resolve(__dirname, '../..')
 
@@ -21,4 +22,12 @@ test('quantify prisma client generates into app-local output', () => {
   )
 
   assert.match(baseSchema, /output\s*=\s*"\.\.\/\.\.\/generated\/prisma"/)
+})
+
+test('quantify prisma generation prepares the generated output path first', () => {
+  const pkg = JSON.parse(
+    fs.readFileSync(path.join(repoRoot, 'apps/quantify/package.json'), 'utf8'),
+  )
+
+  assert.match(pkg.scripts['prisma:generate'], /prepare-generated-dir\.cjs/)
 })

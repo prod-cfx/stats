@@ -4,6 +4,7 @@ import type { ConversationState, QuantParams } from './ai-quant-page-conversatio
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import type { LlmCodegenSessionResponse } from '@/lib/api'
 import {
+  buildAiQuantErrorMessage,
   buildAiQuantStageFallbackMessage,
   parseAiQuantErrorMeta,
 } from '@/components/ai-quant/ai-quant-error-stage'
@@ -134,12 +135,14 @@ function humanizeRejectReason(reason: string): string | null {
   const trimmed = reason.trim()
   if (!trimmed) return null
 
-  const missingRuleMatch = trimmed.match(/脚本缺少关键规则映射:\s*(.+)$/)
-  if (!missingRuleMatch) {
+  const missingRulePrefix = '脚本缺少关键规则映射:'
+  if (!trimmed.startsWith(missingRulePrefix)) {
     return null
   }
 
-  const rawMappings = missingRuleMatch[1]
+  const rawMappings = trimmed
+    .slice(missingRulePrefix.length)
+    .trim()
     .split(/[|,]/)
     .map(item => item.trim())
     .filter(Boolean)
@@ -674,7 +677,7 @@ export function extractCodegenErrorMessage(error: unknown, fallback: string): st
   }
 
   if (meta.message) {
-    return meta.message
+    return buildAiQuantErrorMessage(fallback, error.statusCode ?? 500, meta)
   }
 
   if (error.message?.trim()) {

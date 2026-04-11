@@ -1,4 +1,5 @@
 import type { AiQuantConversationResponseDto } from './dto/ai-quant-conversation.response.dto'
+import type { CodegenSessionResponseDto } from './dto/codegen-session.response.dto'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
@@ -128,7 +129,11 @@ export class AiQuantProxyService {
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async startCodegen(userId: string, authorization: string | undefined, body: Record<string, unknown>) {
+  async startCodegen(
+    userId: string,
+    authorization: string | undefined,
+    body: Record<string, unknown>,
+  ): Promise<CodegenSessionResponseDto> {
     return this.quantifyClient.startCodegen(body, {
       userId,
       timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
@@ -150,7 +155,11 @@ export class AiQuantProxyService {
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async getCodegenSession(userId: string, authorization: string | undefined, sessionId: string) {
+  async getCodegenSession(
+    userId: string,
+    authorization: string | undefined,
+    sessionId: string,
+  ): Promise<CodegenSessionResponseDto> {
     return this.quantifyClient.getCodegenSession(sessionId, {
       userId,
       timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
@@ -163,7 +172,7 @@ export class AiQuantProxyService {
     authorization: string | undefined,
     sessionId: string,
     body: Record<string, unknown>,
-  ) {
+  ): Promise<CodegenSessionResponseDto> {
     return this.quantifyClient.continueCodegen(sessionId, body, {
       userId,
       timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,

@@ -1,4 +1,8 @@
-import { buildAiQuantStageFallbackMessage, parseAiQuantErrorMeta } from './ai-quant-error-stage'
+import {
+  buildAiQuantErrorMessage,
+  buildAiQuantStageFallbackMessage,
+  parseAiQuantErrorMeta,
+} from './ai-quant-error-stage'
 
 describe('aiQuantErrorStage', () => {
   it('parses nested error meta from standard backend payload', () => {
@@ -30,5 +34,18 @@ describe('aiQuantErrorStage', () => {
     })
 
     expect(text).toBe('LLM 策略生成请求失败 codegen (AI_PROVIDER_ERROR, HTTP 502)')
+  })
+
+  it('keeps reason messages while appending stage, code, and requestId metadata', () => {
+    const text = buildAiQuantErrorMessage('LLM 策略生成请求失败', 503, {
+      stage: 'codegen',
+      code: 'SERVICE_TEMPORARILY_UNAVAILABLE',
+      requestId: 'req-503',
+      message: '量化服务暂时不可用，请稍后重试',
+    })
+
+    expect(text).toBe(
+      '量化服务暂时不可用，请稍后重试 codegen (SERVICE_TEMPORARILY_UNAVAILABLE, HTTP 503, requestId req-503)',
+    )
   })
 })

@@ -103,6 +103,8 @@
     "fullScreen": "全屏查看",
     "logicGraph": "策略逻辑图",
     "clarificationGateTitle": "待澄清问题",
+    "clarificationGateInputPlaceholder": "请输入你的澄清说明",
+    "clarificationGateSubmit": "提交澄清",
     "publicationGateTitle": "发布阻断",
     "publicationGateExpected": "期望值",
     "publicationGateActual": "实际值",
@@ -162,6 +164,11 @@
     "editApiConfig": "编辑配置",
     "cancelEdit": "取消编辑",
     "unbindApiConfig": "解绑",
+    "validation": {
+      "requiredBinanceCredentials": "请输入 Binance 的 API Key 和 Secret Key。",
+      "requiredOkxCredentials": "请输入 OKX 的 API Key、Secret Key 和 Passphrase。",
+      "requiredHyperliquidCredentials": "请输入 Hyperliquid 的主钱包地址和 Agent 私钥。"
+    },
     "binanceApi": "Binance API",
     "okxApi": "OKX API",
     "hyperliquidApi": "Hyperliquid API",
@@ -224,6 +231,7 @@
       "backtestRangeOrderInvalid": "开始时间必须早于结束时间。",
       "backtestRangeTooLarge": "回测区间最大支持 365 天，请缩小时间范围。",
       "backtestMissingScriptCode": "策略代码为空，请先确认并生成策略代码。",
+      "backtestCapabilityLoadFailed": "回测能力加载失败，请稍后重试。",
       "backtestPayloadInvalid": "回测参数无效：{{reason}}",
       "returnToChat": "返回对话继续优化",
       "graphTitle": "策略逻辑图确认",

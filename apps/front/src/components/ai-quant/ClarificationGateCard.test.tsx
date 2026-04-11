@@ -1,24 +1,50 @@
 /** @jest-environment jsdom */
 
-import { describe, expect, it, jest } from '@jest/globals'
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { ClarificationGateCard } from './ClarificationGateCard'
 
 jest.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+  // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix
+  useTranslation: () => ({
+    t: (key: string, options?: { defaultValue?: string }) => {
+      const translations: Record<string, string> = {
+        'aiQuant.clarificationGateTitle': '需要补充澄清',
+        'aiQuant.clarificationGateInputPlaceholder': '请输入补充信息',
+        'aiQuant.clarificationGateSubmit': '提交澄清',
+      }
+      return translations[key] ?? options?.defaultValue ?? key
+    },
+  }),
 }))
 
 describe('ClarificationGateCard', () => {
-  it('renders the current pending clarification and submits a structured answer', async () => {
-    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-    const container = document.createElement('div')
+  let container: HTMLDivElement
+  let root: ReturnType<typeof createRoot> | null
+
+  beforeEach(() => {
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    container = document.createElement('div')
     document.body.appendChild(container)
-    const root = createRoot(container)
+    root = createRoot(container)
+  })
+
+  afterEach(async () => {
+    if (root) {
+      await act(async () => {
+        root?.unmount()
+      })
+      root = null
+    }
+    document.body.innerHTML = ''
+  })
+
+  it('renders the current pending clarification and submits a structured answer', async () => {
     const onAnswer = jest.fn()
 
     await act(async () => {
-      root.render(
+      root?.render(
         <ClarificationGateCard
           gate={{
             blocked: true,
@@ -48,22 +74,13 @@ describe('ClarificationGateCard', () => {
     })
 
     expect(onAnswer).toHaveBeenCalledWith('market.marketType', 'perp')
-
-    await act(async () => {
-      root.unmount()
-    })
-    document.body.innerHTML = ''
   })
 
   it('renders a free-form clarification input when no allowed answers are provided', async () => {
-    ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-    const container = document.createElement('div')
-    document.body.appendChild(container)
-    const root = createRoot(container)
     const onAnswer = jest.fn()
 
     await act(async () => {
-      root.render(
+      root?.render(
         <ClarificationGateCard
           gate={{
             blocked: true,
@@ -86,29 +103,80 @@ describe('ClarificationGateCard', () => {
     const input = container.querySelector(
       '[data-testid="clarification-freeform-input"]',
     ) as HTMLInputElement | null
+    const submit = container.querySelector(
+      '[data-testid="clarification-freeform-submit"]',
+    ) as HTMLButtonElement | null
+
     expect(input).not.toBeNull()
+    expect(submit?.disabled).toBe(true)
 
     await act(async () => {
-      if (input) {
-        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')
-          ?.set
-          ?.call(input, '减半仓位')
-        input.dispatchEvent(new Event('input', { bubbles: true }))
-        input.dispatchEvent(new Event('change', { bubbles: true }))
-      }
+      if (!input) return
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')
+        ?.set?.call(input, '减半仓位')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
     })
 
+    expect(submit?.disabled).toBe(false)
+
     await act(async () => {
-      container
-        .querySelector('[data-testid="clarification-freeform-submit"]')
-        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      submit?.click()
     })
 
     expect(onAnswer).toHaveBeenCalledWith('riskRules.earlyStop.action', '减半仓位')
+  })
+
+  it('renders localized freeform clarification copy instead of the english fallback and trims answers', async () => {
+    const onAnswer = jest.fn()
 
     await act(async () => {
-      root.unmount()
+      root?.render(
+        <ClarificationGateCard
+          gate={{
+            blocked: true,
+            items: [
+              {
+                key: 'symbol',
+                field: 'symbol',
+                reason: 'missing symbol',
+                question: '请确认交易对',
+                blocking: true,
+                status: 'pending',
+              },
+            ],
+          }}
+          onAnswer={onAnswer}
+        />,
+      )
     })
-    document.body.innerHTML = ''
+
+    expect(container.textContent).toContain('需要补充澄清')
+    expect(container.textContent).toContain('提交澄清')
+    expect(container.textContent).not.toContain('Submit')
+
+    const input = container.querySelector(
+      '[data-testid="clarification-freeform-input"]',
+    ) as HTMLInputElement | null
+    const submit = container.querySelector(
+      '[data-testid="clarification-freeform-submit"]',
+    ) as HTMLButtonElement | null
+
+    expect(input?.placeholder).toBe('请输入补充信息')
+    expect(submit?.disabled).toBe(true)
+
+    await act(async () => {
+      if (!input) return
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')
+        ?.set?.call(input, '  BTCUSDT  ')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+
+    expect(submit?.disabled).toBe(false)
+
+    await act(async () => {
+      submit?.click()
+    })
+
+    expect(onAnswer).toHaveBeenCalledWith('symbol', 'BTCUSDT')
   })
 })

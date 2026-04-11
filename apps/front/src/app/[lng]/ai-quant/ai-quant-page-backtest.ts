@@ -1,5 +1,6 @@
 import type { MutableRefObject } from 'react'
 
+import type { ConversationState } from './ai-quant-page-conversation'
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import {
   createBacktestJob,
@@ -11,10 +12,9 @@ import {
   buildBacktestPayload,
   isBacktestPayloadBuilderError,
 } from '@/components/ai-quant/backtest-payload-builder'
+
 import { checkBacktestSymbolSupport } from '@/components/ai-quant/backtest-symbol-support-client'
 import { ApiError } from '@/lib/errors'
-
-import type { ConversationState } from './ai-quant-page-conversation'
 import {
   buildBacktestSummaryResult,
   hasLatestPublishedCode,
@@ -131,7 +131,9 @@ export async function runAiQuantBacktest(args: {
         {
           id: `capability-guard-${Date.now()}`,
           role: 'assistant',
-          content: 'aiQuant.messages.backtestCapabilityLoadFailed',
+          content: t('aiQuant.messages.backtestCapabilityLoadFailed', {
+            defaultValue: '回测能力加载失败，请稍后重试。',
+          }),
         },
       ],
       updatedAt: Date.now(),

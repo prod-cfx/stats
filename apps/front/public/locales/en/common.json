@@ -103,6 +103,8 @@
     "fullScreen": "Full Screen",
     "logicGraph": "Strategy Logic Graph",
     "clarificationGateTitle": "Clarification required",
+    "clarificationGateInputPlaceholder": "Enter your clarification",
+    "clarificationGateSubmit": "Submit clarification",
     "publicationGateTitle": "Publication blocked",
     "publicationGateExpected": "Expected",
     "publicationGateActual": "Actual",
@@ -162,6 +164,11 @@
     "editApiConfig": "Edit Config",
     "cancelEdit": "Cancel",
     "unbindApiConfig": "Unbind",
+    "validation": {
+      "requiredBinanceCredentials": "Binance API key and secret are required.",
+      "requiredOkxCredentials": "OKX API key, secret, and passphrase are required.",
+      "requiredHyperliquidCredentials": "Hyperliquid wallet address and agent private key are required."
+    },
     "binanceApi": "Binance API",
     "okxApi": "OKX API",
     "hyperliquidApi": "Hyperliquid API",
@@ -224,6 +231,7 @@
       "backtestRangeOrderInvalid": "Start time must be earlier than end time.",
       "backtestRangeTooLarge": "Backtest range supports at most 365 days. Please shorten the range.",
       "backtestMissingScriptCode": "Strategy code is empty. Please confirm and generate strategy code first.",
+      "backtestCapabilityLoadFailed": "Failed to load backtest capabilities. Please try again later.",
       "backtestPayloadInvalid": "Invalid backtest payload: {{reason}}",
       "returnToChat": "Return to Chat to Optimize",
       "graphTitle": "Strategy Logic Graph Confirmation",

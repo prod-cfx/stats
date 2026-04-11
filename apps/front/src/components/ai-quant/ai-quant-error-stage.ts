@@ -7,6 +7,19 @@ export interface AiQuantErrorMeta {
   requestId?: string
 }
 
+function buildAiQuantErrorSuffix(status: number, meta: AiQuantErrorMeta): string {
+  const detailParts: string[] = []
+  if (meta.code) {
+    detailParts.push(meta.code)
+  }
+  detailParts.push(`HTTP ${status}`)
+  if (meta.requestId) {
+    detailParts.push(`requestId ${meta.requestId}`)
+  }
+  const stageLabel = meta.stage !== 'unknown' ? ` ${meta.stage}` : ''
+  return `${stageLabel} (${detailParts.join(', ')})`
+}
+
 function toNonEmptyString(value: unknown): string | undefined {
   return typeof value === 'string' && value.trim().length > 0 ? value.trim() : undefined
 }
@@ -47,9 +60,17 @@ export function buildAiQuantStageFallbackMessage(
   status: number,
   meta: AiQuantErrorMeta,
 ): string {
-  const stageLabel = meta.stage !== 'unknown' ? ` ${meta.stage}` : ''
-  if (meta.code) {
-    return `${fallback}${stageLabel} (${meta.code}, HTTP ${status})`
+  return `${fallback}${buildAiQuantErrorSuffix(status, meta)}`
+}
+
+export function buildAiQuantErrorMessage(
+  fallback: string,
+  status: number,
+  meta: AiQuantErrorMeta,
+): string {
+  const message = toNonEmptyString(meta.message)
+  if (!message) {
+    return buildAiQuantStageFallbackMessage(fallback, status, meta)
   }
-  return `${fallback}${stageLabel} (HTTP ${status})`
+  return `${message}${buildAiQuantErrorSuffix(status, meta)}`
 }

@@ -1112,9 +1112,18 @@ const PublicationGateMismatchDto = z
 const PublicationGateDto = z
   .object({ passed: z.boolean(), blockingMismatches: z.array(PublicationGateMismatchDto) })
   .passthrough()
+const CodegenConversationMessageDto = z
+  .object({
+    role: z.enum(['user', 'assistant']),
+    content: z.string(),
+  })
+  .passthrough()
 const CodegenSessionResponseDto = z
   .object({
     id: z.string(),
+    conversationId: z.string().nullish(),
+    conversationTitle: z.string().optional(),
+    conversationMessages: z.array(CodegenConversationMessageDto).optional(),
     status: z.enum([
       'DRAFTING',
       'CHECKLIST_GATE',
@@ -1128,18 +1137,19 @@ const CodegenSessionResponseDto = z
       'REJECTED',
     ]),
     missingFields: z.array(z.string()).optional(),
-    scriptCode: z.string().optional(),
-    publishedSnapshotId: z.string().optional(),
-    consistencyReport: z.object({}).partial().passthrough().optional(),
-    specDesc: z.object({}).partial().passthrough().optional(),
-    canonicalDigest: z.string().optional(),
-    semanticGraph: z.object({}).partial().passthrough().optional(),
-    validationReport: z.object({}).partial().passthrough().optional(),
-    strategyInstanceId: z.string().optional(),
-    clarificationState: StrategyClarificationStateDto.optional(),
+    scriptCode: z.string().nullish(),
+    publishedSnapshotId: z.string().nullish(),
+    publishedSnapshotParamValues: z.object({}).partial().passthrough().nullish(),
+    consistencyReport: z.object({}).partial().passthrough().nullish(),
+    specDesc: z.object({}).partial().passthrough().nullish(),
+    canonicalDigest: z.string().nullish(),
+    semanticGraph: z.object({}).partial().passthrough().nullish(),
+    validationReport: z.object({}).partial().passthrough().nullish(),
+    strategyInstanceId: z.string().nullish(),
+    clarificationState: StrategyClarificationStateDto.nullish(),
     clarificationGate: StrategyClarificationGateDto,
-    publicationGate: PublicationGateDto.optional(),
-    rejectReason: z.string().optional(),
+    publicationGate: PublicationGateDto.nullish(),
+    rejectReason: z.string().nullish(),
     assistantPrompt: z.string().optional(),
   })
   .passthrough()

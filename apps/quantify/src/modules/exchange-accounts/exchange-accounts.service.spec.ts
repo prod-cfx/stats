@@ -12,6 +12,7 @@ describe('exchangeAccountsService', () => {
       }),
       findUserByEmail: jest.fn().mockResolvedValue(null),
       updateUserEmail: jest.fn().mockResolvedValue(undefined),
+      reassignUserId: jest.fn().mockResolvedValue(undefined),
       createUser: jest.fn().mockResolvedValue(undefined),
       findExchangeAccountFirst: jest.fn().mockResolvedValue(null),
       findExchangeAccountsByUser: jest.fn().mockResolvedValue([]),
@@ -368,6 +369,25 @@ describe('exchangeAccountsService', () => {
       }),
     )
     expect(repo.deleteExchangeAccount).toHaveBeenCalledWith('account-1')
+  })
+
+  it('realigns an existing quantify user mirror by email to the authenticated user id before binding', async () => {
+    const { service, repo } = createService()
+    repo.findUserById.mockResolvedValueOnce(null)
+    repo.findUserByEmail.mockResolvedValue({ id: 'legacy-user-1' })
+
+    await service.create('user-1', {
+      userId: 'user-1',
+      userEmail: 'user-1@example.com',
+      exchangeId: 'okx',
+      apiKey: 'valid-key',
+      apiSecret: 'valid-secret',
+      passphrase: 'valid-passphrase',
+      marketType: 'spot',
+    })
+
+    expect(repo.reassignUserId).toHaveBeenCalledWith('legacy-user-1', 'user-1', 'user-1@example.com')
+    expect(repo.createUser).not.toHaveBeenCalled()
   })
 
   it('creates a quantify user mirror before first successful binding', async () => {

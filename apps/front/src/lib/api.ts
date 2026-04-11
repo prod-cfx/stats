@@ -10,11 +10,13 @@ import type { MarketDataCatalogItem } from './market-data/catalog-types'
 import { buildBearerAuthHeaders, getErrorHttpStatus, unwrapTransportResponse } from '@ai/shared'
 import {
   deleteStrategyById as deleteMockStrategyById,
-  getStrategyById,
   listStrategies as listMockStrategies,
   updateStrategyStatus as updateMockStrategyStatus,
 } from '@/components/account/ai-quant-strategy-store'
-import { buildAiQuantStageFallbackMessage, parseAiQuantErrorMeta } from '@/components/ai-quant/ai-quant-error-stage'
+import {
+  buildAiQuantErrorMessage,
+  parseAiQuantErrorMeta,
+} from '@/components/ai-quant/ai-quant-error-stage'
 import { cachedRequest, CacheTTL } from './api-cache'
 import { API_BASE_URL, client, safeApiCall, unwrapApiResponse, validateId } from './api-client'
 import { getToken } from './auth-storage'
@@ -96,16 +98,18 @@ function waitRetryDelay(signal?: AbortSignal): Promise<void> {
       return
     }
 
-    const timer = globalThis.setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort)
-      resolve()
-    }, 400)
+    let timer: ReturnType<typeof globalThis.setTimeout>
 
     const onAbort = () => {
       globalThis.clearTimeout(timer)
       signal?.removeEventListener('abort', onAbort)
       reject(new ApiError('Request aborted', 'API_ERROR'))
     }
+
+    timer = globalThis.setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, 400)
 
     signal?.addEventListener('abort', onAbort)
   })
@@ -1803,56 +1807,6 @@ function mapMockStrategyToListItem(item: ReturnType<typeof listMockStrategies>[n
   }
 }
 
-function mapMockStrategyToDetail(item: ReturnType<typeof getStrategyById>): AccountAiQuantStrategyDetail {
-  if (!item) {
-    throw new ApiError('策略不存在', 'ACCOUNT_AI_QUANT_NOT_FOUND', 404)
-  }
-
-  return {
-    ...mapMockStrategyToListItem(item),
-    totalPnl: item.totalPnl ?? null,
-    todayPnl: item.todayPnl ?? null,
-    equitySeries: item.equitySeries.map(point => ({
-      ts: point.ts,
-      value: point.value,
-    })),
-    snapshot: {
-      exchange: item.exchange,
-      symbol: item.symbol,
-      timeframe: item.timeframe,
-      positionPct: item.positionPct,
-      publishedSnapshotId: null,
-      snapshotHash: null,
-      paramSchema: item.paramSchema ?? null,
-      paramValues: item.paramSchema ? (item.paramValues ?? {}) : null,
-      schemaVersion: item.schemaVersion ?? null,
-      deployAccountName: item.deploy?.accountName ?? null,
-      deployAt: item.deploy?.at ?? null,
-    },
-    accountOverview: {
-      initialBalance: item.initialCapital ?? 10000,
-      totalEquity: null,
-      availableBalance: null,
-      totalPnl: item.totalPnl ?? null,
-      todayPnl: item.todayPnl ?? null,
-      baseCurrency: 'USDT',
-    },
-    positionOverview: {
-      openPositionsCount: null,
-      closedPositionsCount: null,
-      totalRealizedPnl: null,
-      totalUnrealizedPnl: null,
-    },
-    latestOrders: [],
-    timeline: item.timeline.map(event => ({
-      at: event.at,
-      eventType: 'system',
-      event: event.event,
-      note: event.note ?? null,
-    })),
-  }
-}
-
 function buildAccountAiQuantHeaders(userId?: string) {
   return {
     'Content-Type': 'application/json',
@@ -2470,8 +2424,7 @@ export interface ContinueLlmCodegenSessionPayload {
 
 function parseApiErrorMessage(status: number, payload: unknown, fallback: string): string {
   const meta = parseAiQuantErrorMeta(payload)
-  if (meta.message) return meta.message
-  return buildAiQuantStageFallbackMessage(fallback, status, meta)
+  return buildAiQuantErrorMessage(fallback, status, meta)
 }
 
 async function postLlmCodegen<T>(path: string, payload: unknown): Promise<T> {
@@ -3139,23 +3092,7 @@ export async function fetchMarketDataCatalogItems(): Promise<MarketDataCatalogIt
 
   return cachedRequest(
     'meta:market-data-catalog',
-    async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/meta/market-data-catalog`, {
-          method: 'GET',
-          headers: { 'Content-Type': 'application/json' },
-        })
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`)
-        }
-
-        const body = await response.json().catch(() => undefined)
-        const data = body && typeof body === 'object' && 'data' in body ? (body as { data: unknown }).data : body
-        return Array.isArray(data) ? (data as MarketDataCatalogItem[]) : FALLBACK_MARKET_DATA_CATALOG
-      } catch {
-        return FALLBACK_MARKET_DATA_CATALOG
-      }
-    },
+    async () => FALLBACK_MARKET_DATA_CATALOG,
     CacheTTL.VERY_LONG,
   )
 }

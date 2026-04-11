@@ -90,6 +90,17 @@ export class ExchangeAccountRepository {
     })
   }
 
+  async reassignUserId(fromUserId: string, toUserId: string, email: string): Promise<void> {
+    const client = this.txHost.tx
+    await client.user.update({
+      where: { id: fromUserId },
+      data: {
+        id: toUserId,
+        email,
+      },
+    })
+  }
+
   async createUser(data: { id: string; email: string }): Promise<void> {
     const client = this.txHost.tx
     await client.user.create({ data })
