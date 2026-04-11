@@ -20,7 +20,7 @@ export class QuantifyAiQuantClient {
     query: Record<string, string | number | boolean | undefined>,
     options: QuantifyRequestOptions & { userId: string },
   ) {
-    return this.runRequest(() =>
+    return this.runRequest(signal =>
       this.client.AccountStrategyViewController_list({
         queries: {
           userId: options.userId,
@@ -31,17 +31,19 @@ export class QuantifyAiQuantClient {
           excludeDraft: booleanOrUndefined(query.excludeDraft),
         },
         headers: buildUserHeaders(options.userId, options.headers?.authorization),
+        signal,
       }) as Promise<unknown>,
-    )
+    , options)
   }
 
   async getAccountStrategyDetail(strategyId: string, options: QuantifyRequestOptions & { userId: string }) {
-    return this.runRequest(() =>
+    return this.runRequest(signal =>
       this.client.AccountStrategyViewController_detail({
         params: { id: strategyId },
         headers: buildUserHeaders(options.userId, options.headers?.authorization),
+        signal,
       }) as Promise<unknown>,
-    )
+    , options)
   }
 
   async performAccountStrategyAction(
@@ -49,29 +51,32 @@ export class QuantifyAiQuantClient {
     body: Record<string, unknown>,
     options: QuantifyRequestOptions & { userId: string },
   ) {
-    return this.runRequest(() =>
+    return this.runRequest(signal =>
       this.client.AccountStrategyViewController_action(body, {
         params: { id: strategyId },
         headers: buildUserHeaders(options.userId, options.headers?.authorization),
+        signal,
       }) as Promise<unknown>,
-    )
+    , options)
   }
 
   async deployAccountStrategy(body: Record<string, unknown>, options: QuantifyRequestOptions & { userId: string }) {
-    return this.runRequest(() =>
+    return this.runRequest(signal =>
       this.client.AccountStrategyViewController_deploy(body, {
         headers: buildUserHeaders(options.userId, options.headers?.authorization),
+        signal,
       }) as Promise<unknown>,
-    )
+    , options)
   }
 
   async deleteAccountStrategy(strategyId: string, options: QuantifyRequestOptions & { userId: string }): Promise<void> {
-    await this.runRequest<void>(() =>
+    await this.runRequest<void>(signal =>
       this.client.AccountStrategyViewController_remove(undefined, {
         params: { id: strategyId },
         headers: buildUserHeaders(options.userId, options.headers?.authorization),
+        signal,
       }) as Promise<unknown>,
-    )
+    , options)
   }
 
   async startCodegen(body: Record<string, unknown>, options: QuantifyRequestOptions & { userId: string }) {
@@ -82,6 +87,7 @@ export class QuantifyAiQuantClient {
           signal,
         }),
       options.timeoutMs,
+      options.signal,
     )
   }
 
@@ -94,6 +100,7 @@ export class QuantifyAiQuantClient {
           signal,
         }),
       options.timeoutMs,
+      options.signal,
     )
   }
 
@@ -110,6 +117,7 @@ export class QuantifyAiQuantClient {
           signal,
         }),
       options.timeoutMs,
+      options.signal,
     )
   }
 
@@ -198,45 +206,48 @@ export class QuantifyAiQuantClient {
   }
 
   async getBacktestCapabilities(options: QuantifyRequestOptions) {
-    return this.runRequest(() =>
+    return this.runRequest(signal =>
       this.client.BacktestingController_getCapabilities({
         headers: buildProxyHeaders(options.headers?.authorization, headerValue(options.headers, 'x-request-id')),
+        signal,
       }) as Promise<unknown>,
-    )
+    , options)
   }
 
   async createBacktestJob(
     body: Record<string, unknown>,
     options: QuantifyRequestOptions & { userId: string },
   ) {
-    return this.runRequest(() =>
+    return this.runRequest(signal =>
       this.client.BacktestingController_createJob(body, {
         headers: buildUserProxyHeaders(
           options.userId,
           options.headers?.authorization,
           headerValue(options.headers, 'x-request-id'),
         ),
+        signal,
       }) as Promise<unknown>,
-    )
+    , options)
   }
 
   async checkBacktestSymbolSupport(
     body: Record<string, unknown>,
     options: QuantifyRequestOptions & { userId: string },
   ) {
-    return this.runRequest(() =>
+    return this.runRequest(signal =>
       this.client.BacktestingController_checkSymbolSupport(body, {
         headers: buildUserProxyHeaders(
           options.userId,
           options.headers?.authorization,
           headerValue(options.headers, 'x-request-id'),
         ),
+        signal,
       }) as Promise<unknown>,
-    )
+    , options)
   }
 
   async getBacktestJob(id: string, options: QuantifyRequestOptions & { userId: string }) {
-    return this.runRequest(() =>
+    return this.runRequest(signal =>
       this.client.BacktestingController_getJob({
         params: { id },
         headers: buildUserProxyHeaders(
@@ -244,12 +255,13 @@ export class QuantifyAiQuantClient {
           options.headers?.authorization,
           headerValue(options.headers, 'x-request-id'),
         ),
+        signal,
       }) as Promise<unknown>,
-    )
+    , options)
   }
 
   async getBacktestJobResult(id: string, options: QuantifyRequestOptions & { userId: string }) {
-    return this.runRequest(() =>
+    return this.runRequest(signal =>
       this.client.BacktestingController_getJobResult({
         params: { id },
         headers: buildUserProxyHeaders(
@@ -257,17 +269,33 @@ export class QuantifyAiQuantClient {
           options.headers?.authorization,
           headerValue(options.headers, 'x-request-id'),
         ),
+        signal,
       }) as Promise<unknown>,
-    )
+    , options)
   }
 
-  private async runRequest<T>(request: () => Promise<unknown>): Promise<T> {
-    return runQuantifyContractRequest<T>(request)
+  private async runRequest<T>(
+    request: (signal?: AbortSignal) => Promise<unknown>,
+    options?: QuantifyRequestOptions,
+  ): Promise<T> {
+    const abortContext = createQuantifyAbortContext(undefined, options?.signal)
+    try {
+      return await runQuantifyContractRequest<T>(
+        () => request(abortContext?.signal),
+        abortContext?.getAbortReason,
+      )
+    } finally {
+      abortContext?.cleanup()
+    }
   }
 
-  private async runTimedRequest<T>(request: (signal?: AbortSignal) => Promise<unknown>, timeoutMs?: number): Promise<T> {
+  private async runTimedRequest<T>(
+    request: (signal?: AbortSignal) => Promise<unknown>,
+    timeoutMs?: number,
+    upstreamSignal?: AbortSignal,
+  ): Promise<T> {
     const effectiveTimeoutMs = this.getRequestTimeoutMs(timeoutMs)
-    const abortContext = createQuantifyAbortContext(effectiveTimeoutMs)
+    const abortContext = createQuantifyAbortContext(effectiveTimeoutMs, upstreamSignal)
     try {
       return await runQuantifyContractRequest<T>(
         () => request(abortContext?.signal),
