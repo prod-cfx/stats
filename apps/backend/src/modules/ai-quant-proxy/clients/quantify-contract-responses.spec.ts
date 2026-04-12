@@ -52,6 +52,27 @@ describe('quantify contract generated responses', () => {
     expect(deleteSnippet).toContain('data: z.null()')
   })
 
+  it('wraps backtesting aliases in transport-envelope response schemas', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+
+    const aliases = [
+      ['BacktestingController_getCapabilities', 'data: BacktestCapabilitiesResponseDto'],
+      ['BacktestingController_createJob', 'data: BacktestJobResponseDto'],
+      ['BacktestingController_getJob', 'data: BacktestJobResponseDto'],
+      ['BacktestingController_getJobResult', 'data: BacktestReportResponseDto'],
+      ['BacktestingController_checkSymbolSupport', 'data: BacktestSymbolSupportResponseDto'],
+    ] as const
+
+    for (const [alias, dataExpectation] of aliases) {
+      const start = source.indexOf(`alias: '${alias}'`)
+      expect(start).toBeGreaterThanOrEqual(0)
+      const snippet = source.slice(start, start + 700)
+      expect(snippet).toContain(dataExpectation)
+      expect(snippet).toContain('message: z.string().optional()')
+      expect(snippet).toContain('.passthrough()')
+    }
+  })
+
   it('keeps nullable AI Quant codegen session fields nullable in the generated contracts', () => {
     const source = readFileSync(generatedPath, 'utf8')
     const start = source.indexOf('const CodegenSessionResponseDto = z')

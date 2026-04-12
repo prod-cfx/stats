@@ -171,6 +171,22 @@ function seedConfirmedConversation(now = Date.now()) {
       llmCodegenSessionId: null,
       publishedStrategyInstanceId: 'strategy-1',
       publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotParamValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+        backtestInitialCash: 10000,
+        backtestLeverage: 1,
+        backtestSlippageBps: 10,
+        backtestFeeBps: 5,
+        backtestPriceSource: 'close',
+        backtestAllowPartial: true,
+      },
       publishedScriptGraphVersion: 1,
       backtestExecutionConfigExplicit: true,
       latestSignalMessage: null,
@@ -286,6 +302,22 @@ describe('AiQuantPageClient capability gating', () => {
         llmCodegenSessionId: null,
         publishedStrategyInstanceId: 'strategy-1',
         publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotParamValues: {
+          exchange: 'okx',
+          symbol: 'ETHUSDC',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+          backtestInitialCash: 10000,
+          backtestLeverage: 1,
+          backtestSlippageBps: 10,
+          backtestFeeBps: 5,
+          backtestPriceSource: 'close',
+          backtestAllowPartial: true,
+        },
         publishedScriptGraphVersion: 1,
         backtestExecutionConfigExplicit: true,
         latestSignalMessage: null,
@@ -295,7 +327,7 @@ describe('AiQuantPageClient capability gating', () => {
     ]))
 
     mockFetchBacktestCapabilities.mockResolvedValue({
-      allowedSymbols: ['BTCUSDT'],
+      allowedSymbols: ['BTCUSDT', 'ETHUSDC'],
       allowedBaseTimeframes: ['15m', '1h'],
     })
 
@@ -307,6 +339,7 @@ describe('AiQuantPageClient capability gating', () => {
 
     const runButton = container.querySelector('[data-testid="run-backtest"]') as HTMLButtonElement | null
     expect(runButton?.disabled).toBe(false)
+    expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain('回测能力加载失败，请稍后重试。')
     const symbolOptions = Array.from(container.querySelectorAll('[data-testid="symbol-select"] option')).map(option => option.textContent)
     expect(symbolOptions).toEqual(expect.arrayContaining(['ETHUSDC', 'BTCUSDT']))
 
@@ -514,6 +547,22 @@ describe('AiQuantPageClient capability gating', () => {
         llmCodegenSessionId: null,
         publishedStrategyInstanceId: 'strategy-1',
         publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotParamValues: {
+          exchange: 'okx',
+          symbol: 'ETHUSDC',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+          backtestInitialCash: 10000,
+          backtestLeverage: 1,
+          backtestSlippageBps: 10,
+          backtestFeeBps: 5,
+          backtestPriceSource: 'close',
+          backtestAllowPartial: true,
+        },
         publishedScriptGraphVersion: 1,
         backtestExecutionConfigExplicit: true,
         latestSignalMessage: null,
@@ -522,7 +571,7 @@ describe('AiQuantPageClient capability gating', () => {
       },
     ]))
     mockFetchBacktestCapabilities.mockResolvedValue({
-      allowedSymbols: ['BTCUSDT'],
+      allowedSymbols: ['BTCUSDT', 'ETHUSDC'],
       allowedBaseTimeframes: ['15m', '1h'],
     })
     mockCheckBacktestSymbolSupport.mockResolvedValueOnce({ status: 'not_supported' })

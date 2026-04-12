@@ -234,23 +234,22 @@ export class AiQuantProxyService {
   }
 
   async getBacktestCapabilities(authorization: string | undefined, requestId?: string) {
+    let lastError: unknown
+
     for (let attempt = 1; attempt <= AiQuantProxyService.BACKTEST_CAPABILITIES_RETRY_ATTEMPTS; attempt += 1) {
       try {
         return await this.quantifyClient.getBacktestCapabilities({
           headers: this.proxyHeaders(authorization, requestId),
         })
       } catch (error) {
+        lastError = error
         const isTransientUpstreamFailure = this.isTransientUpstreamFailure(error)
         const isLastAttempt = attempt >= AiQuantProxyService.BACKTEST_CAPABILITIES_RETRY_ATTEMPTS
         if (!isTransientUpstreamFailure || isLastAttempt) {
-          if (isTransientUpstreamFailure) {
+          if (isTransientUpstreamFailure && isLastAttempt) {
             this.logger.warn(
-              `event=backtesting_capabilities_fallback reason=${this.describeError(error)} requestId=${requestId ?? 'N/A'} attempt=${attempt}`,
+              `event=backtesting_capabilities_retry_exhausted reason=${this.describeError(error)} requestId=${requestId ?? 'N/A'} attempt=${attempt}`,
             )
-            return {
-              allowedSymbols: [],
-              allowedBaseTimeframes: [],
-            }
           }
           throw this.mapQuantifyError(error)
         }
@@ -258,10 +257,7 @@ export class AiQuantProxyService {
       }
     }
 
-    return {
-      allowedSymbols: [],
-      allowedBaseTimeframes: [],
-    }
+    throw this.mapQuantifyError(lastError)
   }
 
   async createBacktestJob(
