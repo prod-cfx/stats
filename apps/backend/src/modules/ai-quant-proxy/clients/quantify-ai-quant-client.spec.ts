@@ -11,6 +11,11 @@ describe('quantifyAiQuantClient', () => {
   function createContractMock() {
     return {
       AccountStrategyViewController_list: jest.fn(),
+      BacktestingController_getCapabilities: jest.fn(),
+      BacktestingController_createJob: jest.fn(),
+      BacktestingController_checkSymbolSupport: jest.fn(),
+      BacktestingController_getJob: jest.fn(),
+      BacktestingController_getJobResult: jest.fn(),
       LiveLlmStrategyCodegenController_startSession: jest.fn(),
       LiveLlmStrategyCodegenController_getSession: jest.fn(),
       LiveLlmStrategyCodegenController_continueSession: jest.fn(),
@@ -158,6 +163,74 @@ describe('quantifyAiQuantClient', () => {
       headers: {
         'x-user-id': 'user-1',
         authorization: 'Bearer token-1',
+      },
+    })
+  })
+
+  it('unwraps transport-envelope backtesting capabilities responses from the contract alias', async () => {
+    const contract = createContractMock()
+    contract.BacktestingController_getCapabilities.mockResolvedValue({
+      data: {
+        allowedSymbols: ['BTCUSDT'],
+        allowedBaseTimeframes: ['15m'],
+      },
+      message: 'Success',
+    })
+    mockedCreateQuantifyApiClient.mockReturnValue(contract as never)
+
+    const client = new QuantifyAiQuantClient(env as any)
+
+    await expect(client.getBacktestCapabilities({
+      headers: {
+        authorization: 'Bearer token-1',
+        'x-request-id': 'req-1',
+      },
+    })).resolves.toEqual({
+      allowedSymbols: ['BTCUSDT'],
+      allowedBaseTimeframes: ['15m'],
+    })
+
+    expect(contract.BacktestingController_getCapabilities).toHaveBeenCalledWith({
+      headers: {
+        authorization: 'Bearer token-1',
+        'x-request-id': 'req-1',
+      },
+    })
+  })
+
+  it('unwraps transport-envelope create-job responses from the contract alias', async () => {
+    const contract = createContractMock()
+    contract.BacktestingController_createJob.mockResolvedValue({
+      data: {
+        id: 'job-1',
+        status: 'queued',
+      },
+      message: 'Success',
+    })
+    mockedCreateQuantifyApiClient.mockReturnValue(contract as never)
+
+    const client = new QuantifyAiQuantClient(env as any)
+
+    await expect(client.createBacktestJob({
+      symbol: 'BTCUSDT',
+    }, {
+      userId: 'user-1',
+      headers: {
+        authorization: 'Bearer token-1',
+        'x-request-id': 'req-1',
+      },
+    })).resolves.toEqual({
+      id: 'job-1',
+      status: 'queued',
+    })
+
+    expect(contract.BacktestingController_createJob).toHaveBeenCalledWith({
+      symbol: 'BTCUSDT',
+    }, {
+      headers: {
+        'x-user-id': 'user-1',
+        authorization: 'Bearer token-1',
+        'x-request-id': 'req-1',
       },
     })
   })

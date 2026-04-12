@@ -354,13 +354,19 @@ describe('aiQuantProxyService', () => {
     expect(quantifyClient.getBacktestCapabilities).toHaveBeenCalledTimes(2)
   })
 
-  it('returns empty capabilities when transient upstream errors persist', async () => {
+  it('surfaces transient upstream capability failures explicitly after retry exhaustion', async () => {
     const { service, quantifyClient } = createService()
     quantifyClient.getBacktestCapabilities.mockRejectedValue(new QuantifyClientError('Quantify request failed', 502, 'UPSTREAM_REQUEST_FAILED'))
 
-    await expect(service.getBacktestCapabilities('Bearer token-1')).resolves.toEqual({
-      allowedSymbols: [],
-      allowedBaseTimeframes: [],
+    await expect(service.getBacktestCapabilities('Bearer token-1')).rejects.toMatchObject({
+      status: 503,
+      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+      message: '量化服务暂时不可用，请稍后重试',
+      args: expect.objectContaining({
+        reasonMessage: '量化服务暂时不可用，请稍后重试',
+        retryable: true,
+        upstreamCode: 'UPSTREAM_REQUEST_FAILED',
+      }),
     })
     expect(quantifyClient.getBacktestCapabilities).toHaveBeenCalledTimes(3)
   })

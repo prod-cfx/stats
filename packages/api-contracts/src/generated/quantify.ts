@@ -1,4 +1,4 @@
-import { makeApi, Zodios, type ZodiosOptions } from '@zodios/core'
+import { makeApi, Zodios, type ZodiosInstance, type ZodiosOptions } from '@zodios/core'
 import { z } from 'zod'
 
 const SettingResponseDto = z
@@ -1927,7 +1927,9 @@ const endpoints = makeApi([
         schema: z.string().optional(),
       },
     ],
-    response: BacktestCapabilitiesResponseDto,
+    response: z
+      .object({ data: BacktestCapabilitiesResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'post',
@@ -1956,7 +1958,9 @@ const endpoints = makeApi([
         schema: z.string().optional(),
       },
     ],
-    response: BacktestJobResponseDto,
+    response: z
+      .object({ data: BacktestJobResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'get',
@@ -1980,7 +1984,9 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: BacktestJobResponseDto,
+    response: z
+      .object({ data: BacktestJobResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'get',
@@ -2004,7 +2010,9 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: BacktestReportResponseDto,
+    response: z
+      .object({ data: BacktestReportResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'post',
@@ -2057,7 +2065,9 @@ const endpoints = makeApi([
         schema: z.string().optional(),
       },
     ],
-    response: BacktestSymbolSupportResponseDto,
+    response: z
+      .object({ data: BacktestSymbolSupportResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'post',
@@ -3734,8 +3744,10 @@ const endpoints = makeApi([
   },
 ])
 
-export const aiQuantifyClient = new Zodios('/api/v1', endpoints)
+export type QuantifyApi = typeof endpoints
 
-export function createApiClient(baseUrl: string, options?: ZodiosOptions) {
+export const aiQuantifyClient: ZodiosInstance<QuantifyApi> = new Zodios('/api/v1', endpoints)
+
+export function createApiClient(baseUrl: string, options?: ZodiosOptions): ZodiosInstance<QuantifyApi> {
   return new Zodios(baseUrl, endpoints, options)
 }

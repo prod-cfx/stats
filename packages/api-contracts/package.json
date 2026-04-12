@@ -9,7 +9,7 @@
     }
   },
   "scripts": {
-    "build": "pnpm exec tsc --noEmit --project tsconfig.json"
+    "build": "pnpm exec tsc --noEmit --declaration false --declarationMap false --project tsconfig.json"
   },
   "dependencies": {
     "@zodios/core": "^10.9.6",

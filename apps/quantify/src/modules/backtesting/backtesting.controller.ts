@@ -2,13 +2,16 @@ import type { BacktestRunInput } from './types/backtesting.types'
 import { ErrorCode } from '@ai/shared'
 import { Body, Controller, Get, Headers, HttpStatus, Logger, Param, Post, UseGuards } from '@nestjs/common'
 import {
+  ApiExtraModels,
   ApiHeader,
   ApiOkResponse,
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger'
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler'
+import { BaseResponseDto } from '@/common/dto/base.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { buildBaseResponseSchema } from '@/common/swagger/base-response-schema.helper'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestRunnerService } from './core/backtest-runner.service'
 // eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时类元数据
@@ -35,6 +38,13 @@ import { BacktestSymbolSupportService } from './services/backtest-symbol-support
 @ApiTags('backtesting')
 @Controller('backtesting')
 @UseGuards(ThrottlerGuard)
+@ApiExtraModels(
+  BaseResponseDto,
+  BacktestCapabilitiesResponseDto,
+  BacktestJobResponseDto,
+  BacktestReportResponseDto,
+  BacktestSymbolSupportResponseDto,
+)
 export class BacktestingController {
   private readonly logger = new Logger(BacktestingController.name)
 
@@ -69,7 +79,7 @@ export class BacktestingController {
   @ApiHeader({ name: 'authorization', required: false })
   @ApiHeader({ name: 'x-user-id', required: false })
   @ApiHeader({ name: 'x-request-id', required: false })
-  @ApiOkResponse({ type: BacktestJobResponseDto })
+  @ApiOkResponse({ schema: buildBaseResponseSchema(BacktestJobResponseDto) })
   async createJob(
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-user-id') forwardedUserId: string | undefined,
@@ -104,7 +114,7 @@ export class BacktestingController {
   @ApiOperation({ summary: '获取回测任务状态' })
   @ApiHeader({ name: 'authorization', required: false })
   @ApiHeader({ name: 'x-user-id', required: false })
-  @ApiOkResponse({ type: BacktestJobResponseDto })
+  @ApiOkResponse({ schema: buildBaseResponseSchema(BacktestJobResponseDto) })
   async getJob(
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-user-id') forwardedUserId: string | undefined,
@@ -118,7 +128,7 @@ export class BacktestingController {
   @ApiOperation({ summary: '获取回测任务结果' })
   @ApiHeader({ name: 'authorization', required: false })
   @ApiHeader({ name: 'x-user-id', required: false })
-  @ApiOkResponse({ type: BacktestReportResponseDto })
+  @ApiOkResponse({ schema: buildBaseResponseSchema(BacktestReportResponseDto) })
   async getJobResult(
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-user-id') forwardedUserId: string | undefined,
@@ -131,7 +141,7 @@ export class BacktestingController {
   @Get('capabilities')
   @ApiOperation({ summary: '获取当前回测能力配置' })
   @ApiHeader({ name: 'x-request-id', required: false })
-  @ApiOkResponse({ type: BacktestCapabilitiesResponseDto })
+  @ApiOkResponse({ schema: buildBaseResponseSchema(BacktestCapabilitiesResponseDto) })
   async getCapabilities(
     @Headers('x-request-id') requestId: string | undefined,
   ) {
@@ -161,7 +171,7 @@ export class BacktestingController {
   @ApiHeader({ name: 'authorization', required: false })
   @ApiHeader({ name: 'x-user-id', required: false })
   @ApiHeader({ name: 'x-request-id', required: false })
-  @ApiOkResponse({ type: BacktestSymbolSupportResponseDto })
+  @ApiOkResponse({ schema: buildBaseResponseSchema(BacktestSymbolSupportResponseDto) })
   async checkSymbolSupport(
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-user-id') forwardedUserId: string | undefined,
