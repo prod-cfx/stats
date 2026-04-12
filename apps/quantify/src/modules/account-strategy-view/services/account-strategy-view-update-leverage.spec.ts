@@ -75,6 +75,50 @@ describe('accountStrategyViewService.updateDeploymentLeverage', () => {
     })
   })
 
+  it('rejects leverage updates from non-owner subscribers', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-1',
+        name: 'ETH strategy',
+        status: 'running',
+        createdBy: 'owner-1',
+        strategyTemplateId: 'tpl-1',
+        params: {},
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+        },
+        deploymentExecutionConfig: {
+          leverage: 3,
+          priceSource: 'mark',
+          orderType: 'market',
+          timeInForce: 'IOC',
+        },
+        executionConfigVersion: 2,
+        subscriptions: [{
+          userId: 'user-1',
+          status: 'active',
+          customParams: {},
+          exchangeAccount: { id: 'acct-1', name: 'Main', exchangeId: 'okx' },
+        }],
+      }),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn(), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn() } as any,
+    )
+
+    await expect(service.updateDeploymentLeverage('inst-1', {
+      userId: 'user-1',
+      leverage: 4,
+    } as any)).rejects.toMatchObject({
+      message: 'account_strategy.owner_only',
+    })
+  })
+
   it('updates only leverage, bumps version, and returns refreshed detail when positions are flat', async () => {
     const repo = {
       findStrategyForUser: jest.fn().mockResolvedValue({

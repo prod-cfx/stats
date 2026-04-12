@@ -484,7 +484,16 @@ export class AccountStrategyViewService {
         backtestConfigDefaults: null,
         deploymentExecutionDefaults: null,
         deploymentExecutionConstraints: null,
-        compatibilityMetadata: null,
+        compatibilityMetadata: {
+          isLegacySnapshot: true,
+          missingStrategyConfig: true,
+          missingBacktestConfigDefaults: true,
+          missingDeploymentExecutionDefaults: true,
+          missingDeploymentExecutionConstraints: true,
+          requiresRepublishForBacktest: true,
+          requiresRepublishForDeploy: true,
+          invalidBinding: true,
+        },
       }
     }
 
@@ -497,7 +506,16 @@ export class AccountStrategyViewService {
         backtestConfigDefaults: null,
         deploymentExecutionDefaults: null,
         deploymentExecutionConstraints: null,
-        compatibilityMetadata: null,
+        compatibilityMetadata: {
+          isLegacySnapshot: true,
+          missingStrategyConfig: true,
+          missingBacktestConfigDefaults: true,
+          missingDeploymentExecutionDefaults: true,
+          missingDeploymentExecutionConstraints: true,
+          requiresRepublishForBacktest: true,
+          requiresRepublishForDeploy: true,
+          invalidBinding: true,
+        },
       }
     }
 
@@ -711,6 +729,10 @@ export class AccountStrategyViewService {
     const row = await this.repo.findStrategyForUser(dto.userId, strategyInstanceId)
     if (!row) {
       throw new StrategyNotFoundException({ strategyInstanceId })
+    }
+
+    if (row.createdBy !== dto.userId) {
+      throw new StrategyOwnerOnlyException({ userId: dto.userId, ownerId: row.createdBy })
     }
 
     const sub = this.assertStrategyVisible(row, strategyInstanceId)

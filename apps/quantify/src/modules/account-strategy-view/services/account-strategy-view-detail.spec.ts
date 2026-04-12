@@ -526,6 +526,82 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     })
   })
 
+  it('marks missing bound snapshots as invalid compatibility state and hides deployment truth', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-missing-snapshot-1',
+        name: 'Missing snapshot strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-missing-1',
+          snapshotHash: 'snapshot-missing-hash-1',
+        },
+        params: { exchange: 'okx', symbol: 'BTCUSDT', timeframe: '15m', positionPct: 10 },
+        strategyTemplateId: 'tpl-missing-1',
+        strategyTemplate: {
+          defaultParams: {},
+          paramsSchema: null,
+          rulesVersion: 1,
+        },
+        subscriptions: [{
+          userId: 'user-1',
+          status: 'active',
+          customParams: {},
+          subscribedAt: new Date('2026-03-20T10:00:00.000Z'),
+          exchangeAccount: { id: 'acct-missing-1', name: 'Missing account', exchangeId: 'okx' },
+        }],
+        startedAt: new Date('2026-03-20T10:01:00.000Z'),
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+        deploymentExecutionConfig: {
+          leverage: 3,
+          priceSource: 'mark',
+          orderType: 'market',
+          timeInForce: 'IOC',
+        },
+        executionConfigVersion: 2,
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue(null),
+      findLatestExecutedAccountByUserAndSymbol: jest.fn().mockResolvedValue(null),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-03-18T10:00:00.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn() } as any,
+      undefined,
+      undefined,
+      undefined,
+      {
+        findByIdForUser: jest.fn().mockResolvedValue(null),
+      } as any,
+    )
+
+    const detail = await service.getStrategyDetail('user-1', 'inst-missing-snapshot-1')
+
+    expect(detail.snapshot.compatibilityMetadata).toEqual({
+      isLegacySnapshot: true,
+      missingStrategyConfig: true,
+      missingBacktestConfigDefaults: true,
+      missingDeploymentExecutionDefaults: true,
+      missingDeploymentExecutionConstraints: true,
+      requiresRepublishForBacktest: true,
+      requiresRepublishForDeploy: true,
+      invalidBinding: true,
+    })
+    expect(detail.deployment).toBeNull()
+  })
+
   it('rejects detail when strategy is not actively subscribed', async () => {
     const repo = {
       findStrategyForUser: jest.fn().mockResolvedValue({
