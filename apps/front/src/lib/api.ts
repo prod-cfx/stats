@@ -1663,6 +1663,61 @@ export interface AccountAiQuantStrategyMetrics {
 export type AccountAiQuantParamSchema = Record<string, unknown>
 export type AccountAiQuantParamValues = Record<string, unknown>
 
+export interface AccountAiQuantLeverageRange {
+  min: number
+  max: number
+}
+
+export interface AccountAiQuantPublishedStrategyConfig {
+  exchange: string | null
+  symbol: string | null
+  baseTimeframe: string | null
+  positionPct: number | null
+  strategyDeclaredLeverageRange?: AccountAiQuantLeverageRange | null
+}
+
+export interface AccountAiQuantBacktestConfigDefaults {
+  initialCash: number | null
+  leverage: number | null
+  slippageBps: number | null
+  feeBps: number | null
+  priceSource: string | null
+  allowPartial: boolean | null
+}
+
+export interface AccountAiQuantDeploymentExecutionConfig {
+  leverage?: number | null
+  priceSource?: string | null
+  orderType?: string | null
+  timeInForce?: string | null
+}
+
+export interface AccountAiQuantDeploymentExecutionConstraints {
+  effectiveAllowedLeverageRange?: AccountAiQuantLeverageRange | null
+  exchangeAccountCapabilityMaxLeverage?: number | null
+  platformRiskMaxLeverage?: number | null
+  strategyDeclaredLeverageRange?: AccountAiQuantLeverageRange | null
+  supportedPriceSources?: string[] | null
+  supportedOrderTypes?: string[] | null
+  supportedTimeInForce?: string[] | null
+  constraintExplanation?: string | null
+}
+
+export interface AccountAiQuantSnapshotCompatibilityMetadata {
+  isLegacySnapshot: boolean
+  missingBacktestConfigDefaults: boolean
+  missingDeploymentExecutionDefaults: boolean
+  missingDeploymentExecutionConstraints: boolean
+  requiresRepublishForBacktest: boolean
+  requiresRepublishForDeploy: boolean
+}
+
+export interface AccountAiQuantConsistencySummary {
+  isConsistent: boolean
+  driftReasons: string[]
+  consistencyScore?: number | null
+}
+
 export interface AccountAiQuantStrategyListItem {
   id: string
   name: string
@@ -1703,6 +1758,14 @@ export interface AccountAiQuantStrategySnapshot {
   schemaVersion: string | null
   deployAccountName?: string | null
   deployAt?: string | null
+  strategyConfig?: AccountAiQuantPublishedStrategyConfig | null
+  backtestConfigDefaults?: AccountAiQuantBacktestConfigDefaults | null
+  deploymentExecutionBaseline?: AccountAiQuantDeploymentExecutionConfig | null
+  deploymentExecutionCurrent?: AccountAiQuantDeploymentExecutionConfig | null
+  deploymentExecutionConstraints?: AccountAiQuantDeploymentExecutionConstraints | null
+  compatibilityMetadata?: AccountAiQuantSnapshotCompatibilityMetadata | null
+  consistencySummary?: AccountAiQuantConsistencySummary | null
+  executionConfigVersion?: number | null
 }
 
 export interface AccountAiQuantStrategyDetail extends AccountAiQuantStrategyListItem {
@@ -1758,6 +1821,12 @@ export interface AccountAiQuantDeployPayload {
   strategyInstanceId?: string
   exchangeAccountId?: string
   exchangeAccountName?: string
+  deploymentExecutionConfig?: AccountAiQuantDeploymentExecutionConfig
+}
+
+export interface AccountAiQuantUpdateLeveragePayload {
+  userId: string
+  leverage: number
 }
 
 function buildMockAccountAiQuantListResponse(
@@ -1989,6 +2058,7 @@ export async function deployAccountAiQuantStrategy(
         strategyInstanceId: payload.strategyInstanceId?.trim() || undefined,
         exchangeAccountId: payload.exchangeAccountId,
         exchangeAccountName: payload.exchangeAccountName,
+        deploymentExecutionConfig: payload.deploymentExecutionConfig,
       }),
     })
     const json = await parseAccountAiQuantJson(response, '部署策略失败')
@@ -1996,6 +2066,37 @@ export async function deployAccountAiQuantStrategy(
       json as AccountAiQuantStrategyDetail | BaseResponse<AccountAiQuantStrategyDetail>,
     )
   }, 'DEPLOY_ACCOUNT_AI_QUANT_STRATEGY')
+}
+
+export async function updateAccountAiQuantStrategyLeverage(
+  strategyId: string,
+  payload: AccountAiQuantUpdateLeveragePayload,
+): Promise<AccountAiQuantStrategyDetail> {
+  return apiCall(async () => {
+    validateId(strategyId, 'strategy ID')
+    if (!payload.userId?.trim()) {
+      throw new ApiError('userId is required', 'INVALID_INPUT')
+    }
+    if (!Number.isFinite(payload.leverage) || payload.leverage <= 0) {
+      throw new ApiError('leverage is required', 'INVALID_INPUT')
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/account/ai-quant/strategies/${encodeURIComponent(strategyId)}/execution/leverage`,
+      {
+        method: 'POST',
+        headers: buildAccountAiQuantHeaders(payload.userId.trim()),
+        body: JSON.stringify({
+          userId: payload.userId.trim(),
+          leverage: payload.leverage,
+        }),
+      },
+    )
+    const json = await parseAccountAiQuantJson(response, '更新策略杠杆失败')
+    return unwrapResponse<AccountAiQuantStrategyDetail>(
+      json as AccountAiQuantStrategyDetail | BaseResponse<AccountAiQuantStrategyDetail>,
+    )
+  }, 'UPDATE_ACCOUNT_AI_QUANT_STRATEGY_LEVERAGE')
 }
 
 // ===== 聚合爆仓数据（Liquidation Data）API =====
@@ -2299,6 +2400,11 @@ export interface LlmCodegenSessionResponse {
   assistantPrompt?: string
   clarificationGate?: LlmClarificationGate | null
   publicationGate?: LlmPublicationGate | null
+  publishedSnapshotStrategyConfig?: AccountAiQuantPublishedStrategyConfig | null
+  publishedSnapshotBacktestConfigDefaults?: AccountAiQuantBacktestConfigDefaults | null
+  publishedSnapshotDeploymentExecutionDefaults?: AccountAiQuantDeploymentExecutionConfig | null
+  publishedSnapshotDeploymentExecutionConstraints?: AccountAiQuantDeploymentExecutionConstraints | null
+  publishedSnapshotCompatibilityMetadata?: AccountAiQuantSnapshotCompatibilityMetadata | null
 }
 
 export interface AiQuantConversationResponse {
@@ -2324,6 +2430,11 @@ export interface AiQuantConversationResponse {
   rejectReason?: string | null
   clarificationGate?: LlmClarificationGate | null
   publicationGate?: LlmPublicationGate | null
+  publishedSnapshotStrategyConfig?: AccountAiQuantPublishedStrategyConfig | null
+  publishedSnapshotBacktestConfigDefaults?: AccountAiQuantBacktestConfigDefaults | null
+  publishedSnapshotDeploymentExecutionDefaults?: AccountAiQuantDeploymentExecutionConfig | null
+  publishedSnapshotDeploymentExecutionConstraints?: AccountAiQuantDeploymentExecutionConstraints | null
+  publishedSnapshotCompatibilityMetadata?: AccountAiQuantSnapshotCompatibilityMetadata | null
 }
 
 export interface LlmClarificationGateItem {

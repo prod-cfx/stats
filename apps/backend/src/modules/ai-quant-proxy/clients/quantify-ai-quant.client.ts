@@ -96,6 +96,22 @@ export class QuantifyAiQuantClient {
     )
   }
 
+  async updateAccountStrategyExecutionLeverage(
+    strategyId: string,
+    body: Record<string, unknown>,
+    options: QuantifyRequestOptions & { userId: string },
+  ) {
+    return this.runRequest(
+      signal =>
+        this.client.AccountStrategyViewController_updateExecutionLeverage(body, {
+          params: { id: strategyId },
+          headers: buildUserHeaders(options.userId, options.headers?.authorization),
+          signal,
+        }) as Promise<unknown>,
+      options,
+    )
+  }
+
   async deleteAccountStrategy(strategyId: string, options: QuantifyRequestOptions & { userId: string }): Promise<void> {
     await this.runRequest<void>(
       signal =>

@@ -64,12 +64,25 @@ function formatOptionalAmount(value: number | null | undefined) {
   return formatAmount(value)
 }
 
+function formatExecutionValue(value: string | number | null | undefined, suffix = '') {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return `${value}${suffix}`
+  }
+  if (typeof value === 'string' && value.trim()) {
+    return `${value}${suffix}`
+  }
+  return '--'
+}
+
 interface AiQuantStrategyDetailProps {
   lng: 'zh' | 'en'
   strategy: AiQuantStrategyRecord | null
   onRunBacktest?: () => void
   isBacktestRunning?: boolean
   backtestError?: string | null
+  onUpdateLeverage?: (leverage: number) => Promise<void> | void
+  isUpdatingLeverage?: boolean
+  leverageUpdateError?: string | null
 }
 
 export function AiQuantStrategyDetail({
@@ -78,9 +91,13 @@ export function AiQuantStrategyDetail({
   onRunBacktest,
   isBacktestRunning = false,
   backtestError = null,
+  onUpdateLeverage,
+  isUpdatingLeverage = false,
+  leverageUpdateError = null,
 }: AiQuantStrategyDetailProps) {
   const { t } = useTranslation()
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+  const [leverageDraft, setLeverageDraft] = useState<number | ''>('')
   const series = strategy?.equitySeries ?? []
   const coords = useMemo(() => buildCoordinates(series), [series])
   const { displayTotalPnl, displayTodayPnl } = useMemo(
@@ -100,6 +117,13 @@ export function AiQuantStrategyDetail({
     () => buildDynamicParamRows(strategy?.paramSchema ?? null, strategy?.paramValues ?? null),
     [strategy?.paramSchema, strategy?.paramValues],
   )
+  const canEditLeverage = Boolean(strategy?.canEditDeploymentLeverage && onUpdateLeverage)
+  const leverageOptions = useMemo(() => {
+    if (!strategy?.deploymentLeverageRange) return []
+    return Array.from({
+      length: strategy.deploymentLeverageRange.max - strategy.deploymentLeverageRange.min + 1,
+    }).map((_, index) => strategy.deploymentLeverageRange!.min + index)
+  }, [strategy?.deploymentLeverageRange])
 
   const canRunBacktest = !!strategy?.publishedSnapshotId && !isBacktestRunning
 
@@ -153,6 +177,111 @@ export function AiQuantStrategyDetail({
       {backtestError && (
         <section className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
           {backtestError}
+        </section>
+      )}
+
+      {strategy.compatibilityMetadata?.isLegacySnapshot && (
+        <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          <p className="font-semibold text-amber-100">需要重新发布</p>
+          <p className="mt-1">
+            当前快照仍是 legacy 结构。
+            {strategy.compatibilityMetadata.requiresRepublishForBacktest ? ' 回测前需要重新发布。' : ''}
+            {strategy.compatibilityMetadata.requiresRepublishForDeploy ? ' 重新部署前也需要重新发布。' : ''}
+          </p>
+        </section>
+      )}
+
+      {(strategy.snapshotBacktestConfigDefaults || strategy.deploymentExecutionBaseline || strategy.deploymentExecutionCurrent) && (
+        <section className="grid gap-4 md:grid-cols-2">
+          {strategy.snapshotBacktestConfigDefaults && (
+            <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
+              <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">回测基线</h2>
+              <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                <p className="text-[color:var(--cf-muted)]">初始资金</p>
+                <p className="text-right text-[color:var(--cf-text-strong)]">
+                  {formatExecutionValue(strategy.snapshotBacktestConfigDefaults.initialCash, ' USDT')}
+                </p>
+                <p className="text-[color:var(--cf-muted)]">回测杠杆</p>
+                <p className="text-right text-[color:var(--cf-text-strong)]">
+                  {formatExecutionValue(strategy.snapshotBacktestConfigDefaults.leverage, 'x')}
+                </p>
+                <p className="text-[color:var(--cf-muted)]">价格来源</p>
+                <p className="text-right text-[color:var(--cf-text-strong)]">
+                  {formatExecutionValue(strategy.snapshotBacktestConfigDefaults.priceSource)}
+                </p>
+              </div>
+            </article>
+          )}
+
+          {(strategy.deploymentExecutionBaseline || strategy.deploymentExecutionCurrent) && (
+            <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
+              <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">执行配置</h2>
+              <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                <p className="text-[color:var(--cf-muted)]">基线执行杠杆</p>
+                <p className="text-right text-[color:var(--cf-text-strong)]">
+                  {formatExecutionValue(strategy.deploymentExecutionBaseline?.leverage, 'x')}
+                </p>
+                <p className="text-[color:var(--cf-muted)]">当前执行杠杆</p>
+                <p className="text-right text-[color:var(--cf-text-strong)]">
+                  {formatExecutionValue(strategy.deploymentExecutionCurrent?.leverage, 'x')}
+                </p>
+                <p className="text-[color:var(--cf-muted)]">价格来源</p>
+                <p className="text-right text-[color:var(--cf-text-strong)]">
+                  {formatExecutionValue(strategy.deploymentExecutionCurrent?.priceSource ?? strategy.deploymentExecutionBaseline?.priceSource)}
+                </p>
+                <p className="text-[color:var(--cf-muted)]">允许杠杆范围</p>
+                <p className="text-right text-[color:var(--cf-text-strong)]">
+                  {strategy.deploymentLeverageRange
+                    ? `${strategy.deploymentLeverageRange.min}x - ${strategy.deploymentLeverageRange.max}x`
+                    : '--'}
+                </p>
+              </div>
+              {strategy.deploymentConstraintExplanation && (
+                <p className="mt-3 text-xs text-[color:var(--cf-muted)]">{strategy.deploymentConstraintExplanation}</p>
+              )}
+              {strategy.consistencySummary?.driftReasons?.length
+                ? (
+                    <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+                      {strategy.consistencySummary.driftReasons.join(' / ')}
+                    </div>
+                  )
+                : null}
+              {canEditLeverage && (
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  <label className="text-xs text-[color:var(--cf-muted)]" htmlFor="deployment-leverage">
+                    部署杠杆
+                  </label>
+                  <select
+                    id="deployment-leverage"
+                    name="deployment-leverage"
+                    value={leverageDraft === '' ? '' : String(leverageDraft)}
+                    onChange={(event) => setLeverageDraft(Number(event.target.value))}
+                    className="h-9 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-2 text-sm text-[color:var(--cf-text)]"
+                  >
+                    <option value="">选择杠杆</option>
+                    {leverageOptions.map(option => (
+                      <option key={option} value={option}>{option}x</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (typeof leverageDraft === 'number' && Number.isFinite(leverageDraft)) {
+                        void onUpdateLeverage?.(leverageDraft)
+                      }
+                    }}
+                    disabled={typeof leverageDraft !== 'number' || isUpdatingLeverage}
+                    className="rounded-lg border border-cyan-500/30 px-3 py-1.5 text-xs font-semibold text-cyan-300 disabled:cursor-not-allowed disabled:border-[color:var(--cf-border)] disabled:text-[color:var(--cf-muted)]"
+                  >
+                    {isUpdatingLeverage ? '更新中…' : '更新杠杆'}
+                  </button>
+                </div>
+              )}
+              {leverageUpdateError && (
+                <p className="mt-2 text-xs text-rose-300">{leverageUpdateError}</p>
+              )}
+            </article>
+          )}
         </section>
       )}
 

@@ -114,4 +114,32 @@ describe('accountStrategyViewController', () => {
     expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token', 'caller-u1')
     expect(service.deleteStrategy).toHaveBeenCalledWith('caller-u1', 'inst-1')
   })
+
+  it('injects caller userId into deployment leverage update dto', async () => {
+    const service = {
+      updateDeploymentLeverage: jest.fn().mockResolvedValue({ id: 'inst-1' }),
+    }
+    const { controller, callerIdentityService } = createController(service)
+
+    await controller.updateDeploymentLeverage(
+      'inst-1',
+      {
+        userId: 'attacker',
+        leverage: 4,
+        reason: 'reduce risk',
+      } as any,
+      'Bearer token',
+      'caller-u1',
+    )
+
+    expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token', 'caller-u1')
+    expect(service.updateDeploymentLeverage).toHaveBeenCalledWith(
+      'inst-1',
+      expect.objectContaining({
+        userId: 'caller-u1',
+        leverage: 4,
+        reason: 'reduce risk',
+      }),
+    )
+  })
 })

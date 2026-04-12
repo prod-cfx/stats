@@ -235,12 +235,28 @@ function seedConfirmedConversation(now = Date.now()) {
         sellWindowMin: 15,
         sellRisePct: 2,
         positionPct: 10,
-        backtestInitialCash: 10000,
-        backtestLeverage: 1,
-        backtestSlippageBps: 10,
-        backtestFeeBps: 5,
-        backtestPriceSource: 'close',
-        backtestAllowPartial: true,
+      },
+      publishedSnapshotStrategyConfig: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: true,
+      },
+      publishedSnapshotCompatibilityMetadata: {
+        isLegacySnapshot: false,
+        missingBacktestConfigDefaults: false,
+        missingDeploymentExecutionDefaults: false,
+        missingDeploymentExecutionConstraints: false,
+        requiresRepublishForBacktest: false,
+        requiresRepublishForDeploy: false,
       },
       latestSignalMessage: null,
       backtestExecutionConfigExplicit: true,
@@ -363,11 +379,11 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     }))
   })
 
-  it('blocks backtest when editable params drift from published snapshot truth', async () => {
+  it('blocks backtest when strategy params drift from published snapshot truth', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
     seeded[0].paramValues = {
       ...seeded[0].paramValues,
-      backtestLeverage: 8,
+      positionPct: 22,
     }
     localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(seeded))
 
@@ -694,14 +710,13 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       backtestPriceSource: 'mid',
       backtestAllowPartial: false,
     }
-    seeded[0].publishedSnapshotParamValues = {
-      ...seeded[0].publishedSnapshotParamValues,
-      backtestInitialCash: 25000,
-      backtestLeverage: 3,
-      backtestSlippageBps: 12,
-      backtestFeeBps: 4,
-      backtestPriceSource: 'mid',
-      backtestAllowPartial: false,
+    seeded[0].publishedSnapshotBacktestConfigDefaults = {
+      initialCash: 25000,
+      leverage: 3,
+      slippageBps: 12,
+      feeBps: 4,
+      priceSource: 'mid',
+      allowPartial: false,
     }
     localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(seeded))
 
@@ -741,14 +756,13 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       backtestPriceSource: 'close',
       backtestAllowPartial: true,
     }
-    seeded[0].publishedSnapshotParamValues = {
-      ...seeded[0].publishedSnapshotParamValues,
-      backtestInitialCash: 10000,
-      backtestLeverage: 1,
-      backtestSlippageBps: 10,
-      backtestFeeBps: 5,
-      backtestPriceSource: 'close',
-      backtestAllowPartial: true,
+    seeded[0].publishedSnapshotBacktestConfigDefaults = {
+      initialCash: 10000,
+      leverage: 1,
+      slippageBps: 10,
+      feeBps: 5,
+      priceSource: 'close',
+      allowPartial: true,
     }
     localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(seeded))
 
@@ -804,9 +818,9 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       ...seeded[0].paramValues,
       backtestAllowPartial: 'maybe',
     }
-    seeded[0].publishedSnapshotParamValues = {
-      ...seeded[0].publishedSnapshotParamValues,
-      backtestAllowPartial: 'maybe',
+    seeded[0].publishedSnapshotBacktestConfigDefaults = {
+      ...seeded[0].publishedSnapshotBacktestConfigDefaults,
+      allowPartial: 'maybe',
     }
     localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(seeded))
 
@@ -837,14 +851,13 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       backtestPriceSource: 'close',
       backtestAllowPartial: true,
     }
-    seeded[0].publishedSnapshotParamValues = {
-      ...seeded[0].publishedSnapshotParamValues,
-      backtestInitialCash: 10000,
-      backtestLeverage: 1,
-      backtestSlippageBps: 10,
-      backtestFeeBps: 5,
-      backtestPriceSource: 'close',
-      backtestAllowPartial: true,
+    seeded[0].publishedSnapshotBacktestConfigDefaults = {
+      initialCash: 10000,
+      leverage: 1,
+      slippageBps: 10,
+      feeBps: 5,
+      priceSource: 'close',
+      allowPartial: true,
     }
     localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(seeded))
 
@@ -869,6 +882,41 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       }),
       allowPartial: true,
     }))
+  })
+
+  it('fails closed for published snapshot backtest when truthful backtest baseline is missing even if old param snapshot exists', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    seeded[0].publishedSnapshotBacktestConfigDefaults = null
+    seeded[0].publishedSnapshotCompatibilityMetadata = {
+      isLegacySnapshot: true,
+      missingBacktestConfigDefaults: true,
+      missingDeploymentExecutionDefaults: true,
+      missingDeploymentExecutionConstraints: true,
+      requiresRepublishForBacktest: true,
+      requiresRepublishForDeploy: true,
+    }
+    seeded[0].publishedSnapshotBacktestConfigDefaults = {
+      initialCash: 10000,
+      leverage: 1,
+      slippageBps: 10,
+      feeBps: 5,
+      priceSource: 'close',
+      allowPartial: true,
+    }
+    localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(seeded))
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mockCreateBacktestJob).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('重新发布')
   })
 
   it('double click triggers only one create job call', async () => {

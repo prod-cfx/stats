@@ -12,6 +12,7 @@ describe('aiQuantProxyService', () => {
       delete: jest.fn(),
       deleteAccountStrategy: jest.fn(),
       deployAccountStrategy: jest.fn(),
+      updateAccountStrategyExecutionLeverage: jest.fn(),
       startCodegen: jest.fn(),
       continueCodegen: jest.fn(),
       getCodegenSession: jest.fn(),
@@ -100,6 +101,7 @@ describe('aiQuantProxyService', () => {
       deployRequestId: 'deploy-req-1',
       publishedSnapshotId: 'snapshot-1',
       exchangeAccountId: 'acc-1',
+      leverage: 4,
     })
 
     expect(quantifyClient.deployAccountStrategy).toHaveBeenCalledWith(
@@ -109,6 +111,25 @@ describe('aiQuantProxyService', () => {
         deployRequestId: 'deploy-req-1',
         publishedSnapshotId: 'snapshot-1',
         exchangeAccountId: 'acc-1',
+        leverage: 4,
+      },
+      { userId: 'user-1', headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
+    )
+  })
+
+  it('forwards leverage-only execution updates with backend-controlled user identity', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.updateAccountStrategyExecutionLeverage.mockResolvedValue({ id: 'strategy-1', status: 'draft' })
+
+    await service.updateAccountStrategyExecutionLeverage('user-1', 'Bearer token-1', 'strategy-1', {
+      leverage: 6,
+    })
+
+    expect(quantifyClient.updateAccountStrategyExecutionLeverage).toHaveBeenCalledWith(
+      'strategy-1',
+      {
+        userId: 'user-1',
+        leverage: 6,
       },
       { userId: 'user-1', headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
     )

@@ -27,6 +27,13 @@ interface DeployStrategyInput {
   symbol: string
   timeframe: string
   positionPct: number
+  deploymentExecutionConfig?: {
+    leverage?: number | null
+    priceSource?: string | null
+    orderType?: string | null
+    timeInForce?: string | null
+  }
+  executionConfigVersion?: number
   publishedSnapshotBinding?: {
     bindingSource: 'PUBLISHED_SNAPSHOT'
     publishedSnapshotId: string
@@ -151,6 +158,12 @@ export class AccountStrategyViewRepository {
           symbol: input.symbol,
           timeframe: input.timeframe,
           positionPct: input.positionPct,
+          ...(input.deploymentExecutionConfig
+            ? {
+                deploymentExecutionConfig: input.deploymentExecutionConfig,
+                executionConfigVersion: input.executionConfigVersion ?? 1,
+              }
+            : {}),
           ...(typeof input.initialBalanceQuote === 'number' && Number.isFinite(input.initialBalanceQuote)
             ? { initialBalanceQuote: input.initialBalanceQuote }
             : {}),
@@ -167,6 +180,8 @@ export class AccountStrategyViewRepository {
             name: normalizedName,
             description: `AI 策略部署 - ${input.symbol}`,
             params: mergedParams,
+            deploymentExecutionConfig: input.deploymentExecutionConfig as Prisma.InputJsonValue | undefined,
+            executionConfigVersion: input.executionConfigVersion ?? 1,
             status: 'running',
             mode: resolvedMode,
             startedAt: new Date(),
@@ -177,7 +192,7 @@ export class AccountStrategyViewRepository {
               sourceStrategyInstanceId: existingInstance.id,
               ...snapshotBindingMetadata,
             },
-          },
+          } as any,
         })
 
         const existingSubscription = await tx.userStrategySubscription.findFirst({
@@ -515,6 +530,41 @@ export class AccountStrategyViewRepository {
       return new Prisma.Decimal(numeric)
     }
     return fallbackInitialBalance
+  }
+
+  async updateDeploymentExecutionConfig(input: {
+    strategyInstanceId: string
+    userId: string
+    executionConfig: {
+      leverage: number
+      priceSource: string
+      orderType: string
+      timeInForce: string
+    }
+    executionConfigVersion: number
+    existingParams: Record<string, unknown>
+    existingMetadata: Record<string, unknown>
+    reason?: string
+  }) {
+    return this.txHost.tx.strategyInstance.update({
+      where: { id: input.strategyInstanceId },
+      data: {
+        deploymentExecutionConfig: input.executionConfig as Prisma.InputJsonValue,
+        executionConfigVersion: input.executionConfigVersion,
+        updatedBy: input.userId,
+        params: {
+          ...input.existingParams,
+          deploymentExecutionConfig: input.executionConfig,
+          executionConfigVersion: input.executionConfigVersion,
+        } as Prisma.InputJsonValue,
+        metadata: {
+          ...input.existingMetadata,
+          executionConfigVersion: input.executionConfigVersion,
+          reReadAtNextEligibleExecutionCycle: true,
+          ...(input.reason ? { executionConfigUpdateReason: input.reason } : {}),
+        } as Prisma.InputJsonValue,
+      } as any,
+    })
   }
 
   async findStrategyForUser(userId: string, strategyInstanceId: string) {

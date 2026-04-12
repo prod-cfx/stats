@@ -23,6 +23,10 @@ export interface CreatePublishedStrategySnapshotInput {
   lockedParams: Record<string, unknown>
   snapshotVersion?: number
   paramsSnapshot?: Record<string, unknown> | null
+  strategyConfig?: Record<string, unknown> | null
+  backtestConfigDefaults?: Record<string, unknown> | null
+  deploymentExecutionDefaults?: Record<string, unknown> | null
+  deploymentExecutionConstraints?: Record<string, unknown> | null
   executionEnvelope?: Record<string, unknown> | null
   executionPolicy?: Record<string, unknown> | null
   dataRequirements?: Record<string, unknown> | null
@@ -79,6 +83,16 @@ export class PublishedStrategySnapshotsRepository {
     const normalizedScriptSummary = stableJsonStringify(input.scriptSummary)
     const normalizedLockedParams = stableJsonStringify(input.lockedParams)
     const normalizedParams = input.paramsSnapshot ? stableJsonStringify(input.paramsSnapshot) : null
+    const normalizedStrategyConfig = input.strategyConfig ? stableJsonStringify(input.strategyConfig) : null
+    const normalizedBacktestConfigDefaults = input.backtestConfigDefaults
+      ? stableJsonStringify(input.backtestConfigDefaults)
+      : null
+    const normalizedDeploymentExecutionDefaults = input.deploymentExecutionDefaults
+      ? stableJsonStringify(input.deploymentExecutionDefaults)
+      : null
+    const normalizedDeploymentExecutionConstraints = input.deploymentExecutionConstraints
+      ? stableJsonStringify(input.deploymentExecutionConstraints)
+      : null
     const normalizedExecutionEnvelope = input.executionEnvelope ? stableJsonStringify(input.executionEnvelope) : null
     const normalizedExecutionPolicy = input.executionPolicy ? stableJsonStringify(input.executionPolicy) : null
     const normalizedDataRequirements = input.dataRequirements ? stableJsonStringify(input.dataRequirements) : null
@@ -108,36 +122,46 @@ export class PublishedStrategySnapshotsRepository {
       sha256(normalizedLockedParams),
       sha256(String(snapshotVersion)),
       normalizedParams ? sha256(normalizedParams) : '',
+      normalizedStrategyConfig ? sha256(normalizedStrategyConfig) : '',
+      normalizedBacktestConfigDefaults ? sha256(normalizedBacktestConfigDefaults) : '',
+      normalizedDeploymentExecutionDefaults ? sha256(normalizedDeploymentExecutionDefaults) : '',
+      normalizedDeploymentExecutionConstraints ? sha256(normalizedDeploymentExecutionConstraints) : '',
       normalizedExecutionPolicy ? sha256(normalizedExecutionPolicy) : '',
       normalizedDataRequirements ? sha256(normalizedDataRequirements) : '',
     ].join(':'))
 
+    const data = {
+      session: { connect: { id: input.sessionId } },
+      strategyTemplateId: input.strategyTemplateId ?? null,
+      strategyInstanceId: input.strategyInstanceId ?? null,
+      snapshotHash,
+      scriptHash,
+      specHash,
+      scriptSnapshot: normalizedScript,
+      specSnapshot: input.specSnapshot as Prisma.InputJsonValue,
+      semanticGraph: input.semanticGraph as Prisma.InputJsonValue | null | undefined,
+      compiledIr: input.compiledIr as Prisma.InputJsonValue | null | undefined,
+      irSnapshot: input.irSnapshot as Prisma.InputJsonValue | null | undefined,
+      astSnapshot: input.astSnapshot as Prisma.InputJsonValue | null | undefined,
+      compiledManifest: input.compiledManifest as Prisma.InputJsonValue | null | undefined,
+      consistencyReport: input.consistencyReport as Prisma.InputJsonValue,
+      userIntentSummary: input.userIntentSummary as Prisma.InputJsonValue,
+      strategySummary: input.strategySummary as Prisma.InputJsonValue,
+      scriptSummary: input.scriptSummary as Prisma.InputJsonValue,
+      lockedParams: input.lockedParams as Prisma.InputJsonValue,
+      snapshotVersion,
+      paramsSnapshot: input.paramsSnapshot as Prisma.InputJsonValue | null | undefined,
+      strategyConfig: input.strategyConfig as Prisma.InputJsonValue | null | undefined,
+      backtestConfigDefaults: input.backtestConfigDefaults as Prisma.InputJsonValue | null | undefined,
+      deploymentExecutionDefaults: input.deploymentExecutionDefaults as Prisma.InputJsonValue | null | undefined,
+      deploymentExecutionConstraints: input.deploymentExecutionConstraints as Prisma.InputJsonValue | null | undefined,
+      executionEnvelope: input.executionEnvelope as Prisma.InputJsonValue | null | undefined,
+      executionPolicy: input.executionPolicy as Prisma.InputJsonValue | null | undefined,
+      dataRequirements: input.dataRequirements as Prisma.InputJsonValue | null | undefined,
+    } as Prisma.PublishedStrategySnapshotCreateInput
+
     return this.txHost.tx.publishedStrategySnapshot.create({
-      data: {
-        session: { connect: { id: input.sessionId } },
-        strategyTemplateId: input.strategyTemplateId ?? null,
-        strategyInstanceId: input.strategyInstanceId ?? null,
-        snapshotHash,
-        scriptHash,
-        specHash,
-        scriptSnapshot: normalizedScript,
-        specSnapshot: input.specSnapshot as Prisma.InputJsonValue,
-        semanticGraph: input.semanticGraph as Prisma.InputJsonValue | null | undefined,
-        compiledIr: input.compiledIr as Prisma.InputJsonValue | null | undefined,
-        irSnapshot: input.irSnapshot as Prisma.InputJsonValue | null | undefined,
-        astSnapshot: input.astSnapshot as Prisma.InputJsonValue | null | undefined,
-        compiledManifest: input.compiledManifest as Prisma.InputJsonValue | null | undefined,
-        consistencyReport: input.consistencyReport as Prisma.InputJsonValue,
-        userIntentSummary: input.userIntentSummary as Prisma.InputJsonValue,
-        strategySummary: input.strategySummary as Prisma.InputJsonValue,
-        scriptSummary: input.scriptSummary as Prisma.InputJsonValue,
-        lockedParams: input.lockedParams as Prisma.InputJsonValue,
-        snapshotVersion,
-        paramsSnapshot: input.paramsSnapshot as Prisma.InputJsonValue | null | undefined,
-        executionEnvelope: input.executionEnvelope as Prisma.InputJsonValue | null | undefined,
-        executionPolicy: input.executionPolicy as Prisma.InputJsonValue | null | undefined,
-        dataRequirements: input.dataRequirements as Prisma.InputJsonValue | null | undefined,
-      },
+      data,
     })
   }
 

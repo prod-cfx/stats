@@ -20,6 +20,10 @@ interface PublishedSnapshotRecord {
   compiledManifest?: unknown
   specSnapshot?: unknown
   paramsSnapshot?: unknown
+  strategyConfig?: unknown
+  backtestConfigDefaults?: unknown
+  deploymentExecutionDefaults?: unknown
+  deploymentExecutionConstraints?: unknown
   lockedParams?: unknown
   executionPolicy?: unknown
   dataRequirements?: unknown
@@ -37,6 +41,35 @@ export interface SnapshotBacktestStrategyInput {
   publishedSnapshotId: string
   userId: string
   params?: Record<string, unknown>
+}
+
+interface FormalSnapshotTruth {
+  strategyConfig: {
+    exchange: string
+    symbol: string
+    marketType: string
+    baseTimeframe: string
+    positionPct: number
+  }
+  backtestConfigDefaults: {
+    initialCash: number
+    leverage: number
+    slippageBps: number
+    feeBps: number
+    priceSource: 'open' | 'close' | 'mid'
+    allowPartial: boolean
+  }
+  deploymentExecutionDefaults: {
+    priceSource: string
+    orderType: string
+    timeInForce: string
+  }
+  deploymentExecutionConstraints: {
+    defaultLeverage: number
+    supportedPriceSources: string[]
+    supportedOrderTypes: string[]
+    supportedTimeInForce: string[]
+  }
 }
 
 @Injectable()
@@ -57,10 +90,10 @@ export class BacktestSnapshotLoaderService {
       })
     }
     const publishedSnapshot = snapshot as unknown as PublishedSnapshotRecord
+    const formalTruth = this.resolveFormalSnapshotTruth(publishedSnapshot)
     const strictParams = this.resolveStrictParams({
       id: publishedSnapshot.id,
-      paramsSnapshot: publishedSnapshot.paramsSnapshot,
-      lockedParams: publishedSnapshot.lockedParams,
+      strategyConfig: formalTruth.strategyConfig,
     })
     this.compiledSnapshotPreflight.validate(publishedSnapshot)
 
@@ -100,14 +133,14 @@ export class BacktestSnapshotLoaderService {
 
   private resolveStrictParams(snapshot: {
     id: string
-    paramsSnapshot?: unknown
-    lockedParams?: unknown
+    strategyConfig: FormalSnapshotTruth['strategyConfig']
   }): Record<string, unknown> {
-    const paramsSnapshot = this.readJsonRecord(snapshot.paramsSnapshot)
-    const lockedParams = this.readJsonRecord(snapshot.lockedParams)
     const resolvedParams = {
-      ...(paramsSnapshot ?? {}),
-      ...(lockedParams ?? {}),
+      exchange: snapshot.strategyConfig.exchange,
+      symbol: snapshot.strategyConfig.symbol,
+      marketType: snapshot.strategyConfig.marketType,
+      timeframe: snapshot.strategyConfig.baseTimeframe,
+      positionPct: snapshot.strategyConfig.positionPct,
     }
 
     const positionPct = resolvedParams?.positionPct
@@ -121,6 +154,51 @@ export class BacktestSnapshotLoaderService {
     }
 
     return resolvedParams
+  }
+
+  private resolveFormalSnapshotTruth(snapshot: PublishedSnapshotRecord): FormalSnapshotTruth {
+    const missingFields: string[] = []
+
+    const strategyConfigRaw = this.readJsonRecord(snapshot.strategyConfig)
+    const strategyConfig = strategyConfigRaw ? this.parseStrategyConfig(strategyConfigRaw) : null
+    if (!strategyConfig) missingFields.push('strategyConfig')
+
+    const backtestConfigDefaultsRaw = this.readJsonRecord(snapshot.backtestConfigDefaults)
+    const backtestConfigDefaults = backtestConfigDefaultsRaw
+      ? this.parseBacktestConfigDefaults(backtestConfigDefaultsRaw)
+      : null
+    if (!backtestConfigDefaults) missingFields.push('backtestConfigDefaults')
+
+    const deploymentExecutionDefaultsRaw = this.readJsonRecord(snapshot.deploymentExecutionDefaults)
+    const deploymentExecutionDefaults = deploymentExecutionDefaultsRaw
+      ? this.parseDeploymentExecutionDefaults(deploymentExecutionDefaultsRaw)
+      : null
+    if (!deploymentExecutionDefaults) missingFields.push('deploymentExecutionDefaults')
+
+    const deploymentExecutionConstraintsRaw = this.readJsonRecord(snapshot.deploymentExecutionConstraints)
+    const deploymentExecutionConstraints = deploymentExecutionConstraintsRaw
+      ? this.parseDeploymentExecutionConstraints(deploymentExecutionConstraintsRaw)
+      : null
+    if (!deploymentExecutionConstraints) missingFields.push('deploymentExecutionConstraints')
+
+    if (missingFields.length > 0) {
+      throw new DomainException('backtest.invalid_snapshot_execution_config', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: {
+          snapshotId: snapshot.id,
+          missingFields,
+          requiresRepublish: true,
+        },
+      })
+    }
+
+    return {
+      strategyConfig,
+      backtestConfigDefaults,
+      deploymentExecutionDefaults,
+      deploymentExecutionConstraints,
+    }
   }
 
   private resolveStrategyId(
@@ -137,6 +215,107 @@ export class BacktestSnapshotLoaderService {
   private readJsonRecord(raw: unknown): Record<string, unknown> | null {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
     return raw as Record<string, unknown>
+  }
+
+  private parseStrategyConfig(raw: Record<string, unknown>): FormalSnapshotTruth['strategyConfig'] | null {
+    const exchange = this.readTrimmedString(raw.exchange)
+    const symbol = this.readTrimmedString(raw.symbol)
+    const marketType = this.readTrimmedString(raw.marketType)
+    const baseTimeframe = this.readTrimmedString(raw.baseTimeframe)
+    const positionPct = this.readFiniteNumber(raw.positionPct)
+    if (!exchange || !symbol || !marketType || !baseTimeframe || positionPct === null) {
+      return null
+    }
+
+    return {
+      exchange,
+      symbol,
+      marketType,
+      baseTimeframe,
+      positionPct,
+    }
+  }
+
+  private parseBacktestConfigDefaults(raw: Record<string, unknown>): FormalSnapshotTruth['backtestConfigDefaults'] | null {
+    const initialCash = this.readFiniteNumber(raw.initialCash)
+    const leverage = this.readFiniteNumber(raw.leverage)
+    const slippageBps = this.readFiniteNumber(raw.slippageBps)
+    const feeBps = this.readFiniteNumber(raw.feeBps)
+    const priceSource = raw.priceSource
+    const allowPartial = raw.allowPartial
+
+    if (
+      initialCash === null || initialCash <= 0
+      || leverage === null || leverage <= 0
+      || slippageBps === null || slippageBps < 0
+      || feeBps === null || feeBps < 0
+      || (priceSource !== 'open' && priceSource !== 'close' && priceSource !== 'mid')
+      || typeof allowPartial !== 'boolean'
+    ) {
+      return null
+    }
+
+    return {
+      initialCash,
+      leverage,
+      slippageBps,
+      feeBps,
+      priceSource,
+      allowPartial,
+    }
+  }
+
+  private parseDeploymentExecutionDefaults(raw: Record<string, unknown>): FormalSnapshotTruth['deploymentExecutionDefaults'] | null {
+    const priceSource = this.readTrimmedString(raw.priceSource)
+    const orderType = this.readTrimmedString(raw.orderType)
+    const timeInForce = this.readTrimmedString(raw.timeInForce)
+    if (!priceSource || !orderType || !timeInForce) {
+      return null
+    }
+
+    return {
+      priceSource,
+      orderType,
+      timeInForce,
+    }
+  }
+
+  private parseDeploymentExecutionConstraints(raw: Record<string, unknown>): FormalSnapshotTruth['deploymentExecutionConstraints'] | null {
+    const defaultLeverage = this.readFiniteNumber(raw.defaultLeverage)
+    const supportedPriceSources = this.readStringArray(raw.supportedPriceSources)
+    const supportedOrderTypes = this.readStringArray(raw.supportedOrderTypes)
+    const supportedTimeInForce = this.readStringArray(raw.supportedTimeInForce)
+
+    if (
+      defaultLeverage === null || defaultLeverage <= 0
+      || supportedPriceSources.length === 0
+      || supportedOrderTypes.length === 0
+      || supportedTimeInForce.length === 0
+    ) {
+      return null
+    }
+
+    return {
+      defaultLeverage,
+      supportedPriceSources,
+      supportedOrderTypes,
+      supportedTimeInForce,
+    }
+  }
+
+  private readTrimmedString(value: unknown): string | null {
+    if (typeof value !== 'string') return null
+    const normalized = value.trim()
+    return normalized.length > 0 ? normalized : null
+  }
+
+  private readFiniteNumber(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+
+  private readStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) return []
+    return value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
   }
 
   private resolveSpecHash(snapshot: {

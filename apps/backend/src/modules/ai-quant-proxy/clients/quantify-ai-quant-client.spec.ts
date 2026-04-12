@@ -10,7 +10,10 @@ describe('quantifyAiQuantClient', () => {
 
   function createContractMock() {
     return {
+      AccountStrategyViewController_detail: jest.fn(),
       AccountStrategyViewController_list: jest.fn(),
+      AccountStrategyViewController_deploy: jest.fn(),
+      AccountStrategyViewController_updateExecutionLeverage: jest.fn(),
       BacktestingController_getCapabilities: jest.fn(),
       BacktestingController_createJob: jest.fn(),
       BacktestingController_checkSymbolSupport: jest.fn(),
@@ -160,6 +163,130 @@ describe('quantifyAiQuantClient', () => {
         subscribedOnly: true,
         excludeDraft: true,
       },
+      headers: {
+        'x-user-id': 'user-1',
+        authorization: 'Bearer token-1',
+      },
+    })
+  })
+
+  it('uses the detail contract alias for account strategy detail passthrough', async () => {
+    const contract = createContractMock()
+    contract.AccountStrategyViewController_detail.mockResolvedValue({
+      data: {
+        id: 'strategy-1',
+        snapshot: {
+          backtestConfigDefaults: { leverage: 1 },
+          deploymentExecutionBaseline: { leverage: 2 },
+          deploymentExecutionCurrent: { leverage: 3 },
+          compatibilityMetadata: { isLegacySnapshot: false },
+          executionConfigVersion: 1,
+        },
+      },
+    })
+    mockedCreateQuantifyApiClient.mockReturnValue(contract as never)
+
+    const client = new QuantifyAiQuantClient(env as any)
+
+    await expect(client.getAccountStrategyDetail('strategy-1', {
+      userId: 'user-1',
+      headers: { authorization: 'Bearer token-1' },
+    })).resolves.toEqual({
+      id: 'strategy-1',
+      snapshot: {
+        backtestConfigDefaults: { leverage: 1 },
+        deploymentExecutionBaseline: { leverage: 2 },
+        deploymentExecutionCurrent: { leverage: 3 },
+        compatibilityMetadata: { isLegacySnapshot: false },
+        executionConfigVersion: 1,
+      },
+    })
+
+    expect(contract.AccountStrategyViewController_detail).toHaveBeenCalledWith({
+      params: { id: 'strategy-1' },
+      headers: {
+        'x-user-id': 'user-1',
+        authorization: 'Bearer token-1',
+      },
+    })
+  })
+
+  it('uses the deploy contract alias for execution-config passthrough', async () => {
+    const contract = createContractMock()
+    contract.AccountStrategyViewController_deploy.mockResolvedValue({
+      data: {
+        id: 'strategy-1',
+        snapshot: {
+          deploymentExecutionCurrent: { leverage: 4 },
+          executionConfigVersion: 1,
+        },
+      },
+    })
+    mockedCreateQuantifyApiClient.mockReturnValue(contract as never)
+
+    const client = new QuantifyAiQuantClient(env as any)
+
+    await expect(client.deployAccountStrategy({
+      publishedSnapshotId: 'snapshot-1',
+      name: 'My Strategy',
+      deployRequestId: 'deploy-1',
+      leverage: 4,
+    }, {
+      userId: 'user-1',
+      headers: { authorization: 'Bearer token-1' },
+    })).resolves.toEqual({
+      id: 'strategy-1',
+      snapshot: {
+        deploymentExecutionCurrent: { leverage: 4 },
+        executionConfigVersion: 1,
+      },
+    })
+
+    expect(contract.AccountStrategyViewController_deploy).toHaveBeenCalledWith({
+      publishedSnapshotId: 'snapshot-1',
+      name: 'My Strategy',
+      deployRequestId: 'deploy-1',
+      leverage: 4,
+    }, {
+      headers: {
+        'x-user-id': 'user-1',
+        authorization: 'Bearer token-1',
+      },
+    })
+  })
+
+  it('uses the leverage-only contract alias for post-deploy execution updates', async () => {
+    const contract = createContractMock()
+    contract.AccountStrategyViewController_updateExecutionLeverage.mockResolvedValue({
+      data: {
+        id: 'strategy-1',
+        snapshot: {
+          deploymentExecutionCurrent: { leverage: 6 },
+          executionConfigVersion: 2,
+        },
+      },
+    })
+    mockedCreateQuantifyApiClient.mockReturnValue(contract as never)
+
+    const client = new QuantifyAiQuantClient(env as any)
+
+    await expect(client.updateAccountStrategyExecutionLeverage('strategy-1', {
+      leverage: 6,
+    }, {
+      userId: 'user-1',
+      headers: { authorization: 'Bearer token-1' },
+    })).resolves.toEqual({
+      id: 'strategy-1',
+      snapshot: {
+        deploymentExecutionCurrent: { leverage: 6 },
+        executionConfigVersion: 2,
+      },
+    })
+
+    expect(contract.AccountStrategyViewController_updateExecutionLeverage).toHaveBeenCalledWith({
+      leverage: 6,
+    }, {
+      params: { id: 'strategy-1' },
       headers: {
         'x-user-id': 'user-1',
         authorization: 'Bearer token-1',

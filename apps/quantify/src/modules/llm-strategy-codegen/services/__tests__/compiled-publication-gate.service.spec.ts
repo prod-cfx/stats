@@ -105,6 +105,37 @@ describe('compiledPublicationGateService', () => {
         marketType: 'spot',
         positionPct: 25,
       },
+      strategyConfig: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        baseTimeframe: '1h',
+        positionPct: 25,
+        strategyDeclaredLeverageRange: null,
+      },
+      backtestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: false,
+      },
+      deploymentExecutionDefaults: {
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'gtc',
+      },
+      deploymentExecutionConstraints: {
+        platformRiskMaxLeverage: 1,
+        strategyDeclaredLeverageRange: null,
+        defaultLeverage: 1,
+        supportedPriceSources: ['close'],
+        supportedOrderTypes: ['market'],
+        supportedTimeInForce: ['gtc'],
+        constraintExplanation: 'strategy/default constraints pending account-capability intersection',
+      },
       executionEnvelope: expect.objectContaining({ marginMode: 'cash' }),
       snapshotVersion: 3,
     }))
@@ -181,6 +212,14 @@ describe('compiledPublicationGateService', () => {
         timeframe: '1h',
         marketType: 'perp',
         positionPct: 25,
+      },
+      strategyConfig: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '1h',
+        positionPct: 25,
+        strategyDeclaredLeverageRange: null,
       },
     }))
   })

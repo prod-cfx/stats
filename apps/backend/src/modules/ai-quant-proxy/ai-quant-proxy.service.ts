@@ -77,6 +77,7 @@ export class AiQuantProxyService {
     if (body.strategyInstanceId !== undefined) payload.strategyInstanceId = body.strategyInstanceId
     if (body.exchangeAccountId !== undefined) payload.exchangeAccountId = body.exchangeAccountId
     if (body.exchangeAccountName !== undefined) payload.exchangeAccountName = body.exchangeAccountName
+    if (body.leverage !== undefined) payload.leverage = body.leverage
 
     for (let attempt = 1; attempt <= AiQuantProxyService.DEPLOY_RETRY_ATTEMPTS; attempt += 1) {
       try {
@@ -99,6 +100,19 @@ export class AiQuantProxyService {
       code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
       status: HttpStatus.SERVICE_UNAVAILABLE,
     })
+  }
+
+  async updateAccountStrategyExecutionLeverage(
+    userId: string,
+    authorization: string | undefined,
+    strategyId: string,
+    body: Record<string, unknown>,
+  ) {
+    return this.quantifyClient.updateAccountStrategyExecutionLeverage(
+      strategyId,
+      { userId, leverage: body.leverage },
+      { userId, headers: this.userHeaders(userId, authorization) },
+    ).catch(error => { throw this.mapQuantifyError(error) })
   }
 
   private async assertExchangeAccountExists(userId: string, exchangeAccountId: unknown): Promise<void> {

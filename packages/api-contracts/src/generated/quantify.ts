@@ -429,6 +429,34 @@ const AccountStrategyListItemDto = z
   })
   .passthrough()
 const AccountStrategyEquityPointDto = z.object({ ts: z.string(), value: z.number() }).passthrough()
+const AccountStrategyExecutionConfigDto = z
+  .object({
+    leverage: z.number().nullish(),
+    priceSource: z.string().nullish(),
+    orderType: z.string().nullish(),
+    timeInForce: z.string().nullish(),
+  })
+  .partial()
+  .passthrough()
+const AccountStrategyCompatibilityMetadataDto = z
+  .object({
+    isLegacySnapshot: z.boolean().optional(),
+    missingBacktestConfigDefaults: z.boolean().optional(),
+    missingDeploymentExecutionDefaults: z.boolean().optional(),
+    missingDeploymentExecutionConstraints: z.boolean().optional(),
+    requiresRepublishForBacktest: z.boolean().optional(),
+    requiresRepublishForDeploy: z.boolean().optional(),
+  })
+  .partial()
+  .passthrough()
+const AccountStrategyConsistencySummaryDto = z
+  .object({
+    isConsistent: z.boolean().optional(),
+    consistencyScore: z.number().optional(),
+    driftReasons: z.array(z.string()).optional(),
+  })
+  .partial()
+  .passthrough()
 const AccountStrategySnapshotDto = z
   .object({
     publishedSnapshotId: z.string().nullable(),
@@ -442,6 +470,15 @@ const AccountStrategySnapshotDto = z
     schemaVersion: z.string().nullable(),
     deployAccountName: z.string().nullable(),
     deployAt: z.string().nullable(),
+    strategyConfig: z.object({}).partial().passthrough().nullish(),
+    backtestConfigDefaults: z.object({}).partial().passthrough().nullish(),
+    deploymentExecutionBaseline: AccountStrategyExecutionConfigDto.nullish(),
+    deploymentExecutionCurrent: AccountStrategyExecutionConfigDto.nullish(),
+    deploymentExecutionConstraints: z.object({}).partial().passthrough().nullish(),
+    effectiveAllowedLeverageRange: z.object({}).partial().passthrough().nullish(),
+    executionConfigVersion: z.number().nullable(),
+    compatibilityMetadata: AccountStrategyCompatibilityMetadataDto.nullish(),
+    consistencySummary: AccountStrategyConsistencySummaryDto.nullish(),
   })
   .partial()
   .passthrough()
@@ -530,6 +567,13 @@ const AccountStrategyDeployDto = z
     userDailyMaxQuote: z.number().optional(),
     userMaxRiskFraction: z.number().optional(),
     exchangeAccountName: z.string().optional(),
+    leverage: z.number().optional(),
+  })
+  .passthrough()
+const AccountStrategyUpdateExecutionLeverageDto = z
+  .object({
+    userId: z.string().optional(),
+    leverage: z.number(),
   })
   .passthrough()
 const CreateStrategyInstanceDto = z
@@ -1405,6 +1449,9 @@ export const schemas = {
   AccountStrategyMetricsDto,
   AccountStrategyListItemDto,
   AccountStrategyEquityPointDto,
+  AccountStrategyExecutionConfigDto,
+  AccountStrategyCompatibilityMetadataDto,
+  AccountStrategyConsistencySummaryDto,
   AccountStrategySnapshotDto,
   AccountStrategyTimelineEventDto,
   AccountStrategyAccountOverviewDto,
@@ -1413,6 +1460,7 @@ export const schemas = {
   AccountStrategyDetailResponseDto,
   AccountStrategyActionDto,
   AccountStrategyDeployDto,
+  AccountStrategyUpdateExecutionLeverageDto,
   CreateStrategyInstanceDto,
   StrategyInstanceStatsDto,
   StrategyInstanceResponseDto,
@@ -1662,6 +1710,35 @@ const endpoints = makeApi([
         name: 'body',
         type: 'Body',
         schema: AccountStrategyDeployDto,
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+    ],
+    response: AccountStrategyDetailResponseDto,
+  },
+  {
+    method: 'post',
+    path: '/account/ai-quant/strategies/:id/execution/leverage',
+    alias: 'AccountStrategyViewController_updateExecutionLeverage',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: AccountStrategyUpdateExecutionLeverageDto,
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
       },
       {
         name: 'authorization',

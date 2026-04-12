@@ -120,10 +120,18 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
           status: 'active',
           customParams: { riskMode: 'aggressive' },
           subscribedAt: new Date('2026-03-20T10:00:00.000Z'),
-          exchangeAccount: { name: '主账户' },
+          exchangeAccount: { id: 'acct-1', name: '主账户', exchangeId: 'okx' },
         }],
         startedAt: new Date('2026-03-20T10:01:00.000Z'),
         updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+        updatedBy: 'user-1',
+        deploymentExecutionConfig: {
+          leverage: 4,
+          priceSource: 'mark',
+          orderType: 'market',
+          timeInForce: 'IOC',
+        },
+        executionConfigVersion: 2,
       }),
       findUserStrategyAccount: jest.fn().mockResolvedValue({
         id: 'acc-1',
@@ -163,6 +171,37 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       findByIdForUser: jest.fn().mockResolvedValue({
         id: 'snapshot-1',
         snapshotHash: 'snapshot-hash-1',
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          baseTimeframe: '15m',
+          marketType: 'perp',
+          positionPct: 25,
+          strategyDeclaredLeverageRange: { min: 1, max: 8 },
+        },
+        backtestConfigDefaults: {
+          initialCash: 20000,
+          leverage: 3,
+          slippageBps: 6,
+          feeBps: 4,
+          priceSource: 'mark',
+          allowPartial: false,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 3,
+          priceSource: 'mark',
+          orderType: 'market',
+          timeInForce: 'IOC',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 5,
+          strategyDeclaredLeverageRange: { min: 1, max: 8 },
+          defaultLeverage: 3,
+          supportedPriceSources: ['mark', 'last'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['IOC'],
+          constraintExplanation: 'platform risk and strategy range',
+        },
         paramsSnapshot: {
           symbol: 'ETHUSDT',
           timeframe: '15m',
@@ -176,6 +215,12 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     }
 
     const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+    const tradingService = {
+      getLeverageConstraints: jest.fn().mockResolvedValue({
+        minLeverage: 1,
+        maxLeverage: 4,
+      }),
+    }
     const service = new AccountStrategyViewService(
       repo as any,
       statsService as any,
@@ -183,7 +228,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       marketDataIngestionService as any,
       undefined,
       undefined,
-      undefined,
+      tradingService as any,
       publishedSnapshotsRepository as any,
     )
     const detail = await service.getStrategyDetail('user-1', 'inst-1')
@@ -247,15 +292,75 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       timeframe: '15m',
       riskMode: 'snapshot-risk',
       positionPct: 25,
-      backtestInitialCash: 10000,
-      backtestLeverage: 1,
-      backtestSlippageBps: 10,
-      backtestFeeBps: 5,
-      backtestPriceSource: 'close',
-      backtestAllowPartial: true,
+    })
+    expect(detail.snapshot.strategyConfig).toEqual({
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      baseTimeframe: '15m',
+      marketType: 'perp',
+      positionPct: 25,
+      strategyDeclaredLeverageRange: { min: 1, max: 8 },
+    })
+    expect(detail.snapshot.backtestConfigDefaults).toEqual({
+      initialCash: 20000,
+      leverage: 3,
+      slippageBps: 6,
+      feeBps: 4,
+      priceSource: 'mark',
+      allowPartial: false,
+    })
+    expect(detail.snapshot.deploymentExecutionBaseline).toEqual({
+      leverage: 3,
+      priceSource: 'mark',
+      orderType: 'market',
+      timeInForce: 'IOC',
+    })
+    expect(detail.snapshot.deploymentExecutionCurrent).toEqual({
+      leverage: 4,
+      priceSource: 'mark',
+      orderType: 'market',
+      timeInForce: 'IOC',
+    })
+    expect(detail.snapshot.deploymentExecutionConstraints).toEqual(expect.objectContaining({
+      platformRiskMaxLeverage: 5,
+      strategyDeclaredLeverageRange: { min: 1, max: 8 },
+      defaultLeverage: 3,
+      accountMaxLeverage: 4,
+    }))
+    expect(detail.snapshot.effectiveAllowedLeverageRange).toEqual({ min: 1, max: 4 })
+    expect(detail.snapshot.compatibilityMetadata).toEqual({
+      isLegacySnapshot: false,
+      missingStrategyConfig: false,
+      missingBacktestConfigDefaults: false,
+      missingDeploymentExecutionDefaults: false,
+      missingDeploymentExecutionConstraints: false,
+      requiresRepublishForBacktest: false,
+      requiresRepublishForDeploy: false,
+    })
+    expect(detail.deployment).toEqual({
+      exchangeAccountId: 'acct-1',
+      exchangeAccountName: '主账户',
+      executionConfig: {
+        leverage: 4,
+        priceSource: 'mark',
+        orderType: 'market',
+        timeInForce: 'IOC',
+      },
+      executionConfigVersion: 2,
+      effectiveAllowedLeverageRange: { min: 1, max: 4 },
+      driftFields: ['leverage'],
+      reReadAtNextEligibleExecutionCycle: true,
+      updatedBy: 'user-1',
     })
     expect(detail.snapshot.schemaVersion).toBe('7')
     expect(publishedSnapshotsRepository.findByIdForUser).toHaveBeenCalledWith('snapshot-1', 'user-1')
+    expect(tradingService.getLeverageConstraints).toHaveBeenCalledWith({
+      userId: 'user-1',
+      exchangeId: 'okx',
+      marketType: 'perp',
+      symbol: 'ETHUSDT',
+      exchangeAccountId: 'acct-1',
+    })
   })
 
   it('returns explicit null snapshot truth when no published snapshot binding exists', async () => {
@@ -328,7 +433,97 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(detail.snapshot.timeframe).toBeNull()
     expect(detail.snapshot.positionPct).toBeNull()
     expect(detail.snapshot.paramValues).toBeNull()
+    expect(detail.snapshot.strategyConfig).toBeNull()
+    expect(detail.snapshot.backtestConfigDefaults).toBeNull()
+    expect(detail.snapshot.deploymentExecutionBaseline).toBeNull()
+    expect(detail.snapshot.deploymentExecutionCurrent).toBeNull()
+    expect(detail.snapshot.deploymentExecutionConstraints).toBeNull()
+    expect(detail.snapshot.compatibilityMetadata).toBeNull()
+    expect(detail.deployment).toBeNull()
     expect(publishedSnapshotsRepository.findByIdForUser).not.toHaveBeenCalled()
+  })
+
+  it('marks legacy snapshots as compatibility-only instead of faking backtest and deployment truth', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-legacy-1',
+        name: 'Legacy snapshot strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-legacy-1',
+          snapshotHash: 'snapshot-legacy-hash-1',
+        },
+        params: { exchange: 'okx', symbol: 'BTCUSDT', timeframe: '15m', positionPct: 10 },
+        strategyTemplateId: 'tpl-legacy-1',
+        strategyTemplate: {
+          defaultParams: {},
+          paramsSchema: null,
+          rulesVersion: 1,
+        },
+        subscriptions: [{
+          userId: 'user-1',
+          status: 'active',
+          customParams: {},
+          subscribedAt: new Date('2026-03-20T10:00:00.000Z'),
+          exchangeAccount: { id: 'acct-legacy-1', name: 'Legacy account', exchangeId: 'okx' },
+        }],
+        startedAt: new Date('2026-03-20T10:01:00.000Z'),
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue(null),
+      findLatestExecutedAccountByUserAndSymbol: jest.fn().mockResolvedValue(null),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-03-18T10:00:00.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn() } as any,
+      undefined,
+      undefined,
+      undefined,
+      {
+        findByIdForUser: jest.fn().mockResolvedValue({
+          id: 'snapshot-legacy-1',
+          snapshotHash: 'snapshot-legacy-hash-1',
+          paramsSnapshot: { symbol: 'BTCUSDT', timeframe: '15m' },
+          lockedParams: { exchange: 'okx', positionPct: 10 },
+        }),
+      } as any,
+    )
+
+    const detail = await service.getStrategyDetail('user-1', 'inst-legacy-1')
+
+    expect(detail.snapshot.backtestConfigDefaults).toBeNull()
+    expect(detail.snapshot.deploymentExecutionBaseline).toBeNull()
+    expect(detail.snapshot.deploymentExecutionCurrent).toBeNull()
+    expect(detail.snapshot.deploymentExecutionConstraints).toBeNull()
+    expect(detail.snapshot.compatibilityMetadata).toEqual({
+      isLegacySnapshot: true,
+      missingStrategyConfig: true,
+      missingBacktestConfigDefaults: true,
+      missingDeploymentExecutionDefaults: true,
+      missingDeploymentExecutionConstraints: true,
+      requiresRepublishForBacktest: true,
+      requiresRepublishForDeploy: true,
+    })
+    expect(detail.deployment).toBeNull()
+    expect(detail.snapshot.paramValues).toEqual({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      positionPct: 10,
+    })
   })
 
   it('rejects detail when strategy is not actively subscribed', async () => {

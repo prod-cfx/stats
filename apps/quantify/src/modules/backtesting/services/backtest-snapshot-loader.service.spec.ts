@@ -40,6 +40,37 @@ describe('backtestSnapshotLoaderService', () => {
           timeframe: '15m',
           marketType: 'spot',
         },
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          baseTimeframe: '15m',
+          positionPct: 25,
+          strategyDeclaredLeverageRange: null,
+        },
+        backtestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: false,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'gtc',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 1,
+          strategyDeclaredLeverageRange: null,
+          defaultLeverage: 1,
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['gtc'],
+          constraintExplanation: 'strategy/default constraints pending account-capability intersection',
+        },
         lockedParams: {
           exchange: 'okx',
           positionPct: 25,
@@ -93,10 +124,10 @@ describe('backtestSnapshotLoaderService', () => {
       protocolVersion: 'v1',
       scriptCode: compiledSnapshot.scriptSnapshot,
       params: {
-        symbol: 'BTCUSDT',
-        timeframe: '15m',
-        marketType: 'spot',
         exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        timeframe: '15m',
         positionPct: 25,
       },
     })
@@ -105,10 +136,10 @@ describe('backtestSnapshotLoaderService', () => {
       strategyInstanceId: 'instance-1',
       strategyTemplateId: 'template-1',
       params: {
-        symbol: 'BTCUSDT',
-        timeframe: '15m',
-        marketType: 'spot',
         exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        timeframe: '15m',
         positionPct: 25,
       },
       snapshotId: 'snapshot-1',
@@ -159,6 +190,37 @@ describe('backtestSnapshotLoaderService', () => {
           symbol: 'BTCUSDT',
           timeframe: '15m',
           marketType: 'spot',
+        },
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          baseTimeframe: '15m',
+          positionPct: 10,
+          strategyDeclaredLeverageRange: null,
+        },
+        backtestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: false,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'gtc',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 1,
+          strategyDeclaredLeverageRange: null,
+          defaultLeverage: 1,
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['gtc'],
+          constraintExplanation: 'strategy/default constraints pending account-capability intersection',
         },
         lockedParams: {
           exchange: 'okx',
@@ -252,6 +314,37 @@ describe('backtestSnapshotLoaderService', () => {
           timeframe: '15m',
           marketType: 'spot',
         },
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          baseTimeframe: '15m',
+          positionPct: 25,
+          strategyDeclaredLeverageRange: null,
+        },
+        backtestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: false,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'gtc',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 1,
+          strategyDeclaredLeverageRange: null,
+          defaultLeverage: 1,
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['gtc'],
+          constraintExplanation: 'strategy/default constraints pending account-capability intersection',
+        },
         lockedParams: {
           exchange: 'okx',
           positionPct: 25,
@@ -306,7 +399,7 @@ describe('backtestSnapshotLoaderService', () => {
     expect(strategyAdapter.build).not.toHaveBeenCalled()
   })
 
-  it('fails fast when snapshot does not contain strict params', async () => {
+  it('fails fast when legacy snapshot does not contain formal structured fields required for backtest', async () => {
     const snapshotsRepository = {
       findByIdForUser: jest.fn().mockResolvedValue({
         id: 'snapshot-1',
@@ -316,8 +409,14 @@ describe('backtestSnapshotLoaderService', () => {
         scriptHash: 'script-hash',
         specHash: 'spec-hash',
         scriptSnapshot: 'const strategy = { protocolVersion: "v1", onBar: () => ({ action: "NOOP" }) }\nstrategy',
-        paramsSnapshot: null,
-        lockedParams: null,
+        paramsSnapshot: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+          marketType: 'spot',
+          positionPct: 25,
+        },
+        lockedParams: {},
         executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
         dataRequirements: { primary: ['15m'] },
         specSnapshot: {
@@ -338,7 +437,7 @@ describe('backtestSnapshotLoaderService', () => {
       publishedSnapshotId: 'snapshot-1',
       userId: 'user-1',
     })).rejects.toMatchObject({
-      message: 'backtest.snapshot_params_missing',
+      message: 'backtest.invalid_snapshot_execution_config',
     })
     expect(strategyAdapter.build).not.toHaveBeenCalled()
   })
@@ -374,6 +473,37 @@ describe('backtestSnapshotLoaderService', () => {
           symbol: 'BTCUSDT',
           timeframe: '15m',
           marketType: 'spot',
+        },
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          baseTimeframe: '15m',
+          positionPct: 25,
+          strategyDeclaredLeverageRange: null,
+        },
+        backtestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: false,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'gtc',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 1,
+          strategyDeclaredLeverageRange: null,
+          defaultLeverage: 1,
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['gtc'],
+          constraintExplanation: 'strategy/default constraints pending account-capability intersection',
         },
         lockedParams: {
           exchange: 'okx',

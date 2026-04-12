@@ -14,7 +14,10 @@ import {
 } from '@/components/ai-quant/backtest-payload-builder'
 import { checkBacktestSymbolSupport } from '@/components/ai-quant/backtest-symbol-support-client'
 import { useAuth } from '@/hooks/use-auth'
-import { fetchAccountAiQuantStrategyDetail } from '@/lib/api'
+import {
+  fetchAccountAiQuantStrategyDetail,
+  updateAccountAiQuantStrategyLeverage,
+} from '@/lib/api'
 import { ApiError } from '@/lib/errors'
 import {
   requiresRepublishForPublishedSnapshot,
@@ -74,6 +77,8 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
   const [isDetailLoading, setIsDetailLoading] = useState(true)
   const [isBacktestRunning, setIsBacktestRunning] = useState(false)
   const [backtestError, setBacktestError] = useState<string | null>(null)
+  const [isUpdatingLeverage, setIsUpdatingLeverage] = useState(false)
+  const [leverageUpdateError, setLeverageUpdateError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!isLoading && !session) {
@@ -118,16 +123,44 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
       if (requiresRepublishForPublishedSnapshot({
         publishedSnapshotId,
         publishedSnapshotParamValues: strategy.publishedSnapshotParamValues ?? null,
+        publishedSnapshotCompatibilityMetadata: strategy.compatibilityMetadata ?? null,
         editableParamValues: strategy.paramValues ?? {},
       })) {
         throw new ApiError('当前参数已脱离已发布快照，请重新发布后再回测。', 'REPUBLISH_REQUIRED')
       }
       const effectiveInputs = resolveEffectivePublishedBacktestInputs({
         publishedSnapshotId,
-        publishedSnapshotParamValues: strategy.publishedSnapshotParamValues ?? null,
+        publishedSnapshotStrategyConfig: strategy.publishedSnapshotParamValues
+          ? {
+              exchange: typeof strategy.publishedSnapshotParamValues.exchange === 'string'
+                ? strategy.publishedSnapshotParamValues.exchange
+                : strategy.exchange,
+              symbol: typeof strategy.publishedSnapshotParamValues.symbol === 'string'
+                ? strategy.publishedSnapshotParamValues.symbol
+                : strategy.symbol,
+              baseTimeframe: typeof strategy.publishedSnapshotParamValues.baseTimeframe === 'string'
+                ? strategy.publishedSnapshotParamValues.baseTimeframe
+                : strategy.timeframe,
+              positionPct:
+                typeof strategy.publishedSnapshotParamValues.positionPct === 'number'
+                  ? strategy.publishedSnapshotParamValues.positionPct
+                  : strategy.positionPct,
+            }
+          : null,
+        publishedSnapshotBacktestConfigDefaults: strategy.snapshotBacktestConfigDefaults
+          ? {
+              initialCash: strategy.snapshotBacktestConfigDefaults.initialCash,
+              leverage: strategy.snapshotBacktestConfigDefaults.leverage,
+              slippageBps: strategy.snapshotBacktestConfigDefaults.slippageBps,
+              feeBps: strategy.snapshotBacktestConfigDefaults.feeBps,
+              priceSource: strategy.snapshotBacktestConfigDefaults.priceSource,
+              allowPartial: strategy.snapshotBacktestConfigDefaults.allowPartial,
+            }
+          : null,
+        publishedSnapshotCompatibilityMetadata: strategy.compatibilityMetadata ?? null,
       })
       if (!effectiveInputs) {
-        throw new ApiError('当前已发布快照缺少完整回测参数，请重新发布后再回测。', 'PUBLISHED_SNAPSHOT_PARAMS_MISSING')
+        throw new ApiError('当前已发布快照缺少正式回测基线，请重新发布后再回测。', 'PUBLISHED_SNAPSHOT_PARAMS_MISSING')
       }
       const { symbol, baseTimeframe, exchange, executionConfig } = effectiveInputs
       if (!executionConfig.allowPartialValid) {
@@ -189,6 +222,23 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
     }
   }, [isBacktestRunning, lng, router, session, strategy])
 
+  const handleUpdateLeverage = useCallback(async (leverage: number) => {
+    if (!session?.userId || !strategy) return
+    setLeverageUpdateError(null)
+    setIsUpdatingLeverage(true)
+    try {
+      const detail = await updateAccountAiQuantStrategyLeverage(strategy.id, {
+        userId: session.userId,
+        leverage,
+      })
+      setStrategy(mapAccountStrategyDetailToRecord(detail))
+    } catch (error) {
+      setLeverageUpdateError(getBacktestErrorMessage(error))
+    } finally {
+      setIsUpdatingLeverage(false)
+    }
+  }, [session?.userId, strategy])
+
   if (isLoading || !session || isDetailLoading) {
     return <main className="mx-auto w-full max-w-[920px] flex-1 px-4 py-8 md:px-8" />
   }
@@ -200,6 +250,9 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
       onRunBacktest={handleRunBacktest}
       isBacktestRunning={isBacktestRunning}
       backtestError={backtestError}
+      onUpdateLeverage={handleUpdateLeverage}
+      isUpdatingLeverage={isUpdatingLeverage}
+      leverageUpdateError={leverageUpdateError}
     />
   )
 }

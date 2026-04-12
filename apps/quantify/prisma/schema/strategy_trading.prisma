@@ -249,21 +249,23 @@ model StrategyTemplate {
 }
 
 model StrategyInstance {
-  id                 String                 @id @default(cuid())
-  strategyTemplateId String                 @map("strategy_template_id")
-  name               String
-  description        String?
-  llmModel           String                 @map("llm_model")
-  params             Json?
-  status             StrategyInstanceStatus @default(draft)
-  mode               StrategyInstanceMode   @default(PAPER)
-  startedAt          DateTime?              @map("started_at")
-  stoppedAt          DateTime?              @map("stopped_at")
-  createdBy          String?                @map("created_by")
-  updatedBy          String?                @map("updated_by")
-  metadata           Json?
-  createdAt          DateTime               @default(now()) @map("created_at")
-  updatedAt          DateTime               @default(now()) @updatedAt @map("updated_at")
+  id                        String                 @id @default(cuid())
+  strategyTemplateId        String                 @map("strategy_template_id")
+  name                      String
+  description               String?
+  llmModel                  String                 @map("llm_model")
+  params                    Json?
+  deploymentExecutionConfig Json?                  @map("deployment_execution_config")
+  executionConfigVersion    Int                    @default(1) @map("execution_config_version")
+  status                    StrategyInstanceStatus @default(draft)
+  mode                      StrategyInstanceMode   @default(PAPER)
+  startedAt                 DateTime?              @map("started_at")
+  stoppedAt                 DateTime?              @map("stopped_at")
+  createdBy                 String?                @map("created_by")
+  updatedBy                 String?                @map("updated_by")
+  metadata                  Json?
+  createdAt                 DateTime               @default(now()) @map("created_at")
+  updatedAt                 DateTime               @default(now()) @updatedAt @map("updated_at")
 
   strategyTemplate StrategyTemplate             @relation(fields: [strategyTemplateId], references: [id], onDelete: Cascade)
   signals          TradingSignal[]

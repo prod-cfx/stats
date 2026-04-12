@@ -76,6 +76,19 @@ function normalizePublishedSnapshotParamValues(
   return normalized
 }
 
+function buildSnapshotStrategyParamValues(response: LlmCodegenSessionResponse): Record<string, unknown> | null {
+  const strategyConfig = response.publishedSnapshotStrategyConfig
+  if (!strategyConfig) {
+    return null
+  }
+  return {
+    exchange: strategyConfig.exchange ?? null,
+    symbol: strategyConfig.symbol ?? null,
+    baseTimeframe: strategyConfig.baseTimeframe ?? null,
+    positionPct: strategyConfig.positionPct ?? null,
+  }
+}
+
 function mergeSnapshotBoundParamValues(input: {
   currentValues: Record<string, unknown>
   snapshotParamValues: Record<string, unknown> | null
@@ -408,15 +421,51 @@ export function applyCodegenResponseToConversationState(args: {
     currentValues: syncResult?.paramValues ?? conversation.paramValues,
     snapshotParamValues:
       response.status === 'PUBLISHED'
-        ? normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
+        ? (
+            buildSnapshotStrategyParamValues(response)
+            ?? normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
+          )
         : null,
   })
   const nextPublishedSnapshotParamValues =
     response.status === 'PUBLISHED'
-      ? normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
+      ? (
+          buildSnapshotStrategyParamValues(response)
+          ?? normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
+        )
       : shouldUpdateGraph
         ? null
         : conversation.publishedSnapshotParamValues
+  const nextPublishedSnapshotStrategyConfig =
+    response.status === 'PUBLISHED'
+      ? (response.publishedSnapshotStrategyConfig ?? null)
+      : shouldUpdateGraph
+        ? null
+        : conversation.publishedSnapshotStrategyConfig
+  const nextPublishedSnapshotBacktestConfigDefaults =
+    response.status === 'PUBLISHED'
+      ? (response.publishedSnapshotBacktestConfigDefaults ?? null)
+      : shouldUpdateGraph
+        ? null
+        : conversation.publishedSnapshotBacktestConfigDefaults
+  const nextPublishedSnapshotDeploymentExecutionDefaults =
+    response.status === 'PUBLISHED'
+      ? (response.publishedSnapshotDeploymentExecutionDefaults ?? null)
+      : shouldUpdateGraph
+        ? null
+        : conversation.publishedSnapshotDeploymentExecutionDefaults
+  const nextPublishedSnapshotDeploymentExecutionConstraints =
+    response.status === 'PUBLISHED'
+      ? (response.publishedSnapshotDeploymentExecutionConstraints ?? null)
+      : shouldUpdateGraph
+        ? null
+        : conversation.publishedSnapshotDeploymentExecutionConstraints
+  const nextPublishedSnapshotCompatibilityMetadata =
+    response.status === 'PUBLISHED'
+      ? (response.publishedSnapshotCompatibilityMetadata ?? null)
+      : shouldUpdateGraph
+        ? null
+        : conversation.publishedSnapshotCompatibilityMetadata
   const nextParamValues = mergedSnapshotParamValues.paramValues
   const nextParamSchema = shouldUpdateGraph
     ? applyCapabilitiesToParamSchema(syncResult?.paramSchema, backtestCapabilities)
@@ -574,6 +623,11 @@ export function applyCodegenResponseToConversationState(args: {
     }),
     publishedSnapshotId: nextPublishedSnapshotId,
     publishedSnapshotParamValues: nextPublishedSnapshotParamValues,
+    publishedSnapshotStrategyConfig: nextPublishedSnapshotStrategyConfig,
+    publishedSnapshotBacktestConfigDefaults: nextPublishedSnapshotBacktestConfigDefaults,
+    publishedSnapshotDeploymentExecutionDefaults: nextPublishedSnapshotDeploymentExecutionDefaults,
+    publishedSnapshotDeploymentExecutionConstraints: nextPublishedSnapshotDeploymentExecutionConstraints,
+    publishedSnapshotCompatibilityMetadata: nextPublishedSnapshotCompatibilityMetadata,
     publishedScriptCode: nextPublishedScriptCode,
     publishedScriptGraphVersion: nextPublishedScriptGraphVersion,
     params: nextParams,

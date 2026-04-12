@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsNotEmpty, IsOptional, IsString } from 'class-validator'
+import { IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator'
 
 export class AccountAiQuantDeployRequestDto {
   @ApiProperty()
@@ -31,4 +31,10 @@ export class AccountAiQuantDeployRequestDto {
   @IsOptional()
   @IsString()
   exchangeAccountName?: string
+
+  @ApiPropertyOptional({ description: 'Requested deployment leverage passthrough.' })
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  leverage?: number
 }

@@ -37,9 +37,13 @@ function buildInvalidExecutionConfigMessage(args: {
   const { activeConversation, executionConfig, t } = args
 
   if (activeConversation.publishedSnapshotId) {
-    if (!activeConversation.publishedSnapshotParamValues) {
+    if (
+      !activeConversation.publishedSnapshotStrategyConfig
+      || !activeConversation.publishedSnapshotBacktestConfigDefaults
+      || activeConversation.publishedSnapshotCompatibilityMetadata?.requiresRepublishForBacktest
+    ) {
       return t('aiQuant.messages.backtestPayloadInvalid', {
-        reason: 'published_snapshot_params_missing：当前已发布快照缺少可证明的回测参数真相，请重新发布后再回测。',
+        reason: 'published_snapshot_backtest_truth_missing：当前已发布快照缺少正式回测基线，请重新发布后再回测。',
       })
     }
 
@@ -194,17 +198,20 @@ export async function runAiQuantBacktest(args: {
   try {
     const effectiveInputs = resolveEffectivePublishedBacktestInputs({
       publishedSnapshotId: activeConversation.publishedSnapshotId,
-      publishedSnapshotParamValues: activeConversation.publishedSnapshotParamValues,
+      publishedSnapshotStrategyConfig: activeConversation.publishedSnapshotStrategyConfig,
+      publishedSnapshotBacktestConfigDefaults: activeConversation.publishedSnapshotBacktestConfigDefaults,
+      publishedSnapshotCompatibilityMetadata: activeConversation.publishedSnapshotCompatibilityMetadata,
     })
     if (!effectiveInputs) {
       throw new ApiError(
-        '当前已发布快照缺少完整回测参数，请重新发布后再回测。',
+        '当前已发布快照缺少正式回测基线，请重新发布后再回测。',
         'PUBLISHED_SNAPSHOT_PARAMS_MISSING',
       )
     }
     if (requiresRepublishForPublishedSnapshot({
       publishedSnapshotId: activeConversation.publishedSnapshotId,
       publishedSnapshotParamValues: activeConversation.publishedSnapshotParamValues,
+      publishedSnapshotCompatibilityMetadata: activeConversation.publishedSnapshotCompatibilityMetadata,
       editableParamValues: activeConversation.paramValues,
     })) {
       throw new ApiError(

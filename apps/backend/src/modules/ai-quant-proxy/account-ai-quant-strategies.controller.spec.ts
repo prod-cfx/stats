@@ -7,6 +7,7 @@ describe('accountAiQuantStrategiesController', () => {
       getAccountStrategyDetail: jest.fn().mockResolvedValue({ id: 'strategy-1' }),
       performAccountStrategyAction: jest.fn().mockResolvedValue({ id: 'strategy-1', status: 'running' }),
       deployAccountStrategy: jest.fn().mockResolvedValue({ id: 'strategy-1', status: 'draft' }),
+      updateAccountStrategyExecutionLeverage: jest.fn().mockResolvedValue({ id: 'strategy-1', status: 'draft' }),
       deleteAccountStrategy: jest.fn().mockResolvedValue(undefined),
     }
 
@@ -54,6 +55,7 @@ describe('accountAiQuantStrategiesController', () => {
       strategyInstanceId: 'strategy-instance-1',
       exchangeAccountId: 'exchange-account-1',
       exchangeAccountName: 'Binance Testnet',
+      leverage: 3,
     })
 
     expect(service.deployAccountStrategy).toHaveBeenCalledWith('user-1', 'Bearer token-1', {
@@ -63,7 +65,23 @@ describe('accountAiQuantStrategiesController', () => {
       strategyInstanceId: 'strategy-instance-1',
       exchangeAccountId: 'exchange-account-1',
       exchangeAccountName: 'Binance Testnet',
+      leverage: 3,
     })
+  })
+
+  it('updates execution leverage with backend-controlled user identity', async () => {
+    const { controller, service } = createController()
+
+    await controller.updateExecutionLeverage('user-1', 'Bearer token-1', 'strategy-1', {
+      leverage: 5,
+    })
+
+    expect(service.updateAccountStrategyExecutionLeverage).toHaveBeenCalledWith(
+      'user-1',
+      'Bearer token-1',
+      'strategy-1',
+      { leverage: 5 },
+    )
   })
 
   it('deletes strategy with backend-controlled user identity', async () => {

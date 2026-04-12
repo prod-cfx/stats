@@ -86,4 +86,12 @@ export class AccountStrategyDeployDto {
   @IsOptional()
   @IsString()
   exchangeAccountName?: string
+
+  @ApiPropertyOptional({
+    description: '部署执行配置（当前仅开放 leverage 覆盖；priceSource/orderType/timeInForce 以后端 snapshot baseline 为准）',
+    type: 'object',
+    additionalProperties: true,
+  })
+  @IsOptional()
+  deploymentExecutionConfig?: Record<string, unknown>
 }

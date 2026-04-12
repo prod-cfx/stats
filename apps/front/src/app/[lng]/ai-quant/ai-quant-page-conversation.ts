@@ -5,6 +5,12 @@ import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import type { StrategyLogicGraph } from '@/components/ai-quant/logic-graph-model'
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
 import type {
+  AccountAiQuantBacktestConfigDefaults,
+  AccountAiQuantDeploymentExecutionConfig,
+  AccountAiQuantDeploymentExecutionConstraints,
+  AccountAiQuantLeverageRange,
+  AccountAiQuantPublishedStrategyConfig,
+  AccountAiQuantSnapshotCompatibilityMetadata,
   AiQuantConversationResponse,
   LlmClarificationGate,
   LlmPublicationGate,
@@ -126,6 +132,11 @@ export interface ConversationState {
   publishedStrategyInstanceId: string | null
   publishedSnapshotId: string | null
   publishedSnapshotParamValues: Record<string, unknown> | null
+  publishedSnapshotStrategyConfig: AccountAiQuantPublishedStrategyConfig | null
+  publishedSnapshotBacktestConfigDefaults: AccountAiQuantBacktestConfigDefaults | null
+  publishedSnapshotDeploymentExecutionDefaults: AccountAiQuantDeploymentExecutionConfig | null
+  publishedSnapshotDeploymentExecutionConstraints: AccountAiQuantDeploymentExecutionConstraints | null
+  publishedSnapshotCompatibilityMetadata: AccountAiQuantSnapshotCompatibilityMetadata | null
   publishedScriptCode: string | null
   publishedScriptGraphVersion: number | null
   latestSignalMessage: string | null
@@ -296,6 +307,154 @@ export function resolveBacktestExecutionConfig(
   }
 }
 
+function normalizeLeverageRange(
+  value: unknown,
+): AccountAiQuantLeverageRange | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+  const candidate = value as Record<string, unknown>
+  const min = typeof candidate.min === 'number' ? candidate.min : Number(candidate.min)
+  const max = typeof candidate.max === 'number' ? candidate.max : Number(candidate.max)
+  if (!Number.isFinite(min) || !Number.isFinite(max) || min <= 0 || max < min) {
+    return null
+  }
+  return { min, max }
+}
+
+function normalizePublishedStrategyConfig(
+  value: unknown,
+): AccountAiQuantPublishedStrategyConfig | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+  const candidate = value as Record<string, unknown>
+  return {
+    exchange: typeof candidate.exchange === 'string' ? candidate.exchange : null,
+    symbol: typeof candidate.symbol === 'string' ? candidate.symbol : null,
+    baseTimeframe:
+      typeof candidate.baseTimeframe === 'string'
+        ? candidate.baseTimeframe
+        : typeof candidate.timeframe === 'string'
+          ? candidate.timeframe
+          : null,
+    positionPct:
+      typeof candidate.positionPct === 'number'
+        ? candidate.positionPct
+        : typeof candidate.positionPct === 'string'
+          ? Number(candidate.positionPct)
+          : null,
+    strategyDeclaredLeverageRange: normalizeLeverageRange(candidate.strategyDeclaredLeverageRange),
+  }
+}
+
+function normalizeBacktestConfigDefaults(
+  value: unknown,
+): AccountAiQuantBacktestConfigDefaults | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+  const candidate = value as Record<string, unknown>
+  const initialCash = parseBacktestExecutionNumber(candidate.initialCash, 0)
+  const leverage = parseBacktestExecutionNumber(candidate.leverage, 0)
+  const slippageBps = parseBacktestExecutionNumber(candidate.slippageBps, 0)
+  const feeBps = parseBacktestExecutionNumber(candidate.feeBps, 0)
+  const priceSource =
+    typeof candidate.priceSource === 'string' ? candidate.priceSource.trim() : null
+  const allowPartial =
+    typeof candidate.allowPartial === 'boolean'
+      ? candidate.allowPartial
+      : candidate.allowPartial === 'true'
+        ? true
+        : candidate.allowPartial === 'false'
+          ? false
+          : null
+  if (!Number.isFinite(initialCash) || !Number.isFinite(leverage) || !priceSource) {
+    return null
+  }
+  return {
+    initialCash,
+    leverage,
+    slippageBps,
+    feeBps,
+    priceSource,
+    allowPartial,
+  }
+}
+
+function normalizeDeploymentExecutionConfig(
+  value: unknown,
+): AccountAiQuantDeploymentExecutionConfig | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+  const candidate = value as Record<string, unknown>
+  const leverage = parseBacktestExecutionNumber(candidate.leverage, 0)
+  return {
+    leverage: Number.isFinite(leverage) && leverage > 0 ? leverage : null,
+    priceSource: typeof candidate.priceSource === 'string' ? candidate.priceSource.trim() : null,
+    orderType: typeof candidate.orderType === 'string' ? candidate.orderType.trim() : null,
+    timeInForce: typeof candidate.timeInForce === 'string' ? candidate.timeInForce.trim() : null,
+  }
+}
+
+function normalizeDeploymentExecutionConstraints(
+  value: unknown,
+): AccountAiQuantDeploymentExecutionConstraints | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+  const candidate = value as Record<string, unknown>
+  return {
+    effectiveAllowedLeverageRange: normalizeLeverageRange(candidate.effectiveAllowedLeverageRange),
+    exchangeAccountCapabilityMaxLeverage: parseBacktestExecutionNumber(candidate.exchangeAccountCapabilityMaxLeverage, 0),
+    platformRiskMaxLeverage: parseBacktestExecutionNumber(candidate.platformRiskMaxLeverage, 0),
+    strategyDeclaredLeverageRange: normalizeLeverageRange(candidate.strategyDeclaredLeverageRange),
+    supportedPriceSources: Array.isArray(candidate.supportedPriceSources)
+      ? candidate.supportedPriceSources.filter(item => typeof item === 'string')
+      : null,
+    supportedOrderTypes: Array.isArray(candidate.supportedOrderTypes)
+      ? candidate.supportedOrderTypes.filter(item => typeof item === 'string')
+      : null,
+    supportedTimeInForce: Array.isArray(candidate.supportedTimeInForce)
+      ? candidate.supportedTimeInForce.filter(item => typeof item === 'string')
+      : null,
+    constraintExplanation:
+      typeof candidate.constraintExplanation === 'string' ? candidate.constraintExplanation : null,
+  }
+}
+
+function normalizeSnapshotCompatibilityMetadata(
+  value: unknown,
+): AccountAiQuantSnapshotCompatibilityMetadata | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+  const candidate = value as Record<string, unknown>
+  return {
+    isLegacySnapshot: candidate.isLegacySnapshot === true,
+    missingBacktestConfigDefaults: candidate.missingBacktestConfigDefaults === true,
+    missingDeploymentExecutionDefaults: candidate.missingDeploymentExecutionDefaults === true,
+    missingDeploymentExecutionConstraints: candidate.missingDeploymentExecutionConstraints === true,
+    requiresRepublishForBacktest: candidate.requiresRepublishForBacktest === true,
+    requiresRepublishForDeploy: candidate.requiresRepublishForDeploy === true,
+  }
+}
+
+function buildPublishedSnapshotStrategyParamValues(
+  strategyConfig: AccountAiQuantPublishedStrategyConfig | null,
+): Record<string, unknown> | null {
+  if (!strategyConfig) {
+    return null
+  }
+  return {
+    exchange: strategyConfig.exchange ?? null,
+    symbol: strategyConfig.symbol ?? null,
+    baseTimeframe: strategyConfig.baseTimeframe ?? null,
+    positionPct: strategyConfig.positionPct ?? null,
+  }
+}
+
 export function normalizePublishedSnapshotParamValues(
   value: unknown,
 ): Record<string, unknown> | null {
@@ -331,23 +490,31 @@ function normalizeComparableParamValue(value: unknown): unknown {
 export function requiresRepublishForPublishedSnapshot(input: {
   publishedSnapshotId: string | null
   publishedSnapshotParamValues: Record<string, unknown> | null
+  publishedSnapshotCompatibilityMetadata?: AccountAiQuantSnapshotCompatibilityMetadata | null
   editableParamValues: Record<string, unknown>
 }): boolean {
   const {
     publishedSnapshotId,
     publishedSnapshotParamValues,
+    publishedSnapshotCompatibilityMetadata,
     editableParamValues,
   } = input
 
   if (!publishedSnapshotId) {
     return false
   }
+  if (publishedSnapshotCompatibilityMetadata?.requiresRepublishForBacktest) {
+    return true
+  }
   if (!publishedSnapshotParamValues) {
     return true
   }
 
   for (const key of Object.keys(editableParamValues)) {
-    if (BACKTEST_RANGE_PARAM_KEY_SET.has(key)) {
+    if (BACKTEST_RANGE_PARAM_KEY_SET.has(key) || BACKTEST_EXECUTION_PARAM_KEY_SET.has(key)) {
+      continue
+    }
+    if (!(key in publishedSnapshotParamValues)) {
       continue
     }
 
@@ -370,28 +537,40 @@ export interface EffectivePublishedBacktestInputs {
 
 export function resolveEffectivePublishedBacktestInputs(input: {
   publishedSnapshotId: string | null
-  publishedSnapshotParamValues: Record<string, unknown> | null
+  publishedSnapshotStrategyConfig: AccountAiQuantPublishedStrategyConfig | null
+  publishedSnapshotBacktestConfigDefaults: AccountAiQuantBacktestConfigDefaults | null
+  publishedSnapshotCompatibilityMetadata?: AccountAiQuantSnapshotCompatibilityMetadata | null
 }): EffectivePublishedBacktestInputs | null {
-  const { publishedSnapshotId, publishedSnapshotParamValues } = input
-  if (!publishedSnapshotId || !publishedSnapshotParamValues) {
+  const {
+    publishedSnapshotId,
+    publishedSnapshotStrategyConfig,
+    publishedSnapshotBacktestConfigDefaults,
+    publishedSnapshotCompatibilityMetadata,
+  } = input
+  if (
+    !publishedSnapshotId
+    || !publishedSnapshotStrategyConfig
+    || !publishedSnapshotBacktestConfigDefaults
+    || publishedSnapshotCompatibilityMetadata?.requiresRepublishForBacktest
+  ) {
     return null
   }
 
   const exchange =
-    publishedSnapshotParamValues.exchange === 'okx'
+    publishedSnapshotStrategyConfig.exchange === 'okx'
       ? 'okx'
-      : publishedSnapshotParamValues.exchange === 'hyperliquid'
+      : publishedSnapshotStrategyConfig.exchange === 'hyperliquid'
         ? 'hyperliquid'
-        : publishedSnapshotParamValues.exchange === 'binance'
+        : publishedSnapshotStrategyConfig.exchange === 'binance'
           ? 'binance'
           : null
   const symbol =
-    typeof publishedSnapshotParamValues.symbol === 'string'
-      ? publishedSnapshotParamValues.symbol.trim()
+    typeof publishedSnapshotStrategyConfig.symbol === 'string'
+      ? publishedSnapshotStrategyConfig.symbol.trim()
       : ''
   const baseTimeframe =
-    typeof publishedSnapshotParamValues.baseTimeframe === 'string'
-      ? publishedSnapshotParamValues.baseTimeframe.trim()
+    typeof publishedSnapshotStrategyConfig.baseTimeframe === 'string'
+      ? publishedSnapshotStrategyConfig.baseTimeframe.trim()
       : ''
 
   if (!exchange || !symbol || !baseTimeframe) {
@@ -402,7 +581,15 @@ export function resolveEffectivePublishedBacktestInputs(input: {
     exchange,
     symbol,
     baseTimeframe,
-    executionConfig: resolveBacktestExecutionConfig(publishedSnapshotParamValues),
+    executionConfig: {
+      initialCash: publishedSnapshotBacktestConfigDefaults.initialCash ?? Number.NaN,
+      leverage: publishedSnapshotBacktestConfigDefaults.leverage ?? Number.NaN,
+      slippageBps: publishedSnapshotBacktestConfigDefaults.slippageBps ?? Number.NaN,
+      feeBps: publishedSnapshotBacktestConfigDefaults.feeBps ?? Number.NaN,
+      priceSource: publishedSnapshotBacktestConfigDefaults.priceSource ?? '',
+      allowPartial: publishedSnapshotBacktestConfigDefaults.allowPartial === true,
+      allowPartialValid: typeof publishedSnapshotBacktestConfigDefaults.allowPartial === 'boolean',
+    },
   }
 }
 
@@ -536,6 +723,11 @@ function hasPublicationArtifacts(conversation: ConversationState): boolean {
     conversation.publishedStrategyInstanceId
       || conversation.publishedSnapshotId
       || conversation.publishedSnapshotParamValues
+      || conversation.publishedSnapshotStrategyConfig
+      || conversation.publishedSnapshotBacktestConfigDefaults
+      || conversation.publishedSnapshotDeploymentExecutionDefaults
+      || conversation.publishedSnapshotDeploymentExecutionConstraints
+      || conversation.publishedSnapshotCompatibilityMetadata
       || conversation.publishedScriptCode
       || conversation.publishedScriptGraphVersion !== null
       || conversation.backtestResult
@@ -550,6 +742,11 @@ function clearPublicationArtifacts(conversation: ConversationState): Conversatio
     publishedStrategyInstanceId: null,
     publishedSnapshotId: null,
     publishedSnapshotParamValues: null,
+    publishedSnapshotStrategyConfig: null,
+    publishedSnapshotBacktestConfigDefaults: null,
+    publishedSnapshotDeploymentExecutionDefaults: null,
+    publishedSnapshotDeploymentExecutionConstraints: null,
+    publishedSnapshotCompatibilityMetadata: null,
     publishedScriptCode: null,
     publishedScriptGraphVersion: null,
     backtestResult: null,
@@ -898,6 +1095,11 @@ export function createConversation(translate: (key: string) => string, now = Dat
     publishedStrategyInstanceId: null,
     publishedSnapshotId: null,
     publishedSnapshotParamValues: null,
+    publishedSnapshotStrategyConfig: null,
+    publishedSnapshotBacktestConfigDefaults: null,
+    publishedSnapshotDeploymentExecutionDefaults: null,
+    publishedSnapshotDeploymentExecutionConstraints: null,
+    publishedSnapshotCompatibilityMetadata: null,
     publishedScriptCode: null,
     publishedScriptGraphVersion: null,
     latestSignalMessage: null,
@@ -1022,6 +1224,19 @@ export function createConversationFromServerConversation(
   translate: (key: string) => string,
 ): ConversationState {
   const seed = createConversation(translate)
+  const snapshotStrategyConfig = normalizePublishedStrategyConfig(response.publishedSnapshotStrategyConfig)
+  const snapshotBacktestConfigDefaults = normalizeBacktestConfigDefaults(
+    response.publishedSnapshotBacktestConfigDefaults,
+  )
+  const snapshotDeploymentExecutionDefaults = normalizeDeploymentExecutionConfig(
+    response.publishedSnapshotDeploymentExecutionDefaults,
+  )
+  const snapshotDeploymentExecutionConstraints = normalizeDeploymentExecutionConstraints(
+    response.publishedSnapshotDeploymentExecutionConstraints,
+  )
+  const snapshotCompatibilityMetadata = normalizeSnapshotCompatibilityMetadata(
+    response.publishedSnapshotCompatibilityMetadata,
+  )
   const normalizedClarificationGate = normalizeClarificationGate(response.clarificationGate)
   const syncResult = response.specDesc
     ? syncStrategyParamsFromCodegen({
@@ -1036,7 +1251,9 @@ export function createConversationFromServerConversation(
         capabilities: null,
       })
     : null
-  const snapshotParamValues = normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
+  const snapshotParamValues =
+    buildPublishedSnapshotStrategyParamValues(snapshotStrategyConfig)
+    ?? normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
   const mergedSnapshotParamValues = mergeSnapshotBoundParamValues({
     currentValues: syncResult?.paramValues ?? seed.paramValues,
     snapshotParamValues,
@@ -1113,6 +1330,11 @@ export function createConversationFromServerConversation(
     publishedStrategyInstanceId: response.strategyInstanceId ?? null,
     publishedSnapshotId: response.publishedSnapshotId ?? null,
     publishedSnapshotParamValues: snapshotParamValues,
+    publishedSnapshotStrategyConfig: snapshotStrategyConfig,
+    publishedSnapshotBacktestConfigDefaults: snapshotBacktestConfigDefaults,
+    publishedSnapshotDeploymentExecutionDefaults: snapshotDeploymentExecutionDefaults,
+    publishedSnapshotDeploymentExecutionConstraints: snapshotDeploymentExecutionConstraints,
+    publishedSnapshotCompatibilityMetadata: snapshotCompatibilityMetadata,
     publishedScriptCode: response.scriptCode ?? null,
     publishedScriptGraphVersion:
       response.scriptCode && logicGraph?.status === 'confirmed'
@@ -1132,6 +1354,11 @@ function hadPersistedCodegenArtifacts(item: Partial<ConversationState>): boolean
       || item.llmCodegenSessionId
       || item.publishedStrategyInstanceId
       || item.publishedSnapshotId
+      || item.publishedSnapshotStrategyConfig
+      || item.publishedSnapshotBacktestConfigDefaults
+      || item.publishedSnapshotDeploymentExecutionDefaults
+      || item.publishedSnapshotDeploymentExecutionConstraints
+      || item.publishedSnapshotCompatibilityMetadata
       || item.publishedScriptCode
       || typeof item.publishedScriptGraphVersion === 'number'
       || item.publicationGate,
@@ -1158,7 +1385,22 @@ export function shouldResetIrrecoverableHydratedConversation(
 
 export function hydrateConversation(item: Partial<ConversationState>): ConversationState {
   const publishedSnapshotId = normalizePublishedSnapshotId(item.publishedSnapshotId)
-  const publishedSnapshotParamValues = normalizePublishedSnapshotParamValues(item.publishedSnapshotParamValues)
+  const publishedSnapshotStrategyConfig = normalizePublishedStrategyConfig(item.publishedSnapshotStrategyConfig)
+  const publishedSnapshotBacktestConfigDefaults = normalizeBacktestConfigDefaults(
+    item.publishedSnapshotBacktestConfigDefaults,
+  )
+  const publishedSnapshotDeploymentExecutionDefaults = normalizeDeploymentExecutionConfig(
+    item.publishedSnapshotDeploymentExecutionDefaults,
+  )
+  const publishedSnapshotDeploymentExecutionConstraints = normalizeDeploymentExecutionConstraints(
+    item.publishedSnapshotDeploymentExecutionConstraints,
+  )
+  const publishedSnapshotCompatibilityMetadata = normalizeSnapshotCompatibilityMetadata(
+    item.publishedSnapshotCompatibilityMetadata,
+  )
+  const publishedSnapshotParamValues =
+    buildPublishedSnapshotStrategyParamValues(publishedSnapshotStrategyConfig)
+    ?? normalizePublishedSnapshotParamValues(item.publishedSnapshotParamValues)
   const baseParams =
     item.params && typeof item.params === 'object' && !Array.isArray(item.params)
       ? (item.params as unknown as Record<string, unknown>)
@@ -1224,6 +1466,11 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
     publishedStrategyInstanceId: item.publishedStrategyInstanceId ?? null,
     publishedSnapshotId,
     publishedSnapshotParamValues,
+    publishedSnapshotStrategyConfig,
+    publishedSnapshotBacktestConfigDefaults,
+    publishedSnapshotDeploymentExecutionDefaults,
+    publishedSnapshotDeploymentExecutionConstraints,
+    publishedSnapshotCompatibilityMetadata,
     publishedScriptCode: resolveHydratedPublishedScriptCode(item),
     publishedScriptGraphVersion: (() => {
       if (typeof item.publishedScriptGraphVersion === 'number') {

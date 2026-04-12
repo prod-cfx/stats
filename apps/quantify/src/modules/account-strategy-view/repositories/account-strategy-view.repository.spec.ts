@@ -31,6 +31,11 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
             timeframe: '5m',
             positionPct: 10,
           },
+          metadata: {
+            bindingSource: 'PUBLISHED_SNAPSHOT',
+            publishedSnapshotId: 'snapshot-1',
+            snapshotHash: 'snapshot-hash-1',
+          },
         }),
         update: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
         create: jest.fn(),
@@ -54,6 +59,13 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       symbol: 'SOLUSDT',
       timeframe: '5m',
       positionPct: 10,
+      deploymentExecutionConfig: {
+        leverage: 4,
+        priceSource: 'mark',
+        orderType: 'market',
+        timeInForce: 'IOC',
+      },
+      executionConfigVersion: 1,
       publishedSnapshotBinding: {
         bindingSource: 'PUBLISHED_SNAPSHOT',
         publishedSnapshotId: 'snapshot-1',
@@ -74,6 +86,22 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       data: expect.objectContaining({
         status: 'running',
         mode: 'TESTNET',
+        deploymentExecutionConfig: {
+          leverage: 4,
+          priceSource: 'mark',
+          orderType: 'market',
+          timeInForce: 'IOC',
+        },
+        executionConfigVersion: 1,
+        params: expect.objectContaining({
+          deploymentExecutionConfig: {
+            leverage: 4,
+            priceSource: 'mark',
+            orderType: 'market',
+            timeInForce: 'IOC',
+          },
+          executionConfigVersion: 1,
+        }),
         metadata: expect.objectContaining({
           bindingSource: 'PUBLISHED_SNAPSHOT',
           publishedSnapshotId: 'snapshot-1',
@@ -273,7 +301,9 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         sourceStrategyInstanceId: null,
         sourceStrategyTemplateId: 'template-1',
       },
-    } as any)).rejects.toThrow('Strategy instance not found')
+    } as any)).rejects.toMatchObject({
+      message: 'account_strategy.deploy_strategy_instance_not_found',
+    })
 
     expect(tx.strategyInstance.create).not.toHaveBeenCalled()
     expect(tx.strategyTemplate.create).not.toHaveBeenCalled()
@@ -342,6 +372,62 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
     expect(String(call.data.initialBalance)).toBe('60000')
     expect(String(call.data.balance)).toBe('58000')
     expect(String(call.data.equity)).toBe('60000')
+  })
+
+  it('updates deployment execution leverage with version bump and compatibility shadow fields', async () => {
+    const tx = {
+      strategyInstance: {
+        update: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
+      },
+    }
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
+
+    await repo.updateDeploymentExecutionConfig({
+      strategyInstanceId: 'strategy-instance-1',
+      userId: 'user-1',
+      executionConfig: {
+        leverage: 5,
+        priceSource: 'mark',
+        orderType: 'market',
+        timeInForce: 'IOC',
+      },
+      executionConfigVersion: 3,
+      existingParams: {
+        symbol: 'SOLUSDT',
+      },
+      existingMetadata: {
+        bindingSource: 'PUBLISHED_SNAPSHOT',
+      },
+    })
+
+    expect(tx.strategyInstance.update).toHaveBeenCalledWith({
+      where: { id: 'strategy-instance-1' },
+      data: {
+        deploymentExecutionConfig: {
+          leverage: 5,
+          priceSource: 'mark',
+          orderType: 'market',
+          timeInForce: 'IOC',
+        },
+        executionConfigVersion: 3,
+        updatedBy: 'user-1',
+        params: {
+          symbol: 'SOLUSDT',
+          deploymentExecutionConfig: {
+            leverage: 5,
+            priceSource: 'mark',
+            orderType: 'market',
+            timeInForce: 'IOC',
+          },
+          executionConfigVersion: 3,
+        },
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          executionConfigVersion: 3,
+          reReadAtNextEligibleExecutionCycle: true,
+        },
+      },
+    })
   })
 
   it('rejects deploy when the selected exchangeAccountId does not belong to the user instead of creating a fake account', async () => {
@@ -489,7 +575,9 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       },
       exchangeAccountId: 'exchange-account-1',
       strategyInstanceId: 'strategy-instance-1',
-    })).rejects.toThrow('Strategy instance not found')
+    })).rejects.toMatchObject({
+      message: 'account_strategy.deploy_strategy_instance_not_found',
+    })
 
     expect(tx.strategyInstance.update).not.toHaveBeenCalled()
     expect(tx.strategyInstance.create).not.toHaveBeenCalled()
