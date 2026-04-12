@@ -1,8 +1,10 @@
 'use client'
 
 import type { AiQuantStrategyRecord } from '@/components/account/ai-quant-strategy-store'
-import { useCallback, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useCallback, useEffect, useState } from 'react'
+import { mapAccountStrategyDetailToRecord } from '@/components/account/ai-quant-strategy-api-adapter'
+import { AiQuantStrategyDetail } from '@/components/account/AiQuantStrategyDetail'
 import { fetchBacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import { createBacktestJob, getBacktestJob } from '@/components/ai-quant/backtest-job-client'
 import {
@@ -11,13 +13,12 @@ import {
   isBacktestPayloadBuilderError,
 } from '@/components/ai-quant/backtest-payload-builder'
 import { checkBacktestSymbolSupport } from '@/components/ai-quant/backtest-symbol-support-client'
-import { mapAccountStrategyDetailToRecord } from '@/components/account/ai-quant-strategy-api-adapter'
-import { AiQuantStrategyDetail } from '@/components/account/AiQuantStrategyDetail'
 import { useAuth } from '@/hooks/use-auth'
-import { ApiError } from '@/lib/errors'
 import { fetchAccountAiQuantStrategyDetail } from '@/lib/api'
+import { ApiError } from '@/lib/errors'
 import {
-  resolveBacktestExecutionConfig,
+  requiresRepublishForPublishedSnapshot,
+  resolveEffectivePublishedBacktestInputs,
   resolveBacktestRangeInput,
 } from '../../../../ai-quant/ai-quant-page-conversation'
 
@@ -111,21 +112,26 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
 
     try {
       const publishedSnapshotId = strategy.publishedSnapshotId?.trim() ?? ''
-      const symbol = strategy.symbol?.trim() ?? ''
-      const baseTimeframe = strategy.timeframe?.trim() ?? ''
-      const exchange = strategy.exchange
-      const executionConfig = resolveBacktestExecutionConfig(strategy.paramValues ?? {})
-      if (!executionConfig.allowPartialValid) {
-        throw new BacktestPayloadBuilderError('invalid_execution_config')
-      }
       if (!publishedSnapshotId) {
         throw new BacktestPayloadBuilderError('missing_published_snapshot')
       }
-      if (!symbol) {
-        throw new BacktestPayloadBuilderError('missing_symbol')
+      if (requiresRepublishForPublishedSnapshot({
+        publishedSnapshotId,
+        publishedSnapshotParamValues: strategy.publishedSnapshotParamValues ?? null,
+        editableParamValues: strategy.paramValues ?? {},
+      })) {
+        throw new ApiError('当前参数已脱离已发布快照，请重新发布后再回测。', 'REPUBLISH_REQUIRED')
       }
-      if (!baseTimeframe) {
-        throw new BacktestPayloadBuilderError('timeframe_not_allowed')
+      const effectiveInputs = resolveEffectivePublishedBacktestInputs({
+        publishedSnapshotId,
+        publishedSnapshotParamValues: strategy.publishedSnapshotParamValues ?? null,
+      })
+      if (!effectiveInputs) {
+        throw new ApiError('当前已发布快照缺少完整回测参数，请重新发布后再回测。', 'PUBLISHED_SNAPSHOT_PARAMS_MISSING')
+      }
+      const { symbol, baseTimeframe, exchange, executionConfig } = effectiveInputs
+      if (!executionConfig.allowPartialValid) {
+        throw new BacktestPayloadBuilderError('invalid_execution_config')
       }
 
       const capabilities = await fetchBacktestCapabilities()

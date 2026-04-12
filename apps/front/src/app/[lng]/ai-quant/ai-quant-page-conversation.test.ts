@@ -7,6 +7,8 @@ import {
   hydrateConversation,
   hydrateConversations,
   invalidateConversationPublication,
+  requiresRepublishForPublishedSnapshot,
+  resolveEffectivePublishedBacktestInputs,
   resolveBacktestExecutionConfig,
   serializePersistedConversations,
 } from './ai-quant-page-conversation'
@@ -132,7 +134,7 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.paramValues.backtestAllowPartial).toBeUndefined()
   })
 
-  it('preserves snapshot-bound default backtest execution params during hydration for published snapshots', () => {
+  it('does not treat missing published snapshot param truth as implicit executable defaults during hydration', () => {
     const conversation = hydrateConversation({
       id: 'conv-published-defaults',
       title: 'published',
@@ -183,6 +185,7 @@ describe('ai-quant-page-conversation', () => {
       llmCodegenSessionId: null,
       publishedStrategyInstanceId: 'strategy-1',
       publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotParamValues: null,
       publishedScriptCode: 'return { ok: true }',
       publishedScriptGraphVersion: 1,
       latestSignalMessage: null,
@@ -192,12 +195,13 @@ describe('ai-quant-page-conversation', () => {
     })
 
     expect(conversation.backtestExecutionConfigExplicit).toBe(false)
-    expect(conversation.paramValues.backtestInitialCash).toBe(10000)
-    expect(conversation.paramValues.backtestLeverage).toBe(1)
-    expect(conversation.paramValues.backtestSlippageBps).toBe(10)
-    expect(conversation.paramValues.backtestFeeBps).toBe(5)
-    expect(conversation.paramValues.backtestPriceSource).toBe('close')
-    expect(conversation.paramValues.backtestAllowPartial).toBe(true)
+    expect(conversation.publishedSnapshotParamValues).toBeNull()
+    expect(conversation.paramValues.backtestInitialCash).toBeUndefined()
+    expect(conversation.paramValues.backtestLeverage).toBeUndefined()
+    expect(conversation.paramValues.backtestSlippageBps).toBeUndefined()
+    expect(conversation.paramValues.backtestFeeBps).toBeUndefined()
+    expect(conversation.paramValues.backtestPriceSource).toBeUndefined()
+    expect(conversation.paramValues.backtestAllowPartial).toBeUndefined()
   })
 
   it('invalidates published artifacts and optionally marks the logic graph as draft', () => {
@@ -539,7 +543,7 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.pendingCanonicalDigest).toBeNull()
   })
 
-  it('keeps published snapshot default backtest params when persisting conversations for reload parity', () => {
+  it('persists published snapshot params separately from editable param values', () => {
     const serialized = serializePersistedConversations([
       {
         id: 'conv-persisted-published',
@@ -595,6 +599,14 @@ describe('ai-quant-page-conversation', () => {
         llmCodegenSessionId: null,
         publishedStrategyInstanceId: 'strategy-1',
         publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotParamValues: {
+          backtestInitialCash: 10000,
+          backtestLeverage: 1,
+          backtestSlippageBps: 10,
+          backtestFeeBps: 5,
+          backtestPriceSource: 'close',
+          backtestAllowPartial: true,
+        },
         publishedScriptCode: 'return { ok: true }',
         publishedScriptGraphVersion: 1,
         latestSignalMessage: null,
@@ -606,12 +618,81 @@ describe('ai-quant-page-conversation', () => {
     ], 'deploy-2026-04-11')
 
     const envelope = JSON.parse(serialized)
-    expect(envelope.conversations[0].paramValues.backtestInitialCash).toBe(10000)
-    expect(envelope.conversations[0].paramValues.backtestLeverage).toBe(1)
-    expect(envelope.conversations[0].paramValues.backtestSlippageBps).toBe(10)
-    expect(envelope.conversations[0].paramValues.backtestFeeBps).toBe(5)
-    expect(envelope.conversations[0].paramValues.backtestPriceSource).toBe('close')
-    expect(envelope.conversations[0].paramValues.backtestAllowPartial).toBe(true)
+    expect(envelope.conversations[0].publishedSnapshotParamValues).toEqual({
+      backtestInitialCash: 10000,
+      backtestLeverage: 1,
+      backtestSlippageBps: 10,
+      backtestFeeBps: 5,
+      backtestPriceSource: 'close',
+      backtestAllowPartial: true,
+    })
+  })
+
+  it('does not require republish when only backtest range changes', () => {
+    expect(requiresRepublishForPublishedSnapshot({
+      publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotParamValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        backtestInitialCash: 10000,
+      },
+      editableParamValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        backtestInitialCash: 10000,
+        backtestRangePreset: '7D',
+      },
+    })).toBe(false)
+  })
+
+  it('requires republish when editable execution params drift from published snapshot truth', () => {
+    expect(requiresRepublishForPublishedSnapshot({
+      publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotParamValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        backtestLeverage: 1,
+      },
+      editableParamValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        backtestLeverage: 3,
+      },
+    })).toBe(true)
+  })
+
+  it('resolves published backtest inputs only from snapshot-bound truth', () => {
+    expect(resolveEffectivePublishedBacktestInputs({
+      publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotParamValues: {
+        exchange: 'okx',
+        symbol: 'BTC-USDT-SWAP',
+        baseTimeframe: '1h',
+        backtestInitialCash: 15000,
+        backtestLeverage: 2,
+        backtestSlippageBps: 7,
+        backtestFeeBps: 3,
+        backtestPriceSource: 'mid',
+        backtestAllowPartial: false,
+      },
+    })).toEqual({
+      exchange: 'okx',
+      symbol: 'BTC-USDT-SWAP',
+      baseTimeframe: '1h',
+      executionConfig: {
+        initialCash: 15000,
+        leverage: 2,
+        slippageBps: 7,
+        feeBps: 3,
+        priceSource: 'mid',
+        allowPartial: false,
+        allowPartialValid: true,
+      },
+    })
   })
 
 })

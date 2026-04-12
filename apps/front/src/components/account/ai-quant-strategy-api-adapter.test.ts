@@ -377,6 +377,18 @@ describe('ai-quant-strategy-api-adapter', () => {
       backtestPriceSource: 'mid',
       backtestAllowPartial: false,
     })
+    expect(record.publishedSnapshotParamValues).toEqual({
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
+      positionPct: 12,
+      backtestInitialCash: 15000,
+      backtestLeverage: 2,
+      backtestSlippageBps: 9,
+      backtestFeeBps: 4,
+      backtestPriceSource: 'mid',
+      backtestAllowPartial: false,
+    })
   })
 
 })

@@ -411,6 +411,12 @@ export function applyCodegenResponseToConversationState(args: {
         ? normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
         : null,
   })
+  const nextPublishedSnapshotParamValues =
+    response.status === 'PUBLISHED'
+      ? normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
+      : shouldUpdateGraph
+        ? null
+        : conversation.publishedSnapshotParamValues
   const nextParamValues = mergedSnapshotParamValues.paramValues
   const nextParamSchema = shouldUpdateGraph
     ? applyCapabilitiesToParamSchema(syncResult?.paramSchema, backtestCapabilities)
@@ -567,6 +573,7 @@ export function applyCodegenResponseToConversationState(args: {
       isStartingNewSession: !activeSessionId,
     }),
     publishedSnapshotId: nextPublishedSnapshotId,
+    publishedSnapshotParamValues: nextPublishedSnapshotParamValues,
     publishedScriptCode: nextPublishedScriptCode,
     publishedScriptGraphVersion: nextPublishedScriptGraphVersion,
     params: nextParams,
