@@ -11,7 +11,9 @@ import type { CompiledScriptParserService } from './compiled-script-parser.servi
 import type { SpecDescBuilderService } from './spec-desc-builder.service'
 import type { StrategyConsistencyService } from './strategy-consistency.service'
 import type { StrategySummaryBuilderService } from './strategy-summary-builder.service'
+import type { StrategySummaryObservationReport } from './strategy-summary-observation.service'
 import { resolveChecklistDefaultTimeframe } from './checklist-rule-drafts'
+import { StrategySummaryObservationService } from './strategy-summary-observation.service'
 
 export interface CompiledScriptValidationResult {
   passed: boolean
@@ -52,6 +54,7 @@ export interface CodegenPublicationArtifacts {
   userIntentSummary: StrategySummary
   strategySummary: StrategySummary
   scriptSummary: StrategySummary
+  summaryObservation: StrategySummaryObservationReport
   lockedParams: Record<string, unknown>
   publishParams: {
     symbol: string
@@ -71,6 +74,7 @@ export class CodegenPublicationGenerationStage {
     private readonly compiledScriptEmitter: CompiledScriptEmitterService,
     private readonly compiledScriptExecutionEnvelope: CompiledScriptExecutionEnvelopeService,
     private readonly compiledScriptParser: CompiledScriptParserService,
+    private readonly strategySummaryObservation: StrategySummaryObservationService = new StrategySummaryObservationService(),
   ) {}
 
   async generate(input: {
@@ -82,7 +86,6 @@ export class CodegenPublicationGenerationStage {
     const userIntentSummary = this.strategySummaryBuilder.buildUserIntentSummary({
       checklist: input.checklist,
     })
-    const strategySummary = this.strategySummaryBuilder.buildStrategySummary(canonicalSpec)
     const lockedParams = this.buildLockedParams(input.checklist)
     const publishParams = this.buildPublishParams({
       canonicalSpec,
@@ -108,11 +111,22 @@ export class CodegenPublicationGenerationStage {
     const semanticConsistency = this.strategyConsistencyService.evaluate({
       canonicalSpec,
       scriptCode: compiledScript,
+    })
+    const strategySummary = this.strategySummaryBuilder.buildSummaryFromProfile({
+      profile: semanticConsistency.specProfile,
+      market: {
+        symbol: canonicalSpec.market.symbol ?? undefined,
+        timeframe: canonicalSpec.market.timeframe ?? undefined,
+        marketType: canonicalSpec.market.marketType,
+      },
+    })
+    const scriptSummary = this.strategySummaryBuilder.buildSummaryFromProfile({
+      profile: semanticConsistency.scriptProfile,
+    })
+    const summaryObservation = this.strategySummaryObservation.build({
       userIntentSummary,
       strategySummary,
-    })
-    const scriptSummary = this.strategySummaryBuilder.buildScriptSummary({
-      scriptProfile: semanticConsistency.scriptProfile,
+      scriptSummary,
     })
     const sessionSpecDesc = {
       ...semanticView,
@@ -120,6 +134,7 @@ export class CodegenPublicationGenerationStage {
       userIntentSummary,
       strategySummary,
       scriptSummary,
+      summaryObservation,
       lockedParams,
       consistencyReport: semanticConsistency,
     } satisfies Record<string, unknown>
@@ -137,6 +152,7 @@ export class CodegenPublicationGenerationStage {
       userIntentSummary,
       strategySummary,
       scriptSummary,
+      summaryObservation,
       lockedParams,
       publishParams,
     }

@@ -427,12 +427,6 @@ strategy
       riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
     }
     const canonicalSpec = canonicalBuilder.build(checklist)
-    const userIntentSummary = summaryBuilder.buildUserIntentSummary({
-      checklist,
-      message: '我要一个收盘价突破布林带上轨做空，价格回到布林带中轨时平仓的策略。',
-    })
-    const strategySummary = summaryBuilder.buildStrategySummary(canonicalSpec)
-
     const report = consistency.evaluate({
       canonicalSpec,
       scriptCode: `
@@ -451,13 +445,11 @@ const strategy: StrategyAdapterV1 = {
 }
 strategy
 `,
-      userIntentSummary,
-      strategySummary,
     })
 
     expect(report.status).toBe('PASSED')
     expect(report.checks.find(check => check.key === 'indicators.required')?.status).toBe('passed')
-    expect(report.checks.find(check => check.key === 'summary.alignment')?.status).toBe('passed')
+    expect(report.checks.some(check => check.key === 'summary.alignment')).toBe(false)
   })
 
   it('fails when ratio sizing uses raw positionPct without normalization', () => {
@@ -492,47 +484,6 @@ strategy
     expect(report.checks.some(check => check.key === 'sizing.mode' && check.status === 'failed')).toBe(true)
   })
 
-  it('fails when bollinger intent cannot be evidenced by script summary', () => {
-    const checklist = {
-      symbols: ['BTCUSDT'],
-      timeframes: ['15m'],
-      entryRules: ['突破布林带上轨时做空'],
-      exitRules: ['回到布林带中轨时平仓'],
-      riskRules: { positionPct: 10 },
-    }
-    const canonicalSpec = canonicalBuilder.build(checklist)
-    const userIntentSummary = summaryBuilder.buildUserIntentSummary({
-      checklist,
-      message: '我要一个布林带策略',
-    })
-    const strategySummary = summaryBuilder.buildStrategySummary(canonicalSpec)
-
-    const report = consistency.evaluate({
-      canonicalSpec,
-      scriptCode: `
-const strategy: StrategyAdapterV1 = {
-  protocolVersion: 'v1',
-  onBar(ctx): StrategyDecisionV1 {
-    const bars = ctx.bars ?? []
-    const closes = bars.map(item => item.close)
-    const fast = ctx.helpers?.ta?.sma(closes, 5)
-    const slow = ctx.helpers?.ta?.sma(closes, 20)
-    if (typeof fast !== 'number' || typeof slow !== 'number') return { action: 'NOOP' }
-    if (fast > slow) return { action: 'OPEN_LONG', size: { mode: 'RATIO', value: 0.1 } }
-    return { action: 'NOOP' }
-  },
-}
-strategy
-`,
-      userIntentSummary,
-      strategySummary,
-    })
-
-    expect(report.status).toBe('FAILED')
-    expect(report.checks.some(check => check.key === 'indicators.required' && check.status === 'failed')).toBe(true)
-    expect(report.checks.some(check => check.key === 'summary.alignment' && check.status === 'failed')).toBe(true)
-  })
-
   it('fails when moving-average script uses SMA filters without crossover semantics', () => {
     const checklist = {
       symbols: ['BTCUSDT'],
@@ -542,12 +493,6 @@ strategy
       riskRules: { positionPct: 10 },
     }
     const canonicalSpec = canonicalBuilder.build(checklist)
-    const userIntentSummary = summaryBuilder.buildUserIntentSummary({
-      checklist,
-      message: '我要一个均线金叉入场、死叉出场的策略',
-    })
-    const strategySummary = summaryBuilder.buildStrategySummary(canonicalSpec)
-
     const report = consistency.evaluate({
       canonicalSpec,
       scriptCode: `
@@ -565,12 +510,10 @@ const strategy: StrategyAdapterV1 = {
 }
 strategy
 `,
-      userIntentSummary,
-      strategySummary,
     })
 
     expect(report.status).toBe('FAILED')
-    expect(report.checks.some(check => check.key === 'summary.alignment' && check.status === 'failed')).toBe(true)
+    expect(report.checks.some(check => check.key === 'rules.mapping' && check.status === 'failed')).toBe(true)
   })
 
   it('passes when moving-average short entry and short exit use death/golden cross in the correct stage', () => {
@@ -582,12 +525,6 @@ strategy
       riskRules: { positionPct: 10 },
     }
     const canonicalSpec = canonicalBuilder.build(checklist)
-    const userIntentSummary = summaryBuilder.buildUserIntentSummary({
-      checklist,
-      message: '我要一个均线死叉开空、金叉平空的策略',
-    })
-    const strategySummary = summaryBuilder.buildStrategySummary(canonicalSpec)
-
     const report = consistency.evaluate({
       canonicalSpec,
       scriptCode: `
@@ -606,12 +543,45 @@ const strategy: StrategyAdapterV1 = {
 }
 strategy
 `,
-      userIntentSummary,
-      strategySummary,
     })
 
     expect(report.status).toBe('PASSED')
-    expect(report.checks.some(check => check.key === 'summary.alignment' && check.status === 'passed')).toBe(true)
+    expect(report.checks.some(check => check.key === 'summary.alignment')).toBe(false)
+  })
+
+  it('does not emit summary alignment checks for publish consistency anymore', () => {
+    const checklist = {
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['收盘价突破布林带上轨时做空'],
+      exitRules: ['价格回到布林带中轨时平仓'],
+      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+    }
+    const canonicalSpec = canonicalBuilder.build(checklist)
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: `
+const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const closes = ctx.bars?.map(item => item.close) ?? []
+    const bb = ctx.helpers?.ta?.bollingerBands(closes, 20, 2)
+    if (!bb) return { action: 'NOOP' }
+    const ratio = ctx.paramsNormalized?.positionPct ? Math.min(ctx.paramsNormalized.positionPct / 100, 1) : 0.1
+    if (closes.at(-1)! > bb.upper) return { action: 'OPEN_SHORT', size: { mode: 'RATIO', value: ratio } }
+    if (Math.abs(closes.at(-1)! - bb.middle) <= 1 && ctx.position?.side === 'long') return { action: 'CLOSE_LONG' }
+    if (Math.abs(closes.at(-1)! - bb.middle) <= 1 && ctx.position?.side === 'short') return { action: 'CLOSE_SHORT' }
+    return { action: 'NOOP' }
+  },
+}
+strategy
+`,
+    })
+
+    expect(report.status).toBe('PASSED')
+    expect(report.checks.some(check => check.key === 'summary.alignment')).toBe(false)
+    expect(report.checks.find(check => check.key === 'indicators.required')?.status).toBe('passed')
   })
 
   it('passes when canonical spec v2 compiles into an RSI-threshold momentum script', () => {
@@ -641,7 +611,6 @@ strategy
     const report = consistency.evaluate({
       canonicalSpec,
       scriptCode: script,
-      strategySummary: summaryBuilder.buildStrategySummary(canonicalSpec),
     })
 
     expect(report.status).toBe('PASSED')
@@ -676,7 +645,6 @@ strategy
     const report = consistency.evaluate({
       canonicalSpec,
       scriptCode: script,
-      strategySummary: summaryBuilder.buildStrategySummary(canonicalSpec),
     })
 
     expect(report.status).toBe('PASSED')
@@ -715,7 +683,6 @@ strategy
     const report = consistency.evaluate({
       canonicalSpec,
       scriptCode: script,
-      strategySummary,
     })
 
     expect(report.status).toBe('PASSED')
@@ -751,7 +718,6 @@ strategy
     const report = consistency.evaluate({
       canonicalSpec,
       scriptCode: script,
-      strategySummary: summaryBuilder.buildStrategySummary(canonicalSpec),
     })
 
     expect(report.status).toBe('PASSED')
@@ -792,7 +758,6 @@ strategy
     const report = consistency.evaluate({
       canonicalSpec,
       scriptCode: script,
-      strategySummary: summaryBuilder.buildStrategySummary(canonicalSpec),
     })
 
     expect(report.status).toBe('PASSED')
@@ -863,8 +828,6 @@ strategy
     const report = consistency.evaluate({
       canonicalSpec,
       scriptCode,
-      strategySummary,
-      scriptSummary,
     })
 
     expect(report.status).toBe('PASSED')
@@ -1012,7 +975,6 @@ strategy
     const report = consistency.evaluate({
       canonicalSpec,
       scriptCode,
-      scriptSummary,
     })
 
     expect(report.status).toBe('PASSED')
@@ -1048,7 +1010,6 @@ strategy
     const report = consistency.evaluate({
       canonicalSpec,
       scriptCode: script,
-      strategySummary: summaryBuilder.buildStrategySummary(canonicalSpec),
     })
 
     expect(report.status).toBe('PASSED')
@@ -1083,7 +1044,6 @@ strategy
     const report = consistency.evaluate({
       canonicalSpec,
       scriptCode: script,
-      strategySummary: summaryBuilder.buildStrategySummary(canonicalSpec),
     })
 
     expect(report.status).toBe('PASSED')
@@ -1117,7 +1077,6 @@ strategy
     const report = consistency.evaluate({
       canonicalSpec,
       scriptCode: script,
-      strategySummary: summaryBuilder.buildStrategySummary(canonicalSpec),
     })
 
     expect(report.status).toBe('PASSED')
@@ -1154,7 +1113,6 @@ strategy
     const report = consistency.evaluate({
       canonicalSpec,
       scriptCode: script,
-      strategySummary: summaryBuilder.buildStrategySummary(canonicalSpec),
     })
 
     expect(report.status).toBe('PASSED')
@@ -1193,7 +1151,6 @@ strategy
     const report = consistency.evaluate({
       canonicalSpec,
       scriptCode: script,
-      strategySummary: summaryBuilder.buildStrategySummary(canonicalSpec),
     })
 
     expect(report.status).toBe('PASSED')
@@ -1229,7 +1186,6 @@ strategy
     const report = consistency.evaluate({
       canonicalSpec,
       scriptCode: script,
-      strategySummary: summaryBuilder.buildStrategySummary(canonicalSpec),
     })
 
     expect(report.status).toBe('PASSED')

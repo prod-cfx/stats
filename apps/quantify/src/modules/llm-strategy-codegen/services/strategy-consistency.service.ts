@@ -13,7 +13,6 @@ import type {
   StrategySemanticRuleMapping,
   StrategySemanticRuleProfile,
 } from '../types/strategy-semantic-profile'
-import type { StrategySummary } from '../types/strategy-summary'
 import { createHash } from 'node:crypto'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { Injectable } from '@nestjs/common'
@@ -21,21 +20,7 @@ import { Injectable } from '@nestjs/common'
 import { CompiledScriptParserService } from './compiled-script-parser.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { ScriptProfileExtractorService } from './script-profile-extractor.service'
-
-const ENTRY_ACTIONS = new Set(['OPEN_LONG', 'OPEN_SHORT'])
-const EXIT_ACTIONS = new Set(['CLOSE_LONG', 'CLOSE_SHORT', 'ADJUST_POSITION'])
-const ENTRY_ADVANCED_RULE_KEYS = new Set([
-  'grid.range_rebalance',
-  'breakout.channel_high_break',
-  'breakout.channel_low_break',
-  'risk.cooldown_bars',
-])
-const EXIT_ADVANCED_RULE_KEYS = new Set([
-  'grid.range_rebalance',
-  'risk.take_profit_pct',
-  'risk.trailing_stop_pct',
-  'risk.time_stop_bars',
-])
+import { normalizeStrategySemanticProfile } from './strategy-semantic-profile-normalizer'
 
 @Injectable()
 export class StrategyConsistencyService {
@@ -70,22 +55,15 @@ export class StrategyConsistencyService {
   evaluate(input: {
     canonicalSpec: CanonicalStrategySpec
     scriptCode: string
-    userIntentSummary?: StrategySummary
-    strategySummary?: StrategySummary
-    scriptSummary?: StrategySummary
   }): StrategyConsistencyReport {
     const parsedProjection = this.tryParseCompiledProjection(input.scriptCode)
-    const scriptProfile = this.extractCompiledScriptProfile(input.scriptCode, parsedProjection)
-    const derivedScriptSummary = input.scriptSummary ?? this.buildScriptSummaryFromProfile(scriptProfile)
-    const specProfile = this.specToProfile(input.canonicalSpec)
+    const scriptProfile = normalizeStrategySemanticProfile(
+      this.extractCompiledScriptProfile(input.scriptCode, parsedProjection),
+    )
+    const specProfile = normalizeStrategySemanticProfile(this.specToProfile(input.canonicalSpec))
     const checks: StrategyConsistencyCheck[] = []
 
     checks.push(this.checkFallback(scriptProfile))
-    checks.push(this.checkSummaryAlignment({
-      userIntentSummary: input.userIntentSummary,
-      strategySummary: input.strategySummary,
-      scriptSummary: derivedScriptSummary,
-    }))
     checks.push(this.checkIndicators(specProfile, scriptProfile))
     checks.push(this.checkRuleMappings(specProfile, scriptProfile))
     checks.push(this.checkActions(specProfile, scriptProfile))
@@ -625,61 +603,6 @@ export class StrategyConsistencyService {
     }
   }
 
-  private checkSummaryAlignment(input: {
-    userIntentSummary?: StrategySummary
-    strategySummary?: StrategySummary
-    scriptSummary?: StrategySummary
-  }): StrategyConsistencyCheck {
-    const userIntentSummary = input.userIntentSummary
-    const strategySummary = input.strategySummary
-    const scriptSummary = input.scriptSummary
-
-    if (!userIntentSummary || !strategySummary || !scriptSummary) {
-      return {
-        key: 'summary.alignment',
-        level: 'warning',
-        status: 'unprovable',
-        expected: {
-          userIntentSummary: userIntentSummary ?? null,
-          strategySummary: strategySummary ?? null,
-        },
-        actual: scriptSummary ?? null,
-        message: '缺少 userIntentSummary/strategySummary/scriptSummary，跳过 summary 强校验。',
-      }
-    }
-
-    const mismatches = [
-      ...this.compareSummaries('用户意图', userIntentSummary, '策略描述', strategySummary),
-      ...this.compareSummaries('策略描述', strategySummary, '脚本语义', scriptSummary),
-    ]
-
-    if (mismatches.length > 0) {
-      return {
-        key: 'summary.alignment',
-        level: 'critical',
-        status: 'failed',
-        expected: {
-          userIntentSummary,
-          strategySummary,
-        },
-        actual: scriptSummary,
-        message: `summary 对齐失败：${mismatches.join('；')}`,
-      }
-    }
-
-    return {
-      key: 'summary.alignment',
-      level: 'critical',
-      status: 'passed',
-      expected: {
-        userIntentSummary,
-        strategySummary,
-      },
-      actual: scriptSummary,
-      message: 'userIntentSummary / strategySummary / scriptSummary 对齐一致。',
-    }
-  }
-
   private checkRuleMappings(
     specProfile: StrategySemanticProfile,
     scriptProfile: StrategySemanticProfile,
@@ -1210,103 +1133,6 @@ export class StrategyConsistencyService {
     return `sha256:${digest}`
   }
 
-  private compareSummaries(
-    leftLabel: string,
-    left: StrategySummary,
-    rightLabel: string,
-    right: StrategySummary,
-  ): string[] {
-    const issues: string[] = []
-    if (left.strategyType !== right.strategyType) {
-      issues.push(`${leftLabel}.strategyType=${left.strategyType} != ${rightLabel}.strategyType=${right.strategyType}`)
-    }
-
-    const leftIndicators = [...left.indicators].sort()
-    const rightIndicators = [...right.indicators].sort()
-    if (leftIndicators.join('|') !== rightIndicators.join('|')) {
-      issues.push(`${leftLabel}.indicators 与 ${rightLabel}.indicators 不一致`)
-    }
-
-    if (left.entryRule !== right.entryRule) {
-      issues.push(`${leftLabel}.entryRule=${left.entryRule} != ${rightLabel}.entryRule=${right.entryRule}`)
-    }
-
-    if (left.exitRule !== right.exitRule) {
-      issues.push(`${leftLabel}.exitRule=${left.exitRule} != ${rightLabel}.exitRule=${right.exitRule}`)
-    }
-
-    if (left.sizing && right.sizing) {
-      const leftSizing = `${left.sizing.mode}:${left.sizing.evidence}`
-      const rightSizing = `${right.sizing.mode}:${right.sizing.evidence}`
-      if (leftSizing !== rightSizing) {
-        issues.push(`${leftLabel}.sizing=${leftSizing} != ${rightLabel}.sizing=${rightSizing}`)
-      }
-    }
-
-    return issues
-  }
-
-  private buildScriptSummaryFromProfile(profile: StrategySemanticProfile): StrategySummary {
-    const indicators = Array.from(new Set(
-      profile.indicators
-        .map(item => item.kind)
-        .filter((kind): kind is Exclude<typeof kind, 'custom'> => kind !== 'custom'),
-    ))
-
-    const strategyType: StrategySummary['strategyType'] = indicators.includes('bollingerBands')
-      ? 'bollinger'
-      : (indicators.includes('sma') || indicators.includes('ema'))
-          ? 'movingAverage'
-          : (indicators.includes('rsi') || indicators.includes('macd'))
-              ? 'momentum'
-              : indicators.includes('atr')
-                  ? 'volatility'
-                  : 'custom'
-
-    const upperRule = profile.ruleMappings.find(item => item.key === 'bollinger.upper_break')
-    const lowerRule = profile.ruleMappings.find(item => item.key === 'bollinger.lower_break')
-    const hasMiddleRule = profile.ruleMappings.some(item => item.key === 'bollinger.middle_revert')
-    const movingAverageEntryRule = this.resolveMovingAverageSummaryRule(profile, ENTRY_ACTIONS)
-    const movingAverageExitRule = this.resolveMovingAverageSummaryRule(profile, EXIT_ACTIONS)
-    const momentumEntryRule = this.resolveMomentumSummaryRule(profile, ENTRY_ACTIONS)
-    const momentumExitRule = this.resolveMomentumSummaryRule(profile, EXIT_ACTIONS)
-    const advancedEntryRule = this.resolveAdvancedSummaryRule(profile, ENTRY_ACTIONS)
-    const advancedExitRule = this.resolveAdvancedSummaryRule(profile, EXIT_ACTIONS)
-
-    const entryRule = upperRule?.action === 'OPEN_SHORT'
-      ? 'bollinger.upper_break_short'
-      : lowerRule?.action === 'OPEN_LONG'
-          ? 'bollinger.lower_break_long'
-          : (strategyType === 'movingAverage' && movingAverageEntryRule)
-              ? movingAverageEntryRule
-              : (strategyType === 'momentum' && momentumEntryRule)
-                  ? momentumEntryRule
-              : advancedEntryRule || 'custom'
-    const exitRule = hasMiddleRule
-      ? 'bollinger.middle_revert'
-      : (strategyType === 'movingAverage' && movingAverageExitRule)
-          ? movingAverageExitRule
-          : (strategyType === 'momentum' && momentumExitRule)
-              ? momentumExitRule
-          : advancedExitRule || 'custom'
-
-    return {
-      strategyType,
-      indicators,
-      entryRule,
-      exitRule,
-      market: {},
-      sizing: profile.sizing
-        ? {
-          mode: profile.sizing.mode,
-          evidence: profile.sizing.source === 'literal' || profile.sizing.source === 'positionPct_normalized'
-            ? 'explicit'
-            : 'unresolved',
-        }
-        : null,
-    }
-  }
-
   private buildLegacyRuleMappings(spec: Exclude<CanonicalStrategySpec, CanonicalStrategySpecV2>): StrategySemanticRuleMapping[] {
     const mappings = new Map<StrategySemanticRuleKey, CanonicalAction>()
     const register = (trigger: string, action: CanonicalAction) => {
@@ -1352,57 +1178,6 @@ export class StrategyConsistencyService {
     spec.exits.forEach(rule => register(rule.trigger, rule.action))
 
     return Array.from(mappings.entries()).map(([key, action]) => ({ key, action }))
-  }
-
-  private resolveMovingAverageSummaryRule(
-    profile: StrategySemanticProfile,
-    actionSet: Set<string>,
-  ): 'ma.golden_cross' | 'ma.death_cross' | null {
-    const matchedKeys = Array.from(new Set(
-      profile.ruleMappings
-        .filter(item => actionSet.has(item.action))
-        .map(item => item.key)
-        .filter((key): key is 'ma.golden_cross' | 'ma.death_cross' =>
-          key === 'ma.golden_cross' || key === 'ma.death_cross'),
-    ))
-
-    return matchedKeys.length === 1 ? matchedKeys[0] : null
-  }
-
-  private resolveMomentumSummaryRule(
-    profile: StrategySemanticProfile,
-    actionSet: Set<string>,
-  ): 'rsi.threshold_lte' | 'rsi.threshold_gte' | 'rsi.cross_over' | 'rsi.cross_under' | 'macd.golden_cross' | 'macd.death_cross' | null {
-    const matchedKeys = Array.from(new Set(
-      profile.ruleMappings
-        .filter(item => actionSet.has(item.action))
-        .map(item => item.key)
-        .filter((key): key is 'rsi.threshold_lte' | 'rsi.threshold_gte' | 'rsi.cross_over' | 'rsi.cross_under' | 'macd.golden_cross' | 'macd.death_cross' =>
-          key === 'rsi.threshold_lte'
-          || key === 'rsi.threshold_gte'
-          || key === 'rsi.cross_over'
-          || key === 'rsi.cross_under'
-          || key === 'macd.golden_cross'
-          || key === 'macd.death_cross'),
-    ))
-
-    return matchedKeys.length === 1 ? matchedKeys[0] : null
-  }
-
-  private resolveAdvancedSummaryRule(
-    profile: StrategySemanticProfile,
-    actionSet: Set<string>,
-  ): 'grid.range_rebalance' | 'breakout.channel_high_break' | 'breakout.channel_low_break' | 'risk.take_profit_pct' | 'risk.trailing_stop_pct' | 'risk.cooldown_bars' | 'risk.time_stop_bars' | null {
-    const allowedKeys = actionSet === ENTRY_ACTIONS ? ENTRY_ADVANCED_RULE_KEYS : EXIT_ADVANCED_RULE_KEYS
-    const matchedKeys = Array.from(new Set(
-      profile.ruleMappings
-        .filter(item => actionSet.has(item.action) && allowedKeys.has(item.key))
-        .map(item => item.key),
-    ))
-
-    return matchedKeys.length === 1
-      ? matchedKeys[0] as 'grid.range_rebalance' | 'breakout.channel_high_break' | 'breakout.channel_low_break' | 'risk.take_profit_pct' | 'risk.trailing_stop_pct' | 'risk.cooldown_bars' | 'risk.time_stop_bars'
-      : null
   }
 
   private flattenV2Rule(rule: CanonicalRuleV2): StrategySemanticRuleProfile[] {
