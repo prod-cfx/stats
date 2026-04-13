@@ -108,6 +108,7 @@ export function AiQuantPageClient({
   const [selectedDeployExchange, setSelectedDeployExchange] =
     useState<QuantParams['exchange']>('binance')
   const [selectedDeployAccountId, setSelectedDeployAccountId] = useState('')
+  const [selectedDeployLeverage, setSelectedDeployLeverage] = useState<number | null>(null)
   const [exchangeAccounts, setExchangeAccounts] = useState<DeployExchangeAccount[]>([])
   const [backtestCapabilityState, setBacktestCapabilityState] = useState<CapabilityState>('loading')
   const [backtestCapabilities, setBacktestCapabilities] = useState<BacktestCapabilities | null>(
@@ -427,6 +428,11 @@ export function AiQuantPageClient({
     [exchangeAccounts, selectedDeployExchange],
   )
   const deployAccounts = useMemo(() => exchangeAccounts, [exchangeAccounts])
+  const deployLeverageOptions = useMemo(() => {
+    const range = activeConversation?.publishedSnapshotDeploymentExecutionConstraints?.effectiveAllowedLeverageRange
+    if (!range) return []
+    return Array.from({ length: range.max - range.min + 1 }).map((_, index) => range.min + index)
+  }, [activeConversation?.publishedSnapshotDeploymentExecutionConstraints?.effectiveAllowedLeverageRange])
 
   const canDeploy = useMemo(() => {
     if (!activeConversation?.backtestResult) return false
@@ -1089,6 +1095,12 @@ export function AiQuantPageClient({
               }}
               onDeploy={() => {
                 setDeployRequestId(createDeployRequestId())
+                const baselineLeverage = activeConversation.publishedSnapshotDeploymentExecutionDefaults?.leverage
+                setSelectedDeployLeverage(
+                  typeof baselineLeverage === 'number' && Number.isFinite(baselineLeverage)
+                    ? baselineLeverage
+                    : null,
+                )
                 setDeployOpen(true)
               }}
             />
@@ -1104,6 +1116,7 @@ export function AiQuantPageClient({
           }
           setDeployOpen(false)
           setDeployRequestId(null)
+          setSelectedDeployLeverage(null)
         }}
         canDeploy={canDeploy}
         deploySubmitting={deploySubmitting}
@@ -1111,6 +1124,12 @@ export function AiQuantPageClient({
         exchange={selectedDeployExchange}
         accounts={deployAccounts}
         selectedAccountId={selectedDeployAccountId}
+        leverageOptions={deployLeverageOptions}
+        selectedLeverage={selectedDeployLeverage ?? undefined}
+        onSelectLeverage={setSelectedDeployLeverage}
+        leverageExplanation={activeConversation.publishedSnapshotDeploymentExecutionConstraints?.constraintExplanation ?? null}
+        deploymentBaseline={activeConversation.publishedSnapshotDeploymentExecutionDefaults ?? null}
+        driftReasons={[]}
         onSelectExchange={nextExchange => {
           if (
             nextExchange !== 'binance' &&
@@ -1134,6 +1153,7 @@ export function AiQuantPageClient({
             deployRequestId,
             selectedDeployAccountId,
             selectedDeployExchange,
+            selectedDeployLeverage,
             sessionUserId: session.userId,
             setDeployOpen,
             setDeployRequestId,

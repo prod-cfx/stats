@@ -24,6 +24,7 @@ export async function confirmAiQuantDeploy(args: {
   deployRequestId: string | null
   selectedDeployAccountId: string
   selectedDeployExchange: QuantParams['exchange']
+  selectedDeployLeverage: number | null
   sessionUserId: string
   setDeployOpen: Dispatch<SetStateAction<boolean>>
   setDeployRequestId: Dispatch<SetStateAction<string | null>>
@@ -40,6 +41,7 @@ export async function confirmAiQuantDeploy(args: {
     deployRequestId,
     selectedDeployAccountId,
     selectedDeployExchange,
+    selectedDeployLeverage,
     sessionUserId,
     setDeployOpen,
     setDeployRequestId,
@@ -112,6 +114,10 @@ export async function confirmAiQuantDeploy(args: {
       strategyInstanceId: activeConversation.publishedStrategyInstanceId ?? undefined,
       exchangeAccountId: account.accountId,
       exchangeAccountName: account.accountName,
+      deploymentExecutionConfig:
+        typeof selectedDeployLeverage === 'number'
+          ? { leverage: selectedDeployLeverage }
+          : undefined,
     })
     setDeployOpen(false)
     setDeployRequestId(null)

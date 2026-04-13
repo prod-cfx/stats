@@ -1,5 +1,12 @@
 import type { AiQuantStrategyRecord, AiQuantStrategyViewState } from './ai-quant-strategy-store'
 import type {
+  AccountAiQuantBacktestConfigDefaults,
+  AccountAiQuantConsistencySummary,
+  AccountAiQuantDeploymentExecutionConfig,
+  AccountAiQuantDeploymentExecutionConstraints,
+  AccountAiQuantLeverageRange,
+  AccountAiQuantPublishedStrategyConfig,
+  AccountAiQuantSnapshotCompatibilityMetadata,
   AccountAiQuantStrategyDetail,
   AccountAiQuantStrategyListItem,
   AccountAiQuantStrategyApiState,
@@ -49,6 +56,100 @@ function mapDynamicParamFields(
   }
 }
 
+function normalizeLeverageRange(
+  range: AccountAiQuantLeverageRange | null | undefined,
+): { min: number, max: number } | null {
+  if (!range) return null
+  const min = normalizeNumber(range.min)
+  const max = normalizeNumber(range.max)
+  if (min <= 0 || max <= 0 || max < min) return null
+  return { min, max }
+}
+
+function normalizeBacktestConfigDefaults(
+  config: AccountAiQuantBacktestConfigDefaults | null | undefined,
+): AiQuantStrategyRecord['snapshotBacktestConfigDefaults'] {
+  if (!config) return null
+  const initialCash = normalizeNumber(config.initialCash)
+  const leverage = normalizeNumber(config.leverage)
+  const slippageBps = normalizeNumber(config.slippageBps)
+  const feeBps = normalizeNumber(config.feeBps)
+  const priceSource = typeof config.priceSource === 'string' ? config.priceSource : ''
+  if (!initialCash || !leverage || !priceSource) return null
+  return {
+    initialCash,
+    leverage,
+    slippageBps,
+    feeBps,
+    priceSource,
+    allowPartial: config.allowPartial === true,
+  }
+}
+
+function normalizeDeploymentExecutionConfig(
+  config: AccountAiQuantDeploymentExecutionConfig | null | undefined,
+): AiQuantStrategyRecord['deploymentExecutionBaseline'] {
+  if (!config) return null
+  return {
+    leverage: typeof config.leverage === 'number' && Number.isFinite(config.leverage) ? config.leverage : null,
+    priceSource: typeof config.priceSource === 'string' ? config.priceSource : null,
+    orderType: typeof config.orderType === 'string' ? config.orderType : null,
+    timeInForce: typeof config.timeInForce === 'string' ? config.timeInForce : null,
+  }
+}
+
+function normalizeCompatibilityMetadata(
+  metadata: AccountAiQuantSnapshotCompatibilityMetadata | null | undefined,
+): AiQuantStrategyRecord['compatibilityMetadata'] {
+  if (!metadata) return null
+  return {
+    isLegacySnapshot: metadata.isLegacySnapshot === true,
+    missingBacktestConfigDefaults: metadata.missingBacktestConfigDefaults === true,
+    missingDeploymentExecutionDefaults: metadata.missingDeploymentExecutionDefaults === true,
+    missingDeploymentExecutionConstraints: metadata.missingDeploymentExecutionConstraints === true,
+    requiresRepublishForBacktest: metadata.requiresRepublishForBacktest === true,
+    requiresRepublishForDeploy: metadata.requiresRepublishForDeploy === true,
+  }
+}
+
+function normalizeConsistencySummary(
+  summary: AccountAiQuantConsistencySummary | null | undefined,
+): AiQuantStrategyRecord['consistencySummary'] {
+  if (!summary) return null
+  return {
+    isConsistent: summary.isConsistent === true,
+    driftReasons: Array.isArray(summary.driftReasons) ? summary.driftReasons.filter(Boolean) : [],
+    consistencyScore: typeof summary.consistencyScore === 'number' ? summary.consistencyScore : null,
+  }
+}
+
+function buildStrategyBoundPublishedSnapshotParamValues(input: {
+  exchange: AiQuantStrategyRecord['exchange']
+  strategyConfig: AccountAiQuantPublishedStrategyConfig | null | undefined
+  fallbackSymbol: string
+  fallbackTimeframe: string
+  fallbackPositionPct: number
+}): Record<string, unknown> | null {
+  const {
+    exchange,
+    strategyConfig,
+    fallbackSymbol,
+    fallbackTimeframe,
+    fallbackPositionPct,
+  } = input
+
+  if (strategyConfig) {
+    return {
+      exchange: strategyConfig.exchange ?? exchange,
+      symbol: strategyConfig.symbol ?? fallbackSymbol,
+      baseTimeframe: strategyConfig.baseTimeframe ?? fallbackTimeframe,
+      positionPct: normalizeNumber(strategyConfig.positionPct ?? fallbackPositionPct),
+    }
+  }
+
+  return null
+}
+
 export function mapAccountStrategyListItemToRecord(
   item: AccountAiQuantStrategyListItem,
 ): AiQuantStrategyRecord {
@@ -83,13 +184,13 @@ export function mapAccountStrategyDetailToRecord(
   const resolvedExchange = snapshotExchange ?? detail.exchange
   const exchange = resolvedExchange === 'okx' ? 'okx' : resolvedExchange === 'hyperliquid' ? 'hyperliquid' : 'binance'
   const publishedSnapshotParamValues = detail.snapshot.publishedSnapshotId
-    ? {
+    ? buildStrategyBoundPublishedSnapshotParamValues({
         exchange,
-        symbol: detail.snapshot.symbol ?? detail.symbol ?? '--',
-        baseTimeframe: detail.snapshot.timeframe ?? detail.timeframe ?? '--',
-        positionPct: normalizeNumber(detail.snapshot.positionPct ?? detail.positionPct),
-        ...(detail.snapshot.paramValues ?? {}),
-      }
+        strategyConfig: detail.snapshot.strategyConfig,
+        fallbackSymbol: detail.snapshot.symbol ?? detail.symbol ?? '--',
+        fallbackTimeframe: detail.snapshot.timeframe ?? detail.timeframe ?? '--',
+        fallbackPositionPct: normalizeNumber(detail.snapshot.positionPct ?? detail.positionPct),
+      })
     : null
   const initialCapital = detail.accountOverview?.initialBalance
     ?? detail.equitySeries[0]?.value
@@ -117,6 +218,24 @@ export function mapAccountStrategyDetailToRecord(
     },
     ...dynamicParams,
     publishedSnapshotParamValues,
+    snapshotBacktestConfigDefaults: normalizeBacktestConfigDefaults(detail.snapshot.backtestConfigDefaults),
+    deploymentExecutionBaseline: normalizeDeploymentExecutionConfig(detail.snapshot.deploymentExecutionBaseline),
+    deploymentExecutionCurrent: normalizeDeploymentExecutionConfig(detail.snapshot.deploymentExecutionCurrent),
+    executionConfigVersion:
+      typeof detail.snapshot.executionConfigVersion === 'number'
+        ? detail.snapshot.executionConfigVersion
+        : null,
+    deploymentLeverageRange: normalizeLeverageRange(
+      detail.snapshot.effectiveAllowedLeverageRange
+        ?? detail.snapshot.deploymentExecutionConstraints?.effectiveAllowedLeverageRange,
+    ),
+    deploymentConstraintExplanation:
+      detail.snapshot.deploymentExecutionConstraints?.constraintExplanation ?? null,
+    compatibilityMetadata: normalizeCompatibilityMetadata(detail.snapshot.compatibilityMetadata),
+    consistencySummary: normalizeConsistencySummary(detail.snapshot.consistencySummary),
+    canEditDeploymentLeverage:
+      Boolean(detail.snapshot.deploymentExecutionCurrent)
+      && detail.snapshot.compatibilityMetadata?.requiresRepublishForDeploy !== true,
     publishedSnapshotId: detail.snapshot.publishedSnapshotId ?? null,
     snapshotHash: detail.snapshot.snapshotHash ?? null,
     totalPnl: detail.totalPnl ?? null,

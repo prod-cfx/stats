@@ -117,12 +117,22 @@ describe('StrategyDetailPageClient', () => {
         symbol: 'BTCUSDT',
         baseTimeframe: '15m',
         positionPct: 12,
-        backtestInitialCash: 20000,
-        backtestLeverage: 2,
-        backtestSlippageBps: 8,
-        backtestFeeBps: 3,
-        backtestPriceSource: 'close',
-        backtestAllowPartial: true,
+      },
+      snapshotBacktestConfigDefaults: {
+        initialCash: 20000,
+        leverage: 2,
+        slippageBps: 8,
+        feeBps: 3,
+        priceSource: 'close',
+        allowPartial: true,
+      },
+      compatibilityMetadata: {
+        isLegacySnapshot: false,
+        missingBacktestConfigDefaults: false,
+        missingDeploymentExecutionDefaults: false,
+        missingDeploymentExecutionConstraints: false,
+        requiresRepublishForBacktest: false,
+        requiresRepublishForDeploy: false,
       },
       snapshotHash: 'snapshot-hash-1',
       updatedAt: '2026-04-10T00:00:00.000Z',
@@ -199,5 +209,60 @@ describe('StrategyDetailPageClient', () => {
     )
     expect(mockGetBacktestJob).not.toHaveBeenCalled()
     expect(container.querySelector('[data-testid="backtest-error"]')?.textContent).toBe('')
+  })
+
+  it('blocks legacy snapshot backtest and prompts republish when formal backtest truth is missing', async () => {
+    mockMapDetailToRecord.mockReturnValue({
+      id: 'inst-legacy',
+      name: 'Legacy strategy',
+      status: 'running',
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      positionPct: 12,
+      initialCapital: 10000,
+      metrics: { returnPct: 0, maxDrawdownPct: 0, winRatePct: 0, tradeCount: 0 },
+      equitySeries: [],
+      timeline: [],
+      paramSchema: null,
+      paramValues: {
+        backtestRangePreset: '7D',
+      },
+      schemaVersion: null,
+      supportsDynamicParams: false,
+      publishedSnapshotId: 'snapshot-legacy',
+      publishedSnapshotParamValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 12,
+      },
+      snapshotBacktestConfigDefaults: null,
+      compatibilityMetadata: {
+        isLegacySnapshot: true,
+        missingBacktestConfigDefaults: true,
+        missingDeploymentExecutionDefaults: true,
+        missingDeploymentExecutionConstraints: true,
+        requiresRepublishForBacktest: true,
+        requiresRepublishForDeploy: true,
+      },
+      snapshotHash: 'snapshot-hash-legacy',
+      updatedAt: '2026-04-10T00:00:00.000Z',
+    })
+
+    await act(async () => {
+      root.render(<StrategyDetailPageClient lng="zh" id="inst-legacy" />)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mockBuildBacktestPayload).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-testid="backtest-error"]')?.textContent).toContain('重新发布')
   })
 })

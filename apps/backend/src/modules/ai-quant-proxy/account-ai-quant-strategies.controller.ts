@@ -7,6 +7,7 @@ import { AiQuantProxyService as AiQuantProxyServiceToken } from './ai-quant-prox
 import { AccountAiQuantActionRequestDto } from './dto/account-ai-quant-action.request.dto'
 import { AccountAiQuantDeployRequestDto } from './dto/account-ai-quant-deploy.request.dto'
 import { AccountAiQuantListQueryDto } from './dto/account-ai-quant-list-query.dto'
+import { AccountAiQuantUpdateExecutionLeverageRequestDto } from './dto/account-ai-quant-update-execution-leverage.request.dto'
 
 @ApiTags('account-ai-quant')
 @ApiBearerAuth('bearer')
@@ -18,6 +19,7 @@ export class AccountAiQuantStrategiesController {
     AccountAiQuantActionRequestDto,
     AccountAiQuantDeployRequestDto,
     AccountAiQuantListQueryDto,
+    AccountAiQuantUpdateExecutionLeverageRequestDto,
   ]
 
   constructor(
@@ -74,6 +76,19 @@ export class AccountAiQuantStrategiesController {
       strategyInstanceId: dto.strategyInstanceId,
       exchangeAccountId: dto.exchangeAccountId,
       exchangeAccountName: dto.exchangeAccountName,
+      leverage: dto.leverage,
+    })
+  }
+
+  @Post(':id/execution/leverage')
+  async updateExecutionLeverage(
+    @CurrentUser('id') userId: string,
+    @Headers('authorization') authorization: string | undefined,
+    @Param('id') id: string,
+    @Body() dto: AccountAiQuantUpdateExecutionLeverageRequestDto,
+  ): Promise<unknown> {
+    return this.service.updateAccountStrategyExecutionLeverage(userId, authorization, id, {
+      leverage: dto.leverage,
     })
   }
 

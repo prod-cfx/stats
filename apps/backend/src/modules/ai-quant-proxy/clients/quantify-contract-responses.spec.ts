@@ -11,6 +11,7 @@ describe('quantify contract generated responses', () => {
       'AccountStrategyViewController_detail',
       'AccountStrategyViewController_action',
       'AccountStrategyViewController_deploy',
+      'AccountStrategyViewController_updateExecutionLeverage',
       'BacktestingController_getCapabilities',
       'BacktestingController_createJob',
       'BacktestingController_getJob',
@@ -90,5 +91,21 @@ describe('quantify contract generated responses', () => {
     expect(snippet).toContain('clarificationState: StrategyClarificationStateDto.nullish()')
     expect(snippet).toContain('publicationGate: PublicationGateDto.nullish()')
     expect(snippet).toContain('rejectReason: z.string().nullish()')
+  })
+
+  it('includes leverage passthrough fields in quantify AI Quant request contracts', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+
+    const deploySchemaStart = source.indexOf('const AccountStrategyDeployDto = z')
+    const updateSchemaStart = source.indexOf('const AccountStrategyUpdateExecutionLeverageDto = z')
+
+    expect(deploySchemaStart).toBeGreaterThanOrEqual(0)
+    expect(updateSchemaStart).toBeGreaterThanOrEqual(0)
+
+    const deploySnippet = source.slice(deploySchemaStart, deploySchemaStart + 900)
+    const updateSnippet = source.slice(updateSchemaStart, updateSchemaStart + 300)
+
+    expect(deploySnippet).toContain('leverage: z.number().optional()')
+    expect(updateSnippet).toContain('leverage: z.number()')
   })
 })

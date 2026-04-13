@@ -14,6 +14,7 @@ import { AccountStrategyDetailResponseDto } from '../dto/account-strategy-detail
 import { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
 import { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
 import { AccountStrategyListQueryDto } from '../dto/account-strategy-list-query.dto'
+import { AccountStrategyUpdateExecutionLeverageDto } from '../dto/account-strategy-update-execution-leverage.dto'
 import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { AccountStrategyCallerIdentityService } from '../services/account-strategy-caller-identity.service'
@@ -29,6 +30,7 @@ export class AccountStrategyViewController {
     AccountStrategyActionDto,
     AccountStrategyDeployDto,
     AccountStrategyListQueryDto,
+    AccountStrategyUpdateExecutionLeverageDto,
   ]
 
   constructor(
@@ -113,6 +115,25 @@ export class AccountStrategyViewController {
   ): Promise<AccountStrategyDetailResponseDto> {
     const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.service.deployStrategy({
+      ...dto,
+      userId,
+    })
+  }
+
+  @Transactional()
+  @Post(':id/execution/leverage')
+  @ApiOperation({ summary: '更新当前用户 AI Quant 策略的部署杠杆' })
+  @ApiHeader({ name: 'authorization', required: false })
+  @ApiHeader({ name: 'x-user-id', required: false })
+  @ApiOkResponse({ type: AccountStrategyDetailResponseDto })
+  async updateDeploymentLeverage(
+    @Param('id') id: string,
+    @Body() dto: AccountStrategyUpdateExecutionLeverageDto,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-user-id') forwardedUserId?: string,
+  ): Promise<AccountStrategyDetailResponseDto> {
+    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
+    return this.service.updateDeploymentLeverage(id, {
       ...dto,
       userId,
     })

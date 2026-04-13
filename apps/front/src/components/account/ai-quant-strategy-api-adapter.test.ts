@@ -295,7 +295,7 @@ describe('ai-quant-strategy-api-adapter', () => {
     expect(record.positionPct).toBe(12)
   })
 
-  it('prefers snapshot-bound backtest execution params over drifted live param values', () => {
+  it('maps truthful snapshot baseline, deployment current truth, and compatibility metadata', () => {
     const record = mapAccountStrategyDetailToRecord({
       id: 'inst-backtest-snapshot',
       name: 'snapshot backtest detail',
@@ -350,6 +350,62 @@ describe('ai-quant-strategy-api-adapter', () => {
           backtestAllowPartial: false,
         },
         schemaVersion: 'v2',
+        strategyConfig: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          positionPct: 12,
+          strategyDeclaredLeverageRange: {
+            min: 1,
+            max: 5,
+          },
+        },
+        backtestConfigDefaults: {
+          initialCash: 15000,
+          leverage: 2,
+          slippageBps: 9,
+          feeBps: 4,
+          priceSource: 'mid',
+          allowPartial: false,
+        },
+        deploymentExecutionBaseline: {
+          leverage: 2,
+          priceSource: 'mark',
+          orderType: 'market',
+          timeInForce: 'IOC',
+        },
+        deploymentExecutionCurrent: {
+          leverage: 4,
+          priceSource: 'mark',
+          orderType: 'market',
+          timeInForce: 'IOC',
+        },
+        executionConfigVersion: 3,
+        compatibilityMetadata: {
+          isLegacySnapshot: false,
+          missingBacktestConfigDefaults: false,
+          missingDeploymentExecutionDefaults: false,
+          missingDeploymentExecutionConstraints: false,
+          requiresRepublishForBacktest: false,
+          requiresRepublishForDeploy: false,
+        },
+        consistencySummary: {
+          isConsistent: false,
+          driftReasons: ['leverage drift'],
+        },
+        deploymentExecutionConstraints: {
+          effectiveAllowedLeverageRange: {
+            min: 1,
+            max: 5,
+          },
+          exchangeAccountCapabilityMaxLeverage: 10,
+          platformRiskMaxLeverage: 5,
+          strategyDeclaredLeverageRange: {
+            min: 1,
+            max: 5,
+          },
+          constraintExplanation: '交易所支持到 10x，但平台风控和策略限制最终只允许 1-5x。',
+        },
       },
       timeline: [],
       accountOverview: {
@@ -369,25 +425,50 @@ describe('ai-quant-strategy-api-adapter', () => {
       latestOrders: [],
     } as any)
 
-    expect(record.paramValues).toEqual({
-      backtestInitialCash: 15000,
-      backtestLeverage: 2,
-      backtestSlippageBps: 9,
-      backtestFeeBps: 4,
-      backtestPriceSource: 'mid',
-      backtestAllowPartial: false,
+    expect(record.snapshotBacktestConfigDefaults).toEqual({
+      initialCash: 15000,
+      leverage: 2,
+      slippageBps: 9,
+      feeBps: 4,
+      priceSource: 'mid',
+      allowPartial: false,
     })
+    expect(record.deploymentExecutionBaseline).toEqual({
+      leverage: 2,
+      priceSource: 'mark',
+      orderType: 'market',
+      timeInForce: 'IOC',
+    })
+    expect(record.deploymentExecutionCurrent).toEqual({
+      leverage: 4,
+      priceSource: 'mark',
+      orderType: 'market',
+      timeInForce: 'IOC',
+    })
+    expect(record.executionConfigVersion).toBe(3)
+    expect(record.compatibilityMetadata).toEqual({
+      isLegacySnapshot: false,
+      missingBacktestConfigDefaults: false,
+      missingDeploymentExecutionDefaults: false,
+      missingDeploymentExecutionConstraints: false,
+      requiresRepublishForBacktest: false,
+      requiresRepublishForDeploy: false,
+    })
+    expect(record.consistencySummary).toEqual({
+      isConsistent: false,
+      driftReasons: ['leverage drift'],
+      consistencyScore: null,
+    })
+    expect(record.deploymentLeverageRange).toEqual({
+      min: 1,
+      max: 5,
+    })
+    expect(record.deploymentConstraintExplanation).toContain('1-5x')
     expect(record.publishedSnapshotParamValues).toEqual({
       exchange: 'binance',
       symbol: 'BTCUSDT',
       baseTimeframe: '15m',
       positionPct: 12,
-      backtestInitialCash: 15000,
-      backtestLeverage: 2,
-      backtestSlippageBps: 9,
-      backtestFeeBps: 4,
-      backtestPriceSource: 'mid',
-      backtestAllowPartial: false,
     })
   })
 

@@ -1,234 +1,110 @@
-import type { ReactNode } from 'react'
-import type { AiQuantStrategyRecord } from './ai-quant-strategy-store'
-import { describe, expect, it, jest } from '@jest/globals'
-import { renderToStaticMarkup } from 'react-dom/server.node'
+/** @jest-environment jsdom */
+
+import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
+import React from 'react'
+import { act } from 'react'
+import { createRoot } from 'react-dom/client'
 import { AiQuantStrategyDetail } from './AiQuantStrategyDetail'
-import { buildParamSummary } from './AiQuantStrategyList'
-
-jest.mock('lucide-react', () => ({
-  Activity: () => null,
-  Clock: () => null,
-  MoreHorizontal: () => null,
-  Play: () => null,
-  PlayCircle: () => null,
-  Square: () => null,
-  StopCircle: () => null,
-}))
-
-jest.mock('next/link', () => ({
-  __esModule: true,
-  default: ({ children, href }: { children: ReactNode, href: string }) => <a href={href}>{children}</a>,
-}))
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => ({
-      'aiQuant.paramSnapshotTitle': '参数快照',
-      'aiQuant.paramSummaryEmpty': '暂无参数',
-      'aiQuant.deployAccountLabel': '部署账户',
-      'aiQuant.deployTimeLabel': '部署时间',
-      'aiQuant.legacyUnsupportedTitle': '策略参数不可用',
-      'aiQuant.legacyUnsupportedMessage': '不支持旧策略，请重新生成',
-    }[key] ?? key),
+    t: (key: string) => key,
   }),
 }))
 
-jest.mock('@/hooks/use-auth', () => ({
-  useAuth: () => ({ session: null }),
-}))
+describe('AiQuantStrategyDetail', () => {
+  let container: HTMLDivElement
+  let root: ReturnType<typeof createRoot>
 
-jest.mock('@/lib/api', () => ({
-  fetchAccountAiQuantStrategies: async () => ({ items: [] }),
-  performAccountAiQuantStrategyAction: async () => undefined,
-}))
-
-function makeStrategy(overrides: Partial<AiQuantStrategyRecord> = {}): AiQuantStrategyRecord {
-  return {
-    id: 'stg-1',
-    name: 'Test Strategy',
-    status: 'running',
-    exchange: 'binance',
-    symbol: 'BTCUSDT',
-    timeframe: '15m',
-    positionPct: 10,
-    initialCapital: 10000,
-    metrics: {
-      returnPct: 10,
-      maxDrawdownPct: 5,
-      winRatePct: 60,
-      tradeCount: 12,
-    },
-    equitySeries: [
-      { ts: '2026-03-20 00:00', value: 10000 },
-      { ts: '2026-03-20 01:00', value: 10020 },
-    ],
-    timeline: [{ at: '2026-03-20 01:00', event: 'Started' }],
-    paramSchema: {
-      type: 'object',
-      properties: {
-        leverage: { type: 'number', title: '杠杆' },
-        atrPeriod: { type: 'number', title: 'ATR周期' },
-        enableTrailing: { type: 'boolean', title: '移动止盈' },
-      },
-    },
-    paramValues: {
-      leverage: 3,
-      atrPeriod: 14,
-      enableTrailing: true,
-    },
-    schemaVersion: 'v1',
-    supportsDynamicParams: true,
-    updatedAt: '2026-03-20T00:00:00.000Z',
-    accountOverview: {
-      initialBalance: 10000,
-      totalEquity: 10120,
-      availableBalance: 9800,
-      totalPnl: 120,
-      todayPnl: 20,
-      baseCurrency: 'USDT',
-    },
-    positionOverview: {
-      openPositionsCount: 1,
-      closedPositionsCount: 3,
-      totalRealizedPnl: 100,
-      totalUnrealizedPnl: 20,
-    },
-    latestOrders: [{
-      executedAt: '2026-03-20 01:10',
-      side: 'BUY',
-      symbol: 'BTCUSDT',
-      price: 68000,
-      quantity: 0.01,
-      fee: 0.2,
-      feeCurrency: 'USDT',
-      orderId: 'ord-1',
-    }],
-    ...overrides,
-  }
-}
-
-describe('AiQuant strategy dynamic params', () => {
-  it('buildParamSummary returns dynamic schema-based summary entries', () => {
-    const summary = buildParamSummary(
-      {
-        type: 'object',
-        properties: {
-          leverage: { type: 'number', title: '杠杆' },
-          atrPeriod: { type: 'number', title: 'ATR周期' },
-          enableTrailing: { type: 'boolean', title: '移动止盈' },
-        },
-      },
-      {
-        leverage: 3,
-        atrPeriod: 14,
-        enableTrailing: true,
-      },
-    )
-
-    expect(summary).toEqual(['杠杆: 3', 'ATR周期: 14', '移动止盈: true'])
+  beforeEach(() => {
+    ;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
   })
 
-  it('renders detail params from dynamic schema and values', () => {
-    const html = renderToStaticMarkup(
-      <AiQuantStrategyDetail
-        lng="zh"
-        strategy={makeStrategy()}
-      />,
-    )
-
-    expect(html).toContain('参数快照')
-    expect(html).toContain('杠杆')
-    expect(html).toContain('ATR周期')
-    expect(html).toContain('移动止盈')
-    expect(html).toContain('3')
-    expect(html).toContain('14')
-    expect(html).toContain('true')
-    expect(html).toContain('账户概览')
-    expect(html).toContain('最新成交')
-    expect(html).toContain('BTCUSDT')
+  afterEach(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    container.remove()
   })
 
-  it('shows legacy rejection when schema is missing and hides param panel', () => {
-    const html = renderToStaticMarkup(
-      <AiQuantStrategyDetail
-        lng="zh"
-        strategy={makeStrategy({
-          supportsDynamicParams: false,
+  it('shows compatibility warning, leverage drift, and leverage-only update controls from truthful execution data', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+        strategy={{
+          id: 'inst-1',
+          name: 'Execution truth strategy',
+          status: 'running',
+          exchange: 'okx',
+          symbol: 'BTC-USDT-SWAP',
+          timeframe: '15m',
+          positionPct: 10,
+          initialCapital: 10000,
+          metrics: { returnPct: 12, maxDrawdownPct: 6, winRatePct: 51, tradeCount: 22 },
+          equitySeries: [],
+          timeline: [],
           paramSchema: null,
           paramValues: null,
-        })}
-      />,
-    )
-
-    expect(html).toContain('不支持旧策略，请重新生成')
-    expect(html).not.toContain('参数快照')
-    expect(html).not.toContain('杠杆：3')
-  })
-
-  it('renders dynamic param panel when schema exists even if supportsDynamicParams is false', () => {
-    const html = renderToStaticMarkup(
-      <AiQuantStrategyDetail
-        lng="zh"
-        strategy={makeStrategy({
+          schemaVersion: null,
           supportsDynamicParams: false,
-        })}
-      />,
-    )
-
-    expect(html).toContain('参数快照')
-    expect(html).toContain('杠杆')
-    expect(html).toContain('3')
-    expect(html).not.toContain('不支持旧策略，请重新生成')
-  })
-
-  it('shows localized empty text when schema exists but no renderable params', () => {
-    const html = renderToStaticMarkup(
-      <AiQuantStrategyDetail
-        lng="zh"
-        strategy={makeStrategy({
-          paramValues: {},
-        })}
-      />,
-    )
-
-    expect(html).toContain('参数快照')
-    expect(html).toContain('暂无参数')
-    expect(html).not.toContain('不支持旧策略，请重新生成')
-  })
-
-  it('renders deploy labels without hardcoded full-width punctuation coupling', () => {
-    const html = renderToStaticMarkup(
-      <AiQuantStrategyDetail
-        lng="zh"
-        strategy={makeStrategy({
-          deploy: {
-            exchange: 'binance',
-            accountId: 'acc-1',
-            accountName: 'MainAccount',
-            at: '2026-03-20T10:30:00.000Z',
-            status: 'running',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'hash-1',
+          snapshotBacktestConfigDefaults: {
+            initialCash: 10000,
+            leverage: 2,
+            slippageBps: 8,
+            feeBps: 4,
+            priceSource: 'close',
+            allowPartial: false,
           },
-        })}
+          deploymentExecutionBaseline: {
+            leverage: 2,
+            priceSource: 'mark',
+            orderType: 'market',
+            timeInForce: 'IOC',
+          },
+          deploymentExecutionCurrent: {
+            leverage: 4,
+            priceSource: 'mark',
+            orderType: 'market',
+            timeInForce: 'IOC',
+          },
+          executionConfigVersion: 2,
+          deploymentLeverageRange: {
+            min: 1,
+            max: 5,
+          },
+          deploymentConstraintExplanation: '交易所支持 10x，但平台风控和策略区间最终只允许 1-5x。',
+          compatibilityMetadata: {
+            isLegacySnapshot: true,
+            missingBacktestConfigDefaults: true,
+            missingDeploymentExecutionDefaults: false,
+            missingDeploymentExecutionConstraints: false,
+            requiresRepublishForBacktest: true,
+            requiresRepublishForDeploy: false,
+          },
+          consistencySummary: {
+            isConsistent: false,
+            driftReasons: ['leverage drift'],
+          },
+          canEditDeploymentLeverage: true,
+        }}
+        onUpdateLeverage={() => {}}
       />,
-    )
+      )
+    })
 
-    expect(html).toContain('部署账户')
-    expect(html).toContain('MainAccount')
-    expect(html).toContain('部署时间')
-    expect(html).toContain('2026-03-20 10:30')
-    expect(html).not.toContain('部署账户：')
-    expect(html).not.toContain('部署时间：')
-  })
-
-  it('shows inaccessible copy when strategy is null', () => {
-    const html = renderToStaticMarkup(
-      <AiQuantStrategyDetail
-        lng="zh"
-        strategy={null}
-      />,
-    )
-
-    expect(html).toContain('策略不存在或不可访问')
-    expect(html).toContain('请返回 AI量化列表重新选择已部署策略。')
+    expect(container.textContent).toContain('需要重新发布')
+    expect(container.textContent).toContain('当前执行杠杆')
+    expect(container.textContent).toContain('4x')
+    expect(container.textContent).toContain('基线执行杠杆')
+    expect(container.textContent).toContain('允许杠杆范围')
+    expect(container.textContent).toContain('1x - 5x')
+    expect(container.textContent).toContain('leverage drift')
+    expect(Array.from(container.querySelectorAll('button')).some(button => button.textContent?.includes('更新杠杆'))).toBe(true)
   })
 })

@@ -150,13 +150,13 @@ model LlmStrategyCodegenSession {
 }
 
 model AiQuantConversation {
-  id               String   @id @default(cuid())
-  userId           String   @map("user_id")
-  codegenSessionId String   @unique @map("codegen_session_id")
+  id               String    @id @default(cuid())
+  userId           String    @map("user_id")
+  codegenSessionId String    @unique @map("codegen_session_id")
   title            String
   archivedAt       DateTime? @map("archived_at")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at")
 
   codegenSession LlmStrategyCodegenSession    @relation(fields: [codegenSessionId], references: [id], onDelete: Cascade)
   messages       AiQuantConversationMessage[]
@@ -167,13 +167,13 @@ model AiQuantConversation {
 }
 
 model AiQuantConversationMessage {
-  id             String                        @id @default(cuid())
-  conversationId String                        @map("conversation_id")
+  id             String                         @id @default(cuid())
+  conversationId String                         @map("conversation_id")
   role           AiQuantConversationMessageRole
-  content        String                        @db.Text
-  sortOrder      Int                           @map("sort_order")
-  createdAt      DateTime                      @default(now()) @map("created_at")
-  updatedAt      DateTime                      @default(now()) @updatedAt @map("updated_at")
+  content        String                         @db.Text
+  sortOrder      Int                            @map("sort_order")
+  createdAt      DateTime                       @default(now()) @map("created_at")
+  updatedAt      DateTime                       @default(now()) @updatedAt @map("updated_at")
 
   conversation AiQuantConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
@@ -202,34 +202,38 @@ model LlmStrategyCodeVersion {
 }
 
 model PublishedStrategySnapshot {
-  id                 String   @id @default(cuid())
-  sessionId          String   @map("session_id")
-  strategyTemplateId String?  @map("strategy_template_id")
-  strategyInstanceId String?  @map("strategy_instance_id")
-  snapshotHash       String   @map("snapshot_hash")
-  scriptHash         String   @map("script_hash")
-  specHash           String   @map("spec_hash")
-  irHash             String?  @map("ir_hash")
-  astDigest          String?  @map("ast_digest")
-  structuralDigest   String?  @map("structural_digest")
-  scriptSnapshot     String   @map("script_snapshot") @db.Text
-  specSnapshot       Json     @map("spec_snapshot")
-  semanticGraph      Json?    @map("semantic_graph")
-  compiledIr         Json?    @map("compiled_ir")
-  irSnapshot         Json?    @map("ir_snapshot")
-  astSnapshot        Json?    @map("ast_snapshot")
-  compiledManifest   Json?    @map("compiled_manifest")
-  consistencyReport  Json     @map("consistency_report")
-  paramsSnapshot     Json?    @map("params_snapshot")
-  executionEnvelope  Json?    @map("execution_envelope")
-  executionPolicy    Json?    @map("execution_policy")
-  dataRequirements   Json?    @map("data_requirements")
-  userIntentSummary  Json     @map("user_intent_summary")
-  strategySummary    Json     @map("strategy_summary")
-  scriptSummary      Json     @map("script_summary")
-  lockedParams       Json     @map("locked_params")
-  snapshotVersion    Int      @default(2) @map("snapshot_version")
-  createdAt          DateTime @default(now()) @map("created_at")
+  id                             String   @id @default(cuid())
+  sessionId                      String   @map("session_id")
+  strategyTemplateId             String?  @map("strategy_template_id")
+  strategyInstanceId             String?  @map("strategy_instance_id")
+  snapshotHash                   String   @map("snapshot_hash")
+  scriptHash                     String   @map("script_hash")
+  specHash                       String   @map("spec_hash")
+  irHash                         String?  @map("ir_hash")
+  astDigest                      String?  @map("ast_digest")
+  structuralDigest               String?  @map("structural_digest")
+  scriptSnapshot                 String   @map("script_snapshot") @db.Text
+  specSnapshot                   Json     @map("spec_snapshot")
+  semanticGraph                  Json?    @map("semantic_graph")
+  compiledIr                     Json?    @map("compiled_ir")
+  irSnapshot                     Json?    @map("ir_snapshot")
+  astSnapshot                    Json?    @map("ast_snapshot")
+  compiledManifest               Json?    @map("compiled_manifest")
+  consistencyReport              Json     @map("consistency_report")
+  paramsSnapshot                 Json?    @map("params_snapshot")
+  strategyConfig                 Json?    @map("strategy_config")
+  backtestConfigDefaults         Json?    @map("backtest_config_defaults")
+  deploymentExecutionDefaults    Json?    @map("deployment_execution_defaults")
+  deploymentExecutionConstraints Json?    @map("deployment_execution_constraints")
+  executionEnvelope              Json?    @map("execution_envelope")
+  executionPolicy                Json?    @map("execution_policy")
+  dataRequirements               Json?    @map("data_requirements")
+  userIntentSummary              Json     @map("user_intent_summary")
+  strategySummary                Json     @map("strategy_summary")
+  scriptSummary                  Json     @map("script_summary")
+  lockedParams                   Json     @map("locked_params")
+  snapshotVersion                Int      @default(2) @map("snapshot_version")
+  createdAt                      DateTime @default(now()) @map("created_at")
 
   session LlmStrategyCodegenSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 

@@ -3,6 +3,7 @@ import type { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dt
 import type { AccountStrategyDetailResponseDto, AccountStrategyTimelineEventDto } from '../dto/account-strategy-detail.response.dto'
 import type { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
 import type { AccountStrategyListQueryDto } from '../dto/account-strategy-list-query.dto'
+import type { AccountStrategyUpdateExecutionLeverageDto } from '../dto/account-strategy-update-execution-leverage.dto'
 import type { StrategySignalsRuntimeConfig } from '@/modules/strategy-signals/types/strategy-signals-config.type'
 import type { ExchangeId, MarketType, UnifiedBalance } from '@/modules/trading/core/types'
 import { createHash } from 'node:crypto'
@@ -36,6 +37,17 @@ import {
 } from '../exceptions'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { AccountStrategyViewRepository } from '../repositories/account-strategy-view.repository'
+
+interface FormalSnapshotDetail {
+  publishedSnapshotId: string | null
+  snapshotHash: string | null
+  paramValues: Record<string, unknown> | null
+  strategyConfig: Record<string, unknown> | null
+  backtestConfigDefaults: Record<string, unknown> | null
+  deploymentExecutionDefaults: Record<string, unknown> | null
+  deploymentExecutionConstraints: Record<string, unknown> | null
+  compatibilityMetadata: Record<string, unknown> | null
+}
 
 @Injectable()
 export class AccountStrategyViewService {
@@ -285,6 +297,33 @@ export class AccountStrategyViewService {
       userId,
       source: row,
     })
+    const detailLeverageConstraints = await this.resolveEffectiveLeverageConstraints({
+      userId,
+      exchangeId: this.resolveExchangeId(
+        resolvedSnapshot.strategyConfig
+          ? this.readString(resolvedSnapshot.strategyConfig, ['exchange', 'exchangeId', 'provider'])
+          : exchangeId,
+      ),
+      marketType: resolvedSnapshot.strategyConfig && this.readString(resolvedSnapshot.strategyConfig, ['marketType']) === 'perp'
+        ? 'perp'
+        : marketType,
+      symbol: resolvedSnapshot.strategyConfig
+        ? this.readString(resolvedSnapshot.strategyConfig, ['symbol'])
+        : symbol,
+      exchangeAccountId: sub?.exchangeAccount?.id ?? null,
+      deploymentExecutionConstraints: resolvedSnapshot.deploymentExecutionConstraints,
+    })
+    const currentExecutionConfig = this.readRecord((row as Record<string, unknown>).deploymentExecutionConfig)
+    const deploymentExecutionConfig = currentExecutionConfig ?? resolvedSnapshot.deploymentExecutionDefaults
+    const baselineExecutionConfig = resolvedSnapshot.deploymentExecutionDefaults
+    const driftReasons: string[] = []
+    if (baselineExecutionConfig && deploymentExecutionConfig) {
+      for (const field of ['leverage', 'priceSource', 'orderType', 'timeInForce']) {
+        if (baselineExecutionConfig[field] !== deploymentExecutionConfig[field]) {
+          driftReasons.push(field)
+        }
+      }
+    }
 
     const detail: AccountStrategyDetailResponseDto = {
       id: row.id,
@@ -311,23 +350,50 @@ export class AccountStrategyViewService {
       snapshot: {
         publishedSnapshotId: resolvedSnapshot.publishedSnapshotId,
         snapshotHash: resolvedSnapshot.snapshotHash,
-        exchange: resolvedSnapshot.paramValues
-          ? this.readString(resolvedSnapshot.paramValues, ['exchange', 'provider', 'exchangeId'])
+        exchange: resolvedSnapshot.strategyConfig
+          ? this.readString(resolvedSnapshot.strategyConfig, ['exchange', 'provider', 'exchangeId'])
           : null,
-        symbol: resolvedSnapshot.paramValues
-          ? this.readString(resolvedSnapshot.paramValues, ['symbol'])
+        symbol: resolvedSnapshot.strategyConfig
+          ? this.readString(resolvedSnapshot.strategyConfig, ['symbol'])
           : null,
-        timeframe: resolvedSnapshot.paramValues
-          ? this.readString(resolvedSnapshot.paramValues, ['timeframe', 'period'])
+        timeframe: resolvedSnapshot.strategyConfig
+          ? this.readString(resolvedSnapshot.strategyConfig, ['baseTimeframe', 'timeframe', 'period'])
           : null,
-        positionPct: resolvedSnapshot.paramValues
-          ? this.readNumber(resolvedSnapshot.paramValues, ['positionPct', 'positionSizeRatioPercent'])
+        positionPct: resolvedSnapshot.strategyConfig
+          ? this.readNumber(resolvedSnapshot.strategyConfig, ['positionPct', 'positionSizeRatioPercent'])
           : null,
         paramSchema: dynamicParams.paramSchema,
         paramValues: resolvedSnapshot.paramValues,
         schemaVersion: dynamicParams.schemaVersion,
         deployAccountName: sub?.exchangeAccount?.name ?? null,
         deployAt: sub?.subscribedAt?.toISOString() ?? row.startedAt?.toISOString() ?? null,
+        strategyConfig: resolvedSnapshot.strategyConfig,
+        backtestConfigDefaults: resolvedSnapshot.backtestConfigDefaults,
+        deploymentExecutionBaseline: resolvedSnapshot.deploymentExecutionDefaults,
+        deploymentExecutionCurrent: deploymentExecutionConfig,
+        deploymentExecutionConstraints: resolvedSnapshot.deploymentExecutionConstraints
+          ? {
+              ...resolvedSnapshot.deploymentExecutionConstraints,
+              ...(detailLeverageConstraints
+                ? { accountMaxLeverage: detailLeverageConstraints.accountMax }
+                : {}),
+            }
+          : null,
+        effectiveAllowedLeverageRange: detailLeverageConstraints
+          ? {
+              min: detailLeverageConstraints.min,
+              max: detailLeverageConstraints.max,
+            }
+          : null,
+        compatibilityMetadata: resolvedSnapshot.compatibilityMetadata as any,
+        consistencySummary: {
+          isConsistent: driftReasons.length === 0,
+          driftReasons,
+          consistencyScore: driftReasons.length === 0 ? 100 : null,
+        },
+        executionConfigVersion: typeof (row as Record<string, unknown>).executionConfigVersion === 'number'
+          ? ((row as Record<string, unknown>).executionConfigVersion as number)
+          : null,
       },
       timeline: this.buildMixedTimeline(timelineSource),
       accountOverview: {
@@ -345,6 +411,27 @@ export class AccountStrategyViewService {
         totalUnrealizedPnl: account ? resolvedUnrealizedPnl : null,
       },
       latestOrders: this.buildLatestOrders(timelineSource.trades),
+      deployment: !resolvedSnapshot.publishedSnapshotId || resolvedSnapshot.compatibilityMetadata?.requiresRepublishForDeploy
+        ? null
+        : {
+            exchangeAccountId: sub?.exchangeAccount?.id ?? null,
+            exchangeAccountName: sub?.exchangeAccount?.name ?? null,
+            executionConfig: {
+              leverage: deploymentExecutionConfig ? this.readNumber(deploymentExecutionConfig, ['leverage']) : null,
+              priceSource: deploymentExecutionConfig ? this.readString(deploymentExecutionConfig, ['priceSource']) : null,
+              orderType: deploymentExecutionConfig ? this.readString(deploymentExecutionConfig, ['orderType']) : null,
+              timeInForce: deploymentExecutionConfig ? this.readString(deploymentExecutionConfig, ['timeInForce']) : null,
+            },
+            executionConfigVersion: typeof (row as Record<string, unknown>).executionConfigVersion === 'number'
+              ? ((row as Record<string, unknown>).executionConfigVersion as number)
+              : null,
+            effectiveAllowedLeverageRange: detailLeverageConstraints
+              ? { min: detailLeverageConstraints.min, max: detailLeverageConstraints.max }
+              : null,
+            driftFields: driftReasons,
+            reReadAtNextEligibleExecutionCycle: true,
+            updatedBy: typeof row.updatedBy === 'string' ? row.updatedBy : null,
+          },
     }
 
     if (detail.equitySeries.length === 0 && account) {
@@ -364,11 +451,7 @@ export class AccountStrategyViewService {
   private async resolveBoundSnapshotDetail(input: {
     userId: string
     source: unknown
-  }): Promise<{
-    publishedSnapshotId: string | null
-    snapshotHash: string | null
-    paramValues: Record<string, unknown> | null
-  }> {
+  }): Promise<FormalSnapshotDetail> {
     const root = this.readRecord(input.source)
     const metadata = this.readRecord(root?.metadata)
     const boundPublishedSnapshotId = typeof metadata?.publishedSnapshotId === 'string' && metadata.publishedSnapshotId.trim().length > 0
@@ -383,6 +466,11 @@ export class AccountStrategyViewService {
         publishedSnapshotId: boundPublishedSnapshotId,
         snapshotHash: boundSnapshotHash,
         paramValues: null,
+        strategyConfig: null,
+        backtestConfigDefaults: null,
+        deploymentExecutionDefaults: null,
+        deploymentExecutionConstraints: null,
+        compatibilityMetadata: null,
       }
     }
 
@@ -392,6 +480,20 @@ export class AccountStrategyViewService {
         publishedSnapshotId: boundPublishedSnapshotId,
         snapshotHash: boundSnapshotHash,
         paramValues: null,
+        strategyConfig: null,
+        backtestConfigDefaults: null,
+        deploymentExecutionDefaults: null,
+        deploymentExecutionConstraints: null,
+        compatibilityMetadata: {
+          isLegacySnapshot: true,
+          missingStrategyConfig: true,
+          missingBacktestConfigDefaults: true,
+          missingDeploymentExecutionDefaults: true,
+          missingDeploymentExecutionConstraints: true,
+          requiresRepublishForBacktest: true,
+          requiresRepublishForDeploy: true,
+          invalidBinding: true,
+        },
       }
     }
 
@@ -400,45 +502,68 @@ export class AccountStrategyViewService {
         publishedSnapshotId: boundPublishedSnapshotId,
         snapshotHash: boundSnapshotHash,
         paramValues: null,
+        strategyConfig: null,
+        backtestConfigDefaults: null,
+        deploymentExecutionDefaults: null,
+        deploymentExecutionConstraints: null,
+        compatibilityMetadata: {
+          isLegacySnapshot: true,
+          missingStrategyConfig: true,
+          missingBacktestConfigDefaults: true,
+          missingDeploymentExecutionDefaults: true,
+          missingDeploymentExecutionConstraints: true,
+          requiresRepublishForBacktest: true,
+          requiresRepublishForDeploy: true,
+          invalidBinding: true,
+        },
       }
     }
 
     const paramValues = {
       ...(this.readRecord(snapshot.paramsSnapshot) ?? {}),
       ...(this.readRecord(snapshot.lockedParams) ?? {}),
-      backtestInitialCash: 10000,
-      backtestLeverage: 1,
-      backtestSlippageBps: 10,
-      backtestFeeBps: 5,
-      backtestPriceSource: 'close',
-      backtestAllowPartial: this.readExecutionAllowPartial(snapshot.executionPolicy),
     }
+    const strategyConfig = this.readRecord((snapshot as Record<string, unknown>).strategyConfig)
+    const backtestConfigDefaults = this.readRecord((snapshot as Record<string, unknown>).backtestConfigDefaults)
+    const deploymentExecutionDefaults = this.readRecord((snapshot as Record<string, unknown>).deploymentExecutionDefaults)
+    const deploymentExecutionConstraints = this.readRecord((snapshot as Record<string, unknown>).deploymentExecutionConstraints)
+    const missingStrategyConfig = !strategyConfig
+    const missingBacktestConfigDefaults = !backtestConfigDefaults
+    const missingDeploymentExecutionDefaults = !deploymentExecutionDefaults
+    const missingDeploymentExecutionConstraints = !deploymentExecutionConstraints
+    const compatibilityMetadata = missingStrategyConfig
+      || missingBacktestConfigDefaults
+      || missingDeploymentExecutionDefaults
+      || missingDeploymentExecutionConstraints
+      ? {
+          isLegacySnapshot: true,
+          missingStrategyConfig,
+          missingBacktestConfigDefaults,
+          missingDeploymentExecutionDefaults,
+          missingDeploymentExecutionConstraints,
+          requiresRepublishForBacktest: missingStrategyConfig || missingBacktestConfigDefaults,
+          requiresRepublishForDeploy: missingStrategyConfig || missingDeploymentExecutionDefaults || missingDeploymentExecutionConstraints,
+        }
+      : {
+          isLegacySnapshot: false,
+          missingStrategyConfig: false,
+          missingBacktestConfigDefaults: false,
+          missingDeploymentExecutionDefaults: false,
+          missingDeploymentExecutionConstraints: false,
+          requiresRepublishForBacktest: false,
+          requiresRepublishForDeploy: false,
+        }
 
     return {
       publishedSnapshotId: snapshot.id,
       snapshotHash: snapshot.snapshotHash,
       paramValues: Object.keys(paramValues).length > 0 ? paramValues : null,
+      strategyConfig,
+      backtestConfigDefaults,
+      deploymentExecutionDefaults,
+      deploymentExecutionConstraints,
+      compatibilityMetadata,
     }
-  }
-
-  private readExecutionAllowPartial(value: unknown): boolean {
-    const executionPolicy = this.readRecord(value)
-    if (!executionPolicy) {
-      return true
-    }
-
-    const direct = executionPolicy.allowPartialFill
-    if (typeof direct === 'boolean') {
-      return direct
-    }
-    if (direct === 'true') {
-      return true
-    }
-    if (direct === 'false') {
-      return false
-    }
-
-    return true
   }
 
   async performAction(
@@ -574,6 +699,8 @@ export class AccountStrategyViewService {
         strategyInstanceId: dto.strategyInstanceId ?? resolvedDeploy.sourceStrategyInstanceId ?? undefined,
         exchangeAccountId: dto.exchangeAccountId,
         exchangeAccountName: dto.exchangeAccountName,
+        deploymentExecutionConfig: resolvedDeploy.deploymentExecutionConfig,
+        executionConfigVersion: 1,
       })
 
       const riskProfile = this.buildRiskProfileSnapshot(dto)
@@ -590,6 +717,89 @@ export class AccountStrategyViewService {
       await this.repo.markDeployRequestFailed(deployRequest.id, String(code), message)
       throw error
     }
+  }
+
+  async updateDeploymentLeverage(
+    strategyInstanceId: string,
+    dto: AccountStrategyUpdateExecutionLeverageDto,
+  ): Promise<AccountStrategyDetailResponseDto> {
+    if (!dto.userId) {
+      throw new MissingUserIdentityException()
+    }
+    const row = await this.repo.findStrategyForUser(dto.userId, strategyInstanceId)
+    if (!row) {
+      throw new StrategyNotFoundException({ strategyInstanceId })
+    }
+
+    if (row.createdBy !== dto.userId) {
+      throw new StrategyOwnerOnlyException({ userId: dto.userId, ownerId: row.createdBy })
+    }
+
+    const sub = this.assertStrategyVisible(row, strategyInstanceId)
+    const account = await this.repo.findUserStrategyAccount(dto.userId, row.strategyTemplateId)
+    const positionOverview = account
+      ? await this.repo.loadPositionOverview(account.id)
+      : { openCount: 0, closedCount: 0 }
+    if ((positionOverview?.openCount ?? 0) > 0) {
+      throw new DomainException('account_strategy.deployment_leverage_requires_flat_positions', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+      })
+    }
+
+    const snapshotDetail = await this.resolveBoundSnapshotDetail({ userId: dto.userId, source: row })
+    if (snapshotDetail.compatibilityMetadata?.requiresRepublishForDeploy) {
+      throw new DomainException('account_strategy.invalid_snapshot_execution_config', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+      })
+    }
+
+    const strategyConfig = snapshotDetail.strategyConfig ?? {}
+    const deploymentDefaults = snapshotDetail.deploymentExecutionDefaults ?? {}
+    const constraints = await this.resolveEffectiveLeverageConstraints({
+      userId: dto.userId,
+      exchangeId: this.resolveExchangeId(this.readString(strategyConfig, ['exchange']) ?? sub.exchangeAccount?.exchangeId ?? null),
+      marketType: this.readString(strategyConfig, ['marketType']) === 'perp' ? 'perp' : 'spot',
+      symbol: this.readString(strategyConfig, ['symbol']),
+      exchangeAccountId: sub.exchangeAccount?.id ?? null,
+      deploymentExecutionConstraints: snapshotDetail.deploymentExecutionConstraints,
+    })
+
+    if (!constraints || dto.leverage < constraints.min || dto.leverage > constraints.max) {
+      throw new DomainException('account_strategy.invalid_deployment_leverage', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+      })
+    }
+
+    const existingConfig = this.readRecord((row as Record<string, unknown>).deploymentExecutionConfig)
+    const nextExecutionConfig = {
+      leverage: dto.leverage,
+      priceSource: this.readString(existingConfig ?? deploymentDefaults, ['priceSource']) ?? null,
+      orderType: this.readString(existingConfig ?? deploymentDefaults, ['orderType']) ?? null,
+      timeInForce: this.readString(existingConfig ?? deploymentDefaults, ['timeInForce']) ?? null,
+    }
+    const nextVersion = typeof (row as Record<string, unknown>).executionConfigVersion === 'number'
+      ? ((row as Record<string, unknown>).executionConfigVersion as number) + 1
+      : 1
+
+    await this.repo.updateDeploymentExecutionConfig({
+      strategyInstanceId,
+      userId: dto.userId,
+      executionConfig: nextExecutionConfig as {
+        leverage: number
+        priceSource: string
+        orderType: string
+        timeInForce: string
+      },
+      executionConfigVersion: nextVersion,
+      existingParams: this.readRecord((row as Record<string, unknown>).params) ?? {},
+      existingMetadata: this.readRecord((row as Record<string, unknown>).metadata) ?? {},
+      reason: dto.reason,
+    })
+
+    return this.getStrategyDetail(dto.userId, strategyInstanceId)
   }
 
   async deleteStrategy(userId: string, strategyInstanceId: string): Promise<void> {
@@ -1312,6 +1522,7 @@ export class AccountStrategyViewService {
         exchangeAccountId: dto.exchangeAccountId ?? null,
         strategyInstanceId: dto.strategyInstanceId ?? null,
         mode: dto.mode ?? null,
+        leverage: this.readNumber(dto.deploymentExecutionConfig ?? {}, ['leverage']) ?? null,
       }))
       .digest('hex')
   }
@@ -1361,6 +1572,13 @@ export class AccountStrategyViewService {
     symbol: string
     timeframe: string
     positionPct: number
+    marketType: MarketType
+    deploymentExecutionConfig: {
+      leverage: number
+      priceSource: string
+      orderType: string
+      timeInForce: string
+    }
     publishedSnapshotId: string
     snapshotHash: string
     sourceStrategyInstanceId: string | null
@@ -1398,15 +1616,25 @@ export class AccountStrategyViewService {
       })
     }
 
-    const snapshotParams = this.resolveSnapshotParamsForDeploy(snapshot)
-    const exchange = this.readString(snapshotParams, ['exchange', 'exchangeId', 'provider']) as
+    const strategyConfig = this.readRecord((snapshot as Record<string, unknown>).strategyConfig)
+    const deploymentExecutionDefaults = this.readRecord((snapshot as Record<string, unknown>).deploymentExecutionDefaults)
+    const deploymentExecutionConstraints = this.readRecord((snapshot as Record<string, unknown>).deploymentExecutionConstraints)
+    if (!strategyConfig || !deploymentExecutionDefaults || !deploymentExecutionConstraints) {
+      throw new DomainException('account_strategy.invalid_snapshot_execution_config', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+      })
+    }
+
+    const exchange = this.readString(strategyConfig, ['exchange', 'exchangeId', 'provider']) as
       | 'binance'
       | 'okx'
       | 'hyperliquid'
       | null
-    const symbol = this.readString(snapshotParams, ['symbol'])
-    const timeframe = this.readString(snapshotParams, ['timeframe', 'period'])
-    const positionPct = this.readNumber(snapshotParams, ['positionPct', 'positionSizeRatioPercent'])
+    const symbol = this.readString(strategyConfig, ['symbol'])
+    const timeframe = this.readString(strategyConfig, ['baseTimeframe', 'timeframe', 'period'])
+    const positionPct = this.readNumber(strategyConfig, ['positionPct', 'positionSizeRatioPercent'])
+    const marketType = this.readString(strategyConfig, ['marketType']) === 'perp' ? 'perp' : 'spot'
 
     if (!exchange || !symbol || !timeframe || positionPct === null) {
       throw new DomainException('account_strategy.deploy_missing_required_fields', {
@@ -1423,11 +1651,47 @@ export class AccountStrategyViewService {
       })
     }
 
+    const leverageConstraints = await this.resolveEffectiveLeverageConstraints({
+      userId: dto.userId!,
+      exchangeId: exchange,
+      marketType,
+      symbol,
+      exchangeAccountId: dto.exchangeAccountId ?? null,
+      deploymentExecutionConstraints,
+    })
+    if (!leverageConstraints) {
+      throw new DomainException('account_strategy.invalid_snapshot_execution_config', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+      })
+    }
+
+    const requestedLeverage = this.readNumber(dto.deploymentExecutionConfig ?? {}, ['leverage'])
+      ?? this.readNumber(deploymentExecutionDefaults, ['leverage'])
+      ?? this.readNumber(deploymentExecutionConstraints, ['defaultLeverage'])
+    if (
+      requestedLeverage === null
+      || requestedLeverage < leverageConstraints.min
+      || requestedLeverage > leverageConstraints.max
+    ) {
+      throw new DomainException('account_strategy.invalid_deployment_leverage', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+      })
+    }
+
     return {
       exchange,
       symbol,
       timeframe,
       positionPct,
+      marketType,
+      deploymentExecutionConfig: {
+        leverage: requestedLeverage,
+        priceSource: this.readString(deploymentExecutionDefaults, ['priceSource']) ?? 'close',
+        orderType: this.readString(deploymentExecutionDefaults, ['orderType']) ?? 'market',
+        timeInForce: this.readString(deploymentExecutionDefaults, ['timeInForce']) ?? 'GTC',
+      },
       publishedSnapshotId: snapshot.id,
       snapshotHash: snapshot.snapshotHash,
       sourceStrategyInstanceId: snapshot.strategyInstanceId,
@@ -1435,26 +1699,34 @@ export class AccountStrategyViewService {
     }
   }
 
-  private resolveSnapshotParamsForDeploy(snapshot: {
-    id: string
-    paramsSnapshot: unknown
-    lockedParams: unknown
-  }): Record<string, unknown> {
-    const paramsSnapshot = this.readRecord(snapshot.paramsSnapshot)
-    const lockedParams = this.readRecord(snapshot.lockedParams)
-    const merged = {
-      ...(paramsSnapshot ?? {}),
-      ...(lockedParams ?? {}),
-    }
-
-    if (Object.keys(merged).length > 0) {
-      return merged
-    }
-
-    throw new DomainException('account_strategy.published_snapshot_params_missing', {
-      code: ErrorCode.BAD_REQUEST,
-      status: HttpStatus.BAD_REQUEST,
-      args: { publishedSnapshotId: snapshot.id },
-    })
+  private async resolveEffectiveLeverageConstraints(input: {
+    userId: string
+    exchangeId: ExchangeId | null
+    marketType: MarketType
+    symbol: string | null
+    exchangeAccountId: string | null
+    deploymentExecutionConstraints: Record<string, unknown> | null
+  }): Promise<{ min: number, max: number, accountMax: number | null } | null> {
+    if (!input.exchangeId || !input.symbol || !input.deploymentExecutionConstraints) return null
+    const platformRiskMaxLeverage = this.readNumber(input.deploymentExecutionConstraints, ['platformRiskMaxLeverage'])
+    const strategyDeclaredLeverageRange = this.readRecord(input.deploymentExecutionConstraints.strategyDeclaredLeverageRange)
+    const strategyMin = strategyDeclaredLeverageRange ? this.readNumber(strategyDeclaredLeverageRange, ['min']) : null
+    const strategyMax = strategyDeclaredLeverageRange ? this.readNumber(strategyDeclaredLeverageRange, ['max']) : null
+    const accountConstraints = typeof (this.tradingService as any)?.getLeverageConstraints === 'function'
+      ? await (this.tradingService as any).getLeverageConstraints({
+          userId: input.userId,
+          exchangeId: input.exchangeId,
+          marketType: input.marketType,
+          symbol: input.symbol,
+          exchangeAccountId: input.exchangeAccountId ?? undefined,
+        })
+      : null
+    const accountMin = typeof accountConstraints?.minLeverage === 'number' ? accountConstraints.minLeverage : 1
+    const accountMax = typeof accountConstraints?.maxLeverage === 'number' ? accountConstraints.maxLeverage : null
+    const min = Math.max(accountMin, strategyMin ?? 1)
+    const maxCandidates = [platformRiskMaxLeverage, strategyMax, accountMax].filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
+    const max = maxCandidates.length > 0 ? Math.min(...maxCandidates) : null
+    if (!max || max < min) return null
+    return { min, max, accountMax }
   }
 }

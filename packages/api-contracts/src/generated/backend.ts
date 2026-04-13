@@ -164,7 +164,59 @@ const AccountAiQuantDeployRequestDto = z
     exchangeAccountId: z.string().optional(),
     strategyInstanceId: z.string().optional(),
     exchangeAccountName: z.string().optional(),
+    leverage: z.number().optional(),
   })
+  .passthrough()
+const AccountAiQuantUpdateExecutionLeverageRequestDto = z
+  .object({ leverage: z.number() })
+  .passthrough()
+const AccountAiQuantExecutionConfigDto = z
+  .object({
+    leverage: z.number().nullish(),
+    priceSource: z.string().nullish(),
+    orderType: z.string().nullish(),
+    timeInForce: z.string().nullish(),
+  })
+  .partial()
+  .passthrough()
+const AccountAiQuantCompatibilityMetadataDto = z
+  .object({
+    isLegacySnapshot: z.boolean().optional(),
+    requiresRepublishForBacktest: z.boolean().optional(),
+    requiresRepublishForDeploy: z.boolean().optional(),
+  })
+  .partial()
+  .passthrough()
+const AccountAiQuantConsistencySummaryDto = z
+  .object({
+    isConsistent: z.boolean().optional(),
+    consistencyScore: z.number().optional(),
+    driftReasons: z.array(z.string()).optional(),
+  })
+  .partial()
+  .passthrough()
+const AccountAiQuantStrategySnapshotResponseDto = z
+  .object({
+    strategyConfig: z.object({}).partial().passthrough().nullish(),
+    backtestConfigDefaults: z.object({}).partial().passthrough().nullish(),
+    deploymentExecutionBaseline: AccountAiQuantExecutionConfigDto.nullish(),
+    deploymentExecutionCurrent: AccountAiQuantExecutionConfigDto.nullish(),
+    deploymentExecutionConstraints: z.object({}).partial().passthrough().nullish(),
+    effectiveAllowedLeverageRange: z.object({}).partial().passthrough().nullish(),
+    executionConfigVersion: z.number().nullish(),
+    compatibilityMetadata: AccountAiQuantCompatibilityMetadataDto.nullish(),
+    consistencySummary: AccountAiQuantConsistencySummaryDto.nullish(),
+  })
+  .partial()
+  .passthrough()
+const AccountAiQuantStrategyDetailResponseDto = z
+  .object({
+    id: z.string(),
+    name: z.string().optional(),
+    status: z.string().optional(),
+    snapshot: AccountAiQuantStrategySnapshotResponseDto.nullish(),
+  })
+  .partial()
   .passthrough()
 const BacktestingSymbolSupportRequestDto = z
   .object({ exchange: z.enum(['binance', 'okx', 'hyperliquid']), symbol: z.string() })
@@ -1148,6 +1200,12 @@ export const schemas = {
   CreateAccountExchangeAccountDto,
   AccountAiQuantActionRequestDto,
   AccountAiQuantDeployRequestDto,
+  AccountAiQuantUpdateExecutionLeverageRequestDto,
+  AccountAiQuantExecutionConfigDto,
+  AccountAiQuantCompatibilityMetadataDto,
+  AccountAiQuantConsistencySummaryDto,
+  AccountAiQuantStrategySnapshotResponseDto,
+  AccountAiQuantStrategyDetailResponseDto,
   BacktestingSymbolSupportRequestDto,
   BacktestingSymbolSupportResponseDto,
   LlmCodegenStartRequestDto,
@@ -1297,7 +1355,7 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: AccountAiQuantStrategyDetailResponseDto,
   },
   {
     method: 'delete',
@@ -1359,7 +1417,31 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: AccountAiQuantStrategyDetailResponseDto,
+  },
+  {
+    method: 'post',
+    path: '/account/ai-quant/strategies/:id/execution/leverage',
+    alias: 'AccountAiQuantStrategiesController_updateExecutionLeverage',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: AccountAiQuantUpdateExecutionLeverageRequestDto,
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: AccountAiQuantStrategyDetailResponseDto,
   },
   {
     method: 'get',

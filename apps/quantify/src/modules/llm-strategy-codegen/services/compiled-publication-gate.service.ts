@@ -31,6 +31,41 @@ interface PublishCompiledSnapshotInput {
   lockedParams: Record<string, unknown>
 }
 
+interface FormalStrategyConfig {
+  exchange: string
+  symbol: string
+  marketType: 'spot' | 'perp'
+  baseTimeframe: string | null
+  positionPct: number | null
+  strategyDeclaredLeverageRange: null
+}
+
+interface FormalBacktestConfigDefaults {
+  initialCash: number
+  leverage: number
+  slippageBps: number
+  feeBps: number
+  priceSource: 'open' | 'close' | 'mid'
+  allowPartial: boolean
+}
+
+interface FormalDeploymentExecutionDefaults {
+  leverage: number
+  priceSource: 'open' | 'close' | 'mid'
+  orderType: 'market' | 'limit'
+  timeInForce: 'gtc' | 'ioc' | 'fok'
+}
+
+interface FormalDeploymentExecutionConstraints {
+  platformRiskMaxLeverage: number
+  strategyDeclaredLeverageRange: null
+  defaultLeverage: number
+  supportedPriceSources: Array<'open' | 'close' | 'mid'>
+  supportedOrderTypes: Array<'market' | 'limit'>
+  supportedTimeInForce: Array<'gtc' | 'ioc' | 'fok'>
+  constraintExplanation: string
+}
+
 @Injectable()
 export class CompiledPublicationGateService {
   constructor(
@@ -59,6 +94,10 @@ export class CompiledPublicationGateService {
     }
 
     const compilerConsistency = this.buildCompilerConsistency(input, parsed, publicationGate)
+    const strategyConfig = this.buildStrategyConfig(input)
+    const backtestConfigDefaults = this.buildBacktestConfigDefaults(input)
+    const deploymentExecutionDefaults = this.buildDeploymentExecutionDefaults(input)
+    const deploymentExecutionConstraints = this.buildDeploymentExecutionConstraints(deploymentExecutionDefaults)
     const semanticStatus = input.semanticConsistencyReport.status
     const consistencyReport = {
       status:
@@ -87,14 +126,16 @@ export class CompiledPublicationGateService {
       lockedParams: input.lockedParams,
       snapshotVersion: 3,
       paramsSnapshot: {
-        exchange: input.ir.market.venue,
-        symbol: input.ir.market.symbol,
-        timeframe: input.ir.market.timeframes[0] ?? null,
-        marketType: input.ir.market.instrumentType === 'perpetual' ? 'perp' : 'spot',
-        positionPct: input.ir.portfolio.sizing.mode === 'pct_equity'
-          ? input.ir.portfolio.sizing.value
-          : null,
+        exchange: strategyConfig.exchange,
+        symbol: strategyConfig.symbol,
+        timeframe: strategyConfig.baseTimeframe,
+        marketType: strategyConfig.marketType,
+        positionPct: strategyConfig.positionPct,
       },
+      strategyConfig: strategyConfig as unknown as Record<string, unknown>,
+      backtestConfigDefaults: backtestConfigDefaults as unknown as Record<string, unknown>,
+      deploymentExecutionDefaults: deploymentExecutionDefaults as unknown as Record<string, unknown>,
+      deploymentExecutionConstraints: deploymentExecutionConstraints as unknown as Record<string, unknown>,
       executionEnvelope: input.executionEnvelope as unknown as Record<string, unknown>,
       executionPolicy: input.ir.executionPolicy as unknown as Record<string, unknown>,
       dataRequirements: input.ast.dataRequirements as unknown as Record<string, unknown>,
@@ -138,6 +179,60 @@ export class CompiledPublicationGateService {
       },
       publicationGate,
     }
+  }
+
+  private buildStrategyConfig(input: PublishCompiledSnapshotInput): FormalStrategyConfig {
+    return {
+      exchange: input.ir.market.venue,
+      symbol: input.ir.market.symbol,
+      marketType: input.ir.market.instrumentType === 'perpetual' ? 'perp' : 'spot',
+      baseTimeframe: input.ir.market.timeframes[0] ?? null,
+      positionPct: input.ir.portfolio.sizing.mode === 'pct_equity'
+        ? input.ir.portfolio.sizing.value
+        : null,
+      strategyDeclaredLeverageRange: null,
+    }
+  }
+
+  private buildBacktestConfigDefaults(input: PublishCompiledSnapshotInput): FormalBacktestConfigDefaults {
+    return {
+      initialCash: 10000,
+      leverage: 1,
+      slippageBps: 10,
+      feeBps: 5,
+      priceSource: this.resolvePriceSource(input.ir.market.priceFeed),
+      allowPartial: input.ir.executionPolicy.allowPartialFill,
+    }
+  }
+
+  private buildDeploymentExecutionDefaults(
+    input: PublishCompiledSnapshotInput,
+  ): FormalDeploymentExecutionDefaults {
+    return {
+      leverage: 1,
+      priceSource: this.resolvePriceSource(input.ir.market.priceFeed),
+      orderType: input.ir.executionPolicy.orderTypeDefault,
+      timeInForce: input.ir.executionPolicy.timeInForce,
+    }
+  }
+
+  private buildDeploymentExecutionConstraints(
+    defaults: FormalDeploymentExecutionDefaults,
+  ): FormalDeploymentExecutionConstraints {
+    return {
+      platformRiskMaxLeverage: 1,
+      strategyDeclaredLeverageRange: null,
+      defaultLeverage: defaults.leverage,
+      supportedPriceSources: [defaults.priceSource],
+      supportedOrderTypes: [defaults.orderType],
+      supportedTimeInForce: [defaults.timeInForce],
+      constraintExplanation: 'strategy/default constraints pending account-capability intersection',
+    }
+  }
+
+  private resolvePriceSource(priceFeed: CanonicalStrategyIrV1['market']['priceFeed']): 'open' | 'close' | 'mid' {
+    if (priceFeed === 'hlc3' || priceFeed === 'ohlc4') return 'mid'
+    return 'close'
   }
 
   private buildPublicationGateReport(

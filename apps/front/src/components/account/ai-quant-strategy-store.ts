@@ -33,6 +33,46 @@ export interface AiQuantStrategyRecord {
   paramSchema: Record<string, unknown> | null
   paramValues: Record<string, unknown> | null
   publishedSnapshotParamValues?: Record<string, unknown> | null
+  snapshotBacktestConfigDefaults?: {
+    initialCash: number
+    leverage: number
+    slippageBps: number
+    feeBps: number
+    priceSource: string
+    allowPartial: boolean
+  } | null
+  deploymentExecutionBaseline?: {
+    leverage?: number | null
+    priceSource?: string | null
+    orderType?: string | null
+    timeInForce?: string | null
+  } | null
+  deploymentExecutionCurrent?: {
+    leverage?: number | null
+    priceSource?: string | null
+    orderType?: string | null
+    timeInForce?: string | null
+  } | null
+  executionConfigVersion?: number | null
+  deploymentLeverageRange?: {
+    min: number
+    max: number
+  } | null
+  deploymentConstraintExplanation?: string | null
+  compatibilityMetadata?: {
+    isLegacySnapshot: boolean
+    missingBacktestConfigDefaults: boolean
+    missingDeploymentExecutionDefaults: boolean
+    missingDeploymentExecutionConstraints: boolean
+    requiresRepublishForBacktest: boolean
+    requiresRepublishForDeploy: boolean
+  } | null
+  consistencySummary?: {
+    isConsistent: boolean
+    driftReasons: string[]
+    consistencyScore?: number | null
+  } | null
+  canEditDeploymentLeverage?: boolean
   schemaVersion: string | null
   supportsDynamicParams: boolean
   publishedSnapshotId?: string | null

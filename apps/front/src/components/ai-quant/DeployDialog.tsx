@@ -18,6 +18,17 @@ interface DeployDialogProps {
   exchange: 'binance' | 'okx' | 'hyperliquid'
   accounts: DeployExchangeAccount[]
   selectedAccountId: string
+  leverageOptions?: number[]
+  selectedLeverage?: number
+  onSelectLeverage?: (leverage: number) => void
+  leverageExplanation?: string | null
+  deploymentBaseline?: {
+    leverage?: number | null
+    priceSource?: string | null
+    orderType?: string | null
+    timeInForce?: string | null
+  } | null
+  driftReasons?: string[]
   lng: 'zh' | 'en'
   onSelectExchange: (exchange: 'binance' | 'okx' | 'hyperliquid') => void
   onSelectAccount: (accountId: string) => void
@@ -33,6 +44,12 @@ export function DeployDialog({
   exchange,
   accounts,
   selectedAccountId,
+  leverageOptions = [],
+  selectedLeverage,
+  onSelectLeverage,
+  leverageExplanation = null,
+  deploymentBaseline = null,
+  driftReasons = [],
   lng,
   onSelectExchange,
   onSelectAccount,
@@ -43,6 +60,10 @@ export function DeployDialog({
   if (!open) return null
   const availableAccounts = accounts.filter(item => item.exchange === exchange && item.status === 'available')
   const accountReady = Boolean(selectedAccountId)
+  const leverageReady = leverageOptions.length === 0 || typeof selectedLeverage === 'number'
+  const leverageRangeLabel = leverageOptions.length > 0
+    ? `${Math.min(...leverageOptions)}x - ${Math.max(...leverageOptions)}x`
+    : '--'
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
@@ -97,7 +118,40 @@ export function DeployDialog({
               ))}
             </select>
           </label>
+
+          <label className="text-xs text-[color:var(--cf-muted)]">
+            部署杠杆
+            <select
+              name="deployment-leverage"
+              value={typeof selectedLeverage === 'number' ? String(selectedLeverage) : ''}
+              onChange={event => onSelectLeverage?.(Number(event.target.value))}
+              className="mt-1 h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)]"
+            >
+              <option value="">选择杠杆</option>
+              {leverageOptions.map(option => (
+                <option key={option} value={option}>{option}x</option>
+              ))}
+            </select>
+          </label>
         </div>
+
+        {leverageOptions.length > 0 && (
+          <div className="mt-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-3 text-sm text-[color:var(--cf-text)]">
+            <p className="font-semibold text-[color:var(--cf-text-strong)]">允许杠杆范围</p>
+            <p className="mt-1">{leverageRangeLabel}</p>
+            {deploymentBaseline && (
+              <p className="mt-2 text-xs text-[color:var(--cf-muted)]">
+                策略部署默认: {deploymentBaseline.leverage ?? '--'}x / {deploymentBaseline.priceSource ?? '--'} / {deploymentBaseline.orderType ?? '--'} / {deploymentBaseline.timeInForce ?? '--'}
+              </p>
+            )}
+            {leverageExplanation && (
+              <p className="mt-2 text-xs text-[color:var(--cf-muted)]">{leverageExplanation}</p>
+            )}
+            {driftReasons.length > 0 && (
+              <p className="mt-2 text-xs text-amber-300">{driftReasons.join(' / ')}</p>
+            )}
+          </div>
+        )}
 
         {availableAccounts.length === 0 && (
           <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-500">
@@ -117,7 +171,7 @@ export function DeployDialog({
           <button
             type="button"
             onClick={onConfirmDeploy}
-            disabled={!apiConfigured || !canDeploy || !accountReady || deploySubmitting}
+            disabled={!apiConfigured || !canDeploy || !accountReady || !leverageReady || deploySubmitting}
             className="from-primary to-secondary rounded-xl bg-gradient-to-r px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             {t('aiQuant.deployDialog.confirmDeploy')}

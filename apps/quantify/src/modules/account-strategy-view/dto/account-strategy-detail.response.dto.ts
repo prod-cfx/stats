@@ -1,6 +1,88 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { AccountStrategyListItemDto } from './account-strategy-list-item.dto'
 
+export class AccountStrategyLeverageRangeDto {
+  @ApiProperty()
+  min!: number
+
+  @ApiProperty()
+  max!: number
+}
+
+export class AccountStrategyExecutionConfigDto {
+  @ApiPropertyOptional({ nullable: true })
+  leverage!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  priceSource!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  orderType!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  timeInForce!: string | null
+}
+
+export class AccountStrategyCompatibilityMetadataDto {
+  @ApiProperty()
+  isLegacySnapshot!: boolean
+
+  @ApiProperty()
+  missingStrategyConfig!: boolean
+
+  @ApiProperty()
+  missingBacktestConfigDefaults!: boolean
+
+  @ApiProperty()
+  missingDeploymentExecutionDefaults!: boolean
+
+  @ApiProperty()
+  missingDeploymentExecutionConstraints!: boolean
+
+  @ApiProperty()
+  requiresRepublishForBacktest!: boolean
+
+  @ApiProperty()
+  requiresRepublishForDeploy!: boolean
+}
+
+export class AccountStrategyConsistencySummaryDto {
+  @ApiProperty()
+  isConsistent!: boolean
+
+  @ApiProperty({ type: [String] })
+  driftReasons!: string[]
+
+  @ApiPropertyOptional({ nullable: true })
+  consistencyScore!: number | null
+}
+
+export class AccountStrategyDeploymentDto {
+  @ApiPropertyOptional({ nullable: true })
+  exchangeAccountId!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  exchangeAccountName!: string | null
+
+  @ApiProperty({ type: AccountStrategyExecutionConfigDto })
+  executionConfig!: AccountStrategyExecutionConfigDto
+
+  @ApiPropertyOptional({ nullable: true })
+  executionConfigVersion!: number | null
+
+  @ApiPropertyOptional({ nullable: true, type: AccountStrategyLeverageRangeDto })
+  effectiveAllowedLeverageRange!: AccountStrategyLeverageRangeDto | null
+
+  @ApiProperty({ type: [String] })
+  driftFields!: string[]
+
+  @ApiProperty()
+  reReadAtNextEligibleExecutionCycle!: boolean
+
+  @ApiPropertyOptional({ nullable: true })
+  updatedBy!: string | null
+}
+
 export class AccountStrategyEquityPointDto {
   @ApiProperty()
   ts!: string
@@ -108,6 +190,33 @@ export class AccountStrategySnapshotDto {
   @ApiPropertyOptional({ nullable: true, type: 'object', additionalProperties: true })
   paramValues!: Record<string, unknown> | null
 
+  @ApiPropertyOptional({ nullable: true, type: 'object', additionalProperties: true })
+  strategyConfig!: Record<string, unknown> | null
+
+  @ApiPropertyOptional({ nullable: true, type: 'object', additionalProperties: true })
+  backtestConfigDefaults!: Record<string, unknown> | null
+
+  @ApiPropertyOptional({ nullable: true, type: 'object', additionalProperties: true })
+  deploymentExecutionBaseline!: Record<string, unknown> | null
+
+  @ApiPropertyOptional({ nullable: true, type: 'object', additionalProperties: true })
+  deploymentExecutionCurrent!: Record<string, unknown> | null
+
+  @ApiPropertyOptional({ nullable: true, type: 'object', additionalProperties: true })
+  deploymentExecutionConstraints!: Record<string, unknown> | null
+
+  @ApiPropertyOptional({ nullable: true, type: AccountStrategyLeverageRangeDto })
+  effectiveAllowedLeverageRange!: AccountStrategyLeverageRangeDto | null
+
+  @ApiPropertyOptional({ nullable: true, type: 'object', additionalProperties: true })
+  compatibilityMetadata!: AccountStrategyCompatibilityMetadataDto | null
+
+  @ApiPropertyOptional({ nullable: true, type: AccountStrategyConsistencySummaryDto })
+  consistencySummary!: AccountStrategyConsistencySummaryDto | null
+
+  @ApiPropertyOptional({ nullable: true })
+  executionConfigVersion!: number | null
+
   @ApiPropertyOptional({ nullable: true })
   schemaVersion!: string | null
 
@@ -142,4 +251,7 @@ export class AccountStrategyDetailResponseDto extends AccountStrategyListItemDto
 
   @ApiProperty({ type: [AccountStrategyLatestOrderDto] })
   latestOrders!: AccountStrategyLatestOrderDto[]
+
+  @ApiPropertyOptional({ nullable: true, type: AccountStrategyDeploymentDto })
+  deployment?: AccountStrategyDeploymentDto | null
 }

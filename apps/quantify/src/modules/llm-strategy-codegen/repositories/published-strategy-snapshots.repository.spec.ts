@@ -33,6 +33,37 @@ describe('publishedStrategySnapshotsRepository', () => {
       paramsSnapshot: { positionPct: 10 },
       executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
       dataRequirements: { primary: ['15m'] },
+      strategyConfig: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        baseTimeframe: '15m',
+        positionPct: 10,
+        strategyDeclaredLeverageRange: null,
+      },
+      backtestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: false,
+      },
+      deploymentExecutionDefaults: {
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'gtc',
+      },
+      deploymentExecutionConstraints: {
+        platformRiskMaxLeverage: 1,
+        strategyDeclaredLeverageRange: null,
+        defaultLeverage: 1,
+        supportedPriceSources: ['close'],
+        supportedOrderTypes: ['market'],
+        supportedTimeInForce: ['gtc'],
+        constraintExplanation: 'default spot execution constraints',
+      },
       userIntentSummary: {
         marketScope: ['BTCUSDT'],
         goals: ['mean-reversion'],
@@ -62,6 +93,37 @@ describe('publishedStrategySnapshotsRepository', () => {
         consistencyReport: {
           status: 'PASSED',
           summary: { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
+        },
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          baseTimeframe: '15m',
+          positionPct: 10,
+          strategyDeclaredLeverageRange: null,
+        },
+        backtestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: false,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'gtc',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 1,
+          strategyDeclaredLeverageRange: null,
+          defaultLeverage: 1,
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['gtc'],
+          constraintExplanation: 'default spot execution constraints',
         },
         userIntentSummary: {
           marketScope: ['BTCUSDT'],
@@ -124,6 +186,37 @@ describe('publishedStrategySnapshotsRepository', () => {
       scriptSummary: { indicators: ['EMA'] },
       lockedParams: { positionPct: 25 },
       snapshotVersion: 2,
+      strategyConfig: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        baseTimeframe: '15m',
+        positionPct: 10,
+        strategyDeclaredLeverageRange: null,
+      },
+      backtestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: false,
+      },
+      deploymentExecutionDefaults: {
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'gtc',
+      },
+      deploymentExecutionConstraints: {
+        platformRiskMaxLeverage: 1,
+        strategyDeclaredLeverageRange: null,
+        defaultLeverage: 1,
+        supportedPriceSources: ['close'],
+        supportedOrderTypes: ['market'],
+        supportedTimeInForce: ['gtc'],
+        constraintExplanation: 'default spot execution constraints',
+      },
       executionEnvelope: {
         positionMode: 'long_only',
         marginMode: 'cash',
@@ -226,6 +319,37 @@ describe('publishedStrategySnapshotsRepository', () => {
       paramsSnapshot: { positionPct: 10 },
       executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
       dataRequirements: { primary: ['15m'] },
+      strategyConfig: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        baseTimeframe: '15m',
+        positionPct: 10,
+        strategyDeclaredLeverageRange: null,
+      },
+      backtestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: false,
+      },
+      deploymentExecutionDefaults: {
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'gtc',
+      },
+      deploymentExecutionConstraints: {
+        platformRiskMaxLeverage: 1,
+        strategyDeclaredLeverageRange: null,
+        defaultLeverage: 1,
+        supportedPriceSources: ['close'],
+        supportedOrderTypes: ['market'],
+        supportedTimeInForce: ['gtc'],
+        constraintExplanation: 'default spot execution constraints',
+      },
       userIntentSummary: { marketScope: ['BTCUSDT'] },
       strategySummary: { thesis: 'mean-reversion' },
       scriptSummary: { indicators: ['BBANDS'] },
@@ -239,6 +363,78 @@ describe('publishedStrategySnapshotsRepository', () => {
       semanticGraph: {
         version: 1,
         nodes: [{ id: 'entry-2' }],
+      },
+    })
+
+    const firstCall = tx.publishedStrategySnapshot.create.mock.calls[0][0]
+    const secondCall = tx.publishedStrategySnapshot.create.mock.calls[1][0]
+
+    expect(firstCall.data.snapshotHash).not.toBe(secondCall.data.snapshotHash)
+  })
+
+  it('includes structured formal snapshot truth fields in snapshot hash', async () => {
+    const tx = {
+      publishedStrategySnapshot: {
+        create: jest.fn().mockImplementation(async ({ data }) => ({
+          id: 'snapshot-structured',
+          createdAt: new Date('2026-04-12T10:00:00.000Z'),
+          ...data,
+        })),
+      },
+    }
+    const repo = new PublishedStrategySnapshotsRepository(createTxHost(tx))
+
+    const baseInput = {
+      sessionId: 'session-1',
+      scriptSnapshot: 'const strategy = { protocolVersion: "v1" }\nstrategy',
+      specSnapshot: {
+        market: { exchange: 'okx', symbol: 'BTCUSDT', timeframe: '15m' },
+      },
+      consistencyReport: { status: 'PASSED' },
+      strategyConfig: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        baseTimeframe: '15m',
+        positionPct: 10,
+        strategyDeclaredLeverageRange: null,
+      },
+      backtestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: false,
+      },
+      deploymentExecutionDefaults: {
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'gtc',
+      },
+      deploymentExecutionConstraints: {
+        platformRiskMaxLeverage: 1,
+        strategyDeclaredLeverageRange: null,
+        defaultLeverage: 1,
+        supportedPriceSources: ['close'],
+        supportedOrderTypes: ['market'],
+        supportedTimeInForce: ['gtc'],
+        constraintExplanation: 'default spot execution constraints',
+      },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'mean-reversion' },
+      scriptSummary: { indicators: ['BBANDS'] },
+      lockedParams: { leverage: 3 },
+      snapshotVersion: 3,
+    }
+
+    await repo.create(baseInput)
+    await repo.create({
+      ...baseInput,
+      backtestConfigDefaults: {
+        ...baseInput.backtestConfigDefaults,
+        leverage: 2,
       },
     })
 

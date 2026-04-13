@@ -20,4 +20,37 @@ describe('backend contract generated AI Quant codegen responses', () => {
       expect(snippet).not.toContain('response: z.void()')
     }
   })
+
+  it('keeps account AI Quant passthrough aliases typed for detail, deploy, and leverage-only update', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+    const aliases = [
+      'AccountAiQuantStrategiesController_detail',
+      'AccountAiQuantStrategiesController_deploy',
+      'AccountAiQuantStrategiesController_updateExecutionLeverage',
+    ]
+
+    for (const alias of aliases) {
+      const start = source.indexOf(`alias: '${alias}'`)
+      expect(start).toBeGreaterThanOrEqual(0)
+      const nextAlias = source.indexOf("\n  {\n    method:", start + 1)
+      const snippet = source.slice(start, nextAlias === -1 ? undefined : nextAlias)
+      expect(snippet).not.toContain('response: z.void()')
+    }
+  })
+
+  it('includes leverage passthrough fields in backend AI Quant request contracts', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+
+    const deploySchemaStart = source.indexOf('const AccountAiQuantDeployRequestDto = z')
+    const updateSchemaStart = source.indexOf('const AccountAiQuantUpdateExecutionLeverageRequestDto = z')
+
+    expect(deploySchemaStart).toBeGreaterThanOrEqual(0)
+    expect(updateSchemaStart).toBeGreaterThanOrEqual(0)
+
+    const deploySnippet = source.slice(deploySchemaStart, deploySchemaStart + 500)
+    const updateSnippet = source.slice(updateSchemaStart, updateSchemaStart + 300)
+
+    expect(deploySnippet).toContain('leverage: z.number().optional()')
+    expect(updateSnippet).toContain('leverage: z.number()')
+  })
 })
