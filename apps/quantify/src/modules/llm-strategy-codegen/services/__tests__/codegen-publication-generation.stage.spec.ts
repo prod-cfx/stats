@@ -76,4 +76,50 @@ describe('codegenPublicationGenerationStage', () => {
     expect(artifacts.strategySummary.indicators).toEqual(['bollingerBands'])
     expect(artifacts.scriptSummary.indicators).toEqual(['bollingerBands'])
   })
+
+  it('derives publish params from canonical multi-timeframe truth instead of checklist order alone', async () => {
+    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const compile = jest.fn().mockReturnValue({
+      ir: {
+        market: { timeframes: ['3m', '15m'] },
+      },
+    })
+
+    const stage = new CodegenPublicationGenerationStage(
+      canonicalSpecBuilder,
+      { buildFromCanonicalSpec: jest.fn().mockReturnValue({}) } as any,
+      strategySummaryBuilder,
+      { evaluate: jest.fn().mockReturnValue({ status: 'PASSED', scriptProfile: null }) } as any,
+      { compile } as any,
+      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
+      { emit: jest.fn().mockReturnValue('strategy') } as any,
+      { build: jest.fn().mockReturnValue({}) } as any,
+      { parse: jest.fn().mockReturnValue({}) } as any,
+    )
+
+    const artifacts = await stage.generate({
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m', '3m'],
+        entryRules: ['3m 内下跌 1% 买入'],
+        exitRules: ['15m 内上涨 2% 卖出'],
+        entryRuleDrafts: [{ id: 'entry-1', phase: 'entry', text: '3m 内下跌 1% 买入', timeframe: '3m' }],
+        exitRuleDrafts: [{ id: 'exit-1', phase: 'exit', text: '15m 内上涨 2% 卖出', timeframe: '15m', basis: 'entry_avg_price' }],
+        riskRules: { exchange: 'okx', marketType: 'spot', positionPct: 10, stopLossPct: 5 },
+      },
+      message: 'OKX BTCUSDT；3 分钟内下跌 1% 买入；15 分钟内上涨 2% 卖出；单笔 10% 资金',
+    })
+
+    expect(compile).toHaveBeenCalledWith(expect.objectContaining({
+      fallback: expect.objectContaining({
+        baseTimeframe: '3m',
+      }),
+    }))
+    expect(artifacts.publishParams).toEqual({
+      symbol: 'BTCUSDT',
+      timeframe: '3m',
+      marketType: 'spot',
+    })
+  })
 })

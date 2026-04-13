@@ -110,6 +110,7 @@ describe('compiledPublicationGateService', () => {
         symbol: 'BTCUSDT',
         marketType: 'spot',
         baseTimeframe: '1h',
+        stateTimeframes: [],
         positionPct: 25,
         strategyDeclaredLeverageRange: null,
       },
@@ -218,9 +219,84 @@ describe('compiledPublicationGateService', () => {
         symbol: 'BTCUSDT',
         marketType: 'perp',
         baseTimeframe: '1h',
+        stateTimeframes: [],
         positionPct: 25,
         strategyDeclaredLeverageRange: null,
       },
+    }))
+  })
+
+  it('publishes state timeframes separately from base timeframe', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn().mockResolvedValue({ id: 'snapshot-multi' }),
+    }
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never)
+    const ir = {
+      ...createIrFixture(),
+      market: {
+        ...createIrFixture().market,
+        venue: 'okx' as const,
+        timeframes: ['3m', '15m'],
+      },
+      dataRequirements: {
+        ...createIrFixture().dataRequirements,
+        requiredTimeframes: ['3m', '15m'],
+      },
+    }
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'long_only' as const,
+      marginMode: 'cash' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await gate.publish({
+      sessionId: 'session-multi',
+      canonicalSnapshot: {
+        version: 2,
+        market: { exchange: 'okx', symbol: 'BTCUSDT', defaultTimeframe: '3m' },
+        rules: [],
+      } as any,
+      semanticView: {
+        viewType: 'canonical-semantic-view.v1',
+        canonicalDigest: 'sha256:multi',
+      },
+      graphSnapshot: {
+        version: 3,
+        status: 'confirmed' as const,
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'okx' as const,
+          symbol: 'BTCUSDT',
+          timeframe: '3m',
+          positionPct: 25,
+          executionTags: [],
+        },
+      },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'multi-timeframe' },
+      scriptSummary: { indicators: ['EMA'] },
+      lockedParams: { exchange: 'okx', positionPct: 25 },
+    })
+
+    expect(publishedSnapshotsRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      strategyConfig: expect.objectContaining({
+        baseTimeframe: '3m',
+        stateTimeframes: ['15m'],
+      }),
+      paramsSnapshot: expect.objectContaining({ timeframe: '3m' }),
+      dataRequirements: expect.objectContaining({ requiredTimeframes: ['3m', '15m'] }),
     }))
   })
 
