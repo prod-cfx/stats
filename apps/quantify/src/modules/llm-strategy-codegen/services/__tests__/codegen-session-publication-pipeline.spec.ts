@@ -74,6 +74,7 @@ describe('codegenSessionPublicationPipeline', () => {
       buildUserIntentSummary: jest.fn().mockReturnValue({ summary: 'intent' }),
       buildStrategySummary: jest.fn().mockReturnValue({ summary: 'strategy' }),
       buildScriptSummary: jest.fn().mockReturnValue({ summary: 'script' }),
+      buildSummaryFromProfile: jest.fn().mockReturnValue({ summary: 'profile' }),
     }
     const gate = overrides?.gate ?? {
       publish: jest.fn().mockResolvedValue({

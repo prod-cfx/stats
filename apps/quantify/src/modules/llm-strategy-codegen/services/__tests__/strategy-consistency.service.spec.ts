@@ -614,6 +614,58 @@ strategy
     expect(report.checks.some(check => check.key === 'summary.alignment' && check.status === 'passed')).toBe(true)
   })
 
+  it('does not hard-fail publish consistency when only user-intent summary drifts from aligned profiles', () => {
+    const checklist = {
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['收盘价突破布林带上轨时做空'],
+      exitRules: ['价格回到布林带中轨时平仓'],
+      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+    }
+    const canonicalSpec = canonicalBuilder.build(checklist)
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: `
+const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const closes = ctx.bars?.map(item => item.close) ?? []
+    const bb = ctx.helpers?.ta?.bollingerBands(closes, 20, 2)
+    if (!bb) return { action: 'NOOP' }
+    const ratio = ctx.paramsNormalized?.positionPct ? Math.min(ctx.paramsNormalized.positionPct / 100, 1) : 0.1
+    if (closes.at(-1)! > bb.upper) return { action: 'OPEN_SHORT', size: { mode: 'RATIO', value: ratio } }
+    if (Math.abs(closes.at(-1)! - bb.middle) <= 1 && ctx.position?.side === 'long') return { action: 'CLOSE_LONG' }
+    if (Math.abs(closes.at(-1)! - bb.middle) <= 1 && ctx.position?.side === 'short') return { action: 'CLOSE_SHORT' }
+    return { action: 'NOOP' }
+  },
+}
+strategy
+`,
+      userIntentSummary: {
+        strategyType: 'bollinger',
+        indicators: ['bollingerBands'],
+        entryRule: 'bollinger.upper_break_short',
+        exitRule: 'bollinger.middle_revert',
+        market: { symbol: 'BTCUSDT', timeframe: '15m', marketType: 'perp' },
+        sizing: { mode: 'RATIO', evidence: 'explicit' },
+      },
+      strategySummary: {
+        strategyType: 'bollinger',
+        indicators: ['bollingerBands', 'sma'],
+        entryRule: 'bollinger.upper_break_short',
+        exitRule: 'bollinger.middle_revert',
+        market: { symbol: 'BTCUSDT', timeframe: '15m', marketType: 'perp' },
+        sizing: { mode: 'RATIO', evidence: 'explicit' },
+      },
+    })
+
+    expect(report.status).toBe('PASSED')
+    expect(report.checks.find(check => check.key === 'summary.alignment')?.level).toBe('warning')
+    expect(report.checks.find(check => check.key === 'summary.alignment')?.status).toBe('failed')
+    expect(report.checks.find(check => check.key === 'indicators.required')?.status).toBe('passed')
+  })
+
   it('passes when canonical spec v2 compiles into an RSI-threshold momentum script', () => {
     const canonicalSpec = canonicalBuilder.build({
       symbols: ['BTCUSDT'],

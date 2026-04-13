@@ -81,7 +81,6 @@ export class CodegenPublicationGenerationStage {
     const userIntentSummary = this.strategySummaryBuilder.buildUserIntentSummary({
       checklist: input.checklist,
     })
-    const strategySummary = this.strategySummaryBuilder.buildStrategySummary(canonicalSpec)
     const lockedParams = this.buildLockedParams(input.checklist)
     const publishParams = this.buildPublishParams({
       checklist: input.checklist,
@@ -107,10 +106,17 @@ export class CodegenPublicationGenerationStage {
       canonicalSpec,
       scriptCode: compiledScript,
       userIntentSummary,
-      strategySummary,
     })
-    const scriptSummary = this.strategySummaryBuilder.buildScriptSummary({
-      scriptProfile: semanticConsistency.scriptProfile,
+    const strategySummary = this.strategySummaryBuilder.buildSummaryFromProfile({
+      profile: semanticConsistency.specProfile,
+      market: {
+        symbol: canonicalSpec.market.symbol ?? undefined,
+        timeframe: canonicalSpec.market.timeframe ?? undefined,
+        marketType: canonicalSpec.market.marketType,
+      },
+    })
+    const scriptSummary = this.strategySummaryBuilder.buildSummaryFromProfile({
+      profile: semanticConsistency.scriptProfile,
     })
     const sessionSpecDesc = {
       ...semanticView,
