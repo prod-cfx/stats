@@ -539,6 +539,7 @@ export function AiQuantPageClient({
   const onSend = async (input: string) => {
     if (!input.trim()) return
     const trimmedInput = input.trim()
+    const pendingClarification = activeConversation.clarificationGate?.items.find(item => item.status === 'pending')
     const isRevisionMessage = isStrategyModificationIntent(trimmedInput)
     const currentConversationId = activeConversation.id
     const currentParams = activeConversation.params
@@ -622,6 +623,21 @@ export function AiQuantPageClient({
         usePresetRules: false,
         confirmGenerate: true,
         confirmedCanonicalDigest: activeConversation.pendingCanonicalDigest ?? undefined,
+      })
+      return
+    }
+
+    if (activeConversation.clarificationGate?.blocked && pendingClarification) {
+      await requestBackendGraphGeneration({
+        conversationId: currentConversationId,
+        message: trimmedInput,
+        params: currentParams,
+        sessionId: currentSessionId,
+        usePresetRules: false,
+        confirmGenerate: false,
+        clarificationAnswers: {
+          [pendingClarification.key]: trimmedInput,
+        },
       })
       return
     }

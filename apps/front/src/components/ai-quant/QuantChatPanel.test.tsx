@@ -1,8 +1,7 @@
 /** @jest-environment jsdom */
 
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
-import React from 'react'
-import { act } from 'react'
+import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QuantChatPanel } from './QuantChatPanel'
 
@@ -221,11 +220,11 @@ describe('QuantChatPanel range settings', () => {
     expect(onSend).not.toHaveBeenCalled()
   })
 
-  it('renders clarification and publication gate cards when provided', async () => {
+  it('does not render a separate clarification card while still showing publication gate content', async () => {
     await act(async () => {
       root?.render(
         <QuantChatPanel
-          messages={[{ id: 'm1', role: 'assistant', content: 'hello' }]}
+          messages={[{ id: 'm1', role: 'assistant', content: '这条策略包含做空，请确认使用现货还是合约/永续？' }]}
           paramSchema={null}
           paramValues={{}}
           clarificationGate={{
@@ -263,5 +262,6 @@ describe('QuantChatPanel range settings', () => {
 
     expect(container.textContent).toContain('这条策略包含做空，请确认使用现货还是合约/永续？')
     expect(container.textContent).toContain('confirmed snapshot and compiled artifact exchange mismatch')
+    expect(container.querySelector('[data-testid="clarification-freeform-input"]')).toBeNull()
   })
 })

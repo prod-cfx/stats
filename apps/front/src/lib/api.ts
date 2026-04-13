@@ -2450,6 +2450,7 @@ export interface LlmClarificationGateItem {
 
 export interface LlmClarificationGate {
   blocked: boolean
+  summary?: string | null
   items: LlmClarificationGateItem[]
   pendingItems?: LlmClarificationGateItem[]
 }
