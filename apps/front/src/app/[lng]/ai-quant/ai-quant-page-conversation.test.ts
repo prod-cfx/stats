@@ -647,7 +647,7 @@ describe('ai-quant-page-conversation', () => {
     })).toBe(false)
   })
 
-  it('requires republish when editable execution params drift from published snapshot truth', () => {
+  it('does not require republish when only editable execution params drift', () => {
     expect(requiresRepublishForPublishedSnapshot({
       publishedSnapshotId: 'snapshot-1',
       publishedSnapshotParamValues: {
@@ -662,22 +662,49 @@ describe('ai-quant-page-conversation', () => {
         baseTimeframe: '15m',
         backtestLeverage: 3,
       },
+    })).toBe(false)
+  })
+
+  it('requires republish when compatibility metadata says published backtest truth is incomplete', () => {
+    expect(requiresRepublishForPublishedSnapshot({
+      publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotParamValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+      },
+      publishedSnapshotCompatibilityMetadata: {
+        isLegacySnapshot: true,
+        missingBacktestConfigDefaults: true,
+        missingDeploymentExecutionDefaults: true,
+        missingDeploymentExecutionConstraints: true,
+        requiresRepublishForBacktest: true,
+        requiresRepublishForDeploy: true,
+      },
+      editableParamValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+      },
     })).toBe(true)
   })
 
   it('resolves published backtest inputs only from snapshot-bound truth', () => {
     expect(resolveEffectivePublishedBacktestInputs({
       publishedSnapshotId: 'snapshot-1',
-      publishedSnapshotParamValues: {
+      publishedSnapshotStrategyConfig: {
         exchange: 'okx',
         symbol: 'BTC-USDT-SWAP',
         baseTimeframe: '1h',
-        backtestInitialCash: 15000,
-        backtestLeverage: 2,
-        backtestSlippageBps: 7,
-        backtestFeeBps: 3,
-        backtestPriceSource: 'mid',
-        backtestAllowPartial: false,
+        positionPct: 10,
+      },
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 15000,
+        leverage: 2,
+        slippageBps: 7,
+        feeBps: 3,
+        priceSource: 'mid',
+        allowPartial: false,
       },
     })).toEqual({
       exchange: 'okx',
@@ -692,6 +719,176 @@ describe('ai-quant-page-conversation', () => {
         allowPartial: false,
         allowPartialValid: true,
       },
+    })
+  })
+
+  it('hydrates structured published snapshot projection from a server conversation', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'server-conv-3',
+      conversationTitle: '结构化快照会话',
+      status: 'PUBLISHED',
+      scriptCode: 'export default function strategy() { return true }',
+      publishedSnapshotId: 'snapshot-structured',
+      publishedSnapshotParamValues: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '15m',
+        positionPct: 12,
+        buyDropPct: 1.25,
+      },
+      publishedSnapshotStrategyConfig: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '15m',
+        positionPct: 12,
+      },
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 12000,
+        leverage: 2,
+        slippageBps: 8,
+        feeBps: 4,
+        priceSource: 'close',
+        allowPartial: false,
+      },
+      publishedSnapshotDeploymentExecutionDefaults: {
+        leverage: 2,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'gtc',
+      },
+      publishedSnapshotDeploymentExecutionConstraints: {
+        effectiveAllowedLeverageRange: { min: 1, max: 3 },
+        supportedPriceSources: ['close'],
+        supportedOrderTypes: ['market'],
+        supportedTimeInForce: ['gtc'],
+        constraintExplanation: 'snapshot constrained',
+      },
+      publishedSnapshotCompatibilityMetadata: {
+        isLegacySnapshot: false,
+        missingBacktestConfigDefaults: false,
+        missingDeploymentExecutionDefaults: false,
+        missingDeploymentExecutionConstraints: false,
+        requiresRepublishForBacktest: false,
+        requiresRepublishForDeploy: false,
+      },
+      specDesc: {
+        market: {
+          symbols: ['ETHUSDT'],
+          timeframes: ['15m'],
+        },
+        rules: [],
+      },
+    } as any, (key: string, options?: Record<string, unknown>) => String(options?.defaultValue ?? key))
+
+    expect(conversation.publishedSnapshotId).toBe('snapshot-structured')
+    expect(conversation.publishedSnapshotParamValues).toEqual({
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      baseTimeframe: '15m',
+      positionPct: 12,
+      buyDropPct: 1.25,
+    })
+    expect(conversation.publishedSnapshotStrategyConfig).toEqual({
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      baseTimeframe: '15m',
+      positionPct: 12,
+      strategyDeclaredLeverageRange: null,
+    })
+    expect(conversation.publishedSnapshotBacktestConfigDefaults).toEqual({
+      initialCash: 12000,
+      leverage: 2,
+      slippageBps: 8,
+      feeBps: 4,
+      priceSource: 'close',
+      allowPartial: false,
+    })
+    expect(conversation.publishedSnapshotDeploymentExecutionDefaults).toEqual({
+      leverage: 2,
+      priceSource: 'close',
+      orderType: 'market',
+      timeInForce: 'gtc',
+    })
+    expect(conversation.publishedSnapshotCompatibilityMetadata).toEqual({
+      isLegacySnapshot: false,
+      missingBacktestConfigDefaults: false,
+      missingDeploymentExecutionDefaults: false,
+      missingDeploymentExecutionConstraints: false,
+      requiresRepublishForBacktest: false,
+      requiresRepublishForDeploy: false,
+    })
+  })
+
+  it('keeps authoritative published snapshot param values during hydration when strategy config is only a subset', () => {
+    const conversation = hydrateConversation({
+      id: 'conv-hydrated-structured',
+      title: 'hydrated',
+      messages: [],
+      params: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 12,
+      },
+      paramValues: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 12,
+      },
+      publishedSnapshotId: 'snapshot-hydrated',
+      publishedSnapshotParamValues: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '15m',
+        positionPct: 12,
+        buyDropPct: 1.5,
+      },
+      publishedSnapshotStrategyConfig: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '15m',
+        positionPct: 12,
+      },
+      backtestResult: null,
+      logicGraph: {
+        version: 1,
+        status: 'confirmed',
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          timeframe: '15m',
+          positionPct: 12,
+        },
+      },
+      semanticGraph: null,
+      validationReport: null,
+      llmCodegenSessionId: null,
+      publishedStrategyInstanceId: null,
+      publishedScriptCode: 'export default function strategy() { return true }',
+      publishedScriptGraphVersion: 1,
+      latestSignalMessage: null,
+      backtestExecutionState: 'idle',
+      updatedAt: 1,
+    } as any)
+
+    expect(conversation.publishedSnapshotParamValues).toEqual({
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      baseTimeframe: '15m',
+      positionPct: 12,
+      buyDropPct: 1.5,
     })
   })
 

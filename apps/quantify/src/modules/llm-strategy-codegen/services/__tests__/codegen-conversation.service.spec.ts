@@ -347,6 +347,32 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       lockedParams: {
         positionPct: 25,
       },
+      strategyConfig: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '1h',
+        positionPct: 25,
+      },
+      backtestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: false,
+      },
+      deploymentExecutionDefaults: {
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'gtc',
+      },
+      deploymentExecutionConstraints: {
+        supportedPriceSources: ['close'],
+        supportedOrderTypes: ['market'],
+        supportedTimeInForce: ['gtc'],
+        defaultLeverage: 1,
+      },
       executionPolicy: {
         allowPartialFill: false,
       },
@@ -365,6 +391,40 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         baseTimeframe: '1h',
         positionPct: 25,
         backtestAllowPartial: false,
+      },
+      publishedSnapshotStrategyConfig: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '1h',
+        positionPct: 25,
+      },
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: false,
+      },
+      publishedSnapshotDeploymentExecutionDefaults: {
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'gtc',
+      },
+      publishedSnapshotDeploymentExecutionConstraints: {
+        supportedPriceSources: ['close'],
+        supportedOrderTypes: ['market'],
+        supportedTimeInForce: ['gtc'],
+        defaultLeverage: 1,
+      },
+      publishedSnapshotCompatibilityMetadata: {
+        isLegacySnapshot: false,
+        missingBacktestConfigDefaults: false,
+        missingDeploymentExecutionDefaults: false,
+        missingDeploymentExecutionConstraints: false,
+        requiresRepublishForBacktest: false,
+        requiresRepublishForDeploy: false,
       },
     })
   })
@@ -897,6 +957,32 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       lockedParams: {
         positionPct: 10,
       },
+      strategyConfig: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      backtestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: false,
+      },
+      deploymentExecutionDefaults: {
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'gtc',
+      },
+      deploymentExecutionConstraints: {
+        supportedPriceSources: ['close'],
+        supportedOrderTypes: ['market'],
+        supportedTimeInForce: ['gtc'],
+        defaultLeverage: 1,
+      },
       executionPolicy: {
         allowPartialFill: false,
       },
@@ -969,7 +1055,91 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       positionPct: 10,
       backtestAllowPartial: false,
     })
+    expect(result.publishedSnapshotStrategyConfig).toEqual({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
+      positionPct: 10,
+    })
+    expect(result.publishedSnapshotBacktestConfigDefaults).toEqual({
+      initialCash: 10000,
+      leverage: 1,
+      slippageBps: 10,
+      feeBps: 5,
+      priceSource: 'close',
+      allowPartial: false,
+    })
+    expect(result.publishedSnapshotDeploymentExecutionDefaults).toEqual({
+      leverage: 1,
+      priceSource: 'close',
+      orderType: 'market',
+      timeInForce: 'gtc',
+    })
+    expect(result.publishedSnapshotDeploymentExecutionConstraints).toEqual({
+      supportedPriceSources: ['close'],
+      supportedOrderTypes: ['market'],
+      supportedTimeInForce: ['gtc'],
+      defaultLeverage: 1,
+    })
+    expect(result.publishedSnapshotCompatibilityMetadata).toEqual({
+      isLegacySnapshot: false,
+      missingBacktestConfigDefaults: false,
+      missingDeploymentExecutionDefaults: false,
+      missingDeploymentExecutionConstraints: false,
+      requiresRepublishForBacktest: false,
+      requiresRepublishForDeploy: false,
+    })
     expect(result.consistencyReport).toEqual({ status: 'PASSED' })
+  })
+
+  it('marks published sessions as republish-required when formal snapshot projection is incomplete', async () => {
+    mockRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-legacy-1',
+      consistencyReport: { status: 'PASSED' },
+      paramsSnapshot: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+      },
+      lockedParams: {
+        positionPct: 10,
+      },
+      strategyConfig: null,
+      backtestConfigDefaults: null,
+      deploymentExecutionDefaults: null,
+      deploymentExecutionConstraints: null,
+      executionPolicy: {
+        allowPartialFill: false,
+      },
+    })
+    mockRepo.findById.mockResolvedValue({
+      id: 's-legacy-snapshot',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      checklist: {},
+      constraintPack: {},
+      latestDraftCode: 'return null',
+      latestSpecDesc: null,
+      strategyInstanceId: 'instance-legacy-1',
+      clarificationState: null,
+      rejectReason: null,
+    })
+
+    const result = await service.getSession('s-legacy-snapshot', 'u1')
+
+    expect(result.publishedSnapshotId).toBe('snapshot-legacy-1')
+    expect(result.publishedSnapshotStrategyConfig).toBeNull()
+    expect(result.publishedSnapshotBacktestConfigDefaults).toBeNull()
+    expect(result.publishedSnapshotDeploymentExecutionDefaults).toBeNull()
+    expect(result.publishedSnapshotDeploymentExecutionConstraints).toBeNull()
+    expect(result.publishedSnapshotCompatibilityMetadata).toEqual({
+      isLegacySnapshot: true,
+      missingBacktestConfigDefaults: true,
+      missingDeploymentExecutionDefaults: true,
+      missingDeploymentExecutionConstraints: true,
+      requiresRepublishForBacktest: true,
+      requiresRepublishForDeploy: true,
+    })
   })
 
   it('keeps legacy clarification items without field/blocking via backward-compatible normalization', async () => {
