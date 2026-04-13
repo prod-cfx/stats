@@ -65,6 +65,14 @@ interface GenerationOptions {
   maxTokens?: number
 }
 
+interface PublishedSnapshotProjection {
+  publishedSnapshotStrategyConfig: Record<string, unknown> | null
+  publishedSnapshotBacktestConfigDefaults: Record<string, unknown> | null
+  publishedSnapshotDeploymentExecutionDefaults: Record<string, unknown> | null
+  publishedSnapshotDeploymentExecutionConstraints: Record<string, unknown> | null
+  publishedSnapshotCompatibilityMetadata: Record<string, unknown> | null
+}
+
 type GuidePromptConfig = CodegenGuidePromptConfigSnapshot
 type RecommendationStyle = 'ma' | 'drop-rise'
 
@@ -565,6 +573,11 @@ export class CodegenConversationService {
     const constraintPack = this.readConstraintPack(session.constraintPack ?? null)
     const conversationMessages = this.toConversationMessages(constraintPack.conversationHistory)
     const conversationTitle = this.deriveConversationTitle(conversationMessages)
+    const effectivePublishedSnapshotId = latestSnapshot?.id ?? sessionPublishedSnapshotId ?? null
+    const publishedSnapshotProjection = this.buildPublishedSnapshotProjection({
+      publishedSnapshotId: effectivePublishedSnapshotId,
+      snapshot: latestSnapshot,
+    })
 
     return this.finalizeSessionResponse({
       id: session.id,
@@ -575,8 +588,9 @@ export class CodegenConversationService {
       createdAt: session.createdAt instanceof Date ? session.createdAt.toISOString() : undefined,
       updatedAt: session.updatedAt instanceof Date ? session.updatedAt.toISOString() : undefined,
       scriptCode: typeof session.latestDraftCode === 'string' ? session.latestDraftCode : null,
-      publishedSnapshotId: latestSnapshot?.id ?? sessionPublishedSnapshotId ?? null,
+      publishedSnapshotId: effectivePublishedSnapshotId,
       publishedSnapshotParamValues: this.buildPublishedSnapshotParamValues(latestSnapshot),
+      ...publishedSnapshotProjection,
       consistencyReport: latestSnapshot?.consistencyReport && typeof latestSnapshot.consistencyReport === 'object' && !Array.isArray(latestSnapshot.consistencyReport)
         ? latestSnapshot.consistencyReport as Record<string, unknown>
         : (sessionConsistencyReport && typeof sessionConsistencyReport === 'object' && !Array.isArray(sessionConsistencyReport)
@@ -616,6 +630,11 @@ export class CodegenConversationService {
       scriptCode: snapshot?.scriptCode ?? null,
       publishedSnapshotId: snapshot?.publishedSnapshotId ?? null,
       publishedSnapshotParamValues: snapshot?.publishedSnapshotParamValues ?? null,
+      publishedSnapshotStrategyConfig: snapshot?.publishedSnapshotStrategyConfig ?? null,
+      publishedSnapshotBacktestConfigDefaults: snapshot?.publishedSnapshotBacktestConfigDefaults ?? null,
+      publishedSnapshotDeploymentExecutionDefaults: snapshot?.publishedSnapshotDeploymentExecutionDefaults ?? null,
+      publishedSnapshotDeploymentExecutionConstraints: snapshot?.publishedSnapshotDeploymentExecutionConstraints ?? null,
+      publishedSnapshotCompatibilityMetadata: snapshot?.publishedSnapshotCompatibilityMetadata ?? null,
       strategyInstanceId: snapshot?.strategyInstanceId ?? null,
       rejectReason: snapshot?.rejectReason ?? null,
     }
@@ -1316,6 +1335,54 @@ export class CodegenConversationService {
     }
 
     return Object.keys(merged).length > 0 ? merged : null
+  }
+
+  private buildPublishedSnapshotProjection(args: {
+    publishedSnapshotId: string | null
+    snapshot: unknown
+  }): PublishedSnapshotProjection {
+    if (!args.publishedSnapshotId) {
+      return {
+        publishedSnapshotStrategyConfig: null,
+        publishedSnapshotBacktestConfigDefaults: null,
+        publishedSnapshotDeploymentExecutionDefaults: null,
+        publishedSnapshotDeploymentExecutionConstraints: null,
+        publishedSnapshotCompatibilityMetadata: null,
+      }
+    }
+
+    const snapshotRecord = this.readRecord(args.snapshot)
+    const strategyConfig = this.readRecord(snapshotRecord?.strategyConfig)
+    const backtestConfigDefaults = this.readRecord(snapshotRecord?.backtestConfigDefaults)
+    const deploymentExecutionDefaults = this.readRecord(snapshotRecord?.deploymentExecutionDefaults)
+    const deploymentExecutionConstraints = this.readRecord(snapshotRecord?.deploymentExecutionConstraints)
+
+    const missingStrategyConfig = !strategyConfig
+    const missingBacktestConfigDefaults = !backtestConfigDefaults
+    const missingDeploymentExecutionDefaults = !deploymentExecutionDefaults
+    const missingDeploymentExecutionConstraints = !deploymentExecutionConstraints
+
+    return {
+      publishedSnapshotStrategyConfig: strategyConfig,
+      publishedSnapshotBacktestConfigDefaults: backtestConfigDefaults,
+      publishedSnapshotDeploymentExecutionDefaults: deploymentExecutionDefaults,
+      publishedSnapshotDeploymentExecutionConstraints: deploymentExecutionConstraints,
+      publishedSnapshotCompatibilityMetadata: {
+        isLegacySnapshot:
+          missingStrategyConfig
+          || missingBacktestConfigDefaults
+          || missingDeploymentExecutionDefaults
+          || missingDeploymentExecutionConstraints,
+        missingBacktestConfigDefaults,
+        missingDeploymentExecutionDefaults,
+        missingDeploymentExecutionConstraints,
+        requiresRepublishForBacktest: missingStrategyConfig || missingBacktestConfigDefaults,
+        requiresRepublishForDeploy:
+          missingStrategyConfig
+          || missingDeploymentExecutionDefaults
+          || missingDeploymentExecutionConstraints,
+      },
+    }
   }
 
   private readAllowPartialFill(executionPolicy: Record<string, unknown> | null): boolean | null {

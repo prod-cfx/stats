@@ -62,6 +62,21 @@ export class AiQuantConversationResponseDto {
   @ApiPropertyOptional({ description: '已发布快照绑定的参数视图（用于前端回测/展示对齐）', type: 'object', additionalProperties: true })
   publishedSnapshotParamValues?: CodegenSessionResponseDto['publishedSnapshotParamValues']
 
+  @ApiPropertyOptional({ description: '已发布快照绑定的正式策略配置', type: 'object', additionalProperties: true, nullable: true })
+  publishedSnapshotStrategyConfig?: CodegenSessionResponseDto['publishedSnapshotStrategyConfig']
+
+  @ApiPropertyOptional({ description: '已发布快照绑定的正式回测默认参数', type: 'object', additionalProperties: true, nullable: true })
+  publishedSnapshotBacktestConfigDefaults?: CodegenSessionResponseDto['publishedSnapshotBacktestConfigDefaults']
+
+  @ApiPropertyOptional({ description: '已发布快照绑定的正式部署默认参数', type: 'object', additionalProperties: true, nullable: true })
+  publishedSnapshotDeploymentExecutionDefaults?: CodegenSessionResponseDto['publishedSnapshotDeploymentExecutionDefaults']
+
+  @ApiPropertyOptional({ description: '已发布快照绑定的正式部署约束', type: 'object', additionalProperties: true, nullable: true })
+  publishedSnapshotDeploymentExecutionConstraints?: CodegenSessionResponseDto['publishedSnapshotDeploymentExecutionConstraints']
+
+  @ApiPropertyOptional({ description: '已发布快照兼容性信息（例如是否需要重新发布）', type: 'object', additionalProperties: true, nullable: true })
+  publishedSnapshotCompatibilityMetadata?: CodegenSessionResponseDto['publishedSnapshotCompatibilityMetadata']
+
   @ApiPropertyOptional({ description: '发布后生成的策略实例 ID' })
   strategyInstanceId?: string | null
 

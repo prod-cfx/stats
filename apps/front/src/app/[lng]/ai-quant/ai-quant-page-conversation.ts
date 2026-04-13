@@ -1252,8 +1252,8 @@ export function createConversationFromServerConversation(
       })
     : null
   const snapshotParamValues =
-    buildPublishedSnapshotStrategyParamValues(snapshotStrategyConfig)
-    ?? normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
+    normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
+    ?? buildPublishedSnapshotStrategyParamValues(snapshotStrategyConfig)
   const mergedSnapshotParamValues = mergeSnapshotBoundParamValues({
     currentValues: syncResult?.paramValues ?? seed.paramValues,
     snapshotParamValues,
@@ -1399,8 +1399,8 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
     item.publishedSnapshotCompatibilityMetadata,
   )
   const publishedSnapshotParamValues =
-    buildPublishedSnapshotStrategyParamValues(publishedSnapshotStrategyConfig)
-    ?? normalizePublishedSnapshotParamValues(item.publishedSnapshotParamValues)
+    normalizePublishedSnapshotParamValues(item.publishedSnapshotParamValues)
+    ?? buildPublishedSnapshotStrategyParamValues(publishedSnapshotStrategyConfig)
   const baseParams =
     item.params && typeof item.params === 'object' && !Array.isArray(item.params)
       ? (item.params as unknown as Record<string, unknown>)
