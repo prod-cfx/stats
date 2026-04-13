@@ -629,4 +629,168 @@ describe('canonicalSpecBuilderService', () => {
       }),
     ]))
   })
+
+  it('builds price-change entry and exit rules from buy/sell wording', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['3m', '15m'],
+      entryRules: ['3m 内下跌 1% 买入'],
+      exitRules: ['15m 内上涨 2% 卖出'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+      },
+    })
+
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'long',
+        condition: expect.objectContaining({
+          key: 'price.change_pct',
+          op: 'LTE',
+          value: -0.01,
+          params: expect.objectContaining({
+            timeframe: '3m',
+          }),
+        }),
+        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        sideScope: 'long',
+        condition: expect.objectContaining({
+          key: 'price.change_pct',
+          op: 'GTE',
+          value: 0.02,
+          params: expect.objectContaining({
+            timeframe: '15m',
+          }),
+        }),
+        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+      }),
+    ]))
+  })
+
+  it('preserves explicit Bollinger parameters from rule text', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['K线收盘后确认突破布林带(30,2.5)上轨时做空'],
+      exitRules: ['价格回到布林带中轨(MA30)时平空'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+      },
+    })
+
+    expect(spec.indicators).toContainEqual({
+      kind: 'bollingerBands',
+      params: {
+        period: 30,
+        stdDev: 2.5,
+      },
+    })
+  })
+
+  it('preserves explicit moving-average periods from crossover wording', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['1h'],
+      entryRules: ['5日线上穿20日线买入'],
+      exitRules: ['5日线下穿20日线卖出'],
+      riskRules: { positionPct: 10 },
+    })
+
+    expect(spec.indicators).toContainEqual({
+      kind: 'sma',
+      params: {
+        fast: 5,
+        slow: 20,
+      },
+    })
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+      }),
+    ]))
+  })
+
+  it('builds price-change rules from raw Chinese minute and percent wording', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['3m', '15m'],
+      entryRules: ['3分钟之内跌百分1买入'],
+      exitRules: ['15分钟之内涨百分2卖出'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+      },
+    })
+
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'entry-price-change-1',
+        condition: expect.objectContaining({
+          key: 'price.change_pct',
+          params: expect.objectContaining({ timeframe: '3m' }),
+          value: -0.01,
+        }),
+      }),
+      expect.objectContaining({
+        id: 'exit-price-change-1',
+        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+        condition: expect.objectContaining({
+          key: 'price.change_pct',
+          params: expect.objectContaining({ timeframe: '15m' }),
+          value: 0.02,
+        }),
+      }),
+    ]))
+  })
+
+  it('defaults generic sell wording to close short when the strategy only has short-side entries', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['1h'],
+      entryRules: ['EMA7 下穿 EMA21 做空'],
+      exitRules: ['EMA7 上穿 EMA21 卖出'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+      },
+    })
+
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'short',
+        actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        sideScope: 'short',
+        actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
+      }),
+    ]))
+  })
 })

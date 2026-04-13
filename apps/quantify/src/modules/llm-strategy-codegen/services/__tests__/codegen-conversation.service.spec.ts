@@ -790,6 +790,41 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).toContain('确认逻辑图')
   })
 
+  it('starts in checklist gate for raw Chinese price-change wording with percent-style sizing', async () => {
+    const dto: StartCodegenSessionDto = {
+      userId: 'u1',
+      initialMessage: 'okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金',
+    }
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '策略逻辑已完整，请确认逻辑图。',
+        logic: {
+          entryRules: ['3分钟之内跌百分1买入'],
+          exitRules: ['15分钟之内涨百分2卖出'],
+          riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's2-raw-price-change' })
+
+    const result = await service.startSession(dto)
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.canonicalDigest).toMatch(/^sha256:/)
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      checklist: expect.objectContaining({
+        symbols: ['BTCUSDT'],
+        riskRules: expect.objectContaining({
+          exchange: 'okx',
+          marketType: 'perp',
+          positionPct: 10,
+        }),
+      }),
+    }))
+  })
+
   it('stays in drafting when planner says logicReady is false even with a detailed message', async () => {
     const dto: StartCodegenSessionDto = {
       userId: 'u1',
@@ -1833,6 +1868,66 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockAi.chat).toHaveBeenCalledTimes(1)
   })
 
+  it('publishes price-change strategy after confirmGenerate through the canonical mainline', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-price-change-publish',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      strategyInstanceId: null,
+      checklist: completeChecklist({
+        symbols: ['BTCUSDT'],
+        timeframes: ['3m', '15m'],
+        entryRules: ['3m 内下跌 1% 买入'],
+        exitRules: ['15m 内上涨 2% 卖出'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+          positionPct: 10,
+        },
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+
+    const result = await service.continueSession('s-price-change-publish', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(completeChecklist({
+        symbols: ['BTCUSDT'],
+        timeframes: ['3m', '15m'],
+        entryRules: ['3m 内下跌 1% 买入'],
+        exitRules: ['15m 内上涨 2% 卖出'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+          positionPct: 10,
+        },
+      })),
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await waitForTerminalStatus('s-price-change-publish')
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-price-change-publish', expect.objectContaining({
+      status: 'PUBLISHED',
+      latestSpecDesc: expect.objectContaining({
+        canonicalSpec: expect.objectContaining({
+          rules: expect.arrayContaining([
+            expect.objectContaining({
+              id: 'entry-price-change-1',
+              condition: expect.objectContaining({ key: 'price.change_pct', value: -0.01 }),
+            }),
+            expect.objectContaining({
+              id: 'exit-price-change-1',
+              condition: expect.objectContaining({ key: 'price.change_pct', value: 0.02 }),
+            }),
+          ]),
+        }),
+      }),
+    }))
+  })
+
   it('rejects compiler-first publish when compiled script fails structural validation', async () => {
     const emitSpy = jest
       .spyOn(CompiledScriptEmitterService.prototype, 'emit')
@@ -2034,8 +2129,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       status: 'CHECKLIST_GATE',
       checklist: completeChecklist({
-        entryRules: ['rsi < 30'],
-        exitRules: ['atr stop'],
+        entryRules: ['RSI 14 低于 30 时做多'],
+        exitRules: ['收益率达到 5% 止盈'],
       }),
       constraintPack: {},
     })
@@ -2057,8 +2152,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '确认逻辑图',
       confirmGenerate: true,
       confirmedCanonicalDigest: buildConfirmedCanonicalDigest(completeChecklist({
-        entryRules: ['rsi < 30'],
-        exitRules: ['atr stop'],
+        entryRules: ['RSI 14 低于 30 时做多'],
+        exitRules: ['收益率达到 5% 止盈'],
       })),
     })
 
@@ -2517,7 +2612,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
-  it('propagates requested exchange and perp marketType into consistency-failed publish artifacts', async () => {
+  it('propagates requested exchange and perp marketType into published artifacts', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-perp-publish',
       userId: 'u1',
@@ -2526,8 +2621,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       checklist: {
         symbols: ['BTCUSDT'],
         timeframes: ['15m'],
-        entryRules: ['价格下跌触及网格线时买入'],
-        exitRules: ['价格上涨一个网格时卖出'],
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
         riskRules: {
           exchange: 'okx',
           marketType: 'perp',
@@ -2557,8 +2652,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       confirmedCanonicalDigest: buildConfirmedCanonicalDigest(completeChecklist({
         symbols: ['BTCUSDT'],
         timeframes: ['15m'],
-        entryRules: ['价格下跌触及网格线时买入'],
-        exitRules: ['价格上涨一个网格时卖出'],
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
         riskRules: {
           exchange: 'okx',
           marketType: 'perp',
@@ -2571,7 +2666,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     await waitForTerminalStatus('s-perp-publish')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-perp-publish', expect.objectContaining({
-      status: 'CONSISTENCY_FAILED',
+      status: 'PUBLISHED',
       latestSpecDesc: expect.objectContaining({
         lockedParams: expect.objectContaining({
           exchange: 'okx',
@@ -2689,5 +2784,35 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       rejectReason: 'create instance failed',
     }))
     expect(mockRepo.create).not.toHaveBeenCalled()
+  })
+
+  it('keeps drafting when planner logic text cannot compile into canonical entry and exit rules', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-uncompilable-logic' })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '策略逻辑已完整，请确认逻辑图。',
+        logic: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+          entryRules: ['基于盘口情绪择机入场'],
+          exitRules: ['根据主观判断离场'],
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'perp',
+            positionPct: 10,
+          },
+        },
+      }),
+    })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'okx交易所 BTC 15分钟图，基于盘口情绪择机入场，根据主观判断离场，单笔用百分10资金',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('当前规则还不能稳定生成脚本')
   })
 })
