@@ -322,6 +322,7 @@ export class StrategyClarificationRulesService {
 
   private detectBasisItems(input: ClarificationChecklistInput): StrategyClarificationItem[] {
     const items: StrategyClarificationItem[] = []
+    const exitRules = input.exitRules ?? []
 
     items.push(...this.detectRuleBasisItems(
       input.entryRules ?? [],
@@ -339,6 +340,7 @@ export class StrategyClarificationRulesService {
     if (
       typeof input.riskRules?.stopLossPct === 'number'
       && !this.hasNamedBasis(input.riskRules?.stopLossBasis)
+      && !this.hasPendingExitBasisRule(exitRules, 'stopLoss')
     ) {
       items.push({
         key: 'risk.stopLoss.basis',
@@ -353,6 +355,7 @@ export class StrategyClarificationRulesService {
     if (
       typeof input.riskRules?.takeProfitPct === 'number'
       && !this.hasNamedBasis(input.riskRules?.takeProfitBasis)
+      && !this.hasPendingExitBasisRule(exitRules, 'takeProfit')
     ) {
       items.push({
         key: 'risk.takeProfit.basis',
@@ -428,6 +431,20 @@ export class StrategyClarificationRulesService {
 
   private hasExplicitBasisInText(rule: string): boolean {
     return /相对于上一根K线收盘价|相对于开仓均价|持仓收益率|持仓盈亏|收益率|盈亏|价格相对入场价/u.test(rule)
+  }
+
+  private hasPendingExitBasisRule(
+    rules: string[],
+    semantic: 'stopLoss' | 'takeProfit',
+  ): boolean {
+    const matcher = semantic === 'stopLoss'
+      ? /止损|亏损/u
+      : /止盈|盈利|收益率/u
+
+    return rules.some(rule => {
+      const normalized = rule.trim()
+      return normalized.length > 0 && matcher.test(normalized) && this.ruleNeedsBasis(normalized)
+    })
   }
 
   private hasStopLossRule(input: ClarificationChecklistInput): boolean {

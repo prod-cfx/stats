@@ -300,7 +300,6 @@ describe('strategyClarificationRulesService', () => {
   expect(state.items).toEqual(expect.arrayContaining([
     expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'entry.basis.1' }),
     expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'exit.basis.1' }),
-    expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'risk.takeProfit.basis' }),
   ]))
   })
 
@@ -343,6 +342,31 @@ describe('strategyClarificationRulesService', () => {
     expect(state.items).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ reason: 'missing_stop_loss_rule' }),
       expect.objectContaining({ reason: 'missing_take_profit_rule' }),
+    ]))
+  })
+
+  it('does not duplicate risk basis blockers when exit rules already carry stop-loss or take-profit semantics', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['突破布林带上轨时做空'],
+      exitRules: ['盈利 10% 止盈', '亏损达到 5% 强制止损'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+        stopLossPct: 5,
+        takeProfitPct: 10,
+      },
+    })
+
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'exit.basis.1', reason: 'ambiguous_condition_basis' }),
+      expect.objectContaining({ key: 'exit.basis.2', reason: 'ambiguous_condition_basis' }),
+    ]))
+    expect(state.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.stopLoss.basis' }),
+      expect.objectContaining({ key: 'risk.takeProfit.basis' }),
     ]))
   })
 

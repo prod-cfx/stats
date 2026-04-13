@@ -930,11 +930,17 @@ export class CodegenConversationService {
       if (item.field === 'exitRules.basis') {
         const ruleIndex = this.readClarificationRuleIndex(item)
         if (ruleIndex === null) return checklist
+        const ruleText = checklist.exitRules?.[ruleIndex] ?? ''
         return this.normalizeChecklist({
           ...checklist,
           exitRuleBases: {
             ...(checklist.exitRuleBases ?? {}),
             [`exit-${ruleIndex + 1}`]: basis,
+          },
+          riskRules: {
+            ...(checklist.riskRules ?? {}),
+            ...(/止损|亏损/u.test(ruleText) ? { stopLossBasis: basis } : {}),
+            ...(/止盈|盈利|收益率/u.test(ruleText) ? { takeProfitBasis: basis } : {}),
           },
         })
       }

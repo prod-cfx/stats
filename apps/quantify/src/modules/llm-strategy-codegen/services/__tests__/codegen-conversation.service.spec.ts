@@ -2108,6 +2108,81 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
   })
 
+  it('syncs exit-rule basis answers into risk stop-loss and take-profit basis fields when they describe the same semantics', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-exit-basis-sync',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['突破布林带上轨时做空'],
+        exitRules: ['盈利 10% 止盈', '亏损达到 5% 强制止损'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+          positionPct: 10,
+          stopLossPct: 5,
+          takeProfitPct: 10,
+        },
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'exit.basis.1',
+            ruleId: 'exit-1',
+            reason: 'ambiguous_condition_basis',
+            field: 'exitRules.basis',
+            blocking: true,
+            question: '出场规则“盈利 10% 止盈”里的百分比条件，是相对上一根 K 线收盘价、开仓均价、持仓收益，还是别的基准？',
+            status: 'pending',
+          },
+          {
+            key: 'exit.basis.2',
+            ruleId: 'exit-2',
+            reason: 'ambiguous_condition_basis',
+            field: 'exitRules.basis',
+            blocking: true,
+            question: '出场规则“亏损达到 5% 强制止损”里的百分比条件，是相对上一根 K 线收盘价、开仓均价、持仓收益，还是别的基准？',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-exit-basis-sync', {
+      userId: 'u1',
+      message: '相对开仓均价',
+      clarificationAnswers: {
+        'exit.basis.1': '相对开仓均价',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('DRAFTING')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-exit-basis-sync',
+      expect.objectContaining({
+        checklist: expect.objectContaining({
+          exitRuleBases: {
+            'exit-1': 'entry_avg_price',
+          },
+          riskRules: expect.objectContaining({
+            takeProfitBasis: 'entry_avg_price',
+          }),
+        }),
+      }),
+    )
+  })
+
   it('surfaces publicationGate at the top level when stored in latestSpecDesc', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-publication-gate',
