@@ -159,9 +159,13 @@ export function normalizeClarificationGate(input: unknown): LlmClarificationGate
   const items = Array.isArray(gate.items)
     ? gate.items
     : (Array.isArray(gate.pendingItems) ? gate.pendingItems : [])
+  const summary = typeof gate.summary === 'string' && gate.summary.trim()
+    ? gate.summary.trim()
+    : null
 
   return {
     blocked: gate.blocked === true || items.length > 0,
+    summary,
     items: items as LlmClarificationGate['items'],
     pendingItems: items as LlmClarificationGate['items'],
   }

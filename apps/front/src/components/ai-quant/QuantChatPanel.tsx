@@ -12,7 +12,6 @@ import {
   parseDynamicParamInputValue,
   validateDynamicParamValues,
 } from './dynamic-params'
-import { ClarificationGateCard } from './ClarificationGateCard'
 import { PublicationGateCard } from './PublicationGateCard'
 
 export interface QuantMessage {
@@ -72,9 +71,9 @@ export function QuantChatPanel({
   messages,
   paramSchema,
   paramValues,
-  clarificationGate,
+  clarificationGate: _clarificationGate,
   publicationGate,
-  onClarificationAnswer,
+  onClarificationAnswer: _onClarificationAnswer,
   onParamChange,
   onSend,
   onRunBacktest,
@@ -300,9 +299,6 @@ export function QuantChatPanel({
       {/* Chat Area */}
       <div ref={chatScrollRef} className="min-w-0 flex-1 overflow-y-auto bg-[color:var(--cf-bg)] p-4">
         <div className="space-y-6">
-          {clarificationGate?.blocked && onClarificationAnswer && (
-            <ClarificationGateCard gate={clarificationGate} onAnswer={onClarificationAnswer} />
-          )}
           {publicationGate && <PublicationGateCard gate={publicationGate} />}
           {messages.map(message => (
             <div

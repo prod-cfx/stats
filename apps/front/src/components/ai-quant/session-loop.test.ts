@@ -189,6 +189,8 @@ describe('ai-quant session-loop', () => {
   it('recognizes short confirmation messages', () => {
     expect(isShortConfirmationMessage('可以')).toBe(true)
     expect(isShortConfirmationMessage('继续')).toBe(true)
+    expect(isShortConfirmationMessage('确认正确')).toBe(true)
+    expect(isShortConfirmationMessage('正确')).toBe(true)
     expect(isShortConfirmationMessage('按你说的来')).toBe(true)
     expect(isShortConfirmationMessage('我想加一个止损')).toBe(false)
   })
@@ -215,6 +217,11 @@ describe('ai-quant session-loop', () => {
       lastAssistantMessage: '你好',
       hasLogicGraph: false,
     })).toBe(false)
+    expect(shouldAutoAdvanceOnConfirmation({
+      userMessage: '确认正确',
+      lastAssistantMessage: '请确认这版逻辑是否正确，我就可以据此生成主线流程图。',
+      hasLogicGraph: false,
+    })).toBe(true)
   })
 
   it('builds auto-advance message with assistant draft', () => {

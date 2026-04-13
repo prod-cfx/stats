@@ -3,6 +3,26 @@ import { ScriptProfileExtractorService } from '../script-profile-extractor.servi
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
 
 describe('strategySummaryBuilderService', () => {
+  it('builds user intent summary from clarified checklist band semantics instead of moving-average alias text', () => {
+    const service = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const summary = service.buildUserIntentSummary({
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['收盘价突破上轨时做空'],
+        exitRules: ['价格回到中轨（20日均线）时平仓'],
+        riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10, stopLossPct: 5 },
+      },
+      message: '中轨（20日均线）回归平仓',
+    })
+
+    expect(summary.strategyType).toBe('bollinger')
+    expect(summary.indicators).toEqual(['bollingerBands'])
+    expect(summary.entryRule).toBe('bollinger.upper_break_short')
+    expect(summary.exitRule).toBe('bollinger.middle_revert')
+    expect(summary.indicators).not.toContain('sma')
+  })
+
   it('extracts bollinger user intent without inventing ma defaults', () => {
     const service = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
     const summary = service.buildUserIntentSummary({

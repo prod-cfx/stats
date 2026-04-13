@@ -107,17 +107,16 @@ jest.mock('@/components/ai-quant/BacktestSummaryCard', () => ({
 jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
   QuantChatPanel: ({
     messages,
-    clarificationGate,
     publicationGate,
     onSend,
     onRunBacktest,
     canRunBacktest,
     onParamChange,
-    onClarificationAnswer,
   }: {
     messages: Array<{ id: string; role: string; content: string }>
     clarificationGate?: {
       blocked: boolean
+      summary?: string | null
       items: Array<{ key: string; question: string; allowedAnswers?: string[]; status: string }>
     } | null
     publicationGate?: {
@@ -128,44 +127,12 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
     onRunBacktest: () => void
     canRunBacktest?: boolean
     onParamChange?: (key: string, value: unknown) => void
-    onClarificationAnswer?: (itemKey: string, value: string) => void
   }) => {
     const [input, setInput] = React.useState('')
-    const [clarificationInput, setClarificationInput] = React.useState('')
-    const pendingClarification = clarificationGate?.items.find(item => item.status === 'pending')
-    const hasAllowedAnswers = (pendingClarification?.allowedAnswers?.length ?? 0) > 0
 
     return (
       <div>
         <div data-testid="messages">{messages.map(message => message.content).join('\n')}</div>
-        <div data-testid="clarification-question">
-          {pendingClarification?.question ?? ''}
-        </div>
-        <button
-          data-testid="clarification-answer"
-          onClick={() => onClarificationAnswer?.(pendingClarification?.key ?? 'market.marketType', 'perp')}
-        >
-          answer clarification
-        </button>
-        {!hasAllowedAnswers && (
-          <>
-            <input
-              data-testid="clarification-freeform-input"
-              value={clarificationInput}
-              onChange={event => setClarificationInput(event.target.value)}
-            />
-            <button
-              data-testid="clarification-freeform-submit"
-              onClick={() =>
-                onClarificationAnswer?.(
-                  pendingClarification?.key ?? 'market.marketType',
-                  clarificationInput,
-                )}
-            >
-              submit clarification
-            </button>
-          </>
-        )}
         <div data-testid="publication-gate">
           {publicationGate?.blockingMismatches
             ?.map(item => `${item.field}:${item.expected}:${item.actual}:${item.reason}`)
@@ -241,6 +208,7 @@ jest.mock('@/lib/api', () => ({
 function seedDraftConversation(
   now = Date.now(),
   overrides?: {
+    messages?: Array<{ id: string; role: 'assistant' | 'user'; content: string }>
     semanticGraph?: typeof validSemanticGraph | null
     validationReport?: {
       ok: boolean
@@ -257,7 +225,7 @@ function seedDraftConversation(
       {
         id: 'conv-1',
         title: 'conv',
-        messages: [{ id: 'welcome', role: 'assistant', content: 'hello' }],
+        messages: overrides?.messages ?? [{ id: 'welcome', role: 'assistant', content: 'hello' }],
         params: {
           exchange: 'okx',
           symbol: 'BTCUSDT',
@@ -396,7 +364,7 @@ function createDeferred<T>() {
   return { promise, resolve }
 }
 
-function readStoredConversations() {
+function readStoredCodegenConversations() {
   const parsed = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]') as Array<{
     id: string
     llmCodegenSessionId?: string | null
@@ -661,10 +629,18 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     expect(runButton?.disabled).toBe(false)
   })
 
-  it('renders a blocking clarification card and disables confirm while marketType is unresolved', async () => {
+  it('keeps clarification inside normal chat messages and disables confirm while marketType is unresolved', async () => {
     seedDraftConversation(Date.now(), {
+      messages: [
+        {
+          id: 'assistant-clarification',
+          role: 'assistant',
+          content: '我当前理解的策略是：OKX BTCUSDT 3m。现在还缺一个会影响脚本生成一致性的条件：关键市场约束信息。请确认：该策略运行在现货还是合约市场？',
+        },
+      ],
       clarificationGate: {
         blocked: true,
+        summary: 'OKX BTCUSDT 3m',
         items: [
           {
             key: 'market.marketType',
@@ -684,8 +660,8 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       await Promise.resolve()
     })
 
-    expect(container.querySelector('[data-testid="clarification-question"]')?.textContent).toContain(
-      '这条策略包含做空，请确认使用现货还是合约/永续？',
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain(
+      '该策略运行在现货还是合约市场？',
     )
     expect(
       (container.querySelector('[data-testid="confirm-graph"]') as HTMLButtonElement | null)?.disabled,
@@ -918,6 +894,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       status: 'DRAFTING',
       clarificationGate: {
         blocked: true,
+        summary: 'OKX BTCUSDT 15m',
         items: [
           {
             key: 'market.marketType',
@@ -953,15 +930,23 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     })
 
     await act(async () => {
+      const input = container.querySelector('[data-testid="chat-input"]') as HTMLInputElement | null
+      if (input) {
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')
+          ?.set
+          ?.call(input, 'perp')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        input.dispatchEvent(new Event('change', { bubbles: true }))
+      }
       container
-        .querySelector('[data-testid="clarification-answer"]')
+        .querySelector('[data-testid="send-chat"]')
         ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       await Promise.resolve()
       await Promise.resolve()
     })
 
     await waitForAssertion(() => {
-      const stored = readStoredConversations<{ pendingCanonicalDigest?: string | null }>()
+    const stored = readStoredConversations<{ pendingCanonicalDigest?: string | null }>()
       expect(stored[0]?.pendingCanonicalDigest ?? null).toBeNull()
       expect(
         (container.querySelector('[data-testid="confirm-graph"]') as HTMLButtonElement | null)?.disabled,
@@ -969,10 +954,18 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     })
   })
 
-  it('submits free-form clarification answers when a clarification item has no allowedAnswers', async () => {
+  it('submits clarification answers through the normal chat input when blocked', async () => {
     seedDraftConversation(Date.now(), {
+      messages: [
+        {
+          id: 'assistant-clarification',
+          role: 'assistant',
+          content: '请补充连续 3 根 K 线跌破布林带下轨时的处理动作',
+        },
+      ],
       clarificationGate: {
         blocked: true,
+        summary: 'OKX BTCUSDT 15m',
         items: [
           {
             key: 'riskRules.earlyStop.action',
@@ -1011,7 +1004,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
 
     await act(async () => {
       const input = container.querySelector(
-        '[data-testid="clarification-freeform-input"]',
+        '[data-testid="chat-input"]',
       ) as HTMLInputElement | null
       if (input) {
         Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')
@@ -1025,7 +1018,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
 
     await act(async () => {
       container
-        .querySelector('[data-testid="clarification-freeform-submit"]')
+        .querySelector('[data-testid="send-chat"]')
         ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       await Promise.resolve()
       await Promise.resolve()
@@ -1097,8 +1090,16 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     expect(container.querySelector('[data-testid="publication-gate"]')?.textContent).toContain('binance')
 
     await act(async () => {
+      const input = container.querySelector('[data-testid="chat-input"]') as HTMLInputElement | null
+      if (input) {
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')
+          ?.set
+          ?.call(input, 'perp')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        input.dispatchEvent(new Event('change', { bubbles: true }))
+      }
       container
-        .querySelector('[data-testid="clarification-answer"]')
+        .querySelector('[data-testid="send-chat"]')
         ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       await Promise.resolve()
       await Promise.resolve()
@@ -1108,7 +1109,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       expect(container.querySelector('[data-testid="publication-gate"]')?.textContent).toBe('')
     })
 
-    const stored = readStoredConversations<{ publicationGate?: Record<string, unknown> | null }>()
+    const stored = readStoredCodegenConversations()
     expect(stored[0]).toHaveProperty('publicationGate', null)
   })
 

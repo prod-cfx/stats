@@ -44,6 +44,40 @@ describe('semanticGraphBuilderService', () => {
     expect(exitNode.params.timeframe).toBe('15m')
   })
 
+  it('uses explicit exit basis metadata to distinguish price-change and position-pnl exits', () => {
+    const prevCloseResult = builder.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['3m', '15m'],
+      entryRules: ['3 分钟内跌 1% 买入'],
+      exitRules: ['15 分钟内涨 2% 卖出'],
+      exitRuleBases: { 'exit-1': 'prev_close' },
+      riskRules: { positionPct: 10, stopLossPct: 5 },
+    })
+    const entryPriceResult = builder.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['3m', '15m'],
+      entryRules: ['3 分钟内跌 1% 买入'],
+      exitRules: ['15 分钟内涨 2% 卖出'],
+      exitRuleBases: { 'exit-1': 'entry_avg_price' },
+      riskRules: { positionPct: 10, stopLossPct: 5 },
+    })
+
+    expect(prevCloseResult.graph?.nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'price_change_pct',
+        phase: 'exit',
+        params: expect.objectContaining({ basis: 'prev_close' }),
+      }),
+    ]))
+    expect(entryPriceResult.graph?.nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'position_pnl_pct',
+        phase: 'exit',
+        params: expect.objectContaining({ basis: 'entry_avg_price' }),
+      }),
+    ]))
+  })
+
   it('builds fixed-range grid buy and upper-grid sell graph with position/risk', () => {
     const result = builder.build({
       symbols: ['BTCUSDT'],
@@ -78,6 +112,41 @@ describe('semanticGraphBuilderService', () => {
     ]))
     expect(result.graph?.risk).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'STOP_LOSS_PCT', valuePct: 5 }),
+    ]))
+  })
+
+  it('normalizes per-mille grid steps into percent when explicit grid semantics are present', () => {
+    const result = builder.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['在固定区间 60000-80000 内执行网格买入，按千分之5步长，共 10 格'],
+      exitRules: ['价格触达上方网格时执行网格卖出平仓'],
+      riskRules: {
+        positionPct: 20,
+        stopLossPct: 5,
+      },
+    })
+
+    expect(result.graph).toBeTruthy()
+    expect(result.graph?.nodes).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'grid_level_touch',
+        phase: 'entry',
+        params: expect.objectContaining({
+          range: { min: 60000, max: 80000 },
+          stepPct: 0.5,
+          levelCount: 10,
+        }),
+      }),
+      expect.objectContaining({
+        kind: 'grid_level_touch',
+        phase: 'exit',
+        params: expect.objectContaining({
+          range: { min: 60000, max: 80000 },
+          stepPct: 0.5,
+          levelCount: 10,
+        }),
+      }),
     ]))
   })
 

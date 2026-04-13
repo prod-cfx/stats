@@ -7,7 +7,7 @@ import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
 import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant-conversations.repository'
-import type { ChecklistPayload } from '../types/codegen-checklist'
+import type { ChecklistPayload, ChecklistRuleBasis } from '../types/codegen-checklist'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
@@ -82,6 +82,7 @@ interface CanonicalCompileabilityReport {
 
 type GuidePromptConfig = CodegenGuidePromptConfigSnapshot
 type RecommendationStyle = 'ma' | 'drop-rise'
+type StrategyClarificationStateWithSummary = StrategyClarificationState & { summary?: string | null }
 
 const ALLOWED_HELPER_CATEGORIES = ['finance', 'array', 'ta', 'signal'] as const
 const MAX_HELPER_SIGNATURE_LINES = 24
@@ -152,7 +153,7 @@ export class CodegenConversationService {
       checklist,
       undefined,
     )
-    const clarificationState = this.clarificationRules.detect(checklist)
+    const clarificationState = this.detectClarificationState(checklist)
     const clarificationPrompt = this.clarificationQuestion.build(clarificationState)
     const plannerStatus: LlmCodegenSessionStatus = this.stateMachine.resolvePlannerStatus({
       logicReady: plan.logicReady,
@@ -285,8 +286,8 @@ export class CodegenConversationService {
       dto.clarificationAnswers,
     )
     const clarificationStateAfterAnswers = hasStructuredClarificationAnswers
-      ? this.clarificationRules.detect(baseChecklist)
-      : baseClarificationState
+      ? this.detectClarificationState(baseChecklist)
+      : this.withClarificationSummary(baseClarificationState, baseChecklist)
     const messageChecklist = this.normalizeChecklist({
       ...this.inferChecklistFromMessage(dto.message),
       ...this.extractChecklist(dto),
@@ -319,7 +320,7 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
     const mergedChecklist = this.mergeChecklistSnapshots(preMergedChecklist, plan.logic ?? {})
-    const clarificationState = this.clarificationRules.detect(mergedChecklist)
+    const clarificationState = this.detectClarificationState(mergedChecklist)
     const clarificationPrompt = this.clarificationQuestion.build(clarificationState)
     const recommendationStyle = this.inferRecommendationStyleFromContext(
       dto.message,
@@ -449,7 +450,7 @@ export class CodegenConversationService {
     )
     const messageChecklist = this.normalizeChecklist(this.extractChecklist(dto))
     const mergedChecklist = this.mergeChecklistSnapshots(baseChecklist, messageChecklist)
-    const clarificationState = this.clarificationRules.detect(mergedChecklist)
+    const clarificationState = this.detectClarificationState(mergedChecklist)
     const clarificationPrompt = this.clarificationQuestion.build(clarificationState)
     const constraintPack = this.readConstraintPack(session.constraintPack)
     const historyAfterConfirm = this.appendConversationHistory(
@@ -764,7 +765,7 @@ export class CodegenConversationService {
   }
 
   private buildClarificationGate(
-    clarificationState?: StrategyClarificationState | null,
+    clarificationState?: StrategyClarificationStateWithSummary | null,
   ): CodegenSessionResponseDto['clarificationGate'] {
     const pendingItems = clarificationState?.status === 'NEEDS_CLARIFICATION'
       ? clarificationState.items.filter(item => item.blocking && item.status === 'pending')
@@ -772,6 +773,9 @@ export class CodegenConversationService {
 
     return {
       blocked: pendingItems.length > 0,
+      summary: pendingItems.length > 0
+        ? this.normalizeClarificationSummary(clarificationState?.summary)
+        : null,
       items: pendingItems,
       pendingItems,
     }
@@ -808,12 +812,53 @@ export class CodegenConversationService {
     item: StrategyClarificationItem,
     answer: string,
   ): ChecklistPayload {
+    const normalizedAnswer = answer.trim()
+    if (!normalizedAnswer) return checklist
+
     if (item.key.startsWith('entry.side.') || item.key.startsWith('entry.action_uniqueness.')) {
-      return this.applyEntryRuleDirectionClarification(checklist, item, answer)
+      return this.applyEntryRuleDirectionClarification(checklist, item, normalizedAnswer)
+    }
+
+    if (item.key === 'entry.rules' || item.field === 'entryRules') {
+      return this.normalizeChecklist({
+        ...checklist,
+        entryRules: [...(checklist.entryRules ?? []), normalizedAnswer],
+      })
+    }
+
+    if (item.key === 'exit.rules' || item.field === 'exitRules') {
+      return this.normalizeChecklist({
+        ...checklist,
+        exitRules: [...(checklist.exitRules ?? []), normalizedAnswer],
+      })
+    }
+
+    if (item.key === 'risk.stopLoss.rule' || item.field === 'riskRules.stopLossPct') {
+      const parsedPct = this.normalizePositionPctClarificationAnswer(normalizedAnswer)
+      return this.normalizeChecklist({
+        ...checklist,
+        riskRules: {
+          ...(checklist.riskRules ?? {}),
+          stopLoss: normalizedAnswer,
+          ...(parsedPct !== null ? { stopLossPct: parsedPct } : {}),
+        },
+      })
+    }
+
+    if (item.key === 'risk.takeProfit.rule' || item.field === 'riskRules.takeProfitPct') {
+      const parsedPct = this.normalizePositionPctClarificationAnswer(normalizedAnswer)
+      return this.normalizeChecklist({
+        ...checklist,
+        riskRules: {
+          ...(checklist.riskRules ?? {}),
+          takeProfit: normalizedAnswer,
+          ...(parsedPct !== null ? { takeProfitPct: parsedPct } : {}),
+        },
+      })
     }
 
     if (item.key === 'market.symbol' || item.field === 'symbol') {
-      const symbol = normalizePublishedSymbol(answer)
+      const symbol = normalizePublishedSymbol(normalizedAnswer)
       return this.normalizeChecklist({
         ...checklist,
         symbols: symbol ? [symbol] : checklist.symbols,
@@ -822,7 +867,7 @@ export class CodegenConversationService {
     }
 
     if (item.key === 'market.timeframe' || item.field === 'timeframe') {
-      const timeframe = answer.trim()
+      const timeframe = normalizedAnswer
       return this.normalizeChecklist({
         ...checklist,
         timeframes: timeframe ? [timeframe] : checklist.timeframes,
@@ -831,7 +876,7 @@ export class CodegenConversationService {
     }
 
     if (item.key === 'market.exchange' || item.field === 'exchange') {
-      const exchange = this.normalizeExchangeClarificationAnswer(answer)
+      const exchange = this.normalizeExchangeClarificationAnswer(normalizedAnswer)
       if (!exchange) return checklist
       return this.normalizeChecklist({
         ...checklist,
@@ -843,7 +888,7 @@ export class CodegenConversationService {
     }
 
     if (item.key === 'market.marketType' || item.field === 'marketType') {
-      const marketType = this.normalizeMarketTypeClarificationAnswer(answer)
+      const marketType = this.normalizeMarketTypeClarificationAnswer(normalizedAnswer)
       if (!marketType) return checklist
       return this.normalizeChecklist({
         ...checklist,
@@ -854,8 +899,85 @@ export class CodegenConversationService {
       })
     }
 
+    if (item.key === 'sizing.positionPct' || item.field === 'riskRules.positionPct') {
+      const positionPct = this.normalizePositionPctClarificationAnswer(normalizedAnswer)
+      if (positionPct === null) return checklist
+      return this.normalizeChecklist({
+        ...checklist,
+        riskRules: {
+          ...(checklist.riskRules ?? {}),
+          positionPct,
+        },
+      })
+    }
+
+    if (item.reason === 'ambiguous_condition_basis') {
+      const basis = this.normalizeBasisClarificationAnswer(normalizedAnswer)
+      if (!basis) return checklist
+
+      if (item.field === 'entryRules.basis') {
+        const ruleIndex = this.readClarificationRuleIndex(item)
+        if (ruleIndex === null) return checklist
+        return this.normalizeChecklist({
+          ...checklist,
+          entryRuleBases: {
+            ...(checklist.entryRuleBases ?? {}),
+            [`entry-${ruleIndex + 1}`]: basis,
+          },
+        })
+      }
+
+      if (item.field === 'exitRules.basis') {
+        const ruleIndex = this.readClarificationRuleIndex(item)
+        if (ruleIndex === null) return checklist
+        const ruleText = checklist.exitRules?.[ruleIndex] ?? ''
+        return this.normalizeChecklist({
+          ...checklist,
+          exitRuleBases: {
+            ...(checklist.exitRuleBases ?? {}),
+            [`exit-${ruleIndex + 1}`]: basis,
+          },
+          riskRules: {
+            ...(checklist.riskRules ?? {}),
+            ...(/止损|亏损/u.test(ruleText) ? { stopLossBasis: basis } : {}),
+            ...(/止盈|盈利|收益率/u.test(ruleText) ? { takeProfitBasis: basis } : {}),
+          },
+        })
+      }
+
+      if (item.field === 'riskRules.stopLossBasis') {
+        return this.normalizeChecklist({
+          ...checklist,
+          riskRules: {
+            ...(checklist.riskRules ?? {}),
+            stopLossBasis: basis,
+          },
+        })
+      }
+
+      if (item.field === 'riskRules.takeProfitBasis') {
+        return this.normalizeChecklist({
+          ...checklist,
+          riskRules: {
+            ...(checklist.riskRules ?? {}),
+            takeProfitBasis: basis,
+          },
+        })
+      }
+
+      if (item.field === 'riskRules.maxDrawdownBasis') {
+        return this.normalizeChecklist({
+          ...checklist,
+          riskRules: {
+            ...(checklist.riskRules ?? {}),
+            maxDrawdownBasis: basis,
+          },
+        })
+      }
+    }
+
     if (item.key === 'riskRules.earlyStop.action' || item.field === 'riskRules.earlyStop.action') {
-      const action = this.normalizeEarlyStopClarificationAnswer(answer)
+      const action = this.normalizeEarlyStopClarificationAnswer(normalizedAnswer)
       if (!action) return checklist
       return this.normalizeChecklist({
         ...checklist,
@@ -1150,10 +1272,41 @@ export class CodegenConversationService {
     return hasReduce ? 'reduce' : 'close'
   }
 
-  private readClarificationState(payload: Prisma.JsonValue | null | undefined): StrategyClarificationState | null {
+  private normalizePositionPctClarificationAnswer(answer: string): number | null {
+    const normalized = answer.replace(/％/gu, '%')
+    const match = normalized.match(/(\d+(?:\.\d+)?)\s*%?/u)
+    if (!match?.[1]) return null
+
+    const value = Number(match[1])
+    if (!Number.isFinite(value) || value <= 0 || value > 100) {
+      return null
+    }
+    return value
+  }
+
+  private normalizeBasisClarificationAnswer(answer: string): ChecklistRuleBasis['kind'] | null {
+    const normalized = answer.trim().toLowerCase()
+    if (!normalized) return null
+
+    if (/上一根|上根|昨收|前收|prev/i.test(normalized)) return 'prev_close'
+    if (/开仓均价|入场价|入场均价|开仓价|entry/i.test(normalized)) return 'entry_avg_price'
+    if (/持仓.*(?:收益|盈亏|亏损|利润|浮盈|pnl)|position.*pnl/i.test(normalized)) return 'position_pnl'
+    if (/账户净值峰值|净值峰值|资金曲线峰值|peak equity/i.test(normalized)) return 'peak_equity'
+    if (/持仓浮盈峰值|浮盈峰值|peak position pnl/i.test(normalized)) return 'peak_position_pnl'
+    if (/上轨|upper band/i.test(normalized)) return 'upper_band'
+    if (/下轨|lower band/i.test(normalized)) return 'lower_band'
+    if (/中轨|middle band/i.test(normalized)) return 'middle_band'
+    if (/前高|last high/i.test(normalized)) return 'last_high'
+    if (/前低|last low/i.test(normalized)) return 'last_low'
+
+    return null
+  }
+
+  private readClarificationState(payload: Prisma.JsonValue | null | undefined): StrategyClarificationStateWithSummary | null {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return null
     const rawStatus = (payload as { status?: unknown }).status
     const rawItems = (payload as { items?: unknown }).items
+    const rawSummary = (payload as { summary?: unknown }).summary
     if (!STRATEGY_CLARIFICATION_STATUSES.includes(rawStatus as never) || !Array.isArray(rawItems)) return null
 
     const normalizedItems: StrategyClarificationItem[] = []
@@ -1216,7 +1369,60 @@ export class CodegenConversationService {
     return {
       status: rawStatus as StrategyClarificationState['status'],
       items: normalizedItems,
+      ...(typeof rawSummary === 'string' && rawSummary.trim() ? { summary: rawSummary.trim() } : {}),
     }
+  }
+
+  private withClarificationSummary(
+    clarificationState: StrategyClarificationState | null | undefined,
+    checklist: ChecklistPayload,
+  ): StrategyClarificationStateWithSummary | null {
+    if (!clarificationState) return null
+    if (clarificationState.status !== 'NEEDS_CLARIFICATION') {
+      return {
+        ...clarificationState,
+        summary: null,
+      }
+    }
+
+    return {
+      ...clarificationState,
+      summary: this.buildClarificationSummary(checklist),
+    }
+  }
+
+  private detectClarificationState(checklist: ChecklistPayload): StrategyClarificationStateWithSummary {
+    return this.withClarificationSummary(
+      this.clarificationRules.detect(checklist),
+      checklist,
+    ) as StrategyClarificationStateWithSummary
+  }
+
+  private buildClarificationSummary(checklist: ChecklistPayload): string | null {
+    const exchange = typeof checklist.riskRules?.exchange === 'string' ? checklist.riskRules.exchange.trim().toUpperCase() : ''
+    const marketType = typeof checklist.riskRules?.marketType === 'string'
+      ? checklist.riskRules.marketType.trim().toLowerCase()
+      : ''
+    const symbol = checklist.symbols?.[0]?.trim() ?? ''
+    const timeframe = checklist.timeframes?.[0]?.trim() ?? ''
+    const entryRule = checklist.entryRules?.[0]?.trim() ?? ''
+    const exitRule = checklist.exitRules?.[0]?.trim() ?? ''
+    const positionPct = typeof checklist.riskRules?.positionPct === 'number'
+      ? `${checklist.riskRules.positionPct}% 仓位`
+      : ''
+
+    const segments = [
+      [exchange, marketType === 'perp' ? '合约' : marketType === 'spot' ? '现货' : '', symbol, timeframe].filter(Boolean).join(' '),
+      entryRule ? `入场：${entryRule}` : '',
+      exitRule ? `出场：${exitRule}` : '',
+      positionPct,
+    ].filter(Boolean)
+
+    return segments.length > 0 ? segments.join('；') : null
+  }
+
+  private normalizeClarificationSummary(summary: unknown): string | null {
+    return typeof summary === 'string' && summary.trim().length > 0 ? summary.trim() : null
   }
 
   private inferClarificationField(input: {
@@ -1725,8 +1931,10 @@ export class CodegenConversationService {
       riskRules.marketType = 'spot'
     }
 
-    const positionMatch = text.match(/(?:仓位|单笔(?:用|使用)?|使用)\s*(?:百分之?\s*)?(\d+(?:\.\d+)?)(?:\s*%|资金|仓位|$)/)
-      ?? text.match(/(?:仓位|单笔(?:用|使用)?).{0,8}?(\d+(?:\.\d+)?)\s*%/)
+    const positionMatch = text.match(/仓位\s*(\d+(?:\.\d+)?)\s*%/u)
+      ?? text.match(/单笔(?:使用|投入)?\s*(\d+(?:\.\d+)?)\s*%\s*资金/u)
+      ?? text.match(/(?:仓位|单笔(?:用|使用)?|使用)\s*(?:百分之?\s*)?(\d+(?:\.\d+)?)(?:\s*%|资金|仓位|$)/u)
+      ?? text.match(/(?:仓位|单笔(?:用|使用)?).{0,8}?(\d+(?:\.\d+)?)\s*%/u)
     if (positionMatch?.[1]) {
       riskRules.positionPct = Number(positionMatch[1])
     }
@@ -1815,12 +2023,30 @@ export class CodegenConversationService {
       return Object.keys(normalized).length > 0 ? normalized : undefined
     }
 
+    const normalizeBasisMap = (
+      value: unknown,
+    ): Record<string, ChecklistRuleBasis['kind']> | undefined => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return undefined
+      }
+
+      const normalized = Object.fromEntries(
+        Object.entries(value as Record<string, unknown>)
+          .filter(([, item]) => typeof item === 'string' && item.trim().length > 0)
+          .map(([key, item]) => [key, (item as string).trim() as ChecklistRuleBasis['kind']]),
+      ) as Record<string, ChecklistRuleBasis['kind']>
+
+      return Object.keys(normalized).length > 0 ? normalized : undefined
+    }
+
     return {
       symbols: normalizeStringArray(payload.symbols),
       timeframes: normalizeStringArray(payload.timeframes),
       entryRules: normalizeStringArray(payload.entryRules),
       exitRules: normalizeStringArray(payload.exitRules),
       riskRules: normalizeObject(payload.riskRules),
+      entryRuleBases: normalizeBasisMap(payload.entryRuleBases),
+      exitRuleBases: normalizeBasisMap(payload.exitRuleBases),
     }
   }
 
@@ -2193,6 +2419,14 @@ export class CodegenConversationService {
   }
 
   private mergeChecklistSnapshots(base: ChecklistPayload, patch: ChecklistPayload): ChecklistPayload {
+    const mergedEntryRuleBases = {
+      ...(base.entryRuleBases ?? {}),
+      ...(patch.entryRuleBases ?? {}),
+    }
+    const mergedExitRuleBases = {
+      ...(base.exitRuleBases ?? {}),
+      ...(patch.exitRuleBases ?? {}),
+    }
     const mergedRiskRules = (() => {
       const baseRiskRules = base.riskRules ?? {}
       const patchRiskRules = patch.riskRules ?? {}
@@ -2211,6 +2445,8 @@ export class CodegenConversationService {
       entryRules: this.mergeRuleArrays(base.entryRules, patch.entryRules),
       exitRules: this.mergeRuleArrays(base.exitRules, patch.exitRules),
       riskRules: mergedRiskRules,
+      entryRuleBases: Object.keys(mergedEntryRuleBases).length > 0 ? mergedEntryRuleBases : undefined,
+      exitRuleBases: Object.keys(mergedExitRuleBases).length > 0 ? mergedExitRuleBases : undefined,
     }
     return this.normalizeChecklist(merged)
   }

@@ -37,11 +37,14 @@ export class StrategySummaryBuilderService {
     message?: string
   }): StrategySummary {
     const normalized = this.normalizeChecklist(input.checklist)
-    const text = [
+    const checklistText = [
       normalized.entryRules.join('\n'),
       normalized.exitRules.join('\n'),
-      input.message ?? '',
+      Object.values(normalized.riskRules)
+        .filter((value): value is string => typeof value === 'string')
+        .join('\n'),
     ].join('\n')
+    const text = checklistText.trim() ? checklistText : (input.message ?? '')
     const indicators = this.detectIndicatorsFromText(text)
     const strategyType = this.resolveStrategyType(indicators)
 
@@ -191,9 +194,10 @@ export class StrategySummaryBuilderService {
     const push = (indicator: StrategySummaryIndicator) => {
       if (!indicators.includes(indicator)) indicators.push(indicator)
     }
+    const hasBollingerSemantics = /布林|bollinger|bbands|上轨|下轨|中轨|upper\s*band|lower\s*band|middle\s*band/iu.test(text)
 
-    if (/布林|bollinger|bbands/i.test(text)) push('bollingerBands')
-    if (/\bsma\b|简单均线|移动平均|moving average/i.test(text)) push('sma')
+    if (hasBollingerSemantics) push('bollingerBands')
+    if (!hasBollingerSemantics && /\bsma\b|简单均线|移动平均|moving average/i.test(text)) push('sma')
     if (/\bema\b|指数均线/i.test(text)) push('ema')
     if (/\brsi\b/i.test(text)) push('rsi')
     if (/\batr\b/i.test(text)) push('atr')
@@ -203,7 +207,7 @@ export class StrategySummaryBuilderService {
       normalized.includes('均线')
       && !normalized.includes('不要均线')
       && !normalized.includes('非均线')
-      && !normalized.includes('布林带')
+      && !hasBollingerSemantics
       && !indicators.includes('sma')
     ) {
       push('sma')

@@ -1,6 +1,78 @@
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
+import { CodegenConversationService } from '../codegen-conversation.service'
 
 describe('canonicalSpecBuilderService', () => {
+  it('normalizes single-trade sizing language into positionPct', () => {
+    const conversationService = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+
+    const checklist = (conversationService as any).inferChecklistFromMessage(
+      '在 OKX 现货市场交易 BTCUSDT，单笔使用 10% 资金',
+    )
+
+    expect(checklist.riskRules?.positionPct).toBe(10)
+  })
+
+  it('preserves clarified stop-loss and take-profit basis on canonical risk rules', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['收盘价突破上轨时做空'],
+      exitRules: ['价格回到中轨（20日均线）时平仓'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+        stopLossPct: 5,
+        stopLossBasis: 'entry_avg_price',
+        takeProfitPct: 10,
+        takeProfitBasis: 'position_pnl',
+      },
+    })
+
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'risk-stop-loss',
+        condition: expect.objectContaining({
+          params: expect.objectContaining({ basis: 'entry_avg_price' }),
+        }),
+        metadata: expect.objectContaining({ basis: 'entry_avg_price' }),
+      }),
+      expect.objectContaining({
+        id: 'risk-take-profit',
+        condition: expect.objectContaining({
+          params: expect.objectContaining({ basis: 'position_pnl' }),
+        }),
+        metadata: expect.objectContaining({ basis: 'position_pnl' }),
+      }),
+    ]))
+  })
+
+  it('does not inject sma when clarified bollinger middle-band semantics use a moving-average alias', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['收盘价突破上轨时做空'],
+      exitRules: ['价格回到中轨（20日均线）时平仓'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        stopLossPct: 5,
+        positionPct: 10,
+      },
+    })
+
+    expect(spec.indicators).toEqual([
+      expect.objectContaining({ kind: 'bollingerBands' }),
+    ])
+    expect(spec.indicators).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'sma' }),
+    ]))
+  })
+
   it('builds independent Bollinger rules for upper-short, lower-long, middle-close, and outside-band full close', () => {
     const service = new CanonicalSpecBuilderService()
 
@@ -385,6 +457,45 @@ describe('canonicalSpecBuilderService', () => {
             rangeMin: 60000,
             rangeMax: 80000,
             stepPct: 1,
+            levelCount: 21,
+          }),
+        }),
+      }),
+    ]))
+  })
+
+  it('normalizes per-mille grid steps into percent while keeping grid params explicit', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['在 60000-80000 固定区间按千分之5步长共 21 格执行区间网格买入'],
+      exitRules: ['价格触达上方网格卖出'],
+      riskRules: { positionPct: 10 },
+    })
+
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        condition: expect.objectContaining({
+          key: 'grid.range_rebalance',
+          params: expect.objectContaining({
+            rangeMin: 60000,
+            rangeMax: 80000,
+            stepPct: 0.5,
+            levelCount: 21,
+          }),
+        }),
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        condition: expect.objectContaining({
+          key: 'grid.range_rebalance',
+          params: expect.objectContaining({
+            rangeMin: 60000,
+            rangeMax: 80000,
+            stepPct: 0.5,
             levelCount: 21,
           }),
         }),
