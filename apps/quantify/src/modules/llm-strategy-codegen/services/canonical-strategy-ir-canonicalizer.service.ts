@@ -15,9 +15,14 @@ function clone<T>(value: T): T {
 export class CanonicalStrategyIrCanonicalizerService {
   canonicalize(ir: CanonicalStrategyIrV1): CanonicalStrategyIrV1 {
     const normalized = clone(ir)
+    const primaryTimeframe = normalized.market.timeframes[0]
+    const primaryRequiredTimeframe = normalized.dataRequirements.requiredTimeframes[0]
 
-    normalized.market.timeframes = [...normalized.market.timeframes].sort()
-    normalized.dataRequirements.requiredTimeframes = [...normalized.dataRequirements.requiredTimeframes].sort()
+    normalized.market.timeframes = this.sortTimeframesPreservingPrimary(normalized.market.timeframes, primaryTimeframe)
+    normalized.dataRequirements.requiredTimeframes = this.sortTimeframesPreservingPrimary(
+      normalized.dataRequirements.requiredTimeframes,
+      primaryRequiredTimeframe,
+    )
     normalized.signalCatalog.series = this.sortSeries(normalized.signalCatalog.series)
     normalized.signalCatalog.predicates = this.sortPredicates(normalized.signalCatalog.predicates)
     normalized.ruleBlocks = this.sortRuleBlocks(normalized.ruleBlocks)
@@ -49,5 +54,16 @@ export class CanonicalStrategyIrCanonicalizerService {
 
   private sortGuards(guards: RiskGuard[]): RiskGuard[] {
     return [...guards].sort((left, right) => left.id.localeCompare(right.id))
+  }
+
+  private sortTimeframesPreservingPrimary(timeframes: string[], primary?: string): string[] {
+    const unique = [...new Set(timeframes)]
+    const ordered = [...unique].sort()
+    if (!primary) {
+      return ordered
+    }
+
+    const rest = ordered.filter(timeframe => timeframe !== primary)
+    return unique.includes(primary) ? [primary, ...rest] : ordered
   }
 }

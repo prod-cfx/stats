@@ -327,6 +327,32 @@ export class CanonicalSpecV2IrCompilerService {
     const closeRef = this.ensurePriceSeries(context, 'close')
 
     switch (atom.key) {
+      case 'price.change_pct': {
+        const timeframe = typeof atom.params?.timeframe === 'string' && atom.params.timeframe.trim().length > 0
+          ? atom.params.timeframe.trim()
+          : context.timeframe
+        const lookbackBars = this.readNumber([atom.params?.lookbackBars], 1)
+        const latestPriceRef = this.ensurePriceSeries(context, 'close', timeframe, 0)
+        const previousPriceRef = this.ensurePriceSeries(context, 'close', timeframe, lookbackBars)
+        const seriesId = `price_change_pct_${timeframe}_${lookbackBars}`
+        if (!context.seriesMap.has(seriesId)) {
+          context.seriesMap.set(seriesId, {
+            id: seriesId,
+            kind: 'PRICE_CHANGE_PCT',
+            timeframe,
+            inputs: [latestPriceRef, previousPriceRef],
+            params: { lookbackBars },
+          })
+        }
+        const thresholdRef = this.ensureConstSeries(context, this.readNumber([atom.value], 0))
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}`,
+          this.resolveComparisonKind(atom.op),
+          [seriesId, thresholdRef],
+        )
+      }
+
       case 'ma.golden_cross':
       case 'ma.death_cross': {
         const fastRef = this.ensureMovingAverageSeries(context, context.movingAverage.fast)
@@ -497,14 +523,20 @@ export class CanonicalSpecV2IrCompilerService {
     }
   }
 
-  private ensurePriceSeries(context: CompileContext, field: 'close'): string {
-    const id = `${field}_${context.timeframe}`
+  private ensurePriceSeries(
+    context: CompileContext,
+    field: 'close',
+    timeframe = context.timeframe,
+    offsetBars = 0,
+  ): string {
+    const id = `${field}_${timeframe}${offsetBars > 0 ? `_${offsetBars}` : ''}`
     if (!context.seriesMap.has(id)) {
       context.seriesMap.set(id, {
         id,
         kind: 'PRICE',
-        timeframe: context.timeframe,
+        timeframe,
         field,
+        ...(offsetBars > 0 ? { offsetBars } : {}),
       })
     }
     return id

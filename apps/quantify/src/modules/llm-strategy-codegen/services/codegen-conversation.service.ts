@@ -65,6 +65,13 @@ interface GenerationOptions {
   maxTokens?: number
 }
 
+interface CanonicalCompileabilityReport {
+  canCompile: boolean
+  entryRuleCount: number
+  exitRuleCount: number
+  reasons: string[]
+}
+
 type GuidePromptConfig = CodegenGuidePromptConfigSnapshot
 type RecommendationStyle = 'ma' | 'drop-rise'
 
@@ -139,20 +146,33 @@ export class CodegenConversationService {
     )
     const clarificationState = this.clarificationRules.detect(checklist)
     const clarificationPrompt = this.clarificationQuestion.build(clarificationState)
-    const status: LlmCodegenSessionStatus = this.stateMachine.resolvePlannerStatus({
+    const plannerStatus: LlmCodegenSessionStatus = this.stateMachine.resolvePlannerStatus({
       logicReady: plan.logicReady,
       clarificationState,
     })
+    const initialCanonicalSpec = plannerStatus === 'CHECKLIST_GATE'
+      ? this.canonicalSpecBuilder.build(checklist)
+      : null
+    const compileability = initialCanonicalSpec
+      ? this.evaluateCanonicalCompileability(initialCanonicalSpec)
+      : null
+    const status: LlmCodegenSessionStatus = plannerStatus === 'CHECKLIST_GATE' && compileability?.canCompile === false
+      ? 'DRAFTING'
+      : plannerStatus
     const shouldGateChecklist = status === 'CHECKLIST_GATE'
 
     const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
-    const initialSpecDesc = shouldGateChecklist ? this.specDescBuilder.build(checklist, '') : null
+    const initialSpecDesc = shouldGateChecklist && initialCanonicalSpec
+      ? this.specDescBuilder.buildFromCanonicalSpec(initialCanonicalSpec, '')
+      : null
     const initialCanonicalDigest = this.readCanonicalDigest(initialSpecDesc)
     const assistantPrompt = clarificationState.status === 'NEEDS_CLARIFICATION' && clarificationPrompt
       ? clarificationPrompt
       : (shouldGateChecklist
           ? `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`
-          : plan.assistantPrompt)
+          : (compileability && !compileability.canCompile
+              ? this.buildCompileabilityAssistantPrompt(compileability)
+              : plan.assistantPrompt))
     const initialHistory = this.appendConversationHistory([], dto.initialMessage, assistantPrompt)
     const session = await this.sessionsRepo.createSession({
       userId: sessionUserId,
@@ -333,6 +353,7 @@ export class CodegenConversationService {
     const canonicalSpec = this.canonicalSpecBuilder.build(mergedChecklist)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
     const canonicalDigest = this.readCanonicalDigest(specDesc)
+    const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
 
     if (!plan.logicReady) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
@@ -350,6 +371,27 @@ export class CodegenConversationService {
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt: plan.assistantPrompt,
+        clarificationState,
+      })
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+    }
+
+    if (!compileability.canCompile) {
+      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
+        status: 'DRAFTING',
+        checklist: mergedChecklist,
+        clarificationState,
+        constraintPack: {
+          ...nextConstraintPack,
+          conversationHistory: historyAfterPlanner,
+        },
+      }))
+
+      const response = this.finalizeSessionResponse({
+        id: session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt: this.buildCompileabilityAssistantPrompt(compileability),
         clarificationState,
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
@@ -432,6 +474,7 @@ export class CodegenConversationService {
     const canonicalSpec = this.canonicalSpecBuilder.build(mergedChecklist)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
     const canonicalDigest = this.readCanonicalDigest(specDesc)
+    const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
     const confirmedCanonicalDigest = dto.confirmedCanonicalDigest?.trim() ?? ''
     if (!canonicalDigest || confirmedCanonicalDigest !== canonicalDigest) {
       throw new DomainException('codegen.confirmation_digest_mismatch', {
@@ -462,6 +505,27 @@ export class CodegenConversationService {
         status: 'DRAFTING',
         missingFields,
         assistantPrompt: '请先补全入场和出场规则，再确认生成代码。',
+        clarificationState,
+      })
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+    }
+
+    if (!compileability.canCompile) {
+      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
+        status: 'DRAFTING',
+        checklist: mergedChecklist,
+        clarificationState,
+        constraintPack: {
+          ...constraintPack,
+          conversationHistory: historyAfterConfirm,
+        },
+      }))
+
+      const response = this.finalizeSessionResponse({
+        id: session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt: this.buildCompileabilityAssistantPrompt(compileability),
         clarificationState,
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
@@ -908,6 +972,7 @@ export class CodegenConversationService {
     const canonicalSpec = this.canonicalSpecBuilder.build(args.checklist)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
     const canonicalDigest = this.readCanonicalDigest(specDesc)
+    const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
     const missingFields = this.resolveChecklistMissingFields(args.checklist)
 
     if (missingFields.length > 0) {
@@ -927,6 +992,27 @@ export class CodegenConversationService {
         status: 'DRAFTING',
         missingFields,
         assistantPrompt: '请先补全入场和出场规则，再确认生成代码。',
+        clarificationState: args.clarificationState,
+      })
+      return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
+    }
+
+    if (!compileability.canCompile) {
+      await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
+        status: 'DRAFTING',
+        checklist: args.checklist,
+        clarificationState: args.clarificationState,
+        constraintPack: {
+          ...args.constraintPack,
+          conversationHistory: historyAfterAnswer,
+        },
+      }))
+
+      const response = this.finalizeSessionResponse({
+        id: args.session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt: this.buildCompileabilityAssistantPrompt(compileability),
         clarificationState: args.clarificationState,
       })
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
@@ -1418,6 +1504,48 @@ export class CodegenConversationService {
     return missing
   }
 
+  private evaluateCanonicalCompileability(spec: {
+    rules: Array<{
+      phase: string
+      actions: Array<{ type: string }>
+    }>
+  }): CanonicalCompileabilityReport {
+    const entryRuleCount = spec.rules.filter(rule =>
+      rule.phase === 'entry'
+      && rule.actions.some(action => action.type === 'OPEN_LONG' || action.type === 'OPEN_SHORT'),
+    ).length
+
+    const exitRuleCount = spec.rules.filter(rule =>
+      (rule.phase === 'exit' || rule.phase === 'risk')
+      && rule.actions.some(action => (
+        action.type === 'CLOSE_LONG'
+        || action.type === 'CLOSE_SHORT'
+        || action.type === 'FORCE_EXIT'
+        || action.type === 'REDUCE_LONG'
+        || action.type === 'REDUCE_SHORT'
+      )),
+    ).length
+
+    const reasons: string[] = []
+    if (entryRuleCount === 0) {
+      reasons.push('未识别可编译入场规则')
+    }
+    if (exitRuleCount === 0) {
+      reasons.push('未识别可编译出场规则')
+    }
+
+    return {
+      canCompile: reasons.length === 0,
+      entryRuleCount,
+      exitRuleCount,
+      reasons,
+    }
+  }
+
+  private buildCompileabilityAssistantPrompt(report: CanonicalCompileabilityReport): string {
+    return `当前规则还不能稳定生成脚本：${report.reasons.join('，')}。请补充能明确落成主链规则的入场/出场条件后再确认逻辑图。`
+  }
+
   private inferChecklistFromMessage(message?: string): ChecklistPayload {
     if (!message || !message.trim()) {
       return {}
@@ -1453,19 +1581,22 @@ export class CodegenConversationService {
       return `${value}d`
     }
 
-    const buyDropPattern = /(\d{1,4})\s*([mhd天]|min|分钟|小时)[^，。；;\n]{0,30}?(?:跌|下跌|回撤)\s*(\d+(?:\.\d+)?)\s*%[^，。；;\n]{0,20}?(?:买入|开仓|入场)/i
-    const sellRisePattern = /(\d{1,4})\s*([mhd天]|min|分钟|小时)[^，。；;\n]{0,30}?(?:涨|上涨|反弹)\s*(\d+(?:\.\d+)?)\s*%[^，。；;\n]{0,20}?(?:卖出|平仓|离场|出场)/i
+    const percentToken = '(?:(\\d+(?:\\.\\d+)?)\\s*%|百分之?\\s*(\\d+(?:\\.\\d+)?))'
+    const buyDropPattern = new RegExp(`(\\d{1,4})\\s*([mhd天]|min|分钟|小时)[^，。；;\\n]{0,30}?(?:跌|下跌|回撤)\\s*${percentToken}[^，。；;\\n]{0,20}?(?:买入|开仓|入场)`, 'i')
+    const sellRisePattern = new RegExp(`(\\d{1,4})\\s*([mhd天]|min|分钟|小时)[^，。；;\\n]{0,30}?(?:涨|上涨|反弹)\\s*${percentToken}[^，。；;\\n]{0,20}?(?:卖出|平仓|离场|出场)`, 'i')
 
     const buyDropMatch = text.match(buyDropPattern)
-    if (buyDropMatch?.[1] && buyDropMatch[2] && buyDropMatch[3]) {
+    const buyDropPct = buyDropMatch?.[3] ?? buyDropMatch?.[4]
+    if (buyDropMatch?.[1] && buyDropMatch[2] && buyDropPct) {
       const frame = normalizeTimeframe(buyDropMatch[1], buyDropMatch[2])
-      entryRules.push(`${frame} 内下跌 ${buyDropMatch[3]}% 买入`)
+      entryRules.push(`${frame} 内下跌 ${buyDropPct}% 买入`)
     }
 
     const sellRiseMatch = text.match(sellRisePattern)
-    if (sellRiseMatch?.[1] && sellRiseMatch[2] && sellRiseMatch[3]) {
+    const sellRisePct = sellRiseMatch?.[3] ?? sellRiseMatch?.[4]
+    if (sellRiseMatch?.[1] && sellRiseMatch[2] && sellRisePct) {
       const frame = normalizeTimeframe(sellRiseMatch[1], sellRiseMatch[2])
-      exitRules.push(`${frame} 内上涨 ${sellRiseMatch[3]}% 卖出`)
+      exitRules.push(`${frame} 内上涨 ${sellRisePct}% 卖出`)
     }
 
     if (entryRules.length === 0) {
@@ -1527,16 +1658,17 @@ export class CodegenConversationService {
       riskRules.marketType = 'spot'
     }
 
-    const positionMatch = text.match(/仓位\s*(\d+(?:\.\d+)?)\s*%/)
+    const positionMatch = text.match(/(?:仓位|单笔(?:用|使用)?|使用)\s*(?:百分之?\s*)?(\d+(?:\.\d+)?)(?:\s*%|资金|仓位|$)/)
+      ?? text.match(/(?:仓位|单笔(?:用|使用)?).{0,8}?(\d+(?:\.\d+)?)\s*%/)
     if (positionMatch?.[1]) {
       riskRules.positionPct = Number(positionMatch[1])
     }
-    const stopLossMatch = text.match(/止损[^%\n]{0,12}?(\d+(?:\.\d+)?)\s*%/)
-      ?? text.match(/亏损[≥>=]?\s*(\d+(?:\.\d+)?)\s*%/)
+    const stopLossMatch = text.match(/止损[^%\n]{0,12}?(?:百分之?\s*)?(\d+(?:\.\d+)?)(?:\s*%|$)/)
+      ?? text.match(/亏损[≥>=]?\s*(?:百分之?\s*)?(\d+(?:\.\d+)?)(?:\s*%|$)/)
     if (stopLossMatch?.[1]) {
       riskRules.stopLossPct = Number(stopLossMatch[1])
     }
-    const drawdownMatch = text.match(/最大回撤\s*(\d+(?:\.\d+)?)\s*%/)
+    const drawdownMatch = text.match(/最大回撤\s*(?:百分之?\s*)?(\d+(?:\.\d+)?)(?:\s*%|$)/)
     if (drawdownMatch?.[1]) {
       riskRules.maxDrawdownPct = Number(drawdownMatch[1])
     }

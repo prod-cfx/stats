@@ -1098,6 +1098,9 @@ export class StrategyConsistencyService {
     predicateId: string
   }): StrategySemanticRuleKey | null {
     const predicateId = input.predicateId.toLowerCase()
+    if (predicateId.includes('price_change_pct') || predicateId.includes('price.change_pct')) {
+      return 'price.change_pct'
+    }
     if (
       input.predicateKind === 'CROSS_OVER'
       && (predicateId.includes('macd_golden_cross') || predicateId.includes('macd.golden_cross'))
@@ -1519,7 +1522,8 @@ export class StrategyConsistencyService {
   }
 
   private isSupportedRuleKey(key: string): key is StrategySemanticRuleKey {
-    return key === 'bollinger.upper_break'
+    return key === 'price.change_pct'
+      || key === 'bollinger.upper_break'
       || key === 'bollinger.lower_break'
       || key === 'bollinger.middle_revert'
       || key === 'bollinger.bars_outside'
