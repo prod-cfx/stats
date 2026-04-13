@@ -333,13 +333,13 @@ export function resolveChecklistPayload(input: {
 export function isShortConfirmationMessage(message: string): boolean {
   const text = message.trim().toLowerCase()
   if (!text) return false
-  return /^(?:可以|确认|继续|按你说的来|就这样|好的?|行|ok|okay|yes|yep|同意|没问题)[。.!！?？\s]*$/i.test(text)
+  return /^(?:可以|确认|确认正确|正确|继续|按你说的来|就这样|好的?|行|ok|okay|yes|yep|同意|没问题)[。.!！?？\s]*$/i.test(text)
 }
 
 export function isAssistantDraftLikeMessage(message: string): boolean {
   const text = message.trim()
   if (!text) return false
-  return /策略逻辑|草案|入场|出场|均线|rsi|请确认逻辑图|逻辑图已更新|确认后我再生成策略代码/i.test(text)
+  return /策略逻辑|草案|入场|出场|均线|rsi|请确认逻辑图|请确认这版逻辑|主线流程图|逻辑图已更新|确认后我再生成策略代码/i.test(text)
 }
 
 export function shouldAutoAdvanceOnConfirmation(input: {
