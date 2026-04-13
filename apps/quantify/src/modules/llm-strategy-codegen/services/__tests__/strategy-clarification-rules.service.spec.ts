@@ -221,15 +221,95 @@ describe('strategyClarificationRulesService', () => {
     ]))
   })
 
+  it('blocks generation when symbol, timeframe, and sizing are still missing', () => {
+    const state = service.detect({
+      entryRules: ['收盘价突破布林带上轨时做空'],
+      exitRules: ['价格回到布林带中轨时平仓'],
+      riskRules: { exchange: 'okx', marketType: 'perp', stopLossPct: 5 },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'market.symbol', reason: 'missing_symbol' }),
+      expect.objectContaining({ key: 'market.timeframe', reason: 'missing_timeframe' }),
+      expect.objectContaining({ key: 'sizing.positionPct', reason: 'missing_position_pct' }),
+    ]))
+  })
+
+  it('blocks missing required rule buckets and market sizing fields even when entry rules are absent', () => {
+    const state = service.detect({
+      riskRules: { exchange: 'okx', marketType: 'perp' },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'entry.rules', reason: 'missing_entry_rules' }),
+      expect.objectContaining({ key: 'exit.rules', reason: 'missing_exit_rules' }),
+      expect.objectContaining({ key: 'risk.stopLoss.rule', reason: 'missing_stop_loss_rule' }),
+      expect.objectContaining({ key: 'risk.takeProfit.rule', reason: 'missing_take_profit_rule' }),
+      expect.objectContaining({ key: 'market.symbol', reason: 'missing_symbol' }),
+      expect.objectContaining({ key: 'market.timeframe', reason: 'missing_timeframe' }),
+      expect.objectContaining({ key: 'sizing.positionPct', reason: 'missing_position_pct' }),
+    ]))
+  })
+
+  it('blocks percentage rules that omit comparison basis', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['3m', '15m'],
+      entryRules: ['3 分钟内跌 1% 买入'],
+      exitRules: ['15 分钟内涨 2% 卖出'],
+      riskRules: { exchange: 'okx', marketType: 'spot', positionPct: 10, stopLossPct: 5 },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'entry.basis.1' }),
+      expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'exit.basis.1' }),
+      expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'risk.stopLoss.basis' }),
+    ]))
+  })
+
+  it('blocks sequence, take-profit, and drawdown basis gaps beyond simple rise fall percentages', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['连续 3 根 K 线累计回撤 2% 后买入'],
+      exitRules: ['回撤 5% 止盈'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+        stopLossPct: 5,
+        stopLossBasis: 'entry_avg_price',
+        takeProfitPct: 12,
+        maxDrawdownPct: 8,
+      },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'entry.basis.1' }),
+      expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'exit.basis.1' }),
+      expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'risk.takeProfit.basis' }),
+      expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'risk.drawdown.basis' }),
+    ]))
+  })
+
   it('returns CLEAR for unambiguous rules', () => {
     const state = service.detect({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['突破布林带上轨时做空'],
+      exitRules: ['价格回到布林带中轨时平仓'],
       riskRules: {
         exchange: 'binance',
         marketType: 'perp',
+        positionPct: 10,
         stopLossPct: 5,
+        stopLossBasis: 'entry_avg_price',
+        takeProfitPct: 12,
+        takeProfitBasis: 'position_pnl',
       },
     })
 

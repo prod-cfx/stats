@@ -5,6 +5,18 @@ export const phaseSchema = z.enum(['entry', 'exit', 'risk'])
 export const actionKindSchema = z.enum(['OPEN_LONG', 'CLOSE_LONG', 'OPEN_SHORT', 'CLOSE_SHORT', 'REDUCE_POSITION'])
 export const riskKindSchema = z.enum(['STOP_LOSS_PCT', 'TAKE_PROFIT_PCT', 'MAX_SINGLE_LOSS_PCT'])
 export const riskEffectSchema = z.enum(['FORCE_EXIT', 'REDUCE_POSITION', 'BLOCK_ENTRY'])
+export const basisSchema = z.enum([
+  'prev_close',
+  'entry_avg_price',
+  'position_pnl',
+  'peak_equity',
+  'peak_position_pnl',
+  'upper_band',
+  'lower_band',
+  'middle_band',
+  'last_high',
+  'last_low',
+])
 
 export const semanticSeriesReferenceSchema = z.object({
   source: z.literal('close'),
@@ -17,12 +29,14 @@ export const priceChangePctParamsSchema = z.object({
   right: semanticSeriesReferenceSchema,
   op: z.enum(['gte', 'lte']),
   valuePct: z.number(),
+  basis: basisSchema.optional(),
 })
 
 export const positionPnlPctParamsSchema = z.object({
   timeframe: timeframeSchema,
   op: z.enum(['gte', 'lte']),
   valuePct: z.number(),
+  basis: basisSchema.optional(),
 })
 
 export const priceChangePctNodeSchema = z.object({

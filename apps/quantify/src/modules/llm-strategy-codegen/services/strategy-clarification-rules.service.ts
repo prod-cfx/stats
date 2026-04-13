@@ -1,12 +1,8 @@
+import type { ChecklistPayload } from '../types/codegen-checklist'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import { Injectable } from '@nestjs/common'
 
-interface ClarificationChecklistInput {
-  symbols?: string[]
-  timeframes?: string[]
-  entryRules?: string[]
-  riskRules?: Record<string, unknown>
-}
+type ClarificationChecklistInput = ChecklistPayload
 
 interface MarketScopeConflict {
   field: 'exchange' | 'marketType' | 'symbol' | 'timeframe'
@@ -18,19 +14,22 @@ const LONG_DIRECTION_PATTERN = /做多|多单|开多|long|买入/u
 const SHORT_DIRECTION_PATTERN = /做空|空单|开空|short|卖出/u
 const UPPER_BAND_PATTERN = /(?:布林|bollinger).{0,8}(?:上轨|upper)|(?:上轨|upper).{0,8}(?:布林|bollinger)|突破.{0,8}(?:上轨|upper)/iu
 const LOWER_BAND_PATTERN = /(?:布林|bollinger).{0,8}(?:下轨|lower)|(?:下轨|lower).{0,8}(?:布林|bollinger)|跌破.{0,8}(?:下轨|lower)|突破.{0,8}(?:下轨|lower)/iu
+const PERCENTAGE_THRESHOLD_PATTERN = /\d+(?:\.\d+)?\s*%/u
 
 @Injectable()
 export class StrategyClarificationRulesService {
   detect(input: ClarificationChecklistInput): StrategyClarificationState {
     const entryDetection = this.detectEntryItems(input.entryRules ?? [])
     const items: StrategyClarificationItem[] = [
+      ...this.detectRequiredRuleItems(input),
       ...entryDetection.items,
       ...this.detectMarketItems(
         input,
-        entryDetection.hasEntryRules,
         entryDetection.hasShortEntry,
         entryDetection.hasActionUniquenessConflict,
       ),
+      ...this.detectSizingItems(input.riskRules),
+      ...this.detectBasisItems(input),
       ...this.detectRiskItems(input.riskRules ?? {}),
     ]
 
@@ -50,19 +49,16 @@ export class StrategyClarificationRulesService {
   private detectEntryItems(entryRules: string[]): {
     items: StrategyClarificationItem[]
     hasActionUniquenessConflict: boolean
-    hasEntryRules: boolean
     hasShortEntry: boolean
   } {
     const items: StrategyClarificationItem[] = []
     let sideQuestionAdded = false
     let hasShortEntry = false
     let hasActionUniquenessConflict = false
-    let hasEntryRules = false
 
     for (const [index, rawRule] of entryRules.entries()) {
       const rule = rawRule.trim()
       if (!rule) continue
-      hasEntryRules = true
 
       const hasLongDirection = LONG_DIRECTION_PATTERN.test(rule)
       const hasShortDirection = SHORT_DIRECTION_PATTERN.test(rule)
@@ -120,18 +116,16 @@ export class StrategyClarificationRulesService {
     return {
       items,
       hasActionUniquenessConflict,
-      hasEntryRules,
       hasShortEntry,
     }
   }
 
   private detectMarketItems(
     input: ClarificationChecklistInput,
-    hasEntryRules: boolean,
     hasShortEntry: boolean,
     hasActionUniquenessConflict: boolean,
   ): StrategyClarificationItem[] {
-    if (!hasEntryRules || hasActionUniquenessConflict) return []
+    if (hasActionUniquenessConflict) return []
 
     const conflicts = this.readMarketScopeConflicts(input.riskRules)
     if (conflicts.length > 0) {
@@ -209,8 +203,77 @@ export class StrategyClarificationRulesService {
     return items
   }
 
+  private detectRequiredRuleItems(input: ClarificationChecklistInput): StrategyClarificationItem[] {
+    const items: StrategyClarificationItem[] = []
+
+    if (!this.hasAnyRule(input.entryRules)) {
+      items.push({
+        key: 'entry.rules',
+        reason: 'missing_entry_rules',
+        field: 'entryRules',
+        blocking: true,
+        question: '请补充至少一条明确的入场规则。',
+        status: 'pending',
+      })
+    }
+
+    if (!this.hasAnyRule(input.exitRules)) {
+      items.push({
+        key: 'exit.rules',
+        reason: 'missing_exit_rules',
+        field: 'exitRules',
+        blocking: true,
+        question: '请补充至少一条明确的出场规则。',
+        status: 'pending',
+      })
+    }
+
+    if (!this.hasStopLossRule(input.riskRules)) {
+      items.push({
+        key: 'risk.stopLoss.rule',
+        reason: 'missing_stop_loss_rule',
+        field: 'riskRules.stopLossPct',
+        blocking: true,
+        question: '请确认止损规则（例如亏损 5% 止损）。',
+        status: 'pending',
+      })
+    }
+
+    if (!this.hasTakeProfitRule(input.riskRules)) {
+      items.push({
+        key: 'risk.takeProfit.rule',
+        reason: 'missing_take_profit_rule',
+        field: 'riskRules.takeProfitPct',
+        blocking: true,
+        question: '请确认止盈规则（例如盈利 10% 止盈）。',
+        status: 'pending',
+      })
+    }
+
+    return items
+  }
+
+  private detectSizingItems(riskRules: Record<string, unknown> | undefined): StrategyClarificationItem[] {
+    if (typeof riskRules?.positionPct === 'number') {
+      return []
+    }
+
+    return [{
+      key: 'sizing.positionPct',
+      reason: 'missing_position_pct',
+      field: 'riskRules.positionPct',
+      blocking: true,
+      question: '请确认单笔仓位百分比（例如 10%）。',
+      status: 'pending',
+    }]
+  }
+
   private hasPrimaryValue(list: string[] | undefined): boolean {
     return typeof list?.[0] === 'string' && list[0].trim().length > 0
+  }
+
+  private hasAnyRule(list: string[] | undefined): boolean {
+    return Array.isArray(list) && list.some(rule => typeof rule === 'string' && rule.trim().length > 0)
   }
 
   private readMarketType(riskRules: Record<string, unknown> | undefined): 'spot' | 'perp' | null {
@@ -238,7 +301,7 @@ export class StrategyClarificationRulesService {
 
     const hasAmbiguousEffect = riskTexts.some((text) => {
       const hasOutsideBand = /轨外|outside/iu.test(text)
-      const hasThreeBars = /连续\s*3|3\s*根|三根/iu.test(text)
+      const hasThreeBars = /连续\s*3|3\s*根|三根/u.test(text)
       const hasCloseAction = /提前止损|止损|全平|全部平仓|清仓|强平|平仓|force\s*exit|force\s*close|close|exit/iu.test(text)
       const hasReduce = /减仓|reduce/iu.test(text)
       return hasOutsideBand && hasThreeBars && hasCloseAction && hasReduce
@@ -255,6 +318,126 @@ export class StrategyClarificationRulesService {
       question: '轨外连续3根K线时，应执行减仓还是直接平仓？',
       status: 'pending',
     }]
+  }
+
+  private detectBasisItems(input: ClarificationChecklistInput): StrategyClarificationItem[] {
+    const items: StrategyClarificationItem[] = []
+
+    items.push(...this.detectRuleBasisItems(
+      input.entryRules ?? [],
+      input.entryRuleBases,
+      'entry',
+      'entryRules.basis',
+    ))
+    items.push(...this.detectRuleBasisItems(
+      input.exitRules ?? [],
+      input.exitRuleBases,
+      'exit',
+      'exitRules.basis',
+    ))
+
+    if (
+      typeof input.riskRules?.stopLossPct === 'number'
+      && !this.hasNamedBasis(input.riskRules?.stopLossBasis)
+    ) {
+      items.push({
+        key: 'risk.stopLoss.basis',
+        reason: 'ambiguous_condition_basis',
+        field: 'riskRules.stopLossBasis',
+        blocking: true,
+        question: '这里的止损百分比是按持仓亏损，还是按价格相对入场价计算？',
+        status: 'pending',
+      })
+    }
+
+    if (
+      typeof input.riskRules?.takeProfitPct === 'number'
+      && !this.hasNamedBasis(input.riskRules?.takeProfitBasis)
+    ) {
+      items.push({
+        key: 'risk.takeProfit.basis',
+        reason: 'ambiguous_condition_basis',
+        field: 'riskRules.takeProfitBasis',
+        blocking: true,
+        question: '这里的止盈百分比是按持仓收益率、价格相对入场价，还是别的基准？',
+        status: 'pending',
+      })
+    }
+
+    if (
+      typeof input.riskRules?.maxDrawdownPct === 'number'
+      && !this.hasNamedBasis(input.riskRules?.maxDrawdownBasis)
+    ) {
+      items.push({
+        key: 'risk.drawdown.basis',
+        reason: 'ambiguous_condition_basis',
+        field: 'riskRules.maxDrawdownBasis',
+        blocking: true,
+        question: '这里的最大回撤百分比是按账户净值峰值、持仓浮盈峰值，还是别的基准？',
+        status: 'pending',
+      })
+    }
+
+    return items
+  }
+
+  private detectRuleBasisItems(
+    rules: string[],
+    bases: Record<string, unknown> | undefined,
+    scope: 'entry' | 'exit',
+    field: 'entryRules.basis' | 'exitRules.basis',
+  ): StrategyClarificationItem[] {
+    return rules.flatMap((rawRule, index) => {
+      const rule = rawRule.trim()
+      if (!rule || !this.ruleNeedsBasis(rule)) {
+        return []
+      }
+
+      const ruleId = `${scope}-${index + 1}`
+      if (this.hasNamedBasis(bases?.[ruleId])) {
+        return []
+      }
+
+      return [{
+        key: `${scope}.basis.${index + 1}`,
+        ruleId,
+        reason: 'ambiguous_condition_basis',
+        field,
+        blocking: true,
+        question: '这里的百分比条件是相对上一根 K 线收盘价、开仓均价、持仓收益，还是别的基准？',
+        status: 'pending',
+      }]
+    })
+  }
+
+  private ruleNeedsBasis(rule: string): boolean {
+    return PERCENTAGE_THRESHOLD_PATTERN.test(rule)
+  }
+
+  private hasNamedBasis(value: unknown): boolean {
+    return typeof value === 'string' && value.trim().length > 0
+  }
+
+  private hasStopLossRule(riskRules: Record<string, unknown> | undefined): boolean {
+    if (typeof riskRules?.stopLossPct === 'number') {
+      return true
+    }
+
+    return this.hasRiskRuleText(riskRules, /止损|stop[\s_-]?loss/i)
+  }
+
+  private hasTakeProfitRule(riskRules: Record<string, unknown> | undefined): boolean {
+    if (typeof riskRules?.takeProfitPct === 'number') {
+      return true
+    }
+
+    return this.hasRiskRuleText(riskRules, /止盈|take[\s_-]?profit/i)
+  }
+
+  private hasRiskRuleText(riskRules: Record<string, unknown> | undefined, pattern: RegExp): boolean {
+    return Object.values(riskRules ?? {}).some(
+      value => typeof value === 'string' && pattern.test(value),
+    )
   }
 
   private readMarketScopeConflicts(

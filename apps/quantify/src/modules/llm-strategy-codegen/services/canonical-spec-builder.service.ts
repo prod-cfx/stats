@@ -8,6 +8,8 @@ interface ChecklistSnapshot {
   entryRules?: unknown
   exitRules?: unknown
   riskRules?: unknown
+  entryRuleBases?: unknown
+  exitRuleBases?: unknown
 }
 
 @Injectable()
@@ -237,12 +239,17 @@ export class CanonicalSpecBuilderService {
           semanticScope: 'position',
           op: 'GTE',
           value: Number((stopLossPct / 100).toFixed(4)),
+          ...(typeof riskRules.stopLossBasis === 'string' ? { params: { basis: riskRules.stopLossBasis } } : {}),
         },
         actions: [{ type: 'FORCE_EXIT' }],
+        ...(typeof riskRules.stopLossBasis === 'string' ? { metadata: { basis: riskRules.stopLossBasis } } : {}),
       })
     }
 
-    const takeProfitRule = this.resolveTakeProfitRule([...exitTexts, ...Object.values(riskRules).map(item => String(item))])
+    const takeProfitRule = this.resolveTakeProfitRule(
+      [...exitTexts, ...Object.values(riskRules).map(item => String(item))],
+      riskRules,
+    )
     if (takeProfitRule) {
       rules.push({
         id: 'risk-take-profit',
@@ -255,8 +262,10 @@ export class CanonicalSpecBuilderService {
           semanticScope: 'position',
           op: 'GTE',
           value: Number((takeProfitRule.pct / 100).toFixed(4)),
+          ...(typeof riskRules.takeProfitBasis === 'string' ? { params: { basis: riskRules.takeProfitBasis } } : {}),
         },
         actions: takeProfitRule.actions,
+        ...(typeof riskRules.takeProfitBasis === 'string' ? { metadata: { basis: riskRules.takeProfitBasis } } : {}),
       })
     }
 
@@ -427,15 +436,17 @@ export class CanonicalSpecBuilderService {
     }
     const hasDonchianBreakout = allTexts.some(text => /唐奇安|donchian/iu.test(text))
       && allTexts.some(text => /上轨|下轨|breakout|breakdown|highest|lowest/iu.test(text))
+    const hasBollingerSemantics = !hasDonchianBreakout
+      && allTexts.some(text => /布林|bollinger|上轨|下轨|中轨|upper\s*band|lower\s*band|middle\s*band/iu.test(text))
 
-    if (!hasDonchianBreakout && allTexts.some(text => /布林|bollinger|上轨|下轨|中轨/iu.test(text))) {
+    if (hasBollingerSemantics) {
       pushIndicator({
         kind: 'bollingerBands',
         params: { ...DEFAULT_INDICATOR_PARAMS.bollingerBands },
       })
     }
 
-    if (allTexts.some(text => this.isMovingAverageRule(text))) {
+    if (!hasBollingerSemantics && allTexts.some(text => this.isMovingAverageRule(text))) {
       pushIndicator({
         kind: 'sma',
         params: { ...DEFAULT_INDICATOR_PARAMS.sma },
@@ -773,18 +784,32 @@ export class CanonicalSpecBuilderService {
     levelCount: number
   } | null {
     const rangeMatch = text.match(/(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)/u)
-    const stepMatch = text.match(/(?:步长|网格步长)\s*(\d+(?:\.\d+)?)\s*%/u)
+    const stepPct = this.resolveGridStepPct(text)
     const levelMatch = text.match(/(?:共|总计)?\s*(\d+)\s*格/u)
-    if (!rangeMatch?.[1] || !rangeMatch[2] || !stepMatch?.[1] || !levelMatch?.[1]) {
+    if (!rangeMatch?.[1] || !rangeMatch[2] || stepPct === null || !levelMatch?.[1]) {
       return null
     }
 
     return {
       rangeMin: Number(rangeMatch[1]),
       rangeMax: Number(rangeMatch[2]),
-      stepPct: Number(stepMatch[1]),
+      stepPct,
       levelCount: Number(levelMatch[1]),
     }
+  }
+
+  private resolveGridStepPct(text: string): number | null {
+    const percentMatch = text.match(/(?:步长|网格步长)\s*(\d+(?:\.\d+)?)\s*%/u)
+    if (percentMatch?.[1]) {
+      return Number(percentMatch[1])
+    }
+
+    const perMilleMatch = text.match(/千分之\s*(\d+(?:\.\d+)?)/u)
+    if (perMilleMatch?.[1]) {
+      return Number(perMilleMatch[1]) / 10
+    }
+
+    return null
   }
 
   private resolveGridSemantics(
@@ -847,11 +872,27 @@ export class CanonicalSpecBuilderService {
 
   private resolveTakeProfitRule(
     texts: string[],
+    riskRules: Record<string, unknown> = {},
   ): {
     pct: number
     sideScope: 'long' | 'short' | 'both'
     actions: CanonicalRuleV2['actions']
   } | null {
+    if (
+      typeof riskRules.takeProfitPct === 'number'
+      && Number.isFinite(riskRules.takeProfitPct)
+      && riskRules.takeProfitPct > 0
+    ) {
+      return {
+        pct: riskRules.takeProfitPct,
+        ...this.resolveExitActionSemantics(
+          typeof riskRules.takeProfit === 'string' && riskRules.takeProfit.trim()
+            ? riskRules.takeProfit
+            : '止盈',
+        ),
+      }
+    }
+
     for (const text of texts) {
       const matched = text.match(/(?:止盈|take[_\s-]?profit)\D{0,8}(\d+(?:\.\d+)?)\s*%/iu)
       if (matched?.[1]) {

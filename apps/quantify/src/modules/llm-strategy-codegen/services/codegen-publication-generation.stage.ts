@@ -80,7 +80,6 @@ export class CodegenPublicationGenerationStage {
     const semanticView = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
     const userIntentSummary = this.strategySummaryBuilder.buildUserIntentSummary({
       checklist: input.checklist,
-      message: input.message,
     })
     const strategySummary = this.strategySummaryBuilder.buildStrategySummary(canonicalSpec)
     const lockedParams = this.buildLockedParams(input.checklist)

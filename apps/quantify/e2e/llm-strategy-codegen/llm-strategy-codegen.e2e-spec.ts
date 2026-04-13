@@ -50,6 +50,15 @@ const PLANNER_READY_JSON = JSON.stringify({
     exitRules: ['跌破支撑位出场'],
     symbols: ['BTCUSDT'],
     timeframes: ['1h'],
+    riskRules: {
+      exchange: 'okx',
+      marketType: 'spot',
+      positionPct: 10,
+      stopLossPct: 5,
+      stopLossBasis: 'entry_avg_price',
+      takeProfitPct: 10,
+      takeProfitBasis: 'entry_avg_price',
+    },
   },
 })
 
@@ -135,7 +144,15 @@ describe('llm strategy codegen (E2E)', () => {
       timeframes: ['1h'],
       entryRules: ['价格突破阻力位入场'],
       exitRules: ['跌破支撑位出场'],
-      riskRules: { maxPositionPct: 0.1 },
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'spot',
+        positionPct: 10,
+        stopLossPct: 5,
+        stopLossBasis: 'entry_avg_price',
+        takeProfitPct: 10,
+        takeProfitBasis: 'entry_avg_price',
+      },
     }).set(withBearer('u-e2e-1')).expect(201)
 
     const startPayload = startRes.body.data ?? startRes.body

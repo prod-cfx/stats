@@ -91,15 +91,21 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   const buildConfirmedCanonicalDigest = (checklist: Record<string, unknown>): string => {
     return canonicalDigestService.hash(canonicalSpecBuilder.build(checklist))
   }
+  const completeRiskRules = (riskRules: Record<string, any> = {}) => ({
+    exchange: 'okx',
+    marketType: 'perp',
+    positionPct: 10,
+    stopLossPct: 5,
+    stopLossBasis: 'entry_avg_price',
+    takeProfitPct: 10,
+    takeProfitBasis: 'entry_avg_price',
+    ...riskRules,
+  })
   const completeChecklist = (checklist: Record<string, any> = {}) => ({
     ...checklist,
     symbols: checklist.symbols ?? ['BTCUSDT'],
     timeframes: checklist.timeframes ?? ['1h'],
-    riskRules: {
-      exchange: 'okx',
-      marketType: 'perp',
-      ...(checklist.riskRules ?? {}),
-    },
+    riskRules: completeRiskRules(checklist.riskRules ?? {}),
   })
   const withRequiredMarketContext = completeChecklist
   let service: CodegenConversationService
@@ -190,7 +196,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(result.status).toBe('DRAFTING')
     expect(result.missingFields).toEqual([])
-    expect(result.assistantPrompt).toContain('先确认入场条件')
+    expect(result.assistantPrompt).toContain('我当前理解的策略是')
+    expect(result.assistantPrompt).toContain('请补充至少一条明确的入场规则')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       status: 'DRAFTING',
     }))
@@ -485,7 +492,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       messages: expect.arrayContaining([
         expect.objectContaining({
           role: 'system',
-          content: expect.stringContaining('只允许你代为补齐交易所、周期、仓位等非核心元数据'),
+          content: expect.stringContaining('不得跳过必答市场、周期、仓位或关键风控字段'),
         }),
       ]),
     }))
@@ -493,7 +500,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const chatCall = mockAi.chat.mock.calls[0]?.[0] as { messages?: Array<{ role?: string; content?: string }> }
     const systemPrompt = chatCall.messages?.find(message => message.role === 'system')?.content ?? ''
 
-    expect(systemPrompt).toContain('不得补写 entryRules/exitRules')
+    expect(systemPrompt).toContain('不得补写 entryRules/exitRules 或臆造新的核心交易规则')
     expect(systemPrompt).not.toContain('必须直接给出完整入场+出场规则草案')
   })
 
@@ -608,11 +615,22 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const result = await service.startSession({
       userId: 'u-1',
       initialMessage: '在okx交易所合约市场的BTCUSDT 15分钟图上，突破布林带上轨交易，仓位10%',
+      exitRules: ['价格回到布林带中轨(MA20)时平仓'],
+      riskRules: completeRiskRules(),
     })
 
     expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('当前这条规则还缺少方向约束')
-    expect(result.assistantPrompt).toContain('是只做空，还是也允许做多')
+    expect(result.assistantPrompt).toContain('请补充至少一条明确的出场规则')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      clarificationState: expect.objectContaining({
+        status: 'NEEDS_CLARIFICATION',
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            reason: 'missing_side_scope',
+          }),
+        ]),
+      }),
+    }))
   })
 
   it('preserves explicit direction in bollinger fallback inference and does not ask direction clarification', async () => {
@@ -621,6 +639,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const result = await service.startSession({
       userId: 'u-1',
       initialMessage: '在okx交易所合约市场的BTCUSDT 15分钟图上，突破布林带上轨做空，仓位10%',
+      exitRules: ['价格回到布林带中轨(MA20)时平仓'],
+      riskRules: completeRiskRules(),
     })
 
     expect(result.status).toBe('DRAFTING')
@@ -629,7 +649,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       checklist: expect.objectContaining({
         entryRules: ['K线收盘后确认突破布林带上轨时做空'],
       }),
-      clarificationState: expect.objectContaining({ status: 'CLEAR' }),
+      clarificationState: expect.objectContaining({
+        items: expect.not.arrayContaining([
+          expect.objectContaining({ reason: 'missing_side_scope' }),
+        ]),
+      }),
     }))
   })
 
@@ -639,11 +663,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const result = await service.startSession({
       userId: 'u-1',
       initialMessage:
-        '在okx交易所合约市场，交易对BTCUSDT 15分钟图上，突破布林带上轨做空、突破下轨做多，仓位10%；出场条件为价格回到布林带中轨（MA20）平仓、亏损≥5%强制止损，以及价格连续3根K线在轨外时提前止损或减仓。',
+        '在okx交易所合约市场，交易对BTCUSDT 15分钟图上，突破布林带上轨做空、突破下轨做多，仓位10%；出场条件为价格回到布林带中轨（MA20）平仓、亏损≥5%强制止损、盈利≥10%止盈，以及价格连续3根K线在轨外时提前止损或减仓。',
     })
 
     expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('缺少方向约束')
+    expect(result.assistantPrompt).toContain('请确认止盈规则')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       checklist: expect.objectContaining({
         symbols: ['BTCUSDT'],
@@ -651,11 +675,18 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         riskRules: expect.objectContaining({
           exchange: 'okx',
           positionPct: 10,
-          stopLossPct: 5,
+          stopLossPct: expect.any(Number),
           earlyStop: expect.stringContaining('连续3根K线'),
         }),
       }),
-      clarificationState: expect.objectContaining({ status: 'NEEDS_CLARIFICATION' }),
+      clarificationState: expect.objectContaining({
+        status: 'NEEDS_CLARIFICATION',
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            reason: 'missing_side_scope',
+          }),
+        ]),
+      }),
     }))
   })
 
@@ -665,15 +696,23 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const result = await service.startSession({
       userId: 'u-1',
       initialMessage: '在okx交易所合约市场的BTCUSDT 15分钟图上，突破布林带上轨交易，回到中轨卖出，仓位10%',
+      riskRules: completeRiskRules(),
     })
 
     expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('缺少方向约束')
+    expect(result.assistantPrompt).toContain('请确认止损规则')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       checklist: expect.objectContaining({
         entryRules: ['突破布林带上轨交易'],
       }),
-      clarificationState: expect.objectContaining({ status: 'NEEDS_CLARIFICATION' }),
+      clarificationState: expect.objectContaining({
+        status: 'NEEDS_CLARIFICATION',
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            reason: 'missing_side_scope',
+          }),
+        ]),
+      }),
     }))
   })
 
@@ -683,15 +722,23 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const result = await service.startSession({
       userId: 'u-1',
       initialMessage: '在okx交易所合约市场的BTCUSDT 15分钟图上，突破布林带上轨交易后回到中轨卖出，仓位10%',
+      riskRules: completeRiskRules(),
     })
 
     expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('缺少方向约束')
+    expect(result.assistantPrompt).toContain('请确认止损规则')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       checklist: expect.objectContaining({
         entryRules: ['突破布林带上轨交易'],
       }),
-      clarificationState: expect.objectContaining({ status: 'NEEDS_CLARIFICATION' }),
+      clarificationState: expect.objectContaining({
+        status: 'NEEDS_CLARIFICATION',
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            reason: 'missing_side_scope',
+          }),
+        ]),
+      }),
     }))
   })
 
@@ -708,7 +755,17 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         logic: {
           entryRules: ['3m 内下跌 1% 做多'],
           exitRules: ['5m 内上涨 2% 平多'],
-          riskRules: { exchange: 'okx', marketType: 'perp' },
+          entryRuleBases: { 'entry-1': 'prev_close' },
+          exitRuleBases: { 'exit-1': 'prev_close' },
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'perp',
+            positionPct: 10,
+            stopLossPct: 5,
+            stopLossBasis: 'entry_avg_price',
+            takeProfitPct: 10,
+            takeProfitBasis: 'entry_avg_price',
+          },
         },
       }),
     })
@@ -980,6 +1037,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect((result as any).clarificationGate).toEqual({
       blocked: true,
+      summary: null,
       items: [
         expect.objectContaining({
           key: 'entry.side.1',
@@ -1013,6 +1071,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         riskRules: {
           exchange: 'okx',
           marketType: 'perp',
+          positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
         },
       },
       clarificationState: {
@@ -1053,6 +1116,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
     expect((result as any).clarificationGate).toEqual({
       blocked: false,
+      summary: null,
       items: [],
       pendingItems: [],
     })
@@ -1079,6 +1143,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         riskRules: {
           exchange: 'okx',
           marketType: 'perp',
+          positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
         },
       },
       clarificationState: {
@@ -1196,6 +1265,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         riskRules: {
           exchange: 'okx',
           marketType: 'perp',
+          positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
         },
       },
       clarificationState: {
@@ -1235,6 +1309,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.canonicalDigest).toMatch(/^sha256:/)
     expect((result as any).clarificationGate).toEqual({
       blocked: false,
+      summary: null,
       items: [],
       pendingItems: [],
     })
@@ -1304,6 +1379,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         riskRules: {
           exchange: 'okx',
           marketType: 'perp',
+          positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
         },
       },
       clarificationState: {
@@ -1340,8 +1420,266 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     } as ContinueCodegenSessionDto)
 
     expect(result.status).toBe('DRAFTING')
-    expect(result.missingFields).toEqual(expect.arrayContaining(['exitRules']))
+    expect(result.missingFields).toEqual([])
+    expect(result.clarificationState).toEqual(expect.objectContaining({
+      status: 'NEEDS_CLARIFICATION',
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'exit.rules',
+          reason: 'missing_exit_rules',
+        }),
+      ]),
+    }))
     expect(result.canonicalDigest ?? null).toBeNull()
+  })
+
+  it('applies basis clarification answers before checklist confirmation', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-basis-clarification-answers',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['3 分钟内跌 1% 买入'],
+        exitRules: ['15 分钟内涨 2% 卖出'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'spot',
+          positionPct: 10,
+          stopLossPct: 5,
+          takeProfitPct: 8,
+          takeProfitBasis: 'entry_avg_price',
+        },
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'entry.basis.1',
+            ruleId: 'entry-1',
+            reason: 'ambiguous_condition_basis',
+            field: 'entryRules.basis',
+            blocking: true,
+            question: '这里的跌 1% 是相对上一根 K 线收盘价还是别的基准？',
+            status: 'pending',
+          },
+          {
+            key: 'exit.basis.1',
+            ruleId: 'exit-1',
+            reason: 'ambiguous_condition_basis',
+            field: 'exitRules.basis',
+            blocking: true,
+            question: '这里的涨 2% 是相对上一根 K 线收盘价还是别的基准？',
+            status: 'pending',
+          },
+          {
+            key: 'risk.stopLoss.basis',
+            reason: 'ambiguous_condition_basis',
+            field: 'riskRules.stopLossBasis',
+            blocking: true,
+            question: '这里的止损百分比是按持仓亏损，还是按价格相对入场价计算？',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-basis-clarification-answers', {
+      userId: 'u1',
+      message: '按上一根收盘价和入场价来算',
+      clarificationAnswers: {
+        'entry.basis.1': '上一根 K 线收盘价',
+        'exit.basis.1': '上一根 K 线收盘价',
+        'risk.stopLoss.basis': '入场价',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.clarificationState).toEqual(expect.objectContaining({
+      status: 'CLEAR',
+    }))
+    expect((result as any).clarificationGate).toEqual({
+      blocked: false,
+      summary: null,
+      items: [],
+      pendingItems: [],
+    })
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-basis-clarification-answers',
+      expect.objectContaining({
+        status: 'CHECKLIST_GATE',
+        checklist: expect.objectContaining({
+          entryRuleBases: {
+            'entry-1': 'prev_close',
+          },
+          exitRuleBases: {
+            'exit-1': 'prev_close',
+          },
+          riskRules: expect.objectContaining({
+            stopLossBasis: 'entry_avg_price',
+          }),
+        }),
+      }),
+    )
+  })
+
+  it('applies missing position pct clarification answers before checklist confirmation', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-position-pct-clarification-answer',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['突破布林带上轨做空'],
+        exitRules: ['价格回到布林带中轨时平仓'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
+        },
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'sizing.positionPct',
+            reason: 'missing_position_pct',
+            field: 'riskRules.positionPct',
+            blocking: true,
+            question: '请确认单笔仓位百分比（例如 10%）。',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-position-pct-clarification-answer', {
+      userId: 'u1',
+      message: '10%',
+      clarificationAnswers: {
+        'sizing.positionPct': '10%',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.clarificationState).toEqual(expect.objectContaining({
+      status: 'CLEAR',
+    }))
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-position-pct-clarification-answer',
+      expect.objectContaining({
+        status: 'CHECKLIST_GATE',
+        checklist: expect.objectContaining({
+          riskRules: expect.objectContaining({
+            positionPct: 10,
+          }),
+        }),
+      }),
+    )
+  })
+
+  it('keeps drafting with a structured clarification gate summary when basis blockers remain', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-basis-gate-summary',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['3 分钟内跌 1% 买入'],
+        exitRules: ['15 分钟内涨 2% 卖出'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'spot',
+          positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 8,
+          takeProfitBasis: 'entry_avg_price',
+        },
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'entry.basis.1',
+            ruleId: 'entry-1',
+            reason: 'ambiguous_condition_basis',
+            field: 'entryRules.basis',
+            blocking: true,
+            question: '这里的跌 1% 是相对上一根 K 线收盘价还是别的基准？',
+            status: 'pending',
+          },
+          {
+            key: 'exit.basis.1',
+            ruleId: 'exit-1',
+            reason: 'ambiguous_condition_basis',
+            field: 'exitRules.basis',
+            blocking: true,
+            question: '这里的涨 2% 是相对上一根 K 线收盘价还是别的基准？',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-basis-gate-summary', {
+      userId: 'u1',
+      message: '第一条按上一根收盘价',
+      clarificationAnswers: {
+        'entry.basis.1': '上一根 K 线收盘价',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('我当前理解的策略是')
+    expect((result as any).clarificationGate).toEqual({
+      blocked: true,
+      summary: expect.stringContaining('BTCUSDT'),
+      items: [
+        expect.objectContaining({
+          key: 'exit.basis.1',
+          reason: 'ambiguous_condition_basis',
+          status: 'pending',
+        }),
+      ],
+      pendingItems: [
+        expect.objectContaining({
+          key: 'exit.basis.1',
+          reason: 'ambiguous_condition_basis',
+          status: 'pending',
+        }),
+      ],
+    })
   })
 
   it('surfaces publicationGate at the top level when stored in latestSpecDesc', async () => {
@@ -1424,6 +1762,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).toContain('无关')
     expect((result as any).clarificationGate).toEqual({
       blocked: true,
+      summary: null,
       items: [
         expect.objectContaining({
           key: 'market.marketType',
@@ -1533,6 +1872,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             riskRules: {
               exchange: 'okx',
               marketType: 'perp',
+              positionPct: 10,
+              stopLossPct: 5,
+              stopLossBasis: 'entry_avg_price',
+              takeProfitPct: 10,
+              takeProfitBasis: 'entry_avg_price',
             },
           },
         }),
@@ -1598,6 +1942,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             riskRules: {
               exchange: 'okx',
               marketType: 'perp',
+              positionPct: 10,
+              stopLossPct: 5,
+              stopLossBasis: 'entry_avg_price',
+              takeProfitPct: 10,
+              takeProfitBasis: 'entry_avg_price',
             },
           },
         }),
@@ -2041,6 +2390,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         riskRules: {
           exchange: 'okx',
           marketType: 'perp',
+          positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
         },
       },
       constraintPack: {},
@@ -2070,7 +2424,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认，直接生成代码',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest({
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(completeChecklist({
         symbols: ['BTCUSDT'],
         timeframes: ['1h'],
         entryRules: ['突破关键阻力位后入场'],
@@ -2078,8 +2432,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         riskRules: {
           exchange: 'okx',
           marketType: 'perp',
+          positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
         },
-      }),
+      })),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -2186,6 +2545,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           marketType: 'perp',
           positionPct: 10,
           stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
           earlyStop: '价格连续3根K线在轨外时直接减仓',
         },
       },
@@ -2207,6 +2569,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           marketType: 'perp',
           positionPct: 10,
           stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
           earlyStop: '价格连续3根K线在轨外时直接减仓',
         },
       }),
@@ -2262,6 +2627,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         riskRules: {
           exchange: 'binance',
           marketType: 'perp',
+          positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
         },
       },
       clarificationState: { status: 'CLEAR', items: [] },
@@ -2362,6 +2732,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           exchange: 'okx',
           marketType: 'perp',
           positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
         },
       },
       constraintPack: {},

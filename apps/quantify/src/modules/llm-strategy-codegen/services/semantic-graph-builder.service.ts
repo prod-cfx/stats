@@ -1,13 +1,6 @@
+import type { ChecklistPayload, ChecklistRuleBasis } from '../types/codegen-checklist'
 import type { SemanticStrategyGraph } from '../types/semantic-strategy-graph'
 import { Injectable } from '@nestjs/common'
-
-interface ChecklistPayload {
-  symbols?: string[]
-  timeframes?: string[]
-  entryRules?: string[]
-  exitRules?: string[]
-  riskRules?: Record<string, unknown>
-}
 
 export interface SemanticGraphBuildResult {
   graph: SemanticStrategyGraph | null
@@ -35,11 +28,11 @@ export class SemanticGraphBuilderService {
     const openSizePct = this.resolveOpenSizePct(checklist.riskRules)
 
     const entryNodeIds: string[] = []
-    const hasDropBuyEntry = this.appendDropBuyNodes(entryRules, entryDefaultTimeframe, nodes, entryNodeIds)
+    const hasDropBuyEntry = this.appendDropBuyNodes(entryRules, checklist.entryRuleBases, entryDefaultTimeframe, nodes, entryNodeIds)
     const grid = this.appendGridNodes(entryRules, exitRules, entryDefaultTimeframe, exitDefaultTimeframe, nodes, diagnostics)
     const bollingerSignals = this.appendBollingerNodes(allText, primaryTimeframe, nodes)
-    const hasRiseExit = this.appendRiseSellNodes(exitRules, exitDefaultTimeframe, nodes)
-    const hasPnlExit = this.appendPositionPnlNodes(exitRules, exitDefaultTimeframe, nodes)
+    const hasRiseExit = this.appendRiseSellNodes(exitRules, checklist.exitRuleBases, exitDefaultTimeframe, nodes)
+    const hasPnlExit = this.appendPositionPnlNodes(exitRules, checklist.exitRuleBases, exitDefaultTimeframe, nodes)
 
     if (entryNodeIds.length > 1) {
       nodes.push({
@@ -183,12 +176,13 @@ export class SemanticGraphBuilderService {
 
   private appendDropBuyNodes(
     entryRules: string[],
+    entryRuleBases: ChecklistPayload['entryRuleBases'],
     fallbackTimeframe: string,
     nodes: Array<SemanticStrategyGraph['nodes'][number]>,
     entryNodeIds: string[],
   ): boolean {
     let created = false
-    for (const rule of entryRules) {
+    for (const [index, rule] of entryRules.entries()) {
       let valuePct: number | null = null
       let matched = rule.match(/当前K线收盘价相对于上一根K线收盘价下跌\s*(?:(?:≥|>=|大于等于)\s*)?(\d+(?:\.\d+)?)\s*%/u)
       if (matched?.[1]) {
@@ -211,6 +205,7 @@ export class SemanticGraphBuilderService {
           right: { source: 'close', offsetBars: 1 },
           op: 'lte',
           valuePct: -Math.abs(valuePct),
+          ...(this.readBasis(entryRuleBases, `entry-${index + 1}`) ? { basis: this.readBasis(entryRuleBases, `entry-${index + 1}`) } : {}),
         },
       })
       entryNodeIds.push(nodeId)
@@ -221,11 +216,12 @@ export class SemanticGraphBuilderService {
 
   private appendRiseSellNodes(
     exitRules: string[],
+    exitRuleBases: ChecklistPayload['exitRuleBases'],
     fallbackTimeframe: string,
     nodes: Array<SemanticStrategyGraph['nodes'][number]>,
   ): boolean {
     let created = false
-    for (const rule of exitRules) {
+    for (const [index, rule] of exitRules.entries()) {
       if (/开仓均价|收益率|盈亏|pnl/iu.test(rule)) {
         continue
       }
@@ -243,6 +239,7 @@ export class SemanticGraphBuilderService {
           right: { source: 'close', offsetBars: 1 },
           op: 'gte',
           valuePct: Number(match[1]),
+          ...(this.readBasis(exitRuleBases, `exit-${index + 1}`) ? { basis: this.readBasis(exitRuleBases, `exit-${index + 1}`) } : {}),
         },
       })
       created = true
@@ -252,14 +249,19 @@ export class SemanticGraphBuilderService {
 
   private appendPositionPnlNodes(
     exitRules: string[],
+    exitRuleBases: ChecklistPayload['exitRuleBases'],
     fallbackTimeframe: string,
     nodes: Array<SemanticStrategyGraph['nodes'][number]>,
   ): boolean {
     let created = false
-    for (const rule of exitRules) {
+    for (const [index, rule] of exitRules.entries()) {
+      const explicitBasis = this.readBasis(exitRuleBases, `exit-${index + 1}`)
       let match = rule.match(/当前K线收盘价相对于开仓均价上涨\s*(?:(?:≥|>=|大于等于)\s*)?(\d+(?:\.\d+)?)\s*%/u)
       if (!match?.[1]) {
         match = rule.match(/(?:持仓|仓位)?[^，。；;\n]{0,12}?(?:收益率|收益|盈利|盈亏)[^，。；;\n]{0,12}?(?:达到|大于等于|>=|超过|≥)?\s*(\d+(?:\.\d+)?)\s*%/u)
+      }
+      if (!match?.[1] && (explicitBasis === 'entry_avg_price' || explicitBasis === 'position_pnl')) {
+        match = rule.match(/(?:涨|上涨|反弹)\s*(?:(?:≥|>=|大于等于)\s*)?(\d+(?:\.\d+)?)\s*%/u)
       }
       if (!match?.[1]) continue
       if (!/止盈|平仓|卖出|离场|出场/u.test(rule)) continue
@@ -272,11 +274,20 @@ export class SemanticGraphBuilderService {
           timeframe: this.extractTimeframe(rule) ?? fallbackTimeframe,
           op: 'gte',
           valuePct: Number(match[1]),
+          ...(explicitBasis ? { basis: explicitBasis } : {}),
         },
       })
       created = true
     }
     return created
+  }
+
+  private readBasis(
+    bases: ChecklistPayload['entryRuleBases'] | ChecklistPayload['exitRuleBases'] | undefined,
+    key: string,
+  ): ChecklistRuleBasis['kind'] | null {
+    const value = bases?.[key]
+    return typeof value === 'string' && value.trim().length > 0 ? value : null
   }
 
   private appendGridNodes(
@@ -295,10 +306,10 @@ export class SemanticGraphBuilderService {
     const wantsEntry = /固定区间|网格买入|区间网格买入/u.test(entryText)
     const wantsExit = /上方网格卖出|网格卖出/u.test(exitText)
     const rangeMatch = combined.match(/(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)/u)
-    const stepMatch = combined.match(/(?:步长|网格步长)\s*(\d+(?:\.\d+)?)\s*%/u)
+    const stepPct = this.resolveGridStepPct(combined)
     const levelMatch = combined.match(/(?:共|总计)?\s*(\d+)\s*格/u)
 
-    const hasCompleteParams = Boolean(rangeMatch?.[1] && rangeMatch?.[2] && stepMatch?.[1] && levelMatch?.[1])
+    const hasCompleteParams = Boolean(rangeMatch?.[1] && rangeMatch?.[2] && stepPct !== null && levelMatch?.[1])
     if ((wantsEntry || wantsExit) && !hasCompleteParams) {
       diagnostics.push('grid_params_missing')
       return { hasEntry: false, hasExit: false }
@@ -310,7 +321,6 @@ export class SemanticGraphBuilderService {
 
     const rangeMin = Number(rangeMatch?.[1])
     const rangeMax = Number(rangeMatch?.[2])
-    const stepPct = Number(stepMatch?.[1])
     const levelCount = Number(levelMatch?.[1])
 
     if (wantsEntry) {
@@ -342,6 +352,20 @@ export class SemanticGraphBuilderService {
     }
 
     return { hasEntry: wantsEntry, hasExit: wantsExit }
+  }
+
+  private resolveGridStepPct(text: string): number | null {
+    const percentMatch = text.match(/(?:步长|网格步长)\s*(\d+(?:\.\d+)?)\s*%/u)
+    if (percentMatch?.[1]) {
+      return Number(percentMatch[1])
+    }
+
+    const perMilleMatch = text.match(/千分之\s*(\d+(?:\.\d+)?)/u)
+    if (perMilleMatch?.[1]) {
+      return Number(perMilleMatch[1]) / 10
+    }
+
+    return null
   }
 
   private appendBollingerNodes(
