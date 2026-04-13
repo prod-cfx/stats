@@ -27,11 +27,24 @@ export class CanonicalSpecBuilderService {
     const market = this.resolveMarket(checklist, riskRules)
     const indicators = this.resolveIndicators(entryTexts, exitTexts, riskRules)
     const requiredTimeframes = this.resolveRequiredTimeframes(checklist)
+    const dominantEntrySideScope = this.resolveDominantEntrySideScope(entryTexts)
 
     const rules: CanonicalRuleV2[] = []
 
     entryTexts.forEach((ruleText, index) => {
       const openAction = this.detectOpenAction(ruleText)
+      const priceChangeRule = this.buildPriceChangeRule({
+        ruleText,
+        index,
+        phase: 'entry',
+        actionType: openAction?.type ?? null,
+        sideScope: openAction?.sideScope ?? null,
+        sizing,
+      })
+      if (priceChangeRule) {
+        rules.push(priceChangeRule)
+        return
+      }
       const gridEntryRule = this.buildGridRule({
         ruleText,
         index,
@@ -139,6 +152,19 @@ export class CanonicalSpecBuilderService {
     })
 
     exitTexts.forEach((ruleText, index) => {
+      const closeAction = this.detectCloseAction(ruleText, dominantEntrySideScope)
+      const priceChangeRule = this.buildPriceChangeRule({
+        ruleText,
+        index,
+        phase: 'exit',
+        actionType: closeAction?.type ?? null,
+        sideScope: closeAction?.sideScope ?? null,
+        sizing,
+      })
+      if (priceChangeRule) {
+        rules.push(priceChangeRule)
+        return
+      }
       const gridExitRule = this.buildGridRule({
         ruleText,
         index,
@@ -153,7 +179,6 @@ export class CanonicalSpecBuilderService {
         return
       }
 
-      const closeAction = this.detectCloseAction(ruleText)
       if (closeAction && this.isMovingAverageRule(ruleText)) {
         const movingAverageRule = this.buildMovingAverageRule({
           ruleText,
@@ -353,23 +378,57 @@ export class CanonicalSpecBuilderService {
   }
 
   private detectOpenAction(ruleText: string): { type: 'OPEN_LONG' | 'OPEN_SHORT'; sideScope: 'long' | 'short' } | null {
-    if (/做空|空单|short/i.test(ruleText)) {
+    if (/做空|空单|开空|卖出开空|short/i.test(ruleText)) {
       return { type: 'OPEN_SHORT', sideScope: 'short' }
     }
-    if (/做多|多单|long/i.test(ruleText)) {
+    if (/做多|多单|开多|买入|买进|开仓|long/i.test(ruleText)) {
       return { type: 'OPEN_LONG', sideScope: 'long' }
     }
     return null
   }
 
-  private detectCloseAction(ruleText: string): { type: 'CLOSE_LONG' | 'CLOSE_SHORT'; sideScope: 'long' | 'short' } | null {
-    if (/平空|空单止盈|close\s*short/i.test(ruleText)) {
+  private detectCloseAction(
+    ruleText: string,
+    fallbackSideScope: 'long' | 'short' | null = null,
+  ): { type: 'CLOSE_LONG' | 'CLOSE_SHORT'; sideScope: 'long' | 'short' } | null {
+    if (/平空|空单止盈|买回|回补|close\s*short/i.test(ruleText)) {
       return { type: 'CLOSE_SHORT', sideScope: 'short' }
     }
     if (/平多|多单止盈|close\s*long/i.test(ruleText)) {
       return { type: 'CLOSE_LONG', sideScope: 'long' }
     }
+    if (/卖出|平仓|离场|出场/.test(ruleText)) {
+      if (fallbackSideScope === 'short') {
+        return { type: 'CLOSE_SHORT', sideScope: 'short' }
+      }
+      if (fallbackSideScope === 'long') {
+        return { type: 'CLOSE_LONG', sideScope: 'long' }
+      }
+      return null
+    }
     return null
+  }
+
+  private resolveDominantEntrySideScope(entryRules: string[]): 'long' | 'short' | null {
+    const scoped = entryRules
+      .map((rule) => {
+        const explicit = this.detectOpenAction(rule)?.sideScope ?? null
+        if (explicit) {
+          return explicit
+        }
+        if (/买入|买进|开仓|入场/.test(rule)) {
+          return 'long'
+        }
+        return null
+      })
+      .filter((side): side is 'long' | 'short' => side === 'long' || side === 'short')
+
+    if (scoped.length === 0) {
+      return null
+    }
+
+    const unique = [...new Set(scoped)]
+    return unique.length === 1 ? unique[0] ?? null : null
   }
 
   private resolveStopLossPct(riskRules: Record<string, unknown>): number | null {
@@ -438,18 +497,21 @@ export class CanonicalSpecBuilderService {
       && allTexts.some(text => /上轨|下轨|breakout|breakdown|highest|lowest/iu.test(text))
     const hasBollingerSemantics = !hasDonchianBreakout
       && allTexts.some(text => /布林|bollinger|上轨|下轨|中轨|upper\s*band|lower\s*band|middle\s*band/iu.test(text))
+    const bollingerParams = this.resolveBollingerParams(allTexts)
+    const movingAverageConfig = this.resolveMovingAverageConfig(allTexts)
+    const macdParams = this.resolveMacdParams(allTexts)
 
     if (hasBollingerSemantics) {
       pushIndicator({
         kind: 'bollingerBands',
-        params: { ...DEFAULT_INDICATOR_PARAMS.bollingerBands },
+        params: { ...bollingerParams },
       })
     }
 
     if (!hasBollingerSemantics && allTexts.some(text => this.isMovingAverageRule(text))) {
       pushIndicator({
-        kind: 'sma',
-        params: { ...DEFAULT_INDICATOR_PARAMS.sma },
+        kind: movingAverageConfig.kind,
+        params: movingAverageConfig.params,
       })
     }
 
@@ -463,7 +525,7 @@ export class CanonicalSpecBuilderService {
     if (allTexts.some(text => /\bmacd\b|指数平滑异同|快线|慢线/iu.test(text))) {
       pushIndicator({
         kind: 'macd',
-        params: { ...DEFAULT_INDICATOR_PARAMS.macd },
+        params: { ...macdParams },
       })
     }
 
@@ -518,8 +580,8 @@ export class CanonicalSpecBuilderService {
   }
 
   private isMovingAverageRule(text: string): boolean {
-    return /均线|moving average|\bsma\b|\bema\b/iu.test(text)
-      || ((/金叉|死叉|上穿|下穿/u.test(text)) && /均线|\bma\b|\bsma\b|\bema\b/i.test(text))
+    return /均线|moving average|\bsma\b|\bema\b|sma\s*\d+|ema\s*\d+|ma\s*\d+|\d+\s*日线/iu.test(text)
+      || ((/金叉|死叉|上穿|下穿/u.test(text)) && /均线|\bma\b|\bsma\b|\bema\b|sma\s*\d+|ema\s*\d+|ma\s*\d+|\d+\s*日线/i.test(text))
   }
 
   private isRsiRule(text: string): boolean {
@@ -531,7 +593,7 @@ export class CanonicalSpecBuilderService {
   }
 
   private isBreakoutRule(text: string): boolean {
-    return /前高|前低|最高价|最低价|通道上轨|通道下轨|唐奇安|donchian|breakout|breakdown|highest|lowest/i.test(text)
+    return /前高|前低|最高价|最低价|通道上轨|通道下轨|关键阻力|阻力位|关键支撑|支撑位|唐奇安|donchian|breakout|breakdown|highest|lowest/i.test(text)
   }
 
   private buildMovingAverageRule(input: {
@@ -679,8 +741,8 @@ export class CanonicalSpecBuilderService {
     sizing: { mode: 'RATIO'; value: number } | null
   }): CanonicalRuleV2 | null {
     const period = this.resolveBreakoutPeriod(input.ruleText)
-    const isHighBreak = /前高|最高价|通道上轨|唐奇安.*上轨|donchian.*upper|breakout|highest/i.test(input.ruleText)
-    const isLowBreak = /前低|最低价|通道下轨|唐奇安.*下轨|donchian.*lower|breakdown|lowest/i.test(input.ruleText)
+    const isHighBreak = /前高|最高价|通道上轨|关键阻力|阻力位|唐奇安.*上轨|donchian.*upper|breakout|highest/i.test(input.ruleText)
+    const isLowBreak = /前低|最低价|通道下轨|关键支撑|支撑位|唐奇安.*下轨|donchian.*lower|breakdown|lowest/i.test(input.ruleText)
     const key = isHighBreak
       ? 'breakout.channel_high_break'
       : (isLowBreak ? 'breakout.channel_low_break' : null)
@@ -698,6 +760,49 @@ export class CanonicalSpecBuilderService {
         semanticScope: 'market',
         op: key === 'breakout.channel_high_break' ? 'CROSS_OVER' : 'CROSS_UNDER',
         params: { period },
+      },
+      actions: [input.phase === 'entry'
+        ? this.buildOpenAction(input.actionType as 'OPEN_LONG' | 'OPEN_SHORT', input.sizing)
+        : { type: input.actionType as 'CLOSE_LONG' | 'CLOSE_SHORT' }],
+    }
+  }
+
+  private buildPriceChangeRule(input: {
+    ruleText: string
+    index: number
+    phase: 'entry' | 'exit'
+    actionType: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | null
+    sideScope: 'long' | 'short' | null
+    sizing: { mode: 'RATIO'; value: number } | null
+  }): CanonicalRuleV2 | null {
+    const timeframe = this.extractRuleTimeframe(input.ruleText)
+    const pctChange = this.extractPriceChangePct(input.ruleText)
+    if (!timeframe || !pctChange || !input.actionType || !input.sideScope) {
+      return null
+    }
+
+    const isDrop = pctChange.direction === 'drop'
+    const numericPct = pctChange.value
+    if (!Number.isFinite(numericPct) || numericPct <= 0) {
+      return null
+    }
+
+    const normalizedValue = Number((numericPct / 100).toFixed(4))
+    return {
+      id: `${input.phase}-price-change-${input.index + 1}`,
+      phase: input.phase,
+      sideScope: input.sideScope,
+      priority: input.phase === 'entry' ? 210 - input.index : 135 - input.index,
+      condition: {
+        kind: 'atom',
+        key: 'price.change_pct',
+        semanticScope: 'market',
+        op: isDrop ? 'LTE' : 'GTE',
+        value: isDrop ? -normalizedValue : normalizedValue,
+        params: {
+          timeframe,
+          lookbackBars: 1,
+        },
       },
       actions: [input.phase === 'entry'
         ? this.buildOpenAction(input.actionType as 'OPEN_LONG' | 'OPEN_SHORT', input.sizing)
@@ -775,6 +880,108 @@ export class CanonicalSpecBuilderService {
     }
 
     return DEFAULT_INDICATOR_PARAMS.rsi.period
+  }
+
+  private extractRuleTimeframe(text: string): string | null {
+    const matched = text.match(/(\d{1,4})\s*(min|分钟|小时|[mhd天])/iu)
+    if (!matched?.[1] || !matched[2]) {
+      return null
+    }
+    const value = matched[1]
+    const unit = matched[2].toLowerCase()
+    if (unit === 'm' || unit === 'min' || unit === '分钟') return `${value}m`
+    if (unit === 'h' || unit === '小时') return `${value}h`
+    return `${value}d`
+  }
+
+  private extractPriceChangePct(
+    text: string,
+  ): { direction: 'drop' | 'rise'; value: number } | null {
+    const percentPattern = /(下跌|跌|回撤|上涨|涨|反弹)\s*(?:(\d+(?:\.\d+)?)\s*%|百分之?\s*(\d+(?:\.\d+)?))/u
+    const matched = text.match(percentPattern)
+    if (!matched?.[1]) {
+      return null
+    }
+    const rawValue = matched[2] ?? matched[3]
+    if (!rawValue) {
+      return null
+    }
+
+    return {
+      direction: /下跌|跌|回撤/u.test(matched[1]) ? 'drop' : 'rise',
+      value: Number(rawValue),
+    }
+  }
+
+  private resolveBollingerParams(
+    texts: string[],
+  ): { period: number; stdDev: number } {
+    for (const text of texts) {
+      const matched = text.match(/布林带\s*[（(]\s*(\d{1,3})\s*[,，]\s*(\d+(?:\.\d+)?)\s*[)）]/u)
+      if (matched?.[1] && matched[2]) {
+        return {
+          period: Number(matched[1]),
+          stdDev: Number(matched[2]),
+        }
+      }
+    }
+
+    for (const text of texts) {
+      const middleMatch = text.match(/中轨\s*\(?(?:MA|ma)\s*(\d{1,3})\)?/u)
+      if (middleMatch?.[1]) {
+        return {
+          period: Number(middleMatch[1]),
+          stdDev: DEFAULT_INDICATOR_PARAMS.bollingerBands.stdDev,
+        }
+      }
+    }
+
+    return { ...DEFAULT_INDICATOR_PARAMS.bollingerBands }
+  }
+
+  private resolveMovingAverageConfig(
+    texts: string[],
+  ): {
+    kind: 'sma' | 'ema'
+    params: Record<string, number>
+  } {
+    for (const text of texts) {
+      const pairMatch = text.match(/(?:EMA|ema|SMA|sma)?\s*(\d{1,3})\D{0,12}(?:EMA|ema|SMA|sma|日线|均线)\s*(\d{1,3})/u)
+        ?? text.match(/(\d{1,3})\s*日线\D{0,12}(\d{1,3})\s*日线/u)
+      if (pairMatch?.[1] && pairMatch[2]) {
+        const first = Number(pairMatch[1])
+        const second = Number(pairMatch[2])
+        const fast = Math.min(first, second)
+        const slow = Math.max(first, second)
+        const kind = /\bema\b|EMA/u.test(text) ? 'ema' : 'sma'
+        return {
+          kind,
+          params: { fast, slow },
+        }
+      }
+    }
+
+    return {
+      kind: 'sma',
+      params: { ...DEFAULT_INDICATOR_PARAMS.sma },
+    }
+  }
+
+  private resolveMacdParams(
+    texts: string[],
+  ): { fastPeriod: number; slowPeriod: number; signalPeriod: number } {
+    for (const text of texts) {
+      const matched = text.match(/(?:MACD|macd)\s*[（(]\s*(\d{1,3})\s*[,，]\s*(\d{1,3})\s*[,，]\s*(\d{1,3})\s*[)）]/u)
+      if (matched?.[1] && matched[2] && matched[3]) {
+        return {
+          fastPeriod: Number(matched[1]),
+          slowPeriod: Number(matched[2]),
+          signalPeriod: Number(matched[3]),
+        }
+      }
+    }
+
+    return { ...DEFAULT_INDICATOR_PARAMS.macd }
   }
 
   private resolveGridParams(text: string): {
@@ -969,15 +1176,17 @@ export class CanonicalSpecBuilderService {
     const allowReduce = options.allowReduce !== false
     const reduceSizing = this.resolveReduceSizing(text)
     const wantsReduce = allowReduce && /减仓|部分止盈|partial/i.test(text)
+    const hasExplicitLongCloseText = /平多|多单|close\s*long/i.test(text)
+    const hasExplicitShortCloseText = /平空|空单|close\s*short|买回|回补/i.test(text)
 
     if (wantsReduce) {
-      if (closeAction?.sideScope === 'long') {
+      if (hasExplicitLongCloseText) {
         return {
           sideScope: 'long',
           actions: [{ type: 'REDUCE_LONG', ...(reduceSizing ? { sizing: reduceSizing } : {}) }],
         }
       }
-      if (closeAction?.sideScope === 'short') {
+      if (hasExplicitShortCloseText || closeAction?.sideScope === 'short') {
         return {
           sideScope: 'short',
           actions: [{ type: 'REDUCE_SHORT', ...(reduceSizing ? { sizing: reduceSizing } : {}) }],

@@ -417,7 +417,7 @@ export class StrategyClarificationRulesService {
   }
 
   private hasExplicitBasisInText(rule: string): boolean {
-    return /相对于上一根K线收盘价|相对于开仓均价|持仓收益率|持仓盈亏|价格相对入场价/u.test(rule)
+    return /相对于上一根K线收盘价|相对于开仓均价|持仓收益率|持仓盈亏|收益率|盈亏|价格相对入场价/u.test(rule)
   }
 
   private hasStopLossRule(input: ClarificationChecklistInput): boolean {
