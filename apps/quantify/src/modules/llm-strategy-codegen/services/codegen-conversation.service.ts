@@ -52,6 +52,7 @@ import { StrategyClarificationQuestionService } from './strategy-clarification-q
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { StrategyClarificationRulesService } from './strategy-clarification-rules.service'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
+import { isEquivalentMarketScopeValue } from './market-scope-equivalence'
 
 interface ConversationPlan {
   related: boolean
@@ -2801,8 +2802,13 @@ export class CodegenConversationService {
       previous: string | undefined,
       next: string | undefined,
     ) => {
-      if (!previous || !next || previous === next) return
-      conflicts.push({ field, previous, next })
+      if (!previous || !next) return
+      if (isEquivalentMarketScopeValue(field, previous, next)) return
+      conflicts.push({
+        field,
+        previous: previous.trim(),
+        next: next.trim(),
+      })
     }
 
     pushConflict('symbol', base.symbols?.[0], patch.symbols?.[0])

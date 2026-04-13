@@ -1617,6 +1617,48 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('does not turn normalized-equal market metadata into a blocking clarification item', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-market-scope-normalized-no-conflict',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: withRequiredMarketContext({
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+        timeframes: ['15m'],
+        riskRules: completeRiskRules({ exchange: 'okx' }),
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+        logic: {
+          symbols: ['btcusdt'],
+          timeframes: [' 15M '],
+          riskRules: {
+            exchange: ' OKX ',
+            marketType: 'PERP',
+          },
+        },
+      }),
+    })
+
+    const result = await service.continueSession('s-market-scope-normalized-no-conflict', {
+      userId: 'u1',
+      message: '维持 OKX BTCUSDT 15m',
+    })
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.clarificationState).toEqual(expect.objectContaining({
+      status: 'CLEAR',
+      items: [],
+    }))
+  })
+
   it('keeps drafting when structured clarification answers still leave required fields missing', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-clarification-missing-fields',

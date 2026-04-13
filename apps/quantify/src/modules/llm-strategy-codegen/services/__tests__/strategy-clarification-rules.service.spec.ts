@@ -160,6 +160,40 @@ describe('strategyClarificationRulesService', () => {
     ]))
   })
 
+  it('ignores stale market scope conflicts whose values normalize to the same meaning', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['跌破布林带下轨时做多'],
+      exitRules: ['上涨 0.5% 止盈'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+        stopLoss: '亏损 5% 止损',
+        takeProfit: '盈利 10% 止盈',
+        _marketScopeConflicts: [
+          {
+            field: 'timeframe',
+            previous: '15m',
+            next: ' 15M ',
+          },
+          {
+            field: 'exchange',
+            previous: 'OKX',
+            next: ' okx ',
+          },
+        ],
+      },
+    })
+
+    expect(state.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'conflicting_market_scope',
+      }),
+    ]))
+  })
+
   it('blocks short-side strategy when exchange is missing', () => {
     const state = service.detect({
       symbols: ['BTCUSDT'],
