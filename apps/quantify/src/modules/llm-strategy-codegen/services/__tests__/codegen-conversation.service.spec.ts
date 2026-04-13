@@ -23,6 +23,7 @@ import { StrategyClarificationQuestionService } from '../strategy-clarification-
 import { StrategyClarificationRulesService } from '../strategy-clarification-rules.service'
 import { StrategyConsistencyService } from '../strategy-consistency.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
+import { StrategySummaryObservationService } from '../strategy-summary-observation.service'
 
 jest.mock('../../repositories/published-strategy-snapshots.repository', () => ({
   PublishedStrategySnapshotsRepository: class PublishedStrategySnapshotsRepository {},
@@ -86,6 +87,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     new CompiledScriptEmitterService(),
     new CompiledScriptExecutionEnvelopeService(),
     new CompiledScriptParserService(),
+    new StrategySummaryObservationService(),
     new CompiledPublicationGateService(mockRepo as unknown as PublishedStrategySnapshotsRepository),
   )
   const buildConfirmedCanonicalDigest = (checklist: Record<string, unknown>): string => {

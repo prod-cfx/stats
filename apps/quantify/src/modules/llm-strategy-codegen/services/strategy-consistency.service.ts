@@ -13,7 +13,6 @@ import type {
   StrategySemanticRuleMapping,
   StrategySemanticRuleProfile,
 } from '../types/strategy-semantic-profile'
-import type { StrategySummary } from '../types/strategy-summary'
 import { createHash } from 'node:crypto'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { Injectable } from '@nestjs/common'
@@ -22,14 +21,12 @@ import { CompiledScriptParserService } from './compiled-script-parser.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { ScriptProfileExtractorService } from './script-profile-extractor.service'
 import { normalizeStrategySemanticProfile } from './strategy-semantic-profile-normalizer'
-import { StrategySummaryBuilderService } from './strategy-summary-builder.service'
 
 @Injectable()
 export class StrategyConsistencyService {
   constructor(
     private readonly scriptProfileExtractor: ScriptProfileExtractorService,
     private readonly compiledScriptParser: CompiledScriptParserService = new CompiledScriptParserService(),
-    private readonly strategySummaryBuilder: StrategySummaryBuilderService = new StrategySummaryBuilderService(scriptProfileExtractor),
   ) {}
 
   audit(input: {
@@ -58,30 +55,15 @@ export class StrategyConsistencyService {
   evaluate(input: {
     canonicalSpec: CanonicalStrategySpec
     scriptCode: string
-    userIntentSummary?: StrategySummary
-    strategySummary?: StrategySummary
-    scriptSummary?: StrategySummary
   }): StrategyConsistencyReport {
     const parsedProjection = this.tryParseCompiledProjection(input.scriptCode)
     const scriptProfile = normalizeStrategySemanticProfile(
       this.extractCompiledScriptProfile(input.scriptCode, parsedProjection),
     )
     const specProfile = normalizeStrategySemanticProfile(this.specToProfile(input.canonicalSpec))
-    const derivedStrategySummary = this.strategySummaryBuilder.buildSummaryFromProfile({
-      profile: specProfile,
-      market: this.buildSummaryMarket(input.canonicalSpec),
-    })
-    const derivedScriptSummary = this.strategySummaryBuilder.buildSummaryFromProfile({
-      profile: scriptProfile,
-    })
     const checks: StrategyConsistencyCheck[] = []
 
     checks.push(this.checkFallback(scriptProfile))
-    checks.push(this.checkSummaryAlignment({
-      userIntentSummary: input.userIntentSummary,
-      strategySummary: input.strategySummary ?? derivedStrategySummary,
-      scriptSummary: input.scriptSummary ?? derivedScriptSummary,
-    }))
     checks.push(this.checkIndicators(specProfile, scriptProfile))
     checks.push(this.checkRuleMappings(specProfile, scriptProfile))
     checks.push(this.checkActions(specProfile, scriptProfile))
@@ -621,61 +603,6 @@ export class StrategyConsistencyService {
     }
   }
 
-  private checkSummaryAlignment(input: {
-    userIntentSummary?: StrategySummary
-    strategySummary?: StrategySummary
-    scriptSummary?: StrategySummary
-  }): StrategyConsistencyCheck {
-    const userIntentSummary = input.userIntentSummary
-    const strategySummary = input.strategySummary
-    const scriptSummary = input.scriptSummary
-
-    if (!userIntentSummary || !strategySummary || !scriptSummary) {
-      return {
-        key: 'summary.alignment',
-        level: 'warning',
-        status: 'unprovable',
-        expected: {
-          userIntentSummary: userIntentSummary ?? null,
-          strategySummary: strategySummary ?? null,
-        },
-        actual: scriptSummary ?? null,
-        message: '缺少 userIntentSummary/strategySummary/scriptSummary，跳过 summary 观测对齐检查。',
-      }
-    }
-
-    const mismatches = [
-      ...this.compareSummaries('用户意图', userIntentSummary, '策略描述', strategySummary),
-      ...this.compareSummaries('策略描述', strategySummary, '脚本语义', scriptSummary),
-    ]
-
-    if (mismatches.length > 0) {
-      return {
-        key: 'summary.alignment',
-        level: 'warning',
-        status: 'failed',
-        expected: {
-          userIntentSummary,
-          strategySummary,
-        },
-        actual: scriptSummary,
-        message: `summary 观测漂移：${mismatches.join('；')}`,
-      }
-    }
-
-    return {
-      key: 'summary.alignment',
-      level: 'warning',
-      status: 'passed',
-      expected: {
-        userIntentSummary,
-        strategySummary,
-      },
-      actual: scriptSummary,
-      message: 'userIntentSummary / strategySummary / scriptSummary 观测对齐一致。',
-    }
-  }
-
   private checkRuleMappings(
     specProfile: StrategySemanticProfile,
     scriptProfile: StrategySemanticProfile,
@@ -1027,22 +954,6 @@ export class StrategyConsistencyService {
     }
   }
 
-  private buildSummaryMarket(spec: CanonicalStrategySpec): StrategySummary['market'] {
-    const symbol = typeof spec.market.symbol === 'string' && spec.market.symbol.trim().length > 0
-      ? spec.market.symbol
-      : undefined
-    const timeframe = typeof spec.market.timeframe === 'string' && spec.market.timeframe.trim().length > 0
-      ? spec.market.timeframe
-      : undefined
-    const marketType = spec.market.marketType === 'spot' || spec.market.marketType === 'perp'
-      ? spec.market.marketType
-      : undefined
-
-    return Object.fromEntries(
-      Object.entries({ symbol, timeframe, marketType }).filter(([, value]) => value !== undefined),
-    ) as StrategySummary['market']
-  }
-
   private resolveExpectedPositionMode(
     spec: CanonicalStrategySpec,
   ): 'long_only' | 'short_only' | 'long_short' {
@@ -1218,42 +1129,6 @@ export class StrategyConsistencyService {
   private hashCanonicalJson(value: unknown): `sha256:${string}` {
     const digest = createHash('sha256').update(canonicalSerialize(value)).digest('hex')
     return `sha256:${digest}`
-  }
-
-  private compareSummaries(
-    leftLabel: string,
-    left: StrategySummary,
-    rightLabel: string,
-    right: StrategySummary,
-  ): string[] {
-    const issues: string[] = []
-    if (left.strategyType !== right.strategyType) {
-      issues.push(`${leftLabel}.strategyType=${left.strategyType} != ${rightLabel}.strategyType=${right.strategyType}`)
-    }
-
-    const leftIndicators = [...left.indicators].sort()
-    const rightIndicators = [...right.indicators].sort()
-    if (leftIndicators.join('|') !== rightIndicators.join('|')) {
-      issues.push(`${leftLabel}.indicators 与 ${rightLabel}.indicators 不一致`)
-    }
-
-    if (left.entryRule !== right.entryRule) {
-      issues.push(`${leftLabel}.entryRule=${left.entryRule} != ${rightLabel}.entryRule=${right.entryRule}`)
-    }
-
-    if (left.exitRule !== right.exitRule) {
-      issues.push(`${leftLabel}.exitRule=${left.exitRule} != ${rightLabel}.exitRule=${right.exitRule}`)
-    }
-
-    if (left.sizing && right.sizing) {
-      const leftSizing = `${left.sizing.mode}:${left.sizing.evidence}`
-      const rightSizing = `${right.sizing.mode}:${right.sizing.evidence}`
-      if (leftSizing !== rightSizing) {
-        issues.push(`${leftLabel}.sizing=${leftSizing} != ${rightLabel}.sizing=${rightSizing}`)
-      }
-    }
-
-    return issues
   }
 
   private buildLegacyRuleMappings(spec: Exclude<CanonicalStrategySpec, CanonicalStrategySpecV2>): StrategySemanticRuleMapping[] {

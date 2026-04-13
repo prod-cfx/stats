@@ -31,6 +31,7 @@ import { StrategyClarificationQuestionService } from './services/strategy-clarif
 import { StrategyClarificationRulesService } from './services/strategy-clarification-rules.service'
 import { StrategyConsistencyService } from './services/strategy-consistency.service'
 import { StrategySummaryBuilderService } from './services/strategy-summary-builder.service'
+import { StrategySummaryObservationService } from './services/strategy-summary-observation.service'
 
 @Module({
   imports: [PrismaModule, AiModule],
@@ -56,6 +57,7 @@ import { StrategySummaryBuilderService } from './services/strategy-summary-build
     CompiledPublicationGateService,
     ScriptProfileExtractorService,
     StrategyConsistencyService,
+    StrategySummaryObservationService,
     StrategySummaryBuilderService,
     StrategyClarificationRulesService,
     StrategyClarificationQuestionService,

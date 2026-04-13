@@ -76,6 +76,9 @@ describe('codegenSessionPublicationPipeline', () => {
       buildScriptSummary: jest.fn().mockReturnValue({ summary: 'script' }),
       buildSummaryFromProfile: jest.fn().mockReturnValue({ summary: 'profile' }),
     }
+    const summaryObservation = {
+      build: jest.fn().mockReturnValue({ status: 'aligned', warnings: [], details: {} }),
+    }
     const gate = overrides?.gate ?? {
       publish: jest.fn().mockResolvedValue({
         snapshotId: 'snapshot-1',
@@ -96,6 +99,7 @@ describe('codegenSessionPublicationPipeline', () => {
       new CompiledScriptEmitterService(),
       new CompiledScriptExecutionEnvelopeService(),
       parser as unknown as CompiledScriptParserService,
+      summaryObservation as any,
       gate as any,
     )
 

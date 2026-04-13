@@ -127,9 +127,9 @@ export class CodegenConversationStateMachine {
       .slice(0, 4)
       .map(item => item.message)
     if (failedChecks.length === 0) {
-      return '策略脚本与策略描述一致性校验失败'
+      return '正式策略语义与脚本语义一致性校验失败'
     }
-    return `策略脚本与策略描述不一致：${failedChecks.join('；')}`
+    return `正式策略语义与脚本语义不一致：${failedChecks.join('；')}`
   }
 
   buildCompiledPublishRejectReason(report: Record<string, unknown>): string {
