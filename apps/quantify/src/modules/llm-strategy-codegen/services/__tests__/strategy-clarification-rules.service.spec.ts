@@ -277,22 +277,62 @@ describe('strategyClarificationRulesService', () => {
       entryRules: ['连续 3 根 K 线累计回撤 2% 后买入'],
       exitRules: ['回撤 5% 止盈'],
       riskRules: {
+      exchange: 'okx',
+      marketType: 'perp',
+      positionPct: 10,
+      stopLossPct: 5,
+      stopLossBasis: 'entry_avg_price',
+      takeProfitPct: 12,
+    },
+  })
+
+  expect(state.status).toBe('NEEDS_CLARIFICATION')
+  expect(state.items).toEqual(expect.arrayContaining([
+    expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'entry.basis.1' }),
+    expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'exit.basis.1' }),
+    expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'risk.takeProfit.basis' }),
+  ]))
+  })
+
+  it('does not block percentage rules that already state an explicit basis in text', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['3m', '15m'],
+      entryRules: ['当前K线收盘价相对于上一根K线收盘价下跌≥1%时买入开仓'],
+      exitRules: ['当前K线收盘价相对于开仓均价上涨≥2%时卖出平仓'],
+      riskRules: {
         exchange: 'okx',
-        marketType: 'perp',
+        marketType: 'spot',
         positionPct: 10,
         stopLossPct: 5,
         stopLossBasis: 'entry_avg_price',
-        takeProfitPct: 12,
-        maxDrawdownPct: 8,
+        takeProfitPct: 8,
+        takeProfitBasis: 'position_pnl',
       },
     })
 
-    expect(state.status).toBe('NEEDS_CLARIFICATION')
-    expect(state.items).toEqual(expect.arrayContaining([
-      expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'entry.basis.1' }),
-      expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'exit.basis.1' }),
-      expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'risk.takeProfit.basis' }),
-      expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'risk.drawdown.basis' }),
+    expect(state.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'entry.basis.1' }),
+      expect.objectContaining({ key: 'exit.basis.1' }),
+    ]))
+  })
+
+  it('treats stop-loss and take-profit semantics in exit rules as satisfying required buckets', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['突破布林带上轨时做空'],
+      exitRules: ['盈利 10% 止盈', '亏损 5% 止损'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+      },
+    })
+
+    expect(state.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'missing_stop_loss_rule' }),
+      expect.objectContaining({ reason: 'missing_take_profit_rule' }),
     ]))
   })
 

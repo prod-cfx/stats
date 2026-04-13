@@ -228,7 +228,7 @@ export class StrategyClarificationRulesService {
       })
     }
 
-    if (!this.hasStopLossRule(input.riskRules)) {
+    if (!this.hasStopLossRule(input)) {
       items.push({
         key: 'risk.stopLoss.rule',
         reason: 'missing_stop_loss_rule',
@@ -239,7 +239,7 @@ export class StrategyClarificationRulesService {
       })
     }
 
-    if (!this.hasTakeProfitRule(input.riskRules)) {
+    if (!this.hasTakeProfitRule(input)) {
       items.push({
         key: 'risk.takeProfit.rule',
         reason: 'missing_take_profit_rule',
@@ -364,20 +364,6 @@ export class StrategyClarificationRulesService {
       })
     }
 
-    if (
-      typeof input.riskRules?.maxDrawdownPct === 'number'
-      && !this.hasNamedBasis(input.riskRules?.maxDrawdownBasis)
-    ) {
-      items.push({
-        key: 'risk.drawdown.basis',
-        reason: 'ambiguous_condition_basis',
-        field: 'riskRules.maxDrawdownBasis',
-        blocking: true,
-        question: '这里的最大回撤百分比是按账户净值峰值、持仓浮盈峰值，还是别的基准？',
-        status: 'pending',
-      })
-    }
-
     return items
   }
 
@@ -411,33 +397,55 @@ export class StrategyClarificationRulesService {
   }
 
   private ruleNeedsBasis(rule: string): boolean {
-    return PERCENTAGE_THRESHOLD_PATTERN.test(rule)
+    if (!PERCENTAGE_THRESHOLD_PATTERN.test(rule)) {
+      return false
+    }
+
+    if (this.hasExplicitBasisInText(rule)) {
+      return false
+    }
+
+    if (/网格|步长/u.test(rule)) {
+      return false
+    }
+
+    return /买入|卖出|开仓|平仓|止盈|止损|离场|出场|收益率|盈利|亏损|回撤|连续\s*\d+\s*根/u.test(rule)
   }
 
   private hasNamedBasis(value: unknown): boolean {
     return typeof value === 'string' && value.trim().length > 0
   }
 
-  private hasStopLossRule(riskRules: Record<string, unknown> | undefined): boolean {
-    if (typeof riskRules?.stopLossPct === 'number') {
-      return true
-    }
-
-    return this.hasRiskRuleText(riskRules, /止损|stop[\s_-]?loss/i)
+  private hasExplicitBasisInText(rule: string): boolean {
+    return /相对于上一根K线收盘价|相对于开仓均价|持仓收益率|持仓盈亏|价格相对入场价/u.test(rule)
   }
 
-  private hasTakeProfitRule(riskRules: Record<string, unknown> | undefined): boolean {
-    if (typeof riskRules?.takeProfitPct === 'number') {
+  private hasStopLossRule(input: ClarificationChecklistInput): boolean {
+    if (typeof input.riskRules?.stopLossPct === 'number') {
       return true
     }
 
-    return this.hasRiskRuleText(riskRules, /止盈|take[\s_-]?profit/i)
+    return this.hasRiskRuleText(input.riskRules, /止损|stop[\s_-]?loss/i)
+      || this.hasRuleText(input.exitRules, /止损|stop[\s_-]?loss/i)
+  }
+
+  private hasTakeProfitRule(input: ClarificationChecklistInput): boolean {
+    if (typeof input.riskRules?.takeProfitPct === 'number') {
+      return true
+    }
+
+    return this.hasRiskRuleText(input.riskRules, /止盈|take[\s_-]?profit/i)
+      || this.hasRuleText(input.exitRules, /止盈|take[\s_-]?profit/i)
   }
 
   private hasRiskRuleText(riskRules: Record<string, unknown> | undefined, pattern: RegExp): boolean {
     return Object.values(riskRules ?? {}).some(
       value => typeof value === 'string' && pattern.test(value),
     )
+  }
+
+  private hasRuleText(rules: string[] | undefined, pattern: RegExp): boolean {
+    return Array.isArray(rules) && rules.some(rule => typeof rule === 'string' && pattern.test(rule))
   }
 
   private readMarketScopeConflicts(

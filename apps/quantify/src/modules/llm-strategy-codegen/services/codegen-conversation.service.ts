@@ -729,12 +729,53 @@ export class CodegenConversationService {
     item: StrategyClarificationItem,
     answer: string,
   ): ChecklistPayload {
+    const normalizedAnswer = answer.trim()
+    if (!normalizedAnswer) return checklist
+
     if (item.key.startsWith('entry.side.') || item.key.startsWith('entry.action_uniqueness.')) {
-      return this.applyEntryRuleDirectionClarification(checklist, item, answer)
+      return this.applyEntryRuleDirectionClarification(checklist, item, normalizedAnswer)
+    }
+
+    if (item.key === 'entry.rules' || item.field === 'entryRules') {
+      return this.normalizeChecklist({
+        ...checklist,
+        entryRules: [...(checklist.entryRules ?? []), normalizedAnswer],
+      })
+    }
+
+    if (item.key === 'exit.rules' || item.field === 'exitRules') {
+      return this.normalizeChecklist({
+        ...checklist,
+        exitRules: [...(checklist.exitRules ?? []), normalizedAnswer],
+      })
+    }
+
+    if (item.key === 'risk.stopLoss.rule' || item.field === 'riskRules.stopLossPct') {
+      const parsedPct = this.normalizePositionPctClarificationAnswer(normalizedAnswer)
+      return this.normalizeChecklist({
+        ...checklist,
+        riskRules: {
+          ...(checklist.riskRules ?? {}),
+          stopLoss: normalizedAnswer,
+          ...(parsedPct !== null ? { stopLossPct: parsedPct } : {}),
+        },
+      })
+    }
+
+    if (item.key === 'risk.takeProfit.rule' || item.field === 'riskRules.takeProfitPct') {
+      const parsedPct = this.normalizePositionPctClarificationAnswer(normalizedAnswer)
+      return this.normalizeChecklist({
+        ...checklist,
+        riskRules: {
+          ...(checklist.riskRules ?? {}),
+          takeProfit: normalizedAnswer,
+          ...(parsedPct !== null ? { takeProfitPct: parsedPct } : {}),
+        },
+      })
     }
 
     if (item.key === 'market.symbol' || item.field === 'symbol') {
-      const symbol = normalizePublishedSymbol(answer)
+      const symbol = normalizePublishedSymbol(normalizedAnswer)
       return this.normalizeChecklist({
         ...checklist,
         symbols: symbol ? [symbol] : checklist.symbols,
@@ -743,7 +784,7 @@ export class CodegenConversationService {
     }
 
     if (item.key === 'market.timeframe' || item.field === 'timeframe') {
-      const timeframe = answer.trim()
+      const timeframe = normalizedAnswer
       return this.normalizeChecklist({
         ...checklist,
         timeframes: timeframe ? [timeframe] : checklist.timeframes,
@@ -752,7 +793,7 @@ export class CodegenConversationService {
     }
 
     if (item.key === 'market.exchange' || item.field === 'exchange') {
-      const exchange = this.normalizeExchangeClarificationAnswer(answer)
+      const exchange = this.normalizeExchangeClarificationAnswer(normalizedAnswer)
       if (!exchange) return checklist
       return this.normalizeChecklist({
         ...checklist,
@@ -764,7 +805,7 @@ export class CodegenConversationService {
     }
 
     if (item.key === 'market.marketType' || item.field === 'marketType') {
-      const marketType = this.normalizeMarketTypeClarificationAnswer(answer)
+      const marketType = this.normalizeMarketTypeClarificationAnswer(normalizedAnswer)
       if (!marketType) return checklist
       return this.normalizeChecklist({
         ...checklist,
@@ -776,7 +817,7 @@ export class CodegenConversationService {
     }
 
     if (item.key === 'sizing.positionPct' || item.field === 'riskRules.positionPct') {
-      const positionPct = this.normalizePositionPctClarificationAnswer(answer)
+      const positionPct = this.normalizePositionPctClarificationAnswer(normalizedAnswer)
       if (positionPct === null) return checklist
       return this.normalizeChecklist({
         ...checklist,
@@ -788,7 +829,7 @@ export class CodegenConversationService {
     }
 
     if (item.reason === 'ambiguous_condition_basis') {
-      const basis = this.normalizeBasisClarificationAnswer(answer)
+      const basis = this.normalizeBasisClarificationAnswer(normalizedAnswer)
       if (!basis) return checklist
 
       if (item.field === 'entryRules.basis') {
@@ -847,7 +888,7 @@ export class CodegenConversationService {
     }
 
     if (item.key === 'riskRules.earlyStop.action' || item.field === 'riskRules.earlyStop.action') {
-      const action = this.normalizeEarlyStopClarificationAnswer(answer)
+      const action = this.normalizeEarlyStopClarificationAnswer(normalizedAnswer)
       if (!action) return checklist
       return this.normalizeChecklist({
         ...checklist,

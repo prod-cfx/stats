@@ -667,7 +667,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('请确认止盈规则')
+    expect(result.assistantPrompt).toContain('缺少方向约束')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       checklist: expect.objectContaining({
         symbols: ['BTCUSDT'],
@@ -1431,6 +1431,140 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       ]),
     }))
     expect(result.canonicalDigest ?? null).toBeNull()
+  })
+
+  it('applies missing exit rule clarification answers before checklist confirmation', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-missing-exit-rule-answer',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['突破布林带上轨做空'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+          positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
+        },
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'exit.rules',
+            reason: 'missing_exit_rules',
+            field: 'exitRules',
+            blocking: true,
+            question: '请补充至少一条明确的出场规则。',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-missing-exit-rule-answer', {
+      userId: 'u1',
+      message: '价格回到布林带中轨时平仓',
+      clarificationAnswers: {
+        'exit.rules': '价格回到布林带中轨时平仓',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-missing-exit-rule-answer',
+      expect.objectContaining({
+        checklist: expect.objectContaining({
+          exitRules: ['价格回到布林带中轨时平仓'],
+        }),
+      }),
+    )
+  })
+
+  it('applies missing stop-loss rule clarification answers before checklist confirmation', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-missing-stop-loss-answer',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['突破布林带上轨做空'],
+        exitRules: ['价格回到布林带中轨时平仓'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+          positionPct: 10,
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
+        },
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'risk.stopLoss.rule',
+            reason: 'missing_stop_loss_rule',
+            field: 'riskRules.stopLossPct',
+            blocking: true,
+            question: '请确认止损规则（例如亏损 5% 止损）。',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-missing-stop-loss-answer', {
+      userId: 'u1',
+      message: '亏损 5% 止损',
+      clarificationAnswers: {
+        'risk.stopLoss.rule': '亏损 5% 止损',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.clarificationState).toEqual(expect.objectContaining({
+      status: 'NEEDS_CLARIFICATION',
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'risk.stopLoss.basis',
+          reason: 'ambiguous_condition_basis',
+        }),
+      ]),
+    }))
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-missing-stop-loss-answer',
+      expect.objectContaining({
+        status: 'DRAFTING',
+        checklist: expect.objectContaining({
+          riskRules: expect.objectContaining({
+            stopLoss: '亏损 5% 止损',
+            stopLossPct: 5,
+          }),
+        }),
+      }),
+    )
   })
 
   it('applies basis clarification answers before checklist confirmation', async () => {
