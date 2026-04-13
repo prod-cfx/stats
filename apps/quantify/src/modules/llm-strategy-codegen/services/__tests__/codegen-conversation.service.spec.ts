@@ -178,6 +178,52 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     restoreProcessEnv(envSnapshot)
   })
 
+  it('does not let entry timeframe bleed into exit extraction', () => {
+    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+
+    const checklist = (service as any).inferChecklistFromMessage(
+      '在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金',
+    )
+
+    expect(checklist.entryRules).toEqual(['3m 内下跌 1% 买入'])
+    expect(checklist.exitRules).toEqual(['15m 内上涨 2% 卖出'])
+    expect(checklist.timeframes).toEqual(['3m', '15m'])
+    expect(checklist.entryRuleDrafts?.[0]).toMatchObject({ timeframe: '3m' })
+    expect(checklist.exitRuleDrafts?.[0]).toMatchObject({ timeframe: '15m' })
+  })
+
+  it('does not let entry clause bleed into exit extraction when phrased as 入场/出场', () => {
+    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+
+    const checklist = (service as any).inferChecklistFromMessage(
+      '在okx交易所 我想买btc 3分钟之内跌百分1入场 15分钟之内涨百分2出场 单笔用百分10资金',
+    )
+
+    expect(checklist.entryRules).toEqual(['3m 内下跌 1% 买入'])
+    expect(checklist.exitRules).toEqual(['15m 内上涨 2% 卖出'])
+    expect(checklist.entryRuleDrafts?.[0]).toMatchObject({ timeframe: '3m' })
+    expect(checklist.exitRuleDrafts?.[0]).toMatchObject({ timeframe: '15m' })
+    expect(checklist.market).toMatchObject({ exchange: 'okx', defaultTimeframe: '3m' })
+  })
+
+  it('builds clarification summary from rule-level timeframes instead of checklist.timeframes[0]', () => {
+    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+
+    const summary = (service as any).buildClarificationSummary({
+      symbols: ['BTCUSDT'],
+      timeframes: ['3m', '15m'],
+      entryRules: ['3m 内下跌 1% 买入'],
+      exitRules: ['15m 内上涨 2% 卖出'],
+      entryRuleDrafts: [{ id: 'entry-1', phase: 'entry', text: '3m 内下跌 1% 买入', timeframe: '3m' }],
+      exitRuleDrafts: [{ id: 'exit-1', phase: 'exit', text: '15m 内上涨 2% 卖出', timeframe: '15m' }],
+      riskRules: { exchange: 'okx', marketType: 'spot', positionPct: 10 },
+    })
+
+    expect(summary).toContain('入场：3m 内下跌 1% 买入')
+    expect(summary).toContain('出场：15m 内上涨 2% 卖出')
+    expect(summary).not.toContain('出场：3m 内上涨 2% 卖出')
+  })
+
   it('starts in drafting and asks next key question from llm planner', async () => {
     const dto: StartCodegenSessionDto = {
       userId: 'u1',

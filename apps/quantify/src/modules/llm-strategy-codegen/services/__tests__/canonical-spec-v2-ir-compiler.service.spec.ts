@@ -129,6 +129,71 @@ describe('canonicalSpecV2IrCompilerService', () => {
     expect(result.ir.portfolio.positionMode).toBe('short_only')
   })
 
+  it('compiles multi-timeframe canonical specs into ordered IR market timeframes', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const result = compiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          defaultTimeframe: '3m',
+        },
+        indicators: [],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['3m', '15m'],
+        },
+        rules: [
+          {
+            id: 'entry-price-change-1',
+            phase: 'entry',
+            priority: 100,
+            sideScope: 'long',
+            condition: {
+              kind: 'atom',
+              key: 'price.change_pct',
+              semanticScope: 'market',
+              op: 'LTE',
+              value: -0.01,
+              params: { timeframe: '3m', lookbackBars: 1 },
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+          {
+            id: 'exit-price-change-1',
+            phase: 'exit',
+            priority: 90,
+            sideScope: 'long',
+            condition: {
+              kind: 'atom',
+              key: 'position_gain_pct',
+              semanticScope: 'position',
+              op: 'GTE',
+              value: 0.02,
+              params: { timeframe: '15m', basis: 'entry_avg_price' },
+            },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+      } as any,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '3m',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.market.timeframes).toEqual(['3m', '15m'])
+  })
+
   it('compiles bollinger outside-band reduce rule with okx perp market metadata', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 

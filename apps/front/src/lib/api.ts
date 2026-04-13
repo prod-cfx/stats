@@ -1683,6 +1683,7 @@ export interface AccountAiQuantBacktestConfigDefaults {
   feeBps: number | null
   priceSource: string | null
   allowPartial: boolean | null
+  stateTimeframes?: string[] | null
 }
 
 export interface AccountAiQuantDeploymentExecutionConfig {
@@ -1763,6 +1764,7 @@ export interface AccountAiQuantStrategySnapshot {
   deploymentExecutionBaseline?: AccountAiQuantDeploymentExecutionConfig | null
   deploymentExecutionCurrent?: AccountAiQuantDeploymentExecutionConfig | null
   deploymentExecutionConstraints?: AccountAiQuantDeploymentExecutionConstraints | null
+  effectiveAllowedLeverageRange?: AccountAiQuantLeverageRange | null
   compatibilityMetadata?: AccountAiQuantSnapshotCompatibilityMetadata | null
   consistencySummary?: AccountAiQuantConsistencySummary | null
   executionConfigVersion?: number | null

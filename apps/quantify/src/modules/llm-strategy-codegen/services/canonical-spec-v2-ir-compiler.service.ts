@@ -97,7 +97,7 @@ export class CanonicalSpecV2IrCompilerService {
   ): CanonicalStrategyIrV1 {
     const exchange = input.canonicalSpec.market.exchange || input.fallback.exchange
     const symbol = input.canonicalSpec.market.symbol || input.fallback.symbol
-    const timeframe = input.canonicalSpec.market.timeframe || input.fallback.baseTimeframe
+    const timeframe = input.canonicalSpec.market.defaultTimeframe || input.canonicalSpec.market.timeframe || input.fallback.baseTimeframe
     const requiredTimeframes = this.resolveRequiredTimeframes(input.canonicalSpec, timeframe)
     const seriesMap = new Map<string, SeriesDef>()
     const levelSetMap = new Map<string, LevelSetDef>()
@@ -191,7 +191,7 @@ export class CanonicalSpecV2IrCompilerService {
 
   private buildGraphSnapshot(input: CompileCanonicalSpecV2ToIrInput): StrategyLogicGraphSnapshot {
     const symbol = input.canonicalSpec.market.symbol || input.fallback.symbol
-    const timeframe = input.canonicalSpec.market.timeframe || input.fallback.baseTimeframe
+    const timeframe = input.canonicalSpec.market.defaultTimeframe || input.canonicalSpec.market.timeframe || input.fallback.baseTimeframe
     const positionPct = this.resolvePositionPct(input.canonicalSpec.sizing, input.fallback.positionPct)
     const movingAverage = this.resolveMovingAverageConfig(input.canonicalSpec)
     const rsi = this.resolveRsiConfig(input.canonicalSpec)
@@ -242,13 +242,40 @@ export class CanonicalSpecV2IrCompilerService {
 
   private resolveRequiredTimeframes(spec: CanonicalStrategySpecV2, timeframe: string): string[] {
     const ordered = new Set<string>()
-    ordered.add(timeframe)
+    const defaultTimeframe = spec.market.defaultTimeframe || spec.market.timeframe || timeframe
+    if (defaultTimeframe) {
+      ordered.add(defaultTimeframe)
+    }
     for (const item of spec.dataRequirements.requiredTimeframes) {
       if (item.trim().length > 0) {
         ordered.add(item.trim())
       }
     }
+    for (const rule of spec.rules) {
+      this.collectRuleTimeframes(rule.condition, ordered, defaultTimeframe)
+    }
     return [...ordered]
+  }
+
+  private collectRuleTimeframes(
+    condition: CanonicalConditionNode,
+    ordered: Set<string>,
+    fallbackTimeframe: string,
+  ): void {
+    if (condition.kind === 'AND' || condition.kind === 'OR' || condition.kind === 'NOT') {
+      for (const child of condition.children) {
+        this.collectRuleTimeframes(child, ordered, fallbackTimeframe)
+      }
+      return
+    }
+
+    const atom = condition as CanonicalConditionAtom
+    const timeframe = typeof atom.params?.timeframe === 'string' && atom.params.timeframe.trim().length > 0
+      ? atom.params.timeframe.trim()
+      : fallbackTimeframe
+    if (timeframe) {
+      ordered.add(timeframe)
+    }
   }
 
   private resolveMovingAverageConfig(spec: CanonicalStrategySpecV2): CompileContext['movingAverage'] {
@@ -350,6 +377,27 @@ export class CanonicalSpecV2IrCompilerService {
           `${seed}_${atom.key.replace(/\./g, '_')}`,
           this.resolveComparisonKind(atom.op),
           [seriesId, thresholdRef],
+        )
+      }
+
+      case 'position_gain_pct': {
+        const timeframe = typeof atom.params?.timeframe === 'string' && atom.params.timeframe.trim().length > 0
+          ? atom.params.timeframe.trim()
+          : context.timeframe
+        const pnlRef = `position_pnl_pct_${timeframe}`
+        if (!context.seriesMap.has(pnlRef)) {
+          context.seriesMap.set(pnlRef, {
+            id: pnlRef,
+            kind: 'POSITION_PNL_PCT',
+            timeframe,
+          })
+        }
+        const thresholdRef = this.ensureConstSeries(context, this.readNumber([atom.value], 0))
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}`,
+          this.resolveComparisonKind(atom.op),
+          [pnlRef, thresholdRef],
         )
       }
 
@@ -958,6 +1006,9 @@ export class CanonicalSpecV2IrCompilerService {
         return `GTE(POSITION_BARS_HELD,${this.readNumber([condition.value], 0)})`
 
       case 'risk.take_profit_pct':
+        return `GTE(POSITION_PNL_PCT,${this.readNumber([condition.value], 0)})`
+
+      case 'position_gain_pct':
         return `GTE(POSITION_PNL_PCT,${this.readNumber([condition.value], 0)})`
 
       case 'bollinger.upper_break':
