@@ -1,6 +1,7 @@
 import type { ChecklistPayload } from '../types/codegen-checklist'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import { Injectable } from '@nestjs/common'
+import { isEquivalentMarketScopeValue } from './market-scope-equivalence'
 import { classifyPercentageRuleFamily } from './rule-family-default-semantics'
 
 type ClarificationChecklistInput = ChecklistPayload
@@ -510,6 +511,10 @@ export class StrategyClarificationRulesService {
         || !previous.trim()
         || !next.trim()
       ) {
+        return []
+      }
+
+      if (isEquivalentMarketScopeValue(field, previous, next)) {
         return []
       }
 
