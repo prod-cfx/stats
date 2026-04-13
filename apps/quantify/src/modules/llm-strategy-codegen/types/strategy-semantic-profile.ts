@@ -6,6 +6,7 @@ export interface StrategySemanticIndicator {
 }
 
 export type StrategySemanticRuleKey =
+  | 'price.change_pct'
   | 'bollinger.upper_break'
   | 'bollinger.lower_break'
   | 'bollinger.middle_revert'

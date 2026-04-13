@@ -337,7 +337,7 @@ export class StrategySummaryBuilderService {
       && (
         text.includes('breakout.channel_high_break')
         || (
-          (/\bhighest(?:high)?\b/i.test(text) || /通道上轨|通道上沿|前高|唐奇安.*上轨|donchian.*upper|breakout/i.test(text))
+          (/\bhighest(?:high)?\b/i.test(text) || /通道上轨|通道上沿|前高|关键阻力|阻力位|唐奇安.*上轨|donchian.*upper|breakout/i.test(text))
           && (/>=|>|上穿|突破|breakout/i.test(text))
         )
       )
@@ -350,7 +350,7 @@ export class StrategySummaryBuilderService {
       && (
         text.includes('breakout.channel_low_break')
         || (
-          (/\blowest(?:low)?\b/i.test(text) || /通道下轨|通道下沿|前低|唐奇安.*下轨|donchian.*lower|breakdown/i.test(text))
+          (/\blowest(?:low)?\b/i.test(text) || /通道下轨|通道下沿|前低|关键支撑|支撑位|唐奇安.*下轨|donchian.*lower|breakdown/i.test(text))
           && (/<=|<|下穿|跌破|breakdown/i.test(text))
         )
       )
