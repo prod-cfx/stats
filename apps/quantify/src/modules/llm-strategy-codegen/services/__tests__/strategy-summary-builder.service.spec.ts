@@ -58,6 +58,31 @@ describe('strategySummaryBuilderService', () => {
     expect(summary.sizing).toBeNull()
   })
 
+  it('builds strategy summary market timeframe from canonical default timeframe while preserving multi-timeframe requirements', () => {
+    const service = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+
+    const summary = service.buildStrategySummary({
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        defaultTimeframe: '3m',
+      },
+      indicators: [],
+      sizing: { mode: 'RATIO', value: 0.1 },
+      executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+      dataRequirements: { requiredTimeframes: ['3m', '15m'] },
+      rules: [],
+    } as any)
+
+    expect(summary.market).toEqual({
+      symbol: 'BTCUSDT',
+      timeframe: '3m',
+      marketType: 'spot',
+    })
+  })
+
   it('does not label moving-average summaries as golden/death cross without explicit crossover evidence', () => {
     const service = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
 

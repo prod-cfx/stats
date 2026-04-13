@@ -163,6 +163,7 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
         throw new ApiError('当前已发布快照缺少正式回测基线，请重新发布后再回测。', 'PUBLISHED_SNAPSHOT_PARAMS_MISSING')
       }
       const { symbol, baseTimeframe, exchange, executionConfig } = effectiveInputs
+      const snapshotStateTimeframes = strategy.snapshotBacktestConfigDefaults?.stateTimeframes ?? []
       if (!executionConfig.allowPartialValid) {
         throw new BacktestPayloadBuilderError('invalid_execution_config')
       }
@@ -172,7 +173,7 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
         symbol,
         baseTimeframe,
         capabilities,
-        stateTimeframes: [baseTimeframe],
+        stateTimeframes: snapshotStateTimeframes.length > 0 ? snapshotStateTimeframes : [baseTimeframe],
         initialCash: executionConfig.initialCash,
         leverage: executionConfig.leverage,
         execution: {

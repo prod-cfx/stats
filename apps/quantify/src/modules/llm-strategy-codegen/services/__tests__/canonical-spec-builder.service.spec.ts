@@ -84,6 +84,42 @@ describe('canonicalSpecBuilderService', () => {
     ]))
   })
 
+  it('emits canonical default timeframe and per-rule timeframe params for multi-timeframe strategies', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['3m', '15m'],
+      entryRules: ['3m 内下跌 1% 买入'],
+      exitRules: ['15m 内上涨 2% 卖出'],
+      entryRuleDrafts: [{ id: 'entry-1', phase: 'entry', text: '3m 内下跌 1% 买入', timeframe: '3m' }],
+      exitRuleDrafts: [{ id: 'exit-1', phase: 'exit', text: '15m 内上涨 2% 卖出', timeframe: '15m', basis: 'entry_avg_price' }],
+      riskRules: { exchange: 'okx', marketType: 'spot', positionPct: 10, stopLossPct: 5 },
+    })
+
+    expect(spec.market).toEqual({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      marketType: 'spot',
+      defaultTimeframe: '3m',
+    })
+    expect(spec.dataRequirements.requiredTimeframes).toEqual(['3m', '15m'])
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'entry-price-change-1',
+        condition: expect.objectContaining({
+          params: expect.objectContaining({ timeframe: '3m' }),
+        }),
+      }),
+      expect.objectContaining({
+        id: 'exit-price-change-1',
+        condition: expect.objectContaining({
+          params: expect.objectContaining({ timeframe: '15m' }),
+        }),
+      }),
+    ]))
+  })
+
   it('keeps explicit position-pnl overrides on canonical risk rules', () => {
     const service = new CanonicalSpecBuilderService()
 
@@ -215,7 +251,7 @@ describe('canonicalSpecBuilderService', () => {
       exchange: 'okx',
       symbol: 'BTCUSDT',
       marketType: 'perp',
-      timeframe: '15m',
+      defaultTimeframe: '15m',
     })
     expect(spec.rules).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -366,7 +402,7 @@ describe('canonicalSpecBuilderService', () => {
       exchange: 'binance',
       symbol: null,
       marketType: 'spot',
-      timeframe: null,
+      defaultTimeframe: null,
     })
     expect(spec.indicators).toEqual([])
     expect(spec.sizing).toBeNull()
@@ -421,7 +457,7 @@ describe('canonicalSpecBuilderService', () => {
       exchange: 'okx',
       symbol: 'BTCUSDT',
       marketType: 'perp',
-      timeframe: '15m',
+      defaultTimeframe: '15m',
     })
   })
 

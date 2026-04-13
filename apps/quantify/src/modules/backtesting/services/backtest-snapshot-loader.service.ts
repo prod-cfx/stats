@@ -49,6 +49,7 @@ interface FormalSnapshotTruth {
     symbol: string
     marketType: string
     baseTimeframe: string
+    stateTimeframes: string[]
     positionPct: number
   }
   backtestConfigDefaults: {
@@ -111,6 +112,7 @@ export class BacktestSnapshotLoaderService {
       ...strategy,
       id: this.resolveStrategyId(publishedSnapshot, input.id),
       params: strictParams,
+      stateTimeframes: formalTruth.strategyConfig.stateTimeframes,
       strategyInstanceId: publishedSnapshot.strategyInstanceId ?? undefined,
       strategyTemplateId: publishedSnapshot.strategyTemplateId ?? undefined,
       snapshotId: publishedSnapshot.id,
@@ -222,6 +224,7 @@ export class BacktestSnapshotLoaderService {
     const symbol = this.readTrimmedString(raw.symbol)
     const marketType = this.readTrimmedString(raw.marketType)
     const baseTimeframe = this.readTrimmedString(raw.baseTimeframe)
+    const stateTimeframes = this.readStringArray(raw.stateTimeframes)
     const positionPct = this.readFiniteNumber(raw.positionPct)
     if (!exchange || !symbol || !marketType || !baseTimeframe || positionPct === null) {
       return null
@@ -232,6 +235,7 @@ export class BacktestSnapshotLoaderService {
       symbol,
       marketType,
       baseTimeframe,
+      stateTimeframes,
       positionPct,
     }
   }

@@ -368,7 +368,15 @@ export class AccountStrategyViewService {
         deployAccountName: sub?.exchangeAccount?.name ?? null,
         deployAt: sub?.subscribedAt?.toISOString() ?? row.startedAt?.toISOString() ?? null,
         strategyConfig: resolvedSnapshot.strategyConfig,
-        backtestConfigDefaults: resolvedSnapshot.backtestConfigDefaults,
+        backtestConfigDefaults: resolvedSnapshot.backtestConfigDefaults
+          ? {
+              ...resolvedSnapshot.backtestConfigDefaults,
+              stateTimeframes: this.readStringArray(
+                resolvedSnapshot.strategyConfig,
+                ['stateTimeframes'],
+              ),
+            }
+          : null,
         deploymentExecutionBaseline: resolvedSnapshot.deploymentExecutionDefaults,
         deploymentExecutionCurrent: deploymentExecutionConfig,
         deploymentExecutionConstraints: resolvedSnapshot.deploymentExecutionConstraints
@@ -919,6 +927,19 @@ export class AccountStrategyViewService {
       if (typeof value === 'string' && value.trim().length > 0) return value
     }
     return null
+  }
+
+  private readStringArray(source: Record<string, unknown> | null, keys: string[]): string[] {
+    if (!source) return []
+    for (const key of keys) {
+      const value = source[key]
+      if (Array.isArray(value)) {
+        return value
+          .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          .map(item => item.trim())
+      }
+    }
+    return []
   }
 
   private readNumber(source: Record<string, unknown>, keys: string[]): number | null {

@@ -36,4 +36,18 @@ describe('specDescBuilderService', () => {
     expect(specDesc).not.toHaveProperty('exitRules')
     expect(specDesc.constraints).toMatchObject({ allowedHelpersOnly: true })
   })
+
+  it('projects semantic-view market timeframes from canonical requiredTimeframes', () => {
+    const specDesc = service.buildFromCanonicalSpec({
+      version: 2,
+      market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'spot', defaultTimeframe: '3m' },
+      indicators: [],
+      sizing: { mode: 'RATIO', value: 0.1 },
+      executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+      dataRequirements: { requiredTimeframes: ['3m', '15m'] },
+      rules: [],
+    } as any, 'return strategy')
+
+    expect(specDesc.market).toMatchObject({ timeframes: ['3m', '15m'] })
+  })
 })

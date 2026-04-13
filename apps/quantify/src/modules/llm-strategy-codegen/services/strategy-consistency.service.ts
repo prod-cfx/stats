@@ -892,7 +892,9 @@ export class StrategyConsistencyService {
       exchange: typeof spec.market.exchange === 'string' ? spec.market.exchange : null,
       marketType: typeof spec.market.marketType === 'string' ? spec.market.marketType : null,
       symbol: typeof spec.market.symbol === 'string' ? spec.market.symbol : null,
-      timeframe: typeof spec.market.timeframe === 'string' ? spec.market.timeframe : null,
+      timeframe: spec.version === 2 && typeof spec.market.defaultTimeframe === 'string'
+        ? spec.market.defaultTimeframe
+        : (typeof spec.market.timeframe === 'string' ? spec.market.timeframe : null),
       positionMode: this.resolveExpectedPositionMode(spec),
     }
 

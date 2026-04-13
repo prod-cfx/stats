@@ -81,7 +81,11 @@ export class StrategySummaryBuilderService {
       exitRule: this.resolveExitRuleTag(specRuleText.exit, indicators),
       market: this.buildMarket({
         symbol: this.normalizeSymbol(spec.market.symbol),
-        timeframe: this.normalizeTimeframe(spec.market.timeframe),
+        timeframe: this.normalizeTimeframe(
+          spec.version === 2
+            ? (spec.market.defaultTimeframe ?? spec.market.timeframe ?? spec.dataRequirements.requiredTimeframes[0] ?? null)
+            : spec.market.timeframe,
+        ),
         marketType: this.normalizeMarketType(spec.market.marketType),
       }),
       sizing: spec.sizing

@@ -7,7 +7,7 @@ import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
 import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant-conversations.repository'
-import type { ChecklistPayload, ChecklistRuleBasis } from '../types/codegen-checklist'
+import type { ChecklistPayload, ChecklistRuleBasis, ChecklistRuleDraft } from '../types/codegen-checklist'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
@@ -37,6 +37,7 @@ import {
 } from '../types/strategy-clarification'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
+import { buildChecklistRuleDrafts, resolveChecklistDefaultTimeframe } from './checklist-rule-drafts'
 import { CodegenConversationStateMachine } from './codegen-conversation-state-machine'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CodegenSessionPublicationPipelineService } from './codegen-session-publication-pipeline.service'
@@ -108,6 +109,27 @@ const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
 
 function normalizePublishedSymbol(raw: string): string {
   return raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
+}
+
+function normalizeDirectionalPercentRule(
+  fragment: string,
+  phase: 'entry' | 'exit',
+): string {
+  const timeframeMatch = fragment.match(/(\d{1,4})\s*(min|分钟|小时|[mhd天])/iu)
+  const value = timeframeMatch?.[1]
+  const unit = timeframeMatch?.[2]?.toLowerCase() ?? ''
+  const timeframe = value
+    ? (unit === 'm' || unit === 'min' || unit === '分钟'
+        ? `${value}m`
+        : (unit === 'h' || unit === '小时' ? `${value}h` : `${value}d`))
+    : null
+  const percentMatch = fragment.match(/(?:(\d+(?:\.\d+)?)\s*%|百分之?\s*(\d+(?:\.\d+)?))/u)
+  const percent = percentMatch?.[1] ?? percentMatch?.[2] ?? '0'
+  const direction = phase === 'entry' ? '下跌' : '上涨'
+  const action = phase === 'entry' ? '买入' : '卖出'
+  const prefix = timeframe ? `${timeframe} 内` : ''
+
+  return `${prefix}${direction} ${percent}% ${action}`.trim()
 }
 
 @Injectable()
@@ -1400,22 +1422,32 @@ export class CodegenConversationService {
   }
 
   private buildClarificationSummary(checklist: ChecklistPayload): string | null {
-    const exchange = typeof checklist.riskRules?.exchange === 'string' ? checklist.riskRules.exchange.trim().toUpperCase() : ''
-    const marketType = typeof checklist.riskRules?.marketType === 'string'
-      ? checklist.riskRules.marketType.trim().toLowerCase()
-      : ''
+    const drafts = buildChecklistRuleDrafts(checklist)
+    const exchange = typeof checklist.market?.exchange === 'string'
+      ? checklist.market.exchange.trim().toUpperCase()
+      : (typeof checklist.riskRules?.exchange === 'string' ? checklist.riskRules.exchange.trim().toUpperCase() : '')
+    const marketType = typeof checklist.market?.marketType === 'string'
+      ? checklist.market.marketType.trim().toLowerCase()
+      : (typeof checklist.riskRules?.marketType === 'string'
+          ? checklist.riskRules.marketType.trim().toLowerCase()
+          : '')
     const symbol = checklist.symbols?.[0]?.trim() ?? ''
-    const timeframe = checklist.timeframes?.[0]?.trim() ?? ''
-    const entryRule = checklist.entryRules?.[0]?.trim() ?? ''
-    const exitRule = checklist.exitRules?.[0]?.trim() ?? ''
+    const timeframe = resolveChecklistDefaultTimeframe(checklist) ?? ''
+    const entryRule = drafts.entry[0]
+    const exitRule = drafts.exit[0]
     const positionPct = typeof checklist.riskRules?.positionPct === 'number'
       ? `${checklist.riskRules.positionPct}% 仓位`
       : ''
+    const formatDraft = (draft: ChecklistRuleDraft | undefined): string => {
+      if (!draft) return ''
+      const normalizedText = draft.text.replace(/^\d+[mhd]\s+/u, '').trim()
+      return `${draft.timeframe ? `${draft.timeframe} ` : ''}${normalizedText}`.trim()
+    }
 
     const segments = [
       [exchange, marketType === 'perp' ? '合约' : marketType === 'spot' ? '现货' : '', symbol, timeframe].filter(Boolean).join(' '),
-      entryRule ? `入场：${entryRule}` : '',
-      exitRule ? `出场：${exitRule}` : '',
+      entryRule ? `入场：${formatDraft(entryRule)}` : '',
+      exitRule ? `出场：${formatDraft(exitRule)}` : '',
       this.buildRiskSummarySegment('止损', checklist.riskRules, 'stopLoss'),
       this.buildRiskSummarySegment('止盈', checklist.riskRules, 'takeProfit'),
       positionPct,
@@ -1858,21 +1890,25 @@ export class CodegenConversationService {
     }
 
     const percentToken = '(?:(\\d+(?:\\.\\d+)?)\\s*%|百分之?\\s*(\\d+(?:\\.\\d+)?))'
-    const buyDropPattern = new RegExp(`(\\d{1,4})\\s*([mhd天]|min|分钟|小时)[^，。；;\\n]{0,30}?(?:跌|下跌|回撤)\\s*${percentToken}[^，。；;\\n]{0,20}?(?:买入|开仓|入场)`, 'i')
-    const sellRisePattern = new RegExp(`(\\d{1,4})\\s*([mhd天]|min|分钟|小时)[^，。；;\\n]{0,30}?(?:涨|上涨|反弹)\\s*${percentToken}[^，。；;\\n]{0,20}?(?:卖出|平仓|离场|出场)`, 'i')
+    const directionalFragments = text
+      .split(/[，。；;\n]/u)
+      .flatMap(fragment => fragment.split(/(?<=买入|卖出|开仓|平仓|入场|出场|离场)/u))
+      .map(fragment => fragment.trim())
+      .filter(Boolean)
 
-    const buyDropMatch = text.match(buyDropPattern)
-    const buyDropPct = buyDropMatch?.[3] ?? buyDropMatch?.[4]
-    if (buyDropMatch?.[1] && buyDropMatch[2] && buyDropPct) {
-      const frame = normalizeTimeframe(buyDropMatch[1], buyDropMatch[2])
-      entryRules.push(`${frame} 内下跌 ${buyDropPct}% 买入`)
+    const buyDropFragment = directionalFragments.find(fragment =>
+      /(?:跌|下跌|回撤).{0,20}?(?:买入|开仓|入场)/u.test(fragment),
+    )
+    const sellRiseFragment = directionalFragments.find(fragment =>
+      /(?:涨|上涨|反弹).{0,20}?(?:卖出|平仓|离场|出场)/u.test(fragment),
+    )
+
+    if (buyDropFragment && new RegExp(percentToken, 'iu').test(buyDropFragment)) {
+      entryRules.push(normalizeDirectionalPercentRule(buyDropFragment, 'entry'))
     }
 
-    const sellRiseMatch = text.match(sellRisePattern)
-    const sellRisePct = sellRiseMatch?.[3] ?? sellRiseMatch?.[4]
-    if (sellRiseMatch?.[1] && sellRiseMatch[2] && sellRisePct) {
-      const frame = normalizeTimeframe(sellRiseMatch[1], sellRiseMatch[2])
-      exitRules.push(`${frame} 内上涨 ${sellRisePct}% 卖出`)
+    if (sellRiseFragment && new RegExp(percentToken, 'iu').test(sellRiseFragment)) {
+      exitRules.push(normalizeDirectionalPercentRule(sellRiseFragment, 'exit'))
     }
 
     if (entryRules.length === 0) {
@@ -1974,12 +2010,34 @@ export class CodegenConversationService {
       riskRules.earlyStop = earlyStopMatch[1].trim()
     }
 
-    return {
+    const inferredMarket = {
+      ...(riskRules.exchange === 'okx' || riskRules.exchange === 'binance' || riskRules.exchange === 'hyperliquid'
+        ? { exchange: riskRules.exchange as ChecklistPayload['market']['exchange'] }
+        : {}),
+      ...(riskRules.marketType === 'spot' || riskRules.marketType === 'perp'
+        ? { marketType: riskRules.marketType as ChecklistPayload['market']['marketType'] }
+        : {}),
+      ...(timeframes[0] ? { defaultTimeframe: timeframes[0] } : {}),
+    }
+
+    const drafts = buildChecklistRuleDrafts({
       symbols: symbols.length > 0 ? symbols : undefined,
       timeframes: timeframes.length > 0 ? timeframes : undefined,
       entryRules: entryRules.length > 0 ? entryRules : undefined,
       exitRules: exitRules.length > 0 ? exitRules : undefined,
       riskRules: Object.keys(riskRules).length > 0 ? riskRules : undefined,
+      market: Object.keys(inferredMarket).length > 0 ? inferredMarket : undefined,
+    })
+
+    return {
+      symbols: symbols.length > 0 ? symbols : undefined,
+      timeframes: timeframes.length > 0 ? timeframes : undefined,
+      entryRules: entryRules.length > 0 ? entryRules : undefined,
+      exitRules: exitRules.length > 0 ? exitRules : undefined,
+      entryRuleDrafts: drafts.entry,
+      exitRuleDrafts: drafts.exit,
+      riskRules: Object.keys(riskRules).length > 0 ? riskRules : undefined,
+      market: Object.keys(inferredMarket).length > 0 ? inferredMarket : { defaultTimeframe: timeframes[0] ?? null },
     }
   }
 
@@ -2061,15 +2119,81 @@ export class CodegenConversationService {
       return Object.keys(normalized).length > 0 ? normalized : undefined
     }
 
-    const normalizedRiskRules = normalizeObject(payload.riskRules)
-    return {
+    const normalizeDrafts = (value: unknown, phase: ChecklistRuleDraft['phase']): ChecklistRuleDraft[] | undefined => {
+      if (!Array.isArray(value)) return undefined
+      const drafts = value
+        .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
+        .map((item, index) => {
+          const text = typeof item.text === 'string' ? item.text.trim() : ''
+          if (!text) return null
+          const timeframe = typeof item.timeframe === 'string' && item.timeframe.trim().length > 0
+            ? item.timeframe.trim()
+            : null
+          const basis = typeof item.basis === 'string' && item.basis.trim().length > 0
+            ? item.basis.trim() as ChecklistRuleBasis['kind']
+            : null
+          return {
+            id: typeof item.id === 'string' && item.id.trim().length > 0 ? item.id.trim() : `${phase}-${index + 1}`,
+            phase,
+            text,
+            timeframe,
+            ...(basis ? { basis } : {}),
+          } satisfies ChecklistRuleDraft
+        })
+        .filter((item): item is ChecklistRuleDraft => item !== null)
+
+      return drafts.length > 0 ? drafts : undefined
+    }
+
+    const normalizeMarket = (value: unknown): ChecklistPayload['market'] | undefined => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return undefined
+      }
+      const raw = value as Record<string, unknown>
+      const exchange = typeof raw.exchange === 'string' && ['binance', 'okx', 'hyperliquid'].includes(raw.exchange.trim().toLowerCase())
+        ? raw.exchange.trim().toLowerCase() as NonNullable<ChecklistPayload['market']>['exchange']
+        : undefined
+      const marketType = typeof raw.marketType === 'string' && ['spot', 'perp'].includes(raw.marketType.trim().toLowerCase())
+        ? raw.marketType.trim().toLowerCase() as NonNullable<ChecklistPayload['market']>['marketType']
+        : undefined
+      const defaultTimeframe = typeof raw.defaultTimeframe === 'string' && raw.defaultTimeframe.trim().length > 0
+        ? raw.defaultTimeframe.trim()
+        : null
+
+      if (!exchange && !marketType && !defaultTimeframe) {
+        return undefined
+      }
+
+      return {
+        ...(exchange ? { exchange } : {}),
+        ...(marketType ? { marketType } : {}),
+        ...(defaultTimeframe ? { defaultTimeframe } : {}),
+      }
+    }
+
+    const normalized: ChecklistPayload = {
       symbols: normalizeStringArray(payload.symbols),
       timeframes: normalizeStringArray(payload.timeframes),
       entryRules: normalizeStringArray(payload.entryRules),
       exitRules: normalizeStringArray(payload.exitRules),
-      riskRules: this.backfillDefaultRiskBasis(normalizedRiskRules),
+      riskRules: this.backfillDefaultRiskBasis(normalizeObject(payload.riskRules)),
       entryRuleBases: normalizeBasisMap(payload.entryRuleBases),
       exitRuleBases: normalizeBasisMap(payload.exitRuleBases),
+      entryRuleDrafts: normalizeDrafts(payload.entryRuleDrafts, 'entry'),
+      exitRuleDrafts: normalizeDrafts(payload.exitRuleDrafts, 'exit'),
+      riskRuleDrafts: normalizeDrafts(payload.riskRuleDrafts, 'risk'),
+      market: normalizeMarket(payload.market),
+    }
+    const drafts = buildChecklistRuleDrafts(normalized)
+
+    return {
+      ...normalized,
+      entryRuleDrafts: drafts.entry.length > 0 ? drafts.entry : undefined,
+      exitRuleDrafts: drafts.exit.length > 0 ? drafts.exit : undefined,
+      riskRuleDrafts: drafts.risk.length > 0 ? drafts.risk : undefined,
+      market: normalized.market ?? (resolveChecklistDefaultTimeframe(normalized)
+        ? { defaultTimeframe: resolveChecklistDefaultTimeframe(normalized) }
+        : undefined),
     }
   }
 
@@ -2596,6 +2720,10 @@ export class CodegenConversationService {
       riskRules: mergedRiskRules,
       entryRuleBases: Object.keys(mergedEntryRuleBases).length > 0 ? mergedEntryRuleBases : undefined,
       exitRuleBases: Object.keys(mergedExitRuleBases).length > 0 ? mergedExitRuleBases : undefined,
+      entryRuleDrafts: patch.entryRuleDrafts && patch.entryRuleDrafts.length > 0 ? patch.entryRuleDrafts : base.entryRuleDrafts,
+      exitRuleDrafts: patch.exitRuleDrafts && patch.exitRuleDrafts.length > 0 ? patch.exitRuleDrafts : base.exitRuleDrafts,
+      riskRuleDrafts: patch.riskRuleDrafts && patch.riskRuleDrafts.length > 0 ? patch.riskRuleDrafts : base.riskRuleDrafts,
+      market: patch.market ?? base.market,
     }
     return this.normalizeChecklist(merged)
   }
