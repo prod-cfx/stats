@@ -441,20 +441,6 @@ function normalizeSnapshotCompatibilityMetadata(
   }
 }
 
-function buildPublishedSnapshotStrategyParamValues(
-  strategyConfig: AccountAiQuantPublishedStrategyConfig | null,
-): Record<string, unknown> | null {
-  if (!strategyConfig) {
-    return null
-  }
-  return {
-    exchange: strategyConfig.exchange ?? null,
-    symbol: strategyConfig.symbol ?? null,
-    baseTimeframe: strategyConfig.baseTimeframe ?? null,
-    positionPct: strategyConfig.positionPct ?? null,
-  }
-}
-
 export function normalizePublishedSnapshotParamValues(
   value: unknown,
 ): Record<string, unknown> | null {
@@ -1251,9 +1237,7 @@ export function createConversationFromServerConversation(
         capabilities: null,
       })
     : null
-  const snapshotParamValues =
-    normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
-    ?? buildPublishedSnapshotStrategyParamValues(snapshotStrategyConfig)
+  const snapshotParamValues = normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
   const mergedSnapshotParamValues = mergeSnapshotBoundParamValues({
     currentValues: syncResult?.paramValues ?? seed.paramValues,
     snapshotParamValues,
@@ -1398,9 +1382,7 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
   const publishedSnapshotCompatibilityMetadata = normalizeSnapshotCompatibilityMetadata(
     item.publishedSnapshotCompatibilityMetadata,
   )
-  const publishedSnapshotParamValues =
-    normalizePublishedSnapshotParamValues(item.publishedSnapshotParamValues)
-    ?? buildPublishedSnapshotStrategyParamValues(publishedSnapshotStrategyConfig)
+  const publishedSnapshotParamValues = normalizePublishedSnapshotParamValues(item.publishedSnapshotParamValues)
   const baseParams =
     item.params && typeof item.params === 'object' && !Array.isArray(item.params)
       ? (item.params as unknown as Record<string, unknown>)

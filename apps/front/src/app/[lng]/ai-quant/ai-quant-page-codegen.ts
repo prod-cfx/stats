@@ -76,19 +76,6 @@ function normalizePublishedSnapshotParamValues(
   return normalized
 }
 
-function buildSnapshotStrategyParamValues(response: LlmCodegenSessionResponse): Record<string, unknown> | null {
-  const strategyConfig = response.publishedSnapshotStrategyConfig
-  if (!strategyConfig) {
-    return null
-  }
-  return {
-    exchange: strategyConfig.exchange ?? null,
-    symbol: strategyConfig.symbol ?? null,
-    baseTimeframe: strategyConfig.baseTimeframe ?? null,
-    positionPct: strategyConfig.positionPct ?? null,
-  }
-}
-
 function mergeSnapshotBoundParamValues(input: {
   currentValues: Record<string, unknown>
   snapshotParamValues: Record<string, unknown> | null
@@ -421,18 +408,12 @@ export function applyCodegenResponseToConversationState(args: {
     currentValues: syncResult?.paramValues ?? conversation.paramValues,
     snapshotParamValues:
       response.status === 'PUBLISHED'
-        ? (
-            buildSnapshotStrategyParamValues(response)
-            ?? normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
-          )
+        ? normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
         : null,
   })
   const nextPublishedSnapshotParamValues =
     response.status === 'PUBLISHED'
-      ? (
-          buildSnapshotStrategyParamValues(response)
-          ?? normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
-        )
+      ? normalizePublishedSnapshotParamValues(response.publishedSnapshotParamValues)
       : shouldUpdateGraph
         ? null
         : conversation.publishedSnapshotParamValues

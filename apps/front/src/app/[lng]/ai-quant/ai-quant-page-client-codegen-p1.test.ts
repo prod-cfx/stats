@@ -8,6 +8,7 @@ import {
   resolvePublishedStrategyInstanceId,
 } from './ai-quant-page-codegen'
 import {
+  createConversation,
   DEFAULT_PARAMS,
   DEFAULT_PARAM_SCHEMA,
   DEFAULT_PARAM_VALUES,
@@ -569,6 +570,74 @@ describe('AiQuantPageClient codegen P1 guards', () => {
       symbol: 'ETHUSDT',
       baseTimeframe: '1h',
       positionPct: 25,
+    })
+  })
+
+  it('prefers authoritative publishedSnapshotParamValues over strategyConfig-derived subsets on publish response', () => {
+    const next = applyCodegenResponseToConversationState({
+      conversation: {
+        ...createConversation((key: string) => key),
+        id: 'conv-2',
+        title: 'test',
+        paramSchema: DEFAULT_PARAM_SCHEMA,
+        paramValues: {
+          ...DEFAULT_PARAM_VALUES,
+          backtestRangePreset: '30D',
+        },
+        backtestResult: null,
+        logicGraph: null,
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: null,
+        llmCodegenSessionId: 'session-2',
+        publishedStrategyInstanceId: null,
+        publishedSnapshotId: null,
+        publishedScriptCode: null,
+        publishedScriptGraphVersion: null,
+        latestSignalMessage: null,
+        backtestExecutionConfigExplicit: false,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+      } as any,
+      response: {
+        id: 'session-2',
+        conversationId: 'server-conv-2',
+        status: 'PUBLISHED',
+        scriptCode: 'export default function strategy() { return true }',
+        publishedSnapshotId: 'snapshot-2',
+        publishedSnapshotParamValues: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          baseTimeframe: '1h',
+          positionPct: 25,
+          buyDropPct: 1.5,
+        },
+        publishedSnapshotStrategyConfig: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          baseTimeframe: '1h',
+          positionPct: 25,
+        },
+      } as any,
+      confirmGenerate: true,
+      targetParams: DEFAULT_PARAMS,
+      backtestCapabilities: null,
+      activeSessionId: 'session-2',
+      trimmedMessage: 'Confirm code generation',
+      t: (key: string, options?: Record<string, unknown>) =>
+        options?.defaultValue ? String(options.defaultValue) : key,
+      loadingMessageId: 'loading',
+    })
+
+    expect(next.publishedSnapshotParamValues).toEqual({
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      baseTimeframe: '1h',
+      positionPct: 25,
+      buyDropPct: 1.5,
     })
   })
 })
