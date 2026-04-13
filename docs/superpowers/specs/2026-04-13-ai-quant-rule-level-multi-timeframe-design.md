@@ -44,17 +44,39 @@
 本次不做：
 
 - 重写整个策略编译器
+- 推翻或重排现有主数据流
 - 允许任意跨周期布尔表达式混用并自动对齐
 - 改变现有单周期策略的用户体验
 - 在本设计中扩展新的策略家族
 
-## 4. 核心原则
+## 4. 主数据流边界
 
-### 4.1 规则周期是一等语义
+本次会动主数据流的核心语义结构，但不会推翻主数据流本身。
+
+必须保持的主链路形状为：
+
+`natural language -> clarification gate -> canonical spec v2 -> semantic view -> confirm canonical snapshot -> IR -> AST -> compiled script -> publish -> publishedSnapshotId -> backtest(using publishedSnapshotId) -> report -> deploy(using publishedSnapshotId, gated by report)`
+
+本次允许修改的是：
+
+- 每一阶段之间传递的周期语义载荷
+- clarification gate 内部如何保存和展示规则级 timeframe
+- canonical spec v2 如何表达 `defaultTimeframe + rule timeframe`
+- semantic view、IR、publish snapshot、backtest、deploy 如何只消费确认后的规则级周期语义
+
+本次不允许修改的是：
+
+- 主链路阶段顺序
+- `confirm canonical snapshot` 作为确认闸口的角色
+- `publishedSnapshotId` 作为回测与部署真相源句柄的边界
+- `backtest(using publishedSnapshotId) -> report -> deploy(using publishedSnapshotId, gated by report)` 这条发布后链路
+## 5. 核心原则
+
+### 5.1 规则周期是一等语义
 
 规则自己的 `timeframe` 属于执行语义，不得由全局 `market.timeframe` 隐式替代。
 
-### 4.2 market 周期降级为默认周期
+### 5.2 market 周期降级为默认周期
 
 `market.timeframe` 不再被视为“所有规则共用的唯一周期”，而应重命名或重解释为：
 
@@ -68,7 +90,7 @@
 
 它不负责覆盖已经明确写在规则里的 timeframe。
 
-### 4.3 真相源只允许一个方向流动
+### 5.3 真相源只允许一个方向流动
 
 周期语义必须沿着：
 
@@ -78,13 +100,13 @@
 
 后续任何层都不得再回头从原始 message 文本重新猜测周期。
 
-### 4.4 单周期兼容必须是自然降级
+### 5.4 单周期兼容必须是自然降级
 
 如果用户只表达了一个周期，则该周期可作为默认周期自动继承到未显式声明的规则。
 
-## 5. 设计方案
+## 6. 设计方案
 
-### 5.1 Checklist 升级为规则级结构
+### 6.1 Checklist 升级为规则级结构
 
 当前 checklist 中：
 
@@ -127,7 +149,7 @@ interface ChecklistPayloadVNext {
 - 保留旧字段读取能力
 - 一旦进入内部计算，统一归一化为规则级草案结构
 
-### 5.2 Clarification 以规则级周期展示
+### 6.2 Clarification 以规则级周期展示
 
 clarification 不再只展示：
 
@@ -140,7 +162,7 @@ clarification 不再只展示：
 
 当仍缺失 basis / side / risk 语义时，追问必须保留各自规则周期，避免误把 exit 的追问绑定到 entry 的 timeframe 上。
 
-### 5.3 Canonical Spec 升级
+### 6.3 Canonical Spec 升级
 
 当前 canonical spec 中：
 
@@ -200,7 +222,7 @@ market: {
 }
 ```
 
-### 5.4 Required Timeframes 从 rules 汇总
+### 6.4 Required Timeframes 从 rules 汇总
 
 `requiredTimeframes` 不再来自：
 
@@ -215,7 +237,7 @@ market: {
 - 无显式 timeframe 的 rule 继承 `market.defaultTimeframe`
 - 汇总结果去重并保序
 
-### 5.5 Summary / Backtest / Deploy 只投影 canonical
+### 6.5 Summary / Backtest / Deploy 只投影 canonical
 
 用户可见摘要、回测请求、部署配置都必须从 canonical spec 派生，不再从原始 entryRules / exitRules 文本拼接。
 
@@ -225,7 +247,7 @@ market: {
 - backtest 知道自己需要 `3m` 与 `15m` 数据
 - deploy 使用与 backtest 同一份 `requiredTimeframes`
 
-## 6. 行为定义
+## 7. 行为定义
 
 ### 6.1 单周期策略
 
@@ -267,7 +289,7 @@ market: {
 
 - `15 分钟内回撤 3% 强制平仓`
 
-## 7. 兼容与迁移
+## 8. 兼容与迁移
 
 ### 7.1 输入兼容
 
@@ -298,7 +320,7 @@ market: {
 3. canonical spec 改为 `defaultTimeframe + rule timeframe`
 4. downstream projection 全部改读 canonical
 
-## 8. 验收标准
+## 9. 验收标准
 
 以下场景必须通过：
 
@@ -313,7 +335,7 @@ market: {
 5. clarification、summary、canonical、semantic graph、IR、backtest、deploy
    看到的 timeframe 必须一致
 
-## 9. 风险与约束
+## 10. 风险与约束
 
 ### 9.1 风险：局部链路先升级，整体仍漂移
 
@@ -337,7 +359,7 @@ market: {
 
 本次支持的是“规则级多周期”，不是“一个布尔表达式内部任意混合多个周期并自动对齐”。
 
-## 10. 结论
+## 11. 结论
 
 本次应采用“规则级多周期是一等语义”的方案，而不是继续修补单个正则或沿用单周期 canonical 模型。
 
