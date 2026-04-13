@@ -76,14 +76,20 @@ function normalizeBacktestConfigDefaults(
   const feeBps = normalizeNumber(config.feeBps)
   const priceSource = typeof config.priceSource === 'string' ? config.priceSource : ''
   if (!initialCash || !leverage || !priceSource) return null
-  return {
+  const normalized = {
     initialCash,
     leverage,
     slippageBps,
     feeBps,
     priceSource,
     allowPartial: config.allowPartial === true,
+    stateTimeframes: Array.isArray(config.stateTimeframes)
+      ? config.stateTimeframes
+          .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+          .map(item => item.trim())
+      : [],
   }
+  return normalized
 }
 
 function normalizeDeploymentExecutionConfig(

@@ -174,7 +174,8 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         strategyConfig: {
           exchange: 'okx',
           symbol: 'ETHUSDT',
-          baseTimeframe: '15m',
+          baseTimeframe: '3m',
+          stateTimeframes: ['15m'],
           marketType: 'perp',
           positionPct: 25,
           strategyDeclaredLeverageRange: { min: 1, max: 8 },
@@ -284,7 +285,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(detail.snapshot.snapshotHash).toBe('snapshot-hash-1')
     expect(detail.snapshot.exchange).toBe('okx')
     expect(detail.snapshot.symbol).toBe('ETHUSDT')
-    expect(detail.snapshot.timeframe).toBe('15m')
+    expect(detail.snapshot.timeframe).toBe('3m')
     expect(detail.snapshot.positionPct).toBe(25)
     expect(detail.snapshot.paramValues).toEqual({
       exchange: 'okx',
@@ -296,7 +297,8 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(detail.snapshot.strategyConfig).toEqual({
       exchange: 'okx',
       symbol: 'ETHUSDT',
-      baseTimeframe: '15m',
+      baseTimeframe: '3m',
+      stateTimeframes: ['15m'],
       marketType: 'perp',
       positionPct: 25,
       strategyDeclaredLeverageRange: { min: 1, max: 8 },
@@ -308,6 +310,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       feeBps: 4,
       priceSource: 'mark',
       allowPartial: false,
+      stateTimeframes: ['15m'],
     })
     expect(detail.snapshot.deploymentExecutionBaseline).toEqual({
       leverage: 3,

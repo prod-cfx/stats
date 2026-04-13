@@ -115,7 +115,7 @@ describe('StrategyDetailPageClient', () => {
       publishedSnapshotParamValues: {
         exchange: 'binance',
         symbol: 'BTCUSDT',
-        baseTimeframe: '15m',
+        baseTimeframe: '3m',
         positionPct: 12,
       },
       snapshotBacktestConfigDefaults: {
@@ -125,6 +125,7 @@ describe('StrategyDetailPageClient', () => {
         feeBps: 3,
         priceSource: 'close',
         allowPartial: true,
+        stateTimeframes: ['15m'],
       },
       compatibilityMetadata: {
         isLegacySnapshot: false,
@@ -139,11 +140,11 @@ describe('StrategyDetailPageClient', () => {
     })
     mockFetchBacktestCapabilities.mockResolvedValue({
       allowedSymbols: ['BTCUSDT'],
-      allowedBaseTimeframes: ['15m'],
+      allowedBaseTimeframes: ['3m'],
     })
     mockBuildBacktestPayload.mockReturnValue({
       symbols: ['BTCUSDT'],
-      baseTimeframe: '15m',
+      baseTimeframe: '3m',
       stateTimeframes: ['15m'],
       initialCash: 20000,
       leverage: 2,
@@ -195,7 +196,7 @@ describe('StrategyDetailPageClient', () => {
     expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
       expect.objectContaining({
         symbol: 'BTCUSDT',
-        baseTimeframe: '15m',
+        baseTimeframe: '3m',
         stateTimeframes: ['15m'],
         strategy: {
           id: 'inst-1',

@@ -142,6 +142,64 @@ describe('ai-quant-strategy-api-adapter', () => {
     expect(record.supportsDynamicParams).toBe(false)
   })
 
+  it('keeps snapshot backtest state timeframes when present', () => {
+    const record = mapAccountStrategyDetailToRecord({
+      id: 'inst-state-timeframes',
+      name: 'detail strategy',
+      status: 'running',
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      timeframe: '3m',
+      positionPct: 10,
+      isSubscribed: true,
+      metrics: {
+        returnPct: 12.5,
+        maxDrawdownPct: 6.3,
+        winRatePct: 50.1,
+        tradeCount: 12,
+      },
+      updatedAt: '2026-03-20T00:00:00.000Z',
+      totalPnl: 0,
+      todayPnl: null,
+      equitySeries: [{ ts: '2026-03-20T00:00:00.000Z', value: 10000 }],
+      snapshot: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '3m',
+        positionPct: 10,
+        publishedSnapshotId: 'snapshot-2',
+        snapshotHash: 'snapshot-hash-2',
+        deployAccountName: null,
+        deployAt: null,
+        paramSchema: null,
+        paramValues: {
+          leverage: 3,
+        },
+        schemaVersion: null,
+        backtestConfigDefaults: {
+          initialCash: 20000,
+          leverage: 2,
+          slippageBps: 8,
+          feeBps: 3,
+          priceSource: 'close',
+          allowPartial: true,
+          stateTimeframes: ['15m', ' 1h ', '', 42 as never],
+        },
+      },
+      timeline: [],
+    } as any)
+
+    expect(record.snapshotBacktestConfigDefaults).toEqual({
+      initialCash: 20000,
+      leverage: 2,
+      slippageBps: 8,
+      feeBps: 3,
+      priceSource: 'close',
+      allowPartial: true,
+      stateTimeframes: ['15m', '1h'],
+    })
+  })
+
   it('normalizes paramValues to empty object when schema exists but values are absent', () => {
     const record = mapAccountStrategyDetailToRecord({
       id: 'inst-3',
@@ -432,6 +490,7 @@ describe('ai-quant-strategy-api-adapter', () => {
       feeBps: 4,
       priceSource: 'mid',
       allowPartial: false,
+      stateTimeframes: [],
     })
     expect(record.deploymentExecutionBaseline).toEqual({
       leverage: 2,

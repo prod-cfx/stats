@@ -1,6 +1,14 @@
 import type { CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
+import type { ChecklistRuleBasis } from '../types/codegen-checklist'
 import { Injectable } from '@nestjs/common'
 import { CANONICAL_RULE_KEYS, DEFAULT_INDICATOR_PARAMS } from '../constants/canonical-strategy-capabilities'
+import {
+  buildChecklistRuleDrafts,
+  resolveChecklistDefaultTimeframe,
+  resolveRequiredRuleTimeframes,
+  resolveRulePhaseDefaultTimeframe,
+} from './checklist-rule-drafts'
+import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 
 interface ChecklistSnapshot {
   symbols?: unknown
@@ -10,11 +18,16 @@ interface ChecklistSnapshot {
   riskRules?: unknown
   entryRuleBases?: unknown
   exitRuleBases?: unknown
+  entryRuleDrafts?: unknown
+  exitRuleDrafts?: unknown
+  market?: unknown
 }
 
 @Injectable()
 export class CanonicalSpecBuilderService {
   build(checklist: ChecklistSnapshot): CanonicalStrategySpecV2 {
+    const normalizedChecklist = checklist as ChecklistSnapshot & Parameters<typeof buildChecklistRuleDrafts>[0]
+    const ruleDrafts = buildChecklistRuleDrafts(normalizedChecklist)
     const entryRules = Array.isArray(checklist.entryRules) ? checklist.entryRules : []
     const exitRules = Array.isArray(checklist.exitRules) ? checklist.exitRules : []
     const riskRules = checklist.riskRules && typeof checklist.riskRules === 'object' && !Array.isArray(checklist.riskRules)
@@ -24,9 +37,9 @@ export class CanonicalSpecBuilderService {
     const exitTexts = exitRules.map(item => String(item))
     const sharedGridParams = this.resolveGridParams([...entryTexts, ...exitTexts].join(' '))
     const sizing = this.resolveSizing(riskRules)
-    const market = this.resolveMarket(checklist, riskRules)
+    const market = this.resolveMarket(normalizedChecklist, riskRules, ruleDrafts)
     const indicators = this.resolveIndicators(entryTexts, exitTexts, riskRules)
-    const requiredTimeframes = this.resolveRequiredTimeframes(checklist)
+    const requiredTimeframes = resolveRequiredRuleTimeframes(ruleDrafts, market.defaultTimeframe)
     const dominantEntrySideScope = this.resolveDominantEntrySideScope(entryTexts)
 
     const rules: CanonicalRuleV2[] = []
@@ -40,6 +53,7 @@ export class CanonicalSpecBuilderService {
         actionType: openAction?.type ?? null,
         sideScope: openAction?.sideScope ?? null,
         sizing,
+        ruleDraft: ruleDrafts.entry[index],
       })
       if (priceChangeRule) {
         rules.push(priceChangeRule)
@@ -53,6 +67,7 @@ export class CanonicalSpecBuilderService {
         sideScope: openAction?.sideScope ?? null,
         sizing,
         sharedGridParams,
+        ruleDraft: ruleDrafts.entry[index],
       })
       if (gridEntryRule) {
         rules.push(gridEntryRule)
@@ -160,6 +175,7 @@ export class CanonicalSpecBuilderService {
         actionType: closeAction?.type ?? null,
         sideScope: closeAction?.sideScope ?? null,
         sizing,
+        ruleDraft: ruleDrafts.exit[index],
       })
       if (priceChangeRule) {
         rules.push(priceChangeRule)
@@ -173,6 +189,7 @@ export class CanonicalSpecBuilderService {
         sideScope: null,
         sizing,
         sharedGridParams,
+        ruleDraft: ruleDrafts.exit[index],
       })
       if (gridExitRule) {
         rules.push(gridExitRule)
@@ -252,6 +269,10 @@ export class CanonicalSpecBuilderService {
     })
 
     const stopLossPct = this.resolveStopLossPct(riskRules)
+    const stopLossBasis = this.resolveRiskBasis(
+      typeof riskRules.stopLoss === 'string' ? riskRules.stopLoss : stopLossPct !== null ? `止损 ${stopLossPct}%` : null,
+      riskRules.stopLossBasis,
+    )
     if (stopLossPct !== null) {
       rules.push({
         id: 'risk-stop-loss',
@@ -264,16 +285,22 @@ export class CanonicalSpecBuilderService {
           semanticScope: 'position',
           op: 'GTE',
           value: Number((stopLossPct / 100).toFixed(4)),
-          ...(typeof riskRules.stopLossBasis === 'string' ? { params: { basis: riskRules.stopLossBasis } } : {}),
+          ...(stopLossBasis ? { params: { basis: stopLossBasis } } : {}),
         },
         actions: [{ type: 'FORCE_EXIT' }],
-        ...(typeof riskRules.stopLossBasis === 'string' ? { metadata: { basis: riskRules.stopLossBasis } } : {}),
+        ...(stopLossBasis ? { metadata: { basis: stopLossBasis } } : {}),
       })
     }
 
     const takeProfitRule = this.resolveTakeProfitRule(
       [...exitTexts, ...Object.values(riskRules).map(item => String(item))],
       riskRules,
+    )
+    const takeProfitBasis = this.resolveRiskBasis(
+      typeof riskRules.takeProfit === 'string'
+        ? riskRules.takeProfit
+        : takeProfitRule ? `止盈 ${takeProfitRule.pct}%` : null,
+      riskRules.takeProfitBasis,
     )
     if (takeProfitRule) {
       rules.push({
@@ -287,10 +314,10 @@ export class CanonicalSpecBuilderService {
           semanticScope: 'position',
           op: 'GTE',
           value: Number((takeProfitRule.pct / 100).toFixed(4)),
-          ...(typeof riskRules.takeProfitBasis === 'string' ? { params: { basis: riskRules.takeProfitBasis } } : {}),
+          ...(takeProfitBasis ? { params: { basis: takeProfitBasis } } : {}),
         },
         actions: takeProfitRule.actions,
-        ...(typeof riskRules.takeProfitBasis === 'string' ? { metadata: { basis: riskRules.takeProfitBasis } } : {}),
+        ...(takeProfitBasis ? { metadata: { basis: takeProfitBasis } } : {}),
       })
     }
 
@@ -445,6 +472,19 @@ export class CanonicalSpecBuilderService {
     return stopLossPct
   }
 
+  private resolveRiskBasis(
+    ruleText: string | null,
+    explicitBasis: unknown,
+  ): ChecklistRuleBasis['kind'] | null {
+    if (typeof explicitBasis === 'string' && explicitBasis.trim()) {
+      return explicitBasis.trim() as ChecklistRuleBasis['kind']
+    }
+    if (!ruleText?.trim()) {
+      return null
+    }
+    return resolveDefaultRiskBasis(ruleText, null)
+  }
+
   private resolveSizing(riskRules: Record<string, unknown>): { mode: 'RATIO'; value: number } | null {
     const hasPositionPct = typeof riskRules.positionPct === 'number'
     if (!hasPositionPct) return null
@@ -460,21 +500,31 @@ export class CanonicalSpecBuilderService {
   private resolveMarket(
     checklist: ChecklistSnapshot,
     riskRules: Record<string, unknown>,
+    ruleDrafts: ReturnType<typeof buildChecklistRuleDrafts>,
   ): CanonicalStrategySpecV2['market'] {
     const symbols = Array.isArray(checklist.symbols) ? checklist.symbols : []
-    const timeframes = Array.isArray(checklist.timeframes) ? checklist.timeframes : []
+    const market = checklist.market && typeof checklist.market === 'object' && !Array.isArray(checklist.market)
+      ? checklist.market as Record<string, unknown>
+      : null
     const rawSymbol = typeof symbols[0] === 'string' ? symbols[0].trim().toUpperCase() : ''
-    const rawTimeframe = typeof timeframes[0] === 'string' ? timeframes[0].trim() : ''
+    const rawTimeframe = resolveRulePhaseDefaultTimeframe(
+      ruleDrafts.entry,
+      resolveChecklistDefaultTimeframe(checklist as Parameters<typeof resolveChecklistDefaultTimeframe>[0]),
+    ) ?? ruleDrafts.exit.find(draft => draft.timeframe)?.timeframe ?? ''
     const riskExchange = typeof riskRules.exchange === 'string' ? riskRules.exchange.trim().toLowerCase() : ''
     const riskMarketType = typeof riskRules.marketType === 'string' ? riskRules.marketType.trim().toLowerCase() : ''
+    const marketExchange = typeof market?.exchange === 'string' ? market.exchange.trim().toLowerCase() : ''
+    const marketType = typeof market?.marketType === 'string' ? market.marketType.trim().toLowerCase() : ''
 
     return {
-      exchange: riskExchange === 'okx' || riskExchange === 'hyperliquid' || riskExchange === 'binance'
-        ? riskExchange
-        : 'binance',
+      exchange: marketExchange === 'okx' || marketExchange === 'hyperliquid' || marketExchange === 'binance'
+        ? marketExchange
+        : (riskExchange === 'okx' || riskExchange === 'hyperliquid' || riskExchange === 'binance'
+            ? riskExchange
+            : 'binance'),
       symbol: rawSymbol || null,
-      marketType: riskMarketType === 'perp' ? 'perp' : 'spot',
-      timeframe: rawTimeframe || null,
+      marketType: marketType === 'perp' ? 'perp' : (riskMarketType === 'perp' ? 'perp' : 'spot'),
+      defaultTimeframe: rawTimeframe || null,
     }
   }
 
@@ -544,13 +594,6 @@ export class CanonicalSpecBuilderService {
     }
 
     return indicators
-  }
-
-  private resolveRequiredTimeframes(checklist: ChecklistSnapshot): string[] {
-    const timeframes = Array.isArray(checklist.timeframes) ? checklist.timeframes : []
-    return timeframes
-      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-      .map(item => item.trim())
   }
 
   private resolveOutsideBandRiskActions(text: string): CanonicalRuleV2['actions'] | null {
@@ -706,6 +749,7 @@ export class CanonicalSpecBuilderService {
       stepPct: number
       levelCount: number
     } | null
+    ruleDraft?: { timeframe: string | null } | undefined
   }): CanonicalRuleV2 | null {
     if (!/网格/u.test(input.ruleText)) return null
 
@@ -724,7 +768,10 @@ export class CanonicalSpecBuilderService {
         key: 'grid.range_rebalance',
         semanticScope: 'market',
         op: semantics.op,
-        params,
+        params: {
+          ...params,
+          ...(input.ruleDraft?.timeframe ? { timeframe: input.ruleDraft.timeframe } : {}),
+        },
       },
       actions: [input.phase === 'entry'
         ? this.buildOpenAction(semantics.action as 'OPEN_LONG' | 'OPEN_SHORT', input.sizing)
@@ -774,8 +821,9 @@ export class CanonicalSpecBuilderService {
     actionType: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | null
     sideScope: 'long' | 'short' | null
     sizing: { mode: 'RATIO'; value: number } | null
+    ruleDraft?: { timeframe: string | null, basis?: string | null } | undefined
   }): CanonicalRuleV2 | null {
-    const timeframe = this.extractRuleTimeframe(input.ruleText)
+    const timeframe = input.ruleDraft?.timeframe ?? this.extractRuleTimeframe(input.ruleText)
     const pctChange = this.extractPriceChangePct(input.ruleText)
     if (!timeframe || !pctChange || !input.actionType || !input.sideScope) {
       return null
@@ -788,6 +836,8 @@ export class CanonicalSpecBuilderService {
     }
 
     const normalizedValue = Number((numericPct / 100).toFixed(4))
+    const explicitBasis = input.ruleDraft?.basis
+    const usesPositionBasis = input.phase === 'exit' && (explicitBasis === 'entry_avg_price' || explicitBasis === 'position_pnl')
     return {
       id: `${input.phase}-price-change-${input.index + 1}`,
       phase: input.phase,
@@ -795,18 +845,20 @@ export class CanonicalSpecBuilderService {
       priority: input.phase === 'entry' ? 210 - input.index : 135 - input.index,
       condition: {
         kind: 'atom',
-        key: 'price.change_pct',
-        semanticScope: 'market',
+        key: usesPositionBasis ? 'position_gain_pct' : 'price.change_pct',
+        semanticScope: usesPositionBasis ? 'position' : 'market',
         op: isDrop ? 'LTE' : 'GTE',
         value: isDrop ? -normalizedValue : normalizedValue,
         params: {
           timeframe,
           lookbackBars: 1,
+          ...(explicitBasis ? { basis: explicitBasis } : {}),
         },
       },
       actions: [input.phase === 'entry'
         ? this.buildOpenAction(input.actionType as 'OPEN_LONG' | 'OPEN_SHORT', input.sizing)
         : { type: input.actionType as 'CLOSE_LONG' | 'CLOSE_SHORT' }],
+      ...(explicitBasis ? { metadata: { basis: explicitBasis } } : {}),
     }
   }
 

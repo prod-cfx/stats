@@ -54,7 +54,8 @@ export interface CanonicalStrategySpecV2 {
     exchange: 'binance' | 'okx' | 'hyperliquid'
     symbol: string | null
     marketType: 'spot' | 'perp'
-    timeframe: string | null
+    defaultTimeframe?: string | null
+    timeframe?: string | null
   }
   indicators: Array<{
     kind: 'bollingerBands' | 'sma' | 'ema' | 'rsi' | 'atr' | 'macd' | 'custom'

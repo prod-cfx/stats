@@ -27,7 +27,9 @@ export class SpecDescBuilderService {
     const canonicalDigest = this.digest.hash(canonicalSpec)
     const rules = canonicalSpec.version === 2 ? canonicalSpec.rules : []
     const symbols = canonicalSpec.version === 2 && canonicalSpec.market.symbol ? [canonicalSpec.market.symbol] : []
-    const timeframes = canonicalSpec.version === 2 && canonicalSpec.market.timeframe ? [canonicalSpec.market.timeframe] : []
+    const timeframes = canonicalSpec.version === 2
+      ? canonicalSpec.dataRequirements.requiredTimeframes
+      : []
 
     const scriptLower = scriptCode.toLowerCase()
     const features = ['rsi', 'sma', 'ema', 'atr', 'macd', 'bollinger', 'crossover', 'crossunder']
@@ -76,7 +78,9 @@ export class SpecDescBuilderService {
         runtime: 'current_script_engine',
         allowedHelpersOnly: true,
       },
-      summary: `策略规则共 ${rules.length} 条（入场 ${phaseCounts.entry}、出场 ${phaseCounts.exit}、风控 ${phaseCounts.risk}）`,
+      summary: timeframes.length > 1
+        ? `策略规则共 ${rules.length} 条，覆盖周期 ${timeframes.join(' / ')}`
+        : `策略规则共 ${rules.length} 条（入场 ${phaseCounts.entry}、出场 ${phaseCounts.exit}、风控 ${phaseCounts.risk}）`,
       embedding: null,
     }
   }

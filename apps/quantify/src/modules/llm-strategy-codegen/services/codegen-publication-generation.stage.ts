@@ -11,6 +11,7 @@ import type { CompiledScriptParserService } from './compiled-script-parser.servi
 import type { SpecDescBuilderService } from './spec-desc-builder.service'
 import type { StrategyConsistencyService } from './strategy-consistency.service'
 import type { StrategySummaryBuilderService } from './strategy-summary-builder.service'
+import { resolveChecklistDefaultTimeframe } from './checklist-rule-drafts'
 
 export interface CompiledScriptValidationResult {
   passed: boolean
@@ -84,6 +85,7 @@ export class CodegenPublicationGenerationStage {
     const strategySummary = this.strategySummaryBuilder.buildStrategySummary(canonicalSpec)
     const lockedParams = this.buildLockedParams(input.checklist)
     const publishParams = this.buildPublishParams({
+      canonicalSpec,
       checklist: input.checklist,
       message: input.message,
     })
@@ -163,6 +165,7 @@ export class CodegenPublicationGenerationStage {
   }
 
   private buildPublishParams(args: {
+    canonicalSpec: CanonicalStrategySpecV2
     checklist: ChecklistPayload
     message: string
   }): {
@@ -171,9 +174,14 @@ export class CodegenPublicationGenerationStage {
     marketType: 'spot' | 'perp'
   } {
     const rawSymbol = args.checklist.symbols?.[0] ?? 'BTCUSDT'
+    const requiredTimeframes = args.canonicalSpec.dataRequirements.requiredTimeframes
+    const baseTimeframe = requiredTimeframes[0]
+      ?? args.canonicalSpec.market.defaultTimeframe
+      ?? resolveChecklistDefaultTimeframe(args.checklist)
+      ?? '5m'
     return {
       symbol: normalizePublishedSymbol(rawSymbol),
-      timeframe: args.checklist.timeframes?.[0] ?? '5m',
+      timeframe: baseTimeframe,
       marketType: inferPublishedMarketType({
         symbol: rawSymbol,
         checklist: args.checklist,
@@ -221,7 +229,7 @@ export class CodegenPublicationGenerationStage {
       locked.symbol = normalizePublishedSymbol(rawSymbol)
     }
 
-    const rawTimeframe = checklist.timeframes?.[0]
+    const rawTimeframe = resolveChecklistDefaultTimeframe(checklist)
     if (typeof rawTimeframe === 'string' && rawTimeframe.trim()) {
       locked.timeframe = rawTimeframe.trim()
     }

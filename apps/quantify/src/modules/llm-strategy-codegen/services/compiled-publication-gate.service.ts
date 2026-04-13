@@ -36,6 +36,7 @@ interface FormalStrategyConfig {
   symbol: string
   marketType: 'spot' | 'perp'
   baseTimeframe: string | null
+  stateTimeframes?: string[]
   positionPct: number | null
   strategyDeclaredLeverageRange: null
 }
@@ -182,11 +183,13 @@ export class CompiledPublicationGateService {
   }
 
   private buildStrategyConfig(input: PublishCompiledSnapshotInput): FormalStrategyConfig {
+    const [baseTimeframe, ...stateTimeframes] = input.ir.market.timeframes
     return {
       exchange: input.ir.market.venue,
       symbol: input.ir.market.symbol,
       marketType: input.ir.market.instrumentType === 'perpetual' ? 'perp' : 'spot',
-      baseTimeframe: input.ir.market.timeframes[0] ?? null,
+      baseTimeframe: baseTimeframe ?? null,
+      stateTimeframes,
       positionPct: input.ir.portfolio.sizing.mode === 'pct_equity'
         ? input.ir.portfolio.sizing.value
         : null,
@@ -395,8 +398,8 @@ export class CompiledPublicationGateService {
   private readCanonicalMarket(snapshot: Record<string, unknown>): {
     exchange: string | null
     marketType: string | null
-    symbol: string | null
-    timeframe: string | null
+      symbol: string | null
+      timeframe: string | null
   } | null {
     const market = snapshot.market
     if (!market || typeof market !== 'object' || Array.isArray(market)) return null
@@ -406,7 +409,9 @@ export class CompiledPublicationGateService {
       exchange: typeof record.exchange === 'string' ? record.exchange : null,
       marketType: typeof record.marketType === 'string' ? record.marketType : null,
       symbol: typeof record.symbol === 'string' ? record.symbol : null,
-      timeframe: typeof record.timeframe === 'string' ? record.timeframe : null,
+      timeframe: typeof record.defaultTimeframe === 'string'
+        ? record.defaultTimeframe
+        : (typeof record.timeframe === 'string' ? record.timeframe : null),
     }
   }
 
