@@ -1,6 +1,7 @@
 import type { ChecklistPayload } from '../types/codegen-checklist'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import { Injectable } from '@nestjs/common'
+import { classifyPercentageRuleFamily } from './rule-family-default-semantics'
 
 type ClarificationChecklistInput = ChecklistPayload
 
@@ -340,6 +341,10 @@ export class StrategyClarificationRulesService {
     if (
       typeof input.riskRules?.stopLossPct === 'number'
       && !this.hasNamedBasis(input.riskRules?.stopLossBasis)
+      && classifyPercentageRuleFamily({
+        phase: 'risk',
+        rule: `止损 ${input.riskRules.stopLossPct}%`,
+      }).requiresUserBasis
       && !this.hasPendingExitBasisRule(exitRules, 'stopLoss')
     ) {
       items.push({
@@ -355,6 +360,10 @@ export class StrategyClarificationRulesService {
     if (
       typeof input.riskRules?.takeProfitPct === 'number'
       && !this.hasNamedBasis(input.riskRules?.takeProfitBasis)
+      && classifyPercentageRuleFamily({
+        phase: 'risk',
+        rule: `止盈 ${input.riskRules.takeProfitPct}%`,
+      }).requiresUserBasis
       && !this.hasPendingExitBasisRule(exitRules, 'takeProfit')
     ) {
       items.push({
@@ -378,7 +387,8 @@ export class StrategyClarificationRulesService {
   ): StrategyClarificationItem[] {
     return rules.flatMap((rawRule, index) => {
       const rule = rawRule.trim()
-      if (!rule || !this.ruleNeedsBasis(rule)) {
+      const semantics = classifyPercentageRuleFamily({ phase: scope, rule })
+      if (!rule || !this.ruleNeedsBasis(rule, semantics.requiresUserBasis)) {
         return []
       }
 
@@ -409,8 +419,12 @@ export class StrategyClarificationRulesService {
     return `${phaseLabel}“${trimmedRule}”里的百分比条件，是相对上一根 K 线收盘价、开仓均价、持仓收益，还是别的基准？`
   }
 
-  private ruleNeedsBasis(rule: string): boolean {
+  private ruleNeedsBasis(rule: string, requiresUserBasis: boolean): boolean {
     if (!PERCENTAGE_THRESHOLD_PATTERN.test(rule)) {
+      return false
+    }
+
+    if (!requiresUserBasis) {
       return false
     }
 
@@ -443,7 +457,10 @@ export class StrategyClarificationRulesService {
 
     return rules.some(rule => {
       const normalized = rule.trim()
-      return normalized.length > 0 && matcher.test(normalized) && this.ruleNeedsBasis(normalized)
+      const semantics = classifyPercentageRuleFamily({ phase: 'exit', rule: normalized })
+      return normalized.length > 0
+        && matcher.test(normalized)
+        && this.ruleNeedsBasis(normalized, semantics.requiresUserBasis)
     })
   }
 

@@ -51,6 +51,7 @@ import { StaticGuardrailService } from './static-guardrail.service'
 import { StrategyClarificationQuestionService } from './strategy-clarification-question.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { StrategyClarificationRulesService } from './strategy-clarification-rules.service'
+import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 
 interface ConversationPlan {
   related: boolean
@@ -1311,7 +1312,7 @@ export class CodegenConversationService {
     if (!normalized) return null
 
     if (/上一根|上根|昨收|前收|prev/i.test(normalized)) return 'prev_close'
-    if (/开仓均价|入场价|入场均价|开仓价|entry/i.test(normalized)) return 'entry_avg_price'
+    if (/开仓均价|入场价|入场均价|开仓价|买入价|成本价|entry/i.test(normalized)) return 'entry_avg_price'
     if (/持仓.*(?:收益|盈亏|亏损|利润|浮盈|pnl)|position.*pnl/i.test(normalized)) return 'position_pnl'
     if (/账户净值峰值|净值峰值|资金曲线峰值|peak equity/i.test(normalized)) return 'peak_equity'
     if (/持仓浮盈峰值|浮盈峰值|peak position pnl/i.test(normalized)) return 'peak_position_pnl'
@@ -1447,6 +1448,8 @@ export class CodegenConversationService {
       [exchange, marketType === 'perp' ? '合约' : marketType === 'spot' ? '现货' : '', symbol, timeframe].filter(Boolean).join(' '),
       entryRule ? `入场：${formatDraft(entryRule)}` : '',
       exitRule ? `出场：${formatDraft(exitRule)}` : '',
+      this.buildRiskSummarySegment('止损', checklist.riskRules, 'stopLoss'),
+      this.buildRiskSummarySegment('止盈', checklist.riskRules, 'takeProfit'),
       positionPct,
     ].filter(Boolean)
 
@@ -1979,6 +1982,25 @@ export class CodegenConversationService {
     if (stopLossMatch?.[1]) {
       riskRules.stopLossPct = Number(stopLossMatch[1])
     }
+    const takeProfitMatch = text.match(/止盈[^%\n]{0,12}?(?:百分之?\s*)?(\d+(?:\.\d+)?)(?:\s*%|$)/)
+      ?? text.match(/(?:盈利|收益率)[≥>=]?\s*(?:百分之?\s*)?(\d+(?:\.\d+)?)(?:\s*%|$)/)
+    if (takeProfitMatch?.[1]) {
+      riskRules.takeProfitPct = Number(takeProfitMatch[1])
+    }
+    const stopLossClause = this.extractRiskRuleClause(text, 'stopLoss')
+    const takeProfitClause = this.extractRiskRuleClause(text, 'takeProfit')
+    const stopLossBasis = this.resolveRiskBasis(stopLossClause, typeof riskRules.stopLossBasis === 'string'
+      ? riskRules.stopLossBasis as ChecklistRuleBasis['kind']
+      : null)
+    if (stopLossBasis && typeof riskRules.stopLossPct === 'number') {
+      riskRules.stopLossBasis = stopLossBasis
+    }
+    const takeProfitBasis = this.resolveRiskBasis(takeProfitClause, typeof riskRules.takeProfitBasis === 'string'
+      ? riskRules.takeProfitBasis as ChecklistRuleBasis['kind']
+      : null)
+    if (takeProfitBasis && typeof riskRules.takeProfitPct === 'number') {
+      riskRules.takeProfitBasis = takeProfitBasis
+    }
     const drawdownMatch = text.match(/最大回撤\s*(?:百分之?\s*)?(\d+(?:\.\d+)?)(?:\s*%|$)/)
     if (drawdownMatch?.[1]) {
       riskRules.maxDrawdownPct = Number(drawdownMatch[1])
@@ -2154,7 +2176,7 @@ export class CodegenConversationService {
       timeframes: normalizeStringArray(payload.timeframes),
       entryRules: normalizeStringArray(payload.entryRules),
       exitRules: normalizeStringArray(payload.exitRules),
-      riskRules: normalizeObject(payload.riskRules),
+      riskRules: this.backfillDefaultRiskBasis(normalizeObject(payload.riskRules)),
       entryRuleBases: normalizeBasisMap(payload.entryRuleBases),
       exitRuleBases: normalizeBasisMap(payload.exitRuleBases),
       entryRuleDrafts: normalizeDrafts(payload.entryRuleDrafts, 'entry'),
@@ -2172,6 +2194,132 @@ export class CodegenConversationService {
       market: normalized.market ?? (resolveChecklistDefaultTimeframe(normalized)
         ? { defaultTimeframe: resolveChecklistDefaultTimeframe(normalized) }
         : undefined),
+    }
+  }
+
+  private backfillDefaultRiskBasis(
+    riskRules: Record<string, unknown> | undefined,
+  ): Record<string, unknown> | undefined {
+    if (!riskRules) return undefined
+
+    const nextRiskRules = { ...riskRules }
+    const stopLossPct = typeof nextRiskRules.stopLossPct === 'number' ? nextRiskRules.stopLossPct : null
+    const takeProfitPct = typeof nextRiskRules.takeProfitPct === 'number' ? nextRiskRules.takeProfitPct : null
+
+    if (this.isValidRiskPct(stopLossPct) && !this.isNamedBasis(nextRiskRules.stopLossBasis)) {
+      const basis = this.resolveRiskBasis(
+        typeof nextRiskRules.stopLoss === 'string' ? nextRiskRules.stopLoss : `止损 ${stopLossPct}%`,
+        null,
+      )
+      if (basis) {
+        nextRiskRules.stopLossBasis = basis
+      }
+    }
+
+    if (this.isValidRiskPct(takeProfitPct) && !this.isNamedBasis(nextRiskRules.takeProfitBasis)) {
+      const basis = this.resolveRiskBasis(
+        typeof nextRiskRules.takeProfit === 'string' ? nextRiskRules.takeProfit : `止盈 ${takeProfitPct}%`,
+        null,
+      )
+      if (basis) {
+        nextRiskRules.takeProfitBasis = basis
+      }
+    }
+
+    return nextRiskRules
+  }
+
+  private isValidRiskPct(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 && value <= 100
+  }
+
+  private isNamedBasis(value: unknown): value is ChecklistRuleBasis['kind'] {
+    return typeof value === 'string' && value.trim().length > 0
+  }
+
+  private resolveRiskBasis(
+    ruleText: string | null | undefined,
+    explicitBasis: ChecklistRuleBasis['kind'] | null,
+  ): ChecklistRuleBasis['kind'] | null {
+    if (explicitBasis) return explicitBasis
+    if (!ruleText?.trim()) return null
+    return resolveDefaultRiskBasis(ruleText, null)
+  }
+
+  private extractRiskRuleClause(
+    text: string,
+    kind: 'stopLoss' | 'takeProfit',
+  ): string | null {
+    const pattern = kind === 'stopLoss'
+      ? /((?:止损|亏损)[^。；;\n]{0,24})/u
+      : /((?:止盈|盈利|收益率)[^。；;\n]{0,24})/u
+    const match = text.match(pattern)
+    return match?.[1]?.trim() ?? null
+  }
+
+  private buildRiskSummarySegment(
+    label: '止损' | '止盈',
+    riskRules: Record<string, unknown> | undefined,
+    kind: 'stopLoss' | 'takeProfit',
+  ): string {
+    const pct = kind === 'stopLoss'
+      ? riskRules?.stopLossPct
+      : riskRules?.takeProfitPct
+    if (!this.isValidRiskPct(pct)) return ''
+
+    const basis = this.resolveRiskBasis(
+      kind === 'stopLoss'
+        ? typeof riskRules?.stopLoss === 'string' ? riskRules.stopLoss : `止损 ${pct}%`
+        : typeof riskRules?.takeProfit === 'string' ? riskRules.takeProfit : `止盈 ${pct}%`,
+      kind === 'stopLoss'
+        ? this.isNamedBasis(riskRules?.stopLossBasis) ? riskRules.stopLossBasis : null
+        : this.isNamedBasis(riskRules?.takeProfitBasis) ? riskRules.takeProfitBasis : null,
+    )
+    return this.describeRiskSummary(basis, label, pct)
+  }
+
+  private describeRiskSummary(
+    basis: ChecklistRuleBasis['kind'] | null,
+    label: '止损' | '止盈',
+    pct: number,
+  ): string {
+    const action = label === '止损' ? '强制平仓' : '平仓'
+
+    if (basis === 'position_pnl') {
+      return `${label}：${label === '止损' ? '持仓亏损达到 ' : '持仓收益率达到 '}${pct}% ${action}`
+    }
+
+    if (basis === 'peak_equity') {
+      return `${label}：账户净值相对峰值回撤达到 ${pct}% ${action}`
+    }
+
+    if (basis === 'peak_position_pnl') {
+      return `${label}：持仓浮盈相对峰值回撤达到 ${pct}% ${action}`
+    }
+
+    const basisLabel = this.describeRiskBasisLabel(basis)
+    const direction = label === '止损' ? '下跌' : '上涨'
+    return `${label}：价格相对${basisLabel}${direction} ${pct}% ${action}`
+  }
+
+  private describeRiskBasisLabel(basis: ChecklistRuleBasis['kind'] | null): string {
+    switch (basis) {
+      case 'prev_close':
+        return '上一根K线收盘价'
+      case 'upper_band':
+        return '布林带上轨'
+      case 'lower_band':
+        return '布林带下轨'
+      case 'middle_band':
+        return '布林带中轨'
+      case 'last_high':
+        return '前高'
+      case 'last_low':
+        return '前低'
+      case 'entry_avg_price':
+      case null:
+      default:
+        return '入场价'
     }
   }
 

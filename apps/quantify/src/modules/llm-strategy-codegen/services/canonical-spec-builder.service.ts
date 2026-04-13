@@ -1,4 +1,5 @@
 import type { CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
+import type { ChecklistRuleBasis } from '../types/codegen-checklist'
 import { Injectable } from '@nestjs/common'
 import { CANONICAL_RULE_KEYS, DEFAULT_INDICATOR_PARAMS } from '../constants/canonical-strategy-capabilities'
 import {
@@ -7,6 +8,7 @@ import {
   resolveRequiredRuleTimeframes,
   resolveRulePhaseDefaultTimeframe,
 } from './checklist-rule-drafts'
+import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 
 interface ChecklistSnapshot {
   symbols?: unknown
@@ -267,6 +269,10 @@ export class CanonicalSpecBuilderService {
     })
 
     const stopLossPct = this.resolveStopLossPct(riskRules)
+    const stopLossBasis = this.resolveRiskBasis(
+      typeof riskRules.stopLoss === 'string' ? riskRules.stopLoss : stopLossPct !== null ? `止损 ${stopLossPct}%` : null,
+      riskRules.stopLossBasis,
+    )
     if (stopLossPct !== null) {
       rules.push({
         id: 'risk-stop-loss',
@@ -279,16 +285,22 @@ export class CanonicalSpecBuilderService {
           semanticScope: 'position',
           op: 'GTE',
           value: Number((stopLossPct / 100).toFixed(4)),
-          ...(typeof riskRules.stopLossBasis === 'string' ? { params: { basis: riskRules.stopLossBasis } } : {}),
+          ...(stopLossBasis ? { params: { basis: stopLossBasis } } : {}),
         },
         actions: [{ type: 'FORCE_EXIT' }],
-        ...(typeof riskRules.stopLossBasis === 'string' ? { metadata: { basis: riskRules.stopLossBasis } } : {}),
+        ...(stopLossBasis ? { metadata: { basis: stopLossBasis } } : {}),
       })
     }
 
     const takeProfitRule = this.resolveTakeProfitRule(
       [...exitTexts, ...Object.values(riskRules).map(item => String(item))],
       riskRules,
+    )
+    const takeProfitBasis = this.resolveRiskBasis(
+      typeof riskRules.takeProfit === 'string'
+        ? riskRules.takeProfit
+        : takeProfitRule ? `止盈 ${takeProfitRule.pct}%` : null,
+      riskRules.takeProfitBasis,
     )
     if (takeProfitRule) {
       rules.push({
@@ -302,10 +314,10 @@ export class CanonicalSpecBuilderService {
           semanticScope: 'position',
           op: 'GTE',
           value: Number((takeProfitRule.pct / 100).toFixed(4)),
-          ...(typeof riskRules.takeProfitBasis === 'string' ? { params: { basis: riskRules.takeProfitBasis } } : {}),
+          ...(takeProfitBasis ? { params: { basis: takeProfitBasis } } : {}),
         },
         actions: takeProfitRule.actions,
-        ...(typeof riskRules.takeProfitBasis === 'string' ? { metadata: { basis: riskRules.takeProfitBasis } } : {}),
+        ...(takeProfitBasis ? { metadata: { basis: takeProfitBasis } } : {}),
       })
     }
 
@@ -458,6 +470,19 @@ export class CanonicalSpecBuilderService {
     }
 
     return stopLossPct
+  }
+
+  private resolveRiskBasis(
+    ruleText: string | null,
+    explicitBasis: unknown,
+  ): ChecklistRuleBasis['kind'] | null {
+    if (typeof explicitBasis === 'string' && explicitBasis.trim()) {
+      return explicitBasis.trim() as ChecklistRuleBasis['kind']
+    }
+    if (!ruleText?.trim()) {
+      return null
+    }
+    return resolveDefaultRiskBasis(ruleText, null)
   }
 
   private resolveSizing(riskRules: Record<string, unknown>): { mode: 'RATIO'; value: number } | null {

@@ -12,6 +12,41 @@ describe('canonicalSpecBuilderService', () => {
     expect(checklist.riskRules?.positionPct).toBe(10)
   })
 
+  it('fills default entry-price basis for stop-loss and take-profit when checklist omits them', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      symbols: ['ETHUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['15 分钟上涨 1% 买入'],
+      exitRules: ['15 分钟下跌 5% 卖出'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'spot',
+        positionPct: 10,
+        stopLossPct: 5,
+        takeProfitPct: 10,
+      },
+    })
+
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'risk-stop-loss',
+        condition: expect.objectContaining({
+          params: expect.objectContaining({ basis: 'entry_avg_price' }),
+        }),
+        metadata: expect.objectContaining({ basis: 'entry_avg_price' }),
+      }),
+      expect.objectContaining({
+        id: 'risk-take-profit',
+        condition: expect.objectContaining({
+          params: expect.objectContaining({ basis: 'entry_avg_price' }),
+        }),
+        metadata: expect.objectContaining({ basis: 'entry_avg_price' }),
+      }),
+    ]))
+  })
+
   it('preserves clarified stop-loss and take-profit basis on canonical risk rules', () => {
     const service = new CanonicalSpecBuilderService()
 
@@ -81,6 +116,37 @@ describe('canonicalSpecBuilderService', () => {
         condition: expect.objectContaining({
           params: expect.objectContaining({ timeframe: '15m' }),
         }),
+      }),
+    ]))
+  })
+
+  it('keeps explicit position-pnl overrides on canonical risk rules', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      symbols: ['ETHUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['15 分钟上涨 1% 买入'],
+      exitRules: ['15 分钟下跌 5% 卖出'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'spot',
+        positionPct: 10,
+        stopLossPct: 5,
+        stopLossBasis: 'position_pnl',
+        takeProfitPct: 10,
+        takeProfitBasis: 'position_pnl',
+      },
+    })
+
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'risk-stop-loss',
+        metadata: expect.objectContaining({ basis: 'position_pnl' }),
+      }),
+      expect.objectContaining({
+        id: 'risk-take-profit',
+        metadata: expect.objectContaining({ basis: 'position_pnl' }),
       }),
     ]))
   })
