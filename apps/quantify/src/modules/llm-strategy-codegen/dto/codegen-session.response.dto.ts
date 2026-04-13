@@ -119,6 +119,21 @@ export class CodegenSessionResponseDto {
   @ApiPropertyOptional({ description: '已发布快照绑定的参数视图（用于前端回测/展示对齐）', type: 'object', additionalProperties: true, nullable: true })
   publishedSnapshotParamValues?: Record<string, unknown> | null
 
+  @ApiPropertyOptional({ description: '已发布快照绑定的正式策略配置', type: 'object', additionalProperties: true, nullable: true })
+  publishedSnapshotStrategyConfig?: Record<string, unknown> | null
+
+  @ApiPropertyOptional({ description: '已发布快照绑定的正式回测默认参数', type: 'object', additionalProperties: true, nullable: true })
+  publishedSnapshotBacktestConfigDefaults?: Record<string, unknown> | null
+
+  @ApiPropertyOptional({ description: '已发布快照绑定的正式部署默认参数', type: 'object', additionalProperties: true, nullable: true })
+  publishedSnapshotDeploymentExecutionDefaults?: Record<string, unknown> | null
+
+  @ApiPropertyOptional({ description: '已发布快照绑定的正式部署约束', type: 'object', additionalProperties: true, nullable: true })
+  publishedSnapshotDeploymentExecutionConstraints?: Record<string, unknown> | null
+
+  @ApiPropertyOptional({ description: '已发布快照兼容性信息（例如是否需要重新发布）', type: 'object', additionalProperties: true, nullable: true })
+  publishedSnapshotCompatibilityMetadata?: Record<string, unknown> | null
+
   @ApiPropertyOptional({ description: '策略一致性校验报告', type: 'object', additionalProperties: true, nullable: true })
   consistencyReport?: Record<string, unknown> | null
 

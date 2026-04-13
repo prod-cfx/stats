@@ -42,6 +42,21 @@ export class CodegenSessionResponseDto {
   @ApiPropertyOptional({ description: 'Snapshot-bound param values for published backtest/display semantics', type: 'object', additionalProperties: true, nullable: true })
   publishedSnapshotParamValues?: Record<string, unknown> | null
 
+  @ApiPropertyOptional({ description: 'Published snapshot formal strategy configuration', type: 'object', additionalProperties: true, nullable: true })
+  publishedSnapshotStrategyConfig?: Record<string, unknown> | null
+
+  @ApiPropertyOptional({ description: 'Published snapshot formal backtest defaults', type: 'object', additionalProperties: true, nullable: true })
+  publishedSnapshotBacktestConfigDefaults?: Record<string, unknown> | null
+
+  @ApiPropertyOptional({ description: 'Published snapshot formal deploy defaults', type: 'object', additionalProperties: true, nullable: true })
+  publishedSnapshotDeploymentExecutionDefaults?: Record<string, unknown> | null
+
+  @ApiPropertyOptional({ description: 'Published snapshot formal deploy constraints', type: 'object', additionalProperties: true, nullable: true })
+  publishedSnapshotDeploymentExecutionConstraints?: Record<string, unknown> | null
+
+  @ApiPropertyOptional({ description: 'Published snapshot compatibility metadata', type: 'object', additionalProperties: true, nullable: true })
+  publishedSnapshotCompatibilityMetadata?: Record<string, unknown> | null
+
   @ApiPropertyOptional({ description: 'Consistency report payload', type: 'object', additionalProperties: true, nullable: true })
   consistencyReport?: Record<string, unknown> | null
 

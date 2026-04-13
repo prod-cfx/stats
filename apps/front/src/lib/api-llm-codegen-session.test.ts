@@ -73,6 +73,11 @@ const sessionPayload = {
   scriptCode: null,
   publishedSnapshotId: null,
   publishedSnapshotParamValues: null,
+  publishedSnapshotStrategyConfig: null,
+  publishedSnapshotBacktestConfigDefaults: null,
+  publishedSnapshotDeploymentExecutionDefaults: null,
+  publishedSnapshotDeploymentExecutionConstraints: null,
+  publishedSnapshotCompatibilityMetadata: null,
   canonicalDigest: null,
   consistencyReport: null,
   specDesc: null,
@@ -181,6 +186,11 @@ describe('llm codegen session transport handling', () => {
     expect(result.conversationId).toBeNull()
     expect(result.scriptCode).toBeNull()
     expect(result.publishedSnapshotId).toBeNull()
+    expect(result.publishedSnapshotStrategyConfig).toBeNull()
+    expect(result.publishedSnapshotBacktestConfigDefaults).toBeNull()
+    expect(result.publishedSnapshotDeploymentExecutionDefaults).toBeNull()
+    expect(result.publishedSnapshotDeploymentExecutionConstraints).toBeNull()
+    expect(result.publishedSnapshotCompatibilityMetadata).toBeNull()
     expect(result.clarificationGate).toBeNull()
     expect(result.publicationGate).toBeNull()
     expect(result.conversationMessages).toEqual(sessionPayload.conversationMessages)
