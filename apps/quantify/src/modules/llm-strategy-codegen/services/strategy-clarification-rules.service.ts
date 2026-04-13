@@ -390,10 +390,20 @@ export class StrategyClarificationRulesService {
         reason: 'ambiguous_condition_basis',
         field,
         blocking: true,
-        question: '这里的百分比条件是相对上一根 K 线收盘价、开仓均价、持仓收益，还是别的基准？',
+        question: this.buildRuleBasisQuestion(scope, rule),
         status: 'pending',
       }]
     })
+  }
+
+  private buildRuleBasisQuestion(scope: 'entry' | 'exit', rule: string): string {
+    const trimmedRule = rule.trim()
+    if (!trimmedRule) {
+      return '这里的百分比条件是相对上一根 K 线收盘价、开仓均价、持仓收益，还是别的基准？'
+    }
+
+    const phaseLabel = scope === 'entry' ? '入场规则' : '出场规则'
+    return `${phaseLabel}“${trimmedRule}”里的百分比条件，是相对上一根 K 线收盘价、开仓均价、持仓收益，还是别的基准？`
   }
 
   private ruleNeedsBasis(rule: string): boolean {

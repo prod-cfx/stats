@@ -268,6 +268,16 @@ describe('strategyClarificationRulesService', () => {
       expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'exit.basis.1' }),
       expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'risk.stopLoss.basis' }),
     ]))
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'entry.basis.1',
+        question: '入场规则“3 分钟内跌 1% 买入”里的百分比条件，是相对上一根 K 线收盘价、开仓均价、持仓收益，还是别的基准？',
+      }),
+      expect.objectContaining({
+        key: 'exit.basis.1',
+        question: '出场规则“15 分钟内涨 2% 卖出”里的百分比条件，是相对上一根 K 线收盘价、开仓均价、持仓收益，还是别的基准？',
+      }),
+    ]))
   })
 
   it('blocks sequence, take-profit, and drawdown basis gaps beyond simple rise fall percentages', () => {
