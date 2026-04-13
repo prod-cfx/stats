@@ -1848,6 +1848,96 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
   })
 
+  it('accepts natural short basis phrasing without requiring the full rule text to be repeated', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-basis-natural-short-answer',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['3m', '15m'],
+        entryRules: ['3 分钟内跌 1% 买入'],
+        exitRules: ['15 分钟内涨 2% 卖出'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'spot',
+          positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 8,
+          takeProfitBasis: 'entry_avg_price',
+        },
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'entry.basis.1',
+            ruleId: 'entry-1',
+            reason: 'ambiguous_condition_basis',
+            field: 'entryRules.basis',
+            blocking: true,
+            question: '入场规则“3 分钟内跌 1% 买入”里的百分比条件，是相对上一根 K 线收盘价、开仓均价、持仓收益，还是别的基准？',
+            status: 'pending',
+          },
+          {
+            key: 'exit.basis.1',
+            ruleId: 'exit-1',
+            reason: 'ambiguous_condition_basis',
+            field: 'exitRules.basis',
+            blocking: true,
+            question: '出场规则“15 分钟内涨 2% 卖出”里的百分比条件，是相对上一根 K 线收盘价、开仓均价、持仓收益，还是别的基准？',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-basis-natural-short-answer', {
+      userId: 'u1',
+      message: '相对上一根 K 线收盘价',
+      clarificationAnswers: {
+        'entry.basis.1': '相对上一根 K 线收盘价',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('DRAFTING')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-basis-natural-short-answer',
+      expect.objectContaining({
+        checklist: expect.objectContaining({
+          entryRuleBases: {
+            'entry-1': 'prev_close',
+          },
+        }),
+      }),
+    )
+    expect((result as any).clarificationGate).toEqual({
+      blocked: true,
+      summary: expect.stringContaining('BTCUSDT'),
+      items: [
+        expect.objectContaining({
+          key: 'exit.basis.1',
+          reason: 'ambiguous_condition_basis',
+        }),
+      ],
+      pendingItems: [
+        expect.objectContaining({
+          key: 'exit.basis.1',
+          reason: 'ambiguous_condition_basis',
+        }),
+      ],
+    })
+  })
+
   it('surfaces publicationGate at the top level when stored in latestSpecDesc', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-publication-gate',
