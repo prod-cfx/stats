@@ -1696,13 +1696,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
   })
 
-  it('applies missing stop-loss rule clarification answers before checklist confirmation', async () => {
+  it('defaults stop-loss and take-profit basis when the user only provides percentages', async () => {
     mockRepo.findById.mockResolvedValue({
-      id: 's-missing-stop-loss-answer',
+      id: 's-default-risk-basis-answer',
       userId: 'u1',
       status: 'DRAFTING',
       checklist: {
-        symbols: ['BTCUSDT'],
+        symbols: ['ETHUSDT'],
         timeframes: ['15m'],
         entryRules: ['突破布林带上轨做空'],
         exitRules: ['价格回到布林带中轨时平仓'],
@@ -1710,8 +1710,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           exchange: 'okx',
           marketType: 'perp',
           positionPct: 10,
-          takeProfitPct: 10,
-          takeProfitBasis: 'entry_avg_price',
         },
       },
       clarificationState: {
@@ -1723,6 +1721,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             field: 'riskRules.stopLossPct',
             blocking: true,
             question: '请确认止损规则（例如亏损 5% 止损）。',
+            status: 'pending',
+          },
+          {
+            key: 'risk.takeProfit.rule',
+            reason: 'missing_take_profit_rule',
+            field: 'riskRules.takeProfitPct',
+            blocking: true,
+            question: '请确认止盈规则（例如盈利 10% 止盈）。',
             status: 'pending',
           },
         ],
@@ -1737,36 +1743,48 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
     })
 
-    const result = await service.continueSession('s-missing-stop-loss-answer', {
+    const result = await service.continueSession('s-default-risk-basis-answer', {
       userId: 'u1',
-      message: '亏损 5% 止损',
+      message: '亏损 5% 止损，盈利 10% 止盈',
       clarificationAnswers: {
         'risk.stopLoss.rule': '亏损 5% 止损',
+        'risk.takeProfit.rule': '盈利 10% 止盈',
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('DRAFTING')
+    expect(result.status).toBe('CHECKLIST_GATE')
     expect(result.clarificationState).toEqual(expect.objectContaining({
-      status: 'NEEDS_CLARIFICATION',
-      items: expect.arrayContaining([
-        expect.objectContaining({
-          key: 'risk.stopLoss.basis',
-          reason: 'ambiguous_condition_basis',
-        }),
-      ]),
+      status: 'CLEAR',
     }))
     expect(mockRepo.updateSession).toHaveBeenCalledWith(
-      's-missing-stop-loss-answer',
+      's-default-risk-basis-answer',
       expect.objectContaining({
-        status: 'DRAFTING',
+        status: 'CHECKLIST_GATE',
         checklist: expect.objectContaining({
           riskRules: expect.objectContaining({
             stopLoss: '亏损 5% 止损',
             stopLossPct: 5,
+            stopLossBasis: 'entry_avg_price',
+            takeProfit: '盈利 10% 止盈',
+            takeProfitPct: 10,
+            takeProfitBasis: 'entry_avg_price',
           }),
         }),
       }),
     )
+  })
+
+  it('preserves explicit non-default risk basis from natural language', () => {
+    const checklist = (service as any).inferChecklistFromMessage(
+      '在 OKX 现货 ETHUSDT，15分钟上涨1%买入，止损按持仓亏损 5%，止盈按持仓收益率 10%，仓位 10%',
+    )
+
+    expect(checklist.riskRules).toEqual(expect.objectContaining({
+      stopLossPct: 5,
+      stopLossBasis: 'position_pnl',
+      takeProfitPct: 10,
+      takeProfitBasis: 'position_pnl',
+    }))
   })
 
   it('applies basis clarification answers before checklist confirmation', async () => {
@@ -2018,6 +2036,48 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
   })
 
+  it('renders defaulted risk semantics in clarification summary instead of generic exit filler', () => {
+    const summary = (service as any).buildClarificationSummary({
+      symbols: ['ETHUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['15 分钟上涨 1% 买入'],
+      exitRules: ['15 分钟下跌 5% 卖出'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'spot',
+        positionPct: 10,
+        stopLossPct: 5,
+        stopLossBasis: 'entry_avg_price',
+        takeProfitPct: 10,
+        takeProfitBasis: 'entry_avg_price',
+      },
+    })
+
+    expect(summary).toContain('止损：价格相对入场价下跌 5% 强制平仓')
+    expect(summary).toContain('止盈：价格相对入场价上涨 10% 平仓')
+    expect(summary).toContain('ETHUSDT')
+  })
+
+  it('renders explicit non-entry risk bases accurately in clarification summary', () => {
+    const summary = (service as any).buildClarificationSummary({
+      symbols: ['BTCUSDT'],
+      timeframes: ['1h'],
+      exitRules: ['浮盈回撤 3% 止损'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        stopLossPct: 3,
+        stopLossBasis: 'peak_position_pnl',
+        takeProfitPct: 8,
+        takeProfitBasis: 'prev_close',
+      },
+    })
+
+    expect(summary).toContain('止损：持仓浮盈相对峰值回撤达到 3% 强制平仓')
+    expect(summary).toContain('止盈：价格相对上一根K线收盘价上涨 8% 平仓')
+    expect(summary).not.toContain('价格相对入场价上涨 8% 平仓')
+  })
+
   it('accepts natural short basis phrasing without requiring the full rule text to be repeated', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-basis-natural-short-answer',
@@ -2167,15 +2227,17 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('DRAFTING')
+    expect(result.status).toBe('CHECKLIST_GATE')
     expect(mockRepo.updateSession).toHaveBeenCalledWith(
       's-exit-basis-sync',
       expect.objectContaining({
+        status: 'CHECKLIST_GATE',
         checklist: expect.objectContaining({
           exitRuleBases: {
             'exit-1': 'entry_avg_price',
           },
           riskRules: expect.objectContaining({
+            stopLossBasis: 'entry_avg_price',
             takeProfitBasis: 'entry_avg_price',
           }),
         }),
