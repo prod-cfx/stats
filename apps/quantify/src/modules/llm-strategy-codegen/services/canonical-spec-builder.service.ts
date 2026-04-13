@@ -392,14 +392,26 @@ export class CanonicalSpecBuilderService {
       if (fallbackSideScope === 'short') {
         return { type: 'CLOSE_SHORT', sideScope: 'short' }
       }
-      return { type: 'CLOSE_LONG', sideScope: 'long' }
+      if (fallbackSideScope === 'long') {
+        return { type: 'CLOSE_LONG', sideScope: 'long' }
+      }
+      return null
     }
     return null
   }
 
   private resolveDominantEntrySideScope(entryRules: string[]): 'long' | 'short' | null {
     const scoped = entryRules
-      .map(rule => this.detectOpenAction(rule)?.sideScope ?? null)
+      .map((rule) => {
+        const explicit = this.detectOpenAction(rule)?.sideScope ?? null
+        if (explicit) {
+          return explicit
+        }
+        if (/买入|买进|开仓|入场/.test(rule)) {
+          return 'long'
+        }
+        return null
+      })
       .filter((side): side is 'long' | 'short' => side === 'long' || side === 'short')
 
     if (scoped.length === 0) {
