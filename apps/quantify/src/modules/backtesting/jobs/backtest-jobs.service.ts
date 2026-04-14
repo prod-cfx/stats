@@ -1,10 +1,10 @@
 import type { BacktestReport, BacktestRunInput } from '../types/backtesting.types'
-import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { Injectable, HttpStatus, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
+import { Prisma } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestRunnerService } from '../core/backtest-runner.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -402,15 +402,15 @@ export class BacktestJobsService {
     return summary && typeof summary === 'object' ? summary : undefined
   }
 
-  private buildFailureResult(error: unknown): Prisma.InputJsonValue | Prisma.JsonNull {
+  private buildFailureResult(error: unknown): Prisma.InputJsonValue | null {
     const details = this.extractErrorDetails(error)
     if (!details) {
-      return Prisma.JsonNull
+      return null
     }
 
-    return {
+    return JSON.parse(JSON.stringify({
       failure: details,
-    } as Prisma.InputJsonValue
+    })) as Prisma.InputJsonValue
   }
 
   private extractStoredFailureDetails(
