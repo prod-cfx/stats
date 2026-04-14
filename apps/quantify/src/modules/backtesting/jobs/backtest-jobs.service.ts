@@ -31,6 +31,7 @@ interface BacktestJobRecord {
   startedAt?: string
   finishedAt?: string
   error?: string
+  errorDetails?: BacktestJobErrorDetails
   inputSummary: {
     symbols: string[]
     baseTimeframe: BacktestRunInput['baseTimeframe']
@@ -51,6 +52,12 @@ interface BacktestJobRecord {
     specHash?: string
   }
   result?: BacktestReport
+}
+
+interface BacktestJobErrorDetails {
+  code?: string
+  message: string
+  args?: Record<string, unknown>
 }
 
 type BacktestJobView = Omit<BacktestJobRecord, 'result' | 'ownerUserId'> & {
@@ -147,7 +154,7 @@ export class BacktestJobsService {
       throw new DomainException('backtest.job_failed', {
         code: ErrorCode.BACKTEST_JOB_CONFLICT,
         status: HttpStatus.CONFLICT,
-        args: { id, error: job.error },
+        args: { id, error: job.error, errorDetails: this.extractStoredFailureDetails(job.result) },
       })
     if (status !== 'succeeded' || !job.result)
       throw new DomainException('backtest.job_not_completed', {
@@ -204,6 +211,7 @@ export class BacktestJobsService {
         data: {
           status: 'failed',
           error: error instanceof Error ? error.message : String(error),
+          result: this.buildFailureResult(error),
           finishedAt: new Date(),
         },
       })
@@ -227,6 +235,7 @@ export class BacktestJobsService {
     } catch (error) {
       job.status = 'failed'
       job.error = error instanceof Error ? error.message : String(error)
+      job.errorDetails = this.extractErrorDetails(error)
       job.finishedAt = new Date().toISOString()
     }
   }
@@ -293,6 +302,7 @@ export class BacktestJobsService {
       startedAt: job.startedAt?.toISOString(),
       finishedAt: job.finishedAt?.toISOString(),
       error: job.error ?? undefined,
+      errorDetails: this.extractStoredFailureDetails(job.result),
       inputSummary: job.inputSummary as unknown as BacktestJobRecord['inputSummary'],
       resultSummary,
     }
@@ -308,6 +318,7 @@ export class BacktestJobsService {
       startedAt: job.startedAt,
       finishedAt: job.finishedAt,
       error: job.error,
+      errorDetails: job.errorDetails,
       inputSummary: job.inputSummary,
       resultSummary,
     }
@@ -389,5 +400,60 @@ export class BacktestJobsService {
 
     const summary = (result as { summary?: BacktestReport['summary'] }).summary
     return summary && typeof summary === 'object' ? summary : undefined
+  }
+
+  private buildFailureResult(error: unknown): Prisma.InputJsonValue | Prisma.JsonNull {
+    const details = this.extractErrorDetails(error)
+    if (!details) {
+      return Prisma.JsonNull
+    }
+
+    return {
+      failure: details,
+    } as Prisma.InputJsonValue
+  }
+
+  private extractStoredFailureDetails(
+    result: Prisma.JsonValue | null | undefined,
+  ): BacktestJobErrorDetails | undefined {
+    if (!result || typeof result !== 'object' || !('failure' in result)) {
+      return undefined
+    }
+
+    const failure = (result as { failure?: unknown }).failure
+    if (!failure || typeof failure !== 'object') {
+      return undefined
+    }
+
+    const candidate = failure as Record<string, unknown>
+    if (typeof candidate.message !== 'string' || !candidate.message.trim()) {
+      return undefined
+    }
+
+    return {
+      code: typeof candidate.code === 'string' ? candidate.code : undefined,
+      message: candidate.message,
+      args: candidate.args && typeof candidate.args === 'object'
+        ? candidate.args as Record<string, unknown>
+        : undefined,
+    }
+  }
+
+  private extractErrorDetails(error: unknown): BacktestJobErrorDetails | undefined {
+    if (error instanceof DomainException) {
+      return {
+        code: error.message,
+        message: error.message,
+        args: error.args,
+      }
+    }
+
+    if (error instanceof Error && error.message.trim()) {
+      return {
+        message: error.message,
+      }
+    }
+
+    return undefined
   }
 }

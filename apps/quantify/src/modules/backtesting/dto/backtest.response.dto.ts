@@ -28,6 +28,17 @@ export class BacktestJobSummaryDto {
   totalTrades!: number
 }
 
+export class BacktestJobErrorDetailsDto {
+  @ApiPropertyOptional()
+  code?: string
+
+  @ApiProperty()
+  message!: string
+
+  @ApiPropertyOptional({ type: 'object', additionalProperties: true })
+  args?: Record<string, unknown>
+}
+
 export class BacktestJobInputSummaryDto {
   @ApiProperty({ type: [String] })
   symbols!: string[]
@@ -99,6 +110,9 @@ export class BacktestJobResponseDto {
 
   @ApiPropertyOptional()
   error?: string
+
+  @ApiPropertyOptional({ type: BacktestJobErrorDetailsDto })
+  errorDetails?: BacktestJobErrorDetailsDto
 
   @ApiProperty({ type: BacktestJobInputSummaryDto })
   inputSummary!: BacktestJobInputSummaryDto
