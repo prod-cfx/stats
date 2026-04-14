@@ -1498,11 +1498,17 @@ export class CodegenConversationService {
 
   private buildClarificationSummary(checklist: ChecklistPayload): string | null {
     const drafts = buildChecklistRuleDrafts(checklist)
-    const resolvedExecutionContext = this.executionContext.resolve(checklist).context
-    const exchange = resolvedExecutionContext.exchange?.toUpperCase() ?? ''
-    const marketType = resolvedExecutionContext.marketType ?? ''
-    const symbol = resolvedExecutionContext.symbol ?? ''
-    const timeframe = resolvedExecutionContext.timeframe ?? ''
+    this.executionContext.resolve(checklist)
+    const exchange = typeof checklist.market?.exchange === 'string'
+      ? checklist.market.exchange.trim().toUpperCase()
+      : (typeof checklist.riskRules?.exchange === 'string' ? checklist.riskRules.exchange.trim().toUpperCase() : '')
+    const marketType = typeof checklist.market?.marketType === 'string'
+      ? checklist.market.marketType.trim().toLowerCase()
+      : (typeof checklist.riskRules?.marketType === 'string'
+          ? checklist.riskRules.marketType.trim().toLowerCase()
+          : '')
+    const symbol = checklist.symbols?.[0]?.trim() ?? ''
+    const timeframe = resolveChecklistDefaultTimeframe(checklist) ?? ''
     const entryRule = drafts.entry[0]
     const exitRule = drafts.exit[0]
     const positionPct = typeof checklist.riskRules?.positionPct === 'number'
