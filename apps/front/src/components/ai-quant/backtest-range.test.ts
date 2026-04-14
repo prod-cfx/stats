@@ -67,7 +67,7 @@ describe('backtest-range', () => {
       endAt: '2026-04-14T04:24:49.123Z',
     }, now, '3m')
 
-    expect(range.startAt).toBe('2026-03-15T04:24:00.000Z')
+    expect(range.startAt).toBe('2026-03-15T04:27:00.000Z')
     expect(range.endAt).toBe('2026-04-14T04:24:00.000Z')
   })
 

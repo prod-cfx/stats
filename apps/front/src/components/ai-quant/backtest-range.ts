@@ -53,13 +53,16 @@ function toIso(date: Date): string {
   return date.toISOString()
 }
 
-function alignToTimeframeBoundary(date: Date, timeframe?: string): Date {
+function alignToTimeframeBoundary(date: Date, timeframe?: string, mode: 'floor' | 'ceil' = 'floor'): Date {
   const timeframeMs = timeframe ? TIMEFRAME_MS[timeframe as MarketTimeframe] : undefined
   if (!timeframeMs) {
     return new Date(date)
   }
 
-  return new Date(Math.floor(date.getTime() / timeframeMs) * timeframeMs)
+  const rounded = mode === 'ceil'
+    ? Math.ceil(date.getTime() / timeframeMs) * timeframeMs
+    : Math.floor(date.getTime() / timeframeMs) * timeframeMs
+  return new Date(rounded)
 }
 
 export function resolveBacktestRange(
@@ -76,8 +79,8 @@ export function resolveBacktestRange(
     }
   }
 
-  const start = alignToTimeframeBoundary(parseDate(input.startAt) ?? new Date(now), baseTimeframe)
-  const end = alignToTimeframeBoundary(parseDate(input.endAt) ?? new Date(now), baseTimeframe)
+  const start = alignToTimeframeBoundary(parseDate(input.startAt) ?? new Date(now), baseTimeframe, 'ceil')
+  const end = alignToTimeframeBoundary(parseDate(input.endAt) ?? new Date(now), baseTimeframe, 'floor')
 
   return {
     startAt: toIso(start),
