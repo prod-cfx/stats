@@ -20,6 +20,30 @@ At the same time, the product requirement is not "ask less at all costs". The fi
 
 This design therefore aims to reduce unnecessary clarification without weakening semantic stability.
 
+## Current Mainline Baseline
+
+After aligning with the latest `origin/main`, the real mainline already contains an important portion of the target direction:
+
+- a bounded semantic capability catalog
+- first-wave trigger atoms and first-wave families
+- `StrategyIntentNormalizerService`
+- `StrategyNormalizedIntent`
+- canonical-spec-v2-driven downstream compilation and validation
+
+The current mainline data flow is effectively:
+
+`Natural Language -> checklist/session state -> StrategyIntentNormalizer -> StrategyNormalizedIntent -> Canonical Spec v2 -> compiled IR / script / backtest / deploy checks`
+
+The current problem is therefore not that normalization is absent. The current problem is that:
+
+- checklist still acts as the dominant conversational truth
+- clarification still primarily reasons over checklist gaps and handwritten missing reasons
+- market context is not isolated as a first-class execution object
+- normalized intent exists, but is not yet the single clarification boundary
+- canonical spec v2 is still the active compilation center
+
+This design should therefore be understood as an evolution from the current mainline, not a greenfield rewrite.
+
 ## Goals
 
 - Replace slot-gap-driven clarification with ambiguity-driven clarification.
@@ -63,7 +87,7 @@ The core architectural correction is:
 
 The target flow is:
 
-`Natural Language -> Constrained Normalizer -> ExecutionContext + Atomic Intent Graph candidates -> Resolver -> Strategy IR -> script/backtest/deploy -> Consistency Gate`
+`Natural Language -> checklist/session memory -> Constrained Normalizer -> ExecutionContext + Atomic Intent Graph candidates -> Resolver -> Strategy IR -> canonical-spec-v2 compatibility output during migration -> script/backtest/deploy -> Consistency Gate`
 
 Clarification only happens between candidate generation/resolution and Strategy IR finalization.
 
@@ -87,6 +111,8 @@ Family remains useful for:
 But family must never define execution semantics directly.
 
 The single executable semantic truth is the atomic graph plus execution context, and then the compiled Strategy IR.
+
+This is intentionally stricter than the current mainline family usage: family may route, summarize, and assist controlled default injection, but must not become runtime execution truth.
 
 ### 3. Clarification only resolves forks
 
@@ -155,22 +181,33 @@ The graph must be expressive enough that:
 - MA and Bollinger strategies map naturally without strategy-family-specific execution paths
 - future strategies can be introduced by extending atomic rules rather than expanding handwritten clarification branches
 
+Note:
+
+- the current mainline `StrategyNormalizedIntent` should be treated as the nearest existing precursor to this layer
+- the target architecture should evolve that layer toward stricter executable atomic meaning instead of discarding it blindly
+
 ### Strategy IR
 
-Strategy IR is a new clean intermediate representation and should be introduced as a new layer rather than reusing the current canonical spec as the long-term core truth.
+Strategy IR is a new clean intermediate representation and should be introduced as a new layer rather than treating the current canonical spec as the long-term core truth.
 
 Strategy IR is compiled from:
 
 - resolved `ExecutionContext`
 - resolved `Atomic Intent Graph`
 
-All downstream executable artifacts derive from Strategy IR:
+All downstream executable artifacts should ultimately derive from Strategy IR:
 
 - script
 - backtest config
 - deploy config
 
-The current canonical spec may remain temporarily as a compatibility output or migration artifact, but it should no longer be the long-term semantic center.
+However, the current mainline reality is that canonical spec v2 is still the active compilation center.
+
+So the intended migration posture is:
+
+- short term: `StrategyNormalizedIntent -> Canonical Spec v2` remains active
+- medium term: `ExecutionContext + Atomic Intent Graph -> Strategy IR -> Canonical Spec v2 compatibility output`
+- long term: Strategy IR becomes the compilation center and canonical spec v2 becomes compatibility-facing rather than core-facing
 
 ### Clarification Gate
 
@@ -180,6 +217,12 @@ It accepts:
 
 - `ExecutionContext` candidates
 - `Atomic Intent Graph` candidates
+
+During migration this also implies:
+
+- current checklist-driven clarification still exists
+- normalized-intent blockage already exists on mainline through `blockerReason`
+- the target is to shift clarification progressively toward execution-context forks and atomic semantic forks rather than handwritten slot-gap reasons
 
 It triggers only for:
 
@@ -252,24 +295,33 @@ This moves failure to the correct layer:
 
 Migration should be incremental and dual-track.
 
-### Phase 1: Merge `main` and adopt the atomic library baseline
+### Phase 1: Merge `main` and adopt the current semantic baseline
 
 - Merge the latest `main` into the working branch.
-- Treat the atomic library on `main` as the base capability, not as something to rewrite.
+- Treat the atomic library, `StrategyIntentNormalizerService`, `StrategyNormalizedIntent`, and canonical-spec-v2 pipeline on `main` as the baseline capability, not as something to rewrite from scratch.
 
-### Phase 2: Introduce parallel semantic pipeline
+### Phase 2: Isolate `ExecutionContext` and tighten normalized intent semantics
 
-Add a new parallel path that produces:
+Add a semantic tightening path that produces:
 
 - `ExecutionContext`
-- candidate `Atomic Intent Graphs`
-- resolved `Strategy IR`
+- stricter candidate `Atomic Intent Graphs` building on the current normalized intent shape
+- eventually resolved `Strategy IR`
 
-without yet replacing the production path.
+without yet replacing the current production compilation path.
 
-### Phase 3: Gold-sample regression
+### Phase 3: Route clarification through semantic forks instead of checklist gaps
 
-Use already-stable strategies as regression anchors:
+Shift clarification triggering source gradually:
+
+- from handwritten checklist missing reasons
+- toward execution-context ambiguity and atomic semantic ambiguity
+
+while preserving one-question-at-a-time UX.
+
+### Phase 4: Gold-sample regression
+
+Use already-stable strategies and current mainline outputs as regression anchors:
 
 - MA strategies
 - Bollinger strategies
@@ -283,14 +335,15 @@ Compare old vs new on:
 - key script behavior
 - backtest-relevant behavior
 
-### Phase 4: Gradual cutover
+### Phase 5: Gradual cutover
 
 Cut over in stages:
 
 1. question generation source
-2. semantic resolution source
-3. IR compilation source
-4. deprecation of checklist-driven clarification as primary truth
+2. execution-context resolution source
+3. semantic resolution source
+4. Strategy IR introduction behind canonical-spec-v2 compatibility
+5. deprecation of checklist-driven clarification as primary truth
 
 ## Compatibility Strategy For Existing Stable Strategies
 
@@ -345,6 +398,18 @@ Mitigation:
 - enforce that runtime compilation only accepts Strategy IR
 - prevent family-based direct compilation paths
 
+### 5. Current normalized intent may remain too loose
+
+The current mainline `StrategyNormalizedIntent` is already valuable, but it is still first-wave bounded and still coexists with checklist-led clarification.
+
+If it remains only a recommendation layer rather than evolving toward stricter executable meaning, clarification pressure will continue leaking back into handwritten rules.
+
+Mitigation:
+
+- evolve normalized intent toward stricter executable atomic meaning
+- isolate execution context explicitly
+- stop treating checklist as the dominant clarification authority
+
 ## Design Constraints
 
 - Beginner-friendly one-question-at-a-time UX must remain.
@@ -358,9 +423,10 @@ Mitigation:
 Adopt an atomic-first constrained normalization architecture with:
 
 - independent `ExecutionContext`
+- current `StrategyNormalizedIntent` treated as the mainline precursor to a stricter atomic graph
 - atomic graph as executable semantic truth
 - new `Strategy IR`
 - ambiguity-driven clarification
 - artifact-only consistency validation
 
-This is the strongest path to solving the current grid clarification issue without creating a new long-term family-driven maintenance trap.
+This is the strongest path to solving the current grid clarification issue without creating a new long-term family-driven maintenance trap, while staying aligned with the actual mainline code that already exists today.
