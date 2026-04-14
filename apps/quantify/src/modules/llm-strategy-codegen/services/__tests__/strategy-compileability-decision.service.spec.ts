@@ -1,4 +1,3 @@
-import { describe, expect, it } from '@jest/globals'
 import { StrategyCompileabilityDecisionService } from '../strategy-compileability-decision.service'
 
 describe('StrategyCompileabilityDecisionService', () => {
@@ -40,6 +39,9 @@ describe('StrategyCompileabilityDecisionService', () => {
     })
 
     expect(decision.kind).toBe('ASK_CLARIFY')
+    if (decision.kind !== 'ASK_CLARIFY') {
+      throw new Error('expected ASK_CLARIFY')
+    }
     expect(decision.nextActionPayload.question.key).toBe('trigger.confirmation')
   })
 })

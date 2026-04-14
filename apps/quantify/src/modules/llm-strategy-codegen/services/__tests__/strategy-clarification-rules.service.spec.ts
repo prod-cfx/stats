@@ -12,6 +12,7 @@ describe('strategyClarificationRulesService', () => {
           marketType: 'perp',
           timeframe: '15m',
         },
+        evidence: [],
         ambiguities: [
           {
             kind: 'execution_context_missing',
@@ -62,6 +63,7 @@ describe('strategyClarificationRulesService', () => {
           marketType: 'perp',
           timeframe: '15m',
         },
+        evidence: [],
         ambiguities: [
           {
             kind: 'execution_context_missing',
@@ -118,6 +120,7 @@ describe('strategyClarificationRulesService', () => {
           marketType: 'perp',
           timeframe: '15m',
         },
+        evidence: [],
         ambiguities: [],
       },
       atomicResolution: {
