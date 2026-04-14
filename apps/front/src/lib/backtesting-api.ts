@@ -1,5 +1,5 @@
 import { buildAiQuantErrorMessage, parseAiQuantErrorMeta } from '@/components/ai-quant/ai-quant-error-stage'
-import { client, unwrapApiResponse } from '@/lib/api-client'
+import { API_BASE_URL, client, unwrapApiResponse } from '@/lib/api-client'
 import { getToken } from '@/lib/auth-storage'
 import { ApiError, AuthenticationError } from '@/lib/errors'
 
@@ -10,6 +10,15 @@ export interface BacktestCapabilities {
 
 export interface FetchBacktestCapabilitiesOptions {
   signal?: AbortSignal
+}
+
+export interface BacktestSymbolSupportCheckInput {
+  exchange: string
+  symbol: string
+}
+
+export interface BacktestSymbolSupportCheckPayload {
+  status: string
 }
 
 export type BacktestJobPhase = 'queued' | 'running' | 'succeeded' | 'failed'
@@ -303,6 +312,43 @@ export async function fetchBacktestCapabilities(
   throw lastError instanceof Error
     ? lastError
     : new ApiError('Failed to fetch backtest capabilities', 'API_ERROR')
+}
+
+export async function postBacktestSymbolSupportCheck(
+  input: BacktestSymbolSupportCheckInput,
+): Promise<BacktestSymbolSupportCheckPayload> {
+  const headers = buildBacktestingHeaders('symbol-check')
+  return requestJson<BacktestSymbolSupportCheckPayload>(
+    async signal => {
+      const response = await fetch(`${API_BASE_URL}/backtesting/symbols/check`, {
+        method: 'POST',
+        signal,
+        headers: {
+          'Content-Type': 'application/json',
+          ...headers,
+        },
+        body: JSON.stringify(input),
+      })
+      let payload: unknown = null
+      try {
+        payload = await response.json()
+      } catch {
+        payload = null
+      }
+
+      if (!response.ok) {
+        const message = buildAiQuantErrorMessage(
+          response.statusText || 'Request failed',
+          response.status,
+          parseAiQuantErrorMeta(payload),
+        )
+        throw new ApiError(message, extractErrorCode(payload), response.status, payload)
+      }
+
+      return payload
+    },
+    BACKTEST_REQUEST_TIMEOUT_MS,
+  )
 }
 
 export async function createBacktestJob(payload: CreateBacktestJobPayload): Promise<BacktestJob> {
