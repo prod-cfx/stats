@@ -30,11 +30,50 @@ describe('compiledPublicationGateService', () => {
         symbol: 'BTCUSDT',
         timeframe: '1h',
       },
+      indicators: [{ kind: 'ema', params: { period: 20 } }],
       rules: [
         {
           id: 'entry-long',
           phase: 'entry',
           sideScope: 'long',
+          priority: 200,
+          condition: {
+            kind: 'atom',
+            key: 'ma.golden_cross',
+            semanticScope: 'market',
+            op: 'CROSS_OVER',
+            params: { indicator: 'ema' },
+          },
+          actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.25 } }],
+        },
+        {
+          id: 'exit-long',
+          phase: 'exit',
+          sideScope: 'long',
+          priority: 100,
+          condition: {
+            kind: 'atom',
+            key: 'ma.death_cross',
+            semanticScope: 'market',
+            op: 'CROSS_UNDER',
+            params: { indicator: 'ema' },
+          },
+          actions: [{ type: 'CLOSE_LONG' }],
+        },
+        {
+          id: 'risk-stop-loss',
+          phase: 'risk',
+          sideScope: 'both',
+          priority: 90,
+          condition: {
+            kind: 'atom',
+            key: 'position_loss_pct',
+            semanticScope: 'position',
+            op: 'GTE',
+            value: 0.04,
+            params: { basis: 'entry_avg_price' },
+          },
+          actions: [{ type: 'FORCE_EXIT' }],
         },
       ],
     }
@@ -98,6 +137,7 @@ describe('compiledPublicationGateService', () => {
         semanticConsistency: { status: 'PASSED', checks: [] },
         compilerConsistency: expect.any(Object),
       }),
+      scriptSummary: { indicators: ['EMA'] },
       paramsSnapshot: {
         exchange: 'binance',
         symbol: 'BTCUSDT',
@@ -756,6 +796,135 @@ describe('compiledPublicationGateService', () => {
     })
 
     expect(publishedSnapshotsRepo.create).toHaveBeenCalled()
+  })
+
+  it('publishes migrated bollinger snapshots without mutating middle-band or outside-band semantics', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn().mockResolvedValue({ id: 'snapshot-bollinger' }),
+    }
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never)
+    const ir = createIrFixtureWithOutsideBandRule()
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'long_short' as const,
+      marginMode: 'cash' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+    const canonicalSnapshot = {
+      version: 2,
+      market: { exchange: 'binance', symbol: 'BTCUSDT', marketType: 'spot', timeframe: '1h' },
+      indicators: [{ kind: 'bollingerBands', params: { period: 20, stdDev: 2 } }],
+      rules: [
+        {
+          id: 'entry-upper-short',
+          phase: 'entry',
+          sideScope: 'short',
+          priority: 200,
+          condition: {
+            kind: 'atom',
+            key: 'bollinger.upper_break',
+            semanticScope: 'market',
+            op: 'CROSS_OVER',
+          },
+          actions: [{ type: 'OPEN_SHORT', sizing: { mode: 'RATIO', value: 0.25 } }],
+        },
+        {
+          id: 'entry-lower-long',
+          phase: 'entry',
+          sideScope: 'long',
+          priority: 190,
+          condition: {
+            kind: 'atom',
+            key: 'bollinger.lower_break',
+            semanticScope: 'market',
+            op: 'CROSS_UNDER',
+          },
+          actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.25 } }],
+        },
+        {
+          id: 'exit-middle-close',
+          phase: 'exit',
+          sideScope: 'both',
+          priority: 140,
+          condition: {
+            kind: 'atom',
+            key: 'bollinger.middle_revert',
+            semanticScope: 'market',
+          },
+          actions: [{ type: 'CLOSE_LONG' }, { type: 'CLOSE_SHORT' }],
+        },
+        {
+          id: 'risk-outside-band-3-bars',
+          phase: 'risk',
+          sideScope: 'both',
+          priority: 110,
+          condition: {
+            kind: 'atom',
+            key: 'bollinger.bars_outside',
+            semanticScope: 'market',
+            op: 'GTE',
+            value: 3,
+            params: { bars: 3 },
+          },
+          actions: [{ type: 'REDUCE_LONG' }, { type: 'REDUCE_SHORT' }],
+        },
+      ],
+    }
+
+    await expect(gate.publish({
+      sessionId: 'session-bollinger',
+      canonicalSnapshot,
+      semanticView: {
+        viewType: 'canonical-semantic-view.v1',
+        canonicalDigest: 'sha256:bollinger',
+      },
+      graphSnapshot: {
+        version: 3,
+        status: 'confirmed' as const,
+        trigger: [],
+        actions: [],
+        risk: ['价格回到布林带中轨平仓', '价格连续3根K线在轨外时提前减仓'],
+        meta: {
+          exchange: 'binance' as const,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          positionPct: 25,
+          executionTags: [],
+        },
+      },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'bollinger mean reversion' },
+      scriptSummary: { indicators: ['EMA', 'BOLLINGER'] },
+      lockedParams: { positionPct: 25 },
+    })).resolves.toEqual(expect.objectContaining({ snapshotId: 'snapshot-bollinger' }))
+
+    expect(publishedSnapshotsRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      specSnapshot: canonicalSnapshot,
+      scriptSummary: { indicators: ['EMA', 'BOLLINGER'] },
+      consistencyReport: expect.objectContaining({
+        status: 'PASSED',
+        compilerConsistency: expect.objectContaining({
+          publicationGate: expect.objectContaining({
+            status: 'PASSED',
+            checks: expect.arrayContaining([
+              expect.objectContaining({
+                key: 'risk.bollinger_bars_outside',
+                status: 'passed',
+              }),
+            ]),
+          }),
+        }),
+      }),
+    }))
   })
 
   it('returns merged failed consistency report instead of throwing so caller can persist diagnostics', async () => {

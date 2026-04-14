@@ -3,6 +3,56 @@ import { StrategyClarificationRulesService } from '../strategy-clarification-rul
 describe('strategyClarificationRulesService', () => {
   const service = new StrategyClarificationRulesService()
 
+  it('surfaces execution-context ambiguities even when no rule text is present', () => {
+    const state = service.detectFromAmbiguities({
+      executionContext: {
+        context: {
+          exchange: null,
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        ambiguities: [
+          {
+            kind: 'execution_context_missing',
+            field: 'exchange',
+            reason: 'missing_exchange',
+          },
+        ],
+      },
+      atomicResolution: {
+        atomicIntent: {
+          triggers: [],
+          actions: [],
+          sizing: null,
+          risk: [],
+          relations: [],
+        },
+        ambiguities: [],
+      },
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        market: {
+          marketType: 'perp',
+        },
+      },
+    })
+
+    expect(state).toEqual({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        expect.objectContaining({
+          key: 'executionContext.exchange',
+          reason: 'missing_exchange',
+          field: 'exchange',
+          blocking: true,
+          status: 'pending',
+        }),
+      ],
+    })
+  })
+
   it('prefers execution-context ambiguities over checklist fallback gaps', () => {
     const state = service.detectFromAmbiguities({
       executionContext: {

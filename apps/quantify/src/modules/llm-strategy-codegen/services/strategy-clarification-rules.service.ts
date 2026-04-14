@@ -33,9 +33,7 @@ export class StrategyClarificationRulesService {
     checklist?: ClarificationChecklistInput | null
   }): StrategyClarificationState {
     const items: StrategyClarificationItem[] = [
-      ...(input.checklist && this.hasClarifiableSemanticSeed(input.checklist)
-        ? this.fromExecutionContextAmbiguities(input.executionContext)
-        : []),
+      ...this.fromExecutionContextAmbiguities(input.executionContext),
       ...this.fromAtomicAmbiguities(input.atomicResolution.ambiguities, input.checklist),
     ]
 
@@ -734,17 +732,6 @@ export class StrategyClarificationRulesService {
     ]
       .map(text => text.trim())
       .filter(text => text.length > 0)
-  }
-
-  private hasClarifiableSemanticSeed(input: ClarificationChecklistInput): boolean {
-    return this.collectRuleTexts(input).length > 0
-      || typeof input.grid?.lower === 'number'
-      || typeof input.grid?.upper === 'number'
-      || typeof input.grid?.stepPct === 'number'
-      || !!input.grid?.sideMode
-      || !!input.stateGates?.trendDirection
-      || !!input.stateGates?.marketRegime
-      || !!input.stateGates?.volatilityState
   }
 
   private readGridRange(input: ClarificationChecklistInput): { lower?: number, upper?: number } {

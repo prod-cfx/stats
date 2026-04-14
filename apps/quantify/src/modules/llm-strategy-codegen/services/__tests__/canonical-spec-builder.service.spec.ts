@@ -1,5 +1,6 @@
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CodegenConversationService } from '../codegen-conversation.service'
+import { StrategyIntentNormalizerService } from '../strategy-intent-normalizer.service'
 
 describe('canonicalSpecBuilderService', () => {
   it('bridges StrategyIR back into canonical spec v2 through the migration entry point', () => {
@@ -64,6 +65,89 @@ describe('canonicalSpecBuilderService', () => {
         phase: 'risk',
       }),
     ]))
+  })
+
+  it('builds stable sma crossover rules from normalized intent through the migration path', () => {
+    const service = new CanonicalSpecBuilderService()
+    const normalizedIntent = new StrategyIntentNormalizerService().normalize({
+      symbols: ['BTCUSDT'],
+      timeframes: ['1h'],
+      entryRules: ['EMA7 上穿 EMA21 做多'],
+      exitRules: ['EMA7 下穿 EMA21 平多'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+        stopLossPct: 5,
+        stopLossBasis: 'entry_avg_price',
+      },
+    } as any).normalizedIntent
+
+    const spec = service.buildFromNormalizedIntent({
+      symbols: ['BTCUSDT'],
+      timeframes: ['1h'],
+      entryRules: ['EMA7 上穿 EMA21 做多'],
+      exitRules: ['EMA7 下穿 EMA21 平多'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+        stopLossPct: 5,
+        stopLossBasis: 'entry_avg_price',
+      },
+    }, normalizedIntent)
+
+    expect(spec.market).toEqual({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      marketType: 'perp',
+      defaultTimeframe: '1h',
+    })
+    expect(spec.indicators).toEqual([
+      { kind: 'sma', params: { period: 20 } },
+    ])
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'long',
+        condition: expect.objectContaining({
+          key: 'ma.golden_cross',
+          op: 'CROSS_OVER',
+          params: { indicator: 'sma' },
+        }),
+        actions: [expect.objectContaining({ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.1 } })],
+        metadata: expect.objectContaining({
+          normalized: expect.objectContaining({
+            source: 'normalized-intent',
+            family: 'single-leg',
+          }),
+        }),
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        sideScope: 'long',
+        condition: expect.objectContaining({
+          key: 'ma.death_cross',
+          op: 'CROSS_UNDER',
+          params: { indicator: 'sma' },
+        }),
+        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+      }),
+      expect.objectContaining({
+        id: 'risk-stop-loss',
+        phase: 'risk',
+        condition: expect.objectContaining({
+          key: 'position_loss_pct',
+          value: 0.05,
+          params: { basis: 'entry_avg_price' },
+        }),
+      }),
+    ]))
+    expect(spec.metadata).toEqual(expect.objectContaining({
+      normalized: expect.objectContaining({
+        source: 'normalized-intent',
+      }),
+    }))
   })
 
   it('normalizes single-trade sizing language into positionPct', () => {
@@ -287,6 +371,71 @@ describe('canonicalSpecBuilderService', () => {
 
     const entryRules = spec.rules.filter(rule => rule.phase === 'entry')
     expect(entryRules).toHaveLength(2)
+  })
+
+  it('builds stable explicit-cue bollinger rules from normalized intent without injecting sma through the migration path', () => {
+    const service = new CanonicalSpecBuilderService()
+    const checklist = {
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['触及布林带上轨后收盘确认做空', '触及布林带下轨后收盘确认做多'],
+      exitRules: ['价格回到布林带中轨(MA20)时平仓'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+        stopLossPct: 5,
+        stopLossBasis: 'entry_avg_price',
+        takeProfitPct: 10,
+        takeProfitBasis: 'entry_avg_price',
+      },
+    }
+    const normalizedIntent = new StrategyIntentNormalizerService().normalize(checklist as any).normalizedIntent
+
+    const spec = service.buildFromNormalizedIntent(checklist, normalizedIntent)
+
+    expect(spec.indicators).toEqual([
+      { kind: 'bollingerBands', params: { period: 20, stdDev: 2 } },
+    ])
+    expect(spec.indicators).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'sma' }),
+    ]))
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'short',
+        condition: expect.objectContaining({
+          key: 'bollinger.upper_break',
+          op: 'CROSS_OVER',
+        }),
+        actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
+      }),
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'long',
+        condition: expect.objectContaining({
+          key: 'bollinger.lower_break',
+          op: 'CROSS_UNDER',
+        }),
+        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        sideScope: 'long',
+        condition: expect.objectContaining({
+          key: 'bollinger.middle_revert',
+        }),
+        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+      }),
+      expect.objectContaining({
+        id: 'risk-stop-loss',
+        phase: 'risk',
+      }),
+      expect.objectContaining({
+        id: 'risk-take-profit',
+        phase: 'risk',
+      }),
+    ]))
   })
 
   it('builds outside-band reduce rules when earlyStop asks to reduce exposure', () => {
@@ -726,6 +875,82 @@ describe('canonicalSpecBuilderService', () => {
     expect(spec.rules.filter(rule => rule.phase === 'exit')).toEqual(expect.arrayContaining([
       expect.objectContaining({ sideScope: 'long', actions: [expect.objectContaining({ type: 'CLOSE_LONG' })] }),
       expect.objectContaining({ sideScope: 'short', actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })] }),
+    ]))
+  })
+
+  it('builds stable bidirectional grid rules from normalized intent through the migration path', () => {
+    const service = new CanonicalSpecBuilderService()
+    const checklist = {
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['在 60000-80000 的区间，每一格千分之5，不断低买高卖'],
+      exitRules: ['持续网格卖出'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+        stopLossPct: 5,
+      },
+    }
+    const normalizedIntent = new StrategyIntentNormalizerService().normalize(checklist as any).normalizedIntent
+
+    const spec = service.buildFromNormalizedIntent(checklist, normalizedIntent)
+
+    expect(spec.indicators).toEqual([
+      { kind: 'custom', params: { family: 'grid' } },
+    ])
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'entry-grid-range-rebalance-long',
+        phase: 'entry',
+        sideScope: 'long',
+        condition: expect.objectContaining({
+          key: 'grid.range_rebalance',
+          op: 'LTE',
+          params: expect.objectContaining({
+            rangeMin: 60000,
+            rangeMax: 80000,
+            stepPct: 0.5,
+            timeframe: '15m',
+          }),
+        }),
+        metadata: expect.objectContaining({
+          normalized: expect.objectContaining({
+            family: 'grid.range_rebalance',
+          }),
+        }),
+      }),
+      expect.objectContaining({
+        id: 'entry-grid-range-rebalance-short',
+        phase: 'entry',
+        sideScope: 'short',
+        condition: expect.objectContaining({
+          key: 'grid.range_rebalance',
+          op: 'GTE',
+        }),
+      }),
+      expect.objectContaining({
+        id: 'exit-grid-range-rebalance-long',
+        phase: 'exit',
+        sideScope: 'long',
+        condition: expect.objectContaining({
+          key: 'grid.range_rebalance',
+          op: 'GTE',
+        }),
+      }),
+      expect.objectContaining({
+        id: 'exit-grid-range-rebalance-short',
+        phase: 'exit',
+        sideScope: 'short',
+        condition: expect.objectContaining({
+          key: 'grid.range_rebalance',
+          op: 'LTE',
+        }),
+      }),
+      expect.objectContaining({
+        id: 'risk-stop-loss',
+        phase: 'risk',
+      }),
     ]))
   })
 
