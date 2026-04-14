@@ -2,6 +2,70 @@ import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CodegenConversationService } from '../codegen-conversation.service'
 
 describe('canonicalSpecBuilderService', () => {
+  it('bridges StrategyIR back into canonical spec v2 through the migration entry point', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.buildFromStrategyIr({
+      version: 'strategy-ir.v1',
+      market: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        timeframe: '15m',
+      },
+      intent: {
+        kind: 'grid.range_rebalance',
+        trigger: {
+          range: { lower: 60000, upper: 80000 },
+          stepPct: 0.5,
+          sideMode: 'bidirectional',
+          recycle: true,
+        },
+        sizing: {
+          mode: 'fixed_ratio',
+          value: 0.1,
+          positionMode: 'long_short',
+        },
+        actions: ['open_long', 'close_long', 'open_short', 'close_short'],
+        risk: [
+          {
+            kind: 'risk.stop_loss_pct',
+            params: { valuePct: 5, basis: 'entry_avg_price' },
+          },
+        ],
+      },
+    })
+
+    expect(spec.market).toEqual({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      marketType: 'perp',
+      defaultTimeframe: '15m',
+    })
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'entry-grid-range-rebalance-long',
+        phase: 'entry',
+      }),
+      expect.objectContaining({
+        id: 'entry-grid-range-rebalance-short',
+        phase: 'entry',
+      }),
+      expect.objectContaining({
+        id: 'exit-grid-range-rebalance-long',
+        phase: 'exit',
+      }),
+      expect.objectContaining({
+        id: 'exit-grid-range-rebalance-short',
+        phase: 'exit',
+      }),
+      expect.objectContaining({
+        id: 'risk-stop-loss',
+        phase: 'risk',
+      }),
+    ]))
+  })
+
   it('normalizes single-trade sizing language into positionPct', () => {
     const conversationService = Object.create(CodegenConversationService.prototype) as CodegenConversationService
 
