@@ -18,6 +18,7 @@ export const STRATEGY_CLARIFICATION_REASONS = [
   'invalid_spot_short_combo',
   'grid_params_missing',
   'ambiguous_state_gate',
+  'atomic_semantic_fork',
 ] as const
 
 export const STRATEGY_CLARIFICATION_ITEM_STATUSES = ['pending', 'answered'] as const
@@ -51,6 +52,7 @@ export const STRATEGY_CLARIFICATION_FIELDS = [
   'grid.upper',
   'grid.stepPct',
   'grid.sideMode',
+  'trigger.confirmation',
 ] as const
 type StrategyClarificationFieldLiteral = typeof STRATEGY_CLARIFICATION_FIELDS[number]
 export type StrategyClarificationField = StrategyClarificationFieldLiteral | (string & {})

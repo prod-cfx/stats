@@ -96,7 +96,7 @@ export class StrategyIntentResolutionService {
           {
             kind: 'atomic_semantic_fork',
             field: 'trigger.confirmation',
-            message: '布林带触发尚不能确定是触及即生效还是收盘确认后生效。',
+            message: '存在触碰即触发与收盘确认触发两种合法解释',
             choices: ['touch', 'close_confirm'],
           },
         ],

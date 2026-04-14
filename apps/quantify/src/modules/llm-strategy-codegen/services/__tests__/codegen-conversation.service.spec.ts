@@ -741,6 +741,32 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('asks for missing exchange from execution-context diagnostics before checklist fallback gaps', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-execution-context-clarify' })
+
+    const result = await service.startSession({
+      userId: 'u-1',
+      initialMessage: '在合约市场的 BTCUSDT 15分钟图上，3分钟内跌 1% 做多，5分钟内涨 2% 平仓，单笔 10% 仓位',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('缺少唯一交易所')
+    expect(result.assistantPrompt).toContain('请确认交易所')
+    expect(result.assistantPrompt).not.toContain('请确认止损规则')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      clarificationState: expect.objectContaining({
+        status: 'NEEDS_CLARIFICATION',
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            key: 'executionContext.exchange',
+            reason: 'missing_exchange',
+            field: 'exchange',
+          }),
+        ]),
+      }),
+    }))
+  })
+
   it('preserves explicit direction in bollinger fallback inference and does not ask direction clarification', async () => {
     mockRepo.createSession.mockResolvedValue({ id: 's-clarify-2' })
 
@@ -760,6 +786,33 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       clarificationState: expect.objectContaining({
         items: expect.not.arrayContaining([
           expect.objectContaining({ reason: 'missing_side_scope' }),
+        ]),
+      }),
+    }))
+  })
+
+  it('asks for Bollinger confirmation semantics before checklist fallback questions', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-semantic-fork-clarify' })
+
+    const result = await service.startSession({
+      userId: 'u-1',
+      initialMessage: '在okx交易所合约市场的BTCUSDT 15分钟图上，触及布林带上轨后收盘确认做空，价格回到布林带中轨(MA20)时平仓，亏损5%止损，盈利10%止盈，仓位10%',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('存在触碰即触发与收盘确认触发两种合法解释')
+    expect(result.assistantPrompt).toContain('触碰即触发')
+    expect(result.assistantPrompt).toContain('收盘确认后触发')
+    expect(result.assistantPrompt).not.toContain('缺少方向约束')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      clarificationState: expect.objectContaining({
+        status: 'NEEDS_CLARIFICATION',
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            reason: 'atomic_semantic_fork',
+            field: 'trigger.confirmation',
+            allowedAnswers: ['touch', 'close_confirm'],
+          }),
         ]),
       }),
     }))
