@@ -25,6 +25,8 @@ export interface StartSessionBootstrapInput {
   clarificationPrompt: string | null
   plan: ConversationPlan
   compileability: CanonicalCompileabilityReport | null
+  normalizationBlocked?: boolean
+  normalizationAssistantPrompt?: string
 }
 
 export interface StartSessionBootstrapResult {
@@ -40,7 +42,8 @@ export function buildStartSessionBootstrap(
   input: StartSessionBootstrapInput,
   buildCompileabilityAssistantPrompt: (report: CanonicalCompileabilityReport) => string,
 ): StartSessionBootstrapResult {
-  const status: LlmCodegenSessionStatus = input.plannerStatus === 'CHECKLIST_GATE' && input.compileability?.canCompile === false
+  const status: LlmCodegenSessionStatus = input.plannerStatus === 'CHECKLIST_GATE'
+    && (input.compileability?.canCompile === false || input.normalizationBlocked === true)
     ? 'DRAFTING'
     : input.plannerStatus
   const shouldGateChecklist = status === 'CHECKLIST_GATE'
@@ -49,9 +52,11 @@ export function buildStartSessionBootstrap(
     ? input.clarificationPrompt
     : (shouldGateChecklist
         ? `${input.plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`
-        : (input.compileability && !input.compileability.canCompile
+        : (input.normalizationBlocked && input.normalizationAssistantPrompt
+            ? input.normalizationAssistantPrompt
+            : (input.compileability && !input.compileability.canCompile
             ? buildCompileabilityAssistantPrompt(input.compileability)
-            : input.plan.assistantPrompt))
+            : input.plan.assistantPrompt)))
 
   return {
     status,

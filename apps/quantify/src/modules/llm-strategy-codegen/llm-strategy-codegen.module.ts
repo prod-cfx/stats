@@ -30,6 +30,7 @@ import { StaticGuardrailService } from './services/static-guardrail.service'
 import { StrategyClarificationQuestionService } from './services/strategy-clarification-question.service'
 import { StrategyClarificationRulesService } from './services/strategy-clarification-rules.service'
 import { StrategyConsistencyService } from './services/strategy-consistency.service'
+import { StrategyIntentNormalizerService } from './services/strategy-intent-normalizer.service'
 import { StrategySummaryBuilderService } from './services/strategy-summary-builder.service'
 import { StrategySummaryObservationService } from './services/strategy-summary-observation.service'
 
@@ -57,6 +58,7 @@ import { StrategySummaryObservationService } from './services/strategy-summary-o
     CompiledPublicationGateService,
     ScriptProfileExtractorService,
     StrategyConsistencyService,
+    StrategyIntentNormalizerService,
     StrategySummaryObservationService,
     StrategySummaryBuilderService,
     StrategyClarificationRulesService,

@@ -107,4 +107,23 @@ describe('strategyClarificationQuestionService', () => {
     expect(prompt).not.toContain('标的/周期/风控可后续配置，不应强制先问这些。')
     expect(prompt).not.toContain('交易所、周期、仓位、risk metadata 可后续补充。')
   })
+
+  it('describes grid clarification gaps as grid parameters instead of a generic blocker', () => {
+    const prompt = questionService.build({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        {
+          key: 'grid.stepPct',
+          reason: 'grid_params_missing',
+          field: 'grid.stepPct',
+          blocking: true,
+          question: '请确认网格步长（例如每格 0.5%）。',
+          status: 'pending',
+        },
+      ],
+    })
+
+    expect(prompt).toContain('网格参数')
+    expect(prompt).toContain('请确认网格步长')
+  })
 })

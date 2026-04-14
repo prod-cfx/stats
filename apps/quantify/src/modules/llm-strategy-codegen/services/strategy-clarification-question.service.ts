@@ -23,6 +23,8 @@ const REASON_PRIORITY: Record<StrategyClarificationItem['reason'], number> = {
   missing_position_pct: 4,
   missing_position_mode: 4,
   ambiguous_condition_basis: 5,
+  grid_params_missing: 3,
+  ambiguous_state_gate: 3,
 }
 
 @Injectable()
@@ -83,6 +85,12 @@ export class StrategyClarificationQuestionService {
     }
     if (item.reason === 'ambiguous_condition_basis') {
       return '条件比较基准。'
+    }
+    if (item.reason === 'grid_params_missing') {
+      return '网格参数。'
+    }
+    if (item.reason === 'ambiguous_state_gate') {
+      return '状态门控白名单。'
     }
     return '关键条件。'
   }

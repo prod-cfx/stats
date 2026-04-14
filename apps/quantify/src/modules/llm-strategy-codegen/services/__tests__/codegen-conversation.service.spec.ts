@@ -2924,6 +2924,48 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.tryRequeueFromProcessing).not.toHaveBeenCalled()
   })
 
+  it('publishes through the compiler-first mainline even when legacy model output would violate the signal payload schema', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's6',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: completeChecklist({
+        entryRules: ['RSI 14 低于 30 时做多'],
+        exitRules: ['收益率达到 5% 止盈'],
+      }),
+      constraintPack: {},
+    })
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '可以生成',
+        }),
+      })
+      .mockResolvedValueOnce({ content: 'return "BUY"' })
+      .mockResolvedValueOnce({ content: 'return "BUY"' })
+      .mockResolvedValueOnce({ content: 'return "BUY"' })
+    mockRepo.createVersion.mockResolvedValue({ id: 'v2' })
+
+    const result = await service.continueSession('s6', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(completeChecklist({
+        entryRules: ['RSI 14 低于 30 时做多'],
+        exitRules: ['收益率达到 5% 止盈'],
+      })),
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await waitForTerminalStatus('s6')
+
+    const hasPublished = mockRepo.updateSession.mock.calls.some(call =>
+      call[0] === 's6' && (call[1] as { status?: string }).status === 'PUBLISHED',
+    )
+    expect(hasPublished).toBe(true)
+  })
   it('generates directly when confirmGenerate is true and checklist is complete even if session is drafting', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's7',

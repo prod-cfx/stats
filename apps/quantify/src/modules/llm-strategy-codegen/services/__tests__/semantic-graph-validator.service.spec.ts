@@ -62,4 +62,5 @@ describe('semanticGraphValidatorService', () => {
     expect(result.ok).toBe(false)
     expect(result.errors.map(error => error.code)).toContain('codegen.semantic_graph_incomplete')
   })
+
 })
