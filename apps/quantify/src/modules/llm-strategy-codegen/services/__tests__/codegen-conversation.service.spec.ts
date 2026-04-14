@@ -1628,6 +1628,68 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
   })
 
+  it('keeps drafting when structured clarification answers resolve the explicit question but normalization remains blocked', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-clarification-normalization-blocked',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['根据主观判断入场'],
+        exitRules: ['价格回到布林带中轨(MA20)时平仓'],
+        riskRules: {
+          marketType: 'perp',
+          positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
+        },
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'market.exchange',
+            reason: 'missing_exchange',
+            field: 'exchange',
+            blocking: true,
+            question: '请确认交易所（binance / okx / hyperliquid）。',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-clarification-normalization-blocked', {
+      userId: 'u1',
+      message: 'okx',
+      clarificationAnswers: {
+        'market.exchange': 'okx',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('存在暂不支持的规则片段：根据主观判断入场')
+    expect(result.specDesc).toBeTruthy()
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-clarification-normalization-blocked',
+      expect.objectContaining({
+        status: 'DRAFTING',
+        latestSpecDesc: expect.any(Object),
+      }),
+    )
+  })
+
   it('turns merged market metadata drift into a blocking clarification item', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-market-scope-conflict',
@@ -2371,11 +2433,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('DRAFTING')
     expect(mockRepo.updateSession).toHaveBeenCalledWith(
       's-exit-basis-sync',
       expect.objectContaining({
-        status: 'CHECKLIST_GATE',
+        status: 'DRAFTING',
         checklist: expect.objectContaining({
           exitRuleBases: {
             'exit-1': 'entry_avg_price',

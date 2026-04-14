@@ -1298,6 +1298,29 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
 
+    if (normalization.blocked) {
+      await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
+        status: 'DRAFTING',
+        checklist: args.checklist,
+        clarificationState: clarification.clarificationState,
+        constraintPack: {
+          ...args.constraintPack,
+          conversationHistory: historyAfterAnswer,
+        },
+        latestSpecDesc: specDesc,
+      }))
+
+      const response = this.finalizeSessionResponse({
+        id: args.session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt: this.buildNormalizationAssistantPrompt(args.checklist, normalization),
+        clarificationState: clarification.clarificationState,
+        specDesc,
+      })
+      return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
+    }
+
     if (!compileability.canCompile) {
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
