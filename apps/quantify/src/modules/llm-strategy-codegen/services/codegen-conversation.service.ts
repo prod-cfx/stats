@@ -1498,17 +1498,7 @@ export class CodegenConversationService {
 
   private buildClarificationSummary(checklist: ChecklistPayload): string | null {
     const drafts = buildChecklistRuleDrafts(checklist)
-    this.executionContext.resolve(checklist)
-    const exchange = typeof checklist.market?.exchange === 'string'
-      ? checklist.market.exchange.trim().toUpperCase()
-      : (typeof checklist.riskRules?.exchange === 'string' ? checklist.riskRules.exchange.trim().toUpperCase() : '')
-    const marketType = typeof checklist.market?.marketType === 'string'
-      ? checklist.market.marketType.trim().toLowerCase()
-      : (typeof checklist.riskRules?.marketType === 'string'
-          ? checklist.riskRules.marketType.trim().toLowerCase()
-          : '')
-    const symbol = checklist.symbols?.[0]?.trim() ?? ''
-    const timeframe = resolveChecklistDefaultTimeframe(checklist) ?? ''
+    const executionContext = this.resolveExecutionContextForSummary(checklist)
     const entryRule = drafts.entry[0]
     const exitRule = drafts.exit[0]
     const positionPct = typeof checklist.riskRules?.positionPct === 'number'
@@ -1521,7 +1511,12 @@ export class CodegenConversationService {
     }
 
     const segments = [
-      [exchange, marketType === 'perp' ? '合约' : marketType === 'spot' ? '现货' : '', symbol, timeframe].filter(Boolean).join(' '),
+      [
+        executionContext.exchange,
+        executionContext.marketType === 'perp' ? '合约' : executionContext.marketType === 'spot' ? '现货' : '',
+        executionContext.symbol,
+        executionContext.timeframe,
+      ].filter(Boolean).join(' '),
       entryRule ? `入场：${formatDraft(entryRule)}` : '',
       exitRule ? `出场：${formatDraft(exitRule)}` : '',
       this.buildRiskSummarySegment('止损', checklist.riskRules, 'stopLoss'),
@@ -1530,6 +1525,35 @@ export class CodegenConversationService {
     ].filter(Boolean)
 
     return segments.length > 0 ? segments.join('；') : null
+  }
+
+  private resolveExecutionContextForSummary(checklist: ChecklistPayload): {
+    exchange: string
+    marketType: string
+    symbol: string
+    timeframe: string
+  } {
+    const rawExchange = typeof checklist.market?.exchange === 'string'
+      ? checklist.market.exchange.trim().toUpperCase()
+      : (typeof checklist.riskRules?.exchange === 'string' ? checklist.riskRules.exchange.trim().toUpperCase() : '')
+    const rawMarketType = typeof checklist.market?.marketType === 'string'
+      ? checklist.market.marketType.trim().toLowerCase()
+      : (typeof checklist.riskRules?.marketType === 'string'
+          ? checklist.riskRules.marketType.trim().toLowerCase()
+          : '')
+    const rawSymbol = checklist.symbols?.[0]?.trim() ?? ''
+    const rawTimeframe = resolveChecklistDefaultTimeframe(checklist) ?? ''
+
+    const resolvedContext = typeof this.executionContext?.resolve === 'function'
+      ? this.executionContext.resolve(checklist).context
+      : null
+
+    return {
+      exchange: resolvedContext?.exchange?.toUpperCase() ?? rawExchange,
+      marketType: resolvedContext?.marketType ?? rawMarketType,
+      symbol: resolvedContext?.symbol ?? rawSymbol,
+      timeframe: resolvedContext?.timeframe ?? rawTimeframe,
+    }
   }
 
   private buildNormalizationAssistantPrompt(

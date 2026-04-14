@@ -53,4 +53,62 @@ describe('strategyExecutionContextService', () => {
       }),
     ])
   })
+
+  it('emits ambiguities for remaining missing execution-context fields', () => {
+    const result = service.resolve({
+      riskRules: {
+        exchange: 'okx',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.context).toEqual({
+      exchange: 'okx',
+      symbol: null,
+      marketType: null,
+      timeframe: null,
+    })
+    expect(result.ambiguities).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'execution_context_missing',
+        field: 'symbol',
+        reason: 'missing_symbol',
+      }),
+      expect.objectContaining({
+        kind: 'execution_context_missing',
+        field: 'marketType',
+        reason: 'missing_market_type',
+      }),
+      expect.objectContaining({
+        kind: 'execution_context_missing',
+        field: 'timeframe',
+        reason: 'missing_timeframe',
+      }),
+    ]))
+  })
+
+  it('prefers market scope over risk-rule fallbacks when both are present', () => {
+    const result = service.resolve({
+      symbols: ['BTCUSDT'],
+      timeframes: ['1h'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'spot',
+        positionPct: 10,
+      },
+      market: {
+        exchange: 'hyperliquid',
+        marketType: 'perp',
+        defaultTimeframe: '3m',
+      },
+    })
+
+    expect(result.context).toEqual({
+      exchange: 'hyperliquid',
+      symbol: 'BTCUSDT',
+      marketType: 'perp',
+      timeframe: '3m',
+    })
+    expect(result.ambiguities).toEqual([])
+  })
 })
