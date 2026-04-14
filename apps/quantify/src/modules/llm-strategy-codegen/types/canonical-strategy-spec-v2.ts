@@ -1,3 +1,5 @@
+import type { StrategyNormalizedIntent } from './strategy-normalized-intent'
+
 export type CanonicalRulePhase = 'entry' | 'exit' | 'risk' | 'rebalance'
 export type CanonicalRuleSideScope = 'long' | 'short' | 'both' | 'flat'
 export type CanonicalRiskRuleSideScope = Exclude<CanonicalRuleSideScope, 'flat'>
@@ -37,6 +39,20 @@ export interface CanonicalRuleAction {
   params?: Record<string, number | string | boolean>
 }
 
+export interface CanonicalRuleNormalizedMetadata {
+  source: 'normalized-intent'
+  triggerKeys?: string[]
+  gateKeys?: string[]
+  actionKeys?: string[]
+  family?: StrategyNormalizedIntent['families'][number]
+}
+
+export interface CanonicalStrategySpecNormalizedMetadata {
+  source: 'normalized-intent'
+  semanticViewSource: 'normalized-canonical-truth'
+  intent: StrategyNormalizedIntent
+}
+
 export interface CanonicalRuleV2 {
   id: string
   phase: CanonicalRulePhase
@@ -45,7 +61,9 @@ export interface CanonicalRuleV2 {
   cooldownBars?: number
   condition: CanonicalConditionNode
   actions: CanonicalRuleAction[]
-  metadata?: Record<string, unknown>
+  metadata?: Record<string, unknown> & {
+    normalized?: CanonicalRuleNormalizedMetadata
+  }
 }
 
 export interface CanonicalStrategySpecV2 {
@@ -73,4 +91,7 @@ export interface CanonicalStrategySpecV2 {
     requiredTimeframes: string[]
   }
   rules: CanonicalRuleV2[]
+  metadata?: {
+    normalized?: CanonicalStrategySpecNormalizedMetadata
+  }
 }

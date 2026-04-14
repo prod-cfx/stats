@@ -17,6 +17,8 @@ describe('conversationPlannerSystemPrompt', () => {
     expect(prompt).toContain('若任一必答项，或阈值/时间窗口/序列条件的比较基准仍不明确')
     expect(prompt).toContain('不得跳过必答市场、周期、仓位或关键风控字段')
     expect(prompt).toContain('不得补写 entryRules/exitRules 或臆造新的核心交易规则')
+    expect(prompt).toContain('禁止发明新的 atom、family、state 值或 grid 语义')
+    expect(prompt).toContain('如果 grid 或状态门控缺少必须字段，logicReady=false')
     expect(prompt).not.toContain('必须直接给出完整入场+出场规则草案')
   })
 })

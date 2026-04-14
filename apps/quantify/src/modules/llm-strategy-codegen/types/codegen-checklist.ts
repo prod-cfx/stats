@@ -36,4 +36,15 @@ export interface ChecklistPayload {
     marketType?: 'spot' | 'perp'
     defaultTimeframe?: string | null
   }
+  stateGates?: {
+    trendDirection?: 'up' | 'down' | 'sideways'
+    marketRegime?: 'trend' | 'range'
+    volatilityState?: 'high' | 'low'
+  }
+  grid?: {
+    lower?: number
+    upper?: number
+    stepPct?: number
+    sideMode?: 'long_only' | 'short_only' | 'bidirectional'
+  }
 }

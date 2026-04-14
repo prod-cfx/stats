@@ -571,6 +571,7 @@ export class CanonicalSpecV2IrCompilerService {
     }
   }
 
+
   private ensurePriceSeries(
     context: CompileContext,
     field: 'close',

@@ -201,6 +201,13 @@ describe('codegenSessionPublicationPipeline', () => {
     expect(recommendationIndex.onSpecDescPersisted).toHaveBeenCalledWith(expect.objectContaining({
       versionId: 'version-1',
     }))
+    expect(repo.createVersion).toHaveBeenCalledWith(expect.objectContaining({
+      specDesc: expect.objectContaining({
+        normalizedIntent: expect.objectContaining({
+          families: expect.any(Array),
+        }),
+      }),
+    }))
     expect(repo.ensureDraftStrategyInstanceBoundForPublishedSession).toHaveBeenCalled()
     expect(repo.updateSession).toHaveBeenCalledWith('session-4', expect.objectContaining({
       status: 'PUBLISHED',

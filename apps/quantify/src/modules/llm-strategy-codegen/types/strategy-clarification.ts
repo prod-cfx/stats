@@ -16,6 +16,8 @@ export const STRATEGY_CLARIFICATION_REASONS = [
   'missing_position_mode',
   'conflicting_market_scope',
   'invalid_spot_short_combo',
+  'grid_params_missing',
+  'ambiguous_state_gate',
 ] as const
 
 export const STRATEGY_CLARIFICATION_ITEM_STATUSES = ['pending', 'answered'] as const
@@ -42,6 +44,13 @@ export const STRATEGY_CLARIFICATION_FIELDS = [
   'riskRules.takeProfitBasis',
   'riskRules.maxDrawdownBasis',
   'riskRules.earlyStop.action',
+  'stateGates.trendDirection',
+  'stateGates.marketRegime',
+  'stateGates.volatilityState',
+  'grid.lower',
+  'grid.upper',
+  'grid.stepPct',
+  'grid.sideMode',
 ] as const
 type StrategyClarificationFieldLiteral = typeof STRATEGY_CLARIFICATION_FIELDS[number]
 export type StrategyClarificationField = StrategyClarificationFieldLiteral | (string & {})

@@ -4,6 +4,9 @@ describe('strategyCodegenSystemPrompt', () => {
   it('contains protocol contract and ctx documentation', () => {
     const prompt = buildStrategyCodegenSystemPrompt('- helpers.ta.sma(prices: number[], period: number): number | null')
 
+    expect(prompt).toContain('你是量化策略脚本生成器（仅用于调试与对照，不是正式发布真源）。')
+    expect(prompt).toContain('正式发布链路以 canonical -> IR -> AST -> compiled script 为准。')
+    expect(prompt).toContain('不得假设自己输出的脚本会直接进入 published snapshot。')
     expect(prompt).toContain("protocolVersion: 'v1'")
     expect(prompt).toContain('const strategy: StrategyAdapterV1')
     expect(prompt).toContain('ctx.data')

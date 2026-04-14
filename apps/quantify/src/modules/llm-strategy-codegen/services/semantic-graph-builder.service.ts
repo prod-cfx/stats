@@ -362,6 +362,7 @@ export class SemanticGraphBuilderService {
     return { hasEntry: wantsEntry, hasExit: wantsExit }
   }
 
+
   private resolveGridStepPct(text: string): number | null {
     const percentMatch = text.match(/(?:步长|网格步长)\s*(\d+(?:\.\d+)?)\s*%/u)
     if (percentMatch?.[1]) {
