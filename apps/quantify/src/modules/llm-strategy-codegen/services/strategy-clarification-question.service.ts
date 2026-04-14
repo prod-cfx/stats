@@ -1,3 +1,4 @@
+import type { StrategyAmbiguity } from '../types/strategy-ambiguity'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import { Injectable } from '@nestjs/common'
 
@@ -25,10 +26,25 @@ const REASON_PRIORITY: Record<StrategyClarificationItem['reason'], number> = {
   ambiguous_condition_basis: 5,
   grid_params_missing: 3,
   ambiguous_state_gate: 3,
+  atomic_semantic_fork: 2,
 }
 
 @Injectable()
 export class StrategyClarificationQuestionService {
+  buildFromAmbiguities(input: {
+    summary?: string | null
+    ambiguities?: StrategyAmbiguity[] | null
+  }): string {
+    const target = this.pickHighestPriorityAmbiguity(input.ambiguities ?? [])
+    if (!target) return ''
+
+    return [
+      `我当前理解的策略是：${input.summary?.trim() || '已识别部分条件，但仍未完整。'}`,
+      `现在还缺一个会影响脚本生成一致性的条件：${this.readAmbiguityMessage(target)}`,
+      `请确认：${this.renderAmbiguityQuestion(target)}`,
+    ].join('\n')
+  }
+
   build(state: StrategyClarificationPromptState | null | undefined): string {
     if (!state || state.status !== 'NEEDS_CLARIFICATION') return ''
 
@@ -92,6 +108,74 @@ export class StrategyClarificationQuestionService {
     if (item.reason === 'ambiguous_state_gate') {
       return '状态门控白名单。'
     }
+    if (item.reason === 'atomic_semantic_fork') {
+      return '执行语义分叉。'
+    }
     return '关键条件。'
+  }
+
+  private pickHighestPriorityAmbiguity(ambiguities: StrategyAmbiguity[]): StrategyAmbiguity | null {
+    return ambiguities
+      .map((ambiguity, index) => ({ ambiguity, index }))
+      .sort((a, b) => {
+        const priorityDelta = this.readAmbiguityPriority(a.ambiguity) - this.readAmbiguityPriority(b.ambiguity)
+        if (priorityDelta !== 0) return priorityDelta
+        return a.index - b.index
+      })[0]?.ambiguity ?? null
+  }
+
+  private readAmbiguityPriority(ambiguity: StrategyAmbiguity): number {
+    if (ambiguity.kind === 'execution_context_conflict') return 1
+    if (ambiguity.kind === 'execution_context_missing') {
+      if (ambiguity.field === 'exchange') return 2
+      if (ambiguity.field === 'symbol') return 3
+      if (ambiguity.field === 'marketType') return 4
+      if (ambiguity.field === 'timeframe') return 5
+      return 6
+    }
+    if (ambiguity.kind === 'atomic_semantic_fork') return 7
+    return 99
+  }
+
+  private renderAmbiguityQuestion(ambiguity: StrategyAmbiguity): string {
+    if (ambiguity.kind === 'execution_context_missing') {
+      if (ambiguity.field === 'exchange') {
+        return '请确认交易所（binance / okx / hyperliquid）。'
+      }
+      if (ambiguity.field === 'symbol') {
+        return '请确认策略交易标的（例如 BTCUSDT）。'
+      }
+      if (ambiguity.field === 'marketType') {
+        return '请确认市场类型（现货或合约/perp）。'
+      }
+      if (ambiguity.field === 'timeframe') {
+        return '请确认策略主周期（例如 15m 或 1h）。'
+      }
+    }
+
+    if (ambiguity.field === 'trigger.confirmation') {
+      const labels = ambiguity.choices?.map((choice) => {
+        if (choice === 'touch') return '触碰即触发'
+        if (choice === 'close_confirm') return '收盘确认后触发'
+        return choice
+      }) ?? []
+
+      return labels.length > 0
+        ? `请确认采用哪种触发方式：${labels.join('，还是')}？`
+        : '该布林带条件是触碰即触发，还是收盘确认后触发？'
+    }
+
+    return ambiguity.message
+  }
+
+  private readAmbiguityMessage(ambiguity: StrategyAmbiguity): string {
+    if (ambiguity.kind === 'execution_context_missing') {
+      if (ambiguity.field === 'exchange') return '缺少唯一交易所'
+      if (ambiguity.field === 'symbol') return '缺少唯一交易标的'
+      if (ambiguity.field === 'marketType') return '缺少唯一市场类型'
+      if (ambiguity.field === 'timeframe') return '缺少唯一主周期'
+    }
+
+    return ambiguity.message
   }
 }

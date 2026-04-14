@@ -45,6 +45,87 @@ describe('strategyIntentNormalizerService', () => {
     expect(first.normalizedIntent.triggers).toEqual(second.normalizedIntent.triggers)
   })
 
+  it('normalizes moving-average crossover rules into stable sma triggers and long-only position semantics', () => {
+    const service = new StrategyIntentNormalizerService()
+
+    const result = service.normalize({
+      market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp', timeframe: '1h' },
+      entryRules: ['EMA7 上穿 EMA21 做多'],
+      exitRules: ['EMA7 下穿 EMA21 平多'],
+      riskRules: { positionPct: 10, stopLossPct: 5, stopLossBasis: 'entry_avg_price' },
+    } as any)
+
+    expect(result.blocked).toBe(false)
+    expect(result.normalizedIntent.families).toContain('single-leg')
+    expect(result.normalizedIntent.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        sideScope: 'long',
+        params: { indicator: 'sma' },
+      }),
+      expect.objectContaining({
+        key: 'indicator.cross_under',
+        phase: 'exit',
+        sideScope: 'long',
+        params: { indicator: 'sma' },
+      }),
+    ]))
+    expect(result.normalizedIntent.actions).toEqual([
+      { key: 'open_long' },
+      { key: 'close_long' },
+    ])
+    expect(result.normalizedIntent.position).toEqual({
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+    })
+    expect(result.normalizedIntent.unresolved).toEqual([])
+  })
+
+  it('preserves explicit touch-plus-close bollinger semantics during normalization', () => {
+    const service = new StrategyIntentNormalizerService()
+
+    const result = service.normalize({
+      market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp', timeframe: '15m' },
+      entryRules: ['触及布林带上轨后收盘确认做空', '触及布林带下轨后收盘确认做多'],
+      exitRules: ['价格回到布林带中轨(MA20)时平仓'],
+      riskRules: { positionPct: 10, stopLossPct: 5, takeProfitPct: 10 },
+    } as any)
+
+    expect(result.blocked).toBe(false)
+    expect(result.normalizedIntent.families).toContain('single-leg')
+    expect(result.normalizedIntent.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'bollinger.touch_upper',
+        phase: 'entry',
+        sideScope: 'short',
+        params: { band: 'upper' },
+        resolutionHints: { confirmation: 'ambiguous_touch_or_close_confirm' },
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_lower',
+        phase: 'entry',
+        sideScope: 'long',
+        params: { band: 'lower' },
+        resolutionHints: { confirmation: 'ambiguous_touch_or_close_confirm' },
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_middle',
+        phase: 'exit',
+        sideScope: 'long',
+        params: { band: 'middle' },
+        resolutionHints: { confirmation: 'ambiguous_touch_or_close_confirm' },
+      }),
+    ]))
+    expect(result.normalizedIntent.position).toEqual({
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_short',
+    })
+    expect(result.normalizedIntent.unresolved).toEqual([])
+  })
+
   it('normalizes a fixed-range grid into the grid.range_rebalance family', () => {
     const service = new StrategyIntentNormalizerService()
 
@@ -62,5 +143,26 @@ describe('strategyIntentNormalizerService', () => {
       stepPct: 0.5,
       sideMode: 'bidirectional',
     }))
+    expect(result.normalizedIntent.actions).toEqual([
+      { key: 'open_long' },
+      { key: 'close_long' },
+      { key: 'open_short' },
+      { key: 'close_short' },
+    ])
+    expect(result.normalizedIntent.position).toEqual({
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_short',
+    })
+    expect(result.normalizedIntent.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.stop_loss_pct',
+        params: { valuePct: 5, basis: 'entry_avg_price' },
+      }),
+      expect.objectContaining({
+        key: 'risk.take_profit_pct',
+        params: { valuePct: 8, basis: 'entry_avg_price' },
+      }),
+    ]))
   })
 })

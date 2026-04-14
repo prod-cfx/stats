@@ -195,6 +195,7 @@ export class StrategyIntentNormalizerService {
         phase,
         sideScope: this.resolveSideScope(rule, phase) ?? (phase === 'entry' ? 'short' : 'both'),
         params: { band: 'upper' },
+        resolutionHints: { confirmation: this.resolveBollingerConfirmationHint(rule) },
       }
     }
 
@@ -204,6 +205,7 @@ export class StrategyIntentNormalizerService {
         phase,
         sideScope: this.resolveSideScope(rule, phase) ?? 'long',
         params: { band: 'lower' },
+        resolutionHints: { confirmation: this.resolveBollingerConfirmationHint(rule) },
       }
     }
 
@@ -213,6 +215,7 @@ export class StrategyIntentNormalizerService {
         phase,
         sideScope: this.resolveSideScope(rule, phase) ?? 'both',
         params: { band: 'middle' },
+        resolutionHints: { confirmation: this.resolveBollingerConfirmationHint(rule) },
       }
     }
 
@@ -489,10 +492,27 @@ export class StrategyIntentNormalizerService {
 
   private sortTriggers(triggers: NormalizedTriggerAtom[]): NormalizedTriggerAtom[] {
     return [...triggers].sort((left, right) => {
-      const leftKey = `${left.phase}:${left.key}:${JSON.stringify(left.params)}:${left.sideScope ?? ''}`
-      const rightKey = `${right.phase}:${right.key}:${JSON.stringify(right.params)}:${right.sideScope ?? ''}`
+      const leftKey = `${left.phase}:${left.key}:${JSON.stringify(left.params)}:${left.sideScope ?? ''}:${JSON.stringify(left.resolutionHints ?? {})}`
+      const rightKey = `${right.phase}:${right.key}:${JSON.stringify(right.params)}:${right.sideScope ?? ''}:${JSON.stringify(right.resolutionHints ?? {})}`
       return leftKey.localeCompare(rightKey)
     })
+  }
+
+  private resolveBollingerConfirmationHint(rule: string): 'touch' | 'close_confirm' | 'ambiguous_touch_or_close_confirm' {
+    const hasTouchCue = /触及|触碰|碰到|touch/iu.test(rule)
+    const hasCloseConfirmCue = /收盘|收于|收在|close/iu.test(rule)
+
+    if (hasTouchCue && hasCloseConfirmCue) {
+      return 'ambiguous_touch_or_close_confirm'
+    }
+    if (hasCloseConfirmCue) {
+      return 'close_confirm'
+    }
+    if (hasTouchCue) {
+      return 'touch'
+    }
+
+    return 'ambiguous_touch_or_close_confirm'
   }
 
   private extractWindow(rule: string): string | null {

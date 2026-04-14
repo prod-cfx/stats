@@ -1,4 +1,5 @@
 import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
+import type { StrategyExecutionContext } from '../types/strategy-execution-context'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
 import { Injectable } from '@nestjs/common'
 import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
@@ -14,6 +15,7 @@ interface SpecDescChecklistSnapshot {
 
 interface SpecDescBuildExtras {
   normalizedIntent?: StrategyNormalizedIntent | null
+  executionContext?: StrategyExecutionContext | null
 }
 
 @Injectable()
@@ -46,6 +48,15 @@ export class SpecDescBuilderService {
 
     const normalizedIntent = extras?.normalizedIntent
       ?? (canonicalSpec.version === 2 ? canonicalSpec.metadata?.normalized?.intent ?? null : null)
+    const executionContext = extras?.executionContext
+      ?? (canonicalSpec.version === 2
+        ? {
+            exchange: canonicalSpec.market.exchange ?? null,
+            symbol: canonicalSpec.market.symbol ?? null,
+            marketType: canonicalSpec.market.marketType ?? null,
+            timeframe: canonicalSpec.market.defaultTimeframe ?? null,
+          }
+        : null)
     const features = this.buildScriptFeatures(scriptCode)
     const styleTags = this.buildStyleTags(features)
     const stateHints = normalizedIntent?.stateHints ?? []
@@ -85,6 +96,7 @@ export class SpecDescBuilderService {
         runtime: 'current_script_engine',
         allowedHelpersOnly: true,
       },
+      ...(executionContext ? { executionContext } : {}),
       summary: timeframes.length > 1
         ? `策略规则共 ${rules.length} 条，覆盖周期 ${timeframes.join(' / ')}`
         : `策略规则共 ${rules.length} 条（入场 ${phaseCounts.entry}、出场 ${phaseCounts.exit}、风控 ${phaseCounts.risk}）`,

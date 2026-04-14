@@ -1,5 +1,7 @@
 import type { ChecklistPayload } from '../types/codegen-checklist'
+import type { AtomicIntentResolution, StrategyAmbiguity } from '../types/strategy-ambiguity'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
+import type { StrategyExecutionContextResolution } from '../types/strategy-execution-context'
 import { Injectable } from '@nestjs/common'
 import { isEquivalentMarketScopeValue } from './market-scope-equivalence'
 import { classifyPercentageRuleFamily } from './rule-family-default-semantics'
@@ -19,9 +21,39 @@ const LOWER_BAND_PATTERN = /(?:布林|bollinger).{0,8}(?:下轨|lower)|(?:下轨
 const PERCENTAGE_THRESHOLD_PATTERN = /\d+(?:\.\d+)?\s*%/u
 const GRID_STRATEGY_PATTERN = /网格|grid/iu
 const STATE_GATE_PATTERN = /趋势|震荡|波动|regime|volatility|trend/iu
+const BOLLINGER_RULE_PATTERN = /布林|bollinger|上轨|下轨|中轨|upper|lower|middle|ma20|均线20/iu
+const TOUCH_CONFIRMATION_PATTERN = /触及|触碰|碰到|touch/iu
+const CLOSE_CONFIRMATION_PATTERN = /收盘|收于|收在|close/iu
 
 @Injectable()
 export class StrategyClarificationRulesService {
+  detectFromAmbiguities(input: {
+    executionContext: StrategyExecutionContextResolution
+    atomicResolution: AtomicIntentResolution
+    checklist?: ClarificationChecklistInput | null
+  }): StrategyClarificationState {
+    const items: StrategyClarificationItem[] = [
+      ...this.fromExecutionContextAmbiguities(input.executionContext),
+      ...this.fromAtomicAmbiguities(input.atomicResolution.ambiguities, input.checklist),
+    ]
+
+    if (items.length > 0) {
+      return {
+        status: 'NEEDS_CLARIFICATION',
+        items,
+      }
+    }
+
+    if (input.checklist) {
+      return this.detect(input.checklist)
+    }
+
+    return {
+      status: 'CLEAR',
+      items: [],
+    }
+  }
+
   detect(input: ClarificationChecklistInput): StrategyClarificationState {
     const entryDetection = this.detectEntryItems(input.entryRules ?? [])
     const items: StrategyClarificationItem[] = [
@@ -50,6 +82,46 @@ export class StrategyClarificationRulesService {
       status: 'NEEDS_CLARIFICATION',
       items,
     }
+  }
+
+  private fromExecutionContextAmbiguities(
+    resolution: StrategyExecutionContextResolution,
+  ): StrategyClarificationItem[] {
+    return resolution.ambiguities.map((ambiguity) => ({
+      key: `executionContext.${ambiguity.field}`,
+      reason: ambiguity.reason,
+      field: ambiguity.field,
+      blocking: true,
+      question: this.renderExecutionContextQuestion(ambiguity.field),
+      status: 'pending',
+    }))
+  }
+
+  private fromAtomicAmbiguities(
+    ambiguities: StrategyAmbiguity[],
+    checklist?: ClarificationChecklistInput | null,
+  ): StrategyClarificationItem[] {
+    return ambiguities.flatMap((ambiguity) => {
+      if (ambiguity.kind !== 'atomic_semantic_fork') {
+        return []
+      }
+
+      const targetRule = this.findFirstAmbiguousBollingerRule(checklist)
+      if (!targetRule) {
+        return []
+      }
+
+      return [{
+        key: `${targetRule.phase}.trigger.confirmation.${targetRule.index + 1}`,
+        ruleId: `${targetRule.phase}-${targetRule.index + 1}`,
+        reason: 'atomic_semantic_fork',
+        field: 'trigger.confirmation',
+        ...(ambiguity.choices?.length ? { allowedAnswers: ambiguity.choices } : {}),
+        blocking: true,
+        question: this.renderAtomicForkQuestion(ambiguity, targetRule.phase, targetRule.text),
+        status: 'pending',
+      }]
+    })
   }
 
   private detectEntryItems(entryRules: string[]): {
@@ -720,5 +792,83 @@ export class StrategyClarificationRulesService {
     return input.grid?.sideMode === 'long_only'
       || input.grid?.sideMode === 'short_only'
       || input.grid?.sideMode === 'bidirectional'
+  }
+
+  private renderExecutionContextQuestion(
+    field: 'exchange' | 'symbol' | 'marketType' | 'timeframe',
+  ): string {
+    if (field === 'exchange') {
+      return '请确认交易所（binance / okx / hyperliquid）。'
+    }
+    if (field === 'symbol') {
+      return '请确认策略交易标的（例如 BTCUSDT）。'
+    }
+    if (field === 'marketType') {
+      return '请确认市场类型（现货或合约/perp）。'
+    }
+    return '请确认策略主周期（例如 15m 或 1h）。'
+  }
+
+  private renderAtomicForkQuestion(
+    ambiguity: StrategyAmbiguity,
+    phase?: 'entry' | 'exit',
+    ruleText?: string,
+  ): string {
+    if (ambiguity.field === 'trigger.confirmation') {
+      if (ruleText) {
+        const phaseLabel = phase === 'exit' ? '出场规则' : '入场规则'
+        return `${phaseLabel}“${ruleText}”是触碰即触发，还是收盘确认后触发？`
+      }
+      return '该布林带条件是触碰即触发，还是收盘确认后触发？'
+    }
+
+    return ambiguity.message
+  }
+
+  private findFirstAmbiguousBollingerRule(
+    checklist?: ClarificationChecklistInput | null,
+  ): { phase: 'entry' | 'exit', index: number, text: string } | null {
+    if (!checklist) return null
+
+    const candidates: Array<{ phase: 'entry' | 'exit', rules: string[] | undefined }> = [
+      { phase: 'entry', rules: checklist.entryRules },
+      { phase: 'exit', rules: checklist.exitRules },
+    ]
+
+    for (const candidate of candidates) {
+      for (const [index, rawRule] of (candidate.rules ?? []).entries()) {
+        const text = rawRule.trim()
+        if (!text) continue
+        if (!BOLLINGER_RULE_PATTERN.test(text)) continue
+        if (this.resolveBollingerConfirmationHint(text) !== 'ambiguous_touch_or_close_confirm') continue
+        if (!(TOUCH_CONFIRMATION_PATTERN.test(text) && CLOSE_CONFIRMATION_PATTERN.test(text))) continue
+        return {
+          phase: candidate.phase,
+          index,
+          text,
+        }
+      }
+    }
+
+    return null
+  }
+
+  private resolveBollingerConfirmationHint(
+    rule: string,
+  ): 'touch' | 'close_confirm' | 'ambiguous_touch_or_close_confirm' {
+    const hasTouchCue = TOUCH_CONFIRMATION_PATTERN.test(rule)
+    const hasCloseCue = CLOSE_CONFIRMATION_PATTERN.test(rule)
+
+    if (hasTouchCue && hasCloseCue) {
+      return 'ambiguous_touch_or_close_confirm'
+    }
+    if (hasCloseCue) {
+      return 'close_confirm'
+    }
+    if (hasTouchCue) {
+      return 'touch'
+    }
+
+    return 'ambiguous_touch_or_close_confirm'
   }
 }

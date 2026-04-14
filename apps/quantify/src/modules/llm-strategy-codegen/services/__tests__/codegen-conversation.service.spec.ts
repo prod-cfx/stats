@@ -245,7 +245,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('DRAFTING')
     expect(result.missingFields).toEqual([])
     expect(result.assistantPrompt).toContain('我当前理解的策略是')
-    expect(result.assistantPrompt).toContain('请补充至少一条明确的入场规则')
+    expect(result.assistantPrompt).toContain('缺少唯一交易所')
+    expect(result.assistantPrompt).toContain('请确认交易所')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       status: 'DRAFTING',
     }))
@@ -741,6 +742,32 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('asks for missing exchange from execution-context diagnostics before checklist fallback gaps', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-execution-context-clarify' })
+
+    const result = await service.startSession({
+      userId: 'u-1',
+      initialMessage: '在合约市场的 BTCUSDT 15分钟图上，3分钟内跌 1% 做多，5分钟内涨 2% 平仓，单笔 10% 仓位',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('缺少唯一交易所')
+    expect(result.assistantPrompt).toContain('请确认交易所')
+    expect(result.assistantPrompt).not.toContain('请确认止损规则')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      clarificationState: expect.objectContaining({
+        status: 'NEEDS_CLARIFICATION',
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            key: 'executionContext.exchange',
+            reason: 'missing_exchange',
+            field: 'exchange',
+          }),
+        ]),
+      }),
+    }))
+  })
+
   it('preserves explicit direction in bollinger fallback inference and does not ask direction clarification', async () => {
     mockRepo.createSession.mockResolvedValue({ id: 's-clarify-2' })
 
@@ -760,6 +787,33 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       clarificationState: expect.objectContaining({
         items: expect.not.arrayContaining([
           expect.objectContaining({ reason: 'missing_side_scope' }),
+        ]),
+      }),
+    }))
+  })
+
+  it('asks for Bollinger confirmation semantics before checklist fallback questions', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-semantic-fork-clarify' })
+
+    const result = await service.startSession({
+      userId: 'u-1',
+      initialMessage: '在okx交易所合约市场的BTCUSDT 15分钟图上，触及布林带上轨后收盘确认做空，价格回到布林带中轨(MA20)时平仓，亏损5%止损，盈利10%止盈，仓位10%',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('存在触碰即触发与收盘确认触发两种合法解释')
+    expect(result.assistantPrompt).toContain('触碰即触发')
+    expect(result.assistantPrompt).toContain('收盘确认后触发')
+    expect(result.assistantPrompt).not.toContain('缺少方向约束')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      clarificationState: expect.objectContaining({
+        status: 'NEEDS_CLARIFICATION',
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            reason: 'atomic_semantic_fork',
+            field: 'trigger.confirmation',
+            allowedAnswers: ['touch', 'close_confirm'],
+          }),
         ]),
       }),
     }))
@@ -1574,6 +1628,68 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
   })
 
+  it('keeps drafting when structured clarification answers resolve the explicit question but normalization remains blocked', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-clarification-normalization-blocked',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['根据主观判断入场'],
+        exitRules: ['价格回到布林带中轨(MA20)时平仓'],
+        riskRules: {
+          marketType: 'perp',
+          positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
+        },
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'market.exchange',
+            reason: 'missing_exchange',
+            field: 'exchange',
+            blocking: true,
+            question: '请确认交易所（binance / okx / hyperliquid）。',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-clarification-normalization-blocked', {
+      userId: 'u1',
+      message: 'okx',
+      clarificationAnswers: {
+        'market.exchange': 'okx',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('存在暂不支持的规则片段：根据主观判断入场')
+    expect(result.specDesc).toBeTruthy()
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-clarification-normalization-blocked',
+      expect.objectContaining({
+        status: 'DRAFTING',
+        latestSpecDesc: expect.any(Object),
+      }),
+    )
+  })
+
   it('turns merged market metadata drift into a blocking clarification item', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-market-scope-conflict',
@@ -2317,11 +2433,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('DRAFTING')
     expect(mockRepo.updateSession).toHaveBeenCalledWith(
       's-exit-basis-sync',
       expect.objectContaining({
-        status: 'CHECKLIST_GATE',
+        status: 'DRAFTING',
         checklist: expect.objectContaining({
           exitRuleBases: {
             'exit-1': 'entry_avg_price',
@@ -2632,19 +2748,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     await waitForTerminalStatus('s5-compiled')
 
-    expect(mockRepo.create).toHaveBeenCalledWith(expect.objectContaining({
-      specSnapshot: expect.objectContaining({
-        version: 2,
-      }),
+    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
+    expect(publishedSnapshot).toEqual(expect.objectContaining({
       semanticGraph: expect.objectContaining({
         viewType: 'canonical-semantic-view.v1',
         canonicalDigest: started.canonicalDigest,
-      }),
-      compiledIr: expect.objectContaining({
-        irVersion: 'csi.v1',
-        source: expect.objectContaining({
-          specHash: expect.stringMatching(/^sha256:/),
-        }),
       }),
       irSnapshot: expect.objectContaining({
         irVersion: 'csi.v1',
@@ -2662,7 +2770,136 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
       snapshotVersion: 3,
     }))
+    expect(publishedSnapshot?.specSnapshot).toEqual(expect.objectContaining({
+      version: 2,
+      indicators: [expect.objectContaining({ kind: 'sma', params: { period: 20 } })],
+      rules: expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          sideScope: 'long',
+          condition: expect.objectContaining({
+            key: 'ma.golden_cross',
+            op: 'CROSS_OVER',
+          }),
+        }),
+        expect.objectContaining({
+          phase: 'exit',
+          sideScope: 'long',
+          condition: expect.objectContaining({
+            key: 'ma.death_cross',
+            op: 'CROSS_UNDER',
+          }),
+        }),
+      ]),
+    }))
+    expect(publishedSnapshot?.compiledIr).toEqual(expect.objectContaining({
+      irVersion: 'csi.v1',
+      source: expect.objectContaining({
+        specHash: expect.stringMatching(/^sha256:/),
+      }),
+      signalCatalog: expect.objectContaining({
+        series: expect.arrayContaining([
+          expect.objectContaining({ kind: 'SMA', params: { period: 7 } }),
+          expect.objectContaining({ kind: 'SMA', params: { period: 20 } }),
+        ]),
+        predicates: expect.arrayContaining([
+          expect.objectContaining({ kind: 'CROSS_OVER' }),
+          expect.objectContaining({ kind: 'CROSS_UNDER' }),
+        ]),
+      }),
+    }))
     expect(mockAi.chat).toHaveBeenCalledTimes(1)
+  })
+
+  it('publishes bollinger strategy after confirmGenerate without reintroducing sma semantics', async () => {
+    const checklist = completeChecklist({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['K线收盘后确认突破布林带上轨时做空', 'K线收盘后确认突破布林带下轨时做多'],
+      exitRules: ['价格回到布林带中轨(MA20)时平仓'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+        stopLossPct: 5,
+        stopLossBasis: 'entry_avg_price',
+        takeProfitPct: 10,
+        takeProfitBasis: 'entry_avg_price',
+      },
+    })
+    mockRepo.findById.mockResolvedValue({
+      id: 's-bollinger-publish',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      strategyInstanceId: null,
+      checklist,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+
+    const result = await service.continueSession('s-bollinger-publish', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(checklist),
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await waitForTerminalStatus('s-bollinger-publish')
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-bollinger-publish', expect.objectContaining({
+      status: 'PUBLISHED',
+    }))
+    expect(mockRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      specSnapshot: expect.objectContaining({
+        indicators: [expect.objectContaining({ kind: 'bollingerBands', params: { period: 20, stdDev: 2 } })],
+        rules: expect.arrayContaining([
+          expect.objectContaining({
+            phase: 'entry',
+            sideScope: 'short',
+            condition: expect.objectContaining({
+              key: 'bollinger.upper_break',
+              op: 'CROSS_OVER',
+            }),
+            actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
+          }),
+          expect.objectContaining({
+            phase: 'entry',
+            sideScope: 'long',
+            condition: expect.objectContaining({
+              key: 'bollinger.lower_break',
+              op: 'CROSS_UNDER',
+            }),
+            actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+          }),
+          expect.objectContaining({
+            phase: 'exit',
+            sideScope: 'both',
+            condition: expect.objectContaining({
+              key: 'bollinger.middle_revert',
+            }),
+            actions: expect.arrayContaining([
+              expect.objectContaining({ type: 'CLOSE_LONG' }),
+              expect.objectContaining({ type: 'CLOSE_SHORT' }),
+            ]),
+          }),
+        ]),
+      }),
+      compiledIr: expect.objectContaining({
+        signalCatalog: expect.objectContaining({
+          series: expect.arrayContaining([
+            expect.objectContaining({ kind: 'UPPER_BAND', params: { period: 20, stdDev: 2 } }),
+            expect.objectContaining({ kind: 'LOWER_BAND', params: { period: 20, stdDev: 2 } }),
+            expect.objectContaining({ kind: 'MID_BAND', params: { period: 20, stdDev: 2 } }),
+          ]),
+        }),
+      }),
+    }))
+
+    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
+    expect(publishedSnapshot?.specSnapshot?.indicators).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'sma' }),
+    ]))
   })
 
   it('publishes price-change strategy after confirmGenerate through the canonical mainline', async () => {
