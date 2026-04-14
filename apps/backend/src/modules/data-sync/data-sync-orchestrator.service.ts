@@ -7,11 +7,12 @@ import { DATA_PULL_JOB_REGISTRY } from './data-sync.tokens'
 import { DataPullExecutionRepository } from './repositories/data-pull-execution.repository'
 // eslint-disable-next-line ts/consistent-type-imports
 import { DataPullTaskRepository } from './repositories/data-pull-task.repository'
+import { DataPullJobRegistryResolver } from './services/data-pull-job-registry.resolver'
 
 @Injectable()
 export class DataSyncOrchestrator {
   private readonly logger = new Logger(DataSyncOrchestrator.name)
-  private readonly jobMap = new Map<string, DataPullJob>()
+  private readonly registryResolver: DataPullJobRegistryResolver
 
   constructor(
     @Inject(DATA_PULL_JOB_REGISTRY)
@@ -19,36 +20,7 @@ export class DataSyncOrchestrator {
     private readonly taskRepo: DataPullTaskRepository,
     private readonly execRepo: DataPullExecutionRepository,
   ) {
-    for (const job of jobs) {
-      this.jobMap.set(job.key, job)
-    }
-  }
-
-  /**
-   * 根据任务 key 查找对应的 Job 实现
-   * 支持两种匹配模式：
-   * 1. 精确匹配：taskKey === job.key
-   * 2. 前缀匹配：taskKey 以 "job.key:" 开头（用于支持同一 Job 类型的多个任务实例）
-   *
-   * 例如：
-   * - taskKey = "coinglass-aggregated-liquidation" 精确匹配 job.key = "coinglass-aggregated-liquidation"
-   * - taskKey = "coinglass-aggregated-liquidation:BTC" 前缀匹配 job.key = "coinglass-aggregated-liquidation"
-   */
-  private findJobForTask(taskKey: string): DataPullJob | undefined {
-    // 优先精确匹配
-    const exactMatch = this.jobMap.get(taskKey)
-    if (exactMatch) {
-      return exactMatch
-    }
-
-    // 前缀匹配：taskKey 格式为 "jobKey:suffix"
-    const colonIndex = taskKey.indexOf(':')
-    if (colonIndex > 0) {
-      const jobKeyPrefix = taskKey.slice(0, colonIndex)
-      return this.jobMap.get(jobKeyPrefix)
-    }
-
-    return undefined
+    this.registryResolver = new DataPullJobRegistryResolver(jobs)
   }
 
   /**
@@ -70,7 +42,7 @@ export class DataSyncOrchestrator {
     this.logger.log(`Found ${tasks.length} due data-pull tasks`)
 
     for (const task of tasks) {
-      const job = this.findJobForTask(task.key)
+      const job = this.registryResolver.findJobForTask(task.key)
       if (!job) {
         this.logger.error(`No DataPullJob implementation found for key=${task.key}`)
         continue
@@ -122,4 +94,3 @@ export class DataSyncOrchestrator {
     }
   }
 }
-
