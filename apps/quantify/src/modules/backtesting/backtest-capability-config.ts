@@ -1,3 +1,4 @@
+import { MARKET_TIMEFRAMES } from '@ai/shared'
 import type { EnvAccessor } from '@/common/env/env.accessor'
 import { defaultEnvAccessor } from '@/common/env/env.accessor'
 
@@ -14,7 +15,8 @@ export interface NormalizedBacktestCapabilitiesConfig {
 export const BACKTEST_CAPABILITY_ALLOWED_SYMBOLS_ENV = 'BACKTEST_CAPABILITY_ALLOWED_SYMBOLS'
 export const BACKTEST_CAPABILITY_ALLOWED_BASE_TIMEFRAMES_ENV = 'BACKTEST_CAPABILITY_ALLOWED_BASE_TIMEFRAMES'
 export const DEFAULT_BACKTEST_CAPABILITY_SYMBOLS = ['BTCUSDT'] as const
-export const DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES = ['15m', '1h'] as const
+export const DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES = MARKET_TIMEFRAMES
+const LEGACY_DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES = ['15m', '1h'] as const
 
 function parseConfiguredStringArray(raw: string | undefined): string[] | null {
   const trimmed = raw?.trim()
@@ -48,6 +50,11 @@ export function normalizeConfiguredStringArray(raw: unknown): string[] | null {
   return normalized.length > 0 ? normalized : null
 }
 
+function isLegacyDefaultBacktestCapabilityTimeframes(value: readonly string[]): boolean {
+  return value.length === LEGACY_DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES.length
+    && value.every((item, index) => item === LEGACY_DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES[index])
+}
+
 export function normalizeBacktestCapabilityConfig(
   config: BacktestCapabilitiesConfigRecord | null | undefined,
 ): NormalizedBacktestCapabilitiesConfig | null {
@@ -64,7 +71,9 @@ export function normalizeBacktestCapabilityConfig(
 
   return {
     allowedSymbols,
-    allowedBaseTimeframes,
+    allowedBaseTimeframes: isLegacyDefaultBacktestCapabilityTimeframes(allowedBaseTimeframes)
+      ? [...DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES]
+      : allowedBaseTimeframes,
   }
 }
 
