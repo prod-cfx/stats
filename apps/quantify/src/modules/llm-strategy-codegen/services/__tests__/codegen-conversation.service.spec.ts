@@ -21,6 +21,7 @@ import { SpecDescBuilderService } from '../spec-desc-builder.service'
 import { StaticGuardrailService } from '../static-guardrail.service'
 import { StrategyClarificationQuestionService } from '../strategy-clarification-question.service'
 import { StrategyClarificationRulesService } from '../strategy-clarification-rules.service'
+import { StrategyCompileabilityDecisionService } from '../strategy-compileability-decision.service'
 import { StrategyConsistencyService } from '../strategy-consistency.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
 import { StrategySummaryObservationService } from '../strategy-summary-observation.service'
@@ -166,6 +167,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       new RuntimeGuardrailService(),
       specDescBuilder,
       canonicalSpecBuilder,
+      new StrategyCompileabilityDecisionService(),
       new StrategyClarificationRulesService(),
       new StrategyClarificationQuestionService(),
       publicationPipeline,
@@ -902,6 +904,20 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         ]),
       }),
     }))
+  })
+
+  it('keeps closed-loop grid wording out of template exit and risk clarification prompts', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-grid-clarify-1' })
+
+    const result = await service.startSession({
+      userId: 'u-1',
+      initialMessage: '在okx交易所合约市场的BTCUSDT上，做一个 60000 到 80000 的网格策略，每格千分之5，不断低买高卖，单笔10%资金',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的出场规则')
+    expect(result.assistantPrompt).not.toContain('请确认止损规则')
+    expect(result.assistantPrompt).not.toContain('请确认止盈规则')
   })
 
   it('starts in checklist gate when llm says logic is ready', async () => {

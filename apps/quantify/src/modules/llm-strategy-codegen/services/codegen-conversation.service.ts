@@ -11,6 +11,7 @@ import type { ChecklistPayload, ChecklistRuleBasis, ChecklistRuleDraft } from '.
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { StrategyAmbiguity } from '../types/strategy-ambiguity'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
+import type { StrategyBlockingReason, StrategyInferredAssumption } from '../types/strategy-decision'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 
@@ -68,6 +69,7 @@ import { StaticGuardrailService } from './static-guardrail.service'
 import { StrategyClarificationQuestionService } from './strategy-clarification-question.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { StrategyClarificationRulesService } from './strategy-clarification-rules.service'
+import { StrategyCompileabilityDecisionService } from './strategy-compileability-decision.service'
 import { StrategyExecutionContextService } from './strategy-execution-context.service'
 import { StrategyIntentNormalizerService } from './strategy-intent-normalizer.service'
 import { StrategyIntentResolutionService } from './strategy-intent-resolution.service'
@@ -148,6 +150,7 @@ export class CodegenConversationService {
     private readonly runtimeGuardrail: RuntimeGuardrailService,
     private readonly specDescBuilder: SpecDescBuilderService,
     private readonly canonicalSpecBuilder: CanonicalSpecBuilderService,
+    private readonly uniquenessDecision: StrategyCompileabilityDecisionService,
     private readonly clarificationRules: StrategyClarificationRulesService,
     private readonly clarificationQuestion: StrategyClarificationQuestionService,
     private readonly publicationPipeline: CodegenSessionPublicationPipelineService,
@@ -183,7 +186,6 @@ export class CodegenConversationService {
     )
     const clarification = this.resolveClarificationArtifacts(checklist)
     const clarificationState = clarification.clarificationState
-    const clarificationPrompt = clarification.clarificationPrompt
     const plannerStatus: LlmCodegenSessionStatus = this.stateMachine.resolvePlannerStatus({
       logicReady: plan.logicReady,
       clarificationState,
@@ -195,6 +197,14 @@ export class CodegenConversationService {
     const compileability = initialCanonicalSpec
       ? this.evaluateCanonicalCompileability(initialCanonicalSpec)
       : null
+    const decision = this.buildStrategyDecision({
+      checklist,
+      clarification,
+      compileability,
+    })
+    const clarificationPrompt = decision.kind === 'CONFIRM_INFERRED'
+      ? this.clarificationQuestion.buildFromDecision(decision)
+      : clarification.clarificationPrompt
     const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
     const bootstrap = buildStartSessionBootstrap({
       initialMessage: dto.initialMessage,
@@ -400,6 +410,14 @@ export class CodegenConversationService {
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
+    const decision = this.buildStrategyDecision({
+      checklist: mergedChecklist,
+      clarification,
+      compileability,
+    })
+    const decisionPrompt = decision.kind === 'CONFIRM_INFERRED'
+      ? this.clarificationQuestion.buildFromDecision(decision)
+      : clarification.clarificationPrompt
 
     if (!plan.logicReady) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
@@ -417,6 +435,27 @@ export class CodegenConversationService {
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt: plan.assistantPrompt,
+        clarificationState,
+      })
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+    }
+
+    if (decision.kind === 'CONFIRM_INFERRED') {
+      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
+        status: 'DRAFTING',
+        checklist: mergedChecklist,
+        clarificationState,
+        constraintPack: {
+          ...nextConstraintPack,
+          conversationHistory: historyAfterPlanner,
+        },
+      }))
+
+      const response = this.finalizeSessionResponse({
+        id: session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt: decisionPrompt,
         clarificationState,
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
@@ -1555,6 +1594,8 @@ export class CodegenConversationService {
     atomicResolution: ReturnType<StrategyIntentResolutionService['resolve']>
     clarificationState: StrategyClarificationStateWithSummary
     clarificationPrompt: string
+    blockingReasons: StrategyBlockingReason[]
+    inferredAssumptions: StrategyInferredAssumption[]
   } {
     const normalization = this.intentNormalizer.normalize(checklist)
     const executionContext = this.executionContext.resolve(checklist)
@@ -1585,6 +1626,24 @@ export class CodegenConversationService {
       summary: clarificationState.summary,
       ambiguities: effectiveAmbiguities,
     }) || this.clarificationQuestion.build(clarificationState)
+    const clarificationEvidence = this.clarificationRules.collectEvidence(checklist)
+    const blockingReasons: StrategyBlockingReason[] = [
+      ...executionContext.evidence
+        .filter((item): item is { key: string, reason: string, priority: number, question: string } => typeof item.question === 'string')
+        .map(item => ({
+          key: item.key,
+          reason: item.reason,
+          priority: item.priority,
+          question: item.question,
+        })),
+      ...clarificationEvidence.blockingReasons.map(item => ({
+        key: item.key,
+        reason: this.mapClarificationReasonToBlockingReason(item.reason),
+        priority: item.priority,
+        question: item.question,
+      })),
+    ]
+    const inferredAssumptions = this.collectInferredAssumptions(checklist)
 
     return {
       normalization,
@@ -1592,6 +1651,8 @@ export class CodegenConversationService {
       atomicResolution,
       clarificationState,
       clarificationPrompt,
+      blockingReasons,
+      inferredAssumptions,
     }
   }
 
@@ -1875,6 +1936,70 @@ export class CodegenConversationService {
 
   private buildCompileabilityAssistantPrompt(report: CanonicalCompileabilityReport): string {
     return `当前规则还不能稳定生成脚本：${report.reasons.join('，')}。请补充能明确落成主链规则的入场/出场条件后再确认逻辑图。`
+  }
+
+  private buildStrategyDecision(input: {
+    checklist: ChecklistPayload
+    clarification: ReturnType<CodegenConversationService['resolveClarificationArtifacts']>
+    compileability: CanonicalCompileabilityReport | null
+  }) {
+    const normalizedSummary = input.clarification.clarificationState.summary?.trim()
+      || this.buildClarificationSummary(input.checklist)
+      || '已识别部分条件，但仍未完整。'
+
+    return this.uniquenessDecision.decide({
+      normalizedSummary,
+      blockingReasons: input.clarification.blockingReasons,
+      inferredAssumptions: input.clarification.inferredAssumptions,
+      compileability: input.compileability,
+    })
+  }
+
+  private mapClarificationReasonToBlockingReason(reason: StrategyClarificationItem['reason']): string {
+    if (
+      reason === 'missing_exchange'
+      || reason === 'missing_symbol'
+      || reason === 'missing_market_type'
+      || reason === 'missing_timeframe'
+      || reason === 'missing_position_pct'
+      || reason === 'missing_position_mode'
+    ) {
+      return 'runtime_context_missing'
+    }
+    if (
+      reason === 'missing_side_scope'
+      || reason === 'direction_ambiguous'
+      || reason === 'missing_action_uniqueness'
+    ) {
+      return 'direction_ambiguity'
+    }
+    if (reason === 'missing_exit_rules') {
+      return 'exit_semantics_missing'
+    }
+    if (reason === 'ambiguous_condition_basis') {
+      return 'basis_ambiguity'
+    }
+    if (reason === 'atomic_semantic_fork') {
+      return 'trigger_semantics_fork'
+    }
+
+    return reason
+  }
+
+  private collectInferredAssumptions(
+    checklist: ChecklistPayload,
+  ): StrategyInferredAssumption[] {
+    const combinedText = [...(checklist.entryRules ?? []), ...(checklist.exitRules ?? [])].join(' ')
+
+    if (!/默认|你来定/u.test(combinedText)) {
+      return []
+    }
+
+    return [{
+      key: 'strategy.defaults',
+      value: '沿用系统默认解释',
+      source: 'system_default',
+    }]
   }
 
   private inferChecklistFromMessage(message?: string): ChecklistPayload {

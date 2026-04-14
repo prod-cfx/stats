@@ -1,5 +1,6 @@
 import type { StrategyAmbiguity } from '../types/strategy-ambiguity'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
+import type { StrategyDecision } from '../types/strategy-decision'
 import { Injectable } from '@nestjs/common'
 
 type StrategyClarificationPromptState = StrategyClarificationState & {
@@ -31,6 +32,27 @@ const REASON_PRIORITY: Record<StrategyClarificationItem['reason'], number> = {
 
 @Injectable()
 export class StrategyClarificationQuestionService {
+  buildFromDecision(decision: StrategyDecision): string {
+    if (decision.kind === 'CONFIRM_INFERRED') {
+      return [
+        `我当前理解的策略是：${decision.normalizedSummary}`,
+        '以下内容是系统推断，不是你明确给出的：',
+        ...decision.inferredAssumptions.map(item => `- ${item.key}: ${item.value}`),
+        '请确认这些推断是否成立；确认后我再生成策略代码。',
+      ].join('\n')
+    }
+
+    if (decision.kind === 'ASK_CLARIFY') {
+      return [
+        `我当前理解的策略是：${decision.normalizedSummary}`,
+        `现在还缺一个会影响脚本生成一致性的条件：${this.renderDecisionGapLabel(decision.nextActionPayload.question.reason)}`,
+        `请确认：${decision.nextActionPayload.question.question}`,
+      ].join('\n')
+    }
+
+    return ''
+  }
+
   buildFromAmbiguities(input: {
     summary?: string | null
     ambiguities?: StrategyAmbiguity[] | null
@@ -111,6 +133,15 @@ export class StrategyClarificationQuestionService {
     if (item.reason === 'atomic_semantic_fork') {
       return '执行语义分叉。'
     }
+    return '关键条件。'
+  }
+
+  private renderDecisionGapLabel(reason: string): string {
+    if (reason === 'trigger_semantics_fork') return '执行语义分叉。'
+    if (reason === 'basis_ambiguity') return '条件比较基准。'
+    if (reason === 'direction_ambiguity') return '缺少方向约束。'
+    if (reason === 'runtime_context_missing') return '关键市场约束信息。'
+    if (reason === 'exit_semantics_missing') return '核心交易语义。'
     return '关键条件。'
   }
 
