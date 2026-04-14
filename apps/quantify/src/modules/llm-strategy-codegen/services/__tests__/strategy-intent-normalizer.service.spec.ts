@@ -63,4 +63,43 @@ describe('strategyIntentNormalizerService', () => {
       sideMode: 'bidirectional',
     }))
   })
+
+  it('preserves explicit Bollinger confirmation hints without turning them into executable semantics yet', () => {
+    const service = new StrategyIntentNormalizerService()
+
+    const explicitTouch = service.normalize({
+      market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp', timeframe: '15m' },
+      entryRules: ['价格触及布林上轨做空'],
+      exitRules: ['价格触及布林中轨平空'],
+      riskRules: { positionPct: 10, stopLossPct: 5, takeProfitPct: 8 },
+    } as any)
+
+    const ambiguous = service.normalize({
+      market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp', timeframe: '15m' },
+      entryRules: ['布林上轨做空'],
+      exitRules: ['布林中轨平空'],
+      riskRules: { positionPct: 10, stopLossPct: 5, takeProfitPct: 8 },
+    } as any)
+
+    expect(explicitTouch.normalizedIntent.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'bollinger.touch_upper',
+        resolutionHints: expect.objectContaining({ confirmation: 'touch' }),
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_middle',
+        resolutionHints: expect.objectContaining({ confirmation: 'touch' }),
+      }),
+    ]))
+    expect(ambiguous.normalizedIntent.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'bollinger.touch_upper',
+        resolutionHints: expect.objectContaining({ confirmation: 'ambiguous_touch_or_close_confirm' }),
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_middle',
+        resolutionHints: expect.objectContaining({ confirmation: 'ambiguous_touch_or_close_confirm' }),
+      }),
+    ]))
+  })
 })

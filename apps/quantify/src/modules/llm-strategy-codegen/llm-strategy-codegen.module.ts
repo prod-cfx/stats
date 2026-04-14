@@ -32,6 +32,7 @@ import { StrategyClarificationRulesService } from './services/strategy-clarifica
 import { StrategyConsistencyService } from './services/strategy-consistency.service'
 import { StrategyExecutionContextService } from './services/strategy-execution-context.service'
 import { StrategyIntentNormalizerService } from './services/strategy-intent-normalizer.service'
+import { StrategyIntentResolutionService } from './services/strategy-intent-resolution.service'
 import { StrategySummaryBuilderService } from './services/strategy-summary-builder.service'
 import { StrategySummaryObservationService } from './services/strategy-summary-observation.service'
 
@@ -61,6 +62,7 @@ import { StrategySummaryObservationService } from './services/strategy-summary-o
     StrategyConsistencyService,
     StrategyExecutionContextService,
     StrategyIntentNormalizerService,
+    StrategyIntentResolutionService,
     StrategySummaryObservationService,
     StrategySummaryBuilderService,
     StrategyClarificationRulesService,

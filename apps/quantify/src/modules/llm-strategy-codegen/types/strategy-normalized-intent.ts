@@ -25,6 +25,13 @@ export const NORMALIZED_TRIGGER_ATOM_KEYS = [
 ] as const
 
 export type NormalizedTriggerAtomKey = (typeof NORMALIZED_TRIGGER_ATOM_KEYS)[number]
+export const NORMALIZED_TRIGGER_CONFIRMATION_HINTS = [
+  'touch',
+  'close_confirm',
+  'ambiguous_touch_or_close_confirm',
+] as const
+
+export type NormalizedTriggerConfirmationHint = (typeof NORMALIZED_TRIGGER_CONFIRMATION_HINTS)[number]
 
 export type NormalizedAtomPhase = 'entry' | 'exit' | 'risk' | 'gate'
 export type NormalizedAtomSideScope = 'long' | 'short' | 'both'
@@ -32,11 +39,16 @@ export type NormalizedPositionMode = 'long_only' | 'short_only' | 'long_short'
 export type NormalizedSizingMode = 'fixed_ratio' | 'fixed_quote' | 'fixed_qty'
 export type NormalizedGridSideMode = 'long_only' | 'short_only' | 'bidirectional'
 
+export interface NormalizedTriggerResolutionHints {
+  confirmation?: NormalizedTriggerConfirmationHint
+}
+
 export interface NormalizedTriggerAtom {
   key: NormalizedTriggerAtomKey
   phase: NormalizedAtomPhase
   sideScope?: NormalizedAtomSideScope
   params: Record<string, string | number | boolean>
+  resolutionHints?: NormalizedTriggerResolutionHints
 }
 
 export interface NormalizedActionAtom {
