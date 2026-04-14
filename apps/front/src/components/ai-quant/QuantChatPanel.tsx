@@ -45,6 +45,14 @@ function normalizeCodeText(children: unknown): string {
 }
 
 const BACKTEST_RANGE_PRESETS = ['7D', '30D', '90D', '1Y', 'CUSTOM'] as const
+const BACKTEST_SETTINGS_FIELD_KEYS = new Set([
+  'backtestInitialCash',
+  'backtestLeverage',
+  'backtestSlippageBps',
+  'backtestFeeBps',
+  'backtestPriceSource',
+  'backtestAllowPartial',
+])
 
 function toDateTimeLocalValue(value: unknown): string {
   if (typeof value !== 'string' || !value.trim()) return ''
@@ -84,7 +92,10 @@ export function QuantChatPanel({
   const [showSettings, setShowSettings] = useState(false)
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
-  const fields = useMemo(() => buildDynamicParamFields(paramSchema), [paramSchema])
+  const fields = useMemo(
+    () => buildDynamicParamFields(paramSchema).filter(field => BACKTEST_SETTINGS_FIELD_KEYS.has(field.key)),
+    [paramSchema],
+  )
   const validation = useMemo(
     () => validateDynamicParamValues(paramSchema, paramValues),
     [paramSchema, paramValues],

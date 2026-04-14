@@ -220,6 +220,52 @@ describe('QuantChatPanel range settings', () => {
     expect(onSend).not.toHaveBeenCalled()
   })
 
+  it('shows only backtest params in the settings panel and hides strategy params', async () => {
+    const mixedSchema = {
+      type: 'object',
+      properties: {
+        positionPct: { type: 'number', title: 'Position %' },
+        buyWindowMin: { type: 'number', title: 'Buy Window (min)' },
+        backtestInitialCash: { type: 'number', title: 'Initial Cash' },
+        backtestLeverage: { type: 'number', title: 'Leverage' },
+        backtestPriceSource: {
+          type: 'string',
+          title: 'Price Source',
+          enum: ['open', 'close', 'mid'],
+        },
+      },
+      required: ['positionPct', 'backtestInitialCash'],
+    }
+
+    await act(async () => {
+      root?.render(
+        <QuantChatPanel
+          messages={[{ id: 'm1', role: 'assistant', content: 'hello' }]}
+          paramSchema={mixedSchema}
+          paramValues={{
+            ...baseParams,
+            backtestInitialCash: 10000,
+            backtestLeverage: 1,
+            backtestPriceSource: 'close',
+          }}
+          onParamChange={() => {}}
+          onSend={() => {}}
+          onRunBacktest={() => {}}
+        />,
+      )
+    })
+
+    await act(async () => {
+      container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(container.textContent).toContain('Initial Cash')
+    expect(container.textContent).toContain('Leverage')
+    expect(container.textContent).toContain('Price Source')
+    expect(container.textContent).not.toContain('Position %')
+    expect(container.textContent).not.toContain('Buy Window (min)')
+  })
+
   it('does not render a separate clarification card while still showing publication gate content', async () => {
     await act(async () => {
       root?.render(

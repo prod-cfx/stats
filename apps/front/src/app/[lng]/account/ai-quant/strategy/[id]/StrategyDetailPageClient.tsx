@@ -186,7 +186,10 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
           publishedSnapshotId,
         },
         range: resolveBacktestRangeInput(strategy.paramValues ?? {}),
-        allowPartial: executionConfig.allowPartial,
+        // Top-level allowPartial controls whether the backtest job may clamp the
+        // requested range to the available market-data coverage. It is not the
+        // same semantic as the snapshot execution-policy allowPartialFill flag.
+        allowPartial: true,
       })
 
       const support = await checkBacktestSymbolSupport({ exchange, symbol })
