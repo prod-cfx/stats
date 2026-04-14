@@ -1,7 +1,8 @@
 import { MARKET_TIMEFRAMES } from '@ai/shared'
 import {
-  normalizeBacktestCapabilityConfig,
+  isLegacyDefaultBacktestCapabilityConfig,
   resolveConfiguredBacktestCapabilityConfig,
+  normalizeBacktestCapabilityConfig,
 } from './backtest-capability-config'
 
 describe('backtestCapabilityConfig', () => {
@@ -12,13 +13,20 @@ describe('backtestCapabilityConfig', () => {
     })
   })
 
-  it('upgrades legacy default timeframe config to all supported market timeframes', () => {
+  it('identifies the exact legacy default capability tuple', () => {
+    expect(isLegacyDefaultBacktestCapabilityConfig({
+      allowedSymbols: ['BTCUSDT'],
+      allowedBaseTimeframes: ['15m', '1h'],
+    })).toBe(true)
+  })
+
+  it('preserves the legacy default tuple in online reads until an explicit repair runs', () => {
     expect(normalizeBacktestCapabilityConfig({
       allowedSymbols: ['BTCUSDT'],
       allowedBaseTimeframes: ['15m', '1h'],
     })).toEqual({
       allowedSymbols: ['BTCUSDT'],
-      allowedBaseTimeframes: [...MARKET_TIMEFRAMES],
+      allowedBaseTimeframes: ['15m', '1h'],
     })
   })
 

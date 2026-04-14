@@ -1,6 +1,7 @@
 import { Client } from 'pg'
 import { createEnvAccessor } from '../src/common/env/env.accessor'
 import {
+  isLegacyDefaultBacktestCapabilityConfig,
   normalizeBacktestCapabilityConfig,
   resolveConfiguredBacktestCapabilityConfig,
 } from '../src/modules/backtesting/backtest-capability-config'
@@ -31,6 +32,7 @@ export interface SchemaAuditSummary {
   driftedMigrations: string[]
   missingActiveCapabilityConfig: boolean
   invalidActiveCapabilityConfig: boolean
+  staleLegacyDefaultCapabilityConfig: boolean
 }
 
 export const REQUIRED_QUANTIFY_SCHEMA: RequiredStructure[] = [
@@ -86,18 +88,21 @@ export function summarizeSchemaAudit(input: SchemaAuditInput): SchemaAuditSummar
   const normalizedConfig = normalizeBacktestCapabilityConfig(input.activeCapabilityConfig)
   const missingActiveCapabilityConfig = input.activeCapabilityConfig == null
   const invalidActiveCapabilityConfig = input.activeCapabilityConfig != null && normalizedConfig == null
+  const staleLegacyDefaultCapabilityConfig = isLegacyDefaultBacktestCapabilityConfig(input.activeCapabilityConfig)
 
   return {
     isHealthy: missingTables.length === 0
       && missingColumns.length === 0
       && driftedMigrations.length === 0
       && !missingActiveCapabilityConfig
-      && !invalidActiveCapabilityConfig,
+      && !invalidActiveCapabilityConfig
+      && !staleLegacyDefaultCapabilityConfig,
     missingTables,
     missingColumns,
     driftedMigrations,
     missingActiveCapabilityConfig,
     invalidActiveCapabilityConfig,
+    staleLegacyDefaultCapabilityConfig,
   }
 }
 
@@ -106,7 +111,11 @@ export function buildSchemaRepairStatements(input: SchemaAuditInput): string[] {
     .filter(item => !hasRequiredStructure(input, item))
     .flatMap(item => item.applyStatements)
 
-  if (input.activeCapabilityConfig == null || normalizeBacktestCapabilityConfig(input.activeCapabilityConfig) == null) {
+  if (
+    input.activeCapabilityConfig == null
+    || normalizeBacktestCapabilityConfig(input.activeCapabilityConfig) == null
+    || isLegacyDefaultBacktestCapabilityConfig(input.activeCapabilityConfig)
+  ) {
     const configured = resolveConfiguredBacktestCapabilityConfig()
     const allowedSymbols = JSON.stringify(configured.allowedSymbols)
     const allowedBaseTimeframes = JSON.stringify(configured.allowedBaseTimeframes)

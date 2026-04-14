@@ -52,16 +52,6 @@ export function normalizeConfiguredStringArray(raw: unknown): string[] | null {
   return normalized.length > 0 ? normalized : null
 }
 
-function isLegacyDefaultBacktestCapabilityConfig(input: {
-  allowedSymbols: readonly string[]
-  allowedBaseTimeframes: readonly string[]
-}): boolean {
-  return input.allowedSymbols.length === LEGACY_DEFAULT_BACKTEST_CAPABILITY_SYMBOLS.length
-    && input.allowedSymbols.every((item, index) => item === LEGACY_DEFAULT_BACKTEST_CAPABILITY_SYMBOLS[index])
-    && input.allowedBaseTimeframes.length === LEGACY_DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES.length
-    && input.allowedBaseTimeframes.every((item, index) => item === LEGACY_DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES[index])
-}
-
 function normalizeConfiguredBacktestCapabilityTimeframes(raw: unknown): string[] | null {
   const normalized = normalizeConfiguredStringArray(raw)
   if (!normalized) {
@@ -71,6 +61,25 @@ function normalizeConfiguredBacktestCapabilityTimeframes(raw: unknown): string[]
   return normalized.every(item => SUPPORTED_BACKTEST_CAPABILITY_BASE_TIMEFRAME_SET.has(item))
     ? normalized
     : null
+}
+
+export function isLegacyDefaultBacktestCapabilityConfig(
+  config: BacktestCapabilitiesConfigRecord | null | undefined,
+): boolean {
+  if (!config) {
+    return false
+  }
+
+  const allowedSymbols = normalizeConfiguredStringArray(config.allowedSymbols)
+  const allowedBaseTimeframes = normalizeConfiguredBacktestCapabilityTimeframes(config.allowedBaseTimeframes)
+  if (!allowedSymbols || !allowedBaseTimeframes) {
+    return false
+  }
+
+  return allowedSymbols.length === LEGACY_DEFAULT_BACKTEST_CAPABILITY_SYMBOLS.length
+    && allowedSymbols.every((item, index) => item === LEGACY_DEFAULT_BACKTEST_CAPABILITY_SYMBOLS[index])
+    && allowedBaseTimeframes.length === LEGACY_DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES.length
+    && allowedBaseTimeframes.every((item, index) => item === LEGACY_DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES[index])
 }
 
 export function normalizeBacktestCapabilityConfig(
@@ -89,12 +98,7 @@ export function normalizeBacktestCapabilityConfig(
 
   return {
     allowedSymbols,
-    allowedBaseTimeframes: isLegacyDefaultBacktestCapabilityConfig({
-      allowedSymbols,
-      allowedBaseTimeframes,
-    })
-      ? [...DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES]
-      : allowedBaseTimeframes,
+    allowedBaseTimeframes,
   }
 }
 
