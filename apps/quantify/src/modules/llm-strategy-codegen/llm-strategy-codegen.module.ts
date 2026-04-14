@@ -31,10 +31,10 @@ import { StrategyClarificationQuestionService } from './services/strategy-clarif
 import { StrategyClarificationRulesService } from './services/strategy-clarification-rules.service'
 import { StrategyConsistencyService } from './services/strategy-consistency.service'
 import { StrategyExecutionContextService } from './services/strategy-execution-context.service'
-import { StrategyIrBuilderService } from './services/strategy-ir-builder.service'
-import { StrategyIrCanonicalAdapterService } from './services/strategy-ir-canonical-adapter.service'
 import { StrategyIntentNormalizerService } from './services/strategy-intent-normalizer.service'
 import { StrategyIntentResolutionService } from './services/strategy-intent-resolution.service'
+import { StrategyIrBuilderService } from './services/strategy-ir-builder.service'
+import { StrategyIrCanonicalAdapterService } from './services/strategy-ir-canonical-adapter.service'
 import { StrategySummaryBuilderService } from './services/strategy-summary-builder.service'
 import { StrategySummaryObservationService } from './services/strategy-summary-observation.service'
 
