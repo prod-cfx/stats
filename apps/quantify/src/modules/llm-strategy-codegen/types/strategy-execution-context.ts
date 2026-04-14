@@ -14,4 +14,10 @@ export interface StrategyExecutionContextAmbiguity {
 export interface StrategyExecutionContextResolution {
   context: StrategyExecutionContext
   ambiguities: StrategyExecutionContextAmbiguity[]
+  evidence: Array<{
+    key: string
+    reason: string
+    priority: number
+    question?: string
+  }>
 }

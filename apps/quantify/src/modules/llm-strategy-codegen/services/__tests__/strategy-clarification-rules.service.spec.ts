@@ -657,4 +657,20 @@ describe('strategyClarificationRulesService', () => {
       expect.objectContaining({ reason: 'ambiguous_state_gate', key: 'state.marketRegime' }),
     ]))
   })
+
+  it('marks closed-loop grid language as exit evidence instead of missing-exit blockers', () => {
+    const state = service.collectEvidence({
+      symbols: ['BTCUSDT'],
+      entryRules: ['在 60000-80000 区间执行网格低买高卖，每格 0.5%'],
+      exitRules: [],
+      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+    })
+
+    expect(state.blockingReasons).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ reason: 'missing_exit_rules' })]),
+    )
+    expect(state.evidence).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: 'closed_loop_exit_detected' })]),
+    )
+  })
 })

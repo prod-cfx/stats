@@ -84,6 +84,43 @@ export class StrategyClarificationRulesService {
     }
   }
 
+  collectEvidence(input: ClarificationChecklistInput): {
+    clarificationState: StrategyClarificationState
+    evidence: Array<{ key: string, reason: string, priority: number, question?: string }>
+    blockingReasons: Array<{ key: string, reason: string, priority: number, question: string }>
+    inferredAssumptions: []
+  } {
+    const clarificationState = this.detect(input)
+    const hasClosedLoopGrid = this.hasClosedLoopExitSemantics(input)
+    const rawEvidence = clarificationState.items
+      .filter((item) => !(
+        hasClosedLoopGrid
+        && (item.reason === 'missing_exit_rules'
+          || item.reason === 'missing_stop_loss_rule'
+          || item.reason === 'missing_take_profit_rule')
+      ))
+      .map((item) => ({
+        key: item.key,
+        reason: item.reason,
+        priority: this.readReasonPriority(item.reason),
+        question: item.question,
+      }))
+
+    const evidence = hasClosedLoopGrid
+      ? [
+          ...rawEvidence,
+          { key: 'closed_loop_exit_detected', reason: 'closed_loop_exit_detected', priority: 60 },
+        ]
+      : rawEvidence
+
+    return {
+      clarificationState,
+      evidence,
+      blockingReasons: rawEvidence.filter((item): item is { key: string, reason: string, priority: number, question: string } => typeof item.question === 'string'),
+      inferredAssumptions: [],
+    }
+  }
+
   private fromExecutionContextAmbiguities(
     resolution: StrategyExecutionContextResolution,
   ): StrategyClarificationItem[] {
@@ -792,6 +829,22 @@ export class StrategyClarificationRulesService {
     return input.grid?.sideMode === 'long_only'
       || input.grid?.sideMode === 'short_only'
       || input.grid?.sideMode === 'bidirectional'
+  }
+
+  private hasClosedLoopExitSemantics(input: ClarificationChecklistInput): boolean {
+    const text = this.collectRuleTexts(input).join(' ')
+    if (!text) return false
+
+    return /网格/u.test(text) && /低买高卖|高卖低买|上方网格卖出|网格卖出/u.test(text)
+  }
+
+  private readReasonPriority(reason: StrategyClarificationItem['reason']): number {
+    if (reason === 'conflicting_market_scope' || reason === 'invalid_spot_short_combo') return 100
+    if (reason === 'missing_entry_rules' || reason === 'missing_exit_rules' || reason === 'missing_action_uniqueness' || reason === 'missing_side_scope' || reason === 'direction_ambiguous' || reason === 'atomic_semantic_fork') return 90
+    if (reason === 'missing_stop_loss_rule' || reason === 'missing_take_profit_rule' || reason === 'grid_params_missing' || reason === 'ambiguous_risk_effect' || reason === 'ambiguous_state_gate') return 70
+    if (reason === 'missing_exchange' || reason === 'missing_symbol' || reason === 'missing_market_type' || reason === 'missing_timeframe' || reason === 'missing_position_pct' || reason === 'missing_position_mode') return 60
+    if (reason === 'ambiguous_condition_basis') return 50
+    return 10
   }
 
   private renderExecutionContextQuestion(

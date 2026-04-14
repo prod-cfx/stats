@@ -111,4 +111,21 @@ describe('strategyExecutionContextService', () => {
     })
     expect(result.ambiguities).toEqual([])
   })
+
+  it('does not force timeframe as a blocker when the strategy remains uniquely compilable without it', () => {
+    const result = service.resolve({
+      symbols: ['BTCUSDT'],
+      market: { exchange: 'okx', marketType: 'perp' },
+      entryRules: ['在 60000-80000 区间执行网格低买高卖'],
+      exitRules: [],
+      riskRules: { positionPct: 10 },
+    } as any)
+
+    expect(result.ambiguities).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ field: 'timeframe' })]),
+    )
+    expect(result.evidence).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: 'timeframe_not_required_for_uniqueness' })]),
+    )
+  })
 })
