@@ -3,7 +3,6 @@
 import type { TradesAdapterKey } from '../trades-ws-adapter'
 import type { ConfigService } from '@nestjs/config'
 import { Injectable } from '@nestjs/common'
-import type { PrismaService } from '@/prisma/prisma.service'
 import type { MarketTradesRepository } from '@/modules/markets/repositories/market-trades.repository'
 import { OkxTradesWsAdapterBase } from './okx/okx-trades-ws.base'
 
@@ -15,10 +14,9 @@ export class OkxCexSpotTradesWsAdapter extends OkxTradesWsAdapterBase {
 
   constructor(
     configService: ConfigService,
-    prismaService: PrismaService,
     marketTradesRepository: MarketTradesRepository,
   ) {
-    super(configService, prismaService, marketTradesRepository)
+    super(configService, marketTradesRepository)
   }
 
   protected getWsBaseUrl(): string {

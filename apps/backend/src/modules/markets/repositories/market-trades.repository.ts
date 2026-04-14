@@ -20,9 +20,31 @@ export interface FindTradesOptions {
   orderBy?: 'asc' | 'desc'
 }
 
+export interface CreateMarketTradeRecordInput {
+  exchange: string
+  instrumentType: string
+  symbol: string
+  baseAsset: string
+  quoteAsset: string
+  tradeId: string
+  price: string
+  size: string
+  side: string
+  tradeTimestamp: bigint
+}
+
 @Injectable()
 export class MarketTradesRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma>) {}
+
+  async createManyTrades(records: CreateMarketTradeRecordInput[]): Promise<void> {
+    if (records.length === 0) return
+
+    await this.txHost.tx.marketTrade.createMany({
+      data: records,
+      skipDuplicates: true,
+    })
+  }
 
   /**
    * 查询交易记录

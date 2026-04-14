@@ -6,7 +6,6 @@ import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
 import type { TradesAdapterKey, TradesConfig, TradesWsAdapter } from '../../trades-ws-adapter'
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { PrismaService } from '@/prisma/prisma.service'
 import { MarketTradesRepository } from '@/modules/markets/repositories/market-trades.repository'
 
 interface OkxTradeData {
@@ -69,8 +68,6 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
   constructor(
     @Inject(ConfigService)
     protected readonly configService: ConfigService,
-    @Inject(PrismaService)
-    protected readonly prismaService: PrismaService,
     @Inject(MarketTradesRepository)
     protected readonly marketTradesRepository: MarketTradesRepository,
   ) {
@@ -424,10 +421,7 @@ export abstract class OkxTradesWsAdapterBase implements TradesWsAdapter {
         }))
 
         promises.push(
-          this.prismaService.marketTrade.createMany({
-            data: records,
-            skipDuplicates: true, // 跳过重复记录
-          }),
+          this.marketTradesRepository.createManyTrades(records),
         )
       }
 

@@ -5,7 +5,6 @@ import { ConfigService } from '@nestjs/config'
 import { Mutex } from 'async-mutex'
 import WebSocket from 'ws'
 import { WhaleAlertService } from '@/modules/whale-alert/whale-alert.service'
-import { PrismaService } from '@/prisma/prisma.service'
 import { HyperliquidTradesWsConfig } from './hyperliquid-trades-ws.config'
 
 interface HyperliquidWsTrade {
@@ -79,8 +78,6 @@ export abstract class HyperliquidTradesWsAdapterBase implements TradesWsAdapter 
     protected readonly configService: ConfigService,
     @Inject(HyperliquidTradesWsConfig)
     protected readonly hyperliquidTradesConfig: HyperliquidTradesWsConfig,
-    @Inject(PrismaService)
-    protected readonly prismaService: PrismaService,
     @Inject(WhaleAlertService)
     protected readonly whaleAlertService: WhaleAlertService,
   ) {}
