@@ -21,4 +21,14 @@ describe('backtestCapabilityConfig', () => {
       allowedBaseTimeframes: [...MARKET_TIMEFRAMES],
     })
   })
+
+  it('preserves explicit narrowed capability configs when they are not the legacy default tuple', () => {
+    expect(normalizeBacktestCapabilityConfig({
+      allowedSymbols: ['ETHUSDT'],
+      allowedBaseTimeframes: ['15m', '1h'],
+    })).toEqual({
+      allowedSymbols: ['ETHUSDT'],
+      allowedBaseTimeframes: ['15m', '1h'],
+    })
+  })
 })
