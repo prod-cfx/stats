@@ -12,6 +12,8 @@
     "lint": "nx run-many --target=lint --all",
     "test": "nx run-many --target=test --all",
     "build": "nx run-many --target=build --all",
+    "clean:artifacts": "bash scripts/cleanup-local-artifacts.sh",
+    "clean:artifacts:dry-run": "bash scripts/cleanup-local-artifacts.sh --dry-run",
     "graph": "nx graph",
     "affected:graph": "nx affected:graph",
     "dx:status": "dx status",
