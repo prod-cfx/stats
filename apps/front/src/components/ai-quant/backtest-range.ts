@@ -1,3 +1,5 @@
+import type { MarketTimeframe } from '@ai/shared'
+
 export type BacktestRangePreset = '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
 
 export interface BacktestRangeInput {
@@ -19,13 +21,19 @@ export type BacktestRangeValidationResult =
 
 const MAX_RANGE_DAYS = 365
 const DAY_MS = 24 * 60 * 60 * 1000
-const TIMEFRAME_MS: Record<string, number> = {
+const TIMEFRAME_MS: Record<MarketTimeframe, number> = {
   '1m': 60 * 1000,
+  '3m': 3 * 60 * 1000,
   '5m': 5 * 60 * 1000,
   '15m': 15 * 60 * 1000,
+  '30m': 30 * 60 * 1000,
   '1h': 60 * 60 * 1000,
   '4h': 4 * 60 * 60 * 1000,
+  '6h': 6 * 60 * 60 * 1000,
+  '8h': 8 * 60 * 60 * 1000,
+  '12h': 12 * 60 * 60 * 1000,
   '1d': DAY_MS,
+  '1w': 7 * DAY_MS,
 }
 
 const PRESET_DAYS: Record<Exclude<BacktestRangePreset, 'CUSTOM'>, number> = {
@@ -46,7 +54,7 @@ function toIso(date: Date): string {
 }
 
 function alignToTimeframeBoundary(date: Date, timeframe?: string): Date {
-  const timeframeMs = timeframe ? TIMEFRAME_MS[timeframe] : undefined
+  const timeframeMs = timeframe ? TIMEFRAME_MS[timeframe as MarketTimeframe] : undefined
   if (!timeframeMs) {
     return new Date(date)
   }
@@ -68,8 +76,8 @@ export function resolveBacktestRange(
     }
   }
 
-  const start = parseDate(input.startAt) ?? new Date(now)
-  const end = parseDate(input.endAt) ?? new Date(now)
+  const start = alignToTimeframeBoundary(parseDate(input.startAt) ?? new Date(now), baseTimeframe)
+  const end = alignToTimeframeBoundary(parseDate(input.endAt) ?? new Date(now), baseTimeframe)
 
   return {
     startAt: toIso(start),
