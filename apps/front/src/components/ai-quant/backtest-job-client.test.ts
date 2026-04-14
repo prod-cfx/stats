@@ -2,6 +2,7 @@ import { ApiError, AuthenticationError } from '@/lib/errors'
 import {
   BACKTEST_REQUEST_TIMEOUT_MS,
   createBacktestJob,
+  formatBacktestJobFailure,
   getBacktestJob,
   getBacktestJobResult,
 } from './backtest-job-client'
@@ -111,6 +112,57 @@ describe('backtest-job-client', () => {
         signal: expect.anything(),
       }),
     )
+  })
+
+  it('preserves structured failure details on failed jobs', async () => {
+    mockClient.BacktestingProxyController_getJob.mockResolvedValue({
+      data: {
+        id: 'btjob-1',
+        status: 'failed',
+        createdAt: '2026-03-25T00:00:00.000Z',
+        error: 'backtest.data_range_out_of_coverage',
+        errorDetails: {
+          code: 'backtest.data_range_out_of_coverage',
+          message: 'backtest.data_range_out_of_coverage',
+          args: {
+            suggestedRange: {
+              fromTs: 2,
+              toTs: 3,
+            },
+          },
+        },
+      },
+    })
+
+    await expect(getBacktestJob('btjob-1')).resolves.toMatchObject({
+      status: 'failed',
+      error: 'backtest.data_range_out_of_coverage',
+      errorDetails: {
+        code: 'backtest.data_range_out_of_coverage',
+        args: {
+          suggestedRange: {
+            fromTs: 2,
+            toTs: 3,
+          },
+        },
+      },
+    })
+  })
+
+  it('formats coverage failures with suggested range details', () => {
+    expect(formatBacktestJobFailure({
+      error: 'backtest.data_range_out_of_coverage',
+      errorDetails: {
+        code: 'backtest.data_range_out_of_coverage',
+        message: 'backtest.data_range_out_of_coverage',
+        args: {
+          suggestedRange: {
+            fromTs: Date.parse('2026-03-15T04:24:00.000Z'),
+            toTs: Date.parse('2026-04-14T04:24:00.000Z'),
+          },
+        },
+      },
+    })).toContain('建议改为 2026-03-15T04:24:00.000Z ~ 2026-04-14T04:24:00.000Z 后重试')
   })
 
   it('encodes jobId safely in path params', async () => {

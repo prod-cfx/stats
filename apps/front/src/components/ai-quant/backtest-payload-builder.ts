@@ -81,6 +81,11 @@ export function buildBacktestPayload(
   }
 
   const resolvedRange = resolveBacktestRange(input.range, now, baseTimeframe)
+  const resolvedFromTs = Date.parse(resolvedRange.startAt)
+  const resolvedToTs = Date.parse(resolvedRange.endAt)
+  if (resolvedFromTs >= resolvedToTs) {
+    throw new BacktestPayloadBuilderError('start_after_end')
+  }
 
   const payload: CreateBacktestJobPayload = {
     symbols: [symbol],
@@ -95,8 +100,8 @@ export function buildBacktestPayload(
       publishedSnapshotId,
     },
     dataRange: {
-      fromTs: Date.parse(resolvedRange.startAt),
-      toTs: Date.parse(resolvedRange.endAt),
+      fromTs: resolvedFromTs,
+      toTs: resolvedToTs,
     },
   }
 

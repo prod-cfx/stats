@@ -74,6 +74,14 @@ describe('quantify contract generated responses', () => {
     }
   })
 
+  it('keeps generated backtesting request schemas aligned with expanded market timeframes', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+
+    expect(source).toContain("baseTimeframe: z.enum(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w'])")
+    expect(source).toContain("stateTimeframes: z.array(z.enum(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w']))")
+    expect(source).toContain("timeframe: z.enum(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w'])")
+  })
+
   it('keeps nullable AI Quant codegen session fields nullable in the generated contracts', () => {
     const source = readFileSync(generatedPath, 'utf8')
     const start = source.indexOf('const CodegenSessionResponseDto = z')

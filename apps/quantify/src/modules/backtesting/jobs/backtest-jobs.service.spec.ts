@@ -426,6 +426,15 @@ describe('backtestJobsService', () => {
     await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toEqual(
       expect.objectContaining({
         status: 'failed',
+        errorDetails: {
+          code: 'backtest.data_range_out_of_coverage',
+          message: 'backtest.data_range_out_of_coverage',
+          args: {
+            requestedRange: { fromTs: 1, toTs: 2 },
+            availableRange: { fromTs: 2, toTs: 3 },
+            suggestedRange: { fromTs: 2, toTs: 3 },
+          },
+        },
         inputSummary: expect.objectContaining({
           allowPartial: false,
         }),

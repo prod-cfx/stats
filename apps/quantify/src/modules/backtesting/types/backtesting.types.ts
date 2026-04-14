@@ -1,6 +1,6 @@
-import type { StrategyDecisionV1 } from '@ai/shared'
+import type { MarketTimeframe, StrategyDecisionV1 } from '@ai/shared'
 
-export type Timeframe = '5m' | '15m' | '1h' | '4h' | '1d'
+export type Timeframe = MarketTimeframe
 
 export interface Bar {
   symbol: string

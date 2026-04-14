@@ -26,6 +26,17 @@ describe('backtest-range', () => {
     expect(range.endAt).toBe('2026-04-02T09:30:00.000Z')
   })
 
+  it('aligns preset range to the provided 3m candle boundary', () => {
+    const range = resolveBacktestRange(
+      { preset: '30D' },
+      new Date('2026-04-02T09:37:12.000Z'),
+      '3m',
+    )
+
+    expect(range.startAt).toBe('2026-03-03T09:36:00.000Z')
+    expect(range.endAt).toBe('2026-04-02T09:36:00.000Z')
+  })
+
   it('resolves 90D preset range', () => {
     const range = resolveBacktestRange({ preset: '90D' }, now)
     expect(range.startAt).toBe('2025-12-24T12:00:00.000Z')
@@ -47,6 +58,17 @@ describe('backtest-range', () => {
 
     expect(range.startAt).toBe(new Date('2026-03-01T08:30').toISOString())
     expect(range.endAt).toBe(new Date('2026-03-20T09:45').toISOString())
+  })
+
+  it('aligns custom range down to the provided 3m candle boundary', () => {
+    const range = resolveBacktestRange({
+      preset: 'CUSTOM',
+      startAt: '2026-03-15T04:24:49.123Z',
+      endAt: '2026-04-14T04:24:49.123Z',
+    }, now, '3m')
+
+    expect(range.startAt).toBe('2026-03-15T04:27:00.000Z')
+    expect(range.endAt).toBe('2026-04-14T04:24:00.000Z')
   })
 
   it('validates valid custom range', () => {
