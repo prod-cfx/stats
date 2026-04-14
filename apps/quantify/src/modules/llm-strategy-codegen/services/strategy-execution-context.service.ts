@@ -112,6 +112,6 @@ export class StrategyExecutionContextService {
       ...(checklist.exitRules ?? []),
     ].join(' ')
 
-    return /网格/u.test(texts) && /低买高卖|高卖低买/u.test(texts)
+    return /网格/u.test(texts) && /低买高卖|高卖低买|上方网格卖出|网格卖出/u.test(texts)
   }
 }

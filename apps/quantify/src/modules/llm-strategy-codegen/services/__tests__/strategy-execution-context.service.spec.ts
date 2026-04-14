@@ -128,4 +128,21 @@ describe('strategyExecutionContextService', () => {
       expect.arrayContaining([expect.objectContaining({ key: 'timeframe_not_required_for_uniqueness' })]),
     )
   })
+
+  it('does not force timeframe as a blocker for upper-grid-sell closed-loop wording', () => {
+    const result = service.resolve({
+      symbols: ['BTCUSDT'],
+      market: { exchange: 'okx', marketType: 'perp' },
+      entryRules: ['在 60000-80000 区间执行网格买入'],
+      exitRules: ['价格触达上方网格时执行网格卖出平仓'],
+      riskRules: { positionPct: 10 },
+    } as any)
+
+    expect(result.ambiguities).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ field: 'timeframe' })]),
+    )
+    expect(result.evidence).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: 'timeframe_not_required_for_uniqueness' })]),
+    )
+  })
 })
