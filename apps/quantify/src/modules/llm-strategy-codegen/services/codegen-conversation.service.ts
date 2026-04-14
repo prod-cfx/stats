@@ -54,6 +54,7 @@ import { StaticGuardrailService } from './static-guardrail.service'
 import { StrategyClarificationQuestionService } from './strategy-clarification-question.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { StrategyClarificationRulesService } from './strategy-clarification-rules.service'
+import { StrategyExecutionContextService } from './strategy-execution-context.service'
 import { StrategyIntentNormalizerService } from './strategy-intent-normalizer.service'
 
 interface ConversationPlan {
@@ -158,6 +159,7 @@ export class CodegenConversationService {
     private readonly clarificationRules: StrategyClarificationRulesService,
     private readonly clarificationQuestion: StrategyClarificationQuestionService,
     private readonly publicationPipeline: CodegenSessionPublicationPipelineService,
+    private readonly executionContext: StrategyExecutionContextService = new StrategyExecutionContextService(),
     private readonly intentNormalizer: StrategyIntentNormalizerService = new StrategyIntentNormalizerService(),
   ) {}
 
@@ -1496,16 +1498,11 @@ export class CodegenConversationService {
 
   private buildClarificationSummary(checklist: ChecklistPayload): string | null {
     const drafts = buildChecklistRuleDrafts(checklist)
-    const exchange = typeof checklist.market?.exchange === 'string'
-      ? checklist.market.exchange.trim().toUpperCase()
-      : (typeof checklist.riskRules?.exchange === 'string' ? checklist.riskRules.exchange.trim().toUpperCase() : '')
-    const marketType = typeof checklist.market?.marketType === 'string'
-      ? checklist.market.marketType.trim().toLowerCase()
-      : (typeof checklist.riskRules?.marketType === 'string'
-          ? checklist.riskRules.marketType.trim().toLowerCase()
-          : '')
-    const symbol = checklist.symbols?.[0]?.trim() ?? ''
-    const timeframe = resolveChecklistDefaultTimeframe(checklist) ?? ''
+    const resolvedExecutionContext = this.executionContext.resolve(checklist).context
+    const exchange = resolvedExecutionContext.exchange?.toUpperCase() ?? ''
+    const marketType = resolvedExecutionContext.marketType ?? ''
+    const symbol = resolvedExecutionContext.symbol ?? ''
+    const timeframe = resolvedExecutionContext.timeframe ?? ''
     const entryRule = drafts.entry[0]
     const exitRule = drafts.exit[0]
     const positionPct = typeof checklist.riskRules?.positionPct === 'number'
