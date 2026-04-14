@@ -2966,7 +2966,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
     expect(hasPublished).toBe(true)
   })
-
   it('generates directly when confirmGenerate is true and checklist is complete even if session is drafting', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's7',

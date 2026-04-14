@@ -1,4 +1,4 @@
-import type { CodegenGuidePromptConfigSnapshot, ConstraintPackSnapshot } from '../constants/constraint-pack'
+import type { ConstraintPackSnapshot } from '../constants/constraint-pack'
 import type { AiQuantConversationResponseDto } from '../dto/ai-quant-conversation.response.dto'
 import type { CodegenGuideConfigDto } from '../dto/codegen-guide-config.dto'
 import type { CodegenSessionResponseDto } from '../dto/codegen-session.response.dto'
@@ -39,6 +39,19 @@ import {
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
 import { buildChecklistRuleDrafts, resolveChecklistDefaultTimeframe } from './checklist-rule-drafts'
+import {
+  CodegenConversationContextHelper,
+  MAX_PLANNER_HISTORY_LINES,
+  type ConversationMessage,
+  type GuidePromptConfig,
+  type RecommendationStyle,
+} from './codegen-conversation-context.helper'
+import { CodegenConversationResponseMapperHelper, type PublishedSnapshotProjection } from './codegen-conversation-response-mapper.helper'
+import {
+  buildStartSessionBootstrap,
+  type CanonicalCompileabilityReport,
+  type ConversationPlan,
+} from './codegen-conversation-start-session.helper'
 import { CodegenConversationStateMachine } from './codegen-conversation-state-machine'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CodegenSessionPublicationPipelineService } from './codegen-session-publication-pipeline.service'
@@ -56,13 +69,6 @@ import { StrategyClarificationQuestionService } from './strategy-clarification-q
 import { StrategyClarificationRulesService } from './strategy-clarification-rules.service'
 import { StrategyIntentNormalizerService } from './strategy-intent-normalizer.service'
 
-interface ConversationPlan {
-  related: boolean
-  logicReady: boolean
-  assistantPrompt: string
-  logic?: ChecklistPayload
-}
-
 interface GenerationOptions {
   providerCode?: string
   model?: string
@@ -70,34 +76,15 @@ interface GenerationOptions {
   maxTokens?: number
 }
 
-interface PublishedSnapshotProjection {
-  publishedSnapshotStrategyConfig: Record<string, unknown> | null
-  publishedSnapshotBacktestConfigDefaults: Record<string, unknown> | null
-  publishedSnapshotDeploymentExecutionDefaults: Record<string, unknown> | null
-  publishedSnapshotDeploymentExecutionConstraints: Record<string, unknown> | null
-  publishedSnapshotCompatibilityMetadata: Record<string, unknown> | null
-}
-
-interface CanonicalCompileabilityReport {
-  canCompile: boolean
-  entryRuleCount: number
-  exitRuleCount: number
-  reasons: string[]
-}
-
 interface NormalizationResult {
   normalizedIntent: StrategyNormalizedIntent
   blocked: boolean
   blockerReason?: string
 }
-
-type GuidePromptConfig = CodegenGuidePromptConfigSnapshot
-type RecommendationStyle = 'ma' | 'drop-rise'
 type StrategyClarificationStateWithSummary = StrategyClarificationState & { summary?: string | null }
 
 const ALLOWED_HELPER_CATEGORIES = ['finance', 'array', 'ta', 'signal'] as const
 const MAX_HELPER_SIGNATURE_LINES = 24
-const MAX_PLANNER_HISTORY_LINES = 12
 const DEFAULT_PROVIDER_CODE = 'strategy-codegen'
 const DEFAULT_MODEL = 'gpt-4'
 const DEFAULT_CODEGEN_STRICT_ENABLED = true
@@ -115,6 +102,9 @@ const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
     },
   },
 }
+
+const conversationContextHelper = new CodegenConversationContextHelper()
+const responseMapperHelper = new CodegenConversationResponseMapperHelper()
 
 function normalizePublishedSymbol(raw: string): string {
   return raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
@@ -201,38 +191,34 @@ export class CodegenConversationService {
     const compileability = initialCanonicalSpec
       ? this.evaluateCanonicalCompileability(initialCanonicalSpec)
       : null
-    const status: LlmCodegenSessionStatus = plannerStatus === 'CHECKLIST_GATE'
-      && (compileability?.canCompile === false || normalization?.blocked === true)
-      ? 'DRAFTING'
-      : plannerStatus
-    const shouldGateChecklist = status === 'CHECKLIST_GATE'
-
     const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
-    const initialSpecDesc = shouldGateChecklist && initialCanonicalSpec
+    const bootstrap = buildStartSessionBootstrap({
+      initialMessage: dto.initialMessage,
+      plannerStatus,
+      clarificationState,
+      clarificationPrompt,
+      plan,
+      compileability,
+      normalizationBlocked: normalization?.blocked === true,
+      normalizationAssistantPrompt: normalization?.blocked
+        ? this.buildNormalizationAssistantPrompt(checklist, normalization)
+        : undefined,
+    }, report => this.buildCompileabilityAssistantPrompt(report))
+    const initialSpecDesc = bootstrap.shouldGateChecklist && initialCanonicalSpec
       ? this.specDescBuilder.buildFromCanonicalSpec(initialCanonicalSpec, '', {
           normalizedIntent: normalization?.normalizedIntent ?? null,
         })
       : null
     const initialCanonicalDigest = this.readCanonicalDigest(initialSpecDesc)
-    const assistantPrompt = clarificationState.status === 'NEEDS_CLARIFICATION' && clarificationPrompt
-      ? clarificationPrompt
-      : (shouldGateChecklist
-          ? `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`
-          : (normalization?.blocked
-              ? this.buildNormalizationAssistantPrompt(checklist, normalization)
-              : (compileability && !compileability.canCompile
-              ? this.buildCompileabilityAssistantPrompt(compileability)
-              : plan.assistantPrompt)))
-    const initialHistory = this.appendConversationHistory([], dto.initialMessage, assistantPrompt)
     const session = await this.sessionsRepo.createSession({
       userId: sessionUserId,
-      status,
+      status: bootstrap.status,
       checklist: checklist as Prisma.InputJsonValue,
       clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
       constraintPack: {
         ...createDefaultConstraintPack(guidePrompt),
         recommendationStyle,
-        conversationHistory: initialHistory,
+        conversationHistory: bootstrap.initialHistory,
       } as unknown as Prisma.InputJsonValue,
       latestDraftCode: null,
       latestSpecDesc: initialSpecDesc as Prisma.InputJsonValue,
@@ -242,11 +228,11 @@ export class CodegenConversationService {
 
     const response = this.finalizeSessionResponse({
       id: session.id,
-      status,
+      status: bootstrap.status,
       missingFields: [],
       specDesc: initialSpecDesc,
       canonicalDigest: initialCanonicalDigest,
-      assistantPrompt,
+      assistantPrompt: bootstrap.assistantPrompt,
       clarificationState,
     })
     return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
@@ -803,58 +789,24 @@ export class CodegenConversationService {
       clarificationGate?: CodegenSessionResponseDto['clarificationGate']
     },
   ): CodegenSessionResponseDto {
-    const clarificationGate = response.clarificationGate ?? this.buildClarificationGate(response.clarificationState)
-    const publicationGate = response.publicationGate ?? this.readPublicationGate(response.consistencyReport)
-
-    if (!clarificationGate.blocked) {
-      return {
-        ...response,
-        clarificationGate,
-        publicationGate,
-      }
-    }
-
-    return {
-      ...response,
-      clarificationGate,
-      publicationGate,
-      specDesc: null,
-      canonicalDigest: null,
-      semanticGraph: null,
-    }
+    return responseMapperHelper.finalizeSessionResponse(
+      response,
+      clarificationState => this.buildClarificationGate(
+        clarificationState as StrategyClarificationStateWithSummary | null | undefined,
+      ),
+    )
   }
 
   private toConversationMessages(
     history: string[] | undefined,
-  ): Array<{ role: 'user' | 'assistant', content: string }> {
-    const messages: Array<{ role: 'user' | 'assistant', content: string }> = []
-
-    for (const entry of history ?? []) {
-      const normalized = entry.trim()
-      if (!normalized) continue
-      if (normalized.startsWith('U:')) {
-        const content = normalized.slice(2).trim()
-        if (content) {
-          messages.push({ role: 'user', content })
-        }
-        continue
-      }
-      if (normalized.startsWith('A:')) {
-        const content = normalized.slice(2).trim()
-        if (content) {
-          messages.push({ role: 'assistant', content })
-        }
-      }
-    }
-
-    return messages
+  ): ConversationMessage[] {
+    return conversationContextHelper.toConversationMessages(history)
   }
 
   private deriveConversationTitle(
-    messages: Array<{ role: 'user' | 'assistant', content: string }>,
+    messages: ConversationMessage[],
   ): string {
-    const firstUser = messages.find(message => message.role === 'user' && message.content.trim())
-    return firstUser?.content.trim().slice(0, 16) || '新对话'
+    return conversationContextHelper.deriveConversationTitle(messages)
   }
 
   private buildClarificationGate(
@@ -1609,118 +1561,7 @@ export class CodegenConversationService {
   }
 
   private readPublicationGate(value: unknown): CodegenSessionResponseDto['publicationGate'] | null {
-    const direct = this.normalizePublicationGate(value)
-    if (direct) {
-      return direct
-    }
-
-    const report = this.readRecord(value)
-    const compilerConsistency = this.readRecord(report?.compilerConsistency)
-    return this.normalizePublicationGate(compilerConsistency?.publicationGate)
-  }
-
-  private normalizePublicationGate(value: unknown): CodegenSessionResponseDto['publicationGate'] | null {
-    const record = this.readRecord(value)
-    if (!record) {
-      return null
-    }
-
-    if (typeof record.passed === 'boolean' && Array.isArray(record.blockingMismatches)) {
-      return {
-        passed: record.passed,
-        blockingMismatches: record.blockingMismatches
-          .map(item => this.normalizePublicationGateMismatch(this.readRecord(item)))
-          .filter((item): item is NonNullable<CodegenSessionResponseDto['publicationGate']>['blockingMismatches'][number] => item !== null),
-      }
-    }
-
-    if (typeof record.status === 'string' && Array.isArray(record.checks)) {
-      const blockingMismatches = record.checks
-        .map(item => this.readRecord(item))
-        .filter((item): item is Record<string, unknown> => item !== null)
-        .filter(item => item.blocking === true && item.status === 'failed')
-        .map(item => ({
-          field: this.normalizePublicationGateField(item.key),
-          expected: this.stringifyPublicationGateValue(item.expected),
-          actual: this.stringifyPublicationGateValue(item.actual),
-          reason:
-            typeof item.message === 'string' && item.message.trim()
-              ? item.message.trim()
-              : 'publication gate blocked',
-        }))
-
-      return {
-        passed: blockingMismatches.length === 0,
-        blockingMismatches,
-      }
-    }
-
-    return null
-  }
-
-  private normalizePublicationGateMismatch(
-    value: Record<string, unknown> | null,
-  ): NonNullable<CodegenSessionResponseDto['publicationGate']>['blockingMismatches'][number] | null {
-    if (!value) {
-      return null
-    }
-
-    const field = typeof value.field === 'string' && value.field.trim()
-      ? value.field.trim()
-      : null
-    const reason = typeof value.reason === 'string' && value.reason.trim()
-      ? value.reason.trim()
-      : null
-    if (!field || !reason) {
-      return null
-    }
-
-    return {
-      field,
-      expected: this.stringifyPublicationGateValue(value.expected),
-      actual: this.stringifyPublicationGateValue(value.actual),
-      reason,
-    }
-  }
-
-  private normalizePublicationGateField(value: unknown): string {
-    if (typeof value !== 'string' || !value.trim()) {
-      return 'unknown'
-    }
-
-    const normalized = value.trim()
-    return normalized.startsWith('market.')
-      ? normalized.slice('market.'.length)
-      : normalized
-  }
-
-  private stringifyPublicationGateValue(value: unknown): string {
-    if (typeof value === 'string') {
-      return value
-    }
-    if (typeof value === 'number' || typeof value === 'boolean') {
-      return String(value)
-    }
-
-    const record = this.readRecord(value)
-    if (record) {
-      if (typeof record.script === 'string' && record.script.trim()) {
-        return record.script.trim()
-      }
-      if (typeof record.ir === 'string' && record.ir.trim()) {
-        return record.ir.trim()
-      }
-    }
-
-    if (value === null || value === undefined) {
-      return ''
-    }
-
-    try {
-      return JSON.stringify(value)
-    } catch {
-      return String(value)
-    }
+    return responseMapperHelper.readPublicationGate(value)
   }
 
   private buildPublishedSnapshotParamValues(
@@ -1730,104 +1571,14 @@ export class CodegenConversationService {
       executionPolicy?: unknown
     } | null | undefined,
   ): Record<string, unknown> | null {
-    if (!snapshot) {
-      return null
-    }
-
-    const paramsSnapshot = this.readRecord(snapshot.paramsSnapshot)
-    const lockedParams = this.readRecord(snapshot.lockedParams)
-    const executionPolicy = this.readRecord(snapshot.executionPolicy)
-    const merged = {
-      // Precedence: paramsSnapshot < lockedParams < executionPolicy-derived aliases.
-      ...(paramsSnapshot ?? {}),
-      ...(lockedParams ?? {}),
-    }
-
-    if (typeof merged.timeframe === 'string' && merged.timeframe.trim() && typeof merged.baseTimeframe !== 'string') {
-      merged.baseTimeframe = merged.timeframe.trim()
-    }
-
-    const allowPartialFill = this.readAllowPartialFill(executionPolicy)
-    if (allowPartialFill !== null) {
-      merged.backtestAllowPartial = allowPartialFill
-    }
-
-    return Object.keys(merged).length > 0 ? merged : null
+    return responseMapperHelper.buildPublishedSnapshotParamValues(snapshot)
   }
 
   private buildPublishedSnapshotProjection(args: {
     publishedSnapshotId: string | null
     snapshot: unknown
   }): PublishedSnapshotProjection {
-    if (!args.publishedSnapshotId) {
-      return {
-        publishedSnapshotStrategyConfig: null,
-        publishedSnapshotBacktestConfigDefaults: null,
-        publishedSnapshotDeploymentExecutionDefaults: null,
-        publishedSnapshotDeploymentExecutionConstraints: null,
-        publishedSnapshotCompatibilityMetadata: null,
-      }
-    }
-
-    const snapshotRecord = this.readRecord(args.snapshot)
-    const strategyConfig = this.readRecord(snapshotRecord?.strategyConfig)
-    const backtestConfigDefaults = this.readRecord(snapshotRecord?.backtestConfigDefaults)
-    const deploymentExecutionDefaults = this.readRecord(snapshotRecord?.deploymentExecutionDefaults)
-    const deploymentExecutionConstraints = this.readRecord(snapshotRecord?.deploymentExecutionConstraints)
-
-    const missingStrategyConfig = !strategyConfig
-    const missingBacktestConfigDefaults = !backtestConfigDefaults
-    const missingDeploymentExecutionDefaults = !deploymentExecutionDefaults
-    const missingDeploymentExecutionConstraints = !deploymentExecutionConstraints
-
-    return {
-      publishedSnapshotStrategyConfig: strategyConfig,
-      publishedSnapshotBacktestConfigDefaults: backtestConfigDefaults,
-      publishedSnapshotDeploymentExecutionDefaults: deploymentExecutionDefaults,
-      publishedSnapshotDeploymentExecutionConstraints: deploymentExecutionConstraints,
-      publishedSnapshotCompatibilityMetadata: {
-        isLegacySnapshot:
-          missingStrategyConfig
-          || missingBacktestConfigDefaults
-          || missingDeploymentExecutionDefaults
-          || missingDeploymentExecutionConstraints,
-        missingBacktestConfigDefaults,
-        missingDeploymentExecutionDefaults,
-        missingDeploymentExecutionConstraints,
-        requiresRepublishForBacktest: missingStrategyConfig || missingBacktestConfigDefaults,
-        requiresRepublishForDeploy:
-          missingStrategyConfig
-          || missingDeploymentExecutionDefaults
-          || missingDeploymentExecutionConstraints,
-      },
-    }
-  }
-
-  private readAllowPartialFill(executionPolicy: Record<string, unknown> | null): boolean | null {
-    if (!executionPolicy) {
-      return null
-    }
-
-    const direct = executionPolicy.allowPartialFill
-    if (typeof direct === 'boolean') {
-      return direct
-    }
-    if (direct === 'true') {
-      return true
-    }
-    if (direct === 'false') {
-      return false
-    }
-
-    return null
-  }
-
-  private readRecord(value: unknown): Record<string, unknown> | null {
-    if (!value || typeof value !== 'object' || Array.isArray(value)) {
-      return null
-    }
-
-    return value as Record<string, unknown>
+    return responseMapperHelper.buildPublishedSnapshotProjection(args)
   }
 
   async testEngine(dto: TestLlmCodegenEngineDto): Promise<LlmCodegenEngineTestResponseDto> {
@@ -2408,21 +2159,7 @@ export class CodegenConversationService {
   }
 
   private readConstraintPack(payload: Prisma.JsonValue | null): ConstraintPackSnapshot {
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-      return createDefaultConstraintPack()
-    }
-
-    const raw = payload as Record<string, unknown>
-    const guidePrompt = this.mergeGuidePromptConfig(undefined, raw.guidePrompt as CodegenGuideConfigDto | undefined)
-    const conversationHistory = Array.isArray(raw.conversationHistory)
-      ? raw.conversationHistory.filter(item => typeof item === 'string').map(item => item.trim()).filter(Boolean)
-      : []
-    return {
-      ...createDefaultConstraintPack(),
-      ...raw,
-      guidePrompt,
-      conversationHistory,
-    } as ConstraintPackSnapshot
+    return conversationContextHelper.readConstraintPack(payload)
   }
 
   private withGuidePrompt(
@@ -2430,32 +2167,14 @@ export class CodegenConversationService {
     guidePrompt?: GuidePromptConfig,
     recommendationStyle?: RecommendationStyle,
   ): ConstraintPackSnapshot {
-    return {
-      ...pack,
-      guidePrompt,
-      recommendationStyle,
-    }
+    return conversationContextHelper.withGuidePrompt(pack, guidePrompt, recommendationStyle)
   }
 
   private mergeGuidePromptConfig(
     base?: GuidePromptConfig,
     patch?: CodegenGuideConfigDto,
   ): GuidePromptConfig | undefined {
-    const merge = {
-      symbolExample: patch?.symbolExample ?? base?.symbolExample,
-      timeframeExample: patch?.timeframeExample ?? base?.timeframeExample,
-      entryRuleExample: patch?.entryRuleExample ?? base?.entryRuleExample,
-      exitRuleExample: patch?.exitRuleExample ?? base?.exitRuleExample,
-      riskRuleExample: patch?.riskRuleExample ?? base?.riskRuleExample,
-    }
-
-    const normalized = Object.fromEntries(
-      Object.entries(merge)
-        .map(([key, value]) => [key, typeof value === 'string' ? value.trim() : value])
-        .filter(([, value]) => typeof value === 'string' && value.length > 0),
-    ) as GuidePromptConfig
-
-    return Object.keys(normalized).length > 0 ? normalized : undefined
+    return conversationContextHelper.mergeGuidePromptConfig(base, patch)
   }
 
   private async generateScript(
@@ -2915,15 +2634,7 @@ export class CodegenConversationService {
     userMessage?: string,
     assistantMessage?: string,
   ): string[] {
-    const next = [...current]
-    const push = (prefix: 'U' | 'A', value?: string) => {
-      const normalized = value?.trim()
-      if (!normalized) return
-      next.push(`${prefix}: ${normalized}`)
-    }
-    push('U', userMessage)
-    push('A', assistantMessage)
-    return next.slice(-MAX_PLANNER_HISTORY_LINES)
+    return conversationContextHelper.appendConversationHistory(current, userMessage, assistantMessage)
   }
 
   private inferRecommendationStyleFromContext(
@@ -2931,28 +2642,7 @@ export class CodegenConversationService {
     checklist: ChecklistPayload,
     currentStyle?: RecommendationStyle,
   ): RecommendationStyle | undefined {
-    const fromChecklist = this.detectRecommendationStyleFromChecklist(checklist)
-    if (fromChecklist) {
-      return fromChecklist
-    }
-    const text = (message ?? '').trim()
-    if (text) {
-      if (/均线|金叉|死叉|\bma\b|moving average/i.test(text)) {
-        return 'ma'
-      }
-      if (/下跌|上涨|回撤|[跌涨天%]|分钟|小时|\d+\s*[mhd]/i.test(text)) {
-        return 'drop-rise'
-      }
-    }
-    return currentStyle
-  }
-
-  private detectRecommendationStyleFromChecklist(checklist: ChecklistPayload): RecommendationStyle | undefined {
-    const rules = [...(checklist.entryRules ?? []), ...(checklist.exitRules ?? [])].join(' ')
-    if (!rules.trim()) return undefined
-    if (/金叉|死叉|均线|ma|moving average/i.test(rules)) return 'ma'
-    if (/下跌|上涨|回撤|[跌涨%]|\d+\s*[mhd]/i.test(rules)) return 'drop-rise'
-    return undefined
+    return conversationContextHelper.inferRecommendationStyleFromContext(message, checklist, currentStyle)
   }
 
   private buildHelperSignaturesPrompt(): string {
