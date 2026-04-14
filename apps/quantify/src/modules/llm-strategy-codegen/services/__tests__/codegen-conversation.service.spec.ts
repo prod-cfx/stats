@@ -1431,10 +1431,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       checklist: {
         symbols: ['BTCUSDT'],
         timeframes: ['15m'],
-        entryRules: ['突破布林带上轨交易'],
-        exitRules: ['价格回到布林带中轨(MA20)时平仓'],
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
         riskRules: {
-          exchange: 'okx',
           marketType: 'perp',
           positionPct: 10,
           stopLossPct: 5,
@@ -1447,12 +1446,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         status: 'NEEDS_CLARIFICATION',
         items: [
           {
-            key: 'entry.side.1',
-            reason: 'missing_side_scope',
-            field: 'positionMode',
+            key: 'market.exchange',
+            reason: 'missing_exchange',
+            field: 'exchange',
             blocking: true,
-            question: '突破上轨时是只做空，还是也允许做多？',
-            allowedAnswers: ['long', 'short'],
+            question: '请确认交易所（binance / okx / hyperliquid）。',
             status: 'pending',
           },
         ],
@@ -1471,7 +1469,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '继续',
       clarificationAnswers: {
-        'entry.side.1': 'short',
+        'market.exchange': 'okx',
       },
     } as ContinueCodegenSessionDto)
 
@@ -1490,9 +1488,66 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-clarification-answers', expect.objectContaining({
       status: 'CHECKLIST_GATE',
       checklist: expect.objectContaining({
-        entryRules: expect.arrayContaining([expect.stringContaining('做空')]),
+        entryRules: ['价格突破阻力位入场'],
+        riskRules: expect.objectContaining({
+          exchange: 'okx',
+        }),
       }),
     }))
+  })
+
+  it('keeps structured clarification flow in DRAFTING when real defaulted risk bases still need confirmation', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-clarification-inferred-defaults',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['价格突破阻力位入场'],
+        exitRules: ['跌破支撑位出场'],
+        riskRules: {
+          marketType: 'perp',
+          positionPct: 10,
+          stopLossPct: 5,
+          takeProfitPct: 10,
+        },
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'market.exchange',
+            reason: 'missing_exchange',
+            field: 'exchange',
+            blocking: true,
+            question: '请确认交易所（binance / okx / hyperliquid）。',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+      }),
+    })
+
+    const result = await service.continueSession('s-clarification-inferred-defaults', {
+      userId: 'u1',
+      message: '继续',
+      clarificationAnswers: {
+        'market.exchange': 'okx',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('以下内容是系统推断')
+    expect(result.assistantPrompt).toContain('risk.stopLossBasis')
+    expect(result.assistantPrompt).toContain('risk.takeProfitBasis')
   })
 
   it('applies action uniqueness clarification to the targeted entry rule only', async () => {
@@ -2054,7 +2109,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
-  it('applies basis clarification answers before checklist confirmation', async () => {
+  it('keeps drafting after basis clarification when stop-loss basis still comes from system default inference', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-basis-clarification-answers',
       userId: 'u1',
@@ -2124,33 +2179,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
-    expect(result.clarificationState).toEqual(expect.objectContaining({
-      status: 'CLEAR',
-    }))
-    expect((result as any).clarificationGate).toEqual({
-      blocked: false,
-      summary: null,
-      items: [],
-      pendingItems: [],
-    })
-    expect(mockRepo.updateSession).toHaveBeenCalledWith(
-      's-basis-clarification-answers',
-      expect.objectContaining({
-        status: 'CHECKLIST_GATE',
-        checklist: expect.objectContaining({
-          entryRuleBases: {
-            'entry-1': 'prev_close',
-          },
-          exitRuleBases: {
-            'exit-1': 'prev_close',
-          },
-          riskRules: expect.objectContaining({
-            stopLossBasis: 'entry_avg_price',
-          }),
-        }),
-      }),
-    )
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('以下内容是系统推断')
+    expect(result.assistantPrompt).toContain('risk.stopLossBasis')
   })
 
   it('applies missing position pct clarification answers before checklist confirmation', async () => {

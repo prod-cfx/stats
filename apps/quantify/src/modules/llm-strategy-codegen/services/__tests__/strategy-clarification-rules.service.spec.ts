@@ -693,4 +693,17 @@ describe('strategyClarificationRulesService', () => {
       expect.objectContaining({ reason: 'missing_take_profit_rule' }),
     ]))
   })
+
+  it('does not emit legacy timeframe blockers for closed-loop grid wording', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      entryRules: ['在 60000-80000 区间执行网格低买高卖，每格 0.5%'],
+      exitRules: [],
+      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+    })
+
+    expect(state.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'missing_timeframe' }),
+    ]))
+  })
 })

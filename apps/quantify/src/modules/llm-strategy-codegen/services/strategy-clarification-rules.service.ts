@@ -268,7 +268,7 @@ export class StrategyClarificationRulesService {
       })
     }
 
-    if (!this.hasPrimaryValue(input.timeframes)) {
+    if (!this.hasPrimaryValue(input.timeframes) && !this.hasClosedLoopExitSemantics(input)) {
       items.push({
         key: 'market.timeframe',
         reason: 'missing_timeframe',
