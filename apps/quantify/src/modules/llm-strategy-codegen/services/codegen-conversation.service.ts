@@ -10,6 +10,7 @@ import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant
 import type { ChecklistPayload, ChecklistRuleBasis, ChecklistRuleDraft } from '../types/codegen-checklist'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
+import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 
 import type { Prisma } from '@/prisma/prisma.types'
@@ -41,6 +42,8 @@ import { buildChecklistRuleDrafts, resolveChecklistDefaultTimeframe } from './ch
 import { CodegenConversationStateMachine } from './codegen-conversation-state-machine'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CodegenSessionPublicationPipelineService } from './codegen-session-publication-pipeline.service'
+import { isEquivalentMarketScopeValue } from './market-scope-equivalence'
+import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RuntimeGuardrailService } from './runtime-guardrail.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -51,8 +54,7 @@ import { StaticGuardrailService } from './static-guardrail.service'
 import { StrategyClarificationQuestionService } from './strategy-clarification-question.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { StrategyClarificationRulesService } from './strategy-clarification-rules.service'
-import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
-import { isEquivalentMarketScopeValue } from './market-scope-equivalence'
+import { StrategyIntentNormalizerService } from './strategy-intent-normalizer.service'
 
 interface ConversationPlan {
   related: boolean
@@ -81,6 +83,12 @@ interface CanonicalCompileabilityReport {
   entryRuleCount: number
   exitRuleCount: number
   reasons: string[]
+}
+
+interface NormalizationResult {
+  normalizedIntent: StrategyNormalizedIntent
+  blocked: boolean
+  blockerReason?: string
 }
 
 type GuidePromptConfig = CodegenGuidePromptConfigSnapshot
@@ -124,7 +132,7 @@ function normalizeDirectionalPercentRule(
         ? `${value}m`
         : (unit === 'h' || unit === '小时' ? `${value}h` : `${value}d`))
     : null
-  const percentMatch = fragment.match(/(?:(\d+(?:\.\d+)?)\s*%|百分之?\s*(\d+(?:\.\d+)?))/u)
+  const percentMatch = fragment.match(/(\d+(?:\.\d+)?)\s*%|百分之?\s*(\d+(?:\.\d+)?)/u)
   const percent = percentMatch?.[1] ?? percentMatch?.[2] ?? '0'
   const direction = phase === 'entry' ? '下跌' : '上涨'
   const action = phase === 'entry' ? '买入' : '卖出'
@@ -150,6 +158,7 @@ export class CodegenConversationService {
     private readonly clarificationRules: StrategyClarificationRulesService,
     private readonly clarificationQuestion: StrategyClarificationQuestionService,
     private readonly publicationPipeline: CodegenSessionPublicationPipelineService,
+    private readonly intentNormalizer: StrategyIntentNormalizerService = new StrategyIntentNormalizerService(),
   ) {}
 
   async startSession(
@@ -183,29 +192,37 @@ export class CodegenConversationService {
       logicReady: plan.logicReady,
       clarificationState,
     })
+    const normalization = plannerStatus === 'CHECKLIST_GATE'
+      ? this.intentNormalizer.normalize(checklist)
+      : null
     const initialCanonicalSpec = plannerStatus === 'CHECKLIST_GATE'
       ? this.canonicalSpecBuilder.build(checklist)
       : null
     const compileability = initialCanonicalSpec
       ? this.evaluateCanonicalCompileability(initialCanonicalSpec)
       : null
-    const status: LlmCodegenSessionStatus = plannerStatus === 'CHECKLIST_GATE' && compileability?.canCompile === false
+    const status: LlmCodegenSessionStatus = plannerStatus === 'CHECKLIST_GATE'
+      && (compileability?.canCompile === false || normalization?.blocked === true)
       ? 'DRAFTING'
       : plannerStatus
     const shouldGateChecklist = status === 'CHECKLIST_GATE'
 
     const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
     const initialSpecDesc = shouldGateChecklist && initialCanonicalSpec
-      ? this.specDescBuilder.buildFromCanonicalSpec(initialCanonicalSpec, '')
+      ? this.specDescBuilder.buildFromCanonicalSpec(initialCanonicalSpec, '', {
+          normalizedIntent: normalization?.normalizedIntent ?? null,
+        })
       : null
     const initialCanonicalDigest = this.readCanonicalDigest(initialSpecDesc)
     const assistantPrompt = clarificationState.status === 'NEEDS_CLARIFICATION' && clarificationPrompt
       ? clarificationPrompt
       : (shouldGateChecklist
           ? `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`
-          : (compileability && !compileability.canCompile
+          : (normalization?.blocked
+              ? this.buildNormalizationAssistantPrompt(checklist, normalization)
+              : (compileability && !compileability.canCompile
               ? this.buildCompileabilityAssistantPrompt(compileability)
-              : plan.assistantPrompt))
+              : plan.assistantPrompt)))
     const initialHistory = this.appendConversationHistory([], dto.initialMessage, assistantPrompt)
     const session = await this.sessionsRepo.createSession({
       userId: sessionUserId,
@@ -383,8 +400,11 @@ export class CodegenConversationService {
       dto.message,
       plan.assistantPrompt,
     )
+    const normalization = this.intentNormalizer.normalize(mergedChecklist)
     const canonicalSpec = this.canonicalSpecBuilder.build(mergedChecklist)
-    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
+    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
+      normalizedIntent: normalization.normalizedIntent,
+    })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
 
@@ -405,6 +425,29 @@ export class CodegenConversationService {
         missingFields: [],
         assistantPrompt: plan.assistantPrompt,
         clarificationState,
+      })
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+    }
+
+    if (normalization.blocked) {
+      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
+        status: 'DRAFTING',
+        checklist: mergedChecklist,
+        clarificationState,
+        constraintPack: {
+          ...nextConstraintPack,
+          conversationHistory: historyAfterPlanner,
+        },
+        latestSpecDesc: specDesc,
+      }))
+
+      const response = this.finalizeSessionResponse({
+        id: session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt: this.buildNormalizationAssistantPrompt(mergedChecklist, normalization),
+        clarificationState,
+        specDesc,
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
@@ -504,8 +547,11 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
+    const normalization = this.intentNormalizer.normalize(mergedChecklist)
     const canonicalSpec = this.canonicalSpecBuilder.build(mergedChecklist)
-    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
+    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
+      normalizedIntent: normalization.normalizedIntent,
+    })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
     const confirmedCanonicalDigest = dto.confirmedCanonicalDigest?.trim() ?? ''
@@ -539,6 +585,29 @@ export class CodegenConversationService {
         missingFields,
         assistantPrompt: '请先补全入场和出场规则，再确认生成代码。',
         clarificationState,
+      })
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+    }
+
+    if (normalization.blocked) {
+      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
+        status: 'DRAFTING',
+        checklist: mergedChecklist,
+        clarificationState,
+        constraintPack: {
+          ...constraintPack,
+          conversationHistory: historyAfterConfirm,
+        },
+        latestSpecDesc: specDesc,
+      }))
+
+      const response = this.finalizeSessionResponse({
+        id: session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt: this.buildNormalizationAssistantPrompt(mergedChecklist, normalization),
+        clarificationState,
+        specDesc,
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
@@ -1134,8 +1203,11 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
 
+    const normalization = this.intentNormalizer.normalize(args.checklist)
     const canonicalSpec = this.canonicalSpecBuilder.build(args.checklist)
-    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
+    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
+      normalizedIntent: normalization.normalizedIntent,
+    })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
     const missingFields = this.resolveChecklistMissingFields(args.checklist)
@@ -1455,6 +1527,24 @@ export class CodegenConversationService {
     ].filter(Boolean)
 
     return segments.length > 0 ? segments.join('；') : null
+  }
+
+  private buildNormalizationAssistantPrompt(
+    checklist: ChecklistPayload,
+    normalization: NormalizationResult,
+  ): string {
+    const summary = this.buildClarificationSummary(checklist)
+    const normalizedFamilies = normalization.normalizedIntent.families.join('、')
+    const normalizedLine = normalizedFamilies
+      ? `当前已归一到的语义族：${normalizedFamilies}。`
+      : '当前还没有稳定归一到首批语义族。'
+    const blockerReason = normalization.blockerReason ?? '当前策略语义仍不稳定。'
+    return [
+      summary ? `我当前理解的策略是：${summary}` : '我当前已经整理了你的策略输入。',
+      normalizedLine,
+      `现在还缺一个会影响脚本生成一致性的条件：${blockerReason}`,
+      '请继续明确策略语义。',
+    ].join('\n')
   }
 
   private normalizeClarificationSummary(summary: unknown): string | null {
@@ -1883,14 +1973,7 @@ export class CodegenConversationService {
     const entryRules: string[] = []
     const exitRules: string[] = []
 
-    const normalizeTimeframe = (value: string, unit: string) => {
-      const normalizedUnit = unit.toLowerCase()
-      if (normalizedUnit === 'm' || normalizedUnit === 'min' || normalizedUnit === '分钟') return `${value}m`
-      if (normalizedUnit === 'h' || normalizedUnit === '小时') return `${value}h`
-      return `${value}d`
-    }
-
-    const percentToken = '(?:(\\d+(?:\\.\\d+)?)\\s*%|百分之?\\s*(\\d+(?:\\.\\d+)?))'
+    const percentToken = '\\d+(?:\\.\\d+)?\\s*%|百分之?\\s*\\d+(?:\\.\\d+)?'
     const directionalFragments = text
       .split(/[，。；;\n]/u)
       .flatMap(fragment => fragment.split(/(?<=买入|卖出|开仓|平仓|入场|出场|离场)/u))
@@ -1904,11 +1987,11 @@ export class CodegenConversationService {
       /(?:涨|上涨|反弹).{0,20}?(?:卖出|平仓|离场|出场)/u.test(fragment),
     )
 
-    if (buyDropFragment && new RegExp(percentToken, 'iu').test(buyDropFragment)) {
+    if (buyDropFragment && new RegExp(percentToken, 'u').test(buyDropFragment)) {
       entryRules.push(normalizeDirectionalPercentRule(buyDropFragment, 'entry'))
     }
 
-    if (sellRiseFragment && new RegExp(percentToken, 'iu').test(sellRiseFragment)) {
+    if (sellRiseFragment && new RegExp(percentToken, 'u').test(sellRiseFragment)) {
       exitRules.push(normalizeDirectionalPercentRule(sellRiseFragment, 'exit'))
     }
 

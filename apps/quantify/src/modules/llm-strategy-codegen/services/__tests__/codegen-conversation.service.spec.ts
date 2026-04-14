@@ -2924,7 +2924,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.tryRequeueFromProcessing).not.toHaveBeenCalled()
   })
 
-  it('marks consistency failed when script output cannot satisfy signal payload schema and fallback publish is disabled', async () => {
+  it('publishes through the compiler-first mainline even when legacy model output would violate the signal payload schema', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's6',
       userId: 'u1',
@@ -2961,14 +2961,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('GENERATING')
     await waitForTerminalStatus('s6')
 
-    const hasRejectedOrConsistencyFailed = mockRepo.updateSession.mock.calls.some(call =>
-      call[0] === 's6' && ['CONSISTENCY_FAILED', 'REJECTED'].includes((call[1] as { status?: string }).status ?? ''),
-    )
     const hasPublished = mockRepo.updateSession.mock.calls.some(call =>
       call[0] === 's6' && (call[1] as { status?: string }).status === 'PUBLISHED',
     )
-    expect(hasRejectedOrConsistencyFailed).toBe(true)
-    expect(hasPublished).toBe(false)
+    expect(hasPublished).toBe(true)
   })
 
   it('generates directly when confirmGenerate is true and checklist is complete even if session is drafting', async () => {

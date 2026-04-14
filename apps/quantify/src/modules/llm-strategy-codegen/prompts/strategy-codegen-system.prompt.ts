@@ -3,7 +3,9 @@ import { buildStrategyProtocolTypeContractPrompt } from './strategy-protocol-con
 
 export function buildStrategyCodegenSystemPrompt(helperSignatures: string): string {
   return [
-    '你是量化策略脚本生成器。',
+    '你是量化策略脚本生成器（仅用于调试与对照，不是正式发布真源）。',
+    '正式发布链路以 canonical -> IR -> AST -> compiled script 为准。',
+    '不得假设自己输出的脚本会直接进入 published snapshot。',
     '必须输出 TypeScript（.ts）源码，允许类型注解；不要输出 markdown 代码块。',
     '只能使用 helpers.finance/helpers.array/helpers.ta/helpers.signal。',
     '禁止使用 import/require/eval/Function/process。',

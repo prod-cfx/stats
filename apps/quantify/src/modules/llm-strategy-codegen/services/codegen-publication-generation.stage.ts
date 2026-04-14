@@ -1,6 +1,7 @@
 import type { CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec-v2'
 import type { ChecklistPayload } from '../types/codegen-checklist'
 import type { StrategyConsistencyReport } from '../types/strategy-consistency-report'
+import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
 import type { StrategySummary } from '../types/strategy-summary'
 import type { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
 import type { CanonicalSpecV2IrCompilerService } from './canonical-spec-v2-ir-compiler.service'
@@ -13,6 +14,7 @@ import type { StrategyConsistencyService } from './strategy-consistency.service'
 import type { StrategySummaryBuilderService } from './strategy-summary-builder.service'
 import type { StrategySummaryObservationReport } from './strategy-summary-observation.service'
 import { resolveChecklistDefaultTimeframe } from './checklist-rule-drafts'
+import { StrategyIntentNormalizerService } from './strategy-intent-normalizer.service'
 import { StrategySummaryObservationService } from './strategy-summary-observation.service'
 
 export interface CompiledScriptValidationResult {
@@ -55,6 +57,7 @@ export interface CodegenPublicationArtifacts {
   strategySummary: StrategySummary
   scriptSummary: StrategySummary
   summaryObservation: StrategySummaryObservationReport
+  normalizedIntent: StrategyNormalizedIntent
   lockedParams: Record<string, unknown>
   publishParams: {
     symbol: string
@@ -75,14 +78,18 @@ export class CodegenPublicationGenerationStage {
     private readonly compiledScriptExecutionEnvelope: CompiledScriptExecutionEnvelopeService,
     private readonly compiledScriptParser: CompiledScriptParserService,
     private readonly strategySummaryObservation: StrategySummaryObservationService = new StrategySummaryObservationService(),
+    private readonly intentNormalizer: StrategyIntentNormalizerService = new StrategyIntentNormalizerService(),
   ) {}
 
   async generate(input: {
     checklist: ChecklistPayload
     message: string
   }): Promise<CodegenPublicationArtifacts> {
+    const normalization = this.intentNormalizer.normalize(input.checklist)
     const canonicalSpec = this.canonicalSpecBuilder.build(input.checklist)
-    const semanticView = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
+    const semanticView = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
+      normalizedIntent: normalization.normalizedIntent,
+    })
     const userIntentSummary = this.strategySummaryBuilder.buildUserIntentSummary({
       checklist: input.checklist,
     })
@@ -130,6 +137,7 @@ export class CodegenPublicationGenerationStage {
     })
     const sessionSpecDesc = {
       ...semanticView,
+      normalizedIntent: normalization.normalizedIntent,
       canonicalSpec,
       userIntentSummary,
       strategySummary,
@@ -153,6 +161,7 @@ export class CodegenPublicationGenerationStage {
       strategySummary,
       scriptSummary,
       summaryObservation,
+      normalizedIntent: normalization.normalizedIntent,
       lockedParams,
       publishParams,
     }

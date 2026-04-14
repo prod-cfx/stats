@@ -465,4 +465,45 @@ describe('strategyClarificationRulesService', () => {
       items: [],
     })
   })
+
+  it('blocks grid strategies missing stepPct and side mode', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['做一个 60000 到 80000 的网格策略'],
+      exitRules: ['持续高卖低买'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+        stopLoss: '亏损 5% 止损',
+        takeProfit: '盈利 8% 止盈',
+      },
+    })
+
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'grid_params_missing', key: 'grid.stepPct' }),
+      expect.objectContaining({ reason: 'missing_side_scope', key: 'grid.sideMode' }),
+    ]))
+  })
+
+  it('blocks vague state gates until they map to the minimal whitelist', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['在合适的趋势里开启网格'],
+      exitRules: ['趋势不对就停掉'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+        stopLoss: '亏损 5% 止损',
+        takeProfit: '盈利 8% 止盈',
+      },
+    })
+
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'ambiguous_state_gate', key: 'state.marketRegime' }),
+    ]))
+  })
 })

@@ -24,3 +24,41 @@ export const CANONICAL_RULE_KEYS = {
 } as const
 
 export type CanonicalRuleKeyValue = (typeof CANONICAL_RULE_KEYS)[keyof typeof CANONICAL_RULE_KEYS]
+
+export const FIRST_WAVE_TRIGGER_ATOMS = [
+  'price.percent_change',
+  'price.breakout_up',
+  'price.breakout_down',
+  'indicator.cross_over',
+  'indicator.cross_under',
+  'indicator.above',
+  'indicator.below',
+  'bollinger.touch_upper',
+  'bollinger.touch_lower',
+  'bollinger.touch_middle',
+  'oscillator.rsi_gte',
+  'oscillator.rsi_lte',
+  'trend.direction',
+  'market.regime',
+  'volatility.state',
+] as const
+
+export type FirstWaveTriggerAtom = (typeof FIRST_WAVE_TRIGGER_ATOMS)[number]
+
+export const FIRST_WAVE_STATE_TRIGGER_ATOMS = [
+  'trend.direction',
+  'market.regime',
+  'volatility.state',
+] as const
+
+export type FirstWaveStateTriggerAtom = (typeof FIRST_WAVE_STATE_TRIGGER_ATOMS)[number]
+
+export const FIRST_WAVE_FAMILIES = [
+  'single-leg',
+  'grid.range_rebalance',
+  'state-gated',
+] as const
+
+export type FirstWaveStrategyFamily = (typeof FIRST_WAVE_FAMILIES)[number]
+
+export const GRID_STRATEGY_FAMILY = 'grid.range_rebalance' as const
