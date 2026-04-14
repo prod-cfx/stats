@@ -63,6 +63,24 @@ function normalizeConfiguredBacktestCapabilityTimeframes(raw: unknown): string[]
     : null
 }
 
+function resolveConfiguredBacktestCapabilityTimeframes(raw: string | undefined): string[] | null {
+  const parsed = parseConfiguredStringArray(raw)
+  if (!parsed) {
+    return null
+  }
+
+  const valid = parsed.filter(item => SUPPORTED_BACKTEST_CAPABILITY_BASE_TIMEFRAME_SET.has(item))
+  const invalid = parsed.filter(item => !SUPPORTED_BACKTEST_CAPABILITY_BASE_TIMEFRAME_SET.has(item))
+
+  if (invalid.length > 0 && valid.length === 0) {
+    throw new Error(
+      `Invalid ${BACKTEST_CAPABILITY_ALLOWED_BASE_TIMEFRAMES_ENV}: ${invalid.join(', ')}`,
+    )
+  }
+
+  return valid.length > 0 ? valid : null
+}
+
 export function isLegacyDefaultBacktestCapabilityConfig(
   config: BacktestCapabilitiesConfigRecord | null | undefined,
 ): boolean {
@@ -119,8 +137,8 @@ export function resolveConfiguredBacktestCapabilityConfig(
 
   const allowedSymbols = parseConfiguredStringArray(read(BACKTEST_CAPABILITY_ALLOWED_SYMBOLS_ENV))
     ?? [...DEFAULT_BACKTEST_CAPABILITY_SYMBOLS]
-  const allowedBaseTimeframes = normalizeConfiguredBacktestCapabilityTimeframes(
-    parseConfiguredStringArray(read(BACKTEST_CAPABILITY_ALLOWED_BASE_TIMEFRAMES_ENV)),
+  const allowedBaseTimeframes = resolveConfiguredBacktestCapabilityTimeframes(
+    read(BACKTEST_CAPABILITY_ALLOWED_BASE_TIMEFRAMES_ENV),
   )
     ?? [...DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES]
 

@@ -47,13 +47,19 @@ describe('backtestCapabilityConfig', () => {
     })).toBeNull()
   })
 
-  it('falls back to shared defaults when env config contains unsupported base timeframes', () => {
+  it('preserves the valid timeframe subset when env config mixes valid and invalid values', () => {
     expect(resolveConfiguredBacktestCapabilityConfig({
       BACKTEST_CAPABILITY_ALLOWED_SYMBOLS: 'BTCUSDT,ETHUSDT',
       BACKTEST_CAPABILITY_ALLOWED_BASE_TIMEFRAMES: '3m,not-a-timeframe',
     })).toEqual({
       allowedSymbols: ['BTCUSDT', 'ETHUSDT'],
-      allowedBaseTimeframes: [...MARKET_TIMEFRAMES],
+      allowedBaseTimeframes: ['3m'],
     })
+  })
+
+  it('throws when env config provides only invalid base timeframes', () => {
+    expect(() => resolveConfiguredBacktestCapabilityConfig({
+      BACKTEST_CAPABILITY_ALLOWED_BASE_TIMEFRAMES: 'not-a-timeframe',
+    })).toThrow('BACKTEST_CAPABILITY_ALLOWED_BASE_TIMEFRAMES')
   })
 })
