@@ -16,6 +16,7 @@ export const BACKTEST_CAPABILITY_ALLOWED_SYMBOLS_ENV = 'BACKTEST_CAPABILITY_ALLO
 export const BACKTEST_CAPABILITY_ALLOWED_BASE_TIMEFRAMES_ENV = 'BACKTEST_CAPABILITY_ALLOWED_BASE_TIMEFRAMES'
 export const DEFAULT_BACKTEST_CAPABILITY_SYMBOLS = ['BTCUSDT'] as const
 export const DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES = MARKET_TIMEFRAMES
+const SUPPORTED_BACKTEST_CAPABILITY_BASE_TIMEFRAME_SET = new Set<string>(MARKET_TIMEFRAMES)
 const LEGACY_DEFAULT_BACKTEST_CAPABILITY_SYMBOLS = ['BTCUSDT'] as const
 const LEGACY_DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES = ['15m', '1h'] as const
 
@@ -61,6 +62,17 @@ function isLegacyDefaultBacktestCapabilityConfig(input: {
     && input.allowedBaseTimeframes.every((item, index) => item === LEGACY_DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES[index])
 }
 
+function normalizeConfiguredBacktestCapabilityTimeframes(raw: unknown): string[] | null {
+  const normalized = normalizeConfiguredStringArray(raw)
+  if (!normalized) {
+    return null
+  }
+
+  return normalized.every(item => SUPPORTED_BACKTEST_CAPABILITY_BASE_TIMEFRAME_SET.has(item))
+    ? normalized
+    : null
+}
+
 export function normalizeBacktestCapabilityConfig(
   config: BacktestCapabilitiesConfigRecord | null | undefined,
 ): NormalizedBacktestCapabilitiesConfig | null {
@@ -69,7 +81,7 @@ export function normalizeBacktestCapabilityConfig(
   }
 
   const allowedSymbols = normalizeConfiguredStringArray(config.allowedSymbols)
-  const allowedBaseTimeframes = normalizeConfiguredStringArray(config.allowedBaseTimeframes)
+  const allowedBaseTimeframes = normalizeConfiguredBacktestCapabilityTimeframes(config.allowedBaseTimeframes)
 
   if (!allowedSymbols || !allowedBaseTimeframes) {
     return null
@@ -103,7 +115,9 @@ export function resolveConfiguredBacktestCapabilityConfig(
 
   const allowedSymbols = parseConfiguredStringArray(read(BACKTEST_CAPABILITY_ALLOWED_SYMBOLS_ENV))
     ?? [...DEFAULT_BACKTEST_CAPABILITY_SYMBOLS]
-  const allowedBaseTimeframes = parseConfiguredStringArray(read(BACKTEST_CAPABILITY_ALLOWED_BASE_TIMEFRAMES_ENV))
+  const allowedBaseTimeframes = normalizeConfiguredBacktestCapabilityTimeframes(
+    parseConfiguredStringArray(read(BACKTEST_CAPABILITY_ALLOWED_BASE_TIMEFRAMES_ENV)),
+  )
     ?? [...DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES]
 
   return {
