@@ -44,4 +44,19 @@ describe('StrategyCompileabilityDecisionService', () => {
     }
     expect(decision.nextActionPayload.question.key).toBe('trigger.confirmation')
   })
+
+  it('returns ASK_CLARIFY when compileability fails even if no explicit blocker was precomputed', () => {
+    const decision = service.decide({
+      normalizedSummary: 'OKX 合约 BTCUSDT；价格突破阻力位入场',
+      blockingReasons: [],
+      inferredAssumptions: [],
+      compileability: { canCompile: false, entryRuleCount: 1, exitRuleCount: 0, reasons: ['未识别可编译出场规则'] },
+    })
+
+    expect(decision.kind).toBe('ASK_CLARIFY')
+    if (decision.kind !== 'ASK_CLARIFY') {
+      throw new Error('expected ASK_CLARIFY')
+    }
+    expect(decision.nextActionPayload.question.key).toBe('compileability')
+  })
 })

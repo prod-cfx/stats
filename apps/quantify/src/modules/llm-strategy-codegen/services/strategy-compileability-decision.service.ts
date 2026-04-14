@@ -15,6 +15,19 @@ export class StrategyCompileabilityDecisionService {
     compileability: CanonicalCompileabilityReport | null
   }): StrategyDecision {
     const blockingReasons = [...input.blockingReasons].sort((a, b) => b.priority - a.priority)
+    const compileabilityReason = blockingReasons.length === 0 && input.compileability && !input.compileability.canCompile
+      ? {
+          key: 'compileability',
+          reason: 'compileability_blocked',
+          priority: 40,
+          question: `当前规则还不能稳定生成脚本：${input.compileability.reasons.join('，')}。请补充能明确落成主链规则的入场/出场条件后再确认逻辑图。`,
+        }
+      : null
+
+    if (compileabilityReason) {
+      blockingReasons.push(compileabilityReason)
+      blockingReasons.sort((a, b) => b.priority - a.priority)
+    }
 
     if (blockingReasons.length > 0) {
       return {

@@ -211,6 +211,7 @@ export class CodegenConversationService {
       plannerStatus,
       clarificationState,
       clarificationPrompt,
+      decisionKind: decision.kind,
       plan,
       compileability,
       normalizationBlocked: normalization?.blocked === true,
@@ -1642,6 +1643,14 @@ export class CodegenConversationService {
         priority: item.priority,
         question: item.question,
       })),
+      ...atomicResolution.ambiguities
+        .filter((item) => item.kind === 'atomic_semantic_fork' && item.field === 'trigger.confirmation')
+        .map(() => ({
+          key: 'trigger.confirmation',
+          reason: 'trigger_semantics_fork',
+          priority: 95,
+          question: '该布林带条件是触碰即触发，还是收盘确认后触发？',
+        })),
     ]
     const inferredAssumptions = this.collectInferredAssumptions(checklist)
 
@@ -1990,16 +1999,36 @@ export class CodegenConversationService {
     checklist: ChecklistPayload,
   ): StrategyInferredAssumption[] {
     const combinedText = [...(checklist.entryRules ?? []), ...(checklist.exitRules ?? [])].join(' ')
+    const assumptions: StrategyInferredAssumption[] = []
+    const inferredKeys = Array.isArray(checklist.riskRules?._inferredAssumptions)
+      ? checklist.riskRules._inferredAssumptions.filter((item): item is string => typeof item === 'string')
+      : []
 
-    if (!/默认|你来定/u.test(combinedText)) {
-      return []
+    if (inferredKeys.includes('risk.stopLossBasis') && checklist.riskRules?.stopLossBasis === 'entry_avg_price') {
+      assumptions.push({
+        key: 'risk.stopLossBasis',
+        value: 'entry_avg_price',
+        source: 'system_default',
+      })
     }
 
-    return [{
-      key: 'strategy.defaults',
-      value: '沿用系统默认解释',
-      source: 'system_default',
-    }]
+    if (inferredKeys.includes('risk.takeProfitBasis') && checklist.riskRules?.takeProfitBasis === 'entry_avg_price') {
+      assumptions.push({
+        key: 'risk.takeProfitBasis',
+        value: 'entry_avg_price',
+        source: 'system_default',
+      })
+    }
+
+    if (/默认|你来定/u.test(combinedText)) {
+      assumptions.push({
+        key: 'strategy.defaults',
+        value: '沿用系统默认解释',
+        source: 'system_default',
+      })
+    }
+
+    return assumptions
   }
 
   private inferChecklistFromMessage(message?: string): ChecklistPayload {
@@ -2362,6 +2391,9 @@ export class CodegenConversationService {
     if (!riskRules) return undefined
 
     const nextRiskRules = { ...riskRules }
+    const inferredAssumptions = Array.isArray(nextRiskRules._inferredAssumptions)
+      ? [...nextRiskRules._inferredAssumptions]
+      : []
     const stopLossPct = typeof nextRiskRules.stopLossPct === 'number' ? nextRiskRules.stopLossPct : null
     const takeProfitPct = typeof nextRiskRules.takeProfitPct === 'number' ? nextRiskRules.takeProfitPct : null
 
@@ -2372,6 +2404,7 @@ export class CodegenConversationService {
       )
       if (basis) {
         nextRiskRules.stopLossBasis = basis
+        inferredAssumptions.push('risk.stopLossBasis')
       }
     }
 
@@ -2382,7 +2415,12 @@ export class CodegenConversationService {
       )
       if (basis) {
         nextRiskRules.takeProfitBasis = basis
+        inferredAssumptions.push('risk.takeProfitBasis')
       }
+    }
+
+    if (inferredAssumptions.length > 0) {
+      nextRiskRules._inferredAssumptions = Array.from(new Set(inferredAssumptions))
     }
 
     return nextRiskRules

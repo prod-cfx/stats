@@ -320,6 +320,7 @@ export class StrategyClarificationRulesService {
 
   private detectRequiredRuleItems(input: ClarificationChecklistInput): StrategyClarificationItem[] {
     const items: StrategyClarificationItem[] = []
+    const hasClosedLoopSemantics = this.hasClosedLoopExitSemantics(input)
 
     if (!this.hasAnyRule(input.entryRules)) {
       items.push({
@@ -332,7 +333,7 @@ export class StrategyClarificationRulesService {
       })
     }
 
-    if (!this.hasAnyRule(input.exitRules)) {
+    if (!this.hasAnyRule(input.exitRules) && !hasClosedLoopSemantics) {
       items.push({
         key: 'exit.rules',
         reason: 'missing_exit_rules',
@@ -343,7 +344,7 @@ export class StrategyClarificationRulesService {
       })
     }
 
-    if (!this.hasStopLossRule(input)) {
+    if (!this.hasStopLossRule(input) && !this.riskRulesOptionalUnderCurrentSemantics(input)) {
       items.push({
         key: 'risk.stopLoss.rule',
         reason: 'missing_stop_loss_rule',
@@ -354,7 +355,7 @@ export class StrategyClarificationRulesService {
       })
     }
 
-    if (!this.hasTakeProfitRule(input)) {
+    if (!this.hasTakeProfitRule(input) && !this.riskRulesOptionalUnderCurrentSemantics(input)) {
       items.push({
         key: 'risk.takeProfit.rule',
         reason: 'missing_take_profit_rule',
@@ -826,9 +827,19 @@ export class StrategyClarificationRulesService {
   }
 
   private hasGridSideMode(input: ClarificationChecklistInput): boolean {
-    return input.grid?.sideMode === 'long_only'
+    if (
+      input.grid?.sideMode === 'long_only'
       || input.grid?.sideMode === 'short_only'
       || input.grid?.sideMode === 'bidirectional'
+    ) {
+      return true
+    }
+
+    const text = this.collectRuleTexts(input).join(' ')
+    return /双向/u.test(text)
+      || /做多网格|多头网格/u.test(text)
+      || /做空网格|空头网格/u.test(text)
+      || /低买高卖|高卖低买/u.test(text)
   }
 
   private hasClosedLoopExitSemantics(input: ClarificationChecklistInput): boolean {
@@ -836,6 +847,10 @@ export class StrategyClarificationRulesService {
     if (!text) return false
 
     return /网格/u.test(text) && /低买高卖|高卖低买|上方网格卖出|网格卖出/u.test(text)
+  }
+
+  private riskRulesOptionalUnderCurrentSemantics(input: ClarificationChecklistInput): boolean {
+    return this.hasClosedLoopExitSemantics(input)
   }
 
   private readReasonPriority(reason: StrategyClarificationItem['reason']): number {

@@ -920,6 +920,51 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('请确认止盈规则')
   })
 
+  it('surfaces inferred default risk bases for confirmation before compile', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已完整，请确认逻辑图。',
+        logic: {
+          entryRules: ['价格突破阻力位入场'],
+          exitRules: ['跌破支撑位出场'],
+          symbols: ['BTCUSDT'],
+          timeframes: ['1h'],
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'spot',
+            positionPct: 10,
+            stopLossPct: 5,
+            takeProfitPct: 10,
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-inferred-risk-basis' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '价格突破阻力位入场，跌破支撑位出场，止损5%，止盈10%',
+      symbols: ['BTCUSDT'],
+      timeframes: ['1h'],
+      entryRules: ['价格突破阻力位入场'],
+      exitRules: ['跌破支撑位出场'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'spot',
+        positionPct: 10,
+        stopLossPct: 5,
+        takeProfitPct: 10,
+      },
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('以下内容是系统推断')
+    expect(result.assistantPrompt).toContain('risk.stopLossBasis')
+    expect(result.assistantPrompt).toContain('risk.takeProfitBasis')
+  })
+
   it('starts in checklist gate when llm says logic is ready', async () => {
     const dto: StartCodegenSessionDto = {
       userId: 'u1',
