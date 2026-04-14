@@ -7,10 +7,9 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { validateBacktestRange } from './backtest-range'
 import {
-  buildDynamicParamFields,
   parseDynamicParamInputValue,
-  validateDynamicParamValues,
 } from './dynamic-params'
 import { PublicationGateCard } from './PublicationGateCard'
 
@@ -45,14 +44,129 @@ function normalizeCodeText(children: unknown): string {
 }
 
 const BACKTEST_RANGE_PRESETS = ['7D', '30D', '90D', '1Y', 'CUSTOM'] as const
-const BACKTEST_SETTINGS_FIELD_KEYS = new Set([
-  'backtestInitialCash',
-  'backtestLeverage',
-  'backtestSlippageBps',
-  'backtestFeeBps',
-  'backtestPriceSource',
-  'backtestAllowPartial',
-])
+const BACKTEST_PRICE_SOURCE_OPTIONS = ['open', 'close', 'mid'] as const
+
+interface BacktestSettingField {
+  key: string
+  labelKey: string
+  type: 'number' | 'select' | 'checkbox'
+  min?: number
+  options?: readonly string[]
+}
+
+const BACKTEST_SETTING_FIELDS: BacktestSettingField[] = [
+  {
+    key: 'backtestInitialCash',
+    labelKey: 'aiQuant.backtestInitialCash',
+    type: 'number',
+    min: 0.00000001,
+  },
+  {
+    key: 'backtestLeverage',
+    labelKey: 'aiQuant.backtestLeverage',
+    type: 'number',
+    min: 0.00000001,
+  },
+  {
+    key: 'backtestSlippageBps',
+    labelKey: 'aiQuant.backtestSlippageBps',
+    type: 'number',
+    min: 0,
+  },
+  {
+    key: 'backtestFeeBps',
+    labelKey: 'aiQuant.backtestFeeBps',
+    type: 'number',
+    min: 0,
+  },
+  {
+    key: 'backtestPriceSource',
+    labelKey: 'aiQuant.backtestPriceSource',
+    type: 'select',
+    options: BACKTEST_PRICE_SOURCE_OPTIONS,
+  },
+  {
+    key: 'backtestAllowPartial',
+    labelKey: 'aiQuant.backtestAllowPartial',
+    type: 'checkbox',
+  },
+]
+
+function parseFiniteNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : null
+  }
+  return null
+}
+
+function validateBacktestSettings(paramValues: DynamicParamValues): {
+  fieldErrors: Record<string, string>
+  rangeError: string | null
+} {
+  const fieldErrors: Record<string, string> = {}
+
+  const initialCash = parseFiniteNumber(paramValues.backtestInitialCash)
+  if (initialCash === null || initialCash <= 0) {
+    fieldErrors.backtestInitialCash = 'aiQuant.validation.positiveNumber'
+  }
+
+  const leverage = parseFiniteNumber(paramValues.backtestLeverage)
+  if (leverage === null || leverage <= 0) {
+    fieldErrors.backtestLeverage = 'aiQuant.validation.positiveNumber'
+  }
+
+  const slippageBps = parseFiniteNumber(paramValues.backtestSlippageBps)
+  if (slippageBps === null || slippageBps < 0) {
+    fieldErrors.backtestSlippageBps = 'aiQuant.validation.nonNegativeNumber'
+  }
+
+  const feeBps = parseFiniteNumber(paramValues.backtestFeeBps)
+  if (feeBps === null || feeBps < 0) {
+    fieldErrors.backtestFeeBps = 'aiQuant.validation.nonNegativeNumber'
+  }
+
+  const priceSource =
+    typeof paramValues.backtestPriceSource === 'string'
+      ? paramValues.backtestPriceSource.trim()
+      : ''
+  if (!BACKTEST_PRICE_SOURCE_OPTIONS.includes(priceSource as (typeof BACKTEST_PRICE_SOURCE_OPTIONS)[number])) {
+    fieldErrors.backtestPriceSource = 'aiQuant.validation.invalidPriceSource'
+  }
+
+  if (typeof paramValues.backtestAllowPartial !== 'boolean') {
+    fieldErrors.backtestAllowPartial = 'aiQuant.validation.invalidBoolean'
+  }
+
+  const range = {
+    preset:
+      typeof paramValues.backtestRangePreset === 'string'
+        ? paramValues.backtestRangePreset.toUpperCase()
+        : '30D',
+    startAt: typeof paramValues.backtestStart === 'string' ? paramValues.backtestStart : '',
+    endAt: typeof paramValues.backtestEnd === 'string' ? paramValues.backtestEnd : '',
+  }
+
+  const rangeValidation = validateBacktestRange(
+    (range.preset === 'CUSTOM'
+      ? { preset: 'CUSTOM', startAt: range.startAt, endAt: range.endAt }
+      : { preset: '30D' }) as Parameters<typeof validateBacktestRange>[0],
+  )
+
+  let rangeError: string | null = null
+  if (range.preset === 'CUSTOM' && !rangeValidation.ok) {
+    if (rangeValidation.reason === 'missing_range') {
+      rangeError = 'aiQuant.messages.backtestRangeMissing'
+    } else if (rangeValidation.reason === 'start_after_end') {
+      rangeError = 'aiQuant.messages.backtestRangeOrderInvalid'
+    } else if (rangeValidation.reason === 'range_too_large') {
+      rangeError = 'aiQuant.messages.backtestRangeTooLarge'
+    }
+  }
+
+  return { fieldErrors, rangeError }
+}
 
 function toDateTimeLocalValue(value: unknown): string {
   if (typeof value !== 'string' || !value.trim()) return ''
@@ -77,7 +191,7 @@ function fromDateTimeLocalValue(value: string): string {
 
 export function QuantChatPanel({
   messages,
-  paramSchema,
+  paramSchema: _paramSchema,
   paramValues,
   clarificationGate: _clarificationGate,
   publicationGate,
@@ -92,14 +206,7 @@ export function QuantChatPanel({
   const [showSettings, setShowSettings] = useState(false)
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null)
   const chatScrollRef = useRef<HTMLDivElement>(null)
-  const fields = useMemo(
-    () => buildDynamicParamFields(paramSchema).filter(field => BACKTEST_SETTINGS_FIELD_KEYS.has(field.key)),
-    [paramSchema],
-  )
-  const validation = useMemo(
-    () => validateDynamicParamValues(paramSchema, paramValues),
-    [paramSchema, paramValues],
-  )
+  const validation = useMemo(() => validateBacktestSettings(paramValues), [paramValues])
   const backtestRangePreset = useMemo(() => {
     const raw = typeof paramValues.backtestRangePreset === 'string'
       ? paramValues.backtestRangePreset.toUpperCase()
@@ -224,7 +331,7 @@ export function QuantChatPanel({
               </>
             )}
 
-            {fields.map(field => {
+            {BACKTEST_SETTING_FIELDS.map(field => {
               const value = paramValues[field.key]
               const error = validation.fieldErrors[field.key]
               const fieldClassName = `h-9 w-full rounded-lg border bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)] outline-none focus:border-primary ${
@@ -234,10 +341,9 @@ export function QuantChatPanel({
               return (
                 <label key={field.key} className="space-y-1.5">
                   <span className="text-xs font-medium text-[color:var(--cf-muted)]">
-                    {field.label}
-                    {field.required ? ' *' : ''}
+                    {t(field.labelKey)}
                   </span>
-                  {field.control === 'select' && field.enumOptions
+                  {field.type === 'select' && field.options
                     ? (
                         <select
                           className={fieldClassName}
@@ -245,63 +351,42 @@ export function QuantChatPanel({
                           onChange={event => onParamChange(field.key, event.target.value)}
                         >
                           <option value="">-</option>
-                          {field.enumOptions.map(option => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
+                          {field.options.map(option => (
+                            <option key={option} value={option}>
+                              {t(`aiQuant.backtestPriceSource.${option}`)}
                             </option>
                           ))}
                         </select>
                       )
-                    : field.control === 'checkbox'
+                    : field.type === 'checkbox'
                       ? (
                           <input
                             type="checkbox"
                             className="h-4 w-4 rounded border border-[color:var(--cf-border)]"
-                            checked={Boolean(value)}
+                            checked={value === true}
                             onChange={event => onParamChange(field.key, event.target.checked)}
                           />
                         )
-                      : field.control === 'textarea'
-                        ? (
-                            <textarea
-                              className={`min-h-[72px] w-full rounded-lg border bg-[color:var(--cf-surface)] px-2 py-1.5 text-sm text-[color:var(--cf-text)] outline-none focus:border-primary ${
-                                error ? 'border-red-500' : 'border-[color:var(--cf-border)]'
-                              }`}
-                              value={typeof value === 'string' ? value : JSON.stringify(value ?? '', null, 2)}
-                              onChange={(event) => {
-                                const raw = event.target.value
-                                try {
-                                  onParamChange(field.key, JSON.parse(raw))
-                                } catch {
-                                  onParamChange(field.key, raw)
-                                }
-                              }}
-                            />
-                          )
                         : (
                             <input
-                              type={field.type === 'number' || field.type === 'integer' ? 'number' : 'text'}
-                              min={field.minimum}
-                              max={field.maximum}
+                              type="number"
+                              min={field.min}
+                              step="any"
                               className={fieldClassName}
                               value={typeof value === 'string' || typeof value === 'number' ? String(value) : ''}
                               onChange={(event) => {
-                                if (field.type === 'number' || field.type === 'integer') {
-                                  onParamChange(field.key, parseDynamicParamInputValue(field.type, event.target.value))
-                                  return
-                                }
-                                onParamChange(field.key, event.target.value)
+                                onParamChange(field.key, parseDynamicParamInputValue('number', event.target.value))
                               }}
                             />
                           )}
                   {error && (
-                    <span className="text-xs text-red-500">{error}</span>
+                    <span className="text-xs text-red-500">{t(error)}</span>
                   )}
                 </label>
               )
             })}
-            {fields.length === 0 && (
-              <p className="text-sm text-[color:var(--cf-muted)]">{t('common.emptyTitle')}</p>
+            {validation.rangeError && backtestRangePreset === 'CUSTOM' && (
+              <p className="text-sm text-red-500 md:col-span-3">{t(validation.rangeError)}</p>
             )}
           </div>
         </div>
