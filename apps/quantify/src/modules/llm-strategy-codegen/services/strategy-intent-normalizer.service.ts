@@ -499,11 +499,17 @@ export class StrategyIntentNormalizerService {
   }
 
   private resolveBollingerConfirmationHint(rule: string): 'touch' | 'close_confirm' | 'ambiguous_touch_or_close_confirm' {
-    if (/触及|触碰|碰到|touch/iu.test(rule)) {
-      return 'touch'
+    const hasTouchCue = /触及|触碰|碰到|touch/iu.test(rule)
+    const hasCloseConfirmCue = /收盘|收于|收在|close/iu.test(rule)
+
+    if (hasTouchCue && hasCloseConfirmCue) {
+      return 'ambiguous_touch_or_close_confirm'
     }
-    if (/收盘|收于|收在|close/iu.test(rule)) {
+    if (hasCloseConfirmCue) {
       return 'close_confirm'
+    }
+    if (hasTouchCue) {
+      return 'touch'
     }
 
     return 'ambiguous_touch_or_close_confirm'
