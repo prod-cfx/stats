@@ -148,6 +148,18 @@ export class TradingService {
     }
   }
 
+  async getLeverageConstraints(
+    _input: {
+      userId: string
+      exchangeId: ExchangeId
+      marketType: MarketType
+      symbol: string
+      exchangeAccountId?: string
+    },
+  ): Promise<{ minLeverage: number; maxLeverage: number } | null> {
+    return null
+  }
+
   /**
    * 校验交易所凭据是否有效。
    *
