@@ -22,6 +22,25 @@ const STATE_GATE_PATTERN = /趋势|震荡|波动|regime|volatility|trend/iu
 
 @Injectable()
 export class StrategyClarificationRulesService {
+  detectContextOnly(input: ClarificationChecklistInput): StrategyClarificationState {
+    const all = this.detect(input)
+    const items = all.items.filter(item =>
+      item.reason === 'missing_exchange'
+      || item.reason === 'missing_symbol'
+      || item.reason === 'missing_timeframe'
+      || item.reason === 'missing_market_type'
+      || item.reason === 'missing_position_pct'
+      || item.reason === 'missing_position_mode'
+      || item.reason === 'conflicting_market_scope'
+      || item.reason === 'invalid_spot_short_combo',
+    )
+
+    return {
+      status: items.length > 0 ? 'NEEDS_CLARIFICATION' : 'CLEAR',
+      items,
+    }
+  }
+
   detect(input: ClarificationChecklistInput): StrategyClarificationState {
     const entryDetection = this.detectEntryItems(input.entryRules ?? [])
     const items: StrategyClarificationItem[] = [

@@ -10,6 +10,7 @@ import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant
 import type { ChecklistPayload, ChecklistRuleBasis, ChecklistRuleDraft } from '../types/codegen-checklist'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
+import type { AtomicIntentResolution, StrategyAmbiguity } from '../types/strategy-ambiguity'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 
@@ -55,6 +56,7 @@ import { StrategyClarificationQuestionService } from './strategy-clarification-q
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { StrategyClarificationRulesService } from './strategy-clarification-rules.service'
 import { StrategyIntentNormalizerService } from './strategy-intent-normalizer.service'
+import { StrategyIntentResolutionService } from './strategy-intent-resolution.service'
 
 interface ConversationPlan {
   related: boolean
@@ -159,6 +161,7 @@ export class CodegenConversationService {
     private readonly clarificationQuestion: StrategyClarificationQuestionService,
     private readonly publicationPipeline: CodegenSessionPublicationPipelineService,
     private readonly intentNormalizer: StrategyIntentNormalizerService = new StrategyIntentNormalizerService(),
+    private readonly intentResolution: StrategyIntentResolutionService = new StrategyIntentResolutionService(),
   ) {}
 
   async startSession(
@@ -186,14 +189,16 @@ export class CodegenConversationService {
       checklist,
       undefined,
     )
-    const clarificationState = this.detectClarificationState(checklist)
-    const clarificationPrompt = this.clarificationQuestion.build(clarificationState)
+    const normalization = this.intentNormalizer.normalize(checklist)
+    const resolution = this.resolveIntentAmbiguities(normalization)
+    const clarificationState = this.detectClarificationState(checklist, normalization, resolution)
+    const clarificationPrompt = this.buildClarificationPrompt(checklist, clarificationState, resolution)
     const plannerStatus: LlmCodegenSessionStatus = this.stateMachine.resolvePlannerStatus({
       logicReady: plan.logicReady,
       clarificationState,
     })
-    const normalization = plannerStatus === 'CHECKLIST_GATE'
-      ? this.intentNormalizer.normalize(checklist)
+    const gatingNormalization = plannerStatus === 'CHECKLIST_GATE'
+      ? normalization
       : null
     const initialCanonicalSpec = plannerStatus === 'CHECKLIST_GATE'
       ? this.canonicalSpecBuilder.build(checklist)
@@ -218,8 +223,8 @@ export class CodegenConversationService {
       ? clarificationPrompt
       : (shouldGateChecklist
           ? `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`
-          : (normalization?.blocked
-              ? this.buildNormalizationAssistantPrompt(checklist, normalization)
+          : (gatingNormalization?.blocked
+              ? this.buildNormalizationAssistantPrompt(checklist, gatingNormalization)
               : (compileability && !compileability.canCompile
               ? this.buildCompileabilityAssistantPrompt(compileability)
               : plan.assistantPrompt)))
@@ -361,8 +366,10 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
     const mergedChecklist = this.mergeChecklistSnapshots(preMergedChecklist, plan.logic ?? {})
-    const clarificationState = this.detectClarificationState(mergedChecklist)
-    const clarificationPrompt = this.clarificationQuestion.build(clarificationState)
+    const normalization = this.intentNormalizer.normalize(mergedChecklist)
+    const resolution = this.resolveIntentAmbiguities(normalization)
+    const clarificationState = this.detectClarificationState(mergedChecklist, normalization, resolution)
+    const clarificationPrompt = this.buildClarificationPrompt(mergedChecklist, clarificationState, resolution)
     const recommendationStyle = this.inferRecommendationStyleFromContext(
       dto.message,
       mergedChecklist,
@@ -400,7 +407,6 @@ export class CodegenConversationService {
       dto.message,
       plan.assistantPrompt,
     )
-    const normalization = this.intentNormalizer.normalize(mergedChecklist)
     const canonicalSpec = this.canonicalSpecBuilder.build(mergedChecklist)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
@@ -517,8 +523,10 @@ export class CodegenConversationService {
     )
     const messageChecklist = this.normalizeChecklist(this.extractChecklist(dto))
     const mergedChecklist = this.mergeChecklistSnapshots(baseChecklist, messageChecklist)
-    const clarificationState = this.detectClarificationState(mergedChecklist)
-    const clarificationPrompt = this.clarificationQuestion.build(clarificationState)
+    const normalization = this.intentNormalizer.normalize(mergedChecklist)
+    const resolution = this.resolveIntentAmbiguities(normalization)
+    const clarificationState = this.detectClarificationState(mergedChecklist, normalization, resolution)
+    const clarificationPrompt = this.buildClarificationPrompt(mergedChecklist, clarificationState, resolution)
     const constraintPack = this.readConstraintPack(session.constraintPack)
     const historyAfterConfirm = this.appendConversationHistory(
       constraintPack.conversationHistory ?? [],
@@ -546,8 +554,6 @@ export class CodegenConversationService {
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
-
-    const normalization = this.intentNormalizer.normalize(mergedChecklist)
     const canonicalSpec = this.canonicalSpecBuilder.build(mergedChecklist)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
@@ -1487,11 +1493,96 @@ export class CodegenConversationService {
     }
   }
 
-  private detectClarificationState(checklist: ChecklistPayload): StrategyClarificationStateWithSummary {
-    return this.withClarificationSummary(
+  private detectClarificationState(
+    checklist: ChecklistPayload,
+    normalization?: NormalizationResult | null,
+    resolution?: AtomicIntentResolution | null,
+  ): StrategyClarificationStateWithSummary {
+    const legacyState = this.withClarificationSummary(
       this.clarificationRules.detect(checklist),
       checklist,
     ) as StrategyClarificationStateWithSummary
+
+    const resolutionItems = this.toClarificationItemsFromResolution(resolution)
+    if (resolutionItems.length > 0) {
+      const contextState = this.clarificationRules.detectContextOnly(checklist)
+      return {
+        status: 'NEEDS_CLARIFICATION',
+        items: [...resolutionItems, ...contextState.items],
+        summary: this.buildClarificationSummary(checklist),
+      }
+    }
+
+    const filteredLegacyItems = legacyState.items.filter(item =>
+      !this.shouldSuppressLegacyClarificationItem(item, normalization),
+    )
+
+    return {
+      status: filteredLegacyItems.length > 0 ? 'NEEDS_CLARIFICATION' : 'CLEAR',
+      items: filteredLegacyItems,
+      summary: this.buildClarificationSummary(checklist),
+    }
+  }
+
+  private resolveIntentAmbiguities(
+    normalization: NormalizationResult | null | undefined,
+  ): AtomicIntentResolution | null {
+    if (!normalization || normalization.blocked) return null
+
+    return this.intentResolution.resolve({
+      normalizedIntent: normalization.normalizedIntent as any,
+    })
+  }
+
+  private buildClarificationPrompt(
+    checklist: ChecklistPayload,
+    clarificationState: StrategyClarificationStateWithSummary,
+    resolution: AtomicIntentResolution | null | undefined,
+  ): string {
+    if (resolution?.nextQuestion) {
+      return this.clarificationQuestion.buildFromAmbiguity({
+        summary: this.buildClarificationSummary(checklist),
+        nextQuestion: resolution.nextQuestion,
+      })
+    }
+
+    return this.clarificationQuestion.build(clarificationState)
+  }
+
+  private toClarificationItemsFromResolution(
+    resolution: AtomicIntentResolution | null | undefined,
+  ): StrategyClarificationItem[] {
+    return (resolution?.ambiguities ?? []).map((ambiguity, index) => ({
+      key: `semantic.${ambiguity.semanticKey}.${ambiguity.slotKey}.${index + 1}`,
+      reason: 'open_semantic_slot',
+      field: 'semanticSlots',
+      blocking: true,
+      question: ambiguity.question,
+      status: 'pending',
+    }))
+  }
+
+  private shouldSuppressLegacyClarificationItem(
+    item: StrategyClarificationItem,
+    normalization: NormalizationResult | null | undefined,
+  ): boolean {
+    if (!normalization || normalization.blocked) return false
+
+    const hasOnlyClosedTriggers = normalization.normalizedIntent.triggers.length > 0
+      && normalization.normalizedIntent.triggers.every(trigger => trigger.closureStatus === 'closed')
+    if (!hasOnlyClosedTriggers) return false
+
+    const hasOnlySupportedGoldenFamilies = normalization.normalizedIntent.triggers.every(trigger =>
+      trigger.key === 'price.percent_change'
+      || trigger.key === 'bollinger.touch_upper'
+      || trigger.key === 'bollinger.touch_lower'
+      || trigger.key === 'bollinger.touch_middle',
+    )
+    if (!hasOnlySupportedGoldenFamilies) return false
+
+    return item.reason === 'missing_stop_loss_rule'
+      || item.reason === 'missing_take_profit_rule'
+      || item.reason === 'ambiguous_condition_basis'
   }
 
   private buildClarificationSummary(checklist: ChecklistPayload): string | null {

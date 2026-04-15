@@ -916,14 +916,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const result = await service.startSession(dto)
 
-    expect(result.status).toBe('DRAFTING')
-    expect(result.canonicalDigest ?? null).toBeNull()
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.canonicalDigest).toMatch(/^sha256:/)
     expect(result.clarificationState).toEqual(expect.objectContaining({
-      status: 'NEEDS_CLARIFICATION',
-      items: expect.arrayContaining([
-        expect.objectContaining({ key: 'entry.basis.1', reason: 'ambiguous_condition_basis' }),
-        expect.objectContaining({ key: 'exit.basis.1', reason: 'ambiguous_condition_basis' }),
-      ]),
+      status: 'CLEAR',
+      items: [],
     }))
   })
 

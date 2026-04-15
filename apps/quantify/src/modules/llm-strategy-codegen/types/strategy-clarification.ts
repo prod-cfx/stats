@@ -1,4 +1,5 @@
 export const STRATEGY_CLARIFICATION_REASONS = [
+  'open_semantic_slot',
   'missing_entry_rules',
   'missing_exit_rules',
   'missing_stop_loss_rule',
@@ -51,6 +52,7 @@ export const STRATEGY_CLARIFICATION_FIELDS = [
   'grid.upper',
   'grid.stepPct',
   'grid.sideMode',
+  'semanticSlots',
 ] as const
 type StrategyClarificationFieldLiteral = typeof STRATEGY_CLARIFICATION_FIELDS[number]
 export type StrategyClarificationField = StrategyClarificationFieldLiteral | (string & {})

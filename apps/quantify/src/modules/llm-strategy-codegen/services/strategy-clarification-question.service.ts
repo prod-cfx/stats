@@ -1,4 +1,5 @@
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
+import type { StrategyAmbiguity } from '../types/strategy-ambiguity'
 import { Injectable } from '@nestjs/common'
 
 type StrategyClarificationPromptState = StrategyClarificationState & {
@@ -6,6 +7,7 @@ type StrategyClarificationPromptState = StrategyClarificationState & {
 }
 
 const REASON_PRIORITY: Record<StrategyClarificationItem['reason'], number> = {
+  open_semantic_slot: 1,
   conflicting_market_scope: 1,
   invalid_spot_short_combo: 1,
   missing_entry_rules: 2,
@@ -29,6 +31,19 @@ const REASON_PRIORITY: Record<StrategyClarificationItem['reason'], number> = {
 
 @Injectable()
 export class StrategyClarificationQuestionService {
+  buildFromAmbiguity(input: {
+    summary?: string | null
+    nextQuestion: StrategyAmbiguity | null
+  }): string {
+    if (!input.nextQuestion) return ''
+
+    return [
+      `我当前理解的策略是：${input.summary?.trim() || '已识别部分条件，但仍未完整。'}`,
+      `现在还缺一个会影响脚本生成一致性的条件：${this.renderAmbiguityGapLabel(input.nextQuestion)}`,
+      `请确认：${input.nextQuestion.question}`,
+    ].join('\n')
+  }
+
   build(state: StrategyClarificationPromptState | null | undefined): string {
     if (!state || state.status !== 'NEEDS_CLARIFICATION') return ''
 
@@ -52,7 +67,17 @@ export class StrategyClarificationQuestionService {
     ].join('\n')
   }
 
+  private renderAmbiguityGapLabel(item: StrategyAmbiguity): string {
+    if (item.lane === 'signal') return '核心信号未闭合。'
+    if (item.lane === 'behavior') return '过滤器/市场状态未闭合。'
+    if (item.lane === 'risk') return '出场与风险未闭合。'
+    return '交易执行上下文未闭合。'
+  }
+
   private renderGapLabel(item: StrategyClarificationItem): string {
+    if (item.reason === 'open_semantic_slot') {
+      return '核心语义未闭合。'
+    }
     if (
       item.reason === 'missing_entry_rules'
       || item.reason === 'missing_exit_rules'
