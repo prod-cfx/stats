@@ -1150,15 +1150,14 @@ export class CodegenConversationService {
       riskRules: fallbackChecklist.riskRules ? { ...fallbackChecklist.riskRules } : undefined,
       stateGates: fallbackChecklist.stateGates ? { ...fallbackChecklist.stateGates } : undefined,
     })
-    const clarificationView = this.semanticStateProjection.buildClarificationView(state)
     const entryRules = this.buildLegacyRulesFromSemanticState(state, 'entry')
     const exitRules = this.buildLegacyRulesFromSemanticState(state, 'exit')
 
-    if (entryRules.length > 0 && !nextChecklist.entryRules?.length) {
+    if (entryRules.length > 0) {
       nextChecklist.entryRules = entryRules
       nextChecklist.entryRuleDrafts = undefined
     }
-    if (exitRules.length > 0 && !nextChecklist.exitRules?.length) {
+    if (exitRules.length > 0) {
       nextChecklist.exitRules = exitRules
       nextChecklist.exitRuleDrafts = undefined
     }
@@ -1226,10 +1225,6 @@ export class CodegenConversationService {
     if (timeframe) {
       nextChecklist.timeframes = [timeframe]
     }
-    if (!nextChecklist.entryRules?.length && clarificationView.summary.includes('入场：')) {
-      nextChecklist.entryRules = fallbackChecklist.entryRules
-    }
-
     return this.normalizeChecklist(nextChecklist)
   }
 

@@ -3825,6 +3825,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('GENERATING')
     expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith('s5-semantic-generate', expect.objectContaining({
       status: 'GENERATING',
+      checklist: expect.objectContaining({
+        entryRules: ['收盘确认价格突破长期均线（50）时买入'],
+        exitRules: ['收盘确认价格跌破短期均线（20）时卖出'],
+      }),
       semanticState: expect.objectContaining({
         triggers: expect.arrayContaining([
           expect.objectContaining({
@@ -4475,6 +4479,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('GENERATING')
     expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith('s7-semantic-confirm-answer', expect.objectContaining({
       status: 'GENERATING',
+      checklist: expect.objectContaining({
+        entryRules: ['收盘确认价格突破长期均线（50）时买入'],
+        exitRules: ['收盘确认价格跌破短期均线（20）时卖出'],
+      }),
       semanticState: expect.objectContaining({
         triggers: expect.arrayContaining([
           expect.objectContaining({
