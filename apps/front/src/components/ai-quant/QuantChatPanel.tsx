@@ -455,7 +455,7 @@ export function QuantChatPanel({
                 onClick={handleCancelBacktestParams}
                 className="rounded-lg border border-[color:var(--cf-border)] px-3 py-1.5 text-sm font-medium text-[color:var(--cf-text)] transition-colors hover:bg-[color:var(--cf-surface)]"
               >
-                {t('common.cancel')}
+                {t('aiQuant.backtestClosePanel')}
               </button>
               <button
                 type="button"
@@ -463,7 +463,7 @@ export function QuantChatPanel({
                 disabled={!hasDraftChanges || Object.keys(validation.fieldErrors).length > 0 || Boolean(validation.rangeError)}
                 className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {t('aiQuant.backtestConfirmSubmit')}
+                {t('aiQuant.backtestConfirmSettings')}
               </button>
             </div>
           </div>

@@ -168,7 +168,7 @@ describe('QuantChatPanel range settings', () => {
     })
 
     const confirmButton = Array.from(container.querySelectorAll('button')).find(
-      btn => btn.textContent?.includes('aiQuant.backtestConfirmSubmit'),
+      btn => btn.textContent?.includes('aiQuant.backtestConfirmSettings'),
     )
     expect(confirmButton).toBeTruthy()
 
@@ -288,7 +288,7 @@ describe('QuantChatPanel range settings', () => {
     expect(container.textContent).toContain('aiQuant.backtestDraftPending')
 
     const confirmButton = Array.from(container.querySelectorAll('button')).find(
-      btn => btn.textContent?.includes('aiQuant.backtestConfirmSubmit'),
+      btn => btn.textContent?.includes('aiQuant.backtestConfirmSettings'),
     )
     expect(confirmButton).toBeTruthy()
 
@@ -334,7 +334,7 @@ describe('QuantChatPanel range settings', () => {
     })
 
     const cancelButton = Array.from(container.querySelectorAll('button')).find(
-      btn => btn.textContent?.includes('common.cancel'),
+      btn => btn.textContent?.includes('aiQuant.backtestClosePanel'),
     )
     expect(cancelButton).toBeTruthy()
 
