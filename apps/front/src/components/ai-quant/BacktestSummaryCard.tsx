@@ -63,9 +63,9 @@ export function BacktestSummaryCard({
 
       <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Metric title={t('aiQuant.maxDrawdown')} value={`-${result.maxDrawdownPct}%`} type="loss" />
-        <Metric title={t('aiQuant.totalReturn')} value={`${result.totalReturnPct > 0 ? '+' : ''}${result.totalReturnPct}%`} type={result.totalReturnPct > 0 ? 'profit' : 'loss'} />
-        <Metric title={t('aiQuant.winRate')} value={`${result.winRatePct}%`} type="neutral" />
-        <Metric title={t('aiQuant.tradeCount')} value={`${result.tradeCount}`} type="neutral" />
+        <Metric title={t('aiQuant.closedReturn')} value={`${result.totalReturnPct > 0 ? '+' : ''}${result.totalReturnPct}%`} type={result.totalReturnPct > 0 ? 'profit' : 'loss'} />
+        <Metric title={t('aiQuant.closedWinRate')} value={`${result.winRatePct}%`} type="neutral" />
+        <Metric title={t('aiQuant.closedTradeCount')} value={`${result.tradeCount}`} type="neutral" />
         {typeof result.openTradeCount === 'number' && (
           <Metric title={t('aiQuant.openTradeCount')} value={`${result.openTradeCount}`} type="neutral" />
         )}

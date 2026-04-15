@@ -13,9 +13,9 @@ jest.mock('react-i18next', () => ({
       'aiQuant.messages.backtestDrawdownLimit': '最大回撤不超过 20% 方可部署',
       'aiQuant.fullScreen': '全屏查看',
       'aiQuant.maxDrawdown': '最大回撤',
-      'aiQuant.totalReturn': '总收益',
-      'aiQuant.winRate': '胜率',
-      'aiQuant.tradeCount': '交易次数',
+      'aiQuant.closedReturn': '已平仓收益',
+      'aiQuant.closedWinRate': '已平仓胜率',
+      'aiQuant.closedTradeCount': '已平仓交易数',
       'aiQuant.openTradeCount': '未平仓笔数',
       'aiQuant.openPnl': 'Open P&L',
       'aiQuant.deploy': '一键部署',
@@ -68,6 +68,9 @@ describe('BacktestSummaryCard', () => {
 
     expect(container.textContent).toContain('未平仓笔数')
     expect(container.textContent).toContain('1')
+    expect(container.textContent).toContain('已平仓收益')
+    expect(container.textContent).toContain('已平仓胜率')
+    expect(container.textContent).toContain('已平仓交易数')
     expect(container.textContent).toContain('Open P&L')
     expect(container.textContent).toContain('+2.49')
   })
