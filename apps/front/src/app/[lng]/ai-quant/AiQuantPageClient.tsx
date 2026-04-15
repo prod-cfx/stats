@@ -463,6 +463,12 @@ export function AiQuantPageClient({
     if (!activeConversation) return true
     return !activeConversation.messages.some(x => x.role === 'user')
   }, [activeConversation])
+  const currentPendingClarification = useMemo(() => {
+    const gate = activeConversation?.clarificationGate
+    if (!gate) return null
+    const prioritizedItems = gate.pendingItems?.length ? gate.pendingItems : gate.items
+    return prioritizedItems.find(item => item.status === 'pending') ?? null
+  }, [activeConversation?.clarificationGate])
 
   const callingMessage = (elapsedSec: number) =>
     t('aiQuant.messages.calling', {
@@ -539,7 +545,6 @@ export function AiQuantPageClient({
   const onSend = async (input: string) => {
     if (!input.trim()) return
     const trimmedInput = input.trim()
-    const pendingClarification = activeConversation.clarificationGate?.items.find(item => item.status === 'pending')
     const isRevisionMessage = isStrategyModificationIntent(trimmedInput)
     const currentConversationId = activeConversation.id
     const currentParams = activeConversation.params
@@ -627,7 +632,7 @@ export function AiQuantPageClient({
       return
     }
 
-    if (activeConversation.clarificationGate?.blocked && pendingClarification) {
+    if (activeConversation.clarificationGate?.blocked && currentPendingClarification) {
       await requestBackendGraphGeneration({
         conversationId: currentConversationId,
         message: trimmedInput,
@@ -636,7 +641,7 @@ export function AiQuantPageClient({
         usePresetRules: false,
         confirmGenerate: false,
         clarificationAnswers: {
-          [pendingClarification.key]: trimmedInput,
+          [currentPendingClarification.key]: trimmedInput,
         },
       })
       return

@@ -434,7 +434,7 @@ export interface AiQuantConversationResponse {
 
 export interface LlmClarificationGateItem {
   key: string
-  field: 'exchange' | 'symbol' | 'timeframe' | 'marketType' | 'positionMode' | 'riskRules.earlyStop.action'
+  field: string
   reason: string
   question: string
   allowedAnswers?: string[]

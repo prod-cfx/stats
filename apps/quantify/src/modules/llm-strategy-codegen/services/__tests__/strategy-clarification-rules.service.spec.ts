@@ -157,6 +157,64 @@ describe('strategyClarificationRulesService', () => {
     ]))
   })
 
+  it('preserves scoped semantic keys when surfacing open semantic slots', () => {
+    const state = service.detectFromAmbiguities({
+      executionContext: {
+        context: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        evidence: [],
+        ambiguities: [],
+      },
+      atomicResolution: {
+        atomicIntent: {
+          triggers: [],
+          actions: [],
+          sizing: null,
+          risk: [],
+          relations: [],
+        },
+        ambiguities: [
+          {
+            kind: 'open_semantic_slot',
+            field: 'reference.period.entry',
+            message: '长期均线周期缺失',
+            question: '长期均线是多少？',
+            priority: 10,
+          },
+          {
+            kind: 'open_semantic_slot',
+            field: 'confirmationMode.exit',
+            message: '出场确认方式缺失',
+            question: '跌破按收盘确认还是盘中触发？',
+            priority: 10,
+          },
+        ],
+      },
+      checklist: {
+        entryRules: ['价格突破长期均线时买入'],
+        exitRules: ['跌破短期均线时卖出'],
+      },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic.reference.period.entry',
+        question: '长期均线是多少？',
+        status: 'pending',
+      }),
+      expect.objectContaining({
+        key: 'semantic.confirmationMode.exit',
+        question: '跌破按收盘确认还是盘中触发？',
+        status: 'pending',
+      }),
+    ]))
+  })
+
   it('detects missing side scope for upper-band breakout entry rule', () => {
     const state = service.detect({
       entryRules: ['突破布林带上轨交易'],

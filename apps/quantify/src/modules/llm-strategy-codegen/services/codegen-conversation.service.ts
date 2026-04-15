@@ -882,8 +882,16 @@ export class CodegenConversationService {
       clarificationGate?: CodegenSessionResponseDto['clarificationGate']
     },
   ): CodegenSessionResponseDto {
+    const clarificationGate = response.clarificationGate ?? this.buildClarificationGate(
+      response.clarificationState as StrategyClarificationStateWithSummary | null | undefined,
+      response.assistantPrompt,
+    )
+
     return responseMapperHelper.finalizeSessionResponse(
-      response,
+      {
+        ...response,
+        clarificationGate,
+      },
       clarificationState => this.buildClarificationGate(
         clarificationState as StrategyClarificationStateWithSummary | null | undefined,
       ),
@@ -904,15 +912,20 @@ export class CodegenConversationService {
 
   private buildClarificationGate(
     clarificationState?: StrategyClarificationStateWithSummary | null,
+    assistantPrompt?: string | null,
   ): CodegenSessionResponseDto['clarificationGate'] {
-    const pendingItems = clarificationState?.status === 'NEEDS_CLARIFICATION'
-      ? clarificationState.items.filter(item => item.blocking && item.status === 'pending')
+    const alignedClarificationState = this.alignClarificationStateWithAskedQuestion(
+      clarificationState,
+      assistantPrompt,
+    )
+    const pendingItems = alignedClarificationState?.status === 'NEEDS_CLARIFICATION'
+      ? alignedClarificationState.items.filter(item => item.blocking && item.status === 'pending')
       : []
 
     return {
       blocked: pendingItems.length > 0,
       summary: pendingItems.length > 0
-        ? this.normalizeClarificationSummary(clarificationState?.summary)
+        ? this.normalizeClarificationSummary(alignedClarificationState?.summary)
         : null,
       items: pendingItems,
       pendingItems,
@@ -1144,12 +1157,17 @@ export class CodegenConversationService {
     item: StrategyClarificationItem,
     answer: string,
   ): ChecklistPayload {
-    if (/均线是多少/u.test(item.question) || item.key.includes('reference.period')) {
+    const key = item.key.toLowerCase()
+    const targetPhase = this.readSemanticClarificationPhase(item)
+
+    if (/均线是多少/u.test(item.question) || key.includes('reference.period')) {
       const period = this.normalizeMovingAveragePeriodClarificationAnswer(answer)
       if (period === null) return checklist
 
+      if (!targetPhase) return checklist
+
       const isLongTerm = /长期均线/u.test(item.question)
-      const targetRules = isLongTerm ? checklist.entryRules : checklist.exitRules
+      const targetRules = targetPhase === 'entry' ? checklist.entryRules : checklist.exitRules
       if (!targetRules || targetRules.length === 0) return checklist
 
       const nextRules = targetRules.map((rule) => {
@@ -1163,17 +1181,18 @@ export class CodegenConversationService {
         )
       })
 
-      return this.normalizeChecklist(isLongTerm
+      return this.normalizeChecklist(targetPhase === 'entry'
         ? { ...checklist, entryRules: nextRules }
         : { ...checklist, exitRules: nextRules })
     }
 
-    if (/按收盘确认还是盘中触发/u.test(item.question) || item.key.includes('confirmationMode')) {
+    if (/按收盘确认还是盘中触发/u.test(item.question) || key.includes('confirmationmode')) {
       const confirmation = this.normalizeSemanticTriggerConfirmationAnswer(answer)
       if (!confirmation) return checklist
 
-      const isEntry = /突破按收盘确认/u.test(item.question)
-      const targetRules = isEntry ? checklist.entryRules : checklist.exitRules
+      if (!targetPhase) return checklist
+
+      const targetRules = targetPhase === 'entry' ? checklist.entryRules : checklist.exitRules
       if (!targetRules || targetRules.length === 0) return checklist
 
       const nextRules = targetRules.map((rule) => {
@@ -1188,7 +1207,7 @@ export class CodegenConversationService {
           : `盘中${stripped}`
       })
 
-      return this.normalizeChecklist(isEntry
+      return this.normalizeChecklist(targetPhase === 'entry'
         ? { ...checklist, entryRules: nextRules }
         : { ...checklist, exitRules: nextRules })
     }
@@ -1672,14 +1691,96 @@ export class CodegenConversationService {
     if (!normalizedMessage) return {}
     if (!clarificationState || clarificationState.status !== 'NEEDS_CLARIFICATION') return {}
 
-    const pendingSemanticItems = clarificationState.items.filter(item =>
-      item.status === 'pending' && item.key.startsWith('semantic.'),
-    )
-    if (pendingSemanticItems.length === 0) return {}
+    const activeItem = clarificationState.items.find(item => item.blocking && item.status === 'pending')
+    if (!activeItem || !activeItem.key.startsWith('semantic.')) return {}
 
     return {
-      [pendingSemanticItems[0].key]: normalizedMessage,
+      [activeItem.key]: normalizedMessage,
     }
+  }
+
+  private readSemanticClarificationPhase(
+    item: StrategyClarificationItem,
+  ): 'entry' | 'exit' | null {
+    const key = item.key.toLowerCase()
+    if (key.includes('.entry')) return 'entry'
+    if (key.includes('.exit')) return 'exit'
+
+    if (/长期均线/u.test(item.question) || /突破按收盘确认还是盘中触发/u.test(item.question)) {
+      return 'entry'
+    }
+    if (/短期均线/u.test(item.question) || /跌破按收盘确认还是盘中触发/u.test(item.question)) {
+      return 'exit'
+    }
+
+    return null
+  }
+
+  private alignClarificationStateWithAskedQuestion(
+    clarificationState: StrategyClarificationStateWithSummary | null | undefined,
+    assistantPrompt?: string | null,
+  ): StrategyClarificationStateWithSummary | null | undefined {
+    if (!clarificationState || clarificationState.status !== 'NEEDS_CLARIFICATION') {
+      return clarificationState
+    }
+
+    const askedQuestion = this.extractAskedClarificationQuestion(assistantPrompt)
+    if (!askedQuestion) {
+      return clarificationState
+    }
+
+    const targetIndex = clarificationState.items.findIndex(item =>
+      item.blocking
+      && item.status === 'pending'
+      && this.isSameClarificationQuestion(item.question, askedQuestion),
+    )
+    if (targetIndex <= 0) {
+      return clarificationState
+    }
+
+    const items = [...clarificationState.items]
+    const [targetItem] = items.splice(targetIndex, 1)
+    if (!targetItem) {
+      return clarificationState
+    }
+    items.unshift(targetItem)
+
+    return {
+      ...clarificationState,
+      items,
+    }
+  }
+
+  private extractAskedClarificationQuestion(
+    assistantPrompt?: string | null,
+  ): string | null {
+    const lines = assistantPrompt
+      ?.split('\n')
+      .map(line => line.trim())
+      .filter(Boolean)
+    if (!lines || lines.length === 0) {
+      return null
+    }
+
+    const askedLine = [...lines].reverse().find(line => line.startsWith('请确认：'))
+    if (!askedLine) {
+      return null
+    }
+
+    return askedLine.slice('请确认：'.length).trim() || null
+  }
+
+  private isSameClarificationQuestion(
+    left: string,
+    right: string,
+  ): boolean {
+    return this.normalizeClarificationQuestion(left) === this.normalizeClarificationQuestion(right)
+  }
+
+  private normalizeClarificationQuestion(
+    question: string,
+  ): string {
+    return question.trim().replace(/^[：:\s]+|[？?。！!\s]+$/gu, '')
   }
 
   private readClarificationState(payload: Prisma.JsonValue | null | undefined): StrategyClarificationStateWithSummary | null {
@@ -1820,6 +1921,10 @@ export class CodegenConversationService {
       summary: clarificationState.summary,
       ambiguities: effectiveAmbiguities,
     }) || this.clarificationQuestion.build(clarificationState)
+    const alignedClarificationState = this.alignClarificationStateWithAskedQuestion(
+      clarificationState,
+      clarificationPrompt,
+    ) as StrategyClarificationStateWithSummary
     const clarificationEvidence = this.clarificationRules.collectEvidence(checklist)
     const blockingReasons: StrategyBlockingReason[] = [
       ...executionContext.evidence
@@ -1851,7 +1956,7 @@ export class CodegenConversationService {
       normalization,
       executionContext,
       atomicResolution,
-      clarificationState,
+      clarificationState: alignedClarificationState,
       clarificationPrompt,
       blockingReasons,
       inferredAssumptions,
