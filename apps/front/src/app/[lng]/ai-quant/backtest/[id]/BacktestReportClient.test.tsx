@@ -164,4 +164,64 @@ describe('BacktestReportClient', () => {
     expect(mockDynamic).toHaveBeenCalled()
     expect(container.querySelector('[data-testid="dynamic-equity-chart"]')).not.toBeNull()
   })
+
+  it('explains closed-trade metrics and renders open positions when a backtest ends with unclosed positions', async () => {
+    mockGetBacktestJobResult.mockResolvedValue({
+      summary: {
+        netProfit: 0,
+        netProfitPct: 0,
+        maxDrawdownPct: 0.32,
+        winRate: 0,
+        profitFactor: 0,
+        totalTrades: 0,
+        totalOpenTrades: 1,
+        openPnl: 2.3882611501623687,
+      },
+      equityCurve: [
+        { ts: Date.parse('2026-04-01T00:00:00.000Z'), equity: 1000 },
+        { ts: Date.parse('2026-04-02T00:00:00.000Z'), equity: 1002.39 },
+      ],
+      trades: [],
+      openPositions: [
+        {
+          symbol: 'BTCUSDT:PERP',
+          qty: 0.0013702196462092872,
+          avgEntryPrice: 72238.52313,
+          unrealizedPnl: 2.3882611501623687,
+        },
+      ],
+    })
+
+    await act(async () => {
+      root.render(
+        <BacktestReportClient
+          lng="en"
+          id="btjob-open-position"
+          symbol="BTCUSDT"
+          rangeDisplay="2026-04-01 ~ 2026-04-15"
+          metrics={{
+            maxDrawdownPct: 0.32,
+            totalReturnPct: 0,
+            winRatePct: 0,
+            tradeCount: 0,
+            openTradeCount: 1,
+            openPnl: 2.39,
+          }}
+        />,
+      )
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).toContain('Closed Return')
+    expect(container.textContent).toContain('Closed Win Rate')
+    expect(container.textContent).toContain('Closed Trades')
+    expect(container.textContent).toContain('No closed trades were completed during this backtest.')
+    expect(container.textContent).toContain('Open Positions')
+    expect(container.textContent).toContain('BTCUSDT:PERP')
+    expect(container.textContent).toContain('+2.39')
+  })
 })

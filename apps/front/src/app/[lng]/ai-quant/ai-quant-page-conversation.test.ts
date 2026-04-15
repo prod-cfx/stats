@@ -2,11 +2,13 @@ import { describe, expect, it } from '@jest/globals'
 
 import {
   AI_QUANT_PERSISTED_SCHEMA_VERSION,
+  buildBacktestSummaryResult,
   createConversationFromServerConversation,
   hasExplicitBacktestExecutionOverrides,
   hydrateConversation,
   hydrateConversations,
   invalidateConversationPublication,
+  isDeployableBacktestResult,
   requiresRepublishForPublishedSnapshot,
   resolveEffectivePublishedBacktestInputs,
   resolveBacktestExecutionConfig,
@@ -14,6 +16,53 @@ import {
 } from './ai-quant-page-conversation'
 
 describe('ai-quant-page-conversation', () => {
+  it('requires at least one trade before a backtest result is considered deployable', () => {
+    expect(isDeployableBacktestResult(null)).toBe(false)
+    expect(isDeployableBacktestResult({
+      id: 'bt-0',
+      maxDrawdownPct: 0,
+      totalReturnPct: 0,
+      winRatePct: 0,
+      tradeCount: 0,
+    })).toBe(false)
+    expect(isDeployableBacktestResult({
+      id: 'bt-1',
+      maxDrawdownPct: 20,
+      totalReturnPct: 8,
+      winRatePct: 55,
+      tradeCount: 3,
+    })).toBe(true)
+    expect(isDeployableBacktestResult({
+      id: 'bt-2',
+      maxDrawdownPct: 20.01,
+      totalReturnPct: 8,
+      winRatePct: 55,
+      tradeCount: 3,
+    })).toBe(false)
+  })
+
+  it('preserves open-trade summary fields when building a backtest summary result', () => {
+    expect(buildBacktestSummaryResult({
+      id: 'bt-open-only',
+      maxDrawdownPct: 0,
+      totalReturnPct: 0,
+      winRatePct: 0,
+      tradeCount: 0,
+    }, {
+      netProfitPct: 0,
+      maxDrawdownPct: 0.3199,
+      winRate: 0,
+      totalTrades: 0,
+      totalOpenTrades: 1,
+      openPnl: 0.282686611713497,
+    })).toMatchObject({
+      id: 'bt-open-only',
+      tradeCount: 0,
+      openTradeCount: 1,
+      openPnl: 0.28,
+    })
+  })
+
   it('restores published script code from confirmed assistant code block during hydration', () => {
     const conversation = hydrateConversation({
       id: 'conv-1',
@@ -689,7 +738,7 @@ describe('ai-quant-page-conversation', () => {
     })).toBe(true)
   })
 
-  it('resolves published backtest inputs only from snapshot-bound truth', () => {
+  it('resolves published backtest market inputs only from snapshot-bound truth', () => {
     expect(resolveEffectivePublishedBacktestInputs({
       publishedSnapshotId: 'snapshot-1',
       publishedSnapshotStrategyConfig: {
@@ -698,27 +747,10 @@ describe('ai-quant-page-conversation', () => {
         baseTimeframe: '1h',
         positionPct: 10,
       },
-      publishedSnapshotBacktestConfigDefaults: {
-        initialCash: 15000,
-        leverage: 2,
-        slippageBps: 7,
-        feeBps: 3,
-        priceSource: 'mid',
-        allowPartial: false,
-      },
     })).toEqual({
       exchange: 'okx',
       symbol: 'BTC-USDT-SWAP',
       baseTimeframe: '1h',
-      executionConfig: {
-        initialCash: 15000,
-        leverage: 2,
-        slippageBps: 7,
-        feeBps: 3,
-        priceSource: 'mid',
-        allowPartial: false,
-        allowPartialValid: true,
-      },
     })
   })
 

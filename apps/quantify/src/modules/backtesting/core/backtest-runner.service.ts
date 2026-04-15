@@ -12,6 +12,7 @@ import { ErrorCode } from '@ai/shared'
 import { buildMultiLegStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 import { Injectable, HttpStatus } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { normalizeExactCode, toSymbolCode } from '@/modules/market-data/utils/market-symbol-code.util'
 import { strategyDecisionToDeltaQty, validateStrategyDecision } from '@/modules/strategy-runtime/strategy-protocol.util'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TheoreticalExecutionModel } from '../execution/theoretical-execution.model'
@@ -56,6 +57,37 @@ interface PositionRuntimeState {
   lowestPriceSinceEntry: number
 }
 
+function buildRuntimeSymbolSet(input: BacktestRunInput): Set<string> {
+  const marketType = typeof input.strategy?.params?.marketType === 'string'
+    ? input.strategy.params.marketType.trim().toLowerCase()
+    : ''
+
+  return new Set(
+    input.symbols.flatMap((symbol) => {
+      const exact = normalizeExactCode(symbol)
+      const raw = exact.split(':')[0] ?? exact
+      const variants = new Set<string>([exact])
+
+      if (exact.includes(':')) {
+        if (exact.endsWith(':SPOT')) {
+          variants.add(raw)
+        }
+      }
+      else {
+        variants.add(raw)
+        if (marketType === 'perp' || marketType === 'perpetual' || marketType === 'future') {
+          variants.add(toSymbolCode(raw, 'PERP'))
+        }
+        else if (marketType === 'spot') {
+          variants.add(toSymbolCode(raw, 'SPOT'))
+        }
+      }
+
+      return [...variants]
+    }),
+  )
+}
+
 @Injectable()
 export class BacktestRunnerService {
   constructor(
@@ -69,7 +101,7 @@ export class BacktestRunnerService {
   async run(input: BacktestRunInput): Promise<BacktestReport> {
     const ledger = this.ledgerFactory.create(input.initialCash)
     const reporter = this.reporterService.create()
-    const symbolSet = new Set(input.symbols)
+    const symbolSet = buildRuntimeSymbolSet(input)
 
     const baseBars = input.bars
       .filter(bar =>
@@ -230,12 +262,18 @@ export class BacktestRunnerService {
       avgEntryPrice: pos.avgEntryPrice,
       unrealizedPnl: pos.unrealizedPnl,
     }))
+    const openPnl = openPositions.reduce((sum, position) => sum + position.unrealizedPnl, 0)
 
     this.stateEngine.reset()
     this.riskEvaluator.reset()
 
     return {
       ...report,
+      summary: {
+        ...report.summary,
+        totalOpenTrades: openPositions.length,
+        openPnl,
+      },
       openPositions,
       pendingSignals,
     }

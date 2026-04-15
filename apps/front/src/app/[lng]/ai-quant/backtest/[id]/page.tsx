@@ -82,7 +82,7 @@ export default async function AiQuantBacktestDetailPage({
   const job = await fetchBacktestJobServer(resolved.id)
   const partialCoverageNotice = resolvePartialCoverageNotice(job?.inputSummary)
   const metrics = job?.resultSummary
-    ? {
+      ? {
         maxDrawdownPct: Number(job.resultSummary.maxDrawdownPct.toFixed(2)),
         totalReturnPct: Number(job.resultSummary.netProfitPct.toFixed(2)),
         winRatePct: Number(
@@ -92,6 +92,12 @@ export default async function AiQuantBacktestDetailPage({
           ).toFixed(2),
         ),
         tradeCount: job.resultSummary.totalTrades,
+        openTradeCount: typeof job.resultSummary.totalOpenTrades === 'number'
+          ? job.resultSummary.totalOpenTrades
+          : undefined,
+        openPnl: typeof job.resultSummary.openPnl === 'number'
+          ? Number(job.resultSummary.openPnl.toFixed(2))
+          : undefined,
       }
     : null
 

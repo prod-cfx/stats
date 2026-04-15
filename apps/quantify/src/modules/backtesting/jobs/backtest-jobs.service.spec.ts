@@ -256,6 +256,49 @@ describe('backtestJobsService', () => {
     })
   })
 
+  it('includes open-trade summary when the backtest ends with open positions', async () => {
+    const runner = {
+      run: jest.fn().mockResolvedValue({
+        summary: {
+          netProfit: 0,
+          netProfitPct: 0,
+          maxDrawdownPct: 3.2,
+          winRate: 0,
+          profitFactor: 0,
+          totalTrades: 0,
+        },
+        equityCurve: [{ ts: 1, equity: 10000 }],
+        trades: [],
+        markers: [{ id: 'm1', symbol: 'BTCUSDT', ts: 1, price: 100, kind: 'entry_long', tradeId: 't1' }],
+        bySymbol: [],
+        openPositions: [
+          {
+            symbol: 'BTCUSDT',
+            qty: 1,
+            avgEntryPrice: 100,
+            unrealizedPnl: 12.34,
+          },
+        ],
+      }),
+    }
+    const marketData = createMarketDataMock()
+    const prisma = createPrismaMock()
+    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+
+    const created = await service.createJob(createInput(), OWNER_USER_ID)
+    await flushMicrotasks()
+
+    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toMatchObject({
+      id: created.id,
+      status: 'succeeded',
+      resultSummary: {
+        totalTrades: 0,
+        totalOpenTrades: 1,
+        openPnl: 12.34,
+      },
+    })
+  })
+
   it('stores failed result state in prisma when runner throws', async () => {
     const runner = {
       run: jest.fn().mockRejectedValue(new Error('boom')),

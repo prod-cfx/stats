@@ -71,6 +71,8 @@ export interface BacktestJobResult {
     winRate: number
     profitFactor: number
     totalTrades: number
+    totalOpenTrades?: number
+    openPnl?: number
   }
   equityCurve?: Array<{
     ts: number
@@ -90,6 +92,12 @@ export interface BacktestJobResult {
     returnPct: number
     reasonOpen?: string
     reasonClose?: string
+  }>
+  openPositions?: Array<{
+    symbol: string
+    qty: number
+    avgEntryPrice: number
+    unrealizedPnl: number
   }>
 }
 

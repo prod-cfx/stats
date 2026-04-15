@@ -55,7 +55,11 @@ jest.mock('@/components/ai-quant/backtest-payload-builder', () => ({
     }
   },
   buildBacktestPayload: (...args: unknown[]) => mockBuildBacktestPayload(...args),
-  isBacktestPayloadBuilderError: () => false,
+  isBacktestPayloadBuilderError: (value: unknown) => (
+    Boolean(value)
+    && typeof value === 'object'
+    && (value as { name?: string }).name === 'BacktestPayloadBuilderError'
+  ),
 }))
 
 jest.mock('@/components/ai-quant/backtest-symbol-support-client', () => ({
@@ -102,12 +106,12 @@ describe('StrategyDetailPageClient', () => {
       paramSchema: null,
       paramValues: {
         backtestRangePreset: '7D',
-        backtestInitialCash: 20000,
-        backtestLeverage: 2,
-        backtestSlippageBps: 8,
-        backtestFeeBps: 3,
-        backtestPriceSource: 'close',
-        backtestAllowPartial: true,
+        backtestInitialCash: 32000,
+        backtestLeverage: 4,
+        backtestSlippageBps: 13,
+        backtestFeeBps: 7,
+        backtestPriceSource: 'mid',
+        backtestAllowPartial: false,
       },
       schemaVersion: null,
       supportsDynamicParams: false,
@@ -198,6 +202,13 @@ describe('StrategyDetailPageClient', () => {
         symbol: 'BTCUSDT',
         baseTimeframe: '3m',
         stateTimeframes: ['15m'],
+        initialCash: 32000,
+        leverage: 4,
+        execution: {
+          slippageBps: 13,
+          feeBps: 7,
+          priceSource: 'mid',
+        },
         strategy: {
           id: 'inst-1',
           publishedSnapshotId: 'snapshot-1',
@@ -232,6 +243,12 @@ describe('StrategyDetailPageClient', () => {
       paramSchema: null,
       paramValues: {
         backtestRangePreset: '7D',
+        backtestInitialCash: 20000,
+        backtestLeverage: 2,
+        backtestSlippageBps: 8,
+        backtestFeeBps: 3,
+        backtestPriceSource: 'close',
+        backtestAllowPartial: false,
       },
       schemaVersion: null,
       supportsDynamicParams: false,

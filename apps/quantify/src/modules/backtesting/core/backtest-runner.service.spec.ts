@@ -45,6 +45,59 @@ describe('backtestRunnerService', () => {
     expect(Array.isArray(report.equityCurve)).toBe(true)
   })
 
+  it('should run perp bars when request symbols are raw spot-style codes but strategy marketType is perp', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '3m',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-perp',
+        params: { marketType: 'perp' },
+        fn: () => ({ type: 'NOOP' }),
+      },
+      dataRange: { fromTs: 1, toTs: 1 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT:PERP', timeframe: '3m', closeTime: 1, close: 100 }),
+      ],
+    })
+
+    expect(report.equityCurve).toEqual([{ ts: 1, equity: 1000 }])
+  })
+
+  it('should not match raw spot-style bars when the request symbol is explicitly perp', async () => {
+    const runner = createRunner()
+    const symbolsSeen: string[] = []
+
+    await runner.run({
+      symbols: ['BTCUSDT:PERP'],
+      baseTimeframe: '3m',
+      stateTimeframes: [],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-perp-exact',
+        params: { marketType: 'perp' },
+        fn: (ctx) => {
+          symbolsSeen.push(ctx.symbol)
+          return { type: 'NOOP' }
+        },
+      },
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '3m', closeTime: 1, close: 99 }),
+        createBar({ symbol: 'BTCUSDT:PERP', timeframe: '3m', closeTime: 2, close: 100 }),
+      ],
+    })
+
+    expect(symbolsSeen).toEqual(['BTCUSDT:PERP'])
+  })
+
   it('should only run base bars for requested symbols', async () => {
     const runner = createRunner()
     const symbolsSeen: string[] = []

@@ -373,6 +373,12 @@ function normalizeBacktestConfigDefaults(
         : candidate.allowPartial === 'false'
           ? false
           : null
+  const stateTimeframes = Array.isArray(candidate.stateTimeframes)
+    ? candidate.stateTimeframes
+        .filter((item): item is string => typeof item === 'string')
+        .map(item => item.trim())
+        .filter(item => item.length > 0)
+    : null
   if (!Number.isFinite(initialCash) || !Number.isFinite(leverage) || !priceSource) {
     return null
   }
@@ -383,6 +389,7 @@ function normalizeBacktestConfigDefaults(
     feeBps,
     priceSource,
     allowPartial,
+    ...(stateTimeframes ? { stateTimeframes } : {}),
   }
 }
 
@@ -522,25 +529,21 @@ export interface EffectivePublishedBacktestInputs {
   exchange: 'binance' | 'okx' | 'hyperliquid'
   symbol: string
   baseTimeframe: string
-  executionConfig: ResolvedBacktestExecutionConfig
 }
 
 export function resolveEffectivePublishedBacktestInputs(input: {
   publishedSnapshotId: string | null
   publishedSnapshotStrategyConfig: AccountAiQuantPublishedStrategyConfig | null
-  publishedSnapshotBacktestConfigDefaults: AccountAiQuantBacktestConfigDefaults | null
   publishedSnapshotCompatibilityMetadata?: AccountAiQuantSnapshotCompatibilityMetadata | null
 }): EffectivePublishedBacktestInputs | null {
   const {
     publishedSnapshotId,
     publishedSnapshotStrategyConfig,
-    publishedSnapshotBacktestConfigDefaults,
     publishedSnapshotCompatibilityMetadata,
   } = input
   if (
     !publishedSnapshotId
     || !publishedSnapshotStrategyConfig
-    || !publishedSnapshotBacktestConfigDefaults
     || publishedSnapshotCompatibilityMetadata?.requiresRepublishForBacktest
   ) {
     return null
@@ -571,15 +574,6 @@ export function resolveEffectivePublishedBacktestInputs(input: {
     exchange,
     symbol,
     baseTimeframe,
-    executionConfig: {
-      initialCash: publishedSnapshotBacktestConfigDefaults.initialCash ?? Number.NaN,
-      leverage: publishedSnapshotBacktestConfigDefaults.leverage ?? Number.NaN,
-      slippageBps: publishedSnapshotBacktestConfigDefaults.slippageBps ?? Number.NaN,
-      feeBps: publishedSnapshotBacktestConfigDefaults.feeBps ?? Number.NaN,
-      priceSource: publishedSnapshotBacktestConfigDefaults.priceSource ?? '',
-      allowPartial: publishedSnapshotBacktestConfigDefaults.allowPartial === true,
-      allowPartialValid: typeof publishedSnapshotBacktestConfigDefaults.allowPartial === 'boolean',
-    },
   }
 }
 
@@ -953,7 +947,7 @@ export function resolveBacktestRangeInput(values: Record<string, unknown>): Back
 }
 
 export function shouldInvalidatePublicationForParamChange(key: string): boolean {
-  return !NON_STRATEGY_PARAM_KEYS.has(key)
+  return !NON_STRATEGY_PARAM_KEYS.has(key) && !BACKTEST_EXECUTION_PARAM_KEY_SET.has(key)
 }
 
 function stripBacktestExecutionParamValues(
@@ -1027,6 +1021,8 @@ export function buildBacktestSummaryResult(
     maxDrawdownPct: number
     winRate: number
     totalTrades: number
+    totalOpenTrades?: number
+    openPnl?: number
   },
 ): BacktestResult {
   const winRatePct = summary.winRate <= 1 ? summary.winRate * 100 : summary.winRate
@@ -1036,7 +1032,19 @@ export function buildBacktestSummaryResult(
     totalReturnPct: Number(summary.netProfitPct.toFixed(2)),
     winRatePct: Number(winRatePct.toFixed(2)),
     tradeCount: summary.totalTrades,
+    openTradeCount: typeof summary.totalOpenTrades === 'number' ? summary.totalOpenTrades : previous.openTradeCount,
+    openPnl: typeof summary.openPnl === 'number' ? Number(summary.openPnl.toFixed(2)) : previous.openPnl,
   }
+}
+
+export function isOpenOnlyBacktestResult(result: BacktestResult | null | undefined): boolean {
+  if (!result) return false
+  return result.tradeCount === 0 && (result.openTradeCount ?? 0) > 0
+}
+
+export function isDeployableBacktestResult(result: BacktestResult | null | undefined): boolean {
+  if (!result) return false
+  return result.tradeCount > 0 && result.maxDrawdownPct <= 20
 }
 
 export function mapExchangeStatusesToDeployAccounts(

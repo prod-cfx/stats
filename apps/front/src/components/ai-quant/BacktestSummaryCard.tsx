@@ -1,7 +1,7 @@
 'use client'
 
-import { formatBacktestRange } from '@/components/ai-quant/backtest-date'
 import { useTranslation } from 'react-i18next'
+import { formatBacktestRange } from '@/components/ai-quant/backtest-date'
 
 interface BacktestSummaryCardProps {
   result: BacktestResult
@@ -18,6 +18,8 @@ export interface BacktestResult {
   totalReturnPct: number
   winRatePct: number
   tradeCount: number
+  openTradeCount?: number
+  openPnl?: number
   symbol?: string
   startAt?: string
   endAt?: string
@@ -35,6 +37,8 @@ export function BacktestSummaryCard({
   const backtestContext = result.symbol && result.startAt && result.endAt
     ? `${result.symbol} · ${formatBacktestRange(result.startAt, result.endAt)}`
     : null
+  const hasOpenOnlyTrades = result.tradeCount === 0 && (result.openTradeCount ?? 0) > 0
+  const openPnlValue = typeof result.openPnl === 'number' ? formatSignedPnl(result.openPnl) : null
 
   return (
     <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
@@ -57,16 +61,26 @@ export function BacktestSummaryCard({
         </button>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-4">
+      <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Metric title={t('aiQuant.maxDrawdown')} value={`-${result.maxDrawdownPct}%`} type="loss" />
-        <Metric title={t('aiQuant.totalReturn')} value={`${result.totalReturnPct > 0 ? '+' : ''}${result.totalReturnPct}%`} type={result.totalReturnPct > 0 ? 'profit' : 'loss'} />
-        <Metric title={t('aiQuant.winRate')} value={`${result.winRatePct}%`} type="neutral" />
-        <Metric title={t('aiQuant.tradeCount')} value={`${result.tradeCount}`} type="neutral" />
+        <Metric title={t('aiQuant.closedReturn')} value={`${result.totalReturnPct > 0 ? '+' : ''}${result.totalReturnPct}%`} type={result.totalReturnPct > 0 ? 'profit' : 'loss'} />
+        <Metric title={t('aiQuant.closedWinRate')} value={`${result.winRatePct}%`} type="neutral" />
+        <Metric title={t('aiQuant.closedTradeCount')} value={`${result.tradeCount}`} type="neutral" />
+        {typeof result.openTradeCount === 'number' && (
+          <Metric title={t('aiQuant.openTradeCount')} value={`${result.openTradeCount}`} type="neutral" />
+        )}
+        {openPnlValue && (
+          <Metric title={t('aiQuant.openPnl')} value={openPnlValue} type={result.openPnl && result.openPnl > 0 ? 'profit' : result.openPnl && result.openPnl < 0 ? 'loss' : 'neutral'} />
+        )}
       </div>
 
       {!canDeploy && (
         <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-500">
-          {t('aiQuant.messages.backtestDrawdownFail')}
+          {hasOpenOnlyTrades
+            ? t('aiQuant.messages.backtestOpenTrades', { count: result.openTradeCount ?? 0 })
+            : result.tradeCount === 0
+              ? t('aiQuant.messages.backtestNoTrades')
+              : t('aiQuant.messages.backtestDrawdownFail')}
         </div>
       )}
 
@@ -102,4 +116,12 @@ function Metric({ title, value, type }: { title: string, value: string, type?: '
       <p className={`mt-1 text-lg font-semibold ${colorClass}`}>{value}</p>
     </div>
   )
+}
+
+function formatSignedPnl(value: number): string {
+  const formatted = value.toFixed(2)
+  if (value > 0) {
+    return `+${formatted}`
+  }
+  return formatted
 }

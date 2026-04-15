@@ -143,4 +143,119 @@ describe('backtest-report-data live mapping', () => {
       },
     )).toBeNull()
   })
+
+  it('preserves open positions for reports that have no closed trades yet', () => {
+    const data = createBacktestReportDataFromLive(
+      'btjob-open-only',
+      {
+        maxDrawdownPct: 0.32,
+        totalReturnPct: 0,
+        winRatePct: 0,
+        tradeCount: 0,
+        openTradeCount: 1,
+        openPnl: 2.39,
+      },
+      {
+        equityCurve: [
+          { ts: Date.parse('2026-04-01T00:00:00.000Z'), equity: 1000 },
+          { ts: Date.parse('2026-04-02T00:00:00.000Z'), equity: 1002.39 },
+        ],
+        trades: [],
+        openPositions: [
+          {
+            symbol: 'BTCUSDT:PERP',
+            qty: 0.0013702196462092872,
+            avgEntryPrice: 72238.52313,
+            unrealizedPnl: 2.3882611501623687,
+          },
+        ],
+      },
+    )
+
+    expect(data).not.toBeNull()
+    expect(data?.openPositions).toEqual([
+      {
+        symbol: 'BTCUSDT:PERP',
+        qty: 0.00137022,
+        avgEntryPrice: 72238.52,
+        unrealizedPnl: 2.39,
+        isProfit: true,
+      },
+    ])
+  })
+
+  it('returns null when open-position summary conflicts with detailed open positions', () => {
+    expect(createBacktestReportDataFromLive(
+      'btjob-open-mismatch',
+      {
+        maxDrawdownPct: 0.32,
+        totalReturnPct: 0,
+        winRatePct: 0,
+        tradeCount: 0,
+        openTradeCount: 1,
+        openPnl: 2.39,
+      },
+      {
+        equityCurve: [
+          { ts: Date.parse('2026-04-01T00:00:00.000Z'), equity: 1000 },
+          { ts: Date.parse('2026-04-02T00:00:00.000Z'), equity: 1002.39 },
+        ],
+        trades: [],
+        openPositions: [],
+      },
+    )).toBeNull()
+  })
+
+  it('accepts open pnl consistency based on raw position totals before display rounding', () => {
+    const data = createBacktestReportDataFromLive(
+      'btjob-open-rounding',
+      {
+        maxDrawdownPct: 0.12,
+        totalReturnPct: 0,
+        winRatePct: 0,
+        tradeCount: 0,
+        openTradeCount: 2,
+        openPnl: 0.02,
+      },
+      {
+        equityCurve: [
+          { ts: Date.parse('2026-04-01T00:00:00.000Z'), equity: 1000 },
+          { ts: Date.parse('2026-04-02T00:00:00.000Z'), equity: 1000.02 },
+        ],
+        trades: [],
+        openPositions: [
+          {
+            symbol: 'BTCUSDT:PERP',
+            qty: 1,
+            avgEntryPrice: 100,
+            unrealizedPnl: 0.014,
+          },
+          {
+            symbol: 'ETHUSDT:PERP',
+            qty: 1,
+            avgEntryPrice: 100,
+            unrealizedPnl: 0.005,
+          },
+        ],
+      },
+    )
+
+    expect(data).not.toBeNull()
+    expect(data?.openPositions).toEqual([
+      {
+        symbol: 'BTCUSDT:PERP',
+        qty: 1,
+        avgEntryPrice: 100,
+        unrealizedPnl: 0.01,
+        isProfit: true,
+      },
+      {
+        symbol: 'ETHUSDT:PERP',
+        qty: 1,
+        avgEntryPrice: 100,
+        unrealizedPnl: 0.01,
+        isProfit: true,
+      },
+    ])
+  })
 })

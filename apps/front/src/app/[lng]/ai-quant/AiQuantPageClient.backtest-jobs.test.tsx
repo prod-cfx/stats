@@ -1,8 +1,10 @@
 /** @jest-environment jsdom */
 
+import type { ConversationState } from './ai-quant-page-conversation'
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
+import { runAiQuantBacktest } from './ai-quant-page-backtest'
 import { AiQuantPageClient } from './AiQuantPageClient'
 
 const mockPush = jest.fn()
@@ -351,6 +353,78 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(summary?.textContent).toContain('2026-03-24T00:00:00.000Z')
   })
 
+  it('treats zero-trade backtests as non-deployable and avoids the success message', async () => {
+    mockGetBacktestJobResult.mockResolvedValueOnce({
+      summary: {
+        netProfit: 0,
+        netProfitPct: 0,
+        maxDrawdownPct: 0,
+        winRate: 0,
+        profitFactor: 0,
+        totalTrades: 0,
+      },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      jest.advanceTimersByTime(1500)
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestNoTrades')
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).not.toContain('aiQuant.messages.backtestSuccess')
+  })
+
+  it('surfaces open-trade messaging when the backtest ends with an unclosed position', async () => {
+    mockGetBacktestJobResult.mockResolvedValueOnce({
+      summary: {
+        netProfit: 0,
+        netProfitPct: 0,
+        maxDrawdownPct: 0.3199417903674797,
+        winRate: 0,
+        profitFactor: 0,
+        totalTrades: 0,
+        totalOpenTrades: 1,
+        openPnl: 0.282686611713497,
+      },
+      openPositions: [
+        {
+          symbol: 'BTCUSDT:PERP',
+          qty: 0.00017167096767048035,
+          avgEntryPrice: 72238.52313,
+          unrealizedPnl: 0.282686611713497,
+        },
+      ],
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      jest.advanceTimersByTime(1500)
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestOpenTrades')
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).not.toContain('aiQuant.messages.backtestNoTrades')
+  })
+
   it('passes allowPartial to the backtest payload builder when submitting a job', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
     seeded[0].paramValues = {
@@ -376,6 +450,29 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
     expect(mockBuildBacktestPayload).toHaveBeenCalledWith(expect.objectContaining({
       allowPartial: true,
+    }))
+  })
+
+  it('passes published snapshot state timeframes to the backtest payload builder', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    seeded[0].publishedSnapshotBacktestConfigDefaults = {
+      ...seeded[0].publishedSnapshotBacktestConfigDefaults,
+      stateTimeframes: ['15m', '1h'],
+    }
+    localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(seeded))
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(expect.objectContaining({
+      stateTimeframes: ['15m', '1h'],
     }))
   })
 
@@ -744,17 +841,17 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain('missing_explicit_execution_config')
   })
 
-  it('preserves published snapshot default backtest params across hydration even without explicit flag', async () => {
+  it('uses AI-Quant page execution params instead of snapshot defaults for published snapshot backtests', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
     seeded[0].backtestExecutionConfigExplicit = false
     seeded[0].paramValues = {
       ...seeded[0].paramValues,
-      backtestInitialCash: 10000,
-      backtestLeverage: 1,
-      backtestSlippageBps: 10,
-      backtestFeeBps: 5,
-      backtestPriceSource: 'close',
-      backtestAllowPartial: true,
+      backtestInitialCash: 32000,
+      backtestLeverage: 4,
+      backtestSlippageBps: 9,
+      backtestFeeBps: 6,
+      backtestPriceSource: 'mid',
+      backtestAllowPartial: false,
     }
     seeded[0].publishedSnapshotBacktestConfigDefaults = {
       initialCash: 10000,
@@ -800,16 +897,133 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
     expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
     expect(mockBuildBacktestPayload).toHaveBeenCalledWith(expect.objectContaining({
-      initialCash: 10000,
-      leverage: 1,
+      initialCash: 32000,
+      leverage: 4,
       execution: expect.objectContaining({
-        slippageBps: 10,
-        feeBps: 5,
-        priceSource: 'close',
+        slippageBps: 9,
+        feeBps: 6,
+        priceSource: 'mid',
       }),
       allowPartial: true,
     }))
     expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain('missing_explicit_execution_config')
+  })
+
+  it('allows published snapshot backtest without snapshot defaults when AI-Quant page execution params are valid', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    seeded[0].backtestExecutionConfigExplicit = false
+    seeded[0].paramValues = {
+      ...seeded[0].paramValues,
+      backtestInitialCash: 18000,
+      backtestLeverage: 2,
+      backtestSlippageBps: 3,
+      backtestFeeBps: 1,
+      backtestPriceSource: 'open',
+      backtestAllowPartial: false,
+    }
+    seeded[0].publishedSnapshotBacktestConfigDefaults = null
+    seeded[0].publishedSnapshotCompatibilityMetadata = {
+      isLegacySnapshot: false,
+      missingBacktestConfigDefaults: true,
+      missingDeploymentExecutionDefaults: false,
+      missingDeploymentExecutionConstraints: false,
+      requiresRepublishForBacktest: false,
+      requiresRepublishForDeploy: false,
+    }
+    localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(seeded))
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(expect.objectContaining({
+      stateTimeframes: ['15m'],
+      initialCash: 18000,
+      leverage: 2,
+      execution: expect.objectContaining({
+        slippageBps: 3,
+        feeBps: 1,
+        priceSource: 'open',
+      }),
+    }))
+    expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain('重新发布')
+  })
+
+  it('reports exact invalid execution fields even when explicit flag is false', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    const activeConversation = {
+      ...seeded[0],
+      backtestExecutionConfigExplicit: false,
+      publishedScriptGraphVersion: 1,
+      publishedScriptCode: 'return { ok: true }',
+      paramValues: {
+        ...seeded[0].paramValues,
+        backtestInitialCash: 20000,
+        backtestLeverage: 2,
+        backtestSlippageBps: 3,
+        backtestFeeBps: '',
+        backtestPriceSource: 'open',
+        backtestAllowPartial: false,
+      },
+    } as ConversationState
+
+    mockBuildBacktestPayload.mockImplementation((input: any) => {
+      if (
+        !Number.isFinite(input.initialCash)
+        || !Number.isFinite(input.leverage)
+        || !Number.isFinite(input.execution?.slippageBps)
+        || !Number.isFinite(input.execution?.feeBps)
+        || (input.execution?.priceSource !== 'open' && input.execution?.priceSource !== 'close' && input.execution?.priceSource !== 'mid')
+      ) {
+        const error = new Error('invalid_execution_config')
+        ;(error as Error & { __builderError: boolean; code: string }).__builderError = true
+        ;(error as Error & { __builderError: boolean; code: string }).code = 'invalid_execution_config'
+        throw error
+      }
+      return {
+        ...defaultPayload(),
+        initialCash: input.initialCash,
+        leverage: input.leverage,
+        execution: { ...input.execution },
+        allowPartial: input.allowPartial,
+      }
+    })
+
+    let currentConversation = activeConversation
+
+    await runAiQuantBacktest({
+      activeConversation,
+      activeConversationIdRef: { current: activeConversation.id },
+      backtestCapabilities: {
+        allowedSymbols: ['BTCUSDT'],
+        allowedBaseTimeframes: ['15m'],
+      },
+      backtestCapabilityState: 'ready',
+      backtestRunMutexRef: { current: new Set<string>() },
+      backtestRunTokenRef: { current: new Map<string, number>() },
+      graphConfirmed: true,
+      isMountedRef: { current: true },
+      setConversationBacktestExecutionState: jest.fn(),
+      t: (key: string, options?: Record<string, unknown>) =>
+        key === 'aiQuant.messages.backtestPayloadInvalid' && typeof options?.reason === 'string'
+          ? `${key}:${options.reason}`
+          : key,
+      updateConversationById: (_conversationId, updater) => {
+        currentConversation = updater(currentConversation)
+      },
+    })
+
+    expect(mockCreateBacktestJob).not.toHaveBeenCalled()
+    expect(currentConversation.messages.at(-1)?.content ?? '').toContain('invalid_execution_config')
+    expect(currentConversation.messages.at(-1)?.content ?? '').toContain('手续费')
+    expect(currentConversation.messages.at(-1)?.content ?? '').not.toContain('missing_explicit_execution_config')
   })
 
   it('fails fast when allowPartial is present but invalid', async () => {
@@ -956,6 +1170,61 @@ describe('AiQuantPageClient backtest jobs integration', () => {
         publishedSnapshotId: 'snapshot-1',
       }),
     }))
+  })
+
+  it('uses the published snapshot exchange for symbol support checks', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    const activeConversation = {
+      ...seeded[0],
+      params: {
+        ...seeded[0].params,
+        exchange: 'binance',
+      },
+      paramValues: {
+        ...seeded[0].paramValues,
+        exchange: 'binance',
+      },
+      publishedSnapshotParamValues: {
+        ...seeded[0].publishedSnapshotParamValues,
+        exchange: 'binance',
+      },
+      publishedSnapshotStrategyConfig: {
+        ...seeded[0].publishedSnapshotStrategyConfig,
+        exchange: 'okx',
+      },
+      publishedScriptGraphVersion: 1,
+      publishedScriptCode: 'return { ok: true }',
+    } as ConversationState
+
+    mockCheckBacktestSymbolSupport.mockResolvedValueOnce({
+      status: 'not_supported',
+    })
+
+    let currentConversation = activeConversation
+
+    await runAiQuantBacktest({
+      activeConversation,
+      activeConversationIdRef: { current: activeConversation.id },
+      backtestCapabilities: {
+        allowedSymbols: ['BTCUSDT'],
+        allowedBaseTimeframes: ['15m'],
+      },
+      backtestCapabilityState: 'ready',
+      backtestRunMutexRef: { current: new Set<string>() },
+      backtestRunTokenRef: { current: new Map<string, number>() },
+      graphConfirmed: true,
+      isMountedRef: { current: true },
+      setConversationBacktestExecutionState: jest.fn(),
+      t: (key: string) => key,
+      updateConversationById: (_conversationId, updater) => {
+        currentConversation = updater(currentConversation)
+      },
+    })
+
+    expect(mockCheckBacktestSymbolSupport).toHaveBeenCalledWith({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+    })
   })
 
   it('unmount while running does not emit react unmount update warning', async () => {
