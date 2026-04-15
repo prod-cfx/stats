@@ -47,8 +47,7 @@ const BACKTEST_PRICE_SOURCE_OPTIONS = ['open', 'close', 'mid'] as const
 interface BacktestSettingField {
   key: string
   labelKey: string
-  type: 'number' | 'select' | 'radio'
-  helperKey?: string
+  type: 'number' | 'select'
   placeholderKey?: string
   errorKey?: string
   min?: number
@@ -62,8 +61,8 @@ const BACKTEST_SETTING_FIELDS: BacktestSettingField[] = [
     key: 'backtestInitialCash',
     labelKey: 'aiQuant.backtestInitialCash',
     type: 'number',
-    helperKey: 'aiQuant.backtestHelper.positive',
     placeholderKey: 'aiQuant.backtestPlaceholder.initialCash',
+    errorKey: 'aiQuant.backtestError.positive',
     min: 0.01,
     step: 0.01,
     inputMode: 'decimal',
@@ -72,8 +71,8 @@ const BACKTEST_SETTING_FIELDS: BacktestSettingField[] = [
     key: 'backtestLeverage',
     labelKey: 'aiQuant.backtestLeverage',
     type: 'number',
-    helperKey: 'aiQuant.backtestHelper.positive',
     placeholderKey: 'aiQuant.backtestPlaceholder.leverage',
+    errorKey: 'aiQuant.backtestError.positiveInteger',
     min: 1,
     step: 1,
     inputMode: 'numeric',
@@ -82,8 +81,8 @@ const BACKTEST_SETTING_FIELDS: BacktestSettingField[] = [
     key: 'backtestSlippageBps',
     labelKey: 'aiQuant.backtestSlippageBps',
     type: 'number',
-    helperKey: 'aiQuant.backtestHelper.nonNegative',
     placeholderKey: 'aiQuant.backtestPlaceholder.slippageBps',
+    errorKey: 'aiQuant.backtestError.nonNegative',
     min: 0,
     step: 0.01,
     inputMode: 'decimal',
@@ -92,8 +91,8 @@ const BACKTEST_SETTING_FIELDS: BacktestSettingField[] = [
     key: 'backtestFeeBps',
     labelKey: 'aiQuant.backtestFeeBps',
     type: 'number',
-    helperKey: 'aiQuant.backtestHelper.nonNegative',
     placeholderKey: 'aiQuant.backtestPlaceholder.feeBps',
+    errorKey: 'aiQuant.backtestError.nonNegative',
     min: 0,
     step: 0.01,
     inputMode: 'decimal',
@@ -102,13 +101,15 @@ const BACKTEST_SETTING_FIELDS: BacktestSettingField[] = [
     key: 'backtestPriceSource',
     labelKey: 'aiQuant.backtestPriceSource',
     type: 'select',
+    placeholderKey: 'aiQuant.backtestPlaceholder.priceSource',
     errorKey: 'aiQuant.backtestError.priceSource',
     options: BACKTEST_PRICE_SOURCE_OPTIONS,
   },
   {
     key: 'backtestAllowPartial',
-    labelKey: 'aiQuant.backtestAllowPartialChoice',
-    type: 'radio',
+    labelKey: 'aiQuant.backtestAllowPartial',
+    type: 'select',
+    placeholderKey: 'aiQuant.backtestPlaceholder.allowPartial',
     errorKey: 'aiQuant.backtestError.allowPartial',
     options: ['true', 'false'],
   },
@@ -142,6 +143,13 @@ function parseFiniteNumber(value: unknown): number | null {
   return null
 }
 
+function parsePositiveIntegerDraftValue(rawValue: string): number | undefined | null {
+  if (rawValue.trim() === '') return undefined
+  if (!/^\d+$/.test(rawValue)) return null
+  const parsed = Number(rawValue)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
 function validateBacktestSettings(paramValues: DynamicParamValues): {
   fieldErrors: Record<string, string>
   rangeError: string | null
@@ -154,7 +162,7 @@ function validateBacktestSettings(paramValues: DynamicParamValues): {
   }
 
   const leverage = parseFiniteNumber(paramValues.backtestLeverage)
-  if (leverage === null || leverage <= 0) {
+  if (leverage === null || leverage <= 0 || !Number.isInteger(leverage)) {
     fieldErrors.backtestLeverage = 'aiQuant.messages.positiveNumber'
   }
 
@@ -273,6 +281,12 @@ export function QuantChatPanel({
     () => hasBacktestDraftChanges(paramValues, backtestDraftValues),
     [backtestDraftValues, paramValues],
   )
+  const showRangeError =
+    Boolean(validation.rangeError) &&
+    backtestRangePreset === 'CUSTOM' &&
+    (submittedBacktestSettings ||
+      touchedBacktestFields.backtestStart ||
+      touchedBacktestFields.backtestEnd)
 
   useEffect(() => {
     const el = chatScrollRef.current
@@ -430,6 +444,7 @@ export function QuantChatPanel({
                             fromDateTimeLocalValue(event.target.value),
                           )
                         }}
+                        onBlur={() => touchBacktestField('backtestStart')}
                       />
                     </label>
                     <label className="space-y-1.5">
@@ -446,6 +461,7 @@ export function QuantChatPanel({
                             fromDateTimeLocalValue(event.target.value),
                           )
                         }}
+                        onBlur={() => touchBacktestField('backtestEnd')}
                       />
                     </label>
                   </>
@@ -457,13 +473,8 @@ export function QuantChatPanel({
                   const showError =
                     Boolean(error) &&
                     (submittedBacktestSettings || touchedBacktestFields[field.key])
-                  const helperText = showError
-                    ? t(field.errorKey ?? error!)
-                    : field.helperKey
-                      ? t(field.helperKey)
-                      : null
                   const fieldClassName = `h-9 w-full rounded-lg border bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)] outline-none focus:border-primary ${
-                    showError ? 'border-amber-400' : 'border-[color:var(--cf-border)]'
+                    showError ? 'border-red-500' : 'border-[color:var(--cf-border)]'
                   }`
 
                   return (
@@ -483,53 +494,28 @@ export function QuantChatPanel({
                               : ''
                           }
                           onChange={event =>
-                            updateBacktestDraftValue(field.key, event.target.value)
+                            updateBacktestDraftValue(
+                              field.key,
+                              field.key === 'backtestAllowPartial'
+                                ? event.target.value === 'true'
+                                : event.target.value,
+                            )
                           }
                           onBlur={() => touchBacktestField(field.key)}
                         >
                           <option value="" disabled>
-                            {t('aiQuant.backtestPlaceholder.priceSource')}
+                            {field.placeholderKey ? t(field.placeholderKey) : ''}
                           </option>
                           {field.options.map(option => (
                             <option key={option} value={option}>
-                              {t(`aiQuant.backtestPriceSource.${option}`)}
+                              {field.key === 'backtestAllowPartial'
+                                ? t(
+                                    `aiQuant.backtestAllowPartial.${option === 'true' ? 'enabled' : 'disabled'}`,
+                                  )
+                                : t(`aiQuant.backtestPriceSource.${option}`)}
                             </option>
                           ))}
                         </select>
-                      ) : field.type === 'radio' && field.options ? (
-                        <div
-                          className={`grid grid-cols-2 gap-2 rounded-lg border p-1 ${
-                            showError ? 'border-amber-400' : 'border-[color:var(--cf-border)]'
-                          }`}
-                          onBlur={event => {
-                            if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                              touchBacktestField(field.key)
-                            }
-                          }}
-                        >
-                          {field.options.map(option => {
-                            const checked = value === (option === 'true')
-                            return (
-                              <button
-                                key={option}
-                                type="button"
-                                onClick={() => {
-                                  updateBacktestDraftValue(field.key, option === 'true')
-                                  touchBacktestField(field.key)
-                                }}
-                                className={`rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                                  checked
-                                    ? 'bg-primary text-white'
-                                    : 'bg-[color:var(--cf-surface)] text-[color:var(--cf-text)] hover:bg-[color:var(--cf-surface-active)]'
-                                }`}
-                              >
-                                {t(
-                                  `aiQuant.backtestAllowPartial.${option === 'true' ? 'enabled' : 'disabled'}`,
-                                )}
-                              </button>
-                            )
-                          })}
-                        </div>
                       ) : (
                         <input
                           type="number"
@@ -544,6 +530,12 @@ export function QuantChatPanel({
                               : ''
                           }
                           onChange={event => {
+                            if (field.key === 'backtestLeverage') {
+                              const nextValue = parsePositiveIntegerDraftValue(event.target.value)
+                              if (nextValue === null) return
+                              updateBacktestDraftValue(field.key, nextValue)
+                              return
+                            }
                             updateBacktestDraftValue(
                               field.key,
                               parseDynamicParamInputValue('number', event.target.value),
@@ -552,17 +544,13 @@ export function QuantChatPanel({
                           onBlur={() => touchBacktestField(field.key)}
                         />
                       )}
-                      {helperText && (
-                        <span
-                          className={`text-xs ${showError ? 'text-amber-600' : 'text-[color:var(--cf-muted)]'}`}
-                        >
-                          {helperText}
-                        </span>
+                      {showError && (
+                        <span className="text-xs text-red-500">{t(field.errorKey ?? error!)}</span>
                       )}
                     </label>
                   )
                 })}
-                {validation.rangeError && backtestRangePreset === 'CUSTOM' && (
+                {showRangeError && validation.rangeError && (
                   <p className="text-sm text-red-500 md:col-span-3">{t(validation.rangeError)}</p>
                 )}
                 {hasDraftChanges && (
@@ -587,11 +575,7 @@ export function QuantChatPanel({
                 <button
                   type="button"
                   onClick={handleConfirmBacktestParams}
-                  disabled={
-                    !hasDraftChanges ||
-                    Object.keys(validation.fieldErrors).length > 0 ||
-                    Boolean(validation.rangeError)
-                  }
+                  disabled={!hasDraftChanges}
                   className="bg-primary w-full rounded-lg px-3 py-1.5 text-sm font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
                 >
                   {t('aiQuant.backtestConfirmSettings')}

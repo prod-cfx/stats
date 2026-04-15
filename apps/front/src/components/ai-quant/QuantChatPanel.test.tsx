@@ -206,8 +206,8 @@ describe('QuantChatPanel range settings', () => {
             backtestLeverage: 2,
             backtestSlippageBps: 10,
             backtestFeeBps: 5,
-            backtestPriceSource: 'close',
-            backtestAllowPartial: true,
+            backtestPriceSource: '',
+            backtestAllowPartial: undefined,
           }}
           onParamChange={() => {}}
           onSend={() => {}}
@@ -225,11 +225,11 @@ describe('QuantChatPanel range settings', () => {
     expect(container.textContent).toContain('aiQuant.backtestSlippageBps')
     expect(container.textContent).toContain('aiQuant.backtestFeeBps')
     expect(container.textContent).toContain('aiQuant.backtestPriceSource')
-    expect(container.textContent).toContain('aiQuant.backtestAllowPartialChoice')
+    expect(container.textContent).toContain('aiQuant.backtestAllowPartial')
     expect(container.textContent).toContain('aiQuant.backtestAllowPartial.enabled')
     expect(container.textContent).toContain('aiQuant.backtestAllowPartial.disabled')
-    expect(container.textContent).toContain('aiQuant.backtestHelper.positive')
-    expect(container.textContent).toContain('aiQuant.backtestHelper.nonNegative')
+    expect(container.textContent).not.toContain('aiQuant.backtestError.positive')
+    expect(container.textContent).not.toContain('aiQuant.backtestError.nonNegative')
 
     const numberInputs = container.querySelectorAll('input[type="number"]')
     expect(numberInputs).toHaveLength(4)
@@ -247,10 +247,17 @@ describe('QuantChatPanel range settings', () => {
     expect((numberInputs[1] as HTMLInputElement).placeholder).toBe(
       'aiQuant.backtestPlaceholder.leverage',
     )
+    expect((numberInputs[2] as HTMLInputElement).placeholder).toBe(
+      'aiQuant.backtestPlaceholder.slippageBps',
+    )
+    expect((numberInputs[3] as HTMLInputElement).placeholder).toBe(
+      'aiQuant.backtestPlaceholder.feeBps',
+    )
     expect(container.textContent).toContain('aiQuant.backtestPlaceholder.priceSource')
+    expect(container.textContent).toContain('aiQuant.backtestPlaceholder.allowPartial')
   })
 
-  it('keeps backtest helpers neutral on first open for invalid values', async () => {
+  it('keeps backtest validation hidden on first open for invalid values', async () => {
     await act(async () => {
       root?.render(
         <QuantChatPanel
@@ -276,12 +283,130 @@ describe('QuantChatPanel range settings', () => {
       container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(container.textContent).toContain('aiQuant.backtestHelper.positive')
-    expect(container.textContent).toContain('aiQuant.backtestHelper.nonNegative')
-    expect(container.textContent).not.toContain('aiQuant.messages.positiveNumber')
-    expect(container.textContent).not.toContain('aiQuant.messages.nonNegativeNumber')
+    expect(container.textContent).not.toContain('aiQuant.backtestError.positive')
+    expect(container.textContent).not.toContain('aiQuant.backtestError.nonNegative')
     expect(container.textContent).not.toContain('aiQuant.backtestError.priceSource')
     expect(container.textContent).not.toContain('aiQuant.backtestError.allowPartial')
+  })
+
+  it('does not show custom range error until the range fields are touched', async () => {
+    await act(async () => {
+      root?.render(
+        <QuantChatPanel
+          messages={[{ id: 'm1', role: 'assistant', content: 'hello' }]}
+          paramSchema={null}
+          paramValues={{
+            ...baseParams,
+            backtestRangePreset: 'CUSTOM',
+            backtestStart: '',
+            backtestEnd: '',
+            backtestInitialCash: 10000,
+            backtestLeverage: 2,
+            backtestSlippageBps: 10,
+            backtestFeeBps: 5,
+            backtestPriceSource: 'close',
+            backtestAllowPartial: true,
+          }}
+          onParamChange={() => {}}
+          onSend={() => {}}
+          onRunBacktest={() => {}}
+        />,
+      )
+    })
+
+    await act(async () => {
+      container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(container.textContent).not.toContain('aiQuant.messages.backtestRangeMissing')
+  })
+
+  it('shows field validation after confirm when required values are invalid', async () => {
+    await act(async () => {
+      root?.render(
+        <QuantChatPanel
+          messages={[{ id: 'm1', role: 'assistant', content: 'hello' }]}
+          paramSchema={null}
+          paramValues={{
+            ...baseParams,
+            backtestInitialCash: 10000,
+            backtestLeverage: 2,
+            backtestSlippageBps: 10,
+            backtestFeeBps: 5,
+            backtestPriceSource: 'close',
+            backtestAllowPartial: true,
+          }}
+          onParamChange={() => {}}
+          onSend={() => {}}
+          onRunBacktest={() => {}}
+        />,
+      )
+    })
+
+    await act(async () => {
+      container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    const numberInputs = container.querySelectorAll('input[type="number"]')
+    const selects = container.querySelectorAll('select')
+
+    await act(async () => {
+      triggerInputChange(numberInputs[0] as HTMLInputElement, '0')
+      triggerInputChange(numberInputs[1] as HTMLInputElement, '0')
+      triggerInputChange(numberInputs[2] as HTMLInputElement, '-1')
+      triggerInputChange(numberInputs[3] as HTMLInputElement, '-1')
+      ;(selects[0] as HTMLSelectElement).value = ''
+      selects[0]?.dispatchEvent(new Event('change', { bubbles: true }))
+    })
+
+    const confirmButton = Array.from(container.querySelectorAll('button')).find(btn =>
+      btn.textContent?.includes('aiQuant.backtestConfirmSettings'),
+    )
+    expect(confirmButton).toBeTruthy()
+
+    await act(async () => {
+      confirmButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(container.textContent).toContain('aiQuant.backtestError.positive')
+    expect(container.textContent).toContain('aiQuant.backtestError.nonNegative')
+    expect(container.textContent).toContain('aiQuant.backtestError.priceSource')
+  })
+
+  it('does not accept decimal leverage input in the field', async () => {
+    await act(async () => {
+      root?.render(
+        <QuantChatPanel
+          messages={[{ id: 'm1', role: 'assistant', content: 'hello' }]}
+          paramSchema={null}
+          paramValues={{
+            ...baseParams,
+            backtestInitialCash: 10000,
+            backtestLeverage: 2,
+            backtestSlippageBps: 10,
+            backtestFeeBps: 5,
+            backtestPriceSource: 'close',
+            backtestAllowPartial: true,
+          }}
+          onParamChange={() => {}}
+          onSend={() => {}}
+          onRunBacktest={() => {}}
+        />,
+      )
+    })
+
+    await act(async () => {
+      container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    const numberInputs = container.querySelectorAll('input[type="number"]')
+    const leverageInput = numberInputs[1] as HTMLInputElement
+
+    await act(async () => {
+      triggerInputChange(leverageInput, '1.5')
+    })
+
+    expect(leverageInput.value).toBe('2')
   })
 
   it('edits backtest params locally and only applies them after confirm', async () => {
