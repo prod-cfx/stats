@@ -327,11 +327,17 @@ export class CodegenConversationService {
     const hasStructuredClarificationAnswers = Boolean(
       dto.clarificationAnswers && Object.keys(dto.clarificationAnswers).length > 0,
     )
-    const baseChecklist = this.applyClarificationAnswers(
+    const baseChecklistAfterAnswers = this.applyClarificationAnswers(
       this.readChecklist(session.checklist),
       baseClarificationState,
       dto.clarificationAnswers,
     )
+    const inferredConfirmation = this.withConfirmedInferredDecisionKeys(
+      this.readConstraintPack(session.constraintPack),
+      baseChecklistAfterAnswers,
+      dto.message,
+    )
+    const baseChecklist = inferredConfirmation.checklist
     const clarificationStateAfterAnswers = hasStructuredClarificationAnswers
       ? this.resolveClarificationArtifacts(baseChecklist).clarificationState
       : this.withClarificationSummary(baseClarificationState, baseChecklist)
@@ -340,7 +346,7 @@ export class CodegenConversationService {
       ...this.extractChecklist(dto),
     })
     const preMergedChecklist = this.mergeChecklistSnapshots(baseChecklist, messageChecklist)
-    const constraintPack = this.readConstraintPack(session.constraintPack)
+    const constraintPack = inferredConfirmation.constraintPack
     const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, dto.guideConfig)
     const plan = await this.planConversationByLlm(dto.message, preMergedChecklist, {
       providerCode: this.resolveProviderCode(dto.providerCode),
@@ -356,6 +362,23 @@ export class CodegenConversationService {
           message: dto.message,
           userId: sessionUserId,
         })
+      }
+      if (inferredConfirmation.consumed) {
+        const assistantPrompt = plan.assistantPrompt || '这条消息看起来和策略无关。请描述交易逻辑或修改条件。'
+        const historyAfterConsumedUnrelated = this.appendConversationHistory(
+          constraintPack.conversationHistory ?? [],
+          dto.message,
+          assistantPrompt,
+        )
+        await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
+          status: session.status,
+          checklist: baseChecklist,
+          clarificationState: clarificationStateAfterAnswers,
+          constraintPack: {
+            ...constraintPack,
+            conversationHistory: historyAfterConsumedUnrelated,
+          },
+        }))
       }
       const response = this.finalizeSessionResponse({
         id: session.id,
@@ -419,7 +442,7 @@ export class CodegenConversationService {
       checklist: mergedChecklist,
       clarification,
       compileability,
-      constraintPack,
+      constraintPack: nextConstraintPack,
     })
     const decisionPrompt = decision.kind === 'CONFIRM_INFERRED'
       ? this.clarificationQuestion.buildFromDecision(decision)
@@ -2079,6 +2102,217 @@ export class CodegenConversationService {
     }
 
     return assumptions
+  }
+
+  private withConfirmedInferredDecisionKeys(
+    constraintPack: ConstraintPackSnapshot,
+    checklist: ChecklistPayload,
+    message: string | undefined,
+  ): {
+      checklist: ChecklistPayload
+      constraintPack: ConstraintPackSnapshot
+      consumed: boolean
+    } {
+    const clarification = this.resolveClarificationArtifacts(checklist)
+    const compileability = this.evaluateCanonicalCompileability(this.canonicalSpecBuilder.build(checklist))
+    const decision = this.buildStrategyDecision({
+      checklist,
+      clarification,
+      compileability,
+      constraintPack,
+    })
+
+    if (decision.kind !== 'CONFIRM_INFERRED') {
+      return {
+        checklist,
+        constraintPack,
+        consumed: false,
+      }
+    }
+
+    const explicitResponse = this.consumeExplicitInferredDecisionResponse(
+      checklist,
+      decision.inferredAssumptions.map(item => item.key),
+      message,
+    )
+    const remainingKeys = decision.inferredAssumptions
+      .map(item => item.key)
+      .filter(key => !explicitResponse.overriddenKeys.includes(key))
+    const confirmedKeys = this.isExplicitInferredConfirmationMessage(message)
+      ? remainingKeys
+      : remainingKeys.filter(key => explicitResponse.confirmedKeys.includes(key))
+
+    if (explicitResponse.overriddenKeys.length === 0 && confirmedKeys.length === 0) {
+      return {
+        checklist,
+        constraintPack,
+        consumed: false,
+      }
+    }
+
+    const existingConfirmedKeys = Array.isArray(constraintPack.inferredConfirmation?.confirmedKeys)
+      ? constraintPack.inferredConfirmation.confirmedKeys.filter((item): item is string => typeof item === 'string')
+      : []
+    const existingOverriddenKeys = Array.isArray(constraintPack.inferredConfirmation?.overriddenKeys)
+      ? constraintPack.inferredConfirmation.overriddenKeys.filter((item): item is string => typeof item === 'string')
+      : []
+
+    return {
+      checklist: explicitResponse.checklist,
+      constraintPack: {
+        ...constraintPack,
+        inferredConfirmation: {
+          confirmedKeys: Array.from(new Set([
+            ...existingConfirmedKeys.filter(key => !explicitResponse.overriddenKeys.includes(key)),
+            ...confirmedKeys,
+          ])),
+          overriddenKeys: Array.from(new Set([
+            ...existingOverriddenKeys,
+            ...explicitResponse.overriddenKeys,
+          ])),
+        },
+      },
+      consumed: true,
+    }
+  }
+
+  private consumeExplicitInferredDecisionResponse(
+    checklist: ChecklistPayload,
+    decisionKeys: string[],
+    message: string | undefined,
+  ): {
+      checklist: ChecklistPayload
+      confirmedKeys: string[]
+      overriddenKeys: string[]
+    } {
+    if (!message?.trim()) {
+      return {
+        checklist,
+        confirmedKeys: [],
+        overriddenKeys: [],
+      }
+    }
+
+    const activeKeys = new Set(decisionKeys)
+    const clauses = message
+      .split(/[，。；;\n]/u)
+      .map(clause => clause.trim())
+      .filter(Boolean)
+    const confirmedKeys = new Set<string>()
+    const overriddenKeys = new Set<string>()
+    let nextChecklist = checklist
+
+    for (const clause of clauses) {
+      const clauseTargets = this.resolveInferredDecisionClauseTargets(clause, activeKeys)
+      const basis = this.normalizeBasisClarificationAnswer(clause)
+      if (clauseTargets.length > 0 && basis) {
+        for (const key of clauseTargets) {
+          const currentBasis = key === 'risk.stopLossBasis'
+            ? nextChecklist.riskRules?.stopLossBasis
+            : nextChecklist.riskRules?.takeProfitBasis
+          if (currentBasis === basis) {
+            confirmedKeys.add(key)
+            continue
+          }
+          nextChecklist = this.normalizeChecklist({
+            ...nextChecklist,
+            riskRules: {
+              ...(nextChecklist.riskRules ?? {}),
+              ...(key === 'risk.stopLossBasis'
+                ? { stopLossBasis: basis }
+                : { takeProfitBasis: basis }),
+            },
+          })
+          overriddenKeys.add(key)
+        }
+        continue
+      }
+
+      if (this.isExplicitInferredConfirmationClause(clause)) {
+        const confirmationTargets = clauseTargets.length > 0
+          ? clauseTargets
+          : activeKeys.size === 1
+            ? [Array.from(activeKeys)[0] as string]
+            : []
+
+        if (confirmationTargets.length === 0) {
+          continue
+        }
+
+        for (const key of confirmationTargets) {
+          confirmedKeys.add(key)
+        }
+      }
+    }
+
+    return {
+      checklist: nextChecklist,
+      confirmedKeys: Array.from(confirmedKeys).filter(key => !overriddenKeys.has(key)),
+      overriddenKeys: Array.from(overriddenKeys),
+    }
+  }
+
+  private resolveInferredDecisionClauseTargets(clause: string, activeKeys: ReadonlySet<string>): string[] {
+    const targets: string[] = []
+    if (activeKeys.has('risk.stopLossBasis') && /止损|亏损/u.test(clause)) {
+      targets.push('risk.stopLossBasis')
+    }
+    if (activeKeys.has('risk.takeProfitBasis') && /止盈|盈利|收益率|收益|利润/u.test(clause)) {
+      targets.push('risk.takeProfitBasis')
+    }
+    return targets
+  }
+
+  private isExplicitInferredConfirmationClause(clause: string): boolean {
+    const raw = clause.trim()
+    if (!raw) {
+      return false
+    }
+
+    if (/[？?]/u.test(raw)) {
+      return false
+    }
+
+    const normalized = raw.replace(/[\s，。,．！!？?、；;：:]/gu, '')
+    if (/[吗么嘛吧呢呗]$/u.test(normalized)) {
+      return false
+    }
+
+    if (
+      /(?:不成立|默认不对|默认不行|默认不好|默认不合适|默认不能|默认不要|默认别)/u.test(normalized)
+      || /(?:不是默认|别按默认|不要默认)/u.test(normalized)
+    ) {
+      return false
+    }
+
+    return [
+      /默认值?没问题/u,
+      /按默认(?:值)?(?:来|走)?$/u,
+      /默认即可$/u,
+      /就按这个默认/u,
+      /就按默认/u,
+    ].some(pattern => pattern.test(normalized))
+  }
+
+  private isExplicitInferredConfirmationMessage(message: string | undefined): boolean {
+    const normalized = message?.trim().replace(/[\s，。,．！!？?、；;：:]/gu, '')
+    if (!normalized) {
+      return false
+    }
+
+    return new Set([
+      '这个是对的',
+      '这是对的',
+      '对的继续',
+      '这个推断是对的',
+      '这些推断是对的',
+      '这些推断成立',
+      '这些成立继续',
+      '推断成立',
+      '就按这个来',
+      '这个默认是对的',
+      '这些默认是对的',
+    ]).has(normalized)
   }
 
   private inferChecklistFromMessage(message?: string): ChecklistPayload {

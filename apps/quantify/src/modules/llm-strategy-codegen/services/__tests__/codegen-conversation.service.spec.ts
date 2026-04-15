@@ -2137,6 +2137,361 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('risk.takeProfitBasis')
   })
 
+  it('records confirmed inferred risk basis keys when the user explicitly confirms the current inference prompt', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-confirm-inferred-risk-basis',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: completeChecklist({
+        entryRules: ['短均线上穿长均线（金叉）时做多'],
+        exitRules: ['短均线下穿长均线（死叉）时平多'],
+        riskRules: {
+          _inferredAssumptions: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+        },
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+      }),
+    })
+
+    const result = await service.continueSession('s-confirm-inferred-risk-basis', {
+      userId: 'u1',
+      message: '这个是对的',
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.assistantPrompt).not.toContain('请确认这些推断是否成立')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-confirm-inferred-risk-basis',
+      expect.objectContaining({
+        constraintPack: expect.objectContaining({
+          inferredConfirmation: expect.objectContaining({
+            confirmedKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+          }),
+        }),
+      }),
+    )
+  })
+
+  it('persists confirmed inferred risk basis keys even when planner marks the explicit confirmation reply unrelated', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-confirm-inferred-risk-basis-unrelated',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: completeChecklist({
+        entryRules: ['短均线上穿长均线（金叉）时做多'],
+        exitRules: ['短均线下穿长均线（死叉）时平多'],
+        riskRules: {
+          _inferredAssumptions: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+        },
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-confirm-inferred-risk-basis-unrelated', {
+      userId: 'u1',
+      message: '这个是对的',
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).not.toContain('请确认这些推断是否成立')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-confirm-inferred-risk-basis-unrelated',
+      expect.objectContaining({
+        constraintPack: expect.objectContaining({
+          conversationHistory: expect.arrayContaining([
+            'U: 这个是对的',
+            'A: 这条消息和策略无关，请继续描述交易逻辑。',
+          ]),
+          inferredConfirmation: expect.objectContaining({
+            confirmedKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+          }),
+        }),
+      }),
+    )
+  })
+
+  it.each(['对的继续', '就按这个来', '这些成立，继续'])(
+    'records confirmed inferred risk basis keys for safe explicit confirmation variant %s',
+    async (message) => {
+      mockRepo.findById.mockResolvedValue({
+        id: 's-confirm-inferred-risk-basis-variant',
+        userId: 'u1',
+        status: 'DRAFTING',
+        checklist: completeChecklist({
+          entryRules: ['短均线上穿长均线（金叉）时做多'],
+          exitRules: ['短均线下穿长均线（死叉）时平多'],
+          riskRules: {
+            _inferredAssumptions: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+          },
+        }),
+        clarificationState: { status: 'CLEAR', items: [] },
+        constraintPack: {},
+      })
+      mockAi.chat.mockResolvedValue({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+        }),
+      })
+
+      const result = await service.continueSession('s-confirm-inferred-risk-basis-variant', {
+        userId: 'u1',
+        message,
+      } as ContinueCodegenSessionDto)
+
+      expect(result.status).toBe('CHECKLIST_GATE')
+      expect(result.assistantPrompt).not.toContain('请确认这些推断是否成立')
+      expect(mockRepo.updateSession).toHaveBeenCalledWith(
+        's-confirm-inferred-risk-basis-variant',
+        expect.objectContaining({
+          constraintPack: expect.objectContaining({
+            inferredConfirmation: expect.objectContaining({
+              confirmedKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+            }),
+          }),
+        }),
+      )
+    },
+  )
+
+  it('consumes mixed partial override and partial confirmation in CONFIRM_INFERRED replies', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-mixed-inferred-risk-basis',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: completeChecklist({
+        entryRules: ['短均线上穿长均线（金叉）时做多'],
+        exitRules: ['短均线下穿长均线（死叉）时平多'],
+        riskRules: {
+          _inferredAssumptions: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+        },
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+      }),
+    })
+
+    const result = await service.continueSession('s-mixed-inferred-risk-basis', {
+      userId: 'u1',
+      message: '止盈按持仓收益率，止损这个默认值没问题',
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.assistantPrompt).not.toContain('请确认这些推断是否成立')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-mixed-inferred-risk-basis',
+      expect.objectContaining({
+        status: 'CHECKLIST_GATE',
+        checklist: expect.objectContaining({
+          riskRules: expect.objectContaining({
+            stopLossBasis: 'entry_avg_price',
+            takeProfitBasis: 'position_pnl',
+          }),
+        }),
+        constraintPack: expect.objectContaining({
+          inferredConfirmation: expect.objectContaining({
+            confirmedKeys: ['risk.stopLossBasis'],
+            overriddenKeys: ['risk.takeProfitBasis'],
+          }),
+        }),
+      }),
+    )
+  })
+
+  it('does not re-enter CONFIRM_INFERRED for keys already marked overridden', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-overridden-inferred-risk-basis',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: completeChecklist({
+        entryRules: ['短均线上穿长均线（金叉）时做多'],
+        exitRules: ['短均线下穿长均线（死叉）时平多'],
+        riskRules: {
+          stopLossBasis: 'entry_avg_price',
+          takeProfitBasis: 'entry_avg_price',
+          _inferredAssumptions: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+        },
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {
+        inferredConfirmation: {
+          confirmedKeys: ['risk.stopLossBasis'],
+          overriddenKeys: ['risk.takeProfitBasis'],
+        },
+      },
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+      }),
+    })
+
+    const result = await service.continueSession('s-overridden-inferred-risk-basis', {
+      userId: 'u1',
+      message: '继续',
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.assistantPrompt).not.toContain('请确认这些推断是否成立')
+    expect(result.assistantPrompt).not.toContain('risk.stopLossBasis')
+    expect(result.assistantPrompt).not.toContain('risk.takeProfitBasis')
+  })
+
+  it.each([
+    {
+      name: '止损可以更宽一点',
+      sessionId: 's-negative-inferred-stoploss-can-be-wider',
+      message: '止损可以更宽一点',
+      expectedConfirmedKey: 'risk.stopLossBasis',
+    },
+    {
+      name: '止盈默认没问题吗',
+      sessionId: 's-negative-inferred-takeprofit-question',
+      message: '止盈默认没问题吗',
+      expectedConfirmedKey: 'risk.takeProfitBasis',
+    },
+    {
+      name: '止盈默认没问题吗。',
+      sessionId: 's-negative-inferred-takeprofit-question-with-period',
+      message: '止盈默认没问题吗。',
+      expectedConfirmedKey: 'risk.takeProfitBasis',
+    },
+    {
+      name: '止盈默认没问题吗！',
+      sessionId: 's-negative-inferred-takeprofit-question-with-exclamation',
+      message: '止盈默认没问题吗！',
+      expectedConfirmedKey: 'risk.takeProfitBasis',
+    },
+    {
+      name: '止盈默认没问题吗；',
+      sessionId: 's-negative-inferred-takeprofit-question-with-semicolon',
+      message: '止盈默认没问题吗；',
+      expectedConfirmedKey: 'risk.takeProfitBasis',
+    },
+    {
+      name: '止盈默认没问题吧',
+      sessionId: 's-negative-inferred-takeprofit-question-with-ba',
+      message: '止盈默认没问题吧',
+      expectedConfirmedKey: 'risk.takeProfitBasis',
+    },
+    {
+      name: '止损默认不成立',
+      sessionId: 's-negative-inferred-stoploss-negated',
+      message: '止损默认不成立',
+      expectedConfirmedKey: 'risk.stopLossBasis',
+    },
+  ])(
+    'does not misread negative or tentative clause %s as inferred confirmation',
+    async ({ sessionId, message, expectedConfirmedKey }) => {
+      mockRepo.findById.mockResolvedValue({
+        id: sessionId,
+        userId: 'u1',
+        status: 'DRAFTING',
+        checklist: completeChecklist({
+          entryRules: ['短均线上穿长均线（金叉）时做多'],
+          exitRules: ['短均线下穿长均线（死叉）时平多'],
+          riskRules: {
+            _inferredAssumptions: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+          },
+        }),
+        clarificationState: { status: 'CLEAR', items: [] },
+        constraintPack: {},
+      })
+      mockAi.chat.mockResolvedValue({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+        }),
+      })
+
+      const result = await service.continueSession(sessionId, {
+        userId: 'u1',
+        message,
+      } as ContinueCodegenSessionDto)
+
+      expect(result.status).toBe('DRAFTING')
+      expect(result.assistantPrompt).toContain('请确认这些推断是否成立')
+
+      const updatePayload = mockRepo.updateSession.mock.calls[0]?.[1] as {
+        constraintPack?: {
+          inferredConfirmation?: {
+            confirmedKeys?: string[]
+          }
+        }
+      }
+      expect(updatePayload.constraintPack?.inferredConfirmation?.confirmedKeys ?? []).not.toContain(expectedConfirmedKey)
+    },
+  )
+
+  it('confirms the only remaining inferred key for a short default-only reply', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-single-inferred-default-confirmation',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: completeChecklist({
+        entryRules: ['短均线上穿长均线（金叉）时做多'],
+        exitRules: ['短均线下穿长均线（死叉）时平多'],
+        riskRules: {
+          stopLossBasis: 'entry_avg_price',
+          takeProfitBasis: 'position_pnl',
+          _inferredAssumptions: ['risk.stopLossBasis'],
+        },
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+      }),
+    })
+
+    const result = await service.continueSession('s-single-inferred-default-confirmation', {
+      userId: 'u1',
+      message: '默认即可',
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.assistantPrompt).not.toContain('请确认这些推断是否成立')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-single-inferred-default-confirmation',
+      expect.objectContaining({
+        constraintPack: expect.objectContaining({
+          inferredConfirmation: expect.objectContaining({
+            confirmedKeys: ['risk.stopLossBasis'],
+          }),
+        }),
+      }),
+    )
+  })
+
   it('preserves explicit non-default risk basis from natural language', () => {
     const checklist = (service as any).inferChecklistFromMessage(
       '在 OKX 现货 ETHUSDT，15分钟上涨1%买入，止损按持仓亏损 5%，止盈按持仓收益率 10%，仓位 10%',
