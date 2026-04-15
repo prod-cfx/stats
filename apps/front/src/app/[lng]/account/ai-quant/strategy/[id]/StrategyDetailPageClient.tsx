@@ -21,6 +21,7 @@ import {
 import { ApiError } from '@/lib/errors'
 import {
   requiresRepublishForPublishedSnapshot,
+  resolveBacktestExecutionConfig,
   resolveEffectivePublishedBacktestInputs,
   resolveBacktestRangeInput,
 } from '../../../../ai-quant/ai-quant-page-conversation'
@@ -153,26 +154,7 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
         throw new ApiError('当前已发布快照缺少策略市场绑定真相，请重新发布后再回测。', 'PUBLISHED_SNAPSHOT_PARAMS_MISSING')
       }
       const { symbol, baseTimeframe, exchange } = effectiveInputs
-      const executionConfig = strategy.snapshotBacktestConfigDefaults
-        ? {
-            initialCash: strategy.snapshotBacktestConfigDefaults.initialCash,
-            leverage: strategy.snapshotBacktestConfigDefaults.leverage,
-            slippageBps: strategy.snapshotBacktestConfigDefaults.slippageBps,
-            feeBps: strategy.snapshotBacktestConfigDefaults.feeBps,
-            priceSource: strategy.snapshotBacktestConfigDefaults.priceSource,
-            allowPartial: strategy.snapshotBacktestConfigDefaults.allowPartial === true,
-            allowPartialValid:
-              typeof strategy.snapshotBacktestConfigDefaults.allowPartial === 'boolean',
-          }
-        : {
-            initialCash: Number.NaN,
-            leverage: Number.NaN,
-            slippageBps: Number.NaN,
-            feeBps: Number.NaN,
-            priceSource: '',
-            allowPartial: false,
-            allowPartialValid: false,
-          }
+      const executionConfig = resolveBacktestExecutionConfig(strategy.paramValues ?? {})
       const snapshotStateTimeframes = strategy.snapshotBacktestConfigDefaults?.stateTimeframes ?? []
       if (!executionConfig.allowPartialValid) {
         throw new BacktestPayloadBuilderError('invalid_execution_config')
