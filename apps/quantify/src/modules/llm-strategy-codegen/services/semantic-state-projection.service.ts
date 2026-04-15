@@ -30,20 +30,12 @@ export class SemanticStateProjectionService {
   }
 
   private findNextOpenSlot(state: SemanticState): SemanticSlotState | null {
-    const triggerSlot = state.triggers
+    return state.triggers
       .flatMap(trigger => trigger.openSlots)
-      .find(slot => slot.status === 'open')
-    if (triggerSlot) {
-      return triggerSlot
-    }
+      .find(slot => slot.status === 'open' && this.isReducerSupportedSlot(slot)) ?? null
+  }
 
-    const riskSlot = state.risk
-      .flatMap(risk => risk.openSlots)
-      .find(slot => slot.status === 'open')
-    if (riskSlot) {
-      return riskSlot
-    }
-
-    return Object.values(state.contextSlots).find(slot => slot?.status === 'open') ?? null
+  private isReducerSupportedSlot(slot: SemanticSlotState): boolean {
+    return slot.slotKey.includes('reference.period') || slot.slotKey.includes('confirmationMode')
   }
 }

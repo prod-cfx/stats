@@ -1,11 +1,18 @@
 import { Injectable } from '@nestjs/common'
-import type { SemanticState } from '../types/semantic-state'
+import type { SemanticSlotState, SemanticState } from '../types/semantic-state'
+
+interface SupportedSlotReduction {
+  paramKey: 'reference.period' | 'confirmationMode'
+  paramValue: number | string
+  slotValue: number | string
+}
 
 @Injectable()
 export class SemanticStateReducerService {
   applyClarificationAnswer(input: {
     currentState: SemanticState
     targetSlotKey: string
+    targetFieldPath: string
     answer: string
     messageIndex?: number
   }): SemanticState {
@@ -36,31 +43,23 @@ export class SemanticStateReducerService {
     }
 
     const answerText = input.answer.trim()
-    const periodMatch = answerText.match(/(?:ma|ema|sma)?\s*(\d{1,4})/iu)
-    const confirmationIsClose = /收盘|确认|close/u.test(answerText)
-    const confirmationIsTouch = /盘中|触发|touch/u.test(answerText)
-
     for (const trigger of nextState.triggers) {
-      const slot = trigger.openSlots.find(item => item.slotKey === input.targetSlotKey)
+      const slot = trigger.openSlots.find(item => item.slotKey === input.targetSlotKey && item.fieldPath === input.targetFieldPath)
       if (!slot) continue
 
-      if (slot.slotKey.includes('reference.period') && periodMatch?.[1]) {
-        trigger.params['reference.period'] = Number(periodMatch[1])
+      const reduction = this.reduceSupportedSlot(slot, answerText)
+      if (!reduction) {
+        break
       }
 
-      if (slot.slotKey.includes('confirmationMode') && (confirmationIsClose || confirmationIsTouch)) {
-        trigger.params.confirmationMode = confirmationIsClose ? 'close_confirm' : 'touch'
-      }
-
-      if (slot.slotKey.includes('confirmationMode')) {
-        slot.value = (trigger.params.confirmationMode as string | undefined) ?? answerText
-      }
-      else if (slot.slotKey.includes('reference.period') && typeof trigger.params['reference.period'] === 'number') {
-        slot.value = trigger.params['reference.period'] as number
+      if (reduction.paramKey === 'reference.period') {
+        trigger.params['reference.period'] = reduction.paramValue
       }
       else {
-        slot.value = answerText
+        trigger.params.confirmationMode = reduction.paramValue
       }
+
+      slot.value = reduction.slotValue
       slot.status = 'locked'
       slot.evidence = {
         text: answerText,
@@ -69,8 +68,42 @@ export class SemanticStateReducerService {
       }
 
       trigger.status = trigger.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+      break
     }
 
     return nextState
+  }
+
+  private reduceSupportedSlot(slot: SemanticSlotState, answerText: string): SupportedSlotReduction | null {
+    if (slot.slotKey.includes('reference.period')) {
+      const periodMatch = answerText.match(/(?:ma|ema|sma)?\s*(\d{1,4})/iu)
+      if (!periodMatch?.[1]) {
+        return null
+      }
+
+      const period = Number(periodMatch[1])
+      return {
+        paramKey: 'reference.period',
+        paramValue: period,
+        slotValue: period,
+      }
+    }
+
+    if (slot.slotKey.includes('confirmationMode')) {
+      const confirmationIsClose = /收盘|确认|close/u.test(answerText)
+      const confirmationIsTouch = /盘中|触发|touch/u.test(answerText)
+      if (confirmationIsClose === confirmationIsTouch) {
+        return null
+      }
+
+      const confirmationMode = confirmationIsClose ? 'close_confirm' : 'touch'
+      return {
+        paramKey: 'confirmationMode',
+        paramValue: confirmationMode,
+        slotValue: confirmationMode,
+      }
+    }
+
+    return null
   }
 }

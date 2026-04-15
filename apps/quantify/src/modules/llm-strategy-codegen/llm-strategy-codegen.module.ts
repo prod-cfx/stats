@@ -25,6 +25,8 @@ import { CompiledScriptParserService } from './services/compiled-script-parser.s
 import { RecommendationIndexService } from './services/recommendation-index.service'
 import { RuntimeGuardrailService } from './services/runtime-guardrail.service'
 import { ScriptProfileExtractorService } from './services/script-profile-extractor.service'
+import { SemanticStateProjectionService } from './services/semantic-state-projection.service'
+import { SemanticStateReducerService } from './services/semantic-state-reducer.service'
 import { SpecDescBuilderService } from './services/spec-desc-builder.service'
 import { StaticGuardrailService } from './services/static-guardrail.service'
 import { StrategyClarificationQuestionService } from './services/strategy-clarification-question.service'
@@ -49,6 +51,8 @@ import { StrategySummaryObservationService } from './services/strategy-summary-o
     ChecklistGateService,
     StaticGuardrailService,
     RuntimeGuardrailService,
+    SemanticStateReducerService,
+    SemanticStateProjectionService,
     SpecDescBuilderService,
     CanonicalSpecBuilderService,
     StrategyCompileabilityDecisionService,
