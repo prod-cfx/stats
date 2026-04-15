@@ -1,4 +1,5 @@
 import { CodegenSessionsRepository } from './codegen-sessions.repository'
+import type { SemanticState } from '../types/semantic-state'
 
 describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSession', () => {
   const buildInput = () => ({
@@ -331,7 +332,7 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
     }
     const repository = new CodegenSessionsRepository(txHost as never)
 
-    const semanticState = {
+    const semanticState: SemanticState = {
       version: 1,
       families: ['single-leg'],
       triggers: [
@@ -365,7 +366,7 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
       },
       normalizationNotes: [],
       updatedAt: '2026-04-15T10:00:00.000Z',
-    } as const
+    }
 
     const created = await repository.createSession({
       userId: 'u1',
@@ -386,11 +387,141 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
     expect((created as any).semanticState).toEqual(expect.objectContaining({
       version: 1,
       families: ['single-leg'],
+      updatedAt: '2026-04-15T10:00:00.000Z',
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          openSlots: expect.arrayContaining([
+            expect.objectContaining({
+              slotKey: 'reference.period.entry',
+            }),
+          ]),
+        }),
+      ]),
+      contextSlots: expect.objectContaining({
+        timeframe: null,
+      }),
     }))
     expect((found as any)?.semanticState).toEqual(expect.objectContaining({
       version: 1,
       families: ['single-leg'],
+      updatedAt: '2026-04-15T10:00:00.000Z',
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          openSlots: expect.arrayContaining([
+            expect.objectContaining({
+              slotKey: 'reference.period.entry',
+            }),
+          ]),
+        }),
+      ]),
+      contextSlots: expect.objectContaining({
+        timeframe: null,
+      }),
     }))
+  })
+
+  it('falls back when semantic_state column is missing during session reads and writes', async () => {
+    const missingSemanticStateColumnError = Object.assign(
+      new Error('The column `semantic_state` does not exist in the current database.'),
+      { code: 'P2022', meta: { column: 'semantic_state' } },
+    )
+
+    const tx = {
+      llmStrategyCodegenSession: {
+        create: jest.fn()
+          .mockRejectedValueOnce(missingSemanticStateColumnError)
+          .mockResolvedValue({
+            id: 'session-1',
+            userId: 'user-1',
+            status: 'DRAFTING',
+            checklist: {},
+            clarificationState: null,
+            constraintPack: {},
+            latestDraftCode: null,
+            latestSpecDesc: null,
+            graphSnapshot: null,
+            semanticGraph: null,
+            validationReport: null,
+            compiledIr: null,
+            rejectReason: null,
+            strategyInstanceId: null,
+            createdAt: new Date('2026-04-15T10:00:00.000Z'),
+            updatedAt: new Date('2026-04-15T10:00:00.000Z'),
+          }),
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'session-1',
+          userId: 'user-1',
+          status: 'DRAFTING',
+          checklist: {},
+          clarificationState: null,
+          constraintPack: {},
+          latestDraftCode: null,
+          latestSpecDesc: null,
+          graphSnapshot: null,
+          semanticGraph: null,
+          validationReport: null,
+          compiledIr: null,
+          rejectReason: null,
+          strategyInstanceId: null,
+          createdAt: new Date('2026-04-15T10:00:00.000Z'),
+          updatedAt: new Date('2026-04-15T10:00:00.000Z'),
+        }),
+      },
+    }
+    const txHost = {
+      tx,
+      withTransaction: jest.fn(async (callback: () => Promise<unknown>) => callback()),
+    }
+    const repository = new CodegenSessionsRepository(txHost as never)
+
+    const created = await repository.createSession({
+      userId: 'user-1',
+      status: 'DRAFTING',
+      checklist: {},
+      semanticState: {
+        version: 1,
+        families: [],
+        triggers: [],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: {
+          exchange: null,
+          symbol: null,
+          marketType: null,
+          timeframe: null,
+        },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      } satisfies SemanticState,
+    } as any)
+    const found = await repository.findById('session-1')
+
+    expect(tx.llmStrategyCodegenSession.create).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      data: expect.objectContaining({
+        semanticState: expect.objectContaining({
+          version: 1,
+        }),
+      }),
+      select: expect.objectContaining({
+        semanticState: true,
+      }),
+    }))
+    expect(tx.llmStrategyCodegenSession.create).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      data: expect.not.objectContaining({
+        semanticState: expect.anything(),
+      }),
+      select: expect.not.objectContaining({
+        semanticState: true,
+      }),
+    }))
+    expect(tx.llmStrategyCodegenSession.findUnique).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.not.objectContaining({
+        semanticState: true,
+      }),
+    }))
+    expect((created as any).semanticState).toBeNull()
+    expect((found as any)?.semanticState).toBeNull()
   })
 
   it('uses the ambient prisma client for single-statement session reads and writes', async () => {
