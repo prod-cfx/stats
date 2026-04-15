@@ -1,7 +1,7 @@
 'use client'
 
-import { formatBacktestRange } from '@/components/ai-quant/backtest-date'
 import { useTranslation } from 'react-i18next'
+import { formatBacktestRange } from '@/components/ai-quant/backtest-date'
 
 interface BacktestSummaryCardProps {
   result: BacktestResult
@@ -18,6 +18,8 @@ export interface BacktestResult {
   totalReturnPct: number
   winRatePct: number
   tradeCount: number
+  openTradeCount?: number
+  openPnl?: number
   symbol?: string
   startAt?: string
   endAt?: string
@@ -35,6 +37,7 @@ export function BacktestSummaryCard({
   const backtestContext = result.symbol && result.startAt && result.endAt
     ? `${result.symbol} · ${formatBacktestRange(result.startAt, result.endAt)}`
     : null
+  const hasOpenOnlyTrades = result.tradeCount === 0 && (result.openTradeCount ?? 0) > 0
 
   return (
     <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
@@ -66,7 +69,11 @@ export function BacktestSummaryCard({
 
       {!canDeploy && (
         <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-500">
-          {t('aiQuant.messages.backtestDrawdownFail')}
+          {hasOpenOnlyTrades
+            ? t('aiQuant.messages.backtestOpenTrades', { count: result.openTradeCount ?? 0 })
+            : result.tradeCount === 0
+              ? t('aiQuant.messages.backtestNoTrades')
+              : t('aiQuant.messages.backtestDrawdownFail')}
         </div>
       )}
 

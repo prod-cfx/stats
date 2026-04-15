@@ -26,6 +26,12 @@ export class BacktestJobSummaryDto {
 
   @ApiProperty()
   totalTrades!: number
+
+  @ApiPropertyOptional()
+  totalOpenTrades?: number
+
+  @ApiPropertyOptional()
+  openPnl?: number
 }
 
 export class BacktestJobErrorDetailsDto {

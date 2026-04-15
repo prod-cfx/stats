@@ -20,6 +20,7 @@ import {
   buildBacktestSummaryResult,
   hasLatestPublishedCode,
   isDeployableBacktestResult,
+  isOpenOnlyBacktestResult,
   requiresRepublishForPublishedSnapshot,
   resolveEffectivePublishedBacktestInputs,
   resolveBacktestExecutionConfig,
@@ -407,11 +408,13 @@ export async function runAiQuantBacktest(args: {
           ? {
               ...message,
               content:
-                result.tradeCount === 0
-                  ? t('aiQuant.messages.backtestNoTrades')
+                isOpenOnlyBacktestResult(result)
+                  ? t('aiQuant.messages.backtestOpenTrades', { count: result.openTradeCount ?? 0 })
+                  : result.tradeCount === 0
+                    ? t('aiQuant.messages.backtestNoTrades')
                   : isDeployableBacktestResult(result)
                     ? t('aiQuant.messages.backtestSuccess', { drawdown: result.maxDrawdownPct })
-                  : t('aiQuant.messages.backtestFail', { drawdown: result.maxDrawdownPct }),
+                    : t('aiQuant.messages.backtestFail', { drawdown: result.maxDrawdownPct }),
             }
           : message,
       ),

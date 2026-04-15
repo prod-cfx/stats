@@ -173,6 +173,8 @@ export interface BacktestReport {
     winRate: number
     profitFactor: number
     totalTrades: number
+    totalOpenTrades?: number
+    openPnl?: number
   }
   equityCurve: Array<{ ts: number; equity: number }>
   trades: TradeRecord[]

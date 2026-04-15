@@ -256,12 +256,18 @@ export class BacktestRunnerService {
       avgEntryPrice: pos.avgEntryPrice,
       unrealizedPnl: pos.unrealizedPnl,
     }))
+    const openPnl = openPositions.reduce((sum, position) => sum + position.unrealizedPnl, 0)
 
     this.stateEngine.reset()
     this.riskEvaluator.reset()
 
     return {
       ...report,
+      summary: {
+        ...report.summary,
+        totalOpenTrades: openPositions.length,
+        openPnl,
+      },
       openPositions,
       pendingSignals,
     }

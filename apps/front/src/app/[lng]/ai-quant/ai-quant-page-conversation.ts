@@ -1021,6 +1021,8 @@ export function buildBacktestSummaryResult(
     maxDrawdownPct: number
     winRate: number
     totalTrades: number
+    totalOpenTrades?: number
+    openPnl?: number
   },
 ): BacktestResult {
   const winRatePct = summary.winRate <= 1 ? summary.winRate * 100 : summary.winRate
@@ -1030,7 +1032,14 @@ export function buildBacktestSummaryResult(
     totalReturnPct: Number(summary.netProfitPct.toFixed(2)),
     winRatePct: Number(winRatePct.toFixed(2)),
     tradeCount: summary.totalTrades,
+    openTradeCount: typeof summary.totalOpenTrades === 'number' ? summary.totalOpenTrades : previous.openTradeCount,
+    openPnl: typeof summary.openPnl === 'number' ? Number(summary.openPnl.toFixed(2)) : previous.openPnl,
   }
+}
+
+export function isOpenOnlyBacktestResult(result: BacktestResult | null | undefined): boolean {
+  if (!result) return false
+  return result.tradeCount === 0 && (result.openTradeCount ?? 0) > 0
 }
 
 export function isDeployableBacktestResult(result: BacktestResult | null | undefined): boolean {

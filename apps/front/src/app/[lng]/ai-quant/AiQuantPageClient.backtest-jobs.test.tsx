@@ -384,6 +384,47 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(container.querySelector('[data-testid="messages"]')?.textContent).not.toContain('aiQuant.messages.backtestSuccess')
   })
 
+  it('surfaces open-trade messaging when the backtest ends with an unclosed position', async () => {
+    mockGetBacktestJobResult.mockResolvedValueOnce({
+      summary: {
+        netProfit: 0,
+        netProfitPct: 0,
+        maxDrawdownPct: 0.3199417903674797,
+        winRate: 0,
+        profitFactor: 0,
+        totalTrades: 0,
+        totalOpenTrades: 1,
+        openPnl: 0.282686611713497,
+      },
+      openPositions: [
+        {
+          symbol: 'BTCUSDT:PERP',
+          qty: 0.00017167096767048035,
+          avgEntryPrice: 72238.52313,
+          unrealizedPnl: 0.282686611713497,
+        },
+      ],
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      jest.advanceTimersByTime(1500)
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestOpenTrades')
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).not.toContain('aiQuant.messages.backtestNoTrades')
+  })
+
   it('passes allowPartial to the backtest payload builder when submitting a job', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
     seeded[0].paramValues = {

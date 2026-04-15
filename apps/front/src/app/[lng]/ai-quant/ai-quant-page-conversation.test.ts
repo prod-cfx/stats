@@ -2,6 +2,7 @@ import { describe, expect, it } from '@jest/globals'
 
 import {
   AI_QUANT_PERSISTED_SCHEMA_VERSION,
+  buildBacktestSummaryResult,
   createConversationFromServerConversation,
   hasExplicitBacktestExecutionOverrides,
   hydrateConversation,
@@ -38,6 +39,28 @@ describe('ai-quant-page-conversation', () => {
       winRatePct: 55,
       tradeCount: 3,
     })).toBe(false)
+  })
+
+  it('preserves open-trade summary fields when building a backtest summary result', () => {
+    expect(buildBacktestSummaryResult({
+      id: 'bt-open-only',
+      maxDrawdownPct: 0,
+      totalReturnPct: 0,
+      winRatePct: 0,
+      tradeCount: 0,
+    }, {
+      netProfitPct: 0,
+      maxDrawdownPct: 0.3199,
+      winRate: 0,
+      totalTrades: 0,
+      totalOpenTrades: 1,
+      openPnl: 0.282686611713497,
+    })).toMatchObject({
+      id: 'bt-open-only',
+      tradeCount: 0,
+      openTradeCount: 1,
+      openPnl: 0.28,
+    })
   })
 
   it('restores published script code from confirmed assistant code block during hydration', () => {

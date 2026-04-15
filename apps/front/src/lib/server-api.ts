@@ -28,6 +28,8 @@ export interface BacktestJobResultSummary {
   winRate: number
   profitFactor: number
   totalTrades: number
+  totalOpenTrades?: number
+  openPnl?: number
 }
 
 export interface BacktestJobResultEquityPoint {

@@ -240,6 +240,7 @@
       "backtestSuccess": "Backtest max drawdown {{drawdown}}% (Passed), ready to deploy.",
       "backtestFail": "Backtest max drawdown {{drawdown}}% (Failed). Suggest optimizing parameters via chat before backtesting again.",
       "backtestNoTrades": "Backtest produced no valid trades, so deployment remains disabled. Please adjust the strategy conditions and retry.",
+      "backtestOpenTrades": "Backtest opened positions but did not close them within the selected range ({{count}} still open), so deployment remains disabled.",
       "optimizeHint": "Suggest reducing single position size or adjusting buy/sell thresholds before re-backtesting.",
       "deploySuccess": "Deployed successfully: {{exchange}} / {{account}}. Check status in User Center.",
       "intentMiss": "The strategy you selected before login is no longer available, please select again.",
