@@ -67,6 +67,8 @@ export interface StrategyClarificationItem {
   question: string
   status: StrategyClarificationItemStatus
   answer?: string
+  priority?: number
+  evidenceKey?: string
 }
 
 export interface StrategyClarificationState {

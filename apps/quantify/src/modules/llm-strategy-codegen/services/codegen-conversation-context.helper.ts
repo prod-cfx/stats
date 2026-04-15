@@ -1,4 +1,8 @@
-import type { CodegenGuidePromptConfigSnapshot, ConstraintPackSnapshot } from '../constants/constraint-pack'
+import type {
+  CodegenGuidePromptConfigSnapshot,
+  ConstraintPackInferredConfirmationSnapshot,
+  ConstraintPackSnapshot,
+} from '../constants/constraint-pack'
 import type { CodegenGuideConfigDto } from '../dto/codegen-guide-config.dto'
 import type { ChecklistPayload } from '../types/codegen-checklist'
 
@@ -18,15 +22,15 @@ export class CodegenConversationContextHelper {
 
     const raw = payload as Record<string, unknown>
     const guidePrompt = this.mergeGuidePromptConfig(undefined, raw.guidePrompt as CodegenGuideConfigDto | undefined)
-    const conversationHistory = Array.isArray(raw.conversationHistory)
-      ? raw.conversationHistory.filter(item => typeof item === 'string').map(item => item.trim()).filter(Boolean)
-      : []
+    const conversationHistory = this.normalizeStringArray(raw.conversationHistory)
+    const inferredConfirmation = this.normalizeInferredConfirmation(raw.inferredConfirmation)
 
     return {
       ...createDefaultConstraintPack(),
       ...raw,
       guidePrompt,
       conversationHistory,
+      inferredConfirmation,
     } as ConstraintPackSnapshot
   }
 
@@ -61,6 +65,29 @@ export class CodegenConversationContextHelper {
     ) as GuidePromptConfig
 
     return Object.keys(normalized).length > 0 ? normalized : undefined
+  }
+
+  private normalizeInferredConfirmation(value: unknown): ConstraintPackInferredConfirmationSnapshot | undefined {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return undefined
+    }
+
+    const raw = value as Record<string, unknown>
+    return {
+      confirmedKeys: this.normalizeStringArray(raw.confirmedKeys),
+      overriddenKeys: this.normalizeStringArray(raw.overriddenKeys),
+    }
+  }
+
+  private normalizeStringArray(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return []
+    }
+
+    return value
+      .filter(item => typeof item === 'string')
+      .map(item => item.trim())
+      .filter(Boolean)
   }
 
   appendConversationHistory(

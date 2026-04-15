@@ -4,6 +4,41 @@ import { StrategyClarificationQuestionService } from '../strategy-clarification-
 describe('strategyClarificationQuestionService', () => {
   const questionService = new StrategyClarificationQuestionService()
 
+  it('renders inferred defaults as a confirmation prompt before compile', () => {
+    const prompt = questionService.buildFromDecision({
+      kind: 'CONFIRM_INFERRED',
+      normalizedSummary: 'OKX 合约 BTCUSDT；突破布林带上轨做空；回到中轨平仓',
+      blockingReasons: [],
+      inferredAssumptions: [
+        { key: 'trigger.confirmation', value: 'close_confirm', source: 'system_default' },
+      ],
+      nextActionPayload: { mode: 'confirm_inferred' },
+    })
+
+    expect(prompt).toContain('我当前理解的策略是')
+    expect(prompt).toContain('以下内容是系统推断')
+    expect(prompt).toContain('trigger.confirmation')
+    expect(prompt).toContain('请确认这些推断是否成立')
+  })
+
+  it('renders only the top-ranked blocker when decision mode is ask clarify', () => {
+    const prompt = questionService.buildFromDecision({
+      kind: 'ASK_CLARIFY',
+      normalizedSummary: 'OKX 合约 BTCUSDT；布林带上轨触发做空',
+      blockingReasons: [
+        { key: 'trigger.confirmation', reason: 'trigger_semantics_fork', priority: 10, question: '该布林带条件是触碰即触发，还是收盘确认后触发？' },
+      ],
+      inferredAssumptions: [],
+      nextActionPayload: {
+        mode: 'ask_clarify',
+        question: { key: 'trigger.confirmation', reason: 'trigger_semantics_fork', priority: 10, question: '该布林带条件是触碰即触发，还是收盘确认后触发？' },
+      },
+    })
+
+    expect(prompt).toContain('执行语义分叉')
+    expect(prompt).toContain('该布林带条件是触碰即触发，还是收盘确认后触发')
+  })
+
   it('asks for exchange when execution context is incomplete', () => {
     const prompt = questionService.buildFromAmbiguities({
       summary: 'BTCUSDT 15m，网格区间 60000-80000，每格 0.5%，单笔 10% 仓位',

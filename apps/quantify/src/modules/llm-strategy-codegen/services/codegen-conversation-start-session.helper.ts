@@ -23,6 +23,7 @@ export interface StartSessionBootstrapInput {
   plannerStatus: LlmCodegenSessionStatus
   clarificationState: StrategyClarificationState & { summary?: string | null }
   clarificationPrompt: string | null
+  decisionKind?: 'DIRECT_COMPILE' | 'CONFIRM_INFERRED' | 'ASK_CLARIFY'
   plan: ConversationPlan
   compileability: CanonicalCompileabilityReport | null
   normalizationBlocked?: boolean
@@ -42,13 +43,15 @@ export function buildStartSessionBootstrap(
   input: StartSessionBootstrapInput,
   buildCompileabilityAssistantPrompt: (report: CanonicalCompileabilityReport) => string,
 ): StartSessionBootstrapResult {
-  const status: LlmCodegenSessionStatus = input.plannerStatus === 'CHECKLIST_GATE'
+  const status: LlmCodegenSessionStatus = input.decisionKind === 'CONFIRM_INFERRED'
+    ? 'DRAFTING'
+    : (input.plannerStatus === 'CHECKLIST_GATE'
     && (input.compileability?.canCompile === false || input.normalizationBlocked === true)
     ? 'DRAFTING'
-    : input.plannerStatus
+    : input.plannerStatus)
   const shouldGateChecklist = status === 'CHECKLIST_GATE'
 
-  const assistantPrompt = input.clarificationState.status === 'NEEDS_CLARIFICATION' && input.clarificationPrompt
+  const assistantPrompt = ((input.clarificationState.status === 'NEEDS_CLARIFICATION') || input.decisionKind === 'CONFIRM_INFERRED') && input.clarificationPrompt
     ? input.clarificationPrompt
     : (shouldGateChecklist
         ? `${input.plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`

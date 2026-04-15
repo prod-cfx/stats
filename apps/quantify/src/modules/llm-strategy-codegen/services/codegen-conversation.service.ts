@@ -11,6 +11,7 @@ import type { ChecklistPayload, ChecklistRuleBasis, ChecklistRuleDraft } from '.
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { StrategyAmbiguity } from '../types/strategy-ambiguity'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
+import type { StrategyBlockingReason, StrategyInferredAssumption } from '../types/strategy-decision'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 
@@ -68,6 +69,7 @@ import { StaticGuardrailService } from './static-guardrail.service'
 import { StrategyClarificationQuestionService } from './strategy-clarification-question.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { StrategyClarificationRulesService } from './strategy-clarification-rules.service'
+import { StrategyCompileabilityDecisionService } from './strategy-compileability-decision.service'
 import { StrategyExecutionContextService } from './strategy-execution-context.service'
 import { StrategyIntentNormalizerService } from './strategy-intent-normalizer.service'
 import { StrategyIntentResolutionService } from './strategy-intent-resolution.service'
@@ -148,6 +150,7 @@ export class CodegenConversationService {
     private readonly runtimeGuardrail: RuntimeGuardrailService,
     private readonly specDescBuilder: SpecDescBuilderService,
     private readonly canonicalSpecBuilder: CanonicalSpecBuilderService,
+    private readonly uniquenessDecision: StrategyCompileabilityDecisionService,
     private readonly clarificationRules: StrategyClarificationRulesService,
     private readonly clarificationQuestion: StrategyClarificationQuestionService,
     private readonly publicationPipeline: CodegenSessionPublicationPipelineService,
@@ -181,9 +184,13 @@ export class CodegenConversationService {
       checklist,
       undefined,
     )
+    const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
+    const initialConstraintPack = {
+      ...createDefaultConstraintPack(guidePrompt),
+      recommendationStyle,
+    }
     const clarification = this.resolveClarificationArtifacts(checklist)
     const clarificationState = clarification.clarificationState
-    const clarificationPrompt = clarification.clarificationPrompt
     const plannerStatus: LlmCodegenSessionStatus = this.stateMachine.resolvePlannerStatus({
       logicReady: plan.logicReady,
       clarificationState,
@@ -195,12 +202,21 @@ export class CodegenConversationService {
     const compileability = initialCanonicalSpec
       ? this.evaluateCanonicalCompileability(initialCanonicalSpec)
       : null
-    const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
+    const decision = this.buildStrategyDecision({
+      checklist,
+      clarification,
+      compileability,
+      constraintPack: initialConstraintPack,
+    })
+    const clarificationPrompt = decision.kind === 'CONFIRM_INFERRED'
+      ? this.clarificationQuestion.buildFromDecision(decision)
+      : clarification.clarificationPrompt
     const bootstrap = buildStartSessionBootstrap({
       initialMessage: dto.initialMessage,
       plannerStatus,
       clarificationState,
       clarificationPrompt,
+      decisionKind: decision.kind,
       plan,
       compileability,
       normalizationBlocked: normalization?.blocked === true,
@@ -221,8 +237,7 @@ export class CodegenConversationService {
       checklist: checklist as Prisma.InputJsonValue,
       clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
       constraintPack: {
-        ...createDefaultConstraintPack(guidePrompt),
-        recommendationStyle,
+        ...initialConstraintPack,
         conversationHistory: bootstrap.initialHistory,
       } as unknown as Prisma.InputJsonValue,
       latestDraftCode: null,
@@ -312,11 +327,17 @@ export class CodegenConversationService {
     const hasStructuredClarificationAnswers = Boolean(
       dto.clarificationAnswers && Object.keys(dto.clarificationAnswers).length > 0,
     )
-    const baseChecklist = this.applyClarificationAnswers(
+    const baseChecklistAfterAnswers = this.applyClarificationAnswers(
       this.readChecklist(session.checklist),
       baseClarificationState,
       dto.clarificationAnswers,
     )
+    const inferredConfirmation = this.withConfirmedInferredDecisionKeys(
+      this.readConstraintPack(session.constraintPack),
+      baseChecklistAfterAnswers,
+      dto.message,
+    )
+    const baseChecklist = inferredConfirmation.checklist
     const clarificationStateAfterAnswers = hasStructuredClarificationAnswers
       ? this.resolveClarificationArtifacts(baseChecklist).clarificationState
       : this.withClarificationSummary(baseClarificationState, baseChecklist)
@@ -325,7 +346,7 @@ export class CodegenConversationService {
       ...this.extractChecklist(dto),
     })
     const preMergedChecklist = this.mergeChecklistSnapshots(baseChecklist, messageChecklist)
-    const constraintPack = this.readConstraintPack(session.constraintPack)
+    const constraintPack = inferredConfirmation.constraintPack
     const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, dto.guideConfig)
     const plan = await this.planConversationByLlm(dto.message, preMergedChecklist, {
       providerCode: this.resolveProviderCode(dto.providerCode),
@@ -341,6 +362,23 @@ export class CodegenConversationService {
           message: dto.message,
           userId: sessionUserId,
         })
+      }
+      if (inferredConfirmation.consumed) {
+        const assistantPrompt = plan.assistantPrompt || '这条消息看起来和策略无关。请描述交易逻辑或修改条件。'
+        const historyAfterConsumedUnrelated = this.appendConversationHistory(
+          constraintPack.conversationHistory ?? [],
+          dto.message,
+          assistantPrompt,
+        )
+        await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
+          status: session.status,
+          checklist: baseChecklist,
+          clarificationState: clarificationStateAfterAnswers,
+          constraintPack: {
+            ...constraintPack,
+            conversationHistory: historyAfterConsumedUnrelated,
+          },
+        }))
       }
       const response = this.finalizeSessionResponse({
         id: session.id,
@@ -400,6 +438,15 @@ export class CodegenConversationService {
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
+    const decision = this.buildStrategyDecision({
+      checklist: mergedChecklist,
+      clarification,
+      compileability,
+      constraintPack: nextConstraintPack,
+    })
+    const decisionPrompt = decision.kind === 'CONFIRM_INFERRED'
+      ? this.clarificationQuestion.buildFromDecision(decision)
+      : clarification.clarificationPrompt
 
     if (!plan.logicReady) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
@@ -417,6 +464,27 @@ export class CodegenConversationService {
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt: plan.assistantPrompt,
+        clarificationState,
+      })
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+    }
+
+    if (decision.kind === 'CONFIRM_INFERRED') {
+      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
+        status: 'DRAFTING',
+        checklist: mergedChecklist,
+        clarificationState,
+        constraintPack: {
+          ...nextConstraintPack,
+          conversationHistory: historyAfterPlanner,
+        },
+      }))
+
+      const response = this.finalizeSessionResponse({
+        id: session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt: decisionPrompt,
         clarificationState,
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
@@ -1227,6 +1295,12 @@ export class CodegenConversationService {
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
     const missingFields = this.resolveChecklistMissingFields(args.checklist)
+    const decision = this.buildStrategyDecision({
+      checklist: args.checklist,
+      clarification,
+      compileability,
+      constraintPack: args.constraintPack,
+    })
 
     if (missingFields.length > 0) {
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
@@ -1246,6 +1320,30 @@ export class CodegenConversationService {
         missingFields,
         assistantPrompt: '请先补全入场和出场规则，再确认生成代码。',
         clarificationState: clarification.clarificationState,
+      })
+      return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
+    }
+
+    if (decision.kind === 'CONFIRM_INFERRED') {
+      const assistantPrompt = this.clarificationQuestion.buildFromDecision(decision)
+      await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
+        status: 'DRAFTING',
+        checklist: args.checklist,
+        clarificationState: clarification.clarificationState,
+        constraintPack: {
+          ...args.constraintPack,
+          conversationHistory: historyAfterAnswer,
+        },
+        latestSpecDesc: specDesc,
+      }))
+
+      const response = this.finalizeSessionResponse({
+        id: args.session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt,
+        clarificationState: clarification.clarificationState,
+        specDesc,
       })
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
@@ -1555,6 +1653,8 @@ export class CodegenConversationService {
     atomicResolution: ReturnType<StrategyIntentResolutionService['resolve']>
     clarificationState: StrategyClarificationStateWithSummary
     clarificationPrompt: string
+    blockingReasons: StrategyBlockingReason[]
+    inferredAssumptions: StrategyInferredAssumption[]
   } {
     const normalization = this.intentNormalizer.normalize(checklist)
     const executionContext = this.executionContext.resolve(checklist)
@@ -1585,6 +1685,32 @@ export class CodegenConversationService {
       summary: clarificationState.summary,
       ambiguities: effectiveAmbiguities,
     }) || this.clarificationQuestion.build(clarificationState)
+    const clarificationEvidence = this.clarificationRules.collectEvidence(checklist)
+    const blockingReasons: StrategyBlockingReason[] = [
+      ...executionContext.evidence
+        .filter((item): item is { key: string, reason: string, priority: number, question: string } => typeof item.question === 'string')
+        .map(item => ({
+          key: item.key,
+          reason: item.reason,
+          priority: item.priority,
+          question: item.question,
+        })),
+      ...clarificationEvidence.blockingReasons.map(item => ({
+        key: item.key,
+        reason: this.mapClarificationReasonToBlockingReason(item.reason),
+        priority: item.priority,
+        question: item.question,
+      })),
+      ...atomicResolution.ambiguities
+        .filter((item) => item.kind === 'atomic_semantic_fork' && item.field === 'trigger.confirmation')
+        .map(() => ({
+          key: 'trigger.confirmation',
+          reason: 'trigger_semantics_fork',
+          priority: 95,
+          question: '该布林带条件是触碰即触发，还是收盘确认后触发？',
+        })),
+    ]
+    const inferredAssumptions = this.collectInferredAssumptions(checklist)
 
     return {
       normalization,
@@ -1592,6 +1718,8 @@ export class CodegenConversationService {
       atomicResolution,
       clarificationState,
       clarificationPrompt,
+      blockingReasons,
+      inferredAssumptions,
     }
   }
 
@@ -1875,6 +2003,316 @@ export class CodegenConversationService {
 
   private buildCompileabilityAssistantPrompt(report: CanonicalCompileabilityReport): string {
     return `当前规则还不能稳定生成脚本：${report.reasons.join('，')}。请补充能明确落成主链规则的入场/出场条件后再确认逻辑图。`
+  }
+
+  private buildStrategyDecision(input: {
+    checklist: ChecklistPayload
+    clarification: ReturnType<CodegenConversationService['resolveClarificationArtifacts']>
+    compileability: CanonicalCompileabilityReport | null
+    constraintPack: ConstraintPackSnapshot
+  }) {
+    const normalizedSummary = input.clarification.clarificationState.summary?.trim()
+      || this.buildClarificationSummary(input.checklist)
+      || '已识别部分条件，但仍未完整。'
+
+    return this.uniquenessDecision.decide({
+      normalizedSummary,
+      blockingReasons: input.clarification.blockingReasons,
+      inferredAssumptions: this.collectInferredAssumptions(
+        input.checklist,
+        input.constraintPack,
+      ),
+      compileability: input.compileability,
+    })
+  }
+
+  private mapClarificationReasonToBlockingReason(reason: StrategyClarificationItem['reason']): string {
+    if (
+      reason === 'missing_exchange'
+      || reason === 'missing_symbol'
+      || reason === 'missing_market_type'
+      || reason === 'missing_timeframe'
+      || reason === 'missing_position_pct'
+      || reason === 'missing_position_mode'
+    ) {
+      return 'runtime_context_missing'
+    }
+    if (
+      reason === 'missing_side_scope'
+      || reason === 'direction_ambiguous'
+      || reason === 'missing_action_uniqueness'
+    ) {
+      return 'direction_ambiguity'
+    }
+    if (reason === 'missing_exit_rules') {
+      return 'exit_semantics_missing'
+    }
+    if (reason === 'ambiguous_condition_basis') {
+      return 'basis_ambiguity'
+    }
+    if (reason === 'atomic_semantic_fork') {
+      return 'trigger_semantics_fork'
+    }
+
+    return reason
+  }
+
+  private collectInferredAssumptions(
+    checklist: ChecklistPayload,
+    constraintPack: ConstraintPackSnapshot = createDefaultConstraintPack(),
+  ): StrategyInferredAssumption[] {
+    const combinedText = [...(checklist.entryRules ?? []), ...(checklist.exitRules ?? [])].join(' ')
+    const assumptions: StrategyInferredAssumption[] = []
+    const consumedKeys = new Set([
+      ...(Array.isArray(constraintPack.inferredConfirmation?.confirmedKeys)
+        ? constraintPack.inferredConfirmation.confirmedKeys.filter((item): item is string => typeof item === 'string')
+        : []),
+      ...(Array.isArray(constraintPack.inferredConfirmation?.overriddenKeys)
+        ? constraintPack.inferredConfirmation.overriddenKeys.filter((item): item is string => typeof item === 'string')
+        : []),
+    ])
+    const inferredKeys = Array.isArray(checklist.riskRules?._inferredAssumptions)
+      ? checklist.riskRules._inferredAssumptions.filter(
+          (item): item is string => typeof item === 'string' && !consumedKeys.has(item),
+        )
+      : []
+
+    if (inferredKeys.includes('risk.stopLossBasis') && checklist.riskRules?.stopLossBasis === 'entry_avg_price') {
+      assumptions.push({
+        key: 'risk.stopLossBasis',
+        value: 'entry_avg_price',
+        source: 'system_default',
+      })
+    }
+
+    if (inferredKeys.includes('risk.takeProfitBasis') && checklist.riskRules?.takeProfitBasis === 'entry_avg_price') {
+      assumptions.push({
+        key: 'risk.takeProfitBasis',
+        value: 'entry_avg_price',
+        source: 'system_default',
+      })
+    }
+
+    if (/默认|你来定/u.test(combinedText)) {
+      assumptions.push({
+        key: 'strategy.defaults',
+        value: '沿用系统默认解释',
+        source: 'system_default',
+      })
+    }
+
+    return assumptions
+  }
+
+  private withConfirmedInferredDecisionKeys(
+    constraintPack: ConstraintPackSnapshot,
+    checklist: ChecklistPayload,
+    message: string | undefined,
+  ): {
+      checklist: ChecklistPayload
+      constraintPack: ConstraintPackSnapshot
+      consumed: boolean
+    } {
+    const clarification = this.resolveClarificationArtifacts(checklist)
+    const compileability = this.evaluateCanonicalCompileability(this.canonicalSpecBuilder.build(checklist))
+    const decision = this.buildStrategyDecision({
+      checklist,
+      clarification,
+      compileability,
+      constraintPack,
+    })
+
+    if (decision.kind !== 'CONFIRM_INFERRED') {
+      return {
+        checklist,
+        constraintPack,
+        consumed: false,
+      }
+    }
+
+    const explicitResponse = this.consumeExplicitInferredDecisionResponse(
+      checklist,
+      decision.inferredAssumptions.map(item => item.key),
+      message,
+    )
+    const remainingKeys = decision.inferredAssumptions
+      .map(item => item.key)
+      .filter(key => !explicitResponse.overriddenKeys.includes(key))
+    const confirmedKeys = this.isExplicitInferredConfirmationMessage(message)
+      ? remainingKeys
+      : remainingKeys.filter(key => explicitResponse.confirmedKeys.includes(key))
+
+    if (explicitResponse.overriddenKeys.length === 0 && confirmedKeys.length === 0) {
+      return {
+        checklist,
+        constraintPack,
+        consumed: false,
+      }
+    }
+
+    const existingConfirmedKeys = Array.isArray(constraintPack.inferredConfirmation?.confirmedKeys)
+      ? constraintPack.inferredConfirmation.confirmedKeys.filter((item): item is string => typeof item === 'string')
+      : []
+    const existingOverriddenKeys = Array.isArray(constraintPack.inferredConfirmation?.overriddenKeys)
+      ? constraintPack.inferredConfirmation.overriddenKeys.filter((item): item is string => typeof item === 'string')
+      : []
+
+    return {
+      checklist: explicitResponse.checklist,
+      constraintPack: {
+        ...constraintPack,
+        inferredConfirmation: {
+          confirmedKeys: Array.from(new Set([
+            ...existingConfirmedKeys.filter(key => !explicitResponse.overriddenKeys.includes(key)),
+            ...confirmedKeys,
+          ])),
+          overriddenKeys: Array.from(new Set([
+            ...existingOverriddenKeys,
+            ...explicitResponse.overriddenKeys,
+          ])),
+        },
+      },
+      consumed: true,
+    }
+  }
+
+  private consumeExplicitInferredDecisionResponse(
+    checklist: ChecklistPayload,
+    decisionKeys: string[],
+    message: string | undefined,
+  ): {
+      checklist: ChecklistPayload
+      confirmedKeys: string[]
+      overriddenKeys: string[]
+    } {
+    if (!message?.trim()) {
+      return {
+        checklist,
+        confirmedKeys: [],
+        overriddenKeys: [],
+      }
+    }
+
+    const activeKeys = new Set(decisionKeys)
+    const clauses = message
+      .split(/[，。；;\n]/u)
+      .map(clause => clause.trim())
+      .filter(Boolean)
+    const confirmedKeys = new Set<string>()
+    const overriddenKeys = new Set<string>()
+    let nextChecklist = checklist
+
+    for (const clause of clauses) {
+      const clauseTargets = this.resolveInferredDecisionClauseTargets(clause, activeKeys)
+      const basis = this.normalizeBasisClarificationAnswer(clause)
+      if (clauseTargets.length > 0 && basis) {
+        for (const key of clauseTargets) {
+          const currentBasis = key === 'risk.stopLossBasis'
+            ? nextChecklist.riskRules?.stopLossBasis
+            : nextChecklist.riskRules?.takeProfitBasis
+          if (currentBasis === basis) {
+            confirmedKeys.add(key)
+            continue
+          }
+          nextChecklist = this.normalizeChecklist({
+            ...nextChecklist,
+            riskRules: {
+              ...(nextChecklist.riskRules ?? {}),
+              ...(key === 'risk.stopLossBasis'
+                ? { stopLossBasis: basis }
+                : { takeProfitBasis: basis }),
+            },
+          })
+          overriddenKeys.add(key)
+        }
+        continue
+      }
+
+      if (this.isExplicitInferredConfirmationClause(clause)) {
+        const confirmationTargets = clauseTargets.length > 0
+          ? clauseTargets
+          : activeKeys.size === 1
+            ? [Array.from(activeKeys)[0] as string]
+            : []
+
+        if (confirmationTargets.length === 0) {
+          continue
+        }
+
+        for (const key of confirmationTargets) {
+          confirmedKeys.add(key)
+        }
+      }
+    }
+
+    return {
+      checklist: nextChecklist,
+      confirmedKeys: Array.from(confirmedKeys).filter(key => !overriddenKeys.has(key)),
+      overriddenKeys: Array.from(overriddenKeys),
+    }
+  }
+
+  private resolveInferredDecisionClauseTargets(clause: string, activeKeys: ReadonlySet<string>): string[] {
+    const targets: string[] = []
+    if (activeKeys.has('risk.stopLossBasis') && /止损|亏损/u.test(clause)) {
+      targets.push('risk.stopLossBasis')
+    }
+    if (activeKeys.has('risk.takeProfitBasis') && /止盈|盈利|收益率|收益|利润/u.test(clause)) {
+      targets.push('risk.takeProfitBasis')
+    }
+    return targets
+  }
+
+  private isExplicitInferredConfirmationClause(clause: string): boolean {
+    const raw = clause.trim()
+    if (!raw) {
+      return false
+    }
+
+    if (/[？?]/u.test(raw)) {
+      return false
+    }
+
+    const normalized = raw.replace(/[\s，。,．！!？?、；;：:]/gu, '')
+    if (/[吗么嘛吧呢呗]$/u.test(normalized)) {
+      return false
+    }
+
+    if (
+      /(?:不成立|默认不对|默认不行|默认不好|默认不合适|默认不能|默认不要|默认别)/u.test(normalized)
+      || /(?:不是默认|别按默认|不要默认)/u.test(normalized)
+    ) {
+      return false
+    }
+
+    return [
+      /默认值?没问题/u,
+      /按默认(?:值)?(?:来|走)?$/u,
+      /默认即可$/u,
+      /就按这个默认/u,
+      /就按默认/u,
+    ].some(pattern => pattern.test(normalized))
+  }
+
+  private isExplicitInferredConfirmationMessage(message: string | undefined): boolean {
+    const normalized = message?.trim().replace(/[\s，。,．！!？?、；;：:]/gu, '')
+    if (!normalized) {
+      return false
+    }
+
+    return new Set([
+      '这个是对的',
+      '这是对的',
+      '对的继续',
+      '这个推断是对的',
+      '这些推断是对的',
+      '这些推断成立',
+      '这些成立继续',
+      '推断成立',
+      '就按这个来',
+      '这个默认是对的',
+      '这些默认是对的',
+    ]).has(normalized)
   }
 
   private inferChecklistFromMessage(message?: string): ChecklistPayload {
@@ -2237,6 +2675,9 @@ export class CodegenConversationService {
     if (!riskRules) return undefined
 
     const nextRiskRules = { ...riskRules }
+    const inferredAssumptions = Array.isArray(nextRiskRules._inferredAssumptions)
+      ? [...nextRiskRules._inferredAssumptions]
+      : []
     const stopLossPct = typeof nextRiskRules.stopLossPct === 'number' ? nextRiskRules.stopLossPct : null
     const takeProfitPct = typeof nextRiskRules.takeProfitPct === 'number' ? nextRiskRules.takeProfitPct : null
 
@@ -2247,6 +2688,7 @@ export class CodegenConversationService {
       )
       if (basis) {
         nextRiskRules.stopLossBasis = basis
+        inferredAssumptions.push('risk.stopLossBasis')
       }
     }
 
@@ -2257,7 +2699,12 @@ export class CodegenConversationService {
       )
       if (basis) {
         nextRiskRules.takeProfitBasis = basis
+        inferredAssumptions.push('risk.takeProfitBasis')
       }
+    }
+
+    if (inferredAssumptions.length > 0) {
+      nextRiskRules._inferredAssumptions = Array.from(new Set(inferredAssumptions))
     }
 
     return nextRiskRules

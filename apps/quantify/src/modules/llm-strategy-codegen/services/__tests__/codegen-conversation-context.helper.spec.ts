@@ -53,6 +53,20 @@ describe('CodegenConversationContextHelper', () => {
     })
   })
 
+  it('normalizes inferred confirmation keys into string arrays', () => {
+    expect(helper.readConstraintPack({
+      inferredConfirmation: {
+        confirmedKeys: [' entryRules ', '', 1, null, 'riskRules'],
+        overriddenKeys: [' exitRules ', undefined, '  ', false, 'positionSizing'],
+      },
+    })).toMatchObject({
+      inferredConfirmation: {
+        confirmedKeys: ['entryRules', 'riskRules'],
+        overriddenKeys: ['exitRules', 'positionSizing'],
+      },
+    })
+  })
+
   it('derives recommendation style from checklist before message fallback', () => {
     expect(helper.inferRecommendationStyleFromContext(
       '这是一个上涨回撤策略',
