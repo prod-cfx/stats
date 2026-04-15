@@ -947,7 +947,7 @@ export function resolveBacktestRangeInput(values: Record<string, unknown>): Back
 }
 
 export function shouldInvalidatePublicationForParamChange(key: string): boolean {
-  return !NON_STRATEGY_PARAM_KEYS.has(key)
+  return !NON_STRATEGY_PARAM_KEYS.has(key) && !BACKTEST_EXECUTION_PARAM_KEY_SET.has(key)
 }
 
 function stripBacktestExecutionParamValues(

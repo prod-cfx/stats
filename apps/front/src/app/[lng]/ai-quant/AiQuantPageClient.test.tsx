@@ -110,6 +110,12 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
       >
         valid
       </button>
+      <button
+        data-testid="set-backtest-execution"
+        onClick={() => onParamChange('backtestInitialCash', 25000)}
+      >
+        execution
+      </button>
       <button data-testid="run-backtest" onClick={onRunBacktest}>run</button>
       <div data-testid="params">{JSON.stringify(paramValues)}</div>
       <div data-testid="messages">{messages.map(msg => msg.content).join('|')}</div>
@@ -451,6 +457,33 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(summary).toBeTruthy()
     expect(summary?.textContent).toContain('2026-03-17T12:00:00.000Z')
     expect(summary?.textContent).toContain('2026-03-24T12:00:00.000Z')
+  })
+
+  it('keeps confirmed logic graph and published snapshot when changing backtest execution params', async () => {
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="set-backtest-execution"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    const raw = localStorage.getItem('ai_quant_conversations_v1')
+    expect(raw).toBeTruthy()
+    const parsed = JSON.parse(raw ?? '{}') as {
+      version: string
+      conversations: Array<{
+        publishedSnapshotId: string | null
+        logicGraph?: { status?: string }
+        paramValues?: Record<string, unknown>
+      }>
+    }
+    expect(parsed.conversations[0]?.publishedSnapshotId).toBe('snapshot-1')
+    expect(parsed.conversations[0]?.logicGraph?.status).toBe('confirmed')
+    expect(parsed.conversations[0]?.paramValues?.backtestInitialCash).toBe(25000)
   })
 
   it('passes symbol/startAt/endAt query params when opening backtest full screen', async () => {
