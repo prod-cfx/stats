@@ -75,13 +75,6 @@ function buildInvalidExecutionConfigMessage(args: {
     invalidFields.push('成交价来源')
   }
 
-  if (invalidFields.length > 0 && activeConversation.backtestExecutionConfigExplicit !== true) {
-    return t('aiQuant.messages.backtestPayloadInvalid', {
-      reason:
-        'missing_explicit_execution_config：当前会话还没有明确保存回测执行参数（初始资金、杠杆、滑点、手续费、成交价来源、是否允许部分成交），请先重新确认回测参数。',
-    })
-  }
-
   if (invalidFields.length > 0) {
     return t('aiQuant.messages.backtestPayloadInvalid', {
       reason: `invalid_execution_config：以下回测执行参数无效或缺失：${invalidFields.join('、')}。`,

@@ -884,6 +884,76 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain('重新发布')
   })
 
+  it('reports exact invalid execution fields even when explicit flag is false', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    const activeConversation = {
+      ...seeded[0],
+      backtestExecutionConfigExplicit: false,
+      publishedScriptGraphVersion: 1,
+      publishedScriptCode: 'return { ok: true }',
+      paramValues: {
+        ...seeded[0].paramValues,
+        backtestInitialCash: 20000,
+        backtestLeverage: 2,
+        backtestSlippageBps: 3,
+        backtestFeeBps: '',
+        backtestPriceSource: 'open',
+        backtestAllowPartial: false,
+      },
+    } as ConversationState
+
+    mockBuildBacktestPayload.mockImplementation((input: any) => {
+      if (
+        !Number.isFinite(input.initialCash)
+        || !Number.isFinite(input.leverage)
+        || !Number.isFinite(input.execution?.slippageBps)
+        || !Number.isFinite(input.execution?.feeBps)
+        || (input.execution?.priceSource !== 'open' && input.execution?.priceSource !== 'close' && input.execution?.priceSource !== 'mid')
+      ) {
+        const error = new Error('invalid_execution_config')
+        ;(error as Error & { __builderError: boolean; code: string }).__builderError = true
+        ;(error as Error & { __builderError: boolean; code: string }).code = 'invalid_execution_config'
+        throw error
+      }
+      return {
+        ...defaultPayload(),
+        initialCash: input.initialCash,
+        leverage: input.leverage,
+        execution: { ...input.execution },
+        allowPartial: input.allowPartial,
+      }
+    })
+
+    let currentConversation = activeConversation
+
+    await runAiQuantBacktest({
+      activeConversation,
+      activeConversationIdRef: { current: activeConversation.id },
+      backtestCapabilities: {
+        allowedSymbols: ['BTCUSDT'],
+        allowedBaseTimeframes: ['15m'],
+      },
+      backtestCapabilityState: 'ready',
+      backtestRunMutexRef: { current: new Set<string>() },
+      backtestRunTokenRef: { current: new Map<string, number>() },
+      graphConfirmed: true,
+      isMountedRef: { current: true },
+      setConversationBacktestExecutionState: jest.fn(),
+      t: (key: string, options?: Record<string, unknown>) =>
+        key === 'aiQuant.messages.backtestPayloadInvalid' && typeof options?.reason === 'string'
+          ? `${key}:${options.reason}`
+          : key,
+      updateConversationById: (_conversationId, updater) => {
+        currentConversation = updater(currentConversation)
+      },
+    })
+
+    expect(mockCreateBacktestJob).not.toHaveBeenCalled()
+    expect(currentConversation.messages.at(-1)?.content ?? '').toContain('invalid_execution_config')
+    expect(currentConversation.messages.at(-1)?.content ?? '').toContain('手续费')
+    expect(currentConversation.messages.at(-1)?.content ?? '').not.toContain('missing_explicit_execution_config')
+  })
+
   it('fails fast when allowPartial is present but invalid', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
     seeded[0].paramValues = {
