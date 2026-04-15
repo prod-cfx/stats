@@ -125,6 +125,8 @@
     "totalReturn": "Total Return",
     "winRate": "Win Rate",
     "tradeCount": "Trades",
+    "openTradeCount": "Open Trades",
+    "openPnl": "Open P&L",
     "deploy": "Deploy",
     "optimize": "Optimize",
     "fullScreen": "Full Screen",

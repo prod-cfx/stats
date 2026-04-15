@@ -3,6 +3,8 @@ export interface BacktestReportMetrics {
   totalReturnPct: number
   winRatePct: number
   tradeCount: number
+  openTradeCount?: number
+  openPnl?: number
 }
 
 export interface EquityPoint {

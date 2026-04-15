@@ -125,6 +125,8 @@
     "totalReturn": "总收益",
     "winRate": "胜率",
     "tradeCount": "交易次数",
+    "openTradeCount": "未平仓笔数",
+    "openPnl": "浮动盈亏",
     "deploy": "一键部署",
     "optimize": "继续优化",
     "fullScreen": "全屏查看",

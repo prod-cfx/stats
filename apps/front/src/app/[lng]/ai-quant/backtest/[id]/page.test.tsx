@@ -22,6 +22,8 @@ const mockBacktestReportClient = jest.fn(
       totalReturnPct: number
       winRatePct: number
       tradeCount: number
+      openTradeCount?: number
+      openPnl?: number
     } | null
     partialCoverageNotice?: {
       requestedRange: string
@@ -150,6 +152,8 @@ describe('AiQuantBacktestDetailPage', () => {
         winRate: 0.5,
         profitFactor: 1.4,
         totalTrades: 4,
+        totalOpenTrades: 1,
+        openPnl: 2.4851821235144986,
       },
     })
 
@@ -171,6 +175,8 @@ describe('AiQuantBacktestDetailPage', () => {
         totalReturnPct: 8.8,
         winRatePct: 50,
         tradeCount: 4,
+        openTradeCount: 1,
+        openPnl: 2.49,
       },
     })
     expect(props).not.toHaveProperty('report')

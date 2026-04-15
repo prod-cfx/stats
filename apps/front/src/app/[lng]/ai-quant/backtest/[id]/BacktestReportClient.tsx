@@ -7,8 +7,8 @@ import type {
   TradeRecord,
 } from './backtest-report-data'
 import type { BacktestJobResult } from '@/components/ai-quant/backtest-job-client'
-import Link from 'next/link'
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import React, { startTransition, useMemo, useState } from 'react'
 import { getBacktestJobResult } from '@/components/ai-quant/backtest-job-client'
 import { createBacktestReportDataFromLive } from './backtest-report-data'
@@ -146,6 +146,14 @@ function MetricCard({
       </p>
     </div>
   )
+}
+
+function formatSignedPnl(value: number): string {
+  const formatted = value.toFixed(2)
+  if (value > 0) {
+    return `+${formatted}`
+  }
+  return formatted
 }
 
 // --- 4. AI Analysis Panel ---
@@ -462,7 +470,7 @@ export function BacktestReportClient({
       <StrategyConclusionCard status={status} summary={summary} onDeploy={handleDeploy} lng={lng} />
 
       {/* 2. 核心指标卡 */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
         <MetricCard
           title={lng === 'en' ? 'Total Return' : '总收益'}
           value={
@@ -485,6 +493,20 @@ export function BacktestReportClient({
           value={metrics ? `${metrics.tradeCount}` : '--'}
           trend="neutral"
         />
+        {typeof metrics?.openTradeCount === 'number' && (
+          <MetricCard
+            title={lng === 'en' ? 'Open Trades' : '未平仓笔数'}
+            value={`${metrics.openTradeCount}`}
+            trend="neutral"
+          />
+        )}
+        {typeof metrics?.openPnl === 'number' && (
+          <MetricCard
+            title={lng === 'en' ? 'Open P&L' : '浮动盈亏'}
+            value={formatSignedPnl(metrics.openPnl)}
+            trend={metrics.openPnl > 0 ? 'up' : metrics.openPnl < 0 ? 'down' : 'neutral'}
+          />
+        )}
       </div>
 
       {hasReportData && reportData ? (

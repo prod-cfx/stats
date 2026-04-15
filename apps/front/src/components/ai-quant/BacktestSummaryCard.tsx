@@ -38,6 +38,7 @@ export function BacktestSummaryCard({
     ? `${result.symbol} · ${formatBacktestRange(result.startAt, result.endAt)}`
     : null
   const hasOpenOnlyTrades = result.tradeCount === 0 && (result.openTradeCount ?? 0) > 0
+  const openPnlValue = typeof result.openPnl === 'number' ? formatSignedPnl(result.openPnl) : null
 
   return (
     <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
@@ -60,11 +61,17 @@ export function BacktestSummaryCard({
         </button>
       </div>
 
-      <div className="mt-4 grid gap-3 md:grid-cols-4">
+      <div className="mt-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Metric title={t('aiQuant.maxDrawdown')} value={`-${result.maxDrawdownPct}%`} type="loss" />
         <Metric title={t('aiQuant.totalReturn')} value={`${result.totalReturnPct > 0 ? '+' : ''}${result.totalReturnPct}%`} type={result.totalReturnPct > 0 ? 'profit' : 'loss'} />
         <Metric title={t('aiQuant.winRate')} value={`${result.winRatePct}%`} type="neutral" />
         <Metric title={t('aiQuant.tradeCount')} value={`${result.tradeCount}`} type="neutral" />
+        {typeof result.openTradeCount === 'number' && (
+          <Metric title={t('aiQuant.openTradeCount')} value={`${result.openTradeCount}`} type="neutral" />
+        )}
+        {openPnlValue && (
+          <Metric title={t('aiQuant.openPnl')} value={openPnlValue} type={result.openPnl && result.openPnl > 0 ? 'profit' : result.openPnl && result.openPnl < 0 ? 'loss' : 'neutral'} />
+        )}
       </div>
 
       {!canDeploy && (
@@ -109,4 +116,12 @@ function Metric({ title, value, type }: { title: string, value: string, type?: '
       <p className={`mt-1 text-lg font-semibold ${colorClass}`}>{value}</p>
     </div>
   )
+}
+
+function formatSignedPnl(value: number): string {
+  const formatted = value.toFixed(2)
+  if (value > 0) {
+    return `+${formatted}`
+  }
+  return formatted
 }
