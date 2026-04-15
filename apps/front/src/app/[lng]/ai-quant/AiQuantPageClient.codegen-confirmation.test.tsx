@@ -8,6 +8,7 @@ import { AiQuantPageClient } from './AiQuantPageClient'
 const mockContinueLlmCodegenSession = jest.fn()
 const mockFetchBacktestCapabilities = jest.fn()
 const mockGetLlmCodegenSession = jest.fn()
+const mockReadPersistedConversations = jest.fn()
 const mockStartLlmCodegenSession = jest.fn()
 const validSemanticGraph = {
   version: 1,
@@ -79,6 +80,20 @@ jest.mock('@/hooks/use-auth', () => ({
     isLoading: false,
   }),
 }))
+
+jest.mock('./ai-quant-page-conversation', () => {
+  const actual = jest.requireActual('./ai-quant-page-conversation') as typeof import('./ai-quant-page-conversation')
+  return {
+    ...actual,
+    readPersistedConversations: (...args: Parameters<typeof actual.readPersistedConversations>) => {
+      const override = mockReadPersistedConversations.getMockImplementation()
+      if (override) {
+        return override(...args, actual.readPersistedConversations)
+      }
+      return actual.readPersistedConversations(...args)
+    },
+  }
+})
 
 jest.mock('@/components/account/ai-quant-strategy-store', () => ({
   upsertStrategyDeployment: jest.fn(),
@@ -415,6 +430,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     localStorage.clear()
     seedDraftConversation(Date.now())
     jest.clearAllMocks()
+    mockReadPersistedConversations.mockReset()
 
     mockFetchBacktestCapabilities.mockResolvedValue({
       allowedSymbols: ['BTCUSDT'],
@@ -1030,6 +1046,153 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
         message: '减半仓位',
         clarificationAnswers: {
           'riskRules.earlyStop.action': '减半仓位',
+        },
+      }),
+    )
+  })
+
+  it('binds the MA50 blocked-chat answer to the backend-selected semantic clarification item', async () => {
+    seedDraftConversation(Date.now(), {
+      messages: [
+        {
+          id: 'assistant-semantic-clarification',
+          role: 'assistant',
+          content: '长期均线是多少？',
+        },
+      ],
+      clarificationGate: {
+        blocked: true,
+        summary: 'BTCUSDT 15m',
+        items: [
+          {
+            key: 'semantic.reference.period.entry',
+            field: 'entryRules',
+            reason: 'missing_entry_rules',
+            question: '长期均线是多少？',
+            blocking: true,
+            status: 'pending',
+          },
+          {
+            key: 'executionContext.exchange',
+            field: 'exchange',
+            reason: 'missing_exchange',
+            question: '请确认交易所（binance / okx / hyperliquid）。',
+            blocking: true,
+            status: 'pending',
+          },
+        ],
+        pendingItems: [
+          {
+            key: 'semantic.reference.period.entry',
+            field: 'entryRules',
+            reason: 'missing_entry_rules',
+            question: '长期均线是多少？',
+            blocking: true,
+            status: 'pending',
+          },
+        ],
+      },
+    })
+    mockReadPersistedConversations.mockImplementation((input, actualReadPersistedConversations) => {
+      const result = actualReadPersistedConversations(input)
+      return {
+        ...result,
+        conversations: result.conversations.map((conversation, index) => {
+          if (index !== 0 || !conversation.clarificationGate) {
+            return conversation
+          }
+          return {
+            ...conversation,
+            clarificationGate: {
+              ...conversation.clarificationGate,
+              items: [
+                {
+                  key: 'semantic.reference.period.entry',
+                  field: 'entryRules',
+                  reason: 'missing_entry_rules',
+                  question: '长期均线是多少？',
+                  blocking: true,
+                  status: 'pending',
+                },
+                {
+                  key: 'executionContext.exchange',
+                  field: 'exchange',
+                  reason: 'missing_exchange',
+                  question: '请确认交易所（binance / okx / hyperliquid）。',
+                  blocking: true,
+                  status: 'pending',
+                },
+              ],
+              pendingItems: [
+                {
+                  key: 'semantic.reference.period.entry',
+                  field: 'entryRules',
+                  reason: 'missing_entry_rules',
+                  question: '长期均线是多少？',
+                  blocking: true,
+                  status: 'pending',
+                },
+              ],
+            },
+          }
+        }),
+      }
+    })
+
+    mockContinueLlmCodegenSession.mockResolvedValueOnce({
+      id: 'session-1',
+      status: 'CHECKLIST_GATE',
+      clarificationGate: null,
+      canonicalDigest: 'sha256:canonical-ma50',
+      semanticGraph: validSemanticGraph,
+      validationReport: { ok: true, errors: [] },
+      specDesc: {
+        entryRules: ['价格突破 MA50 时买入'],
+        exitRules: ['价格跌破短期均线时卖出'],
+        riskRules: { positionPct: 10, maxDrawdownPct: 15 },
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+      },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('长期均线是多少？')
+    expect(
+      (container.querySelector('[data-testid="confirm-graph"]') as HTMLButtonElement | null)?.disabled,
+    ).toBe(true)
+
+    await act(async () => {
+      const input = container.querySelector('[data-testid="chat-input"]') as HTMLInputElement | null
+      if (input) {
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')
+          ?.set
+          ?.call(input, 'MA50')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        input.dispatchEvent(new Event('change', { bubbles: true }))
+      }
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="send-chat"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockContinueLlmCodegenSession).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        message: 'MA50',
+        clarificationAnswers: {
+          'semantic.reference.period.entry': 'MA50',
         },
       }),
     )

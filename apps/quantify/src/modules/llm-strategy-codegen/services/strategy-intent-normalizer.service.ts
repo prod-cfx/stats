@@ -286,9 +286,10 @@ export class StrategyIntentNormalizerService {
         })
       }
       const unresolvedSlots: UnresolvedSlot[] = []
+      const semanticScope = phase === 'entry' ? 'entry' : 'exit'
       if (referencePeriod === null) {
         unresolvedSlots.push({
-          slotKey: 'reference.period',
+          slotKey: `reference.period.${semanticScope}`,
           fieldPath: `triggers[${triggerIndex}].params.reference.period`,
           reason: 'missing_required_param',
           questionHint: `${questionPrefix}是多少？`,
@@ -299,7 +300,7 @@ export class StrategyIntentNormalizerService {
       }
       if (!confirmationMode) {
         unresolvedSlots.push({
-          slotKey: 'confirmationMode',
+          slotKey: `confirmationMode.${semanticScope}`,
           fieldPath: `triggers[${triggerIndex}].params.confirmationMode`,
           reason: 'missing_definition',
           questionHint: '突破按收盘确认还是盘中触发？',
@@ -336,9 +337,10 @@ export class StrategyIntentNormalizerService {
         })
       }
       const unresolvedSlots: UnresolvedSlot[] = []
+      const semanticScope = phase === 'entry' ? 'entry' : 'exit'
       if (referencePeriod === null) {
         unresolvedSlots.push({
-          slotKey: 'reference.period',
+          slotKey: `reference.period.${semanticScope}`,
           fieldPath: `triggers[${triggerIndex}].params.reference.period`,
           reason: 'missing_required_param',
           questionHint: `${questionPrefix}是多少？`,
@@ -349,7 +351,7 @@ export class StrategyIntentNormalizerService {
       }
       if (!confirmationMode) {
         unresolvedSlots.push({
-          slotKey: 'confirmationMode',
+          slotKey: `confirmationMode.${semanticScope}`,
           fieldPath: `triggers[${triggerIndex}].params.confirmationMode`,
           reason: 'missing_definition',
           questionHint: '跌破按收盘确认还是盘中触发？',

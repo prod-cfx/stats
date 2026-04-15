@@ -770,6 +770,74 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('keeps clarification gate ordering aligned with the semantic question selected for assistantPrompt', () => {
+    const result = (service as any).finalizeSessionResponse({
+      id: 's-clarification-order-alignment',
+      status: 'DRAFTING',
+      missingFields: [],
+      assistantPrompt: [
+        '我当前理解的策略是：BTCUSDT 15m；入场：价格突破长期均线时买入；出场：跌破短期均线时卖出。',
+        '现在还缺一个会影响脚本生成一致性的条件：核心信号未闭合',
+        '请确认：长期均线是多少？',
+      ].join('\n'),
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'executionContext.exchange',
+            reason: 'missing_exchange',
+            field: 'exchange',
+            blocking: true,
+            question: '请确认交易所（binance / okx / hyperliquid）。',
+            status: 'pending',
+          },
+          {
+            key: 'semantic.reference.period.entry',
+            reason: 'missing_entry_rules',
+            field: 'entryRules',
+            blocking: true,
+            question: '长期均线是多少？',
+            status: 'pending',
+          },
+          {
+            key: 'semantic.confirmationMode.entry',
+            reason: 'missing_entry_rules',
+            field: 'entryRules',
+            blocking: true,
+            question: '突破按收盘确认还是盘中触发？',
+            status: 'pending',
+          },
+        ],
+      },
+    })
+
+    expect(result.assistantPrompt).toContain('长期均线是多少')
+    expect((result as any).clarificationGate).toEqual(expect.objectContaining({
+      blocked: true,
+      summary: null,
+    }))
+    expect((result as any).clarificationGate.items[0]).toEqual(expect.objectContaining({
+      key: 'semantic.reference.period.entry',
+      question: '长期均线是多少？',
+      status: 'pending',
+    }))
+    expect((result as any).clarificationGate.pendingItems[0]).toEqual(expect.objectContaining({
+      key: 'semantic.reference.period.entry',
+      question: '长期均线是多少？',
+      status: 'pending',
+    }))
+    expect((result as any).clarificationGate.items.map((item: any) => item.key)).toEqual(expect.arrayContaining([
+      'semantic.reference.period.entry',
+      'semantic.confirmationMode.entry',
+      'executionContext.exchange',
+    ]))
+    expect((result as any).clarificationGate.pendingItems.map((item: any) => item.key)).toEqual(expect.arrayContaining([
+      'semantic.reference.period.entry',
+      'semantic.confirmationMode.entry',
+      'executionContext.exchange',
+    ]))
+  })
+
   it('preserves explicit direction in bollinger fallback inference and does not ask direction clarification', async () => {
     mockRepo.createSession.mockResolvedValue({ id: 's-clarify-2' })
 
@@ -1560,7 +1628,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         status: 'NEEDS_CLARIFICATION',
         items: [
           {
-            key: 'semantic.reference.period',
+            key: 'semantic.reference.period.entry',
             reason: 'missing_entry_rules',
             field: 'entryRules',
             blocking: true,
@@ -1583,7 +1651,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '50',
       clarificationAnswers: {
-        'semantic.reference.period': '50',
+        'semantic.reference.period.entry': '50',
       },
     } as ContinueCodegenSessionDto)
 
@@ -1611,7 +1679,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         status: 'NEEDS_CLARIFICATION',
         items: [
           {
-            key: 'semantic.reference.period',
+            key: 'semantic.reference.period.entry',
             reason: 'missing_entry_rules',
             field: 'entryRules',
             blocking: true,
@@ -1646,7 +1714,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('长期均线是多少')
   })
 
-  it('binds a freeform answer to the first pending semantic slot even when more semantic slots remain', async () => {
+  it('applies MA50 to the active entry moving-average slot and advances to the next clarification question', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-semantic-ma-period-freeform-multi',
       userId: 'u1',
@@ -1688,7 +1756,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const result = await service.continueSession('s-semantic-ma-period-freeform-multi', {
       userId: 'u1',
-      message: 'ma50',
+      message: 'MA50',
+      clarificationAnswers: {
+        'semantic.reference.period.entry': 'MA50',
+      },
     } as ContinueCodegenSessionDto)
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith(
@@ -1701,6 +1772,35 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
     expect(result.assistantPrompt).not.toContain('长期均线是多少')
     expect(result.assistantPrompt).toContain('突破按收盘确认还是盘中触发')
+  })
+
+  it('does not auto-bind freeform semantic answers when another clarification item is currently active', () => {
+    const inferredAnswers = (service as any).inferFreeformSemanticClarificationAnswers(
+      {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'executionContext.exchange',
+            reason: 'missing_exchange',
+            field: 'exchange',
+            blocking: true,
+            question: '请确认交易所（binance / okx / hyperliquid）。',
+            status: 'pending',
+          },
+          {
+            key: 'semantic.reference.period.entry',
+            reason: 'missing_entry_rules',
+            field: 'entryRules',
+            blocking: true,
+            question: '长期均线是多少？',
+            status: 'pending',
+          },
+        ],
+      },
+      'MA50',
+    )
+
+    expect(inferredAnswers).toEqual({})
   })
 
   it('applies action uniqueness clarification to the targeted entry rule only', async () => {
