@@ -52,4 +52,52 @@ describe('SemanticStateReducerService', () => {
     expect(next.triggers[0]?.openSlots.find(slot => slot.slotKey === 'reference.period.entry')?.status).toBe('locked')
     expect(next.triggers[0]?.openSlots.find(slot => slot.slotKey === 'confirmationMode.entry')?.status).toBe('open')
   })
+
+  it('locks the confirmation slot with the semantic confirmation value instead of inheriting reference period', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [
+          {
+            id: 'entry-ma',
+            key: 'indicator.above',
+            phase: 'entry',
+            params: {
+              indicator: 'ma',
+              referenceRole: 'long_term',
+              'reference.period': 50,
+            },
+            status: 'open',
+            source: 'user_explicit',
+            openSlots: [
+              {
+                slotKey: 'confirmationMode.entry',
+                fieldPath: 'triggers[0].params.confirmationMode',
+                status: 'open',
+                priority: 'core',
+                questionHint: '突破按收盘确认还是盘中触发？',
+                affectsExecution: true,
+              },
+            ],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'confirmationMode.entry',
+      answer: '收盘确认',
+      messageIndex: 5,
+    })
+
+    expect(next.triggers[0]?.params.confirmationMode).toBe('close_confirm')
+    expect(next.triggers[0]?.openSlots.find(slot => slot.slotKey === 'confirmationMode.entry')).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'close_confirm',
+    }))
+  })
 })

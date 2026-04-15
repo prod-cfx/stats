@@ -52,9 +52,15 @@ export class SemanticStateReducerService {
         trigger.params.confirmationMode = confirmationIsClose ? 'close_confirm' : 'touch'
       }
 
-      slot.value = typeof trigger.params['reference.period'] === 'number'
-        ? (trigger.params['reference.period'] as number)
-        : (trigger.params.confirmationMode as string | undefined) ?? answerText
+      if (slot.slotKey.includes('confirmationMode')) {
+        slot.value = (trigger.params.confirmationMode as string | undefined) ?? answerText
+      }
+      else if (slot.slotKey.includes('reference.period') && typeof trigger.params['reference.period'] === 'number') {
+        slot.value = trigger.params['reference.period'] as number
+      }
+      else {
+        slot.value = answerText
+      }
       slot.status = 'locked'
       slot.evidence = {
         text: answerText,
