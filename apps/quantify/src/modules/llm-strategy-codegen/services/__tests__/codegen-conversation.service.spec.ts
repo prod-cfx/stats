@@ -1774,6 +1774,251 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).toContain('突破按收盘确认还是盘中触发')
   })
 
+  it('does not regress to checklist-derived generic summary after locking MA semantics', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-semantic-mainline',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        entryRules: ['满足入场条件后开仓'],
+        exitRules: ['满足出场条件后平仓'],
+        riskRules: {
+          marketType: 'perp',
+          positionPct: 10,
+        },
+      },
+      semanticState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [
+          {
+            id: 'entry-ma',
+            key: 'indicator.above',
+            phase: 'entry',
+            params: {
+              indicator: 'ma',
+              referenceRole: 'long_term',
+              'reference.period': 50,
+              confirmationMode: 'close_confirm',
+            },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          },
+          {
+            id: 'exit-ma',
+            key: 'indicator.below',
+            phase: 'exit',
+            params: {
+              indicator: 'ma',
+              referenceRole: 'short_term',
+              'reference.period': 20,
+              confirmationMode: 'close_confirm',
+            },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: {
+          mode: 'fixed_ratio',
+          value: 10,
+          positionMode: 'long_only',
+          status: 'locked',
+          source: 'user_explicit',
+        },
+        contextSlots: {
+          exchange: {
+            slotKey: 'exchange',
+            fieldPath: 'contextSlots.exchange',
+            status: 'locked',
+            priority: 'context',
+            questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+            affectsExecution: true,
+            value: 'okx',
+          },
+          symbol: {
+            slotKey: 'symbol',
+            fieldPath: 'contextSlots.symbol',
+            status: 'locked',
+            priority: 'context',
+            questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+            affectsExecution: true,
+            value: 'BTCUSDT',
+          },
+          marketType: {
+            slotKey: 'marketType',
+            fieldPath: 'contextSlots.marketType',
+            status: 'locked',
+            priority: 'context',
+            questionHint: '请确认市场类型（现货或合约/perp）。',
+            affectsExecution: true,
+            value: 'perp',
+          },
+          timeframe: {
+            slotKey: 'timeframe',
+            fieldPath: 'contextSlots.timeframe',
+            status: 'open',
+            priority: 'context',
+            questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+            affectsExecution: true,
+          },
+        },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'executionContext.timeframe',
+            reason: 'missing_timeframe',
+            field: 'timeframe',
+            blocking: true,
+            question: '请确认策略主周期（例如 15m 或 1h）。',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+        logic: {
+          riskRules: {
+            exchange: 'okx',
+          },
+        },
+      }),
+    })
+
+    const result = await service.continueSession('s-semantic-mainline', {
+      userId: 'u1',
+      message: 'okx',
+    } as any)
+
+    expect(result.assistantPrompt).not.toContain('满足入场条件后开仓')
+    expect(result.assistantPrompt).not.toContain('满足出场条件后平仓')
+  })
+
+  it('keeps asking unresolved state-gate questions after trigger slots are partially closed', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-state-gate-open',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        entryRules: ['价格突破一条长期均线时买入'],
+        exitRules: ['跌破短期均线时卖出'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+          positionPct: 10,
+        },
+      },
+      semanticState: {
+        version: 1,
+        families: ['single-leg', 'state-gated'],
+        triggers: [
+          {
+            id: 'entry-ma',
+            key: 'indicator.above',
+            phase: 'entry',
+            params: {
+              indicator: 'ma',
+              referenceRole: 'long_term',
+            },
+            status: 'open',
+            source: 'user_explicit',
+            openSlots: [
+              {
+                slotKey: 'reference.period.entry',
+                fieldPath: 'triggers[0].params.reference.period',
+                status: 'open',
+                priority: 'core',
+                questionHint: '长期均线是多少？',
+                affectsExecution: true,
+              },
+            ],
+          },
+          {
+            id: 'regime-gate',
+            key: 'market.regime',
+            phase: 'gate',
+            params: {
+              value: 'range',
+              mode: 'observation_only',
+            },
+            status: 'open',
+            source: 'user_explicit',
+            openSlots: [
+              {
+                slotKey: 'regimeDefinition',
+                fieldPath: 'triggers[1].params.definition',
+                status: 'open',
+                priority: 'behavior',
+                questionHint: '震荡行情怎么判断？',
+                affectsExecution: true,
+              },
+            ],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: {
+          mode: 'fixed_ratio',
+          value: 10,
+          positionMode: 'long_only',
+          status: 'locked',
+          source: 'user_explicit',
+        },
+        contextSlots: {
+          exchange: null,
+          symbol: null,
+          marketType: null,
+          timeframe: null,
+        },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'semantic.reference.period.entry',
+            reason: 'missing_entry_rules',
+            field: 'entryRules',
+            blocking: true,
+            question: '长期均线是多少？',
+            status: 'pending',
+            slotKey: 'reference.period.entry',
+            fieldPath: 'triggers[0].params.reference.period',
+            slotId: JSON.stringify(['reference.period.entry', 'triggers[0].params.reference.period']),
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-state-gate-open', {
+      userId: 'u1',
+      message: 'MA50',
+    } as any)
+
+    expect(result.assistantPrompt).toContain('震荡行情怎么判断')
+  })
+
   it('does not auto-bind freeform semantic answers when another clarification item is currently active', () => {
     const inferredAnswers = (service as any).inferFreeformSemanticClarificationAnswers(
       {
