@@ -324,13 +324,21 @@ export class CodegenConversationService {
     }
 
     const baseClarificationState = this.readClarificationState(session.clarificationState)
+    const inferredSemanticClarificationAnswers = this.inferFreeformSemanticClarificationAnswers(
+      baseClarificationState,
+      dto.message,
+      dto.clarificationAnswers,
+    )
+    const effectiveClarificationAnswers = Object.keys(inferredSemanticClarificationAnswers).length > 0
+      ? inferredSemanticClarificationAnswers
+      : dto.clarificationAnswers
     const hasStructuredClarificationAnswers = Boolean(
-      dto.clarificationAnswers && Object.keys(dto.clarificationAnswers).length > 0,
+      effectiveClarificationAnswers && Object.keys(effectiveClarificationAnswers).length > 0,
     )
     const baseChecklistAfterAnswers = this.applyClarificationAnswers(
       this.readChecklist(session.checklist),
       baseClarificationState,
-      dto.clarificationAnswers,
+      effectiveClarificationAnswers,
     )
     const inferredConfirmation = this.withConfirmedInferredDecisionKeys(
       this.readConstraintPack(session.constraintPack),
@@ -571,10 +579,18 @@ export class CodegenConversationService {
     sessionUserId: string,
   ): Promise<CodegenSessionResponseDto> {
     const baseClarificationState = this.readClarificationState(session.clarificationState)
+    const inferredSemanticClarificationAnswers = this.inferFreeformSemanticClarificationAnswers(
+      baseClarificationState,
+      dto.message,
+      dto.clarificationAnswers,
+    )
+    const effectiveClarificationAnswers = Object.keys(inferredSemanticClarificationAnswers).length > 0
+      ? inferredSemanticClarificationAnswers
+      : dto.clarificationAnswers
     const baseChecklist = this.applyClarificationAnswers(
       this.readChecklist(session.checklist),
       baseClarificationState,
-      dto.clarificationAnswers,
+      effectiveClarificationAnswers,
     )
     const messageChecklist = this.normalizeChecklist(this.extractChecklist(dto))
     const mergedChecklist = this.mergeChecklistSnapshots(baseChecklist, messageChecklist)
@@ -1641,6 +1657,29 @@ export class CodegenConversationService {
     if (/前低|last low/i.test(normalized)) return 'last_low'
 
     return null
+  }
+
+  private inferFreeformSemanticClarificationAnswers(
+    clarificationState: StrategyClarificationStateWithSummary | null,
+    message: string | undefined,
+    explicitAnswers?: Record<string, string>,
+  ): Record<string, string> {
+    if (explicitAnswers && Object.keys(explicitAnswers).length > 0) {
+      return explicitAnswers
+    }
+
+    const normalizedMessage = message?.trim()
+    if (!normalizedMessage) return {}
+    if (!clarificationState || clarificationState.status !== 'NEEDS_CLARIFICATION') return {}
+
+    const pendingSemanticItems = clarificationState.items.filter(item =>
+      item.status === 'pending' && item.key.startsWith('semantic.'),
+    )
+    if (pendingSemanticItems.length !== 1) return {}
+
+    return {
+      [pendingSemanticItems[0].key]: normalizedMessage,
+    }
   }
 
   private readClarificationState(payload: Prisma.JsonValue | null | undefined): StrategyClarificationStateWithSummary | null {
