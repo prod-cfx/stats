@@ -937,6 +937,10 @@ export class CodegenConversationService {
     const normalizedAnswer = answer.trim()
     if (!normalizedAnswer) return checklist
 
+    if (item.key.startsWith('semantic.')) {
+      return this.applySemanticSlotClarification(checklist, item, normalizedAnswer)
+    }
+
     if (item.key.startsWith('entry.side.') || item.key.startsWith('entry.action_uniqueness.')) {
       return this.applyEntryRuleDirectionClarification(checklist, item, normalizedAnswer)
     }
@@ -1114,6 +1118,63 @@ export class CodegenConversationService {
             : '价格连续3根K线在轨外时提前全平',
         },
       })
+    }
+
+    return checklist
+  }
+
+  private applySemanticSlotClarification(
+    checklist: ChecklistPayload,
+    item: StrategyClarificationItem,
+    answer: string,
+  ): ChecklistPayload {
+    if (/均线是多少/u.test(item.question) || item.key.includes('reference.period')) {
+      const period = this.normalizeMovingAveragePeriodClarificationAnswer(answer)
+      if (period === null) return checklist
+
+      const isLongTerm = /长期均线/u.test(item.question)
+      const targetRules = isLongTerm ? checklist.entryRules : checklist.exitRules
+      if (!targetRules || targetRules.length === 0) return checklist
+
+      const nextRules = targetRules.map((rule) => {
+        const normalized = rule.trim()
+        if (!normalized) return rule
+        if (isLongTerm && !/长期均线/u.test(normalized)) return normalized
+        if (!isLongTerm && !/短期均线/u.test(normalized)) return normalized
+        return normalized.replace(
+          isLongTerm ? /长期均线/u : /短期均线/u,
+          `${isLongTerm ? '长期均线' : '短期均线'}（${period}）`,
+        )
+      })
+
+      return this.normalizeChecklist(isLongTerm
+        ? { ...checklist, entryRules: nextRules }
+        : { ...checklist, exitRules: nextRules })
+    }
+
+    if (/按收盘确认还是盘中触发/u.test(item.question) || item.key.includes('confirmationMode')) {
+      const confirmation = this.normalizeSemanticTriggerConfirmationAnswer(answer)
+      if (!confirmation) return checklist
+
+      const isEntry = /突破按收盘确认/u.test(item.question)
+      const targetRules = isEntry ? checklist.entryRules : checklist.exitRules
+      if (!targetRules || targetRules.length === 0) return checklist
+
+      const nextRules = targetRules.map((rule) => {
+        const normalized = rule.trim()
+        if (!normalized) return rule
+        const stripped = normalized
+          .replace(/收盘确认/gu, '')
+          .replace(/盘中/gu, '')
+          .trim()
+        return confirmation === 'close_confirm'
+          ? `收盘确认${stripped}`
+          : `盘中${stripped}`
+      })
+
+      return this.normalizeChecklist(isEntry
+        ? { ...checklist, entryRules: nextRules }
+        : { ...checklist, exitRules: nextRules })
     }
 
     return checklist
@@ -1531,6 +1592,37 @@ export class CodegenConversationService {
       return null
     }
     return value
+  }
+
+  private normalizeMovingAveragePeriodClarificationAnswer(answer: string): number | null {
+    const normalized = answer.trim().toLowerCase()
+    if (!normalized) return null
+
+    const match = normalized.match(/(?:ma|ema|sma)?\s*(\d{1,4})/u)
+    if (!match?.[1]) return null
+
+    const value = Number(match[1])
+    if (!Number.isFinite(value) || value <= 0) {
+      return null
+    }
+
+    return value
+  }
+
+  private normalizeSemanticTriggerConfirmationAnswer(
+    answer: string,
+  ): 'touch' | 'close_confirm' | null {
+    const normalized = answer.trim().toLowerCase()
+    if (!normalized) return null
+
+    if (/盘中|即时|触发|touch/u.test(normalized)) {
+      return 'touch'
+    }
+    if (/收盘|确认|close/u.test(normalized)) {
+      return 'close_confirm'
+    }
+
+    return null
   }
 
   private normalizeBasisClarificationAnswer(answer: string): ChecklistRuleBasis['kind'] | null {

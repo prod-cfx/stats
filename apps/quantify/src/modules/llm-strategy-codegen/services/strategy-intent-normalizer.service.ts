@@ -262,19 +262,32 @@ export class StrategyIntentNormalizerService {
       : (/短期|短线|短周期|short[\s-]?term/iu.test(rule) ? 'short_term' : null)
     if (!referenceRole) return null
 
+    const periodMatch = rule.match(/(?:ma|ema|sma)?\s*[（(]?\s*(\d{1,4})\s*[)）]?/iu)
+      ?? rule.match(/(\d{1,4})\s*(?:日|周期)?均线/iu)
+    const referencePeriod = periodMatch?.[1] ? Number(periodMatch[1]) : null
+    const confirmationMode = /收盘|确认|close/iu.test(rule)
+      ? 'close_confirm'
+      : (/盘中|即时|触发/iu.test(rule) ? 'touch' : null)
+
     const questionPrefix = referenceRole === 'long_term' ? '长期均线' : '短期均线'
     const sideScope = this.resolveSideScope(rule, phase)
     if (/突破|站上|上方|高于/u.test(rule)) {
-      return this.createOpenTrigger({
-        key: 'indicator.above',
-        phase,
-        ...(sideScope ? { sideScope } : {}),
-        params: {
-          indicator: 'ma',
-          referenceRole,
-        },
-      }, [
-        {
+      if (referencePeriod !== null && confirmationMode) {
+        return this.createClosedTrigger({
+          key: 'indicator.above',
+          phase,
+          ...(sideScope ? { sideScope } : {}),
+          params: {
+            indicator: 'ma',
+            referenceRole,
+            'reference.period': referencePeriod,
+            confirmationMode,
+          },
+        })
+      }
+      const unresolvedSlots: UnresolvedSlot[] = []
+      if (referencePeriod === null) {
+        unresolvedSlots.push({
           slotKey: 'reference.period',
           fieldPath: `triggers[${triggerIndex}].params.reference.period`,
           reason: 'missing_required_param',
@@ -282,8 +295,10 @@ export class StrategyIntentNormalizerService {
           priority: 'core',
           affectsExecution: true,
           evidenceText: rule,
-        },
-        {
+        })
+      }
+      if (!confirmationMode) {
+        unresolvedSlots.push({
           slotKey: 'confirmationMode',
           fieldPath: `triggers[${triggerIndex}].params.confirmationMode`,
           reason: 'missing_definition',
@@ -291,21 +306,38 @@ export class StrategyIntentNormalizerService {
           priority: 'core',
           affectsExecution: true,
           evidenceText: rule,
-        },
-      ], rule)
-    }
-
-    if (/跌破|失守|下方|低于/u.test(rule)) {
+        })
+      }
       return this.createOpenTrigger({
-        key: 'indicator.below',
+        key: 'indicator.above',
         phase,
         ...(sideScope ? { sideScope } : {}),
         params: {
           indicator: 'ma',
           referenceRole,
+          ...(referencePeriod !== null ? { 'reference.period': referencePeriod } : {}),
+          ...(confirmationMode ? { confirmationMode } : {}),
         },
-      }, [
-        {
+      }, unresolvedSlots, rule)
+    }
+
+    if (/跌破|失守|下方|低于/u.test(rule)) {
+      if (referencePeriod !== null && confirmationMode) {
+        return this.createClosedTrigger({
+          key: 'indicator.below',
+          phase,
+          ...(sideScope ? { sideScope } : {}),
+          params: {
+            indicator: 'ma',
+            referenceRole,
+            'reference.period': referencePeriod,
+            confirmationMode,
+          },
+        })
+      }
+      const unresolvedSlots: UnresolvedSlot[] = []
+      if (referencePeriod === null) {
+        unresolvedSlots.push({
           slotKey: 'reference.period',
           fieldPath: `triggers[${triggerIndex}].params.reference.period`,
           reason: 'missing_required_param',
@@ -313,8 +345,10 @@ export class StrategyIntentNormalizerService {
           priority: 'core',
           affectsExecution: true,
           evidenceText: rule,
-        },
-        {
+        })
+      }
+      if (!confirmationMode) {
+        unresolvedSlots.push({
           slotKey: 'confirmationMode',
           fieldPath: `triggers[${triggerIndex}].params.confirmationMode`,
           reason: 'missing_definition',
@@ -322,8 +356,19 @@ export class StrategyIntentNormalizerService {
           priority: 'core',
           affectsExecution: true,
           evidenceText: rule,
+        })
+      }
+      return this.createOpenTrigger({
+        key: 'indicator.below',
+        phase,
+        ...(sideScope ? { sideScope } : {}),
+        params: {
+          indicator: 'ma',
+          referenceRole,
+          ...(referencePeriod !== null ? { 'reference.period': referencePeriod } : {}),
+          ...(confirmationMode ? { confirmationMode } : {}),
         },
-      ], rule)
+      }, unresolvedSlots, rule)
     }
 
     return null
