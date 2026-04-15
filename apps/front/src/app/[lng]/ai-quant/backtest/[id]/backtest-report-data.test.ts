@@ -205,4 +205,57 @@ describe('backtest-report-data live mapping', () => {
       },
     )).toBeNull()
   })
+
+  it('accepts open pnl consistency based on raw position totals before display rounding', () => {
+    const data = createBacktestReportDataFromLive(
+      'btjob-open-rounding',
+      {
+        maxDrawdownPct: 0.12,
+        totalReturnPct: 0,
+        winRatePct: 0,
+        tradeCount: 0,
+        openTradeCount: 2,
+        openPnl: 0.02,
+      },
+      {
+        equityCurve: [
+          { ts: Date.parse('2026-04-01T00:00:00.000Z'), equity: 1000 },
+          { ts: Date.parse('2026-04-02T00:00:00.000Z'), equity: 1000.02 },
+        ],
+        trades: [],
+        openPositions: [
+          {
+            symbol: 'BTCUSDT:PERP',
+            qty: 1,
+            avgEntryPrice: 100,
+            unrealizedPnl: 0.014,
+          },
+          {
+            symbol: 'ETHUSDT:PERP',
+            qty: 1,
+            avgEntryPrice: 100,
+            unrealizedPnl: 0.005,
+          },
+        ],
+      },
+    )
+
+    expect(data).not.toBeNull()
+    expect(data?.openPositions).toEqual([
+      {
+        symbol: 'BTCUSDT:PERP',
+        qty: 1,
+        avgEntryPrice: 100,
+        unrealizedPnl: 0.01,
+        isProfit: true,
+      },
+      {
+        symbol: 'ETHUSDT:PERP',
+        qty: 1,
+        avgEntryPrice: 100,
+        unrealizedPnl: 0.01,
+        isProfit: true,
+      },
+    ])
+  })
 })

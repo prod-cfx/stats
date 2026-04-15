@@ -98,7 +98,7 @@ export function createBacktestReportDataFromLive(
   const equitySeries = mapLiveEquitySeries(normalizedEquity)
   const trades = mapLiveTrades(report.trades)
   const openPositions = mapLiveOpenPositions(report.openPositions)
-  const openPnl = calculateOpenPositionsUnrealizedPnl(openPositions) ?? metrics.openPnl ?? 0
+  const openPnl = calculateRawOpenPositionsUnrealizedPnl(report.openPositions) ?? metrics.openPnl ?? 0
   if (!isDetailedReportConsistent(metrics, normalizedEquity, trades, openPositions, openPnl)) {
     return null
   }
@@ -265,14 +265,21 @@ function mapLiveOpenPositions(
     }))
 }
 
-function calculateOpenPositionsUnrealizedPnl(
-  openPositions: OpenPositionRecord[],
+function calculateRawOpenPositionsUnrealizedPnl(
+  openPositions: LiveBacktestReportInput['openPositions'],
 ): number | null {
-  if (openPositions.length === 0) {
+  if (!Array.isArray(openPositions) || openPositions.length === 0) {
     return null
   }
 
-  return Number(openPositions.reduce((sum, position) => sum + position.unrealizedPnl, 0).toFixed(2))
+  const total = openPositions.reduce((sum, position) => {
+    if (!Number.isFinite(position?.unrealizedPnl)) {
+      return sum
+    }
+    return sum + position.unrealizedPnl
+  }, 0)
+
+  return Number(total.toFixed(2))
 }
 
 function analyzeDrawdown(equityCurve: NormalizedEquityPoint[]): DrawdownSnapshot {
