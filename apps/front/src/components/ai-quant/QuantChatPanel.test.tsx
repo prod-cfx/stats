@@ -228,6 +228,17 @@ describe('QuantChatPanel range settings', () => {
     expect(container.textContent).toContain('aiQuant.backtestAllowPartial')
     expect(container.textContent).toContain('aiQuant.backtestAllowPartial.enabled')
     expect(container.textContent).toContain('aiQuant.backtestAllowPartial.disabled')
+
+    const numberInputs = container.querySelectorAll('input[type="number"]')
+    expect(numberInputs).toHaveLength(4)
+    expect((numberInputs[0] as HTMLInputElement).min).toBe('0.01')
+    expect((numberInputs[0] as HTMLInputElement).step).toBe('0.01')
+    expect((numberInputs[1] as HTMLInputElement).min).toBe('0.1')
+    expect((numberInputs[1] as HTMLInputElement).step).toBe('0.1')
+    expect((numberInputs[2] as HTMLInputElement).min).toBe('0')
+    expect((numberInputs[2] as HTMLInputElement).step).toBe('0.01')
+    expect((numberInputs[3] as HTMLInputElement).min).toBe('0')
+    expect((numberInputs[3] as HTMLInputElement).step).toBe('0.01')
   })
 
   it('shows inline validation for invalid backtest execution values', async () => {

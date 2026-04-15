@@ -49,6 +49,8 @@ interface BacktestSettingField {
   labelKey: string
   type: 'number' | 'select'
   min?: number
+  step?: number
+  inputMode?: 'decimal' | 'numeric'
   options?: readonly string[]
 }
 
@@ -57,25 +59,33 @@ const BACKTEST_SETTING_FIELDS: BacktestSettingField[] = [
     key: 'backtestInitialCash',
     labelKey: 'aiQuant.backtestInitialCash',
     type: 'number',
-    min: 0.00000001,
+    min: 0.01,
+    step: 0.01,
+    inputMode: 'decimal',
   },
   {
     key: 'backtestLeverage',
     labelKey: 'aiQuant.backtestLeverage',
     type: 'number',
-    min: 0.00000001,
+    min: 0.1,
+    step: 0.1,
+    inputMode: 'decimal',
   },
   {
     key: 'backtestSlippageBps',
     labelKey: 'aiQuant.backtestSlippageBps',
     type: 'number',
     min: 0,
+    step: 0.01,
+    inputMode: 'decimal',
   },
   {
     key: 'backtestFeeBps',
     labelKey: 'aiQuant.backtestFeeBps',
     type: 'number',
     min: 0,
+    step: 0.01,
+    inputMode: 'decimal',
   },
   {
     key: 'backtestPriceSource',
@@ -456,7 +466,8 @@ export function QuantChatPanel({
                         <input
                           type="number"
                           min={field.min}
-                          step="any"
+                          step={field.step ?? 'any'}
+                          inputMode={field.inputMode ?? 'decimal'}
                           className={fieldClassName}
                           value={
                             typeof value === 'string' || typeof value === 'number'
