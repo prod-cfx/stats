@@ -31,9 +31,18 @@ export interface RiskItem {
   value: string
 }
 
+export interface OpenPositionRecord {
+  symbol: string
+  qty: number
+  avgEntryPrice: number
+  unrealizedPnl: number
+  isProfit: boolean
+}
+
 export interface BacktestReportData {
   equitySeries: EquityPoint[]
   trades: TradeRecord[]
+  openPositions: OpenPositionRecord[]
   maxDrawdownAnalysis: RiskItem[]
   volatilitySharpe: RiskItem[]
   insights: string[]
@@ -51,6 +60,12 @@ export interface LiveBacktestReportInput {
     returnPct: number
     reasonOpen?: string
     reasonClose?: string
+  }> | null
+  openPositions?: Array<{
+    symbol: string
+    qty: number
+    avgEntryPrice: number
+    unrealizedPnl: number
   }> | null
 }
 
@@ -82,6 +97,7 @@ export function createBacktestReportDataFromLive(
   const normalizedEquity = normalizeEquityCurve(report.equityCurve)
   const equitySeries = mapLiveEquitySeries(normalizedEquity)
   const trades = mapLiveTrades(report.trades)
+  const openPositions = mapLiveOpenPositions(report.openPositions)
   if (!isDetailedReportConsistent(metrics, normalizedEquity, trades)) {
     return null
   }
@@ -100,6 +116,7 @@ export function createBacktestReportDataFromLive(
   return {
     equitySeries,
     trades,
+    openPositions,
     maxDrawdownAnalysis: [
       { label: 'Max Drawdown', value: formatDrawdownPct(drawdown.maxDrawdownPct) },
       { label: 'Drawdown Period', value: `${drawdown.periodStart} ~ ${drawdown.periodEnd}` },
@@ -123,12 +140,14 @@ export function createBacktestReportDataFromLive(
     ],
     insights: [
       metrics.totalReturnPct >= 0
-        ? `Backtest #${id} closed with ${metrics.totalReturnPct.toFixed(2)}% total return across ${trades.length} closed trades.`
-        : `Backtest #${id} closed with ${metrics.totalReturnPct.toFixed(2)}% total return and needs parameter review.`,
+        ? `Backtest #${id} closed with ${metrics.totalReturnPct.toFixed(2)}% realized return across ${trades.length} closed trades.`
+        : `Backtest #${id} closed with ${metrics.totalReturnPct.toFixed(2)}% realized return and needs parameter review.`,
       `Realized win rate from live trades was ${realizedWinRate.toFixed(2)}%, with maximum drawdown ${drawdown.maxDrawdownPct.toFixed(2)}%.`,
       bestTrade && worstTrade
         ? `Best closed trade returned ${formatSignedPct(bestTrade.profitPct)} while the weakest closed trade returned ${formatSignedPct(worstTrade.profitPct)}. ${drawdown.summary}`
-        : 'No closed trades were recorded in the live backtest report.',
+        : openPositions.length > 0
+          ? `${openPositions.length} open position${openPositions.length > 1 ? 's were' : ' was'} still active at the end of the backtest, with ${formatSignedPnl(metrics.openPnl ?? 0)} unrealized P&L.`
+          : 'No closed trades were recorded in the live backtest report.',
     ],
   }
 }
@@ -210,6 +229,29 @@ function mapLiveTrades(trades: LiveBacktestReportInput['trades']): TradeRecord[]
         reasonClose: sanitizeReason(trade.reasonClose),
       }
     })
+}
+
+function mapLiveOpenPositions(
+  openPositions: LiveBacktestReportInput['openPositions'],
+): OpenPositionRecord[] {
+  if (!Array.isArray(openPositions) || openPositions.length === 0) {
+    return []
+  }
+
+  return openPositions
+    .filter(position => (
+      typeof position?.symbol === 'string'
+      && Number.isFinite(position?.qty)
+      && Number.isFinite(position?.avgEntryPrice)
+      && Number.isFinite(position?.unrealizedPnl)
+    ))
+    .map(position => ({
+      symbol: position.symbol,
+      qty: Number(position.qty.toFixed(8)),
+      avgEntryPrice: Number(position.avgEntryPrice.toFixed(2)),
+      unrealizedPnl: Number(position.unrealizedPnl.toFixed(2)),
+      isProfit: position.unrealizedPnl >= 0,
+    }))
 }
 
 function analyzeDrawdown(equityCurve: NormalizedEquityPoint[]): DrawdownSnapshot {
@@ -376,4 +418,8 @@ function formatDrawdownPct(value: number): string {
 
 function formatSignedPct(value: number): string {
   return `${value >= 0 ? '+' : ''}${value.toFixed(2)}%`
+}
+
+function formatSignedPnl(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(2)}`
 }

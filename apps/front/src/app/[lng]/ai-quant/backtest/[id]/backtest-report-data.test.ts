@@ -143,4 +143,44 @@ describe('backtest-report-data live mapping', () => {
       },
     )).toBeNull()
   })
+
+  it('preserves open positions for reports that have no closed trades yet', () => {
+    const data = createBacktestReportDataFromLive(
+      'btjob-open-only',
+      {
+        maxDrawdownPct: 0.32,
+        totalReturnPct: 0,
+        winRatePct: 0,
+        tradeCount: 0,
+        openTradeCount: 1,
+        openPnl: 2.39,
+      },
+      {
+        equityCurve: [
+          { ts: Date.parse('2026-04-01T00:00:00.000Z'), equity: 1000 },
+          { ts: Date.parse('2026-04-02T00:00:00.000Z'), equity: 1002.39 },
+        ],
+        trades: [],
+        openPositions: [
+          {
+            symbol: 'BTCUSDT:PERP',
+            qty: 0.0013702196462092872,
+            avgEntryPrice: 72238.52313,
+            unrealizedPnl: 2.3882611501623687,
+          },
+        ],
+      },
+    )
+
+    expect(data).not.toBeNull()
+    expect(data?.openPositions).toEqual([
+      {
+        symbol: 'BTCUSDT:PERP',
+        qty: 0.00137022,
+        avgEntryPrice: 72238.52,
+        unrealizedPnl: 2.39,
+        isProfit: true,
+      },
+    ])
+  })
 })
