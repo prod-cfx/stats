@@ -92,6 +92,27 @@ const BACKTEST_SETTING_FIELDS: BacktestSettingField[] = [
   },
 ]
 
+const BACKTEST_DRAFT_KEYS = [
+  'backtestRangePreset',
+  'backtestStart',
+  'backtestEnd',
+  ...BACKTEST_SETTING_FIELDS.map(field => field.key),
+] as const
+
+function buildBacktestDraftValues(paramValues: DynamicParamValues): DynamicParamValues {
+  return Object.fromEntries(
+    BACKTEST_DRAFT_KEYS.map(key => [key, paramValues[key]]),
+  )
+}
+
+function hasBacktestDraftChanges(current: DynamicParamValues, draft: DynamicParamValues): boolean {
+  return BACKTEST_DRAFT_KEYS.some(key => {
+    const currentValue = current[key]
+    const draftValue = draft[key]
+    return JSON.stringify(currentValue ?? null) !== JSON.stringify(draftValue ?? null)
+  })
+}
+
 function parseFiniteNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (typeof value === 'string' && value.trim()) {
@@ -205,16 +226,21 @@ export function QuantChatPanel({
   const [input, setInput] = useState('')
   const [showSettings, setShowSettings] = useState(false)
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null)
+  const [backtestDraftValues, setBacktestDraftValues] = useState<DynamicParamValues>(() => buildBacktestDraftValues(paramValues))
   const chatScrollRef = useRef<HTMLDivElement>(null)
-  const validation = useMemo(() => validateBacktestSettings(paramValues), [paramValues])
+  const validation = useMemo(() => validateBacktestSettings(backtestDraftValues), [backtestDraftValues])
   const backtestRangePreset = useMemo(() => {
-    const raw = typeof paramValues.backtestRangePreset === 'string'
-      ? paramValues.backtestRangePreset.toUpperCase()
+    const raw = typeof backtestDraftValues.backtestRangePreset === 'string'
+      ? backtestDraftValues.backtestRangePreset.toUpperCase()
       : '30D'
     return BACKTEST_RANGE_PRESETS.includes(raw as typeof BACKTEST_RANGE_PRESETS[number])
       ? raw as typeof BACKTEST_RANGE_PRESETS[number]
       : '30D'
-  }, [paramValues.backtestRangePreset])
+  }, [backtestDraftValues.backtestRangePreset])
+  const hasDraftChanges = useMemo(
+    () => hasBacktestDraftChanges(paramValues, backtestDraftValues),
+    [backtestDraftValues, paramValues],
+  )
 
   useEffect(() => {
     const el = chatScrollRef.current
@@ -222,10 +248,37 @@ export function QuantChatPanel({
     el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   }, [messages])
 
+  useEffect(() => {
+    setBacktestDraftValues(buildBacktestDraftValues(paramValues))
+  }, [paramValues])
+
   const submit = () => {
     if (!input.trim()) return
     onSend(input)
     setInput('')
+  }
+
+  const updateBacktestDraftValue = (key: string, value: unknown) => {
+    setBacktestDraftValues(prev => ({ ...prev, [key]: value }))
+  }
+
+  const handleConfirmBacktestParams = () => {
+    if (Object.keys(validation.fieldErrors).length > 0 || validation.rangeError) {
+      return
+    }
+    for (const key of BACKTEST_DRAFT_KEYS) {
+      const nextValue = backtestDraftValues[key]
+      const currentValue = paramValues[key]
+      if (JSON.stringify(nextValue ?? null) !== JSON.stringify(currentValue ?? null)) {
+        onParamChange(key, nextValue)
+      }
+    }
+    setShowSettings(false)
+  }
+
+  const handleCancelBacktestParams = () => {
+    setBacktestDraftValues(buildBacktestDraftValues(paramValues))
+    setShowSettings(false)
   }
 
   const copyCode = async (code: string, codeId: string) => {
@@ -267,7 +320,7 @@ export function QuantChatPanel({
           <button
             type="button"
             onClick={onRunBacktest}
-            disabled={!canRunBacktest}
+            disabled={!canRunBacktest || hasDraftChanges}
             className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-all hover:from-violet-600 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Play className="h-4 w-4 fill-current" />
@@ -290,7 +343,7 @@ export function QuantChatPanel({
                     <button
                       key={preset}
                       type="button"
-                      onClick={() => onParamChange('backtestRangePreset', preset)}
+                      onClick={() => updateBacktestDraftValue('backtestRangePreset', preset)}
                       className={`rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${
                         active
                           ? 'border-primary bg-primary/10 text-primary'
@@ -311,9 +364,9 @@ export function QuantChatPanel({
                   <input
                     type="datetime-local"
                     className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)] outline-none focus:border-primary"
-                    value={toDateTimeLocalValue(paramValues.backtestStart)}
+                    value={toDateTimeLocalValue(backtestDraftValues.backtestStart)}
                     onChange={(event) => {
-                      onParamChange('backtestStart', fromDateTimeLocalValue(event.target.value))
+                      updateBacktestDraftValue('backtestStart', fromDateTimeLocalValue(event.target.value))
                     }}
                   />
                 </label>
@@ -322,9 +375,9 @@ export function QuantChatPanel({
                   <input
                     type="datetime-local"
                     className="h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)] outline-none focus:border-primary"
-                    value={toDateTimeLocalValue(paramValues.backtestEnd)}
+                    value={toDateTimeLocalValue(backtestDraftValues.backtestEnd)}
                     onChange={(event) => {
-                      onParamChange('backtestEnd', fromDateTimeLocalValue(event.target.value))
+                      updateBacktestDraftValue('backtestEnd', fromDateTimeLocalValue(event.target.value))
                     }}
                   />
                 </label>
@@ -332,7 +385,7 @@ export function QuantChatPanel({
             )}
 
             {BACKTEST_SETTING_FIELDS.map(field => {
-              const value = paramValues[field.key]
+              const value = backtestDraftValues[field.key]
               const error = validation.fieldErrors[field.key]
               const fieldClassName = `h-9 w-full rounded-lg border bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)] outline-none focus:border-primary ${
                 error ? 'border-red-500' : 'border-[color:var(--cf-border)]'
@@ -348,7 +401,7 @@ export function QuantChatPanel({
                         <select
                           className={fieldClassName}
                           value={typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean' ? String(value) : ''}
-                          onChange={event => onParamChange(field.key, event.target.value)}
+                          onChange={event => updateBacktestDraftValue(field.key, event.target.value)}
                         >
                           <option value="">-</option>
                           {field.options.map(option => (
@@ -364,7 +417,7 @@ export function QuantChatPanel({
                             type="checkbox"
                             className="h-4 w-4 rounded border border-[color:var(--cf-border)]"
                             checked={value === true}
-                            onChange={event => onParamChange(field.key, event.target.checked)}
+                            onChange={event => updateBacktestDraftValue(field.key, event.target.checked)}
                           />
                         )
                         : (
@@ -375,7 +428,7 @@ export function QuantChatPanel({
                               className={fieldClassName}
                               value={typeof value === 'string' || typeof value === 'number' ? String(value) : ''}
                               onChange={(event) => {
-                                onParamChange(field.key, parseDynamicParamInputValue('number', event.target.value))
+                                updateBacktestDraftValue(field.key, parseDynamicParamInputValue('number', event.target.value))
                               }}
                             />
                           )}
@@ -388,6 +441,23 @@ export function QuantChatPanel({
             {validation.rangeError && backtestRangePreset === 'CUSTOM' && (
               <p className="text-sm text-red-500 md:col-span-3">{t(validation.rangeError)}</p>
             )}
+            <div className="flex items-center justify-end gap-2 md:col-span-3">
+              <button
+                type="button"
+                onClick={handleCancelBacktestParams}
+                className="rounded-lg border border-[color:var(--cf-border)] px-3 py-1.5 text-sm font-medium text-[color:var(--cf-text)] transition-colors hover:bg-[color:var(--cf-surface)]"
+              >
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmBacktestParams}
+                disabled={!hasDraftChanges || Object.keys(validation.fieldErrors).length > 0 || Boolean(validation.rangeError)}
+                className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-white transition-colors disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {t('aiQuant.backtestConfirmSubmit')}
+              </button>
+            </div>
           </div>
         </div>
       )}

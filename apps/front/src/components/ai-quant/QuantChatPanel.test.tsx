@@ -112,10 +112,18 @@ describe('QuantChatPanel range settings', () => {
     expect(container.textContent).toContain('aiQuant.customRange')
   })
 
-  it('shows custom datetime inputs and triggers onParamsChange when values change', async () => {
+  it('shows custom datetime inputs and applies them after confirm', async () => {
     const onParamChange = jest.fn()
     const Harness = () => {
-      const [paramValues, setParamValues] = React.useState(baseParams)
+      const [paramValues, setParamValues] = React.useState({
+        ...baseParams,
+        backtestInitialCash: 10000,
+        backtestLeverage: 1,
+        backtestSlippageBps: 10,
+        backtestFeeBps: 5,
+        backtestPriceSource: 'close',
+        backtestAllowPartial: true,
+      })
       return (
         <QuantChatPanel
           messages={[{ id: 'm1', role: 'assistant', content: 'hello' }]}
@@ -145,8 +153,6 @@ describe('QuantChatPanel range settings', () => {
     await act(async () => {
       customBtn?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
-    const callCountAfterCustom = onParamChange.mock.calls.length
-
     const dateInputs = container.querySelectorAll('input[type="datetime-local"]')
     expect(dateInputs).toHaveLength(2)
 
@@ -154,18 +160,26 @@ describe('QuantChatPanel range settings', () => {
     await act(async () => {
       triggerInputChange(startInput, '2026-01-01T00:00')
     })
-    const callCountAfterStart = onParamChange.mock.calls.length
 
     const endInput = dateInputs[1] as HTMLInputElement
     await act(async () => {
       triggerInputChange(endInput, '2026-02-01T00:00')
     })
 
+    const confirmButton = Array.from(container.querySelectorAll('button')).find(
+      btn => btn.textContent?.includes('aiQuant.backtestConfirmSubmit'),
+    )
+    expect(confirmButton).toBeTruthy()
+
+    await act(async () => {
+      confirmButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
     expect(onParamChange).toHaveBeenCalled()
     const calls = onParamChange.mock.calls
     expect(calls.some(([key, value]) => key === 'backtestRangePreset' && value === 'CUSTOM')).toBe(true)
-    expect(callCountAfterStart).toBeGreaterThan(callCountAfterCustom)
-    expect(onParamChange.mock.calls.length).toBeGreaterThan(callCountAfterStart)
+    expect(calls.some(([key, value]) => key === 'backtestStart' && value === '2026-01-01T00:00:00.000Z')).toBe(true)
+    expect(calls.some(([key, value]) => key === 'backtestEnd' && value === '2026-02-01T00:00:00.000Z')).toBe(true)
   })
 
   it('renders explicit backtest execution controls even when paramSchema is null', async () => {
@@ -232,6 +246,100 @@ describe('QuantChatPanel range settings', () => {
     expect(container.textContent).toContain('aiQuant.validation.nonNegativeNumber')
     expect(container.textContent).toContain('aiQuant.validation.invalidPriceSource')
     expect(container.textContent).toContain('aiQuant.validation.invalidBoolean')
+  })
+
+  it('edits backtest params locally and only applies them after confirm', async () => {
+    const onParamChange = jest.fn()
+
+    await act(async () => {
+      root?.render(
+        <QuantChatPanel
+          messages={[{ id: 'm1', role: 'assistant', content: 'hello' }]}
+          paramSchema={null}
+          paramValues={{
+            ...baseParams,
+            backtestInitialCash: 10000,
+            backtestLeverage: 2,
+            backtestSlippageBps: 10,
+            backtestFeeBps: 5,
+            backtestPriceSource: 'close',
+            backtestAllowPartial: true,
+          }}
+          onParamChange={onParamChange}
+          onSend={() => {}}
+          onRunBacktest={() => {}}
+        />,
+      )
+    })
+
+    await act(async () => {
+      container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    const numberInputs = container.querySelectorAll('input[type="number"]')
+    expect(numberInputs.length).toBeGreaterThanOrEqual(4)
+
+    await act(async () => {
+      triggerInputChange(numberInputs[0] as HTMLInputElement, '20000')
+    })
+
+    expect(onParamChange).not.toHaveBeenCalled()
+
+    const confirmButton = Array.from(container.querySelectorAll('button')).find(
+      btn => btn.textContent?.includes('aiQuant.backtestConfirmSubmit'),
+    )
+    expect(confirmButton).toBeTruthy()
+
+    await act(async () => {
+      confirmButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(onParamChange).toHaveBeenCalledWith('backtestInitialCash', 20000)
+  })
+
+  it('cancels backtest param edits without applying them', async () => {
+    const onParamChange = jest.fn()
+
+    await act(async () => {
+      root?.render(
+        <QuantChatPanel
+          messages={[{ id: 'm1', role: 'assistant', content: 'hello' }]}
+          paramSchema={null}
+          paramValues={{
+            ...baseParams,
+            backtestInitialCash: 10000,
+            backtestLeverage: 2,
+            backtestSlippageBps: 10,
+            backtestFeeBps: 5,
+            backtestPriceSource: 'close',
+            backtestAllowPartial: true,
+          }}
+          onParamChange={onParamChange}
+          onSend={() => {}}
+          onRunBacktest={() => {}}
+        />,
+      )
+    })
+
+    await act(async () => {
+      container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    const numberInputs = container.querySelectorAll('input[type="number"]')
+    await act(async () => {
+      triggerInputChange(numberInputs[0] as HTMLInputElement, '20000')
+    })
+
+    const cancelButton = Array.from(container.querySelectorAll('button')).find(
+      btn => btn.textContent?.includes('common.cancel'),
+    )
+    expect(cancelButton).toBeTruthy()
+
+    await act(async () => {
+      cancelButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(onParamChange).not.toHaveBeenCalled()
   })
 
   it('does not submit when Enter is pressed during IME composition', async () => {
