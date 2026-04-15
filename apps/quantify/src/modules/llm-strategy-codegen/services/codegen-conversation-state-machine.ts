@@ -57,6 +57,7 @@ export class CodegenConversationStateMachine {
 
   buildGeneratingUpdate(input: {
     checklist: ChecklistPayload
+    semanticState?: SemanticState | null
     clarificationState: StrategyClarificationState
     constraintPack: ConstraintPackSnapshot
     latestSpecDesc: Record<string, unknown>
@@ -64,6 +65,7 @@ export class CodegenConversationStateMachine {
     return {
       status: 'GENERATING',
       checklist: input.checklist as Prisma.InputJsonValue,
+      ...(input.semanticState ? { semanticState: input.semanticState as unknown as Prisma.InputJsonValue } : {}),
       clarificationState: input.clarificationState as unknown as Prisma.InputJsonValue,
       constraintPack: input.constraintPack as unknown as Prisma.InputJsonValue,
       latestSpecDesc: input.latestSpecDesc as Prisma.InputJsonValue,

@@ -110,6 +110,93 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     timeframes: checklist.timeframes ?? ['1h'],
     riskRules: completeRiskRules(checklist.riskRules ?? {}),
   })
+  const buildLockedMaSemanticState = (overrides: Record<string, any> = {}) => ({
+    version: 1,
+    families: ['single-leg'],
+    triggers: [
+      {
+        id: 'entry-ma',
+        key: 'indicator.above',
+        phase: 'entry',
+        params: {
+          indicator: 'ma',
+          referenceRole: 'long_term',
+          'reference.period': 50,
+          confirmationMode: 'close_confirm',
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'exit-ma',
+        key: 'indicator.below',
+        phase: 'exit',
+        params: {
+          indicator: 'ma',
+          referenceRole: 'short_term',
+          'reference.period': 20,
+          confirmationMode: 'close_confirm',
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ],
+    actions: [
+      { id: 'action-1', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      { id: 'action-2', key: 'close_long', status: 'locked', source: 'user_explicit' },
+    ],
+    risk: [],
+    position: {
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+    },
+    contextSlots: {
+      exchange: {
+        slotKey: 'exchange',
+        fieldPath: 'contextSlots.exchange',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+        affectsExecution: true,
+        value: 'okx',
+      },
+      symbol: {
+        slotKey: 'symbol',
+        fieldPath: 'contextSlots.symbol',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+        affectsExecution: true,
+        value: 'BTCUSDT',
+      },
+      marketType: {
+        slotKey: 'marketType',
+        fieldPath: 'contextSlots.marketType',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认市场类型（现货或合约/perp）。',
+        affectsExecution: true,
+        value: 'perp',
+      },
+      timeframe: {
+        slotKey: 'timeframe',
+        fieldPath: 'contextSlots.timeframe',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+        affectsExecution: true,
+        value: '1h',
+      },
+    },
+    normalizationNotes: [],
+    updatedAt: '2026-04-15T10:00:00.000Z',
+    ...overrides,
+  })
   const withRequiredMarketContext = completeChecklist
   let service: CodegenConversationService
   const waitForTerminalStatus = async (
@@ -3682,6 +3769,47 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockAi.chat).toHaveBeenCalledTimes(1)
   })
 
+  it('persists existing semanticState when confirmGenerate moves a checklist-gate session into GENERATING', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's5-semantic-generate',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: completeChecklist({
+        entryRules: ['价格突破长期均线（50）时买入'],
+        exitRules: ['价格跌破短期均线（20）时卖出'],
+      }),
+      semanticState: buildLockedMaSemanticState(),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+
+    const result = await service.continueSession('s5-semantic-generate', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(completeChecklist({
+        entryRules: ['价格突破长期均线（50）时买入'],
+        exitRules: ['价格跌破短期均线（20）时卖出'],
+      })),
+    })
+
+    expect(result.status).toBe('GENERATING')
+    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith('s5-semantic-generate', expect.objectContaining({
+      status: 'GENERATING',
+      semanticState: expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'entry-ma',
+            params: expect.objectContaining({
+              'reference.period': 50,
+              confirmationMode: 'close_confirm',
+            }),
+          }),
+        ]),
+      }),
+    }))
+  })
+
   it('publishes canonical snapshot, semantic view, and compiled artifacts after confirmGenerate', async () => {
     mockAi.chat
       .mockResolvedValueOnce({
@@ -4228,6 +4356,115 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s7', expect.objectContaining({
       status: 'PUBLISHED',
+    }))
+  })
+
+  it('persists updated semanticState when confirmGenerate closes a semantic slot before GENERATING', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's7-semantic-confirm-answer',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: completeChecklist({
+        entryRules: ['价格突破长期均线时买入'],
+        exitRules: ['价格跌破短期均线（20）时卖出'],
+      }),
+      semanticState: buildLockedMaSemanticState({
+        triggers: [
+          {
+            id: 'entry-ma',
+            key: 'indicator.above',
+            phase: 'entry',
+            params: {
+              indicator: 'ma',
+              referenceRole: 'long_term',
+              confirmationMode: 'close_confirm',
+            },
+            status: 'open',
+            source: 'user_explicit',
+            openSlots: [
+              {
+                slotKey: 'reference.period.entry',
+                fieldPath: 'triggers[0].params.reference.period',
+                status: 'open',
+                priority: 'core',
+                questionHint: '长期均线是多少？',
+                affectsExecution: true,
+              },
+            ],
+          },
+          {
+            id: 'exit-ma',
+            key: 'indicator.below',
+            phase: 'exit',
+            params: {
+              indicator: 'ma',
+              referenceRole: 'short_term',
+              'reference.period': 20,
+              confirmationMode: 'close_confirm',
+            },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          },
+        ],
+      }),
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'semantic.reference.period.entry',
+            reason: 'missing_entry_rules',
+            field: 'entryRules',
+            blocking: true,
+            question: '长期均线是多少？',
+            status: 'pending',
+            slotId: JSON.stringify(['reference.period.entry', 'triggers[0].params.reference.period']),
+            slotKey: 'reference.period.entry',
+            fieldPath: 'triggers[0].params.reference.period',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValueOnce({
+      content: 'return "BUY"',
+    })
+
+    const result = await service.continueSession('s7-semantic-confirm-answer', {
+      userId: 'u1',
+      message: '确认，直接生成代码',
+      clarificationAnswers: {
+        'semantic.reference.period.entry': 'MA50',
+      },
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(completeChecklist({
+        entryRules: ['价格突破长期均线（50）时买入'],
+        exitRules: ['价格跌破短期均线（20）时卖出'],
+      })),
+    })
+
+    expect(result.status).toBe('GENERATING')
+    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith('s7-semantic-confirm-answer', expect.objectContaining({
+      status: 'GENERATING',
+      semanticState: expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({
+            id: 'entry-ma',
+            status: 'locked',
+            params: expect.objectContaining({
+              'reference.period': 50,
+              confirmationMode: 'close_confirm',
+            }),
+            openSlots: expect.arrayContaining([
+              expect.objectContaining({
+                slotKey: 'reference.period.entry',
+                status: 'locked',
+                value: 50,
+              }),
+            ]),
+          }),
+        ]),
+      }),
     }))
   })
 
