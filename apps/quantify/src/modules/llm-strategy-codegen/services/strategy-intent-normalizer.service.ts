@@ -100,6 +100,11 @@ export class StrategyIntentNormalizerService {
         triggers.push(movingAverageBreakout)
         continue
       }
+      const unknownBreakout = this.tryNormalizeUnknownBreakoutConcept(rule, phase, triggers.length)
+      if (unknownBreakout) {
+        triggers.push(unknownBreakout)
+        continue
+      }
       const breakout = this.tryNormalizeBreakout(rule, phase)
       if (breakout) {
         triggers.push(breakout)
@@ -319,6 +324,43 @@ export class StrategyIntentNormalizerService {
     }
 
     return null
+  }
+
+  private tryNormalizeUnknownBreakoutConcept(
+    rule: string,
+    phase: 'entry' | 'exit',
+    triggerIndex: number,
+  ): NormalizedTriggerAtom | null {
+    if (!/关键位置|回踩|确认支撑|确认压力/u.test(rule)) return null
+
+    const sideScope = this.resolveSideScope(rule, phase)
+    return this.createOpenTrigger({
+      key: /跌破|下破|失守/u.test(rule) ? 'price.breakout_down' : 'price.breakout_up',
+      phase,
+      ...(sideScope ? { sideScope } : {}),
+      params: {
+        reference: 'unknown',
+      },
+    }, [
+      {
+        slotKey: 'unknown_trigger_definition',
+        fieldPath: `triggers[${triggerIndex}].params.reference`,
+        reason: 'missing_definition',
+        questionHint: '这里的关键位置怎么定义？',
+        priority: 'core',
+        affectsExecution: true,
+        evidenceText: rule,
+      },
+      {
+        slotKey: 'pullback.confirmation',
+        fieldPath: `triggers[${triggerIndex}].params.pullback`,
+        reason: 'missing_definition',
+        questionHint: '回踩确认用什么信号？',
+        priority: 'core',
+        affectsExecution: true,
+        evidenceText: rule,
+      },
+    ], rule)
   }
 
   private tryNormalizeBreakout(

@@ -78,10 +78,14 @@ export class StrategyIntentResolutionService {
   }): StrategyAmbiguity[] {
     return (input.unresolvedSlots ?? []).map(slot => ({
       ...slot,
+      kind: slot.slotKey.endsWith('.conflict') ? 'semantic_conflict' : undefined,
       lane: input.lane,
       semanticKind: input.semanticKind,
       semanticKey: input.semanticKey,
       ...(input.phase ? { phase: input.phase } : {}),
+    })).map(item => ({
+      ...item,
+      kind: item.kind ?? item.reason,
     }))
   }
 

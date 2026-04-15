@@ -117,4 +117,21 @@ describe('strategyIntentNormalizerService', () => {
       }),
     ]))
   })
+
+  it('falls back to an open trigger slot instead of dropping unsupported breakout concepts', () => {
+    const result = service.normalize({
+      entryRules: ['价格突破关键位置后回踩确认支撑有效再进场'],
+    } as any)
+
+    expect(result.blocked).toBe(false)
+    expect(result.normalizedIntent.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        closureStatus: 'open',
+        unresolvedSlots: expect.arrayContaining([
+          expect.objectContaining({ slotKey: 'unknown_trigger_definition' }),
+          expect.objectContaining({ slotKey: 'pullback.confirmation' }),
+        ]),
+      }),
+    ]))
+  })
 })
