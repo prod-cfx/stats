@@ -1,101 +1,83 @@
+import { StrategyIntentNormalizerService } from '../strategy-intent-normalizer.service'
 import { StrategyIntentResolutionService } from '../strategy-intent-resolution.service'
 
 describe('strategyIntentResolutionService', () => {
   const service = new StrategyIntentResolutionService()
+  const normalizer = new StrategyIntentNormalizerService()
 
-  it('prioritizes signal ambiguities above context ambiguities', () => {
+  it('resolves the fixed-range grid case into one executable interpretation', () => {
     const resolution = service.resolve({
       normalizedIntent: {
-        families: ['single-leg'],
-        triggers: [
-          {
-            key: 'indicator.above',
-            phase: 'entry',
-            params: { indicator: 'ma', referenceRole: 'long_term' },
-            closureStatus: 'open',
-            unresolvedSlots: [
-              {
-                slotKey: 'reference.period',
-                fieldPath: 'triggers[0].params.reference.period',
-                reason: 'missing_required_param',
-                questionHint: '长期均线是多少？',
-                priority: 'core',
-                affectsExecution: true,
-              },
-            ],
-          },
-        ],
+        families: ['grid.range_rebalance'],
+        triggers: [],
         actions: [],
         risk: [],
-        position: {
-          mode: 'fixed_ratio',
-          value: 0,
-          positionMode: 'long_short',
-          closureStatus: 'open',
-          unresolvedSlots: [
-            {
-              slotKey: 'position.value',
-              fieldPath: 'position.value',
-              reason: 'missing_required_param',
-              questionHint: '单笔仓位是多少？',
-              priority: 'context',
-              affectsExecution: true,
-            },
-          ],
+        position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_short' },
+        grid: {
+          family: 'grid.range_rebalance',
+          range: { lower: 60000, upper: 80000 },
+          stepPct: 0.5,
+          sideMode: 'bidirectional',
+          recycle: true,
         },
+        unresolved: [],
         normalizationNotes: [],
-      } as any,
+      },
     })
 
-    expect(resolution.nextQuestion).toEqual(expect.objectContaining({
-      lane: 'signal',
-      slotKey: 'reference.period',
-    }))
-    expect(resolution.ambiguities[1]).toEqual(expect.objectContaining({
-      lane: 'context',
-    }))
+    expect(resolution.ambiguities).toEqual([])
+    expect(resolution.atomicIntent.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'grid_touch' }),
+    ]))
   })
 
-  it('promotes conflict slots into semantic_conflict ambiguities', () => {
+  it('keeps Bollinger trigger semantics ambiguous when the normalized input cannot distinguish touch vs close confirmation', () => {
     const resolution = service.resolve({
       normalizedIntent: {
         families: ['single-leg'],
         triggers: [
           {
-            key: 'indicator.above',
+            key: 'bollinger.touch_upper',
             phase: 'entry',
-            params: { indicator: 'ma', referenceRole: 'long_term', reference: { period: 200 }, conflictCandidate: 100 },
-            closureStatus: 'open',
-            unresolvedSlots: [
-              {
-                slotKey: 'reference.period.conflict',
-                fieldPath: 'triggers[0].params.reference.period',
-                reason: 'missing_definition',
-                questionHint: '长期均线最终以 200 还是 100 为准？',
-                priority: 'core',
-                affectsExecution: true,
-              },
-            ],
+            sideScope: 'short',
+            params: { band: 'upper' },
           },
         ],
-        actions: [],
+        actions: [{ key: 'open_short' }],
         risk: [],
-        position: {
-          mode: 'fixed_ratio',
-          value: 0.1,
-          positionMode: 'long_only',
-          closureStatus: 'closed',
-          unresolvedSlots: [],
-        },
+        position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'short_only' },
+        unresolved: [],
         normalizationNotes: [],
-      } as any,
+      },
     })
 
     expect(resolution.ambiguities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'atomic_semantic_fork', field: 'trigger.confirmation' }),
+    ]))
+  })
+
+  it('keeps mixed Bollinger touch-plus-close wording ambiguous through the normalizer heuristic path', () => {
+    const normalized = normalizer.normalize({
+      market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp', timeframe: '15m' },
+      entryRules: ['触及布林上轨后收盘确认做空'],
+      exitRules: ['收盘回到布林中轨平空'],
+      riskRules: { positionPct: 10, stopLossPct: 5, takeProfitPct: 8 },
+    } as any)
+
+    const resolution = service.resolve({
+      normalizedIntent: normalized.normalizedIntent,
+    })
+
+    expect(normalized.normalizedIntent.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        kind: 'semantic_conflict',
-        slotKey: 'reference.period.conflict',
+        key: 'bollinger.touch_upper',
+        resolutionHints: expect.objectContaining({
+          confirmation: 'ambiguous_touch_or_close_confirm',
+        }),
       }),
+    ]))
+    expect(resolution.ambiguities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'atomic_semantic_fork', field: 'trigger.confirmation' }),
     ]))
   })
 })

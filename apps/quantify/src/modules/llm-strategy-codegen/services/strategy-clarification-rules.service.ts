@@ -1,5 +1,7 @@
 import type { ChecklistPayload } from '../types/codegen-checklist'
+import type { AtomicIntentResolution, StrategyAmbiguity } from '../types/strategy-ambiguity'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
+import type { StrategyExecutionContextResolution } from '../types/strategy-execution-context'
 import { Injectable } from '@nestjs/common'
 import { isEquivalentMarketScopeValue } from './market-scope-equivalence'
 import { classifyPercentageRuleFamily } from './rule-family-default-semantics'
@@ -19,25 +21,36 @@ const LOWER_BAND_PATTERN = /(?:布林|bollinger).{0,8}(?:下轨|lower)|(?:下轨
 const PERCENTAGE_THRESHOLD_PATTERN = /\d+(?:\.\d+)?\s*%/u
 const GRID_STRATEGY_PATTERN = /网格|grid/iu
 const STATE_GATE_PATTERN = /趋势|震荡|波动|regime|volatility|trend/iu
+const BOLLINGER_RULE_PATTERN = /布林|bollinger|上轨|下轨|中轨|upper|lower|middle|ma20|均线20/iu
+const TOUCH_CONFIRMATION_PATTERN = /触及|触碰|碰到|touch/iu
+const CLOSE_CONFIRMATION_PATTERN = /收盘|收于|收在|close/iu
 
 @Injectable()
 export class StrategyClarificationRulesService {
-  detectContextOnly(input: ClarificationChecklistInput): StrategyClarificationState {
-    const all = this.detect(input)
-    const items = all.items.filter(item =>
-      item.reason === 'missing_exchange'
-      || item.reason === 'missing_symbol'
-      || item.reason === 'missing_timeframe'
-      || item.reason === 'missing_market_type'
-      || item.reason === 'missing_position_pct'
-      || item.reason === 'missing_position_mode'
-      || item.reason === 'conflicting_market_scope'
-      || item.reason === 'invalid_spot_short_combo',
-    )
+  detectFromAmbiguities(input: {
+    executionContext: StrategyExecutionContextResolution
+    atomicResolution: AtomicIntentResolution
+    checklist?: ClarificationChecklistInput | null
+  }): StrategyClarificationState {
+    const items: StrategyClarificationItem[] = [
+      ...this.fromExecutionContextAmbiguities(input.executionContext),
+      ...this.fromAtomicAmbiguities(input.atomicResolution.ambiguities, input.checklist),
+    ]
+
+    if (items.length > 0) {
+      return {
+        status: 'NEEDS_CLARIFICATION',
+        items,
+      }
+    }
+
+    if (input.checklist) {
+      return this.detect(input.checklist)
+    }
 
     return {
-      status: items.length > 0 ? 'NEEDS_CLARIFICATION' : 'CLEAR',
-      items,
+      status: 'CLEAR',
+      items: [],
     }
   }
 
@@ -69,6 +82,83 @@ export class StrategyClarificationRulesService {
       status: 'NEEDS_CLARIFICATION',
       items,
     }
+  }
+
+  collectEvidence(input: ClarificationChecklistInput): {
+    clarificationState: StrategyClarificationState
+    evidence: Array<{ key: string, reason: string, priority: number, question?: string }>
+    blockingReasons: Array<{ key: string, reason: string, priority: number, question: string }>
+    inferredAssumptions: []
+  } {
+    const clarificationState = this.detect(input)
+    const hasClosedLoopGrid = this.hasClosedLoopExitSemantics(input)
+    const rawEvidence = clarificationState.items
+      .filter((item) => !(
+        hasClosedLoopGrid
+        && (item.reason === 'missing_exit_rules'
+          || item.reason === 'missing_stop_loss_rule'
+          || item.reason === 'missing_take_profit_rule')
+      ))
+      .map((item) => ({
+        key: item.key,
+        reason: item.reason,
+        priority: this.readReasonPriority(item.reason),
+        question: item.question,
+      }))
+
+    const evidence = hasClosedLoopGrid
+      ? [
+          ...rawEvidence,
+          { key: 'closed_loop_exit_detected', reason: 'closed_loop_exit_detected', priority: 60 },
+        ]
+      : rawEvidence
+
+    return {
+      clarificationState,
+      evidence,
+      blockingReasons: rawEvidence.filter((item): item is { key: string, reason: string, priority: number, question: string } => typeof item.question === 'string'),
+      inferredAssumptions: [],
+    }
+  }
+
+  private fromExecutionContextAmbiguities(
+    resolution: StrategyExecutionContextResolution,
+  ): StrategyClarificationItem[] {
+    return resolution.ambiguities.map((ambiguity) => ({
+      key: `executionContext.${ambiguity.field}`,
+      reason: ambiguity.reason,
+      field: ambiguity.field,
+      blocking: true,
+      question: this.renderExecutionContextQuestion(ambiguity.field),
+      status: 'pending',
+    }))
+  }
+
+  private fromAtomicAmbiguities(
+    ambiguities: StrategyAmbiguity[],
+    checklist?: ClarificationChecklistInput | null,
+  ): StrategyClarificationItem[] {
+    return ambiguities.flatMap((ambiguity) => {
+      if (ambiguity.kind !== 'atomic_semantic_fork') {
+        return []
+      }
+
+      const targetRule = this.findFirstAmbiguousBollingerRule(checklist)
+      if (!targetRule) {
+        return []
+      }
+
+      return [{
+        key: `${targetRule.phase}.trigger.confirmation.${targetRule.index + 1}`,
+        ruleId: `${targetRule.phase}-${targetRule.index + 1}`,
+        reason: 'atomic_semantic_fork',
+        field: 'trigger.confirmation',
+        ...(ambiguity.choices?.length ? { allowedAnswers: ambiguity.choices } : {}),
+        blocking: true,
+        question: this.renderAtomicForkQuestion(ambiguity, targetRule.phase, targetRule.text),
+        status: 'pending',
+      }]
+    })
   }
 
   private detectEntryItems(entryRules: string[]): {
@@ -178,7 +268,7 @@ export class StrategyClarificationRulesService {
       })
     }
 
-    if (!this.hasPrimaryValue(input.timeframes)) {
+    if (!this.hasPrimaryValue(input.timeframes) && !this.hasClosedLoopExitSemantics(input)) {
       items.push({
         key: 'market.timeframe',
         reason: 'missing_timeframe',
@@ -230,6 +320,7 @@ export class StrategyClarificationRulesService {
 
   private detectRequiredRuleItems(input: ClarificationChecklistInput): StrategyClarificationItem[] {
     const items: StrategyClarificationItem[] = []
+    const hasClosedLoopSemantics = this.hasClosedLoopExitSemantics(input)
 
     if (!this.hasAnyRule(input.entryRules)) {
       items.push({
@@ -242,7 +333,7 @@ export class StrategyClarificationRulesService {
       })
     }
 
-    if (!this.hasAnyRule(input.exitRules)) {
+    if (!this.hasAnyRule(input.exitRules) && !hasClosedLoopSemantics) {
       items.push({
         key: 'exit.rules',
         reason: 'missing_exit_rules',
@@ -253,7 +344,7 @@ export class StrategyClarificationRulesService {
       })
     }
 
-    if (!this.hasStopLossRule(input)) {
+    if (!this.hasStopLossRule(input) && !this.riskRulesOptionalUnderCurrentSemantics(input)) {
       items.push({
         key: 'risk.stopLoss.rule',
         reason: 'missing_stop_loss_rule',
@@ -264,7 +355,7 @@ export class StrategyClarificationRulesService {
       })
     }
 
-    if (!this.hasTakeProfitRule(input)) {
+    if (!this.hasTakeProfitRule(input) && !this.riskRulesOptionalUnderCurrentSemantics(input)) {
       items.push({
         key: 'risk.takeProfit.rule',
         reason: 'missing_take_profit_rule',
@@ -736,8 +827,116 @@ export class StrategyClarificationRulesService {
   }
 
   private hasGridSideMode(input: ClarificationChecklistInput): boolean {
-    return input.grid?.sideMode === 'long_only'
+    if (
+      input.grid?.sideMode === 'long_only'
       || input.grid?.sideMode === 'short_only'
       || input.grid?.sideMode === 'bidirectional'
+    ) {
+      return true
+    }
+
+    const text = this.collectRuleTexts(input).join(' ')
+    return /双向/u.test(text)
+      || /做多网格|多头网格/u.test(text)
+      || /做空网格|空头网格/u.test(text)
+      || /低买高卖|高卖低买/u.test(text)
+  }
+
+  private hasClosedLoopExitSemantics(input: ClarificationChecklistInput): boolean {
+    const text = this.collectRuleTexts(input).join(' ')
+    if (!text) return false
+
+    return /网格/u.test(text) && /低买高卖|高卖低买|上方网格卖出|网格卖出/u.test(text)
+  }
+
+  private riskRulesOptionalUnderCurrentSemantics(input: ClarificationChecklistInput): boolean {
+    return this.hasClosedLoopExitSemantics(input)
+  }
+
+  private readReasonPriority(reason: StrategyClarificationItem['reason']): number {
+    if (reason === 'conflicting_market_scope' || reason === 'invalid_spot_short_combo') return 100
+    if (reason === 'missing_entry_rules' || reason === 'missing_exit_rules' || reason === 'missing_action_uniqueness' || reason === 'missing_side_scope' || reason === 'direction_ambiguous' || reason === 'atomic_semantic_fork') return 90
+    if (reason === 'missing_stop_loss_rule' || reason === 'missing_take_profit_rule' || reason === 'grid_params_missing' || reason === 'ambiguous_risk_effect' || reason === 'ambiguous_state_gate') return 70
+    if (reason === 'missing_exchange' || reason === 'missing_symbol' || reason === 'missing_market_type' || reason === 'missing_timeframe' || reason === 'missing_position_pct' || reason === 'missing_position_mode') return 60
+    if (reason === 'ambiguous_condition_basis') return 50
+    return 10
+  }
+
+  private renderExecutionContextQuestion(
+    field: 'exchange' | 'symbol' | 'marketType' | 'timeframe',
+  ): string {
+    if (field === 'exchange') {
+      return '请确认交易所（binance / okx / hyperliquid）。'
+    }
+    if (field === 'symbol') {
+      return '请确认策略交易标的（例如 BTCUSDT）。'
+    }
+    if (field === 'marketType') {
+      return '请确认市场类型（现货或合约/perp）。'
+    }
+    return '请确认策略主周期（例如 15m 或 1h）。'
+  }
+
+  private renderAtomicForkQuestion(
+    ambiguity: StrategyAmbiguity,
+    phase?: 'entry' | 'exit',
+    ruleText?: string,
+  ): string {
+    if (ambiguity.field === 'trigger.confirmation') {
+      if (ruleText) {
+        const phaseLabel = phase === 'exit' ? '出场规则' : '入场规则'
+        return `${phaseLabel}“${ruleText}”是触碰即触发，还是收盘确认后触发？`
+      }
+      return '该布林带条件是触碰即触发，还是收盘确认后触发？'
+    }
+
+    return ambiguity.message
+  }
+
+  private findFirstAmbiguousBollingerRule(
+    checklist?: ClarificationChecklistInput | null,
+  ): { phase: 'entry' | 'exit', index: number, text: string } | null {
+    if (!checklist) return null
+
+    const candidates: Array<{ phase: 'entry' | 'exit', rules: string[] | undefined }> = [
+      { phase: 'entry', rules: checklist.entryRules },
+      { phase: 'exit', rules: checklist.exitRules },
+    ]
+
+    for (const candidate of candidates) {
+      for (const [index, rawRule] of (candidate.rules ?? []).entries()) {
+        const text = rawRule.trim()
+        if (!text) continue
+        if (!BOLLINGER_RULE_PATTERN.test(text)) continue
+        if (this.resolveBollingerConfirmationHint(text) !== 'ambiguous_touch_or_close_confirm') continue
+        if (!(TOUCH_CONFIRMATION_PATTERN.test(text) && CLOSE_CONFIRMATION_PATTERN.test(text))) continue
+        return {
+          phase: candidate.phase,
+          index,
+          text,
+        }
+      }
+    }
+
+    return null
+  }
+
+  private resolveBollingerConfirmationHint(
+    rule: string,
+  ): 'touch' | 'close_confirm' | 'ambiguous_touch_or_close_confirm' {
+    const hasTouchCue = TOUCH_CONFIRMATION_PATTERN.test(rule)
+    const hasCloseCue = CLOSE_CONFIRMATION_PATTERN.test(rule)
+
+    if (hasTouchCue && hasCloseCue) {
+      return 'ambiguous_touch_or_close_confirm'
+    }
+    if (hasCloseCue) {
+      return 'close_confirm'
+    }
+    if (hasTouchCue) {
+      return 'touch'
+    }
+
+    return 'ambiguous_touch_or_close_confirm'
   }
 }

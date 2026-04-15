@@ -23,6 +23,11 @@ export const REQUIRED_CHECKLIST_FIELDS = [
 
 export type ChecklistField = typeof REQUIRED_CHECKLIST_FIELDS[number]
 
+export interface ConstraintPackInferredConfirmationSnapshot {
+  confirmedKeys: string[]
+  overriddenKeys: string[]
+}
+
 export interface ConstraintPackSnapshot {
   allowedHelperPrefixes: readonly string[]
   forbiddenTokens: readonly string[]
@@ -31,6 +36,7 @@ export interface ConstraintPackSnapshot {
   guidePrompt?: CodegenGuidePromptConfigSnapshot
   recommendationStyle?: 'ma' | 'drop-rise'
   conversationHistory?: string[]
+  inferredConfirmation?: ConstraintPackInferredConfirmationSnapshot
 }
 
 export interface CodegenGuidePromptConfigSnapshot {

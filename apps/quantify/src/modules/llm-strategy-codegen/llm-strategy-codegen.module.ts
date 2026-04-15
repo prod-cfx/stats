@@ -29,9 +29,13 @@ import { SpecDescBuilderService } from './services/spec-desc-builder.service'
 import { StaticGuardrailService } from './services/static-guardrail.service'
 import { StrategyClarificationQuestionService } from './services/strategy-clarification-question.service'
 import { StrategyClarificationRulesService } from './services/strategy-clarification-rules.service'
-import { StrategyIntentResolutionService } from './services/strategy-intent-resolution.service'
+import { StrategyCompileabilityDecisionService } from './services/strategy-compileability-decision.service'
 import { StrategyConsistencyService } from './services/strategy-consistency.service'
+import { StrategyExecutionContextService } from './services/strategy-execution-context.service'
 import { StrategyIntentNormalizerService } from './services/strategy-intent-normalizer.service'
+import { StrategyIntentResolutionService } from './services/strategy-intent-resolution.service'
+import { StrategyIrBuilderService } from './services/strategy-ir-builder.service'
+import { StrategyIrCanonicalAdapterService } from './services/strategy-ir-canonical-adapter.service'
 import { StrategySummaryBuilderService } from './services/strategy-summary-builder.service'
 import { StrategySummaryObservationService } from './services/strategy-summary-observation.service'
 
@@ -47,6 +51,7 @@ import { StrategySummaryObservationService } from './services/strategy-summary-o
     RuntimeGuardrailService,
     SpecDescBuilderService,
     CanonicalSpecBuilderService,
+    StrategyCompileabilityDecisionService,
     CanonicalSpecV2DigestService,
     CanonicalSpecV2ValidatorService,
     CanonicalStrategyIrValidatorService,
@@ -59,6 +64,9 @@ import { StrategySummaryObservationService } from './services/strategy-summary-o
     CompiledPublicationGateService,
     ScriptProfileExtractorService,
     StrategyConsistencyService,
+    StrategyExecutionContextService,
+    StrategyIrBuilderService,
+    StrategyIrCanonicalAdapterService,
     StrategyIntentNormalizerService,
     StrategyIntentResolutionService,
     StrategySummaryObservationService,

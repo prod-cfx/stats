@@ -1,5 +1,6 @@
-import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyAmbiguity } from '../types/strategy-ambiguity'
+import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
+import type { StrategyDecision } from '../types/strategy-decision'
 import { Injectable } from '@nestjs/common'
 
 type StrategyClarificationPromptState = StrategyClarificationState & {
@@ -7,7 +8,6 @@ type StrategyClarificationPromptState = StrategyClarificationState & {
 }
 
 const REASON_PRIORITY: Record<StrategyClarificationItem['reason'], number> = {
-  open_semantic_slot: 1,
   conflicting_market_scope: 1,
   invalid_spot_short_combo: 1,
   missing_entry_rules: 2,
@@ -27,20 +27,43 @@ const REASON_PRIORITY: Record<StrategyClarificationItem['reason'], number> = {
   ambiguous_condition_basis: 5,
   grid_params_missing: 3,
   ambiguous_state_gate: 3,
+  atomic_semantic_fork: 2,
 }
 
 @Injectable()
 export class StrategyClarificationQuestionService {
-  buildFromAmbiguity(input: {
+  buildFromDecision(decision: StrategyDecision): string {
+    if (decision.kind === 'CONFIRM_INFERRED') {
+      return [
+        `我当前理解的策略是：${decision.normalizedSummary}`,
+        '以下内容是系统推断，不是你明确给出的：',
+        ...decision.inferredAssumptions.map(item => `- ${item.key}: ${item.value}`),
+        '请确认这些推断是否成立；确认后我再生成策略代码。',
+      ].join('\n')
+    }
+
+    if (decision.kind === 'ASK_CLARIFY') {
+      return [
+        `我当前理解的策略是：${decision.normalizedSummary}`,
+        `现在还缺一个会影响脚本生成一致性的条件：${this.renderDecisionGapLabel(decision.nextActionPayload.question.reason)}`,
+        `请确认：${decision.nextActionPayload.question.question}`,
+      ].join('\n')
+    }
+
+    return ''
+  }
+
+  buildFromAmbiguities(input: {
     summary?: string | null
-    nextQuestion: StrategyAmbiguity | null
+    ambiguities?: StrategyAmbiguity[] | null
   }): string {
-    if (!input.nextQuestion) return ''
+    const target = this.pickHighestPriorityAmbiguity(input.ambiguities ?? [])
+    if (!target) return ''
 
     return [
       `我当前理解的策略是：${input.summary?.trim() || '已识别部分条件，但仍未完整。'}`,
-      `现在还缺一个会影响脚本生成一致性的条件：${this.renderAmbiguityGapLabel(input.nextQuestion)}`,
-      `请确认：${input.nextQuestion.question}`,
+      `现在还缺一个会影响脚本生成一致性的条件：${this.readAmbiguityMessage(target)}`,
+      `请确认：${this.renderAmbiguityQuestion(target)}`,
     ].join('\n')
   }
 
@@ -67,17 +90,7 @@ export class StrategyClarificationQuestionService {
     ].join('\n')
   }
 
-  private renderAmbiguityGapLabel(item: StrategyAmbiguity): string {
-    if (item.lane === 'signal') return '核心信号未闭合。'
-    if (item.lane === 'behavior') return '过滤器/市场状态未闭合。'
-    if (item.lane === 'risk') return '出场与风险未闭合。'
-    return '交易执行上下文未闭合。'
-  }
-
   private renderGapLabel(item: StrategyClarificationItem): string {
-    if (item.reason === 'open_semantic_slot') {
-      return '核心语义未闭合。'
-    }
     if (
       item.reason === 'missing_entry_rules'
       || item.reason === 'missing_exit_rules'
@@ -117,6 +130,83 @@ export class StrategyClarificationQuestionService {
     if (item.reason === 'ambiguous_state_gate') {
       return '状态门控白名单。'
     }
+    if (item.reason === 'atomic_semantic_fork') {
+      return '执行语义分叉。'
+    }
     return '关键条件。'
+  }
+
+  private renderDecisionGapLabel(reason: string): string {
+    if (reason === 'trigger_semantics_fork') return '执行语义分叉。'
+    if (reason === 'basis_ambiguity') return '条件比较基准。'
+    if (reason === 'direction_ambiguity') return '缺少方向约束。'
+    if (reason === 'runtime_context_missing') return '关键市场约束信息。'
+    if (reason === 'exit_semantics_missing') return '核心交易语义。'
+    return '关键条件。'
+  }
+
+  private pickHighestPriorityAmbiguity(ambiguities: StrategyAmbiguity[]): StrategyAmbiguity | null {
+    return ambiguities
+      .map((ambiguity, index) => ({ ambiguity, index }))
+      .sort((a, b) => {
+        const priorityDelta = this.readAmbiguityPriority(a.ambiguity) - this.readAmbiguityPriority(b.ambiguity)
+        if (priorityDelta !== 0) return priorityDelta
+        return a.index - b.index
+      })[0]?.ambiguity ?? null
+  }
+
+  private readAmbiguityPriority(ambiguity: StrategyAmbiguity): number {
+    if (ambiguity.kind === 'execution_context_conflict') return 1
+    if (ambiguity.kind === 'execution_context_missing') {
+      if (ambiguity.field === 'exchange') return 2
+      if (ambiguity.field === 'symbol') return 3
+      if (ambiguity.field === 'marketType') return 4
+      if (ambiguity.field === 'timeframe') return 5
+      return 6
+    }
+    if (ambiguity.kind === 'atomic_semantic_fork') return 7
+    return 99
+  }
+
+  private renderAmbiguityQuestion(ambiguity: StrategyAmbiguity): string {
+    if (ambiguity.kind === 'execution_context_missing') {
+      if (ambiguity.field === 'exchange') {
+        return '请确认交易所（binance / okx / hyperliquid）。'
+      }
+      if (ambiguity.field === 'symbol') {
+        return '请确认策略交易标的（例如 BTCUSDT）。'
+      }
+      if (ambiguity.field === 'marketType') {
+        return '请确认市场类型（现货或合约/perp）。'
+      }
+      if (ambiguity.field === 'timeframe') {
+        return '请确认策略主周期（例如 15m 或 1h）。'
+      }
+    }
+
+    if (ambiguity.field === 'trigger.confirmation') {
+      const labels = ambiguity.choices?.map((choice) => {
+        if (choice === 'touch') return '触碰即触发'
+        if (choice === 'close_confirm') return '收盘确认后触发'
+        return choice
+      }) ?? []
+
+      return labels.length > 0
+        ? `请确认采用哪种触发方式：${labels.join('，还是')}？`
+        : '该布林带条件是触碰即触发，还是收盘确认后触发？'
+    }
+
+    return ambiguity.message
+  }
+
+  private readAmbiguityMessage(ambiguity: StrategyAmbiguity): string {
+    if (ambiguity.kind === 'execution_context_missing') {
+      if (ambiguity.field === 'exchange') return '缺少唯一交易所'
+      if (ambiguity.field === 'symbol') return '缺少唯一交易标的'
+      if (ambiguity.field === 'marketType') return '缺少唯一市场类型'
+      if (ambiguity.field === 'timeframe') return '缺少唯一主周期'
+    }
+
+    return ambiguity.message
   }
 }

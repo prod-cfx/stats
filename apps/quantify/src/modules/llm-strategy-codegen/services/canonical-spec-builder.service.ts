@@ -1,5 +1,6 @@
 import type { CanonicalConditionNode, CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
 import type { ChecklistRuleBasis } from '../types/codegen-checklist'
+import type { StrategyIR } from '../types/strategy-ir'
 import type {
   NormalizedGridIntent,
   NormalizedRiskAtom,
@@ -15,6 +16,7 @@ import {
   resolveRulePhaseDefaultTimeframe,
 } from './checklist-rule-drafts'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
+import { StrategyIrCanonicalAdapterService } from './strategy-ir-canonical-adapter.service'
 
 interface ChecklistSnapshot {
   symbols?: unknown
@@ -31,6 +33,10 @@ interface ChecklistSnapshot {
 
 @Injectable()
 export class CanonicalSpecBuilderService {
+  constructor(
+    private readonly strategyIrCanonicalAdapter: StrategyIrCanonicalAdapterService = new StrategyIrCanonicalAdapterService(),
+  ) {}
+
   build(checklist: ChecklistSnapshot): CanonicalStrategySpecV2 {
     const normalizedChecklist = checklist as ChecklistSnapshot & Parameters<typeof buildChecklistRuleDrafts>[0]
     const ruleDrafts = buildChecklistRuleDrafts(normalizedChecklist)
@@ -450,6 +456,10 @@ export class CanonicalSpecBuilderService {
         },
       },
     }
+  }
+
+  buildFromStrategyIr(strategyIr: StrategyIR): CanonicalStrategySpecV2 {
+    return this.strategyIrCanonicalAdapter.adapt(strategyIr)
   }
 
   private detectOpenAction(ruleText: string): { type: 'OPEN_LONG' | 'OPEN_SHORT'; sideScope: 'long' | 'short' } | null {

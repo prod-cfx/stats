@@ -1,104 +1,131 @@
-import type {
-  AtomicIntent,
-  AtomicIntentResolution,
-  AtomicIntentSemanticKind,
-  StrategyAmbiguity,
-  StrategyAmbiguityLane,
-} from '../types/strategy-ambiguity'
-import type { UnresolvedSlot } from '../types/strategy-normalized-intent'
+import type { AtomicIntent, AtomicIntentResolution, StrategyAmbiguity } from '../types/strategy-ambiguity'
+import type { NormalizedTriggerAtom, StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
+import { Injectable } from '@nestjs/common'
 
-const LANE_PRIORITY: Record<StrategyAmbiguityLane, number> = {
-  signal: 1,
-  behavior: 2,
-  risk: 3,
-  context: 4,
-}
-
-const SLOT_PRIORITY: Record<UnresolvedSlot['priority'], number> = {
-  core: 1,
-  behavior: 2,
-  risk: 3,
-  context: 4,
-}
-
+@Injectable()
 export class StrategyIntentResolutionService {
-  resolve(input: AtomicIntent): AtomicIntentResolution {
-    const ambiguities: StrategyAmbiguity[] = [
-      ...input.normalizedIntent.triggers.flatMap((trigger) => this.toAmbiguities({
-        lane: 'signal',
-        semanticKind: 'trigger',
-        semanticKey: trigger.key,
-        phase: trigger.phase,
-        unresolvedSlots: trigger.unresolvedSlots,
-      })),
-      ...input.normalizedIntent.actions.flatMap((action) => this.toAmbiguities({
-        lane: 'signal',
-        semanticKind: 'action',
-        semanticKey: action.key,
-        unresolvedSlots: action.unresolvedSlots,
-      })),
-      ...input.normalizedIntent.risk.flatMap((risk) => this.toAmbiguities({
-        lane: 'risk',
-        semanticKind: 'risk',
-        semanticKey: risk.key,
-        unresolvedSlots: risk.unresolvedSlots,
-      })),
-      ...this.toAmbiguities({
-        lane: 'context',
-        semanticKind: 'position',
-        semanticKey: 'position',
-        unresolvedSlots: input.normalizedIntent.position.unresolvedSlots,
-      }),
-      ...this.toAmbiguities({
-        lane: 'signal',
-        semanticKind: 'grid',
-        semanticKey: input.normalizedIntent.grid?.family ?? 'grid',
-        unresolvedSlots: input.normalizedIntent.grid?.unresolvedSlots,
-      }),
-      ...(input.normalizedIntent.stateHints ?? []).flatMap((hint) => this.toAmbiguities({
-        lane: 'behavior',
-        semanticKind: 'state_hint',
-        semanticKey: hint.type,
-        unresolvedSlots: hint.unresolvedSlots,
-      })),
-    ].sort((left, right) => this.compareAmbiguities(left, right))
+  resolve(input: { normalizedIntent: StrategyNormalizedIntent }): AtomicIntentResolution {
+    const { normalizedIntent } = input
+    if (normalizedIntent.grid) {
+      return this.resolveGridIntent(normalizedIntent)
+    }
 
+    return this.resolveSingleLegIntent(normalizedIntent)
+  }
+
+  private resolveGridIntent(normalizedIntent: StrategyNormalizedIntent): AtomicIntentResolution {
     return {
-      ambiguities,
-      nextQuestion: ambiguities[0] ?? null,
+      atomicIntent: {
+        triggers: [
+          {
+            kind: 'grid_touch',
+            params: {
+              range: normalizedIntent.grid?.range,
+              stepPct: normalizedIntent.grid?.stepPct,
+              sideMode: normalizedIntent.grid?.sideMode,
+              recycle: normalizedIntent.grid?.recycle,
+            },
+          },
+        ],
+        actions: normalizedIntent.actions.map(action => ({
+          kind: action.key,
+          ...(action.params ? { params: action.params as Record<string, unknown> } : {}),
+        })),
+        sizing: this.buildSizing(normalizedIntent),
+        risk: normalizedIntent.risk.map(risk => ({ kind: risk.key, params: risk.params })),
+        relations: [],
+      },
+      ambiguities: [],
     }
   }
 
-  private toAmbiguities(input: {
-    lane: StrategyAmbiguityLane
-    semanticKind: AtomicIntentSemanticKind
-    semanticKey: string
-    phase?: StrategyAmbiguity['phase']
-    unresolvedSlots?: UnresolvedSlot[]
-  }): StrategyAmbiguity[] {
-    return (input.unresolvedSlots ?? []).map(slot => ({
-      ...slot,
-      kind: slot.slotKey.endsWith('.conflict') ? 'semantic_conflict' : undefined,
-      lane: input.lane,
-      semanticKind: input.semanticKind,
-      semanticKey: input.semanticKey,
-      ...(input.phase ? { phase: input.phase } : {}),
-    })).map(item => ({
-      ...item,
-      kind: item.kind ?? item.reason,
-    }))
+  private resolveSingleLegIntent(normalizedIntent: StrategyNormalizedIntent): AtomicIntentResolution {
+    const ambiguities: StrategyAmbiguity[] = []
+    const triggers = normalizedIntent.triggers.flatMap((trigger) => {
+      const resolution = this.resolveTrigger(trigger)
+      ambiguities.push(...resolution.ambiguities)
+      return resolution.triggers
+    })
+
+    return {
+      atomicIntent: {
+        triggers,
+        actions: normalizedIntent.actions.map(action => ({
+          kind: action.key,
+          ...(action.params ? { params: action.params as Record<string, unknown> } : {}),
+        })),
+        sizing: this.buildSizing(normalizedIntent),
+        risk: normalizedIntent.risk.map(risk => ({ kind: risk.key, params: risk.params })),
+        relations: [],
+      },
+      ambiguities,
+    }
   }
 
-  private compareAmbiguities(left: StrategyAmbiguity, right: StrategyAmbiguity): number {
-    const laneDelta = LANE_PRIORITY[left.lane] - LANE_PRIORITY[right.lane]
-    if (laneDelta !== 0) return laneDelta
+  private resolveTrigger(
+    trigger: NormalizedTriggerAtom,
+  ): Pick<AtomicIntentResolution, 'ambiguities'> & Pick<AtomicIntent, 'triggers'> {
+    if (trigger.key.startsWith('bollinger.touch_')) {
+      return this.resolveBollingerTrigger(trigger)
+    }
 
-    const priorityDelta = SLOT_PRIORITY[left.priority] - SLOT_PRIORITY[right.priority]
-    if (priorityDelta !== 0) return priorityDelta
+    return {
+      triggers: [
+        {
+          kind: 'normalized_trigger',
+          phase: trigger.phase,
+          triggerKey: trigger.key,
+          params: {
+            ...trigger.params,
+            ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
+          },
+        },
+      ],
+      ambiguities: [],
+    }
+  }
 
-    const executionDelta = Number(right.affectsExecution) - Number(left.affectsExecution)
-    if (executionDelta !== 0) return executionDelta
+  private resolveBollingerTrigger(
+    trigger: NormalizedTriggerAtom,
+  ): Pick<AtomicIntentResolution, 'ambiguities'> & Pick<AtomicIntent, 'triggers'> {
+    const confirmation = trigger.resolutionHints?.confirmation ?? 'ambiguous_touch_or_close_confirm'
+    if (confirmation === 'ambiguous_touch_or_close_confirm') {
+      return {
+        triggers: [],
+        ambiguities: [
+          {
+            kind: 'atomic_semantic_fork',
+            field: 'trigger.confirmation',
+            message: '存在触碰即触发与收盘确认触发两种合法解释',
+            choices: ['touch', 'close_confirm'],
+          },
+        ],
+      }
+    }
 
-    return left.fieldPath.localeCompare(right.fieldPath)
+    return {
+      triggers: [
+        {
+          kind: 'bollinger_band_trigger',
+          phase: trigger.phase,
+          triggerKey: trigger.key,
+          params: {
+            ...trigger.params,
+            confirmation,
+            ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
+          },
+        },
+      ],
+      ambiguities: [],
+    }
+  }
+
+  private buildSizing(normalizedIntent: StrategyNormalizedIntent): AtomicIntent['sizing'] {
+    return {
+      kind: 'position_sizing',
+      mode: normalizedIntent.position.mode,
+      value: normalizedIntent.position.value,
+      positionMode: normalizedIntent.position.positionMode,
+    }
   }
 }

@@ -4,6 +4,10 @@ describe('conversationPlannerSystemPrompt', () => {
   it('enforces incremental extraction and preserves strong rule semantics', () => {
     const prompt = buildConversationPlannerSystemPrompt()
 
+    expect(prompt).toContain('程序化决策层决定 DIRECT_COMPILE / CONFIRM_INFERRED / ASK_CLARIFY')
+    expect(prompt).toContain('若处于 ASK_CLARIFY：只能围绕当前唯一 blocker 发问')
+    expect(prompt).toContain('若处于 CONFIRM_INFERRED：必须明确区分用户原话与系统推断')
+    expect(prompt).toContain('若处于 DIRECT_COMPILE：不得反向触发旧 checklist 缺项追问')
     expect(prompt).toContain('只能把用户当前消息或 currentLogic 中已经明确的规则写入 logic')
     expect(prompt).toContain('默认保留 currentLogic 中未被用户明确修改的字段')
     expect(prompt).toContain('entryRules / exitRules 中的每一条规则必须原子化表达')

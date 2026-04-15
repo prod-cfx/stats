@@ -25,6 +25,13 @@ export const NORMALIZED_TRIGGER_ATOM_KEYS = [
 ] as const
 
 export type NormalizedTriggerAtomKey = (typeof NORMALIZED_TRIGGER_ATOM_KEYS)[number]
+export const NORMALIZED_TRIGGER_CONFIRMATION_HINTS = [
+  'touch',
+  'close_confirm',
+  'ambiguous_touch_or_close_confirm',
+] as const
+
+export type NormalizedTriggerConfirmationHint = (typeof NORMALIZED_TRIGGER_CONFIRMATION_HINTS)[number]
 
 export type NormalizedAtomPhase = 'entry' | 'exit' | 'risk' | 'gate'
 export type NormalizedAtomSideScope = 'long' | 'short' | 'both'
@@ -43,6 +50,10 @@ export interface UnresolvedSlot {
   evidenceText?: string
 }
 
+export interface NormalizedTriggerResolutionHints {
+  confirmation?: NormalizedTriggerConfirmationHint
+}
+
 interface RecognizedSemanticMetadata {
   closureStatus: NormalizedClosureStatus
   unresolvedSlots: UnresolvedSlot[]
@@ -54,6 +65,7 @@ export interface NormalizedTriggerAtom extends RecognizedSemanticMetadata {
   phase: NormalizedAtomPhase
   sideScope?: NormalizedAtomSideScope
   params: Record<string, string | number | boolean>
+  resolutionHints?: NormalizedTriggerResolutionHints
 }
 
 export interface NormalizedActionAtom {

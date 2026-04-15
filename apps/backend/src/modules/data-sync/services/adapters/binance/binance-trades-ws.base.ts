@@ -8,7 +8,6 @@ import { EventEmitter2 } from '@nestjs/event-emitter'
 import type { TradesAdapterKey, TradesConfig, TradesWsAdapter } from '../../trades-ws-adapter'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { DataSyncOperationTimeoutException } from '@/modules/data-sync/exceptions/data-sync-operation-timeout.exception'
-import { PrismaService } from '@/prisma/prisma.service'
 import { MarketTradesRepository } from '@/modules/markets/repositories/market-trades.repository'
 import type { TradeEvent } from '@/modules/kline/interfaces/trade-event.interface'
 import { TRADE_RECEIVED_EVENT } from '@/modules/kline/interfaces/trade-event.interface'
@@ -65,8 +64,6 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
   constructor(
     @Inject(ConfigService)
     protected readonly configService: ConfigService,
-    @Inject(PrismaService)
-    protected readonly prismaService: PrismaService,
     @Inject(EventEmitter2)
     protected readonly eventEmitter: EventEmitter2,
     @Inject(MarketTradesRepository)
@@ -496,10 +493,7 @@ export abstract class BinanceTradesWsAdapterBase implements TradesWsAdapter {
         }))
 
         promises.push(
-          this.prismaService.marketTrade.createMany({
-            data: records,
-            skipDuplicates: true,
-          }),
+          this.marketTradesRepository.createManyTrades(records),
         )
       }
 

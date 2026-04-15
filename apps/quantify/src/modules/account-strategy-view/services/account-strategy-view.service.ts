@@ -4,6 +4,7 @@ import type { AccountStrategyDetailResponseDto, AccountStrategyTimelineEventDto 
 import type { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
 import type { AccountStrategyListQueryDto } from '../dto/account-strategy-list-query.dto'
 import type { AccountStrategyUpdateExecutionLeverageDto } from '../dto/account-strategy-update-execution-leverage.dto'
+import type { StrategyInstanceStatsDto } from '@/modules/strategy-instances/dto/strategy-instance-stats.dto'
 import type { StrategySignalsRuntimeConfig } from '@/modules/strategy-signals/types/strategy-signals-config.type'
 import type { ExchangeId, MarketType, UnifiedBalance } from '@/modules/trading/core/types'
 import { createHash } from 'node:crypto'
@@ -37,6 +38,10 @@ import {
 } from '../exceptions'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { AccountStrategyViewRepository } from '../repositories/account-strategy-view.repository'
+import {
+  buildAccountStrategyLatestOrders,
+  buildAccountStrategyMixedTimeline,
+} from './account-strategy-view-detail-projection'
 
 interface FormalSnapshotDetail {
   publishedSnapshotId: string | null
@@ -47,6 +52,18 @@ interface FormalSnapshotDetail {
   deploymentExecutionDefaults: Record<string, unknown> | null
   deploymentExecutionConstraints: Record<string, unknown> | null
   compatibilityMetadata: Record<string, unknown> | null
+}
+
+interface StrategyAccountFallback {
+  id: string
+  initialBalance: unknown
+  totalRealizedPnl: unknown
+  totalUnrealizedPnl: unknown
+}
+
+interface TradingLeverageConstraints {
+  minLeverage?: number
+  maxLeverage?: number
 }
 
 @Injectable()
@@ -77,13 +94,13 @@ export class AccountStrategyViewService {
     })
 
     const instanceIds = rows.items.map(item => item.id)
-    let statsMap = new Map<string, any>()
+    let statsMap = new Map<string, StrategyInstanceStatsDto | null>()
 
     if (instanceIds.length > 0) {
       try {
         statsMap = await this.statsService.calculateBatchStats(instanceIds)
       } catch {
-        statsMap = new Map<string, any>()
+        statsMap = new Map<string, StrategyInstanceStatsDto | null>()
       }
     }
 
@@ -181,17 +198,17 @@ export class AccountStrategyViewService {
     const equityRows = account
       ? await this.repo.loadEquitySeries(account.id)
       : []
-    const latestDailySnapshot = account && typeof (this.repo as any).loadLatestDailySnapshot === 'function'
-      ? await (this.repo as any).loadLatestDailySnapshot(account.id)
+    const latestDailySnapshot = account
+      ? await this.repo.loadLatestDailySnapshot?.(account.id) ?? this.getLatestDailySnapshotFromSeries(equityRows)
       : this.getLatestDailySnapshotFromSeries(equityRows)
-    const closedPositionRows = account && typeof (this.repo as any).loadClosedPositionPnlSeries === 'function'
-      ? await (this.repo as any).loadClosedPositionPnlSeries(account.id)
+    const closedPositionRows = account
+      ? await this.repo.loadClosedPositionPnlSeries?.(account.id) ?? []
       : []
-    const positionFinancials = account && typeof (this.repo as any).loadPositionFinancials === 'function'
-      ? await (this.repo as any).loadPositionFinancials(account.id)
+    const positionFinancials = account
+      ? await this.repo.loadPositionFinancials?.(account.id) ?? null
       : null
-    const openPositionsForValuation = account && typeof (this.repo as any).loadOpenPositionsForValuation === 'function'
-      ? await (this.repo as any).loadOpenPositionsForValuation(account.id)
+    const openPositionsForValuation = account
+      ? await this.repo.loadOpenPositionsForValuation?.(account.id) ?? []
       : []
     const tradeStats = account
       ? await this.repo.loadTradeStats(account.id)
@@ -393,7 +410,7 @@ export class AccountStrategyViewService {
               max: detailLeverageConstraints.max,
             }
           : null,
-        compatibilityMetadata: resolvedSnapshot.compatibilityMetadata as any,
+        compatibilityMetadata: this.normalizeCompatibilityMetadata(resolvedSnapshot.compatibilityMetadata),
         consistencySummary: {
           isConsistent: driftReasons.length === 0,
           driftReasons,
@@ -403,7 +420,7 @@ export class AccountStrategyViewService {
           ? ((row as Record<string, unknown>).executionConfigVersion as number)
           : null,
       },
-      timeline: this.buildMixedTimeline(timelineSource),
+      timeline: buildAccountStrategyMixedTimeline(timelineSource),
       accountOverview: {
         initialBalance: overviewInitialBalance,
         totalEquity: overviewTotalEquity,
@@ -418,7 +435,7 @@ export class AccountStrategyViewService {
         totalRealizedPnl: account ? resolvedRealizedPnl : null,
         totalUnrealizedPnl: account ? resolvedUnrealizedPnl : null,
       },
-      latestOrders: this.buildLatestOrders(timelineSource.trades),
+      latestOrders: buildAccountStrategyLatestOrders(timelineSource.trades),
       deployment: !resolvedSnapshot.publishedSnapshotId || resolvedSnapshot.compatibilityMetadata?.requiresRepublishForDeploy
         ? null
         : {
@@ -607,7 +624,7 @@ export class AccountStrategyViewService {
     await this.strategyInstancesService.updateInstance(
       strategyInstanceId,
       {
-        status: nextStatus as any,
+        status: nextStatus,
         updatedBy: userId,
       },
       userId,
@@ -869,6 +886,23 @@ export class AccountStrategyViewService {
     }
   }
 
+  private normalizeCompatibilityMetadata(
+    value: Record<string, unknown> | null,
+  ): AccountStrategyDetailResponseDto['snapshot']['compatibilityMetadata'] {
+    if (!value) return null
+
+    return {
+      isLegacySnapshot: value.isLegacySnapshot === true,
+      missingStrategyConfig: value.missingStrategyConfig === true,
+      missingBacktestConfigDefaults: value.missingBacktestConfigDefaults === true,
+      missingDeploymentExecutionDefaults: value.missingDeploymentExecutionDefaults === true,
+      missingDeploymentExecutionConstraints: value.missingDeploymentExecutionConstraints === true,
+      requiresRepublishForBacktest: value.requiresRepublishForBacktest === true,
+      requiresRepublishForDeploy: value.requiresRepublishForDeploy === true,
+      ...(value.invalidBinding === true ? { invalidBinding: true } : {}),
+    }
+  }
+
   private resolveStrategySchema(source: unknown): Record<string, unknown> | null {
     const root = this.readRecord(source)
     if (!root) return null
@@ -974,18 +1008,11 @@ export class AccountStrategyViewService {
   } | null> {
     if (!strategyTemplateId) return null
 
-    const repoAny = this.repo as any
-    const findExact = repoAny.findUserStrategyAccount as
-      ((uid: string, strategyId: string) => Promise<any>) | undefined
-    const loadTradeStats = repoAny.loadTradeStats as
-      ((accountId: string) => Promise<{ tradeCount: number; closedCount: number; winningCount: number }>) | undefined
-
-    if (!findExact || !loadTradeStats) return null
-
-    const account = await findExact.call(this.repo, userId, strategyTemplateId)
+    const account = await this.repo.findUserStrategyAccount?.(userId, strategyTemplateId) as StrategyAccountFallback | null
     if (!account) return null
 
-    const tradeStats = await loadTradeStats.call(this.repo, account.id)
+    const tradeStats = await this.repo.loadTradeStats?.(account.id)
+    if (!tradeStats) return null
     const totalPnl = Number(account.totalRealizedPnl) + Number(account.totalUnrealizedPnl)
     const invested = Number(account.initialBalance)
 
@@ -996,105 +1023,6 @@ export class AccountStrategyViewService {
         : 0,
       tradeCount: tradeStats.tradeCount,
     }
-  }
-
-  private buildMixedTimeline(source: {
-    instance: any
-    subscription: any
-    signalExecutions: any[]
-    trades: any[]
-  }): AccountStrategyTimelineEventDto[] {
-    const events: AccountStrategyTimelineEventDto[] = []
-
-    if (source.instance?.createdAt) {
-      events.push({
-        at: source.instance.createdAt.toISOString(),
-        eventType: 'system',
-        event: '创建策略',
-        note: null,
-      })
-    }
-    if (source.subscription?.subscribedAt) {
-      events.push({
-        at: source.subscription.subscribedAt.toISOString(),
-        eventType: 'system',
-        event: '订阅策略',
-        note: null,
-      })
-    }
-    if (source.instance?.startedAt) {
-      events.push({
-        at: source.instance.startedAt.toISOString(),
-        eventType: 'system',
-        event: '开始运行',
-        note: null,
-      })
-    }
-    if (source.instance?.stoppedAt) {
-      events.push({
-        at: source.instance.stoppedAt.toISOString(),
-        eventType: 'system',
-        event: '停止运行',
-        note: null,
-      })
-    }
-    if (source.subscription?.unsubscribedAt) {
-      events.push({
-        at: source.subscription.unsubscribedAt.toISOString(),
-        eventType: 'system',
-        event: '取消订阅',
-        note: null,
-      })
-    }
-
-    for (const execution of source.signalExecutions) {
-      events.push({
-        at: execution.createdAt.toISOString(),
-        eventType: 'trade',
-        event: execution.status === 'SUCCESS' ? '信号执行成功' : '信号执行',
-        note: execution.errorMessage ?? null,
-      })
-    }
-
-    for (const trade of source.trades) {
-      events.push({
-        at: trade.executedAt.toISOString(),
-        eventType: 'trade',
-        event: `成交 ${trade.side}`,
-        note: `${trade.symbol} @ ${trade.price}`,
-      })
-    }
-
-    return events
-      .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
-      .slice(0, 30)
-  }
-
-  private buildLatestOrders(
-    trades: Array<{
-      executedAt?: Date
-      side?: string
-      symbol?: string
-      price?: unknown
-      quantity?: unknown
-      fee?: unknown
-      feeCurrency?: string | null
-      orderId?: string | null
-    }>,
-  ) {
-    return trades
-      .filter(trade => trade.executedAt instanceof Date && typeof trade.symbol === 'string' && typeof trade.side === 'string')
-      .slice(0, 10)
-      .map(trade => ({
-        executedAt: trade.executedAt!.toISOString(),
-        side: trade.side!,
-        symbol: trade.symbol!,
-        price: this.toFiniteNumber(trade.price),
-        quantity: this.toFiniteNumber(trade.quantity),
-        fee: this.toFiniteNumber(trade.fee),
-        feeCurrency: trade.feeCurrency ?? null,
-        orderId: trade.orderId ?? null,
-      }))
   }
 
   private toFiniteNumber(value: unknown): number | null {
@@ -1733,8 +1661,8 @@ export class AccountStrategyViewService {
     const strategyDeclaredLeverageRange = this.readRecord(input.deploymentExecutionConstraints.strategyDeclaredLeverageRange)
     const strategyMin = strategyDeclaredLeverageRange ? this.readNumber(strategyDeclaredLeverageRange, ['min']) : null
     const strategyMax = strategyDeclaredLeverageRange ? this.readNumber(strategyDeclaredLeverageRange, ['max']) : null
-    const accountConstraints = typeof (this.tradingService as any)?.getLeverageConstraints === 'function'
-      ? await (this.tradingService as any).getLeverageConstraints({
+    const accountConstraints = this.tradingService?.getLeverageConstraints
+      ? await this.tradingService.getLeverageConstraints({
           userId: input.userId,
           exchangeId: input.exchangeId,
           marketType: input.marketType,

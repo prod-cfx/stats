@@ -44,6 +44,9 @@ export class AccountStrategyCompatibilityMetadataDto {
 
   @ApiProperty()
   requiresRepublishForDeploy!: boolean
+
+  @ApiPropertyOptional({ nullable: true })
+  invalidBinding?: boolean | null
 }
 
 export class AccountStrategyConsistencySummaryDto {

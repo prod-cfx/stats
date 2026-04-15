@@ -1,38 +1,29 @@
 import type { DataPullJob, DataPullJobContext, JobMetaSchema } from '../contracts/data-pull-job'
 import type {
+  AdminDataPullExecutionResponseDto,
   AdminDataPullTaskListQueryDto,
+  AdminDataPullTaskResponseDto,
   CreateAdminDataPullTaskDto,
   UpdateAdminDataPullTaskDto,
 } from '../dto/admin-data-pull-task.dto'
 import type { DataPullTask } from '../repositories/data-pull-task.repository'
+import type { RegisteredJobInfo } from './data-pull-job-registry.resolver'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Inject, Injectable } from '@nestjs/common'
 import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { DATA_PULL_JOB_REGISTRY } from '../data-sync.tokens'
-import {
-  AdminDataPullExecutionResponseDto,
-  AdminDataPullTaskResponseDto,
-} from '../dto/admin-data-pull-task.dto'
 import { DataPullExecutionRepository } from '../repositories/data-pull-execution.repository'
 import { DataPullTaskRepository } from '../repositories/data-pull-task.repository'
-
-/**
- * Job 信息（用于前端展示）
- */
-export interface RegisteredJobInfo {
-  /** Job 唯一标识 */
-  key: string
-  /** Job 名称（用于展示） */
-  name: string
-  /** Meta 配置格式说明 */
-  metaSchema: JobMetaSchema | null
-}
+import {
+  toAdminDataPullExecutionResponseDto,
+  toAdminDataPullTaskResponseDto,
+} from './admin-data-pull-task.mapper'
+import { DataPullJobRegistryResolver } from './data-pull-job-registry.resolver'
 
 @Injectable()
 export class AdminDataPullTaskService {
-  private readonly registeredKeys: Set<string>
-  private readonly jobsMap: Map<string, DataPullJob>
+  private readonly registryResolver: DataPullJobRegistryResolver
 
   constructor(
     @Inject(DataPullTaskRepository)
@@ -42,77 +33,15 @@ export class AdminDataPullTaskService {
     @Inject(DataPullExecutionRepository)
     private readonly execRepo: DataPullExecutionRepository,
   ) {
-    this.registeredKeys = new Set(jobs.map(job => job.key))
-    this.jobsMap = new Map(jobs.map(job => [job.key, job]))
+    this.registryResolver = new DataPullJobRegistryResolver(jobs)
   }
 
-  /**
-   * 根据任务 key 查找对应的 Job 实现
-   * - 支持精确匹配和前缀匹配（key 以 "job.key:" 开头）
-   */
-  private findJobForTask(taskKey: string): DataPullJob | undefined {
-    // 优先精确匹配
-    const exactMatch = this.jobsMap.get(taskKey)
-    if (exactMatch) {
-      return exactMatch
-    }
-
-    // 前缀匹配：taskKey 格式为 "jobKey:suffix"
-    const colonIndex = taskKey.indexOf(':')
-    if (colonIndex > 0) {
-      const jobKeyPrefix = taskKey.slice(0, colonIndex)
-      return this.jobsMap.get(jobKeyPrefix)
-    }
-
-    return undefined
-  }
-
-  /**
-   * 获取所有已在代码中注册的 Job key 列表
-   * 用于前端创建任务时的下拉选择
-   */
   getRegisteredKeys(): string[] {
-    return Array.from(this.registeredKeys).sort()
+    return this.registryResolver.getRegisteredKeys()
   }
 
-  /**
-   * 获取所有已注册的 Job 详细信息（包含 metaSchema）
-   * 用于前端展示 meta 配置说明
-   */
   getRegisteredJobs(): RegisteredJobInfo[] {
-    return Array.from(this.jobsMap.values())
-      .map(job => ({
-        key: job.key,
-        name: job.name ?? job.key,
-        metaSchema: job.metaSchema ?? null,
-      }))
-      .sort((a, b) => a.key.localeCompare(b.key))
-  }
-
-  /**
-   * 检查任务 key 是否有对应的 Job 实现
-   * 支持两种匹配模式：
-   * 1. 精确匹配：taskKey === job.key
-   * 2. 前缀匹配：taskKey 以 "job.key:" 开头（用于支持同一 Job 类型的多个任务实例）
-   *
-   * 例如：
-   * - "coinglass-aggregated-liquidation" 精确匹配
-   * - "coinglass-aggregated-liquidation:BTC" 前缀匹配 "coinglass-aggregated-liquidation"
-   */
-  private isKeyRegistered(taskKey: string): boolean {
-    // 精确匹配
-    if (this.registeredKeys.has(taskKey)) {
-      return true
-    }
-
-    // 前缀匹配：taskKey 格式为 "jobKey:suffix"
-    const colonIndex = taskKey.indexOf(':')
-    if (colonIndex > 0) {
-      const jobKeyPrefix = taskKey.slice(0, colonIndex)
-      return this.registeredKeys.has(jobKeyPrefix)
-    }
-
-    return false
+    return this.registryResolver.getRegisteredJobs()
   }
 
   /**
@@ -134,12 +63,12 @@ export class AdminDataPullTaskService {
 
     const now = new Date()
 
-    const job = this.findJobForTask(task.key)
+    const job = this.registryResolver.findJobForTask(task.key)
     if (!job) {
       throw new DomainException('data_sync.task_key_not_registered', {
         code: ErrorCode.DATA_SYNC_TASK_KEY_NOT_REGISTERED,
         status: HttpStatus.BAD_REQUEST,
-        args: { key: task.key, registeredKeys: Array.from(this.registeredKeys).join(', ') },
+        args: { key: task.key, registeredKeys: this.registryResolver.getRegisteredKeys().join(', ') },
       })
     }
 
@@ -176,17 +105,14 @@ export class AdminDataPullTaskService {
         result.meta,
       )
 
-      const dto = new AdminDataPullExecutionResponseDto()
-      dto.id = exec.id
-      dto.taskId = task.id
-      dto.status = 'SUCCESS'
-      dto.fetchedCount = result.fetchedCount
-      dto.startedAt = exec.startedAt
-      dto.finishedAt = finished
-      dto.errorMessage = null
-      dto.meta = (result.meta ?? null) as any
-
-      return dto
+      return toAdminDataPullExecutionResponseDto({
+        ...exec,
+        status: 'SUCCESS',
+        fetchedCount: result.fetchedCount,
+        finishedAt: finished,
+        errorMessage: null,
+        meta: result.meta ?? null,
+      })
     } catch (error) {
       const finished = new Date()
       await this.execRepo.markFailed(exec.id, finished, error)
@@ -279,27 +205,18 @@ export class AdminDataPullTaskService {
     }
 
     const { total, items } = await this.execRepo.listByTaskId(taskId, page, limit)
-    const mapped: AdminDataPullExecutionResponseDto[] = items.map(exec => ({
-      id: exec.id,
-      taskId: exec.taskId,
-      status: exec.status,
-      fetchedCount: exec.fetchedCount,
-      startedAt: exec.startedAt,
-      finishedAt: exec.finishedAt,
-      errorMessage: exec.errorMessage,
-      meta: (exec.meta ?? null) as any,
-    }))
+    const mapped = items.map(exec => toAdminDataPullExecutionResponseDto(exec))
 
     return new BasePaginationResponseDto(total, page, limit, mapped)
   }
 
   async create(dto: CreateAdminDataPullTaskDto): Promise<AdminDataPullTaskResponseDto> {
     // 校验 key 是否已注册（支持精确匹配和前缀匹配，如 "job-key:BTC"）
-    if (!this.isKeyRegistered(dto.key)) {
+    if (!this.registryResolver.isKeyRegistered(dto.key)) {
       throw new DomainException('data_sync.task_key_not_registered', {
         code: ErrorCode.DATA_SYNC_TASK_KEY_NOT_REGISTERED,
         status: HttpStatus.BAD_REQUEST,
-        args: { key: dto.key, registeredKeys: Array.from(this.registeredKeys).join(', ') },
+        args: { key: dto.key, registeredKeys: this.registryResolver.getRegisteredKeys().join(', ') },
       })
     }
 
@@ -338,11 +255,11 @@ export class AdminDataPullTaskService {
     }
 
     // 如果要启用任务，校验 key 是否已注册（支持精确匹配和前缀匹配）
-    if (dto.enabled && !this.isKeyRegistered(existing.key)) {
+    if (dto.enabled && !this.registryResolver.isKeyRegistered(existing.key)) {
       throw new DomainException('data_sync.task_key_not_registered', {
         code: ErrorCode.DATA_SYNC_TASK_KEY_NOT_REGISTERED,
         status: HttpStatus.BAD_REQUEST,
-        args: { key: existing.key, registeredKeys: Array.from(this.registeredKeys).join(', ') },
+        args: { key: existing.key, registeredKeys: this.registryResolver.getRegisteredKeys().join(', ') },
       })
     }
 
@@ -370,23 +287,6 @@ export class AdminDataPullTaskService {
   }
 
   private toResponseDto(task: DataPullTask): AdminDataPullTaskResponseDto {
-    const dto = new AdminDataPullTaskResponseDto()
-    dto.id = task.id
-    dto.key = task.key
-    dto.name = task.name
-    dto.source = task.source
-    dto.type = task.type
-    dto.cron = task.cron
-    dto.intervalSeconds = task.intervalSeconds
-    dto.enabled = task.enabled
-    dto.cursor = task.cursor
-    dto.lastStatus = task.lastStatus
-    dto.lastRunAt = task.lastRunAt
-    dto.lastSuccessAt = task.lastSuccessAt
-    dto.lastError = task.lastError
-    dto.meta = (task.meta ?? null) as any
-    dto.createdAt = task.createdAt
-    dto.updatedAt = task.updatedAt
-    return dto
+    return toAdminDataPullTaskResponseDto(task)
   }
 }

@@ -3,6 +3,160 @@ import { StrategyClarificationRulesService } from '../strategy-clarification-rul
 describe('strategyClarificationRulesService', () => {
   const service = new StrategyClarificationRulesService()
 
+  it('surfaces execution-context ambiguities even when no rule text is present', () => {
+    const state = service.detectFromAmbiguities({
+      executionContext: {
+        context: {
+          exchange: null,
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        evidence: [],
+        ambiguities: [
+          {
+            kind: 'execution_context_missing',
+            field: 'exchange',
+            reason: 'missing_exchange',
+          },
+        ],
+      },
+      atomicResolution: {
+        atomicIntent: {
+          triggers: [],
+          actions: [],
+          sizing: null,
+          risk: [],
+          relations: [],
+        },
+        ambiguities: [],
+      },
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        market: {
+          marketType: 'perp',
+        },
+      },
+    })
+
+    expect(state).toEqual({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        expect.objectContaining({
+          key: 'executionContext.exchange',
+          reason: 'missing_exchange',
+          field: 'exchange',
+          blocking: true,
+          status: 'pending',
+        }),
+      ],
+    })
+  })
+
+  it('prefers execution-context ambiguities over checklist fallback gaps', () => {
+    const state = service.detectFromAmbiguities({
+      executionContext: {
+        context: {
+          exchange: null,
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        evidence: [],
+        ambiguities: [
+          {
+            kind: 'execution_context_missing',
+            field: 'exchange',
+            reason: 'missing_exchange',
+          },
+        ],
+      },
+      atomicResolution: {
+        atomicIntent: {
+          triggers: [],
+          actions: [],
+          sizing: null,
+          risk: [],
+          relations: [],
+        },
+        ambiguities: [],
+      },
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['3 分钟内跌 1% 买入'],
+        exitRules: ['5 分钟内涨 2% 卖出'],
+        riskRules: {
+          marketType: 'perp',
+        },
+      },
+    })
+
+    expect(state).toEqual({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        expect.objectContaining({
+          key: 'executionContext.exchange',
+          reason: 'missing_exchange',
+          field: 'exchange',
+          blocking: true,
+          status: 'pending',
+        }),
+      ],
+    })
+    expect(state.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'missing_position_pct' }),
+      expect.objectContaining({ reason: 'missing_stop_loss_rule' }),
+    ]))
+  })
+
+  it('turns atomic semantic forks into blocking clarification items', () => {
+    const state = service.detectFromAmbiguities({
+      executionContext: {
+        context: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        evidence: [],
+        ambiguities: [],
+      },
+      atomicResolution: {
+        atomicIntent: {
+          triggers: [],
+          actions: [],
+          sizing: null,
+          risk: [],
+          relations: [],
+        },
+        ambiguities: [
+          {
+            kind: 'atomic_semantic_fork',
+            field: 'trigger.confirmation',
+            message: '存在触碰即触发与收盘确认触发两种合法解释',
+            choices: ['touch', 'close_confirm'],
+          },
+        ],
+      },
+      checklist: {
+        entryRules: ['触及布林带上轨后收盘确认做空'],
+      },
+    })
+
+    expect(state.status).toBe('NEEDS_CLARIFICATION')
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'atomic_semantic_fork',
+        field: 'trigger.confirmation',
+        allowedAnswers: ['touch', 'close_confirm'],
+        blocking: true,
+        status: 'pending',
+      }),
+    ]))
+  })
+
   it('detects missing side scope for upper-band breakout entry rule', () => {
     const state = service.detect({
       entryRules: ['突破布林带上轨交易'],
@@ -466,7 +620,7 @@ describe('strategyClarificationRulesService', () => {
     })
   })
 
-  it('blocks grid strategies missing stepPct and side mode', () => {
+  it('blocks grid strategies missing stepPct while treating low-buy-high-sell wording as explicit closed-loop direction semantics', () => {
     const state = service.detect({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
@@ -483,6 +637,8 @@ describe('strategyClarificationRulesService', () => {
 
     expect(state.items).toEqual(expect.arrayContaining([
       expect.objectContaining({ reason: 'grid_params_missing', key: 'grid.stepPct' }),
+    ]))
+    expect(state.items).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ reason: 'missing_side_scope', key: 'grid.sideMode' }),
     ]))
   })
@@ -504,6 +660,50 @@ describe('strategyClarificationRulesService', () => {
 
     expect(state.items).toEqual(expect.arrayContaining([
       expect.objectContaining({ reason: 'ambiguous_state_gate', key: 'state.marketRegime' }),
+    ]))
+  })
+
+  it('marks closed-loop grid language as exit evidence instead of missing-exit blockers', () => {
+    const state = service.collectEvidence({
+      symbols: ['BTCUSDT'],
+      entryRules: ['在 60000-80000 区间执行网格低买高卖，每格 0.5%'],
+      exitRules: [],
+      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+    })
+
+    expect(state.blockingReasons).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ reason: 'missing_exit_rules' })]),
+    )
+    expect(state.evidence).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: 'closed_loop_exit_detected' })]),
+    )
+  })
+
+  it('does not emit legacy exit and risk blockers for closed-loop grid wording', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      entryRules: ['在 60000-80000 区间执行网格低买高卖，每格 0.5%'],
+      exitRules: [],
+      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+    })
+
+    expect(state.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'missing_exit_rules' }),
+      expect.objectContaining({ reason: 'missing_stop_loss_rule' }),
+      expect.objectContaining({ reason: 'missing_take_profit_rule' }),
+    ]))
+  })
+
+  it('does not emit legacy timeframe blockers for closed-loop grid wording', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      entryRules: ['在 60000-80000 区间执行网格低买高卖，每格 0.5%'],
+      exitRules: [],
+      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+    })
+
+    expect(state.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'missing_timeframe' }),
     ]))
   })
 })
