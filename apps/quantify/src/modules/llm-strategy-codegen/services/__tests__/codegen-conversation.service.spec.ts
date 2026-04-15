@@ -1700,6 +1700,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
     )
     expect(result.assistantPrompt).not.toContain('长期均线是多少')
+    expect(result.assistantPrompt).toContain('突破按收盘确认还是盘中触发')
   })
 
   it('applies action uniqueness clarification to the targeted entry rule only', async () => {
