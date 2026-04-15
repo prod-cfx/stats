@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import { buildSemanticSlotId } from '../types/semantic-state'
 import type { SemanticSlotState, SemanticState } from '../types/semantic-state'
 
 interface SupportedSlotReduction {
@@ -12,7 +13,8 @@ export class SemanticStateReducerService {
   applyClarificationAnswer(input: {
     currentState: SemanticState
     targetSlotKey: string
-    targetFieldPath: string
+    targetFieldPath?: string
+    targetSlotId?: string
     answer: string
     messageIndex?: number
   }): SemanticState {
@@ -44,7 +46,13 @@ export class SemanticStateReducerService {
 
     const answerText = input.answer.trim()
     for (const trigger of nextState.triggers) {
-      const slot = trigger.openSlots.find(item => item.slotKey === input.targetSlotKey && item.fieldPath === input.targetFieldPath)
+      const slot = trigger.openSlots.find((item) => {
+        if (input.targetSlotId) {
+          return buildSemanticSlotId(item) === input.targetSlotId
+        }
+
+        return item.slotKey === input.targetSlotKey && item.fieldPath === input.targetFieldPath
+      })
       if (!slot) continue
 
       const reduction = this.reduceSupportedSlot(slot, answerText)
@@ -91,7 +99,7 @@ export class SemanticStateReducerService {
 
     if (slot.slotKey.includes('confirmationMode')) {
       const confirmationIsClose = /收盘|确认|close/u.test(answerText)
-      const confirmationIsTouch = /盘中|触发|touch/u.test(answerText)
+      const confirmationIsTouch = /盘中|即时|touch/u.test(answerText)
       if (confirmationIsClose === confirmationIsTouch) {
         return null
       }

@@ -43,7 +43,7 @@ describe('SemanticStateProjectionService', () => {
     expect(result.nextQuestion).toBe('突破按收盘确认还是盘中触发？')
   })
 
-  it('does not surface unsupported next-question slots that the reducer cannot apply yet', () => {
+  it('surfaces unsupported open work as a blocking fallback next question instead of hiding it', () => {
     const result = service.buildClarificationView({
       version: 1,
       families: ['single-leg'],
@@ -89,6 +89,6 @@ describe('SemanticStateProjectionService', () => {
       updatedAt: '2026-04-15T10:00:00.000Z',
     })
 
-    expect(result.nextQuestion).toBeNull()
+    expect(result.nextQuestion).toBe('这里的关键位置怎么定义？')
   })
 })

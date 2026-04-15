@@ -1,3 +1,4 @@
+import { buildSemanticSlotId } from '../../types/semantic-state'
 import { StrategyClarificationRulesService } from '../strategy-clarification-rules.service'
 
 describe('strategyClarificationRulesService', () => {
@@ -184,6 +185,12 @@ describe('strategyClarificationRulesService', () => {
             message: '长期均线周期缺失',
             question: '长期均线是多少？',
             priority: 10,
+            slotKey: 'reference.period.entry',
+            fieldPath: 'triggers[0].params.reference.period',
+            slotId: buildSemanticSlotId({
+              slotKey: 'reference.period.entry',
+              fieldPath: 'triggers[0].params.reference.period',
+            }),
           },
           {
             kind: 'open_semantic_slot',
@@ -191,6 +198,12 @@ describe('strategyClarificationRulesService', () => {
             message: '出场确认方式缺失',
             question: '跌破按收盘确认还是盘中触发？',
             priority: 10,
+            slotKey: 'confirmationMode.exit',
+            fieldPath: 'triggers[1].params.confirmationMode',
+            slotId: buildSemanticSlotId({
+              slotKey: 'confirmationMode.exit',
+              fieldPath: 'triggers[1].params.confirmationMode',
+            }),
           },
         ],
       },
@@ -206,11 +219,23 @@ describe('strategyClarificationRulesService', () => {
         key: 'semantic.reference.period.entry',
         question: '长期均线是多少？',
         status: 'pending',
+        slotKey: 'reference.period.entry',
+        fieldPath: 'triggers[0].params.reference.period',
+        slotId: buildSemanticSlotId({
+          slotKey: 'reference.period.entry',
+          fieldPath: 'triggers[0].params.reference.period',
+        }),
       }),
       expect.objectContaining({
         key: 'semantic.confirmationMode.exit',
         question: '跌破按收盘确认还是盘中触发？',
         status: 'pending',
+        slotKey: 'confirmationMode.exit',
+        fieldPath: 'triggers[1].params.confirmationMode',
+        slotId: buildSemanticSlotId({
+          slotKey: 'confirmationMode.exit',
+          fieldPath: 'triggers[1].params.confirmationMode',
+        }),
       }),
     ]))
   })

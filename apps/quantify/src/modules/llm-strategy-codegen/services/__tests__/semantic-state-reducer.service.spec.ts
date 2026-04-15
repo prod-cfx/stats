@@ -1,3 +1,4 @@
+import { buildSemanticSlotId } from '../../types/semantic-state'
 import { SemanticStateReducerService } from '../semantic-state-reducer.service'
 
 describe('SemanticStateReducerService', () => {
@@ -44,7 +45,10 @@ describe('SemanticStateReducerService', () => {
         updatedAt: '2026-04-15T10:00:00.000Z',
       },
       targetSlotKey: 'reference.period.entry',
-      targetFieldPath: 'triggers[0].params.reference.period',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'reference.period.entry',
+        fieldPath: 'triggers[0].params.reference.period',
+      }),
       answer: 'MA50',
       messageIndex: 4,
     })
@@ -91,7 +95,10 @@ describe('SemanticStateReducerService', () => {
         updatedAt: '2026-04-15T10:00:00.000Z',
       },
       targetSlotKey: 'confirmationMode.entry',
-      targetFieldPath: 'triggers[0].params.confirmationMode',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'confirmationMode.entry',
+        fieldPath: 'triggers[0].params.confirmationMode',
+      }),
       answer: '收盘确认',
       messageIndex: 5,
     })
@@ -140,7 +147,10 @@ describe('SemanticStateReducerService', () => {
         updatedAt: '2026-04-15T10:00:00.000Z',
       },
       targetSlotKey: 'confirmationMode.entry',
-      targetFieldPath: 'triggers[0].params.confirmationMode',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'confirmationMode.entry',
+        fieldPath: 'triggers[0].params.confirmationMode',
+      }),
       answer: '看情况',
       messageIndex: 6,
     })
@@ -206,7 +216,10 @@ describe('SemanticStateReducerService', () => {
         updatedAt: '2026-04-15T10:00:00.000Z',
       },
       targetSlotKey: 'confirmationMode.entry',
-      targetFieldPath: 'triggers[1].params.confirmationMode',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'confirmationMode.entry',
+        fieldPath: 'triggers[1].params.confirmationMode',
+      }),
       answer: '收盘确认',
       messageIndex: 7,
     })
@@ -222,6 +235,58 @@ describe('SemanticStateReducerService', () => {
     expect(next.triggers[1]?.status).toBe('locked')
     expect(next.triggers[1]?.openSlots[0]).toEqual(expect.objectContaining({
       fieldPath: 'triggers[1].params.confirmationMode',
+      status: 'locked',
+      value: 'close_confirm',
+    }))
+  })
+
+  it('normalizes 收盘后触发 as close confirmation instead of touch', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [
+          {
+            id: 'entry-ma',
+            key: 'indicator.above',
+            phase: 'entry',
+            params: {
+              indicator: 'ma',
+              referenceRole: 'long_term',
+              'reference.period': 50,
+            },
+            status: 'open',
+            source: 'user_explicit',
+            openSlots: [
+              {
+                slotKey: 'confirmationMode.entry',
+                fieldPath: 'triggers[0].params.confirmationMode',
+                status: 'open',
+                priority: 'core',
+                questionHint: '突破按收盘确认还是盘中触发？',
+                affectsExecution: true,
+              },
+            ],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      targetSlotKey: 'confirmationMode.entry',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'confirmationMode.entry',
+        fieldPath: 'triggers[0].params.confirmationMode',
+      }),
+      answer: '收盘后触发',
+      messageIndex: 8,
+    })
+
+    expect(next.triggers[0]?.params.confirmationMode).toBe('close_confirm')
+    expect(next.triggers[0]?.openSlots[0]).toEqual(expect.objectContaining({
       status: 'locked',
       value: 'close_confirm',
     }))

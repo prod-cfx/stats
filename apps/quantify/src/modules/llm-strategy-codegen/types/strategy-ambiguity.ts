@@ -11,6 +11,9 @@ export interface StrategyAmbiguity {
   choices?: string[]
   question?: string
   priority?: number
+  slotId?: string
+  slotKey?: string
+  fieldPath?: string
 }
 
 export interface AtomicIntentTrigger {

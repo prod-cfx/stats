@@ -30,9 +30,25 @@ export class SemanticStateProjectionService {
   }
 
   private findNextOpenSlot(state: SemanticState): SemanticSlotState | null {
-    return state.triggers
-      .flatMap(trigger => trigger.openSlots)
-      .find(slot => slot.status === 'open' && this.isReducerSupportedSlot(slot)) ?? null
+    const triggerSlots = state.triggers.flatMap(trigger => trigger.openSlots)
+    const supportedTriggerSlot = triggerSlots.find(slot => slot.status === 'open' && this.isReducerSupportedSlot(slot))
+    if (supportedTriggerSlot) {
+      return supportedTriggerSlot
+    }
+
+    const firstBlockingTriggerSlot = triggerSlots.find(slot => slot.status === 'open')
+    if (firstBlockingTriggerSlot) {
+      return firstBlockingTriggerSlot
+    }
+
+    const riskSlot = state.risk
+      .flatMap(risk => risk.openSlots)
+      .find(slot => slot.status === 'open')
+    if (riskSlot) {
+      return riskSlot
+    }
+
+    return Object.values(state.contextSlots).find(slot => slot?.status === 'open') ?? null
   }
 
   private isReducerSupportedSlot(slot: SemanticSlotState): boolean {

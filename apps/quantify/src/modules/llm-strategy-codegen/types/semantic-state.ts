@@ -2,6 +2,15 @@ export type SemanticNodeStatus = 'open' | 'locked' | 'superseded'
 export type SemanticSource = 'user_explicit' | 'inferred' | 'derived'
 export type SemanticPriority = 'core' | 'behavior' | 'risk' | 'context'
 
+export interface SemanticSlotIdentity {
+  slotKey: string
+  fieldPath: string
+}
+
+export function buildSemanticSlotId(slot: SemanticSlotIdentity): string {
+  return JSON.stringify([slot.slotKey, slot.fieldPath])
+}
+
 export interface SemanticEvidence {
   text: string
   messageIndex?: number
