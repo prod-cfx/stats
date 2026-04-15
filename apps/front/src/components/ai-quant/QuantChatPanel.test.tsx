@@ -69,7 +69,10 @@ describe('QuantChatPanel range settings', () => {
   }
 
   const triggerTextareaChange = (element: HTMLTextAreaElement, value: string) => {
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLTextAreaElement.prototype,
+      'value',
+    )?.set
     setter?.call(element, value)
     element.dispatchEvent(new Event('input', { bubbles: true }))
     element.dispatchEvent(new Event('change', { bubbles: true }))
@@ -148,7 +151,9 @@ describe('QuantChatPanel range settings', () => {
       container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    const customBtn = Array.from(container.querySelectorAll('button')).find(btn => btn.textContent?.includes('aiQuant.customRange'))
+    const customBtn = Array.from(container.querySelectorAll('button')).find(btn =>
+      btn.textContent?.includes('aiQuant.customRange'),
+    )
     expect(customBtn).toBeTruthy()
 
     await act(async () => {
@@ -167,8 +172,8 @@ describe('QuantChatPanel range settings', () => {
       triggerInputChange(endInput, '2026-02-01T00:00')
     })
 
-    const confirmButton = Array.from(container.querySelectorAll('button')).find(
-      btn => btn.textContent?.includes('aiQuant.backtestConfirmSettings'),
+    const confirmButton = Array.from(container.querySelectorAll('button')).find(btn =>
+      btn.textContent?.includes('aiQuant.backtestConfirmSettings'),
     )
     expect(confirmButton).toBeTruthy()
 
@@ -178,9 +183,15 @@ describe('QuantChatPanel range settings', () => {
 
     expect(onParamChange).toHaveBeenCalled()
     const calls = onParamChange.mock.calls
-    expect(calls.some(([key, value]) => key === 'backtestRangePreset' && value === 'CUSTOM')).toBe(true)
-    expect(calls.some(([key, value]) => key === 'backtestStart' && value === '2026-01-01T00:00:00.000Z')).toBe(true)
-    expect(calls.some(([key, value]) => key === 'backtestEnd' && value === '2026-02-01T00:00:00.000Z')).toBe(true)
+    expect(calls.some(([key, value]) => key === 'backtestRangePreset' && value === 'CUSTOM')).toBe(
+      true,
+    )
+    expect(
+      calls.some(([key, value]) => key === 'backtestStart' && value === '2026-01-01T00:00:00.000Z'),
+    ).toBe(true)
+    expect(
+      calls.some(([key, value]) => key === 'backtestEnd' && value === '2026-02-01T00:00:00.000Z'),
+    ).toBe(true)
   })
 
   it('renders explicit backtest execution controls even when paramSchema is null', async () => {
@@ -287,8 +298,8 @@ describe('QuantChatPanel range settings', () => {
     expect(onParamChange).not.toHaveBeenCalled()
     expect(container.textContent).toContain('aiQuant.backtestDraftPending')
 
-    const confirmButton = Array.from(container.querySelectorAll('button')).find(
-      btn => btn.textContent?.includes('aiQuant.backtestConfirmSettings'),
+    const confirmButton = Array.from(container.querySelectorAll('button')).find(btn =>
+      btn.textContent?.includes('aiQuant.backtestConfirmSettings'),
     )
     expect(confirmButton).toBeTruthy()
 
@@ -333,8 +344,8 @@ describe('QuantChatPanel range settings', () => {
       triggerInputChange(numberInputs[0] as HTMLInputElement, '20000')
     })
 
-    const cancelButton = Array.from(container.querySelectorAll('button')).find(
-      btn => btn.textContent?.includes('aiQuant.backtestClosePanel'),
+    const cancelButton = Array.from(container.querySelectorAll('button')).find(btn =>
+      btn.textContent?.includes('aiQuant.backtestClosePanel'),
     )
     expect(cancelButton).toBeTruthy()
 
@@ -465,16 +476,59 @@ describe('QuantChatPanel range settings', () => {
       triggerInputChange(numberInputs[0] as HTMLInputElement, '20000')
     })
 
-    const runButton = container.querySelector('[data-testid="run-backtest"]') as HTMLButtonElement | null
+    const runButton = container.querySelector(
+      '[data-testid="run-backtest"]',
+    ) as HTMLButtonElement | null
     expect(runButton?.disabled).toBe(true)
     expect(container.textContent).toContain('aiQuant.backtestDraftPending')
+  })
+
+  it('renders a dedicated settings action bar so mobile users can always reach the controls', async () => {
+    await act(async () => {
+      root?.render(
+        <QuantChatPanel
+          messages={[{ id: 'm1', role: 'assistant', content: 'hello' }]}
+          paramSchema={null}
+          paramValues={{
+            ...baseParams,
+            backtestInitialCash: 10000,
+            backtestLeverage: 2,
+            backtestSlippageBps: 10,
+            backtestFeeBps: 5,
+            backtestPriceSource: 'close',
+            backtestAllowPartial: true,
+          }}
+          onParamChange={() => {}}
+          onSend={() => {}}
+          onRunBacktest={() => {}}
+        />,
+      )
+    })
+
+    await act(async () => {
+      container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    const actions = container.querySelector('[data-testid="backtest-settings-actions"]')
+    expect(actions).toBeTruthy()
+    expect(actions?.className).toContain('shrink-0')
+    expect(actions?.textContent).toContain('aiQuant.backtestClosePanel')
+    expect(actions?.textContent).toContain('aiQuant.backtestConfirmSettings')
+    expect(actions?.querySelectorAll('button')).toHaveLength(2)
+    expect(actions?.querySelector('button')?.className).toContain('w-full')
   })
 
   it('does not render a separate clarification card while still showing publication gate content', async () => {
     await act(async () => {
       root?.render(
         <QuantChatPanel
-          messages={[{ id: 'm1', role: 'assistant', content: '这条策略包含做空，请确认使用现货还是合约/永续？' }]}
+          messages={[
+            {
+              id: 'm1',
+              role: 'assistant',
+              content: '这条策略包含做空，请确认使用现货还是合约/永续？',
+            },
+          ]}
           paramSchema={null}
           paramValues={{}}
           clarificationGate={{
@@ -511,7 +565,9 @@ describe('QuantChatPanel range settings', () => {
     })
 
     expect(container.textContent).toContain('这条策略包含做空，请确认使用现货还是合约/永续？')
-    expect(container.textContent).toContain('confirmed snapshot and compiled artifact exchange mismatch')
+    expect(container.textContent).toContain(
+      'confirmed snapshot and compiled artifact exchange mismatch',
+    )
     expect(container.querySelector('[data-testid="clarification-freeform-input"]')).toBeNull()
   })
 })
