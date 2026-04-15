@@ -5,10 +5,12 @@ import type {
 } from './strategy-normalized-intent'
 
 export interface StrategyAmbiguity {
-  kind: 'execution_context_missing' | 'execution_context_conflict' | 'atomic_semantic_fork'
+  kind: 'execution_context_missing' | 'execution_context_conflict' | 'atomic_semantic_fork' | 'open_semantic_slot' | 'semantic_conflict'
   field: string
   message: string
   choices?: string[]
+  question?: string
+  priority?: number
 }
 
 export interface AtomicIntentTrigger {

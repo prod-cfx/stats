@@ -38,12 +38,29 @@ export type NormalizedAtomSideScope = 'long' | 'short' | 'both'
 export type NormalizedPositionMode = 'long_only' | 'short_only' | 'long_short'
 export type NormalizedSizingMode = 'fixed_ratio' | 'fixed_quote' | 'fixed_qty'
 export type NormalizedGridSideMode = 'long_only' | 'short_only' | 'bidirectional'
+export type NormalizedClosureStatus = 'closed' | 'open'
+
+export interface UnresolvedSlot {
+  slotKey: string
+  fieldPath: string
+  reason: 'missing_required_param' | 'missing_definition' | 'missing_relation' | 'missing_scope'
+  questionHint: string
+  priority: 'core' | 'behavior' | 'risk' | 'context'
+  affectsExecution: boolean
+  evidenceText?: string
+}
 
 export interface NormalizedTriggerResolutionHints {
   confirmation?: NormalizedTriggerConfirmationHint
 }
 
-export interface NormalizedTriggerAtom {
+interface RecognizedSemanticMetadata {
+  closureStatus: NormalizedClosureStatus
+  unresolvedSlots: UnresolvedSlot[]
+  evidenceText?: string
+}
+
+export interface NormalizedTriggerAtom extends RecognizedSemanticMetadata {
   key: NormalizedTriggerAtomKey
   phase: NormalizedAtomPhase
   sideScope?: NormalizedAtomSideScope
@@ -78,7 +95,7 @@ export interface NormalizedGridIntent {
   recycle: boolean
 }
 
-export interface ObservationOnlyStateHint {
+export interface ObservationOnlyStateHint extends RecognizedSemanticMetadata {
   type: 'trend' | 'regime' | 'volatility'
   value: string
   mode: 'observation_only'

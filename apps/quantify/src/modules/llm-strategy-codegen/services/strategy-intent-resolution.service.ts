@@ -1,5 +1,5 @@
 import type { AtomicIntent, AtomicIntentResolution, StrategyAmbiguity } from '../types/strategy-ambiguity'
-import type { NormalizedTriggerAtom, StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
+import type { NormalizedTriggerAtom, StrategyNormalizedIntent, UnresolvedSlot } from '../types/strategy-normalized-intent'
 import { Injectable } from '@nestjs/common'
 
 @Injectable()
@@ -47,6 +47,14 @@ export class StrategyIntentResolutionService {
       return resolution.triggers
     })
 
+    for (const hint of normalizedIntent.stateHints ?? []) {
+      ambiguities.push(...(hint.unresolvedSlots ?? []).map(slot => this.toOpenSemanticSlot({
+        slot,
+        field: slot.slotKey,
+        message: slot.questionHint,
+      })))
+    }
+
     return {
       atomicIntent: {
         triggers,
@@ -65,8 +73,18 @@ export class StrategyIntentResolutionService {
   private resolveTrigger(
     trigger: NormalizedTriggerAtom,
   ): Pick<AtomicIntentResolution, 'ambiguities'> & Pick<AtomicIntent, 'triggers'> {
+    const openSlotAmbiguities = (trigger.unresolvedSlots ?? []).map(slot => this.toOpenSemanticSlot({
+      slot,
+      field: slot.slotKey,
+      message: slot.questionHint,
+    }))
+
     if (trigger.key.startsWith('bollinger.touch_')) {
-      return this.resolveBollingerTrigger(trigger)
+      const resolution = this.resolveBollingerTrigger(trigger)
+      return {
+        triggers: resolution.triggers,
+        ambiguities: [...openSlotAmbiguities, ...resolution.ambiguities],
+      }
     }
 
     return {
@@ -81,7 +99,21 @@ export class StrategyIntentResolutionService {
           },
         },
       ],
-      ambiguities: [],
+      ambiguities: openSlotAmbiguities,
+    }
+  }
+
+  private toOpenSemanticSlot(input: {
+    slot: UnresolvedSlot
+    field: string
+    message: string
+  }): StrategyAmbiguity {
+    return {
+      kind: input.slot.slotKey.endsWith('.conflict') ? 'semantic_conflict' : 'open_semantic_slot',
+      field: input.field,
+      message: input.message,
+      question: input.slot.questionHint,
+      priority: input.slot.priority === 'core' ? 10 : input.slot.priority === 'behavior' ? 20 : input.slot.priority === 'risk' ? 30 : 40,
     }
   }
 

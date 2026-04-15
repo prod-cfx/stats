@@ -5,6 +5,7 @@ import type {
   NormalizedRiskAtom,
   NormalizedTriggerAtom,
   StrategyNormalizedIntent,
+  UnresolvedSlot,
 } from '../types/strategy-normalized-intent'
 import { Injectable } from '@nestjs/common'
 import { GRID_STRATEGY_FAMILY } from '../constants/canonical-strategy-capabilities'
@@ -94,6 +95,16 @@ export class StrategyIntentNormalizerService {
         triggers.push(pnlChange)
         continue
       }
+      const movingAverageBreakout = this.tryNormalizeMovingAverageBreakout(rule, phase, triggers.length)
+      if (movingAverageBreakout) {
+        triggers.push(movingAverageBreakout)
+        continue
+      }
+      const unknownBreakout = this.tryNormalizeUnknownBreakoutConcept(rule, phase, triggers.length)
+      if (unknownBreakout) {
+        triggers.push(unknownBreakout)
+        continue
+      }
       const breakout = this.tryNormalizeBreakout(rule, phase)
       if (breakout) {
         triggers.push(breakout)
@@ -126,19 +137,18 @@ export class StrategyIntentNormalizerService {
     phase: 'entry' | 'exit',
     basis: string | undefined,
   ): NormalizedTriggerAtom | null {
-    const percentMatch = rule.match(/(\d+(?:\.\d+)?)\s*%/u)
-    if (!percentMatch?.[1]) return null
+    const rawValue = this.extractPercentValue(rule)
+    if (rawValue === null) return null
 
     const hasDirectionWord = /下跌|跌|回调|上涨|涨|反弹/u.test(rule)
     const hasActionWord = /买入|卖出|做多|做空|开多|开空|平多|平空|平仓/u.test(rule)
     if (!hasDirectionWord || !hasActionWord) return null
 
-    const rawValue = Number(percentMatch[1])
     const valuePct = /下跌|跌|回调/u.test(rule) ? -Math.abs(rawValue) : Math.abs(rawValue)
     const window = this.extractWindow(rule)
     const sideScope = this.resolveSideScope(rule, phase)
 
-    return {
+    return this.createClosedTrigger({
       key: 'price.percent_change',
       phase,
       ...(sideScope ? { sideScope } : {}),
@@ -147,7 +157,7 @@ export class StrategyIntentNormalizerService {
         ...(window ? { window } : {}),
         basis: basis ?? 'prev_close',
       },
-    }
+    })
   }
 
   private normalizeStateHints(checklist: ChecklistPayload): StrategyNormalizedIntent['stateHints'] {
@@ -160,13 +170,29 @@ export class StrategyIntentNormalizerService {
         type: 'trend',
         value: stateGates.trendDirection,
         mode: 'observation_only',
+        closureStatus: 'closed',
+        unresolvedSlots: [],
       })
     }
     if (stateGates.marketRegime) {
+      const hintIndex = hints.length
       hints.push({
         type: 'regime',
         value: stateGates.marketRegime,
         mode: 'observation_only',
+        closureStatus: 'open',
+        unresolvedSlots: [
+          {
+            slotKey: 'regimeDefinition',
+            fieldPath: `stateHints[${hintIndex}].definition`,
+            reason: 'missing_definition',
+            questionHint: '震荡行情怎么判断？',
+            priority: 'behavior',
+            affectsExecution: true,
+            evidenceText: stateGates.marketRegime,
+          },
+        ],
+        evidenceText: stateGates.marketRegime,
       })
     }
     if (stateGates.volatilityState) {
@@ -174,6 +200,8 @@ export class StrategyIntentNormalizerService {
         type: 'volatility',
         value: stateGates.volatilityState,
         mode: 'observation_only',
+        closureStatus: 'closed',
+        unresolvedSlots: [],
       })
     }
 
@@ -190,36 +218,197 @@ export class StrategyIntentNormalizerService {
     }
 
     if (/上轨|upper/i.test(normalized)) {
-      return {
+      return this.createClosedTrigger({
         key: 'bollinger.touch_upper',
         phase,
         sideScope: this.resolveSideScope(rule, phase) ?? (phase === 'entry' ? 'short' : 'both'),
         params: { band: 'upper' },
         resolutionHints: { confirmation: this.resolveBollingerConfirmationHint(rule) },
-      }
+      })
     }
 
     if (/下轨|lower/i.test(normalized)) {
-      return {
+      return this.createClosedTrigger({
         key: 'bollinger.touch_lower',
         phase,
         sideScope: this.resolveSideScope(rule, phase) ?? 'long',
         params: { band: 'lower' },
         resolutionHints: { confirmation: this.resolveBollingerConfirmationHint(rule) },
-      }
+      })
     }
 
     if (/中轨|middle|ma20|均线20/i.test(normalized)) {
-      return {
+      return this.createClosedTrigger({
         key: 'bollinger.touch_middle',
         phase,
         sideScope: this.resolveSideScope(rule, phase) ?? 'both',
         params: { band: 'middle' },
         resolutionHints: { confirmation: this.resolveBollingerConfirmationHint(rule) },
-      }
+      })
     }
 
     return null
+  }
+
+  private tryNormalizeMovingAverageBreakout(
+    rule: string,
+    phase: 'entry' | 'exit',
+    triggerIndex: number,
+  ): NormalizedTriggerAtom | null {
+    if (!/均线|ema|sma|ma/iu.test(rule)) return null
+
+    const referenceRole = /长期|长线|长周期|long[\s-]?term/iu.test(rule)
+      ? 'long_term'
+      : (/短期|短线|短周期|short[\s-]?term/iu.test(rule) ? 'short_term' : null)
+    if (!referenceRole) return null
+
+    const periodMatch = rule.match(/(?:ma|ema|sma)?\s*[（(]?\s*(\d{1,4})\s*[)）]?/iu)
+      ?? rule.match(/(\d{1,4})\s*(?:日|周期)?均线/iu)
+    const referencePeriod = periodMatch?.[1] ? Number(periodMatch[1]) : null
+    const confirmationMode = /收盘|确认|close/iu.test(rule)
+      ? 'close_confirm'
+      : (/盘中|即时|触发/iu.test(rule) ? 'touch' : null)
+
+    const questionPrefix = referenceRole === 'long_term' ? '长期均线' : '短期均线'
+    const sideScope = this.resolveSideScope(rule, phase)
+    if (/突破|站上|上方|高于/u.test(rule)) {
+      if (referencePeriod !== null && confirmationMode) {
+        return this.createClosedTrigger({
+          key: 'indicator.above',
+          phase,
+          ...(sideScope ? { sideScope } : {}),
+          params: {
+            indicator: 'ma',
+            referenceRole,
+            'reference.period': referencePeriod,
+            confirmationMode,
+          },
+        })
+      }
+      const unresolvedSlots: UnresolvedSlot[] = []
+      if (referencePeriod === null) {
+        unresolvedSlots.push({
+          slotKey: 'reference.period',
+          fieldPath: `triggers[${triggerIndex}].params.reference.period`,
+          reason: 'missing_required_param',
+          questionHint: `${questionPrefix}是多少？`,
+          priority: 'core',
+          affectsExecution: true,
+          evidenceText: rule,
+        })
+      }
+      if (!confirmationMode) {
+        unresolvedSlots.push({
+          slotKey: 'confirmationMode',
+          fieldPath: `triggers[${triggerIndex}].params.confirmationMode`,
+          reason: 'missing_definition',
+          questionHint: '突破按收盘确认还是盘中触发？',
+          priority: 'core',
+          affectsExecution: true,
+          evidenceText: rule,
+        })
+      }
+      return this.createOpenTrigger({
+        key: 'indicator.above',
+        phase,
+        ...(sideScope ? { sideScope } : {}),
+        params: {
+          indicator: 'ma',
+          referenceRole,
+          ...(referencePeriod !== null ? { 'reference.period': referencePeriod } : {}),
+          ...(confirmationMode ? { confirmationMode } : {}),
+        },
+      }, unresolvedSlots, rule)
+    }
+
+    if (/跌破|失守|下方|低于/u.test(rule)) {
+      if (referencePeriod !== null && confirmationMode) {
+        return this.createClosedTrigger({
+          key: 'indicator.below',
+          phase,
+          ...(sideScope ? { sideScope } : {}),
+          params: {
+            indicator: 'ma',
+            referenceRole,
+            'reference.period': referencePeriod,
+            confirmationMode,
+          },
+        })
+      }
+      const unresolvedSlots: UnresolvedSlot[] = []
+      if (referencePeriod === null) {
+        unresolvedSlots.push({
+          slotKey: 'reference.period',
+          fieldPath: `triggers[${triggerIndex}].params.reference.period`,
+          reason: 'missing_required_param',
+          questionHint: `${questionPrefix}是多少？`,
+          priority: 'core',
+          affectsExecution: true,
+          evidenceText: rule,
+        })
+      }
+      if (!confirmationMode) {
+        unresolvedSlots.push({
+          slotKey: 'confirmationMode',
+          fieldPath: `triggers[${triggerIndex}].params.confirmationMode`,
+          reason: 'missing_definition',
+          questionHint: '跌破按收盘确认还是盘中触发？',
+          priority: 'core',
+          affectsExecution: true,
+          evidenceText: rule,
+        })
+      }
+      return this.createOpenTrigger({
+        key: 'indicator.below',
+        phase,
+        ...(sideScope ? { sideScope } : {}),
+        params: {
+          indicator: 'ma',
+          referenceRole,
+          ...(referencePeriod !== null ? { 'reference.period': referencePeriod } : {}),
+          ...(confirmationMode ? { confirmationMode } : {}),
+        },
+      }, unresolvedSlots, rule)
+    }
+
+    return null
+  }
+
+  private tryNormalizeUnknownBreakoutConcept(
+    rule: string,
+    phase: 'entry' | 'exit',
+    triggerIndex: number,
+  ): NormalizedTriggerAtom | null {
+    if (!/关键位置|回踩|确认支撑|确认压力/u.test(rule)) return null
+
+    const sideScope = this.resolveSideScope(rule, phase)
+    return this.createOpenTrigger({
+      key: /跌破|下破|失守/u.test(rule) ? 'price.breakout_down' : 'price.breakout_up',
+      phase,
+      ...(sideScope ? { sideScope } : {}),
+      params: {
+        reference: 'unknown',
+      },
+    }, [
+      {
+        slotKey: 'unknown_trigger_definition',
+        fieldPath: `triggers[${triggerIndex}].params.reference`,
+        reason: 'missing_definition',
+        questionHint: '这里的关键位置怎么定义？',
+        priority: 'core',
+        affectsExecution: true,
+        evidenceText: rule,
+      },
+      {
+        slotKey: 'pullback.confirmation',
+        fieldPath: `triggers[${triggerIndex}].params.pullback`,
+        reason: 'missing_definition',
+        questionHint: '回踩确认用什么信号？',
+        priority: 'core',
+        affectsExecution: true,
+        evidenceText: rule,
+      },
+    ], rule)
   }
 
   private tryNormalizeBreakout(
@@ -227,21 +416,21 @@ export class StrategyIntentNormalizerService {
     phase: 'entry' | 'exit',
   ): NormalizedTriggerAtom | null {
     if (/突破.{0,12}(?:阻力|高点|压力)|站上.{0,12}(?:阻力|高点|压力)|breakout|突破/u.test(rule)) {
-      return {
+      return this.createClosedTrigger({
         key: 'price.breakout_up',
         phase,
         sideScope: this.resolveSideScope(rule, phase) ?? (phase === 'entry' ? 'long' : 'long'),
         params: { reference: 'resistance' },
-      }
+      })
     }
 
     if (/跌破.{0,12}(?:支撑|低点)|失守.{0,12}(?:支撑|低点)|breakdown/iu.test(rule)) {
-      return {
+      return this.createClosedTrigger({
         key: 'price.breakout_down',
         phase,
         sideScope: this.resolveSideScope(rule, phase) ?? (phase === 'entry' ? 'short' : 'long'),
         params: { reference: 'support' },
-      }
+      })
     }
 
     return null
@@ -254,19 +443,19 @@ export class StrategyIntentNormalizerService {
   ): NormalizedTriggerAtom | null {
     if (phase !== 'exit') return null
     if (!/收益率|盈利|盈亏|pnl/iu.test(rule)) return null
-    const percentMatch = rule.match(/(\d+(?:\.\d+)?)\s*%/u)
-    if (!percentMatch?.[1]) return null
+    const rawValue = this.extractPercentValue(rule)
+    if (rawValue === null) return null
 
-    return {
+    return this.createClosedTrigger({
       key: 'price.percent_change',
       phase,
       sideScope: this.resolveSideScope(rule, phase) ?? 'long',
       params: {
-        valuePct: Number(percentMatch[1]),
+        valuePct: rawValue,
         basis: basis ?? 'position_pnl',
         window: this.extractWindow(rule) ?? 'position',
       },
-    }
+    })
   }
 
   private tryNormalizeIndicatorThreshold(
@@ -276,39 +465,39 @@ export class StrategyIntentNormalizerService {
     const percentMatch = rule.match(/(\d+(?:\.\d+)?)/u)
     if (/\brsi\b/i.test(rule)) {
       if (/超卖|低于|小于|<=|≤/u.test(rule)) {
-        return {
+        return this.createClosedTrigger({
           key: 'oscillator.rsi_lte',
           phase,
           sideScope: this.resolveSideScope(rule, phase),
           params: percentMatch?.[1] ? { value: Number(percentMatch[1]) } : {},
-        }
+        })
       }
       if (/超买|高于|大于|>=|≥/u.test(rule)) {
-        return {
+        return this.createClosedTrigger({
           key: 'oscillator.rsi_gte',
           phase,
           sideScope: this.resolveSideScope(rule, phase),
           params: percentMatch?.[1] ? { value: Number(percentMatch[1]) } : {},
-        }
+        })
       }
     }
 
     if (/均线|ema|sma|ma/iu.test(rule) && /上方|高于|站上/u.test(rule)) {
-      return {
+      return this.createClosedTrigger({
         key: 'indicator.above',
         phase,
         sideScope: this.resolveSideScope(rule, phase),
         params: { indicator: this.resolveIndicatorName(rule) },
-      }
+      })
     }
 
     if (/均线|ema|sma|ma/iu.test(rule) && /下方|低于|跌破/u.test(rule)) {
-      return {
+      return this.createClosedTrigger({
         key: 'indicator.below',
         phase,
         sideScope: this.resolveSideScope(rule, phase),
         params: { indicator: this.resolveIndicatorName(rule) },
-      }
+      })
     }
 
     return null
@@ -319,20 +508,20 @@ export class StrategyIntentNormalizerService {
     phase: 'entry' | 'exit',
   ): NormalizedTriggerAtom | null {
     if (/金叉|cross over|上穿/u.test(rule)) {
-      return {
+      return this.createClosedTrigger({
         key: 'indicator.cross_over',
         phase,
         sideScope: this.resolveSideScope(rule, phase),
         params: { indicator: this.resolveIndicatorName(rule) },
-      }
+      })
     }
     if (/死叉|cross under|下穿/u.test(rule)) {
-      return {
+      return this.createClosedTrigger({
         key: 'indicator.cross_under',
         phase,
         sideScope: this.resolveSideScope(rule, phase),
         params: { indicator: this.resolveIndicatorName(rule) },
-      }
+      })
     }
 
     return null
@@ -525,6 +714,16 @@ export class StrategyIntentNormalizerService {
     return `${value}d`
   }
 
+  private extractPercentValue(rule: string): number | null {
+    const standardMatch = rule.match(/(\d+(?:\.\d+)?)\s*%/u)
+    if (standardMatch?.[1]) return Number(standardMatch[1])
+
+    const chineseMatch = rule.match(/百分之?\s*(\d+(?:\.\d+)?)/u)
+    if (chineseMatch?.[1]) return Number(chineseMatch[1])
+
+    return null
+  }
+
   private resolveSideScope(rule: string, phase: 'entry' | 'exit'): NormalizedTriggerAtom['sideScope'] | undefined {
     if (/做空|开空|平空|short/u.test(rule)) return 'short'
     if (/做多|开多|买入|平多|long/u.test(rule)) return 'long'
@@ -547,5 +746,28 @@ export class StrategyIntentNormalizerService {
     if (/\bema\b/i.test(rule)) return 'ema'
     if (/\bsma\b/i.test(rule) || /均线|ma/iu.test(rule)) return 'sma'
     return 'indicator'
+  }
+
+  private createClosedTrigger(
+    trigger: Omit<NormalizedTriggerAtom, 'closureStatus' | 'unresolvedSlots' | 'evidenceText'>,
+  ): NormalizedTriggerAtom {
+    return {
+      ...trigger,
+      closureStatus: 'closed',
+      unresolvedSlots: [],
+    }
+  }
+
+  private createOpenTrigger(
+    trigger: Omit<NormalizedTriggerAtom, 'closureStatus' | 'unresolvedSlots' | 'evidenceText'>,
+    unresolvedSlots: UnresolvedSlot[],
+    evidenceText?: string,
+  ): NormalizedTriggerAtom {
+    return {
+      ...trigger,
+      closureStatus: 'open',
+      unresolvedSlots,
+      ...(evidenceText ? { evidenceText } : {}),
+    }
   }
 }

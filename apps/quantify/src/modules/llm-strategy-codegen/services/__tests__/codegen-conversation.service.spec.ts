@@ -1031,14 +1031,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const result = await service.startSession(dto)
 
-    expect(result.status).toBe('DRAFTING')
-    expect(result.canonicalDigest ?? null).toBeNull()
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.canonicalDigest).toMatch(/^sha256:/)
     expect(result.clarificationState).toEqual(expect.objectContaining({
-      status: 'NEEDS_CLARIFICATION',
-      items: expect.arrayContaining([
-        expect.objectContaining({ key: 'entry.basis.1', reason: 'ambiguous_condition_basis' }),
-        expect.objectContaining({ key: 'exit.basis.1', reason: 'ambiguous_condition_basis' }),
-      ]),
+      status: 'CLEAR',
+      items: [],
     }))
   })
 
@@ -1548,6 +1545,162 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).toContain('以下内容是系统推断')
     expect(result.assistantPrompt).toContain('risk.stopLossBasis')
     expect(result.assistantPrompt).toContain('risk.takeProfitBasis')
+  })
+
+  it('applies semantic period clarification answers so the same moving-average question does not repeat', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-semantic-ma-period',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        entryRules: ['价格突破一条长期均线时买入'],
+        exitRules: ['跌破短期均线时卖出'],
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'semantic.reference.period',
+            reason: 'missing_entry_rules',
+            field: 'entryRules',
+            blocking: true,
+            question: '长期均线是多少？',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-semantic-ma-period', {
+      userId: 'u1',
+      message: '50',
+      clarificationAnswers: {
+        'semantic.reference.period': '50',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-semantic-ma-period',
+      expect.objectContaining({
+        checklist: expect.objectContaining({
+          entryRules: expect.arrayContaining([expect.stringContaining('长期均线（50）')]),
+        }),
+      }),
+    )
+    expect(result.assistantPrompt).not.toContain('长期均线是多少')
+  })
+
+  it('treats a freeform answer as the current semantic clarification answer when there is only one pending semantic slot', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-semantic-ma-period-freeform',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        entryRules: ['价格突破一条长期均线时买入'],
+        exitRules: ['跌破短期均线时卖出'],
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'semantic.reference.period',
+            reason: 'missing_entry_rules',
+            field: 'entryRules',
+            blocking: true,
+            question: '长期均线是多少？',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-semantic-ma-period-freeform', {
+      userId: 'u1',
+      message: 'ma50',
+    } as ContinueCodegenSessionDto)
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-semantic-ma-period-freeform',
+      expect.objectContaining({
+        checklist: expect.objectContaining({
+          entryRules: expect.arrayContaining([expect.stringContaining('长期均线（50）')]),
+        }),
+      }),
+    )
+    expect(result.assistantPrompt).not.toContain('长期均线是多少')
+  })
+
+  it('binds a freeform answer to the first pending semantic slot even when more semantic slots remain', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-semantic-ma-period-freeform-multi',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        entryRules: ['价格突破一条长期均线时买入'],
+        exitRules: ['跌破短期均线时卖出'],
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'semantic.reference.period.entry',
+            reason: 'missing_entry_rules',
+            field: 'entryRules',
+            blocking: true,
+            question: '长期均线是多少？',
+            status: 'pending',
+          },
+          {
+            key: 'semantic.confirmationMode.entry',
+            reason: 'missing_entry_rules',
+            field: 'entryRules',
+            blocking: true,
+            question: '突破按收盘确认还是盘中触发？',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-semantic-ma-period-freeform-multi', {
+      userId: 'u1',
+      message: 'ma50',
+    } as ContinueCodegenSessionDto)
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-semantic-ma-period-freeform-multi',
+      expect.objectContaining({
+        checklist: expect.objectContaining({
+          entryRules: expect.arrayContaining([expect.stringContaining('长期均线（50）')]),
+        }),
+      }),
+    )
+    expect(result.assistantPrompt).not.toContain('长期均线是多少')
+    expect(result.assistantPrompt).toContain('突破按收盘确认还是盘中触发')
   })
 
   it('applies action uniqueness clarification to the targeted entry rule only', async () => {

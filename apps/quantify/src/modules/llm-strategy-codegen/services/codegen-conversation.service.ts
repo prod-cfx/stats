@@ -324,13 +324,21 @@ export class CodegenConversationService {
     }
 
     const baseClarificationState = this.readClarificationState(session.clarificationState)
+    const inferredSemanticClarificationAnswers = this.inferFreeformSemanticClarificationAnswers(
+      baseClarificationState,
+      dto.message,
+      dto.clarificationAnswers,
+    )
+    const effectiveClarificationAnswers = Object.keys(inferredSemanticClarificationAnswers).length > 0
+      ? inferredSemanticClarificationAnswers
+      : dto.clarificationAnswers
     const hasStructuredClarificationAnswers = Boolean(
-      dto.clarificationAnswers && Object.keys(dto.clarificationAnswers).length > 0,
+      effectiveClarificationAnswers && Object.keys(effectiveClarificationAnswers).length > 0,
     )
     const baseChecklistAfterAnswers = this.applyClarificationAnswers(
       this.readChecklist(session.checklist),
       baseClarificationState,
-      dto.clarificationAnswers,
+      effectiveClarificationAnswers,
     )
     const inferredConfirmation = this.withConfirmedInferredDecisionKeys(
       this.readConstraintPack(session.constraintPack),
@@ -571,10 +579,18 @@ export class CodegenConversationService {
     sessionUserId: string,
   ): Promise<CodegenSessionResponseDto> {
     const baseClarificationState = this.readClarificationState(session.clarificationState)
+    const inferredSemanticClarificationAnswers = this.inferFreeformSemanticClarificationAnswers(
+      baseClarificationState,
+      dto.message,
+      dto.clarificationAnswers,
+    )
+    const effectiveClarificationAnswers = Object.keys(inferredSemanticClarificationAnswers).length > 0
+      ? inferredSemanticClarificationAnswers
+      : dto.clarificationAnswers
     const baseChecklist = this.applyClarificationAnswers(
       this.readChecklist(session.checklist),
       baseClarificationState,
-      dto.clarificationAnswers,
+      effectiveClarificationAnswers,
     )
     const messageChecklist = this.normalizeChecklist(this.extractChecklist(dto))
     const mergedChecklist = this.mergeChecklistSnapshots(baseChecklist, messageChecklist)
@@ -937,6 +953,10 @@ export class CodegenConversationService {
     const normalizedAnswer = answer.trim()
     if (!normalizedAnswer) return checklist
 
+    if (item.key.startsWith('semantic.')) {
+      return this.applySemanticSlotClarification(checklist, item, normalizedAnswer)
+    }
+
     if (item.key.startsWith('entry.side.') || item.key.startsWith('entry.action_uniqueness.')) {
       return this.applyEntryRuleDirectionClarification(checklist, item, normalizedAnswer)
     }
@@ -1114,6 +1134,63 @@ export class CodegenConversationService {
             : '价格连续3根K线在轨外时提前全平',
         },
       })
+    }
+
+    return checklist
+  }
+
+  private applySemanticSlotClarification(
+    checklist: ChecklistPayload,
+    item: StrategyClarificationItem,
+    answer: string,
+  ): ChecklistPayload {
+    if (/均线是多少/u.test(item.question) || item.key.includes('reference.period')) {
+      const period = this.normalizeMovingAveragePeriodClarificationAnswer(answer)
+      if (period === null) return checklist
+
+      const isLongTerm = /长期均线/u.test(item.question)
+      const targetRules = isLongTerm ? checklist.entryRules : checklist.exitRules
+      if (!targetRules || targetRules.length === 0) return checklist
+
+      const nextRules = targetRules.map((rule) => {
+        const normalized = rule.trim()
+        if (!normalized) return rule
+        if (isLongTerm && !/长期均线/u.test(normalized)) return normalized
+        if (!isLongTerm && !/短期均线/u.test(normalized)) return normalized
+        return normalized.replace(
+          isLongTerm ? /长期均线/u : /短期均线/u,
+          `${isLongTerm ? '长期均线' : '短期均线'}（${period}）`,
+        )
+      })
+
+      return this.normalizeChecklist(isLongTerm
+        ? { ...checklist, entryRules: nextRules }
+        : { ...checklist, exitRules: nextRules })
+    }
+
+    if (/按收盘确认还是盘中触发/u.test(item.question) || item.key.includes('confirmationMode')) {
+      const confirmation = this.normalizeSemanticTriggerConfirmationAnswer(answer)
+      if (!confirmation) return checklist
+
+      const isEntry = /突破按收盘确认/u.test(item.question)
+      const targetRules = isEntry ? checklist.entryRules : checklist.exitRules
+      if (!targetRules || targetRules.length === 0) return checklist
+
+      const nextRules = targetRules.map((rule) => {
+        const normalized = rule.trim()
+        if (!normalized) return rule
+        const stripped = normalized
+          .replace(/收盘确认/gu, '')
+          .replace(/盘中/gu, '')
+          .trim()
+        return confirmation === 'close_confirm'
+          ? `收盘确认${stripped}`
+          : `盘中${stripped}`
+      })
+
+      return this.normalizeChecklist(isEntry
+        ? { ...checklist, entryRules: nextRules }
+        : { ...checklist, exitRules: nextRules })
     }
 
     return checklist
@@ -1533,6 +1610,37 @@ export class CodegenConversationService {
     return value
   }
 
+  private normalizeMovingAveragePeriodClarificationAnswer(answer: string): number | null {
+    const normalized = answer.trim().toLowerCase()
+    if (!normalized) return null
+
+    const match = normalized.match(/(?:ma|ema|sma)?\s*(\d{1,4})/u)
+    if (!match?.[1]) return null
+
+    const value = Number(match[1])
+    if (!Number.isFinite(value) || value <= 0) {
+      return null
+    }
+
+    return value
+  }
+
+  private normalizeSemanticTriggerConfirmationAnswer(
+    answer: string,
+  ): 'touch' | 'close_confirm' | null {
+    const normalized = answer.trim().toLowerCase()
+    if (!normalized) return null
+
+    if (/盘中|即时|触发|touch/u.test(normalized)) {
+      return 'touch'
+    }
+    if (/收盘|确认|close/u.test(normalized)) {
+      return 'close_confirm'
+    }
+
+    return null
+  }
+
   private normalizeBasisClarificationAnswer(answer: string): ChecklistRuleBasis['kind'] | null {
     const normalized = answer.trim().toLowerCase()
     if (!normalized) return null
@@ -1549,6 +1657,29 @@ export class CodegenConversationService {
     if (/前低|last low/i.test(normalized)) return 'last_low'
 
     return null
+  }
+
+  private inferFreeformSemanticClarificationAnswers(
+    clarificationState: StrategyClarificationStateWithSummary | null,
+    message: string | undefined,
+    explicitAnswers?: Record<string, string>,
+  ): Record<string, string> {
+    if (explicitAnswers && Object.keys(explicitAnswers).length > 0) {
+      return explicitAnswers
+    }
+
+    const normalizedMessage = message?.trim()
+    if (!normalizedMessage) return {}
+    if (!clarificationState || clarificationState.status !== 'NEEDS_CLARIFICATION') return {}
+
+    const pendingSemanticItems = clarificationState.items.filter(item =>
+      item.status === 'pending' && item.key.startsWith('semantic.'),
+    )
+    if (pendingSemanticItems.length === 0) return {}
+
+    return {
+      [pendingSemanticItems[0].key]: normalizedMessage,
+    }
   }
 
   private readClarificationState(payload: Prisma.JsonValue | null | undefined): StrategyClarificationStateWithSummary | null {
@@ -1661,7 +1792,7 @@ export class CodegenConversationService {
     const atomicResolution = this.intentResolution.resolve({
       normalizedIntent: normalization.normalizedIntent,
     })
-    const clarificationState = this.withClarificationSummary(
+    const rawClarificationState = this.withClarificationSummary(
       this.clarificationRules.detectFromAmbiguities({
         executionContext,
         atomicResolution,
@@ -1669,8 +1800,12 @@ export class CodegenConversationService {
       }),
       checklist,
     ) as StrategyClarificationStateWithSummary
+    const clarificationState = this.filterLegacyClarificationState(rawClarificationState, normalization)
     const shouldUseExecutionContextAmbiguities = clarificationState.items.some(item => item.key.startsWith('executionContext.'))
-    const shouldUseAtomicAmbiguities = clarificationState.items.some(item => item.reason === 'atomic_semantic_fork')
+    const shouldUseAtomicAmbiguities = clarificationState.items.some(item =>
+      item.reason === 'atomic_semantic_fork'
+      || item.key.startsWith('semantic.'),
+    )
     const effectiveAmbiguities: StrategyAmbiguity[] = [
       ...(shouldUseExecutionContextAmbiguities
         ? executionContext.ambiguities.map(ambiguity => ({
@@ -1721,6 +1856,44 @@ export class CodegenConversationService {
       blockingReasons,
       inferredAssumptions,
     }
+  }
+
+  private filterLegacyClarificationState(
+    clarificationState: StrategyClarificationStateWithSummary,
+    normalization: NormalizationResult,
+  ): StrategyClarificationStateWithSummary {
+    const items = clarificationState.items.filter(item =>
+      !this.shouldSuppressLegacyClarificationItem(item, normalization),
+    )
+
+    return {
+      ...clarificationState,
+      status: items.length > 0 ? 'NEEDS_CLARIFICATION' : 'CLEAR',
+      items,
+    }
+  }
+
+  private shouldSuppressLegacyClarificationItem(
+    item: StrategyClarificationItem,
+    normalization: NormalizationResult,
+  ): boolean {
+    if (normalization.blocked) return false
+
+    const triggers = normalization.normalizedIntent.triggers
+    if (triggers.length === 0 || triggers.some(trigger => trigger.closureStatus !== 'closed')) {
+      return false
+    }
+
+    const isGoldenSupportedTriggerSet = triggers.every(trigger =>
+      trigger.key === 'price.percent_change'
+      || trigger.key === 'bollinger.touch_upper'
+      || trigger.key === 'bollinger.touch_lower'
+      || trigger.key === 'bollinger.touch_middle',
+    )
+    if (!isGoldenSupportedTriggerSet) return false
+
+    return item.reason === 'missing_stop_loss_rule'
+      || item.reason === 'missing_take_profit_rule'
   }
 
   private buildClarificationSummary(checklist: ChecklistPayload): string | null {
@@ -2342,6 +2515,8 @@ export class CodegenConversationService {
 
     const entryRules: string[] = []
     const exitRules: string[] = []
+    const entryRuleBases: Record<string, ChecklistRuleBasis['kind']> = {}
+    const exitRuleBases: Record<string, ChecklistRuleBasis['kind']> = {}
 
     const percentToken = '\\d+(?:\\.\\d+)?\\s*%|百分之?\\s*\\d+(?:\\.\\d+)?'
     const directionalFragments = text
@@ -2359,10 +2534,12 @@ export class CodegenConversationService {
 
     if (buyDropFragment && new RegExp(percentToken, 'u').test(buyDropFragment)) {
       entryRules.push(normalizeDirectionalPercentRule(buyDropFragment, 'entry'))
+      entryRuleBases['entry-1'] = 'prev_close'
     }
 
     if (sellRiseFragment && new RegExp(percentToken, 'u').test(sellRiseFragment)) {
       exitRules.push(normalizeDirectionalPercentRule(sellRiseFragment, 'exit'))
+      exitRuleBases['exit-1'] = 'prev_close'
     }
 
     if (entryRules.length === 0) {
@@ -2497,6 +2674,8 @@ export class CodegenConversationService {
       timeframes: timeframes.length > 0 ? timeframes : undefined,
       entryRules: entryRules.length > 0 ? entryRules : undefined,
       exitRules: exitRules.length > 0 ? exitRules : undefined,
+      entryRuleBases: Object.keys(entryRuleBases).length > 0 ? entryRuleBases : undefined,
+      exitRuleBases: Object.keys(exitRuleBases).length > 0 ? exitRuleBases : undefined,
       riskRules: Object.keys(riskRules).length > 0 ? riskRules : undefined,
       market: Object.keys(inferredMarket).length > 0 ? inferredMarket : undefined,
     })
@@ -2506,6 +2685,8 @@ export class CodegenConversationService {
       timeframes: timeframes.length > 0 ? timeframes : undefined,
       entryRules: entryRules.length > 0 ? entryRules : undefined,
       exitRules: exitRules.length > 0 ? exitRules : undefined,
+      entryRuleBases: Object.keys(entryRuleBases).length > 0 ? entryRuleBases : undefined,
+      exitRuleBases: Object.keys(exitRuleBases).length > 0 ? exitRuleBases : undefined,
       entryRuleDrafts: drafts.entry,
       exitRuleDrafts: drafts.exit,
       riskRules: Object.keys(riskRules).length > 0 ? riskRules : undefined,
