@@ -1,3 +1,4 @@
+import { MARKET_TIMEFRAMES } from '@ai/shared'
 import type { ValidationArguments, ValidatorConstraintInterface } from 'class-validator'
 import type { BacktestRunInput } from '../types/backtesting.types'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
@@ -43,8 +44,8 @@ export class BacktestBarDto {
   @IsNotEmpty()
   symbol!: string
 
-  @ApiProperty({ enum: ['5m', '15m', '1h', '4h', '1d'] })
-  @IsIn(['5m', '15m', '1h', '4h', '1d'])
+  @ApiProperty({ enum: MARKET_TIMEFRAMES })
+  @IsIn(MARKET_TIMEFRAMES)
   timeframe!: BacktestRunInput['baseTimeframe']
 
   @ApiProperty()
@@ -139,13 +140,13 @@ export class RunBacktestDto implements RunBacktestDtoShape {
   @IsString({ each: true })
   symbols!: string[]
 
-  @ApiProperty({ enum: ['5m', '15m', '1h', '4h', '1d'] })
-  @IsIn(['5m', '15m', '1h', '4h', '1d'])
+  @ApiProperty({ enum: MARKET_TIMEFRAMES })
+  @IsIn(MARKET_TIMEFRAMES)
   baseTimeframe!: BacktestRunInput['baseTimeframe']
 
-  @ApiProperty({ type: [String], enum: ['5m', '15m', '1h', '4h', '1d'] })
+  @ApiProperty({ type: [String], enum: MARKET_TIMEFRAMES })
   @IsArray()
-  @IsIn(['5m', '15m', '1h', '4h', '1d'], { each: true })
+  @IsIn(MARKET_TIMEFRAMES, { each: true })
   stateTimeframes!: BacktestRunInput['stateTimeframes']
 
   @ApiProperty()

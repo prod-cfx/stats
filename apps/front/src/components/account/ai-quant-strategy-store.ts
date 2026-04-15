@@ -40,6 +40,7 @@ export interface AiQuantStrategyRecord {
     feeBps: number
     priceSource: string
     allowPartial: boolean
+    stateTimeframes: string[]
   } | null
   deploymentExecutionBaseline?: {
     leverage?: number | null

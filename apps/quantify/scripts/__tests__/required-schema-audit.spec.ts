@@ -18,6 +18,7 @@ describe('required-schema-audit', () => {
     expect(summary.missingColumns).toEqual(['public.llm_strategy_codegen_sessions.strategy_instance_id'])
     expect(summary.missingActiveCapabilityConfig).toBe(true)
     expect(summary.invalidActiveCapabilityConfig).toBe(false)
+    expect(summary.staleLegacyDefaultCapabilityConfig).toBe(false)
     expect(summary.isHealthy).toBe(false)
   })
 
@@ -51,7 +52,7 @@ describe('required-schema-audit', () => {
     ])
   })
 
-  it('stays healthy when all required structures exist', () => {
+  it('flags the legacy default capability tuple as stale so repair can upgrade it explicitly', () => {
     const summary = summarizeSchemaAudit({
       existingTables: new Set<string>(['public.backtest_capability_configs']),
       existingColumns: new Set<string>(['public.llm_strategy_codegen_sessions.strategy_instance_id']),
@@ -62,12 +63,28 @@ describe('required-schema-audit', () => {
       },
     })
 
-    expect(summary.isHealthy).toBe(true)
+    expect(summary.isHealthy).toBe(false)
     expect(summary.missingTables).toEqual([])
     expect(summary.missingColumns).toEqual([])
     expect(summary.driftedMigrations).toEqual([])
     expect(summary.missingActiveCapabilityConfig).toBe(false)
     expect(summary.invalidActiveCapabilityConfig).toBe(false)
+    expect(summary.staleLegacyDefaultCapabilityConfig).toBe(true)
+  })
+
+  it('stays healthy when all required structures exist with a non-legacy capability config', () => {
+    const summary = summarizeSchemaAudit({
+      existingTables: new Set<string>(['public.backtest_capability_configs']),
+      existingColumns: new Set<string>(['public.llm_strategy_codegen_sessions.strategy_instance_id']),
+      appliedMigrations: new Set<string>(REQUIRED_QUANTIFY_SCHEMA.map(item => item.migrationName)),
+      activeCapabilityConfig: {
+        allowedSymbols: ['BTCUSDT'],
+        allowedBaseTimeframes: ['3m', '15m'],
+      },
+    })
+
+    expect(summary.isHealthy).toBe(true)
+    expect(summary.staleLegacyDefaultCapabilityConfig).toBe(false)
   })
 
   it('flags active capability config as invalid when arrays are empty or dirty', () => {
@@ -84,5 +101,22 @@ describe('required-schema-audit', () => {
     expect(summary.isHealthy).toBe(false)
     expect(summary.missingActiveCapabilityConfig).toBe(false)
     expect(summary.invalidActiveCapabilityConfig).toBe(true)
+    expect(summary.staleLegacyDefaultCapabilityConfig).toBe(false)
+  })
+
+  it('builds repair statements when active capability config is the legacy default tuple', () => {
+    const statements = buildSchemaRepairStatements({
+      existingTables: new Set<string>(['public.backtest_capability_configs']),
+      existingColumns: new Set<string>(['public.llm_strategy_codegen_sessions.strategy_instance_id']),
+      appliedMigrations: new Set<string>(REQUIRED_QUANTIFY_SCHEMA.map(item => item.migrationName)),
+      activeCapabilityConfig: {
+        allowedSymbols: ['BTCUSDT'],
+        allowedBaseTimeframes: ['15m', '1h'],
+      },
+    })
+
+    expect(statements).toHaveLength(1)
+    expect(statements[0]).toContain('UPDATE "backtest_capability_configs"')
+    expect(statements[0]).toContain('"allowed_base_timeframes"')
   })
 })

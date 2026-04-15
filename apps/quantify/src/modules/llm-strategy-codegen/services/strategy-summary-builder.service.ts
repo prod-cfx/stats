@@ -4,6 +4,7 @@ import type { StrategySummary, StrategySummaryIndicator } from '../types/strateg
 import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { ScriptProfileExtractorService } from './script-profile-extractor.service'
+import { normalizeStrategySemanticProfile } from './strategy-semantic-profile-normalizer'
 
 interface ChecklistSnapshot {
   symbols?: unknown
@@ -80,7 +81,11 @@ export class StrategySummaryBuilderService {
       exitRule: this.resolveExitRuleTag(specRuleText.exit, indicators),
       market: this.buildMarket({
         symbol: this.normalizeSymbol(spec.market.symbol),
-        timeframe: this.normalizeTimeframe(spec.market.timeframe),
+        timeframe: this.normalizeTimeframe(
+          spec.version === 2
+            ? (spec.market.defaultTimeframe ?? spec.market.timeframe ?? spec.dataRequirements.requiredTimeframes[0] ?? null)
+            : spec.market.timeframe,
+        ),
         marketType: this.normalizeMarketType(spec.market.marketType),
       }),
       sizing: spec.sizing
@@ -121,6 +126,14 @@ export class StrategySummaryBuilderService {
       return this.buildEmptySummary()
     }
 
+    return this.buildSummaryFromProfile({ profile })
+  }
+
+  buildSummaryFromProfile(input: {
+    profile: StrategySemanticProfile
+    market?: StrategySummary['market']
+  }): StrategySummary {
+    const profile = normalizeStrategySemanticProfile(input.profile)
     const indicators = this.normalizeIndicators(
       profile.indicators
         .map(item => item.kind)
@@ -134,14 +147,14 @@ export class StrategySummaryBuilderService {
       indicators,
       entryRule,
       exitRule,
-      market: {},
+      market: input.market ?? {},
       sizing: profile.sizing
         ? {
-          mode: profile.sizing.mode,
-          evidence: profile.sizing.source === 'literal' || profile.sizing.source === 'positionPct_normalized'
-            ? 'explicit'
-            : 'unresolved',
-        }
+            mode: profile.sizing.mode,
+            evidence: profile.sizing.source === 'literal' || profile.sizing.source === 'positionPct_normalized'
+              ? 'explicit'
+              : 'unresolved',
+          }
         : null,
     }
   }

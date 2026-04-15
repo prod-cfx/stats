@@ -64,7 +64,7 @@ const BacktestDataRangeDto = z.object({ fromTs: z.number(), toTs: z.number() }).
 const BacktestBarDto = z
   .object({
     symbol: z.string(),
-    timeframe: z.enum(['5m', '15m', '1h', '4h', '1d']),
+    timeframe: z.enum(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w']),
     openTime: z.number(),
     closeTime: z.number(),
     open: z.number(),
@@ -77,8 +77,8 @@ const BacktestBarDto = z
 const RunBacktestDto = z
   .object({
     symbols: z.array(z.string()),
-    baseTimeframe: z.enum(['5m', '15m', '1h', '4h', '1d']),
-    stateTimeframes: z.array(z.enum(['5m', '15m', '1h', '4h', '1d'])),
+    baseTimeframe: z.enum(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w']),
+    stateTimeframes: z.array(z.enum(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w'])),
     initialCash: z.number(),
     leverage: z.number(),
     allowPartial: z.boolean().optional(),

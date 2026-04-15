@@ -28,6 +28,8 @@ import { SpecDescBuilderService } from './spec-desc-builder.service'
 import { StrategyConsistencyService } from './strategy-consistency.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { StrategySummaryBuilderService } from './strategy-summary-builder.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { StrategySummaryObservationService } from './strategy-summary-observation.service'
 
 const DEFAULT_MODEL = 'gpt-4'
 
@@ -49,6 +51,7 @@ export class CodegenSessionPublicationPipelineService {
     compiledScriptEmitter: CompiledScriptEmitterService,
     compiledScriptExecutionEnvelope: CompiledScriptExecutionEnvelopeService,
     compiledScriptParser: CompiledScriptParserService,
+    strategySummaryObservation: StrategySummaryObservationService,
     compiledPublicationGate: CompiledPublicationGateService,
   ) {
     this.generationStage = new CodegenPublicationGenerationStage(
@@ -61,6 +64,7 @@ export class CodegenSessionPublicationPipelineService {
       compiledScriptEmitter,
       compiledScriptExecutionEnvelope,
       compiledScriptParser,
+      strategySummaryObservation,
     )
     this.persistenceStage = new CodegenPublicationPersistenceStage(
       sessionsRepo,

@@ -74,6 +74,10 @@ describe('codegenSessionPublicationPipeline', () => {
       buildUserIntentSummary: jest.fn().mockReturnValue({ summary: 'intent' }),
       buildStrategySummary: jest.fn().mockReturnValue({ summary: 'strategy' }),
       buildScriptSummary: jest.fn().mockReturnValue({ summary: 'script' }),
+      buildSummaryFromProfile: jest.fn().mockReturnValue({ summary: 'profile' }),
+    }
+    const summaryObservation = {
+      build: jest.fn().mockReturnValue({ status: 'aligned', warnings: [], details: {} }),
     }
     const gate = overrides?.gate ?? {
       publish: jest.fn().mockResolvedValue({
@@ -95,6 +99,7 @@ describe('codegenSessionPublicationPipeline', () => {
       new CompiledScriptEmitterService(),
       new CompiledScriptExecutionEnvelopeService(),
       parser as unknown as CompiledScriptParserService,
+      summaryObservation as any,
       gate as any,
     )
 
@@ -195,6 +200,13 @@ describe('codegenSessionPublicationPipeline', () => {
     expect(repo.createVersion).toHaveBeenCalled()
     expect(recommendationIndex.onSpecDescPersisted).toHaveBeenCalledWith(expect.objectContaining({
       versionId: 'version-1',
+    }))
+    expect(repo.createVersion).toHaveBeenCalledWith(expect.objectContaining({
+      specDesc: expect.objectContaining({
+        normalizedIntent: expect.objectContaining({
+          families: expect.any(Array),
+        }),
+      }),
     }))
     expect(repo.ensureDraftStrategyInstanceBoundForPublishedSession).toHaveBeenCalled()
     expect(repo.updateSession).toHaveBeenCalledWith('session-4', expect.objectContaining({

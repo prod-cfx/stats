@@ -1,6 +1,7 @@
 import type { CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec-v2'
 import type { ChecklistPayload } from '../types/codegen-checklist'
 import type { StrategyConsistencyReport } from '../types/strategy-consistency-report'
+import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
 import type { StrategySummary } from '../types/strategy-summary'
 import type { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
 import type { CanonicalSpecV2IrCompilerService } from './canonical-spec-v2-ir-compiler.service'
@@ -11,6 +12,10 @@ import type { CompiledScriptParserService } from './compiled-script-parser.servi
 import type { SpecDescBuilderService } from './spec-desc-builder.service'
 import type { StrategyConsistencyService } from './strategy-consistency.service'
 import type { StrategySummaryBuilderService } from './strategy-summary-builder.service'
+import type { StrategySummaryObservationReport } from './strategy-summary-observation.service'
+import { resolveChecklistDefaultTimeframe } from './checklist-rule-drafts'
+import { StrategyIntentNormalizerService } from './strategy-intent-normalizer.service'
+import { StrategySummaryObservationService } from './strategy-summary-observation.service'
 
 export interface CompiledScriptValidationResult {
   passed: boolean
@@ -51,6 +56,8 @@ export interface CodegenPublicationArtifacts {
   userIntentSummary: StrategySummary
   strategySummary: StrategySummary
   scriptSummary: StrategySummary
+  summaryObservation: StrategySummaryObservationReport
+  normalizedIntent: StrategyNormalizedIntent
   lockedParams: Record<string, unknown>
   publishParams: {
     symbol: string
@@ -70,20 +77,25 @@ export class CodegenPublicationGenerationStage {
     private readonly compiledScriptEmitter: CompiledScriptEmitterService,
     private readonly compiledScriptExecutionEnvelope: CompiledScriptExecutionEnvelopeService,
     private readonly compiledScriptParser: CompiledScriptParserService,
+    private readonly strategySummaryObservation: StrategySummaryObservationService = new StrategySummaryObservationService(),
+    private readonly intentNormalizer: StrategyIntentNormalizerService = new StrategyIntentNormalizerService(),
   ) {}
 
   async generate(input: {
     checklist: ChecklistPayload
     message: string
   }): Promise<CodegenPublicationArtifacts> {
+    const normalization = this.intentNormalizer.normalize(input.checklist)
     const canonicalSpec = this.canonicalSpecBuilder.build(input.checklist)
-    const semanticView = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '')
+    const semanticView = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
+      normalizedIntent: normalization.normalizedIntent,
+    })
     const userIntentSummary = this.strategySummaryBuilder.buildUserIntentSummary({
       checklist: input.checklist,
     })
-    const strategySummary = this.strategySummaryBuilder.buildStrategySummary(canonicalSpec)
     const lockedParams = this.buildLockedParams(input.checklist)
     const publishParams = this.buildPublishParams({
+      canonicalSpec,
       checklist: input.checklist,
       message: input.message,
     })
@@ -106,18 +118,31 @@ export class CodegenPublicationGenerationStage {
     const semanticConsistency = this.strategyConsistencyService.evaluate({
       canonicalSpec,
       scriptCode: compiledScript,
+    })
+    const strategySummary = this.strategySummaryBuilder.buildSummaryFromProfile({
+      profile: semanticConsistency.specProfile,
+      market: {
+        symbol: canonicalSpec.market.symbol ?? undefined,
+        timeframe: canonicalSpec.market.timeframe ?? undefined,
+        marketType: canonicalSpec.market.marketType,
+      },
+    })
+    const scriptSummary = this.strategySummaryBuilder.buildSummaryFromProfile({
+      profile: semanticConsistency.scriptProfile,
+    })
+    const summaryObservation = this.strategySummaryObservation.build({
       userIntentSummary,
       strategySummary,
-    })
-    const scriptSummary = this.strategySummaryBuilder.buildScriptSummary({
-      scriptProfile: semanticConsistency.scriptProfile,
+      scriptSummary,
     })
     const sessionSpecDesc = {
       ...semanticView,
+      normalizedIntent: normalization.normalizedIntent,
       canonicalSpec,
       userIntentSummary,
       strategySummary,
       scriptSummary,
+      summaryObservation,
       lockedParams,
       consistencyReport: semanticConsistency,
     } satisfies Record<string, unknown>
@@ -135,6 +160,8 @@ export class CodegenPublicationGenerationStage {
       userIntentSummary,
       strategySummary,
       scriptSummary,
+      summaryObservation,
+      normalizedIntent: normalization.normalizedIntent,
       lockedParams,
       publishParams,
     }
@@ -163,6 +190,7 @@ export class CodegenPublicationGenerationStage {
   }
 
   private buildPublishParams(args: {
+    canonicalSpec: CanonicalStrategySpecV2
     checklist: ChecklistPayload
     message: string
   }): {
@@ -171,9 +199,14 @@ export class CodegenPublicationGenerationStage {
     marketType: 'spot' | 'perp'
   } {
     const rawSymbol = args.checklist.symbols?.[0] ?? 'BTCUSDT'
+    const requiredTimeframes = args.canonicalSpec.dataRequirements.requiredTimeframes
+    const baseTimeframe = requiredTimeframes[0]
+      ?? args.canonicalSpec.market.defaultTimeframe
+      ?? resolveChecklistDefaultTimeframe(args.checklist)
+      ?? '5m'
     return {
       symbol: normalizePublishedSymbol(rawSymbol),
-      timeframe: args.checklist.timeframes?.[0] ?? '5m',
+      timeframe: baseTimeframe,
       marketType: inferPublishedMarketType({
         symbol: rawSymbol,
         checklist: args.checklist,
@@ -221,7 +254,7 @@ export class CodegenPublicationGenerationStage {
       locked.symbol = normalizePublishedSymbol(rawSymbol)
     }
 
-    const rawTimeframe = checklist.timeframes?.[0]
+    const rawTimeframe = resolveChecklistDefaultTimeframe(checklist)
     if (typeof rawTimeframe === 'string' && rawTimeframe.trim()) {
       locked.timeframe = rawTimeframe.trim()
     }

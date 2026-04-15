@@ -58,6 +58,31 @@ describe('strategySummaryBuilderService', () => {
     expect(summary.sizing).toBeNull()
   })
 
+  it('builds strategy summary market timeframe from canonical default timeframe while preserving multi-timeframe requirements', () => {
+    const service = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+
+    const summary = service.buildStrategySummary({
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        defaultTimeframe: '3m',
+      },
+      indicators: [],
+      sizing: { mode: 'RATIO', value: 0.1 },
+      executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+      dataRequirements: { requiredTimeframes: ['3m', '15m'] },
+      rules: [],
+    } as any)
+
+    expect(summary.market).toEqual({
+      symbol: 'BTCUSDT',
+      timeframe: '3m',
+      marketType: 'spot',
+    })
+  })
+
   it('does not label moving-average summaries as golden/death cross without explicit crossover evidence', () => {
     const service = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
 
@@ -119,5 +144,31 @@ strategy
     expect(userIntentSummary.exitRule).toBe('ma.golden_cross')
     expect(scriptSummary.entryRule).toBe('ma.death_cross')
     expect(scriptSummary.exitRule).toBe('ma.golden_cross')
+  })
+
+  it('normalizes bollinger middle-band MA20 alias out of script summary indicators', () => {
+    const service = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+
+    const summary = service.buildScriptSummary({
+      scriptCode: `
+const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    const closes = ctx.bars?.map(item => item.close) ?? []
+    const bb = ctx.helpers?.ta?.bollingerBands(closes, 20, 2)
+    const mid = ctx.helpers?.ta?.sma(closes, 20)
+    if (!bb || typeof mid !== 'number') return { action: 'NOOP' }
+    if (closes.at(-1)! > bb.upper) return { action: 'OPEN_SHORT', size: { mode: 'RATIO', value: 0.1 } }
+    if (Math.abs(closes.at(-1)! - mid) <= 1 && ctx.position?.side === 'short') return { action: 'CLOSE_SHORT' }
+    return { action: 'NOOP' }
+  },
+}
+strategy
+`,
+    })
+
+    expect(summary.strategyType).toBe('bollinger')
+    expect(summary.indicators).toEqual(['bollingerBands'])
+    expect(summary.exitRule).toBe('bollinger.middle_revert')
   })
 })

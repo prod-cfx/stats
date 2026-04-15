@@ -12,6 +12,14 @@ export interface ChecklistRuleBasis {
     | 'last_low'
 }
 
+export interface ChecklistRuleDraft {
+  id: string
+  phase: 'entry' | 'exit' | 'risk'
+  text: string
+  timeframe: string | null
+  basis?: ChecklistRuleBasis['kind'] | null
+}
+
 export interface ChecklistPayload {
   symbols?: string[]
   timeframes?: string[]
@@ -20,4 +28,23 @@ export interface ChecklistPayload {
   riskRules?: Record<string, unknown>
   entryRuleBases?: Record<string, ChecklistRuleBasis['kind']>
   exitRuleBases?: Record<string, ChecklistRuleBasis['kind']>
+  entryRuleDrafts?: ChecklistRuleDraft[]
+  exitRuleDrafts?: ChecklistRuleDraft[]
+  riskRuleDrafts?: ChecklistRuleDraft[]
+  market?: {
+    exchange?: 'binance' | 'okx' | 'hyperliquid'
+    marketType?: 'spot' | 'perp'
+    defaultTimeframe?: string | null
+  }
+  stateGates?: {
+    trendDirection?: 'up' | 'down' | 'sideways'
+    marketRegime?: 'trend' | 'range'
+    volatilityState?: 'high' | 'low'
+  }
+  grid?: {
+    lower?: number
+    upper?: number
+    stepPct?: number
+    sideMode?: 'long_only' | 'short_only' | 'bidirectional'
+  }
 }

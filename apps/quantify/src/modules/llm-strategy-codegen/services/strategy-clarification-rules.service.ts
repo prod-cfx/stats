@@ -1,6 +1,8 @@
 import type { ChecklistPayload } from '../types/codegen-checklist'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import { Injectable } from '@nestjs/common'
+import { isEquivalentMarketScopeValue } from './market-scope-equivalence'
+import { classifyPercentageRuleFamily } from './rule-family-default-semantics'
 
 type ClarificationChecklistInput = ChecklistPayload
 
@@ -15,6 +17,8 @@ const SHORT_DIRECTION_PATTERN = /做空|空单|开空|short|卖出/u
 const UPPER_BAND_PATTERN = /(?:布林|bollinger).{0,8}(?:上轨|upper)|(?:上轨|upper).{0,8}(?:布林|bollinger)|突破.{0,8}(?:上轨|upper)/iu
 const LOWER_BAND_PATTERN = /(?:布林|bollinger).{0,8}(?:下轨|lower)|(?:下轨|lower).{0,8}(?:布林|bollinger)|跌破.{0,8}(?:下轨|lower)|突破.{0,8}(?:下轨|lower)/iu
 const PERCENTAGE_THRESHOLD_PATTERN = /\d+(?:\.\d+)?\s*%/u
+const GRID_STRATEGY_PATTERN = /网格|grid/iu
+const STATE_GATE_PATTERN = /趋势|震荡|波动|regime|volatility|trend/iu
 
 @Injectable()
 export class StrategyClarificationRulesService {
@@ -31,6 +35,8 @@ export class StrategyClarificationRulesService {
       ...this.detectSizingItems(input.riskRules),
       ...this.detectBasisItems(input),
       ...this.detectRiskItems(input.riskRules ?? {}),
+      ...this.detectGridItems(input),
+      ...this.detectStateGateItems(input),
     ]
 
     if (items.length === 0) {
@@ -164,7 +170,7 @@ export class StrategyClarificationRulesService {
       })
     }
 
-    const exchange = this.readExchange(input.riskRules)
+    const exchange = this.readExchange(input.riskRules, input.market)
     if (!exchange) {
       items.push({
         key: 'market.exchange',
@@ -176,7 +182,7 @@ export class StrategyClarificationRulesService {
       })
     }
 
-    const marketType = this.readMarketType(input.riskRules)
+    const marketType = this.readMarketType(input.riskRules, input.market)
     if (!marketType) {
       items.push({
         key: 'market.marketType',
@@ -268,6 +274,85 @@ export class StrategyClarificationRulesService {
     }]
   }
 
+  private detectGridItems(input: ClarificationChecklistInput): StrategyClarificationItem[] {
+    if (!this.looksLikeGridStrategy(input)) {
+      return []
+    }
+
+    const items: StrategyClarificationItem[] = []
+    const range = this.readGridRange(input)
+
+    if (typeof range.lower !== 'number') {
+      items.push({
+        key: 'grid.lower',
+        reason: 'grid_params_missing',
+        field: 'grid.lower',
+        blocking: true,
+        question: '请确认网格下沿价格。',
+        status: 'pending',
+      })
+    }
+
+    if (typeof range.upper !== 'number') {
+      items.push({
+        key: 'grid.upper',
+        reason: 'grid_params_missing',
+        field: 'grid.upper',
+        blocking: true,
+        question: '请确认网格上沿价格。',
+        status: 'pending',
+      })
+    }
+
+    if (typeof this.readGridStepPct(input) !== 'number') {
+      items.push({
+        key: 'grid.stepPct',
+        reason: 'grid_params_missing',
+        field: 'grid.stepPct',
+        blocking: true,
+        question: '请确认网格步长（例如每格 0.5%）。',
+        status: 'pending',
+      })
+    }
+
+    if (!this.hasGridSideMode(input)) {
+      items.push({
+        key: 'grid.sideMode',
+        reason: 'missing_side_scope',
+        field: 'grid.sideMode',
+        allowedAnswers: ['long_only', 'short_only', 'bidirectional'],
+        blocking: true,
+        question: '请确认网格方向：只做多、只做空，还是双向低买高卖？',
+        status: 'pending',
+      })
+    }
+
+    return items
+  }
+
+  private detectStateGateItems(input: ClarificationChecklistInput): StrategyClarificationItem[] {
+    if (!this.looksLikeStateGate(input)) {
+      return []
+    }
+
+    if (
+      input.stateGates?.trendDirection
+      || input.stateGates?.marketRegime
+      || input.stateGates?.volatilityState
+    ) {
+      return []
+    }
+
+    return [{
+      key: 'state.marketRegime',
+      reason: 'ambiguous_state_gate',
+      field: 'stateGates.marketRegime',
+      blocking: true,
+      question: '这里的状态门控是趋势、震荡，还是高/低波动？请明确到白名单状态。',
+      status: 'pending',
+    }]
+  }
+
   private hasPrimaryValue(list: string[] | undefined): boolean {
     return typeof list?.[0] === 'string' && list[0].trim().length > 0
   }
@@ -276,8 +361,11 @@ export class StrategyClarificationRulesService {
     return Array.isArray(list) && list.some(rule => typeof rule === 'string' && rule.trim().length > 0)
   }
 
-  private readMarketType(riskRules: Record<string, unknown> | undefined): 'spot' | 'perp' | null {
-    const raw = riskRules?.marketType
+  private readMarketType(
+    riskRules: Record<string, unknown> | undefined,
+    market?: ClarificationChecklistInput['market'],
+  ): 'spot' | 'perp' | null {
+    const raw = typeof market?.marketType === 'string' ? market.marketType : riskRules?.marketType
     if (typeof raw !== 'string') return null
     const normalized = raw.trim().toLowerCase()
     return normalized === 'spot' || normalized === 'perp' ? normalized : null
@@ -285,8 +373,9 @@ export class StrategyClarificationRulesService {
 
   private readExchange(
     riskRules: Record<string, unknown> | undefined,
+    market?: ClarificationChecklistInput['market'],
   ): 'binance' | 'okx' | 'hyperliquid' | null {
-    const raw = riskRules?.exchange
+    const raw = typeof market?.exchange === 'string' ? market.exchange : riskRules?.exchange
     if (typeof raw !== 'string') return null
     const normalized = raw.trim().toLowerCase()
     if (normalized === 'binance' || normalized === 'okx' || normalized === 'hyperliquid') {
@@ -340,6 +429,10 @@ export class StrategyClarificationRulesService {
     if (
       typeof input.riskRules?.stopLossPct === 'number'
       && !this.hasNamedBasis(input.riskRules?.stopLossBasis)
+      && classifyPercentageRuleFamily({
+        phase: 'risk',
+        rule: `止损 ${input.riskRules.stopLossPct}%`,
+      }).requiresUserBasis
       && !this.hasPendingExitBasisRule(exitRules, 'stopLoss')
     ) {
       items.push({
@@ -355,6 +448,10 @@ export class StrategyClarificationRulesService {
     if (
       typeof input.riskRules?.takeProfitPct === 'number'
       && !this.hasNamedBasis(input.riskRules?.takeProfitBasis)
+      && classifyPercentageRuleFamily({
+        phase: 'risk',
+        rule: `止盈 ${input.riskRules.takeProfitPct}%`,
+      }).requiresUserBasis
       && !this.hasPendingExitBasisRule(exitRules, 'takeProfit')
     ) {
       items.push({
@@ -378,7 +475,8 @@ export class StrategyClarificationRulesService {
   ): StrategyClarificationItem[] {
     return rules.flatMap((rawRule, index) => {
       const rule = rawRule.trim()
-      if (!rule || !this.ruleNeedsBasis(rule)) {
+      const semantics = classifyPercentageRuleFamily({ phase: scope, rule })
+      if (!rule || !this.ruleNeedsBasis(rule, semantics.requiresUserBasis)) {
         return []
       }
 
@@ -409,8 +507,12 @@ export class StrategyClarificationRulesService {
     return `${phaseLabel}“${trimmedRule}”里的百分比条件，是相对上一根 K 线收盘价、开仓均价、持仓收益，还是别的基准？`
   }
 
-  private ruleNeedsBasis(rule: string): boolean {
+  private ruleNeedsBasis(rule: string, requiresUserBasis: boolean): boolean {
     if (!PERCENTAGE_THRESHOLD_PATTERN.test(rule)) {
+      return false
+    }
+
+    if (!requiresUserBasis) {
       return false
     }
 
@@ -443,7 +545,10 @@ export class StrategyClarificationRulesService {
 
     return rules.some(rule => {
       const normalized = rule.trim()
-      return normalized.length > 0 && matcher.test(normalized) && this.ruleNeedsBasis(normalized)
+      const semantics = classifyPercentageRuleFamily({ phase: 'exit', rule: normalized })
+      return normalized.length > 0
+        && matcher.test(normalized)
+        && this.ruleNeedsBasis(normalized, semantics.requiresUserBasis)
     })
   }
 
@@ -496,6 +601,10 @@ export class StrategyClarificationRulesService {
         return []
       }
 
+      if (isEquivalentMarketScopeValue(field, previous, next)) {
+        return []
+      }
+
       return [{
         field,
         previous: previous.trim(),
@@ -509,5 +618,107 @@ export class StrategyClarificationRulesService {
     if (field === 'marketType') return '市场类型'
     if (field === 'symbol') return '交易标的'
     return '主周期'
+  }
+
+  private looksLikeGridStrategy(input: ClarificationChecklistInput): boolean {
+    if (
+      typeof input.grid?.lower === 'number'
+      || typeof input.grid?.upper === 'number'
+      || typeof input.grid?.stepPct === 'number'
+      || typeof input.grid?.sideMode === 'string'
+    ) {
+      return true
+    }
+
+    return this.collectRuleTexts(input).some(text => GRID_STRATEGY_PATTERN.test(text))
+  }
+
+  private looksLikeStateGate(input: ClarificationChecklistInput): boolean {
+    if (
+      input.stateGates?.trendDirection
+      || input.stateGates?.marketRegime
+      || input.stateGates?.volatilityState
+    ) {
+      return true
+    }
+
+    return this.collectRuleTexts(input).some(text => STATE_GATE_PATTERN.test(text))
+  }
+
+  private collectRuleTexts(input: ClarificationChecklistInput): string[] {
+    const riskTexts = Object.values(input.riskRules ?? {}).flatMap((value) => {
+      if (typeof value === 'string' && value.trim().length > 0) {
+        return [value.trim()]
+      }
+      return []
+    })
+
+    return [
+      ...(input.entryRules ?? []),
+      ...(input.exitRules ?? []),
+      ...riskTexts,
+    ]
+      .map(text => text.trim())
+      .filter(text => text.length > 0)
+  }
+
+  private readGridRange(input: ClarificationChecklistInput): { lower?: number, upper?: number } {
+    if (typeof input.grid?.lower === 'number' && typeof input.grid?.upper === 'number') {
+      return {
+        lower: input.grid.lower,
+        upper: input.grid.upper,
+      }
+    }
+
+    for (const text of this.collectRuleTexts(input)) {
+      const match = text.match(/(\d+(?:\.\d+)?)\s*[-到至]\s*(\d+(?:\.\d+)?)/u)
+      if (!match) continue
+
+      const lower = Number.parseFloat(match[1])
+      const upper = Number.parseFloat(match[2])
+      if (!Number.isFinite(lower) || !Number.isFinite(upper)) continue
+
+      return {
+        lower: Math.min(lower, upper),
+        upper: Math.max(lower, upper),
+      }
+    }
+
+    return {
+      lower: input.grid?.lower,
+      upper: input.grid?.upper,
+    }
+  }
+
+  private readGridStepPct(input: ClarificationChecklistInput): number | null {
+    if (typeof input.grid?.stepPct === 'number') {
+      return input.grid.stepPct
+    }
+
+    for (const text of this.collectRuleTexts(input)) {
+      const percentMatch = text.match(/每一格\s*(\d+(?:\.\d+)?)\s*%/u)
+      if (percentMatch) {
+        const value = Number.parseFloat(percentMatch[1])
+        if (Number.isFinite(value)) {
+          return value
+        }
+      }
+
+      const permilleMatch = text.match(/每一格\s*千分之\s*(\d+(?:\.\d+)?)/u)
+      if (permilleMatch) {
+        const value = Number.parseFloat(permilleMatch[1])
+        if (Number.isFinite(value)) {
+          return value / 10
+        }
+      }
+    }
+
+    return null
+  }
+
+  private hasGridSideMode(input: ClarificationChecklistInput): boolean {
+    return input.grid?.sideMode === 'long_only'
+      || input.grid?.sideMode === 'short_only'
+      || input.grid?.sideMode === 'bidirectional'
   }
 }

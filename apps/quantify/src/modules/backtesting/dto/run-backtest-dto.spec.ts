@@ -81,6 +81,17 @@ describe('runBacktestDto', () => {
     expect(errors).toHaveLength(0)
   })
 
+  it('accepts snapshot-backed payload with 3m timeframe', async () => {
+    const payload = buildValidPayload()
+    payload.baseTimeframe = '3m'
+    payload.stateTimeframes = ['3m', '15m']
+
+    const dto = plainToInstance(RunBacktestDto, payload)
+    const errors = await validate(dto)
+
+    expect(errors).toHaveLength(0)
+  })
+
   it('rejects strategy payload when publishedSnapshotId is missing', async () => {
     const payload = buildValidPayload()
     delete payload.strategy.publishedSnapshotId

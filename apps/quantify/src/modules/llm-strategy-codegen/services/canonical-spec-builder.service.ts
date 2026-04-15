@@ -1,6 +1,20 @@
-import type { CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
+import type { CanonicalConditionNode, CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
+import type { ChecklistRuleBasis } from '../types/codegen-checklist'
+import type {
+  NormalizedGridIntent,
+  NormalizedRiskAtom,
+  NormalizedTriggerAtom,
+  StrategyNormalizedIntent,
+} from '../types/strategy-normalized-intent'
 import { Injectable } from '@nestjs/common'
 import { CANONICAL_RULE_KEYS, DEFAULT_INDICATOR_PARAMS } from '../constants/canonical-strategy-capabilities'
+import {
+  buildChecklistRuleDrafts,
+  resolveChecklistDefaultTimeframe,
+  resolveRequiredRuleTimeframes,
+  resolveRulePhaseDefaultTimeframe,
+} from './checklist-rule-drafts'
+import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 
 interface ChecklistSnapshot {
   symbols?: unknown
@@ -10,11 +24,16 @@ interface ChecklistSnapshot {
   riskRules?: unknown
   entryRuleBases?: unknown
   exitRuleBases?: unknown
+  entryRuleDrafts?: unknown
+  exitRuleDrafts?: unknown
+  market?: unknown
 }
 
 @Injectable()
 export class CanonicalSpecBuilderService {
   build(checklist: ChecklistSnapshot): CanonicalStrategySpecV2 {
+    const normalizedChecklist = checklist as ChecklistSnapshot & Parameters<typeof buildChecklistRuleDrafts>[0]
+    const ruleDrafts = buildChecklistRuleDrafts(normalizedChecklist)
     const entryRules = Array.isArray(checklist.entryRules) ? checklist.entryRules : []
     const exitRules = Array.isArray(checklist.exitRules) ? checklist.exitRules : []
     const riskRules = checklist.riskRules && typeof checklist.riskRules === 'object' && !Array.isArray(checklist.riskRules)
@@ -24,9 +43,9 @@ export class CanonicalSpecBuilderService {
     const exitTexts = exitRules.map(item => String(item))
     const sharedGridParams = this.resolveGridParams([...entryTexts, ...exitTexts].join(' '))
     const sizing = this.resolveSizing(riskRules)
-    const market = this.resolveMarket(checklist, riskRules)
+    const market = this.resolveMarket(normalizedChecklist, riskRules, ruleDrafts)
     const indicators = this.resolveIndicators(entryTexts, exitTexts, riskRules)
-    const requiredTimeframes = this.resolveRequiredTimeframes(checklist)
+    const requiredTimeframes = resolveRequiredRuleTimeframes(ruleDrafts, market.defaultTimeframe)
     const dominantEntrySideScope = this.resolveDominantEntrySideScope(entryTexts)
 
     const rules: CanonicalRuleV2[] = []
@@ -40,6 +59,7 @@ export class CanonicalSpecBuilderService {
         actionType: openAction?.type ?? null,
         sideScope: openAction?.sideScope ?? null,
         sizing,
+        ruleDraft: ruleDrafts.entry[index],
       })
       if (priceChangeRule) {
         rules.push(priceChangeRule)
@@ -53,6 +73,7 @@ export class CanonicalSpecBuilderService {
         sideScope: openAction?.sideScope ?? null,
         sizing,
         sharedGridParams,
+        ruleDraft: ruleDrafts.entry[index],
       })
       if (gridEntryRule) {
         rules.push(gridEntryRule)
@@ -160,6 +181,7 @@ export class CanonicalSpecBuilderService {
         actionType: closeAction?.type ?? null,
         sideScope: closeAction?.sideScope ?? null,
         sizing,
+        ruleDraft: ruleDrafts.exit[index],
       })
       if (priceChangeRule) {
         rules.push(priceChangeRule)
@@ -173,6 +195,7 @@ export class CanonicalSpecBuilderService {
         sideScope: null,
         sizing,
         sharedGridParams,
+        ruleDraft: ruleDrafts.exit[index],
       })
       if (gridExitRule) {
         rules.push(gridExitRule)
@@ -252,6 +275,10 @@ export class CanonicalSpecBuilderService {
     })
 
     const stopLossPct = this.resolveStopLossPct(riskRules)
+    const stopLossBasis = this.resolveRiskBasis(
+      typeof riskRules.stopLoss === 'string' ? riskRules.stopLoss : stopLossPct !== null ? `止损 ${stopLossPct}%` : null,
+      riskRules.stopLossBasis,
+    )
     if (stopLossPct !== null) {
       rules.push({
         id: 'risk-stop-loss',
@@ -264,16 +291,22 @@ export class CanonicalSpecBuilderService {
           semanticScope: 'position',
           op: 'GTE',
           value: Number((stopLossPct / 100).toFixed(4)),
-          ...(typeof riskRules.stopLossBasis === 'string' ? { params: { basis: riskRules.stopLossBasis } } : {}),
+          ...(stopLossBasis ? { params: { basis: stopLossBasis } } : {}),
         },
         actions: [{ type: 'FORCE_EXIT' }],
-        ...(typeof riskRules.stopLossBasis === 'string' ? { metadata: { basis: riskRules.stopLossBasis } } : {}),
+        ...(stopLossBasis ? { metadata: { basis: stopLossBasis } } : {}),
       })
     }
 
     const takeProfitRule = this.resolveTakeProfitRule(
       [...exitTexts, ...Object.values(riskRules).map(item => String(item))],
       riskRules,
+    )
+    const takeProfitBasis = this.resolveRiskBasis(
+      typeof riskRules.takeProfit === 'string'
+        ? riskRules.takeProfit
+        : takeProfitRule ? `止盈 ${takeProfitRule.pct}%` : null,
+      riskRules.takeProfitBasis,
     )
     if (takeProfitRule) {
       rules.push({
@@ -287,10 +320,10 @@ export class CanonicalSpecBuilderService {
           semanticScope: 'position',
           op: 'GTE',
           value: Number((takeProfitRule.pct / 100).toFixed(4)),
-          ...(typeof riskRules.takeProfitBasis === 'string' ? { params: { basis: riskRules.takeProfitBasis } } : {}),
+          ...(takeProfitBasis ? { params: { basis: takeProfitBasis } } : {}),
         },
         actions: takeProfitRule.actions,
-        ...(typeof riskRules.takeProfitBasis === 'string' ? { metadata: { basis: riskRules.takeProfitBasis } } : {}),
+        ...(takeProfitBasis ? { metadata: { basis: takeProfitBasis } } : {}),
       })
     }
 
@@ -377,6 +410,48 @@ export class CanonicalSpecBuilderService {
     return spec
   }
 
+  buildFromNormalizedIntent(
+    checklist: ChecklistSnapshot,
+    normalizedIntent: StrategyNormalizedIntent,
+  ): CanonicalStrategySpecV2 {
+    const normalizedChecklist = checklist as ChecklistSnapshot & Parameters<typeof buildChecklistRuleDrafts>[0]
+    const ruleDrafts = buildChecklistRuleDrafts(normalizedChecklist)
+    const riskRules = checklist.riskRules && typeof checklist.riskRules === 'object' && !Array.isArray(checklist.riskRules)
+      ? checklist.riskRules as Record<string, unknown>
+      : {}
+    const market = this.resolveMarket(normalizedChecklist, riskRules, ruleDrafts)
+    const sizing = this.resolveSizingFromNormalizedIntent(normalizedIntent) ?? this.resolveSizing(riskRules)
+    const requiredTimeframes = this.resolveNormalizedRequiredTimeframes(normalizedIntent, ruleDrafts, market.defaultTimeframe)
+    const indicators = this.resolveIndicatorsFromNormalizedIntent(normalizedIntent)
+    const rules = this.buildRulesFromNormalizedIntent({
+      normalizedIntent,
+      sizing,
+      defaultTimeframe: market.defaultTimeframe ?? requiredTimeframes[0] ?? null,
+    })
+
+    return {
+      version: 2,
+      market,
+      indicators,
+      sizing,
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes,
+      },
+      rules,
+      metadata: {
+        normalized: {
+          source: 'normalized-intent',
+          semanticViewSource: 'normalized-canonical-truth',
+          intent: normalizedIntent,
+        },
+      },
+    }
+  }
+
   private detectOpenAction(ruleText: string): { type: 'OPEN_LONG' | 'OPEN_SHORT'; sideScope: 'long' | 'short' } | null {
     if (/做空|空单|开空|卖出开空|short/i.test(ruleText)) {
       return { type: 'OPEN_SHORT', sideScope: 'short' }
@@ -445,6 +520,19 @@ export class CanonicalSpecBuilderService {
     return stopLossPct
   }
 
+  private resolveRiskBasis(
+    ruleText: string | null,
+    explicitBasis: unknown,
+  ): ChecklistRuleBasis['kind'] | null {
+    if (typeof explicitBasis === 'string' && explicitBasis.trim()) {
+      return explicitBasis.trim() as ChecklistRuleBasis['kind']
+    }
+    if (!ruleText?.trim()) {
+      return null
+    }
+    return resolveDefaultRiskBasis(ruleText, null)
+  }
+
   private resolveSizing(riskRules: Record<string, unknown>): { mode: 'RATIO'; value: number } | null {
     const hasPositionPct = typeof riskRules.positionPct === 'number'
     if (!hasPositionPct) return null
@@ -460,21 +548,31 @@ export class CanonicalSpecBuilderService {
   private resolveMarket(
     checklist: ChecklistSnapshot,
     riskRules: Record<string, unknown>,
+    ruleDrafts: ReturnType<typeof buildChecklistRuleDrafts>,
   ): CanonicalStrategySpecV2['market'] {
     const symbols = Array.isArray(checklist.symbols) ? checklist.symbols : []
-    const timeframes = Array.isArray(checklist.timeframes) ? checklist.timeframes : []
+    const market = checklist.market && typeof checklist.market === 'object' && !Array.isArray(checklist.market)
+      ? checklist.market as Record<string, unknown>
+      : null
     const rawSymbol = typeof symbols[0] === 'string' ? symbols[0].trim().toUpperCase() : ''
-    const rawTimeframe = typeof timeframes[0] === 'string' ? timeframes[0].trim() : ''
+    const rawTimeframe = resolveRulePhaseDefaultTimeframe(
+      ruleDrafts.entry,
+      resolveChecklistDefaultTimeframe(checklist as Parameters<typeof resolveChecklistDefaultTimeframe>[0]),
+    ) ?? ruleDrafts.exit.find(draft => draft.timeframe)?.timeframe ?? ''
     const riskExchange = typeof riskRules.exchange === 'string' ? riskRules.exchange.trim().toLowerCase() : ''
     const riskMarketType = typeof riskRules.marketType === 'string' ? riskRules.marketType.trim().toLowerCase() : ''
+    const marketExchange = typeof market?.exchange === 'string' ? market.exchange.trim().toLowerCase() : ''
+    const marketType = typeof market?.marketType === 'string' ? market.marketType.trim().toLowerCase() : ''
 
     return {
-      exchange: riskExchange === 'okx' || riskExchange === 'hyperliquid' || riskExchange === 'binance'
-        ? riskExchange
-        : 'binance',
+      exchange: marketExchange === 'okx' || marketExchange === 'hyperliquid' || marketExchange === 'binance'
+        ? marketExchange
+        : (riskExchange === 'okx' || riskExchange === 'hyperliquid' || riskExchange === 'binance'
+            ? riskExchange
+            : 'binance'),
       symbol: rawSymbol || null,
-      marketType: riskMarketType === 'perp' ? 'perp' : 'spot',
-      timeframe: rawTimeframe || null,
+      marketType: marketType === 'perp' ? 'perp' : (riskMarketType === 'perp' ? 'perp' : 'spot'),
+      defaultTimeframe: rawTimeframe || null,
     }
   }
 
@@ -546,13 +644,6 @@ export class CanonicalSpecBuilderService {
     return indicators
   }
 
-  private resolveRequiredTimeframes(checklist: ChecklistSnapshot): string[] {
-    const timeframes = Array.isArray(checklist.timeframes) ? checklist.timeframes : []
-    return timeframes
-      .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
-      .map(item => item.trim())
-  }
-
   private resolveOutsideBandRiskActions(text: string): CanonicalRuleV2['actions'] | null {
     if (/全平|全部平仓|直接平仓|清仓|强平|force\s*exit|force\s*close/iu.test(text)) {
       return [{ type: 'FORCE_EXIT' }]
@@ -567,7 +658,7 @@ export class CanonicalSpecBuilderService {
 
   private buildOpenAction(
     type: 'OPEN_LONG' | 'OPEN_SHORT',
-    sizing: { mode: 'RATIO'; value: number } | null,
+    sizing: CanonicalStrategySpecV2['sizing'],
   ): CanonicalRuleV2['actions'][number] {
     if (!sizing) {
       return { type }
@@ -706,6 +797,7 @@ export class CanonicalSpecBuilderService {
       stepPct: number
       levelCount: number
     } | null
+    ruleDraft?: { timeframe: string | null } | undefined
   }): CanonicalRuleV2 | null {
     if (!/网格/u.test(input.ruleText)) return null
 
@@ -724,7 +816,10 @@ export class CanonicalSpecBuilderService {
         key: 'grid.range_rebalance',
         semanticScope: 'market',
         op: semantics.op,
-        params,
+        params: {
+          ...params,
+          ...(input.ruleDraft?.timeframe ? { timeframe: input.ruleDraft.timeframe } : {}),
+        },
       },
       actions: [input.phase === 'entry'
         ? this.buildOpenAction(semantics.action as 'OPEN_LONG' | 'OPEN_SHORT', input.sizing)
@@ -774,8 +869,9 @@ export class CanonicalSpecBuilderService {
     actionType: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT' | null
     sideScope: 'long' | 'short' | null
     sizing: { mode: 'RATIO'; value: number } | null
+    ruleDraft?: { timeframe: string | null, basis?: string | null } | undefined
   }): CanonicalRuleV2 | null {
-    const timeframe = this.extractRuleTimeframe(input.ruleText)
+    const timeframe = input.ruleDraft?.timeframe ?? this.extractRuleTimeframe(input.ruleText)
     const pctChange = this.extractPriceChangePct(input.ruleText)
     if (!timeframe || !pctChange || !input.actionType || !input.sideScope) {
       return null
@@ -788,6 +884,8 @@ export class CanonicalSpecBuilderService {
     }
 
     const normalizedValue = Number((numericPct / 100).toFixed(4))
+    const explicitBasis = input.ruleDraft?.basis
+    const usesPositionBasis = input.phase === 'exit' && (explicitBasis === 'entry_avg_price' || explicitBasis === 'position_pnl')
     return {
       id: `${input.phase}-price-change-${input.index + 1}`,
       phase: input.phase,
@@ -795,19 +893,658 @@ export class CanonicalSpecBuilderService {
       priority: input.phase === 'entry' ? 210 - input.index : 135 - input.index,
       condition: {
         kind: 'atom',
-        key: 'price.change_pct',
-        semanticScope: 'market',
+        key: usesPositionBasis ? 'position_gain_pct' : 'price.change_pct',
+        semanticScope: usesPositionBasis ? 'position' : 'market',
         op: isDrop ? 'LTE' : 'GTE',
         value: isDrop ? -normalizedValue : normalizedValue,
         params: {
           timeframe,
           lookbackBars: 1,
+          ...(explicitBasis ? { basis: explicitBasis } : {}),
         },
       },
       actions: [input.phase === 'entry'
         ? this.buildOpenAction(input.actionType as 'OPEN_LONG' | 'OPEN_SHORT', input.sizing)
         : { type: input.actionType as 'CLOSE_LONG' | 'CLOSE_SHORT' }],
+      ...(explicitBasis ? { metadata: { basis: explicitBasis } } : {}),
     }
+  }
+
+  private resolveSizingFromNormalizedIntent(
+    normalizedIntent: StrategyNormalizedIntent,
+  ): CanonicalStrategySpecV2['sizing'] {
+    if (!normalizedIntent.position || !Number.isFinite(normalizedIntent.position.value)) {
+      return null
+    }
+
+    if (normalizedIntent.position.mode === 'fixed_ratio') {
+      return {
+        mode: 'RATIO',
+        value: Number(normalizedIntent.position.value.toFixed(4)),
+      }
+    }
+
+    if (normalizedIntent.position.mode === 'fixed_quote') {
+      return {
+        mode: 'QUOTE',
+        value: Number(normalizedIntent.position.value.toFixed(4)),
+      }
+    }
+
+    return {
+      mode: 'QTY',
+      value: Number(normalizedIntent.position.value.toFixed(4)),
+    }
+  }
+
+  private resolveNormalizedRequiredTimeframes(
+    normalizedIntent: StrategyNormalizedIntent,
+    ruleDrafts: ReturnType<typeof buildChecklistRuleDrafts>,
+    fallbackTimeframe: string | null,
+  ): string[] {
+    const ordered = new Set(resolveRequiredRuleTimeframes(ruleDrafts, fallbackTimeframe))
+
+    for (const trigger of normalizedIntent.triggers) {
+      const window = typeof trigger.params.window === 'string' ? trigger.params.window.trim() : ''
+      if (window) {
+        ordered.add(window)
+      }
+    }
+
+    const defaultTimeframe = fallbackTimeframe?.trim()
+    if (defaultTimeframe) {
+      ordered.add(defaultTimeframe)
+    }
+
+    return [...ordered]
+  }
+
+  private resolveIndicatorsFromNormalizedIntent(
+    normalizedIntent: StrategyNormalizedIntent,
+  ): CanonicalStrategySpecV2['indicators'] {
+    const indicators: CanonicalStrategySpecV2['indicators'] = []
+    const pushIndicator = (indicator: CanonicalStrategySpecV2['indicators'][number]) => {
+      if (!indicators.some(item => item.kind === indicator.kind)) {
+        indicators.push(indicator)
+      }
+    }
+
+    for (const trigger of normalizedIntent.triggers) {
+      switch (trigger.key) {
+        case 'bollinger.touch_upper':
+        case 'bollinger.touch_lower':
+        case 'bollinger.touch_middle':
+          pushIndicator({
+            kind: 'bollingerBands',
+            params: { ...DEFAULT_INDICATOR_PARAMS.bollingerBands },
+          })
+          break
+        case 'oscillator.rsi_gte':
+        case 'oscillator.rsi_lte':
+          pushIndicator({
+            kind: 'rsi',
+            params: { period: DEFAULT_INDICATOR_PARAMS.rsi.period },
+          })
+          break
+        case 'indicator.cross_over':
+        case 'indicator.cross_under':
+        case 'indicator.above':
+        case 'indicator.below': {
+          const indicator = typeof trigger.params.indicator === 'string'
+            ? trigger.params.indicator.trim().toLowerCase()
+            : ''
+          if (indicator === 'macd') {
+            pushIndicator({
+              kind: 'macd',
+              params: { ...DEFAULT_INDICATOR_PARAMS.macd },
+            })
+            break
+          }
+          if (indicator === 'ema') {
+            pushIndicator({
+              kind: 'ema',
+              params: { ...DEFAULT_INDICATOR_PARAMS.ema },
+            })
+            break
+          }
+          if (indicator === 'sma' || indicator === 'indicator' || indicator.length === 0) {
+            pushIndicator({
+              kind: 'sma',
+              params: { ...DEFAULT_INDICATOR_PARAMS.sma },
+            })
+          }
+          break
+        }
+        case 'volatility.state':
+          pushIndicator({
+            kind: 'atr',
+            params: { ...DEFAULT_INDICATOR_PARAMS.atr },
+          })
+          break
+        default:
+          break
+      }
+    }
+
+    if (normalizedIntent.grid) {
+      pushIndicator({
+        kind: 'custom',
+        params: { family: 'grid' },
+      })
+    }
+
+    if (normalizedIntent.triggers.some(trigger => trigger.key === 'price.breakout_up' || trigger.key === 'price.breakout_down')) {
+      pushIndicator({
+        kind: 'custom',
+        params: { family: 'breakout' },
+      })
+    }
+
+    return indicators
+  }
+
+  private buildRulesFromNormalizedIntent(input: {
+    normalizedIntent: StrategyNormalizedIntent
+    sizing: CanonicalStrategySpecV2['sizing']
+    defaultTimeframe: string | null
+  }): CanonicalRuleV2[] {
+    const gateTriggers = input.normalizedIntent.triggers.filter(trigger => trigger.phase === 'gate')
+    const rules: CanonicalRuleV2[] = []
+    let entryPriority = 210
+    let exitPriority = 140
+    let riskPriority = 120
+
+    for (const trigger of input.normalizedIntent.triggers) {
+      if (trigger.phase !== 'entry' && trigger.phase !== 'exit') {
+        continue
+      }
+      const phaseTrigger = trigger as NormalizedTriggerAtom & { phase: 'entry' | 'exit' }
+
+      const rule = this.buildRuleFromNormalizedTrigger({
+        trigger: phaseTrigger,
+        gateTriggers,
+        sizing: input.sizing,
+        priority: phaseTrigger.phase === 'entry' ? entryPriority-- : exitPriority--,
+        defaultTimeframe: input.defaultTimeframe,
+      })
+      if (rule) {
+        rules.push(rule)
+      }
+    }
+
+    if (input.normalizedIntent.grid) {
+      rules.push(
+        ...this.buildGridRulesFromNormalizedIntent({
+          grid: input.normalizedIntent.grid,
+          gateTriggers,
+          sizing: input.sizing,
+          startingEntryPriority: entryPriority,
+          startingExitPriority: exitPriority,
+          defaultTimeframe: input.defaultTimeframe,
+        }),
+      )
+    }
+
+    for (const riskAtom of input.normalizedIntent.risk) {
+      const rule = this.buildRiskRuleFromNormalizedAtom(riskAtom, riskPriority--)
+      if (rule) {
+        rules.push(rule)
+      }
+    }
+
+    return rules
+  }
+
+  private buildRuleFromNormalizedTrigger(input: {
+    trigger: NormalizedTriggerAtom & { phase: 'entry' | 'exit' }
+    gateTriggers: NormalizedTriggerAtom[]
+    sizing: CanonicalStrategySpecV2['sizing']
+    priority: number
+    defaultTimeframe: string | null
+  }): CanonicalRuleV2 | null {
+    const triggerCondition = this.buildConditionFromNormalizedTrigger(input.trigger, input.defaultTimeframe)
+    if (!triggerCondition) {
+      return null
+    }
+
+    const actions = this.buildActionsForNormalizedTrigger(input.trigger, input.sizing)
+    if (actions.length === 0) {
+      return null
+    }
+
+    const gateKeys = input.gateTriggers.map(trigger => trigger.key)
+    return {
+      id: `${input.trigger.phase}-${input.trigger.key.replace(/\./g, '-')}-${input.priority}`,
+      phase: input.trigger.phase,
+      sideScope: input.trigger.sideScope ?? (input.trigger.phase === 'exit' ? 'both' : undefined),
+      priority: input.priority,
+      condition: this.attachGateConditions(triggerCondition, input.gateTriggers),
+      actions,
+      metadata: {
+        normalized: {
+          source: 'normalized-intent',
+          triggerKeys: [input.trigger.key],
+          ...(gateKeys.length > 0 ? { gateKeys } : {}),
+          actionKeys: actions.map(action => action.type),
+          family: 'single-leg',
+        },
+      },
+    }
+  }
+
+  private buildGridRulesFromNormalizedIntent(input: {
+    grid: NormalizedGridIntent
+    gateTriggers: NormalizedTriggerAtom[]
+    sizing: CanonicalStrategySpecV2['sizing']
+    startingEntryPriority: number
+    startingExitPriority: number
+    defaultTimeframe: string | null
+  }): CanonicalRuleV2[] {
+    const rules: CanonicalRuleV2[] = []
+    let entryPriority = input.startingEntryPriority
+    let exitPriority = input.startingExitPriority
+    const gridCondition = this.buildGridConditionFromNormalizedIntent(input.grid, input.defaultTimeframe)
+    const gateKeys = input.gateTriggers.map(trigger => trigger.key)
+
+    const buildRule = (
+      phase: 'entry' | 'exit',
+      sideScope: 'long' | 'short',
+      op: 'LTE' | 'GTE',
+      actionType: 'OPEN_LONG' | 'OPEN_SHORT' | 'CLOSE_LONG' | 'CLOSE_SHORT',
+    ): CanonicalRuleV2 => ({
+      id: `${phase}-grid-range-rebalance-${sideScope}`,
+      phase,
+      sideScope,
+      priority: phase === 'entry' ? entryPriority-- : exitPriority--,
+      condition: this.attachGateConditions(
+        {
+          ...gridCondition,
+          op,
+        },
+        input.gateTriggers,
+      ),
+      actions: [phase === 'entry'
+        ? this.buildOpenAction(actionType as 'OPEN_LONG' | 'OPEN_SHORT', input.sizing)
+        : { type: actionType as 'CLOSE_LONG' | 'CLOSE_SHORT' }],
+      metadata: {
+        normalized: {
+          source: 'normalized-intent',
+          triggerKeys: ['grid.range_rebalance'],
+          ...(gateKeys.length > 0 ? { gateKeys } : {}),
+          actionKeys: [actionType],
+          family: 'grid.range_rebalance',
+        },
+      },
+    })
+
+    if (input.grid.sideMode === 'long_only' || input.grid.sideMode === 'bidirectional') {
+      rules.push(buildRule('entry', 'long', 'LTE', 'OPEN_LONG'))
+      rules.push(buildRule('exit', 'long', 'GTE', 'CLOSE_LONG'))
+    }
+
+    if (input.grid.sideMode === 'short_only' || input.grid.sideMode === 'bidirectional') {
+      rules.push(buildRule('entry', 'short', 'GTE', 'OPEN_SHORT'))
+      rules.push(buildRule('exit', 'short', 'LTE', 'CLOSE_SHORT'))
+    }
+
+    return rules
+  }
+
+  private buildRiskRuleFromNormalizedAtom(
+    riskAtom: NormalizedRiskAtom,
+    priority: number,
+  ): CanonicalRuleV2 | null {
+    if (riskAtom.key === 'risk.stop_loss_pct') {
+      const valuePct = typeof riskAtom.params.valuePct === 'number' ? riskAtom.params.valuePct : null
+      if (!valuePct || !Number.isFinite(valuePct)) {
+        return null
+      }
+      const basis = typeof riskAtom.params.basis === 'string' ? riskAtom.params.basis : 'entry_avg_price'
+      return {
+        id: 'risk-stop-loss',
+        phase: 'risk',
+        sideScope: 'both',
+        priority,
+        condition: {
+          kind: 'atom',
+          key: CANONICAL_RULE_KEYS.positionLossPct,
+          semanticScope: 'position',
+          op: 'GTE',
+          value: Number((valuePct / 100).toFixed(4)),
+          params: { basis },
+        },
+        actions: [{ type: 'FORCE_EXIT' }],
+        metadata: {
+          basis,
+          normalized: {
+            source: 'normalized-intent',
+            triggerKeys: [riskAtom.key],
+            actionKeys: ['FORCE_EXIT'],
+          },
+        },
+      }
+    }
+
+    if (riskAtom.key === 'risk.take_profit_pct') {
+      const valuePct = typeof riskAtom.params.valuePct === 'number' ? riskAtom.params.valuePct : null
+      if (!valuePct || !Number.isFinite(valuePct)) {
+        return null
+      }
+      const basis = typeof riskAtom.params.basis === 'string' ? riskAtom.params.basis : 'entry_avg_price'
+      return {
+        id: 'risk-take-profit',
+        phase: 'risk',
+        sideScope: 'both',
+        priority,
+        condition: {
+          kind: 'atom',
+          key: 'risk.take_profit_pct',
+          semanticScope: 'position',
+          op: 'GTE',
+          value: Number((valuePct / 100).toFixed(4)),
+          params: { basis },
+        },
+        actions: [{ type: 'CLOSE_LONG' }, { type: 'CLOSE_SHORT' }],
+        metadata: {
+          basis,
+          normalized: {
+            source: 'normalized-intent',
+            triggerKeys: [riskAtom.key],
+            actionKeys: ['CLOSE_LONG', 'CLOSE_SHORT'],
+          },
+        },
+      }
+    }
+
+    if (riskAtom.key === 'risk.max_drawdown_pct') {
+      const valuePct = typeof riskAtom.params.valuePct === 'number' ? riskAtom.params.valuePct : null
+      if (!valuePct || !Number.isFinite(valuePct)) {
+        return null
+      }
+      return {
+        id: 'risk-max-drawdown',
+        phase: 'risk',
+        sideScope: 'both',
+        priority,
+        condition: {
+          kind: 'atom',
+          key: 'risk.max_drawdown_pct',
+          semanticScope: 'portfolio',
+          op: 'GTE',
+          value: Number((valuePct / 100).toFixed(4)),
+        },
+        actions: [{ type: 'FORCE_EXIT' }],
+        metadata: {
+          normalized: {
+            source: 'normalized-intent',
+            triggerKeys: [riskAtom.key],
+            actionKeys: ['FORCE_EXIT'],
+          },
+        },
+      }
+    }
+
+    if (riskAtom.key === 'risk.max_single_loss_pct') {
+      const valuePct = typeof riskAtom.params.valuePct === 'number' ? riskAtom.params.valuePct : null
+      if (!valuePct || !Number.isFinite(valuePct)) {
+        return null
+      }
+      return {
+        id: 'risk-max-single-loss',
+        phase: 'risk',
+        sideScope: 'both',
+        priority,
+        condition: {
+          kind: 'atom',
+          key: 'risk.max_single_loss_pct',
+          semanticScope: 'position',
+          op: 'GTE',
+          value: Number((valuePct / 100).toFixed(4)),
+        },
+        actions: [{ type: 'FORCE_EXIT' }],
+        metadata: {
+          normalized: {
+            source: 'normalized-intent',
+            triggerKeys: [riskAtom.key],
+            actionKeys: ['FORCE_EXIT'],
+          },
+        },
+      }
+    }
+
+    return null
+  }
+
+  private attachGateConditions(
+    condition: CanonicalConditionNode,
+    gateTriggers: NormalizedTriggerAtom[],
+  ): CanonicalConditionNode {
+    if (gateTriggers.length === 0) {
+      return condition
+    }
+
+    return {
+      kind: 'AND',
+      children: [
+        ...gateTriggers
+          .map(trigger => this.buildConditionFromNormalizedTrigger(trigger, null))
+          .filter((item): item is CanonicalConditionNode => item !== null),
+        condition,
+      ],
+    }
+  }
+
+  private buildConditionFromNormalizedTrigger(
+    trigger: NormalizedTriggerAtom,
+    defaultTimeframe: string | null,
+  ): CanonicalConditionNode | null {
+    switch (trigger.key) {
+      case 'price.percent_change': {
+        const valuePct = typeof trigger.params.valuePct === 'number' ? trigger.params.valuePct : null
+        if (valuePct === null || !Number.isFinite(valuePct) || valuePct === 0) {
+          return null
+        }
+        const basis = typeof trigger.params.basis === 'string' ? trigger.params.basis : undefined
+        const usesPositionBasis = trigger.phase === 'exit' && (basis === 'entry_avg_price' || basis === 'position_pnl')
+        const timeframe = typeof trigger.params.window === 'string' && trigger.params.window.trim()
+          ? trigger.params.window.trim()
+          : defaultTimeframe
+        return {
+          kind: 'atom',
+          key: usesPositionBasis ? 'position_gain_pct' : 'price.change_pct',
+          semanticScope: usesPositionBasis ? 'position' : 'market',
+          op: valuePct < 0 ? 'LTE' : 'GTE',
+          value: Number((valuePct / 100).toFixed(4)),
+          params: {
+            ...(timeframe ? { timeframe } : {}),
+            lookbackBars: 1,
+            ...(basis ? { basis } : {}),
+          },
+        }
+      }
+      case 'price.breakout_up':
+        return {
+          kind: 'atom',
+          key: 'breakout.channel_high_break',
+          semanticScope: 'market',
+          op: 'CROSS_OVER',
+          params: {
+            period: typeof trigger.params.period === 'number' ? trigger.params.period : 20,
+            ...(typeof trigger.params.reference === 'string' ? { reference: trigger.params.reference } : {}),
+          },
+        }
+      case 'price.breakout_down':
+        return {
+          kind: 'atom',
+          key: 'breakout.channel_low_break',
+          semanticScope: 'market',
+          op: 'CROSS_UNDER',
+          params: {
+            period: typeof trigger.params.period === 'number' ? trigger.params.period : 20,
+            ...(typeof trigger.params.reference === 'string' ? { reference: trigger.params.reference } : {}),
+          },
+        }
+      case 'bollinger.touch_upper':
+        return {
+          kind: 'atom',
+          key: CANONICAL_RULE_KEYS.bollingerUpperBreak,
+          semanticScope: 'market',
+          op: 'CROSS_OVER',
+        }
+      case 'bollinger.touch_lower':
+        return {
+          kind: 'atom',
+          key: CANONICAL_RULE_KEYS.bollingerLowerBreak,
+          semanticScope: 'market',
+          op: 'CROSS_UNDER',
+        }
+      case 'bollinger.touch_middle':
+        return {
+          kind: 'atom',
+          key: CANONICAL_RULE_KEYS.bollingerMiddleRevert,
+          semanticScope: 'market',
+        }
+      case 'oscillator.rsi_lte':
+        return {
+          kind: 'atom',
+          key: CANONICAL_RULE_KEYS.rsiThresholdLte,
+          semanticScope: 'market',
+          op: 'LTE',
+          value: typeof trigger.params.value === 'number' ? trigger.params.value : 30,
+          params: { period: DEFAULT_INDICATOR_PARAMS.rsi.period },
+        }
+      case 'oscillator.rsi_gte':
+        return {
+          kind: 'atom',
+          key: CANONICAL_RULE_KEYS.rsiThresholdGte,
+          semanticScope: 'market',
+          op: 'GTE',
+          value: typeof trigger.params.value === 'number' ? trigger.params.value : 70,
+          params: { period: DEFAULT_INDICATOR_PARAMS.rsi.period },
+        }
+      case 'indicator.cross_over':
+      case 'indicator.cross_under': {
+        const indicator = typeof trigger.params.indicator === 'string'
+          ? trigger.params.indicator.trim().toLowerCase()
+          : ''
+        const operator = trigger.key === 'indicator.cross_over' ? 'CROSS_OVER' : 'CROSS_UNDER'
+        if (indicator === 'macd') {
+          return {
+            kind: 'atom',
+            key: trigger.key === 'indicator.cross_over' ? CANONICAL_RULE_KEYS.macdGoldenCross : CANONICAL_RULE_KEYS.macdDeathCross,
+            semanticScope: 'market',
+            op: operator,
+            params: { ...DEFAULT_INDICATOR_PARAMS.macd },
+          }
+        }
+        if (indicator === 'rsi') {
+          return {
+            kind: 'atom',
+            key: trigger.key === 'indicator.cross_over' ? CANONICAL_RULE_KEYS.rsiCrossOver : CANONICAL_RULE_KEYS.rsiCrossUnder,
+            semanticScope: 'market',
+            op: operator,
+            value: typeof trigger.params.value === 'number' ? trigger.params.value : 50,
+            params: { period: DEFAULT_INDICATOR_PARAMS.rsi.period },
+          }
+        }
+        return {
+          kind: 'atom',
+          key: trigger.key === 'indicator.cross_over' ? CANONICAL_RULE_KEYS.movingAverageGoldenCross : CANONICAL_RULE_KEYS.movingAverageDeathCross,
+          semanticScope: 'market',
+          op: operator,
+          ...(indicator ? { params: { indicator } } : {}),
+        }
+      }
+      case 'indicator.above':
+        return {
+          kind: 'atom',
+          key: 'indicator.above',
+          semanticScope: 'market',
+          op: 'GTE',
+          ...(typeof trigger.params.indicator === 'string' ? { params: { indicator: trigger.params.indicator } } : {}),
+        }
+      case 'indicator.below':
+        return {
+          kind: 'atom',
+          key: 'indicator.below',
+          semanticScope: 'market',
+          op: 'LTE',
+          ...(typeof trigger.params.indicator === 'string' ? { params: { indicator: trigger.params.indicator } } : {}),
+        }
+      case 'trend.direction':
+      case 'market.regime':
+      case 'volatility.state':
+        return {
+          kind: 'atom',
+          key: trigger.key,
+          semanticScope: 'market',
+          op: 'EQ',
+          value: typeof trigger.params.value === 'string' ? trigger.params.value : undefined,
+        }
+      default:
+        return null
+    }
+  }
+
+  private buildActionsForNormalizedTrigger(
+    trigger: NormalizedTriggerAtom,
+    sizing: CanonicalStrategySpecV2['sizing'],
+  ): CanonicalRuleV2['actions'] {
+    if (trigger.phase === 'entry') {
+      if (trigger.sideScope === 'short') {
+        return [this.buildOpenAction('OPEN_SHORT', sizing)]
+      }
+      return [this.buildOpenAction('OPEN_LONG', sizing)]
+    }
+
+    if (trigger.phase === 'exit') {
+      if (trigger.sideScope === 'short') {
+        return [{ type: 'CLOSE_SHORT' }]
+      }
+      if (trigger.sideScope === 'both') {
+        return [{ type: 'CLOSE_LONG' }, { type: 'CLOSE_SHORT' }]
+      }
+      return [{ type: 'CLOSE_LONG' }]
+    }
+
+    return []
+  }
+
+  private buildGridConditionFromNormalizedIntent(
+    grid: NormalizedGridIntent,
+    defaultTimeframe: string | null,
+  ): Extract<CanonicalConditionNode, { kind: 'atom' }> {
+    const stepPct = Number(grid.stepPct.toFixed(4))
+    return {
+      kind: 'atom',
+      key: 'grid.range_rebalance',
+      semanticScope: 'market',
+      params: {
+        rangeMin: grid.range.lower,
+        rangeMax: grid.range.upper,
+        stepPct,
+        levelCount: this.deriveGridLevelCount(grid.range.lower, grid.range.upper, stepPct),
+        ...(defaultTimeframe ? { timeframe: defaultTimeframe } : {}),
+        recycle: grid.recycle,
+      },
+    }
+  }
+
+  private deriveGridLevelCount(
+    lower: number,
+    upper: number,
+    stepPct: number,
+  ): number {
+    if (!Number.isFinite(lower) || !Number.isFinite(upper) || !Number.isFinite(stepPct) || lower <= 0 || upper <= lower || stepPct <= 0) {
+      return 2
+    }
+
+    const ratio = 1 + stepPct / 100
+    if (ratio <= 1) {
+      return 2
+    }
+
+    return Math.max(2, Math.floor(Math.log(upper / lower) / Math.log(ratio)) + 1)
   }
 
   private resolveRsiThreshold(text: string): {

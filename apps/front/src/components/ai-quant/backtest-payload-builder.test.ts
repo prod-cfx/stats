@@ -117,6 +117,23 @@ describe('backtest-payload-builder', () => {
     })
   })
 
+  it('rejects custom range when timeframe normalization collapses it to an empty interval', () => {
+    expectBuildErrorCode(() => {
+      buildBacktestPayload(createInput({
+        baseTimeframe: '3m',
+        capabilities: {
+          allowedSymbols: ['BTCUSDT', 'ETHUSDT'],
+          allowedBaseTimeframes: ['3m', '15m', '1h'],
+        },
+        range: {
+          preset: 'CUSTOM',
+          startAt: '2026-03-15T04:24:01.000Z',
+          endAt: '2026-03-15T04:24:49.000Z',
+        },
+      }), now)
+    }, 'start_after_end')
+  })
+
   it('includes strategy protocolVersion=v1 and publishedSnapshotId only', () => {
     const payload = buildBacktestPayload(createInput(), now)
 

@@ -4,6 +4,7 @@ import type { ConversationState } from './ai-quant-page-conversation'
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import {
   createBacktestJob,
+  formatBacktestJobFailure,
   getBacktestJob,
   getBacktestJobResult,
 } from '@/components/ai-quant/backtest-job-client'
@@ -384,7 +385,7 @@ export async function runAiQuantBacktest(args: {
     }
     if (latestJob.status === 'failed') {
       setConversationBacktestExecutionState(conversationId, 'failed')
-      updateBacktestMessage(toFailureMessage(latestJob.error ?? 'job_failed'))
+      updateBacktestMessage(formatBacktestJobFailure(latestJob))
       return
     }
 

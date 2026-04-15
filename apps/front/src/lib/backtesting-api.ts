@@ -46,6 +46,11 @@ export interface BacktestJob {
   startedAt?: string
   finishedAt?: string
   error?: string
+  errorDetails?: {
+    code?: string
+    message: string
+    args?: Record<string, unknown>
+  }
   resultSummary?: BacktestJobResult['summary']
 }
 
@@ -180,6 +185,26 @@ function parseBacktestJob(payload: unknown, context: string): BacktestJob {
   const job = payload as BacktestJob
   assertBacktestJobPhase(job?.status, context)
   return job
+}
+
+function readRangeBoundary(value: unknown): { fromTs: number; toTs: number } | null {
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+
+  const candidate = value as { fromTs?: unknown; toTs?: unknown }
+  if (typeof candidate.fromTs !== 'number' || typeof candidate.toTs !== 'number') {
+    return null
+  }
+
+  return {
+    fromTs: candidate.fromTs,
+    toTs: candidate.toTs,
+  }
+}
+
+function formatRangeBoundary(value: { fromTs: number; toTs: number }): string {
+  return `${new Date(value.fromTs).toISOString()} ~ ${new Date(value.toTs).toISOString()}`
 }
 
 async function requestJson<T>(
@@ -320,4 +345,24 @@ export function getBacktestJobResult(jobId: string): Promise<BacktestJobResult> 
       }),
     BACKTEST_REQUEST_TIMEOUT_MS,
   )
+}
+
+export function formatBacktestJobFailure(job: Pick<BacktestJob, 'error' | 'errorDetails'>): string {
+  const details = job.errorDetails
+  if (details?.code === 'backtest.data_range_out_of_coverage') {
+    const suggestedRange = readRangeBoundary(details.args?.suggestedRange)
+    const availableRange = readRangeBoundary(details.args?.availableRange)
+
+    if (suggestedRange) {
+      return `当前选择的回测时间范围没有完整市场数据覆盖，建议改为 ${formatRangeBoundary(suggestedRange)} 后重试。`
+    }
+
+    if (availableRange) {
+      return `当前选择的回测时间范围没有完整市场数据覆盖，当前完整可用范围为 ${formatRangeBoundary(availableRange)}。`
+    }
+
+    return '当前选择的回测时间范围没有完整市场数据覆盖，请把结束时间往前调整一点后再试。'
+  }
+
+  return details?.message?.trim() || job.error?.trim() || '回测任务执行失败'
 }

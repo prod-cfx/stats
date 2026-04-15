@@ -1,6 +1,7 @@
 import type { ChecklistPayload, ChecklistRuleBasis } from '../types/codegen-checklist'
 import type { SemanticStrategyGraph } from '../types/semantic-strategy-graph'
 import { Injectable } from '@nestjs/common'
+import { buildChecklistRuleDrafts, resolveChecklistDefaultTimeframe, resolveRulePhaseDefaultTimeframe } from './checklist-rule-drafts'
 
 export interface SemanticGraphBuildResult {
   graph: SemanticStrategyGraph | null
@@ -11,14 +12,15 @@ export interface SemanticGraphBuildResult {
 @Injectable()
 export class SemanticGraphBuilderService {
   build(checklist: ChecklistPayload): SemanticGraphBuildResult {
+    const drafts = buildChecklistRuleDrafts(checklist)
     const entryRules = this.normalizeRules(checklist.entryRules)
     const exitRules = this.normalizeRules(checklist.exitRules)
     const riskText = this.stringifyRiskRules(checklist.riskRules)
     const ruleText = [...entryRules, ...exitRules].join(' ')
     const allText = [ruleText, riskText].join(' ')
-    const primaryTimeframe = this.resolvePrimaryTimeframe(checklist, [...entryRules, ...exitRules, riskText])
-    const entryDefaultTimeframe = this.resolvePhaseDefaultTimeframe(checklist.timeframes, 'entry', primaryTimeframe)
-    const exitDefaultTimeframe = this.resolvePhaseDefaultTimeframe(checklist.timeframes, 'exit', primaryTimeframe)
+    const primaryTimeframe = this.resolvePrimaryTimeframe(checklist, drafts, [...entryRules, ...exitRules, riskText])
+    const entryDefaultTimeframe = resolveRulePhaseDefaultTimeframe(drafts.entry, primaryTimeframe) ?? primaryTimeframe
+    const exitDefaultTimeframe = resolveRulePhaseDefaultTimeframe(drafts.exit, primaryTimeframe) ?? primaryTimeframe
     const symbol = this.resolveSymbol(checklist.symbols)
     const unsupportedFeatures = this.collectUnsupportedFeatures(ruleText)
     const diagnostics: string[] = []
@@ -28,11 +30,11 @@ export class SemanticGraphBuilderService {
     const openSizePct = this.resolveOpenSizePct(checklist.riskRules)
 
     const entryNodeIds: string[] = []
-    const hasDropBuyEntry = this.appendDropBuyNodes(entryRules, checklist.entryRuleBases, entryDefaultTimeframe, nodes, entryNodeIds)
-    const grid = this.appendGridNodes(entryRules, exitRules, entryDefaultTimeframe, exitDefaultTimeframe, nodes, diagnostics)
+    const hasDropBuyEntry = this.appendDropBuyNodes(entryRules, drafts.entry, checklist.entryRuleBases, entryDefaultTimeframe, nodes, entryNodeIds)
+    const grid = this.appendGridNodes(entryRules, exitRules, drafts.entry, drafts.exit, entryDefaultTimeframe, exitDefaultTimeframe, nodes, diagnostics)
     const bollingerSignals = this.appendBollingerNodes(allText, primaryTimeframe, nodes)
-    const hasRiseExit = this.appendRiseSellNodes(exitRules, checklist.exitRuleBases, exitDefaultTimeframe, nodes)
-    const hasPnlExit = this.appendPositionPnlNodes(exitRules, checklist.exitRuleBases, exitDefaultTimeframe, nodes)
+    const hasRiseExit = this.appendRiseSellNodes(exitRules, drafts.exit, checklist.exitRuleBases, exitDefaultTimeframe, nodes)
+    const hasPnlExit = this.appendPositionPnlNodes(exitRules, drafts.exit, checklist.exitRuleBases, exitDefaultTimeframe, nodes)
 
     if (entryNodeIds.length > 1) {
       nodes.push({
@@ -116,32 +118,28 @@ export class SemanticGraphBuilderService {
     return 'BTCUSDT'
   }
 
-  private resolvePrimaryTimeframe(checklist: ChecklistPayload, hints: string[]): string {
-    if (Array.isArray(checklist.timeframes) && checklist.timeframes[0]?.trim()) {
-      return checklist.timeframes[0].trim()
+  private resolvePrimaryTimeframe(
+    checklist: ChecklistPayload,
+    drafts: ReturnType<typeof buildChecklistRuleDrafts>,
+    hints: string[],
+  ): string {
+    const defaultTimeframe = resolveChecklistDefaultTimeframe(checklist)
+    if (defaultTimeframe) {
+      return defaultTimeframe
+    }
+    const entryTimeframe = drafts.entry.find(draft => draft.timeframe)?.timeframe
+    if (entryTimeframe) {
+      return entryTimeframe
+    }
+    const exitTimeframe = drafts.exit.find(draft => draft.timeframe)?.timeframe
+    if (exitTimeframe) {
+      return exitTimeframe
     }
     for (const hint of hints) {
       const timeframe = this.extractTimeframe(hint)
       if (timeframe) return timeframe
     }
     return '15m'
-  }
-
-  private resolvePhaseDefaultTimeframe(
-    timeframes: string[] | undefined,
-    phase: 'entry' | 'exit',
-    fallback: string,
-  ): string {
-    if (!Array.isArray(timeframes) || timeframes.length === 0) {
-      return fallback
-    }
-    if (phase === 'entry') {
-      return timeframes[0] ?? fallback
-    }
-    if (timeframes.length >= 2) {
-      return timeframes[1] ?? timeframes[0] ?? fallback
-    }
-    return timeframes[0] ?? fallback
   }
 
   private resolveOpenSizePct(riskRules?: Record<string, unknown>): number {
@@ -176,6 +174,7 @@ export class SemanticGraphBuilderService {
 
   private appendDropBuyNodes(
     entryRules: string[],
+    entryDrafts: ChecklistPayload['entryRuleDrafts'] | undefined,
     entryRuleBases: ChecklistPayload['entryRuleBases'],
     fallbackTimeframe: string,
     nodes: Array<SemanticStrategyGraph['nodes'][number]>,
@@ -183,6 +182,7 @@ export class SemanticGraphBuilderService {
   ): boolean {
     let created = false
     for (const [index, rule] of entryRules.entries()) {
+      const explicitBasis = entryDrafts?.[index]?.basis ?? this.readBasis(entryRuleBases, `entry-${index + 1}`)
       let valuePct: number | null = null
       let matched = rule.match(/当前K线收盘价相对于上一根K线收盘价下跌\s*(?:(?:≥|>=|大于等于)\s*)?(\d+(?:\.\d+)?)\s*%/u)
       if (matched?.[1]) {
@@ -200,12 +200,12 @@ export class SemanticGraphBuilderService {
         phase: 'entry',
         kind: 'price_change_pct',
         params: {
-          timeframe: this.extractTimeframe(rule) ?? fallbackTimeframe,
+          timeframe: entryDrafts?.[index]?.timeframe ?? this.extractTimeframe(rule) ?? fallbackTimeframe,
           left: { source: 'close', offsetBars: 0 },
           right: { source: 'close', offsetBars: 1 },
           op: 'lte',
           valuePct: -Math.abs(valuePct),
-          ...(this.readBasis(entryRuleBases, `entry-${index + 1}`) ? { basis: this.readBasis(entryRuleBases, `entry-${index + 1}`) } : {}),
+          ...(explicitBasis ? { basis: explicitBasis } : {}),
         },
       })
       entryNodeIds.push(nodeId)
@@ -216,12 +216,17 @@ export class SemanticGraphBuilderService {
 
   private appendRiseSellNodes(
     exitRules: string[],
+    exitDrafts: ChecklistPayload['exitRuleDrafts'] | undefined,
     exitRuleBases: ChecklistPayload['exitRuleBases'],
     fallbackTimeframe: string,
     nodes: Array<SemanticStrategyGraph['nodes'][number]>,
   ): boolean {
     let created = false
     for (const [index, rule] of exitRules.entries()) {
+      const explicitBasis = exitDrafts?.[index]?.basis ?? this.readBasis(exitRuleBases, `exit-${index + 1}`)
+      if (explicitBasis === 'entry_avg_price' || explicitBasis === 'position_pnl') {
+        continue
+      }
       if (/开仓均价|收益率|盈亏|pnl/iu.test(rule)) {
         continue
       }
@@ -234,12 +239,12 @@ export class SemanticGraphBuilderService {
         phase: 'exit',
         kind: 'price_change_pct',
         params: {
-          timeframe: this.extractTimeframe(rule) ?? fallbackTimeframe,
+          timeframe: exitDrafts?.[index]?.timeframe ?? this.extractTimeframe(rule) ?? fallbackTimeframe,
           left: { source: 'close', offsetBars: 0 },
           right: { source: 'close', offsetBars: 1 },
           op: 'gte',
           valuePct: Number(match[1]),
-          ...(this.readBasis(exitRuleBases, `exit-${index + 1}`) ? { basis: this.readBasis(exitRuleBases, `exit-${index + 1}`) } : {}),
+          ...(explicitBasis ? { basis: explicitBasis } : {}),
         },
       })
       created = true
@@ -249,13 +254,14 @@ export class SemanticGraphBuilderService {
 
   private appendPositionPnlNodes(
     exitRules: string[],
+    exitDrafts: ChecklistPayload['exitRuleDrafts'] | undefined,
     exitRuleBases: ChecklistPayload['exitRuleBases'],
     fallbackTimeframe: string,
     nodes: Array<SemanticStrategyGraph['nodes'][number]>,
   ): boolean {
     let created = false
     for (const [index, rule] of exitRules.entries()) {
-      const explicitBasis = this.readBasis(exitRuleBases, `exit-${index + 1}`)
+      const explicitBasis = exitDrafts?.[index]?.basis ?? this.readBasis(exitRuleBases, `exit-${index + 1}`)
       let match = rule.match(/当前K线收盘价相对于开仓均价上涨\s*(?:(?:≥|>=|大于等于)\s*)?(\d+(?:\.\d+)?)\s*%/u)
       if (!match?.[1]) {
         match = rule.match(/(?:持仓|仓位)?[^，。；;\n]{0,12}?(?:收益率|收益|盈利|盈亏)[^，。；;\n]{0,12}?(?:达到|大于等于|>=|超过|≥)?\s*(\d+(?:\.\d+)?)\s*%/u)
@@ -271,7 +277,7 @@ export class SemanticGraphBuilderService {
         phase: 'exit',
         kind: 'position_pnl_pct',
         params: {
-          timeframe: this.extractTimeframe(rule) ?? fallbackTimeframe,
+          timeframe: exitDrafts?.[index]?.timeframe ?? this.extractTimeframe(rule) ?? fallbackTimeframe,
           op: 'gte',
           valuePct: Number(match[1]),
           ...(explicitBasis ? { basis: explicitBasis } : {}),
@@ -293,6 +299,8 @@ export class SemanticGraphBuilderService {
   private appendGridNodes(
     entryRules: string[],
     exitRules: string[],
+    entryDrafts: ChecklistPayload['entryRuleDrafts'] | undefined,
+    exitDrafts: ChecklistPayload['exitRuleDrafts'] | undefined,
     entryDefaultTimeframe: string,
     exitDefaultTimeframe: string,
     nodes: Array<SemanticStrategyGraph['nodes'][number]>,
@@ -329,7 +337,7 @@ export class SemanticGraphBuilderService {
         phase: 'entry',
         kind: 'grid_level_touch',
         params: {
-          timeframe: this.extractTimeframe(entryText) ?? entryDefaultTimeframe,
+          timeframe: entryDrafts?.[0]?.timeframe ?? this.extractTimeframe(entryText) ?? entryDefaultTimeframe,
           range: { min: rangeMin, max: rangeMax },
           stepPct,
           levelCount,
@@ -343,7 +351,7 @@ export class SemanticGraphBuilderService {
         phase: 'exit',
         kind: 'grid_level_touch',
         params: {
-          timeframe: this.extractTimeframe(exitText) ?? exitDefaultTimeframe,
+          timeframe: exitDrafts?.[0]?.timeframe ?? this.extractTimeframe(exitText) ?? exitDefaultTimeframe,
           range: { min: rangeMin, max: rangeMax },
           stepPct,
           levelCount,
@@ -353,6 +361,7 @@ export class SemanticGraphBuilderService {
 
     return { hasEntry: wantsEntry, hasExit: wantsExit }
   }
+
 
   private resolveGridStepPct(text: string): number | null {
     const percentMatch = text.match(/(?:步长|网格步长)\s*(\d+(?:\.\d+)?)\s*%/u)

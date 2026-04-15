@@ -78,6 +78,23 @@ describe('semanticGraphBuilderService', () => {
     ]))
   })
 
+  it('prefers draft timeframe when semantic graph fallback order differs from checklist order', () => {
+    const result = builder.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m', '3m'],
+      entryRules: ['3m 内下跌 1% 买入'],
+      exitRules: ['15m 内上涨 2% 卖出'],
+      entryRuleDrafts: [{ id: 'entry-1', phase: 'entry', text: '3m 内下跌 1% 买入', timeframe: '3m' }],
+      exitRuleDrafts: [{ id: 'exit-1', phase: 'exit', text: '15m 内上涨 2% 卖出', timeframe: '15m', basis: 'entry_avg_price' }],
+      riskRules: { positionPct: 10, stopLossPct: 5 },
+    })
+
+    const entryNode = result.graph?.nodes.find(node => node.phase === 'entry' && node.kind === 'price_change_pct')
+    const exitNode = result.graph?.nodes.find(node => node.phase === 'exit' && node.kind === 'position_pnl_pct')
+    expect(entryNode).toMatchObject({ params: { timeframe: '3m' } })
+    expect(exitNode).toMatchObject({ params: { timeframe: '15m' } })
+  })
+
   it('builds fixed-range grid buy and upper-grid sell graph with position/risk', () => {
     const result = builder.build({
       symbols: ['BTCUSDT'],

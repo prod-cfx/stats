@@ -160,6 +160,40 @@ describe('strategyClarificationRulesService', () => {
     ]))
   })
 
+  it('ignores stale market scope conflicts whose values normalize to the same meaning', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['跌破布林带下轨时做多'],
+      exitRules: ['上涨 0.5% 止盈'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+        stopLoss: '亏损 5% 止损',
+        takeProfit: '盈利 10% 止盈',
+        _marketScopeConflicts: [
+          {
+            field: 'timeframe',
+            previous: '15m',
+            next: ' 15M ',
+          },
+          {
+            field: 'exchange',
+            previous: 'OKX',
+            next: ' okx ',
+          },
+        ],
+      },
+    })
+
+    expect(state.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'conflicting_market_scope',
+      }),
+    ]))
+  })
+
   it('blocks short-side strategy when exchange is missing', () => {
     const state = service.detect({
       symbols: ['BTCUSDT'],
@@ -266,6 +300,8 @@ describe('strategyClarificationRulesService', () => {
     expect(state.items).toEqual(expect.arrayContaining([
       expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'entry.basis.1' }),
       expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'exit.basis.1' }),
+    ]))
+    expect(state.items).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ reason: 'ambiguous_condition_basis', key: 'risk.stopLoss.basis' }),
     ]))
     expect(state.items).toEqual(expect.arrayContaining([
@@ -277,6 +313,45 @@ describe('strategyClarificationRulesService', () => {
         key: 'exit.basis.1',
         question: '出场规则“15 分钟内涨 2% 卖出”里的百分比条件，是相对上一根 K 线收盘价、开仓均价、持仓收益，还是别的基准？',
       }),
+    ]))
+  })
+
+  it('does not ask basis for defaulted stop-loss and take-profit percentages', () => {
+    const state = service.detect({
+      symbols: ['ETHUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['15 分钟上涨 1% 买入'],
+      exitRules: ['15 分钟下跌 5% 卖出'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'spot',
+        positionPct: 10,
+        stopLossPct: 5,
+        takeProfitPct: 10,
+      },
+    })
+
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'entry.basis.1', reason: 'ambiguous_condition_basis' }),
+      expect.objectContaining({ key: 'exit.basis.1', reason: 'ambiguous_condition_basis' }),
+    ]))
+    expect(state.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'risk.stopLoss.basis' }),
+      expect.objectContaining({ key: 'risk.takeProfit.basis' }),
+    ]))
+  })
+
+  it('keeps drawdown-style risk rules basis-gated because they lack a safe default', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['突破布林带上轨做空'],
+      exitRules: ['浮盈回撤 2% 止损'],
+      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10, stopLossPct: 5 },
+    })
+
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'exit.basis.1', reason: 'ambiguous_condition_basis' }),
     ]))
   })
 
@@ -345,7 +420,7 @@ describe('strategyClarificationRulesService', () => {
     ]))
   })
 
-  it('does not duplicate risk basis blockers when exit rules already carry stop-loss or take-profit semantics', () => {
+  it('does not basis-gate defaulted stop-loss and take-profit semantics carried by exit rules', () => {
     const state = service.detect({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
@@ -360,11 +435,9 @@ describe('strategyClarificationRulesService', () => {
       },
     })
 
-    expect(state.items).toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'exit.basis.1', reason: 'ambiguous_condition_basis' }),
-      expect.objectContaining({ key: 'exit.basis.2', reason: 'ambiguous_condition_basis' }),
-    ]))
     expect(state.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'exit.basis.1' }),
+      expect.objectContaining({ key: 'exit.basis.2' }),
       expect.objectContaining({ key: 'risk.stopLoss.basis' }),
       expect.objectContaining({ key: 'risk.takeProfit.basis' }),
     ]))
@@ -391,5 +464,46 @@ describe('strategyClarificationRulesService', () => {
       status: 'CLEAR',
       items: [],
     })
+  })
+
+  it('blocks grid strategies missing stepPct and side mode', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['做一个 60000 到 80000 的网格策略'],
+      exitRules: ['持续高卖低买'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+        stopLoss: '亏损 5% 止损',
+        takeProfit: '盈利 8% 止盈',
+      },
+    })
+
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'grid_params_missing', key: 'grid.stepPct' }),
+      expect.objectContaining({ reason: 'missing_side_scope', key: 'grid.sideMode' }),
+    ]))
+  })
+
+  it('blocks vague state gates until they map to the minimal whitelist', () => {
+    const state = service.detect({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['在合适的趋势里开启网格'],
+      exitRules: ['趋势不对就停掉'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+        stopLoss: '亏损 5% 止损',
+        takeProfit: '盈利 8% 止盈',
+      },
+    })
+
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'ambiguous_state_gate', key: 'state.marketRegime' }),
+    ]))
   })
 })

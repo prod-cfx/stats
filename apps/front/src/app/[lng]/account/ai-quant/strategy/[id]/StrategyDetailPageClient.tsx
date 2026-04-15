@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { mapAccountStrategyDetailToRecord } from '@/components/account/ai-quant-strategy-api-adapter'
 import { AiQuantStrategyDetail } from '@/components/account/AiQuantStrategyDetail'
 import { fetchBacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
-import { createBacktestJob, getBacktestJob } from '@/components/ai-quant/backtest-job-client'
+import { createBacktestJob, formatBacktestJobFailure, getBacktestJob } from '@/components/ai-quant/backtest-job-client'
 import {
   BacktestPayloadBuilderError,
   buildBacktestPayload,
@@ -163,6 +163,7 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
         throw new ApiError('当前已发布快照缺少正式回测基线，请重新发布后再回测。', 'PUBLISHED_SNAPSHOT_PARAMS_MISSING')
       }
       const { symbol, baseTimeframe, exchange, executionConfig } = effectiveInputs
+      const snapshotStateTimeframes = strategy.snapshotBacktestConfigDefaults?.stateTimeframes ?? []
       if (!executionConfig.allowPartialValid) {
         throw new BacktestPayloadBuilderError('invalid_execution_config')
       }
@@ -172,7 +173,7 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
         symbol,
         baseTimeframe,
         capabilities,
-        stateTimeframes: [baseTimeframe],
+        stateTimeframes: snapshotStateTimeframes.length > 0 ? snapshotStateTimeframes : [baseTimeframe],
         initialCash: executionConfig.initialCash,
         leverage: executionConfig.leverage,
         execution: {
@@ -206,7 +207,7 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
       }
 
       if (latestJob.status !== 'succeeded') {
-        throw new ApiError(latestJob.error ?? '回测任务执行失败', 'BACKTEST_FAILED')
+        throw new ApiError(formatBacktestJobFailure(latestJob), 'BACKTEST_FAILED', 409, latestJob.errorDetails)
       }
 
       const search = new URLSearchParams({
