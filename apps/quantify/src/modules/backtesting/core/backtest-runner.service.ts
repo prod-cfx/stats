@@ -66,9 +66,15 @@ function buildRuntimeSymbolSet(input: BacktestRunInput): Set<string> {
     input.symbols.flatMap((symbol) => {
       const exact = normalizeExactCode(symbol)
       const raw = exact.split(':')[0] ?? exact
-      const variants = new Set<string>([exact, raw])
+      const variants = new Set<string>([exact])
 
-      if (!exact.includes(':')) {
+      if (exact.includes(':')) {
+        if (exact.endsWith(':SPOT')) {
+          variants.add(raw)
+        }
+      }
+      else {
+        variants.add(raw)
         if (marketType === 'perp' || marketType === 'perpetual' || marketType === 'future') {
           variants.add(toSymbolCode(raw, 'PERP'))
         }
