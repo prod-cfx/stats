@@ -226,6 +226,8 @@ describe('QuantChatPanel range settings', () => {
     expect(container.textContent).toContain('aiQuant.backtestFeeBps')
     expect(container.textContent).toContain('aiQuant.backtestPriceSource')
     expect(container.textContent).toContain('aiQuant.backtestAllowPartial')
+    expect(container.textContent).toContain('aiQuant.backtestAllowPartial.enabled')
+    expect(container.textContent).toContain('aiQuant.backtestAllowPartial.disabled')
   })
 
   it('shows inline validation for invalid backtest execution values', async () => {

@@ -47,7 +47,7 @@ const BACKTEST_PRICE_SOURCE_OPTIONS = ['open', 'close', 'mid'] as const
 interface BacktestSettingField {
   key: string
   labelKey: string
-  type: 'number' | 'select' | 'checkbox'
+  type: 'number' | 'select'
   min?: number
   options?: readonly string[]
 }
@@ -86,7 +86,8 @@ const BACKTEST_SETTING_FIELDS: BacktestSettingField[] = [
   {
     key: 'backtestAllowPartial',
     labelKey: 'aiQuant.backtestAllowPartial',
-    type: 'checkbox',
+    type: 'select',
+    options: ['true', 'false'],
   },
 ]
 
@@ -443,19 +444,14 @@ export function QuantChatPanel({
                           <option value="">-</option>
                           {field.options.map(option => (
                             <option key={option} value={option}>
-                              {t(`aiQuant.backtestPriceSource.${option}`)}
+                              {field.key === 'backtestAllowPartial'
+                                ? t(
+                                    `aiQuant.backtestAllowPartial.${option === 'true' ? 'enabled' : 'disabled'}`,
+                                  )
+                                : t(`aiQuant.backtestPriceSource.${option}`)}
                             </option>
                           ))}
                         </select>
-                      ) : field.type === 'checkbox' ? (
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 rounded border border-[color:var(--cf-border)]"
-                          checked={value === true}
-                          onChange={event =>
-                            updateBacktestDraftValue(field.key, event.target.checked)
-                          }
-                        />
                       ) : (
                         <input
                           type="number"

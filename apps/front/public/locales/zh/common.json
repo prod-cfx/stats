@@ -98,6 +98,8 @@
     "backtestFeeBps": "手续费 (bps)",
     "backtestPriceSource": "成交价来源",
     "backtestAllowPartial": "允许部分覆盖数据继续回测",
+    "backtestAllowPartial.enabled": "允许",
+    "backtestAllowPartial.disabled": "不允许",
     "backtestPriceSource.open": "开盘价",
     "backtestPriceSource.close": "收盘价",
     "backtestPriceSource.mid": "中间价",

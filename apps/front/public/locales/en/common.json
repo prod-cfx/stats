@@ -98,6 +98,8 @@
     "backtestFeeBps": "Fee (bps)",
     "backtestPriceSource": "Price Source",
     "backtestAllowPartial": "Allow partial data coverage",
+    "backtestAllowPartial.enabled": "Allow",
+    "backtestAllowPartial.disabled": "Disallow",
     "backtestPriceSource.open": "Open",
     "backtestPriceSource.close": "Close",
     "backtestPriceSource.mid": "Mid",
