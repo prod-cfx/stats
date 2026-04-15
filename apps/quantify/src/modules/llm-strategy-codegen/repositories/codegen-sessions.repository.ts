@@ -15,6 +15,7 @@ const SESSION_SELECT_BASE = {
   userId: true,
   status: true,
   checklist: true,
+  semanticState: true,
   clarificationState: true,
   constraintPack: true,
   latestDraftCode: true,
@@ -33,6 +34,7 @@ const SESSION_SELECT_BASE_WITHOUT_CLARIFICATION = {
   userId: true,
   status: true,
   checklist: true,
+  semanticState: true,
   constraintPack: true,
   latestDraftCode: true,
   latestSpecDesc: true,
@@ -290,14 +292,16 @@ export class CodegenSessionsRepository {
   }
 
   private toSessionWithNullableOptionalColumns(
-    session: Omit<LlmStrategyCodegenSession, 'strategyInstanceId' | 'clarificationState'> & {
+    session: Omit<LlmStrategyCodegenSession, 'strategyInstanceId' | 'semanticState' | 'clarificationState'> & {
       strategyInstanceId?: string | null
+      semanticState?: Prisma.JsonValue | null
       clarificationState?: Prisma.JsonValue | null
     },
   ): LlmStrategyCodegenSession {
     return {
       ...session,
       strategyInstanceId: session.strategyInstanceId ?? null,
+      semanticState: session.semanticState ?? null,
       clarificationState: session.clarificationState ?? null,
     } as LlmStrategyCodegenSession
   }

@@ -288,6 +288,111 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
     })
   })
 
+  it('persists semanticState with session reads and writes', async () => {
+    let storedRow: Record<string, unknown> | null = null
+
+    const pickSelected = (row: Record<string, unknown>, select?: Record<string, boolean>) => {
+      const keys = Object.entries(select ?? {})
+        .filter(([, enabled]) => enabled)
+        .map(([key]) => key)
+      return Object.fromEntries(keys.map(key => [key, row[key]]))
+    }
+
+    const tx = {
+      llmStrategyCodegenSession: {
+        create: jest.fn().mockImplementation(async (args: { data: Record<string, unknown>; select?: Record<string, boolean> }) => {
+          storedRow = {
+            id: 'session-1',
+            userId: args.data.userId,
+            status: args.data.status,
+            checklist: args.data.checklist ?? null,
+            semanticState: args.data.semanticState ?? null,
+            clarificationState: args.data.clarificationState ?? null,
+            constraintPack: args.data.constraintPack ?? null,
+            latestDraftCode: args.data.latestDraftCode ?? null,
+            latestSpecDesc: args.data.latestSpecDesc ?? null,
+            rejectReason: args.data.rejectReason ?? null,
+            strategyInstanceId: args.data.strategyInstanceId ?? null,
+            createdAt: new Date('2026-04-15T10:00:00.000Z'),
+            updatedAt: new Date('2026-04-15T10:00:00.000Z'),
+          }
+          return pickSelected(storedRow, args.select)
+        }),
+        findUnique: jest.fn().mockImplementation(async (args: { select?: Record<string, boolean> }) => {
+          if (!storedRow) return null
+          return pickSelected(storedRow, args.select)
+        }),
+      },
+    }
+
+    const txHost = {
+      tx,
+      withTransaction: jest.fn(async (callback: () => Promise<unknown>) => callback()),
+    }
+    const repository = new CodegenSessionsRepository(txHost as never)
+
+    const semanticState = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'trigger-entry-ma-long',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: { indicator: 'ma', referenceRole: 'long_term' },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'reference.period.entry',
+              fieldPath: 'triggers[0].params.reference.period',
+              status: 'open',
+              priority: 'core',
+              questionHint: '长期均线是多少？',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-15T10:00:00.000Z',
+    } as const
+
+    const created = await repository.createSession({
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {},
+      semanticState: semanticState as any,
+      clarificationState: { status: 'NEEDS_CLARIFICATION', items: [] } as any,
+      constraintPack: {} as any,
+    } as any)
+
+    const found = await repository.findById(created.id)
+
+    expect(tx.llmStrategyCodegenSession.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        semanticState,
+      }),
+    }))
+    expect((created as any).semanticState).toEqual(expect.objectContaining({
+      version: 1,
+      families: ['single-leg'],
+    }))
+    expect((found as any)?.semanticState).toEqual(expect.objectContaining({
+      version: 1,
+      families: ['single-leg'],
+    }))
+  })
+
   it('uses the ambient prisma client for single-statement session reads and writes', async () => {
     const tx = {
       llmStrategyCodegenSession: {
