@@ -184,6 +184,11 @@ export class CodegenConversationService {
       checklist,
       undefined,
     )
+    const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
+    const initialConstraintPack = {
+      ...createDefaultConstraintPack(guidePrompt),
+      recommendationStyle,
+    }
     const clarification = this.resolveClarificationArtifacts(checklist)
     const clarificationState = clarification.clarificationState
     const plannerStatus: LlmCodegenSessionStatus = this.stateMachine.resolvePlannerStatus({
@@ -201,11 +206,11 @@ export class CodegenConversationService {
       checklist,
       clarification,
       compileability,
+      constraintPack: initialConstraintPack,
     })
     const clarificationPrompt = decision.kind === 'CONFIRM_INFERRED'
       ? this.clarificationQuestion.buildFromDecision(decision)
       : clarification.clarificationPrompt
-    const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
     const bootstrap = buildStartSessionBootstrap({
       initialMessage: dto.initialMessage,
       plannerStatus,
@@ -232,8 +237,7 @@ export class CodegenConversationService {
       checklist: checklist as Prisma.InputJsonValue,
       clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
       constraintPack: {
-        ...createDefaultConstraintPack(guidePrompt),
-        recommendationStyle,
+        ...initialConstraintPack,
         conversationHistory: bootstrap.initialHistory,
       } as unknown as Prisma.InputJsonValue,
       latestDraftCode: null,
@@ -415,6 +419,7 @@ export class CodegenConversationService {
       checklist: mergedChecklist,
       clarification,
       compileability,
+      constraintPack,
     })
     const decisionPrompt = decision.kind === 'CONFIRM_INFERRED'
       ? this.clarificationQuestion.buildFromDecision(decision)
@@ -1271,6 +1276,7 @@ export class CodegenConversationService {
       checklist: args.checklist,
       clarification,
       compileability,
+      constraintPack: args.constraintPack,
     })
 
     if (missingFields.length > 0) {
@@ -1980,6 +1986,7 @@ export class CodegenConversationService {
     checklist: ChecklistPayload
     clarification: ReturnType<CodegenConversationService['resolveClarificationArtifacts']>
     compileability: CanonicalCompileabilityReport | null
+    constraintPack: ConstraintPackSnapshot
   }) {
     const normalizedSummary = input.clarification.clarificationState.summary?.trim()
       || this.buildClarificationSummary(input.checklist)
@@ -1988,7 +1995,10 @@ export class CodegenConversationService {
     return this.uniquenessDecision.decide({
       normalizedSummary,
       blockingReasons: input.clarification.blockingReasons,
-      inferredAssumptions: input.clarification.inferredAssumptions,
+      inferredAssumptions: this.collectInferredAssumptions(
+        input.checklist,
+        input.constraintPack,
+      ),
       compileability: input.compileability,
     })
   }
@@ -2026,11 +2036,22 @@ export class CodegenConversationService {
 
   private collectInferredAssumptions(
     checklist: ChecklistPayload,
+    constraintPack: ConstraintPackSnapshot = createDefaultConstraintPack(),
   ): StrategyInferredAssumption[] {
     const combinedText = [...(checklist.entryRules ?? []), ...(checklist.exitRules ?? [])].join(' ')
     const assumptions: StrategyInferredAssumption[] = []
+    const consumedKeys = new Set([
+      ...(Array.isArray(constraintPack.inferredConfirmation?.confirmedKeys)
+        ? constraintPack.inferredConfirmation.confirmedKeys.filter((item): item is string => typeof item === 'string')
+        : []),
+      ...(Array.isArray(constraintPack.inferredConfirmation?.overriddenKeys)
+        ? constraintPack.inferredConfirmation.overriddenKeys.filter((item): item is string => typeof item === 'string')
+        : []),
+    ])
     const inferredKeys = Array.isArray(checklist.riskRules?._inferredAssumptions)
-      ? checklist.riskRules._inferredAssumptions.filter((item): item is string => typeof item === 'string')
+      ? checklist.riskRules._inferredAssumptions.filter(
+          (item): item is string => typeof item === 'string' && !consumedKeys.has(item),
+        )
       : []
 
     if (inferredKeys.includes('risk.stopLossBasis') && checklist.riskRules?.stopLossBasis === 'entry_avg_price') {

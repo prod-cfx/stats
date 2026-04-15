@@ -2096,6 +2096,47 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
   })
 
+  it('does not re-confirm inferred risk basis keys that were already consumed in constraint pack', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-consumed-inferred-risk-basis',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: completeChecklist({
+        riskRules: {
+          _inferredAssumptions: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+        },
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {
+        inferredConfirmation: {
+          confirmedKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+          overriddenKeys: [],
+        },
+      },
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+        logic: {
+          entryRules: ['短均线上穿长均线（金叉）时做多'],
+          exitRules: ['短均线下穿长均线（死叉）时平多'],
+          riskRules: { exchange: 'okx', marketType: 'perp' },
+        },
+      }),
+    })
+
+    const result = await service.continueSession('s-consumed-inferred-risk-basis', {
+      userId: 'u1',
+      message: '继续',
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.assistantPrompt).not.toContain('risk.stopLossBasis')
+    expect(result.assistantPrompt).not.toContain('risk.takeProfitBasis')
+  })
+
   it('preserves explicit non-default risk basis from natural language', () => {
     const checklist = (service as any).inferChecklistFromMessage(
       '在 OKX 现货 ETHUSDT，15分钟上涨1%买入，止损按持仓亏损 5%，止盈按持仓收益率 10%，仓位 10%',
