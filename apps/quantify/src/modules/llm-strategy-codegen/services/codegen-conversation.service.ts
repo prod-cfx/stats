@@ -1675,7 +1675,7 @@ export class CodegenConversationService {
     const pendingSemanticItems = clarificationState.items.filter(item =>
       item.status === 'pending' && item.key.startsWith('semantic.'),
     )
-    if (pendingSemanticItems.length !== 1) return {}
+    if (pendingSemanticItems.length === 0) return {}
 
     return {
       [pendingSemanticItems[0].key]: normalizedMessage,

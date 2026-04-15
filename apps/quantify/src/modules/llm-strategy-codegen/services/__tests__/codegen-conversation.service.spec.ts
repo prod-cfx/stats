@@ -1646,6 +1646,62 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('长期均线是多少')
   })
 
+  it('binds a freeform answer to the first pending semantic slot even when more semantic slots remain', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-semantic-ma-period-freeform-multi',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        entryRules: ['价格突破一条长期均线时买入'],
+        exitRules: ['跌破短期均线时卖出'],
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'semantic.reference.period.entry',
+            reason: 'missing_entry_rules',
+            field: 'entryRules',
+            blocking: true,
+            question: '长期均线是多少？',
+            status: 'pending',
+          },
+          {
+            key: 'semantic.confirmationMode.entry',
+            reason: 'missing_entry_rules',
+            field: 'entryRules',
+            blocking: true,
+            question: '突破按收盘确认还是盘中触发？',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-semantic-ma-period-freeform-multi', {
+      userId: 'u1',
+      message: 'ma50',
+    } as ContinueCodegenSessionDto)
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-semantic-ma-period-freeform-multi',
+      expect.objectContaining({
+        checklist: expect.objectContaining({
+          entryRules: expect.arrayContaining([expect.stringContaining('长期均线（50）')]),
+        }),
+      }),
+    )
+    expect(result.assistantPrompt).not.toContain('长期均线是多少')
+  })
+
   it('applies action uniqueness clarification to the targeted entry rule only', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-clarification-action-uniqueness',
