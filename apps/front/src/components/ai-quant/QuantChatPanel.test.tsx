@@ -105,6 +105,7 @@ describe('QuantChatPanel range settings', () => {
       container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
+    expect(container.textContent).toContain('aiQuant.backtestSettingsTitle')
     expect(container.textContent).toContain('7D')
     expect(container.textContent).toContain('30D')
     expect(container.textContent).toContain('90D')
@@ -242,10 +243,10 @@ describe('QuantChatPanel range settings', () => {
       container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(container.textContent).toContain('aiQuant.validation.positiveNumber')
-    expect(container.textContent).toContain('aiQuant.validation.nonNegativeNumber')
-    expect(container.textContent).toContain('aiQuant.validation.invalidPriceSource')
-    expect(container.textContent).toContain('aiQuant.validation.invalidBoolean')
+    expect(container.textContent).toContain('aiQuant.messages.positiveNumber')
+    expect(container.textContent).toContain('aiQuant.messages.nonNegativeNumber')
+    expect(container.textContent).toContain('aiQuant.messages.invalidPriceSource')
+    expect(container.textContent).toContain('aiQuant.messages.invalidBoolean')
   })
 
   it('edits backtest params locally and only applies them after confirm', async () => {
@@ -284,6 +285,7 @@ describe('QuantChatPanel range settings', () => {
     })
 
     expect(onParamChange).not.toHaveBeenCalled()
+    expect(container.textContent).toContain('aiQuant.backtestDraftPending')
 
     const confirmButton = Array.from(container.querySelectorAll('button')).find(
       btn => btn.textContent?.includes('aiQuant.backtestConfirmSubmit'),
@@ -295,6 +297,7 @@ describe('QuantChatPanel range settings', () => {
     })
 
     expect(onParamChange).toHaveBeenCalledWith('backtestInitialCash', 20000)
+    expect(container.textContent).not.toContain('aiQuant.backtestDraftPending')
   })
 
   it('cancels backtest param edits without applying them', async () => {
@@ -429,6 +432,42 @@ describe('QuantChatPanel range settings', () => {
     expect(container.textContent).toContain('aiQuant.backtestPriceSource')
     expect(container.textContent).not.toContain('Position %')
     expect(container.textContent).not.toContain('Buy Window (min)')
+  })
+
+  it('disables start backtest while there are unconfirmed draft changes', async () => {
+    await act(async () => {
+      root?.render(
+        <QuantChatPanel
+          messages={[{ id: 'm1', role: 'assistant', content: 'hello' }]}
+          paramSchema={null}
+          paramValues={{
+            ...baseParams,
+            backtestInitialCash: 10000,
+            backtestLeverage: 2,
+            backtestSlippageBps: 10,
+            backtestFeeBps: 5,
+            backtestPriceSource: 'close',
+            backtestAllowPartial: true,
+          }}
+          onParamChange={() => {}}
+          onSend={() => {}}
+          onRunBacktest={() => {}}
+        />,
+      )
+    })
+
+    await act(async () => {
+      container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    const numberInputs = container.querySelectorAll('input[type="number"]')
+    await act(async () => {
+      triggerInputChange(numberInputs[0] as HTMLInputElement, '20000')
+    })
+
+    const runButton = container.querySelector('[data-testid="run-backtest"]') as HTMLButtonElement | null
+    expect(runButton?.disabled).toBe(true)
+    expect(container.textContent).toContain('aiQuant.backtestDraftPending')
   })
 
   it('does not render a separate clarification card while still showing publication gate content', async () => {

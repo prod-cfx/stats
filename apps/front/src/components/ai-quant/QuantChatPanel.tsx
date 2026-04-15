@@ -130,22 +130,22 @@ function validateBacktestSettings(paramValues: DynamicParamValues): {
 
   const initialCash = parseFiniteNumber(paramValues.backtestInitialCash)
   if (initialCash === null || initialCash <= 0) {
-    fieldErrors.backtestInitialCash = 'aiQuant.validation.positiveNumber'
+    fieldErrors.backtestInitialCash = 'aiQuant.messages.positiveNumber'
   }
 
   const leverage = parseFiniteNumber(paramValues.backtestLeverage)
   if (leverage === null || leverage <= 0) {
-    fieldErrors.backtestLeverage = 'aiQuant.validation.positiveNumber'
+    fieldErrors.backtestLeverage = 'aiQuant.messages.positiveNumber'
   }
 
   const slippageBps = parseFiniteNumber(paramValues.backtestSlippageBps)
   if (slippageBps === null || slippageBps < 0) {
-    fieldErrors.backtestSlippageBps = 'aiQuant.validation.nonNegativeNumber'
+    fieldErrors.backtestSlippageBps = 'aiQuant.messages.nonNegativeNumber'
   }
 
   const feeBps = parseFiniteNumber(paramValues.backtestFeeBps)
   if (feeBps === null || feeBps < 0) {
-    fieldErrors.backtestFeeBps = 'aiQuant.validation.nonNegativeNumber'
+    fieldErrors.backtestFeeBps = 'aiQuant.messages.nonNegativeNumber'
   }
 
   const priceSource =
@@ -153,11 +153,11 @@ function validateBacktestSettings(paramValues: DynamicParamValues): {
       ? paramValues.backtestPriceSource.trim()
       : ''
   if (!BACKTEST_PRICE_SOURCE_OPTIONS.includes(priceSource as (typeof BACKTEST_PRICE_SOURCE_OPTIONS)[number])) {
-    fieldErrors.backtestPriceSource = 'aiQuant.validation.invalidPriceSource'
+    fieldErrors.backtestPriceSource = 'aiQuant.messages.invalidPriceSource'
   }
 
   if (typeof paramValues.backtestAllowPartial !== 'boolean') {
-    fieldErrors.backtestAllowPartial = 'aiQuant.validation.invalidBoolean'
+    fieldErrors.backtestAllowPartial = 'aiQuant.messages.invalidBoolean'
   }
 
   const range = {
@@ -319,6 +319,7 @@ export function QuantChatPanel({
           </button>
           <button
             type="button"
+            data-testid="run-backtest"
             onClick={onRunBacktest}
             disabled={!canRunBacktest || hasDraftChanges}
             className="flex items-center gap-2 rounded-lg bg-gradient-to-r from-violet-500 to-purple-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm transition-all hover:from-violet-600 hover:to-purple-700 disabled:cursor-not-allowed disabled:opacity-50"
@@ -333,6 +334,10 @@ export function QuantChatPanel({
       {showSettings && (
         <div className="border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-3 transition-all">
           <div className="grid gap-4 md:grid-cols-3">
+            <div className="space-y-1 md:col-span-3">
+              <h3 className="text-sm font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.backtestSettingsTitle')}</h3>
+              <p className="text-xs text-[color:var(--cf-muted)]">{t('aiQuant.backtestSettingsDescription')}</p>
+            </div>
             <div className="space-y-2 md:col-span-3">
               <span className="text-xs font-medium text-[color:var(--cf-muted)]">{t('aiQuant.backtestRange')}</span>
               <div className="flex flex-wrap gap-2">
@@ -440,6 +445,9 @@ export function QuantChatPanel({
             })}
             {validation.rangeError && backtestRangePreset === 'CUSTOM' && (
               <p className="text-sm text-red-500 md:col-span-3">{t(validation.rangeError)}</p>
+            )}
+            {hasDraftChanges && (
+              <p className="text-sm text-[color:var(--cf-muted)] md:col-span-3">{t('aiQuant.backtestDraftPending')}</p>
             )}
             <div className="flex items-center justify-end gap-2 md:col-span-3">
               <button
