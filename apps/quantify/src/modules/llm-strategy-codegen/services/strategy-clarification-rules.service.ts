@@ -138,7 +138,7 @@ export class StrategyClarificationRulesService {
     ambiguities: StrategyAmbiguity[],
     checklist?: ClarificationChecklistInput | null,
   ): StrategyClarificationItem[] {
-    return ambiguities.flatMap((ambiguity) => {
+    return ambiguities.flatMap<StrategyClarificationItem>((ambiguity) => {
       if (ambiguity.kind === 'open_semantic_slot' || ambiguity.kind === 'semantic_conflict') {
         return [{
           key: `semantic.${ambiguity.field}`,
