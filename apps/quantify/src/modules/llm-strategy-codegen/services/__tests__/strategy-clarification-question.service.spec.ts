@@ -74,6 +74,29 @@ describe('strategyClarificationQuestionService', () => {
     expect(prompt).toContain('收盘确认后触发')
   })
 
+  it('prioritizes open semantic slots before execution context gaps', () => {
+    const prompt = questionService.buildFromAmbiguities({
+      summary: '入场：当价格突破一条长期均线时买入；出场：当价格跌破一条短期均线时卖出',
+      ambiguities: [
+        {
+          kind: 'execution_context_missing',
+          field: 'exchange',
+          message: '缺少唯一交易所',
+        },
+        {
+          kind: 'open_semantic_slot',
+          field: 'reference.period',
+          message: '核心信号未闭合',
+          question: '长期均线是多少？',
+          priority: 10,
+        },
+      ],
+    })
+
+    expect(prompt).toContain('长期均线是多少')
+    expect(prompt).not.toContain('请确认交易所')
+  })
+
   it('asks only the highest-priority unresolved clarification question', () => {
     const prompt = questionService.build({
       status: 'NEEDS_CLARIFICATION',

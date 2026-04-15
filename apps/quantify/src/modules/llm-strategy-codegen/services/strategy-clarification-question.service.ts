@@ -157,16 +157,22 @@ export class StrategyClarificationQuestionService {
 
   private readAmbiguityPriority(ambiguity: StrategyAmbiguity): number {
     if (ambiguity.kind === 'semantic_conflict') return 1
-    if (ambiguity.kind === 'open_semantic_slot') return typeof ambiguity.priority === 'number' ? ambiguity.priority : 2
+    if (ambiguity.kind === 'open_semantic_slot') {
+      if (ambiguity.priority === 10) return 2
+      if (ambiguity.priority === 20) return 3
+      if (ambiguity.priority === 30) return 4
+      if (ambiguity.priority === 40) return 5
+      return 2
+    }
     if (ambiguity.kind === 'execution_context_conflict') return 1
     if (ambiguity.kind === 'execution_context_missing') {
-      if (ambiguity.field === 'exchange') return 2
-      if (ambiguity.field === 'symbol') return 3
-      if (ambiguity.field === 'marketType') return 4
-      if (ambiguity.field === 'timeframe') return 5
-      return 6
+      if (ambiguity.field === 'exchange') return 20
+      if (ambiguity.field === 'symbol') return 21
+      if (ambiguity.field === 'marketType') return 22
+      if (ambiguity.field === 'timeframe') return 23
+      return 24
     }
-    if (ambiguity.kind === 'atomic_semantic_fork') return 7
+    if (ambiguity.kind === 'atomic_semantic_fork') return 10
     return 99
   }
 
