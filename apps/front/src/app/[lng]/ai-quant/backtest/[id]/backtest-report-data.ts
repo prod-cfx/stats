@@ -98,7 +98,8 @@ export function createBacktestReportDataFromLive(
   const equitySeries = mapLiveEquitySeries(normalizedEquity)
   const trades = mapLiveTrades(report.trades)
   const openPositions = mapLiveOpenPositions(report.openPositions)
-  if (!isDetailedReportConsistent(metrics, normalizedEquity, trades)) {
+  const openPnl = calculateOpenPositionsUnrealizedPnl(openPositions) ?? metrics.openPnl ?? 0
+  if (!isDetailedReportConsistent(metrics, normalizedEquity, trades, openPositions, openPnl)) {
     return null
   }
   const drawdown = analyzeDrawdown(normalizedEquity)
@@ -146,7 +147,7 @@ export function createBacktestReportDataFromLive(
       bestTrade && worstTrade
         ? `Best closed trade returned ${formatSignedPct(bestTrade.profitPct)} while the weakest closed trade returned ${formatSignedPct(worstTrade.profitPct)}. ${drawdown.summary}`
         : openPositions.length > 0
-          ? `${openPositions.length} open position${openPositions.length > 1 ? 's were' : ' was'} still active at the end of the backtest, with ${formatSignedPnl(metrics.openPnl ?? 0)} unrealized P&L.`
+          ? `${openPositions.length} open position${openPositions.length > 1 ? 's were' : ' was'} still active at the end of the backtest, with ${formatSignedPnl(openPnl)} unrealized P&L.`
           : 'No closed trades were recorded in the live backtest report.',
     ],
   }
@@ -156,6 +157,8 @@ function isDetailedReportConsistent(
   metrics: BacktestReportMetrics,
   equityCurve: NormalizedEquityPoint[],
   trades: TradeRecord[],
+  openPositions: OpenPositionRecord[],
+  openPnl: number,
 ): boolean {
   if (equityCurve.length === 0) {
     if (trades.length > 0 || metrics.tradeCount > 0) {
@@ -167,6 +170,14 @@ function isDetailedReportConsistent(
   }
 
   if (trades.length === 0 && metrics.tradeCount > 0) {
+    return false
+  }
+
+  if (typeof metrics.openTradeCount === 'number' && metrics.openTradeCount !== openPositions.length) {
+    return false
+  }
+
+  if (typeof metrics.openPnl === 'number' && Math.abs(metrics.openPnl - openPnl) > 0.01) {
     return false
   }
 
@@ -252,6 +263,16 @@ function mapLiveOpenPositions(
       unrealizedPnl: Number(position.unrealizedPnl.toFixed(2)),
       isProfit: position.unrealizedPnl >= 0,
     }))
+}
+
+function calculateOpenPositionsUnrealizedPnl(
+  openPositions: OpenPositionRecord[],
+): number | null {
+  if (openPositions.length === 0) {
+    return null
+  }
+
+  return Number(openPositions.reduce((sum, position) => sum + position.unrealizedPnl, 0).toFixed(2))
 }
 
 function analyzeDrawdown(equityCurve: NormalizedEquityPoint[]): DrawdownSnapshot {

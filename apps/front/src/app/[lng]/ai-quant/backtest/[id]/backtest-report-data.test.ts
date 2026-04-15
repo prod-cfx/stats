@@ -183,4 +183,26 @@ describe('backtest-report-data live mapping', () => {
       },
     ])
   })
+
+  it('returns null when open-position summary conflicts with detailed open positions', () => {
+    expect(createBacktestReportDataFromLive(
+      'btjob-open-mismatch',
+      {
+        maxDrawdownPct: 0.32,
+        totalReturnPct: 0,
+        winRatePct: 0,
+        tradeCount: 0,
+        openTradeCount: 1,
+        openPnl: 2.39,
+      },
+      {
+        equityCurve: [
+          { ts: Date.parse('2026-04-01T00:00:00.000Z'), equity: 1000 },
+          { ts: Date.parse('2026-04-02T00:00:00.000Z'), equity: 1002.39 },
+        ],
+        trades: [],
+        openPositions: [],
+      },
+    )).toBeNull()
+  })
 })
