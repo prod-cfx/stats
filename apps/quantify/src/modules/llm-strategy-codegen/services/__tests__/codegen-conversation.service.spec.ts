@@ -1163,6 +1163,35 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
     }))
     expect(result.assistantPrompt).toContain('确认逻辑图')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      semanticState: expect.objectContaining({
+        version: 1,
+        triggers: expect.arrayContaining([
+          expect.objectContaining({
+            key: 'price.percent_change',
+            phase: 'entry',
+          }),
+          expect.objectContaining({
+            key: 'price.percent_change',
+            phase: 'exit',
+          }),
+        ]),
+        contextSlots: expect.objectContaining({
+          exchange: expect.objectContaining({
+            value: 'okx',
+            status: 'locked',
+          }),
+          symbol: expect.objectContaining({
+            value: 'BTCUSDT',
+            status: 'locked',
+          }),
+          marketType: expect.objectContaining({
+            value: 'perp',
+            status: 'locked',
+          }),
+        }),
+      }),
+    }))
   })
 
   it('starts in checklist gate for raw Chinese price-change wording with percent-style sizing', async () => {

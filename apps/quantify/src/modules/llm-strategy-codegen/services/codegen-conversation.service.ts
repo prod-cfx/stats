@@ -196,6 +196,7 @@ export class CodegenConversationService {
     }
     const clarification = this.resolveClarificationArtifacts(checklist)
     const clarificationState = clarification.clarificationState
+    const initialSemanticState = this.buildFallbackSemanticState(checklist)
     const plannerStatus: LlmCodegenSessionStatus = this.stateMachine.resolvePlannerStatus({
       logicReady: plan.logicReady,
       clarificationState,
@@ -240,6 +241,7 @@ export class CodegenConversationService {
       userId: sessionUserId,
       status: bootstrap.status,
       checklist: checklist as Prisma.InputJsonValue,
+      semanticState: initialSemanticState as unknown as Prisma.InputJsonValue,
       clarificationState: clarificationState as unknown as Prisma.InputJsonValue,
       constraintPack: {
         ...initialConstraintPack,
