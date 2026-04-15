@@ -171,6 +171,12 @@ function seedConfirmedConversation(now = Date.now()) {
       llmCodegenSessionId: null,
       publishedStrategyInstanceId: 'strategy-1',
       publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotStrategyConfig: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
       publishedSnapshotParamValues: {
         exchange: 'binance',
         symbol: 'BTCUSDT',
@@ -318,6 +324,12 @@ describe('AiQuantPageClient capability gating', () => {
         llmCodegenSessionId: null,
         publishedStrategyInstanceId: 'strategy-1',
         publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotStrategyConfig: {
+          exchange: 'okx',
+          symbol: 'ETHUSDC',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
         publishedSnapshotParamValues: {
           exchange: 'okx',
           symbol: 'ETHUSDC',
@@ -579,6 +591,12 @@ describe('AiQuantPageClient capability gating', () => {
         llmCodegenSessionId: null,
         publishedStrategyInstanceId: 'strategy-1',
         publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotStrategyConfig: {
+          exchange: 'okx',
+          symbol: 'ETHUSDC',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
         publishedSnapshotParamValues: {
           exchange: 'okx',
           symbol: 'ETHUSDC',
