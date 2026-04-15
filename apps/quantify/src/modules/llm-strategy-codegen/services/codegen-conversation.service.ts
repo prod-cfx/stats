@@ -1671,7 +1671,10 @@ export class CodegenConversationService {
     ) as StrategyClarificationStateWithSummary
     const clarificationState = this.filterLegacyClarificationState(rawClarificationState, normalization)
     const shouldUseExecutionContextAmbiguities = clarificationState.items.some(item => item.key.startsWith('executionContext.'))
-    const shouldUseAtomicAmbiguities = clarificationState.items.some(item => item.reason === 'atomic_semantic_fork')
+    const shouldUseAtomicAmbiguities = clarificationState.items.some(item =>
+      item.reason === 'atomic_semantic_fork'
+      || item.key.startsWith('semantic.'),
+    )
     const effectiveAmbiguities: StrategyAmbiguity[] = [
       ...(shouldUseExecutionContextAmbiguities
         ? executionContext.ambiguities.map(ambiguity => ({

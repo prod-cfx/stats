@@ -156,6 +156,8 @@ export class StrategyClarificationQuestionService {
   }
 
   private readAmbiguityPriority(ambiguity: StrategyAmbiguity): number {
+    if (ambiguity.kind === 'semantic_conflict') return 1
+    if (ambiguity.kind === 'open_semantic_slot') return typeof ambiguity.priority === 'number' ? ambiguity.priority : 2
     if (ambiguity.kind === 'execution_context_conflict') return 1
     if (ambiguity.kind === 'execution_context_missing') {
       if (ambiguity.field === 'exchange') return 2
@@ -169,6 +171,10 @@ export class StrategyClarificationQuestionService {
   }
 
   private renderAmbiguityQuestion(ambiguity: StrategyAmbiguity): string {
+    if (ambiguity.kind === 'open_semantic_slot' || ambiguity.kind === 'semantic_conflict') {
+      return ambiguity.question ?? ambiguity.message
+    }
+
     if (ambiguity.kind === 'execution_context_missing') {
       if (ambiguity.field === 'exchange') {
         return '请确认交易所（binance / okx / hyperliquid）。'
@@ -200,6 +206,12 @@ export class StrategyClarificationQuestionService {
   }
 
   private readAmbiguityMessage(ambiguity: StrategyAmbiguity): string {
+    if (ambiguity.kind === 'open_semantic_slot') {
+      return '核心信号未闭合'
+    }
+    if (ambiguity.kind === 'semantic_conflict') {
+      return '核心语义存在冲突'
+    }
     if (ambiguity.kind === 'execution_context_missing') {
       if (ambiguity.field === 'exchange') return '缺少唯一交易所'
       if (ambiguity.field === 'symbol') return '缺少唯一交易标的'
