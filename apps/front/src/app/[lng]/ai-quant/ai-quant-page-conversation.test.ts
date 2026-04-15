@@ -7,6 +7,7 @@ import {
   hydrateConversation,
   hydrateConversations,
   invalidateConversationPublication,
+  isDeployableBacktestResult,
   requiresRepublishForPublishedSnapshot,
   resolveEffectivePublishedBacktestInputs,
   resolveBacktestExecutionConfig,
@@ -14,6 +15,31 @@ import {
 } from './ai-quant-page-conversation'
 
 describe('ai-quant-page-conversation', () => {
+  it('requires at least one trade before a backtest result is considered deployable', () => {
+    expect(isDeployableBacktestResult(null)).toBe(false)
+    expect(isDeployableBacktestResult({
+      id: 'bt-0',
+      maxDrawdownPct: 0,
+      totalReturnPct: 0,
+      winRatePct: 0,
+      tradeCount: 0,
+    })).toBe(false)
+    expect(isDeployableBacktestResult({
+      id: 'bt-1',
+      maxDrawdownPct: 20,
+      totalReturnPct: 8,
+      winRatePct: 55,
+      tradeCount: 3,
+    })).toBe(true)
+    expect(isDeployableBacktestResult({
+      id: 'bt-2',
+      maxDrawdownPct: 20.01,
+      totalReturnPct: 8,
+      winRatePct: 55,
+      tradeCount: 3,
+    })).toBe(false)
+  })
+
   it('restores published script code from confirmed assistant code block during hydration', () => {
     const conversation = hydrateConversation({
       id: 'conv-1',

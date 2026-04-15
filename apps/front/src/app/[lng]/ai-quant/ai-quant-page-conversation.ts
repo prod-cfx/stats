@@ -1033,6 +1033,11 @@ export function buildBacktestSummaryResult(
   }
 }
 
+export function isDeployableBacktestResult(result: BacktestResult | null | undefined): boolean {
+  if (!result) return false
+  return result.tradeCount > 0 && result.maxDrawdownPct <= 20
+}
+
 export function mapExchangeStatusesToDeployAccounts(
   items: UserExchangeAccountStatus[],
 ): DeployExchangeAccount[] {

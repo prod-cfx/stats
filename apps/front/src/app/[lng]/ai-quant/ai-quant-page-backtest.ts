@@ -19,6 +19,7 @@ import { ApiError } from '@/lib/errors'
 import {
   buildBacktestSummaryResult,
   hasLatestPublishedCode,
+  isDeployableBacktestResult,
   requiresRepublishForPublishedSnapshot,
   resolveEffectivePublishedBacktestInputs,
   resolveBacktestExecutionConfig,
@@ -406,8 +407,10 @@ export async function runAiQuantBacktest(args: {
           ? {
               ...message,
               content:
-                result.maxDrawdownPct <= 20
-                  ? t('aiQuant.messages.backtestSuccess', { drawdown: result.maxDrawdownPct })
+                result.tradeCount === 0
+                  ? t('aiQuant.messages.backtestNoTrades')
+                  : isDeployableBacktestResult(result)
+                    ? t('aiQuant.messages.backtestSuccess', { drawdown: result.maxDrawdownPct })
                   : t('aiQuant.messages.backtestFail', { drawdown: result.maxDrawdownPct }),
             }
           : message,

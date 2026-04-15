@@ -239,6 +239,7 @@
       "backtestRunning": "正在回测中，请稍后...",
       "backtestSuccess": "本次回测最大回撤 {{drawdown}}%（达标），可以部署。",
       "backtestFail": "本次回测最大回撤 {{drawdown}}%（未达标）。建议继续对话优化参数后再回测。",
+      "backtestNoTrades": "本次回测未产生有效成交，暂不允许部署。请调整策略条件后重试。",
       "optimizeHint": "建议先降低单笔仓位或调整买卖阈值，再重新回测。",
       "deploySuccess": "部署成功：{{exchange}} / {{account}}。可在个人中心查看运行状态。",
       "intentMiss": "你登录前选择的策略已不可用，请重新选择策略。",

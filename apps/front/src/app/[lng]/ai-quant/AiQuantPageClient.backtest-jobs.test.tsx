@@ -353,6 +353,37 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(summary?.textContent).toContain('2026-03-24T00:00:00.000Z')
   })
 
+  it('treats zero-trade backtests as non-deployable and avoids the success message', async () => {
+    mockGetBacktestJobResult.mockResolvedValueOnce({
+      summary: {
+        netProfit: 0,
+        netProfitPct: 0,
+        maxDrawdownPct: 0,
+        winRate: 0,
+        profitFactor: 0,
+        totalTrades: 0,
+      },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      jest.advanceTimersByTime(1500)
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestNoTrades')
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).not.toContain('aiQuant.messages.backtestSuccess')
+  })
+
   it('passes allowPartial to the backtest payload builder when submitting a job', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
     seeded[0].paramValues = {
