@@ -510,8 +510,10 @@ describe('QuantChatPanel range settings', () => {
     })
 
     const actions = container.querySelector('[data-testid="backtest-settings-actions"]')
+    const buttonGroup = actions?.querySelector('div')
     expect(actions).toBeTruthy()
     expect(actions?.className).toContain('shrink-0')
+    expect(buttonGroup?.className).toContain('grid-cols-2')
     expect(actions?.textContent).toContain('aiQuant.backtestClosePanel')
     expect(actions?.textContent).toContain('aiQuant.backtestConfirmSettings')
     expect(actions?.querySelectorAll('button')).toHaveLength(2)
