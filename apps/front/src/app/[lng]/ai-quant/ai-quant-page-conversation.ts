@@ -373,6 +373,12 @@ function normalizeBacktestConfigDefaults(
         : candidate.allowPartial === 'false'
           ? false
           : null
+  const stateTimeframes = Array.isArray(candidate.stateTimeframes)
+    ? candidate.stateTimeframes
+        .filter((item): item is string => typeof item === 'string')
+        .map(item => item.trim())
+        .filter(item => item.length > 0)
+    : null
   if (!Number.isFinite(initialCash) || !Number.isFinite(leverage) || !priceSource) {
     return null
   }
@@ -383,6 +389,7 @@ function normalizeBacktestConfigDefaults(
     feeBps,
     priceSource,
     allowPartial,
+    ...(stateTimeframes ? { stateTimeframes } : {}),
   }
 }
 
@@ -522,25 +529,21 @@ export interface EffectivePublishedBacktestInputs {
   exchange: 'binance' | 'okx' | 'hyperliquid'
   symbol: string
   baseTimeframe: string
-  executionConfig: ResolvedBacktestExecutionConfig
 }
 
 export function resolveEffectivePublishedBacktestInputs(input: {
   publishedSnapshotId: string | null
   publishedSnapshotStrategyConfig: AccountAiQuantPublishedStrategyConfig | null
-  publishedSnapshotBacktestConfigDefaults: AccountAiQuantBacktestConfigDefaults | null
   publishedSnapshotCompatibilityMetadata?: AccountAiQuantSnapshotCompatibilityMetadata | null
 }): EffectivePublishedBacktestInputs | null {
   const {
     publishedSnapshotId,
     publishedSnapshotStrategyConfig,
-    publishedSnapshotBacktestConfigDefaults,
     publishedSnapshotCompatibilityMetadata,
   } = input
   if (
     !publishedSnapshotId
     || !publishedSnapshotStrategyConfig
-    || !publishedSnapshotBacktestConfigDefaults
     || publishedSnapshotCompatibilityMetadata?.requiresRepublishForBacktest
   ) {
     return null
@@ -571,15 +574,6 @@ export function resolveEffectivePublishedBacktestInputs(input: {
     exchange,
     symbol,
     baseTimeframe,
-    executionConfig: {
-      initialCash: publishedSnapshotBacktestConfigDefaults.initialCash ?? Number.NaN,
-      leverage: publishedSnapshotBacktestConfigDefaults.leverage ?? Number.NaN,
-      slippageBps: publishedSnapshotBacktestConfigDefaults.slippageBps ?? Number.NaN,
-      feeBps: publishedSnapshotBacktestConfigDefaults.feeBps ?? Number.NaN,
-      priceSource: publishedSnapshotBacktestConfigDefaults.priceSource ?? '',
-      allowPartial: publishedSnapshotBacktestConfigDefaults.allowPartial === true,
-      allowPartialValid: typeof publishedSnapshotBacktestConfigDefaults.allowPartial === 'boolean',
-    },
   }
 }
 

@@ -1,8 +1,10 @@
 /** @jest-environment jsdom */
 
+import type { ConversationState } from './ai-quant-page-conversation'
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
+import { runAiQuantBacktest } from './ai-quant-page-backtest'
 import { AiQuantPageClient } from './AiQuantPageClient'
 
 const mockPush = jest.fn()
@@ -379,6 +381,29 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     }))
   })
 
+  it('passes published snapshot state timeframes to the backtest payload builder', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    seeded[0].publishedSnapshotBacktestConfigDefaults = {
+      ...seeded[0].publishedSnapshotBacktestConfigDefaults,
+      stateTimeframes: ['15m', '1h'],
+    }
+    localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(seeded))
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(expect.objectContaining({
+      stateTimeframes: ['15m', '1h'],
+    }))
+  })
+
   it('blocks backtest when strategy params drift from published snapshot truth', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
     seeded[0].paramValues = {
@@ -744,17 +769,17 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain('missing_explicit_execution_config')
   })
 
-  it('preserves published snapshot default backtest params across hydration even without explicit flag', async () => {
+  it('uses AI-Quant page execution params instead of snapshot defaults for published snapshot backtests', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
     seeded[0].backtestExecutionConfigExplicit = false
     seeded[0].paramValues = {
       ...seeded[0].paramValues,
-      backtestInitialCash: 10000,
-      backtestLeverage: 1,
-      backtestSlippageBps: 10,
-      backtestFeeBps: 5,
-      backtestPriceSource: 'close',
-      backtestAllowPartial: true,
+      backtestInitialCash: 32000,
+      backtestLeverage: 4,
+      backtestSlippageBps: 9,
+      backtestFeeBps: 6,
+      backtestPriceSource: 'mid',
+      backtestAllowPartial: false,
     }
     seeded[0].publishedSnapshotBacktestConfigDefaults = {
       initialCash: 10000,
@@ -800,16 +825,63 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
     expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
     expect(mockBuildBacktestPayload).toHaveBeenCalledWith(expect.objectContaining({
-      initialCash: 10000,
-      leverage: 1,
+      initialCash: 32000,
+      leverage: 4,
       execution: expect.objectContaining({
-        slippageBps: 10,
-        feeBps: 5,
-        priceSource: 'close',
+        slippageBps: 9,
+        feeBps: 6,
+        priceSource: 'mid',
       }),
       allowPartial: true,
     }))
     expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain('missing_explicit_execution_config')
+  })
+
+  it('allows published snapshot backtest without snapshot defaults when AI-Quant page execution params are valid', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    seeded[0].backtestExecutionConfigExplicit = false
+    seeded[0].paramValues = {
+      ...seeded[0].paramValues,
+      backtestInitialCash: 18000,
+      backtestLeverage: 2,
+      backtestSlippageBps: 3,
+      backtestFeeBps: 1,
+      backtestPriceSource: 'open',
+      backtestAllowPartial: false,
+    }
+    seeded[0].publishedSnapshotBacktestConfigDefaults = null
+    seeded[0].publishedSnapshotCompatibilityMetadata = {
+      isLegacySnapshot: false,
+      missingBacktestConfigDefaults: true,
+      missingDeploymentExecutionDefaults: false,
+      missingDeploymentExecutionConstraints: false,
+      requiresRepublishForBacktest: false,
+      requiresRepublishForDeploy: false,
+    }
+    localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(seeded))
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(expect.objectContaining({
+      stateTimeframes: ['15m'],
+      initialCash: 18000,
+      leverage: 2,
+      execution: expect.objectContaining({
+        slippageBps: 3,
+        feeBps: 1,
+        priceSource: 'open',
+      }),
+    }))
+    expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain('重新发布')
   })
 
   it('fails fast when allowPartial is present but invalid', async () => {
@@ -956,6 +1028,61 @@ describe('AiQuantPageClient backtest jobs integration', () => {
         publishedSnapshotId: 'snapshot-1',
       }),
     }))
+  })
+
+  it('uses the published snapshot exchange for symbol support checks', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    const activeConversation = {
+      ...seeded[0],
+      params: {
+        ...seeded[0].params,
+        exchange: 'binance',
+      },
+      paramValues: {
+        ...seeded[0].paramValues,
+        exchange: 'binance',
+      },
+      publishedSnapshotParamValues: {
+        ...seeded[0].publishedSnapshotParamValues,
+        exchange: 'binance',
+      },
+      publishedSnapshotStrategyConfig: {
+        ...seeded[0].publishedSnapshotStrategyConfig,
+        exchange: 'okx',
+      },
+      publishedScriptGraphVersion: 1,
+      publishedScriptCode: 'return { ok: true }',
+    } as ConversationState
+
+    mockCheckBacktestSymbolSupport.mockResolvedValueOnce({
+      status: 'not_supported',
+    })
+
+    let currentConversation = activeConversation
+
+    await runAiQuantBacktest({
+      activeConversation,
+      activeConversationIdRef: { current: activeConversation.id },
+      backtestCapabilities: {
+        allowedSymbols: ['BTCUSDT'],
+        allowedBaseTimeframes: ['15m'],
+      },
+      backtestCapabilityState: 'ready',
+      backtestRunMutexRef: { current: new Set<string>() },
+      backtestRunTokenRef: { current: new Map<string, number>() },
+      graphConfirmed: true,
+      isMountedRef: { current: true },
+      setConversationBacktestExecutionState: jest.fn(),
+      t: (key: string) => key,
+      updateConversationById: (_conversationId, updater) => {
+        currentConversation = updater(currentConversation)
+      },
+    })
+
+    expect(mockCheckBacktestSymbolSupport).toHaveBeenCalledWith({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+    })
   })
 
   it('unmount while running does not emit react unmount update warning', async () => {

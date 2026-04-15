@@ -40,30 +40,12 @@ function buildInvalidExecutionConfigMessage(args: {
   if (activeConversation.publishedSnapshotId) {
     if (
       !activeConversation.publishedSnapshotStrategyConfig
-      || !activeConversation.publishedSnapshotBacktestConfigDefaults
       || activeConversation.publishedSnapshotCompatibilityMetadata?.requiresRepublishForBacktest
     ) {
       return t('aiQuant.messages.backtestPayloadInvalid', {
-        reason: 'published_snapshot_backtest_truth_missing：当前已发布快照缺少正式回测基线，请重新发布后再回测。',
+        reason: 'published_snapshot_backtest_truth_missing：当前已发布快照缺少策略市场绑定真相，请重新发布后再回测。',
       })
     }
-
-    if (!executionConfig.allowPartialValid) {
-      return t('aiQuant.messages.backtestPayloadInvalid', {
-        reason: 'invalid_allow_partial：是否允许部分成交只能是 true 或 false。',
-      })
-    }
-
-    return t('aiQuant.messages.backtestPayloadInvalid', {
-      reason: 'invalid_snapshot_execution_config：当前已发布快照中的执行参数不完整或无效，请重新发布后再回测。',
-    })
-  }
-
-  if (activeConversation.backtestExecutionConfigExplicit !== true) {
-    return t('aiQuant.messages.backtestPayloadInvalid', {
-      reason:
-        'missing_explicit_execution_config：当前会话还没有明确保存回测执行参数（初始资金、杠杆、滑点、手续费、成交价来源、是否允许部分成交），请先重新确认回测参数。',
-    })
   }
 
   if (!executionConfig.allowPartialValid) {
@@ -91,6 +73,13 @@ function buildInvalidExecutionConfigMessage(args: {
     && executionConfig.priceSource !== 'mid'
   ) {
     invalidFields.push('成交价来源')
+  }
+
+  if (invalidFields.length > 0 && activeConversation.backtestExecutionConfigExplicit !== true) {
+    return t('aiQuant.messages.backtestPayloadInvalid', {
+      reason:
+        'missing_explicit_execution_config：当前会话还没有明确保存回测执行参数（初始资金、杠杆、滑点、手续费、成交价来源、是否允许部分成交），请先重新确认回测参数。',
+    })
   }
 
   if (invalidFields.length > 0) {
@@ -196,16 +185,16 @@ export async function runAiQuantBacktest(args: {
   }
 
   let payload: ReturnType<typeof buildBacktestPayload>
+  let backtestExchange: ConversationState['params']['exchange'] | null = null
   try {
     const effectiveInputs = resolveEffectivePublishedBacktestInputs({
       publishedSnapshotId: activeConversation.publishedSnapshotId,
       publishedSnapshotStrategyConfig: activeConversation.publishedSnapshotStrategyConfig,
-      publishedSnapshotBacktestConfigDefaults: activeConversation.publishedSnapshotBacktestConfigDefaults,
       publishedSnapshotCompatibilityMetadata: activeConversation.publishedSnapshotCompatibilityMetadata,
     })
     if (!effectiveInputs) {
       throw new ApiError(
-        '当前已发布快照缺少正式回测基线，请重新发布后再回测。',
+        '当前已发布快照缺少策略市场绑定真相，请重新发布后再回测。',
         'PUBLISHED_SNAPSHOT_PARAMS_MISSING',
       )
     }
@@ -221,15 +210,19 @@ export async function runAiQuantBacktest(args: {
       )
     }
 
-    const executionConfig = effectiveInputs.executionConfig
+    const executionConfig = resolveBacktestExecutionConfig(activeConversation.paramValues)
+    const snapshotStateTimeframes = activeConversation.publishedSnapshotBacktestConfigDefaults?.stateTimeframes ?? []
     if (!executionConfig.allowPartialValid) {
       throw new BacktestPayloadBuilderError('invalid_execution_config')
     }
+    backtestExchange = effectiveInputs.exchange
     payload = buildBacktestPayload({
       symbol: effectiveInputs.symbol,
       baseTimeframe: effectiveInputs.baseTimeframe,
       capabilities: backtestCapabilities,
-      stateTimeframes: [effectiveInputs.baseTimeframe],
+      stateTimeframes: snapshotStateTimeframes.length > 0
+        ? snapshotStateTimeframes
+        : [effectiveInputs.baseTimeframe],
       initialCash: executionConfig.initialCash,
       leverage: executionConfig.leverage,
       execution: {
@@ -346,7 +339,7 @@ export async function runAiQuantBacktest(args: {
 
   try {
     const support = await checkBacktestSymbolSupport({
-      exchange: activeConversation.params.exchange,
+      exchange: backtestExchange ?? activeConversation.params.exchange,
       symbol: payload.symbols[0],
     })
     if (!canContinue()) {

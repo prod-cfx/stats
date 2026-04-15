@@ -689,7 +689,7 @@ describe('ai-quant-page-conversation', () => {
     })).toBe(true)
   })
 
-  it('resolves published backtest inputs only from snapshot-bound truth', () => {
+  it('resolves published backtest market inputs only from snapshot-bound truth', () => {
     expect(resolveEffectivePublishedBacktestInputs({
       publishedSnapshotId: 'snapshot-1',
       publishedSnapshotStrategyConfig: {
@@ -698,27 +698,10 @@ describe('ai-quant-page-conversation', () => {
         baseTimeframe: '1h',
         positionPct: 10,
       },
-      publishedSnapshotBacktestConfigDefaults: {
-        initialCash: 15000,
-        leverage: 2,
-        slippageBps: 7,
-        feeBps: 3,
-        priceSource: 'mid',
-        allowPartial: false,
-      },
     })).toEqual({
       exchange: 'okx',
       symbol: 'BTC-USDT-SWAP',
       baseTimeframe: '1h',
-      executionConfig: {
-        initialCash: 15000,
-        leverage: 2,
-        slippageBps: 7,
-        feeBps: 3,
-        priceSource: 'mid',
-        allowPartial: false,
-        allowPartialValid: true,
-      },
     })
   })
 
