@@ -1,5 +1,6 @@
 import type { CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec-v2'
 import type { ChecklistPayload } from '../types/codegen-checklist'
+import type { SemanticState } from '../types/semantic-state'
 import type { StrategyConsistencyReport } from '../types/strategy-consistency-report'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
 import type { StrategySummary } from '../types/strategy-summary'
@@ -9,11 +10,13 @@ import type { CanonicalStrategyAstCompilerService } from './canonical-strategy-a
 import type { CompiledScriptEmitterService } from './compiled-script-emitter.service'
 import type { CompiledScriptExecutionEnvelopeService } from './compiled-script-execution-envelope.service'
 import type { CompiledScriptParserService } from './compiled-script-parser.service'
+import type { SemanticStateCompileBridgeService } from './semantic-state-compile-bridge.service'
 import type { SpecDescBuilderService } from './spec-desc-builder.service'
 import type { StrategyConsistencyService } from './strategy-consistency.service'
 import type { StrategySummaryBuilderService } from './strategy-summary-builder.service'
 import type { StrategySummaryObservationReport } from './strategy-summary-observation.service'
 import { resolveChecklistDefaultTimeframe } from './checklist-rule-drafts'
+import { SemanticStateCompileBridgeService as RuntimeSemanticStateCompileBridgeService } from './semantic-state-compile-bridge.service'
 import { StrategyIntentNormalizerService } from './strategy-intent-normalizer.service'
 import { StrategySummaryObservationService } from './strategy-summary-observation.service'
 
@@ -79,30 +82,35 @@ export class CodegenPublicationGenerationStage {
     private readonly compiledScriptParser: CompiledScriptParserService,
     private readonly strategySummaryObservation: StrategySummaryObservationService = new StrategySummaryObservationService(),
     private readonly intentNormalizer: StrategyIntentNormalizerService = new StrategyIntentNormalizerService(),
+    private readonly semanticStateCompileBridge: SemanticStateCompileBridgeService = new RuntimeSemanticStateCompileBridgeService(),
   ) {}
 
   async generate(input: {
     checklist: ChecklistPayload
+    semanticState?: SemanticState
     message: string
   }): Promise<CodegenPublicationArtifacts> {
-    const normalization = this.intentNormalizer.normalize(input.checklist)
-    const canonicalSpec = this.canonicalSpecBuilder.build(input.checklist)
+    const sourceChecklist = input.semanticState
+      ? this.semanticStateCompileBridge.buildLegacyChecklist(input.semanticState, input.checklist)
+      : input.checklist
+    const normalization = this.intentNormalizer.normalize(sourceChecklist)
+    const canonicalSpec = this.canonicalSpecBuilder.build(sourceChecklist)
     const semanticView = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
     })
     const userIntentSummary = this.strategySummaryBuilder.buildUserIntentSummary({
-      checklist: input.checklist,
+      checklist: sourceChecklist,
     })
-    const lockedParams = this.buildLockedParams(input.checklist)
+    const lockedParams = this.buildLockedParams(sourceChecklist)
     const publishParams = this.buildPublishParams({
       canonicalSpec,
-      checklist: input.checklist,
+      checklist: sourceChecklist,
       message: input.message,
     })
     const compiled = this.canonicalSpecV2IrCompiler.compile({
       canonicalSpec,
       fallback: this.buildCompiledIrFallback({
-        checklist: input.checklist,
+        checklist: sourceChecklist,
         lockedParams,
         publishParams,
       }),

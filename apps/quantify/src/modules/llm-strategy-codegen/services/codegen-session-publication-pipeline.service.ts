@@ -1,4 +1,5 @@
 import type { ChecklistPayload } from '../types/codegen-checklist'
+import type { SemanticState } from '../types/semantic-state'
 
 import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -22,6 +23,8 @@ import { CompiledScriptExecutionEnvelopeService } from './compiled-script-execut
 import { CompiledScriptParserService } from './compiled-script-parser.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RecommendationIndexService } from './recommendation-index.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { SemanticStateCompileBridgeService } from './semantic-state-compile-bridge.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { SpecDescBuilderService } from './spec-desc-builder.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -53,6 +56,7 @@ export class CodegenSessionPublicationPipelineService {
     compiledScriptParser: CompiledScriptParserService,
     strategySummaryObservation: StrategySummaryObservationService,
     compiledPublicationGate: CompiledPublicationGateService,
+    semanticStateCompileBridge: SemanticStateCompileBridgeService = new SemanticStateCompileBridgeService(),
   ) {
     this.generationStage = new CodegenPublicationGenerationStage(
       canonicalSpecBuilder,
@@ -65,6 +69,8 @@ export class CodegenSessionPublicationPipelineService {
       compiledScriptExecutionEnvelope,
       compiledScriptParser,
       strategySummaryObservation,
+      undefined,
+      semanticStateCompileBridge,
     )
     this.persistenceStage = new CodegenPublicationPersistenceStage(
       sessionsRepo,
@@ -77,6 +83,7 @@ export class CodegenSessionPublicationPipelineService {
     sessionId: string
     userId: string
     checklist: ChecklistPayload
+    semanticState?: SemanticState
     message: string
     model?: string
     existingStrategyInstanceId?: string | null
@@ -84,6 +91,7 @@ export class CodegenSessionPublicationPipelineService {
     try {
       const artifacts = await this.generationStage.generate({
         checklist: args.checklist,
+        semanticState: args.semanticState,
         message: args.message,
       })
       let strategyInstanceId = args.existingStrategyInstanceId
@@ -242,6 +250,7 @@ export class CodegenSessionPublicationPipelineService {
     sessionId: string
     userId: string
     checklist: ChecklistPayload
+    semanticState?: SemanticState
     message: string
     model?: string
     existingStrategyInstanceId?: string | null

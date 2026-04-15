@@ -1,9 +1,217 @@
+import type { SemanticState } from '../../types/semantic-state'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
+import { CanonicalSpecV2DigestService } from '../canonical-spec-v2-digest.service'
 import { CodegenPublicationGenerationStage } from '../codegen-publication-generation.stage'
+import { SpecDescBuilderService } from '../spec-desc-builder.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
+import { bollingerGoldenCase, maGoldenCase } from './fixtures/semantic-state-golden-cases'
 
 describe('codegenPublicationGenerationStage', () => {
+  const completeRiskRules = (riskRules: Record<string, unknown> = {}) => ({
+    exchange: 'okx',
+    marketType: 'perp',
+    positionPct: 10,
+    stopLossPct: 5,
+    stopLossBasis: 'entry_avg_price',
+    takeProfitPct: 10,
+    takeProfitBasis: 'entry_avg_price',
+    ...riskRules,
+  })
+
+  const buildLockedMaSemanticState = (): SemanticState => ({
+    version: 1,
+    families: ['single-leg'],
+    triggers: [
+      {
+        id: 'entry-ma',
+        key: 'indicator.above',
+        phase: 'entry',
+        params: {
+          indicator: 'ma',
+          referenceRole: 'long_term',
+          'reference.period': 50,
+          confirmationMode: 'close_confirm',
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'exit-ma',
+        key: 'indicator.below',
+        phase: 'exit',
+        params: {
+          indicator: 'ma',
+          referenceRole: 'short_term',
+          'reference.period': 10,
+          confirmationMode: 'close_confirm',
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ],
+    actions: [
+      { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+    ],
+    risk: [
+      {
+        id: 'risk-stop-loss',
+        key: 'risk.stop_loss_pct',
+        params: { valuePct: 5, basis: 'entry_avg_price' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'risk-take-profit',
+        key: 'risk.take_profit_pct',
+        params: { valuePct: 10, basis: 'entry_avg_price' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ],
+    position: {
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+    },
+    contextSlots: {
+      exchange: {
+        slotKey: 'exchange',
+        fieldPath: 'contextSlots.exchange',
+        value: 'okx',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认交易所。',
+        affectsExecution: true,
+      },
+      symbol: {
+        slotKey: 'symbol',
+        fieldPath: 'contextSlots.symbol',
+        value: 'BTCUSDT',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认交易标的。',
+        affectsExecution: true,
+      },
+      marketType: {
+        slotKey: 'marketType',
+        fieldPath: 'contextSlots.marketType',
+        value: 'spot',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认市场类型。',
+        affectsExecution: true,
+      },
+      timeframe: {
+        slotKey: 'timeframe',
+        fieldPath: 'contextSlots.timeframe',
+        value: '15m',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认周期。',
+        affectsExecution: true,
+      },
+    },
+    normalizationNotes: [],
+    updatedAt: '2026-04-15T10:00:00.000Z',
+  })
+
+  const buildLockedBollingerSemanticState = (): SemanticState => ({
+    version: 1,
+    families: ['single-leg'],
+    triggers: [
+      {
+        id: 'entry-bollinger-upper',
+        key: 'bollinger.touch_upper',
+        phase: 'entry',
+        params: {
+          indicator: 'bollinger',
+          period: 30,
+          stdDev: 2.5,
+          confirmationMode: 'close_confirm',
+        },
+        sideScope: 'short',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'exit-bollinger-middle',
+        key: 'bollinger.touch_middle',
+        phase: 'exit',
+        params: {
+          indicator: 'bollinger',
+          period: 30,
+          stdDev: 2.5,
+          confirmationMode: 'close_confirm',
+        },
+        sideScope: 'short',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ],
+    actions: [
+      { id: 'action-open-short', key: 'open_short', status: 'locked', source: 'user_explicit' },
+      { id: 'action-close-short', key: 'close_short', status: 'locked', source: 'user_explicit' },
+    ],
+    risk: [],
+    position: {
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'short_only',
+      status: 'locked',
+      source: 'user_explicit',
+    },
+    contextSlots: {
+      exchange: {
+        slotKey: 'exchange',
+        fieldPath: 'contextSlots.exchange',
+        value: 'okx',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认交易所。',
+        affectsExecution: true,
+      },
+      symbol: {
+        slotKey: 'symbol',
+        fieldPath: 'contextSlots.symbol',
+        value: 'BTCUSDT',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认交易标的。',
+        affectsExecution: true,
+      },
+      marketType: {
+        slotKey: 'marketType',
+        fieldPath: 'contextSlots.marketType',
+        value: 'perp',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认市场类型。',
+        affectsExecution: true,
+      },
+      timeframe: {
+        slotKey: 'timeframe',
+        fieldPath: 'contextSlots.timeframe',
+        value: '15m',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认周期。',
+        affectsExecution: true,
+      },
+    },
+    normalizationNotes: [],
+    updatedAt: '2026-04-15T10:00:00.000Z',
+  })
+
   it('keeps clarified bollinger middle-band summaries aligned through generation', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
@@ -278,5 +486,161 @@ describe('codegenPublicationGenerationStage', () => {
       timeframe: '3m',
       marketType: 'spot',
     })
+  })
+
+  it('keeps the MA golden case canonical digest stable through semanticState compile input', async () => {
+    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const digestService = new CanonicalSpecV2DigestService()
+    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const semanticState = buildLockedMaSemanticState()
+    const expectedChecklist = {
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['收盘确认价格突破长期均线（50）时买入'],
+      exitRules: ['收盘确认价格跌破短期均线（10）时卖出'],
+      riskRules: completeRiskRules({
+        marketType: 'spot',
+      }),
+    }
+    const expectedDigest = digestService.hash(canonicalSpecBuilder.build(expectedChecklist))
+
+    const stage = new CodegenPublicationGenerationStage(
+      canonicalSpecBuilder,
+      new SpecDescBuilderService(canonicalSpecBuilder),
+      strategySummaryBuilder,
+      { evaluate: jest.fn().mockReturnValue({
+        status: 'PASSED',
+        specProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        scriptProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        checks: [],
+        summary: { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
+      }) } as any,
+      { compile: jest.fn().mockReturnValue({ ir: { source: { graphDigest: 'sha256:ma' } }, graphSnapshot: {} }) } as any,
+      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
+      { emit: jest.fn().mockReturnValue('strategy') } as any,
+      { build: jest.fn().mockReturnValue({}) } as any,
+      { parse: jest.fn().mockReturnValue({}) } as any,
+    )
+
+    const artifacts = await stage.generate({
+      checklist: {
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'spot',
+        },
+      },
+      semanticState,
+      message: maGoldenCase.message,
+    } as any)
+
+    expect(artifacts.sessionSpecDesc.canonicalDigest).toMatch(maGoldenCase.expectedDigestPattern)
+    expect(artifacts.sessionSpecDesc).toEqual(expect.objectContaining({
+      canonicalDigest: expectedDigest,
+      normalizedIntent: expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({ key: 'indicator.above', phase: 'entry' }),
+          expect.objectContaining({ key: 'indicator.below', phase: 'exit' }),
+        ]),
+      }),
+    }))
+  })
+
+  it('keeps the Bollinger golden case semantic graph stable through semanticState compile input', async () => {
+    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const compile = jest.fn().mockReturnValue({
+      ir: {
+        source: { graphDigest: 'sha256:bollinger' },
+      },
+      graphSnapshot: {},
+    })
+
+    const stage = new CodegenPublicationGenerationStage(
+      canonicalSpecBuilder,
+      new SpecDescBuilderService(canonicalSpecBuilder),
+      strategySummaryBuilder,
+      { evaluate: jest.fn().mockReturnValue({
+        status: 'PASSED',
+        specProfile: {
+          indicators: [{ kind: 'bollingerBands', params: { period: 30, stdDev: 2.5 } }],
+          actions: ['OPEN_SHORT', 'CLOSE_SHORT'],
+          ruleMappings: [
+            { key: 'bollinger.upper_break', action: 'OPEN_SHORT' },
+            { key: 'bollinger.middle_revert', action: 'CLOSE_SHORT' },
+          ],
+          rules: [],
+          sizing: { mode: 'RATIO', value: 0.1, source: 'literal' },
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        scriptProfile: {
+          indicators: [{ kind: 'bollingerBands', params: { period: 30, stdDev: 2.5 } }],
+          actions: ['OPEN_SHORT', 'CLOSE_SHORT'],
+          ruleMappings: [
+            { key: 'bollinger.upper_break', action: 'OPEN_SHORT' },
+            { key: 'bollinger.middle_revert', action: 'CLOSE_SHORT' },
+          ],
+          rules: [],
+          sizing: { mode: 'RATIO', value: 0.1, source: 'literal' },
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        checks: [],
+        summary: { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
+      }) } as any,
+      { compile } as any,
+      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
+      { emit: jest.fn().mockReturnValue('strategy') } as any,
+      { build: jest.fn().mockReturnValue({}) } as any,
+      { parse: jest.fn().mockReturnValue({}) } as any,
+    )
+
+    const artifacts = await stage.generate({
+      checklist: {
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+        },
+      },
+      semanticState: buildLockedBollingerSemanticState(),
+      message: bollingerGoldenCase.message,
+    } as any)
+
+    expect(compile).toHaveBeenCalledWith(expect.objectContaining({
+      canonicalSpec: expect.objectContaining({
+        indicators: expect.arrayContaining([
+          expect.objectContaining({ kind: 'bollingerBands', params: { period: 30, stdDev: 2.5 } }),
+        ]),
+        rules: expect.arrayContaining([
+          expect.objectContaining({
+            phase: 'entry',
+            condition: expect.objectContaining({ key: 'bollinger.upper_break' }),
+          }),
+          expect.objectContaining({
+            phase: 'exit',
+            condition: expect.objectContaining({ key: 'bollinger.middle_revert' }),
+          }),
+        ]),
+      }),
+    }))
+    expect(artifacts.sessionSpecDesc.normalizedIntent).toEqual(expect.any(Object))
+    expect(artifacts.compiled.ir.source.graphDigest).toMatch(bollingerGoldenCase.expectedDigestPattern)
+    expect(artifacts.semanticConsistency.status).toBe('PASSED')
   })
 })

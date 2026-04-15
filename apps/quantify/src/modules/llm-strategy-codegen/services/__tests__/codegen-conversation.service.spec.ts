@@ -25,6 +25,7 @@ import { StrategyCompileabilityDecisionService } from '../strategy-compileabilit
 import { StrategyConsistencyService } from '../strategy-consistency.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
 import { StrategySummaryObservationService } from '../strategy-summary-observation.service'
+import { bollingerGoldenCase, maGoldenCase } from './fixtures/semantic-state-golden-cases'
 
 jest.mock('../../repositories/published-strategy-snapshots.repository', () => ({
   PublishedStrategySnapshotsRepository: class PublishedStrategySnapshotsRepository {},
@@ -92,7 +93,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     new CompiledPublicationGateService(mockRepo as unknown as PublishedStrategySnapshotsRepository),
   )
   const buildConfirmedCanonicalDigest = (checklist: Record<string, unknown>): string => {
-    return canonicalDigestService.hash(canonicalSpecBuilder.build(checklist))
+    const clarification = (service as any).resolveClarificationArtifacts(checklist)
+    const canonicalSpec = (service as any).buildCanonicalSpecForConversation(checklist, clarification.normalization)
+    return canonicalDigestService.hash(canonicalSpec)
   }
   const completeRiskRules = (riskRules: Record<string, any> = {}) => ({
     exchange: 'okx',
@@ -198,6 +201,26 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ...overrides,
   })
   const withRequiredMarketContext = completeChecklist
+  const startGoldenCase = async (args: {
+    sessionId: string
+    message: string
+    plannerLogic: Record<string, unknown>
+  }) => {
+    mockRepo.createSession.mockResolvedValue({ id: args.sessionId })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        logic: args.plannerLogic,
+      }),
+    })
+
+    return service.startSession({
+      userId: 'u1',
+      initialMessage: args.message,
+    })
+  }
   let service: CodegenConversationService
   const waitForTerminalStatus = async (
     sessionId: string,
@@ -698,7 +721,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const chatCall = mockAi.chat.mock.calls[0]?.[0] as { messages?: Array<{ role?: string; content?: string }> }
     const systemPrompt = chatCall.messages?.find(message => message.role === 'system')?.content ?? ''
 
-    expect(systemPrompt).toContain('不得补写 entryRules/exitRules 或臆造新的核心交易规则')
+    expect(systemPrompt).toContain('semanticUpdates 只表达当前消息涉及的增量语义')
+    expect(systemPrompt).toContain('不得臆造新的核心交易规则')
     expect(systemPrompt).not.toContain('必须直接给出完整入场+出场规则草案')
   })
 
@@ -799,7 +823,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const systemPrompt = chatCall.messages?.find(message => message.role === 'system')?.content ?? ''
     const userPrompt = chatCall.messages?.find(message => message.role === 'user')?.content ?? ''
 
-    expect(systemPrompt).toContain('会影响运行时决策的 riskRules')
+    expect(systemPrompt).toContain('semanticState 派生约束')
+    expect(systemPrompt).toContain('risk / sizing / context')
     expect(systemPrompt).toContain('不要为了“覆盖”而伪造无意义的运行时代码分支')
     expect(userPrompt).toContain('价格连续3根K线在轨外时直接平仓')
     expect(userPrompt).not.toContain('价格连续3根K线在轨外时直接减仓')
@@ -972,6 +997,83 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             allowedAnswers: ['touch', 'close_confirm'],
           }),
         ]),
+      }),
+    }))
+  })
+
+  it('accepts planner semanticUpdates output and projects it into checklist-compatible state', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        semanticUpdates: {
+          triggerUpdates: [
+            {
+              key: 'indicator.above',
+              phase: 'entry',
+              params: {
+                indicator: 'ma',
+                referenceRole: 'long_term',
+                'reference.period': 50,
+                confirmationMode: 'close_confirm',
+              },
+            },
+            {
+              key: 'indicator.below',
+              phase: 'exit',
+              params: {
+                indicator: 'ma',
+                referenceRole: 'short_term',
+                'reference.period': 10,
+                confirmationMode: 'close_confirm',
+              },
+            },
+          ],
+          actionUpdates: [
+            { key: 'open_long' },
+            { key: 'close_long' },
+          ],
+          riskUpdates: [
+            { key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
+            { key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' } },
+          ],
+          positionUpdate: {
+            mode: 'fixed_ratio',
+            value: 0.1,
+            positionMode: 'long_only',
+          },
+          contextUpdates: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'spot',
+            timeframe: '15m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-semantic-updates' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '帮我做一个 MA50 上破买入、MA10 下破卖出的 OKX 现货 BTCUSDT 15m 策略',
+    })
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.canonicalDigest).toMatch(/^sha256:/)
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      checklist: expect.objectContaining({
+        entryRules: expect.arrayContaining(['收盘确认价格突破长期均线（50）时买入']),
+        exitRules: expect.arrayContaining(['收盘确认价格跌破短期均线（10）时卖出']),
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        riskRules: expect.objectContaining({
+          exchange: 'okx',
+          marketType: 'spot',
+          positionPct: 10,
+          stopLossPct: 5,
+          takeProfitPct: 10,
+        }),
       }),
     }))
   })
@@ -1220,6 +1322,92 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.clarificationState).toEqual(expect.objectContaining({
       status: 'CLEAR',
       items: [],
+    }))
+  })
+
+  it('keeps MA golden case stable across conversation artifacts', async () => {
+    const started = await startGoldenCase({
+      sessionId: 's-golden-ma',
+      message: maGoldenCase.message,
+      plannerLogic: completeChecklist({
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['收盘确认价格突破长期均线（50）时买入'],
+        exitRules: ['收盘确认价格跌破短期均线（10）时卖出'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'spot',
+          positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
+        },
+      }),
+    })
+
+    const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any> | undefined
+
+    expect(started.status).toBe('CHECKLIST_GATE')
+    expect(started.assistantPrompt).not.toContain('存在暂不支持的规则片段')
+    expect(createdSession?.checklist?.entryRules).toContain('收盘确认价格突破长期均线（50）时买入')
+    expect(createdSession?.checklist?.exitRules).toContain('收盘确认价格跌破短期均线（10）时卖出')
+    expect(createdSession?.checklist?.entryRules).not.toContain('满足入场条件后开仓')
+    expect(createdSession?.checklist?.exitRules).not.toContain('满足出场条件后平仓')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      semanticState: expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({
+            key: 'indicator.above',
+            params: expect.objectContaining({
+              'reference.period': 50,
+            }),
+          }),
+          expect.objectContaining({
+            key: 'indicator.below',
+            params: expect.objectContaining({
+              'reference.period': 10,
+            }),
+          }),
+        ]),
+      }),
+    }))
+  })
+
+  it('keeps Bollinger golden case stable across conversation artifacts', async () => {
+    const started = await startGoldenCase({
+      sessionId: 's-golden-bollinger',
+      message: bollingerGoldenCase.message,
+      plannerLogic: completeChecklist({
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['收盘价突破上轨时做空'],
+        exitRules: ['价格回到中轨（30日均线）时平空'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+          positionPct: 10,
+        },
+      }),
+    })
+
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      latestSpecDesc: expect.objectContaining({
+        canonicalDigest: expect.stringMatching(bollingerGoldenCase.expectedDigestPattern),
+        rules: expect.arrayContaining([
+          expect.objectContaining({
+            condition: expect.objectContaining({ key: 'bollinger.upper_break' }),
+          }),
+          expect.objectContaining({
+            condition: expect.objectContaining({ key: 'bollinger.middle_revert' }),
+          }),
+        ]),
+      }),
+      semanticState: expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({ key: 'bollinger.touch_middle', phase: 'exit' }),
+        ]),
+      }),
     }))
   })
 
@@ -3817,8 +4005,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '确认逻辑图',
       confirmGenerate: true,
       confirmedCanonicalDigest: buildConfirmedCanonicalDigest(completeChecklist({
-        entryRules: ['价格突破长期均线（50）时买入'],
-        exitRules: ['价格跌破短期均线（20）时卖出'],
+        entryRules: ['收盘确认价格突破长期均线（50）时买入'],
+        exitRules: ['收盘确认价格跌破短期均线（20）时卖出'],
       })),
     })
 
@@ -4471,8 +4659,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
       confirmGenerate: true,
       confirmedCanonicalDigest: buildConfirmedCanonicalDigest(completeChecklist({
-        entryRules: ['价格突破长期均线（50）时买入'],
-        exitRules: ['价格跌破短期均线（20）时卖出'],
+        entryRules: ['收盘确认价格突破长期均线（50）时买入'],
+        exitRules: ['收盘确认价格跌破短期均线（20）时卖出'],
       })),
     })
 
