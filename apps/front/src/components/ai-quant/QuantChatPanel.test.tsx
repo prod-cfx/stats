@@ -225,23 +225,32 @@ describe('QuantChatPanel range settings', () => {
     expect(container.textContent).toContain('aiQuant.backtestSlippageBps')
     expect(container.textContent).toContain('aiQuant.backtestFeeBps')
     expect(container.textContent).toContain('aiQuant.backtestPriceSource')
-    expect(container.textContent).toContain('aiQuant.backtestAllowPartial')
+    expect(container.textContent).toContain('aiQuant.backtestAllowPartialChoice')
     expect(container.textContent).toContain('aiQuant.backtestAllowPartial.enabled')
     expect(container.textContent).toContain('aiQuant.backtestAllowPartial.disabled')
+    expect(container.textContent).toContain('aiQuant.backtestHelper.positive')
+    expect(container.textContent).toContain('aiQuant.backtestHelper.nonNegative')
 
     const numberInputs = container.querySelectorAll('input[type="number"]')
     expect(numberInputs).toHaveLength(4)
     expect((numberInputs[0] as HTMLInputElement).min).toBe('0.01')
     expect((numberInputs[0] as HTMLInputElement).step).toBe('0.01')
-    expect((numberInputs[1] as HTMLInputElement).min).toBe('0.1')
-    expect((numberInputs[1] as HTMLInputElement).step).toBe('0.1')
+    expect((numberInputs[1] as HTMLInputElement).min).toBe('1')
+    expect((numberInputs[1] as HTMLInputElement).step).toBe('1')
     expect((numberInputs[2] as HTMLInputElement).min).toBe('0')
     expect((numberInputs[2] as HTMLInputElement).step).toBe('0.01')
     expect((numberInputs[3] as HTMLInputElement).min).toBe('0')
     expect((numberInputs[3] as HTMLInputElement).step).toBe('0.01')
+    expect((numberInputs[0] as HTMLInputElement).placeholder).toBe(
+      'aiQuant.backtestPlaceholder.initialCash',
+    )
+    expect((numberInputs[1] as HTMLInputElement).placeholder).toBe(
+      'aiQuant.backtestPlaceholder.leverage',
+    )
+    expect(container.textContent).toContain('aiQuant.backtestPlaceholder.priceSource')
   })
 
-  it('shows inline validation for invalid backtest execution values', async () => {
+  it('keeps backtest helpers neutral on first open for invalid values', async () => {
     await act(async () => {
       root?.render(
         <QuantChatPanel
@@ -267,10 +276,12 @@ describe('QuantChatPanel range settings', () => {
       container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(container.textContent).toContain('aiQuant.messages.positiveNumber')
-    expect(container.textContent).toContain('aiQuant.messages.nonNegativeNumber')
-    expect(container.textContent).toContain('aiQuant.messages.invalidPriceSource')
-    expect(container.textContent).toContain('aiQuant.messages.invalidBoolean')
+    expect(container.textContent).toContain('aiQuant.backtestHelper.positive')
+    expect(container.textContent).toContain('aiQuant.backtestHelper.nonNegative')
+    expect(container.textContent).not.toContain('aiQuant.messages.positiveNumber')
+    expect(container.textContent).not.toContain('aiQuant.messages.nonNegativeNumber')
+    expect(container.textContent).not.toContain('aiQuant.backtestError.priceSource')
+    expect(container.textContent).not.toContain('aiQuant.backtestError.allowPartial')
   })
 
   it('edits backtest params locally and only applies them after confirm', async () => {
