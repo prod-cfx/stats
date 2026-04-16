@@ -82,6 +82,22 @@ describe('quantify contract generated responses', () => {
     expect(source).toContain("timeframe: z.enum(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w'])")
   })
 
+  it('allows spot backtest contracts to omit request leverage and accept nullable job leverage', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+
+    const runDtoStart = source.indexOf('const RunBacktestDto = z')
+    const jobSummaryStart = source.indexOf('const BacktestJobInputSummaryDto = z')
+
+    expect(runDtoStart).toBeGreaterThanOrEqual(0)
+    expect(jobSummaryStart).toBeGreaterThanOrEqual(0)
+
+    const runDtoSnippet = source.slice(runDtoStart, runDtoStart + 500)
+    const jobSummarySnippet = source.slice(jobSummaryStart, jobSummaryStart + 500)
+
+    expect(runDtoSnippet).toContain('leverage: z.number().optional()')
+    expect(jobSummarySnippet).toContain('leverage: z.number().nullish()')
+  })
+
   it('keeps nullable AI Quant codegen session fields nullable in the generated contracts', () => {
     const source = readFileSync(generatedPath, 'utf8')
     const start = source.indexOf('const CodegenSessionResponseDto = z')
