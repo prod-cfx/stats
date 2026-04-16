@@ -25,6 +25,7 @@ import { StrategyCompileabilityDecisionService } from '../strategy-compileabilit
 import { StrategyConsistencyService } from '../strategy-consistency.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
 import { StrategySummaryObservationService } from '../strategy-summary-observation.service'
+import { buildSemanticSlotId } from '../../types/semantic-state'
 import { bollingerGoldenCase, maGoldenCase } from './fixtures/semantic-state-golden-cases'
 
 jest.mock('../../repositories/published-strategy-snapshots.repository', () => ({
@@ -2522,35 +2523,114 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('keeps previously identified grid semantics when continueSession only adds timeframe', async () => {
-    mockRepo.createSession.mockResolvedValue({ id: 's-grid-timeframe-followup' })
-    mockAi.chat.mockResolvedValueOnce({
-      content: JSON.stringify({
-        related: true,
-        logicReady: false,
-        logic: {},
-        assistantPrompt: '逻辑图仍未完整，请继续补充。',
-      }),
-    })
-
-    const startResult = await service.startSession({
-      userId: 'u1',
-      initialMessage: '在okx交易所合约市场的BTCUSDT上，做一个 60000 到 80000 的网格策略，每格千分之5，不断低买高卖，单笔10%资金',
-    })
-
-    const createdSession = buildPersistedSessionSnapshot(
+    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
       's-grid-timeframe-followup',
-      mockRepo.createSession.mock.calls[0]?.[0] as Record<string, unknown>,
       {
-        clarificationState: startResult.clarificationState,
-        latestSpecDesc: startResult.specDesc ?? null,
-        semanticState: (mockRepo.createSession.mock.calls[0]?.[0] as Record<string, unknown>).semanticState,
+        checklist: {
+          symbols: ['BTCUSDT'],
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'perp',
+            positionPct: 10,
+          },
+          market: {
+            exchange: 'okx',
+            marketType: 'perp',
+          },
+        },
+        semanticState: {
+          version: 1,
+          families: ['grid.range_rebalance'],
+          triggers: [
+            {
+              id: 'grid-entry',
+              key: 'grid.range_rebalance',
+              phase: 'entry',
+              sideScope: 'both',
+              params: {
+                rangeLower: 60000,
+                rangeUpper: 80000,
+                stepPct: 0.5,
+                sideMode: 'bidirectional',
+                recycle: true,
+                breakoutAction: 'pause',
+              },
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+            },
+          ],
+          actions: [],
+          risk: [],
+          position: {
+            mode: 'fixed_ratio',
+            value: 0.1,
+            positionMode: 'long_only',
+            status: 'locked',
+            source: 'user_explicit',
+          },
+          contextSlots: {
+            exchange: {
+              slotKey: 'exchange',
+              fieldPath: 'contextSlots.exchange',
+              value: 'okx',
+              status: 'locked',
+              priority: 'context',
+              questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+              affectsExecution: true,
+            },
+            symbol: {
+              slotKey: 'symbol',
+              fieldPath: 'contextSlots.symbol',
+              value: 'BTCUSDT',
+              status: 'locked',
+              priority: 'context',
+              questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+              affectsExecution: true,
+            },
+            marketType: {
+              slotKey: 'marketType',
+              fieldPath: 'contextSlots.marketType',
+              value: 'perp',
+              status: 'locked',
+              priority: 'context',
+              questionHint: '请确认市场类型（现货或合约/perp）。',
+              affectsExecution: true,
+            },
+            timeframe: {
+              slotKey: 'timeframe',
+              fieldPath: 'contextSlots.timeframe',
+              status: 'open',
+              priority: 'context',
+              questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+              affectsExecution: true,
+            },
+          },
+          normalizationNotes: [],
+          updatedAt: '2026-04-16T10:00:00.000Z',
+        },
+        clarificationState: {
+          status: 'NEEDS_CLARIFICATION',
+          items: [
+            {
+              key: 'semantic.timeframe',
+              reason: 'missing_timeframe',
+              field: 'timeframe',
+              blocking: true,
+              question: '请确认策略主周期（例如 15m 或 1h）。',
+              status: 'pending',
+              slotId: buildSemanticSlotId({
+                slotKey: 'timeframe',
+                fieldPath: 'contextSlots.timeframe',
+              }),
+              slotKey: 'timeframe',
+              fieldPath: 'contextSlots.timeframe',
+            },
+          ],
+          summary: '已识别 grid.range_rebalance，但还缺少主周期。',
+        },
       },
-    )
-    expect(createdSession.clarificationState).toBeTruthy()
-    mockRepo.findById.mockResolvedValue({
-      ...createdSession,
-      updatedAt: '2026-04-16T10:00:00.000Z',
-    })
+    ))
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
         related: true,
@@ -2574,6 +2654,17 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       's-grid-timeframe-followup',
       expect.objectContaining({
         semanticState: expect.objectContaining({
+          triggers: expect.arrayContaining([
+            expect.objectContaining({
+              key: 'grid.range_rebalance',
+              status: 'locked',
+              params: expect.objectContaining({
+                rangeLower: 60000,
+                rangeUpper: 80000,
+                stepPct: 0.5,
+              }),
+            }),
+          ]),
           contextSlots: expect.objectContaining({
             timeframe: expect.objectContaining({
               value: '15m',
@@ -2583,17 +2674,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         }),
       }),
     )
-    expect(result.clarificationState?.items).toEqual(expect.arrayContaining([
+    expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
       expect.objectContaining({
-        key: 'semantic.entryRules',
         reason: 'missing_entry_rules',
       }),
       expect.objectContaining({
         reason: 'grid_params_missing',
-        key: 'grid.stepPct',
       }),
-    ]))
-    expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
       expect.objectContaining({
         reason: 'missing_timeframe',
         status: 'pending',

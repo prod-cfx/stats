@@ -75,6 +75,7 @@ import { StrategyExecutionContextService } from './strategy-execution-context.se
 import { StrategyIntentNormalizerService } from './strategy-intent-normalizer.service'
 import { StrategyIntentResolutionService } from './strategy-intent-resolution.service'
 import { SemanticStateCompileBridgeService } from './semantic-state-compile-bridge.service'
+import { SemanticStateMergeService } from './semantic-state-merge.service'
 import { SemanticStateProjectionService } from './semantic-state-projection.service'
 import { SemanticStateReducerService } from './semantic-state-reducer.service'
 
@@ -164,6 +165,7 @@ export class CodegenConversationService {
     private readonly semanticStateReducer: SemanticStateReducerService = new SemanticStateReducerService(),
     private readonly semanticStateProjection: SemanticStateProjectionService = new SemanticStateProjectionService(),
     private readonly semanticStateCompileBridge: SemanticStateCompileBridgeService = new SemanticStateCompileBridgeService(),
+    private readonly semanticStateMerge: SemanticStateMergeService = new SemanticStateMergeService(),
   ) {}
 
   async startSession(
@@ -384,9 +386,13 @@ export class CodegenConversationService {
       dto.message,
     )
     const baseChecklist = inferredConfirmation.checklist
+    const derivedBaseSemanticState = this.buildFallbackSemanticState(baseChecklist)
     const baseSemanticState = hasPersistedSemanticState
-      ? this.mergeChecklistIntoSemanticState(semanticStateAfterAnswers, baseChecklist)
-      : this.buildFallbackSemanticState(baseChecklist)
+      ? this.semanticStateMerge.merge({
+          persisted: semanticStateAfterAnswers,
+          derived: derivedBaseSemanticState,
+        })
+      : derivedBaseSemanticState
     const clarificationStateAfterAnswers = hasStructuredClarificationAnswers
       ? this.resolveClarificationArtifacts(baseChecklist).clarificationState
       : this.withClarificationSummary(baseClarificationState, baseChecklist)
@@ -442,9 +448,13 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
     const mergedChecklist = this.mergeChecklistSnapshots(preMergedChecklist, plan.logic ?? {})
+    const derivedSemanticState = this.buildFallbackSemanticState(mergedChecklist)
     const reducedSemanticState = hasPersistedSemanticState
-      ? this.mergeChecklistIntoSemanticState(semanticStateAfterAnswers, mergedChecklist)
-      : this.buildFallbackSemanticState(mergedChecklist)
+      ? this.semanticStateMerge.merge({
+          persisted: semanticStateAfterAnswers,
+          derived: derivedSemanticState,
+        })
+      : derivedSemanticState
     const canonicalChecklist = hasPersistedSemanticState
       ? this.projectLegacyChecklistFromSemanticState(reducedSemanticState, mergedChecklist)
       : mergedChecklist
@@ -673,9 +683,13 @@ export class CodegenConversationService {
     )
     const messageChecklist = this.normalizeChecklist(this.extractChecklist(dto))
     const mergedChecklist = this.mergeChecklistSnapshots(baseChecklist, messageChecklist)
+    const derivedSemanticState = this.buildFallbackSemanticState(mergedChecklist)
     const reducedSemanticState = hasPersistedSemanticState
-      ? this.mergeChecklistIntoSemanticState(semanticStateAfterAnswers, mergedChecklist)
-      : this.buildFallbackSemanticState(mergedChecklist)
+      ? this.semanticStateMerge.merge({
+          persisted: semanticStateAfterAnswers,
+          derived: derivedSemanticState,
+        })
+      : derivedSemanticState
     const canonicalChecklist = hasPersistedSemanticState
       ? this.projectLegacyChecklistFromSemanticState(reducedSemanticState, mergedChecklist)
       : mergedChecklist
@@ -975,186 +989,6 @@ export class CodegenConversationService {
     }
   }
 
-  private mergeChecklistIntoSemanticState(
-    currentState: SemanticState,
-    checklist: ChecklistPayload,
-  ): SemanticState {
-    const derivedState = this.buildFallbackSemanticState(checklist)
-    const remainingOpenCurrentTriggers = currentState.triggers
-      .filter(trigger =>
-        trigger.status === 'open'
-        && trigger.openSlots.some(slot => slot.status === 'open'),
-      )
-      .map(trigger => ({
-        ...trigger,
-        params: { ...trigger.params },
-        openSlots: trigger.openSlots.map(slot => ({ ...slot })),
-      }))
-    const nextTriggers = derivedState.triggers.map(trigger => this.reconcileDerivedTriggerState(
-      trigger,
-      derivedState.triggers,
-      currentState,
-      remainingOpenCurrentTriggers,
-    ))
-
-    return {
-      ...derivedState,
-      triggers: nextTriggers,
-      updatedAt: new Date().toISOString(),
-    }
-  }
-
-  private reconcileDerivedTriggerState(
-    trigger: SemanticTriggerState,
-    derivedTriggers: SemanticTriggerState[],
-    currentState: SemanticState,
-    remainingOpenCurrentTriggers?: SemanticTriggerState[],
-  ): SemanticTriggerState {
-    let nextTrigger: SemanticTriggerState = {
-      ...trigger,
-      params: { ...trigger.params },
-      openSlots: trigger.openSlots.map(slot => ({ ...slot })),
-    }
-
-    if (this.isBollingerSemanticTrigger(nextTrigger)) {
-      nextTrigger = this.hydrateBollingerTriggerParams(nextTrigger, derivedTriggers)
-    }
-
-    if (nextTrigger.phase === 'gate' && typeof nextTrigger.params.value === 'string') {
-      const matchingLockedGate = currentState.triggers.find(currentTrigger =>
-        currentTrigger.phase === 'gate'
-        && currentTrigger.key === nextTrigger.key
-        && currentTrigger.status === 'locked'
-        && currentTrigger.openSlots.every(slot => slot.status !== 'open')
-        && currentTrigger.params.value === nextTrigger.params.value,
-      )
-      if (matchingLockedGate) {
-        nextTrigger = {
-          ...nextTrigger,
-          id: matchingLockedGate.id,
-          source: matchingLockedGate.source ?? nextTrigger.source,
-          ...(matchingLockedGate.evidence ? { evidence: matchingLockedGate.evidence } : {}),
-          params: {
-            ...nextTrigger.params,
-            ...(typeof matchingLockedGate.params.mode === 'string'
-              ? { mode: matchingLockedGate.params.mode }
-              : {}),
-          },
-          openSlots: [],
-          status: 'locked',
-        }
-      }
-    }
-
-    const openTriggerPool = remainingOpenCurrentTriggers ?? currentState.triggers
-    const matchingCurrentTriggerIndex = openTriggerPool.findIndex(currentTrigger =>
-      this.isSameDerivedTriggerIdentity(currentTrigger, nextTrigger)
-      && currentTrigger.status === 'open'
-      && currentTrigger.openSlots.some(slot => slot.status === 'open'),
-    )
-    const matchingCurrentTrigger = matchingCurrentTriggerIndex >= 0
-      ? openTriggerPool[matchingCurrentTriggerIndex]
-      : undefined
-
-    if (matchingCurrentTrigger) {
-      if (remainingOpenCurrentTriggers && matchingCurrentTriggerIndex >= 0) {
-        remainingOpenCurrentTriggers.splice(matchingCurrentTriggerIndex, 1)
-      }
-      nextTrigger = {
-        ...nextTrigger,
-        id: matchingCurrentTrigger.id,
-        source: matchingCurrentTrigger.source ?? nextTrigger.source,
-        ...(matchingCurrentTrigger.evidence ? { evidence: matchingCurrentTrigger.evidence } : {}),
-        params: {
-          ...nextTrigger.params,
-          ...matchingCurrentTrigger.params,
-        },
-        openSlots: matchingCurrentTrigger.openSlots.map(slot => ({ ...slot })),
-        status: matchingCurrentTrigger.status,
-      }
-    }
-
-    return nextTrigger
-  }
-
-  private isSameDerivedTriggerIdentity(
-    currentTrigger: SemanticTriggerState,
-    derivedTrigger: SemanticTriggerState,
-  ): boolean {
-    if (currentTrigger.phase !== derivedTrigger.phase || currentTrigger.key !== derivedTrigger.key) {
-      return false
-    }
-    if (
-      currentTrigger.sideScope !== undefined
-      && derivedTrigger.sideScope !== undefined
-      && currentTrigger.sideScope !== derivedTrigger.sideScope
-    ) {
-      return false
-    }
-
-    const identityParamKeys = [
-      'indicator',
-      'referenceRole',
-      'reference.period',
-      'period',
-      'stdDev',
-      'value',
-    ] as const
-
-    return identityParamKeys.every((paramKey) => {
-      const currentValue = currentTrigger.params[paramKey]
-      const derivedValue = derivedTrigger.params[paramKey]
-      if (currentValue === undefined || currentValue === null) {
-        return true
-      }
-      if (derivedValue === undefined || derivedValue === null) {
-        return true
-      }
-
-      return currentValue === derivedValue
-    })
-  }
-
-  private hydrateBollingerTriggerParams(
-    trigger: SemanticTriggerState,
-    derivedTriggers: SemanticTriggerState[],
-  ): SemanticTriggerState {
-    const sharedSource = derivedTriggers.find(candidate =>
-      candidate !== trigger
-      && this.isBollingerSemanticTrigger(candidate)
-      && (typeof candidate.params.period === 'number'
-        || typeof candidate.params.stdDev === 'number'
-        || typeof candidate.sideScope === 'string'),
-    )
-    if (!sharedSource) {
-      return trigger
-    }
-
-    return {
-      ...trigger,
-      params: {
-        ...trigger.params,
-        ...(typeof trigger.params.period === 'number' ? {} : (
-          typeof sharedSource.params.period === 'number'
-            ? { period: sharedSource.params.period }
-            : {}
-        )),
-        ...(typeof trigger.params.stdDev === 'number' ? {} : (
-          typeof sharedSource.params.stdDev === 'number'
-            ? { stdDev: sharedSource.params.stdDev }
-            : {}
-        )),
-      },
-      ...(trigger.sideScope ? {} : (sharedSource.sideScope ? { sideScope: sharedSource.sideScope } : {})),
-    }
-  }
-
-  private isBollingerSemanticTrigger(trigger: SemanticTriggerState): boolean {
-    return trigger.key === 'bollinger.touch_upper'
-      || trigger.key === 'bollinger.touch_lower'
-      || trigger.key === 'bollinger.touch_middle'
-  }
-
   private toSemanticTriggerState(
     trigger: StrategyNormalizedIntent['triggers'][number],
     index: number,
@@ -1293,6 +1127,22 @@ export class CodegenConversationService {
     item: StrategyClarificationItem,
     semanticState: SemanticState,
   ): boolean {
+    if (item.reason === 'missing_entry_rules' || item.field === 'entryRules') {
+      return semanticState.triggers.some(trigger =>
+        trigger.phase === 'entry'
+        && trigger.status === 'locked'
+        && trigger.openSlots.every(slot => slot.status !== 'open'),
+      )
+    }
+
+    if (item.reason === 'missing_exit_rules' || item.field === 'exitRules') {
+      return semanticState.triggers.some(trigger =>
+        trigger.phase === 'exit'
+        && trigger.status === 'locked'
+        && trigger.openSlots.every(slot => slot.status !== 'open'),
+      )
+    }
+
     if (item.reason !== 'ambiguous_state_gate') {
       return false
     }
