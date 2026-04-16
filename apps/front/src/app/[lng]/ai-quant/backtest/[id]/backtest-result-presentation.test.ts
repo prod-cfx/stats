@@ -25,6 +25,7 @@ describe('backtest-result-presentation', () => {
     ]))
     expect(model.tradeDirectionLabel('long')).toBe('买入建仓')
     expect(model.tradeDirectionLabel('short')).toBe('卖出平仓')
+    expect(model.conclusionSummary.warning).toBe('表现一般，建议结合当前持仓与持仓浮盈浮亏后再决定是否部署。')
   })
 
   it('keeps perp labels in futures-oriented wording', () => {
@@ -50,6 +51,7 @@ describe('backtest-result-presentation', () => {
     ]))
     expect(model.tradeDirectionLabel('long')).toBe('做多')
     expect(model.tradeDirectionLabel('short')).toBe('做空')
+    expect(model.conclusionSummary.warning).toBe('表现一般，建议优化参数后再部署。')
   })
 
   it('formats spot symbols and open positions for display', () => {

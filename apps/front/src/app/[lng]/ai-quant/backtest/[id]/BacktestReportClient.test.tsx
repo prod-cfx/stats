@@ -287,6 +287,7 @@ describe('BacktestReportClient', () => {
     expect(container.textContent).toContain('已完成交易')
     expect(container.textContent).toContain('当前持仓')
     expect(container.textContent).toContain('持仓浮盈浮亏')
+    expect(container.textContent).toContain('表现一般，建议结合当前持仓与持仓浮盈浮亏后再决定是否部署。')
     expect(container.textContent).toContain('当前持仓')
     expect(container.textContent).toContain('BTCUSDT 现货')
     expect(container.textContent).not.toContain('未平仓持仓')

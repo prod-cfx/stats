@@ -513,24 +513,14 @@ export function BacktestReportClient({
 
   // Determine strategy status based on metrics
   let status: 'good' | 'warning' | 'danger' = 'warning'
-  let summary =
-    lng === 'en'
-      ? 'Average performance, consider optimizing parameters before deploying.'
-      : '表现一般，建议优化参数后再部署。'
 
   if (metrics && metrics.maxDrawdownPct <= 15 && metrics.totalReturnPct > 20) {
     status = 'good'
-    summary =
-      lng === 'en'
-        ? 'Good performance, controllable risk and considerable return, recommended to deploy.'
-        : '策略表现良好，风险可控且收益可观，建议部署。'
   } else if (metrics && (metrics.maxDrawdownPct > 30 || metrics.totalReturnPct < 0)) {
     status = 'danger'
-    summary =
-      lng === 'en'
-        ? 'High risk or in loss, not recommended to deploy.'
-        : '策略风险较高或处于亏损状态，不建议部署。'
   }
+
+  const summary = presentation.conclusionSummary[status]
 
   return (
     <div className="space-y-6">

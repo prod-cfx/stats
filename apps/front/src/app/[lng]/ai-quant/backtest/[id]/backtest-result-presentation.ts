@@ -29,6 +29,11 @@ export interface BacktestResultPresentationModel {
   openPositionQuantityLabel: string
   openPositionAvgEntryLabel: string
   openPositionPnlLabel: string
+  conclusionSummary: {
+    good: string
+    warning: string
+    danger: string
+  }
 }
 
 function formatSignedPct(value: number): string {
@@ -136,6 +141,30 @@ export function buildBacktestResultPresentation(args: {
       }
     : null
 
+  const conclusionSummary = marketType === 'spot'
+    ? {
+        good: isEn
+          ? 'Spot strategy performance is good, current holdings are under control with solid return, recommended to deploy.'
+          : '现货策略表现良好，当前持仓风险可控且收益可观，建议部署。',
+        warning: isEn
+          ? 'Spot strategy performance is average. Review current holdings and holding P&L before deciding whether to deploy.'
+          : '表现一般，建议结合当前持仓与持仓浮盈浮亏后再决定是否部署。',
+        danger: isEn
+          ? 'Spot strategy risk is elevated or overall return is negative, not recommended to deploy.'
+          : '现货策略风险较高或整体处于亏损状态，不建议部署。',
+      }
+    : {
+        good: isEn
+          ? 'Good performance, controllable risk and considerable return, recommended to deploy.'
+          : '策略表现良好，风险可控且收益可观，建议部署。',
+        warning: isEn
+          ? 'Average performance, consider optimizing parameters before deploying.'
+          : '表现一般，建议优化参数后再部署。',
+        danger: isEn
+          ? 'High risk or in loss, not recommended to deploy.'
+          : '策略风险较高或处于亏损状态，不建议部署。',
+      }
+
   return {
     marketType,
     marketLabel: marketType === 'spot'
@@ -175,6 +204,7 @@ export function buildBacktestResultPresentation(args: {
     openPositionQuantityLabel: marketType === 'spot' ? (isEn ? 'Holding Qty' : '当前持仓数量') : (isEn ? 'Quantity' : '持仓数量'),
     openPositionAvgEntryLabel: marketType === 'spot' ? (isEn ? 'Holding Avg Price' : '持仓均价') : (isEn ? 'Avg Entry Price' : '持仓均价'),
     openPositionPnlLabel: marketType === 'spot' ? (isEn ? 'Holding P&L' : '持仓浮盈浮亏') : (isEn ? 'Unrealized P&L' : '浮动盈亏'),
+    conclusionSummary,
   }
 }
 
