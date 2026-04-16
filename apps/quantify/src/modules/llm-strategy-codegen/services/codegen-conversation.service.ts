@@ -1725,6 +1725,18 @@ export class CodegenConversationService {
     const key = item.key.toLowerCase()
     const targetPhase = this.readSemanticClarificationPhase(item)
 
+    if (key.startsWith('grid.')) {
+      const nextGrid = this.applyGridChecklistClarification(checklist.grid, item, answer)
+      if (!nextGrid) {
+        return checklist
+      }
+
+      return this.normalizeChecklist({
+        ...checklist,
+        grid: nextGrid,
+      })
+    }
+
     if (/均线是多少/u.test(item.question) || key.includes('reference.period')) {
       const period = this.normalizeMovingAveragePeriodClarificationAnswer(answer)
       if (period === null) return checklist
@@ -1778,6 +1790,88 @@ export class CodegenConversationService {
     }
 
     return checklist
+  }
+
+  private applyGridChecklistClarification(
+    currentGrid: ChecklistPayload['grid'] | undefined,
+    item: StrategyClarificationItem,
+    answer: string,
+  ): ChecklistPayload['grid'] | null {
+    const nextGrid: NonNullable<ChecklistPayload['grid']> = {
+      ...(currentGrid ?? {}),
+    }
+    const key = item.key.toLowerCase()
+
+    if (key === 'grid.range.lower') {
+      const value = this.parseGridChecklistNumericAnswer('grid.range.lower', answer)
+      if (value === null) return null
+      nextGrid.lower = value
+      return nextGrid
+    }
+
+    if (key === 'grid.range.upper') {
+      const value = this.parseGridChecklistNumericAnswer('grid.range.upper', answer)
+      if (value === null) return null
+      nextGrid.upper = value
+      return nextGrid
+    }
+
+    if (key === 'grid.steppct') {
+      const value = this.parseGridChecklistNumericAnswer('grid.stepPct', answer)
+      if (value === null) return null
+      nextGrid.stepPct = value
+      return nextGrid
+    }
+
+    if (key === 'grid.sidemode') {
+      const sideMode = this.normalizeGridChecklistSideMode(answer)
+      if (!sideMode) return null
+      nextGrid.sideMode = sideMode
+      return nextGrid
+    }
+
+    return null
+  }
+
+  private parseGridChecklistNumericAnswer(
+    slotKey: 'grid.range.lower' | 'grid.range.upper' | 'grid.stepPct',
+    answer: string,
+  ): number | null {
+    if (slotKey === 'grid.stepPct') {
+      const percentMatch = answer.match(/(\d+(?:\.\d+)?)\s*%/u)
+      if (percentMatch?.[1]) {
+        return Number(percentMatch[1])
+      }
+
+      const perMilleMatch = answer.match(/千分之\s*(\d+(?:\.\d+)?)/u)
+      if (perMilleMatch?.[1]) {
+        return Number(perMilleMatch[1]) / 10
+      }
+    }
+
+    const numericMatch = answer.match(/-?\d+(?:\.\d+)?/u)
+    if (!numericMatch) {
+      return null
+    }
+
+    const value = Number(numericMatch[0])
+    return Number.isFinite(value) ? value : null
+  }
+
+  private normalizeGridChecklistSideMode(
+    answer: string,
+  ): NonNullable<ChecklistPayload['grid']>['sideMode'] | null {
+    if (/双向|低买高卖|来回|往返|自动买卖|自动交易/u.test(answer)) {
+      return 'bidirectional'
+    }
+    if (/只做多|仅做多/u.test(answer)) {
+      return 'long_only'
+    }
+    if (/只做空|仅做空/u.test(answer)) {
+      return 'short_only'
+    }
+
+    return null
   }
 
   private applyEntryRuleDirectionClarification(
