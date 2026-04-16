@@ -1069,7 +1069,7 @@ export function isOpenOnlyBacktestResult(result: BacktestResult | null | undefin
 
 export function isDeployableBacktestResult(result: BacktestResult | null | undefined): boolean {
   if (!result) return false
-  return result.tradeCount > 0 && result.maxDrawdownPct <= 20
+  return (result.tradeCount > 0 || (result.openTradeCount ?? 0) > 0) && result.maxDrawdownPct <= 20
 }
 
 export function mapExchangeStatusesToDeployAccounts(

@@ -15,6 +15,7 @@ jest.mock('react-i18next', () => ({
     t: (key: string) => ({
       'aiQuant.backtestResult': '回测结果',
       'aiQuant.messages.backtestDrawdownLimit': '最大回撤不超过 20% 方可部署',
+      'aiQuant.messages.backtestDrawdownFail': '回撤超标，暂不允许部署',
       'aiQuant.fullScreen': '全屏查看',
       'aiQuant.maxDrawdown': '最大回撤',
       'aiQuant.closedReturn': '已平仓收益',
@@ -48,7 +49,7 @@ describe('BacktestSummaryCard', () => {
   })
 
 
-  it('renders spot backtest summaries with holding-oriented labels and copy', async () => {
+  it('renders spot backtest summaries with holding-oriented labels and metrics', async () => {
     await act(async () => {
       root.render(
         <BacktestSummaryCard
@@ -65,7 +66,7 @@ describe('BacktestSummaryCard', () => {
             openPnl: 2.49,
           }}
           marketType="spot"
-          canDeploy={false}
+          canDeploy
           onOpenFullScreen={() => undefined}
           onOptimize={() => undefined}
           onDeploy={() => undefined}
@@ -78,7 +79,7 @@ describe('BacktestSummaryCard', () => {
     expect(container.textContent).toContain('已完成交易')
     expect(container.textContent).toContain('当前持仓')
     expect(container.textContent).toContain('持仓浮盈浮亏')
-    expect(container.textContent).toContain('本次回测已产生建仓，但在回测区间内仍有 1 笔当前持仓未完成卖出平仓，暂不允许部署。')
+    expect(container.textContent).not.toContain('暂不允许部署')
     expect(container.textContent).not.toContain('已平仓收益')
     expect(container.textContent).not.toContain('已平仓胜率')
     expect(container.textContent).not.toContain('未平仓笔数')

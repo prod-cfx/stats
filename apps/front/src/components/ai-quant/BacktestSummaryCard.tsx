@@ -42,7 +42,6 @@ export function BacktestSummaryCard({
   const backtestContext = result.symbol && result.startAt && result.endAt
     ? `${result.symbol} · ${formatBacktestRange(result.startAt, result.endAt)}`
     : null
-  const hasOpenOnlyTrades = result.tradeCount === 0 && (result.openTradeCount ?? 0) > 0
   const openPnlValue = typeof result.openPnl === 'number' ? formatSignedPnl(result.openPnl) : null
   const metrics = normalizedMarketType === 'spot'
     ? [
@@ -133,13 +132,7 @@ export function BacktestSummaryCard({
             }]
           : []),
       ]
-  const deployBlockMessage = hasOpenOnlyTrades
-    ? normalizedMarketType === 'spot'
-      ? isEn
-        ? `Backtest opened holdings but still had ${result.openTradeCount ?? 0} current holding${(result.openTradeCount ?? 0) === 1 ? '' : 's'} without a completed sell-to-close action in the selected range, so deployment remains disabled.`
-        : `本次回测已产生建仓，但在回测区间内仍有 ${result.openTradeCount ?? 0} 笔当前持仓未完成卖出平仓，暂不允许部署。`
-      : t('aiQuant.messages.backtestOpenTrades', { count: result.openTradeCount ?? 0 })
-    : result.tradeCount === 0
+  const deployBlockMessage = result.tradeCount === 0
       ? normalizedMarketType === 'spot'
         ? isEn
           ? 'Backtest produced no completed spot trades, so deployment remains disabled. Please adjust the spot strategy conditions and retry.'
