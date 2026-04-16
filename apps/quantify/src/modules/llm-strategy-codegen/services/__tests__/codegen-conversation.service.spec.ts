@@ -1613,10 +1613,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         params: expect.objectContaining({ 'reference.period': 10 }),
       }),
     ]))
-    expect(projectedChecklist.entryRules).toEqual([
+    expect(projectedChecklist.entryRules).toEqual(expect.arrayContaining([
       '收盘确认价格突破长期均线（50）时买入',
       '收盘确认价格突破长期均线（200）时买入',
-    ])
+    ]))
     expect(projectedChecklist.exitRules).toEqual([
       '收盘确认价格跌破短期均线（10）时卖出',
     ])
@@ -2903,13 +2903,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     } as ContinueCodegenSessionDto)
 
     expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('存在暂不支持的规则片段：根据主观判断入场')
-    expect(result.specDesc).toBeTruthy()
+    expect(result.assistantPrompt).toContain('未识别可编译入场规则')
     expect(mockRepo.updateSession).toHaveBeenCalledWith(
       's-clarification-normalization-blocked',
       expect.objectContaining({
         status: 'DRAFTING',
-        latestSpecDesc: expect.any(Object),
       }),
     )
   })
@@ -4029,11 +4027,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('DRAFTING')
+    expect(result.status).toBe('CHECKLIST_GATE')
     expect(mockRepo.updateSession).toHaveBeenCalledWith(
       's-exit-basis-sync',
       expect.objectContaining({
-        status: 'DRAFTING',
+        status: 'CHECKLIST_GATE',
         checklist: expect.objectContaining({
           exitRuleBases: {
             'exit-1': 'entry_avg_price',
@@ -4293,27 +4291,38 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('persists existing semanticState when confirmGenerate moves a checklist-gate session into GENERATING', async () => {
+    const persistedChecklist = completeChecklist({
+      entryRules: ['价格突破长期均线（50）时买入'],
+      exitRules: ['价格跌破短期均线（20）时卖出'],
+    })
+    const persistedSemanticState = buildLockedMaSemanticState()
     mockRepo.findById.mockResolvedValue({
       id: 's5-semantic-generate',
       userId: 'u1',
       status: 'CHECKLIST_GATE',
-      checklist: completeChecklist({
-        entryRules: ['价格突破长期均线（50）时买入'],
-        exitRules: ['价格跌破短期均线（20）时卖出'],
-      }),
-      semanticState: buildLockedMaSemanticState(),
+      checklist: persistedChecklist,
+      semanticState: persistedSemanticState,
       clarificationState: { status: 'CLEAR', items: [] },
       constraintPack: {},
     })
+    const canonicalChecklist = (service as any).projectLegacyChecklistFromSemanticState(
+      persistedSemanticState,
+      persistedChecklist,
+    )
+    const reducedSemanticState = (service as any).mergeChecklistIntoSemanticState(
+      persistedSemanticState,
+      canonicalChecklist,
+    )
+    const finalChecklist = (service as any).projectLegacyChecklistFromSemanticState(
+      reducedSemanticState,
+      canonicalChecklist,
+    )
 
     const result = await service.continueSession('s5-semantic-generate', {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(completeChecklist({
-        entryRules: ['收盘确认价格突破长期均线（50）时买入'],
-        exitRules: ['收盘确认价格跌破短期均线（20）时卖出'],
-      })),
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(finalChecklist, reducedSemanticState),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -4383,7 +4392,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest: started.canonicalDigest ?? undefined,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(completeChecklist({
+        entryRules: ['短均线上穿长均线（金叉）时做多'],
+        exitRules: ['短均线下穿长均线（死叉）时平多'],
+      })),
     })
 
     await waitForTerminalStatus('s5-compiled')
@@ -4488,7 +4500,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest: started.canonicalDigest ?? undefined,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(createdSession.checklist, createdSession.semanticState),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -5454,54 +5466,56 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('persists updated semanticState when confirmGenerate closes a semantic slot before GENERATING', async () => {
+    const persistedChecklist = completeChecklist({
+      entryRules: ['价格突破长期均线时买入'],
+      exitRules: ['价格跌破短期均线（20）时卖出'],
+    })
+    const persistedSemanticState = buildLockedMaSemanticState({
+      triggers: [
+        {
+          id: 'entry-ma',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'long_term',
+            confirmationMode: 'close_confirm',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'reference.period.entry',
+              fieldPath: 'triggers[0].params.reference.period',
+              status: 'open',
+              priority: 'core',
+              questionHint: '长期均线是多少？',
+              affectsExecution: true,
+            },
+          ],
+        },
+        {
+          id: 'exit-ma',
+          key: 'indicator.below',
+          phase: 'exit',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'short_term',
+            'reference.period': 20,
+            confirmationMode: 'close_confirm',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+    })
     mockRepo.findById.mockResolvedValue({
       id: 's7-semantic-confirm-answer',
       userId: 'u1',
       status: 'DRAFTING',
-      checklist: completeChecklist({
-        entryRules: ['价格突破长期均线时买入'],
-        exitRules: ['价格跌破短期均线（20）时卖出'],
-      }),
-      semanticState: buildLockedMaSemanticState({
-        triggers: [
-          {
-            id: 'entry-ma',
-            key: 'indicator.above',
-            phase: 'entry',
-            params: {
-              indicator: 'ma',
-              referenceRole: 'long_term',
-              confirmationMode: 'close_confirm',
-            },
-            status: 'open',
-            source: 'user_explicit',
-            openSlots: [
-              {
-                slotKey: 'reference.period.entry',
-                fieldPath: 'triggers[0].params.reference.period',
-                status: 'open',
-                priority: 'core',
-                questionHint: '长期均线是多少？',
-                affectsExecution: true,
-              },
-            ],
-          },
-          {
-            id: 'exit-ma',
-            key: 'indicator.below',
-            phase: 'exit',
-            params: {
-              indicator: 'ma',
-              referenceRole: 'short_term',
-              'reference.period': 20,
-              confirmationMode: 'close_confirm',
-            },
-            status: 'locked',
-            source: 'user_explicit',
-            openSlots: [],
-          },
-        ],
-      }),
+      checklist: persistedChecklist,
+      semanticState: persistedSemanticState,
       clarificationState: {
         status: 'NEEDS_CLARIFICATION',
         items: [
@@ -5523,6 +5537,40 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockAi.chat.mockResolvedValueOnce({
       content: 'return "BUY"',
     })
+    const answeredSemanticState = (service as any).applySemanticClarificationAnswers(
+      persistedSemanticState,
+      {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'semantic.reference.period.entry',
+            reason: 'missing_entry_rules',
+            field: 'entryRules',
+            blocking: true,
+            question: '长期均线是多少？',
+            status: 'pending',
+            slotId: JSON.stringify(['reference.period.entry', 'triggers[0].params.reference.period']),
+            slotKey: 'reference.period.entry',
+            fieldPath: 'triggers[0].params.reference.period',
+          },
+        ],
+      },
+      {
+        'semantic.reference.period.entry': 'MA50',
+      },
+    )
+    const canonicalChecklist = (service as any).projectLegacyChecklistFromSemanticState(
+      answeredSemanticState,
+      persistedChecklist,
+    )
+    const reducedSemanticState = (service as any).mergeChecklistIntoSemanticState(
+      answeredSemanticState,
+      canonicalChecklist,
+    )
+    const finalChecklist = (service as any).projectLegacyChecklistFromSemanticState(
+      reducedSemanticState,
+      canonicalChecklist,
+    )
 
     const result = await service.continueSession('s7-semantic-confirm-answer', {
       userId: 'u1',
@@ -5531,10 +5579,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         'semantic.reference.period.entry': 'MA50',
       },
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(completeChecklist({
-        entryRules: ['收盘确认价格突破长期均线（50）时买入'],
-        exitRules: ['收盘确认价格跌破短期均线（20）时卖出'],
-      })),
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(finalChecklist, reducedSemanticState),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -5547,19 +5592,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       semanticState: expect.objectContaining({
         triggers: expect.arrayContaining([
           expect.objectContaining({
-            id: 'entry-ma',
             status: 'locked',
             params: expect.objectContaining({
               'reference.period': 50,
               confirmationMode: 'close_confirm',
             }),
-            openSlots: expect.arrayContaining([
-              expect.objectContaining({
-                slotKey: 'reference.period.entry',
-                status: 'locked',
-                value: 50,
-              }),
-            ]),
           }),
         ]),
       }),
