@@ -1272,6 +1272,27 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('请确认止盈规则')
   })
 
+  it('asks for missing grid slots instead of generic entry rules when the user only gave vague grid semantics', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-grid-vague-start' })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        logic: {},
+        assistantPrompt: '逻辑图仍未完整，请继续补充。',
+      }),
+    })
+
+    const result = await service.startSession({
+      userId: 'u-1',
+      initialMessage: '帮我做一个网格策略，在一个区间内自动买卖，行情突破区间就停掉',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('请确认网格区间下界')
+    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的入场规则')
+  })
+
   it('surfaces inferred default risk bases for confirmation before compile', async () => {
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
@@ -2465,6 +2486,96 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).toContain('以下内容是系统推断')
     expect(result.assistantPrompt).toContain('risk.stopLossBasis')
     expect(result.assistantPrompt).toContain('risk.takeProfitBasis')
+  })
+
+  it('keeps previously identified grid semantics when continueSession only adds timeframe', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-grid-timeframe-followup',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        entryRules: ['在 60000-80000 区间执行网格低买高卖，每格 0.5%'],
+        riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+      },
+      semanticState: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [
+          {
+            id: 'entry-grid-1',
+            key: 'grid.range_rebalance',
+            phase: 'entry',
+            params: {
+              rangeLower: 60000,
+              rangeUpper: 80000,
+              stepPct: 0.5,
+              sideMode: 'bidirectional',
+              recycle: true,
+              breakoutAction: 'pause',
+            },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          },
+        ],
+        actions: [
+          { id: 'action-1', key: 'open_long', status: 'locked', source: 'user_explicit' },
+          { id: 'action-2', key: 'close_long', status: 'locked', source: 'user_explicit' },
+        ],
+        risk: [],
+        position: {
+          mode: 'fixed_ratio',
+          value: 0.1,
+          positionMode: 'long_short',
+          status: 'locked',
+          source: 'user_explicit',
+        },
+        contextSlots: {
+          exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', priority: 'context', questionHint: '请确认交易所（binance / okx / hyperliquid）。', affectsExecution: true },
+          symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', questionHint: '请确认策略交易标的（例如 BTCUSDT）。', affectsExecution: true },
+          marketType: { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'perp', status: 'locked', priority: 'context', questionHint: '请确认市场类型（现货或合约/perp）。', affectsExecution: true },
+          timeframe: { slotKey: 'timeframe', fieldPath: 'contextSlots.timeframe', status: 'open', priority: 'context', questionHint: '请确认策略主周期（例如 15m 或 1h）。', affectsExecution: true },
+        },
+        normalizationNotes: [],
+        updatedAt: '2026-04-16T10:00:00.000Z',
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'semantic.timeframe',
+            reason: 'missing_timeframe',
+            field: 'timeframe',
+            blocking: true,
+            question: '请确认策略主周期（例如 15m 或 1h）。',
+            status: 'pending',
+            slotKey: 'timeframe',
+            fieldPath: 'contextSlots.timeframe',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-grid-timeframe-followup', {
+      userId: 'u1',
+      message: '15m',
+      clarificationAnswers: {
+        'semantic.timeframe': '15m',
+      },
+    } as any)
+
+    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的入场规则')
+    expect(result.clarificationState?.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'missing_entry_rules' }),
+    ]))
   })
 
   it('applies semantic period clarification answers so the same moving-average question does not repeat', async () => {

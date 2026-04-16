@@ -164,6 +164,29 @@ describe('strategyIntentNormalizerService', () => {
     ]))
   })
 
+  it('keeps vague grid semantics as an open grid atom instead of dropping them into unresolved fallback', () => {
+    const result = service.normalize({
+      market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp' },
+      entryRules: ['帮我做一个网格策略，在一个区间内自动买卖，行情突破区间就停掉'],
+      riskRules: { positionPct: 10 },
+    } as any)
+
+    expect(result.blocked).toBe(false)
+    expect(result.normalizedIntent.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        closureStatus: 'open',
+        unresolvedSlots: expect.arrayContaining([
+          expect.objectContaining({ slotKey: 'grid.range.lower', questionHint: '请确认网格区间下界。' }),
+          expect.objectContaining({ slotKey: 'grid.range.upper', questionHint: '请确认网格区间上界。' }),
+          expect.objectContaining({ slotKey: 'grid.stepPct', questionHint: '请确认每格步长（例如 0.5%）。' }),
+        ]),
+      }),
+    ]))
+    expect(result.unresolved).toEqual([])
+  })
+
   it('keeps the live price-change strategy closed', () => {
     const result = service.normalize({
       market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'spot', timeframe: '3m' },
