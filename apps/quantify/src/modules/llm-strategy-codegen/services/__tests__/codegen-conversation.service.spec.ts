@@ -295,6 +295,17 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     updatedAt: '2026-04-15T10:00:00.000Z',
     ...overrides,
   })
+  const buildPersistedSessionSnapshot = (
+    sessionId: string,
+    createdSession: Record<string, unknown>,
+    overrides: Record<string, unknown> = {},
+  ) => ({
+    id: sessionId,
+    userId: 'u1',
+    status: 'DRAFTING',
+    ...createdSession,
+    ...overrides,
+  })
   const withRequiredMarketContext = completeChecklist
   const startGoldenCase = async (args: {
     sessionId: string
@@ -1285,12 +1296,18 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const result = await service.startSession({
       userId: 'u-1',
-      initialMessage: '帮我做一个网格策略，在一个区间内自动买卖，行情突破区间就停掉',
+      initialMessage: '在okx交易所合约市场的BTCUSDT 15m上，帮我做一个网格策略，在一个区间内自动买卖，行情突破区间就停掉',
     })
 
     expect(result.status).toBe('DRAFTING')
     expect(result.assistantPrompt).toContain('请确认网格区间下界')
-    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的入场规则')
+    expect(result.assistantPrompt).not.toContain('请确认交易所')
+    expect(result.clarificationState?.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'grid_params_missing',
+        key: 'grid.stepPct',
+      }),
+    ]))
   })
 
   it('surfaces inferred default risk bases for confirmation before compile', async () => {
@@ -2499,19 +2516,22 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
     })
 
-    await service.startSession({
+    const startResult = await service.startSession({
       userId: 'u1',
       initialMessage: '在okx交易所合约市场的BTCUSDT上，做一个 60000 到 80000 的网格策略，每格千分之5，不断低买高卖，单笔10%资金',
     })
 
-    const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>
+    const createdSession = buildPersistedSessionSnapshot(
+      's-grid-timeframe-followup',
+      mockRepo.createSession.mock.calls[0]?.[0] as Record<string, unknown>,
+      {
+        clarificationState: (mockRepo.createSession.mock.calls[0]?.[0] as Record<string, unknown>).clarificationState,
+        latestDraftCode: startResult.latestDraftCode,
+      },
+    )
     expect(createdSession.clarificationState).toBeTruthy()
     mockRepo.findById.mockResolvedValue({
-      id: 's-grid-timeframe-followup',
-      userId: 'u1',
-      status: 'DRAFTING',
       ...createdSession,
-      clarificationState: createdSession.clarificationState,
       updatedAt: '2026-04-16T10:00:00.000Z',
     })
     mockAi.chat.mockResolvedValue({

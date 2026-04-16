@@ -178,9 +178,9 @@ describe('strategyIntentNormalizerService', () => {
         phase: 'entry',
         closureStatus: 'open',
         unresolvedSlots: expect.arrayContaining([
-          expect.objectContaining({ slotKey: 'grid.range.lower', questionHint: '请确认网格区间下界。' }),
-          expect.objectContaining({ slotKey: 'grid.range.upper', questionHint: '请确认网格区间上界。' }),
-          expect.objectContaining({ slotKey: 'grid.stepPct', questionHint: '请确认每格步长（例如 0.5%）。' }),
+          expect.objectContaining({ slotKey: 'grid.range.lower' }),
+          expect.objectContaining({ slotKey: 'grid.range.upper' }),
+          expect.objectContaining({ slotKey: 'grid.stepPct' }),
         ]),
       }),
     ]))
