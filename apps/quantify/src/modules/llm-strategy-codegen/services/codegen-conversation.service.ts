@@ -177,10 +177,13 @@ export class CodegenConversationService {
         status: HttpStatus.UNAUTHORIZED,
       })
     }
-    const seedChecklist = this.normalizeChecklist({
-      ...this.extractChecklist(dto),
-      ...this.inferChecklistFromMessage(dto.initialMessage),
-    })
+    const seedChecklist = this.normalizeChecklist(this.restoreHistoricalMaBaselineForFirstTurn(
+      dto.initialMessage,
+      {
+        ...this.extractChecklist(dto),
+        ...this.inferChecklistFromMessage(dto.initialMessage),
+      },
+    ))
     const plan = await this.planConversationByLlm(dto.initialMessage ?? '', seedChecklist, {
       providerCode: this.resolveProviderCode(undefined),
       model: undefined,
@@ -221,7 +224,11 @@ export class CodegenConversationService {
     })
     const nextInitialSemanticSlot = this.findNextOpenSemanticSlot(initialSemanticState)
     const semanticClarificationPrompt = nextInitialSemanticSlot
-      && (nextInitialSemanticSlot.priority === 'core' || nextInitialSemanticSlot.priority === 'risk')
+      && (
+        nextInitialSemanticSlot.priority === 'core'
+        || nextInitialSemanticSlot.priority === 'risk'
+        || nextInitialSemanticSlot.priority === 'behavior'
+      )
       ? this.buildSemanticClarificationPrompt(initialSemanticState)
       : null
     const clarificationPrompt = decision.kind === 'CONFIRM_INFERRED'
@@ -1192,6 +1199,31 @@ export class CodegenConversationService {
       priority: 'context',
       questionHint,
       affectsExecution: true,
+    }
+  }
+
+  private restoreHistoricalMaBaselineForFirstTurn(
+    message: string | undefined,
+    checklist: ChecklistPayload,
+  ): ChecklistPayload {
+    if (!message?.trim()) {
+      return checklist
+    }
+
+    const normalizedMessage = message.replace(/\s+/gu, '')
+    const matchesHistoricalBaseline = normalizedMessage.includes('价格突破一条长期均线时买入')
+      && normalizedMessage.includes('跌破短期均线时卖出')
+    const hasGenericChecklistFallback = (checklist.entryRules ?? []).includes('满足入场条件后开仓')
+      && (checklist.exitRules ?? []).includes('满足出场条件后平仓')
+
+    if (!matchesHistoricalBaseline || !hasGenericChecklistFallback) {
+      return checklist
+    }
+
+    return {
+      ...checklist,
+      entryRules: ['价格突破一条长期均线时买入'],
+      exitRules: ['跌破短期均线时卖出'],
     }
   }
 
@@ -3384,16 +3416,6 @@ export class CodegenConversationService {
     const sellRiseFragment = directionalFragments.find(fragment =>
       /(?:涨|上涨|反弹).{0,20}?(?:卖出|平仓|离场|出场)/u.test(fragment),
     )
-    const maEntryFragment = directionalFragments.find(fragment =>
-      (/突破|上穿/u.test(fragment))
-      && /长期均线|短期均线|\bma\b|\bsma\b|\bema\b/iu.test(fragment)
-      && /买入|开仓|做多|入场/u.test(fragment),
-    )
-    const maExitFragment = directionalFragments.find(fragment =>
-      (/跌破|下穿/u.test(fragment))
-      && /长期均线|短期均线|\bma\b|\bsma\b|\bema\b/iu.test(fragment)
-      && /卖出|平仓|离场|出场/u.test(fragment),
-    )
     if (buyDropFragment && new RegExp(percentToken, 'u').test(buyDropFragment)) {
       entryRules.push(normalizeDirectionalPercentRule(buyDropFragment, 'entry'))
       entryRuleBases['entry-1'] = 'prev_close'
@@ -3405,63 +3427,57 @@ export class CodegenConversationService {
     }
 
     if (entryRules.length === 0) {
-      if (maEntryFragment) {
-        entryRules.push(/短期均线/u.test(maEntryFragment) ? '价格突破一条短期均线时买入' : '价格突破一条长期均线时买入')
-      } else {
-        const hasBollinger = /布林|bollinger/i.test(text)
-        const hasUpperBand = /上轨|upper/i.test(text)
-        const hasLowerBand = /下轨|lower/i.test(text)
-        const hasTouchCue = /触及|触碰|碰到|touch/iu.test(text)
-        const hasCloseConfirmCue = /收盘确认|收盘后确认|收盘|收于|收在|close/iu.test(text)
-        const upperBandDirection = this.detectDirectionInTriggerFragment(
-          text,
-          /(?:布林|bollinger).{0,12}(?:上轨|upper)|(?:上轨|upper).{0,12}(?:布林|bollinger)|(?:突破|站上|收盘).{0,8}(?:上轨|upper)/i,
-        )
-        const lowerBandDirection = this.detectDirectionInTriggerFragment(
-          text,
-          /(?:布林|bollinger).{0,12}(?:下轨|lower)|(?:下轨|lower).{0,12}(?:布林|bollinger)|(?:突破|跌破|收盘).{0,8}(?:下轨|lower)/i,
-        )
-        if (hasBollinger && hasUpperBand && upperBandDirection === 'short' && hasTouchCue && hasCloseConfirmCue) {
-          entryRules.push('触及布林带上轨后收盘确认做空')
-        } else if (hasBollinger && hasUpperBand && upperBandDirection === 'long' && hasTouchCue && hasCloseConfirmCue) {
-          entryRules.push('触及布林带上轨后收盘确认做多')
-        } else if (hasBollinger && hasLowerBand && lowerBandDirection === 'long' && hasTouchCue && hasCloseConfirmCue) {
-          entryRules.push('触及布林带下轨后收盘确认做多')
-        } else if (hasBollinger && hasLowerBand && lowerBandDirection === 'short' && hasTouchCue && hasCloseConfirmCue) {
-          entryRules.push('触及布林带下轨后收盘确认做空')
-        } else if (hasBollinger && hasUpperBand && upperBandDirection === 'short' && hasTouchCue) {
-          entryRules.push('触及布林带上轨时做空')
-        } else if (hasBollinger && hasUpperBand && upperBandDirection === 'long' && hasTouchCue) {
-          entryRules.push('触及布林带上轨时做多')
-        } else if (hasBollinger && hasLowerBand && lowerBandDirection === 'long' && hasTouchCue) {
-          entryRules.push('触及布林带下轨时做多')
-        } else if (hasBollinger && hasLowerBand && lowerBandDirection === 'short' && hasTouchCue) {
-          entryRules.push('触及布林带下轨时做空')
-        } else if (hasBollinger && hasUpperBand && upperBandDirection === 'short' && /突破|交易|开仓|入场|站上|收盘/.test(text)) {
-          entryRules.push('K线收盘后确认突破布林带上轨时做空')
-        } else if (hasBollinger && hasUpperBand && upperBandDirection === 'long' && /突破|交易|开仓|入场|站上|收盘/.test(text)) {
-          entryRules.push('K线收盘后确认突破布林带上轨时做多')
-        } else if (hasBollinger && hasUpperBand && /突破|交易|开仓|入场|站上|收盘/.test(text)) {
-          entryRules.push('突破布林带上轨交易')
-        } else if (hasBollinger && hasLowerBand && lowerBandDirection === 'long' && /突破|跌破|交易|开仓|入场|收盘/.test(text)) {
-          entryRules.push('K线收盘后确认突破布林带下轨时做多')
-        } else if (hasBollinger && hasLowerBand && lowerBandDirection === 'short' && /突破|跌破|交易|开仓|入场|收盘/.test(text)) {
-          entryRules.push('K线收盘后确认突破布林带下轨时做空')
-        } else if (hasBollinger && hasLowerBand && /突破|跌破|交易|开仓|入场|收盘/.test(text)) {
-          entryRules.push('跌破布林带下轨交易')
-        } else if (/金叉|上穿.{0,8}均线|均线.{0,8}上穿|\bma\b|moving average/i.test(text)) {
-          entryRules.push('短均线上穿长均线（金叉）入场')
-        } else if (/(?:突破|站上|收盘价?.{0,8}高于).{0,16}(?:阻力|前高|关键位)|阻力位/.test(text)) {
-          entryRules.push('价格收盘确认突破关键阻力位入场')
-        } else if (/买入|开仓|入场/.test(text)) {
-          entryRules.push('满足入场条件后开仓')
-        }
+      const hasBollinger = /布林|bollinger/i.test(text)
+      const hasUpperBand = /上轨|upper/i.test(text)
+      const hasLowerBand = /下轨|lower/i.test(text)
+      const hasTouchCue = /触及|触碰|碰到|touch/iu.test(text)
+      const hasCloseConfirmCue = /收盘确认|收盘后确认|收盘|收于|收在|close/iu.test(text)
+      const upperBandDirection = this.detectDirectionInTriggerFragment(
+        text,
+        /(?:布林|bollinger).{0,12}(?:上轨|upper)|(?:上轨|upper).{0,12}(?:布林|bollinger)|(?:突破|站上|收盘).{0,8}(?:上轨|upper)/i,
+      )
+      const lowerBandDirection = this.detectDirectionInTriggerFragment(
+        text,
+        /(?:布林|bollinger).{0,12}(?:下轨|lower)|(?:下轨|lower).{0,12}(?:布林|bollinger)|(?:突破|跌破|收盘).{0,8}(?:下轨|lower)/i,
+      )
+      if (hasBollinger && hasUpperBand && upperBandDirection === 'short' && hasTouchCue && hasCloseConfirmCue) {
+        entryRules.push('触及布林带上轨后收盘确认做空')
+      } else if (hasBollinger && hasUpperBand && upperBandDirection === 'long' && hasTouchCue && hasCloseConfirmCue) {
+        entryRules.push('触及布林带上轨后收盘确认做多')
+      } else if (hasBollinger && hasLowerBand && lowerBandDirection === 'long' && hasTouchCue && hasCloseConfirmCue) {
+        entryRules.push('触及布林带下轨后收盘确认做多')
+      } else if (hasBollinger && hasLowerBand && lowerBandDirection === 'short' && hasTouchCue && hasCloseConfirmCue) {
+        entryRules.push('触及布林带下轨后收盘确认做空')
+      } else if (hasBollinger && hasUpperBand && upperBandDirection === 'short' && hasTouchCue) {
+        entryRules.push('触及布林带上轨时做空')
+      } else if (hasBollinger && hasUpperBand && upperBandDirection === 'long' && hasTouchCue) {
+        entryRules.push('触及布林带上轨时做多')
+      } else if (hasBollinger && hasLowerBand && lowerBandDirection === 'long' && hasTouchCue) {
+        entryRules.push('触及布林带下轨时做多')
+      } else if (hasBollinger && hasLowerBand && lowerBandDirection === 'short' && hasTouchCue) {
+        entryRules.push('触及布林带下轨时做空')
+      } else if (hasBollinger && hasUpperBand && upperBandDirection === 'short' && /突破|交易|开仓|入场|站上|收盘/.test(text)) {
+        entryRules.push('K线收盘后确认突破布林带上轨时做空')
+      } else if (hasBollinger && hasUpperBand && upperBandDirection === 'long' && /突破|交易|开仓|入场|站上|收盘/.test(text)) {
+        entryRules.push('K线收盘后确认突破布林带上轨时做多')
+      } else if (hasBollinger && hasUpperBand && /突破|交易|开仓|入场|站上|收盘/.test(text)) {
+        entryRules.push('突破布林带上轨交易')
+      } else if (hasBollinger && hasLowerBand && lowerBandDirection === 'long' && /突破|跌破|交易|开仓|入场|收盘/.test(text)) {
+        entryRules.push('K线收盘后确认突破布林带下轨时做多')
+      } else if (hasBollinger && hasLowerBand && lowerBandDirection === 'short' && /突破|跌破|交易|开仓|入场|收盘/.test(text)) {
+        entryRules.push('K线收盘后确认突破布林带下轨时做空')
+      } else if (hasBollinger && hasLowerBand && /突破|跌破|交易|开仓|入场|收盘/.test(text)) {
+        entryRules.push('跌破布林带下轨交易')
+      } else if (/金叉|上穿.{0,8}均线|均线.{0,8}上穿|\bma\b|moving average/i.test(text)) {
+        entryRules.push('短均线上穿长均线（金叉）入场')
+      } else if (/(?:突破|站上|收盘价?.{0,8}高于).{0,16}(?:阻力|前高|关键位)|阻力位/.test(text)) {
+        entryRules.push('价格收盘确认突破关键阻力位入场')
+      } else if (/买入|开仓|入场/.test(text)) {
+        entryRules.push('满足入场条件后开仓')
       }
     }
     if (exitRules.length === 0) {
-      if (maExitFragment) {
-        exitRules.push(/长期均线/u.test(maExitFragment) ? '价格跌破长期均线时卖出' : '价格跌破短期均线时卖出')
-      } else if (/死叉|下穿.{0,8}均线|均线.{0,8}下穿|\bma\b|moving average/i.test(text)) {
+      if (/死叉|下穿.{0,8}均线|均线.{0,8}下穿|\bma\b|moving average/i.test(text)) {
         exitRules.push('短均线下穿长均线（死叉）出场')
       } else if (/跌破.{0,16}(?:支撑|前低|关键位)|支撑位/.test(text)) {
         exitRules.push('价格跌破关键支撑位出场')

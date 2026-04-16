@@ -1961,6 +1961,15 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(payload.checklist?.exitRules?.join(' ')).not.toContain('均线')
   })
 
+  it('keeps historical MA baseline restoration out of the general inferChecklistFromMessage path', () => {
+    const inferred = (service as any).inferChecklistFromMessage(
+      '当价格突破一条长期均线时买入，跌破短期均线时卖出',
+    )
+
+    expect(inferred.entryRules).toEqual(['满足入场条件后开仓'])
+    expect(inferred.exitRules).toEqual(['满足出场条件后平仓'])
+  })
+
   it('returns strategyInstanceId in session snapshot response', async () => {
     mockRepo.findLatestBySessionId.mockResolvedValue({
       id: 'snapshot-session-1',
@@ -2609,6 +2618,112 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         ]),
       }),
     }))
+  })
+
+  it('treats an open behavior slot as semantic-first clarification ownership on startSession', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-behavior-slot-start' })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        logic: {},
+        assistantPrompt: '逻辑图仍未完整，请继续补充。',
+      }),
+    })
+
+    const buildFallbackSemanticStateSpy = jest.spyOn(service as any, 'buildFallbackSemanticState').mockReturnValue({
+      version: 1,
+      families: ['single-leg', 'state-gated'],
+      triggers: [
+        {
+          id: 'regime-gate',
+          key: 'market.regime',
+          phase: 'gate',
+          params: {
+            value: 'range',
+            mode: 'observation_only',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'regimeDefinition',
+              fieldPath: 'triggers[0].params.definition',
+              status: 'open',
+              priority: 'behavior',
+              questionHint: '震荡行情怎么判断？',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    })
+    const resolveClarificationArtifactsSpy = jest.spyOn(service as any, 'resolveClarificationArtifacts').mockReturnValue({
+      normalization: {
+        normalizedIntent: {
+          families: [],
+          triggers: [],
+          actions: [],
+          risk: [],
+          normalizationNotes: [],
+        },
+        blocked: true,
+        blockerReason: '震荡行情怎么判断？',
+      },
+      executionContext: {
+        context: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        ambiguities: [],
+        evidence: [],
+      },
+      atomicResolution: {
+        ambiguities: [],
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'executionContext.exchange',
+            reason: 'missing_exchange',
+            field: 'exchange',
+            blocking: true,
+            question: '请确认交易所（binance / okx / hyperliquid）。',
+            status: 'pending',
+          },
+        ],
+        summary: '已识别部分条件，但仍未完整。',
+      },
+      clarificationPrompt: '请先确认交易所。',
+      blockingReasons: [],
+      inferredAssumptions: [],
+    })
+    const buildStrategyDecisionSpy = jest.spyOn(service as any, 'buildStrategyDecision').mockReturnValue({
+      kind: 'ASK_CLARIFY',
+    })
+
+    try {
+      const result = await service.startSession({
+        userId: 'u-1',
+        initialMessage: '先按震荡行情处理',
+      })
+
+      expect(result.assistantPrompt).toContain('震荡行情怎么判断')
+      expect(result.assistantPrompt).not.toContain('请先确认交易所')
+    } finally {
+      buildFallbackSemanticStateSpy.mockRestore()
+      resolveClarificationArtifactsSpy.mockRestore()
+      buildStrategyDecisionSpy.mockRestore()
+    }
   })
 
   it('keeps the next semantic slot active after locking MA50 instead of falling through to execution context', async () => {
