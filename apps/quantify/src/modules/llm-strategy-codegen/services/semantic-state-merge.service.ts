@@ -44,15 +44,22 @@ export class SemanticStateMergeService {
       }
 
       const derivedTrigger = next[matchIndex]
+      const preferPersisted = this.compareNodeStrength(persistedTrigger, derivedTrigger) > 0
       next[matchIndex] = {
-        ...derivedTrigger,
+        ...(preferPersisted ? derivedTrigger : persistedTrigger),
+        ...(preferPersisted ? persistedTrigger : derivedTrigger),
         id: persistedTrigger.id,
-        params: { ...persistedTrigger.params, ...derivedTrigger.params },
-        openSlots: derivedTrigger.openSlots.length > 0 ? derivedTrigger.openSlots : persistedTrigger.openSlots,
+        sideScope: persistedTrigger.sideScope ?? derivedTrigger.sideScope,
+        params: preferPersisted
+          ? { ...derivedTrigger.params, ...persistedTrigger.params }
+          : { ...persistedTrigger.params, ...derivedTrigger.params },
+        openSlots: this.mergeOpenSlots(persistedTrigger.openSlots, derivedTrigger.openSlots),
         status: derivedTrigger.status === 'locked' || persistedTrigger.status === 'superseded'
           ? derivedTrigger.status
           : persistedTrigger.status,
-        evidence: derivedTrigger.evidence ?? persistedTrigger.evidence,
+        evidence: preferPersisted
+          ? persistedTrigger.evidence ?? derivedTrigger.evidence
+          : derivedTrigger.evidence ?? persistedTrigger.evidence,
       }
     }
 
@@ -64,15 +71,19 @@ export class SemanticStateMergeService {
     derived: SemanticContextSlotState,
   ): SemanticContextSlotState {
     return {
-      exchange: derived.exchange ?? persisted.exchange,
-      symbol: derived.symbol ?? persisted.symbol,
-      marketType: derived.marketType ?? persisted.marketType,
-      timeframe: derived.timeframe ?? persisted.timeframe,
+      exchange: this.mergeSlotState(persisted.exchange, derived.exchange),
+      symbol: this.mergeSlotState(persisted.symbol, derived.symbol),
+      marketType: this.mergeSlotState(persisted.marketType, derived.marketType),
+      timeframe: this.mergeSlotState(persisted.timeframe, derived.timeframe),
     }
   }
 
   private isSameTriggerIdentity(left: SemanticTriggerState, right: SemanticTriggerState): boolean {
-    if (left.phase !== right.phase || left.key !== right.key || left.sideScope !== right.sideScope) {
+    if (left.phase !== right.phase || left.key !== right.key) {
+      return false
+    }
+
+    if (left.sideScope && right.sideScope && left.sideScope !== right.sideScope) {
       return false
     }
 
@@ -98,5 +109,94 @@ export class SemanticStateMergeService {
       }
       return leftValue === rightValue
     })
+  }
+
+  private mergeOpenSlots(
+    persisted: SemanticTriggerState['openSlots'],
+    derived: SemanticTriggerState['openSlots'],
+  ): SemanticTriggerState['openSlots'] {
+    const next = derived.map(slot => ({ ...slot }))
+
+    for (const persistedSlot of persisted) {
+      const matchIndex = next.findIndex(slot =>
+        slot.slotKey === persistedSlot.slotKey && slot.fieldPath === persistedSlot.fieldPath)
+      if (matchIndex < 0) {
+        next.push({ ...persistedSlot })
+        continue
+      }
+
+      next[matchIndex] = this.mergeSlotState(persistedSlot, next[matchIndex])!
+    }
+
+    return next
+  }
+
+  private mergeSlotState<T extends SemanticContextSlotState[keyof SemanticContextSlotState]>(
+    persisted: T,
+    derived: T,
+  ): T {
+    if (!persisted) {
+      return derived
+    }
+
+    if (!derived) {
+      return persisted
+    }
+
+    const preferPersisted = this.compareNodeStrength(persisted, derived) > 0
+    const stronger = preferPersisted ? persisted : derived
+    const weaker = preferPersisted ? derived : persisted
+
+    return {
+      ...weaker,
+      ...stronger,
+      value: 'value' in stronger && stronger.value !== undefined
+        ? stronger.value
+        : 'value' in weaker
+          ? weaker.value
+          : undefined,
+      evidence: stronger.evidence ?? weaker.evidence,
+    } as T
+  }
+
+  private compareNodeStrength(
+    left: { status: 'open' | 'locked' | 'superseded', source?: 'user_explicit' | 'inferred' | 'derived', value?: unknown },
+    right: { status: 'open' | 'locked' | 'superseded', source?: 'user_explicit' | 'inferred' | 'derived', value?: unknown },
+  ): number {
+    const statusDiff = this.getStatusRank(left.status) - this.getStatusRank(right.status)
+    if (statusDiff !== 0) {
+      return statusDiff
+    }
+
+    const sourceDiff = this.getSourceRank(left.source) - this.getSourceRank(right.source)
+    if (sourceDiff !== 0) {
+      return sourceDiff
+    }
+
+    return Number(left.value !== undefined) - Number(right.value !== undefined)
+  }
+
+  private getStatusRank(status: 'open' | 'locked' | 'superseded'): number {
+    switch (status) {
+      case 'locked':
+        return 2
+      case 'open':
+        return 1
+      case 'superseded':
+      default:
+        return 0
+    }
+  }
+
+  private getSourceRank(source?: 'user_explicit' | 'inferred' | 'derived'): number {
+    switch (source) {
+      case 'user_explicit':
+        return 2
+      case 'inferred':
+        return 1
+      case 'derived':
+      default:
+        return 0
+    }
   }
 }
