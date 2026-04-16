@@ -174,12 +174,14 @@ function seedConfirmedConversation(now = Date.now()) {
       publishedSnapshotStrategyConfig: {
         exchange: 'binance',
         symbol: 'BTCUSDT',
+        marketType: 'perp',
         baseTimeframe: '15m',
         positionPct: 10,
       },
       publishedSnapshotParamValues: {
         exchange: 'binance',
         symbol: 'BTCUSDT',
+        marketType: 'perp',
         baseTimeframe: '15m',
         buyWindowMin: 3,
         buyDropPct: 1,
@@ -327,12 +329,14 @@ describe('AiQuantPageClient capability gating', () => {
         publishedSnapshotStrategyConfig: {
           exchange: 'okx',
           symbol: 'ETHUSDC',
+          marketType: 'perp',
           baseTimeframe: '15m',
           positionPct: 10,
         },
         publishedSnapshotParamValues: {
           exchange: 'okx',
           symbol: 'ETHUSDC',
+          marketType: 'perp',
           baseTimeframe: '15m',
           buyWindowMin: 3,
           buyDropPct: 1,
@@ -594,12 +598,14 @@ describe('AiQuantPageClient capability gating', () => {
         publishedSnapshotStrategyConfig: {
           exchange: 'okx',
           symbol: 'ETHUSDC',
+          marketType: 'perp',
           baseTimeframe: '15m',
           positionPct: 10,
         },
         publishedSnapshotParamValues: {
           exchange: 'okx',
           symbol: 'ETHUSDC',
+          marketType: 'perp',
           baseTimeframe: '15m',
           buyWindowMin: 3,
           buyDropPct: 1,
