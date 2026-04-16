@@ -915,7 +915,11 @@ export class CodegenConversationService {
     let nextState = currentState
     for (const item of clarificationState?.items ?? []) {
       const rawAnswer = answers[item.key]
-      if (typeof rawAnswer !== 'string' || !rawAnswer.trim() || !item.key.startsWith('semantic.')) {
+      if (
+        typeof rawAnswer !== 'string'
+        || !rawAnswer.trim()
+        || (!item.key.startsWith('semantic.') && !item.key.startsWith('grid.'))
+      ) {
         continue
       }
 
@@ -1082,18 +1086,25 @@ export class CodegenConversationService {
     }
 
     if (nextOpenSlot.priority !== 'context') {
-      const activeItem = this.buildSemanticClarificationItem(nextOpenSlot)
+      const semanticItems = this.listOpenSemanticSlots(semanticState)
+        .filter(slot => slot.priority !== 'context')
+        .map(slot => this.buildSemanticClarificationItem(slot))
+      const semanticItemKeys = new Set(semanticItems.map(item => item.key))
+      const semanticSlotIds = new Set(semanticItems.map(item => item.slotId).filter((slotId): slotId is string => typeof slotId === 'string'))
+      const semanticFieldPaths = new Set(semanticItems.map(item => item.fieldPath).filter((fieldPath): fieldPath is string => typeof fieldPath === 'string'))
       const remainingPendingItems = fallbackState.status === 'NEEDS_CLARIFICATION'
         ? fallbackState.items.filter(item =>
             item.blocking
             && item.status === 'pending'
-            && item.key !== activeItem.key,
+            && !semanticItemKeys.has(item.key)
+            && (!item.slotId || !semanticSlotIds.has(item.slotId))
+            && (!item.fieldPath || !semanticFieldPaths.has(item.fieldPath)),
           )
         : []
 
       return {
         status: 'NEEDS_CLARIFICATION',
-        items: [activeItem, ...remainingPendingItems],
+        items: [...semanticItems, ...remainingPendingItems],
         summary: clarificationView.summary,
       }
     }
@@ -1185,6 +1196,7 @@ export class CodegenConversationService {
   private buildSemanticClarificationItem(slot: SemanticSlotState): StrategyClarificationItem {
     const isStateGateSlot = slot.priority === 'behavior' || slot.slotKey === 'regimeDefinition'
     const isContextSlot = slot.priority === 'context'
+    const isGridSlot = slot.slotKey.startsWith('grid.')
     const contextReasonMap: Partial<Record<SemanticSlotState['slotKey'], string>> = {
       exchange: 'missing_exchange',
       symbol: 'missing_symbol',
@@ -1195,15 +1207,19 @@ export class CodegenConversationService {
       ? 'stateGates.marketRegime'
       : isContextSlot
         ? slot.slotKey
+      : isGridSlot
+        ? slot.slotKey
       : (slot.slotKey.includes('.exit') ? 'exitRules' : 'entryRules')
     const reason = isStateGateSlot
       ? 'ambiguous_state_gate'
       : isContextSlot
         ? (contextReasonMap[slot.slotKey] ?? 'missing_execution_context')
+      : isGridSlot
+        ? 'grid_params_missing'
         : (slot.slotKey.includes('.exit') ? 'missing_exit_rules' : 'missing_entry_rules')
 
     return {
-      key: `semantic.${slot.slotKey}`,
+      key: isGridSlot ? slot.slotKey : `semantic.${slot.slotKey}`,
       reason,
       field,
       blocking: true,
@@ -1227,6 +1243,23 @@ export class CodegenConversationService {
       items: [this.buildSemanticClarificationItem(nextOpenSlot)],
       summary: clarificationView.summary,
     })
+  }
+
+  private listOpenSemanticSlots(state: SemanticState): SemanticSlotState[] {
+    const triggerPhaseOrder: Array<'entry' | 'exit' | 'risk' | 'gate'> = ['entry', 'exit', 'risk', 'gate']
+    const openTriggerSlots = triggerPhaseOrder.flatMap(phase =>
+      state.triggers
+        .filter(trigger => trigger.phase === phase)
+        .flatMap(trigger => trigger.openSlots)
+        .filter(slot => slot.status === 'open'),
+    )
+    const openRiskSlots = state.risk
+      .flatMap(risk => risk.openSlots)
+      .filter(slot => slot.status === 'open')
+    const openContextSlots = Object.values(state.contextSlots)
+      .filter((slot): slot is SemanticSlotState => Boolean(slot) && slot.status === 'open')
+
+    return [...openTriggerSlots, ...openRiskSlots, ...openContextSlots]
   }
 
   private projectLegacyChecklistFromSemanticState(
@@ -1498,7 +1531,7 @@ export class CodegenConversationService {
     const normalizedAnswer = answer.trim()
     if (!normalizedAnswer) return checklist
 
-    if (item.key.startsWith('semantic.')) {
+    if (item.key.startsWith('semantic.') || item.key.startsWith('grid.')) {
       return this.applySemanticSlotClarification(checklist, item, normalizedAnswer)
     }
 
@@ -2241,7 +2274,7 @@ export class CodegenConversationService {
     if (!clarificationState || clarificationState.status !== 'NEEDS_CLARIFICATION') return {}
 
     const activeItem = clarificationState.items.find(item => item.blocking && item.status === 'pending')
-    if (!activeItem || !activeItem.key.startsWith('semantic.')) return {}
+    if (!activeItem || (!activeItem.key.startsWith('semantic.') && !activeItem.key.startsWith('grid.'))) return {}
 
     return {
       [activeItem.key]: normalizedMessage,
@@ -2531,9 +2564,18 @@ export class CodegenConversationService {
     clarificationState: StrategyClarificationStateWithSummary,
     normalization: NormalizationResult,
   ): StrategyClarificationStateWithSummary {
-    const items = clarificationState.items.filter(item =>
-      !this.shouldSuppressLegacyClarificationItem(item, normalization),
-    )
+    const hasActiveGrid = normalization.normalizedIntent.triggers.some(trigger => trigger.key === 'grid.range_rebalance')
+    const items = clarificationState.items.filter(item => {
+      if (
+        hasActiveGrid
+        && item.reason === 'missing_entry_rules'
+        && item.field === 'entryRules'
+      ) {
+        return false
+      }
+
+      return !this.shouldSuppressLegacyClarificationItem(item, normalization)
+    })
 
     return {
       ...clarificationState,
@@ -3349,6 +3391,7 @@ export class CodegenConversationService {
     }
 
     const riskRules: Record<string, unknown> = {}
+    const grid: NonNullable<ChecklistPayload['grid']> = {}
     if (/\bokx\b/i.test(text)) {
       riskRules.exchange = 'okx'
     } else if (/hyperliquid/i.test(text)) {
@@ -3402,6 +3445,29 @@ export class CodegenConversationService {
     if (earlyStopMatch?.[1]) {
       riskRules.earlyStop = earlyStopMatch[1].trim()
     }
+    if (/网格|grid/iu.test(text)) {
+      const rangeMatch = text.match(/(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)/u)
+      if (rangeMatch?.[1] && rangeMatch[2]) {
+        grid.lower = Number(rangeMatch[1])
+        grid.upper = Number(rangeMatch[2])
+      }
+
+      const percentMatch = text.match(/(?:步长|每格)\s*(\d+(?:\.\d+)?)\s*%/u)
+      const perMilleMatch = text.match(/千分之\s*(\d+(?:\.\d+)?)/u)
+      if (percentMatch?.[1]) {
+        grid.stepPct = Number(percentMatch[1])
+      } else if (perMilleMatch?.[1]) {
+        grid.stepPct = Number(perMilleMatch[1]) / 10
+      }
+
+      if (/双向|低买高卖|来回|往返|自动买卖|自动交易/u.test(text)) {
+        grid.sideMode = 'bidirectional'
+      } else if (/只做多|仅做多/u.test(text)) {
+        grid.sideMode = 'long_only'
+      } else if (/只做空|仅做空/u.test(text)) {
+        grid.sideMode = 'short_only'
+      }
+    }
 
     const inferredMarket = {
       ...(riskRules.exchange === 'okx' || riskRules.exchange === 'binance' || riskRules.exchange === 'hyperliquid'
@@ -3421,6 +3487,7 @@ export class CodegenConversationService {
       entryRuleBases: Object.keys(entryRuleBases).length > 0 ? entryRuleBases : undefined,
       exitRuleBases: Object.keys(exitRuleBases).length > 0 ? exitRuleBases : undefined,
       riskRules: Object.keys(riskRules).length > 0 ? riskRules : undefined,
+      grid: Object.keys(grid).length > 0 ? grid : undefined,
       market: Object.keys(inferredMarket).length > 0 ? inferredMarket : undefined,
     })
 
@@ -3434,6 +3501,7 @@ export class CodegenConversationService {
       entryRuleDrafts: drafts.entry,
       exitRuleDrafts: drafts.exit,
       riskRules: Object.keys(riskRules).length > 0 ? riskRules : undefined,
+      grid: Object.keys(grid).length > 0 ? grid : undefined,
       market: Object.keys(inferredMarket).length > 0 ? inferredMarket : { defaultTimeframe: timeframes[0] ?? null },
     }
   }
@@ -3628,6 +3696,37 @@ export class CodegenConversationService {
       }
     }
 
+    const normalizeGrid = (value: unknown): ChecklistPayload['grid'] | undefined => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return undefined
+      }
+      const raw = value as Record<string, unknown>
+      const lower = typeof raw.lower === 'number' && Number.isFinite(raw.lower)
+        ? raw.lower
+        : undefined
+      const upper = typeof raw.upper === 'number' && Number.isFinite(raw.upper)
+        ? raw.upper
+        : undefined
+      const stepPct = typeof raw.stepPct === 'number' && Number.isFinite(raw.stepPct)
+        ? raw.stepPct
+        : undefined
+      const sideMode = typeof raw.sideMode === 'string'
+        && (raw.sideMode === 'long_only' || raw.sideMode === 'short_only' || raw.sideMode === 'bidirectional')
+        ? raw.sideMode
+        : undefined
+
+      if (lower === undefined && upper === undefined && stepPct === undefined && !sideMode) {
+        return undefined
+      }
+
+      return {
+        ...(lower !== undefined ? { lower } : {}),
+        ...(upper !== undefined ? { upper } : {}),
+        ...(stepPct !== undefined ? { stepPct } : {}),
+        ...(sideMode ? { sideMode } : {}),
+      }
+    }
+
     const normalized: ChecklistPayload = {
       symbols: normalizeStringArray(payload.symbols),
       timeframes: normalizeStringArray(payload.timeframes),
@@ -3641,6 +3740,7 @@ export class CodegenConversationService {
       exitRuleDrafts: normalizeDrafts(payload.exitRuleDrafts, 'exit'),
       riskRuleDrafts: normalizeDrafts(payload.riskRuleDrafts, 'risk'),
       market: normalizeMarket(payload.market),
+      grid: normalizeGrid(payload.grid),
     }
     const drafts = buildChecklistRuleDrafts(normalized)
 
@@ -4413,6 +4513,13 @@ export class CodegenConversationService {
       exitRuleDrafts: patch.exitRuleDrafts && patch.exitRuleDrafts.length > 0 ? patch.exitRuleDrafts : base.exitRuleDrafts,
       riskRuleDrafts: patch.riskRuleDrafts && patch.riskRuleDrafts.length > 0 ? patch.riskRuleDrafts : base.riskRuleDrafts,
       market: patch.market ?? base.market,
+      grid: (() => {
+        const mergedGrid = {
+          ...(base.grid ?? {}),
+          ...(patch.grid ?? {}),
+        }
+        return Object.keys(mergedGrid).length > 0 ? mergedGrid : undefined
+      })(),
     }
     return this.normalizeChecklist(merged)
   }

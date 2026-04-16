@@ -13,6 +13,7 @@ export class SemanticStateCompileBridgeService {
     if (state.triggers.some(trigger => trigger.phase === 'gate')) {
       families.add('state-gated')
     }
+    const grid = this.buildGridIntent(state.triggers)
 
     return {
       families: Array.from(families) as StrategyNormalizedIntent['families'],
@@ -34,8 +35,35 @@ export class SemanticStateCompileBridgeService {
             positionMode: state.position.positionMode as StrategyNormalizedIntent['position']['positionMode'],
           }
         : null,
+      ...(grid ? { grid } : {}),
       unresolved: [],
       normalizationNotes: [...state.normalizationNotes],
+    }
+  }
+
+  private buildGridIntent(
+    triggers: SemanticTriggerState[],
+  ): StrategyNormalizedIntent['grid'] {
+    const activeGrid = triggers.find(trigger =>
+      trigger.key === 'grid.range_rebalance'
+      && trigger.status !== 'superseded'
+      && typeof trigger.params.rangeLower === 'number'
+      && typeof trigger.params.rangeUpper === 'number'
+      && typeof trigger.params.stepPct === 'number',
+    )
+    if (!activeGrid) {
+      return null
+    }
+
+    return {
+      family: 'grid.range_rebalance',
+      range: {
+        lower: activeGrid.params.rangeLower as number,
+        upper: activeGrid.params.rangeUpper as number,
+      },
+      stepPct: activeGrid.params.stepPct as number,
+      sideMode: (activeGrid.params.sideMode as StrategyNormalizedIntent['grid']['sideMode']) ?? 'bidirectional',
+      recycle: activeGrid.params.recycle !== false,
     }
   }
 

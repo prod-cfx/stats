@@ -9,6 +9,17 @@ export class SemanticStateProjectionService {
   } {
     const triggerSummary = state.triggers
       .map((trigger) => {
+        if (trigger.key === 'grid.range_rebalance') {
+          const lower = trigger.params.rangeLower
+          const upper = trigger.params.rangeUpper
+          const stepPct = trigger.params.stepPct
+          return [
+            '入场：区间网格',
+            typeof lower === 'number' && typeof upper === 'number' ? `${lower}-${upper}` : '区间待补充',
+            typeof stepPct === 'number' ? `步长 ${stepPct}%` : '步长待补充',
+          ].join(' ')
+        }
+
         if (trigger.key === 'indicator.above' && trigger.params['reference.period']) {
           return `入场：突破 MA${trigger.params['reference.period']}`
         }
