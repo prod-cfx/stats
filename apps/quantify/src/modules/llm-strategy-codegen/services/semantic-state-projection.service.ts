@@ -30,15 +30,21 @@ export class SemanticStateProjectionService {
   }
 
   private findNextOpenSlot(state: SemanticState): SemanticSlotState | null {
-    const triggerSlots = state.triggers.flatMap(trigger => trigger.openSlots)
-    const behaviorTriggerSlot = triggerSlots.find(slot =>
-      slot.status === 'open' && (slot.priority === 'behavior' || slot.slotKey === 'regimeDefinition'),
+    const triggerPhaseOrder: Array<'entry' | 'exit' | 'risk' | 'gate'> = ['entry', 'exit', 'risk', 'gate']
+    const openTriggerSlots = triggerPhaseOrder.flatMap(phase =>
+      state.triggers
+        .filter(trigger => trigger.phase === phase)
+        .flatMap(trigger => trigger.openSlots)
+        .filter(slot => slot.status === 'open'),
+    )
+    const behaviorTriggerSlot = openTriggerSlots.find(slot =>
+      slot.priority === 'behavior' || slot.slotKey === 'regimeDefinition',
     )
     if (behaviorTriggerSlot) {
       return behaviorTriggerSlot
     }
 
-    const firstBlockingTriggerSlot = triggerSlots.find(slot => slot.status === 'open')
+    const firstBlockingTriggerSlot = openTriggerSlots[0] ?? null
     if (firstBlockingTriggerSlot) {
       return firstBlockingTriggerSlot
     }

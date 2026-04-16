@@ -1612,6 +1612,73 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('does not let a context clarification item overtake the active semantic slot in mergeSemanticClarificationState', () => {
+    const result = (service as any).mergeSemanticClarificationState({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-ma',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'long_term',
+            'reference.period': 50,
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'confirmationMode.entry',
+              fieldPath: 'triggers[0].params.confirmationMode',
+              status: 'open',
+              priority: 'core',
+              questionHint: '突破按收盘确认还是盘中触发？',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'open',
+          priority: 'context',
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+        },
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    }, {
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        {
+          key: 'executionContext.exchange',
+          reason: 'missing_exchange',
+          field: 'exchange',
+          blocking: true,
+          question: '请确认交易所（binance / okx / hyperliquid）。',
+          status: 'pending',
+        },
+      ],
+      summary: '已识别部分条件，但仍未完整。',
+    })
+
+    expect(result.items[0]).toEqual(expect.objectContaining({
+      key: 'semantic.confirmationMode.entry',
+      question: '突破按收盘确认还是盘中触发？',
+    }))
+  })
+
   it('keeps newly added semantic triggers when a persisted semanticState session gains another rule', () => {
     const currentSemanticState = buildLockedMaSemanticState({
       triggers: [
