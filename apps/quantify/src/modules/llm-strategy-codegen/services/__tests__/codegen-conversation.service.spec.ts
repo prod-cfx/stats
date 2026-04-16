@@ -1961,13 +1961,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(payload.checklist?.exitRules?.join(' ')).not.toContain('均线')
   })
 
-  it('keeps historical MA baseline restoration out of the general inferChecklistFromMessage path', () => {
+  it('extracts generic moving-average breakout rules for the historical MA baseline sentence', () => {
     const inferred = (service as any).inferChecklistFromMessage(
       '当价格突破一条长期均线时买入，跌破短期均线时卖出',
     )
 
-    expect(inferred.entryRules).toEqual(['满足入场条件后开仓'])
-    expect(inferred.exitRules).toEqual(['满足出场条件后平仓'])
+    expect(inferred.entryRules).toEqual(['价格突破长期均线时买入'])
+    expect(inferred.exitRules).toEqual(['价格跌破短期均线时卖出'])
   })
 
   it('returns strategyInstanceId in session snapshot response', async () => {

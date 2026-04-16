@@ -177,13 +177,10 @@ export class CodegenConversationService {
         status: HttpStatus.UNAUTHORIZED,
       })
     }
-    const seedChecklist = this.normalizeChecklist(this.restoreHistoricalMaBaselineForFirstTurn(
-      dto.initialMessage,
-      {
-        ...this.extractChecklist(dto),
-        ...this.inferChecklistFromMessage(dto.initialMessage),
-      },
-    ))
+    const seedChecklist = this.normalizeChecklist({
+      ...this.extractChecklist(dto),
+      ...this.inferChecklistFromMessage(dto.initialMessage),
+    })
     const plan = await this.planConversationByLlm(dto.initialMessage ?? '', seedChecklist, {
       providerCode: this.resolveProviderCode(undefined),
       model: undefined,
@@ -1199,31 +1196,6 @@ export class CodegenConversationService {
       priority: 'context',
       questionHint,
       affectsExecution: true,
-    }
-  }
-
-  private restoreHistoricalMaBaselineForFirstTurn(
-    message: string | undefined,
-    checklist: ChecklistPayload,
-  ): ChecklistPayload {
-    if (!message?.trim()) {
-      return checklist
-    }
-
-    const normalizedMessage = message.replace(/\s+/gu, '')
-    const matchesHistoricalBaseline = normalizedMessage.includes('价格突破一条长期均线时买入')
-      && normalizedMessage.includes('跌破短期均线时卖出')
-    const hasGenericChecklistFallback = (checklist.entryRules ?? []).includes('满足入场条件后开仓')
-      && (checklist.exitRules ?? []).includes('满足出场条件后平仓')
-
-    if (!matchesHistoricalBaseline || !hasGenericChecklistFallback) {
-      return checklist
-    }
-
-    return {
-      ...checklist,
-      entryRules: ['价格突破一条长期均线时买入'],
-      exitRules: ['跌破短期均线时卖出'],
     }
   }
 
@@ -3427,6 +3399,26 @@ export class CodegenConversationService {
     }
 
     if (entryRules.length === 0) {
+      const entryMovingAverageBreakout = this.inferMovingAverageBreakoutRuleFromFragments(
+        directionalFragments,
+        'entry',
+      )
+      if (entryMovingAverageBreakout) {
+        entryRules.push(entryMovingAverageBreakout)
+      }
+    }
+
+    if (exitRules.length === 0) {
+      const exitMovingAverageBreakout = this.inferMovingAverageBreakoutRuleFromFragments(
+        directionalFragments,
+        'exit',
+      )
+      if (exitMovingAverageBreakout) {
+        exitRules.push(exitMovingAverageBreakout)
+      }
+    }
+
+    if (entryRules.length === 0) {
       const hasBollinger = /布林|bollinger/i.test(text)
       const hasUpperBand = /上轨|upper/i.test(text)
       const hasLowerBand = /下轨|lower/i.test(text)
@@ -3576,6 +3568,40 @@ export class CodegenConversationService {
       riskRules: Object.keys(riskRules).length > 0 ? riskRules : undefined,
       market: Object.keys(inferredMarket).length > 0 ? inferredMarket : { defaultTimeframe: timeframes[0] ?? null },
     }
+  }
+
+  private inferMovingAverageBreakoutRuleFromFragments(
+    fragments: string[],
+    phase: 'entry' | 'exit',
+  ): string | null {
+    const actionPattern = phase === 'entry'
+      ? /买入|开仓|入场/u
+      : /卖出|平仓|离场|出场/u
+
+    for (const fragment of fragments) {
+      if (!actionPattern.test(fragment)) {
+        continue
+      }
+      if (!/均线|ema|sma|ma/iu.test(fragment)) {
+        continue
+      }
+
+      const referenceRole = /长期|长线|长周期|long[\s-]?term/iu.test(fragment)
+        ? '长期均线'
+        : (/短期|短线|短周期|short[\s-]?term/iu.test(fragment) ? '短期均线' : null)
+      if (!referenceRole) {
+        continue
+      }
+
+      if (/突破|上穿|站上|上方|高于/u.test(fragment)) {
+        return `价格突破${referenceRole}时${phase === 'entry' ? '买入' : '卖出'}`
+      }
+      if (/跌破|下穿|失守|下方|低于/u.test(fragment)) {
+        return `价格跌破${referenceRole}时${phase === 'entry' ? '买入' : '卖出'}`
+      }
+    }
+
+    return null
   }
 
   private detectDirectionInTriggerFragment(
