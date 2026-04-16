@@ -1832,6 +1832,52 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('does not reuse one persisted open trigger across multiple newly derived siblings', () => {
+    const currentSemanticState = buildLockedMaSemanticState({
+      triggers: [
+        {
+          id: 'entry-ma-generic',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'reference.period.entry',
+              fieldPath: 'triggers[0].params.reference.period',
+              status: 'open',
+              priority: 'core',
+              questionHint: '长期均线是多少？',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      actions: [
+        { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      ],
+      position: null,
+    })
+
+    const mergedSemanticState = (service as any).mergeChecklistIntoSemanticState(currentSemanticState, {
+      entryRules: [
+        '价格突破长期均线（50）时买入',
+        '价格突破短期均线（20）时买入',
+      ],
+      exitRules: ['收盘确认价格跌破短期均线（10）时卖出'],
+    })
+
+    const reusedIds = mergedSemanticState.triggers
+      .filter((trigger: any) => trigger.phase === 'entry' && trigger.key === 'indicator.above')
+      .map((trigger: any) => trigger.id)
+      .filter((id: string) => id === 'entry-ma-generic')
+
+    expect(reusedIds).toHaveLength(1)
+  })
+
   it('rebuilds semantic state from updated checklist without retaining stale locked state-gate triggers', () => {
     const currentSemanticState = buildLockedBollingerSemanticState({
       families: ['single-leg', 'state-gated'],

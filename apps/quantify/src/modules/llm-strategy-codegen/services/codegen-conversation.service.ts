@@ -980,10 +980,21 @@ export class CodegenConversationService {
     checklist: ChecklistPayload,
   ): SemanticState {
     const derivedState = this.buildFallbackSemanticState(checklist)
+    const remainingOpenCurrentTriggers = currentState.triggers
+      .filter(trigger =>
+        trigger.status === 'open'
+        && trigger.openSlots.some(slot => slot.status === 'open'),
+      )
+      .map(trigger => ({
+        ...trigger,
+        params: { ...trigger.params },
+        openSlots: trigger.openSlots.map(slot => ({ ...slot })),
+      }))
     const nextTriggers = derivedState.triggers.map(trigger => this.reconcileDerivedTriggerState(
       trigger,
       derivedState.triggers,
       currentState,
+      remainingOpenCurrentTriggers,
     ))
 
     return {
@@ -997,6 +1008,7 @@ export class CodegenConversationService {
     trigger: SemanticTriggerState,
     derivedTriggers: SemanticTriggerState[],
     currentState: SemanticState,
+    remainingOpenCurrentTriggers?: SemanticTriggerState[],
   ): SemanticTriggerState {
     let nextTrigger: SemanticTriggerState = {
       ...trigger,
@@ -1034,13 +1046,20 @@ export class CodegenConversationService {
       }
     }
 
-    const matchingCurrentTrigger = currentState.triggers.find(currentTrigger =>
+    const openTriggerPool = remainingOpenCurrentTriggers ?? currentState.triggers
+    const matchingCurrentTriggerIndex = openTriggerPool.findIndex(currentTrigger =>
       this.isSameDerivedTriggerIdentity(currentTrigger, nextTrigger)
       && currentTrigger.status === 'open'
       && currentTrigger.openSlots.some(slot => slot.status === 'open'),
     )
+    const matchingCurrentTrigger = matchingCurrentTriggerIndex >= 0
+      ? openTriggerPool[matchingCurrentTriggerIndex]
+      : undefined
 
     if (matchingCurrentTrigger) {
+      if (remainingOpenCurrentTriggers && matchingCurrentTriggerIndex >= 0) {
+        remainingOpenCurrentTriggers.splice(matchingCurrentTriggerIndex, 1)
+      }
       nextTrigger = {
         ...nextTrigger,
         id: matchingCurrentTrigger.id,
