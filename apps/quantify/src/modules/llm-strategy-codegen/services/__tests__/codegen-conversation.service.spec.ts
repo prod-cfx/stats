@@ -1413,6 +1413,83 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('applies legacy grid.lower answers into the semantic snapshot path', () => {
+    const nextSemanticState = (service as any).applySemanticClarificationAnswers(
+      {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [
+          {
+            id: 'grid-entry',
+            key: 'grid.range_rebalance',
+            phase: 'entry',
+            params: {
+              sideMode: 'bidirectional',
+            },
+            status: 'open',
+            source: 'user_explicit',
+            openSlots: [
+              {
+                slotKey: 'grid.lower',
+                fieldPath: 'triggers[0].params.rangeLower',
+                status: 'open',
+                priority: 'core',
+                questionHint: '请确认网格区间下界。',
+                affectsExecution: true,
+              },
+            ],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-16T10:00:00.000Z',
+      },
+      {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'grid.lower',
+            reason: 'grid_params_missing',
+            field: 'grid.lower',
+            blocking: true,
+            question: '请确认网格区间下界。',
+            status: 'pending',
+            slotId: buildSemanticSlotId({
+              slotKey: 'grid.lower',
+              fieldPath: 'triggers[0].params.rangeLower',
+            }),
+            slotKey: 'grid.lower',
+            fieldPath: 'triggers[0].params.rangeLower',
+          },
+        ],
+        summary: '已识别网格策略，但还缺少区间下界。',
+      },
+      {
+        'grid.lower': '60000',
+      },
+    )
+
+    expect(nextSemanticState).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          params: expect.objectContaining({
+            rangeLower: 60000,
+          }),
+          openSlots: expect.arrayContaining([
+            expect.objectContaining({
+              slotKey: 'grid.lower',
+              status: 'locked',
+              value: 60000,
+            }),
+          ]),
+        }),
+      ]),
+    }))
+  })
+
   it('keeps persisted grid clarification items valid when they use canonical grid.range field names', () => {
     const clarificationState = (service as any).readClarificationState({
       status: 'NEEDS_CLARIFICATION',

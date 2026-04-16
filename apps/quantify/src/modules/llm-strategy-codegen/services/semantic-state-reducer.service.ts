@@ -84,6 +84,8 @@ export class SemanticStateReducerService {
   }
 
   private reduceSupportedSlot(slot: SemanticSlotState, answerText: string): SupportedSlotReduction | null {
+    const normalizedGridSlotKey = this.normalizeGridSlotKey(slot.slotKey)
+
     if (slot.slotKey.includes('reference.period')) {
       const periodMatch = answerText.match(/(?:ma|ema|sma)?\s*(\d{1,4})/iu)
       if (!periodMatch?.[1]) {
@@ -113,15 +115,15 @@ export class SemanticStateReducerService {
       }
     }
 
-    if (slot.slotKey === 'grid.range.lower' || slot.slotKey === 'grid.range.upper' || slot.slotKey === 'grid.stepPct') {
-      const value = this.parseGridNumericAnswer(slot.slotKey, answerText)
+    if (normalizedGridSlotKey === 'grid.range.lower' || normalizedGridSlotKey === 'grid.range.upper' || normalizedGridSlotKey === 'grid.stepPct') {
+      const value = this.parseGridNumericAnswer(normalizedGridSlotKey, answerText)
       if (value === null) {
         return null
       }
 
-      const paramKey = slot.slotKey === 'grid.range.lower'
+      const paramKey = normalizedGridSlotKey === 'grid.range.lower'
         ? 'rangeLower'
-        : (slot.slotKey === 'grid.range.upper' ? 'rangeUpper' : 'stepPct')
+        : (normalizedGridSlotKey === 'grid.range.upper' ? 'rangeUpper' : 'stepPct')
 
       return {
         paramKey,
@@ -130,7 +132,7 @@ export class SemanticStateReducerService {
       }
     }
 
-    if (slot.slotKey === 'grid.sideMode') {
+    if (normalizedGridSlotKey === 'grid.sideMode') {
       const sideMode = this.parseGridSideModeAnswer(answerText)
       if (!sideMode) {
         return null
@@ -141,6 +143,26 @@ export class SemanticStateReducerService {
         paramValue: sideMode,
         slotValue: sideMode,
       }
+    }
+
+    return null
+  }
+
+  private normalizeGridSlotKey(slotKey: string): 'grid.range.lower' | 'grid.range.upper' | 'grid.stepPct' | 'grid.sideMode' | null {
+    if (slotKey === 'grid.range.lower' || slotKey === 'grid.lower') {
+      return 'grid.range.lower'
+    }
+
+    if (slotKey === 'grid.range.upper' || slotKey === 'grid.upper') {
+      return 'grid.range.upper'
+    }
+
+    if (slotKey === 'grid.stepPct') {
+      return 'grid.stepPct'
+    }
+
+    if (slotKey === 'grid.sideMode') {
+      return 'grid.sideMode'
     }
 
     return null

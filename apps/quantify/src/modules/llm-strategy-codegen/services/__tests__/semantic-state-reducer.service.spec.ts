@@ -395,6 +395,55 @@ describe('SemanticStateReducerService', () => {
     expect(withStep.triggers[0]?.status).toBe('locked')
   })
 
+  it('treats legacy grid.lower and grid.upper slots as canonical grid range semantics', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [
+          {
+            id: 'grid-entry',
+            key: 'grid.range_rebalance',
+            phase: 'entry',
+            params: {
+              sideMode: 'bidirectional',
+            },
+            status: 'open',
+            source: 'user_explicit',
+            openSlots: [
+              {
+                slotKey: 'grid.lower',
+                fieldPath: 'triggers[0].params.rangeLower',
+                status: 'open',
+                priority: 'core',
+                questionHint: '请确认网格区间下界。',
+                affectsExecution: true,
+              },
+            ],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-16T10:00:00.000Z',
+      },
+      targetSlotKey: 'grid.lower',
+      targetFieldPath: 'triggers[0].params.rangeLower',
+      answer: '60000',
+      messageIndex: 12,
+    })
+
+    expect(next.triggers[0]?.params.rangeLower).toBe(60000)
+    expect(next.triggers[0]?.openSlots[0]).toEqual(expect.objectContaining({
+      slotKey: 'grid.lower',
+      status: 'locked',
+      value: 60000,
+    }))
+    expect(next.triggers[0]?.status).toBe('locked')
+  })
+
   it('reduces grid sideMode into trigger params and locks the semantic slot', () => {
     const next = service.applyClarificationAnswer({
       currentState: {
