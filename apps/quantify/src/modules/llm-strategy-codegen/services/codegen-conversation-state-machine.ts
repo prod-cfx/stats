@@ -4,6 +4,7 @@ import type {
   LlmCodegenConversationStatus,
   LlmCodegenSessionStatus,
 } from '../types/codegen-session-status'
+import type { SemanticState } from '../types/semantic-state'
 import type { StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyConsistencyReport } from '../types/strategy-consistency-report'
 import type { Prisma } from '@/prisma/prisma.types'
@@ -39,6 +40,7 @@ export class CodegenConversationStateMachine {
   buildConversationUpdate(input: {
     status: LlmCodegenConversationStatus
     checklist: ChecklistPayload
+    semanticState?: SemanticState | null
     clarificationState: StrategyClarificationState
     constraintPack: ConstraintPackSnapshot
     latestSpecDesc?: Record<string, unknown> | null
@@ -46,6 +48,7 @@ export class CodegenConversationStateMachine {
     return {
       status: input.status,
       checklist: input.checklist as Prisma.InputJsonValue,
+      ...(input.semanticState ? { semanticState: input.semanticState as unknown as Prisma.InputJsonValue } : {}),
       clarificationState: input.clarificationState as unknown as Prisma.InputJsonValue,
       constraintPack: input.constraintPack as unknown as Prisma.InputJsonValue,
       ...(input.latestSpecDesc ? { latestSpecDesc: input.latestSpecDesc as Prisma.InputJsonValue } : {}),
@@ -54,6 +57,7 @@ export class CodegenConversationStateMachine {
 
   buildGeneratingUpdate(input: {
     checklist: ChecklistPayload
+    semanticState?: SemanticState | null
     clarificationState: StrategyClarificationState
     constraintPack: ConstraintPackSnapshot
     latestSpecDesc: Record<string, unknown>
@@ -61,6 +65,7 @@ export class CodegenConversationStateMachine {
     return {
       status: 'GENERATING',
       checklist: input.checklist as Prisma.InputJsonValue,
+      ...(input.semanticState ? { semanticState: input.semanticState as unknown as Prisma.InputJsonValue } : {}),
       clarificationState: input.clarificationState as unknown as Prisma.InputJsonValue,
       constraintPack: input.constraintPack as unknown as Prisma.InputJsonValue,
       latestSpecDesc: input.latestSpecDesc as Prisma.InputJsonValue,

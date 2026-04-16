@@ -195,8 +195,8 @@ describe('strategyClarificationQuestionService', () => {
   it('requires the conversation planner prompt to summarize first and keep logicReady false while blockers remain', () => {
     const prompt = buildConversationPlannerSystemPrompt()
 
-    expect(prompt).toContain('2) 如果策略逻辑还不完整：logicReady=false，assistantPrompt 必须先总结当前已理解策略，再只问一个最高优先级问题。')
-    expect(prompt).toContain('3) 若任一必答项，或阈值/时间窗口/序列条件的比较基准仍不明确：logicReady=false，禁止请求确认逻辑图。')
+    expect(prompt).toContain('你的职责是生成 semantic update candidates 与自然语言交互')
+    expect(prompt).toContain('"semanticUpdates"?: {')
     expect(prompt).not.toContain('标的/周期/风控可后续配置，不应强制先问这些。')
     expect(prompt).not.toContain('交易所、周期、仓位、risk metadata 可后续补充。')
   })

@@ -1,3 +1,4 @@
+import { buildSemanticSlotId } from '../../types/semantic-state'
 import { StrategyIntentNormalizerService } from '../strategy-intent-normalizer.service'
 import { StrategyIntentResolutionService } from '../strategy-intent-resolution.service'
 
@@ -80,6 +81,50 @@ describe('strategyIntentResolutionService', () => {
     ]))
     expect(resolution.ambiguities).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'atomic_semantic_fork', field: 'trigger.confirmation' }),
+    ]))
+  })
+
+  it('propagates stable semantic slot identity into open-slot ambiguities', () => {
+    const resolution = service.resolve({
+      normalizedIntent: {
+        families: ['single-leg'],
+        triggers: [
+          {
+            key: 'indicator.above',
+            phase: 'entry',
+            params: { indicator: 'ma', referenceRole: 'long_term' },
+            closureStatus: 'open',
+            unresolvedSlots: [
+              {
+                slotKey: 'reference.period.entry',
+                fieldPath: 'triggers[0].params.reference.period',
+                reason: 'missing_required_param',
+                questionHint: '长期均线是多少？',
+                priority: 'core',
+                affectsExecution: true,
+              },
+            ],
+          },
+        ],
+        actions: [{ key: 'open_long' } as any],
+        risk: [],
+        position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_only' } as any,
+        unresolved: [],
+        normalizationNotes: [],
+      },
+    })
+
+    expect(resolution.ambiguities).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'open_semantic_slot',
+        field: 'reference.period.entry',
+        slotKey: 'reference.period.entry',
+        fieldPath: 'triggers[0].params.reference.period',
+        slotId: buildSemanticSlotId({
+          slotKey: 'reference.period.entry',
+          fieldPath: 'triggers[0].params.reference.period',
+        }),
+      }),
     ]))
   })
 })

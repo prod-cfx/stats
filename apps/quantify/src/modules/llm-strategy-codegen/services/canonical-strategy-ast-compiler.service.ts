@@ -227,7 +227,13 @@ export class CanonicalStrategyAstCompilerService {
   }
 
   private seriesRank(series: SeriesDef, seriesIndex: Map<string, SeriesDef>): number {
-    if (series.kind === 'PRICE' || series.kind === 'CONST') return 0
+    if (
+      series.kind === 'PRICE'
+      || series.kind === 'CONST'
+      || series.kind === 'MARKET_REGIME'
+      || series.kind === 'TREND_DIRECTION'
+      || series.kind === 'VOLATILITY_STATE'
+    ) return 0
     if (!series.inputs || series.inputs.length === 0) return 1
 
     const inputRank = series.inputs.reduce((max, input) => {

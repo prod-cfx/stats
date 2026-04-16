@@ -1,6 +1,7 @@
 import type { AtomicIntent, AtomicIntentResolution, StrategyAmbiguity } from '../types/strategy-ambiguity'
 import type { NormalizedTriggerAtom, StrategyNormalizedIntent, UnresolvedSlot } from '../types/strategy-normalized-intent'
 import { Injectable } from '@nestjs/common'
+import { buildSemanticSlotId } from '../types/semantic-state'
 
 @Injectable()
 export class StrategyIntentResolutionService {
@@ -114,6 +115,9 @@ export class StrategyIntentResolutionService {
       message: input.message,
       question: input.slot.questionHint,
       priority: input.slot.priority === 'core' ? 10 : input.slot.priority === 'behavior' ? 20 : input.slot.priority === 'risk' ? 30 : 40,
+      slotId: buildSemanticSlotId(input.slot),
+      slotKey: input.slot.slotKey,
+      fieldPath: input.slot.fieldPath,
     }
   }
 

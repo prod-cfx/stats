@@ -566,6 +566,22 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
+      case 'market.regime':
+      case 'trend.direction':
+      case 'volatility.state': {
+        const stateSeriesRef = this.ensureStateContextSeries(atom.key, context)
+        const expectedValueRef = this.ensureConstSeries(
+          context,
+          typeof atom.value === 'string' ? atom.value : '',
+        )
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}`,
+          'EQ',
+          [stateSeriesRef, expectedValueRef],
+        )
+      }
+
       default:
         throw new Error(`codegen.canonical_spec_v2_condition_unsupported:${atom.key}`)
     }
@@ -723,13 +739,34 @@ export class CanonicalSpecV2IrCompilerService {
     return id
   }
 
-  private ensureConstSeries(context: CompileContext, value: number): string {
-    const id = `const_${this.normalizeNumberToken(value)}`
+  private ensureConstSeries(context: CompileContext, value: number | string): string {
+    const id = typeof value === 'string'
+      ? `const_text_${this.normalizeTextToken(value)}`
+      : `const_${this.normalizeNumberToken(value)}`
     if (!context.seriesMap.has(id)) {
       context.seriesMap.set(id, {
         id,
         kind: 'CONST',
         value,
+      })
+    }
+    return id
+  }
+
+  private ensureStateContextSeries(
+    key: 'market.regime' | 'trend.direction' | 'volatility.state',
+    context: CompileContext,
+  ): string {
+    const kindMap = {
+      'market.regime': 'MARKET_REGIME',
+      'trend.direction': 'TREND_DIRECTION',
+      'volatility.state': 'VOLATILITY_STATE',
+    } as const
+    const id = key.replace(/\./g, '_')
+    if (!context.seriesMap.has(id)) {
+      context.seriesMap.set(id, {
+        id,
+        kind: kindMap[key],
       })
     }
     return id
@@ -1076,6 +1113,10 @@ export class CanonicalSpecV2IrCompilerService {
 
   private normalizeNumberToken(value: number): string {
     return String(value).replace(/\./g, '_')
+  }
+
+  private normalizeTextToken(value: string): string {
+    return value.trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'empty'
   }
 
   private readNumber(candidates: unknown[], fallback: number): number {

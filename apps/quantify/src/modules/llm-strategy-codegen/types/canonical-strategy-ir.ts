@@ -54,6 +54,9 @@ export interface SeriesDef {
   kind:
     | 'PRICE'
     | 'CONST'
+    | 'MARKET_REGIME'
+    | 'TREND_DIRECTION'
+    | 'VOLATILITY_STATE'
     | 'PRICE_CHANGE_PCT'
     | 'POSITION_AVG_PRICE'
     | 'POSITION_PNL_PCT'
@@ -76,7 +79,7 @@ export interface SeriesDef {
   offsetBars?: number
   inputs?: string[]
   params?: Record<string, number | string>
-  value?: number
+  value?: number | string
 }
 
 export interface LevelSetDef {

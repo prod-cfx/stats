@@ -617,6 +617,88 @@ describe('canonicalSpecV2IrCompilerService', () => {
     ]))
   })
 
+  it('compiles state-gated canonical rules into deterministic IR predicates', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const result = compiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        indicators: [{ kind: 'bollingerBands', params: { period: 20, stdDev: 2 } }],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['15m'],
+        },
+        rules: [
+          {
+            id: 'entry-gated-short',
+            phase: 'entry',
+            sideScope: 'short',
+            priority: 200,
+            condition: {
+              kind: 'AND',
+              children: [
+                {
+                  kind: 'atom',
+                  key: 'bollinger.upper_break',
+                  semanticScope: 'market',
+                  op: 'CROSS_OVER',
+                },
+                {
+                  kind: 'atom',
+                  key: 'market.regime',
+                  semanticScope: 'market',
+                  op: 'EQ',
+                  value: 'range',
+                },
+              ],
+            },
+            actions: [{ type: 'OPEN_SHORT', sizing: { mode: 'RATIO', value: 0.1 } }],
+            metadata: {
+              normalized: {
+                source: 'normalized-intent',
+                triggerKeys: ['bollinger.touch_upper'],
+                gateKeys: ['market.regime'],
+                actionKeys: ['OPEN_SHORT'],
+                family: 'single-leg',
+              },
+            },
+          },
+        ],
+      } as any,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'MARKET_REGIME' }),
+      expect.objectContaining({ kind: 'CONST', value: 'range' }),
+    ]))
+    expect(result.ir.signalCatalog.predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'EQ' }),
+      expect.objectContaining({ kind: 'AND' }),
+    ]))
+    expect(result.ir.ruleBlocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        actions: [expect.objectContaining({ kind: 'OPEN_SHORT' })],
+      }),
+    ]))
+  })
+
   it('compiles breakout and risk guards into deterministic IR', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 

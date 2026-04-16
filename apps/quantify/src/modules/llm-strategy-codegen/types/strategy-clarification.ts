@@ -69,6 +69,9 @@ export interface StrategyClarificationItem {
   answer?: string
   priority?: number
   evidenceKey?: string
+  slotId?: string
+  slotKey?: string
+  fieldPath?: string
 }
 
 export interface StrategyClarificationState {
