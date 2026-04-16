@@ -1367,8 +1367,8 @@ export class CodegenConversationService {
     if (item.slotKey === 'grid.stepPct') return 'grid.stepPct'
     if (item.slotKey === 'grid.sideMode') return 'grid.sideMode'
 
-    if (item.field === 'grid.lower') return 'grid.range.lower'
-    if (item.field === 'grid.upper') return 'grid.range.upper'
+    if (item.field === 'grid.range.lower' || item.field === 'grid.lower') return 'grid.range.lower'
+    if (item.field === 'grid.range.upper' || item.field === 'grid.upper') return 'grid.range.upper'
     if (item.field === 'grid.stepPct') return 'grid.stepPct'
     if (item.field === 'grid.sideMode') return 'grid.sideMode'
 
@@ -1907,13 +1907,18 @@ export class CodegenConversationService {
   private normalizeGridChecklistSideMode(
     answer: string,
   ): NonNullable<ChecklistPayload['grid']>['sideMode'] | null {
-    if (/双向|低买高卖|来回|往返|自动买卖|自动交易/u.test(answer)) {
+    const normalized = answer.trim().toLowerCase()
+    if (!normalized) {
+      return null
+    }
+
+    if (normalized === 'bidirectional' || /双向|低买高卖|来回|往返|自动买卖|自动交易/u.test(answer)) {
       return 'bidirectional'
     }
-    if (/只做多|仅做多/u.test(answer)) {
+    if (normalized === 'long_only' || /只做多|仅做多/u.test(answer)) {
       return 'long_only'
     }
-    if (/只做空|仅做空/u.test(answer)) {
+    if (normalized === 'short_only' || /只做空|仅做空/u.test(answer)) {
       return 'short_only'
     }
 

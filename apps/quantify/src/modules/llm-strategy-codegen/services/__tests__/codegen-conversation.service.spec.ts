@@ -1413,6 +1413,90 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('keeps persisted grid clarification items valid when they use canonical grid.range field names', () => {
+    const clarificationState = (service as any).readClarificationState({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        {
+          key: 'grid.range.lower',
+          reason: 'grid_params_missing',
+          field: 'grid.range.lower',
+          blocking: true,
+          question: '请确认网格区间下界。',
+          status: 'pending',
+          slotKey: 'grid.range.lower',
+          fieldPath: 'triggers[0].params.rangeLower',
+        },
+        {
+          key: 'grid.range.upper',
+          reason: 'grid_params_missing',
+          field: 'grid.range.upper',
+          blocking: true,
+          question: '请确认网格区间上界。',
+          status: 'pending',
+          slotKey: 'grid.range.upper',
+          fieldPath: 'triggers[0].params.rangeUpper',
+        },
+      ],
+      summary: '已识别网格策略，但还缺少区间上下界。',
+    })
+
+    expect(clarificationState).toEqual(expect.objectContaining({
+      status: 'NEEDS_CLARIFICATION',
+      summary: '已识别网格策略，但还缺少区间上下界。',
+      items: [
+        expect.objectContaining({
+          key: 'grid.range.lower',
+          field: 'grid.range.lower',
+          slotKey: 'grid.range.lower',
+        }),
+        expect.objectContaining({
+          key: 'grid.range.upper',
+          field: 'grid.range.upper',
+          slotKey: 'grid.range.upper',
+        }),
+      ],
+    }))
+  })
+
+  it('accepts canonical grid sideMode clarification answers on the fallback checklist path', () => {
+    const nextChecklist = (service as any).applyClarificationAnswers(
+      {
+        grid: {
+          lower: 60000,
+          upper: 80000,
+          stepPct: 0.5,
+        },
+      },
+      {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'grid.sideMode',
+            reason: 'missing_side_scope',
+            field: 'grid.sideMode',
+            blocking: true,
+            question: '请确认网格方向（双向 / 只做多 / 只做空）。',
+            status: 'pending',
+            allowedAnswers: ['bidirectional', 'long_only', 'short_only'],
+          },
+        ],
+      },
+      {
+        'grid.sideMode': 'bidirectional',
+      },
+    )
+
+    expect(nextChecklist).toEqual(expect.objectContaining({
+      grid: {
+        lower: 60000,
+        upper: 80000,
+        stepPct: 0.5,
+        sideMode: 'bidirectional',
+      },
+    }))
+  })
+
   it('surfaces inferred default risk bases for confirmation before compile', async () => {
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
