@@ -54,7 +54,7 @@ interface FormalSnapshotTruth {
   }
   backtestConfigDefaults: {
     initialCash: number
-    leverage: number
+    leverage: number | null
     slippageBps: number
     feeBps: number
     priceSource: 'open' | 'close' | 'mid'
@@ -167,7 +167,7 @@ export class BacktestSnapshotLoaderService {
 
     const backtestConfigDefaultsRaw = this.readJsonRecord(snapshot.backtestConfigDefaults)
     const backtestConfigDefaults = backtestConfigDefaultsRaw
-      ? this.parseBacktestConfigDefaults(backtestConfigDefaultsRaw)
+      ? this.parseBacktestConfigDefaults(backtestConfigDefaultsRaw, strategyConfig?.marketType ?? null)
       : null
     if (!backtestConfigDefaults) missingFields.push('backtestConfigDefaults')
 
@@ -222,7 +222,8 @@ export class BacktestSnapshotLoaderService {
   private parseStrategyConfig(raw: Record<string, unknown>): FormalSnapshotTruth['strategyConfig'] | null {
     const exchange = this.readTrimmedString(raw.exchange)
     const symbol = this.readTrimmedString(raw.symbol)
-    const marketType = this.readTrimmedString(raw.marketType)
+    const marketTypeRaw = this.readTrimmedString(raw.marketType)
+    const marketType = marketTypeRaw === 'spot' || marketTypeRaw === 'perp' ? marketTypeRaw : null
     const baseTimeframe = this.readTrimmedString(raw.baseTimeframe)
     const stateTimeframes = this.readStringArray(raw.stateTimeframes)
     const positionPct = this.readFiniteNumber(raw.positionPct)
@@ -240,7 +241,10 @@ export class BacktestSnapshotLoaderService {
     }
   }
 
-  private parseBacktestConfigDefaults(raw: Record<string, unknown>): FormalSnapshotTruth['backtestConfigDefaults'] | null {
+  private parseBacktestConfigDefaults(
+    raw: Record<string, unknown>,
+    marketType: string | null,
+  ): FormalSnapshotTruth['backtestConfigDefaults'] | null {
     const initialCash = this.readFiniteNumber(raw.initialCash)
     const leverage = this.readFiniteNumber(raw.leverage)
     const slippageBps = this.readFiniteNumber(raw.slippageBps)
@@ -250,18 +254,19 @@ export class BacktestSnapshotLoaderService {
 
     if (
       initialCash === null || initialCash <= 0
-      || leverage === null || leverage <= 0
       || slippageBps === null || slippageBps < 0
       || feeBps === null || feeBps < 0
       || (priceSource !== 'open' && priceSource !== 'close' && priceSource !== 'mid')
       || typeof allowPartial !== 'boolean'
+      || (marketType === 'perp' && (leverage === null || leverage <= 0))
+      || (marketType !== 'spot' && marketType !== 'perp')
     ) {
       return null
     }
 
     return {
       initialCash,
-      leverage,
+      leverage: leverage !== null && leverage > 0 ? leverage : null,
       slippageBps,
       feeBps,
       priceSource,

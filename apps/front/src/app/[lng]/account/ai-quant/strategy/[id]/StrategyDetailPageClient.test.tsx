@@ -119,6 +119,7 @@ describe('StrategyDetailPageClient', () => {
       publishedSnapshotParamValues: {
         exchange: 'binance',
         symbol: 'BTCUSDT',
+        marketType: 'perp',
         baseTimeframe: '3m',
         positionPct: 12,
       },
@@ -223,6 +224,79 @@ describe('StrategyDetailPageClient', () => {
     expect(container.querySelector('[data-testid="backtest-error"]')?.textContent).toBe('')
   })
 
+  it('runs spot backtests from strategy detail without sending leverage', async () => {
+    mockMapDetailToRecord.mockReturnValue({
+      id: 'inst-spot',
+      name: 'Spot strategy',
+      status: 'running',
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      timeframe: '3m',
+      positionPct: 12,
+      initialCapital: 10000,
+      metrics: { returnPct: 0, maxDrawdownPct: 0, winRatePct: 0, tradeCount: 0 },
+      equitySeries: [],
+      timeline: [],
+      paramSchema: null,
+      publishedSnapshotId: 'snapshot-spot',
+      paramValues: {
+        backtestRangePreset: '7D',
+        backtestInitialCash: 18000,
+        backtestSlippageBps: 9,
+        backtestFeeBps: 2,
+        backtestPriceSource: 'close',
+        backtestAllowPartial: true,
+      },
+      schemaVersion: null,
+      supportsDynamicParams: false,
+      publishedSnapshotParamValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        baseTimeframe: '3m',
+        positionPct: 12,
+      },
+      snapshotBacktestConfigDefaults: {
+        initialCash: 18000,
+        leverage: null,
+        slippageBps: 9,
+        feeBps: 2,
+        priceSource: 'close',
+        allowPartial: true,
+        stateTimeframes: ['15m'],
+      },
+      compatibilityMetadata: {
+        isLegacySnapshot: false,
+        missingBacktestConfigDefaults: false,
+        missingDeploymentExecutionDefaults: false,
+        missingDeploymentExecutionConstraints: false,
+        requiresRepublishForBacktest: false,
+        requiresRepublishForDeploy: false,
+      },
+      updatedAt: '2026-04-10T00:00:00.000Z',
+    })
+
+    await act(async () => {
+      root.render(<StrategyDetailPageClient lng="zh" id="inst-spot" />)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        marketType: 'spot',
+        initialCash: 18000,
+        leverage: null,
+      }),
+    )
+  })
+
   it('allows partial market-data coverage from strategy detail even when snapshot allowPartial is false', async () => {
     mockMapDetailToRecord.mockReturnValue({
       id: 'inst-1',
@@ -256,6 +330,7 @@ describe('StrategyDetailPageClient', () => {
       publishedSnapshotParamValues: {
         exchange: 'binance',
         symbol: 'BTCUSDT',
+        marketType: 'perp',
         baseTimeframe: '3m',
         positionPct: 12,
       },
@@ -320,6 +395,7 @@ describe('StrategyDetailPageClient', () => {
       publishedSnapshotParamValues: {
         exchange: 'binance',
         symbol: 'BTCUSDT',
+        marketType: 'perp',
         baseTimeframe: '15m',
         positionPct: 12,
       },

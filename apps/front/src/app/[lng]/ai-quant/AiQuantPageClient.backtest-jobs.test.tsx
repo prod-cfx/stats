@@ -231,6 +231,7 @@ function seedConfirmedConversation(now = Date.now()) {
       publishedSnapshotParamValues: {
         exchange: 'binance',
         symbol: 'BTCUSDT',
+        marketType: 'perp',
         baseTimeframe: '15m',
         buyWindowMin: 3,
         buyDropPct: 1,
@@ -241,6 +242,7 @@ function seedConfirmedConversation(now = Date.now()) {
       publishedSnapshotStrategyConfig: {
         exchange: 'binance',
         symbol: 'BTCUSDT',
+        marketType: 'perp',
         baseTimeframe: '15m',
         positionPct: 10,
       },
@@ -839,6 +841,60 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       allowPartial: true,
     }))
     expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain('missing_explicit_execution_config')
+  })
+
+  it('allows spot snapshot backtests without a leverage value', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    seeded[0].backtestExecutionConfigExplicit = false
+    seeded[0].paramValues = {
+      ...seeded[0].paramValues,
+      marketType: 'spot',
+      backtestInitialCash: 21000,
+      backtestLeverage: undefined,
+      backtestSlippageBps: 11,
+      backtestFeeBps: 3,
+      backtestPriceSource: 'mid',
+      backtestAllowPartial: true,
+    }
+    seeded[0].publishedSnapshotParamValues = {
+      ...seeded[0].publishedSnapshotParamValues,
+      marketType: 'spot',
+    }
+    seeded[0].publishedSnapshotStrategyConfig = {
+      ...seeded[0].publishedSnapshotStrategyConfig,
+      marketType: 'spot',
+    }
+    seeded[0].publishedSnapshotBacktestConfigDefaults = {
+      initialCash: 21000,
+      leverage: null,
+      slippageBps: 11,
+      feeBps: 3,
+      priceSource: 'mid',
+      allowPartial: true,
+    }
+    localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(seeded))
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(expect.objectContaining({
+      marketType: 'spot',
+      initialCash: 21000,
+      leverage: null,
+      execution: expect.objectContaining({
+        slippageBps: 11,
+        feeBps: 3,
+        priceSource: 'mid',
+      }),
+    }))
   })
 
   it('uses AI-Quant page execution params instead of snapshot defaults for published snapshot backtests', async () => {

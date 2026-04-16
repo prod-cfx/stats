@@ -21,6 +21,7 @@ interface QuantChatPanelProps {
   messages: QuantMessage[]
   paramSchema: DynamicParamSchema | null
   paramValues: DynamicParamValues
+  backtestMarketType?: 'spot' | 'perp' | null
   clarificationGate?: LlmClarificationGate | null
   publicationGate?: LlmPublicationGate | null
   compactMode?: boolean // Kept for compatibility but ignored in new design
@@ -150,7 +151,7 @@ function parsePositiveIntegerDraftValue(rawValue: string): number | undefined | 
   return Number.isFinite(parsed) ? parsed : null
 }
 
-function validateBacktestSettings(paramValues: DynamicParamValues): {
+function validateBacktestSettings(paramValues: DynamicParamValues, backtestMarketType: 'spot' | 'perp' | null): {
   fieldErrors: Record<string, string>
   rangeError: string | null
 } {
@@ -162,7 +163,7 @@ function validateBacktestSettings(paramValues: DynamicParamValues): {
   }
 
   const leverage = parseFiniteNumber(paramValues.backtestLeverage)
-  if (leverage === null || leverage <= 0 || !Number.isInteger(leverage)) {
+  if (backtestMarketType === 'perp' && (leverage === null || leverage <= 0 || !Number.isInteger(leverage))) {
     fieldErrors.backtestLeverage = 'aiQuant.messages.positiveNumber'
   }
 
@@ -246,6 +247,7 @@ export function QuantChatPanel({
   messages,
   paramSchema: _paramSchema,
   paramValues,
+  backtestMarketType = 'perp',
   clarificationGate: _clarificationGate,
   publicationGate,
   onClarificationAnswer: _onClarificationAnswer,
@@ -264,9 +266,13 @@ export function QuantChatPanel({
     buildBacktestDraftValues(paramValues),
   )
   const chatScrollRef = useRef<HTMLDivElement>(null)
+  const visibleBacktestSettingFields = useMemo(
+    () => BACKTEST_SETTING_FIELDS.filter(field => field.key !== 'backtestLeverage' || backtestMarketType === 'perp'),
+    [backtestMarketType],
+  )
   const validation = useMemo(
-    () => validateBacktestSettings(backtestDraftValues),
-    [backtestDraftValues],
+    () => validateBacktestSettings(backtestDraftValues, backtestMarketType),
+    [backtestDraftValues, backtestMarketType],
   )
   const backtestRangePreset = useMemo(() => {
     const raw =
@@ -467,7 +473,7 @@ export function QuantChatPanel({
                   </>
                 )}
 
-                {BACKTEST_SETTING_FIELDS.map(field => {
+                {visibleBacktestSettingFields.map(field => {
                   const value = backtestDraftValues[field.key]
                   const error = validation.fieldErrors[field.key]
                   const showError =

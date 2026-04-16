@@ -197,7 +197,7 @@ export class BacktestRunnerService {
         markPrice: this.getMarkPrice(bar, input.execution.priceSource),
       }, strictSnapshotPath)
       const adjustedDelta = this.applyLeverageCap({
-        leverage: input.leverage,
+        leverage: this.resolveEffectiveLeverage(input),
         price: this.getMarkPrice(bar, input.execution.priceSource),
         currentQty: position.qty,
         requestedDelta: normalized,
@@ -506,6 +506,18 @@ export class BacktestRunnerService {
     if (priceSource === 'open') return bar.open
     if (priceSource === 'close') return bar.close
     return (bar.open + bar.close) / 2
+  }
+
+  private resolveEffectiveLeverage(input: BacktestRunInput): number {
+    const marketType = typeof input.strategy?.params?.marketType === 'string'
+      ? input.strategy.params.marketType.trim().toLowerCase()
+      : ''
+    if (marketType === 'spot') {
+      return 1
+    }
+
+    const leverage = input.leverage
+    return Number.isFinite(leverage) && leverage > 0 ? leverage : 1
   }
 
   private applyLeverageCap(input: {

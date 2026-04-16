@@ -203,7 +203,7 @@ export type BacktestExecutionPriceSource = 'open' | 'close' | 'mid'
 
 export interface ResolvedBacktestExecutionConfig {
   initialCash: number
-  leverage: number
+  leverage: number | null
   slippageBps: number
   feeBps: number
   priceSource: string
@@ -290,10 +290,13 @@ export function resolveBacktestExecutionConfig(
       values.backtestInitialCash,
       DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES.backtestInitialCash,
     ),
-    leverage: parseBacktestExecutionNumber(
-      values.backtestLeverage,
-      DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES.backtestLeverage,
-    ),
+    leverage: (() => {
+      const leverage = parseBacktestExecutionNumber(
+        values.backtestLeverage,
+        DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES.backtestLeverage,
+      )
+      return Number.isFinite(leverage) ? leverage : null
+    })(),
     slippageBps: parseBacktestExecutionNumber(
       values.backtestSlippageBps,
       DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES.backtestSlippageBps,
@@ -333,9 +336,14 @@ function normalizePublishedStrategyConfig(
     return null
   }
   const candidate = value as Record<string, unknown>
+  const marketType =
+    typeof candidate.marketType === 'string'
+      ? candidate.marketType.trim().toLowerCase()
+      : ''
   return {
     exchange: typeof candidate.exchange === 'string' ? candidate.exchange : null,
     symbol: typeof candidate.symbol === 'string' ? candidate.symbol : null,
+    ...(marketType === 'spot' || marketType === 'perp' ? { marketType } : {}),
     baseTimeframe:
       typeof candidate.baseTimeframe === 'string'
         ? candidate.baseTimeframe
@@ -379,12 +387,17 @@ function normalizeBacktestConfigDefaults(
         .map(item => item.trim())
         .filter(item => item.length > 0)
     : null
-  if (!Number.isFinite(initialCash) || !Number.isFinite(leverage) || !priceSource) {
+  if (
+    !Number.isFinite(initialCash)
+    || !Number.isFinite(slippageBps)
+    || !Number.isFinite(feeBps)
+    || !priceSource
+  ) {
     return null
   }
   return {
     initialCash,
-    leverage,
+    leverage: Number.isFinite(leverage) && leverage > 0 ? leverage : null,
     slippageBps,
     feeBps,
     priceSource,
@@ -528,24 +541,34 @@ export function requiresRepublishForPublishedSnapshot(input: {
 export interface EffectivePublishedBacktestInputs {
   exchange: 'binance' | 'okx' | 'hyperliquid'
   symbol: string
+  marketType: 'spot' | 'perp'
   baseTimeframe: string
+}
+
+export function resolvePublishedBacktestMarketType(input: {
+  publishedSnapshotId: string | null
+  publishedSnapshotStrategyConfig: AccountAiQuantPublishedStrategyConfig | null
+}): 'spot' | 'perp' | null {
+  const {
+    publishedSnapshotId,
+    publishedSnapshotStrategyConfig,
+  } = input
+  if (!publishedSnapshotId || !publishedSnapshotStrategyConfig) {
+    return null
+  }
+
+  return publishedSnapshotStrategyConfig.marketType ?? null
 }
 
 export function resolveEffectivePublishedBacktestInputs(input: {
   publishedSnapshotId: string | null
   publishedSnapshotStrategyConfig: AccountAiQuantPublishedStrategyConfig | null
-  publishedSnapshotCompatibilityMetadata?: AccountAiQuantSnapshotCompatibilityMetadata | null
 }): EffectivePublishedBacktestInputs | null {
   const {
     publishedSnapshotId,
     publishedSnapshotStrategyConfig,
-    publishedSnapshotCompatibilityMetadata,
   } = input
-  if (
-    !publishedSnapshotId
-    || !publishedSnapshotStrategyConfig
-    || publishedSnapshotCompatibilityMetadata?.requiresRepublishForBacktest
-  ) {
+  if (!publishedSnapshotId || !publishedSnapshotStrategyConfig) {
     return null
   }
 
@@ -561,18 +584,20 @@ export function resolveEffectivePublishedBacktestInputs(input: {
     typeof publishedSnapshotStrategyConfig.symbol === 'string'
       ? publishedSnapshotStrategyConfig.symbol.trim()
       : ''
+  const marketType = resolvePublishedBacktestMarketType(input)
   const baseTimeframe =
     typeof publishedSnapshotStrategyConfig.baseTimeframe === 'string'
       ? publishedSnapshotStrategyConfig.baseTimeframe.trim()
       : ''
 
-  if (!exchange || !symbol || !baseTimeframe) {
+  if (!exchange || !symbol || !marketType || !baseTimeframe) {
     return null
   }
 
   return {
     exchange,
     symbol,
+    marketType,
     baseTimeframe,
   }
 }

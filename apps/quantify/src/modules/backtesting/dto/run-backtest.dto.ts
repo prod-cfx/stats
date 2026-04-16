@@ -1,6 +1,6 @@
-import { MARKET_TIMEFRAMES } from '@ai/shared'
 import type { ValidationArguments, ValidatorConstraintInterface } from 'class-validator'
 import type { BacktestRunInput } from '../types/backtesting.types'
+import { MARKET_TIMEFRAMES } from '@ai/shared'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import {
@@ -27,14 +27,40 @@ class BacktestStrategyPayloadConstraint implements ValidatorConstraintInterface 
       return false
     }
 
-    const strategy = objectValue as { publishedSnapshotId?: unknown }
+    const strategy = objectValue as { publishedSnapshotId?: unknown, params?: { marketType?: unknown } }
     const snapshotId = typeof strategy.publishedSnapshotId === 'string' ? strategy.publishedSnapshotId.trim() : ''
+    const marketType = typeof strategy.params?.marketType === 'string'
+      ? strategy.params.marketType.trim().toLowerCase()
+      : ''
 
-    return snapshotId.length > 0
+    return snapshotId.length > 0 && (marketType === 'spot' || marketType === 'perp')
   }
 
   defaultMessage(_args?: ValidationArguments): string {
-    return 'strategy requires publishedSnapshotId'
+    return 'strategy requires publishedSnapshotId and params.marketType in spot|perp'
+  }
+}
+
+@ValidatorConstraint({ name: 'backtestLeverageConstraint', async: false })
+class BacktestLeverageConstraint implements ValidatorConstraintInterface {
+  validate(_value: unknown, args?: ValidationArguments): boolean {
+    const objectValue = args?.object as { leverage?: unknown, strategy?: { params?: { marketType?: unknown } } } | undefined
+    const marketType = typeof objectValue?.strategy?.params?.marketType === 'string'
+      ? objectValue.strategy.params.marketType.trim().toLowerCase()
+      : ''
+    const leverage = typeof objectValue?.leverage === 'number' ? objectValue.leverage : null
+
+    if (marketType === 'spot') {
+      return leverage === null || (Number.isFinite(leverage) && leverage > 0)
+    }
+    if (marketType === 'perp') {
+      return leverage !== null && Number.isFinite(leverage) && leverage > 0
+    }
+    return false
+  }
+
+  defaultMessage(_args?: ValidationArguments): string {
+    return 'perp backtests require leverage and spot/perp marketType must be confirmed before backtest'
   }
 }
 
@@ -154,10 +180,14 @@ export class RunBacktestDto implements RunBacktestDtoShape {
   @Min(0)
   initialCash!: number
 
-  @ApiProperty()
+  @ApiPropertyOptional()
+  @IsOptional()
   @IsNumber()
   @IsPositive()
-  leverage!: number
+  leverage?: number
+
+  @Validate(BacktestLeverageConstraint)
+  private readonly __leverageGuard = true
 
   @ApiPropertyOptional()
   @IsOptional()

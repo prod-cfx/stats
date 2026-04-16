@@ -129,31 +129,40 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
       })) {
         throw new ApiError('当前参数已脱离已发布快照，请重新发布后再回测。', 'REPUBLISH_REQUIRED')
       }
+      const rawPublishedSnapshotMarketType = strategy.publishedSnapshotParamValues?.marketType
+      const publishedSnapshotMarketType: 'spot' | 'perp' | null =
+        rawPublishedSnapshotMarketType === 'spot' || rawPublishedSnapshotMarketType === 'perp'
+          ? rawPublishedSnapshotMarketType
+          : null
+      const publishedSnapshotStrategyConfig = strategy.publishedSnapshotParamValues
+        ? {
+            exchange: typeof strategy.publishedSnapshotParamValues.exchange === 'string'
+              ? strategy.publishedSnapshotParamValues.exchange
+              : strategy.exchange,
+            symbol: typeof strategy.publishedSnapshotParamValues.symbol === 'string'
+              ? strategy.publishedSnapshotParamValues.symbol
+              : strategy.symbol,
+            marketType: publishedSnapshotMarketType,
+            baseTimeframe: typeof strategy.publishedSnapshotParamValues.baseTimeframe === 'string'
+              ? strategy.publishedSnapshotParamValues.baseTimeframe
+              : strategy.timeframe,
+            positionPct:
+              typeof strategy.publishedSnapshotParamValues.positionPct === 'number'
+                ? strategy.publishedSnapshotParamValues.positionPct
+                : strategy.positionPct,
+          }
+        : null
+      if (!publishedSnapshotStrategyConfig?.marketType) {
+        throw new ApiError('请先确认策略交易的是现货还是合约，然后再开始回测。', 'MARKET_TYPE_UNCONFIRMED')
+      }
       const effectiveInputs = resolveEffectivePublishedBacktestInputs({
         publishedSnapshotId,
-        publishedSnapshotStrategyConfig: strategy.publishedSnapshotParamValues
-          ? {
-              exchange: typeof strategy.publishedSnapshotParamValues.exchange === 'string'
-                ? strategy.publishedSnapshotParamValues.exchange
-                : strategy.exchange,
-              symbol: typeof strategy.publishedSnapshotParamValues.symbol === 'string'
-                ? strategy.publishedSnapshotParamValues.symbol
-                : strategy.symbol,
-              baseTimeframe: typeof strategy.publishedSnapshotParamValues.baseTimeframe === 'string'
-                ? strategy.publishedSnapshotParamValues.baseTimeframe
-                : strategy.timeframe,
-              positionPct:
-                typeof strategy.publishedSnapshotParamValues.positionPct === 'number'
-                  ? strategy.publishedSnapshotParamValues.positionPct
-                  : strategy.positionPct,
-            }
-          : null,
-        publishedSnapshotCompatibilityMetadata: strategy.compatibilityMetadata ?? null,
+        publishedSnapshotStrategyConfig,
       })
       if (!effectiveInputs) {
         throw new ApiError('当前已发布快照缺少策略市场绑定真相，请重新发布后再回测。', 'PUBLISHED_SNAPSHOT_PARAMS_MISSING')
       }
-      const { symbol, baseTimeframe, exchange } = effectiveInputs
+      const { symbol, baseTimeframe, exchange, marketType } = effectiveInputs
       const executionConfig = resolveBacktestExecutionConfig(strategy.paramValues ?? {})
       const snapshotStateTimeframes = strategy.snapshotBacktestConfigDefaults?.stateTimeframes ?? []
       if (!executionConfig.allowPartialValid) {
@@ -164,6 +173,7 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
       const payload = buildBacktestPayload({
         symbol,
         baseTimeframe,
+        marketType,
         capabilities,
         stateTimeframes: snapshotStateTimeframes.length > 0 ? snapshotStateTimeframes : [baseTimeframe],
         initialCash: executionConfig.initialCash,

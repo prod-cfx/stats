@@ -257,6 +257,39 @@ describe('QuantChatPanel range settings', () => {
     expect(container.textContent).toContain('aiQuant.backtestPlaceholder.allowPartial')
   })
 
+  it('hides leverage controls when the confirmed backtest market type is spot', async () => {
+    await act(async () => {
+      root?.render(
+        <QuantChatPanel
+          messages={[{ id: 'm1', role: 'assistant', content: 'hello' }]}
+          paramSchema={null}
+          paramValues={{
+            ...baseParams,
+            backtestInitialCash: 10000,
+            backtestSlippageBps: 10,
+            backtestFeeBps: 5,
+            backtestPriceSource: 'close',
+            backtestAllowPartial: true,
+          }}
+          backtestMarketType="spot"
+          onParamChange={() => {}}
+          onSend={() => {}}
+          onRunBacktest={() => {}}
+        />,
+      )
+    })
+
+    await act(async () => {
+      container.querySelector('button')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(container.textContent).toContain('aiQuant.backtestInitialCash')
+    expect(container.textContent).not.toContain('aiQuant.backtestLeverage')
+
+    const numberInputs = container.querySelectorAll('input[type="number"]')
+    expect(numberInputs).toHaveLength(3)
+  })
+
   it('keeps backtest validation hidden on first open for invalid values', async () => {
     await act(async () => {
       root?.render(

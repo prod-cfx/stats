@@ -17,7 +17,7 @@ function buildValidPayload() {
       id: 's1',
       protocolVersion: 'v1',
       publishedSnapshotId: 'snapshot-1',
-      params: {},
+      params: { marketType: 'perp' },
     },
     dataRange: { fromTs: 1, toTs: 2 },
     bars: [],
@@ -26,7 +26,7 @@ function buildValidPayload() {
     baseTimeframe: string
     stateTimeframes: string[]
     initialCash: number
-    leverage: number
+    leverage?: number
     execution: { slippageBps: number; feeBps: number; priceSource: string }
     strategy: {
       id?: string
@@ -119,7 +119,7 @@ describe('runBacktestDto', () => {
     const dto = plainToInstance(RunBacktestDto, payload)
     const errors = await validate(dto)
 
-    expect(errors).toHaveLength(0)
+    expect(errors.length).toBeGreaterThan(0)
   })
 
   it('accepts snapshot-backed payload without strategy id', async () => {
@@ -140,5 +140,27 @@ describe('runBacktestDto', () => {
     const errors = await validate(dto)
 
     expect(errors).toHaveLength(0)
+  })
+
+  it('accepts spot payload without leverage', async () => {
+    const payload = buildValidPayload()
+    delete payload.leverage
+    payload.strategy.params = { marketType: 'spot' }
+
+    const dto = plainToInstance(RunBacktestDto, payload)
+    const errors = await validate(dto)
+
+    expect(errors).toHaveLength(0)
+  })
+
+  it('rejects perp payload without leverage', async () => {
+    const payload = buildValidPayload()
+    delete payload.leverage
+    payload.strategy.params = { marketType: 'perp' }
+
+    const dto = plainToInstance(RunBacktestDto, payload)
+    const errors = await validate(dto)
+
+    expect(errors.length).toBeGreaterThan(0)
   })
 })
