@@ -27,9 +27,17 @@ jest.mock('@/hooks/use-auth', () => ({
 }))
 
 jest.mock('@/components/account/AiQuantStrategyDetail', () => ({
-  AiQuantStrategyDetail: ({ onRunBacktest, backtestError }: { onRunBacktest?: () => void; backtestError?: string | null }) => (
+  AiQuantStrategyDetail: ({
+    onRunBacktest,
+    backtestError,
+  }: {
+    onRunBacktest?: () => void
+    backtestError?: string | null
+  }) => (
     <div>
-      <button data-testid="run-backtest" onClick={onRunBacktest}>run</button>
+      <button data-testid="run-backtest" onClick={onRunBacktest}>
+        run
+      </button>
       <div data-testid="backtest-error">{backtestError ?? ''}</div>
     </div>
   ),
@@ -55,11 +63,10 @@ jest.mock('@/components/ai-quant/backtest-payload-builder', () => ({
     }
   },
   buildBacktestPayload: (...args: unknown[]) => mockBuildBacktestPayload(...args),
-  isBacktestPayloadBuilderError: (value: unknown) => (
-    Boolean(value)
-    && typeof value === 'object'
-    && (value as { name?: string }).name === 'BacktestPayloadBuilderError'
-  ),
+  isBacktestPayloadBuilderError: (value: unknown) =>
+    Boolean(value) &&
+    typeof value === 'object' &&
+    (value as { name?: string }).name === 'BacktestPayloadBuilderError',
 }))
 
 jest.mock('@/components/ai-quant/backtest-symbol-support-client', () => ({
@@ -76,7 +83,9 @@ describe('StrategyDetailPageClient', () => {
   let root: ReturnType<typeof createRoot>
 
   beforeEach(() => {
-    ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+    ;(globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT =
+      true
+    jest.useFakeTimers()
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -182,6 +191,7 @@ describe('StrategyDetailPageClient', () => {
       root.unmount()
     })
     container.remove()
+    jest.useRealTimers()
     jest.restoreAllMocks()
   })
 
@@ -195,7 +205,9 @@ describe('StrategyDetailPageClient', () => {
     })
 
     await act(async () => {
-      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
@@ -216,7 +228,9 @@ describe('StrategyDetailPageClient', () => {
         },
       }),
     )
-    expect(mockCreateBacktestJob).toHaveBeenCalledWith(mockBuildBacktestPayload.mock.results[0]?.value)
+    expect(mockCreateBacktestJob).toHaveBeenCalledWith(
+      mockBuildBacktestPayload.mock.results[0]?.value,
+    )
     expect(mockPush).toHaveBeenCalledWith(
       '/zh/ai-quant/backtest/job-1?symbol=BTCUSDT&startAt=2026-04-03T00%3A00%3A00.000Z&endAt=2026-04-10T00%3A00%3A00.000Z',
     )
@@ -285,7 +299,9 @@ describe('StrategyDetailPageClient', () => {
     })
 
     await act(async () => {
-      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
@@ -364,12 +380,63 @@ describe('StrategyDetailPageClient', () => {
     })
 
     await act(async () => {
-      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
-    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(expect.objectContaining({
-      allowPartial: true,
-    }))
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allowPartial: true,
+      }),
+    )
+  })
+
+  it('waits up to 180 seconds before timing out strategy-detail backtests', async () => {
+    mockCreateBacktestJob.mockResolvedValue({
+      id: 'job-1',
+      status: 'running',
+      createdAt: '2026-04-10T00:00:00.000Z',
+    })
+    mockGetBacktestJob.mockResolvedValue({
+      id: 'job-1',
+      status: 'running',
+      createdAt: '2026-04-10T00:00:00.000Z',
+    })
+
+    await act(async () => {
+      root.render(<StrategyDetailPageClient lng="zh" id="inst-1" />)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      jest.advanceTimersByTime(179000)
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="backtest-error"]')?.textContent).toBe('')
+
+    await act(async () => {
+      jest.advanceTimersByTime(1500)
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="backtest-error"]')?.textContent).toContain(
+      '前端等待超时',
+    )
+    expect(container.querySelector('[data-testid="backtest-error"]')?.textContent).toContain(
+      'job-1',
+    )
   })
 
   it('blocks legacy snapshot backtest and prompts republish when formal backtest truth is missing', async () => {
@@ -421,10 +488,14 @@ describe('StrategyDetailPageClient', () => {
     })
 
     await act(async () => {
-      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
     })
 
     expect(mockBuildBacktestPayload).not.toHaveBeenCalled()
-    expect(container.querySelector('[data-testid="backtest-error"]')?.textContent).toContain('重新发布')
+    expect(container.querySelector('[data-testid="backtest-error"]')?.textContent).toContain(
+      '重新发布',
+    )
   })
 })

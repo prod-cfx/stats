@@ -48,6 +48,7 @@ describe('ai-quant-page-conversation', () => {
       totalReturnPct: 0,
       winRatePct: 0,
       tradeCount: 0,
+      marketType: 'spot',
     }, {
       netProfitPct: 0,
       maxDrawdownPct: 0.3199,
@@ -57,6 +58,7 @@ describe('ai-quant-page-conversation', () => {
       openPnl: 0.282686611713497,
     })).toMatchObject({
       id: 'bt-open-only',
+      marketType: 'spot',
       tradeCount: 0,
       openTradeCount: 1,
       openPnl: 0.28,

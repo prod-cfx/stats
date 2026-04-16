@@ -13,11 +13,17 @@ import Link from 'next/link'
 import React, { startTransition, useMemo, useState } from 'react'
 import { getBacktestJobResult } from '@/components/ai-quant/backtest-job-client'
 import { createBacktestReportDataFromLive } from './backtest-report-data'
+import {
+  buildBacktestResultPresentation,
+  formatOpenPositionForDisplay,
+  normalizeBacktestMarketType,
+} from './backtest-result-presentation'
 
 interface BacktestReportProps {
   lng: string
   id: string
   symbol: string
+  marketType?: 'spot' | 'perp' | null
   rangeDisplay: string
   metrics: BacktestReportMetrics | null
   report?: LiveBacktestReportInput | null
@@ -220,9 +226,23 @@ function RiskCard({ title, data }: { title: string; data: { label: string; value
 }
 
 // --- 6. Trade Details Section ---
-function TradeDetailsSection({ lng, trades }: { lng: string; trades: TradeRecord[] }) {
+function TradeDetailsSection({
+  lng,
+  trades,
+  marketType,
+}: {
+  lng: string
+  trades: TradeRecord[]
+  marketType: 'spot' | 'perp'
+}) {
   const [filter, setFilter] = useState<'all' | 'profit' | 'loss'>('all')
   const [expanded, setExpanded] = useState(false)
+  const presentation = buildBacktestResultPresentation({
+    lng,
+    symbol: '',
+    marketType,
+    metrics: null,
+  })
 
   const filteredTrades = trades.filter(t => {
     if (filter === 'profit') return t.isProfit
@@ -237,7 +257,7 @@ function TradeDetailsSection({ lng, trades }: { lng: string; trades: TradeRecord
     <div className="rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 backdrop-blur-sm">
       <div className="mb-6 flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <h3 className="text-base font-medium text-[color:var(--cf-text-strong)]">
-          {lng === 'en' ? 'Trade Details' : '交易明细'}
+          {presentation.tradeSectionTitle}
         </h3>
         <div className="flex items-center gap-2 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-1">
           {(['all', 'profit', 'loss'] as const).map(f => (
@@ -274,7 +294,7 @@ function TradeDetailsSection({ lng, trades }: { lng: string; trades: TradeRecord
               <tr className="border-b border-[color:var(--cf-border)] text-[color:var(--cf-muted)]">
                 <th className="pb-3 font-normal">{lng === 'en' ? 'Entry Time' : '开仓时间'}</th>
                 <th className="pb-3 font-normal">{lng === 'en' ? 'Exit Time' : '平仓时间'}</th>
-                <th className="pb-3 font-normal">{lng === 'en' ? 'Direction' : '方向'}</th>
+                <th className="pb-3 font-normal">{presentation.tradeDirectionColumnLabel}</th>
                 <th className="pb-3 font-normal">{lng === 'en' ? 'Entry Price' : '开仓价'}</th>
                 <th className="pb-3 font-normal">{lng === 'en' ? 'Exit Price' : '平仓价'}</th>
                 <th className="pb-3 text-right font-normal">{lng === 'en' ? 'Return' : '收益率'}</th>
@@ -299,13 +319,7 @@ function TradeDetailsSection({ lng, trades }: { lng: string; trades: TradeRecord
                     )}
                   </td>
                   <td className="py-3 text-[color:var(--cf-text)]">
-                    {trade.direction === 'long'
-                      ? lng === 'en'
-                        ? 'Long'
-                        : '做多'
-                      : lng === 'en'
-                        ? 'Short'
-                        : '做空'}
+                    {presentation.tradeDirectionLabel(trade.direction)}
                   </td>
                   <td className="py-3 text-[color:var(--cf-text)]">
                     {trade.entryPrice === null ? '--' : `$${trade.entryPrice.toFixed(2)}`}
@@ -324,8 +338,8 @@ function TradeDetailsSection({ lng, trades }: { lng: string; trades: TradeRecord
       ) : (
         <div className="rounded-xl border border-dashed border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-6 text-sm text-[color:var(--cf-muted)]">
           {lng === 'en'
-            ? 'No closed trades were completed during this backtest.'
-            : '本次回测区间内暂无已平仓交易。'}
+            ? presentation.emptyTradeMessage
+            : presentation.emptyTradeMessage}
         </div>
       )}
 
@@ -350,21 +364,27 @@ function TradeDetailsSection({ lng, trades }: { lng: string; trades: TradeRecord
 
 function OpenPositionsSection({
   lng,
+  marketType,
   openPositions,
 }: {
   lng: string
+  marketType: 'spot' | 'perp'
   openPositions: OpenPositionRecord[]
 }) {
+  const presentation = buildBacktestResultPresentation({
+    lng,
+    symbol: openPositions[0]?.symbol ?? '',
+    marketType,
+    metrics: null,
+  })
   return (
     <div className="rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 backdrop-blur-sm">
       <div className="mb-6 flex items-center justify-between gap-4">
         <h3 className="text-base font-medium text-[color:var(--cf-text-strong)]">
-          {lng === 'en' ? 'Open Positions' : '未平仓持仓'}
+          {presentation.openPositionsTitle}
         </h3>
         <span className="text-xs text-[color:var(--cf-muted)]">
-          {lng === 'en'
-            ? `${openPositions.length} active at backtest end`
-            : `回测结束时仍有 ${openPositions.length} 笔持仓`}
+          {presentation.openPositionsBadge(openPositions.length)}
         </span>
       </div>
 
@@ -372,14 +392,16 @@ function OpenPositionsSection({
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-[color:var(--cf-border)] text-[color:var(--cf-muted)]">
-              <th className="pb-3 font-normal">{lng === 'en' ? 'Symbol' : '标的'}</th>
-              <th className="pb-3 font-normal">{lng === 'en' ? 'Quantity' : '持仓数量'}</th>
-              <th className="pb-3 font-normal">{lng === 'en' ? 'Avg Entry Price' : '持仓均价'}</th>
-              <th className="pb-3 text-right font-normal">{lng === 'en' ? 'Unrealized P&L' : '浮动盈亏'}</th>
+              <th className="pb-3 font-normal">{presentation.openPositionsColumns.symbol}</th>
+              <th className="pb-3 font-normal">{presentation.openPositionsColumns.quantity}</th>
+              <th className="pb-3 font-normal">{presentation.openPositionsColumns.avgEntryPrice}</th>
+              <th className="pb-3 text-right font-normal">{presentation.openPositionsColumns.unrealizedPnl}</th>
             </tr>
           </thead>
           <tbody>
-            {openPositions.map(position => (
+            {openPositions.map((rawPosition) => {
+              const position = formatOpenPositionForDisplay({ position: rawPosition, marketType, lng })
+              return (
               <tr
                 key={`${position.symbol}-${position.avgEntryPrice}-${position.qty}`}
                 className="border-b border-[color:var(--cf-border)] transition-colors last:border-0 hover:bg-[color:var(--cf-surface-hover)]"
@@ -393,7 +415,8 @@ function OpenPositionsSection({
                   {formatSignedPnl(position.unrealizedPnl)}
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </div>
@@ -406,6 +429,7 @@ export function BacktestReportClient({
   lng,
   id,
   symbol,
+  marketType = null,
   rangeDisplay,
   metrics,
   report = null,
@@ -473,29 +497,30 @@ export function BacktestReportClient({
     return createBacktestReportDataFromLive(id, metrics, detailedReport)
   }, [detailedReport, id, metrics])
   const hasReportData = metrics !== null && reportData !== null
+  const normalizedMarketType = normalizeBacktestMarketType(marketType)
+  const presentation = useMemo(
+    () =>
+      buildBacktestResultPresentation({
+        lng,
+        symbol,
+        marketType: normalizedMarketType,
+        metrics,
+      }),
+    [lng, metrics, normalizedMarketType, symbol],
+  )
 
   const handleDeploy = () => {}
 
   // Determine strategy status based on metrics
   let status: 'good' | 'warning' | 'danger' = 'warning'
-  let summary =
-    lng === 'en'
-      ? 'Average performance, consider optimizing parameters before deploying.'
-      : '表现一般，建议优化参数后再部署。'
 
   if (metrics && metrics.maxDrawdownPct <= 15 && metrics.totalReturnPct > 20) {
     status = 'good'
-    summary =
-      lng === 'en'
-        ? 'Good performance, controllable risk and considerable return, recommended to deploy.'
-        : '策略表现良好，风险可控且收益可观，建议部署。'
   } else if (metrics && (metrics.maxDrawdownPct > 30 || metrics.totalReturnPct < 0)) {
     status = 'danger'
-    summary =
-      lng === 'en'
-        ? 'High risk or in loss, not recommended to deploy.'
-        : '策略风险较高或处于亏损状态，不建议部署。'
   }
+
+  const summary = presentation.conclusionSummary[status]
 
   return (
     <div className="space-y-6">
@@ -506,7 +531,10 @@ export function BacktestReportClient({
             {lng === 'en' ? 'Backtest Analysis Report' : '回测分析报告'}
           </h1>
           <p className="mt-1 text-sm text-[color:var(--cf-muted)]">
-            {symbol} · {rangeDisplay}
+            {presentation.displaySymbol} · {rangeDisplay}
+          </p>
+          <p className="mt-1 text-xs font-medium text-[color:var(--cf-primary)]">
+            {presentation.marketLabel}
           </p>
         </div>
         <Link
@@ -542,42 +570,14 @@ export function BacktestReportClient({
 
       {/* 2. 核心指标卡 */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
-        <MetricCard
-          title={lng === 'en' ? 'Closed Return' : '已平仓收益'}
-          value={
-            metrics ? `${metrics.totalReturnPct > 0 ? '+' : ''}${metrics.totalReturnPct}%` : '--'
-          }
-          trend={metrics ? (metrics.totalReturnPct > 0 ? 'up' : 'down') : 'neutral'}
-        />
-        <MetricCard
-          title={lng === 'en' ? 'Max Drawdown' : '最大回撤'}
-          value={metrics ? `-${metrics.maxDrawdownPct}%` : '--'}
-          trend="down"
-        />
-        <MetricCard
-          title={lng === 'en' ? 'Closed Win Rate' : '已平仓胜率'}
-          value={metrics ? `${metrics.winRatePct}%` : '--'}
-          trend="neutral"
-        />
-        <MetricCard
-          title={lng === 'en' ? 'Closed Trades' : '已平仓笔数'}
-          value={metrics ? `${metrics.tradeCount}` : '--'}
-          trend="neutral"
-        />
-        {typeof metrics?.openTradeCount === 'number' && (
+        {presentation.summaryCards.map(card => (
           <MetricCard
-            title={lng === 'en' ? 'Open Trades' : '未平仓笔数'}
-            value={`${metrics.openTradeCount}`}
-            trend="neutral"
+            key={card.key}
+            title={card.title}
+            value={card.value}
+            trend={card.trend}
           />
-        )}
-        {typeof metrics?.openPnl === 'number' && (
-          <MetricCard
-            title={lng === 'en' ? 'Open P&L' : '浮动盈亏'}
-            value={formatSignedPnl(metrics.openPnl)}
-            trend={metrics.openPnl > 0 ? 'up' : metrics.openPnl < 0 ? 'down' : 'neutral'}
-          />
-        )}
+        ))}
       </div>
 
       {hasReportData && reportData ? (
@@ -630,10 +630,10 @@ export function BacktestReportClient({
           </div>
 
           {/* 6. 交易明细 */}
-          <TradeDetailsSection lng={lng} trades={reportData.trades} />
+          <TradeDetailsSection lng={lng} trades={reportData.trades} marketType={normalizedMarketType} />
 
           {reportData.openPositions.length > 0 && (
-            <OpenPositionsSection lng={lng} openPositions={reportData.openPositions} />
+            <OpenPositionsSection lng={lng} marketType={normalizedMarketType} openPositions={reportData.openPositions} />
           )}
         </>
       ) : detailedReportState === 'loading' && metrics ? (

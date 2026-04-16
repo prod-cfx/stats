@@ -225,12 +225,14 @@ function seedConfirmedConversation(now = Date.now()) {
       publishedSnapshotStrategyConfig: {
         exchange: 'binance',
         symbol: 'BTCUSDT',
+        marketType: 'perp',
         baseTimeframe: '15m',
         positionPct: 10,
       },
       publishedSnapshotParamValues: {
         exchange: 'binance',
         symbol: 'BTCUSDT',
+        marketType: 'perp',
         baseTimeframe: '15m',
         buyWindowMin: 3,
         buyDropPct: 1,
@@ -315,12 +317,14 @@ function buildPersistedConversation(now = Date.now()) {
     publishedSnapshotStrategyConfig: {
       exchange: 'binance',
       symbol: 'ETHUSDT',
+      marketType: 'perp',
       baseTimeframe: '15m',
       positionPct: 10,
     },
     publishedSnapshotParamValues: {
       exchange: 'binance',
       symbol: 'ETHUSDT',
+      marketType: 'perp',
       baseTimeframe: '15m',
       buyWindowMin: 3,
       buyDropPct: 1,
