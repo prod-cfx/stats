@@ -249,3 +249,10 @@
 - 恢复 `#794` 已建立的 slot-first clarification 行为
 - 用均线案例做后端回归基线锁死行为
 - 不把未实现能力样例混入本次验收
+
+## 13. Implementation Notes
+
+- Regression baseline locked by backend tests in
+  `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-conversation.service.spec.ts`
+- Clarification ownership ordering locked by
+  `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-state-projection.service.spec.ts`
