@@ -113,6 +113,7 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
 jest.mock('@/components/ai-quant/BacktestSummaryCard', () => ({
   BacktestSummaryCard: ({
     result,
+    canDeploy,
   }: {
     result: {
       id: string
@@ -124,9 +125,10 @@ jest.mock('@/components/ai-quant/BacktestSummaryCard', () => ({
       winRatePct: number
       tradeCount: number
     }
+    canDeploy: boolean
   }) => (
     <div data-testid="backtest-summary">
-      {`${result.id}|${result.symbol}|${result.startAt}|${result.endAt}|${result.maxDrawdownPct}|${result.totalReturnPct}|${result.winRatePct}|${result.tradeCount}`}
+      {`${result.id}|${result.symbol}|${result.startAt}|${result.endAt}|${result.maxDrawdownPct}|${result.totalReturnPct}|${result.winRatePct}|${result.tradeCount}|${canDeploy ? 'deployable' : 'blocked'}`}
     </div>
   ),
 }))
@@ -377,7 +379,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
   })
 
   it('treats zero-trade backtests as non-deployable and avoids the success message', async () => {
-    mockGetBacktestJobResult.mockResolvedValueOnce({
+    mockGetBacktestJobResult.mockResolvedValue({
       summary: {
         netProfit: 0,
         netProfitPct: 0,
@@ -413,7 +415,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     )
   })
 
-  it('surfaces open-trade messaging when the backtest ends with an unclosed position', async () => {
+  it('allows deploy messaging when the backtest ends with an unclosed position but drawdown still passes', async () => {
     mockGetBacktestJobResult.mockResolvedValueOnce({
       summary: {
         netProfit: 0,
@@ -453,10 +455,60 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     })
 
     expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain(
-      'aiQuant.messages.backtestOpenTrades',
+      'aiQuant.messages.backtestSuccess',
     )
     expect(container.querySelector('[data-testid="messages"]')?.textContent).not.toContain(
-      'aiQuant.messages.backtestNoTrades',
+      'aiQuant.messages.backtestOpenTrades',
+    )
+    expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain(
+      'deployable',
+    )
+  })
+
+  it('surfaces drawdown failure messaging when open-only results still exceed the drawdown limit', async () => {
+    mockGetBacktestJobResult.mockResolvedValueOnce({
+      summary: {
+        netProfit: 0,
+        netProfitPct: 0,
+        maxDrawdownPct: 20.5,
+        winRate: 0,
+        profitFactor: 0,
+        totalTrades: 0,
+        totalOpenTrades: 1,
+        openPnl: -1.25,
+      },
+      openPositions: [
+        {
+          symbol: 'BTCUSDT:PERP',
+          qty: 0.00017167096767048035,
+          avgEntryPrice: 72238.52313,
+          unrealizedPnl: -1.25,
+        },
+      ],
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      jest.advanceTimersByTime(1500)
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain(
+      'aiQuant.messages.backtestFail',
+    )
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).not.toContain(
+      'aiQuant.messages.backtestOpenTrades',
     )
   })
 

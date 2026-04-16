@@ -446,13 +446,15 @@ export async function runAiQuantBacktest(args: {
         message.id === backtestMessageId
           ? {
               ...message,
-              content: isOpenOnlyBacktestResult(result)
-                ? t('aiQuant.messages.backtestOpenTrades', { count: result.openTradeCount ?? 0 })
-                : result.tradeCount === 0
+              content: isDeployableBacktestResult(result)
+                ? t('aiQuant.messages.backtestSuccess', { drawdown: result.maxDrawdownPct })
+                : result.maxDrawdownPct > 20
+                  ? t('aiQuant.messages.backtestFail', { drawdown: result.maxDrawdownPct })
+                  : isOpenOnlyBacktestResult(result)
+                  ? t('aiQuant.messages.backtestOpenTrades', { count: result.openTradeCount ?? 0 })
+                  : result.tradeCount === 0
                   ? t('aiQuant.messages.backtestNoTrades')
-                  : isDeployableBacktestResult(result)
-                    ? t('aiQuant.messages.backtestSuccess', { drawdown: result.maxDrawdownPct })
-                    : t('aiQuant.messages.backtestFail', { drawdown: result.maxDrawdownPct }),
+                  : t('aiQuant.messages.backtestFail', { drawdown: result.maxDrawdownPct }),
             }
           : message,
       ),

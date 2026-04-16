@@ -33,11 +33,27 @@ describe('ai-quant-page-conversation', () => {
       tradeCount: 3,
     })).toBe(true)
     expect(isDeployableBacktestResult({
+      id: 'bt-open-1',
+      maxDrawdownPct: 20,
+      totalReturnPct: 0,
+      winRatePct: 0,
+      tradeCount: 0,
+      openTradeCount: 1,
+    })).toBe(true)
+    expect(isDeployableBacktestResult({
       id: 'bt-2',
       maxDrawdownPct: 20.01,
       totalReturnPct: 8,
       winRatePct: 55,
       tradeCount: 3,
+    })).toBe(false)
+    expect(isDeployableBacktestResult({
+      id: 'bt-open-2',
+      maxDrawdownPct: 20.01,
+      totalReturnPct: 0,
+      winRatePct: 0,
+      tradeCount: 0,
+      openTradeCount: 1,
     })).toBe(false)
   })
 
