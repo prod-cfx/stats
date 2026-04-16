@@ -2513,9 +2513,34 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
               recycle: true,
               breakoutAction: 'pause',
             },
-            status: 'locked',
+            status: 'open',
             source: 'user_explicit',
-            openSlots: [],
+            openSlots: [
+              {
+                slotKey: 'grid.range.lower',
+                fieldPath: 'triggers[0].params.rangeLower',
+                status: 'open',
+                priority: 'core',
+                questionHint: '请确认网格区间下界。',
+                affectsExecution: true,
+              },
+              {
+                slotKey: 'grid.range.upper',
+                fieldPath: 'triggers[0].params.rangeUpper',
+                status: 'open',
+                priority: 'core',
+                questionHint: '请确认网格区间上界。',
+                affectsExecution: true,
+              },
+              {
+                slotKey: 'grid.stepPct',
+                fieldPath: 'triggers[0].params.stepPct',
+                status: 'open',
+                priority: 'core',
+                questionHint: '请确认每格步长（例如 0.5%）。',
+                affectsExecution: true,
+              },
+            ],
           },
         ],
         actions: [
@@ -2542,6 +2567,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       clarificationState: {
         status: 'NEEDS_CLARIFICATION',
         items: [
+          {
+            key: 'semantic.entryRules',
+            reason: 'missing_entry_rules',
+            field: 'entryRules',
+            blocking: true,
+            question: '请补充至少一条明确的入场规则。',
+            status: 'pending',
+          },
           {
             key: 'semantic.timeframe',
             reason: 'missing_timeframe',
@@ -2572,7 +2605,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as any)
 
+    expect(result.assistantPrompt).toContain('请确认网格区间下界')
     expect(result.assistantPrompt).not.toContain('请补充至少一条明确的入场规则')
+    expect(result.assistantPrompt).not.toContain('请确认交易所')
     expect(result.clarificationState?.items).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ reason: 'missing_entry_rules' }),
     ]))
