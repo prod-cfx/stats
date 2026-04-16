@@ -8,6 +8,10 @@ import { BacktestSummaryCard } from './BacktestSummaryCard'
 jest.mock('react-i18next', () => ({
   // eslint-disable-next-line react-hooks-extra/no-unnecessary-use-prefix
   useTranslation: () => ({
+    i18n: {
+      language: 'zh',
+      resolvedLanguage: 'zh',
+    },
     t: (key: string) => ({
       'aiQuant.backtestResult': '回测结果',
       'aiQuant.messages.backtestDrawdownLimit': '最大回撤不超过 20% 方可部署',
@@ -18,6 +22,7 @@ jest.mock('react-i18next', () => ({
       'aiQuant.closedTradeCount': '已平仓交易数',
       'aiQuant.openTradeCount': '未平仓笔数',
       'aiQuant.openPnl': 'Open P&L',
+      'aiQuant.messages.returnToChat': '返回对话继续优化',
       'aiQuant.deploy': '一键部署',
     }[key] ?? key),
   }),
@@ -42,6 +47,43 @@ describe('BacktestSummaryCard', () => {
     container.remove()
   })
 
+
+  it('renders spot backtest summaries with holding-oriented labels and copy', async () => {
+    await act(async () => {
+      root.render(
+        <BacktestSummaryCard
+          result={{
+            id: 'bt-spot',
+            symbol: 'BTCUSDT',
+            startAt: '2026-04-01T00:00:00.000Z',
+            endAt: '2026-04-15T00:00:00.000Z',
+            maxDrawdownPct: 0.32,
+            totalReturnPct: 0,
+            winRatePct: 0,
+            tradeCount: 0,
+            openTradeCount: 1,
+            openPnl: 2.49,
+          }}
+          marketType="spot"
+          canDeploy={false}
+          onOpenFullScreen={() => undefined}
+          onOptimize={() => undefined}
+          onDeploy={() => undefined}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('现货回测')
+    expect(container.textContent).toContain('收益率')
+    expect(container.textContent).toContain('已完成交易')
+    expect(container.textContent).toContain('当前持仓')
+    expect(container.textContent).toContain('持仓浮盈浮亏')
+    expect(container.textContent).toContain('本次回测已产生建仓，但在回测区间内仍有 1 笔当前持仓未完成卖出平仓，暂不允许部署。')
+    expect(container.textContent).not.toContain('已平仓收益')
+    expect(container.textContent).not.toContain('已平仓胜率')
+    expect(container.textContent).not.toContain('未平仓笔数')
+  })
+
   it('renders open trade count and open pnl when present', async () => {
     await act(async () => {
       root.render(
@@ -58,6 +100,7 @@ describe('BacktestSummaryCard', () => {
             openTradeCount: 1,
             openPnl: 2.49,
           }}
+          marketType="perp"
           canDeploy={false}
           onOpenFullScreen={() => undefined}
           onOptimize={() => undefined}

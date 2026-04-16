@@ -195,6 +195,7 @@ export async function runAiQuantBacktest(args: {
 
   let payload: ReturnType<typeof buildBacktestPayload>
   let backtestExchange: ConversationState['params']['exchange'] | null = null
+  let backtestMarketType: 'spot' | 'perp' | null = null
   try {
     const publishedMarketType = resolvePublishedBacktestMarketType({
       publishedSnapshotId: activeConversation.publishedSnapshotId,
@@ -236,6 +237,7 @@ export async function runAiQuantBacktest(args: {
       throw new BacktestPayloadBuilderError('invalid_execution_config')
     }
     backtestExchange = effectiveInputs.exchange
+    backtestMarketType = effectiveInputs.marketType
     payload = buildBacktestPayload({
       symbol: effectiveInputs.symbol,
       baseTimeframe: effectiveInputs.baseTimeframe,
@@ -428,6 +430,7 @@ export async function runAiQuantBacktest(args: {
         totalReturnPct: 0,
         winRatePct: 0,
         tradeCount: 0,
+        marketType: backtestMarketType,
         symbol: payload.symbols[0],
         startAt: new Date(payload.dataRange.fromTs).toISOString(),
         endAt: new Date(payload.dataRange.toTs).toISOString(),
