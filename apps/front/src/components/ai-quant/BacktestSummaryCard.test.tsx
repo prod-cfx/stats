@@ -118,4 +118,33 @@ describe('BacktestSummaryCard', () => {
     expect(container.textContent).toContain('Open P&L')
     expect(container.textContent).toContain('+2.49')
   })
+
+  it('shows drawdown failure copy when open-only results exceed the deploy threshold', async () => {
+    await act(async () => {
+      root.render(
+        <BacktestSummaryCard
+          result={{
+            id: 'bt-open-drawdown-fail',
+            symbol: 'BTCUSDT',
+            startAt: '2026-04-01T00:00:00.000Z',
+            endAt: '2026-04-15T00:00:00.000Z',
+            maxDrawdownPct: 20.5,
+            totalReturnPct: 0,
+            winRatePct: 0,
+            tradeCount: 0,
+            openTradeCount: 1,
+            openPnl: -1.25,
+          }}
+          marketType="perp"
+          canDeploy={false}
+          onOpenFullScreen={() => undefined}
+          onOptimize={() => undefined}
+          onDeploy={() => undefined}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('回撤超标，暂不允许部署')
+    expect(container.textContent).not.toContain('未形成已完成交易')
+  })
 })

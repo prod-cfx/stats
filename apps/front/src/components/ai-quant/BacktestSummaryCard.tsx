@@ -132,7 +132,9 @@ export function BacktestSummaryCard({
             }]
           : []),
       ]
-  const deployBlockMessage = result.tradeCount === 0
+  const deployBlockMessage = result.maxDrawdownPct > 20
+    ? t('aiQuant.messages.backtestDrawdownFail')
+    : result.tradeCount === 0
       ? normalizedMarketType === 'spot'
         ? isEn
           ? 'Backtest produced no completed spot trades, so deployment remains disabled. Please adjust the spot strategy conditions and retry.'
