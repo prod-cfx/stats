@@ -2,8 +2,8 @@
 
 ## Scope
 - Plan anchors:
-  - `.omx/plans/prd-2026-04-11-ai-quant-backtest-snapshot-semantics.md`
-  - `.omx/plans/test-spec-2026-04-11-ai-quant-backtest-snapshot-semantics.md`
+  - PRD: `2026-04-11 ai-quant backtest snapshot semantics`
+  - Test spec: `2026-04-11 ai-quant backtest snapshot semantics`
 - Review posture: code-quality + integration-readiness review before the parallel implementation lands.
 - Delivery note: after acceptance criteria pass on the integrated branch, the leader should run `$git-pr-ship`.
 
