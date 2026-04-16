@@ -79,6 +79,7 @@ function evaluateSeries(
         ? node.payload.value
         : null
     case 'PRICE':
+    case 'PRICE_CHANGE_PCT':
     case 'EMA':
     case 'SMA':
     case 'RSI':
@@ -343,6 +344,27 @@ function resolveSeriesValueAt(
           (node.payload.offsetBars ?? 0) + offset,
           executionModel,
         )
+      case 'PRICE_CHANGE_PCT': {
+        const [currentSeriesId, compareSeriesId] = resolveSeriesInputNodeIds(node, exprIndex)
+        const current = resolveSeriesValueAt(
+          currentSeriesId,
+          offset + (node.payload.offsetBars ?? 0),
+          ctx,
+          executionModel,
+          exprIndex,
+          seriesMemo,
+        )
+        const previous = resolveSeriesValueAt(
+          compareSeriesId,
+          offset + (node.payload.offsetBars ?? 0),
+          ctx,
+          executionModel,
+          exprIndex,
+          seriesMemo,
+        )
+        if (current == null || previous == null || previous === 0) return null
+        return (current - previous) / previous
+      }
       case 'EMA':
       case 'SMA': {
         const inputId = resolveSeriesInputNodeId(node, exprIndex)
@@ -554,25 +576,40 @@ function resolveSeriesInputNodeId(
   node: CompiledExprNode,
   exprIndex: ReadonlyMap<string, CompiledExprNode> | undefined,
 ): string | undefined {
-  if (!exprIndex) return node.deps?.[0] ?? node.payload.inputs?.[0]
+  return resolveSeriesInputNodeIds(node, exprIndex)[0]
+}
 
-  for (const depId of node.deps ?? []) {
-    if (exprIndex.has(depId)) return depId
+function resolveSeriesInputNodeIds(
+  node: CompiledExprNode,
+  exprIndex: ReadonlyMap<string, CompiledExprNode> | undefined,
+): string[] {
+  if (!exprIndex) {
+    return [...(node.deps ?? []), ...(node.payload.inputs ?? [])].filter((value): value is string => typeof value === 'string')
   }
 
-  for (const inputId of node.payload.inputs ?? []) {
-    if (exprIndex.has(inputId)) return inputId
-  }
+  const resolved: string[] = []
+  const candidates = [...(node.deps ?? []), ...(node.payload.inputs ?? [])]
+  const seen = new Set<string>()
 
-  for (const inputId of node.payload.inputs ?? []) {
+  for (const candidateId of candidates) {
+    if (!candidateId || seen.has(candidateId)) continue
+    seen.add(candidateId)
+    if (exprIndex.has(candidateId)) {
+      resolved.push(candidateId)
+      continue
+    }
+
     for (const candidate of exprIndex.values()) {
-      if (candidate.sourceRef === inputId) {
-        return candidate.id
+      if (candidate.sourceRef === candidateId) {
+        resolved.push(candidate.id)
+        break
       }
     }
   }
 
-  return node.deps?.[0] ?? node.payload.inputs?.[0]
+  return resolved.length > 0
+    ? resolved
+    : [...(node.deps ?? []), ...(node.payload.inputs ?? [])].filter((value): value is string => typeof value === 'string')
 }
 
 function readPositionAvgPrice(ctx: StrategyExecutionContextV1): number | null {

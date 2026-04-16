@@ -3,12 +3,13 @@
 import type {
   BacktestReportMetrics,
   LiveBacktestReportInput,
+  OpenPositionRecord,
   RiskItem,
   TradeRecord,
 } from './backtest-report-data'
 import type { BacktestJobResult } from '@/components/ai-quant/backtest-job-client'
-import Link from 'next/link'
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import React, { startTransition, useMemo, useState } from 'react'
 import { getBacktestJobResult } from '@/components/ai-quant/backtest-job-client'
 import { createBacktestReportDataFromLive } from './backtest-report-data'
@@ -51,6 +52,14 @@ function mapDetailedReport(result: BacktestJobResult): LiveBacktestReportInput |
       reasonOpen: trade.reasonOpen,
       reasonClose: trade.reasonClose,
     })),
+    openPositions: Array.isArray(result.openPositions)
+      ? result.openPositions.map(position => ({
+        symbol: position.symbol,
+        qty: position.qty,
+        avgEntryPrice: position.avgEntryPrice,
+        unrealizedPnl: position.unrealizedPnl,
+      }))
+      : [],
   }
 }
 
@@ -148,6 +157,14 @@ function MetricCard({
   )
 }
 
+function formatSignedPnl(value: number): string {
+  const formatted = value.toFixed(2)
+  if (value > 0) {
+    return `+${formatted}`
+  }
+  return formatted
+}
+
 // --- 4. AI Analysis Panel ---
 function AiAnalysisPanel({ lng, insights }: { lng: string; insights: string[] }) {
   const [expanded, setExpanded] = useState(true)
@@ -214,6 +231,7 @@ function TradeDetailsSection({ lng, trades }: { lng: string; trades: TradeRecord
   })
 
   const displayTrades = expanded ? filteredTrades : filteredTrades.slice(0, 3)
+  const hasTrades = filteredTrades.length > 0
 
   return (
     <div className="rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 backdrop-blur-sm">
@@ -249,59 +267,67 @@ function TradeDetailsSection({ lng, trades }: { lng: string; trades: TradeRecord
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b border-[color:var(--cf-border)] text-[color:var(--cf-muted)]">
-              <th className="pb-3 font-normal">{lng === 'en' ? 'Entry Time' : '开仓时间'}</th>
-              <th className="pb-3 font-normal">{lng === 'en' ? 'Exit Time' : '平仓时间'}</th>
-              <th className="pb-3 font-normal">{lng === 'en' ? 'Direction' : '方向'}</th>
-              <th className="pb-3 font-normal">{lng === 'en' ? 'Entry Price' : '开仓价'}</th>
-              <th className="pb-3 font-normal">{lng === 'en' ? 'Exit Price' : '平仓价'}</th>
-              <th className="pb-3 text-right font-normal">{lng === 'en' ? 'Return' : '收益率'}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {displayTrades.map(trade => (
-              <tr
-                key={trade.id}
-                className="border-b border-[color:var(--cf-border)] transition-colors last:border-0 hover:bg-[color:var(--cf-surface-hover)]"
-              >
-                <td className="py-3 text-[color:var(--cf-text)]">
-                  <div>{trade.entryTime}</div>
-                  {trade.reasonOpen && (
-                    <div className="mt-1 text-xs text-[color:var(--cf-muted)]">{trade.reasonOpen}</div>
-                  )}
-                </td>
-                <td className="py-3 text-[color:var(--cf-text)]">
-                  <div>{trade.exitTime}</div>
-                  {trade.reasonClose && (
-                    <div className="mt-1 text-xs text-[color:var(--cf-muted)]">{trade.reasonClose}</div>
-                  )}
-                </td>
-                <td className="py-3 text-[color:var(--cf-text)]">
-                  {trade.direction === 'long'
-                    ? lng === 'en'
-                      ? 'Long'
-                      : '做多'
-                    : lng === 'en'
-                      ? 'Short'
-                      : '做空'}
-                </td>
-                <td className="py-3 text-[color:var(--cf-text)]">
-                  {trade.entryPrice === null ? '--' : `$${trade.entryPrice.toFixed(2)}`}
-                </td>
-                <td className="py-3 text-[color:var(--cf-text)]">${trade.exitPrice.toFixed(2)}</td>
-                <td
-                  className={`py-3 text-right font-medium ${trade.isProfit ? 'text-[color:var(--cf-primary)]' : 'text-[#FF4D4F]'}`}
-                >
-                  {`${trade.profitPct > 0 ? '+' : ''}${trade.profitPct}%`}
-                </td>
+      {hasTrades ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr className="border-b border-[color:var(--cf-border)] text-[color:var(--cf-muted)]">
+                <th className="pb-3 font-normal">{lng === 'en' ? 'Entry Time' : '开仓时间'}</th>
+                <th className="pb-3 font-normal">{lng === 'en' ? 'Exit Time' : '平仓时间'}</th>
+                <th className="pb-3 font-normal">{lng === 'en' ? 'Direction' : '方向'}</th>
+                <th className="pb-3 font-normal">{lng === 'en' ? 'Entry Price' : '开仓价'}</th>
+                <th className="pb-3 font-normal">{lng === 'en' ? 'Exit Price' : '平仓价'}</th>
+                <th className="pb-3 text-right font-normal">{lng === 'en' ? 'Return' : '收益率'}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {displayTrades.map(trade => (
+                <tr
+                  key={trade.id}
+                  className="border-b border-[color:var(--cf-border)] transition-colors last:border-0 hover:bg-[color:var(--cf-surface-hover)]"
+                >
+                  <td className="py-3 text-[color:var(--cf-text)]">
+                    <div>{trade.entryTime}</div>
+                    {trade.reasonOpen && (
+                      <div className="mt-1 text-xs text-[color:var(--cf-muted)]">{trade.reasonOpen}</div>
+                    )}
+                  </td>
+                  <td className="py-3 text-[color:var(--cf-text)]">
+                    <div>{trade.exitTime}</div>
+                    {trade.reasonClose && (
+                      <div className="mt-1 text-xs text-[color:var(--cf-muted)]">{trade.reasonClose}</div>
+                    )}
+                  </td>
+                  <td className="py-3 text-[color:var(--cf-text)]">
+                    {trade.direction === 'long'
+                      ? lng === 'en'
+                        ? 'Long'
+                        : '做多'
+                      : lng === 'en'
+                        ? 'Short'
+                        : '做空'}
+                  </td>
+                  <td className="py-3 text-[color:var(--cf-text)]">
+                    {trade.entryPrice === null ? '--' : `$${trade.entryPrice.toFixed(2)}`}
+                  </td>
+                  <td className="py-3 text-[color:var(--cf-text)]">${trade.exitPrice.toFixed(2)}</td>
+                  <td
+                    className={`py-3 text-right font-medium ${trade.isProfit ? 'text-[color:var(--cf-primary)]' : 'text-[#FF4D4F]'}`}
+                  >
+                    {`${trade.profitPct > 0 ? '+' : ''}${trade.profitPct}%`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-dashed border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-6 text-sm text-[color:var(--cf-muted)]">
+          {lng === 'en'
+            ? 'No closed trades were completed during this backtest.'
+            : '本次回测区间内暂无已平仓交易。'}
+        </div>
+      )}
 
       {filteredTrades.length > 3 && (
         <button
@@ -318,6 +344,59 @@ function TradeDetailsSection({ lng, trades }: { lng: string; trades: TradeRecord
               : `查看更多 (${filteredTrades.length - 3})`}
         </button>
       )}
+    </div>
+  )
+}
+
+function OpenPositionsSection({
+  lng,
+  openPositions,
+}: {
+  lng: string
+  openPositions: OpenPositionRecord[]
+}) {
+  return (
+    <div className="rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 backdrop-blur-sm">
+      <div className="mb-6 flex items-center justify-between gap-4">
+        <h3 className="text-base font-medium text-[color:var(--cf-text-strong)]">
+          {lng === 'en' ? 'Open Positions' : '未平仓持仓'}
+        </h3>
+        <span className="text-xs text-[color:var(--cf-muted)]">
+          {lng === 'en'
+            ? `${openPositions.length} active at backtest end`
+            : `回测结束时仍有 ${openPositions.length} 笔持仓`}
+        </span>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-left text-sm">
+          <thead>
+            <tr className="border-b border-[color:var(--cf-border)] text-[color:var(--cf-muted)]">
+              <th className="pb-3 font-normal">{lng === 'en' ? 'Symbol' : '标的'}</th>
+              <th className="pb-3 font-normal">{lng === 'en' ? 'Quantity' : '持仓数量'}</th>
+              <th className="pb-3 font-normal">{lng === 'en' ? 'Avg Entry Price' : '持仓均价'}</th>
+              <th className="pb-3 text-right font-normal">{lng === 'en' ? 'Unrealized P&L' : '浮动盈亏'}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {openPositions.map(position => (
+              <tr
+                key={`${position.symbol}-${position.avgEntryPrice}-${position.qty}`}
+                className="border-b border-[color:var(--cf-border)] transition-colors last:border-0 hover:bg-[color:var(--cf-surface-hover)]"
+              >
+                <td className="py-3 text-[color:var(--cf-text)]">{position.symbol}</td>
+                <td className="py-3 text-[color:var(--cf-text)]">{position.qty}</td>
+                <td className="py-3 text-[color:var(--cf-text)]">${position.avgEntryPrice.toFixed(2)}</td>
+                <td
+                  className={`py-3 text-right font-medium ${position.isProfit ? 'text-[color:var(--cf-primary)]' : 'text-[#FF4D4F]'}`}
+                >
+                  {formatSignedPnl(position.unrealizedPnl)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
@@ -462,9 +541,9 @@ export function BacktestReportClient({
       <StrategyConclusionCard status={status} summary={summary} onDeploy={handleDeploy} lng={lng} />
 
       {/* 2. 核心指标卡 */}
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
         <MetricCard
-          title={lng === 'en' ? 'Total Return' : '总收益'}
+          title={lng === 'en' ? 'Closed Return' : '已平仓收益'}
           value={
             metrics ? `${metrics.totalReturnPct > 0 ? '+' : ''}${metrics.totalReturnPct}%` : '--'
           }
@@ -476,15 +555,29 @@ export function BacktestReportClient({
           trend="down"
         />
         <MetricCard
-          title={lng === 'en' ? 'Win Rate' : '胜率'}
+          title={lng === 'en' ? 'Closed Win Rate' : '已平仓胜率'}
           value={metrics ? `${metrics.winRatePct}%` : '--'}
           trend="neutral"
         />
         <MetricCard
-          title={lng === 'en' ? 'Trade Count' : '交易次数'}
+          title={lng === 'en' ? 'Closed Trades' : '已平仓笔数'}
           value={metrics ? `${metrics.tradeCount}` : '--'}
           trend="neutral"
         />
+        {typeof metrics?.openTradeCount === 'number' && (
+          <MetricCard
+            title={lng === 'en' ? 'Open Trades' : '未平仓笔数'}
+            value={`${metrics.openTradeCount}`}
+            trend="neutral"
+          />
+        )}
+        {typeof metrics?.openPnl === 'number' && (
+          <MetricCard
+            title={lng === 'en' ? 'Open P&L' : '浮动盈亏'}
+            value={formatSignedPnl(metrics.openPnl)}
+            trend={metrics.openPnl > 0 ? 'up' : metrics.openPnl < 0 ? 'down' : 'neutral'}
+          />
+        )}
       </div>
 
       {hasReportData && reportData ? (
@@ -538,6 +631,10 @@ export function BacktestReportClient({
 
           {/* 6. 交易明细 */}
           <TradeDetailsSection lng={lng} trades={reportData.trades} />
+
+          {reportData.openPositions.length > 0 && (
+            <OpenPositionsSection lng={lng} openPositions={reportData.openPositions} />
+          )}
         </>
       ) : detailedReportState === 'loading' && metrics ? (
         <div className="rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 text-sm text-[color:var(--cf-muted)]">

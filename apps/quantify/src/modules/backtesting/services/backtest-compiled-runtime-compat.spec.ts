@@ -200,6 +200,113 @@ describe('backtestCompiledRuntimeCompat', () => {
     expect(typeof values.macd_signal).toBe('number')
   })
 
+  it('evaluates PRICE_CHANGE_PCT as relative change so entry programs are not shadowed by always-true exits', () => {
+    const ctx = {
+      bars: [
+        { time: 1, open: 100, high: 101, low: 99, close: 100 },
+        { time: 2, open: 100, high: 100, low: 98, close: 98.5 },
+      ],
+      currentPrice: 98.5,
+      baseTimeframeBar: { close: 98.5 },
+      position: { qty: 0 },
+      portfolio: { equity: 1000 },
+      __compiledDecisionState: { barIndex: 2, lastTriggeredByProgram: {} },
+    } as any
+
+    const exprPool = [
+      {
+        id: 'close_now',
+        nodeType: 'series',
+        sourceRef: 'close_3m',
+        payload: { kind: 'PRICE', field: 'close', timeframe: '3m' },
+      },
+      {
+        id: 'close_prev',
+        nodeType: 'series',
+        sourceRef: 'close_3m_1',
+        payload: { kind: 'PRICE', field: 'close', timeframe: '3m', offsetBars: 1 },
+      },
+      {
+        id: 'const_entry',
+        nodeType: 'series',
+        payload: { kind: 'CONST', value: -0.01 },
+      },
+      {
+        id: 'const_exit',
+        nodeType: 'series',
+        payload: { kind: 'CONST', value: 0.02 },
+      },
+      {
+        id: 'price_change_pct',
+        nodeType: 'series',
+        deps: ['close_now', 'close_prev'],
+        payload: {
+          kind: 'PRICE_CHANGE_PCT',
+          timeframe: '3m',
+          inputs: ['close_3m', 'close_3m_1'],
+          params: { lookbackBars: 1 },
+        },
+      },
+      {
+        id: 'entry_hit',
+        nodeType: 'predicate',
+        deps: ['price_change_pct', 'const_entry'],
+        payload: { kind: 'LTE' },
+      },
+      {
+        id: 'exit_hit',
+        nodeType: 'predicate',
+        deps: ['price_change_pct', 'const_exit'],
+        payload: { kind: 'GTE' },
+      },
+    ] as any
+
+    const values = evaluateExprPool(
+      ctx,
+      exprPool,
+      ['close_now', 'close_prev', 'const_entry', 'const_exit', 'price_change_pct', 'entry_hit', 'exit_hit'],
+    )
+
+    expect(values.price_change_pct).toBeCloseTo(-0.015)
+    expect(values.entry_hit).toBe(true)
+    expect(values.exit_hit).toBe(false)
+
+    const decision = runDecisionPrograms(
+      ctx,
+      [
+        {
+          id: 'decision_exit',
+          phase: 'exit',
+          priority: 100,
+          when: 'exit_hit',
+          actions: [{ kind: 'CLOSE_LONG', quantity: { mode: 'position_pct', value: 100 } }],
+        },
+        {
+          id: 'decision_entry',
+          phase: 'entry',
+          priority: 200,
+          when: 'entry_hit',
+          actions: [{ kind: 'OPEN_LONG', quantity: { mode: 'pct_equity', value: 10 } }],
+        },
+      ] as any,
+      values,
+      {
+        blockNewEntry: false,
+        forceExit: false,
+        strategyHalt: false,
+        cancelOrderPrograms: false,
+        triggered: [],
+      },
+      ['decision_exit', 'decision_entry'],
+    )
+
+    expect(decision).toEqual({
+      action: 'OPEN_LONG',
+      size: { mode: 'RATIO', value: 0.1 },
+      reason: 'compiled.decision_entry',
+    })
+  })
+
   it('evaluates position average price and pnl pct series as numeric runtime values', () => {
     const values = evaluateExprPool(
       {

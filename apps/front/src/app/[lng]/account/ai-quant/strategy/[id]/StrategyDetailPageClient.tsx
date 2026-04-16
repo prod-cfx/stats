@@ -21,6 +21,7 @@ import {
 import { ApiError } from '@/lib/errors'
 import {
   requiresRepublishForPublishedSnapshot,
+  resolveBacktestExecutionConfig,
   resolveEffectivePublishedBacktestInputs,
   resolveBacktestRangeInput,
 } from '../../../../ai-quant/ai-quant-page-conversation'
@@ -147,22 +148,13 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
                   : strategy.positionPct,
             }
           : null,
-        publishedSnapshotBacktestConfigDefaults: strategy.snapshotBacktestConfigDefaults
-          ? {
-              initialCash: strategy.snapshotBacktestConfigDefaults.initialCash,
-              leverage: strategy.snapshotBacktestConfigDefaults.leverage,
-              slippageBps: strategy.snapshotBacktestConfigDefaults.slippageBps,
-              feeBps: strategy.snapshotBacktestConfigDefaults.feeBps,
-              priceSource: strategy.snapshotBacktestConfigDefaults.priceSource,
-              allowPartial: strategy.snapshotBacktestConfigDefaults.allowPartial,
-            }
-          : null,
         publishedSnapshotCompatibilityMetadata: strategy.compatibilityMetadata ?? null,
       })
       if (!effectiveInputs) {
-        throw new ApiError('当前已发布快照缺少正式回测基线，请重新发布后再回测。', 'PUBLISHED_SNAPSHOT_PARAMS_MISSING')
+        throw new ApiError('当前已发布快照缺少策略市场绑定真相，请重新发布后再回测。', 'PUBLISHED_SNAPSHOT_PARAMS_MISSING')
       }
-      const { symbol, baseTimeframe, exchange, executionConfig } = effectiveInputs
+      const { symbol, baseTimeframe, exchange } = effectiveInputs
+      const executionConfig = resolveBacktestExecutionConfig(strategy.paramValues ?? {})
       const snapshotStateTimeframes = strategy.snapshotBacktestConfigDefaults?.stateTimeframes ?? []
       if (!executionConfig.allowPartialValid) {
         throw new BacktestPayloadBuilderError('invalid_execution_config')
@@ -186,7 +178,10 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
           publishedSnapshotId,
         },
         range: resolveBacktestRangeInput(strategy.paramValues ?? {}),
-        allowPartial: executionConfig.allowPartial,
+        // Top-level allowPartial controls whether the backtest job may clamp the
+        // requested range to the available market-data coverage. It is not the
+        // same semantic as the snapshot execution-policy allowPartialFill flag.
+        allowPartial: true,
       })
 
       const support = await checkBacktestSymbolSupport({ exchange, symbol })

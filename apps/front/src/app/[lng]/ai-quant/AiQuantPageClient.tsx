@@ -51,6 +51,7 @@ import {
   createRecoveryConversation,
   hasExplicitBacktestExecutionOverrides,
   hasLatestPublishedCode,
+  isDeployableBacktestResult,
   invalidateConversationPublication,
   mapExchangeStatusesToDeployAccounts,
   normalizeParamsFromValues,
@@ -435,8 +436,7 @@ export function AiQuantPageClient({
   }, [activeConversation?.publishedSnapshotDeploymentExecutionConstraints?.effectiveAllowedLeverageRange])
 
   const canDeploy = useMemo(() => {
-    if (!activeConversation?.backtestResult) return false
-    return activeConversation.backtestResult.maxDrawdownPct <= 20
+    return isDeployableBacktestResult(activeConversation?.backtestResult)
   }, [activeConversation?.backtestResult])
   const graphConfirmed = activeConversation?.logicGraph?.status === 'confirmed'
   const clarificationBlocked = activeConversation?.clarificationGate?.blocked === true

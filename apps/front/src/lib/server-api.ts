@@ -28,6 +28,8 @@ export interface BacktestJobResultSummary {
   winRate: number
   profitFactor: number
   totalTrades: number
+  totalOpenTrades?: number
+  openPnl?: number
 }
 
 export interface BacktestJobResultEquityPoint {
@@ -49,10 +51,18 @@ export interface BacktestJobResultTradeRecord {
   returnPct: number
 }
 
+export interface BacktestJobResultOpenPositionRecord {
+  symbol: string
+  qty: number
+  avgEntryPrice: number
+  unrealizedPnl: number
+}
+
 export interface BacktestJobResultReport {
   summary: BacktestJobResultSummary
   equityCurve?: BacktestJobResultEquityPoint[]
   trades?: BacktestJobResultTradeRecord[]
+  openPositions?: BacktestJobResultOpenPositionRecord[]
 }
 
 export interface BacktestJobServerResponse {

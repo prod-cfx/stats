@@ -55,7 +55,11 @@ jest.mock('@/components/ai-quant/backtest-payload-builder', () => ({
     }
   },
   buildBacktestPayload: (...args: unknown[]) => mockBuildBacktestPayload(...args),
-  isBacktestPayloadBuilderError: () => false,
+  isBacktestPayloadBuilderError: (value: unknown) => (
+    Boolean(value)
+    && typeof value === 'object'
+    && (value as { name?: string }).name === 'BacktestPayloadBuilderError'
+  ),
 }))
 
 jest.mock('@/components/ai-quant/backtest-symbol-support-client', () => ({
@@ -102,12 +106,12 @@ describe('StrategyDetailPageClient', () => {
       paramSchema: null,
       paramValues: {
         backtestRangePreset: '7D',
-        backtestInitialCash: 20000,
-        backtestLeverage: 2,
-        backtestSlippageBps: 8,
-        backtestFeeBps: 3,
-        backtestPriceSource: 'close',
-        backtestAllowPartial: true,
+        backtestInitialCash: 32000,
+        backtestLeverage: 4,
+        backtestSlippageBps: 13,
+        backtestFeeBps: 7,
+        backtestPriceSource: 'mid',
+        backtestAllowPartial: false,
       },
       schemaVersion: null,
       supportsDynamicParams: false,
@@ -198,6 +202,13 @@ describe('StrategyDetailPageClient', () => {
         symbol: 'BTCUSDT',
         baseTimeframe: '3m',
         stateTimeframes: ['15m'],
+        initialCash: 32000,
+        leverage: 4,
+        execution: {
+          slippageBps: 13,
+          feeBps: 7,
+          priceSource: 'mid',
+        },
         strategy: {
           id: 'inst-1',
           publishedSnapshotId: 'snapshot-1',
@@ -210,6 +221,80 @@ describe('StrategyDetailPageClient', () => {
     )
     expect(mockGetBacktestJob).not.toHaveBeenCalled()
     expect(container.querySelector('[data-testid="backtest-error"]')?.textContent).toBe('')
+  })
+
+  it('allows partial market-data coverage from strategy detail even when snapshot allowPartial is false', async () => {
+    mockMapDetailToRecord.mockReturnValue({
+      id: 'inst-1',
+      name: 'Strategy 1',
+      status: 'running',
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      timeframe: '3m',
+      positionPct: 12,
+      metrics: {
+        returnPct: 10,
+        maxDrawdownPct: 5,
+        winRatePct: 55,
+        tradeCount: 12,
+      },
+      equitySeries: [],
+      timeline: [],
+      paramSchema: null,
+      paramValues: {
+        backtestRangePreset: '7D',
+        backtestInitialCash: 20000,
+        backtestLeverage: 2,
+        backtestSlippageBps: 8,
+        backtestFeeBps: 3,
+        backtestPriceSource: 'close',
+        backtestAllowPartial: false,
+      },
+      schemaVersion: null,
+      supportsDynamicParams: false,
+      publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotParamValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '3m',
+        positionPct: 12,
+      },
+      snapshotBacktestConfigDefaults: {
+        initialCash: 20000,
+        leverage: 2,
+        slippageBps: 8,
+        feeBps: 3,
+        priceSource: 'close',
+        allowPartial: false,
+        stateTimeframes: ['15m'],
+      },
+      compatibilityMetadata: {
+        isLegacySnapshot: false,
+        missingBacktestConfigDefaults: false,
+        missingDeploymentExecutionDefaults: false,
+        missingDeploymentExecutionConstraints: false,
+        requiresRepublishForBacktest: false,
+        requiresRepublishForDeploy: false,
+      },
+      snapshotHash: 'snapshot-hash-1',
+      updatedAt: '2026-04-10T00:00:00.000Z',
+    })
+
+    await act(async () => {
+      root.render(<StrategyDetailPageClient lng="zh" id="inst-1" />)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="run-backtest"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(expect.objectContaining({
+      allowPartial: true,
+    }))
   })
 
   it('blocks legacy snapshot backtest and prompts republish when formal backtest truth is missing', async () => {
