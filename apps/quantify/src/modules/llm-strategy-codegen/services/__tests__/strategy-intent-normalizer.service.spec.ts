@@ -99,23 +99,29 @@ describe('strategyIntentNormalizerService', () => {
       expect.objectContaining({
         key: 'bollinger.touch_upper',
         phase: 'entry',
+        closureStatus: 'closed',
         sideScope: 'short',
-        params: { band: 'upper' },
+        params: expect.objectContaining({ band: 'upper' }),
         resolutionHints: { confirmation: 'ambiguous_touch_or_close_confirm' },
+        unresolvedSlots: [],
       }),
       expect.objectContaining({
         key: 'bollinger.touch_lower',
         phase: 'entry',
+        closureStatus: 'closed',
         sideScope: 'long',
-        params: { band: 'lower' },
+        params: expect.objectContaining({ band: 'lower' }),
         resolutionHints: { confirmation: 'ambiguous_touch_or_close_confirm' },
+        unresolvedSlots: [],
       }),
       expect.objectContaining({
         key: 'bollinger.touch_middle',
         phase: 'exit',
+        closureStatus: 'closed',
         sideScope: 'long',
-        params: { band: 'middle' },
+        params: expect.objectContaining({ band: 'middle' }),
         resolutionHints: { confirmation: 'ambiguous_touch_or_close_confirm' },
+        unresolvedSlots: [],
       }),
     ]))
     expect(result.normalizedIntent.position).toEqual({
@@ -260,15 +266,21 @@ describe('strategyIntentNormalizerService', () => {
     expect(result.normalizedIntent.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'indicator.above',
+        phase: 'entry',
         closureStatus: 'open',
         unresolvedSlots: expect.arrayContaining([
-          expect.objectContaining({ slotKey: 'reference.period' }),
-          expect.objectContaining({ slotKey: 'confirmationMode' }),
+          expect.objectContaining({ slotKey: 'reference.period.entry' }),
+          expect.objectContaining({ slotKey: 'confirmationMode.entry' }),
         ]),
       }),
       expect.objectContaining({
         key: 'indicator.below',
+        phase: 'exit',
         closureStatus: 'open',
+        unresolvedSlots: expect.arrayContaining([
+          expect.objectContaining({ slotKey: 'reference.period.exit' }),
+          expect.objectContaining({ slotKey: 'confirmationMode.exit' }),
+        ]),
       }),
     ]))
     expect(result.normalizedIntent.stateHints).toEqual(expect.arrayContaining([
