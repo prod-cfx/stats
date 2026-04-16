@@ -398,4 +398,206 @@ describe('SemanticStateMergeService', () => {
       status: 'locked',
     }))
   })
+
+  it('keeps stronger persisted position, actions, and risk atoms when a weaker derived round only provides looser replacements', () => {
+    const merged = service.merge({
+      persisted: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [],
+        actions: [
+          { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+          { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+        ],
+        risk: [
+          {
+            id: 'stop-loss',
+            key: 'stop_loss_pct',
+            params: { value: 5 },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          },
+        ],
+        position: {
+          mode: 'fixed_ratio',
+          value: 0.1,
+          positionMode: 'long_only',
+          status: 'locked',
+          source: 'user_explicit',
+        },
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-16T10:00:00.000Z',
+      },
+      derived: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [],
+        actions: [
+          { id: 'derived-open-long', key: 'open_long', status: 'open', source: 'derived' },
+        ],
+        risk: [
+          {
+            id: 'derived-stop-loss',
+            key: 'stop_loss_pct',
+            params: {},
+            status: 'open',
+            source: 'derived',
+            openSlots: [
+              {
+                slotKey: 'risk.stopLossPct',
+                fieldPath: 'risk[0].params.value',
+                status: 'open',
+                priority: 'risk',
+                questionHint: '止损比例是多少？',
+                affectsExecution: true,
+              },
+            ],
+          },
+        ],
+        position: {
+          mode: 'fixed_ratio',
+          value: 0.1,
+          positionMode: 'long_only',
+          status: 'open',
+          source: 'derived',
+        },
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-16T10:01:00.000Z',
+      },
+    })
+
+    expect(merged.position).toEqual(expect.objectContaining({
+      status: 'locked',
+      source: 'user_explicit',
+      value: 0.1,
+    }))
+    expect(merged.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'open-long',
+        key: 'open_long',
+        status: 'locked',
+        source: 'user_explicit',
+      }),
+      expect.objectContaining({
+        id: 'close-long',
+        key: 'close_long',
+        status: 'locked',
+        source: 'user_explicit',
+      }),
+    ]))
+    expect(merged.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'stop-loss',
+        key: 'stop_loss_pct',
+        status: 'locked',
+        source: 'user_explicit',
+        params: expect.objectContaining({ value: 5 }),
+      }),
+    ]))
+  })
+
+  it('matches each derived trigger at most once so persisted sibling atoms stay distinct', () => {
+    const merged = service.merge({
+      persisted: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [
+          {
+            id: 'entry-sibling-a',
+            key: 'indicator.above',
+            phase: 'entry',
+            params: {
+              indicator: 'ma',
+              referenceRole: 'long_term',
+            },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [
+              {
+                slotKey: 'reference.period.entry.a',
+                fieldPath: 'triggers[0].params.reference.period',
+                status: 'open',
+                priority: 'core',
+                questionHint: '第一个条件的长期均线周期是多少？',
+                affectsExecution: true,
+              },
+            ],
+          },
+          {
+            id: 'entry-sibling-b',
+            key: 'indicator.above',
+            phase: 'entry',
+            params: {
+              indicator: 'ma',
+              referenceRole: 'long_term',
+            },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [
+              {
+                slotKey: 'reference.period.entry.b',
+                fieldPath: 'triggers[1].params.reference.period',
+                status: 'open',
+                priority: 'core',
+                questionHint: '第二个条件的长期均线周期是多少？',
+                affectsExecution: true,
+              },
+            ],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-16T10:00:00.000Z',
+      },
+      derived: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [
+          {
+            id: 'derived-entry-open',
+            key: 'indicator.above',
+            phase: 'entry',
+            params: {
+              indicator: 'ma',
+              referenceRole: 'long_term',
+            },
+            status: 'open',
+            source: 'derived',
+            openSlots: [
+              {
+                slotKey: 'reference.period.entry',
+                fieldPath: 'triggers[0].params.reference.period',
+                status: 'open',
+                priority: 'core',
+                questionHint: '长期均线周期是多少？',
+                affectsExecution: true,
+              },
+            ],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-16T10:01:00.000Z',
+      },
+    })
+
+    expect(merged.triggers).toHaveLength(2)
+    expect(merged.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'entry-sibling-a',
+      }),
+      expect.objectContaining({
+        id: 'entry-sibling-b',
+      }),
+    ]))
+  })
 })

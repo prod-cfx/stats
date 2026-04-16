@@ -1,6 +1,13 @@
 import { Injectable } from '@nestjs/common'
 
-import type { SemanticContextSlotState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
+import type {
+  SemanticActionState,
+  SemanticContextSlotState,
+  SemanticPositionState,
+  SemanticRiskState,
+  SemanticState,
+  SemanticTriggerState,
+} from '../types/semantic-state'
 
 @Injectable()
 export class SemanticStateMergeService {
@@ -13,9 +20,9 @@ export class SemanticStateMergeService {
       ...input.derived,
       families: [...new Set([...input.persisted.families, ...input.derived.families])],
       triggers: this.mergeTriggers(input.persisted.triggers, input.derived.triggers),
-      actions: input.derived.actions.length > 0 ? input.derived.actions : input.persisted.actions,
-      risk: input.derived.risk.length > 0 ? input.derived.risk : input.persisted.risk,
-      position: input.derived.position ?? input.persisted.position,
+      actions: this.mergeActions(input.persisted.actions, input.derived.actions),
+      risk: this.mergeRisk(input.persisted.risk, input.derived.risk),
+      position: this.mergePosition(input.persisted.position, input.derived.position),
       contextSlots: this.mergeContextSlots(input.persisted.contextSlots, input.derived.contextSlots),
       normalizationNotes: [...new Set([...input.persisted.normalizationNotes, ...input.derived.normalizationNotes])],
       updatedAt: new Date().toISOString(),
@@ -31,9 +38,11 @@ export class SemanticStateMergeService {
       params: { ...trigger.params },
       openSlots: trigger.openSlots.map(slot => ({ ...slot })),
     }))
+    const consumedDerivedIndexes = new Set<number>()
 
     for (const persistedTrigger of persisted) {
-      const matchIndex = next.findIndex(candidate => this.isSameTriggerIdentity(persistedTrigger, candidate))
+      const matchIndex = next.findIndex((candidate, index) =>
+        !consumedDerivedIndexes.has(index) && this.isSameTriggerIdentity(persistedTrigger, candidate))
       if (matchIndex < 0) {
         next.push({
           ...persistedTrigger,
@@ -44,6 +53,7 @@ export class SemanticStateMergeService {
       }
 
       const derivedTrigger = next[matchIndex]
+      consumedDerivedIndexes.add(matchIndex)
       const preferPersisted = this.compareNodeStrength(persistedTrigger, derivedTrigger) > 0
       next[matchIndex] = {
         ...(preferPersisted ? derivedTrigger : persistedTrigger),
@@ -64,6 +74,113 @@ export class SemanticStateMergeService {
     }
 
     return next
+  }
+
+  private mergeActions(
+    persisted: SemanticActionState[],
+    derived: SemanticActionState[],
+  ): SemanticActionState[] {
+    const next = derived.map(action => ({
+      ...action,
+      params: action.params ? { ...action.params } : undefined,
+    }))
+    const consumedDerivedIndexes = new Set<number>()
+
+    for (const persistedAction of persisted) {
+      const matchIndex = next.findIndex((candidate, index) =>
+        !consumedDerivedIndexes.has(index) && this.isSameActionIdentity(persistedAction, candidate))
+      if (matchIndex < 0) {
+        next.push({
+          ...persistedAction,
+          params: persistedAction.params ? { ...persistedAction.params } : undefined,
+        })
+        continue
+      }
+
+      consumedDerivedIndexes.add(matchIndex)
+      const derivedAction = next[matchIndex]
+      const preferPersisted = this.compareNodeStrength(persistedAction, derivedAction) > 0
+      next[matchIndex] = {
+        ...(preferPersisted ? derivedAction : persistedAction),
+        ...(preferPersisted ? persistedAction : derivedAction),
+        id: persistedAction.id,
+        params: preferPersisted
+          ? { ...derivedAction.params, ...persistedAction.params }
+          : { ...persistedAction.params, ...derivedAction.params },
+        evidence: preferPersisted
+          ? persistedAction.evidence ?? derivedAction.evidence
+          : derivedAction.evidence ?? persistedAction.evidence,
+      }
+    }
+
+    return next
+  }
+
+  private mergeRisk(
+    persisted: SemanticRiskState[],
+    derived: SemanticRiskState[],
+  ): SemanticRiskState[] {
+    const next = derived.map(risk => ({
+      ...risk,
+      params: { ...risk.params },
+      openSlots: risk.openSlots.map(slot => ({ ...slot })),
+    }))
+    const consumedDerivedIndexes = new Set<number>()
+
+    for (const persistedRisk of persisted) {
+      const matchIndex = next.findIndex((candidate, index) =>
+        !consumedDerivedIndexes.has(index) && this.isSameRiskIdentity(persistedRisk, candidate))
+      if (matchIndex < 0) {
+        next.push({
+          ...persistedRisk,
+          params: { ...persistedRisk.params },
+          openSlots: persistedRisk.openSlots.map(slot => ({ ...slot })),
+        })
+        continue
+      }
+
+      consumedDerivedIndexes.add(matchIndex)
+      const derivedRisk = next[matchIndex]
+      const preferPersisted = this.compareNodeStrength(persistedRisk, derivedRisk) > 0
+      next[matchIndex] = {
+        ...(preferPersisted ? derivedRisk : persistedRisk),
+        ...(preferPersisted ? persistedRisk : derivedRisk),
+        id: persistedRisk.id,
+        params: preferPersisted
+          ? { ...derivedRisk.params, ...persistedRisk.params }
+          : { ...persistedRisk.params, ...derivedRisk.params },
+        openSlots: this.mergeOpenSlots(persistedRisk.openSlots, derivedRisk.openSlots),
+        evidence: preferPersisted
+          ? persistedRisk.evidence ?? derivedRisk.evidence
+          : derivedRisk.evidence ?? persistedRisk.evidence,
+      }
+    }
+
+    return next
+  }
+
+  private mergePosition(
+    persisted: SemanticPositionState | null,
+    derived: SemanticPositionState | null,
+  ): SemanticPositionState | null {
+    if (!persisted) {
+      return derived
+    }
+
+    if (!derived) {
+      return persisted
+    }
+
+    const preferPersisted = this.compareNodeStrength(persisted, derived) > 0
+    const stronger = preferPersisted ? persisted : derived
+    const weaker = preferPersisted ? derived : persisted
+
+    return {
+      ...weaker,
+      ...stronger,
+      value: stronger.value ?? weaker.value,
+      evidence: stronger.evidence ?? weaker.evidence,
+    }
   }
 
   private mergeContextSlots(
@@ -101,9 +218,35 @@ export class SemanticStateMergeService {
       'breakoutAction',
     ] as const
 
+    return this.haveCompatibleParamValues(left.params, right.params, identityKeys)
+  }
+
+  private isSameActionIdentity(left: SemanticActionState, right: SemanticActionState): boolean {
+    if (left.key !== right.key) {
+      return false
+    }
+
+    return this.haveCompatibleParamValues(left.params ?? {}, right.params ?? {})
+  }
+
+  private isSameRiskIdentity(left: SemanticRiskState, right: SemanticRiskState): boolean {
+    if (left.key !== right.key) {
+      return false
+    }
+
+    return this.haveCompatibleParamValues(left.params, right.params)
+  }
+
+  private haveCompatibleParamValues(
+    left: Record<string, unknown>,
+    right: Record<string, unknown>,
+    keys?: readonly string[],
+  ): boolean {
+    const identityKeys = keys ?? [...new Set([...Object.keys(left), ...Object.keys(right)])]
+
     return identityKeys.every((key) => {
-      const leftValue = left.params[key]
-      const rightValue = right.params[key]
+      const leftValue = left[key]
+      const rightValue = right[key]
       if (leftValue === undefined || rightValue === undefined) {
         return true
       }
