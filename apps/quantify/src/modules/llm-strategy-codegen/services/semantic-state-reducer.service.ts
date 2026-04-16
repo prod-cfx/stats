@@ -3,7 +3,7 @@ import { buildSemanticSlotId } from '../types/semantic-state'
 import type { SemanticSlotState, SemanticState } from '../types/semantic-state'
 
 interface SupportedSlotReduction {
-  paramKey: 'reference.period' | 'confirmationMode'
+  paramKey: 'reference.period' | 'confirmationMode' | 'rangeLower' | 'rangeUpper' | 'stepPct'
   paramValue: number | string
   slotValue: number | string
 }
@@ -62,9 +62,10 @@ export class SemanticStateReducerService {
 
       if (reduction.paramKey === 'reference.period') {
         trigger.params['reference.period'] = reduction.paramValue
-      }
-      else {
+      } else if (reduction.paramKey === 'confirmationMode') {
         trigger.params.confirmationMode = reduction.paramValue
+      } else {
+        trigger.params[reduction.paramKey] = reduction.paramValue
       }
 
       slot.value = reduction.slotValue
@@ -112,6 +113,45 @@ export class SemanticStateReducerService {
       }
     }
 
+    if (slot.slotKey === 'grid.range.lower' || slot.slotKey === 'grid.range.upper' || slot.slotKey === 'grid.stepPct') {
+      const value = this.parseGridNumericAnswer(slot.slotKey, answerText)
+      if (value === null) {
+        return null
+      }
+
+      const paramKey = slot.slotKey === 'grid.range.lower'
+        ? 'rangeLower'
+        : (slot.slotKey === 'grid.range.upper' ? 'rangeUpper' : 'stepPct')
+
+      return {
+        paramKey,
+        paramValue: value,
+        slotValue: value,
+      }
+    }
+
     return null
+  }
+
+  private parseGridNumericAnswer(slotKey: string, answerText: string): number | null {
+    if (slotKey === 'grid.stepPct') {
+      const percentMatch = answerText.match(/(\d+(?:\.\d+)?)\s*%/u)
+      if (percentMatch?.[1]) {
+        return Number(percentMatch[1])
+      }
+
+      const perMilleMatch = answerText.match(/千分之\s*(\d+(?:\.\d+)?)/u)
+      if (perMilleMatch?.[1]) {
+        return Number(perMilleMatch[1]) / 10
+      }
+    }
+
+    const numericMatch = answerText.match(/-?\d+(?:\.\d+)?/u)
+    if (!numericMatch) {
+      return null
+    }
+
+    const value = Number(numericMatch[0])
+    return Number.isFinite(value) ? value : null
   }
 }

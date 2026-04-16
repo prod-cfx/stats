@@ -291,4 +291,107 @@ describe('SemanticStateReducerService', () => {
       value: 'close_confirm',
     }))
   })
+
+  it('reduces grid slots into trigger params and keeps remaining grid slots open', () => {
+    const baseState = {
+      version: 1,
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-entry',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: {
+            sideMode: 'bidirectional',
+            breakoutAction: 'pause',
+          },
+          status: 'open',
+          source: 'user_explicit' as const,
+          openSlots: [
+            {
+              slotKey: 'grid.range.lower',
+              fieldPath: 'triggers[0].params.rangeLower',
+              status: 'open' as const,
+              priority: 'core' as const,
+              questionHint: '请确认网格区间下界。',
+              affectsExecution: true,
+            },
+            {
+              slotKey: 'grid.range.upper',
+              fieldPath: 'triggers[0].params.rangeUpper',
+              status: 'open' as const,
+              priority: 'core' as const,
+              questionHint: '请确认网格区间上界。',
+              affectsExecution: true,
+            },
+            {
+              slotKey: 'grid.stepPct',
+              fieldPath: 'triggers[0].params.stepPct',
+              status: 'open' as const,
+              priority: 'core' as const,
+              questionHint: '请确认每格步长（例如 0.5%）。',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    }
+
+    const withLower = service.applyClarificationAnswer({
+      currentState: baseState,
+      targetSlotKey: 'grid.range.lower',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'grid.range.lower',
+        fieldPath: 'triggers[0].params.rangeLower',
+      }),
+      answer: '60000',
+      messageIndex: 9,
+    })
+    const withUpper = service.applyClarificationAnswer({
+      currentState: withLower,
+      targetSlotKey: 'grid.range.upper',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'grid.range.upper',
+        fieldPath: 'triggers[0].params.rangeUpper',
+      }),
+      answer: '80000',
+      messageIndex: 10,
+    })
+    const withStep = service.applyClarificationAnswer({
+      currentState: withUpper,
+      targetSlotKey: 'grid.stepPct',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'grid.stepPct',
+        fieldPath: 'triggers[0].params.stepPct',
+      }),
+      answer: '0.5%',
+      messageIndex: 11,
+    })
+
+    expect(withLower.triggers[0]?.params.rangeLower).toBe(60000)
+    expect(withLower.triggers[0]?.openSlots.find(slot => slot.slotKey === 'grid.range.lower')).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 60000,
+    }))
+    expect(withLower.triggers[0]?.openSlots.find(slot => slot.slotKey === 'grid.range.upper')?.status).toBe('open')
+
+    expect(withUpper.triggers[0]?.params.rangeUpper).toBe(80000)
+    expect(withUpper.triggers[0]?.openSlots.find(slot => slot.slotKey === 'grid.range.upper')).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 80000,
+    }))
+
+    expect(withStep.triggers[0]?.params.stepPct).toBe(0.5)
+    expect(withStep.triggers[0]?.openSlots.find(slot => slot.slotKey === 'grid.stepPct')).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 0.5,
+    }))
+    expect(withStep.triggers[0]?.status).toBe('locked')
+  })
 })
