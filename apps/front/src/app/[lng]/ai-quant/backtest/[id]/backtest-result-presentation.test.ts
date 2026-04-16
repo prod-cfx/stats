@@ -55,8 +55,11 @@ describe('backtest-result-presentation', () => {
   it('formats spot symbols and open positions for display', () => {
     expect(formatBacktestDisplaySymbol('BTCUSDT:SPOT', 'spot')).toBe('BTCUSDT 现货')
     expect(formatBacktestDisplaySymbol('BTCUSDT:PERP', 'perp')).toBe('BTCUSDT 合约')
+    expect(formatBacktestDisplaySymbol('BTCUSDT:SPOT', 'spot', 'en')).toBe('BTCUSDT Spot')
+    expect(formatBacktestDisplaySymbol('BTCUSDT:PERP', 'perp', 'en')).toBe('BTCUSDT Perp')
 
     expect(formatOpenPositionForDisplay({
+      lng: 'en',
       marketType: 'spot',
       position: {
         symbol: 'BTCUSDT:SPOT',
@@ -66,7 +69,7 @@ describe('backtest-result-presentation', () => {
         isProfit: true,
       },
     })).toEqual(expect.objectContaining({
-      symbol: 'BTCUSDT 现货',
+      symbol: 'BTCUSDT Spot',
     }))
   })
 })

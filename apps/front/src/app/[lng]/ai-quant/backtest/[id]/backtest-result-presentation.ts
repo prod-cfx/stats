@@ -44,12 +44,17 @@ export function normalizeBacktestMarketType(value: unknown): BacktestMarketType 
   return value === 'perp' ? 'perp' : 'spot'
 }
 
-export function formatBacktestDisplaySymbol(symbol: string, marketType: BacktestMarketType): string {
+export function formatBacktestDisplaySymbol(
+  symbol: string,
+  marketType: BacktestMarketType,
+  lng: string = 'zh',
+): string {
   const normalized = symbol.replace(':SPOT', '').replace(':PERP', '')
+  const isEn = lng === 'en'
   if (marketType === 'spot') {
-    return `${normalized} ${'现货'}`
+    return `${normalized} ${isEn ? 'Spot' : '现货'}`
   }
-  return `${normalized} ${'合约'}`
+  return `${normalized} ${isEn ? 'Perp' : '合约'}`
 }
 
 export function buildBacktestResultPresentation(args: {
@@ -136,7 +141,7 @@ export function buildBacktestResultPresentation(args: {
     marketLabel: marketType === 'spot'
       ? (isEn ? 'Spot Backtest' : '现货回测')
       : (isEn ? 'Perp Backtest' : '合约回测'),
-    displaySymbol: formatBacktestDisplaySymbol(symbol, marketType),
+    displaySymbol: formatBacktestDisplaySymbol(symbol, marketType, lng),
     summaryCards: [...baseCards, ...(openTradeCard ? [openTradeCard] : []), ...(openPnlCard ? [openPnlCard] : [])],
     tradeSectionTitle: isEn ? 'Trade Details' : '交易明细',
     tradeDirectionColumnLabel: marketType === 'spot'
@@ -174,11 +179,12 @@ export function buildBacktestResultPresentation(args: {
 }
 
 export function formatOpenPositionForDisplay(args: {
+  lng?: string
   position: OpenPositionRecord
   marketType: BacktestMarketType
 }): OpenPositionRecord {
   return {
     ...args.position,
-    symbol: formatBacktestDisplaySymbol(args.position.symbol, args.marketType),
+    symbol: formatBacktestDisplaySymbol(args.position.symbol, args.marketType, args.lng),
   }
 }

@@ -226,7 +226,7 @@ describe('BacktestReportClient', () => {
     expect(container.textContent).toContain('Closed Trades')
     expect(container.textContent).toContain('No closed trades were completed during this backtest.')
     expect(container.textContent).toContain('Open Positions')
-    expect(container.textContent).toContain('BTCUSDT 合约')
+    expect(container.textContent).toContain('BTCUSDT Perp')
     expect(container.textContent).toContain('+2.39')
   })
 

@@ -285,4 +285,30 @@ describe('AiQuantBacktestDetailPage', () => {
     const html = renderToStaticMarkup(element)
     expect(html).toContain('SOLUSDT')
   })
+
+  it('falls back to job input summary for symbol and range when query params are missing', async () => {
+    mockFetchBacktestJobServer.mockResolvedValue({
+      inputSummary: {
+        symbols: ['SOLUSDT'],
+        requestedRange: {
+          fromTs: Date.parse('2026-04-01T00:00:00.000Z'),
+          toTs: Date.parse('2026-04-15T00:00:00.000Z'),
+        },
+      },
+    })
+
+    const element = await AiQuantBacktestDetailPage({
+      params: { lng: 'en', id: 'backtest-5005' },
+      searchParams: {},
+    })
+
+    renderToStaticMarkup(element)
+
+    const props = mockBacktestReportClient.mock.calls.at(-1)?.[0] as Record<string, unknown>
+
+    expect(props).toMatchObject({
+      symbol: 'SOLUSDT',
+      rangeDisplay: '2026-04-01 ~ 2026-04-15',
+    })
+  })
 })

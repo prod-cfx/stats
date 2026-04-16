@@ -400,7 +400,7 @@ function OpenPositionsSection({
           </thead>
           <tbody>
             {openPositions.map((rawPosition) => {
-              const position = formatOpenPositionForDisplay({ position: rawPosition, marketType })
+              const position = formatOpenPositionForDisplay({ position: rawPosition, marketType, lng })
               return (
               <tr
                 key={`${position.symbol}-${position.avgEntryPrice}-${position.qty}`}
