@@ -1318,6 +1318,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         reason: 'grid_params_missing',
         key: 'grid.stepPct',
       }),
+      expect.objectContaining({
+        reason: 'grid_params_missing',
+        key: 'grid.range.lower',
+        status: 'pending',
+      }),
     ]))
   })
 
@@ -2565,6 +2570,19 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(result.assistantPrompt).not.toContain('请补充至少一条明确的入场规则')
     expect(result.assistantPrompt).not.toContain('请确认网格区间下界')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-grid-timeframe-followup',
+      expect.objectContaining({
+        semanticState: expect.objectContaining({
+          contextSlots: expect.objectContaining({
+            timeframe: expect.objectContaining({
+              value: '15m',
+              status: 'locked',
+            }),
+          }),
+        }),
+      }),
+    )
     expect(result.clarificationState?.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'semantic.entryRules',
@@ -2573,6 +2591,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expect.objectContaining({
         reason: 'grid_params_missing',
         key: 'grid.stepPct',
+      }),
+    ]))
+    expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({
+        reason: 'missing_timeframe',
+        status: 'pending',
       }),
     ]))
   })
