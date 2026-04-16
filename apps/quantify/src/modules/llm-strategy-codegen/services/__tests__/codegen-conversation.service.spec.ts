@@ -456,6 +456,18 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(summary).not.toContain('出场：3m 内上涨 2% 卖出')
   })
 
+  it('seeds checklist.grid for vague grid prompts even before numeric params are known', () => {
+    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+
+    const checklist = (service as any).inferChecklistFromMessage(
+      '在okx交易所合约市场的BTCUSDT 15m上，帮我做一个网格策略，在一个区间里挂单，行情突破区间就停掉',
+    )
+
+    expect(checklist.grid).toEqual(expect.objectContaining({
+      sideMode: 'bidirectional',
+    }))
+  })
+
   it('starts in drafting and asks next key question from llm planner', async () => {
     const dto: StartCodegenSessionDto = {
       userId: 'u1',
@@ -1364,6 +1376,43 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('writes legacy grid.lower answers back into checklist.grid on the fallback checklist path', () => {
+    const nextChecklist = (service as any).applyClarificationAnswers(
+      {
+        grid: {
+          upper: 80000,
+          stepPct: 0.5,
+          sideMode: 'bidirectional',
+        },
+      },
+      {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'grid.lower',
+            reason: 'grid_params_missing',
+            field: 'grid.lower',
+            blocking: true,
+            question: '请确认网格区间下界。',
+            status: 'pending',
+          },
+        ],
+      },
+      {
+        'grid.lower': '60000',
+      },
+    )
+
+    expect(nextChecklist).toEqual(expect.objectContaining({
+      grid: {
+        lower: 60000,
+        upper: 80000,
+        stepPct: 0.5,
+        sideMode: 'bidirectional',
+      },
+    }))
+  })
+
   it('surfaces inferred default risk bases for confirmation before compile', async () => {
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
@@ -1776,6 +1825,87 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         status: 'pending',
       }),
     ]))
+  })
+
+  it('suppresses legacy grid fallback items when equivalent semantic grid slots are active', () => {
+    const result = (service as any).mergeSemanticClarificationState({
+      version: 1,
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-entry',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: {
+            sideMode: 'bidirectional',
+            breakoutAction: 'pause',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'grid.range.lower',
+              fieldPath: 'triggers[0].params.rangeLower',
+              status: 'open',
+              priority: 'core',
+              questionHint: '请确认网格区间下界。',
+              affectsExecution: true,
+            },
+            {
+              slotKey: 'grid.stepPct',
+              fieldPath: 'triggers[0].params.stepPct',
+              status: 'open',
+              priority: 'core',
+              questionHint: '请确认每格步长（例如 0.5%）。',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    }, {
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        {
+          key: 'grid.lower',
+          reason: 'grid_params_missing',
+          field: 'grid.lower',
+          blocking: true,
+          question: '请确认网格区间下界。',
+          status: 'pending',
+        },
+        {
+          key: 'grid.stepPct',
+          reason: 'grid_params_missing',
+          field: 'grid.stepPct',
+          blocking: true,
+          question: '请确认每格步长（例如 0.5%）。',
+          status: 'pending',
+        },
+      ],
+      summary: '已识别网格策略，但还缺少参数。',
+    })
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        key: 'grid.range.lower',
+        question: '请确认网格区间下界。',
+      }),
+      expect.objectContaining({
+        key: 'grid.stepPct',
+        question: '请确认每格步长（例如 0.5%）。',
+      }),
+    ])
   })
 
   it('keeps newly added semantic triggers when a persisted semanticState session gains another rule', () => {

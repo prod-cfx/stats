@@ -1101,10 +1101,13 @@ export class CodegenConversationService {
             && (!item.fieldPath || !semanticFieldPaths.has(item.fieldPath)),
           )
         : []
+      const filteredPendingItems = remainingPendingItems.filter(item =>
+        !this.hasEquivalentActiveSemanticGridItem(item, semanticItems),
+      )
 
       return {
         status: 'NEEDS_CLARIFICATION',
-        items: [...semanticItems, ...remainingPendingItems],
+        items: [...semanticItems, ...filteredPendingItems],
         summary: clarificationView.summary,
       }
     }
@@ -1327,6 +1330,49 @@ export class CodegenConversationService {
     item: StrategyClarificationItem,
   ): boolean {
     return Boolean(item.slotId || item.slotKey || item.fieldPath || item.key.startsWith('semantic.'))
+  }
+
+  private hasEquivalentActiveSemanticGridItem(
+    fallbackItem: StrategyClarificationItem,
+    semanticItems: StrategyClarificationItem[],
+  ): boolean {
+    const fallbackGridSlotKey = this.toCanonicalGridClarificationSlotKey(fallbackItem)
+    if (!fallbackGridSlotKey) {
+      return false
+    }
+
+    return semanticItems.some(item =>
+      this.toCanonicalGridClarificationSlotKey(item) === fallbackGridSlotKey,
+    )
+  }
+
+  private toCanonicalGridClarificationSlotKey(
+    item: StrategyClarificationItem,
+  ): 'grid.range.lower' | 'grid.range.upper' | 'grid.stepPct' | 'grid.sideMode' | null {
+    if (item.key === 'grid.range.lower' || item.key === 'grid.lower') {
+      return 'grid.range.lower'
+    }
+    if (item.key === 'grid.range.upper' || item.key === 'grid.upper') {
+      return 'grid.range.upper'
+    }
+    if (item.key === 'grid.stepPct') {
+      return 'grid.stepPct'
+    }
+    if (item.key === 'grid.sideMode') {
+      return 'grid.sideMode'
+    }
+
+    if (item.slotKey === 'grid.range.lower') return 'grid.range.lower'
+    if (item.slotKey === 'grid.range.upper') return 'grid.range.upper'
+    if (item.slotKey === 'grid.stepPct') return 'grid.stepPct'
+    if (item.slotKey === 'grid.sideMode') return 'grid.sideMode'
+
+    if (item.field === 'grid.lower') return 'grid.range.lower'
+    if (item.field === 'grid.upper') return 'grid.range.upper'
+    if (item.field === 'grid.stepPct') return 'grid.stepPct'
+    if (item.field === 'grid.sideMode') return 'grid.sideMode'
+
+    return null
   }
 
   private readCanonicalDigest(specDesc: Record<string, unknown> | null): string | null {
@@ -1802,14 +1848,14 @@ export class CodegenConversationService {
     }
     const key = item.key.toLowerCase()
 
-    if (key === 'grid.range.lower') {
+    if (key === 'grid.range.lower' || key === 'grid.lower') {
       const value = this.parseGridChecklistNumericAnswer('grid.range.lower', answer)
       if (value === null) return null
       nextGrid.lower = value
       return nextGrid
     }
 
-    if (key === 'grid.range.upper') {
+    if (key === 'grid.range.upper' || key === 'grid.upper') {
       const value = this.parseGridChecklistNumericAnswer('grid.range.upper', answer)
       if (value === null) return null
       nextGrid.upper = value
@@ -3560,6 +3606,10 @@ export class CodegenConversationService {
         grid.sideMode = 'long_only'
       } else if (/只做空|仅做空/u.test(text)) {
         grid.sideMode = 'short_only'
+      }
+
+      if (!grid.sideMode) {
+        grid.sideMode = 'bidirectional'
       }
     }
 
