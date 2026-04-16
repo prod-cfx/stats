@@ -303,6 +303,17 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     id: sessionId,
     userId: 'u1',
     status: 'DRAFTING',
+    checklist: {},
+    semanticState: null,
+    clarificationState: null,
+    constraintPack: {},
+    latestDraftCode: null,
+    latestSpecDesc: null,
+    consistencyReport: null,
+    rejectReason: null,
+    strategyInstanceId: null,
+    createdAt: new Date('2026-04-16T09:00:00.000Z'),
+    updatedAt: new Date('2026-04-16T09:00:00.000Z'),
     ...createdSession,
     ...overrides,
   })
@@ -2525,8 +2536,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       's-grid-timeframe-followup',
       mockRepo.createSession.mock.calls[0]?.[0] as Record<string, unknown>,
       {
-        clarificationState: (mockRepo.createSession.mock.calls[0]?.[0] as Record<string, unknown>).clarificationState,
-        latestDraftCode: startResult.latestDraftCode,
+        clarificationState: startResult.clarificationState,
+        latestSpecDesc: startResult.specDesc ?? null,
+        semanticState: (mockRepo.createSession.mock.calls[0]?.[0] as Record<string, unknown>).semanticState,
       },
     )
     expect(createdSession.clarificationState).toBeTruthy()
@@ -2553,8 +2565,15 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(result.assistantPrompt).not.toContain('请补充至少一条明确的入场规则')
     expect(result.assistantPrompt).not.toContain('请确认网格区间下界')
-    expect(result.clarificationState?.items).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ reason: 'missing_entry_rules' }),
+    expect(result.clarificationState?.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic.entryRules',
+        reason: 'missing_entry_rules',
+      }),
+      expect.objectContaining({
+        reason: 'grid_params_missing',
+        key: 'grid.stepPct',
+      }),
     ]))
   })
 
