@@ -255,7 +255,5 @@
 - Regression baseline command:
   `dx test unit quantify codegen-conversation.service.spec.ts -- --runInBand -t "asks the MA semantic slot before execution context on startSession for the historical MA baseline|keeps the next semantic slot active after locking MA50 instead of falling through to execution context"`
 - Observed result: `PASS`, `2 passed / 0 failed`
-- Regression baseline locked by backend tests in
+- This rerun verifies the MA regression baseline in
   `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-conversation.service.spec.ts`
-- Clarification ownership ordering locked by
-  `apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-state-projection.service.spec.ts`
