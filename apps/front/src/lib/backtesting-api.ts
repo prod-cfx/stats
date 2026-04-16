@@ -28,7 +28,7 @@ export interface CreateBacktestJobPayload {
   baseTimeframe: string
   stateTimeframes: string[]
   initialCash: number
-  leverage: number
+  leverage?: number
   execution: {
     slippageBps: number
     feeBps: number

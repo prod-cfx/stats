@@ -3,20 +3,34 @@ import type { StrategyInstanceStatus } from '@ai/shared'
 import type { ZodTypeAny } from 'zod'
 import { validateId } from './api-client'
 export {
-  fetchAggregatedLiquidationSummary,
-  fetchAggregatedOpenInterest,
-  fetchAggregatedOrderbook,
-  fetchAggregatedVolume,
-  fetchCryptoStockQuotesLatest,
-  fetchExchangeLiquidation,
-  fetchExchangeLongShortRatio,
-  fetchHistoricalPositions,
-  fetchKlineData,
-  fetchLongShortRatio,
-  fetchMarketDataCatalogItems,
-  fetchOpenPositions,
-  fetchPredictionMarkets,
-  fetchTicker,
+  continueLlmCodegenSession,
+  deleteAccountAiQuantStrategy,
+  deleteAiQuantConversation,
+  deployAccountAiQuantStrategy,
+  fetchAccountAiQuantStrategies,
+  fetchAccountAiQuantStrategyDetail,
+  getLlmCodegenSession,
+  listAiQuantConversations,
+  performAccountAiQuantStrategyAction,
+  startLlmCodegenSession,
+  updateAccountAiQuantStrategyLeverage,
+} from './api-ai-quant-domain'
+export {
+  fetchProfile,
+  getTelegramLoginConfigRequest,
+  login,
+  registerAccount,
+  requestPasswordReset,
+  sendVerificationCode,
+  type TelegramLoginConfigResponse,
+  verifyPasswordReset,
+} from './api-auth-domain'
+export {
+  deleteUserExchangeAccount,
+  fetchUserExchangeAccountStatuses,
+  upsertUserExchangeAccount,
+} from './api-exchange-accounts-domain'
+export {
   type AggregatedLiquidationSummary,
   type AggregatedOrderbookLevel,
   type AggregatedOrderbookQueryType,
@@ -28,12 +42,26 @@ export {
   type ExchangeLiquidationResponse,
   type ExchangeLongShortRatioApiItem,
   type ExchangeLongShortTimeRange,
+  fetchAggregatedLiquidationSummary,
+  fetchAggregatedOpenInterest,
   type FetchAggregatedOpenInterestQuery,
+  fetchAggregatedOrderbook,
   type FetchAggregatedOrderbookParams,
+  fetchAggregatedVolume,
   type FetchAggregatedVolumeQuery,
+  fetchCryptoStockQuotesLatest,
+  fetchExchangeLiquidation,
+  fetchExchangeLongShortRatio,
   type FetchExchangeLongShortRatioQuery,
+  fetchHistoricalPositions,
+  fetchKlineData,
   type FetchKlineDataParams,
+  fetchLongShortRatio,
+  fetchMarketDataCatalogItems,
+  fetchOpenPositions,
+  fetchPredictionMarkets,
   type FetchPredictionMarketsParams,
+  fetchTicker,
   type KlineBar,
   type OpenInterestApiItem,
   type PositionResponse,
@@ -43,27 +71,27 @@ export {
 } from './api-market-domain'
 export {
   fetchRealtimeWhaleAlerts,
+  type FetchRealtimeWhaleAlertsParams,
   fetchTraderDiscoverTags,
+  type FetchTraderDiscoverTagsQuery,
   fetchTraderFullData,
+  type FetchTraderFullDataQuery,
   fetchTraderOpenOrders,
+  type FetchTraderOpenOrdersQuery,
   fetchTraderPositions,
+  type FetchTraderPositionsQuery,
   fetchTraderSnapshot,
+  type FetchTraderSnapshotQuery,
   fetchUserFills,
+  type FetchUserFillsQuery,
   fetchUserPortfolio,
+  type FetchUserPortfolioQuery,
   fetchWhaleAddressPerformance,
+  type FetchWhaleAddressPerformanceQuery,
   fetchWhaleHoldings,
+  type FetchWhaleHoldingsQuery,
   fetchWhaleTrackingDiscover,
   fetchWhaleTradesRealtime,
-  type FetchRealtimeWhaleAlertsParams,
-  type FetchTraderDiscoverTagsQuery,
-  type FetchTraderFullDataQuery,
-  type FetchTraderOpenOrdersQuery,
-  type FetchTraderPositionsQuery,
-  type FetchTraderSnapshotQuery,
-  type FetchUserFillsQuery,
-  type FetchUserPortfolioQuery,
-  type FetchWhaleAddressPerformanceQuery,
-  type FetchWhaleHoldingsQuery,
   type FetchWhaleTradesRealtimeParams,
   type RealtimeWhaleAlertItem,
   type TraderDiscoverTagsResponse,
@@ -77,49 +105,21 @@ export {
   type WhaleTradeDto,
 } from './api-whale-domain'
 export {
-  deleteAiQuantConversation,
-  deleteAccountAiQuantStrategy,
-  deployAccountAiQuantStrategy,
-  fetchAccountAiQuantStrategies,
-  fetchAccountAiQuantStrategyDetail,
-  getLlmCodegenSession,
-  listAiQuantConversations,
-  performAccountAiQuantStrategyAction,
-  startLlmCodegenSession,
-  continueLlmCodegenSession,
-  updateAccountAiQuantStrategyLeverage,
-} from './api-ai-quant-domain'
-export {
-  fetchProfile,
-  getTelegramLoginConfigRequest,
-  login,
-  registerAccount,
-  requestPasswordReset,
-  sendVerificationCode,
-  verifyPasswordReset,
-  type TelegramLoginConfigResponse,
-} from './api-auth-domain'
-export {
-  deleteUserExchangeAccount,
-  fetchUserExchangeAccountStatuses,
-  upsertUserExchangeAccount,
-} from './api-exchange-accounts-domain'
-export {
   BACKTEST_CAPABILITY_REQUEST_TIMEOUT_MS,
   BACKTEST_REQUEST_TIMEOUT_MS,
-  createBacktestJob,
-  fetchBacktestCapabilities,
-  getBacktestJob,
-  getBacktestJobResult,
-  postBacktestSymbolSupportCheck,
   type BacktestCapabilities,
   type BacktestJob,
   type BacktestJobPhase,
   type BacktestJobResult,
   type BacktestSymbolSupportCheckInput,
   type BacktestSymbolSupportCheckPayload,
+  createBacktestJob,
   type CreateBacktestJobPayload,
+  fetchBacktestCapabilities,
   type FetchBacktestCapabilitiesOptions,
+  getBacktestJob,
+  getBacktestJobResult,
+  postBacktestSymbolSupportCheck,
 } from './backtesting-api'
 
 // Re-export types for external use
@@ -186,6 +186,7 @@ export interface AccountAiQuantLeverageRange {
 export interface AccountAiQuantPublishedStrategyConfig {
   exchange: string | null
   symbol: string | null
+  marketType?: 'spot' | 'perp' | null
   baseTimeframe: string | null
   positionPct: number | null
   strategyDeclaredLeverageRange?: AccountAiQuantLeverageRange | null
@@ -315,15 +316,6 @@ export interface AccountAiQuantStrategyDetail extends AccountAiQuantStrategyList
     feeCurrency: string | null
     orderId: string | null
   }>
-}
-
-interface AccountAiQuantListQuery {
-  userId: string
-  page?: number
-  limit?: number
-  status?: AccountAiQuantStrategyApiState
-  subscribedOnly?: boolean
-  excludeDraft?: boolean
 }
 
 export interface AccountAiQuantDeployPayload {

@@ -58,8 +58,11 @@ export class BacktestJobInputSummaryDto {
   @ApiProperty()
   initialCash!: number
 
-  @ApiProperty()
-  leverage!: number
+  @ApiPropertyOptional()
+  leverage?: number | null
+
+  @ApiProperty({ enum: ['spot', 'perp'] })
+  marketType!: 'spot' | 'perp'
 
   @ApiProperty({ type: BacktestJobRangeDto })
   dataRange!: BacktestJobRangeDto

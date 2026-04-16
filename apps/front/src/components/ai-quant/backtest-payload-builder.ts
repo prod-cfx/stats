@@ -23,6 +23,7 @@ export function isBacktestPayloadBuilderError(error: unknown): error is Backtest
 }
 
 export interface BuildBacktestPayloadInput {
+  marketType: 'spot' | 'perp'
   symbol: string
   baseTimeframe: string
   capabilities: {
@@ -31,7 +32,7 @@ export interface BuildBacktestPayloadInput {
   }
   stateTimeframes: string[]
   initialCash: number
-  leverage: number
+  leverage: number | null
   execution: CreateBacktestJobPayload['execution']
   strategy: {
     id: string
@@ -67,11 +68,13 @@ export function buildBacktestPayload(
   const priceSource = input.execution?.priceSource
   if (
     !Number.isFinite(initialCash) || initialCash <= 0 ||
-    !Number.isFinite(leverage) || leverage <= 0 ||
     !Number.isFinite(slippageBps) || slippageBps < 0 ||
     !Number.isFinite(feeBps) || feeBps < 0 ||
     (priceSource !== 'open' && priceSource !== 'close' && priceSource !== 'mid')
   ) {
+    throw new BacktestPayloadBuilderError('invalid_execution_config')
+  }
+  if (input.marketType === 'perp' && (!Number.isFinite(leverage) || (leverage ?? 0) <= 0)) {
     throw new BacktestPayloadBuilderError('invalid_execution_config')
   }
 
@@ -92,17 +95,20 @@ export function buildBacktestPayload(
     baseTimeframe,
     stateTimeframes: input.stateTimeframes,
     initialCash,
-    leverage,
     execution: input.execution,
     strategy: {
       id: input.strategy.id,
       protocolVersion: 'v1',
       publishedSnapshotId,
+      params: { marketType: input.marketType },
     },
     dataRange: {
       fromTs: resolvedFromTs,
       toTs: resolvedToTs,
     },
+  }
+  if (input.marketType === 'perp') {
+    payload.leverage = leverage as number
   }
 
   if (input.allowPartial === true) {

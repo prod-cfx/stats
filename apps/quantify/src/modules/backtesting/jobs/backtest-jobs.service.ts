@@ -37,7 +37,8 @@ interface BacktestJobRecord {
     baseTimeframe: BacktestRunInput['baseTimeframe']
     stateTimeframes: BacktestRunInput['stateTimeframes']
     initialCash: number
-    leverage: number
+    leverage?: number | null
+    marketType: 'spot' | 'perp'
     dataRange: BacktestRunInput['dataRange']
     requestedRange: BacktestRunInput['dataRange']
     appliedRange?: BacktestRunInput['dataRange']
@@ -325,12 +326,14 @@ export class BacktestJobsService {
   }
 
   private createInputSummary(input: BacktestRunInput): BacktestJobRecord['inputSummary'] {
+    const marketType = this.readStrategyMarketType(input.strategy)
     return {
       symbols: input.symbols,
       baseTimeframe: input.baseTimeframe,
       stateTimeframes: input.stateTimeframes,
       initialCash: input.initialCash,
-      leverage: input.leverage,
+      leverage: typeof input.leverage === 'number' && Number.isFinite(input.leverage) ? input.leverage : null,
+      marketType,
       dataRange: input.dataRange,
       requestedRange: input.dataRange,
       allowPartial: input.allowPartial === true,
@@ -357,6 +360,11 @@ export class BacktestJobsService {
     if (typeof value !== 'string') return undefined
     const normalized = value.trim()
     return normalized || undefined
+  }
+
+  private readStrategyMarketType(strategy: BacktestRunInput['strategy']): 'spot' | 'perp' {
+    const value = strategy.params?.marketType
+    return value === 'perp' ? 'perp' : 'spot'
   }
 
   private normalizePersistedStatus(status: string, id: string): BacktestJobPhase {

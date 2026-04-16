@@ -35,7 +35,7 @@ export interface AiQuantStrategyRecord {
   publishedSnapshotParamValues?: Record<string, unknown> | null
   snapshotBacktestConfigDefaults?: {
     initialCash: number
-    leverage: number
+    leverage: number | null
     slippageBps: number
     feeBps: number
     priceSource: string

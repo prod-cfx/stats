@@ -75,10 +75,10 @@ function normalizeBacktestConfigDefaults(
   const slippageBps = normalizeNumber(config.slippageBps)
   const feeBps = normalizeNumber(config.feeBps)
   const priceSource = typeof config.priceSource === 'string' ? config.priceSource : ''
-  if (!initialCash || !leverage || !priceSource) return null
+  if (!initialCash || !priceSource) return null
   const normalized = {
     initialCash,
-    leverage,
+    leverage: leverage > 0 ? leverage : null,
     slippageBps,
     feeBps,
     priceSource,
@@ -148,6 +148,7 @@ function buildStrategyBoundPublishedSnapshotParamValues(input: {
     return {
       exchange: strategyConfig.exchange ?? exchange,
       symbol: strategyConfig.symbol ?? fallbackSymbol,
+      ...(strategyConfig.marketType ? { marketType: strategyConfig.marketType } : {}),
       baseTimeframe: strategyConfig.baseTimeframe ?? fallbackTimeframe,
       positionPct: normalizeNumber(strategyConfig.positionPct ?? fallbackPositionPct),
     }

@@ -24,6 +24,7 @@ import {
   requiresRepublishForPublishedSnapshot,
   resolveEffectivePublishedBacktestInputs,
   resolveBacktestExecutionConfig,
+  resolvePublishedBacktestMarketType,
   resolveBacktestRangeInput,
 } from './ai-quant-page-conversation'
 
@@ -35,9 +36,10 @@ type Translate = (key: string, options?: Record<string, unknown>) => string
 function buildInvalidExecutionConfigMessage(args: {
   activeConversation: ConversationState
   executionConfig: ReturnType<typeof resolveBacktestExecutionConfig>
+  marketType: 'spot' | 'perp' | null
   t: Translate
 }): string {
-  const { activeConversation, executionConfig, t } = args
+  const { activeConversation, executionConfig, marketType, t } = args
 
   if (activeConversation.publishedSnapshotId) {
     if (
@@ -50,6 +52,10 @@ function buildInvalidExecutionConfigMessage(args: {
     }
   }
 
+  if (!marketType) {
+    return '请先确认策略交易的是现货还是合约，然后再开始回测。'
+  }
+
   if (!executionConfig.allowPartialValid) {
     return t('aiQuant.messages.backtestPayloadInvalid', {
       reason: 'invalid_allow_partial：是否允许部分成交只能是 true 或 false。',
@@ -57,10 +63,11 @@ function buildInvalidExecutionConfigMessage(args: {
   }
 
   const invalidFields: string[] = []
+  const leverage = executionConfig.leverage
   if (!Number.isFinite(executionConfig.initialCash) || executionConfig.initialCash <= 0) {
     invalidFields.push('初始资金')
   }
-  if (!Number.isFinite(executionConfig.leverage) || executionConfig.leverage <= 0) {
+  if (marketType === 'perp' && (!Number.isFinite(leverage) || (leverage ?? 0) <= 0)) {
     invalidFields.push('杠杆')
   }
   if (!Number.isFinite(executionConfig.slippageBps) || executionConfig.slippageBps < 0) {
@@ -182,10 +189,20 @@ export async function runAiQuantBacktest(args: {
   let payload: ReturnType<typeof buildBacktestPayload>
   let backtestExchange: ConversationState['params']['exchange'] | null = null
   try {
+    const publishedMarketType = resolvePublishedBacktestMarketType({
+      publishedSnapshotId: activeConversation.publishedSnapshotId,
+      publishedSnapshotStrategyConfig: activeConversation.publishedSnapshotStrategyConfig,
+    })
+    if (!publishedMarketType) {
+      throw new ApiError(
+        '请先确认策略交易的是现货还是合约，然后再开始回测。',
+        'MARKET_TYPE_UNCONFIRMED',
+      )
+    }
+
     const effectiveInputs = resolveEffectivePublishedBacktestInputs({
       publishedSnapshotId: activeConversation.publishedSnapshotId,
       publishedSnapshotStrategyConfig: activeConversation.publishedSnapshotStrategyConfig,
-      publishedSnapshotCompatibilityMetadata: activeConversation.publishedSnapshotCompatibilityMetadata,
     })
     if (!effectiveInputs) {
       throw new ApiError(
@@ -214,6 +231,7 @@ export async function runAiQuantBacktest(args: {
     payload = buildBacktestPayload({
       symbol: effectiveInputs.symbol,
       baseTimeframe: effectiveInputs.baseTimeframe,
+      marketType: effectiveInputs.marketType,
       capabilities: backtestCapabilities,
       stateTimeframes: snapshotStateTimeframes.length > 0
         ? snapshotStateTimeframes
@@ -262,6 +280,10 @@ export async function runAiQuantBacktest(args: {
           return buildInvalidExecutionConfigMessage({
             activeConversation,
             executionConfig: resolveBacktestExecutionConfig(activeConversation.paramValues),
+            marketType: resolvePublishedBacktestMarketType({
+              publishedSnapshotId: activeConversation.publishedSnapshotId,
+              publishedSnapshotStrategyConfig: activeConversation.publishedSnapshotStrategyConfig,
+            }),
             t,
           })
         case 'missing_symbol':

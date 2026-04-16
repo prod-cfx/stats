@@ -190,7 +190,7 @@ export interface BacktestRunInput {
   stateTimeframes: Timeframe[]
   allowPartial?: boolean
   initialCash: number
-  leverage: number
+  leverage?: number | null
   execution: ExecutionConfig
   strategy: {
     id: string

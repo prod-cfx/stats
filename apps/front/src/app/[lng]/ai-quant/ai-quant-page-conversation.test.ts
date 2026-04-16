@@ -744,12 +744,14 @@ describe('ai-quant-page-conversation', () => {
       publishedSnapshotStrategyConfig: {
         exchange: 'okx',
         symbol: 'BTC-USDT-SWAP',
+        marketType: 'perp',
         baseTimeframe: '1h',
         positionPct: 10,
       },
     })).toEqual({
       exchange: 'okx',
       symbol: 'BTC-USDT-SWAP',
+      marketType: 'perp',
       baseTimeframe: '1h',
     })
   })
@@ -764,6 +766,7 @@ describe('ai-quant-page-conversation', () => {
       publishedSnapshotParamValues: {
         exchange: 'okx',
         symbol: 'ETHUSDT',
+        marketType: 'perp',
         baseTimeframe: '15m',
         positionPct: 12,
         buyDropPct: 1.25,
@@ -771,6 +774,7 @@ describe('ai-quant-page-conversation', () => {
       publishedSnapshotStrategyConfig: {
         exchange: 'okx',
         symbol: 'ETHUSDT',
+        marketType: 'perp',
         baseTimeframe: '15m',
         positionPct: 12,
       },
@@ -816,6 +820,7 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.publishedSnapshotParamValues).toEqual({
       exchange: 'okx',
       symbol: 'ETHUSDT',
+      marketType: 'perp',
       baseTimeframe: '15m',
       positionPct: 12,
       buyDropPct: 1.25,
@@ -823,6 +828,7 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.publishedSnapshotStrategyConfig).toEqual({
       exchange: 'okx',
       symbol: 'ETHUSDT',
+      marketType: 'perp',
       baseTimeframe: '15m',
       positionPct: 12,
       strategyDeclaredLeverageRange: null,
@@ -880,6 +886,7 @@ describe('ai-quant-page-conversation', () => {
       publishedSnapshotParamValues: {
         exchange: 'okx',
         symbol: 'ETHUSDT',
+        marketType: 'perp',
         baseTimeframe: '15m',
         positionPct: 12,
         buyDropPct: 1.5,
@@ -887,6 +894,7 @@ describe('ai-quant-page-conversation', () => {
       publishedSnapshotStrategyConfig: {
         exchange: 'okx',
         symbol: 'ETHUSDT',
+        marketType: 'perp',
         baseTimeframe: '15m',
         positionPct: 12,
       },
@@ -918,6 +926,7 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.publishedSnapshotParamValues).toEqual({
       exchange: 'okx',
       symbol: 'ETHUSDT',
+      marketType: 'perp',
       baseTimeframe: '15m',
       positionPct: 12,
       buyDropPct: 1.5,

@@ -56,6 +56,7 @@ import {
   mapExchangeStatusesToDeployAccounts,
   normalizeParamsFromValues,
   readPersistedConversations,
+  resolvePublishedBacktestMarketType,
   serializePersistedConversations,
   shouldInvalidatePublicationForParamChange,
 } from './ai-quant-page-conversation'
@@ -989,6 +990,10 @@ export function AiQuantPageClient({
             messages={activeConversation.messages}
             paramSchema={activeConversation.paramSchema}
             paramValues={activeConversation.paramValues}
+            backtestMarketType={resolvePublishedBacktestMarketType({
+              publishedSnapshotId: activeConversation.publishedSnapshotId,
+              publishedSnapshotStrategyConfig: activeConversation.publishedSnapshotStrategyConfig,
+            })}
             clarificationGate={activeConversation.clarificationGate}
             publicationGate={activeConversation.publicationGate}
             compactMode={compactMode}
