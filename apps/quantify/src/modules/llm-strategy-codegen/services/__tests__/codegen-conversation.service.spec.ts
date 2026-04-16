@@ -2505,34 +2505,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>
+    expect(createdSession.clarificationState).toBeTruthy()
     mockRepo.findById.mockResolvedValue({
       id: 's-grid-timeframe-followup',
       userId: 'u1',
       status: 'DRAFTING',
       ...createdSession,
-      clarificationState: createdSession.clarificationState ?? {
-        status: 'NEEDS_CLARIFICATION',
-        items: [
-          {
-            key: 'semantic.entryRules',
-            reason: 'missing_entry_rules',
-            field: 'entryRules',
-            blocking: true,
-            question: '请补充至少一条明确的入场规则。',
-            status: 'pending',
-          },
-          {
-            key: 'semantic.timeframe',
-            reason: 'missing_timeframe',
-            field: 'timeframe',
-            blocking: true,
-            question: '请确认策略主周期（例如 15m 或 1h）。',
-            status: 'pending',
-            slotKey: 'timeframe',
-            fieldPath: 'contextSlots.timeframe',
-          },
-        ],
-      },
+      clarificationState: createdSession.clarificationState,
       updatedAt: '2026-04-16T10:00:00.000Z',
     })
     mockAi.chat.mockResolvedValue({
