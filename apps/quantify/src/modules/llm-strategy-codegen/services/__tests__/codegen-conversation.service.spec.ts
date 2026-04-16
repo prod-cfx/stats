@@ -1669,6 +1669,102 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ])
   })
 
+  it('preserves the correct open MA trigger identity when multiple same-phase same-key triggers survive merge', () => {
+    const currentSemanticState = buildLockedMaSemanticState({
+      triggers: [
+        {
+          id: 'entry-ma-long',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'long_term',
+            'reference.period': 50,
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'confirmationMode.entry.long',
+              fieldPath: 'triggers[0].params.confirmationMode',
+              status: 'open',
+              priority: 'core',
+              questionHint: '长期均线突破按收盘确认还是盘中触发？',
+              affectsExecution: true,
+            },
+          ],
+        },
+        {
+          id: 'entry-ma-short',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'short_term',
+            'reference.period': 20,
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'confirmationMode.entry.short',
+              fieldPath: 'triggers[1].params.confirmationMode',
+              status: 'open',
+              priority: 'core',
+              questionHint: '短期均线突破按收盘确认还是盘中触发？',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      actions: [
+        { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      ],
+      position: null,
+    })
+
+    const mergedSemanticState = (service as any).mergeChecklistIntoSemanticState(currentSemanticState, {
+      entryRules: [
+        '价格突破长期均线（50）时买入',
+        '价格突破短期均线（20）时买入',
+      ],
+      exitRules: ['收盘确认价格跌破短期均线（10）时卖出'],
+    })
+
+    expect(mergedSemanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'entry-ma-long',
+        phase: 'entry',
+        key: 'indicator.above',
+        params: expect.objectContaining({
+          referenceRole: 'long_term',
+          'reference.period': 50,
+        }),
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({
+            slotKey: 'confirmationMode.entry.long',
+            fieldPath: 'triggers[0].params.confirmationMode',
+          }),
+        ]),
+      }),
+      expect.objectContaining({
+        id: 'entry-ma-short',
+        phase: 'entry',
+        key: 'indicator.above',
+        params: expect.objectContaining({
+          referenceRole: 'short_term',
+          'reference.period': 20,
+        }),
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({
+            slotKey: 'confirmationMode.entry.short',
+            fieldPath: 'triggers[1].params.confirmationMode',
+          }),
+        ]),
+      }),
+    ]))
+  })
+
   it('rebuilds semantic state from updated checklist without retaining stale locked state-gate triggers', () => {
     const currentSemanticState = buildLockedBollingerSemanticState({
       families: ['single-leg', 'state-gated'],

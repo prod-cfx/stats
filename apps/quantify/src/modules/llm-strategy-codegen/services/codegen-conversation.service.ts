@@ -1021,8 +1021,7 @@ export class CodegenConversationService {
     }
 
     const matchingCurrentTrigger = currentState.triggers.find(currentTrigger =>
-      currentTrigger.phase === nextTrigger.phase
-      && currentTrigger.key === nextTrigger.key
+      this.isSameDerivedTriggerIdentity(currentTrigger, nextTrigger)
       && currentTrigger.status === 'open'
       && currentTrigger.openSlots.some(slot => slot.status === 'open'),
     )
@@ -1043,6 +1042,44 @@ export class CodegenConversationService {
     }
 
     return nextTrigger
+  }
+
+  private isSameDerivedTriggerIdentity(
+    currentTrigger: SemanticTriggerState,
+    derivedTrigger: SemanticTriggerState,
+  ): boolean {
+    if (currentTrigger.phase !== derivedTrigger.phase || currentTrigger.key !== derivedTrigger.key) {
+      return false
+    }
+    if (
+      currentTrigger.sideScope !== undefined
+      && derivedTrigger.sideScope !== undefined
+      && currentTrigger.sideScope !== derivedTrigger.sideScope
+    ) {
+      return false
+    }
+
+    const identityParamKeys = [
+      'indicator',
+      'referenceRole',
+      'reference.period',
+      'period',
+      'stdDev',
+      'value',
+    ] as const
+
+    return identityParamKeys.every((paramKey) => {
+      const currentValue = currentTrigger.params[paramKey]
+      const derivedValue = derivedTrigger.params[paramKey]
+      if (currentValue === undefined || currentValue === null) {
+        return true
+      }
+      if (derivedValue === undefined || derivedValue === null) {
+        return true
+      }
+
+      return currentValue === derivedValue
+    })
   }
 
   private hydrateBollingerTriggerParams(
