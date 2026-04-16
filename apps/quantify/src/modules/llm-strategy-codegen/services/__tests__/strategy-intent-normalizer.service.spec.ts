@@ -184,7 +184,7 @@ describe('strategyIntentNormalizerService', () => {
         ]),
       }),
     ]))
-    expect(result.unresolved).toEqual([])
+    expect(result.normalizedIntent.unresolved).toEqual([])
   })
 
   it('keeps the live price-change strategy closed', () => {

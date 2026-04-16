@@ -24,6 +24,7 @@ export const NORMALIZED_TRIGGER_ATOM_KEYS = [
   'trend.direction',
   'market.regime',
   'volatility.state',
+  'grid.range_rebalance',
 ] as const
 
 export type NormalizedTriggerAtomKey = (typeof NORMALIZED_TRIGGER_ATOM_KEYS)[number]

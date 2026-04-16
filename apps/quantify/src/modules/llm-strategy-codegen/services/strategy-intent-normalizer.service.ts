@@ -22,11 +22,13 @@ export class StrategyIntentNormalizerService {
     const entryNormalization = this.normalizeRuleAtoms(checklist.entryRules, checklist.entryRuleBases, 'entry')
     const exitNormalization = this.normalizeRuleAtoms(checklist.exitRules, checklist.exitRuleBases, 'exit')
     const stateHints = this.normalizeStateHints(checklist)
+    const grid = this.normalizeGrid(checklist)
+    const gridTriggers = this.buildGridTriggerAtoms(checklist, grid)
     const triggers = this.sortTriggers([
       ...entryNormalization.triggers,
       ...exitNormalization.triggers,
+      ...gridTriggers,
     ])
-    const grid = this.normalizeGrid(checklist)
     const risk = this.normalizeRisk(checklist.riskRules)
     const actions = this.normalizeActions(triggers, grid)
     const families = this.resolveFamilies(triggers, grid)
@@ -591,6 +593,72 @@ export class StrategyIntentNormalizerService {
       sideMode: this.resolveGridSideMode(combinedText),
       recycle: true,
     }
+  }
+
+  private buildGridTriggerAtoms(
+    checklist: ChecklistPayload,
+    grid: NormalizedGridIntent | null,
+  ): NormalizedTriggerAtom[] {
+    const combinedText = [...(checklist.entryRules ?? []), ...(checklist.exitRules ?? [])].join(' ')
+    if (!/网格|grid/iu.test(combinedText)) {
+      return []
+    }
+
+    const breakoutAction = /突破.{0,8}(停|暂停|停止)/u.test(combinedText) ? 'pause' : 'continue'
+    if (grid) {
+      return [this.createClosedTrigger({
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope: grid.sideMode === 'bidirectional'
+          ? 'both'
+          : (grid.sideMode === 'short_only' ? 'short' : 'long'),
+        params: {
+          rangeLower: grid.range.lower,
+          rangeUpper: grid.range.upper,
+          stepPct: grid.stepPct,
+          sideMode: grid.sideMode,
+          recycle: grid.recycle,
+          breakoutAction,
+        },
+      })]
+    }
+
+    return [this.createOpenTrigger({
+      key: 'grid.range_rebalance',
+      phase: 'entry',
+      sideScope: 'both',
+      params: {
+        breakoutAction,
+      },
+    }, [
+      {
+        slotKey: 'grid.range.lower',
+        fieldPath: 'triggers[grid].params.rangeLower',
+        reason: 'missing_required_param',
+        questionHint: '请确认网格区间下界。',
+        priority: 'core',
+        affectsExecution: true,
+        evidenceText: combinedText,
+      },
+      {
+        slotKey: 'grid.range.upper',
+        fieldPath: 'triggers[grid].params.rangeUpper',
+        reason: 'missing_required_param',
+        questionHint: '请确认网格区间上界。',
+        priority: 'core',
+        affectsExecution: true,
+        evidenceText: combinedText,
+      },
+      {
+        slotKey: 'grid.stepPct',
+        fieldPath: 'triggers[grid].params.stepPct',
+        reason: 'missing_required_param',
+        questionHint: '请确认每格步长（例如 0.5%）。',
+        priority: 'core',
+        affectsExecution: true,
+        evidenceText: combinedText,
+      },
+    ], combinedText)]
   }
 
   private normalizeRisk(riskRules: Record<string, unknown> | undefined): NormalizedRiskAtom[] {
