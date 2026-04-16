@@ -1565,6 +1565,53 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(projected.exitRules).toEqual(['收盘确认价格突破长期均线（50）时平空'])
   })
 
+  it('keeps semantic MA rules when projectLegacyChecklistFromSemanticState projects over generic checklist placeholders', () => {
+    const projected = (service as any).projectLegacyChecklistFromSemanticState({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-ma',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'long_term',
+            'reference.period': 50,
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'confirmationMode.entry',
+              fieldPath: 'triggers[0].params.confirmationMode',
+              status: 'open',
+              priority: 'core',
+              questionHint: '突破按收盘确认还是盘中触发？',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    }, {
+      entryRules: ['满足入场条件后开仓'],
+      exitRules: ['满足出场条件后平仓'],
+    })
+
+    expect(projected.entryRules).toEqual(expect.arrayContaining([
+      expect.stringContaining('长期均线'),
+    ]))
+    expect(projected.entryRules).not.toEqual(expect.arrayContaining([
+      '满足入场条件后开仓',
+    ]))
+  })
+
   it('keeps newly added semantic triggers when a persisted semanticState session gains another rule', () => {
     const currentSemanticState = buildLockedMaSemanticState({
       triggers: [
