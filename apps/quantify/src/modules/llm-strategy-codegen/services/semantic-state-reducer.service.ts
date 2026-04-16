@@ -3,7 +3,7 @@ import { buildSemanticSlotId } from '../types/semantic-state'
 import type { SemanticSlotState, SemanticState } from '../types/semantic-state'
 
 interface SupportedSlotReduction {
-  paramKey: 'reference.period' | 'confirmationMode' | 'rangeLower' | 'rangeUpper' | 'stepPct'
+  paramKey: 'reference.period' | 'confirmationMode' | 'rangeLower' | 'rangeUpper' | 'stepPct' | 'sideMode'
   paramValue: number | string
   slotValue: number | string
 }
@@ -130,6 +130,19 @@ export class SemanticStateReducerService {
       }
     }
 
+    if (slot.slotKey === 'grid.sideMode') {
+      const sideMode = this.parseGridSideModeAnswer(answerText)
+      if (!sideMode) {
+        return null
+      }
+
+      return {
+        paramKey: 'sideMode',
+        paramValue: sideMode,
+        slotValue: sideMode,
+      }
+    }
+
     return null
   }
 
@@ -153,5 +166,26 @@ export class SemanticStateReducerService {
 
     const value = Number(numericMatch[0])
     return Number.isFinite(value) ? value : null
+  }
+
+  private parseGridSideModeAnswer(answerText: string): 'long_only' | 'short_only' | 'bidirectional' | null {
+    const normalized = answerText.trim().toLowerCase()
+    if (!normalized) {
+      return null
+    }
+
+    if (normalized === 'bidirectional' || /双向|低买高卖|来回|往返|自动买卖|自动交易/u.test(answerText)) {
+      return 'bidirectional'
+    }
+
+    if (normalized === 'long_only' || /只做多|仅做多/u.test(answerText)) {
+      return 'long_only'
+    }
+
+    if (normalized === 'short_only' || /只做空|仅做空/u.test(answerText)) {
+      return 'short_only'
+    }
+
+    return null
   }
 }
