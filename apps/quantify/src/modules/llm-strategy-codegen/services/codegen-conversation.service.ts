@@ -197,8 +197,11 @@ export class CodegenConversationService {
       recommendationStyle,
     }
     const clarification = this.resolveClarificationArtifacts(checklist)
-    const clarificationState = clarification.clarificationState
     const initialSemanticState = this.buildFallbackSemanticState(checklist)
+    const clarificationState = this.mergeSemanticClarificationState(
+      initialSemanticState,
+      clarification.clarificationState,
+    )
     const plannerStatus: LlmCodegenSessionStatus = this.stateMachine.resolvePlannerStatus({
       logicReady: plan.logicReady,
       clarificationState,
@@ -216,9 +219,20 @@ export class CodegenConversationService {
       compileability,
       constraintPack: initialConstraintPack,
     })
+    const nextInitialSemanticSlot = this.findNextOpenSemanticSlot(initialSemanticState)
+    const semanticClarificationPrompt = nextInitialSemanticSlot
+      && (
+        nextInitialSemanticSlot.priority === 'core'
+        || nextInitialSemanticSlot.priority === 'risk'
+        || nextInitialSemanticSlot.priority === 'behavior'
+      )
+      ? this.buildSemanticClarificationPrompt(initialSemanticState)
+      : null
     const clarificationPrompt = decision.kind === 'CONFIRM_INFERRED'
       ? this.clarificationQuestion.buildFromDecision(decision)
-      : clarification.clarificationPrompt
+      : (semanticClarificationPrompt
+          || clarification.clarificationPrompt
+          || this.clarificationQuestion.build(clarificationState))
     const bootstrap = buildStartSessionBootstrap({
       initialMessage: dto.initialMessage,
       plannerStatus,
@@ -966,10 +980,21 @@ export class CodegenConversationService {
     checklist: ChecklistPayload,
   ): SemanticState {
     const derivedState = this.buildFallbackSemanticState(checklist)
+    const remainingOpenCurrentTriggers = currentState.triggers
+      .filter(trigger =>
+        trigger.status === 'open'
+        && trigger.openSlots.some(slot => slot.status === 'open'),
+      )
+      .map(trigger => ({
+        ...trigger,
+        params: { ...trigger.params },
+        openSlots: trigger.openSlots.map(slot => ({ ...slot })),
+      }))
     const nextTriggers = derivedState.triggers.map(trigger => this.reconcileDerivedTriggerState(
       trigger,
       derivedState.triggers,
       currentState,
+      remainingOpenCurrentTriggers,
     ))
 
     return {
@@ -983,6 +1008,7 @@ export class CodegenConversationService {
     trigger: SemanticTriggerState,
     derivedTriggers: SemanticTriggerState[],
     currentState: SemanticState,
+    remainingOpenCurrentTriggers?: SemanticTriggerState[],
   ): SemanticTriggerState {
     let nextTrigger: SemanticTriggerState = {
       ...trigger,
@@ -1020,7 +1046,73 @@ export class CodegenConversationService {
       }
     }
 
+    const openTriggerPool = remainingOpenCurrentTriggers ?? currentState.triggers
+    const matchingCurrentTriggerIndex = openTriggerPool.findIndex(currentTrigger =>
+      this.isSameDerivedTriggerIdentity(currentTrigger, nextTrigger)
+      && currentTrigger.status === 'open'
+      && currentTrigger.openSlots.some(slot => slot.status === 'open'),
+    )
+    const matchingCurrentTrigger = matchingCurrentTriggerIndex >= 0
+      ? openTriggerPool[matchingCurrentTriggerIndex]
+      : undefined
+
+    if (matchingCurrentTrigger) {
+      if (remainingOpenCurrentTriggers && matchingCurrentTriggerIndex >= 0) {
+        remainingOpenCurrentTriggers.splice(matchingCurrentTriggerIndex, 1)
+      }
+      nextTrigger = {
+        ...nextTrigger,
+        id: matchingCurrentTrigger.id,
+        source: matchingCurrentTrigger.source ?? nextTrigger.source,
+        ...(matchingCurrentTrigger.evidence ? { evidence: matchingCurrentTrigger.evidence } : {}),
+        params: {
+          ...nextTrigger.params,
+          ...matchingCurrentTrigger.params,
+        },
+        openSlots: matchingCurrentTrigger.openSlots.map(slot => ({ ...slot })),
+        status: matchingCurrentTrigger.status,
+      }
+    }
+
     return nextTrigger
+  }
+
+  private isSameDerivedTriggerIdentity(
+    currentTrigger: SemanticTriggerState,
+    derivedTrigger: SemanticTriggerState,
+  ): boolean {
+    if (currentTrigger.phase !== derivedTrigger.phase || currentTrigger.key !== derivedTrigger.key) {
+      return false
+    }
+    if (
+      currentTrigger.sideScope !== undefined
+      && derivedTrigger.sideScope !== undefined
+      && currentTrigger.sideScope !== derivedTrigger.sideScope
+    ) {
+      return false
+    }
+
+    const identityParamKeys = [
+      'indicator',
+      'referenceRole',
+      'reference.period',
+      'period',
+      'stdDev',
+      'value',
+    ] as const
+
+    return identityParamKeys.every((paramKey) => {
+      const currentValue = currentTrigger.params[paramKey]
+      const derivedValue = derivedTrigger.params[paramKey]
+      if (currentValue === undefined || currentValue === null) {
+        return true
+      }
+      if (derivedValue === undefined || derivedValue === null) {
+        return true
+      }
+
+      return currentValue === derivedValue
+    })
   }
 
   private hydrateBollingerTriggerParams(
@@ -1155,6 +1247,23 @@ export class CodegenConversationService {
       }
     }
 
+    if (nextOpenSlot.priority !== 'context') {
+      const activeItem = this.buildSemanticClarificationItem(nextOpenSlot)
+      const remainingPendingItems = fallbackState.status === 'NEEDS_CLARIFICATION'
+        ? fallbackState.items.filter(item =>
+            item.blocking
+            && item.status === 'pending'
+            && item.key !== activeItem.key,
+          )
+        : []
+
+      return {
+        status: 'NEEDS_CLARIFICATION',
+        items: [activeItem, ...remainingPendingItems],
+        summary: clarificationView.summary,
+      }
+    }
+
     const items = fallbackState.status === 'NEEDS_CLARIFICATION'
       ? [...fallbackState.items]
       : []
@@ -1196,15 +1305,21 @@ export class CodegenConversationService {
   }
 
   private findNextOpenSemanticSlot(state: SemanticState): SemanticSlotState | null {
-    const triggerSlots = state.triggers.flatMap(trigger => trigger.openSlots)
-    const behaviorTriggerSlot = triggerSlots.find(slot =>
-      slot.status === 'open' && (slot.priority === 'behavior' || slot.slotKey === 'regimeDefinition'),
+    const triggerPhaseOrder: Array<'entry' | 'exit' | 'risk' | 'gate'> = ['entry', 'exit', 'risk', 'gate']
+    const openTriggerSlots = triggerPhaseOrder.flatMap(phase =>
+      state.triggers
+        .filter(trigger => trigger.phase === phase)
+        .flatMap(trigger => trigger.openSlots)
+        .filter(slot => slot.status === 'open'),
+    )
+    const behaviorTriggerSlot = openTriggerSlots.find(slot =>
+      slot.priority === 'behavior' || slot.slotKey === 'regimeDefinition',
     )
     if (behaviorTriggerSlot) {
       return behaviorTriggerSlot
     }
 
-    const triggerSlot = triggerSlots.find(slot => slot.status === 'open')
+    const triggerSlot = openTriggerSlots[0] ?? null
     if (triggerSlot) {
       return triggerSlot
     }
@@ -3291,7 +3406,6 @@ export class CodegenConversationService {
     const sellRiseFragment = directionalFragments.find(fragment =>
       /(?:涨|上涨|反弹).{0,20}?(?:卖出|平仓|离场|出场)/u.test(fragment),
     )
-
     if (buyDropFragment && new RegExp(percentToken, 'u').test(buyDropFragment)) {
       entryRules.push(normalizeDirectionalPercentRule(buyDropFragment, 'entry'))
       entryRuleBases['entry-1'] = 'prev_close'
@@ -3300,6 +3414,26 @@ export class CodegenConversationService {
     if (sellRiseFragment && new RegExp(percentToken, 'u').test(sellRiseFragment)) {
       exitRules.push(normalizeDirectionalPercentRule(sellRiseFragment, 'exit'))
       exitRuleBases['exit-1'] = 'prev_close'
+    }
+
+    if (entryRules.length === 0) {
+      const entryMovingAverageBreakout = this.inferMovingAverageBreakoutRuleFromFragments(
+        directionalFragments,
+        'entry',
+      )
+      if (entryMovingAverageBreakout) {
+        entryRules.push(entryMovingAverageBreakout)
+      }
+    }
+
+    if (exitRules.length === 0) {
+      const exitMovingAverageBreakout = this.inferMovingAverageBreakoutRuleFromFragments(
+        directionalFragments,
+        'exit',
+      )
+      if (exitMovingAverageBreakout) {
+        exitRules.push(exitMovingAverageBreakout)
+      }
     }
 
     if (entryRules.length === 0) {
@@ -3452,6 +3586,40 @@ export class CodegenConversationService {
       riskRules: Object.keys(riskRules).length > 0 ? riskRules : undefined,
       market: Object.keys(inferredMarket).length > 0 ? inferredMarket : { defaultTimeframe: timeframes[0] ?? null },
     }
+  }
+
+  private inferMovingAverageBreakoutRuleFromFragments(
+    fragments: string[],
+    phase: 'entry' | 'exit',
+  ): string | null {
+    const actionPattern = phase === 'entry'
+      ? /买入|开仓|入场/u
+      : /卖出|平仓|离场|出场/u
+
+    for (const fragment of fragments) {
+      if (!actionPattern.test(fragment)) {
+        continue
+      }
+      if (!/均线|ema|sma|ma/iu.test(fragment)) {
+        continue
+      }
+
+      const referenceRole = /长期|长线|长周期|long[\s-]?term/iu.test(fragment)
+        ? '长期均线'
+        : (/短期|短线|短周期|short[\s-]?term/iu.test(fragment) ? '短期均线' : null)
+      if (!referenceRole) {
+        continue
+      }
+
+      if (/突破|上穿|站上|上方|高于/u.test(fragment)) {
+        return `价格突破${referenceRole}时${phase === 'entry' ? '买入' : '卖出'}`
+      }
+      if (/跌破|下穿|失守|下方|低于/u.test(fragment)) {
+        return `价格跌破${referenceRole}时${phase === 'entry' ? '买入' : '卖出'}`
+      }
+    }
+
+    return null
   }
 
   private detectDirectionInTriggerFragment(

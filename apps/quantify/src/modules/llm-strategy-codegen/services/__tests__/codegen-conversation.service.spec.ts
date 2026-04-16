@@ -1565,6 +1565,127 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(projected.exitRules).toEqual(['收盘确认价格突破长期均线（50）时平空'])
   })
 
+  it('keeps semantic MA rules when projectLegacyChecklistFromSemanticState projects over generic checklist placeholders', () => {
+    const projected = (service as any).projectLegacyChecklistFromSemanticState({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-ma',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'long_term',
+            'reference.period': 50,
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'confirmationMode.entry',
+              fieldPath: 'triggers[0].params.confirmationMode',
+              status: 'open',
+              priority: 'core',
+              questionHint: '突破按收盘确认还是盘中触发？',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    }, {
+      entryRules: ['满足入场条件后开仓'],
+      exitRules: ['满足出场条件后平仓'],
+    })
+
+    expect(projected.entryRules).toEqual(expect.arrayContaining([
+      expect.stringContaining('长期均线'),
+    ]))
+    expect(projected.entryRules).not.toEqual(expect.arrayContaining([
+      '满足入场条件后开仓',
+    ]))
+  })
+
+  it('does not let a context clarification item overtake the active semantic slot in mergeSemanticClarificationState', () => {
+    const result = (service as any).mergeSemanticClarificationState({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-ma',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'long_term',
+            'reference.period': 50,
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'confirmationMode.entry',
+              fieldPath: 'triggers[0].params.confirmationMode',
+              status: 'open',
+              priority: 'core',
+              questionHint: '突破按收盘确认还是盘中触发？',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'open',
+          priority: 'context',
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+        },
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    }, {
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        {
+          key: 'executionContext.exchange',
+          reason: 'missing_exchange',
+          field: 'exchange',
+          blocking: true,
+          question: '请确认交易所（binance / okx / hyperliquid）。',
+          status: 'pending',
+        },
+      ],
+      summary: '已识别部分条件，但仍未完整。',
+    })
+
+    expect(result.items[0]).toEqual(expect.objectContaining({
+      key: 'semantic.confirmationMode.entry',
+      question: '突破按收盘确认还是盘中触发？',
+    }))
+    expect(result.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'executionContext.exchange',
+        question: '请确认交易所（binance / okx / hyperliquid）。',
+        status: 'pending',
+      }),
+    ]))
+  })
+
   it('keeps newly added semantic triggers when a persisted semanticState session gains another rule', () => {
     const currentSemanticState = buildLockedMaSemanticState({
       triggers: [
@@ -1620,6 +1741,148 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(projectedChecklist.exitRules).toEqual([
       '收盘确认价格跌破短期均线（10）时卖出',
     ])
+  })
+
+  it('preserves the correct open MA trigger identity when multiple same-phase same-key triggers survive merge', () => {
+    const currentSemanticState = buildLockedMaSemanticState({
+      triggers: [
+        {
+          id: 'entry-ma-long',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'long_term',
+            'reference.period': 50,
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'confirmationMode.entry.long',
+              fieldPath: 'triggers[0].params.confirmationMode',
+              status: 'open',
+              priority: 'core',
+              questionHint: '长期均线突破按收盘确认还是盘中触发？',
+              affectsExecution: true,
+            },
+          ],
+        },
+        {
+          id: 'entry-ma-short',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'short_term',
+            'reference.period': 20,
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'confirmationMode.entry.short',
+              fieldPath: 'triggers[1].params.confirmationMode',
+              status: 'open',
+              priority: 'core',
+              questionHint: '短期均线突破按收盘确认还是盘中触发？',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      actions: [
+        { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      ],
+      position: null,
+    })
+
+    const mergedSemanticState = (service as any).mergeChecklistIntoSemanticState(currentSemanticState, {
+      entryRules: [
+        '价格突破长期均线（50）时买入',
+        '价格突破短期均线（20）时买入',
+      ],
+      exitRules: ['收盘确认价格跌破短期均线（10）时卖出'],
+    })
+
+    expect(mergedSemanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'entry-ma-long',
+        phase: 'entry',
+        key: 'indicator.above',
+        params: expect.objectContaining({
+          referenceRole: 'long_term',
+          'reference.period': 50,
+        }),
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({
+            slotKey: 'confirmationMode.entry.long',
+            fieldPath: 'triggers[0].params.confirmationMode',
+          }),
+        ]),
+      }),
+      expect.objectContaining({
+        id: 'entry-ma-short',
+        phase: 'entry',
+        key: 'indicator.above',
+        params: expect.objectContaining({
+          referenceRole: 'short_term',
+          'reference.period': 20,
+        }),
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({
+            slotKey: 'confirmationMode.entry.short',
+            fieldPath: 'triggers[1].params.confirmationMode',
+          }),
+        ]),
+      }),
+    ]))
+  })
+
+  it('does not reuse one persisted open trigger across multiple newly derived siblings', () => {
+    const currentSemanticState = buildLockedMaSemanticState({
+      triggers: [
+        {
+          id: 'entry-ma-generic',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'reference.period.entry',
+              fieldPath: 'triggers[0].params.reference.period',
+              status: 'open',
+              priority: 'core',
+              questionHint: '长期均线是多少？',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      actions: [
+        { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      ],
+      position: null,
+    })
+
+    const mergedSemanticState = (service as any).mergeChecklistIntoSemanticState(currentSemanticState, {
+      entryRules: [
+        '价格突破长期均线（50）时买入',
+        '价格突破短期均线（20）时买入',
+      ],
+      exitRules: ['收盘确认价格跌破短期均线（10）时卖出'],
+    })
+
+    const reusedIds = mergedSemanticState.triggers
+      .filter((trigger: any) => trigger.phase === 'entry' && trigger.key === 'indicator.above')
+      .map((trigger: any) => trigger.id)
+      .filter((id: string) => id === 'entry-ma-generic')
+
+    expect(reusedIds).toHaveLength(1)
   })
 
   it('rebuilds semantic state from updated checklist without retaining stale locked state-gate triggers', () => {
@@ -1749,6 +2012,15 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const payload = mockRepo.createSession.mock.calls[0]?.[0] as { checklist?: { entryRules?: string[]; exitRules?: string[] } }
     expect(payload.checklist?.entryRules?.join(' ')).not.toContain('均线')
     expect(payload.checklist?.exitRules?.join(' ')).not.toContain('均线')
+  })
+
+  it('extracts generic moving-average breakout rules for the historical MA baseline sentence', () => {
+    const inferred = (service as any).inferChecklistFromMessage(
+      '当价格突破一条长期均线时买入，跌破短期均线时卖出',
+    )
+
+    expect(inferred.entryRules).toEqual(['价格突破长期均线时买入'])
+    expect(inferred.exitRules).toEqual(['价格跌破短期均线时卖出'])
   })
 
   it('returns strategyInstanceId in session snapshot response', async () => {
@@ -2352,6 +2624,286 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
     expect(result.assistantPrompt).not.toContain('长期均线是多少')
     expect(result.assistantPrompt).toContain('突破按收盘确认还是盘中触发')
+  })
+
+  it('asks the MA semantic slot before execution context on startSession for the historical MA baseline', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-ma-baseline-start' })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        logic: {},
+        assistantPrompt: '逻辑图仍未完整，请继续补充。',
+      }),
+    })
+
+    const result = await service.startSession({
+      userId: 'u-1',
+      initialMessage: '当价格突破一条长期均线时买入，跌破短期均线时卖出',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('长期均线是多少')
+    expect(result.assistantPrompt).not.toContain('请确认交易所')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      semanticState: expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({
+            key: 'indicator.above',
+            openSlots: expect.arrayContaining([
+              expect.objectContaining({
+                slotKey: 'reference.period.entry',
+                status: 'open',
+                questionHint: '长期均线是多少？',
+              }),
+            ]),
+          }),
+        ]),
+      }),
+      clarificationState: expect.objectContaining({
+        status: 'NEEDS_CLARIFICATION',
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            key: 'semantic.reference.period.entry',
+            question: '长期均线是多少？',
+            status: 'pending',
+          }),
+        ]),
+      }),
+    }))
+  })
+
+  it('treats an open behavior slot as semantic-first clarification ownership on startSession', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-behavior-slot-start' })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        logic: {},
+        assistantPrompt: '逻辑图仍未完整，请继续补充。',
+      }),
+    })
+
+    const buildFallbackSemanticStateSpy = jest.spyOn(service as any, 'buildFallbackSemanticState').mockReturnValue({
+      version: 1,
+      families: ['single-leg', 'state-gated'],
+      triggers: [
+        {
+          id: 'regime-gate',
+          key: 'market.regime',
+          phase: 'gate',
+          params: {
+            value: 'range',
+            mode: 'observation_only',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'regimeDefinition',
+              fieldPath: 'triggers[0].params.definition',
+              status: 'open',
+              priority: 'behavior',
+              questionHint: '震荡行情怎么判断？',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    })
+    const resolveClarificationArtifactsSpy = jest.spyOn(service as any, 'resolveClarificationArtifacts').mockReturnValue({
+      normalization: {
+        normalizedIntent: {
+          families: [],
+          triggers: [],
+          actions: [],
+          risk: [],
+          normalizationNotes: [],
+        },
+        blocked: true,
+        blockerReason: '震荡行情怎么判断？',
+      },
+      executionContext: {
+        context: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        ambiguities: [],
+        evidence: [],
+      },
+      atomicResolution: {
+        ambiguities: [],
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'executionContext.exchange',
+            reason: 'missing_exchange',
+            field: 'exchange',
+            blocking: true,
+            question: '请确认交易所（binance / okx / hyperliquid）。',
+            status: 'pending',
+          },
+        ],
+        summary: '已识别部分条件，但仍未完整。',
+      },
+      clarificationPrompt: '请先确认交易所。',
+      blockingReasons: [],
+      inferredAssumptions: [],
+    })
+    const buildStrategyDecisionSpy = jest.spyOn(service as any, 'buildStrategyDecision').mockReturnValue({
+      kind: 'ASK_CLARIFY',
+    })
+
+    try {
+      const result = await service.startSession({
+        userId: 'u-1',
+        initialMessage: '先按震荡行情处理',
+      })
+
+      expect(result.assistantPrompt).toContain('震荡行情怎么判断')
+      expect(result.assistantPrompt).not.toContain('请先确认交易所')
+    } finally {
+      buildFallbackSemanticStateSpy.mockRestore()
+      resolveClarificationArtifactsSpy.mockRestore()
+      buildStrategyDecisionSpy.mockRestore()
+    }
+  })
+
+  it('keeps the next semantic slot active after locking MA50 instead of falling through to execution context', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-ma-baseline-continue',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        entryRules: ['价格突破一条长期均线时买入'],
+        exitRules: ['跌破短期均线时卖出'],
+      },
+      semanticState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [
+          {
+            id: 'entry-ma',
+            key: 'indicator.above',
+            phase: 'entry',
+            params: { indicator: 'ma', referenceRole: 'long_term' },
+            status: 'open',
+            source: 'user_explicit',
+            openSlots: [
+              {
+                slotKey: 'reference.period.entry',
+                fieldPath: 'triggers[0].params.reference.period',
+                status: 'open',
+                priority: 'core',
+                questionHint: '长期均线是多少？',
+                affectsExecution: true,
+              },
+              {
+                slotKey: 'confirmationMode.entry',
+                fieldPath: 'triggers[0].params.confirmationMode',
+                status: 'open',
+                priority: 'core',
+                questionHint: '突破按收盘确认还是盘中触发？',
+                affectsExecution: true,
+              },
+            ],
+          },
+          {
+            id: 'exit-ma',
+            key: 'indicator.below',
+            phase: 'exit',
+            params: { indicator: 'ma', referenceRole: 'short_term' },
+            status: 'open',
+            source: 'user_explicit',
+            openSlots: [
+              {
+                slotKey: 'reference.period.exit',
+                fieldPath: 'triggers[1].params.reference.period',
+                status: 'open',
+                priority: 'core',
+                questionHint: '短期均线是多少？',
+                affectsExecution: true,
+              },
+            ],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: {
+          exchange: {
+            slotKey: 'exchange',
+            fieldPath: 'contextSlots.exchange',
+            status: 'open',
+            priority: 'context',
+            questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+            affectsExecution: true,
+          },
+          symbol: null,
+          marketType: null,
+          timeframe: null,
+        },
+        normalizationNotes: [],
+        updatedAt: '2026-04-16T10:00:00.000Z',
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'semantic.reference.period.entry',
+            reason: 'missing_entry_rules',
+            field: 'entryRules',
+            blocking: true,
+            question: '长期均线是多少？',
+            status: 'pending',
+            slotKey: 'reference.period.entry',
+            fieldPath: 'triggers[0].params.reference.period',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-ma-baseline-continue', {
+      userId: 'u1',
+      message: 'MA50',
+      clarificationAnswers: {
+        'semantic.reference.period.entry': 'MA50',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(result.assistantPrompt).toContain('突破按收盘确认还是盘中触发')
+    expect(result.assistantPrompt).not.toContain('请确认交易所')
+    expect(result.assistantPrompt).not.toContain('长期均线是多少')
+    expect(result.clarificationState?.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic.confirmationMode.entry',
+        status: 'pending',
+      }),
+    ]))
+    expect(result.clarificationState?.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'executionContext.exchange',
+        status: 'pending',
+      }),
+    ]))
   })
 
   it('does not regress to checklist-derived generic summary after locking MA semantics', async () => {
