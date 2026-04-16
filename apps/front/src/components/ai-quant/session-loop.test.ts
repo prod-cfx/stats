@@ -187,11 +187,18 @@ describe('ai-quant session-loop', () => {
   })
 
   it('recognizes short confirmation messages', () => {
-    expect(isShortConfirmationMessage('可以')).toBe(true)
+    expect(isShortConfirmationMessage('这样可以')).toBe(true)
+    expect(isShortConfirmationMessage('可以了')).toBe(true)
+    expect(isShortConfirmationMessage('就这样')).toBe(true)
     expect(isShortConfirmationMessage('继续')).toBe(true)
+    expect(isShortConfirmationMessage('继续 ')).toBe(true)
     expect(isShortConfirmationMessage('确认正确')).toBe(true)
+    expect(isShortConfirmationMessage('确认！')).toBe(true)
     expect(isShortConfirmationMessage('正确')).toBe(true)
+    expect(isShortConfirmationMessage('可以。')).toBe(true)
     expect(isShortConfirmationMessage('按你说的来')).toBe(true)
+    expect(isShortConfirmationMessage('这样可以吗')).toBe(false)
+    expect(isShortConfirmationMessage('默认没问题吗')).toBe(false)
     expect(isShortConfirmationMessage('我想加一个止损')).toBe(false)
   })
 
