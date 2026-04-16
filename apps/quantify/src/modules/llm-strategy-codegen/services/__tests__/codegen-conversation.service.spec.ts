@@ -1677,6 +1677,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       key: 'semantic.confirmationMode.entry',
       question: '突破按收盘确认还是盘中触发？',
     }))
+    expect(result.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'executionContext.exchange',
+        question: '请确认交易所（binance / okx / hyperliquid）。',
+        status: 'pending',
+      }),
+    ]))
   })
 
   it('keeps newly added semantic triggers when a persisted semanticState session gains another rule', () => {
@@ -2891,7 +2898,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         status: 'pending',
       }),
     ]))
-    expect(result.clarificationState?.items?.some(item => item.key.startsWith('executionContext.'))).toBe(false)
+    expect(result.clarificationState?.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'executionContext.exchange',
+        status: 'pending',
+      }),
+    ]))
   })
 
   it('does not regress to checklist-derived generic summary after locking MA semantics', async () => {

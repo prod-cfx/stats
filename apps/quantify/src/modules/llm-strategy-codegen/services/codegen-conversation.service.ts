@@ -1249,18 +1249,17 @@ export class CodegenConversationService {
 
     if (nextOpenSlot.priority !== 'context') {
       const activeItem = this.buildSemanticClarificationItem(nextOpenSlot)
-      const existingSemanticItems = fallbackState.status === 'NEEDS_CLARIFICATION'
+      const remainingPendingItems = fallbackState.status === 'NEEDS_CLARIFICATION'
         ? fallbackState.items.filter(item =>
             item.blocking
             && item.status === 'pending'
-            && this.isSemanticClarificationItem(item)
             && item.key !== activeItem.key,
           )
         : []
 
       return {
         status: 'NEEDS_CLARIFICATION',
-        items: [activeItem, ...existingSemanticItems],
+        items: [activeItem, ...remainingPendingItems],
         summary: clarificationView.summary,
       }
     }
