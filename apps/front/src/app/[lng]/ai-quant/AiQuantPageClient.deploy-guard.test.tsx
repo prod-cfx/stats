@@ -325,10 +325,14 @@ describe('AiQuantPageClient deploy guard', () => {
 
     expect(mockDeployAccountAiQuantStrategy).toHaveBeenCalledWith(
       expect.objectContaining({
-        strategyInstanceId: 'strategy-1',
         publishedSnapshotId: 'snapshot-1',
         exchangeAccountId: 'acct-hyper-1',
         exchangeAccountName: 'Hyper Testnet',
+      }),
+    )
+    expect(mockDeployAccountAiQuantStrategy).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        strategyInstanceId: expect.anything(),
       }),
     )
   })

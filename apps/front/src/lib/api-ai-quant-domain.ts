@@ -289,7 +289,6 @@ export async function deployAccountAiQuantStrategy(
         name: payload.name.trim(),
         deployRequestId: payload.deployRequestId.trim(),
         publishedSnapshotId: payload.publishedSnapshotId.trim(),
-        strategyInstanceId: payload.strategyInstanceId?.trim() || undefined,
         exchangeAccountId: payload.exchangeAccountId,
         exchangeAccountName: payload.exchangeAccountName,
         deploymentExecutionConfig: payload.deploymentExecutionConfig,

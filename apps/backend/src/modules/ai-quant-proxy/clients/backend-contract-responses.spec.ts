@@ -51,6 +51,7 @@ describe('backend contract generated AI Quant codegen responses', () => {
     const updateSnippet = source.slice(updateSchemaStart, updateSchemaStart + 300)
 
     expect(deploySnippet).toContain('leverage: z.number().optional()')
+    expect(deploySnippet).not.toContain('strategyInstanceId')
     expect(updateSnippet).toContain('leverage: z.number()')
   })
 })

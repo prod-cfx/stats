@@ -111,7 +111,6 @@ export async function confirmAiQuantDeploy(args: {
       name: strategyName,
       deployRequestId: requestId,
       publishedSnapshotId,
-      strategyInstanceId: activeConversation.publishedStrategyInstanceId ?? undefined,
       exchangeAccountId: account.accountId,
       exchangeAccountName: account.accountName,
       deploymentExecutionConfig:

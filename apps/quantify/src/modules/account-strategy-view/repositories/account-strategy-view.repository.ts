@@ -44,7 +44,6 @@ interface DeployStrategyInput {
   initialBalanceQuote?: number
   accountBalanceQuote?: number
   mode?: 'TESTNET' | 'LIVE'
-  strategyInstanceId?: string
   exchangeAccountId?: string
   exchangeAccountName?: string
 }
@@ -120,9 +119,7 @@ export class AccountStrategyViewRepository {
         })
       }
 
-      const reusableStrategyInstanceId = input.strategyInstanceId
-        ?? input.publishedSnapshotBinding?.sourceStrategyInstanceId
-        ?? null
+      const reusableStrategyInstanceId = input.publishedSnapshotBinding?.sourceStrategyInstanceId ?? null
 
       if (reusableStrategyInstanceId) {
         const existingInstance = await tx.strategyInstance.findFirst({
@@ -258,7 +255,7 @@ export class AccountStrategyViewRepository {
       }
 
       throw new DeployStrategyInstanceNotFoundException({
-        strategyInstanceId: input.strategyInstanceId ?? input.publishedSnapshotBinding?.sourceStrategyInstanceId ?? undefined,
+        strategyInstanceId: input.publishedSnapshotBinding?.sourceStrategyInstanceId ?? undefined,
       })
     })
 

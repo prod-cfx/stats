@@ -327,7 +327,6 @@ export interface AccountAiQuantDeployPayload {
   symbol?: string
   timeframe?: string
   positionPct?: number
-  strategyInstanceId?: string
   exchangeAccountId?: string
   exchangeAccountName?: string
   deploymentExecutionConfig?: AccountAiQuantDeploymentExecutionConfig

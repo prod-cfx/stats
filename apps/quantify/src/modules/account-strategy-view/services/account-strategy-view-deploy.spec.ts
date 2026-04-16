@@ -75,7 +75,6 @@ describe('accountStrategyViewService.deployStrategy', () => {
       publishedSnapshotId: 'snapshot-1',
       deployRequestId: 'deploy-req-1',
       exchangeAccountId: 'acc-1',
-      strategyInstanceId: 'inst-draft-1',
     } as any)
 
     expect(marketDataIngestionService.ensureSymbolsSubscribed).toHaveBeenCalledWith(['SOLUSDT'])
@@ -83,9 +82,9 @@ describe('accountStrategyViewService.deployStrategy', () => {
     expect(repo.deployStrategyForUser).toHaveBeenCalledWith(expect.objectContaining({
       exchange: 'okx',
       symbol: 'SOLUSDT',
-      strategyInstanceId: 'inst-draft-1',
       publishedSnapshotBinding: expect.objectContaining({
         publishedSnapshotId: 'snapshot-1',
+        sourceStrategyInstanceId: 'inst-draft-1',
       }),
     }))
     expect(service.getStrategyDetail).toHaveBeenCalledWith('user-1', 'inst-okx-1')
@@ -165,7 +164,6 @@ describe('accountStrategyViewService.deployStrategy', () => {
       publishedSnapshotId: 'snapshot-2',
       deployRequestId: 'deploy-req-2',
       exchangeAccountId: 'acc-1',
-      strategyInstanceId: 'inst-draft-1',
     } as any)
 
     expect(marketDataIngestionService.ensureSymbolsSubscribed).toHaveBeenCalledWith(['SOLUSDT'])
@@ -178,6 +176,67 @@ describe('accountStrategyViewService.deployStrategy', () => {
         publishedSnapshotId: 'snapshot-2',
       }),
     }))
+  })
+
+  it('rejects deploy when the published snapshot has no source strategy instance binding', async () => {
+    const repo = {
+      deployStrategyForUser: jest.fn(),
+      findStrategyForUser: jest.fn().mockResolvedValue(null),
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-1' }),
+      markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
+      markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
+      upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+    }
+    const snapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-missing-instance',
+        snapshotHash: 'snapshot-hash-missing-instance',
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'SOLUSDT',
+          baseTimeframe: '5m',
+          marketType: 'spot',
+          positionPct: 10,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'GTC',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 5,
+          defaultLeverage: 1,
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['GTC'],
+        },
+        strategyInstanceId: null,
+        strategyTemplateId: 'template-1',
+      }),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn(), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn().mockResolvedValue(undefined) } as any,
+      undefined,
+      undefined,
+      undefined,
+      snapshotsRepository as any,
+    )
+
+    await expect(service.deployStrategy({
+      userId: 'user-1',
+      name: 'OKX SOL 5m',
+      publishedSnapshotId: 'snapshot-missing-instance',
+      deployRequestId: 'deploy-req-missing-instance',
+      exchangeAccountId: 'acc-1',
+    } as any)).rejects.toMatchObject({
+      message: 'account_strategy.deploy_snapshot_requires_republish',
+    })
+    expect(repo.deployStrategyForUser).not.toHaveBeenCalled()
   })
 
   it('seeds deploy account balances from the bound exchange account snapshot when available', async () => {
@@ -259,7 +318,6 @@ describe('accountStrategyViewService.deployStrategy', () => {
       publishedSnapshotId: 'snapshot-live-balance',
       deployRequestId: 'deploy-req-live-balance',
       exchangeAccountId: 'exchange-account-1',
-      strategyInstanceId: 'inst-draft-1',
     } as any)
 
     expect(tradingService.getBalance).toHaveBeenCalledWith('user-1', 'okx', 'spot', 'exchange-account-1')
@@ -348,7 +406,6 @@ describe('accountStrategyViewService.deployStrategy', () => {
       publishedSnapshotId: 'snapshot-missing-asset',
       deployRequestId: 'deploy-req-missing-quote-asset',
       exchangeAccountId: 'exchange-account-1',
-      strategyInstanceId: 'inst-draft-1',
     } as any)
 
     expect(repo.deployStrategyForUser).toHaveBeenCalledWith(expect.not.objectContaining({
@@ -496,7 +553,6 @@ describe('accountStrategyViewService.deployStrategy', () => {
       publishedSnapshotId: 'snapshot-exec-1',
       deployRequestId: 'deploy-req-exec-1',
       exchangeAccountId: 'acct-1',
-      strategyInstanceId: 'inst-draft-1',
       deploymentExecutionConfig: {
         leverage: 4,
       },

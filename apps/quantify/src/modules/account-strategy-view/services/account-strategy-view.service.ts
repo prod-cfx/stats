@@ -31,6 +31,7 @@ import { Prisma } from '@/prisma/prisma.types'
 import { AccountStrategyAction } from '../dto/account-strategy-action.dto'
 import {
   DeployIdempotencyConflictException,
+  DeploySnapshotRequiresRepublishException,
   InvalidStrategyActionException,
   MissingUserIdentityException,
   StrategyNotFoundException,
@@ -59,11 +60,6 @@ interface StrategyAccountFallback {
   initialBalance: unknown
   totalRealizedPnl: unknown
   totalUnrealizedPnl: unknown
-}
-
-interface TradingLeverageConstraints {
-  minLeverage?: number
-  maxLeverage?: number
 }
 
 @Injectable()
@@ -715,13 +711,12 @@ export class AccountStrategyViewService {
           bindingSource: 'PUBLISHED_SNAPSHOT',
           publishedSnapshotId: resolvedDeploy.publishedSnapshotId,
           snapshotHash: resolvedDeploy.snapshotHash,
-          sourceStrategyInstanceId: resolvedDeploy.sourceStrategyInstanceId ?? dto.strategyInstanceId ?? null,
+          sourceStrategyInstanceId: resolvedDeploy.sourceStrategyInstanceId,
           sourceStrategyTemplateId: resolvedDeploy.sourceStrategyTemplateId,
         },
         initialBalanceQuote: exchangeBalance?.total,
         accountBalanceQuote: exchangeBalance?.free,
         mode: dto.mode,
-        strategyInstanceId: dto.strategyInstanceId ?? resolvedDeploy.sourceStrategyInstanceId ?? undefined,
         exchangeAccountId: dto.exchangeAccountId,
         exchangeAccountName: dto.exchangeAccountName,
         deploymentExecutionConfig: resolvedDeploy.deploymentExecutionConfig,
@@ -1469,7 +1464,6 @@ export class AccountStrategyViewService {
         name: dto.name,
         publishedSnapshotId: dto.publishedSnapshotId,
         exchangeAccountId: dto.exchangeAccountId ?? null,
-        strategyInstanceId: dto.strategyInstanceId ?? null,
         mode: dto.mode ?? null,
         leverage: this.readNumber(dto.deploymentExecutionConfig ?? {}, ['leverage']) ?? null,
       }))
@@ -1550,7 +1544,6 @@ export class AccountStrategyViewService {
           symbol: null,
           timeframe: null,
           positionPct: null,
-          strategyInstanceId: dto.strategyInstanceId ?? null,
           publishedSnapshotId: null,
         },
       })
@@ -1594,7 +1587,6 @@ export class AccountStrategyViewService {
           symbol,
           timeframe,
           positionPct,
-          strategyInstanceId: dto.strategyInstanceId ?? null,
           publishedSnapshotId,
         },
       })
@@ -1626,6 +1618,12 @@ export class AccountStrategyViewService {
       throw new DomainException('account_strategy.invalid_deployment_leverage', {
         code: ErrorCode.BAD_REQUEST,
         status: HttpStatus.BAD_REQUEST,
+      })
+    }
+
+    if (!snapshot.strategyInstanceId) {
+      throw new DeploySnapshotRequiresRepublishException({
+        publishedSnapshotId: snapshot.id,
       })
     }
 

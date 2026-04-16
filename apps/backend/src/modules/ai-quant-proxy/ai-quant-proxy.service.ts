@@ -74,7 +74,6 @@ export class AiQuantProxyService {
       deployRequestId: body.deployRequestId,
       publishedSnapshotId: body.publishedSnapshotId,
     }
-    if (body.strategyInstanceId !== undefined) payload.strategyInstanceId = body.strategyInstanceId
     if (body.exchangeAccountId !== undefined) payload.exchangeAccountId = body.exchangeAccountId
     if (body.exchangeAccountName !== undefined) payload.exchangeAccountName = body.exchangeAccountName
     if (body.leverage !== undefined) payload.leverage = body.leverage

@@ -8,16 +8,16 @@ function buildDeployPayloadHash(input: {
   name: string
   publishedSnapshotId?: string
   exchangeAccountId?: string
-  strategyInstanceId?: string
   mode?: string
+  leverage?: number | null
 }): string {
   return createHash('sha256')
     .update(JSON.stringify({
       name: input.name,
       publishedSnapshotId: input.publishedSnapshotId,
       exchangeAccountId: input.exchangeAccountId ?? null,
-      strategyInstanceId: input.strategyInstanceId ?? null,
       mode: input.mode ?? null,
+      leverage: input.leverage ?? null,
     }))
     .digest('hex')
 }
