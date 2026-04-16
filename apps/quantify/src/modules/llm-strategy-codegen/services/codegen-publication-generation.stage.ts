@@ -93,8 +93,15 @@ export class CodegenPublicationGenerationStage {
     const sourceChecklist = input.semanticState
       ? this.semanticStateCompileBridge.buildLegacyChecklist(input.semanticState, input.checklist)
       : input.checklist
-    const normalization = this.intentNormalizer.normalize(sourceChecklist)
-    const canonicalSpec = this.canonicalSpecBuilder.build(sourceChecklist)
+    const normalization = input.semanticState
+      ? {
+          normalizedIntent: this.semanticStateCompileBridge.buildNormalizedIntent(input.semanticState),
+          blocked: false,
+        }
+      : this.intentNormalizer.normalize(sourceChecklist)
+    const canonicalSpec = input.semanticState && normalization.normalizedIntent.triggers.some(trigger => trigger.phase === 'gate')
+      ? this.canonicalSpecBuilder.buildFromNormalizedIntent(sourceChecklist, normalization.normalizedIntent)
+      : this.canonicalSpecBuilder.build(sourceChecklist)
     const semanticView = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
     })

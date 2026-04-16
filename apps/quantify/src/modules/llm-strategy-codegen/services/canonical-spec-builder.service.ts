@@ -986,7 +986,14 @@ export class CanonicalSpecBuilderService {
         case 'bollinger.touch_middle':
           pushIndicator({
             kind: 'bollingerBands',
-            params: { ...DEFAULT_INDICATOR_PARAMS.bollingerBands },
+            params: {
+              period: typeof trigger.params.period === 'number' && Number.isFinite(trigger.params.period)
+                ? trigger.params.period
+                : DEFAULT_INDICATOR_PARAMS.bollingerBands.period,
+              stdDev: typeof trigger.params.stdDev === 'number' && Number.isFinite(trigger.params.stdDev)
+                ? trigger.params.stdDev
+                : DEFAULT_INDICATOR_PARAMS.bollingerBands.stdDev,
+            },
           })
           break
         case 'oscillator.rsi_gte':

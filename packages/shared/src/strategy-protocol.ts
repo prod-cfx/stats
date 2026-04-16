@@ -37,6 +37,9 @@ export interface StrategyExecutionContextV1 extends Record<string, any> {
   symbol?: string
   timeframe?: string
   currentPrice?: number
+  marketRegime?: string
+  trendDirection?: string
+  volatilityState?: string
   indicators?: Record<string, number>
   bars?: Bar[]
   execution?: {

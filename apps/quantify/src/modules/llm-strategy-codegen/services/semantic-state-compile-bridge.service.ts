@@ -1,9 +1,44 @@
 import { Injectable } from '@nestjs/common'
 import type { ChecklistPayload } from '../types/codegen-checklist'
 import type { SemanticSlotState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
+import type {
+  StrategyNormalizedIntent,
+  NormalizedTriggerAtom,
+} from '../types/strategy-normalized-intent'
 
 @Injectable()
 export class SemanticStateCompileBridgeService {
+  buildNormalizedIntent(state: SemanticState): StrategyNormalizedIntent {
+    const families = new Set(state.families)
+    if (state.triggers.some(trigger => trigger.phase === 'gate')) {
+      families.add('state-gated')
+    }
+
+    return {
+      families: Array.from(families) as StrategyNormalizedIntent['families'],
+      triggers: state.triggers
+        .filter(trigger => trigger.status !== 'superseded')
+        .map(trigger => this.toNormalizedTrigger(trigger)),
+      actions: state.actions.map(action => ({
+        key: action.key,
+        ...(action.params ? { params: { ...action.params } } : {}),
+      })),
+      risk: state.risk.map(risk => ({
+        key: risk.key,
+        params: { ...risk.params },
+      })),
+      position: state.position
+        ? {
+            mode: state.position.mode as StrategyNormalizedIntent['position']['mode'],
+            value: state.position.value,
+            positionMode: state.position.positionMode as StrategyNormalizedIntent['position']['positionMode'],
+          }
+        : null,
+      unresolved: [],
+      normalizationNotes: [...state.normalizationNotes],
+    }
+  }
+
   buildLegacyChecklist(
     state: SemanticState,
     fallbackChecklist: ChecklistPayload = {},
@@ -25,6 +60,14 @@ export class SemanticStateCompileBridgeService {
     if (exitRules.length > 0) {
       nextChecklist.exitRules = exitRules
       nextChecklist.exitRuleDrafts = undefined
+    }
+
+    const projectedStateGates = this.buildStateGates(state)
+    if (Object.keys(projectedStateGates).length > 0) {
+      nextChecklist.stateGates = {
+        ...(nextChecklist.stateGates ?? {}),
+        ...projectedStateGates,
+      }
     }
 
     const riskRules = {
@@ -81,6 +124,60 @@ export class SemanticStateCompileBridgeService {
     }
 
     return nextChecklist
+  }
+
+  private buildStateGates(state: SemanticState): NonNullable<ChecklistPayload['stateGates']> {
+    const nextStateGates: NonNullable<ChecklistPayload['stateGates']> = {}
+
+    for (const trigger of state.triggers) {
+      if (trigger.phase !== 'gate') continue
+
+      if (trigger.key === 'market.regime' && typeof trigger.params.value === 'string') {
+        nextStateGates.marketRegime = trigger.params.value as NonNullable<ChecklistPayload['stateGates']>['marketRegime']
+      }
+      if (trigger.key === 'trend.direction' && typeof trigger.params.value === 'string') {
+        nextStateGates.trendDirection = trigger.params.value as NonNullable<ChecklistPayload['stateGates']>['trendDirection']
+      }
+      if (trigger.key === 'volatility.state' && typeof trigger.params.value === 'string') {
+        nextStateGates.volatilityState = trigger.params.value as NonNullable<ChecklistPayload['stateGates']>['volatilityState']
+      }
+    }
+
+    return nextStateGates
+  }
+
+  private toNormalizedTrigger(trigger: SemanticTriggerState): NormalizedTriggerAtom {
+    const confirmationMode = typeof trigger.params.confirmationMode === 'string'
+      ? trigger.params.confirmationMode
+      : null
+    const unresolvedSlots = trigger.openSlots.map(slot => this.toUnresolvedSlot(slot))
+
+    return {
+      key: trigger.key as NormalizedTriggerAtom['key'],
+      phase: trigger.phase,
+      ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
+      params: { ...trigger.params } as NormalizedTriggerAtom['params'],
+      ...(confirmationMode === 'touch'
+        || confirmationMode === 'close_confirm'
+        || confirmationMode === 'ambiguous_touch_or_close_confirm'
+        ? { resolutionHints: { confirmation: confirmationMode } }
+        : {}),
+      closureStatus: trigger.status === 'locked' && unresolvedSlots.length === 0 ? 'closed' : 'open',
+      unresolvedSlots,
+      ...(trigger.evidence?.text ? { evidenceText: trigger.evidence.text } : {}),
+    }
+  }
+
+  private toUnresolvedSlot(slot: SemanticSlotState): NormalizedTriggerAtom['unresolvedSlots'][number] {
+    return {
+      slotKey: slot.slotKey,
+      fieldPath: slot.fieldPath,
+      reason: 'missing_definition',
+      questionHint: slot.questionHint,
+      priority: slot.priority,
+      affectsExecution: slot.affectsExecution,
+      ...(slot.evidence?.text ? { evidenceText: slot.evidence.text } : {}),
+    }
   }
 
   private buildRulesForPhase(

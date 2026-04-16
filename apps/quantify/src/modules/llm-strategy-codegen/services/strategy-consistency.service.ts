@@ -1026,6 +1026,21 @@ export class StrategyConsistencyService {
     if (predicateId.includes('price_change_pct') || predicateId.includes('price.change_pct')) {
       return 'price.change_pct'
     }
+    if (predicateId.includes('bollinger_touch_upper') || predicateId.includes('upper_break')) {
+      return 'bollinger.upper_break'
+    }
+    if (predicateId.includes('bollinger_touch_lower') || predicateId.includes('lower_break')) {
+      return 'bollinger.lower_break'
+    }
+    if (predicateId.includes('bollinger_touch_middle') || predicateId.includes('middle_revert')) {
+      return 'bollinger.middle_revert'
+    }
+    if (predicateId.includes('indicator_above') || predicateId.includes('ma_golden_cross') || predicateId.includes('golden_cross')) {
+      return 'ma.golden_cross'
+    }
+    if (predicateId.includes('indicator_below') || predicateId.includes('ma_death_cross') || predicateId.includes('death_cross')) {
+      return 'ma.death_cross'
+    }
     if (
       input.predicateKind === 'CROSS_OVER'
       && (predicateId.includes('macd_golden_cross') || predicateId.includes('macd.golden_cross'))
