@@ -1375,7 +1375,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('keeps Bollinger golden case stable across conversation artifacts', async () => {
-    const started = await startGoldenCase({
+    await startGoldenCase({
       sessionId: 's-golden-bollinger',
       message: bollingerGoldenCase.message,
       plannerLogic: completeChecklist({
