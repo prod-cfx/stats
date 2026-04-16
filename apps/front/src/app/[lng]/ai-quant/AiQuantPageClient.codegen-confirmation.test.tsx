@@ -1051,6 +1051,86 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     )
   })
 
+  it('does not let short confirmation replies bypass a pending clarification gate', async () => {
+    seedDraftConversation(Date.now(), {
+      logicGraph: { ...validSemanticGraph, status: 'draft' },
+      validationReport: { ok: false, errors: ['missing clarification'] },
+      messages: [
+        {
+          id: 'assistant-inferred-confirmation',
+          role: 'assistant',
+          content: '请确认这些推断是否成立；确认后我再生成策略代码。',
+        },
+      ],
+      clarificationGate: {
+        blocked: true,
+        summary: 'OKX BTCUSDT 15m',
+        items: [
+          {
+            key: 'risk.stopLossBasis',
+            field: 'risk.stopLossBasis',
+            reason: 'ambiguous_condition_basis',
+            question: '请确认这些推断是否成立；确认后我再生成策略代码。',
+            blocking: true,
+            status: 'pending',
+          },
+        ],
+      },
+    })
+
+    mockContinueLlmCodegenSession.mockResolvedValueOnce({
+      id: 'session-1',
+      status: 'CHECKLIST_GATE',
+      clarificationGate: null,
+      canonicalDigest: 'sha256:canonical-2',
+      semanticGraph: validSemanticGraph,
+      validationReport: { ok: true, errors: [] },
+      specDesc: {
+        entryRules: ['价格回踩 5 日均线买入'],
+        exitRules: ['价格跌破 10 日均线卖出'],
+        riskRules: { positionPct: 8, maxDrawdownPct: 15 },
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+      },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      const input = container.querySelector('[data-testid="chat-input"]') as HTMLInputElement | null
+      if (input) {
+        Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')
+          ?.set
+          ?.call(input, '可以')
+        input.dispatchEvent(new Event('input', { bubbles: true }))
+        input.dispatchEvent(new Event('change', { bubbles: true }))
+      }
+      container
+        .querySelector('[data-testid="send-chat"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockContinueLlmCodegenSession).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        message: '可以',
+        clarificationAnswers: {
+          'risk.stopLossBasis': '可以',
+        },
+      }),
+    )
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).not.toContain(
+      'The current strategy graph is not yet executable.',
+    )
+  })
+
   it('binds the MA50 blocked-chat answer to the backend-selected semantic clarification item', async () => {
     seedDraftConversation(Date.now(), {
       messages: [

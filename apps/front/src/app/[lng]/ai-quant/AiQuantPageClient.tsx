@@ -606,6 +606,21 @@ export function AiQuantPageClient({
         : nextConversation
     })
 
+    if (activeConversation.clarificationGate?.blocked && currentPendingClarification) {
+      await requestBackendGraphGeneration({
+        conversationId: currentConversationId,
+        message: trimmedInput,
+        params: currentParams,
+        sessionId: currentSessionId,
+        usePresetRules: false,
+        confirmGenerate: false,
+        clarificationAnswers: {
+          [currentPendingClarification.key]: trimmedInput,
+        },
+      })
+      return
+    }
+
     const confirmPattern =
       /^(?:确认逻辑图|\/confirm|确认|可以|好的?|行|ok|okay|yes|同意|没问题)[。.!！?？\s]*$/i
     if (currentGraphStatus === 'draft' && confirmPattern.test(trimmedInput)) {
@@ -651,21 +666,6 @@ export function AiQuantPageClient({
         usePresetRules: false,
         confirmGenerate: true,
         confirmedCanonicalDigest: activeConversation.pendingCanonicalDigest ?? undefined,
-      })
-      return
-    }
-
-    if (activeConversation.clarificationGate?.blocked && currentPendingClarification) {
-      await requestBackendGraphGeneration({
-        conversationId: currentConversationId,
-        message: trimmedInput,
-        params: currentParams,
-        sessionId: currentSessionId,
-        usePresetRules: false,
-        confirmGenerate: false,
-        clarificationAnswers: {
-          [currentPendingClarification.key]: trimmedInput,
-        },
       })
       return
     }
