@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Execution Status:** 本计划已执行完成。下文保留的是执行前任务拆解与命令设计，复选框与 `Expected: FAIL` 等描述用于实现时序，不代表当前分支仍处于未完成状态；实际落地结果与最终验证见文末记录。
+
 **Goal:** 修复 `#800` 后 semanticState-first 主线导致的 clarification 回归，恢复 `#794` 已建立的 open-semantic-slot-first 行为，并用均线案例锁死回归基线。
 
 **Architecture:** 本次实现不新增主数据流，也不改写 `#794` 的 priority 规则。修复聚焦于现有 session authoritative state 链路中的两个问题：一是 open semantic slots 在 `semanticState` 构建、合并与投影过程中的存活；二是 semantic slot 存活时，clarification 继续由 slot 驱动，而不是被 execution context 或 generic checklist fallback 抢走。
