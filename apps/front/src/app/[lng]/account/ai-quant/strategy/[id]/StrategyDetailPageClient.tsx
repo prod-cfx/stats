@@ -39,6 +39,14 @@ function sleep(ms: number) {
   return new Promise(resolve => window.setTimeout(resolve, ms))
 }
 
+function buildBacktestTimeoutMessage(lng: 'zh' | 'en', jobId: string): string {
+  if (lng === 'en') {
+    return `Backtest is still running and the client wait timed out. Please check the result later. Job ID: ${jobId}`
+  }
+
+  return `回测任务仍在执行，前端等待超时。请稍后查看结果，任务 ID：${jobId}`
+}
+
 function getBacktestErrorMessage(error: unknown): string {
   if (isBacktestPayloadBuilderError(error)) {
     switch (error.code) {
@@ -218,7 +226,10 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
 
       while (latestJob.status === 'queued' || latestJob.status === 'running') {
         if (Date.now() >= deadline) {
-          throw new ApiError('回测任务执行超时，请稍后重试', 'BACKTEST_TIMEOUT')
+          throw new ApiError(
+            buildBacktestTimeoutMessage(lng, createdJob.id),
+            'BACKTEST_TIMEOUT',
+          )
         }
         await sleep(BACKTEST_JOB_POLL_INTERVAL_MS)
         latestJob = await getBacktestJob(createdJob.id)

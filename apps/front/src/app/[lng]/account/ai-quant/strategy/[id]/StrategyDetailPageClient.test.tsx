@@ -432,7 +432,10 @@ describe('StrategyDetailPageClient', () => {
     })
 
     expect(container.querySelector('[data-testid="backtest-error"]')?.textContent).toContain(
-      '回测任务执行超时',
+      '前端等待超时',
+    )
+    expect(container.querySelector('[data-testid="backtest-error"]')?.textContent).toContain(
+      'job-1',
     )
   })
 
