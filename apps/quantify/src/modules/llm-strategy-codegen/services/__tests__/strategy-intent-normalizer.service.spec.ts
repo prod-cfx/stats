@@ -229,6 +229,45 @@ describe('strategyIntentNormalizerService', () => {
     expect(result.normalizedIntent.unresolved).toEqual([])
   })
 
+  it('emits an open grid trigger atom from partial checklist.grid without explicit grid wording in rules', () => {
+    const result = service.normalize({
+      market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp', timeframe: '15m' },
+      grid: {
+        lower: 60000,
+        sideMode: 'long_only',
+      },
+      riskRules: { positionPct: 10 },
+    } as any)
+
+    expect(result.blocked).toBe(false)
+    expect(result.normalizedIntent.grid).toBeNull()
+    expect(result.normalizedIntent.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        closureStatus: 'open',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          rangeLower: 60000,
+          sideMode: 'long_only',
+          breakoutAction: 'continue',
+        }),
+        unresolvedSlots: expect.arrayContaining([
+          expect.objectContaining({ slotKey: 'grid.range.upper' }),
+          expect.objectContaining({ slotKey: 'grid.stepPct' }),
+        ]),
+      }),
+    ]))
+    expect(result.normalizedIntent.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        unresolvedSlots: expect.arrayContaining([
+          expect.objectContaining({ slotKey: 'grid.range.lower' }),
+        ]),
+      }),
+    ]))
+  })
+
   it('keeps the live price-change strategy closed', () => {
     const result = service.normalize({
       market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'spot', timeframe: '3m' },

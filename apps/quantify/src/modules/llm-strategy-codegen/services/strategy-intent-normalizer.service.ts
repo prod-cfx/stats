@@ -600,6 +600,7 @@ export class StrategyIntentNormalizerService {
     grid: NormalizedGridIntent | null,
   ): NormalizedTriggerAtom[] {
     const combinedText = [...(checklist.entryRules ?? []), ...(checklist.exitRules ?? [])].join(' ')
+    const structuredGrid = checklist.grid
     const breakoutAction = /突破.{0,8}(停|暂停|停止)/u.test(combinedText) ? 'pause' : 'continue'
     if (grid) {
       return [this.createClosedTrigger({
@@ -617,6 +618,64 @@ export class StrategyIntentNormalizerService {
           breakoutAction,
         },
       })]
+    }
+
+    if (structuredGrid) {
+      const unresolvedSlots: UnresolvedSlot[] = []
+      if (typeof structuredGrid.lower !== 'number' || !Number.isFinite(structuredGrid.lower)) {
+        unresolvedSlots.push({
+          slotKey: 'grid.range.lower',
+          fieldPath: 'triggers[grid].params.rangeLower',
+          reason: 'missing_required_param',
+          questionHint: '请确认网格区间下界。',
+          priority: 'core',
+          affectsExecution: true,
+          ...(combinedText ? { evidenceText: combinedText } : {}),
+        })
+      }
+      if (typeof structuredGrid.upper !== 'number' || !Number.isFinite(structuredGrid.upper)) {
+        unresolvedSlots.push({
+          slotKey: 'grid.range.upper',
+          fieldPath: 'triggers[grid].params.rangeUpper',
+          reason: 'missing_required_param',
+          questionHint: '请确认网格区间上界。',
+          priority: 'core',
+          affectsExecution: true,
+          ...(combinedText ? { evidenceText: combinedText } : {}),
+        })
+      }
+      if (typeof structuredGrid.stepPct !== 'number' || !Number.isFinite(structuredGrid.stepPct)) {
+        unresolvedSlots.push({
+          slotKey: 'grid.stepPct',
+          fieldPath: 'triggers[grid].params.stepPct',
+          reason: 'missing_required_param',
+          questionHint: '请确认每格步长（例如 0.5%）。',
+          priority: 'core',
+          affectsExecution: true,
+          ...(combinedText ? { evidenceText: combinedText } : {}),
+        })
+      }
+
+      return [this.createOpenTrigger({
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope: structuredGrid.sideMode === 'short_only'
+          ? 'short'
+          : (structuredGrid.sideMode === 'long_only' ? 'long' : 'both'),
+        params: {
+          ...(typeof structuredGrid.lower === 'number' && Number.isFinite(structuredGrid.lower)
+            ? { rangeLower: structuredGrid.lower }
+            : {}),
+          ...(typeof structuredGrid.upper === 'number' && Number.isFinite(structuredGrid.upper)
+            ? { rangeUpper: structuredGrid.upper }
+            : {}),
+          ...(typeof structuredGrid.stepPct === 'number' && Number.isFinite(structuredGrid.stepPct)
+            ? { stepPct: structuredGrid.stepPct }
+            : {}),
+          ...(structuredGrid.sideMode ? { sideMode: structuredGrid.sideMode } : {}),
+          breakoutAction,
+        },
+      }, unresolvedSlots, combinedText || JSON.stringify(structuredGrid))]
     }
 
     if (!/网格|grid/iu.test(combinedText)) {
