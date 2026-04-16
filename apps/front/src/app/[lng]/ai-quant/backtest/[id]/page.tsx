@@ -56,6 +56,15 @@ function resolvePartialCoverageNotice(inputSummary: unknown): {
   }
 }
 
+function resolveBacktestMarketType(inputSummary: unknown): 'spot' | 'perp' {
+  if (typeof inputSummary !== 'object' || inputSummary === null) {
+    return 'spot'
+  }
+
+  const marketType = (inputSummary as { marketType?: unknown }).marketType
+  return marketType === 'perp' ? 'perp' : 'spot'
+}
+
 export default async function AiQuantBacktestDetailPage({
   params,
   searchParams,
@@ -81,6 +90,7 @@ export default async function AiQuantBacktestDetailPage({
 
   const job = await fetchBacktestJobServer(resolved.id)
   const partialCoverageNotice = resolvePartialCoverageNotice(job?.inputSummary)
+  const marketType = resolveBacktestMarketType(job?.inputSummary)
   const metrics = job?.resultSummary
       ? {
         maxDrawdownPct: Number(job.resultSummary.maxDrawdownPct.toFixed(2)),
@@ -109,6 +119,7 @@ export default async function AiQuantBacktestDetailPage({
           lng={lng}
           id={resolved.id}
           symbol={symbol}
+          marketType={marketType}
           rangeDisplay={rangeDisplay}
           metrics={metrics}
           partialCoverageNotice={partialCoverageNotice}
