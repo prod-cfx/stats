@@ -164,6 +164,42 @@ describe('strategyIntentNormalizerService', () => {
     ]))
   })
 
+  it('emits a closed grid trigger atom from checklist.grid even without explicit grid wording in rules', () => {
+    const result = service.normalize({
+      market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp', timeframe: '15m' },
+      grid: {
+        lower: 60000,
+        upper: 80000,
+        stepPct: 0.5,
+        sideMode: 'bidirectional',
+      },
+      riskRules: { positionPct: 10 },
+    } as any)
+
+    expect(result.blocked).toBe(false)
+    expect(result.normalizedIntent.grid).toEqual(expect.objectContaining({
+      family: GRID_STRATEGY_FAMILY,
+      range: { lower: 60000, upper: 80000 },
+      stepPct: 0.5,
+      sideMode: 'bidirectional',
+    }))
+    expect(result.normalizedIntent.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        closureStatus: 'closed',
+        sideScope: 'both',
+        params: expect.objectContaining({
+          rangeLower: 60000,
+          rangeUpper: 80000,
+          stepPct: 0.5,
+          sideMode: 'bidirectional',
+          breakoutAction: 'continue',
+        }),
+      }),
+    ]))
+  })
+
   it('keeps vague grid semantics as an open grid atom instead of dropping them into unresolved fallback', () => {
     const result = service.normalize({
       market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp' },

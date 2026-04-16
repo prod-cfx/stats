@@ -600,10 +600,6 @@ export class StrategyIntentNormalizerService {
     grid: NormalizedGridIntent | null,
   ): NormalizedTriggerAtom[] {
     const combinedText = [...(checklist.entryRules ?? []), ...(checklist.exitRules ?? [])].join(' ')
-    if (!/网格|grid/iu.test(combinedText)) {
-      return []
-    }
-
     const breakoutAction = /突破.{0,8}(停|暂停|停止)/u.test(combinedText) ? 'pause' : 'continue'
     if (grid) {
       return [this.createClosedTrigger({
@@ -621,6 +617,10 @@ export class StrategyIntentNormalizerService {
           breakoutAction,
         },
       })]
+    }
+
+    if (!/网格|grid/iu.test(combinedText)) {
+      return []
     }
 
     return [this.createOpenTrigger({
