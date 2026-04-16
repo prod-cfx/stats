@@ -4519,8 +4519,6 @@ export class CodegenConversationService {
       : /盘中|触及/u.test(text)
         ? 'touch'
         : 'unspecified'
-    const period = (text.match(/(?:MA|均线（?)(\d{1,4})/iu)?.[1] ?? '').trim()
-    const stdDev = (text.match(/布林带\((\d{1,4}),\s*([0-9.]+)\)/u)?.[2] ?? '').trim()
 
     if ((/连续\s*3|3\s*根/u.test(text)) && /轨外|outside/iu.test(text)) {
       return 'outside-band-3-bars'

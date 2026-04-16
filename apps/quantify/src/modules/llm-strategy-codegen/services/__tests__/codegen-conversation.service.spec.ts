@@ -4464,7 +4464,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('covers the MA golden case through the first startSession -> confirmGenerate path', async () => {
-    const started = await startGoldenCase({
+    await startGoldenCase({
       sessionId: 's-golden-ma-publish',
       message: maGoldenCase.message,
       plannerLogic: completeChecklist({
