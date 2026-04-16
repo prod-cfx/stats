@@ -67,6 +67,12 @@ export interface StrategyContext {
   // 辅助数据
   /** 当前价格 */
   currentPrice?: number
+  /** 市场状态门控：行情结构，如 range / trend */
+  marketRegime?: string
+  /** 市场状态门控：方向，如 up / down / sideways */
+  trendDirection?: string
+  /** 市场状态门控：波动状态，如 low / high */
+  volatilityState?: string
   /** 当前时间戳（毫秒） */
   timestamp?: number
   /**

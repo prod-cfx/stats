@@ -11,6 +11,8 @@ import type {
   StrategyParamsNormalized,
 } from './helpers.types'
 import { getSafeHelpers } from './safe-helpers'
+import { trendDirection } from './signal-helpers'
+import { atr } from './technical-indicators'
 
 /**
  * 构建策略执行上下文（旧版，单 Leg 单周期）
@@ -18,6 +20,7 @@ import { getSafeHelpers } from './safe-helpers'
  */
 export function buildStrategyContext(context: StrategyContext): Record<string, unknown> {
   const paramsNormalized = normalizeStrategyParams(context.params)
+  const stateContext = deriveStateContext(context)
   return {
     // 市场数据
     bars: context.bars,
@@ -25,6 +28,9 @@ export function buildStrategyContext(context: StrategyContext): Record<string, u
     timeframe: context.timeframe,
     indicators: context.indicators,
     currentPrice: context.currentPrice,
+    marketRegime: stateContext.marketRegime,
+    trendDirection: stateContext.trendDirection,
+    volatilityState: stateContext.volatilityState,
     timestamp: context.timestamp,
 
     // 策略参数（来自模板 defaultParams 或实例 params）
@@ -56,16 +62,26 @@ export function buildMultiLegStrategyContext(context: MultiLegStrategyContext): 
     timeframe?: string
     indicators?: Record<string, number>
     currentPrice?: number
+    marketRegime?: string
+    trendDirection?: string
+    volatilityState?: string
   } = {}
   
   if (primaryLegId && context.data[primaryLegId]?.[primaryTimeframe]) {
     const primaryData = context.data[primaryLegId][primaryTimeframe]
+    const stateContext = deriveStateContext({
+      bars: primaryData.bars,
+      currentPrice: primaryData.currentPrice,
+    })
     compatibilityData = {
       bars: primaryData.bars,
       symbol: primaryLeg.symbol,
       timeframe: primaryTimeframe,
       indicators: primaryData.indicators,
       currentPrice: primaryData.currentPrice,
+      marketRegime: stateContext.marketRegime,
+      trendDirection: stateContext.trendDirection,
+      volatilityState: stateContext.volatilityState,
     }
   }
   
@@ -117,6 +133,72 @@ function readBoolean(value: unknown): boolean | null {
   return typeof value === 'boolean' ? value : null
 }
 
+function deriveStateContext(context: Pick<
+  StrategyContext,
+  'bars' | 'currentPrice' | 'marketRegime' | 'trendDirection' | 'volatilityState'
+>): {
+  marketRegime: string | undefined
+  trendDirection: string | undefined
+  volatilityState: string | undefined
+} {
+  const explicitMarketRegime = normalizeStateValue(context.marketRegime)
+  const explicitTrendDirection = normalizeStateValue(context.trendDirection)
+  const explicitVolatilityState = normalizeStateValue(context.volatilityState)
+
+  const closes = context.bars.map(bar => bar.close).filter(value => Number.isFinite(value))
+  const derivedTrendDirection = explicitTrendDirection ?? deriveTrendDirection(closes)
+  const derivedVolatilityState = explicitVolatilityState ?? deriveVolatilityState(
+    context.bars,
+    context.currentPrice ?? closes[closes.length - 1],
+  )
+  const derivedMarketRegime = explicitMarketRegime ?? deriveMarketRegime(derivedTrendDirection)
+
+  return {
+    marketRegime: derivedMarketRegime ?? undefined,
+    trendDirection: derivedTrendDirection ?? undefined,
+    volatilityState: derivedVolatilityState ?? undefined,
+  }
+}
+
+function deriveTrendDirection(prices: number[]): string | null {
+  if (prices.length < 6) return null
+  const direction = trendDirection(prices, Math.min(20, prices.length))
+  if (direction === 'UP') return 'up'
+  if (direction === 'DOWN') return 'down'
+  if (direction === 'SIDEWAYS') return 'sideways'
+  return null
+}
+
+function deriveVolatilityState(
+  bars: StrategyContext['bars'],
+  currentPrice: number | undefined,
+): string | null {
+  if (bars.length < 15 || typeof currentPrice !== 'number' || !Number.isFinite(currentPrice) || currentPrice <= 0) {
+    return null
+  }
+  const atrValue = atr(bars, Math.min(14, bars.length - 1))
+  if (typeof atrValue !== 'number' || !Number.isFinite(atrValue)) {
+    return null
+  }
+
+  const ratio = atrValue / currentPrice
+  if (ratio >= 0.03) return 'high'
+  if (ratio <= 0.015) return 'low'
+  return 'medium'
+}
+
+function deriveMarketRegime(trend: string | null): string | null {
+  if (trend === 'sideways') return 'range'
+  if (trend === 'up' || trend === 'down') return 'trend'
+  return null
+}
+
+function normalizeStateValue(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0
+    ? value.trim().toLowerCase()
+    : null
+}
+
 /**
  * 获取辅助函数库的类型定义（用于 TypeScript）
  */
@@ -133,6 +215,9 @@ export function getAvailableGlobals(): string[] {
     'timeframe',
     'indicators',
     'currentPrice',
+    'marketRegime',
+    'trendDirection',
+    'volatilityState',
     'timestamp',
     'data', // 多 leg 数据
     'execution', // 执行配置

@@ -4,6 +4,7 @@ import { atr, bollingerBands, ema, macd, rsi, sma } from '../helpers/technical-i
 
 export type CompiledRuntimeValue =
   | number
+  | string
   | boolean
   | null
   | {
@@ -21,7 +22,7 @@ interface CompiledExprNode {
     field?: 'open' | 'high' | 'low' | 'close'
     offsetBars?: number
     inputs?: string[]
-    value?: number
+    value?: number | string
     params?: Record<string, number | string>
   }
 }
@@ -74,11 +75,13 @@ function evaluateSeries(
 ): CompiledRuntimeValue {
   switch (node.payload.kind) {
     case 'CONST':
-      return typeof node.payload.value === 'number' ? node.payload.value : null
-      case 'PRICE':
-      case 'PRICE_CHANGE_PCT':
-      case 'EMA':
-      case 'SMA':
+      return typeof node.payload.value === 'number' || typeof node.payload.value === 'string'
+        ? node.payload.value
+        : null
+    case 'PRICE':
+    case 'PRICE_CHANGE_PCT':
+    case 'EMA':
+    case 'SMA':
     case 'RSI':
     case 'ATR':
     case 'MACD_LINE':
@@ -93,6 +96,12 @@ function evaluateSeries(
     case 'LOWER_BAND':
     case 'BOLLINGER_BARS_OUTSIDE':
       return resolveSeriesValueAt(node.id, 0, ctx, executionModel, exprIndex, seriesMemo)
+    case 'MARKET_REGIME':
+      return readStringContextValue(ctx.marketRegime)
+    case 'TREND_DIRECTION':
+      return readStringContextValue(ctx.trendDirection)
+    case 'VOLATILITY_STATE':
+      return readStringContextValue(ctx.volatilityState)
     default: {
       const firstDep = node.deps?.[0]
       return typeof firstDep === 'string' ? values[firstDep] ?? null : null
@@ -122,7 +131,7 @@ function evaluatePredicate(
     case 'LTE':
       return compare(left, right, (a, b) => a <= b)
     case 'EQ':
-      return compare(left, right, (a, b) => a === b)
+      return compareEq(left, right)
     case 'AND':
       return (node.deps ?? []).every(dep => values[dep] === true)
     case 'OR':
@@ -248,6 +257,20 @@ function compare(
 ): boolean {
   if (typeof left !== 'number' || typeof right !== 'number') return false
   return predicate(left, right)
+}
+
+function compareEq(
+  left: CompiledRuntimeValue,
+  right: CompiledRuntimeValue,
+): boolean {
+  if (typeof left === 'number' && typeof right === 'number') return left === right
+  if (typeof left === 'string' && typeof right === 'string') return left === right
+  if (typeof left === 'boolean' && typeof right === 'boolean') return left === right
+  return false
+}
+
+function readStringContextValue(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
 }
 
 function touchesLevel(

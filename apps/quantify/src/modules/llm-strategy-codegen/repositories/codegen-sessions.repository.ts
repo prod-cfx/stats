@@ -15,6 +15,25 @@ const SESSION_SELECT_BASE = {
   userId: true,
   status: true,
   checklist: true,
+  semanticState: true,
+  clarificationState: true,
+  constraintPack: true,
+  latestDraftCode: true,
+  latestSpecDesc: true,
+  graphSnapshot: true,
+  semanticGraph: true,
+  validationReport: true,
+  compiledIr: true,
+  rejectReason: true,
+  createdAt: true,
+  updatedAt: true,
+} as const
+
+const SESSION_SELECT_BASE_WITHOUT_SEMANTIC = {
+  id: true,
+  userId: true,
+  status: true,
+  checklist: true,
   clarificationState: true,
   constraintPack: true,
   latestDraftCode: true,
@@ -29,6 +48,24 @@ const SESSION_SELECT_BASE = {
 } as const
 
 const SESSION_SELECT_BASE_WITHOUT_CLARIFICATION = {
+  id: true,
+  userId: true,
+  status: true,
+  checklist: true,
+  semanticState: true,
+  constraintPack: true,
+  latestDraftCode: true,
+  latestSpecDesc: true,
+  graphSnapshot: true,
+  semanticGraph: true,
+  validationReport: true,
+  compiledIr: true,
+  rejectReason: true,
+  createdAt: true,
+  updatedAt: true,
+} as const
+
+const SESSION_SELECT_BASE_WITHOUT_SEMANTIC_OR_CLARIFICATION = {
   id: true,
   userId: true,
   status: true,
@@ -50,8 +87,18 @@ const SESSION_SELECT_WITH_STRATEGY = {
   strategyInstanceId: true,
 } as const
 
+const SESSION_SELECT_WITH_STRATEGY_WITHOUT_SEMANTIC = {
+  ...SESSION_SELECT_BASE_WITHOUT_SEMANTIC,
+  strategyInstanceId: true,
+} as const
+
 const SESSION_SELECT_WITH_STRATEGY_WITHOUT_CLARIFICATION = {
   ...SESSION_SELECT_BASE_WITHOUT_CLARIFICATION,
+  strategyInstanceId: true,
+} as const
+
+const SESSION_SELECT_WITH_STRATEGY_WITHOUT_SEMANTIC_OR_CLARIFICATION = {
+  ...SESSION_SELECT_BASE_WITHOUT_SEMANTIC_OR_CLARIFICATION,
   strategyInstanceId: true,
 } as const
 
@@ -60,6 +107,7 @@ const MAX_TRANSACTION_START_RETRIES = 3
 @Injectable()
 export class CodegenSessionsRepository {
   private strategyInstanceColumnMissing = false
+  private semanticStateColumnMissing = false
   private clarificationStateColumnMissing = false
 
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
@@ -263,10 +311,22 @@ export class CodegenSessionsRepository {
 
   private resolveSessionSelect() {
     if (this.strategyInstanceColumnMissing) {
+      if (this.semanticStateColumnMissing) {
+        return this.clarificationStateColumnMissing
+          ? SESSION_SELECT_BASE_WITHOUT_SEMANTIC_OR_CLARIFICATION
+          : SESSION_SELECT_BASE_WITHOUT_SEMANTIC
+      }
       return this.clarificationStateColumnMissing
         ? SESSION_SELECT_BASE_WITHOUT_CLARIFICATION
         : SESSION_SELECT_BASE
     }
+
+    if (this.semanticStateColumnMissing) {
+      return this.clarificationStateColumnMissing
+        ? SESSION_SELECT_WITH_STRATEGY_WITHOUT_SEMANTIC_OR_CLARIFICATION
+        : SESSION_SELECT_WITH_STRATEGY_WITHOUT_SEMANTIC
+    }
+
     return this.clarificationStateColumnMissing
       ? SESSION_SELECT_WITH_STRATEGY_WITHOUT_CLARIFICATION
       : SESSION_SELECT_WITH_STRATEGY
@@ -276,6 +336,9 @@ export class CodegenSessionsRepository {
     let output: Record<string, unknown> = input
     if (this.strategyInstanceColumnMissing) {
       output = this.omitField(output, 'strategyInstanceId')
+    }
+    if (this.semanticStateColumnMissing) {
+      output = this.omitField(output, 'semanticState')
     }
     if (this.clarificationStateColumnMissing) {
       output = this.omitField(output, 'clarificationState')
@@ -290,14 +353,16 @@ export class CodegenSessionsRepository {
   }
 
   private toSessionWithNullableOptionalColumns(
-    session: Omit<LlmStrategyCodegenSession, 'strategyInstanceId' | 'clarificationState'> & {
+    session: Partial<Omit<LlmStrategyCodegenSession, 'strategyInstanceId' | 'semanticState' | 'clarificationState'>> & {
       strategyInstanceId?: string | null
+      semanticState?: Prisma.JsonValue | null
       clarificationState?: Prisma.JsonValue | null
     },
   ): LlmStrategyCodegenSession {
     return {
       ...session,
       strategyInstanceId: session.strategyInstanceId ?? null,
+      semanticState: session.semanticState ?? null,
       clarificationState: session.clarificationState ?? null,
     } as LlmStrategyCodegenSession
   }
@@ -348,10 +413,37 @@ export class CodegenSessionsRepository {
     return false
   }
 
+  private isMissingSemanticStateColumnError(error: unknown): boolean {
+    if (!error || typeof error !== 'object') return false
+
+    const code = 'code' in error ? (error as { code?: unknown }).code : undefined
+    const message = 'message' in error ? (error as { message?: unknown }).message : undefined
+    const meta = 'meta' in error ? (error as { meta?: unknown }).meta : undefined
+
+    if (code !== 'P2022') return false
+
+    if (typeof message === 'string' && message.includes('semantic_state')) {
+      return true
+    }
+
+    if (meta && typeof meta === 'object') {
+      const column = (meta as { column?: unknown }).column
+      if (typeof column === 'string' && column.includes('semantic_state')) {
+        return true
+      }
+    }
+
+    return false
+  }
+
   private markMissingOptionalSessionColumn(error: unknown): boolean {
     let changed = false
     if (this.isMissingStrategyInstanceColumnError(error) && !this.strategyInstanceColumnMissing) {
       this.strategyInstanceColumnMissing = true
+      changed = true
+    }
+    if (this.isMissingSemanticStateColumnError(error) && !this.semanticStateColumnMissing) {
+      this.semanticStateColumnMissing = true
       changed = true
     }
     if (this.isMissingClarificationStateColumnError(error) && !this.clarificationStateColumnMissing) {

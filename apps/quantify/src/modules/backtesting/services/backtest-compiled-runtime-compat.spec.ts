@@ -1,6 +1,7 @@
 import { evaluateExprPool } from '@ai/shared/script-engine/compiled-runtime/evaluate-expr-pool'
 import { evaluateGuards } from '@ai/shared/script-engine/compiled-runtime/evaluate-guards'
 import { runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime/run-decision-programs'
+import { buildStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
 
 describe('backtestCompiledRuntimeCompat', () => {
   it('evaluates CROSS_OVER using previous and current series values', () => {
@@ -330,6 +331,71 @@ describe('backtestCompiledRuntimeCompat', () => {
 
     expect(values.position_avg_price).toBe(100)
     expect(values.position_pnl_pct).toBe(-5)
+  })
+
+  it('evaluates state-gate equality predicates from explicit execution context fields', () => {
+    const values = evaluateExprPool(
+      {
+        marketRegime: 'range',
+      } as any,
+      [
+        {
+          id: 'market_regime',
+          nodeType: 'series',
+          payload: { kind: 'MARKET_REGIME' },
+        },
+        {
+          id: 'regime_range',
+          nodeType: 'series',
+          payload: { kind: 'CONST', value: 'range' },
+        },
+        {
+          id: 'entry_gate',
+          nodeType: 'predicate',
+          deps: ['market_regime', 'regime_range'],
+          payload: { kind: 'EQ' },
+        },
+      ] as any,
+      ['market_regime', 'regime_range', 'entry_gate'],
+    )
+
+    expect(values.market_regime).toBe('range')
+    expect(values.entry_gate).toBe(true)
+  })
+
+  it('derives state-gate execution context fields from bars when explicit values are absent', () => {
+    const ctx = buildStrategyContext({
+      bars: [
+        { time: 1, open: 100, high: 102, low: 99, close: 100, volume: 1_000 },
+        { time: 2, open: 100, high: 101, low: 99, close: 100.5, volume: 1_000 },
+        { time: 3, open: 100.5, high: 101, low: 100, close: 100.2, volume: 1_000 },
+        { time: 4, open: 100.2, high: 101, low: 100, close: 100.6, volume: 1_000 },
+        { time: 5, open: 100.6, high: 101, low: 100, close: 100.4, volume: 1_000 },
+        { time: 6, open: 100.4, high: 101, low: 100, close: 100.5, volume: 1_000 },
+        { time: 7, open: 100.5, high: 101, low: 100, close: 100.3, volume: 1_000 },
+        { time: 8, open: 100.3, high: 101, low: 100, close: 100.4, volume: 1_000 },
+        { time: 9, open: 100.4, high: 101, low: 100, close: 100.6, volume: 1_000 },
+        { time: 10, open: 100.6, high: 101, low: 100, close: 100.5, volume: 1_000 },
+        { time: 11, open: 100.5, high: 101, low: 100, close: 100.4, volume: 1_000 },
+        { time: 12, open: 100.4, high: 101, low: 100, close: 100.5, volume: 1_000 },
+        { time: 13, open: 100.5, high: 101, low: 100, close: 100.6, volume: 1_000 },
+        { time: 14, open: 100.6, high: 101, low: 100, close: 100.5, volume: 1_000 },
+        { time: 15, open: 100.5, high: 101, low: 100, close: 100.4, volume: 1_000 },
+        { time: 16, open: 100.4, high: 101, low: 100, close: 100.5, volume: 1_000 },
+        { time: 17, open: 100.5, high: 101, low: 100, close: 100.4, volume: 1_000 },
+        { time: 18, open: 100.4, high: 101, low: 100, close: 100.5, volume: 1_000 },
+        { time: 19, open: 100.5, high: 101, low: 100, close: 100.4, volume: 1_000 },
+        { time: 20, open: 100.4, high: 101, low: 100, close: 100.5, volume: 1_000 },
+      ] as any,
+      symbol: 'BTCUSDT',
+      timeframe: '1h',
+      indicators: {},
+      currentPrice: 100.5,
+    }) as any
+
+    expect(ctx.marketRegime).toBe('range')
+    expect(ctx.trendDirection).toBe('sideways')
+    expect(typeof ctx.volatilityState).toBe('string')
   })
 
   it('forces exit when TAKE_PROFIT_PCT is breached for a long position', () => {

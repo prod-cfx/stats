@@ -5,6 +5,7 @@ import type { StrategyExecutionContextResolution } from '../types/strategy-execu
 import { Injectable } from '@nestjs/common'
 import { isEquivalentMarketScopeValue } from './market-scope-equivalence'
 import { classifyPercentageRuleFamily } from './rule-family-default-semantics'
+import { buildSemanticSlotId } from '../types/semantic-state'
 
 type ClarificationChecklistInput = ChecklistPayload
 
@@ -140,13 +141,20 @@ export class StrategyClarificationRulesService {
   ): StrategyClarificationItem[] {
     return ambiguities.flatMap<StrategyClarificationItem>((ambiguity) => {
       if (ambiguity.kind === 'open_semantic_slot' || ambiguity.kind === 'semantic_conflict') {
+        const slotKey = ambiguity.slotKey ?? ambiguity.field
+        const fieldPath = ambiguity.fieldPath
+        const slotId = ambiguity.slotId ?? (fieldPath ? buildSemanticSlotId({ slotKey, fieldPath }) : undefined)
+
         return [{
-          key: `semantic.${ambiguity.field}`,
+          key: `semantic.${slotKey}`,
           reason: 'missing_entry_rules',
           field: 'entryRules',
           blocking: true,
           question: ambiguity.question ?? ambiguity.message,
           status: 'pending',
+          slotId,
+          slotKey,
+          fieldPath,
           ...(ambiguity.choices?.length ? { allowedAnswers: ambiguity.choices } : {}),
           ...(typeof ambiguity.priority === 'number' ? { priority: ambiguity.priority } : {}),
         }]

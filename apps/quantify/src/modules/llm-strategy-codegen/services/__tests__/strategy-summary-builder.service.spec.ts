@@ -1,6 +1,7 @@
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
+import { bollingerGoldenCase, maGoldenCase } from './fixtures/semantic-state-golden-cases'
 
 describe('strategySummaryBuilderService', () => {
   it('builds user intent summary from clarified checklist band semantics instead of moving-average alias text', () => {
@@ -33,6 +34,43 @@ describe('strategySummaryBuilderService', () => {
         exitRules: ['回到布林带中轨平仓'],
       },
       message: '我要布林带策略，不要均线金叉那一套',
+    })
+
+    expect(summary.strategyType).toBe('bollinger')
+    expect(summary.indicators).toEqual(['bollingerBands'])
+    expect(summary.entryRule).toBe('bollinger.upper_break_short')
+    expect(summary.exitRule).toBe('bollinger.middle_revert')
+    expect(summary.indicators).not.toContain('sma')
+  })
+
+  it('keeps MA golden case summary anchored to explicit MA periods instead of generic open/close phrasing', () => {
+    const service = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const summary = service.buildUserIntentSummary({
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['收盘确认价格突破长期均线（50）时买入'],
+        exitRules: ['收盘确认价格跌破短期均线（10）时卖出'],
+        riskRules: { exchange: 'okx', marketType: 'spot', positionPct: 10, stopLossPct: 5, takeProfitPct: 10 },
+      },
+      message: maGoldenCase.message,
+    })
+
+    expect(summary.strategyType).toBe('movingAverage')
+    expect(summary.indicators).toEqual(['sma'])
+  })
+
+  it('keeps Bollinger golden case summary anchored to band semantics without reintroducing sma aliases', () => {
+    const service = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const summary = service.buildUserIntentSummary({
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['K线收盘后确认突破布林带(30,2.5)上轨时做空'],
+        exitRules: ['价格回到布林带中轨(MA30)时平空'],
+        riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+      },
+      message: bollingerGoldenCase.message,
     })
 
     expect(summary.strategyType).toBe('bollinger')

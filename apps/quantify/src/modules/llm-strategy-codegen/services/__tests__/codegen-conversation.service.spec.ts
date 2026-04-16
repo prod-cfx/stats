@@ -25,6 +25,7 @@ import { StrategyCompileabilityDecisionService } from '../strategy-compileabilit
 import { StrategyConsistencyService } from '../strategy-consistency.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
 import { StrategySummaryObservationService } from '../strategy-summary-observation.service'
+import { bollingerGoldenCase, maGoldenCase } from './fixtures/semantic-state-golden-cases'
 
 jest.mock('../../repositories/published-strategy-snapshots.repository', () => ({
   PublishedStrategySnapshotsRepository: class PublishedStrategySnapshotsRepository {},
@@ -91,8 +92,16 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     new StrategySummaryObservationService(),
     new CompiledPublicationGateService(mockRepo as unknown as PublishedStrategySnapshotsRepository),
   )
-  const buildConfirmedCanonicalDigest = (checklist: Record<string, unknown>): string => {
-    return canonicalDigestService.hash(canonicalSpecBuilder.build(checklist))
+  const buildConfirmedCanonicalDigest = (
+    checklist: Record<string, unknown>,
+    semanticState?: Record<string, unknown>,
+  ): string => {
+    const clarification = (service as any).resolveClarificationArtifacts(checklist)
+    const normalization = semanticState
+      ? (service as any).buildNormalizationFromSemanticState(semanticState)
+      : clarification.normalization
+    const canonicalSpec = (service as any).buildCanonicalSpecForConversation(checklist, normalization)
+    return canonicalDigestService.hash(canonicalSpec)
   }
   const completeRiskRules = (riskRules: Record<string, any> = {}) => ({
     exchange: 'okx',
@@ -110,7 +119,203 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     timeframes: checklist.timeframes ?? ['1h'],
     riskRules: completeRiskRules(checklist.riskRules ?? {}),
   })
+  const buildLockedMaSemanticState = (overrides: Record<string, any> = {}) => ({
+    version: 1,
+    families: ['single-leg'],
+    triggers: [
+      {
+        id: 'entry-ma',
+        key: 'indicator.above',
+        phase: 'entry',
+        params: {
+          indicator: 'ma',
+          referenceRole: 'long_term',
+          'reference.period': 50,
+          confirmationMode: 'close_confirm',
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'exit-ma',
+        key: 'indicator.below',
+        phase: 'exit',
+        params: {
+          indicator: 'ma',
+          referenceRole: 'short_term',
+          'reference.period': 20,
+          confirmationMode: 'close_confirm',
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ],
+    actions: [
+      { id: 'action-1', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      { id: 'action-2', key: 'close_long', status: 'locked', source: 'user_explicit' },
+    ],
+    risk: [],
+    position: {
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+    },
+    contextSlots: {
+      exchange: {
+        slotKey: 'exchange',
+        fieldPath: 'contextSlots.exchange',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+        affectsExecution: true,
+        value: 'okx',
+      },
+      symbol: {
+        slotKey: 'symbol',
+        fieldPath: 'contextSlots.symbol',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+        affectsExecution: true,
+        value: 'BTCUSDT',
+      },
+      marketType: {
+        slotKey: 'marketType',
+        fieldPath: 'contextSlots.marketType',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认市场类型（现货或合约/perp）。',
+        affectsExecution: true,
+        value: 'perp',
+      },
+      timeframe: {
+        slotKey: 'timeframe',
+        fieldPath: 'contextSlots.timeframe',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+        affectsExecution: true,
+        value: '1h',
+      },
+    },
+    normalizationNotes: [],
+    updatedAt: '2026-04-15T10:00:00.000Z',
+    ...overrides,
+  })
+  const buildLockedBollingerSemanticState = (overrides: Record<string, any> = {}) => ({
+    version: 1,
+    families: ['single-leg'],
+    triggers: [
+      {
+        id: 'entry-bollinger-upper',
+        key: 'bollinger.touch_upper',
+        phase: 'entry',
+        params: {
+          indicator: 'bollinger',
+          period: 20,
+          stdDev: 2,
+          confirmationMode: 'close_confirm',
+        },
+        sideScope: 'short',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'exit-bollinger-middle',
+        key: 'bollinger.touch_middle',
+        phase: 'exit',
+        params: {
+          indicator: 'bollinger',
+          period: 20,
+          stdDev: 2,
+          confirmationMode: 'close_confirm',
+        },
+        sideScope: 'short',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ],
+    actions: [
+      { id: 'action-open-short', key: 'open_short', status: 'locked', source: 'user_explicit' },
+      { id: 'action-close-short', key: 'close_short', status: 'locked', source: 'user_explicit' },
+    ],
+    risk: [],
+    position: {
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'short_only',
+      status: 'locked',
+      source: 'user_explicit',
+    },
+    contextSlots: {
+      exchange: {
+        slotKey: 'exchange',
+        fieldPath: 'contextSlots.exchange',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+        affectsExecution: true,
+        value: 'okx',
+      },
+      symbol: {
+        slotKey: 'symbol',
+        fieldPath: 'contextSlots.symbol',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+        affectsExecution: true,
+        value: 'BTCUSDT',
+      },
+      marketType: {
+        slotKey: 'marketType',
+        fieldPath: 'contextSlots.marketType',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认市场类型（现货或合约/perp）。',
+        affectsExecution: true,
+        value: 'perp',
+      },
+      timeframe: {
+        slotKey: 'timeframe',
+        fieldPath: 'contextSlots.timeframe',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+        affectsExecution: true,
+        value: '15m',
+      },
+    },
+    normalizationNotes: [],
+    updatedAt: '2026-04-15T10:00:00.000Z',
+    ...overrides,
+  })
   const withRequiredMarketContext = completeChecklist
+  const startGoldenCase = async (args: {
+    sessionId: string
+    message: string
+    plannerLogic: Record<string, unknown>
+  }) => {
+    mockRepo.createSession.mockResolvedValue({ id: args.sessionId })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        logic: args.plannerLogic,
+      }),
+    })
+
+    return service.startSession({
+      userId: 'u1',
+      initialMessage: args.message,
+    })
+  }
   let service: CodegenConversationService
   const waitForTerminalStatus = async (
     sessionId: string,
@@ -611,7 +816,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const chatCall = mockAi.chat.mock.calls[0]?.[0] as { messages?: Array<{ role?: string; content?: string }> }
     const systemPrompt = chatCall.messages?.find(message => message.role === 'system')?.content ?? ''
 
-    expect(systemPrompt).toContain('不得补写 entryRules/exitRules 或臆造新的核心交易规则')
+    expect(systemPrompt).toContain('semanticUpdates 只表达当前消息涉及的增量语义')
+    expect(systemPrompt).toContain('不得臆造新的核心交易规则')
     expect(systemPrompt).not.toContain('必须直接给出完整入场+出场规则草案')
   })
 
@@ -712,7 +918,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const systemPrompt = chatCall.messages?.find(message => message.role === 'system')?.content ?? ''
     const userPrompt = chatCall.messages?.find(message => message.role === 'user')?.content ?? ''
 
-    expect(systemPrompt).toContain('会影响运行时决策的 riskRules')
+    expect(systemPrompt).toContain('semanticState 派生约束')
+    expect(systemPrompt).toContain('risk / sizing / context')
     expect(systemPrompt).toContain('不要为了“覆盖”而伪造无意义的运行时代码分支')
     expect(userPrompt).toContain('价格连续3根K线在轨外时直接平仓')
     expect(userPrompt).not.toContain('价格连续3根K线在轨外时直接减仓')
@@ -885,6 +1092,83 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             allowedAnswers: ['touch', 'close_confirm'],
           }),
         ]),
+      }),
+    }))
+  })
+
+  it('accepts planner semanticUpdates output and projects it into checklist-compatible state', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        semanticUpdates: {
+          triggerUpdates: [
+            {
+              key: 'indicator.above',
+              phase: 'entry',
+              params: {
+                indicator: 'ma',
+                referenceRole: 'long_term',
+                'reference.period': 50,
+                confirmationMode: 'close_confirm',
+              },
+            },
+            {
+              key: 'indicator.below',
+              phase: 'exit',
+              params: {
+                indicator: 'ma',
+                referenceRole: 'short_term',
+                'reference.period': 10,
+                confirmationMode: 'close_confirm',
+              },
+            },
+          ],
+          actionUpdates: [
+            { key: 'open_long' },
+            { key: 'close_long' },
+          ],
+          riskUpdates: [
+            { key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
+            { key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' } },
+          ],
+          positionUpdate: {
+            mode: 'fixed_ratio',
+            value: 0.1,
+            positionMode: 'long_only',
+          },
+          contextUpdates: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'spot',
+            timeframe: '15m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-semantic-updates' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '帮我做一个 MA50 上破买入、MA10 下破卖出的 OKX 现货 BTCUSDT 15m 策略',
+    })
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.canonicalDigest).toMatch(/^sha256:/)
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      checklist: expect.objectContaining({
+        entryRules: expect.arrayContaining(['收盘确认价格突破长期均线（50）时买入']),
+        exitRules: expect.arrayContaining(['收盘确认价格跌破短期均线（10）时卖出']),
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        riskRules: expect.objectContaining({
+          exchange: 'okx',
+          marketType: 'spot',
+          positionPct: 10,
+          stopLossPct: 5,
+          takeProfitPct: 10,
+        }),
       }),
     }))
   })
@@ -1076,6 +1360,35 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
     }))
     expect(result.assistantPrompt).toContain('确认逻辑图')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      semanticState: expect.objectContaining({
+        version: 1,
+        triggers: expect.arrayContaining([
+          expect.objectContaining({
+            key: 'price.percent_change',
+            phase: 'entry',
+          }),
+          expect.objectContaining({
+            key: 'price.percent_change',
+            phase: 'exit',
+          }),
+        ]),
+        contextSlots: expect.objectContaining({
+          exchange: expect.objectContaining({
+            value: 'okx',
+            status: 'locked',
+          }),
+          symbol: expect.objectContaining({
+            value: 'BTCUSDT',
+            status: 'locked',
+          }),
+          marketType: expect.objectContaining({
+            value: 'perp',
+            status: 'locked',
+          }),
+        }),
+      }),
+    }))
   })
 
   it('starts in checklist gate for raw Chinese price-change wording with percent-style sizing', async () => {
@@ -1105,6 +1418,273 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       status: 'CLEAR',
       items: [],
     }))
+  })
+
+  it('keeps MA golden case stable across conversation artifacts', async () => {
+    const started = await startGoldenCase({
+      sessionId: 's-golden-ma',
+      message: maGoldenCase.message,
+      plannerLogic: completeChecklist({
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['收盘确认价格突破长期均线（50）时买入'],
+        exitRules: ['收盘确认价格跌破短期均线（10）时卖出'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'spot',
+          positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
+        },
+      }),
+    })
+
+    const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any> | undefined
+
+    expect(started.status).toBe('CHECKLIST_GATE')
+    expect(started.assistantPrompt).not.toContain('存在暂不支持的规则片段')
+    expect(createdSession?.checklist?.entryRules).toContain('收盘确认价格突破长期均线（50）时买入')
+    expect(createdSession?.checklist?.exitRules).toContain('收盘确认价格跌破短期均线（10）时卖出')
+    expect(createdSession?.checklist?.entryRules).not.toContain('满足入场条件后开仓')
+    expect(createdSession?.checklist?.exitRules).not.toContain('满足出场条件后平仓')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      semanticState: expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({
+            key: 'indicator.above',
+            params: expect.objectContaining({
+              'reference.period': 50,
+            }),
+          }),
+          expect.objectContaining({
+            key: 'indicator.below',
+            params: expect.objectContaining({
+              'reference.period': 10,
+            }),
+          }),
+        ]),
+      }),
+    }))
+  })
+
+  it('keeps Bollinger golden case stable across conversation artifacts', async () => {
+    await startGoldenCase({
+      sessionId: 's-golden-bollinger',
+      message: bollingerGoldenCase.message,
+      plannerLogic: completeChecklist({
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['收盘价突破上轨时做空'],
+        exitRules: ['价格回到中轨（30日均线）时平空'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+          positionPct: 10,
+        },
+      }),
+    })
+
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      latestSpecDesc: expect.objectContaining({
+        canonicalDigest: expect.stringMatching(bollingerGoldenCase.expectedDigestPattern),
+        rules: expect.arrayContaining([
+          expect.objectContaining({
+            condition: expect.objectContaining({ key: 'bollinger.upper_break' }),
+          }),
+          expect.objectContaining({
+            condition: expect.objectContaining({ key: 'bollinger.middle_revert' }),
+          }),
+        ]),
+      }),
+      semanticState: expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({ key: 'bollinger.touch_middle', phase: 'exit' }),
+        ]),
+      }),
+    }))
+  })
+
+  it('projects short-side MA semantic triggers back into checklist rules without rewriting them into long actions', () => {
+    const projected = (service as any).projectLegacyChecklistFromSemanticState({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-short-ma',
+          key: 'indicator.below',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'short_term',
+            'reference.period': 20,
+            confirmationMode: 'close_confirm',
+          },
+          sideScope: 'short',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'exit-short-ma',
+          key: 'indicator.above',
+          phase: 'exit',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'long_term',
+            'reference.period': 50,
+            confirmationMode: 'close_confirm',
+          },
+          sideScope: 'short',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'action-open-short', key: 'open_short', status: 'locked', source: 'user_explicit' },
+        { id: 'action-close-short', key: 'close_short', status: 'locked', source: 'user_explicit' },
+      ],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-15T10:00:00.000Z',
+    }, {
+      entryRules: ['短均线下穿长均线（死叉）时做空'],
+      exitRules: ['短均线上穿长均线（金叉）时平空'],
+    })
+
+    expect(projected.entryRules).toEqual(['收盘确认价格跌破短期均线（20）时做空'])
+    expect(projected.exitRules).toEqual(['收盘确认价格突破长期均线（50）时平空'])
+  })
+
+  it('keeps newly added semantic triggers when a persisted semanticState session gains another rule', () => {
+    const currentSemanticState = buildLockedMaSemanticState({
+      triggers: [
+        {
+          id: 'entry-ma-50',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'long_term',
+            'reference.period': 50,
+            confirmationMode: 'close_confirm',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      ],
+      position: null,
+    })
+
+    const checklist = {
+      entryRules: [
+        '收盘确认价格突破长期均线（50）时买入',
+        '收盘确认价格突破长期均线（200）时买入',
+      ],
+      exitRules: ['收盘确认价格跌破短期均线（10）时卖出'],
+    }
+    const mergedSemanticState = (service as any).mergeChecklistIntoSemanticState(currentSemanticState, checklist)
+    const projectedChecklist = (service as any).projectLegacyChecklistFromSemanticState(mergedSemanticState, checklist)
+
+    expect(mergedSemanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        params: expect.objectContaining({ 'reference.period': 50 }),
+      }),
+      expect.objectContaining({
+        phase: 'entry',
+        params: expect.objectContaining({ 'reference.period': 200 }),
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        params: expect.objectContaining({ 'reference.period': 10 }),
+      }),
+    ]))
+    expect(projectedChecklist.entryRules).toEqual(expect.arrayContaining([
+      '收盘确认价格突破长期均线（50）时买入',
+      '收盘确认价格突破长期均线（200）时买入',
+    ]))
+    expect(projectedChecklist.exitRules).toEqual([
+      '收盘确认价格跌破短期均线（10）时卖出',
+    ])
+  })
+
+  it('rebuilds semantic state from updated checklist without retaining stale locked state-gate triggers', () => {
+    const currentSemanticState = buildLockedBollingerSemanticState({
+      families: ['single-leg', 'state-gated'],
+      triggers: [
+        {
+          id: 'entry-bollinger-upper',
+          key: 'bollinger.touch_upper',
+          phase: 'entry',
+          params: {
+            indicator: 'bollinger',
+            period: 20,
+            stdDev: 2,
+            confirmationMode: 'close_confirm',
+          },
+          sideScope: 'short',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'regime-gate-range',
+          key: 'market.regime',
+          phase: 'gate',
+          params: {
+            value: 'range',
+            mode: 'hard_gate',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+    })
+
+    const checklist = completeChecklist({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['K线收盘后确认突破布林带(20,2)上轨时做空'],
+      exitRules: ['价格回到布林带中轨(MA20)时平空'],
+      stateGates: {
+        marketRegime: 'trend',
+      },
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+      },
+    })
+
+    const mergedSemanticState = (service as any).mergeChecklistIntoSemanticState(currentSemanticState, checklist)
+
+    expect(mergedSemanticState.triggers.filter((trigger: any) => trigger.phase === 'gate')).toEqual([
+      expect.objectContaining({
+        key: 'market.regime',
+        params: expect.objectContaining({ value: 'trend' }),
+      }),
+    ])
+    expect(mergedSemanticState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'market.regime',
+        params: expect.objectContaining({ value: 'range' }),
+      }),
+    ]))
   })
 
   it('stays in drafting when planner says logicReady is false even with a detailed message', async () => {
@@ -1774,6 +2354,281 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).toContain('突破按收盘确认还是盘中触发')
   })
 
+  it('does not regress to checklist-derived generic summary after locking MA semantics', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-semantic-mainline',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        entryRules: ['满足入场条件后开仓'],
+        exitRules: ['满足出场条件后平仓'],
+        riskRules: {
+          marketType: 'perp',
+          positionPct: 10,
+        },
+      },
+      semanticState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [
+          {
+            id: 'entry-ma',
+            key: 'indicator.above',
+            phase: 'entry',
+            params: {
+              indicator: 'ma',
+              referenceRole: 'long_term',
+              'reference.period': 50,
+              confirmationMode: 'close_confirm',
+            },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          },
+          {
+            id: 'exit-ma',
+            key: 'indicator.below',
+            phase: 'exit',
+            params: {
+              indicator: 'ma',
+              referenceRole: 'short_term',
+              'reference.period': 20,
+              confirmationMode: 'close_confirm',
+            },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: {
+          mode: 'fixed_ratio',
+          value: 10,
+          positionMode: 'long_only',
+          status: 'locked',
+          source: 'user_explicit',
+        },
+        contextSlots: {
+          exchange: {
+            slotKey: 'exchange',
+            fieldPath: 'contextSlots.exchange',
+            status: 'locked',
+            priority: 'context',
+            questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+            affectsExecution: true,
+            value: 'okx',
+          },
+          symbol: {
+            slotKey: 'symbol',
+            fieldPath: 'contextSlots.symbol',
+            status: 'locked',
+            priority: 'context',
+            questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+            affectsExecution: true,
+            value: 'BTCUSDT',
+          },
+          marketType: {
+            slotKey: 'marketType',
+            fieldPath: 'contextSlots.marketType',
+            status: 'locked',
+            priority: 'context',
+            questionHint: '请确认市场类型（现货或合约/perp）。',
+            affectsExecution: true,
+            value: 'perp',
+          },
+          timeframe: {
+            slotKey: 'timeframe',
+            fieldPath: 'contextSlots.timeframe',
+            status: 'open',
+            priority: 'context',
+            questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+            affectsExecution: true,
+          },
+        },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'executionContext.timeframe',
+            reason: 'missing_timeframe',
+            field: 'timeframe',
+            blocking: true,
+            question: '请确认策略主周期（例如 15m 或 1h）。',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+        logic: {
+          riskRules: {
+            exchange: 'okx',
+          },
+        },
+      }),
+    })
+
+    const result = await service.continueSession('s-semantic-mainline', {
+      userId: 'u1',
+      message: 'okx',
+    } as any)
+
+    expect(result.assistantPrompt).not.toContain('满足入场条件后开仓')
+    expect(result.assistantPrompt).not.toContain('满足出场条件后平仓')
+  })
+
+  it('keeps asking unresolved state-gate questions after trigger slots are partially closed', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-state-gate-open',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        entryRules: ['价格突破一条长期均线时买入'],
+        exitRules: ['跌破短期均线时卖出'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+          positionPct: 10,
+        },
+      },
+      semanticState: {
+        version: 1,
+        families: ['single-leg', 'state-gated'],
+        triggers: [
+          {
+            id: 'entry-ma',
+            key: 'indicator.above',
+            phase: 'entry',
+            params: {
+              indicator: 'ma',
+              referenceRole: 'long_term',
+            },
+            status: 'open',
+            source: 'user_explicit',
+            openSlots: [
+              {
+                slotKey: 'reference.period.entry',
+                fieldPath: 'triggers[0].params.reference.period',
+                status: 'open',
+                priority: 'core',
+                questionHint: '长期均线是多少？',
+                affectsExecution: true,
+              },
+            ],
+          },
+          {
+            id: 'regime-gate',
+            key: 'market.regime',
+            phase: 'gate',
+            params: {
+              value: 'range',
+              mode: 'observation_only',
+            },
+            status: 'open',
+            source: 'user_explicit',
+            openSlots: [
+              {
+                slotKey: 'regimeDefinition',
+                fieldPath: 'triggers[1].params.definition',
+                status: 'open',
+                priority: 'behavior',
+                questionHint: '震荡行情怎么判断？',
+                affectsExecution: true,
+              },
+            ],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: {
+          mode: 'fixed_ratio',
+          value: 10,
+          positionMode: 'long_only',
+          status: 'locked',
+          source: 'user_explicit',
+        },
+        contextSlots: {
+          exchange: null,
+          symbol: null,
+          marketType: null,
+          timeframe: null,
+        },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'semantic.reference.period.entry',
+            reason: 'missing_entry_rules',
+            field: 'entryRules',
+            blocking: true,
+            question: '长期均线是多少？',
+            status: 'pending',
+            slotKey: 'reference.period.entry',
+            fieldPath: 'triggers[0].params.reference.period',
+            slotId: JSON.stringify(['reference.period.entry', 'triggers[0].params.reference.period']),
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-state-gate-open', {
+      userId: 'u1',
+      message: 'MA50',
+    } as any)
+
+    expect(result.assistantPrompt).toContain('震荡行情怎么判断')
+  })
+
+  it('maps context semantic slots into execution-context clarification reasons', () => {
+    expect((service as any).buildSemanticClarificationItem({
+      slotKey: 'exchange',
+      fieldPath: 'contextSlots.exchange',
+      status: 'open',
+      priority: 'context',
+      questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+      affectsExecution: true,
+    })).toEqual(expect.objectContaining({
+      key: 'semantic.exchange',
+      reason: 'missing_exchange',
+      field: 'exchange',
+      question: '请确认交易所（binance / okx / hyperliquid）。',
+    }))
+
+    expect((service as any).buildSemanticClarificationItem({
+      slotKey: 'timeframe',
+      fieldPath: 'contextSlots.timeframe',
+      status: 'open',
+      priority: 'context',
+      questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+      affectsExecution: true,
+    })).toEqual(expect.objectContaining({
+      key: 'semantic.timeframe',
+      reason: 'missing_timeframe',
+      field: 'timeframe',
+      question: '请确认策略主周期（例如 15m 或 1h）。',
+    }))
+  })
+
   it('does not auto-bind freeform semantic answers when another clarification item is currently active', () => {
     const inferredAnswers = (service as any).inferFreeformSemanticClarificationAnswers(
       {
@@ -2048,13 +2903,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     } as ContinueCodegenSessionDto)
 
     expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('存在暂不支持的规则片段：根据主观判断入场')
-    expect(result.specDesc).toBeTruthy()
+    expect(result.assistantPrompt).toContain('未识别可编译入场规则')
     expect(mockRepo.updateSession).toHaveBeenCalledWith(
       's-clarification-normalization-blocked',
       expect.objectContaining({
         status: 'DRAFTING',
-        latestSpecDesc: expect.any(Object),
       }),
     )
   })
@@ -3174,11 +4027,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('DRAFTING')
+    expect(result.status).toBe('CHECKLIST_GATE')
     expect(mockRepo.updateSession).toHaveBeenCalledWith(
       's-exit-basis-sync',
       expect.objectContaining({
-        status: 'DRAFTING',
+        status: 'CHECKLIST_GATE',
         checklist: expect.objectContaining({
           exitRuleBases: {
             'exit-1': 'entry_avg_price',
@@ -3437,6 +4290,61 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockAi.chat).toHaveBeenCalledTimes(1)
   })
 
+  it('persists existing semanticState when confirmGenerate moves a checklist-gate session into GENERATING', async () => {
+    const persistedChecklist = completeChecklist({
+      entryRules: ['价格突破长期均线（50）时买入'],
+      exitRules: ['价格跌破短期均线（20）时卖出'],
+    })
+    const persistedSemanticState = buildLockedMaSemanticState()
+    mockRepo.findById.mockResolvedValue({
+      id: 's5-semantic-generate',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: persistedChecklist,
+      semanticState: persistedSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    const canonicalChecklist = (service as any).projectLegacyChecklistFromSemanticState(
+      persistedSemanticState,
+      persistedChecklist,
+    )
+    const reducedSemanticState = (service as any).mergeChecklistIntoSemanticState(
+      persistedSemanticState,
+      canonicalChecklist,
+    )
+    const finalChecklist = (service as any).projectLegacyChecklistFromSemanticState(
+      reducedSemanticState,
+      canonicalChecklist,
+    )
+
+    const result = await service.continueSession('s5-semantic-generate', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(finalChecklist, reducedSemanticState),
+    })
+
+    expect(result.status).toBe('GENERATING')
+    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith('s5-semantic-generate', expect.objectContaining({
+      status: 'GENERATING',
+      checklist: expect.objectContaining({
+        entryRules: ['收盘确认价格突破长期均线（50）时买入'],
+        exitRules: ['收盘确认价格跌破短期均线（20）时卖出'],
+      }),
+      semanticState: expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({
+            params: expect.objectContaining({
+              'reference.period': 50,
+              confirmationMode: 'close_confirm',
+            }),
+          }),
+        ]),
+      }),
+    }))
+  })
+
   it('publishes canonical snapshot, semantic view, and compiled artifacts after confirmGenerate', async () => {
     mockAi.chat
       .mockResolvedValueOnce({
@@ -3484,7 +4392,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest: started.canonicalDigest ?? undefined,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(completeChecklist({
+        entryRules: ['短均线上穿长均线（金叉）时做多'],
+        exitRules: ['短均线下穿长均线（死叉）时平多'],
+      })),
     })
 
     await waitForTerminalStatus('s5-compiled')
@@ -3550,6 +4461,574 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
     }))
     expect(mockAi.chat).toHaveBeenCalledTimes(1)
+  })
+
+  it('covers the MA golden case through the first startSession -> confirmGenerate path', async () => {
+    await startGoldenCase({
+      sessionId: 's-golden-ma-publish',
+      message: maGoldenCase.message,
+      plannerLogic: completeChecklist({
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['收盘确认价格突破长期均线（50）时买入'],
+        exitRules: ['收盘确认价格跌破短期均线（10）时卖出'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'spot',
+          positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
+        },
+      }),
+    })
+
+    const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    mockRepo.findById.mockResolvedValue({
+      id: 's-golden-ma-publish',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: createdSession.checklist,
+      semanticState: createdSession.semanticState,
+      clarificationState: createdSession.clarificationState,
+      constraintPack: createdSession.constraintPack,
+      strategyInstanceId: null,
+    })
+
+    const result = await service.continueSession('s-golden-ma-publish', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(createdSession.checklist, createdSession.semanticState),
+    })
+
+    expect(result.status).toBe('GENERATING')
+    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith('s-golden-ma-publish', expect.objectContaining({
+      checklist: expect.objectContaining({
+        entryRules: ['收盘确认价格突破长期均线（50）时买入'],
+        exitRules: ['收盘确认价格跌破短期均线（10）时卖出'],
+      }),
+      semanticState: expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({
+            key: 'indicator.above',
+            phase: 'entry',
+            params: expect.objectContaining({ 'reference.period': 50 }),
+          }),
+          expect.objectContaining({
+            key: 'indicator.below',
+            phase: 'exit',
+            params: expect.objectContaining({ 'reference.period': 10 }),
+          }),
+        ]),
+      }),
+    }))
+
+    await waitForTerminalStatus('s-golden-ma-publish')
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-golden-ma-publish', expect.objectContaining({
+      status: 'CONSISTENCY_FAILED',
+      rejectReason: expect.stringContaining('脚本缺少关键指标: sma'),
+    }))
+    expect(mockRepo.createVersion).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps semanticState and canonical digest aligned when a persisted MA trigger is replaced', async () => {
+    const currentSemanticState = buildLockedMaSemanticState({
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+          value: 'okx',
+        },
+        symbol: {
+          slotKey: 'symbol',
+          fieldPath: 'contextSlots.symbol',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+          affectsExecution: true,
+          value: 'BTCUSDT',
+        },
+        marketType: {
+          slotKey: 'marketType',
+          fieldPath: 'contextSlots.marketType',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认市场类型（现货或合约/perp）。',
+          affectsExecution: true,
+          value: 'spot',
+        },
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+          affectsExecution: true,
+          value: '15m',
+        },
+      },
+    })
+    const persistedChecklist = completeChecklist({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['收盘确认价格突破长期均线（50）时买入'],
+      exitRules: ['收盘确认价格跌破短期均线（20）时卖出'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'spot',
+        positionPct: 10,
+        stopLossPct: 5,
+        stopLossBasis: 'entry_avg_price',
+        takeProfitPct: 10,
+        takeProfitBasis: 'entry_avg_price',
+      },
+    })
+
+    mockRepo.findById.mockResolvedValueOnce({
+      id: 's-semantic-ma-replace',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: persistedChecklist,
+      semanticState: currentSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      strategyInstanceId: null,
+    })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '已更新为 MA200，请确认逻辑图。',
+        logic: completeChecklist({
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+          entryRules: ['收盘确认价格突破长期均线（200）时买入'],
+          exitRules: ['收盘确认价格跌破短期均线（20）时卖出'],
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'spot',
+            positionPct: 10,
+            stopLossPct: 5,
+            stopLossBasis: 'entry_avg_price',
+            takeProfitPct: 10,
+            takeProfitBasis: 'entry_avg_price',
+          },
+        }),
+      }),
+    })
+
+    const updated = await service.continueSession('s-semantic-ma-replace', {
+      userId: 'u1',
+      message: '把长期均线改成 MA200',
+    })
+
+    const checklistGateUpdate = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updated.status).toBe('CHECKLIST_GATE')
+    expect(checklistGateUpdate).toEqual(expect.objectContaining({
+      status: 'CHECKLIST_GATE',
+      checklist: expect.objectContaining({
+        entryRules: ['收盘确认价格突破长期均线（200）时买入'],
+        exitRules: ['收盘确认价格跌破短期均线（20）时卖出'],
+      }),
+      semanticState: expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({
+            key: 'indicator.above',
+            phase: 'entry',
+            params: expect.objectContaining({
+              'reference.period': 200,
+            }),
+          }),
+        ]),
+      }),
+    }))
+    expect(checklistGateUpdate.semanticState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        params: expect.objectContaining({
+          'reference.period': 50,
+        }),
+      }),
+    ]))
+    expect(updated.canonicalDigest).toEqual(checklistGateUpdate.latestSpecDesc?.canonicalDigest)
+    expect(updated.canonicalDigest).toEqual(
+      buildConfirmedCanonicalDigest(checklistGateUpdate.checklist, checklistGateUpdate.semanticState),
+    )
+  })
+
+  it('covers the Bollinger golden case through the first startSession -> confirmGenerate path', async () => {
+    mockRepo.createVersion.mockResolvedValue({ id: 'v-golden-bollinger' })
+
+    const started = await startGoldenCase({
+      sessionId: 's-golden-bollinger-publish',
+      message: bollingerGoldenCase.message,
+      plannerLogic: completeChecklist({
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['K线收盘后确认突破布林带(30,2.5)上轨时做空'],
+        exitRules: ['价格回到布林带中轨(MA30)时平空'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+          positionPct: 10,
+        },
+      }),
+    })
+
+    const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    mockRepo.findById.mockResolvedValue({
+      id: 's-golden-bollinger-publish',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: createdSession.checklist,
+      semanticState: createdSession.semanticState,
+      clarificationState: createdSession.clarificationState,
+      constraintPack: createdSession.constraintPack,
+      strategyInstanceId: null,
+    })
+
+    const result = await service.continueSession('s-golden-bollinger-publish', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: started.canonicalDigest ?? undefined,
+    })
+
+    expect(result.status).toBe('GENERATING')
+    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith('s-golden-bollinger-publish', expect.objectContaining({
+      checklist: expect.objectContaining({
+        entryRules: expect.any(Array),
+        exitRules: expect.any(Array),
+      }),
+      semanticState: expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({
+            phase: 'entry',
+          }),
+          expect.objectContaining({
+            key: 'bollinger.touch_middle',
+            phase: 'exit',
+          }),
+        ]),
+      }),
+      latestSpecDesc: expect.objectContaining({
+        rules: expect.arrayContaining([
+          expect.objectContaining({
+            phase: 'entry',
+          }),
+          expect.objectContaining({
+            phase: 'exit',
+            condition: expect.objectContaining({ key: 'bollinger.middle_revert' }),
+          }),
+        ]),
+      }),
+    }))
+
+    await waitForTerminalStatus('s-golden-bollinger-publish')
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-golden-bollinger-publish', expect.objectContaining({
+      status: 'PUBLISHED',
+    }))
+    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
+    expect(publishedSnapshot).toEqual(expect.objectContaining({
+      specSnapshot: expect.objectContaining({
+        indicators: expect.arrayContaining([
+          expect.objectContaining({ kind: 'bollingerBands' }),
+        ]),
+        rules: expect.arrayContaining([
+          expect.objectContaining({
+            phase: 'entry',
+            condition: expect.objectContaining({ key: 'bollinger.upper_break' }),
+          }),
+          expect.objectContaining({
+            phase: 'exit',
+            condition: expect.objectContaining({ key: 'bollinger.middle_revert' }),
+          }),
+        ]),
+      }),
+    }))
+  })
+
+  it('keeps updated Bollinger trigger semantics aligned through checklist gate and publication', async () => {
+    const persistedChecklist = completeChecklist({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['K线收盘后确认突破布林带(20,2)上轨时做空'],
+      exitRules: ['价格回到布林带中轨(MA20)时平空'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+      },
+    })
+
+    mockRepo.findById.mockResolvedValueOnce({
+      id: 's-semantic-bollinger-replace',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: persistedChecklist,
+      semanticState: buildLockedBollingerSemanticState(),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      strategyInstanceId: null,
+    })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '已更新为布林带(30,2.5)，请确认逻辑图。',
+        logic: completeChecklist({
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+          entryRules: ['K线收盘后确认突破布林带(30,2.5)上轨时做空'],
+          exitRules: ['价格回到布林带中轨(MA30)时平空'],
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'perp',
+            positionPct: 10,
+          },
+        }),
+      }),
+    })
+
+    const updated = await service.continueSession('s-semantic-bollinger-replace', {
+      userId: 'u1',
+      message: '把布林带改成 30 周期 2.5 倍标准差',
+    })
+
+    expect(updated.status).toBe('CHECKLIST_GATE')
+    const checklistGateUpdate = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updated.canonicalDigest).toEqual(
+      buildConfirmedCanonicalDigest(checklistGateUpdate.checklist, checklistGateUpdate.semanticState),
+    )
+    expect(checklistGateUpdate).toEqual(expect.objectContaining({
+      checklist: expect.objectContaining({
+        entryRules: ['K线收盘后确认突破布林带(30,2.5)上轨时做空'],
+        exitRules: ['价格回到布林带中轨(MA30)时平空'],
+      }),
+      semanticState: expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({
+            key: 'bollinger.touch_upper',
+            phase: 'entry',
+            params: expect.objectContaining({
+              period: 30,
+              stdDev: 2.5,
+            }),
+          }),
+          expect.objectContaining({
+            key: 'bollinger.touch_middle',
+            phase: 'exit',
+            params: expect.objectContaining({
+              period: 30,
+              stdDev: 2.5,
+            }),
+          }),
+        ]),
+      }),
+    }))
+    expect(checklistGateUpdate.semanticState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'bollinger.touch_upper',
+        phase: 'entry',
+        params: expect.objectContaining({
+          period: 20,
+          stdDev: 2,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_middle',
+        phase: 'exit',
+        params: expect.objectContaining({
+          period: 20,
+          stdDev: 2,
+        }),
+      }),
+    ]))
+
+    mockRepo.findById.mockResolvedValueOnce({
+      id: 's-semantic-bollinger-replace',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: checklistGateUpdate.checklist,
+      semanticState: checklistGateUpdate.semanticState,
+      clarificationState: checklistGateUpdate.clarificationState,
+      constraintPack: checklistGateUpdate.constraintPack,
+      strategyInstanceId: null,
+    })
+
+    const confirmed = await service.continueSession('s-semantic-bollinger-replace', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: updated.canonicalDigest ?? undefined,
+    })
+
+    expect(confirmed.status).toBe('GENERATING')
+    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith('s-semantic-bollinger-replace', expect.objectContaining({
+      checklist: expect.objectContaining({
+        entryRules: ['K线收盘后确认突破布林带(30,2.5)上轨时做空'],
+        exitRules: ['价格回到布林带中轨(MA30)时平空'],
+      }),
+      semanticState: expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({
+            key: 'bollinger.touch_upper',
+            params: expect.objectContaining({
+              period: 30,
+              stdDev: 2.5,
+            }),
+          }),
+        ]),
+      }),
+    }))
+
+    await waitForTerminalStatus('s-semantic-bollinger-replace')
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-semantic-bollinger-replace', expect.objectContaining({
+      status: 'PUBLISHED',
+    }))
+    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
+    expect(publishedSnapshot?.specSnapshot?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        condition: expect.objectContaining({ key: 'bollinger.upper_break' }),
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        condition: expect.objectContaining({ key: 'bollinger.middle_revert' }),
+      }),
+    ]))
+    expect(publishedSnapshot?.compiledIr?.signalCatalog?.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'UPPER_BAND', params: { period: 30, stdDev: 2.5 } }),
+      expect.objectContaining({ kind: 'MID_BAND', params: { period: 30, stdDev: 2.5 } }),
+    ]))
+  })
+
+  it('keeps state-gated semantic conditions aligned from checklist gate through publication', async () => {
+    const persistedChecklist = completeChecklist({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['满足入场条件后开仓'],
+      exitRules: ['满足出场条件后平仓'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+      },
+    })
+    const semanticState = buildLockedBollingerSemanticState({
+      families: ['single-leg', 'state-gated'],
+      triggers: [
+        {
+          id: 'entry-bollinger-upper',
+          key: 'bollinger.touch_upper',
+          phase: 'entry',
+          params: {
+            indicator: 'bollinger',
+            period: 20,
+            stdDev: 2,
+            confirmationMode: 'close_confirm',
+          },
+          sideScope: 'short',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'exit-bollinger-middle',
+          key: 'bollinger.touch_middle',
+          phase: 'exit',
+          params: {
+            indicator: 'bollinger',
+            period: 20,
+            stdDev: 2,
+            confirmationMode: 'close_confirm',
+          },
+          sideScope: 'short',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'regime-gate',
+          key: 'market.regime',
+          phase: 'gate',
+          params: {
+            value: 'range',
+            mode: 'hard_gate',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+    })
+
+    mockRepo.findById.mockResolvedValue({
+      id: 's-state-gate-publish',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: persistedChecklist,
+      semanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      strategyInstanceId: null,
+    })
+
+    const projectedChecklist = (service as any).projectLegacyChecklistFromSemanticState(semanticState, persistedChecklist)
+    const mergedSemanticState = (service as any).mergeChecklistIntoSemanticState(semanticState, projectedChecklist)
+    const canonicalChecklist = (service as any).projectLegacyChecklistFromSemanticState(mergedSemanticState, projectedChecklist)
+
+    const result = await service.continueSession('s-state-gate-publish', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(canonicalChecklist, mergedSemanticState),
+    })
+
+    expect(result.status).toBe('GENERATING')
+    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith('s-state-gate-publish', expect.objectContaining({
+      checklist: expect.objectContaining({
+        entryRules: ['K线收盘后确认突破布林带(20,2)上轨时做空'],
+        exitRules: ['价格回到布林带中轨(MA20)时平空'],
+        stateGates: expect.objectContaining({
+          marketRegime: 'range',
+        }),
+      }),
+    }))
+
+    await waitForTerminalStatus('s-state-gate-publish')
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-state-gate-publish', expect.objectContaining({
+      status: 'PUBLISHED',
+    }))
+    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
+    expect(publishedSnapshot?.specSnapshot?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        condition: expect.objectContaining({
+          kind: 'AND',
+          children: expect.arrayContaining([
+            expect.objectContaining({ key: 'bollinger.upper_break' }),
+            expect.objectContaining({ key: 'market.regime', value: 'range' }),
+          ]),
+        }),
+        metadata: expect.objectContaining({
+          normalized: expect.objectContaining({
+            gateKeys: expect.arrayContaining(['market.regime']),
+          }),
+        }),
+      }),
+    ]))
   })
 
   it('publishes bollinger strategy after confirmGenerate without reintroducing sma semantics', async () => {
@@ -3983,6 +5462,144 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s7', expect.objectContaining({
       status: 'PUBLISHED',
+    }))
+  })
+
+  it('persists updated semanticState when confirmGenerate closes a semantic slot before GENERATING', async () => {
+    const persistedChecklist = completeChecklist({
+      entryRules: ['价格突破长期均线时买入'],
+      exitRules: ['价格跌破短期均线（20）时卖出'],
+    })
+    const persistedSemanticState = buildLockedMaSemanticState({
+      triggers: [
+        {
+          id: 'entry-ma',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'long_term',
+            confirmationMode: 'close_confirm',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'reference.period.entry',
+              fieldPath: 'triggers[0].params.reference.period',
+              status: 'open',
+              priority: 'core',
+              questionHint: '长期均线是多少？',
+              affectsExecution: true,
+            },
+          ],
+        },
+        {
+          id: 'exit-ma',
+          key: 'indicator.below',
+          phase: 'exit',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'short_term',
+            'reference.period': 20,
+            confirmationMode: 'close_confirm',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+    })
+    mockRepo.findById.mockResolvedValue({
+      id: 's7-semantic-confirm-answer',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: persistedChecklist,
+      semanticState: persistedSemanticState,
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'semantic.reference.period.entry',
+            reason: 'missing_entry_rules',
+            field: 'entryRules',
+            blocking: true,
+            question: '长期均线是多少？',
+            status: 'pending',
+            slotId: JSON.stringify(['reference.period.entry', 'triggers[0].params.reference.period']),
+            slotKey: 'reference.period.entry',
+            fieldPath: 'triggers[0].params.reference.period',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValueOnce({
+      content: 'return "BUY"',
+    })
+    const answeredSemanticState = (service as any).applySemanticClarificationAnswers(
+      persistedSemanticState,
+      {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'semantic.reference.period.entry',
+            reason: 'missing_entry_rules',
+            field: 'entryRules',
+            blocking: true,
+            question: '长期均线是多少？',
+            status: 'pending',
+            slotId: JSON.stringify(['reference.period.entry', 'triggers[0].params.reference.period']),
+            slotKey: 'reference.period.entry',
+            fieldPath: 'triggers[0].params.reference.period',
+          },
+        ],
+      },
+      {
+        'semantic.reference.period.entry': 'MA50',
+      },
+    )
+    const canonicalChecklist = (service as any).projectLegacyChecklistFromSemanticState(
+      answeredSemanticState,
+      persistedChecklist,
+    )
+    const reducedSemanticState = (service as any).mergeChecklistIntoSemanticState(
+      answeredSemanticState,
+      canonicalChecklist,
+    )
+    const finalChecklist = (service as any).projectLegacyChecklistFromSemanticState(
+      reducedSemanticState,
+      canonicalChecklist,
+    )
+
+    const result = await service.continueSession('s7-semantic-confirm-answer', {
+      userId: 'u1',
+      message: '确认，直接生成代码',
+      clarificationAnswers: {
+        'semantic.reference.period.entry': 'MA50',
+      },
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(finalChecklist, reducedSemanticState),
+    })
+
+    expect(result.status).toBe('GENERATING')
+    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith('s7-semantic-confirm-answer', expect.objectContaining({
+      status: 'GENERATING',
+      checklist: expect.objectContaining({
+        entryRules: ['收盘确认价格突破长期均线（50）时买入'],
+        exitRules: ['收盘确认价格跌破短期均线（20）时卖出'],
+      }),
+      semanticState: expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({
+            status: 'locked',
+            params: expect.objectContaining({
+              'reference.period': 50,
+              confirmationMode: 'close_confirm',
+            }),
+          }),
+        ]),
+      }),
     }))
   })
 

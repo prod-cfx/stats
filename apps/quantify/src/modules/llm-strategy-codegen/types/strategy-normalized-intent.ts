@@ -1,3 +1,5 @@
+import type { SemanticPriority } from './semantic-state'
+
 export const NORMALIZED_INTENT_FAMILIES = [
   'single-leg',
   'grid.range_rebalance',
@@ -45,7 +47,7 @@ export interface UnresolvedSlot {
   fieldPath: string
   reason: 'missing_required_param' | 'missing_definition' | 'missing_relation' | 'missing_scope'
   questionHint: string
-  priority: 'core' | 'behavior' | 'risk' | 'context'
+  priority: SemanticPriority
   affectsExecution: boolean
   evidenceText?: string
 }

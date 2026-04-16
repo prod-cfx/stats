@@ -100,6 +100,11 @@ export class StrategyIntentNormalizerService {
         triggers.push(movingAverageBreakout)
         continue
       }
+      const bollinger = this.tryNormalizeBollinger(rule, phase)
+      if (bollinger) {
+        triggers.push(bollinger)
+        continue
+      }
       const unknownBreakout = this.tryNormalizeUnknownBreakoutConcept(rule, phase, triggers.length)
       if (unknownBreakout) {
         triggers.push(unknownBreakout)
@@ -108,11 +113,6 @@ export class StrategyIntentNormalizerService {
       const breakout = this.tryNormalizeBreakout(rule, phase)
       if (breakout) {
         triggers.push(breakout)
-        continue
-      }
-      const bollinger = this.tryNormalizeBollinger(rule, phase)
-      if (bollinger) {
-        triggers.push(bollinger)
         continue
       }
       const indicatorThreshold = this.tryNormalizeIndicatorThreshold(rule, phase)
@@ -216,13 +216,24 @@ export class StrategyIntentNormalizerService {
     if (!/布林|bollinger|上轨|下轨|中轨|upper|lower|middle/iu.test(rule)) {
       return null
     }
+    const bandMatch = rule.match(/布林带\s*[（(]\s*(\d{1,3})\s*[,，]\s*(\d+(?:\.\d+)?)\s*[)）]/u)
+    const middleMatch = rule.match(/中轨\s*\(?(?:MA|ma)\s*(\d{1,3})\)?/u)
+      ?? rule.match(/均线\s*(\d{1,3})/u)
+    const period = bandMatch?.[1]
+      ? Number(bandMatch[1])
+      : (middleMatch?.[1] ? Number(middleMatch[1]) : null)
+    const stdDev = bandMatch?.[2] ? Number(bandMatch[2]) : null
 
     if (/上轨|upper/i.test(normalized)) {
       return this.createClosedTrigger({
         key: 'bollinger.touch_upper',
         phase,
         sideScope: this.resolveSideScope(rule, phase) ?? (phase === 'entry' ? 'short' : 'both'),
-        params: { band: 'upper' },
+        params: {
+          band: 'upper',
+          ...(period !== null ? { period } : {}),
+          ...(stdDev !== null ? { stdDev } : {}),
+        },
         resolutionHints: { confirmation: this.resolveBollingerConfirmationHint(rule) },
       })
     }
@@ -232,7 +243,11 @@ export class StrategyIntentNormalizerService {
         key: 'bollinger.touch_lower',
         phase,
         sideScope: this.resolveSideScope(rule, phase) ?? 'long',
-        params: { band: 'lower' },
+        params: {
+          band: 'lower',
+          ...(period !== null ? { period } : {}),
+          ...(stdDev !== null ? { stdDev } : {}),
+        },
         resolutionHints: { confirmation: this.resolveBollingerConfirmationHint(rule) },
       })
     }
@@ -242,7 +257,11 @@ export class StrategyIntentNormalizerService {
         key: 'bollinger.touch_middle',
         phase,
         sideScope: this.resolveSideScope(rule, phase) ?? 'both',
-        params: { band: 'middle' },
+        params: {
+          band: 'middle',
+          ...(period !== null ? { period } : {}),
+          ...(stdDev !== null ? { stdDev } : {}),
+        },
         resolutionHints: { confirmation: this.resolveBollingerConfirmationHint(rule) },
       })
     }
