@@ -6,7 +6,11 @@ import { useCallback, useEffect, useState } from 'react'
 import { mapAccountStrategyDetailToRecord } from '@/components/account/ai-quant-strategy-api-adapter'
 import { AiQuantStrategyDetail } from '@/components/account/AiQuantStrategyDetail'
 import { fetchBacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
-import { createBacktestJob, formatBacktestJobFailure, getBacktestJob } from '@/components/ai-quant/backtest-job-client'
+import {
+  createBacktestJob,
+  formatBacktestJobFailure,
+  getBacktestJob,
+} from '@/components/ai-quant/backtest-job-client'
 import {
   BacktestPayloadBuilderError,
   buildBacktestPayload,
@@ -14,10 +18,7 @@ import {
 } from '@/components/ai-quant/backtest-payload-builder'
 import { checkBacktestSymbolSupport } from '@/components/ai-quant/backtest-symbol-support-client'
 import { useAuth } from '@/hooks/use-auth'
-import {
-  fetchAccountAiQuantStrategyDetail,
-  updateAccountAiQuantStrategyLeverage,
-} from '@/lib/api'
+import { fetchAccountAiQuantStrategyDetail, updateAccountAiQuantStrategyLeverage } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
 import {
   requiresRepublishForPublishedSnapshot,
@@ -27,7 +28,7 @@ import {
 } from '../../../../ai-quant/ai-quant-page-conversation'
 
 const BACKTEST_JOB_POLL_INTERVAL_MS = 1500
-const BACKTEST_JOB_TIMEOUT_MS = 60_000
+const BACKTEST_JOB_TIMEOUT_MS = 180_000
 
 interface StrategyDetailPageClientProps {
   lng: 'zh' | 'en'
@@ -93,7 +94,7 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
     setIsDetailLoading(true)
 
     void fetchAccountAiQuantStrategyDetail(id, session.userId)
-      .then((detail) => {
+      .then(detail => {
         if (cancelled) return
         setStrategy(mapAccountStrategyDetailToRecord(detail))
       })
@@ -121,12 +122,14 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
       if (!publishedSnapshotId) {
         throw new BacktestPayloadBuilderError('missing_published_snapshot')
       }
-      if (requiresRepublishForPublishedSnapshot({
-        publishedSnapshotId,
-        publishedSnapshotParamValues: strategy.publishedSnapshotParamValues ?? null,
-        publishedSnapshotCompatibilityMetadata: strategy.compatibilityMetadata ?? null,
-        editableParamValues: strategy.paramValues ?? {},
-      })) {
+      if (
+        requiresRepublishForPublishedSnapshot({
+          publishedSnapshotId,
+          publishedSnapshotParamValues: strategy.publishedSnapshotParamValues ?? null,
+          publishedSnapshotCompatibilityMetadata: strategy.compatibilityMetadata ?? null,
+          editableParamValues: strategy.paramValues ?? {},
+        })
+      ) {
         throw new ApiError('当前参数已脱离已发布快照，请重新发布后再回测。', 'REPUBLISH_REQUIRED')
       }
       const rawPublishedSnapshotMarketType = strategy.publishedSnapshotParamValues?.marketType
@@ -136,16 +139,19 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
           : null
       const publishedSnapshotStrategyConfig = strategy.publishedSnapshotParamValues
         ? {
-            exchange: typeof strategy.publishedSnapshotParamValues.exchange === 'string'
-              ? strategy.publishedSnapshotParamValues.exchange
-              : strategy.exchange,
-            symbol: typeof strategy.publishedSnapshotParamValues.symbol === 'string'
-              ? strategy.publishedSnapshotParamValues.symbol
-              : strategy.symbol,
+            exchange:
+              typeof strategy.publishedSnapshotParamValues.exchange === 'string'
+                ? strategy.publishedSnapshotParamValues.exchange
+                : strategy.exchange,
+            symbol:
+              typeof strategy.publishedSnapshotParamValues.symbol === 'string'
+                ? strategy.publishedSnapshotParamValues.symbol
+                : strategy.symbol,
             marketType: publishedSnapshotMarketType,
-            baseTimeframe: typeof strategy.publishedSnapshotParamValues.baseTimeframe === 'string'
-              ? strategy.publishedSnapshotParamValues.baseTimeframe
-              : strategy.timeframe,
+            baseTimeframe:
+              typeof strategy.publishedSnapshotParamValues.baseTimeframe === 'string'
+                ? strategy.publishedSnapshotParamValues.baseTimeframe
+                : strategy.timeframe,
             positionPct:
               typeof strategy.publishedSnapshotParamValues.positionPct === 'number'
                 ? strategy.publishedSnapshotParamValues.positionPct
@@ -153,14 +159,20 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
           }
         : null
       if (!publishedSnapshotStrategyConfig?.marketType) {
-        throw new ApiError('请先确认策略交易的是现货还是合约，然后再开始回测。', 'MARKET_TYPE_UNCONFIRMED')
+        throw new ApiError(
+          '请先确认策略交易的是现货还是合约，然后再开始回测。',
+          'MARKET_TYPE_UNCONFIRMED',
+        )
       }
       const effectiveInputs = resolveEffectivePublishedBacktestInputs({
         publishedSnapshotId,
         publishedSnapshotStrategyConfig,
       })
       if (!effectiveInputs) {
-        throw new ApiError('当前已发布快照缺少策略市场绑定真相，请重新发布后再回测。', 'PUBLISHED_SNAPSHOT_PARAMS_MISSING')
+        throw new ApiError(
+          '当前已发布快照缺少策略市场绑定真相，请重新发布后再回测。',
+          'PUBLISHED_SNAPSHOT_PARAMS_MISSING',
+        )
       }
       const { symbol, baseTimeframe, exchange, marketType } = effectiveInputs
       const executionConfig = resolveBacktestExecutionConfig(strategy.paramValues ?? {})
@@ -175,7 +187,8 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
         baseTimeframe,
         marketType,
         capabilities,
-        stateTimeframes: snapshotStateTimeframes.length > 0 ? snapshotStateTimeframes : [baseTimeframe],
+        stateTimeframes:
+          snapshotStateTimeframes.length > 0 ? snapshotStateTimeframes : [baseTimeframe],
         initialCash: executionConfig.initialCash,
         leverage: executionConfig.leverage,
         execution: {
@@ -212,7 +225,12 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
       }
 
       if (latestJob.status !== 'succeeded') {
-        throw new ApiError(formatBacktestJobFailure(latestJob), 'BACKTEST_FAILED', 409, latestJob.errorDetails)
+        throw new ApiError(
+          formatBacktestJobFailure(latestJob),
+          'BACKTEST_FAILED',
+          409,
+          latestJob.errorDetails,
+        )
       }
 
       const search = new URLSearchParams({
@@ -228,22 +246,25 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
     }
   }, [isBacktestRunning, lng, router, session, strategy])
 
-  const handleUpdateLeverage = useCallback(async (leverage: number) => {
-    if (!session?.userId || !strategy) return
-    setLeverageUpdateError(null)
-    setIsUpdatingLeverage(true)
-    try {
-      const detail = await updateAccountAiQuantStrategyLeverage(strategy.id, {
-        userId: session.userId,
-        leverage,
-      })
-      setStrategy(mapAccountStrategyDetailToRecord(detail))
-    } catch (error) {
-      setLeverageUpdateError(getBacktestErrorMessage(error))
-    } finally {
-      setIsUpdatingLeverage(false)
-    }
-  }, [session?.userId, strategy])
+  const handleUpdateLeverage = useCallback(
+    async (leverage: number) => {
+      if (!session?.userId || !strategy) return
+      setLeverageUpdateError(null)
+      setIsUpdatingLeverage(true)
+      try {
+        const detail = await updateAccountAiQuantStrategyLeverage(strategy.id, {
+          userId: session.userId,
+          leverage,
+        })
+        setStrategy(mapAccountStrategyDetailToRecord(detail))
+      } catch (error) {
+        setLeverageUpdateError(getBacktestErrorMessage(error))
+      } finally {
+        setIsUpdatingLeverage(false)
+      }
+    },
+    [session?.userId, strategy],
+  )
 
   if (isLoading || !session || isDetailLoading) {
     return <main className="mx-auto w-full max-w-[920px] flex-1 px-4 py-8 md:px-8" />
