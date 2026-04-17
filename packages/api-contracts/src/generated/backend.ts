@@ -162,7 +162,6 @@ const AccountAiQuantDeployRequestDto = z
     deployRequestId: z.string(),
     publishedSnapshotId: z.string(),
     exchangeAccountId: z.string().optional(),
-    strategyInstanceId: z.string().optional(),
     exchangeAccountName: z.string().optional(),
     leverage: z.number().optional(),
   })

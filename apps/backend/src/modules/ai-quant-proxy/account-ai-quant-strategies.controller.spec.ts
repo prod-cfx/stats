@@ -5,6 +5,7 @@ describe('accountAiQuantStrategiesController', () => {
     const service = {
       listAccountStrategies: jest.fn().mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 }),
       getAccountStrategyDetail: jest.fn().mockResolvedValue({ id: 'strategy-1' }),
+      getDeployResult: jest.fn().mockResolvedValue({ id: 'strategy-1', status: 'running' }),
       performAccountStrategyAction: jest.fn().mockResolvedValue({ id: 'strategy-1', status: 'running' }),
       deployAccountStrategy: jest.fn().mockResolvedValue({ id: 'strategy-1', status: 'draft' }),
       updateAccountStrategyExecutionLeverage: jest.fn().mockResolvedValue({ id: 'strategy-1', status: 'draft' }),
@@ -52,7 +53,6 @@ describe('accountAiQuantStrategiesController', () => {
       name: 'My Strategy',
       deployRequestId: 'deploy-req-1',
       publishedSnapshotId: 'snapshot-1',
-      strategyInstanceId: 'strategy-instance-1',
       exchangeAccountId: 'exchange-account-1',
       exchangeAccountName: 'Binance Testnet',
       leverage: 3,
@@ -62,7 +62,6 @@ describe('accountAiQuantStrategiesController', () => {
       name: 'My Strategy',
       deployRequestId: 'deploy-req-1',
       publishedSnapshotId: 'snapshot-1',
-      strategyInstanceId: 'strategy-instance-1',
       exchangeAccountId: 'exchange-account-1',
       exchangeAccountName: 'Binance Testnet',
       leverage: 3,

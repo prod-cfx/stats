@@ -69,6 +69,16 @@ export class QuantifyAiQuantClient {
     )
   }
 
+  async getDeployResult(deployRequestId: string, options: QuantifyRequestOptions & { userId: string }) {
+    return this.get(
+      `/account/ai-quant/strategies/deploy-requests/${encodeURIComponent(deployRequestId)}/result`,
+      {
+        ...options,
+        headers: buildUserHeaders(options.userId, options.headers?.authorization),
+      },
+    )
+  }
+
   async performAccountStrategyAction(
     strategyId: string,
     body: Record<string, unknown>,

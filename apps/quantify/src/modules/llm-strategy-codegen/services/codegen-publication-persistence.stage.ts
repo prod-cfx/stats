@@ -70,7 +70,7 @@ export class CodegenPublicationPersistenceStage {
     strategySummary: Record<string, unknown>
     scriptSummary: Record<string, unknown>
     lockedParams: Record<string, unknown>
-  }): Promise<{ snapshotId: string, consistencyReport: Record<string, unknown> }> {
+  }): Promise<{ snapshotId: string, snapshotHash: string, consistencyReport: Record<string, unknown> }> {
     return this.compiledPublicationGate.publish(input as any)
   }
 }

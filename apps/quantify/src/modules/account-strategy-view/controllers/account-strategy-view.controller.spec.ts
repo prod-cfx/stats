@@ -54,6 +54,18 @@ describe('accountStrategyViewController', () => {
     expect(service.getStrategyDetail).toHaveBeenCalledWith('caller-u1', 'inst-1')
   })
 
+  it('uses caller identity from authorization for deploy-result lookup', async () => {
+    const service = {
+      getDeployResult: jest.fn().mockResolvedValue({ id: 'inst-1' }),
+    }
+    const { controller, callerIdentityService } = createController(service)
+
+    await controller.deployResult('deploy-req-1', 'Bearer token', 'caller-u1')
+
+    expect(callerIdentityService.resolveCallerUserIdFromAuthorization).toHaveBeenCalledWith('Bearer token', 'caller-u1')
+    expect(service.getDeployResult).toHaveBeenCalledWith('caller-u1', 'deploy-req-1')
+  })
+
   it('injects caller userId into action dto', async () => {
     const service = {
       performAction: jest.fn().mockResolvedValue({ id: 'inst-1' }),

@@ -53,11 +53,6 @@ export class AccountStrategyDeployDto {
   @IsString()
   exchangeAccountId?: string
 
-  @ApiPropertyOptional({ description: '当前 AI 会话发布出的策略实例 ID' })
-  @IsOptional()
-  @IsString()
-  strategyInstanceId?: string
-
   @ApiPropertyOptional({ description: '部署模式（默认按账户网络自动推导）', enum: ['TESTNET', 'LIVE'] })
   @IsOptional()
   @IsIn(['TESTNET', 'LIVE'])

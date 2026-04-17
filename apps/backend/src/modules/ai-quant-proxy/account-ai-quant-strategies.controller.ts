@@ -73,7 +73,6 @@ export class AccountAiQuantStrategiesController {
       name: dto.name,
       deployRequestId: dto.deployRequestId,
       publishedSnapshotId: dto.publishedSnapshotId,
-      strategyInstanceId: dto.strategyInstanceId,
       exchangeAccountId: dto.exchangeAccountId,
       exchangeAccountName: dto.exchangeAccountName,
       leverage: dto.leverage,

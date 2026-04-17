@@ -99,11 +99,15 @@ export class CodegenConversationResponseMapperHelper {
     const backtestConfigDefaults = this.readRecord(snapshotRecord?.backtestConfigDefaults)
     const deploymentExecutionDefaults = this.readRecord(snapshotRecord?.deploymentExecutionDefaults)
     const deploymentExecutionConstraints = this.readRecord(snapshotRecord?.deploymentExecutionConstraints)
+    const strategyInstanceId = typeof snapshotRecord?.strategyInstanceId === 'string'
+      ? snapshotRecord.strategyInstanceId.trim()
+      : ''
 
     const missingStrategyConfig = !strategyConfig
     const missingBacktestConfigDefaults = !backtestConfigDefaults
     const missingDeploymentExecutionDefaults = !deploymentExecutionDefaults
     const missingDeploymentExecutionConstraints = !deploymentExecutionConstraints
+    const missingStrategyInstanceBinding = strategyInstanceId.length === 0
 
     return {
       publishedSnapshotStrategyConfig: strategyConfig,
@@ -112,16 +116,20 @@ export class CodegenConversationResponseMapperHelper {
       publishedSnapshotDeploymentExecutionConstraints: deploymentExecutionConstraints,
       publishedSnapshotCompatibilityMetadata: {
         isLegacySnapshot:
-          missingStrategyConfig
+          missingStrategyInstanceBinding
+          || missingStrategyConfig
           || missingBacktestConfigDefaults
           || missingDeploymentExecutionDefaults
           || missingDeploymentExecutionConstraints,
+        missingStrategyInstanceBinding,
+        missingStrategyConfig,
         missingBacktestConfigDefaults,
         missingDeploymentExecutionDefaults,
         missingDeploymentExecutionConstraints,
         requiresRepublishForBacktest: missingStrategyConfig || missingBacktestConfigDefaults,
         requiresRepublishForDeploy:
-          missingStrategyConfig
+          missingStrategyInstanceBinding
+          || missingStrategyConfig
           || missingDeploymentExecutionDefaults
           || missingDeploymentExecutionConstraints,
       },

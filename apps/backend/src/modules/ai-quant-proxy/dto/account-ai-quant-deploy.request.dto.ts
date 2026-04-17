@@ -25,11 +25,6 @@ export class AccountAiQuantDeployRequestDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()
-  strategyInstanceId?: string
-
-  @ApiPropertyOptional()
-  @IsOptional()
-  @IsString()
   exchangeAccountName?: string
 
   @ApiPropertyOptional({ description: 'Requested deployment leverage passthrough.' })

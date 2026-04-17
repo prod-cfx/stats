@@ -1,4 +1,5 @@
 import { Transactional } from '@nestjs-cls/transactional'
+import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Post, Query } from '@nestjs/common'
 import {
   ApiExtraModels,
   ApiHeader,
@@ -8,14 +9,13 @@ import {
   ApiTags,
   getSchemaPath,
 } from '@nestjs/swagger'
-import { Body, Controller, Delete, Get, Headers, HttpCode, Param, Post, Query } from '@nestjs/common'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { AccountStrategyActionDto } from '../dto/account-strategy-action.dto'
-import { AccountStrategyDetailResponseDto } from '../dto/account-strategy-detail.response.dto'
 import { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
+import { AccountStrategyDetailResponseDto } from '../dto/account-strategy-detail.response.dto'
 import { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
 import { AccountStrategyListQueryDto } from '../dto/account-strategy-list-query.dto'
 import { AccountStrategyUpdateExecutionLeverageDto } from '../dto/account-strategy-update-execution-leverage.dto'
-import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { AccountStrategyCallerIdentityService } from '../services/account-strategy-caller-identity.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
@@ -67,6 +67,20 @@ export class AccountStrategyViewController {
       ...query,
       userId,
     })
+  }
+
+  @Get('deploy-requests/:deployRequestId/result')
+  @ApiOperation({ summary: '按部署请求 ID 查询当前用户的 AI Quant 部署结果' })
+  @ApiHeader({ name: 'authorization', required: false })
+  @ApiHeader({ name: 'x-user-id', required: false })
+  @ApiOkResponse({ type: AccountStrategyDetailResponseDto })
+  async deployResult(
+    @Param('deployRequestId') deployRequestId: string,
+    @Headers('authorization') authorization?: string,
+    @Headers('x-user-id') forwardedUserId?: string,
+  ): Promise<AccountStrategyDetailResponseDto | null> {
+    const userId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
+    return this.service.getDeployResult(userId, deployRequestId)
   }
 
   @Get(':id')

@@ -292,6 +292,48 @@ export class CodegenSessionsRepository {
     })
   }
 
+  async bindPublishedSnapshotToStrategyInstance(input: {
+    strategyInstanceId: string
+    userId: string
+    publishedSnapshotId: string
+    snapshotHash: string
+    strategyTemplateId?: string | null
+  }): Promise<void> {
+    const existing = await this.txHost.tx.strategyInstance.findFirst({
+      where: {
+        id: input.strategyInstanceId,
+        createdBy: input.userId,
+      },
+      select: {
+        id: true,
+        metadata: true,
+      },
+    })
+
+    if (!existing) {
+      throw new Error(`published source strategy instance not found: ${input.strategyInstanceId}`)
+    }
+
+    const metadata = existing.metadata && typeof existing.metadata === 'object' && !Array.isArray(existing.metadata)
+      ? existing.metadata as Record<string, unknown>
+      : {}
+
+    await this.txHost.tx.strategyInstance.update({
+      where: { id: input.strategyInstanceId },
+      data: {
+        updatedBy: input.userId,
+        metadata: {
+          ...metadata,
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: input.publishedSnapshotId,
+          snapshotHash: input.snapshotHash,
+          sourceStrategyInstanceId: input.strategyInstanceId,
+          ...(input.strategyTemplateId ? { sourceStrategyTemplateId: input.strategyTemplateId } : {}),
+        } as Prisma.InputJsonValue,
+      },
+    })
+  }
+
   private async runWithTransactionStartRetry<T>(operation: () => Promise<T>): Promise<T> {
     let lastError: unknown
 

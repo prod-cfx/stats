@@ -8,7 +8,7 @@ function createTxHost(tx: any) {
 }
 
 describe('accountStrategyViewRepository.deployStrategyForUser', () => {
-  it('reuses the published AI draft instance when strategyInstanceId is provided', async () => {
+  it('reuses the published AI draft instance from snapshot binding', async () => {
     const tx = {
       user: {
         findUnique: jest.fn().mockResolvedValue({ id: 'user-1' }),
@@ -74,7 +74,6 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         sourceStrategyTemplateId: 'template-1',
       },
       exchangeAccountId: 'exchange-account-1',
-      strategyInstanceId: 'strategy-instance-1',
     })
 
     expect(result.strategyInstanceId).toBe('strategy-instance-1')
@@ -143,6 +142,11 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
             timeframe: '5m',
             positionPct: 10,
           },
+          metadata: {
+            bindingSource: 'PUBLISHED_SNAPSHOT',
+            publishedSnapshotId: 'snapshot-1',
+            snapshotHash: 'snapshot-hash-1',
+          },
         }),
         update: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
         create: jest.fn(),
@@ -167,7 +171,13 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       timeframe: '5m',
       positionPct: 10,
       exchangeAccountId: 'exchange-account-1',
-      strategyInstanceId: 'strategy-instance-1',
+      publishedSnapshotBinding: {
+        bindingSource: 'PUBLISHED_SNAPSHOT',
+        publishedSnapshotId: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        sourceStrategyInstanceId: 'strategy-instance-1',
+        sourceStrategyTemplateId: 'template-1',
+      },
     })
 
     expect(tx.strategyInstance.update).toHaveBeenCalledWith(expect.objectContaining({
@@ -257,7 +267,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
     expect(tx.strategyTemplate.create).not.toHaveBeenCalled()
   })
 
-  it('rejects deploy when neither explicit nor snapshot-derived strategy instance is available', async () => {
+  it('rejects deploy when snapshot-derived strategy instance is unavailable', async () => {
     const tx = {
       user: {
         findUnique: jest.fn().mockResolvedValue({ id: 'user-1' }),
@@ -332,6 +342,11 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
             timeframe: '5m',
             positionPct: 10,
           },
+          metadata: {
+            bindingSource: 'PUBLISHED_SNAPSHOT',
+            publishedSnapshotId: 'snapshot-created',
+            snapshotHash: 'snapshot-hash-created',
+          },
         }),
         update: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
         create: jest.fn(),
@@ -356,7 +371,13 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       timeframe: '5m',
       positionPct: 10,
       exchangeAccountId: 'exchange-account-1',
-      strategyInstanceId: 'strategy-instance-1',
+      publishedSnapshotBinding: {
+        bindingSource: 'PUBLISHED_SNAPSHOT',
+        publishedSnapshotId: 'snapshot-created',
+        snapshotHash: 'snapshot-hash-created',
+        sourceStrategyInstanceId: 'strategy-instance-1',
+        sourceStrategyTemplateId: 'template-1',
+      },
       initialBalanceQuote: 60000,
       accountBalanceQuote: 58000,
     } as any)
@@ -574,13 +595,59 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         sourceStrategyTemplateId: 'template-1',
       },
       exchangeAccountId: 'exchange-account-1',
-      strategyInstanceId: 'strategy-instance-1',
     })).rejects.toMatchObject({
       message: 'account_strategy.deploy_strategy_instance_not_found',
     })
 
     expect(tx.strategyInstance.update).not.toHaveBeenCalled()
     expect(tx.strategyInstance.create).not.toHaveBeenCalled()
+  })
+})
+
+describe('accountStrategyViewRepository.deleteStrategyForUser', () => {
+  it('clears published session and snapshot bindings before deleting the strategy instance', async () => {
+    const tx = {
+      strategyInstance: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
+        delete: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
+      },
+      llmStrategyCodegenSession: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      publishedStrategySnapshot: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    }
+
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
+
+    await repo.deleteStrategyForUser('user-1', 'strategy-instance-1')
+
+    expect(tx.llmStrategyCodegenSession.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        strategyInstanceId: 'strategy-instance-1',
+      },
+      data: {
+        strategyInstanceId: null,
+      },
+    })
+    expect(tx.publishedStrategySnapshot.updateMany).toHaveBeenCalledWith({
+      where: {
+        strategyInstanceId: 'strategy-instance-1',
+        session: {
+          userId: 'user-1',
+        },
+      },
+      data: {
+        strategyInstanceId: null,
+      },
+    })
+    expect(tx.strategyInstance.delete).toHaveBeenCalledWith({
+      where: {
+        id: 'strategy-instance-1',
+      },
+    })
   })
 })
 

@@ -561,7 +561,6 @@ const AccountStrategyDeployDto = z
     timeframe: z.string().optional(),
     positionPct: z.number().optional(),
     exchangeAccountId: z.string().optional(),
-    strategyInstanceId: z.string().optional(),
     mode: z.enum(['TESTNET', 'LIVE']).optional(),
     userPerOrderMaxQuote: z.number().optional(),
     userDailyMaxQuote: z.number().optional(),
