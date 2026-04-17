@@ -228,27 +228,19 @@ function toDateTimeLocalValue(value: unknown): string {
   if (Number.isNaN(date.getTime())) return ''
 
   const pad = (n: number) => String(n).padStart(2, '0')
-  const y = date.getUTCFullYear()
-  const m = pad(date.getUTCMonth() + 1)
-  const d = pad(date.getUTCDate())
-  const hh = pad(date.getUTCHours())
-  const mm = pad(date.getUTCMinutes())
+  const y = date.getFullYear()
+  const m = pad(date.getMonth() + 1)
+  const d = pad(date.getDate())
+  const hh = pad(date.getHours())
+  const mm = pad(date.getMinutes())
   return `${y}-${m}-${d}T${hh}:${mm}`
 }
 
 function fromDateTimeLocalValue(value: string): string {
   if (!value.trim()) return ''
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value.trim())
-  if (!match) return ''
-  const [, year, month, day, hour, minute] = match
-  const date = new Date(Date.UTC(
-    Number(year),
-    Number(month) - 1,
-    Number(day),
-    Number(hour),
-    Number(minute),
-  ))
-  return Number.isNaN(date.getTime()) ? '' : date.toISOString()
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return date.toISOString()
 }
 
 export function QuantChatPanel({

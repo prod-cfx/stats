@@ -186,11 +186,13 @@ describe('QuantChatPanel range settings', () => {
     expect(calls.some(([key, value]) => key === 'backtestRangePreset' && value === 'CUSTOM')).toBe(
       true,
     )
+    const expectedStart = new Date('2026-01-01T00:00').toISOString()
+    const expectedEnd = new Date('2026-02-01T00:00').toISOString()
     expect(
-      calls.some(([key, value]) => key === 'backtestStart' && value === '2026-01-01T00:00:00.000Z'),
+      calls.some(([key, value]) => key === 'backtestStart' && value === expectedStart),
     ).toBe(true)
     expect(
-      calls.some(([key, value]) => key === 'backtestEnd' && value === '2026-02-01T00:00:00.000Z'),
+      calls.some(([key, value]) => key === 'backtestEnd' && value === expectedEnd),
     ).toBe(true)
   })
 
