@@ -1234,7 +1234,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('确认逻辑图')
+    expect(result.assistantPrompt).toContain('缺少方向约束')
+    expect(result.assistantPrompt).toContain('突破上轨时是只做空，还是也允许做多？')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       checklist: expect.objectContaining({
         symbols: ['BTCUSDT'],

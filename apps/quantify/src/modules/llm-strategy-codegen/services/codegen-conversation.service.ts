@@ -2126,12 +2126,7 @@ export class CodegenConversationService {
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
-    const semanticReadyForChecklistGate = this.findNextOpenSemanticSlot(args.semanticState) === null
-    const missingFields = this.resolveActiveGateMissingFields(
-      projectedChecklist,
-      semanticReadyForChecklistGate,
-      compileability,
-    )
+    const missingFields = this.resolveChecklistMissingFields(projectedChecklist)
     const decision = this.buildStrategyDecision({
       checklist: projectedChecklist,
       clarification,
