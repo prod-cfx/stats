@@ -1,4 +1,4 @@
-import { buildSemanticSlotId } from '../../types/semantic-state'
+import { buildSemanticSlotId, type SemanticState } from '../../types/semantic-state'
 import { SemanticStateReducerService } from '../semantic-state-reducer.service'
 
 describe('SemanticStateReducerService', () => {
@@ -293,7 +293,7 @@ describe('SemanticStateReducerService', () => {
   })
 
   it('reduces grid slots into trigger params and keeps remaining grid slots open', () => {
-    const baseState = {
+    const baseState: SemanticState = {
       version: 1,
       families: ['grid.range_rebalance'],
       triggers: [
