@@ -22,11 +22,13 @@ export class StrategyIntentNormalizerService {
     const entryNormalization = this.normalizeRuleAtoms(checklist.entryRules, checklist.entryRuleBases, 'entry')
     const exitNormalization = this.normalizeRuleAtoms(checklist.exitRules, checklist.exitRuleBases, 'exit')
     const stateHints = this.normalizeStateHints(checklist)
+    const grid = this.normalizeGrid(checklist)
+    const gridTriggers = this.buildGridTriggerAtoms(checklist, grid)
     const triggers = this.sortTriggers([
       ...entryNormalization.triggers,
       ...exitNormalization.triggers,
+      ...gridTriggers,
     ])
-    const grid = this.normalizeGrid(checklist)
     const risk = this.normalizeRisk(checklist.riskRules)
     const actions = this.normalizeActions(triggers, grid)
     const families = this.resolveFamilies(triggers, grid)
@@ -565,6 +567,9 @@ export class StrategyIntentNormalizerService {
         stepPct: explicitGrid.stepPct,
         sideMode: explicitGrid.sideMode ?? 'bidirectional',
         recycle: true,
+        ...(explicitGrid.breakoutAction === 'pause' || explicitGrid.breakoutAction === 'continue'
+          ? { breakoutAction: explicitGrid.breakoutAction }
+          : {}),
       }
     }
 
@@ -573,7 +578,7 @@ export class StrategyIntentNormalizerService {
 
     const rangeMatch = combinedText.match(/(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)/u)
     const perMilleMatch = combinedText.match(/千分之\s*(\d+(?:\.\d+)?)/u)
-    const percentMatch = combinedText.match(/(?:步长|每格)\s*(\d+(?:\.\d+)?)\s*%/u)
+    const percentMatch = combinedText.match(/(?:步长|每一格|每格)\s*(\d+(?:\.\d+)?)\s*%/u)
     if (!rangeMatch?.[1] || !rangeMatch[2]) return null
 
     const stepPct = percentMatch?.[1]
@@ -590,7 +595,134 @@ export class StrategyIntentNormalizerService {
       stepPct,
       sideMode: this.resolveGridSideMode(combinedText),
       recycle: true,
+      breakoutAction: /突破.{0,8}(停|暂停|停止)/u.test(combinedText) ? 'pause' : 'continue',
     }
+  }
+
+  private buildGridTriggerAtoms(
+    checklist: ChecklistPayload,
+    grid: NormalizedGridIntent | null,
+  ): NormalizedTriggerAtom[] {
+    const combinedText = [...(checklist.entryRules ?? []), ...(checklist.exitRules ?? [])].join(' ')
+    const structuredGrid = checklist.grid
+    const breakoutAction = structuredGrid?.breakoutAction
+      ?? (/突破.{0,8}(停|暂停|停止)/u.test(combinedText) ? 'pause' : 'continue')
+    if (grid) {
+      return [this.createClosedTrigger({
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope: grid.sideMode === 'bidirectional'
+          ? 'both'
+          : (grid.sideMode === 'short_only' ? 'short' : 'long'),
+        params: {
+          rangeLower: grid.range.lower,
+          rangeUpper: grid.range.upper,
+          stepPct: grid.stepPct,
+          sideMode: grid.sideMode,
+          recycle: grid.recycle,
+          breakoutAction,
+        },
+      })]
+    }
+
+    if (structuredGrid) {
+      const unresolvedSlots: UnresolvedSlot[] = []
+      if (typeof structuredGrid.lower !== 'number' || !Number.isFinite(structuredGrid.lower)) {
+        unresolvedSlots.push({
+          slotKey: 'grid.range.lower',
+          fieldPath: 'triggers[grid].params.rangeLower',
+          reason: 'missing_required_param',
+          questionHint: '请确认网格区间下界。',
+          priority: 'core',
+          affectsExecution: true,
+          ...(combinedText ? { evidenceText: combinedText } : {}),
+        })
+      }
+      if (typeof structuredGrid.upper !== 'number' || !Number.isFinite(structuredGrid.upper)) {
+        unresolvedSlots.push({
+          slotKey: 'grid.range.upper',
+          fieldPath: 'triggers[grid].params.rangeUpper',
+          reason: 'missing_required_param',
+          questionHint: '请确认网格区间上界。',
+          priority: 'core',
+          affectsExecution: true,
+          ...(combinedText ? { evidenceText: combinedText } : {}),
+        })
+      }
+      if (typeof structuredGrid.stepPct !== 'number' || !Number.isFinite(structuredGrid.stepPct)) {
+        unresolvedSlots.push({
+          slotKey: 'grid.stepPct',
+          fieldPath: 'triggers[grid].params.stepPct',
+          reason: 'missing_required_param',
+          questionHint: '请确认每格步长（例如 0.5%）。',
+          priority: 'core',
+          affectsExecution: true,
+          ...(combinedText ? { evidenceText: combinedText } : {}),
+        })
+      }
+
+      return [this.createOpenTrigger({
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope: structuredGrid.sideMode === 'short_only'
+          ? 'short'
+          : (structuredGrid.sideMode === 'long_only' ? 'long' : 'both'),
+        params: {
+          ...(typeof structuredGrid.lower === 'number' && Number.isFinite(structuredGrid.lower)
+            ? { rangeLower: structuredGrid.lower }
+            : {}),
+          ...(typeof structuredGrid.upper === 'number' && Number.isFinite(structuredGrid.upper)
+            ? { rangeUpper: structuredGrid.upper }
+            : {}),
+          ...(typeof structuredGrid.stepPct === 'number' && Number.isFinite(structuredGrid.stepPct)
+            ? { stepPct: structuredGrid.stepPct }
+            : {}),
+          ...(structuredGrid.sideMode ? { sideMode: structuredGrid.sideMode } : {}),
+          breakoutAction,
+        },
+      }, unresolvedSlots, combinedText || JSON.stringify(structuredGrid))]
+    }
+
+    if (!/网格|grid/iu.test(combinedText)) {
+      return []
+    }
+
+    return [this.createOpenTrigger({
+      key: 'grid.range_rebalance',
+      phase: 'entry',
+      sideScope: 'both',
+      params: {
+        breakoutAction,
+      },
+    }, [
+      {
+        slotKey: 'grid.range.lower',
+        fieldPath: 'triggers[grid].params.rangeLower',
+        reason: 'missing_required_param',
+        questionHint: '请确认网格区间下界。',
+        priority: 'core',
+        affectsExecution: true,
+        evidenceText: combinedText,
+      },
+      {
+        slotKey: 'grid.range.upper',
+        fieldPath: 'triggers[grid].params.rangeUpper',
+        reason: 'missing_required_param',
+        questionHint: '请确认网格区间上界。',
+        priority: 'core',
+        affectsExecution: true,
+        evidenceText: combinedText,
+      },
+      {
+        slotKey: 'grid.stepPct',
+        fieldPath: 'triggers[grid].params.stepPct',
+        reason: 'missing_required_param',
+        questionHint: '请确认每格步长（例如 0.5%）。',
+        priority: 'core',
+        affectsExecution: true,
+        evidenceText: combinedText,
+      },
+    ], combinedText)]
   }
 
   private normalizeRisk(riskRules: Record<string, unknown> | undefined): NormalizedRiskAtom[] {

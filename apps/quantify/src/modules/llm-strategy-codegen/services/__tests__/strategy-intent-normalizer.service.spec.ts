@@ -99,23 +99,29 @@ describe('strategyIntentNormalizerService', () => {
       expect.objectContaining({
         key: 'bollinger.touch_upper',
         phase: 'entry',
+        closureStatus: 'closed',
         sideScope: 'short',
-        params: { band: 'upper' },
+        params: expect.objectContaining({ band: 'upper' }),
         resolutionHints: { confirmation: 'ambiguous_touch_or_close_confirm' },
+        unresolvedSlots: [],
       }),
       expect.objectContaining({
         key: 'bollinger.touch_lower',
         phase: 'entry',
+        closureStatus: 'closed',
         sideScope: 'long',
-        params: { band: 'lower' },
+        params: expect.objectContaining({ band: 'lower' }),
         resolutionHints: { confirmation: 'ambiguous_touch_or_close_confirm' },
+        unresolvedSlots: [],
       }),
       expect.objectContaining({
         key: 'bollinger.touch_middle',
         phase: 'exit',
+        closureStatus: 'closed',
         sideScope: 'long',
-        params: { band: 'middle' },
+        params: expect.objectContaining({ band: 'middle' }),
         resolutionHints: { confirmation: 'ambiguous_touch_or_close_confirm' },
+        unresolvedSlots: [],
       }),
     ]))
     expect(result.normalizedIntent.position).toEqual({
@@ -164,6 +170,135 @@ describe('strategyIntentNormalizerService', () => {
     ]))
   })
 
+  it('emits a closed grid trigger atom from checklist.grid even without explicit grid wording in rules', () => {
+    const result = service.normalize({
+      market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp', timeframe: '15m' },
+      grid: {
+        lower: 60000,
+        upper: 80000,
+        stepPct: 0.5,
+        sideMode: 'bidirectional',
+        breakoutAction: 'pause',
+      },
+      riskRules: { positionPct: 10 },
+    } as any)
+
+    expect(result.blocked).toBe(false)
+    expect(result.normalizedIntent.grid).toEqual(expect.objectContaining({
+      family: GRID_STRATEGY_FAMILY,
+      range: { lower: 60000, upper: 80000 },
+      stepPct: 0.5,
+      sideMode: 'bidirectional',
+      breakoutAction: 'pause',
+    }))
+    expect(result.normalizedIntent.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        closureStatus: 'closed',
+        sideScope: 'both',
+        params: expect.objectContaining({
+          rangeLower: 60000,
+          rangeUpper: 80000,
+          stepPct: 0.5,
+          sideMode: 'bidirectional',
+          breakoutAction: 'pause',
+        }),
+      }),
+    ]))
+  })
+
+  it('recognizes short-only grid wording and 每一格 percent syntax', () => {
+    const result = service.normalize({
+      market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp', timeframe: '15m' },
+      entryRules: ['做空网格，区间 60000-80000，每一格 1%，行情突破区间就停掉'],
+      riskRules: { positionPct: 10 },
+    } as any)
+
+    expect(result.blocked).toBe(false)
+    expect(result.normalizedIntent.grid).toEqual(expect.objectContaining({
+      range: { lower: 60000, upper: 80000 },
+      stepPct: 1,
+      sideMode: 'short_only',
+      breakoutAction: 'pause',
+    }))
+    expect(result.normalizedIntent.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope: 'short',
+        closureStatus: 'closed',
+        params: expect.objectContaining({
+          stepPct: 1,
+          sideMode: 'short_only',
+          breakoutAction: 'pause',
+        }),
+      }),
+    ]))
+  })
+
+  it('keeps vague grid semantics as an open grid atom instead of dropping them into unresolved fallback', () => {
+    const result = service.normalize({
+      market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp' },
+      entryRules: ['帮我做一个网格策略，在一个区间内自动买卖，行情突破区间就停掉'],
+      riskRules: { positionPct: 10 },
+    } as any)
+
+    expect(result.blocked).toBe(false)
+    expect(result.normalizedIntent.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        closureStatus: 'open',
+        unresolvedSlots: expect.arrayContaining([
+          expect.objectContaining({ slotKey: 'grid.range.lower' }),
+          expect.objectContaining({ slotKey: 'grid.range.upper' }),
+          expect.objectContaining({ slotKey: 'grid.stepPct' }),
+        ]),
+      }),
+    ]))
+    expect(result.normalizedIntent.unresolved).toEqual([])
+  })
+
+  it('emits an open grid trigger atom from partial checklist.grid without explicit grid wording in rules', () => {
+    const result = service.normalize({
+      market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp', timeframe: '15m' },
+      grid: {
+        lower: 60000,
+        sideMode: 'long_only',
+      },
+      riskRules: { positionPct: 10 },
+    } as any)
+
+    expect(result.blocked).toBe(false)
+    expect(result.normalizedIntent.grid).toBeNull()
+    expect(result.normalizedIntent.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        closureStatus: 'open',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          rangeLower: 60000,
+          sideMode: 'long_only',
+          breakoutAction: 'continue',
+        }),
+        unresolvedSlots: expect.arrayContaining([
+          expect.objectContaining({ slotKey: 'grid.range.upper' }),
+          expect.objectContaining({ slotKey: 'grid.stepPct' }),
+        ]),
+      }),
+    ]))
+    expect(result.normalizedIntent.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        unresolvedSlots: expect.arrayContaining([
+          expect.objectContaining({ slotKey: 'grid.range.lower' }),
+        ]),
+      }),
+    ]))
+  })
+
   it('keeps the live price-change strategy closed', () => {
     const result = service.normalize({
       market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'spot', timeframe: '3m' },
@@ -201,15 +336,21 @@ describe('strategyIntentNormalizerService', () => {
     expect(result.normalizedIntent.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'indicator.above',
+        phase: 'entry',
         closureStatus: 'open',
         unresolvedSlots: expect.arrayContaining([
-          expect.objectContaining({ slotKey: 'reference.period' }),
-          expect.objectContaining({ slotKey: 'confirmationMode' }),
+          expect.objectContaining({ slotKey: 'reference.period.entry' }),
+          expect.objectContaining({ slotKey: 'confirmationMode.entry' }),
         ]),
       }),
       expect.objectContaining({
         key: 'indicator.below',
+        phase: 'exit',
         closureStatus: 'open',
+        unresolvedSlots: expect.arrayContaining([
+          expect.objectContaining({ slotKey: 'reference.period.exit' }),
+          expect.objectContaining({ slotKey: 'confirmationMode.exit' }),
+        ]),
       }),
     ]))
     expect(result.normalizedIntent.stateHints).toEqual(expect.arrayContaining([

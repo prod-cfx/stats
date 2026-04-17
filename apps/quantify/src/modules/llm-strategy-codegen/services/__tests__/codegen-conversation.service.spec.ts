@@ -25,6 +25,7 @@ import { StrategyCompileabilityDecisionService } from '../strategy-compileabilit
 import { StrategyConsistencyService } from '../strategy-consistency.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
 import { StrategySummaryObservationService } from '../strategy-summary-observation.service'
+import { buildSemanticSlotId } from '../../types/semantic-state'
 import { bollingerGoldenCase, maGoldenCase } from './fixtures/semantic-state-golden-cases'
 
 jest.mock('../../repositories/published-strategy-snapshots.repository', () => ({
@@ -295,6 +296,28 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     updatedAt: '2026-04-15T10:00:00.000Z',
     ...overrides,
   })
+  const buildPersistedSessionSnapshot = (
+    sessionId: string,
+    createdSession: Record<string, unknown>,
+    overrides: Record<string, unknown> = {},
+  ) => ({
+    id: sessionId,
+    userId: 'u1',
+    status: 'DRAFTING',
+    checklist: {},
+    semanticState: null,
+    clarificationState: null,
+    constraintPack: {},
+    latestDraftCode: null,
+    latestSpecDesc: null,
+    consistencyReport: null,
+    rejectReason: null,
+    strategyInstanceId: null,
+    createdAt: new Date('2026-04-16T09:00:00.000Z'),
+    updatedAt: new Date('2026-04-16T09:00:00.000Z'),
+    ...createdSession,
+    ...overrides,
+  })
   const withRequiredMarketContext = completeChecklist
   const startGoldenCase = async (args: {
     sessionId: string
@@ -431,6 +454,34 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(summary).toContain('入场：3m 内下跌 1% 买入')
     expect(summary).toContain('出场：15m 内上涨 2% 卖出')
     expect(summary).not.toContain('出场：3m 内上涨 2% 卖出')
+  })
+
+  it('seeds checklist.grid for vague grid prompts even before numeric params are known', () => {
+    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+
+    const checklist = (service as any).inferChecklistFromMessage(
+      '在okx交易所合约市场的BTCUSDT 15m上，帮我做一个网格策略，在一个区间里挂单，行情突破区间就停掉',
+    )
+
+    expect(checklist.grid).toEqual(expect.objectContaining({
+      sideMode: 'bidirectional',
+    }))
+  })
+
+  it('extracts short grid wording, 每一格 percent syntax, and breakout pause semantics from freeform input', () => {
+    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+
+    const checklist = (service as any).inferChecklistFromMessage(
+      '在okx交易所合约市场的BTCUSDT 15m上，做空网格，区间 60000-80000，每一格 1%，行情突破区间就停掉',
+    )
+
+    expect(checklist.grid).toEqual(expect.objectContaining({
+      lower: 60000,
+      upper: 80000,
+      stepPct: 1,
+      sideMode: 'short_only',
+      breakoutAction: 'pause',
+    }))
   })
 
   it('starts in drafting and asks next key question from llm planner', async () => {
@@ -1272,6 +1323,386 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('请确认止盈规则')
   })
 
+  it('asks for missing grid slots instead of generic entry rules when the user only gave vague grid semantics', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-grid-vague-start' })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        logic: {},
+        assistantPrompt: '逻辑图仍未完整，请继续补充。',
+      }),
+    })
+
+    const result = await service.startSession({
+      userId: 'u-1',
+      initialMessage: '在okx交易所合约市场的BTCUSDT 15m上，帮我做一个网格策略，在一个区间内自动买卖，行情突破区间就停掉',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('请确认网格区间下界')
+    expect(result.assistantPrompt).not.toContain('请确认交易所')
+    expect(result.clarificationState?.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'grid_params_missing',
+        key: 'grid.stepPct',
+      }),
+      expect.objectContaining({
+        reason: 'grid_params_missing',
+        key: 'grid.range.lower',
+        status: 'pending',
+      }),
+    ]))
+  })
+
+  it('writes grid clarification answers back into checklist.grid on the fallback checklist path', () => {
+    const nextChecklist = (service as any).applyClarificationAnswers(
+      {
+        grid: {
+          upper: 80000,
+          stepPct: 0.5,
+          sideMode: 'bidirectional',
+        },
+      },
+      {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'grid.range.lower',
+            reason: 'grid_params_missing',
+            field: 'grid.lower',
+            blocking: true,
+            question: '请确认网格区间下界。',
+            status: 'pending',
+          },
+        ],
+      },
+      {
+        'grid.range.lower': '60000',
+      },
+    )
+
+    expect(nextChecklist).toEqual(expect.objectContaining({
+      grid: {
+        lower: 60000,
+        upper: 80000,
+        stepPct: 0.5,
+        sideMode: 'bidirectional',
+      },
+    }))
+  })
+
+  it('writes legacy grid.lower answers back into checklist.grid on the fallback checklist path', () => {
+    const nextChecklist = (service as any).applyClarificationAnswers(
+      {
+        grid: {
+          upper: 80000,
+          stepPct: 0.5,
+          sideMode: 'bidirectional',
+        },
+      },
+      {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'grid.lower',
+            reason: 'grid_params_missing',
+            field: 'grid.lower',
+            blocking: true,
+            question: '请确认网格区间下界。',
+            status: 'pending',
+          },
+        ],
+      },
+      {
+        'grid.lower': '60000',
+      },
+    )
+
+    expect(nextChecklist).toEqual(expect.objectContaining({
+      grid: {
+        lower: 60000,
+        upper: 80000,
+        stepPct: 0.5,
+        sideMode: 'bidirectional',
+      },
+    }))
+  })
+
+  it('applies legacy grid.lower answers into the semantic snapshot path', () => {
+    const nextSemanticState = (service as any).applySemanticClarificationAnswers(
+      {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [
+          {
+            id: 'grid-entry',
+            key: 'grid.range_rebalance',
+            phase: 'entry',
+            params: {
+              sideMode: 'bidirectional',
+            },
+            status: 'open',
+            source: 'user_explicit',
+            openSlots: [
+              {
+                slotKey: 'grid.lower',
+                fieldPath: 'triggers[0].params.rangeLower',
+                status: 'open',
+                priority: 'core',
+                questionHint: '请确认网格区间下界。',
+                affectsExecution: true,
+              },
+            ],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-16T10:00:00.000Z',
+      },
+      {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'grid.lower',
+            reason: 'grid_params_missing',
+            field: 'grid.lower',
+            blocking: true,
+            question: '请确认网格区间下界。',
+            status: 'pending',
+            slotId: buildSemanticSlotId({
+              slotKey: 'grid.lower',
+              fieldPath: 'triggers[0].params.rangeLower',
+            }),
+            slotKey: 'grid.lower',
+            fieldPath: 'triggers[0].params.rangeLower',
+          },
+        ],
+        summary: '已识别网格策略，但还缺少区间下界。',
+      },
+      {
+        'grid.lower': '60000',
+      },
+    )
+
+    expect(nextSemanticState).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          params: expect.objectContaining({
+            rangeLower: 60000,
+          }),
+          openSlots: expect.arrayContaining([
+            expect.objectContaining({
+              slotKey: 'grid.lower',
+              status: 'locked',
+              value: 60000,
+            }),
+          ]),
+        }),
+      ]),
+    }))
+  })
+
+  it('keeps persisted grid clarification items valid when they use canonical grid.range field names', () => {
+    const clarificationState = (service as any).readClarificationState({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        {
+          key: 'grid.range.lower',
+          reason: 'grid_params_missing',
+          field: 'grid.range.lower',
+          blocking: true,
+          question: '请确认网格区间下界。',
+          status: 'pending',
+          slotKey: 'grid.range.lower',
+          fieldPath: 'triggers[0].params.rangeLower',
+        },
+        {
+          key: 'grid.range.upper',
+          reason: 'grid_params_missing',
+          field: 'grid.range.upper',
+          blocking: true,
+          question: '请确认网格区间上界。',
+          status: 'pending',
+          slotKey: 'grid.range.upper',
+          fieldPath: 'triggers[0].params.rangeUpper',
+        },
+      ],
+      summary: '已识别网格策略，但还缺少区间上下界。',
+    })
+
+    expect(clarificationState).toEqual(expect.objectContaining({
+      status: 'NEEDS_CLARIFICATION',
+      summary: '已识别网格策略，但还缺少区间上下界。',
+      items: [
+        expect.objectContaining({
+          key: 'grid.range.lower',
+          field: 'grid.range.lower',
+          slotKey: 'grid.range.lower',
+        }),
+        expect.objectContaining({
+          key: 'grid.range.upper',
+          field: 'grid.range.upper',
+          slotKey: 'grid.range.upper',
+        }),
+      ],
+    }))
+  })
+
+  it('accepts canonical grid sideMode clarification answers on the fallback checklist path', () => {
+    const nextChecklist = (service as any).applyClarificationAnswers(
+      {
+        grid: {
+          lower: 60000,
+          upper: 80000,
+          stepPct: 0.5,
+        },
+      },
+      {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'grid.sideMode',
+            reason: 'missing_side_scope',
+            field: 'grid.sideMode',
+            blocking: true,
+            question: '请确认网格方向（双向 / 只做多 / 只做空）。',
+            status: 'pending',
+            allowedAnswers: ['bidirectional', 'long_only', 'short_only'],
+          },
+        ],
+      },
+      {
+        'grid.sideMode': 'bidirectional',
+      },
+    )
+
+    expect(nextChecklist).toEqual(expect.objectContaining({
+      grid: {
+        lower: 60000,
+        upper: 80000,
+        stepPct: 0.5,
+        sideMode: 'bidirectional',
+      },
+    }))
+  })
+
+  it('accepts natural short-grid sideMode clarification answers on the fallback checklist path', () => {
+    const nextChecklist = (service as any).applyClarificationAnswers(
+      {
+        grid: {
+          lower: 60000,
+          upper: 80000,
+          stepPct: 0.5,
+        },
+      },
+      {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'grid.sideMode',
+            reason: 'grid_params_missing',
+            field: 'grid.sideMode',
+            blocking: true,
+            question: '请确认网格方向（双向 / 只做多 / 只做空）。',
+            status: 'pending',
+          },
+        ],
+      },
+      {
+        'grid.sideMode': '空头网格',
+      },
+    )
+
+    expect(nextChecklist).toEqual(expect.objectContaining({
+      grid: expect.objectContaining({
+        sideMode: 'short_only',
+      }),
+    }))
+  })
+
+  it('accepts canonical grid sideMode clarification answers on the semantic snapshot path', () => {
+    const nextSemanticState = (service as any).applySemanticClarificationAnswers(
+      {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [
+          {
+            id: 'grid-entry',
+            key: 'grid.range_rebalance',
+            phase: 'entry',
+            params: {
+              rangeLower: 60000,
+              rangeUpper: 80000,
+              stepPct: 0.5,
+            },
+            status: 'open',
+            source: 'user_explicit',
+            openSlots: [
+              {
+                slotKey: 'grid.sideMode',
+                fieldPath: 'triggers[0].params.sideMode',
+                status: 'open',
+                priority: 'core',
+                questionHint: '请确认网格方向（双向 / 只做多 / 只做空）。',
+                affectsExecution: true,
+              },
+            ],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-16T10:00:00.000Z',
+      },
+      {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'grid.sideMode',
+            reason: 'grid_params_missing',
+            field: 'grid.sideMode',
+            blocking: true,
+            question: '请确认网格方向（双向 / 只做多 / 只做空）。',
+            status: 'pending',
+            slotId: buildSemanticSlotId({
+              slotKey: 'grid.sideMode',
+              fieldPath: 'triggers[0].params.sideMode',
+            }),
+            slotKey: 'grid.sideMode',
+            fieldPath: 'triggers[0].params.sideMode',
+          },
+        ],
+        summary: '已识别网格策略，但还缺少方向。',
+      },
+      {
+        'grid.sideMode': 'bidirectional',
+      },
+    )
+
+    expect(nextSemanticState).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          params: expect.objectContaining({
+            sideMode: 'bidirectional',
+          }),
+          openSlots: expect.arrayContaining([
+            expect.objectContaining({
+              slotKey: 'grid.sideMode',
+              status: 'locked',
+              value: 'bidirectional',
+            }),
+          ]),
+        }),
+      ]),
+    }))
+  })
+
   it('surfaces inferred default risk bases for confirmation before compile', async () => {
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
@@ -1684,6 +2115,87 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         status: 'pending',
       }),
     ]))
+  })
+
+  it('suppresses legacy grid fallback items when equivalent semantic grid slots are active', () => {
+    const result = (service as any).mergeSemanticClarificationState({
+      version: 1,
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-entry',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: {
+            sideMode: 'bidirectional',
+            breakoutAction: 'pause',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'grid.range.lower',
+              fieldPath: 'triggers[0].params.rangeLower',
+              status: 'open',
+              priority: 'core',
+              questionHint: '请确认网格区间下界。',
+              affectsExecution: true,
+            },
+            {
+              slotKey: 'grid.stepPct',
+              fieldPath: 'triggers[0].params.stepPct',
+              status: 'open',
+              priority: 'core',
+              questionHint: '请确认每格步长（例如 0.5%）。',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    }, {
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        {
+          key: 'grid.lower',
+          reason: 'grid_params_missing',
+          field: 'grid.lower',
+          blocking: true,
+          question: '请确认网格区间下界。',
+          status: 'pending',
+        },
+        {
+          key: 'grid.stepPct',
+          reason: 'grid_params_missing',
+          field: 'grid.stepPct',
+          blocking: true,
+          question: '请确认每格步长（例如 0.5%）。',
+          status: 'pending',
+        },
+      ],
+      summary: '已识别网格策略，但还缺少参数。',
+    })
+
+    expect(result.items).toEqual([
+      expect.objectContaining({
+        key: 'grid.range.lower',
+        question: '请确认网格区间下界。',
+      }),
+      expect.objectContaining({
+        key: 'grid.stepPct',
+        question: '请确认每格步长（例如 0.5%）。',
+      }),
+    ])
   })
 
   it('keeps newly added semantic triggers when a persisted semanticState session gains another rule', () => {
@@ -2465,6 +2977,500 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).toContain('以下内容是系统推断')
     expect(result.assistantPrompt).toContain('risk.stopLossBasis')
     expect(result.assistantPrompt).toContain('risk.takeProfitBasis')
+  })
+
+  it('keeps previously identified grid semantics when continueSession only adds timeframe', async () => {
+    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
+      's-grid-timeframe-followup',
+      {
+        checklist: {
+          symbols: ['BTCUSDT'],
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'perp',
+            positionPct: 10,
+          },
+          market: {
+            exchange: 'okx',
+            marketType: 'perp',
+          },
+        },
+        semanticState: {
+          version: 1,
+          families: ['grid.range_rebalance'],
+          triggers: [
+            {
+              id: 'grid-entry',
+              key: 'grid.range_rebalance',
+              phase: 'entry',
+              sideScope: 'both',
+              params: {
+                rangeLower: 60000,
+                rangeUpper: 80000,
+                stepPct: 0.5,
+                sideMode: 'bidirectional',
+                recycle: true,
+                breakoutAction: 'pause',
+              },
+              status: 'locked',
+              source: 'user_explicit',
+              openSlots: [],
+            },
+          ],
+          actions: [],
+          risk: [],
+          position: {
+            mode: 'fixed_ratio',
+            value: 0.1,
+            positionMode: 'long_only',
+            status: 'locked',
+            source: 'user_explicit',
+          },
+          contextSlots: {
+            exchange: {
+              slotKey: 'exchange',
+              fieldPath: 'contextSlots.exchange',
+              value: 'okx',
+              status: 'locked',
+              priority: 'context',
+              questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+              affectsExecution: true,
+            },
+            symbol: {
+              slotKey: 'symbol',
+              fieldPath: 'contextSlots.symbol',
+              value: 'BTCUSDT',
+              status: 'locked',
+              priority: 'context',
+              questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+              affectsExecution: true,
+            },
+            marketType: {
+              slotKey: 'marketType',
+              fieldPath: 'contextSlots.marketType',
+              value: 'perp',
+              status: 'locked',
+              priority: 'context',
+              questionHint: '请确认市场类型（现货或合约/perp）。',
+              affectsExecution: true,
+            },
+            timeframe: {
+              slotKey: 'timeframe',
+              fieldPath: 'contextSlots.timeframe',
+              status: 'open',
+              priority: 'context',
+              questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+              affectsExecution: true,
+            },
+          },
+          normalizationNotes: [],
+          updatedAt: '2026-04-16T10:00:00.000Z',
+        },
+        clarificationState: {
+          status: 'NEEDS_CLARIFICATION',
+          items: [
+            {
+              key: 'semantic.timeframe',
+              reason: 'missing_timeframe',
+              field: 'timeframe',
+              blocking: true,
+              question: '请确认策略主周期（例如 15m 或 1h）。',
+              status: 'pending',
+              slotId: buildSemanticSlotId({
+                slotKey: 'timeframe',
+                fieldPath: 'contextSlots.timeframe',
+              }),
+              slotKey: 'timeframe',
+              fieldPath: 'contextSlots.timeframe',
+            },
+          ],
+          summary: '已识别 grid.range_rebalance，但还缺少主周期。',
+        },
+      },
+    ))
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        logic: {},
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-grid-timeframe-followup', {
+      userId: 'u1',
+      message: '15m',
+      clarificationAnswers: {
+        'semantic.timeframe': '15m',
+      },
+    } as any)
+
+    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的入场规则')
+    expect(result.assistantPrompt).not.toContain('请确认网格区间下界')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-grid-timeframe-followup',
+      expect.objectContaining({
+        checklist: expect.objectContaining({
+          grid: expect.objectContaining({
+            lower: 60000,
+            upper: 80000,
+            stepPct: 0.5,
+            sideMode: 'bidirectional',
+            breakoutAction: 'pause',
+          }),
+          timeframes: ['15m'],
+        }),
+        semanticState: expect.objectContaining({
+          triggers: expect.arrayContaining([
+            expect.objectContaining({
+              key: 'grid.range_rebalance',
+              status: 'locked',
+              params: expect.objectContaining({
+                rangeLower: 60000,
+                rangeUpper: 80000,
+                stepPct: 0.5,
+                breakoutAction: 'pause',
+              }),
+            }),
+          ]),
+          contextSlots: expect.objectContaining({
+            timeframe: expect.objectContaining({
+              value: '15m',
+              status: 'locked',
+            }),
+          }),
+        }),
+      }),
+    )
+    expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({
+        reason: 'missing_entry_rules',
+      }),
+      expect.objectContaining({
+        reason: 'grid_params_missing',
+      }),
+      expect.objectContaining({
+        reason: 'missing_timeframe',
+        status: 'pending',
+      }),
+    ]))
+  })
+
+  it('does not regress the exact two-turn grid reproduction into missing exit rules after answering 15m', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-grid-exact-repro' })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        logic: {},
+        assistantPrompt: '逻辑图仍未完整，请继续补充。',
+      }),
+    })
+
+    const startResult = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在ok交易所 我想弄个网格策略 btc永续合约 在60000-80000的区间 每一格千分之5 不断低买高卖 单笔百分10资金',
+    })
+
+    const createdSession = buildPersistedSessionSnapshot(
+      's-grid-exact-repro',
+      mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>,
+      {
+        clarificationState: startResult.clarificationState,
+        latestSpecDesc: startResult.specDesc ?? null,
+        semanticState: (mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>).semanticState,
+      },
+    )
+
+    mockRepo.findById.mockResolvedValue({
+      ...createdSession,
+      updatedAt: '2026-04-17T10:00:00.000Z',
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        logic: {},
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-grid-exact-repro', {
+      userId: 'u1',
+      message: '15m',
+      clarificationAnswers: {
+        'semantic.timeframe': '15m',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的出场规则')
+    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的入场规则')
+    expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({ reason: 'missing_exit_rules' }),
+      expect.objectContaining({ reason: 'missing_entry_rules' }),
+    ]))
+  })
+
+  it('does not regress the exact two-turn grid reproduction when timeframe is answered through executionContext.timeframe', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-grid-exact-repro-execution-context' })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        logic: {},
+        assistantPrompt: '逻辑图仍未完整，请继续补充。',
+      }),
+    })
+
+    const startResult = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在ok交易所 我想弄个网格策略 btc永续合约 在60000-80000的区间 每一格千分之5 不断低买高卖 单笔百分10资金',
+    })
+
+    const createdSession = buildPersistedSessionSnapshot(
+      's-grid-exact-repro-execution-context',
+      mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>,
+      {
+        clarificationState: {
+          ...(startResult.clarificationState as unknown as Record<string, unknown>),
+          items: [
+            {
+              key: 'executionContext.timeframe',
+              reason: 'missing_timeframe',
+              field: 'timeframe',
+              blocking: true,
+              question: '请确认策略主周期（例如 15m 或 1h）。',
+              status: 'pending',
+            },
+          ],
+        },
+        latestSpecDesc: startResult.specDesc ?? null,
+        semanticState: (mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>).semanticState,
+      },
+    )
+
+    mockRepo.findById.mockResolvedValue({
+      ...createdSession,
+      updatedAt: '2026-04-17T10:00:00.000Z',
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        logic: {},
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-grid-exact-repro-execution-context', {
+      userId: 'u1',
+      message: '15m',
+      clarificationAnswers: {
+        'executionContext.timeframe': '15m',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的出场规则')
+    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的入场规则')
+    expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({ reason: 'missing_exit_rules' }),
+      expect.objectContaining({ reason: 'missing_entry_rules' }),
+    ]))
+  })
+
+  it('applies grid clarification answers into semantic snapshot and advances to the next grid slot', async () => {
+    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
+      's-grid-clarification-followup',
+      {
+        checklist: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'perp',
+            positionPct: 10,
+          },
+          market: {
+            exchange: 'okx',
+            marketType: 'perp',
+            defaultTimeframe: '15m',
+          },
+        },
+        semanticState: {
+          version: 1,
+          families: ['grid.range_rebalance'],
+          triggers: [
+            {
+              id: 'grid-entry',
+              key: 'grid.range_rebalance',
+              phase: 'entry',
+              sideScope: 'both',
+              params: {
+                rangeUpper: 80000,
+                breakoutAction: 'pause',
+                sideMode: 'bidirectional',
+              },
+              status: 'open',
+              source: 'user_explicit',
+              openSlots: [
+                {
+                  slotKey: 'grid.range.lower',
+                  fieldPath: 'triggers[0].params.rangeLower',
+                  status: 'open',
+                  priority: 'core',
+                  questionHint: '请确认网格区间下界。',
+                  affectsExecution: true,
+                },
+                {
+                  slotKey: 'grid.stepPct',
+                  fieldPath: 'triggers[0].params.stepPct',
+                  status: 'open',
+                  priority: 'core',
+                  questionHint: '请确认每格步长（例如 0.5%）。',
+                  affectsExecution: true,
+                },
+              ],
+            },
+          ],
+          actions: [],
+          risk: [],
+          position: {
+            mode: 'fixed_ratio',
+            value: 0.1,
+            positionMode: 'long_short',
+            status: 'locked',
+            source: 'user_explicit',
+          },
+          contextSlots: {
+            exchange: {
+              slotKey: 'exchange',
+              fieldPath: 'contextSlots.exchange',
+              value: 'okx',
+              status: 'locked',
+              priority: 'context',
+              questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+              affectsExecution: true,
+            },
+            symbol: {
+              slotKey: 'symbol',
+              fieldPath: 'contextSlots.symbol',
+              value: 'BTCUSDT',
+              status: 'locked',
+              priority: 'context',
+              questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+              affectsExecution: true,
+            },
+            marketType: {
+              slotKey: 'marketType',
+              fieldPath: 'contextSlots.marketType',
+              value: 'perp',
+              status: 'locked',
+              priority: 'context',
+              questionHint: '请确认市场类型（现货或合约/perp）。',
+              affectsExecution: true,
+            },
+            timeframe: {
+              slotKey: 'timeframe',
+              fieldPath: 'contextSlots.timeframe',
+              value: '15m',
+              status: 'locked',
+              priority: 'context',
+              questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+              affectsExecution: true,
+            },
+          },
+          normalizationNotes: [],
+          updatedAt: '2026-04-16T10:00:00.000Z',
+        },
+        clarificationState: {
+          status: 'NEEDS_CLARIFICATION',
+          items: [
+            {
+              key: 'grid.range.lower',
+              reason: 'grid_params_missing',
+              field: 'grid.lower',
+              blocking: true,
+              question: '请确认网格区间下界。',
+              status: 'pending',
+              slotId: buildSemanticSlotId({
+                slotKey: 'grid.range.lower',
+                fieldPath: 'triggers[0].params.rangeLower',
+              }),
+              slotKey: 'grid.range.lower',
+              fieldPath: 'triggers[0].params.rangeLower',
+            },
+            {
+              key: 'grid.stepPct',
+              reason: 'grid_params_missing',
+              field: 'grid.stepPct',
+              blocking: true,
+              question: '请确认每格步长（例如 0.5%）。',
+              status: 'pending',
+              slotId: buildSemanticSlotId({
+                slotKey: 'grid.stepPct',
+                fieldPath: 'triggers[0].params.stepPct',
+              }),
+              slotKey: 'grid.stepPct',
+              fieldPath: 'triggers[0].params.stepPct',
+            },
+          ],
+          summary: '已识别网格策略，但还缺少区间下界和步长。',
+        },
+      },
+    ))
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-grid-clarification-followup', {
+      userId: 'u1',
+      message: '60000',
+      clarificationAnswers: {
+        'grid.range.lower': '60000',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-grid-clarification-followup',
+      expect.objectContaining({
+        checklist: expect.objectContaining({
+          grid: expect.objectContaining({
+            lower: 60000,
+            upper: 80000,
+            sideMode: 'bidirectional',
+          }),
+        }),
+        semanticState: expect.objectContaining({
+          triggers: expect.arrayContaining([
+            expect.objectContaining({
+              key: 'grid.range_rebalance',
+              params: expect.objectContaining({
+                rangeLower: 60000,
+                rangeUpper: 80000,
+                sideMode: 'bidirectional',
+              }),
+              openSlots: expect.arrayContaining([
+                expect.objectContaining({
+                  slotKey: 'grid.range.lower',
+                  status: 'locked',
+                  value: 60000,
+                }),
+                expect.objectContaining({
+                  slotKey: 'grid.stepPct',
+                  status: 'open',
+                }),
+              ]),
+            }),
+          ]),
+        }),
+      }),
+    )
+    expect(result.assistantPrompt).toContain('请确认每格步长')
+    expect(result.assistantPrompt).not.toContain('请确认网格区间下界')
   })
 
   it('applies semantic period clarification answers so the same moving-average question does not repeat', async () => {

@@ -48,6 +48,8 @@ export const STRATEGY_CLARIFICATION_FIELDS = [
   'stateGates.trendDirection',
   'stateGates.marketRegime',
   'stateGates.volatilityState',
+  'grid.range.lower',
+  'grid.range.upper',
   'grid.lower',
   'grid.upper',
   'grid.stepPct',

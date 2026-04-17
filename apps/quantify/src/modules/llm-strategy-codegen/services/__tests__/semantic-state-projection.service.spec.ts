@@ -142,4 +142,52 @@ describe('SemanticStateProjectionService', () => {
 
     expect(result.nextQuestion).toBe('突破按收盘确认还是盘中触发？')
   })
+
+  it('builds a grid summary and surfaces the next open grid slot before context slots', () => {
+    const view = service.buildClarificationView({
+      version: 1,
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid-entry',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: { breakoutAction: 'pause' },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'grid.range.lower',
+              fieldPath: 'triggers[0].params.rangeLower',
+              status: 'open',
+              priority: 'core',
+              questionHint: '请确认网格区间下界。',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'open',
+          priority: 'context',
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+        },
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    })
+
+    expect(view.summary).toContain('网格')
+    expect(view.nextQuestion).toBe('请确认网格区间下界。')
+  })
 })

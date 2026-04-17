@@ -75,6 +75,7 @@ import { StrategyExecutionContextService } from './strategy-execution-context.se
 import { StrategyIntentNormalizerService } from './strategy-intent-normalizer.service'
 import { StrategyIntentResolutionService } from './strategy-intent-resolution.service'
 import { SemanticStateCompileBridgeService } from './semantic-state-compile-bridge.service'
+import { SemanticStateMergeService } from './semantic-state-merge.service'
 import { SemanticStateProjectionService } from './semantic-state-projection.service'
 import { SemanticStateReducerService } from './semantic-state-reducer.service'
 import { InferredConfirmationClassifierService } from './inferred-confirmation-classifier.service'
@@ -166,6 +167,7 @@ export class CodegenConversationService {
     private readonly semanticStateReducer: SemanticStateReducerService = new SemanticStateReducerService(),
     private readonly semanticStateProjection: SemanticStateProjectionService = new SemanticStateProjectionService(),
     private readonly semanticStateCompileBridge: SemanticStateCompileBridgeService = new SemanticStateCompileBridgeService(),
+    private readonly semanticStateMerge: SemanticStateMergeService = new SemanticStateMergeService(),
   ) {
     this.inferredConfirmationClassifier = new InferredConfirmationClassifierService(this.aiService)
   }
@@ -392,9 +394,13 @@ export class CodegenConversationService {
       },
     )
     const baseChecklist = inferredConfirmation.checklist
+    const derivedBaseSemanticState = this.buildFallbackSemanticState(baseChecklist)
     const baseSemanticState = hasPersistedSemanticState
-      ? this.mergeChecklistIntoSemanticState(semanticStateAfterAnswers, baseChecklist)
-      : this.buildFallbackSemanticState(baseChecklist)
+      ? this.semanticStateMerge.merge({
+          persisted: semanticStateAfterAnswers,
+          derived: derivedBaseSemanticState,
+        })
+      : derivedBaseSemanticState
     const clarificationStateAfterAnswers = hasStructuredClarificationAnswers
       ? this.resolveClarificationArtifacts(baseChecklist).clarificationState
       : this.withClarificationSummary(baseClarificationState, baseChecklist)
@@ -450,9 +456,13 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
     const mergedChecklist = this.mergeChecklistSnapshots(preMergedChecklist, plan.logic ?? {})
+    const derivedSemanticState = this.buildFallbackSemanticState(mergedChecklist)
     const reducedSemanticState = hasPersistedSemanticState
-      ? this.mergeChecklistIntoSemanticState(semanticStateAfterAnswers, mergedChecklist)
-      : this.buildFallbackSemanticState(mergedChecklist)
+      ? this.semanticStateMerge.merge({
+          persisted: semanticStateAfterAnswers,
+          derived: derivedSemanticState,
+        })
+      : derivedSemanticState
     const canonicalChecklist = hasPersistedSemanticState
       ? this.projectLegacyChecklistFromSemanticState(reducedSemanticState, mergedChecklist)
       : mergedChecklist
@@ -681,9 +691,13 @@ export class CodegenConversationService {
     )
     const messageChecklist = this.normalizeChecklist(this.extractChecklist(dto))
     const mergedChecklist = this.mergeChecklistSnapshots(baseChecklist, messageChecklist)
+    const derivedSemanticState = this.buildFallbackSemanticState(mergedChecklist)
     const reducedSemanticState = hasPersistedSemanticState
-      ? this.mergeChecklistIntoSemanticState(semanticStateAfterAnswers, mergedChecklist)
-      : this.buildFallbackSemanticState(mergedChecklist)
+      ? this.semanticStateMerge.merge({
+          persisted: semanticStateAfterAnswers,
+          derived: derivedSemanticState,
+        })
+      : derivedSemanticState
     const canonicalChecklist = hasPersistedSemanticState
       ? this.projectLegacyChecklistFromSemanticState(reducedSemanticState, mergedChecklist)
       : mergedChecklist
@@ -909,7 +923,11 @@ export class CodegenConversationService {
     let nextState = currentState
     for (const item of clarificationState?.items ?? []) {
       const rawAnswer = answers[item.key]
-      if (typeof rawAnswer !== 'string' || !rawAnswer.trim() || !item.key.startsWith('semantic.')) {
+      if (
+        typeof rawAnswer !== 'string'
+        || !rawAnswer.trim()
+        || (!item.key.startsWith('semantic.') && !item.key.startsWith('grid.'))
+      ) {
         continue
       }
 
@@ -981,186 +999,6 @@ export class CodegenConversationService {
       normalizationNotes: [...normalization.normalizedIntent.normalizationNotes],
       updatedAt: new Date().toISOString(),
     }
-  }
-
-  private mergeChecklistIntoSemanticState(
-    currentState: SemanticState,
-    checklist: ChecklistPayload,
-  ): SemanticState {
-    const derivedState = this.buildFallbackSemanticState(checklist)
-    const remainingOpenCurrentTriggers = currentState.triggers
-      .filter(trigger =>
-        trigger.status === 'open'
-        && trigger.openSlots.some(slot => slot.status === 'open'),
-      )
-      .map(trigger => ({
-        ...trigger,
-        params: { ...trigger.params },
-        openSlots: trigger.openSlots.map(slot => ({ ...slot })),
-      }))
-    const nextTriggers = derivedState.triggers.map(trigger => this.reconcileDerivedTriggerState(
-      trigger,
-      derivedState.triggers,
-      currentState,
-      remainingOpenCurrentTriggers,
-    ))
-
-    return {
-      ...derivedState,
-      triggers: nextTriggers,
-      updatedAt: new Date().toISOString(),
-    }
-  }
-
-  private reconcileDerivedTriggerState(
-    trigger: SemanticTriggerState,
-    derivedTriggers: SemanticTriggerState[],
-    currentState: SemanticState,
-    remainingOpenCurrentTriggers?: SemanticTriggerState[],
-  ): SemanticTriggerState {
-    let nextTrigger: SemanticTriggerState = {
-      ...trigger,
-      params: { ...trigger.params },
-      openSlots: trigger.openSlots.map(slot => ({ ...slot })),
-    }
-
-    if (this.isBollingerSemanticTrigger(nextTrigger)) {
-      nextTrigger = this.hydrateBollingerTriggerParams(nextTrigger, derivedTriggers)
-    }
-
-    if (nextTrigger.phase === 'gate' && typeof nextTrigger.params.value === 'string') {
-      const matchingLockedGate = currentState.triggers.find(currentTrigger =>
-        currentTrigger.phase === 'gate'
-        && currentTrigger.key === nextTrigger.key
-        && currentTrigger.status === 'locked'
-        && currentTrigger.openSlots.every(slot => slot.status !== 'open')
-        && currentTrigger.params.value === nextTrigger.params.value,
-      )
-      if (matchingLockedGate) {
-        nextTrigger = {
-          ...nextTrigger,
-          id: matchingLockedGate.id,
-          source: matchingLockedGate.source ?? nextTrigger.source,
-          ...(matchingLockedGate.evidence ? { evidence: matchingLockedGate.evidence } : {}),
-          params: {
-            ...nextTrigger.params,
-            ...(typeof matchingLockedGate.params.mode === 'string'
-              ? { mode: matchingLockedGate.params.mode }
-              : {}),
-          },
-          openSlots: [],
-          status: 'locked',
-        }
-      }
-    }
-
-    const openTriggerPool = remainingOpenCurrentTriggers ?? currentState.triggers
-    const matchingCurrentTriggerIndex = openTriggerPool.findIndex(currentTrigger =>
-      this.isSameDerivedTriggerIdentity(currentTrigger, nextTrigger)
-      && currentTrigger.status === 'open'
-      && currentTrigger.openSlots.some(slot => slot.status === 'open'),
-    )
-    const matchingCurrentTrigger = matchingCurrentTriggerIndex >= 0
-      ? openTriggerPool[matchingCurrentTriggerIndex]
-      : undefined
-
-    if (matchingCurrentTrigger) {
-      if (remainingOpenCurrentTriggers && matchingCurrentTriggerIndex >= 0) {
-        remainingOpenCurrentTriggers.splice(matchingCurrentTriggerIndex, 1)
-      }
-      nextTrigger = {
-        ...nextTrigger,
-        id: matchingCurrentTrigger.id,
-        source: matchingCurrentTrigger.source ?? nextTrigger.source,
-        ...(matchingCurrentTrigger.evidence ? { evidence: matchingCurrentTrigger.evidence } : {}),
-        params: {
-          ...nextTrigger.params,
-          ...matchingCurrentTrigger.params,
-        },
-        openSlots: matchingCurrentTrigger.openSlots.map(slot => ({ ...slot })),
-        status: matchingCurrentTrigger.status,
-      }
-    }
-
-    return nextTrigger
-  }
-
-  private isSameDerivedTriggerIdentity(
-    currentTrigger: SemanticTriggerState,
-    derivedTrigger: SemanticTriggerState,
-  ): boolean {
-    if (currentTrigger.phase !== derivedTrigger.phase || currentTrigger.key !== derivedTrigger.key) {
-      return false
-    }
-    if (
-      currentTrigger.sideScope !== undefined
-      && derivedTrigger.sideScope !== undefined
-      && currentTrigger.sideScope !== derivedTrigger.sideScope
-    ) {
-      return false
-    }
-
-    const identityParamKeys = [
-      'indicator',
-      'referenceRole',
-      'reference.period',
-      'period',
-      'stdDev',
-      'value',
-    ] as const
-
-    return identityParamKeys.every((paramKey) => {
-      const currentValue = currentTrigger.params[paramKey]
-      const derivedValue = derivedTrigger.params[paramKey]
-      if (currentValue === undefined || currentValue === null) {
-        return true
-      }
-      if (derivedValue === undefined || derivedValue === null) {
-        return true
-      }
-
-      return currentValue === derivedValue
-    })
-  }
-
-  private hydrateBollingerTriggerParams(
-    trigger: SemanticTriggerState,
-    derivedTriggers: SemanticTriggerState[],
-  ): SemanticTriggerState {
-    const sharedSource = derivedTriggers.find(candidate =>
-      candidate !== trigger
-      && this.isBollingerSemanticTrigger(candidate)
-      && (typeof candidate.params.period === 'number'
-        || typeof candidate.params.stdDev === 'number'
-        || typeof candidate.sideScope === 'string'),
-    )
-    if (!sharedSource) {
-      return trigger
-    }
-
-    return {
-      ...trigger,
-      params: {
-        ...trigger.params,
-        ...(typeof trigger.params.period === 'number' ? {} : (
-          typeof sharedSource.params.period === 'number'
-            ? { period: sharedSource.params.period }
-            : {}
-        )),
-        ...(typeof trigger.params.stdDev === 'number' ? {} : (
-          typeof sharedSource.params.stdDev === 'number'
-            ? { stdDev: sharedSource.params.stdDev }
-            : {}
-        )),
-      },
-      ...(trigger.sideScope ? {} : (sharedSource.sideScope ? { sideScope: sharedSource.sideScope } : {})),
-    }
-  }
-
-  private isBollingerSemanticTrigger(trigger: SemanticTriggerState): boolean {
-    return trigger.key === 'bollinger.touch_upper'
-      || trigger.key === 'bollinger.touch_lower'
-      || trigger.key === 'bollinger.touch_middle'
   }
 
   private toSemanticTriggerState(
@@ -1256,18 +1094,28 @@ export class CodegenConversationService {
     }
 
     if (nextOpenSlot.priority !== 'context') {
-      const activeItem = this.buildSemanticClarificationItem(nextOpenSlot)
+      const semanticItems = this.listOpenSemanticSlots(semanticState)
+        .filter(slot => slot.priority !== 'context')
+        .map(slot => this.buildSemanticClarificationItem(slot))
+      const semanticItemKeys = new Set(semanticItems.map(item => item.key))
+      const semanticSlotIds = new Set(semanticItems.map(item => item.slotId).filter((slotId): slotId is string => typeof slotId === 'string'))
+      const semanticFieldPaths = new Set(semanticItems.map(item => item.fieldPath).filter((fieldPath): fieldPath is string => typeof fieldPath === 'string'))
       const remainingPendingItems = fallbackState.status === 'NEEDS_CLARIFICATION'
         ? fallbackState.items.filter(item =>
             item.blocking
             && item.status === 'pending'
-            && item.key !== activeItem.key,
+            && !semanticItemKeys.has(item.key)
+            && (!item.slotId || !semanticSlotIds.has(item.slotId))
+            && (!item.fieldPath || !semanticFieldPaths.has(item.fieldPath)),
           )
         : []
+      const filteredPendingItems = remainingPendingItems.filter(item =>
+        !this.hasEquivalentActiveSemanticGridItem(item, semanticItems),
+      )
 
       return {
         status: 'NEEDS_CLARIFICATION',
-        items: [activeItem, ...remainingPendingItems],
+        items: [...semanticItems, ...filteredPendingItems],
         summary: clarificationView.summary,
       }
     }
@@ -1301,6 +1149,22 @@ export class CodegenConversationService {
     item: StrategyClarificationItem,
     semanticState: SemanticState,
   ): boolean {
+    if (item.reason === 'missing_entry_rules' || item.field === 'entryRules') {
+      return semanticState.triggers.some(trigger =>
+        trigger.phase === 'entry'
+        && trigger.status === 'locked'
+        && trigger.openSlots.every(slot => slot.status !== 'open'),
+      )
+    }
+
+    if (item.reason === 'missing_exit_rules' || item.field === 'exitRules') {
+      return semanticState.triggers.some(trigger =>
+        trigger.phase === 'exit'
+        && trigger.status === 'locked'
+        && trigger.openSlots.every(slot => slot.status !== 'open'),
+      )
+    }
+
     if (item.reason !== 'ambiguous_state_gate') {
       return false
     }
@@ -1343,6 +1207,7 @@ export class CodegenConversationService {
   private buildSemanticClarificationItem(slot: SemanticSlotState): StrategyClarificationItem {
     const isStateGateSlot = slot.priority === 'behavior' || slot.slotKey === 'regimeDefinition'
     const isContextSlot = slot.priority === 'context'
+    const isGridSlot = slot.slotKey.startsWith('grid.')
     const contextReasonMap: Partial<Record<SemanticSlotState['slotKey'], string>> = {
       exchange: 'missing_exchange',
       symbol: 'missing_symbol',
@@ -1353,15 +1218,19 @@ export class CodegenConversationService {
       ? 'stateGates.marketRegime'
       : isContextSlot
         ? slot.slotKey
+      : isGridSlot
+        ? slot.slotKey
       : (slot.slotKey.includes('.exit') ? 'exitRules' : 'entryRules')
     const reason = isStateGateSlot
       ? 'ambiguous_state_gate'
       : isContextSlot
         ? (contextReasonMap[slot.slotKey] ?? 'missing_execution_context')
+      : isGridSlot
+        ? 'grid_params_missing'
         : (slot.slotKey.includes('.exit') ? 'missing_exit_rules' : 'missing_entry_rules')
 
     return {
-      key: `semantic.${slot.slotKey}`,
+      key: isGridSlot ? slot.slotKey : `semantic.${slot.slotKey}`,
       reason,
       field,
       blocking: true,
@@ -1385,6 +1254,23 @@ export class CodegenConversationService {
       items: [this.buildSemanticClarificationItem(nextOpenSlot)],
       summary: clarificationView.summary,
     })
+  }
+
+  private listOpenSemanticSlots(state: SemanticState): SemanticSlotState[] {
+    const triggerPhaseOrder: Array<'entry' | 'exit' | 'risk' | 'gate'> = ['entry', 'exit', 'risk', 'gate']
+    const openTriggerSlots = triggerPhaseOrder.flatMap(phase =>
+      state.triggers
+        .filter(trigger => trigger.phase === phase)
+        .flatMap(trigger => trigger.openSlots)
+        .filter(slot => slot.status === 'open'),
+    )
+    const openRiskSlots = state.risk
+      .flatMap(risk => risk.openSlots)
+      .filter(slot => slot.status === 'open')
+    const openContextSlots = Object.values(state.contextSlots)
+      .filter((slot): slot is SemanticSlotState => Boolean(slot) && slot.status === 'open')
+
+    return [...openTriggerSlots, ...openRiskSlots, ...openContextSlots]
   }
 
   private projectLegacyChecklistFromSemanticState(
@@ -1452,6 +1338,49 @@ export class CodegenConversationService {
     item: StrategyClarificationItem,
   ): boolean {
     return Boolean(item.slotId || item.slotKey || item.fieldPath || item.key.startsWith('semantic.'))
+  }
+
+  private hasEquivalentActiveSemanticGridItem(
+    fallbackItem: StrategyClarificationItem,
+    semanticItems: StrategyClarificationItem[],
+  ): boolean {
+    const fallbackGridSlotKey = this.toCanonicalGridClarificationSlotKey(fallbackItem)
+    if (!fallbackGridSlotKey) {
+      return false
+    }
+
+    return semanticItems.some(item =>
+      this.toCanonicalGridClarificationSlotKey(item) === fallbackGridSlotKey,
+    )
+  }
+
+  private toCanonicalGridClarificationSlotKey(
+    item: StrategyClarificationItem,
+  ): 'grid.range.lower' | 'grid.range.upper' | 'grid.stepPct' | 'grid.sideMode' | null {
+    if (item.key === 'grid.range.lower' || item.key === 'grid.lower') {
+      return 'grid.range.lower'
+    }
+    if (item.key === 'grid.range.upper' || item.key === 'grid.upper') {
+      return 'grid.range.upper'
+    }
+    if (item.key === 'grid.stepPct') {
+      return 'grid.stepPct'
+    }
+    if (item.key === 'grid.sideMode') {
+      return 'grid.sideMode'
+    }
+
+    if (item.slotKey === 'grid.range.lower') return 'grid.range.lower'
+    if (item.slotKey === 'grid.range.upper') return 'grid.range.upper'
+    if (item.slotKey === 'grid.stepPct') return 'grid.stepPct'
+    if (item.slotKey === 'grid.sideMode') return 'grid.sideMode'
+
+    if (item.field === 'grid.range.lower' || item.field === 'grid.lower') return 'grid.range.lower'
+    if (item.field === 'grid.range.upper' || item.field === 'grid.upper') return 'grid.range.upper'
+    if (item.field === 'grid.stepPct') return 'grid.stepPct'
+    if (item.field === 'grid.sideMode') return 'grid.sideMode'
+
+    return null
   }
 
   private readCanonicalDigest(specDesc: Record<string, unknown> | null): string | null {
@@ -1656,7 +1585,7 @@ export class CodegenConversationService {
     const normalizedAnswer = answer.trim()
     if (!normalizedAnswer) return checklist
 
-    if (item.key.startsWith('semantic.')) {
+    if (item.key.startsWith('semantic.') || item.key.startsWith('grid.')) {
       return this.applySemanticSlotClarification(checklist, item, normalizedAnswer)
     }
 
@@ -1850,6 +1779,18 @@ export class CodegenConversationService {
     const key = item.key.toLowerCase()
     const targetPhase = this.readSemanticClarificationPhase(item)
 
+    if (key.startsWith('grid.')) {
+      const nextGrid = this.applyGridChecklistClarification(checklist.grid, item, answer)
+      if (!nextGrid) {
+        return checklist
+      }
+
+      return this.normalizeChecklist({
+        ...checklist,
+        grid: nextGrid,
+      })
+    }
+
     if (/均线是多少/u.test(item.question) || key.includes('reference.period')) {
       const period = this.normalizeMovingAveragePeriodClarificationAnswer(answer)
       if (period === null) return checklist
@@ -1903,6 +1844,93 @@ export class CodegenConversationService {
     }
 
     return checklist
+  }
+
+  private applyGridChecklistClarification(
+    currentGrid: ChecklistPayload['grid'] | undefined,
+    item: StrategyClarificationItem,
+    answer: string,
+  ): ChecklistPayload['grid'] | null {
+    const nextGrid: NonNullable<ChecklistPayload['grid']> = {
+      ...(currentGrid ?? {}),
+    }
+    const key = item.key.toLowerCase()
+
+    if (key === 'grid.range.lower' || key === 'grid.lower') {
+      const value = this.parseGridChecklistNumericAnswer('grid.range.lower', answer)
+      if (value === null) return null
+      nextGrid.lower = value
+      return nextGrid
+    }
+
+    if (key === 'grid.range.upper' || key === 'grid.upper') {
+      const value = this.parseGridChecklistNumericAnswer('grid.range.upper', answer)
+      if (value === null) return null
+      nextGrid.upper = value
+      return nextGrid
+    }
+
+    if (key === 'grid.steppct') {
+      const value = this.parseGridChecklistNumericAnswer('grid.stepPct', answer)
+      if (value === null) return null
+      nextGrid.stepPct = value
+      return nextGrid
+    }
+
+    if (key === 'grid.sidemode') {
+      const sideMode = this.normalizeGridChecklistSideMode(answer)
+      if (!sideMode) return null
+      nextGrid.sideMode = sideMode
+      return nextGrid
+    }
+
+    return null
+  }
+
+  private parseGridChecklistNumericAnswer(
+    slotKey: 'grid.range.lower' | 'grid.range.upper' | 'grid.stepPct',
+    answer: string,
+  ): number | null {
+    if (slotKey === 'grid.stepPct') {
+      const percentMatch = answer.match(/(\d+(?:\.\d+)?)\s*%/u)
+      if (percentMatch?.[1]) {
+        return Number(percentMatch[1])
+      }
+
+      const perMilleMatch = answer.match(/千分之\s*(\d+(?:\.\d+)?)/u)
+      if (perMilleMatch?.[1]) {
+        return Number(perMilleMatch[1]) / 10
+      }
+    }
+
+    const numericMatch = answer.match(/-?\d+(?:\.\d+)?/u)
+    if (!numericMatch) {
+      return null
+    }
+
+    const value = Number(numericMatch[0])
+    return Number.isFinite(value) ? value : null
+  }
+
+  private normalizeGridChecklistSideMode(
+    answer: string,
+  ): NonNullable<ChecklistPayload['grid']>['sideMode'] | null {
+    const normalized = answer.trim().toLowerCase()
+    if (!normalized) {
+      return null
+    }
+
+    if (normalized === 'bidirectional' || /双向|低买高卖|来回|往返|自动买卖|自动交易/u.test(answer)) {
+      return 'bidirectional'
+    }
+    if (normalized === 'long_only' || /只做多|仅做多|做多网格|多头网格|做多|多头/u.test(answer)) {
+      return 'long_only'
+    }
+    if (normalized === 'short_only' || /只做空|仅做空|做空网格|空头网格|做空|空头/u.test(answer)) {
+      return 'short_only'
+    }
+
+    return null
   }
 
   private applyEntryRuleDirectionClarification(
@@ -2399,7 +2427,7 @@ export class CodegenConversationService {
     if (!clarificationState || clarificationState.status !== 'NEEDS_CLARIFICATION') return {}
 
     const activeItem = clarificationState.items.find(item => item.blocking && item.status === 'pending')
-    if (!activeItem || !activeItem.key.startsWith('semantic.')) return {}
+    if (!activeItem || (!activeItem.key.startsWith('semantic.') && !activeItem.key.startsWith('grid.'))) return {}
 
     return {
       [activeItem.key]: normalizedMessage,
@@ -2689,9 +2717,18 @@ export class CodegenConversationService {
     clarificationState: StrategyClarificationStateWithSummary,
     normalization: NormalizationResult,
   ): StrategyClarificationStateWithSummary {
-    const items = clarificationState.items.filter(item =>
-      !this.shouldSuppressLegacyClarificationItem(item, normalization),
-    )
+    const hasActiveGrid = normalization.normalizedIntent.triggers.some(trigger => trigger.key === 'grid.range_rebalance')
+    const items = clarificationState.items.filter(item => {
+      if (
+        hasActiveGrid
+        && item.reason === 'missing_entry_rules'
+        && item.field === 'entryRules'
+      ) {
+        return false
+      }
+
+      return !this.shouldSuppressLegacyClarificationItem(item, normalization)
+    })
 
     return {
       ...clarificationState,
@@ -3412,6 +3449,7 @@ export class CodegenConversationService {
     }
 
     const riskRules: Record<string, unknown> = {}
+    const grid: NonNullable<ChecklistPayload['grid']> = {}
     if (/\bokx\b/i.test(text)) {
       riskRules.exchange = 'okx'
     } else if (/hyperliquid/i.test(text)) {
@@ -3465,6 +3503,43 @@ export class CodegenConversationService {
     if (earlyStopMatch?.[1]) {
       riskRules.earlyStop = earlyStopMatch[1].trim()
     }
+    if (/网格|grid/iu.test(text)) {
+      const rangeMatch = text.match(/(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)/u)
+      if (rangeMatch?.[1] && rangeMatch[2]) {
+        grid.lower = Number(rangeMatch[1])
+        grid.upper = Number(rangeMatch[2])
+      }
+
+      const percentMatch = text.match(/(?:步长|每一格|每格)\s*(\d+(?:\.\d+)?)\s*%/u)
+      const perMilleMatch = text.match(/千分之\s*(\d+(?:\.\d+)?)/u)
+      if (percentMatch?.[1]) {
+        grid.stepPct = Number(percentMatch[1])
+      } else if (perMilleMatch?.[1]) {
+        grid.stepPct = Number(perMilleMatch[1]) / 10
+      }
+
+      if (/双向|低买高卖|来回|往返|自动买卖|自动交易/u.test(text)) {
+        grid.sideMode = 'bidirectional'
+      } else if (/做空网格|空头网格|做空|空头/u.test(text)) {
+        grid.sideMode = 'short_only'
+      } else if (/做多网格|多头网格|做多|多头/u.test(text)) {
+        grid.sideMode = 'long_only'
+      } else if (/只做多|仅做多/u.test(text)) {
+        grid.sideMode = 'long_only'
+      } else if (/只做空|仅做空/u.test(text)) {
+        grid.sideMode = 'short_only'
+      }
+
+      if (!grid.sideMode) {
+        grid.sideMode = 'bidirectional'
+      }
+
+      if (/突破.{0,8}(停|暂停|停止)/u.test(text)) {
+        grid.breakoutAction = 'pause'
+      } else if (/突破/u.test(text)) {
+        grid.breakoutAction = 'continue'
+      }
+    }
 
     const inferredMarket = {
       ...(riskRules.exchange === 'okx' || riskRules.exchange === 'binance' || riskRules.exchange === 'hyperliquid'
@@ -3484,6 +3559,7 @@ export class CodegenConversationService {
       entryRuleBases: Object.keys(entryRuleBases).length > 0 ? entryRuleBases : undefined,
       exitRuleBases: Object.keys(exitRuleBases).length > 0 ? exitRuleBases : undefined,
       riskRules: Object.keys(riskRules).length > 0 ? riskRules : undefined,
+      grid: Object.keys(grid).length > 0 ? grid : undefined,
       market: Object.keys(inferredMarket).length > 0 ? inferredMarket : undefined,
     })
 
@@ -3497,6 +3573,7 @@ export class CodegenConversationService {
       entryRuleDrafts: drafts.entry,
       exitRuleDrafts: drafts.exit,
       riskRules: Object.keys(riskRules).length > 0 ? riskRules : undefined,
+      grid: Object.keys(grid).length > 0 ? grid : undefined,
       market: Object.keys(inferredMarket).length > 0 ? inferredMarket : { defaultTimeframe: timeframes[0] ?? null },
     }
   }
@@ -3691,6 +3768,41 @@ export class CodegenConversationService {
       }
     }
 
+    const normalizeGrid = (value: unknown): ChecklistPayload['grid'] | undefined => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) {
+        return undefined
+      }
+      const raw = value as Record<string, unknown>
+      const lower = typeof raw.lower === 'number' && Number.isFinite(raw.lower)
+        ? raw.lower
+        : undefined
+      const upper = typeof raw.upper === 'number' && Number.isFinite(raw.upper)
+        ? raw.upper
+        : undefined
+      const stepPct = typeof raw.stepPct === 'number' && Number.isFinite(raw.stepPct)
+        ? raw.stepPct
+        : undefined
+      const breakoutAction = raw.breakoutAction === 'pause' || raw.breakoutAction === 'continue'
+        ? raw.breakoutAction
+        : undefined
+      const sideMode = typeof raw.sideMode === 'string'
+        && (raw.sideMode === 'long_only' || raw.sideMode === 'short_only' || raw.sideMode === 'bidirectional')
+        ? raw.sideMode
+        : undefined
+
+      if (lower === undefined && upper === undefined && stepPct === undefined && !sideMode && !breakoutAction) {
+        return undefined
+      }
+
+      return {
+        ...(lower !== undefined ? { lower } : {}),
+        ...(upper !== undefined ? { upper } : {}),
+        ...(stepPct !== undefined ? { stepPct } : {}),
+        ...(sideMode ? { sideMode } : {}),
+        ...(breakoutAction ? { breakoutAction } : {}),
+      }
+    }
+
     const normalized: ChecklistPayload = {
       symbols: normalizeStringArray(payload.symbols),
       timeframes: normalizeStringArray(payload.timeframes),
@@ -3704,6 +3816,7 @@ export class CodegenConversationService {
       exitRuleDrafts: normalizeDrafts(payload.exitRuleDrafts, 'exit'),
       riskRuleDrafts: normalizeDrafts(payload.riskRuleDrafts, 'risk'),
       market: normalizeMarket(payload.market),
+      grid: normalizeGrid(payload.grid),
     }
     const drafts = buildChecklistRuleDrafts(normalized)
 
@@ -4476,6 +4589,13 @@ export class CodegenConversationService {
       exitRuleDrafts: patch.exitRuleDrafts && patch.exitRuleDrafts.length > 0 ? patch.exitRuleDrafts : base.exitRuleDrafts,
       riskRuleDrafts: patch.riskRuleDrafts && patch.riskRuleDrafts.length > 0 ? patch.riskRuleDrafts : base.riskRuleDrafts,
       market: patch.market ?? base.market,
+      grid: (() => {
+        const mergedGrid = {
+          ...(base.grid ?? {}),
+          ...(patch.grid ?? {}),
+        }
+        return Object.keys(mergedGrid).length > 0 ? mergedGrid : undefined
+      })(),
     }
     return this.normalizeChecklist(merged)
   }

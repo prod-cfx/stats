@@ -46,5 +46,6 @@ export interface ChecklistPayload {
     upper?: number
     stepPct?: number
     sideMode?: 'long_only' | 'short_only' | 'bidirectional'
+    breakoutAction?: 'pause' | 'continue'
   }
 }

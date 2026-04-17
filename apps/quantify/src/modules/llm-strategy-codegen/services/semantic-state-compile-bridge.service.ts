@@ -13,6 +13,7 @@ export class SemanticStateCompileBridgeService {
     if (state.triggers.some(trigger => trigger.phase === 'gate')) {
       families.add('state-gated')
     }
+    const grid = this.buildGridIntent(state.triggers)
 
     return {
       families: Array.from(families) as StrategyNormalizedIntent['families'],
@@ -34,8 +35,38 @@ export class SemanticStateCompileBridgeService {
             positionMode: state.position.positionMode as StrategyNormalizedIntent['position']['positionMode'],
           }
         : null,
+      ...(grid ? { grid } : {}),
       unresolved: [],
       normalizationNotes: [...state.normalizationNotes],
+    }
+  }
+
+  private buildGridIntent(
+    triggers: SemanticTriggerState[],
+  ): StrategyNormalizedIntent['grid'] {
+    const activeGrid = triggers.find(trigger =>
+      trigger.key === 'grid.range_rebalance'
+      && trigger.status !== 'superseded'
+      && typeof trigger.params.rangeLower === 'number'
+      && typeof trigger.params.rangeUpper === 'number'
+      && typeof trigger.params.stepPct === 'number',
+    )
+    if (!activeGrid) {
+      return null
+    }
+
+    return {
+      family: 'grid.range_rebalance',
+      range: {
+        lower: activeGrid.params.rangeLower as number,
+        upper: activeGrid.params.rangeUpper as number,
+      },
+      stepPct: activeGrid.params.stepPct as number,
+      sideMode: (activeGrid.params.sideMode as StrategyNormalizedIntent['grid']['sideMode']) ?? 'bidirectional',
+      recycle: activeGrid.params.recycle !== false,
+      ...(activeGrid.params.breakoutAction === 'pause' || activeGrid.params.breakoutAction === 'continue'
+        ? { breakoutAction: activeGrid.params.breakoutAction }
+        : {}),
     }
   }
 
@@ -43,11 +74,13 @@ export class SemanticStateCompileBridgeService {
     state: SemanticState,
     fallbackChecklist: ChecklistPayload = {},
   ): ChecklistPayload {
+    const projectedGrid = this.buildLegacyGrid(state.triggers)
     const nextChecklist: ChecklistPayload = {
       ...fallbackChecklist,
       riskRules: fallbackChecklist.riskRules ? { ...fallbackChecklist.riskRules } : undefined,
       stateGates: fallbackChecklist.stateGates ? { ...fallbackChecklist.stateGates } : undefined,
       market: fallbackChecklist.market ? { ...fallbackChecklist.market } : undefined,
+      grid: fallbackChecklist.grid ? { ...fallbackChecklist.grid } : undefined,
     }
 
     const entryRules = this.buildRulesForPhase(state, 'entry')
@@ -122,8 +155,57 @@ export class SemanticStateCompileBridgeService {
     if (timeframe) {
       nextChecklist.timeframes = [timeframe]
     }
+    if (projectedGrid) {
+      nextChecklist.grid = {
+        ...(nextChecklist.grid ?? {}),
+        ...projectedGrid,
+      }
+    }
 
     return nextChecklist
+  }
+
+  private buildLegacyGrid(
+    triggers: SemanticTriggerState[],
+  ): ChecklistPayload['grid'] | undefined {
+    const activeGrid = triggers.find(trigger =>
+      trigger.key === 'grid.range_rebalance'
+      && trigger.status !== 'superseded'
+    )
+    if (!activeGrid) {
+      return undefined
+    }
+
+    const lower = typeof activeGrid.params.rangeLower === 'number'
+      ? activeGrid.params.rangeLower as number
+      : undefined
+    const upper = typeof activeGrid.params.rangeUpper === 'number'
+      ? activeGrid.params.rangeUpper as number
+      : undefined
+    const stepPct = typeof activeGrid.params.stepPct === 'number'
+      ? activeGrid.params.stepPct as number
+      : undefined
+    const sideMode = activeGrid.params.sideMode === 'long_only'
+      || activeGrid.params.sideMode === 'short_only'
+      || activeGrid.params.sideMode === 'bidirectional'
+      ? activeGrid.params.sideMode
+      : undefined
+    const breakoutAction = activeGrid.params.breakoutAction === 'pause'
+      || activeGrid.params.breakoutAction === 'continue'
+      ? activeGrid.params.breakoutAction
+      : undefined
+
+    if (lower === undefined && upper === undefined && stepPct === undefined && sideMode === undefined && breakoutAction === undefined) {
+      return undefined
+    }
+
+    return {
+      ...(lower !== undefined ? { lower } : {}),
+      ...(upper !== undefined ? { upper } : {}),
+      ...(stepPct !== undefined ? { stepPct } : {}),
+      ...(sideMode !== undefined ? { sideMode } : {}),
+      ...(breakoutAction !== undefined ? { breakoutAction } : {}),
+    }
   }
 
   private buildStateGates(state: SemanticState): NonNullable<ChecklistPayload['stateGates']> {
