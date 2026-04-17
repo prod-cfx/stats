@@ -221,6 +221,43 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
     expect(graph.blocks[1].items.map(item => item.text).join(' ')).toContain('亏损达到 5%')
   })
 
+  it('renders the first exit path as AND_AT_THEN instead of OR_THEN', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        rules: [
+          {
+            id: 'entry-1',
+            phase: 'entry',
+            condition: {
+              key: 'price.change_pct',
+              op: 'LTE',
+              value: -0.01,
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+          {
+            id: 'exit-1',
+            phase: 'exit',
+            condition: {
+              key: 'price.change_pct',
+              op: 'GTE',
+              value: 0.02,
+            },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+      },
+      fallbackMeta: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'AND_AT_THEN', 'EXECUTE'])
+  })
+
   it('uses canonical timeframe when top-level market timeframes are missing', () => {
     const graph = buildDisplayLogicGraphFromCodegenSpec({
       specDesc: {

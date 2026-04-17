@@ -169,6 +169,25 @@ describe('buildLogicGraphFromCodegenSpec', () => {
     expect(graph.meta.timeframe).toBe('1h')
   })
 
+  it('keeps the first exit trigger joined with AND when entry rules exist', () => {
+    const graph = buildLogicGraphFromCodegenSpec(
+      {
+        entryRules: ['3m 内下跌 1% 买入'],
+        exitRules: ['15m 内上涨 2% 卖出'],
+      },
+      {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      14,
+    )
+
+    expect(graph.trigger[1]?.id).toContain('exit')
+    expect(graph.trigger[1]?.join).toBe('AND')
+  })
+
   it('describes price.change_pct rules with timeframe, basis, and direction', () => {
     const graph = buildLogicGraphFromCodegenSpec(
       {

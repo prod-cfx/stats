@@ -224,7 +224,7 @@ export function buildLogicGraphFromCodegenSpec(
       subject: symbol,
       operator: rule,
       value: 'true',
-      join: (idx > 0 ? 'AND' : undefined) as 'AND' | undefined,
+      join: ((idx > 0 || entryRules.length > 0) ? 'AND' : undefined) as 'AND' | undefined,
     })),
   ]
 

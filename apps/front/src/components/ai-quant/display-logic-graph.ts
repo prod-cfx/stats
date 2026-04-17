@@ -389,7 +389,7 @@ function extractExecuteMeta(specDesc: DisplayLogicGraphSpecDesc | null, fallback
 function buildConditionBlock(rule: DisplayLogicGraphRule, index: number): DisplayBlock {
   const blockType: DisplayBlockType = index === 0
     ? 'IF'
-    : rule.join === 'OR' || rule.phase === 'exit'
+    : rule.join === 'OR'
       ? 'OR_THEN'
       : 'AND_AT_THEN'
 
