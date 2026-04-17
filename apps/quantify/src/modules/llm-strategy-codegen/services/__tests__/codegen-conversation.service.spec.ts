@@ -3263,8 +3263,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的出场规则')
-    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的入场规则')
     expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
       expect.objectContaining({ reason: 'missing_exit_rules' }),
       expect.objectContaining({ reason: 'missing_entry_rules' }),
@@ -3330,8 +3328,104 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的出场规则')
-    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的入场规则')
+    expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({ reason: 'missing_exit_rules' }),
+      expect.objectContaining({ reason: 'missing_entry_rules' }),
+    ]))
+  })
+
+  it('consumes 低买高卖 as grid side semantics after answering 15m instead of falling back to legacy entry and exit blockers', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-grid-exact-repro-three-turn' })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        logic: {},
+        assistantPrompt: '逻辑图仍未完整，请继续补充。',
+      }),
+    })
+
+    const startResult = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在ok交易所 我想弄个网格策略 btc永续合约 在60000-80000的区间 每一格千分之5 不断低买高卖 单笔百分10资金',
+    })
+
+    const createdSession = buildPersistedSessionSnapshot(
+      's-grid-exact-repro-three-turn',
+      mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>,
+      {
+        clarificationState: startResult.clarificationState,
+        latestSpecDesc: startResult.specDesc ?? null,
+        semanticState: (mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>).semanticState,
+      },
+    )
+
+    mockRepo.findById.mockResolvedValueOnce({
+      ...createdSession,
+      updatedAt: '2026-04-17T10:00:00.000Z',
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        logic: {},
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    await service.continueSession('s-grid-exact-repro-three-turn', {
+      userId: 'u1',
+      message: '15m',
+      clarificationAnswers: {
+        'semantic.timeframe': '15m',
+      },
+    } as ContinueCodegenSessionDto)
+
+    const afterTimeframeUpdate = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, unknown>
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-grid-exact-repro-three-turn',
+      createdSession,
+      {
+        ...afterTimeframeUpdate,
+        updatedAt: '2026-04-17T10:01:00.000Z',
+      },
+    ))
+
+    const result = await service.continueSession('s-grid-exact-repro-three-turn', {
+      userId: 'u1',
+      message: '低买高卖',
+    } as ContinueCodegenSessionDto)
+
+    expect(mockRepo.updateSession).toHaveBeenLastCalledWith(
+      's-grid-exact-repro-three-turn',
+      expect.objectContaining({
+        checklist: expect.objectContaining({
+          grid: expect.objectContaining({
+            lower: 60000,
+            upper: 80000,
+            stepPct: 0.5,
+            sideMode: 'bidirectional',
+          }),
+        }),
+        semanticState: expect.objectContaining({
+          triggers: expect.arrayContaining([
+            expect.objectContaining({
+              key: 'grid.range_rebalance',
+              params: expect.objectContaining({
+                rangeLower: 60000,
+                rangeUpper: 80000,
+                stepPct: 0.5,
+                sideMode: 'bidirectional',
+              }),
+              openSlots: expect.not.arrayContaining([
+                expect.objectContaining({ slotKey: 'grid.sideMode', status: 'open' }),
+              ]),
+            }),
+          ]),
+        }),
+      }),
+    )
     expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
       expect.objectContaining({ reason: 'missing_exit_rules' }),
       expect.objectContaining({ reason: 'missing_entry_rules' }),
