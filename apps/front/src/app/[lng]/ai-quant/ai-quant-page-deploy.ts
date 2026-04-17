@@ -86,6 +86,24 @@ export async function confirmAiQuantDeploy(args: {
       return
     }
 
+    if (activeConversation.publishedSnapshotCompatibilityMetadata?.requiresRepublishForDeploy) {
+      updateActiveConversation(curr => ({
+        ...curr,
+        messages: [
+          ...curr.messages,
+          {
+            id: `deploy-republish-${Date.now()}`,
+            role: 'assistant',
+            content: t('aiQuant.messages.deployRepublishRequired', {
+              defaultValue: '当前已发布快照缺少可部署绑定真相，请重新发布后再部署。',
+            }),
+          },
+        ],
+        updatedAt: Date.now(),
+      }))
+      return
+    }
+
     const latestExchangeAccounts = mapExchangeStatusesToDeployAccounts(
       await fetchUserExchangeAccountStatuses(),
     )

@@ -51,7 +51,7 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
 
 jest.mock('@/components/ai-quant/BacktestSummaryCard', () => ({
   BacktestSummaryCard: ({ onDeploy }: { onDeploy: () => void }) => (
-    <button data-testid="open-deploy" onClick={onDeploy}>open deploy</button>
+    <button type="button" data-testid="open-deploy" onClick={onDeploy}>open deploy</button>
   ),
 }))
 
@@ -79,19 +79,20 @@ jest.mock('@/components/ai-quant/DeployDialog', () => ({
   }) => (
     open
       ? (
-          <div>
+            <div>
             <div data-testid="selected-exchange">{exchange}</div>
             <div data-testid="selected-leverage">{selectedLeverage ?? ''}</div>
-            <button data-testid="select-hyperliquid" onClick={() => onSelectExchange('hyperliquid')}>
+            <button type="button" data-testid="select-hyperliquid" onClick={() => onSelectExchange('hyperliquid')}>
               select hyperliquid
             </button>
-            <button data-testid="select-account" onClick={() => onSelectAccount('acct-hyper-1')}>
+            <button type="button" data-testid="select-account" onClick={() => onSelectAccount('acct-hyper-1')}>
               select account
             </button>
-            <button data-testid="select-leverage" onClick={() => onSelectLeverage?.(4)}>
+            <button type="button" data-testid="select-leverage" onClick={() => onSelectLeverage?.(4)}>
               select leverage
             </button>
             <button
+              type="button"
               data-testid="confirm-deploy"
               disabled={!selectedAccountId || deploySubmitting}
               onClick={() => void onConfirmDeploy()}
@@ -383,5 +384,59 @@ describe('AiQuantPageClient deploy guard', () => {
         }),
       }),
     )
+  })
+
+  it('blocks deploy and records a republish-required message when snapshot compatibility requires republish', async () => {
+    localStorage.clear()
+    seedDeployableConversation(Date.now())
+    const stored = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    stored[0].publishedSnapshotCompatibilityMetadata = {
+      isLegacySnapshot: true,
+      missingStrategyInstanceBinding: true,
+      missingBacktestConfigDefaults: false,
+      missingDeploymentExecutionDefaults: false,
+      missingDeploymentExecutionConstraints: false,
+      requiresRepublishForBacktest: false,
+      requiresRepublishForDeploy: true,
+    }
+    localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(stored))
+
+    mockFetchUserExchangeAccountStatuses.mockReset()
+    mockDeployAccountAiQuantStrategy.mockReset()
+    mockFetchUserExchangeAccountStatuses.mockResolvedValue([
+      {
+        id: 'acct-binance-1',
+        exchangeId: 'binance',
+        isBound: true,
+        name: 'Binance Main',
+        maskedCredential: 'BIN****01',
+        isTestnet: false,
+        lastValidatedAt: null,
+        createdAt: null,
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="open-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="select-account"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="confirm-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mockDeployAccountAiQuantStrategy).not.toHaveBeenCalled()
+    expect(mockFetchUserExchangeAccountStatuses).toHaveBeenCalledTimes(1)
   })
 })
