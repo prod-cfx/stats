@@ -6,6 +6,7 @@ import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { runAiQuantBacktest } from './ai-quant-page-backtest'
 import { AiQuantPageClient } from './AiQuantPageClient'
+import { ApiError } from '@/lib/errors'
 
 const mockPush = jest.fn()
 const mockCreateBacktestJob = jest.fn()
@@ -651,6 +652,62 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       'aiQuant.messages.backtestPayloadInvalid',
     )
     expect(mockGetBacktestJobResult).not.toHaveBeenCalled()
+  })
+
+  it('retries transient backtest job polling failure and still completes successfully', async () => {
+    mockGetBacktestJob
+      .mockRejectedValueOnce(
+        new ApiError(
+          '量化服务暂时不可用，请稍后重试 (SERVICE_TEMPORARILY_UNAVAILABLE, HTTP 503, requestId req-503)',
+          'SERVICE_TEMPORARILY_UNAVAILABLE',
+          503,
+          { error: { code: 'SERVICE_TEMPORARILY_UNAVAILABLE', requestId: 'req-503' } },
+        ),
+      )
+      .mockResolvedValueOnce({
+        id: 'job-1',
+        status: 'succeeded',
+        createdAt: '2026-03-24T12:00:01.000Z',
+      })
+    mockGetBacktestJobResult.mockResolvedValue({
+      summary: {
+        netProfit: 120,
+        netProfitPct: 12,
+        maxDrawdownPct: 9.5,
+        winRate: 0.55,
+        profitFactor: 1.8,
+        totalTrades: 42,
+      },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      jest.advanceTimersByTime(1500)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      jest.advanceTimersByTime(1500)
+      await Promise.resolve()
+    })
+
+    expect(mockGetBacktestJob).toHaveBeenCalledTimes(2)
+    expect(mockGetBacktestJobResult).toHaveBeenCalled()
+    expect(container.querySelector('[data-testid="backtest-summary"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="messages"]')?.textContent).not.toContain(
+      'aiQuant.messages.backtestPayloadInvalid',
+    )
   })
 
   it('refreshes cached backtest summary from the persisted job result on hydration', async () => {
