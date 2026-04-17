@@ -190,12 +190,39 @@ jest.mock('@/components/ai-quant/LogicGraphPreview', () => ({
     onRevise: () => void
     confirmDisabled?: boolean
   }) => (
-    <div>
+    <div data-testid="legacy-graph-preview">
       <div data-testid="graph-status">{graph.status}</div>
       <button data-testid="confirm-graph" disabled={Boolean(confirmDisabled)} onClick={onConfirm}>
         confirm
       </button>
       <button data-testid="revise-graph" onClick={onRevise}>
+        revise
+      </button>
+    </div>
+  ),
+}))
+
+jest.mock('@/components/ai-quant/DisplayLogicGraphPreview', () => ({
+  DisplayLogicGraphPreview: ({
+    graph,
+    onConfirm,
+    onRevise,
+    confirmDisabled,
+    confirmed,
+  }: {
+    graph: { blocks: Array<{ type: string }> }
+    onConfirm: () => void
+    onRevise: () => void
+    confirmDisabled?: boolean
+    confirmed?: boolean
+  }) => (
+    <div data-testid="display-graph-preview">
+      <div data-testid="display-graph-block-count">{graph.blocks.length}</div>
+      <div data-testid="display-graph-status">{confirmed ? 'confirmed' : 'draft'}</div>
+      <button data-testid="display-confirm-graph" disabled={Boolean(confirmDisabled)} onClick={onConfirm}>
+        confirm
+      </button>
+      <button data-testid="display-revise-graph" onClick={onRevise}>
         revise
       </button>
     </div>
@@ -224,6 +251,7 @@ function seedDraftConversation(
   now = Date.now(),
   overrides?: {
     messages?: Array<{ id: string; role: 'assistant' | 'user'; content: string }>
+    displayLogicGraph?: Record<string, unknown> | null
     semanticGraph?: typeof validSemanticGraph | null
     validationReport?: {
       ok: boolean
@@ -276,6 +304,9 @@ function seedDraftConversation(
             positionPct: 10,
           },
         },
+        displayLogicGraph: overrides?.displayLogicGraph === undefined
+          ? null
+          : overrides.displayLogicGraph,
         semanticGraph: overrides?.semanticGraph === undefined ? validSemanticGraph : overrides.semanticGraph,
         validationReport: overrides?.validationReport === undefined
           ? { ok: true, errors: [] }
@@ -467,6 +498,46 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
       root = null
     }
     document.body.innerHTML = ''
+  })
+
+  it('renders the display graph preview when hydrated and still confirms the operational logicGraph', async () => {
+    localStorage.clear()
+    seedDraftConversation(Date.now(), {
+      displayLogicGraph: {
+        blocks: [
+          {
+            type: 'IF',
+            items: [
+              {
+                kind: 'condition',
+                id: 'condition-1',
+                text: '3m 内相对前收盘下跌 1%',
+              },
+            ],
+          },
+        ],
+      },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="display-graph-preview"]')).not.toBeNull()
+    expect(container.querySelector('[data-testid="legacy-graph-preview"]')).toBeNull()
+    expect(container.querySelector('[data-testid="display-graph-block-count"]')?.textContent).toBe('1')
+    expect(container.querySelector('[data-testid="display-graph-status"]')?.textContent).toBe('draft')
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="display-confirm-graph"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="display-graph-status"]')?.textContent).toBe('confirmed')
   })
 
   it('shows generating copy immediately after graph confirmation and enables backtest after codegen is published', async () => {

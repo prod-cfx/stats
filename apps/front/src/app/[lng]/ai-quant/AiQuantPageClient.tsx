@@ -20,6 +20,7 @@ import { ConversationSidebar } from '@/components/ai-quant/ConversationSidebar'
 import { DeployDialog } from '@/components/ai-quant/DeployDialog'
 import { GuestAiQuantLanding } from '@/components/ai-quant/GuestAiQuantLanding'
 import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-storage'
+import { DisplayLogicGraphPreview } from '@/components/ai-quant/DisplayLogicGraphPreview'
 import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
 import { SemanticGraphCard } from '@/components/ai-quant/SemanticGraphCard'
@@ -81,6 +82,18 @@ type ConversationSyncState = 'idle' | 'loading' | 'ready' | 'error'
 interface AiQuantPageClientProps {
   deployVersion?: string
   serverOwnedConversations?: boolean
+}
+
+function hasRenderableDisplayLogicGraph(
+  graph: ConversationState['displayLogicGraph'] | null | undefined,
+): graph is NonNullable<ConversationState['displayLogicGraph']> {
+  if (!graph || typeof graph !== 'object') return false
+  const candidate = graph as { blocks?: unknown }
+  if (!Array.isArray(candidate.blocks)) return false
+  return candidate.blocks.every((block) => {
+    if (!block || typeof block !== 'object') return false
+    return Array.isArray((block as { items?: unknown }).items)
+  })
 }
 
 export function AiQuantPageClient({
@@ -492,6 +505,9 @@ export function AiQuantPageClient({
     const prioritizedItems = gate.pendingItems?.length ? gate.pendingItems : gate.items
     return prioritizedItems.find(item => item.status === 'pending') ?? null
   }, [activeConversation?.clarificationGate])
+  const displayLogicGraph = hasRenderableDisplayLogicGraph(activeConversation?.displayLogicGraph)
+    ? activeConversation.displayLogicGraph
+    : null
 
   const callingMessage = (elapsedSec: number) =>
     t('aiQuant.messages.calling', {
@@ -540,6 +556,42 @@ export function AiQuantPageClient({
       ],
       updatedAt: Date.now(),
     }))
+  }
+
+  const confirmCurrentLogicGraph = (args: {
+    conversationId: string
+    params: QuantParams
+    sessionId: string | null
+    message: string
+  }) => {
+    if (!semanticViewConfirmable) {
+      appendSemanticGraphGuardMessage(args.conversationId)
+      return false
+    }
+
+    updateActiveConversation(curr => ({
+      ...curr,
+      logicGraph: curr.logicGraph ? { ...curr.logicGraph, status: 'confirmed' } : null,
+      messages: [
+        ...curr.messages,
+        {
+          id: `graph-confirm-${Date.now()}`,
+          role: 'assistant',
+          content: t('aiQuant.messages.graphConfirmed'),
+        },
+      ],
+      updatedAt: Date.now(),
+    }))
+    void requestBackendGraphGeneration({
+      conversationId: args.conversationId,
+      message: args.message,
+      params: args.params,
+      sessionId: args.sessionId,
+      usePresetRules: false,
+      confirmGenerate: true,
+      confirmedCanonicalDigest: activeConversation.pendingCanonicalDigest ?? undefined,
+    })
+    return true
   }
 
   const requestBackendGraphGeneration = async (args: {
@@ -624,32 +676,14 @@ export function AiQuantPageClient({
     const confirmPattern =
       /^(?:确认逻辑图|\/confirm|确认|可以|好的?|行|ok|okay|yes|同意|没问题)[。.!！?？\s]*$/i
     if (currentGraphStatus === 'draft' && confirmPattern.test(trimmedInput)) {
-      if (!semanticViewConfirmable) {
-        appendSemanticGraphGuardMessage(currentConversationId)
-        return
-      }
-      updateActiveConversation(curr => ({
-        ...curr,
-        logicGraph: curr.logicGraph ? { ...curr.logicGraph, status: 'confirmed' } : null,
-        messages: [
-          ...curr.messages,
-          {
-            id: `graph-confirm-by-chat-${Date.now()}`,
-            role: 'assistant',
-            content: t('aiQuant.messages.graphConfirmed'),
-          },
-        ],
-        updatedAt: Date.now(),
-      }))
-      await requestBackendGraphGeneration({
+      if (!confirmCurrentLogicGraph({
         conversationId: currentConversationId,
-        message: trimmedInput,
         params: currentParams,
         sessionId: currentSessionId,
-        usePresetRules: false,
-        confirmGenerate: true,
-        confirmedCanonicalDigest: activeConversation.pendingCanonicalDigest ?? undefined,
-      })
+        message: trimmedInput,
+      })) {
+        return
+      }
       return
     }
 
@@ -1049,65 +1083,74 @@ export function AiQuantPageClient({
           {activeConversation.validationReport && !activeConversation.validationReport.ok && (
             <SemanticGraphValidationAlert validationReport={activeConversation.validationReport} />
           )}
-          {activeConversation.logicGraph && (
-            <>
-              <LogicGraphPreview
-                graph={activeConversation.logicGraph}
-                confirmDisabled={
-                  codegenBusy ||
-                  activeConversation.logicGraph.status === 'confirmed' ||
-                  !semanticViewConfirmable
-                }
-                onConfirm={() => {
-                  const currentConversationId = activeConversation.id
-                  const currentParams = activeConversation.params
-                  const currentSessionId = activeConversation.llmCodegenSessionId
-                  if (!semanticViewConfirmable) {
-                    appendSemanticGraphGuardMessage(currentConversationId)
-                    return
-                  }
-                  updateActiveConversation(curr => ({
-                    ...curr,
-                    logicGraph: curr.logicGraph ? { ...curr.logicGraph, status: 'confirmed' } : null,
-                    messages: [
-                      ...curr.messages,
-                      {
-                        id: `graph-confirm-${Date.now()}`,
-                        role: 'assistant',
-                        content: t('aiQuant.messages.graphConfirmed'),
-                      },
-                    ],
-                    updatedAt: Date.now(),
-                  }))
-                  void requestBackendGraphGeneration({
-                    conversationId: currentConversationId,
-                    message: t('aiQuant.messages.confirmGenerate', {
-                      defaultValue: 'Confirm code generation',
-                    }),
-                    params: currentParams,
-                    sessionId: currentSessionId,
-                    usePresetRules: false,
-                    confirmGenerate: true,
-                    confirmedCanonicalDigest: activeConversation.pendingCanonicalDigest ?? undefined,
-                  })
-                }}
-                onRevise={() => {
-                  updateActiveConversation(curr => ({
-                    ...invalidateConversationPublication(curr, { markGraphDraft: true }),
-                    messages: [
-                      ...curr.messages,
-                      {
-                        id: `graph-revise-${Date.now()}`,
-                        role: 'assistant',
-                        content: t('aiQuant.messages.graphRevise'),
-                      },
-                    ],
-                    updatedAt: Date.now(),
-                  }))
-                }}
-              />
-            </>
-          )}
+          {activeConversation.logicGraph && displayLogicGraph ? (
+            <DisplayLogicGraphPreview
+              graph={displayLogicGraph}
+              confirmDisabled={
+                codegenBusy ||
+                activeConversation.logicGraph.status === 'confirmed' ||
+                !semanticViewConfirmable
+              }
+              confirmed={activeConversation.logicGraph.status === 'confirmed'}
+              onConfirm={() => {
+                confirmCurrentLogicGraph({
+                  conversationId: activeConversation.id,
+                  params: activeConversation.params,
+                  sessionId: activeConversation.llmCodegenSessionId,
+                  message: t('aiQuant.messages.confirmGenerate', {
+                    defaultValue: 'Confirm code generation',
+                  }),
+                })
+              }}
+              onRevise={() => {
+                updateActiveConversation(curr => ({
+                  ...invalidateConversationPublication(curr, { markGraphDraft: true }),
+                  messages: [
+                    ...curr.messages,
+                    {
+                      id: `graph-revise-${Date.now()}`,
+                      role: 'assistant',
+                      content: t('aiQuant.messages.graphRevise'),
+                    },
+                  ],
+                  updatedAt: Date.now(),
+                }))
+              }}
+            />
+          ) : activeConversation.logicGraph ? (
+            <LogicGraphPreview
+              graph={activeConversation.logicGraph}
+              confirmDisabled={
+                codegenBusy ||
+                activeConversation.logicGraph.status === 'confirmed' ||
+                !semanticViewConfirmable
+              }
+              onConfirm={() => {
+                confirmCurrentLogicGraph({
+                  conversationId: activeConversation.id,
+                  params: activeConversation.params,
+                  sessionId: activeConversation.llmCodegenSessionId,
+                  message: t('aiQuant.messages.confirmGenerate', {
+                    defaultValue: 'Confirm code generation',
+                  }),
+                })
+              }}
+              onRevise={() => {
+                updateActiveConversation(curr => ({
+                  ...invalidateConversationPublication(curr, { markGraphDraft: true }),
+                  messages: [
+                    ...curr.messages,
+                    {
+                      id: `graph-revise-${Date.now()}`,
+                      role: 'assistant',
+                      content: t('aiQuant.messages.graphRevise'),
+                    },
+                  ],
+                  updatedAt: Date.now(),
+                }))
+              }}
+            />
+          ) : null}
 
           {activeConversation.backtestResult && (
             <BacktestSummaryCard
