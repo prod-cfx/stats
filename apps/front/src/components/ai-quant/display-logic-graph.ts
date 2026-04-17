@@ -295,6 +295,27 @@ function extractRules(specDesc: DisplayLogicGraphSpecDesc | null): DisplayLogicG
   return Array.isArray(specDesc?.rules) ? specDesc.rules : []
 }
 
+function buildRiskSummaryText(rule: DisplayLogicGraphRule): string | null {
+  const conditionText = formatConditionText(rule.condition)
+  const actionText = (rule.actions ?? [])
+    .map(action => formatActionText(action))
+    .filter(Boolean)
+    .join(' / ')
+  if (!conditionText) return null
+  return actionText ? `风控: ${conditionText} -> ${actionText}` : `风控: ${conditionText}`
+}
+
+function buildLegacyRiskSummaryTexts(specDesc: DisplayLogicGraphSpecDesc | null): string[] {
+  if (!isRecord(specDesc?.riskRules)) return []
+  return Object.entries(specDesc.riskRules)
+    .map(([key, value]) => {
+      const formatted = typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+        ? String(value)
+        : JSON.stringify(value)
+      return `风控: ${key} = ${formatted}`
+    })
+}
+
 function buildLegacyRuleBlocks(specDesc: DisplayLogicGraphSpecDesc | null): DisplayBlock[] {
   if (!specDesc) return []
 
@@ -476,15 +497,34 @@ export function buildDisplayLogicGraphFromCodegenSpec(input: BuildDisplayLogicGr
   const nextInput = input ?? {}
   const specDesc = isRecord(nextInput.specDesc) ? nextInput.specDesc as DisplayLogicGraphSpecDesc : null
   const rules = extractRules(specDesc)
-  const blocks = rules.length > 0
-    ? rules.map((rule, index) => buildConditionBlock(rule, index))
+  const nonRiskRules = rules.filter(rule => rule.phase !== 'risk')
+  const blocks = nonRiskRules.length > 0
+    ? nonRiskRules.map((rule, index) => buildConditionBlock(rule, index))
     : buildLegacyRuleBlocks(specDesc)
   const executeMeta = extractExecuteMeta(specDesc, nextInput.fallbackMeta)
+  const executeBlock = buildExecuteBlock(executeMeta)
+  const riskSummaries = [
+    ...rules
+      .filter(rule => rule.phase === 'risk')
+      .map(buildRiskSummaryText)
+      .filter((item): item is string => Boolean(item)),
+    ...buildLegacyRiskSummaryTexts(specDesc),
+  ]
+
+  riskSummaries.forEach((text, index) => {
+    executeBlock.items.push({
+      kind: 'execute',
+      id: `execute-risk-${index}`,
+      key: 'risk',
+      value: text,
+      text,
+    })
+  })
 
   return {
     blocks: [
       ...blocks,
-      buildExecuteBlock(executeMeta),
+      executeBlock,
     ],
   }
 }

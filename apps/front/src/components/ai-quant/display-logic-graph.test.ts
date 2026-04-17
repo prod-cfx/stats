@@ -182,6 +182,45 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
     expect(text).not.toContain('grid.range_rebalance')
   })
 
+  it('keeps risk-phase rules out of the main trigger blocks and shows them in execute summary', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        rules: [
+          {
+            id: 'entry-1',
+            phase: 'entry',
+            condition: {
+              key: 'price.change_pct',
+              op: 'LTE',
+              value: -0.01,
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+          {
+            id: 'risk-1',
+            phase: 'risk',
+            condition: {
+              key: 'position_loss_pct',
+              value: 0.05,
+            },
+            actions: [{ type: 'FORCE_EXIT' }],
+          },
+        ],
+      },
+      fallbackMeta: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'EXECUTE'])
+    expect(graph.blocks[0].items.map(item => item.text).join(' ')).not.toContain('风控')
+    expect(graph.blocks[1].items.map(item => item.text).join(' ')).toContain('风控:')
+    expect(graph.blocks[1].items.map(item => item.text).join(' ')).toContain('亏损达到 5%')
+  })
+
   it('uses canonical timeframe when top-level market timeframes are missing', () => {
     const graph = buildDisplayLogicGraphFromCodegenSpec({
       specDesc: {
