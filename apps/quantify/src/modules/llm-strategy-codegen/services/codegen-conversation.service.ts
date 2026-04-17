@@ -79,6 +79,7 @@ import { SemanticStateMergeService } from './semantic-state-merge.service'
 import { SemanticStateProjectionService } from './semantic-state-projection.service'
 import { SemanticStateReducerService } from './semantic-state-reducer.service'
 import { InferredConfirmationClassifierService } from './inferred-confirmation-classifier.service'
+import { resolveSemanticClarificationMetadata } from './semantic-clarification-metadata'
 
 interface GenerationOptions {
   providerCode?: string
@@ -762,7 +763,11 @@ export class CodegenConversationService {
       })
     }
 
-    const missingFields = this.resolveChecklistMissingFields(canonicalChecklist)
+    const missingFields = this.resolveActiveGateMissingFields(
+      canonicalChecklist,
+      semanticReadyForGenerate,
+      compileability,
+    )
     if (missingFields.length > 0) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
@@ -1214,20 +1219,21 @@ export class CodegenConversationService {
       marketType: 'missing_market_type',
       timeframe: 'missing_timeframe',
     }
+    const semanticMetadata = resolveSemanticClarificationMetadata(slot.slotKey)
     const field = isStateGateSlot
       ? 'stateGates.marketRegime'
       : isContextSlot
         ? slot.slotKey
       : isGridSlot
-        ? slot.slotKey
-      : (slot.slotKey.includes('.exit') ? 'exitRules' : 'entryRules')
+        ? semanticMetadata.field
+      : semanticMetadata.field
     const reason = isStateGateSlot
       ? 'ambiguous_state_gate'
       : isContextSlot
         ? (contextReasonMap[slot.slotKey] ?? 'missing_execution_context')
       : isGridSlot
-        ? 'grid_params_missing'
-        : (slot.slotKey.includes('.exit') ? 'missing_exit_rules' : 'missing_entry_rules')
+        ? semanticMetadata.reason
+        : semanticMetadata.reason
 
     return {
       key: isGridSlot ? slot.slotKey : `semantic.${slot.slotKey}`,
@@ -2998,6 +3004,18 @@ export class CodegenConversationService {
       missing.push('exitRules')
     }
     return missing
+  }
+
+  private resolveActiveGateMissingFields(
+    checklist: ChecklistPayload,
+    semanticReady: boolean,
+    compileability: CanonicalCompileabilityReport,
+  ): string[] {
+    const missingFields = this.resolveChecklistMissingFields(checklist)
+    if (semanticReady && compileability.canCompile) {
+      return []
+    }
+    return missingFields
   }
 
   private evaluateCanonicalCompileability(spec: {

@@ -6,6 +6,7 @@ import { Injectable } from '@nestjs/common'
 import { isEquivalentMarketScopeValue } from './market-scope-equivalence'
 import { classifyPercentageRuleFamily } from './rule-family-default-semantics'
 import { buildSemanticSlotId } from '../types/semantic-state'
+import { resolveSemanticClarificationMetadata } from './semantic-clarification-metadata'
 
 type ClarificationChecklistInput = ChecklistPayload
 
@@ -144,11 +145,12 @@ export class StrategyClarificationRulesService {
         const slotKey = ambiguity.slotKey ?? ambiguity.field
         const fieldPath = ambiguity.fieldPath
         const slotId = ambiguity.slotId ?? (fieldPath ? buildSemanticSlotId({ slotKey, fieldPath }) : undefined)
+        const semanticMetadata = resolveSemanticClarificationMetadata(slotKey)
 
         return [{
           key: `semantic.${slotKey}`,
-          reason: 'missing_entry_rules',
-          field: 'entryRules',
+          reason: semanticMetadata.reason,
+          field: semanticMetadata.field,
           blocking: true,
           question: ambiguity.question ?? ambiguity.message,
           status: 'pending',

@@ -240,6 +240,67 @@ describe('strategyClarificationRulesService', () => {
     ]))
   })
 
+  it('does not map grid semantic slots back into legacy missing entry and exit reasons', () => {
+    const state = service.detectFromAmbiguities({
+      executionContext: {
+        context: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        evidence: [],
+        ambiguities: [],
+      },
+      atomicResolution: {
+        atomicIntent: {
+          triggers: [],
+          actions: [],
+          sizing: null,
+          risk: [],
+          relations: [],
+        },
+        ambiguities: [
+          {
+            kind: 'open_semantic_slot',
+            field: 'grid.sideMode',
+            message: '网格方向缺失',
+            question: '请确认网格方向：只做多、只做空，还是双向低买高卖？',
+            priority: 10,
+            slotKey: 'grid.sideMode',
+            fieldPath: 'triggers[0].params.sideMode',
+            slotId: buildSemanticSlotId({
+              slotKey: 'grid.sideMode',
+              fieldPath: 'triggers[0].params.sideMode',
+            }),
+          },
+        ],
+      },
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+          positionPct: 10,
+        },
+      },
+    })
+
+    expect(state.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic.grid.sideMode',
+        reason: 'missing_side_scope',
+        field: 'grid.sideMode',
+        slotKey: 'grid.sideMode',
+      }),
+    ]))
+    expect(state.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'missing_entry_rules' }),
+      expect.objectContaining({ reason: 'missing_exit_rules' }),
+    ]))
+  })
+
   it('detects missing side scope for upper-band breakout entry rule', () => {
     const state = service.detect({
       entryRules: ['突破布林带上轨交易'],

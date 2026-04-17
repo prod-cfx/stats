@@ -1235,6 +1235,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(result.status).toBe('DRAFTING')
     expect(result.assistantPrompt).toContain('缺少方向约束')
+    expect(result.assistantPrompt).toContain('突破上轨时是只做空，还是也允许做多？')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       checklist: expect.objectContaining({
         symbols: ['BTCUSDT'],
@@ -1822,11 +1823,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
-  it('starts in checklist gate for raw Chinese price-change wording with percent-style sizing', async () => {
-    const dto: StartCodegenSessionDto = {
-      userId: 'u1',
-      initialMessage: 'okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金',
-    }
+  it('starts in checklist gate for the exact raw price-change path without falling back to legacy entry and exit missing reasons', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's2-raw-price-change-exact' })
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
         related: true,
@@ -1839,15 +1837,78 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         },
       }),
     })
-    mockRepo.createSession.mockResolvedValue({ id: 's2-raw-price-change' })
 
-    const result = await service.startSession(dto)
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金',
+    })
 
     expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.specDesc).toBeTruthy()
     expect(result.canonicalDigest).toMatch(/^sha256:/)
-    expect(result.clarificationState).toEqual(expect.objectContaining({
-      status: 'CLEAR',
-      items: [],
+    expect(result.specDesc).toEqual(expect.objectContaining({
+      confirmation: expect.objectContaining({
+        required: true,
+      }),
+    }))
+    expect(result.clarificationState?.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'missing_entry_rules' }),
+      expect.objectContaining({ reason: 'missing_exit_rules' }),
+    ]))
+  })
+
+  it('starts in checklist gate for the exact Bollinger path without falling back to legacy entry and exit missing reasons', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's2-bollinger-exact' })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '策略逻辑已完整，请确认逻辑图。',
+        logic: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+          entryRules: ['K线收盘后确认突破布林带(30,2.5)上轨时做空'],
+          exitRules: ['价格回到布林带中轨(MA30)时平空'],
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'perp',
+            positionPct: 10,
+          },
+        },
+      }),
+    })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在ok交易所 我想在btc-usdt-swap 15分钟布林带 上轨做空 下轨做多 单笔百分10资金',
+    })
+
+    expect(result.clarificationState?.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ reason: 'missing_entry_rules' }),
+      expect.objectContaining({ reason: 'missing_exit_rules' }),
+    ]))
+    expect(result.assistantPrompt).toContain('缺少方向约束')
+    expect(result.status).toBe('DRAFTING')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      semanticState: expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({
+            key: 'bollinger.touch_upper',
+            phase: 'entry',
+            sideScope: 'short',
+          }),
+          expect.objectContaining({
+            key: 'bollinger.touch_middle',
+            phase: 'exit',
+            sideScope: 'short',
+          }),
+        ]),
+      }),
+      clarificationState: expect.objectContaining({
+        items: expect.arrayContaining([
+          expect.objectContaining({ reason: 'missing_side_scope' }),
+        ]),
+      }),
     }))
   })
 
@@ -3203,8 +3264,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的出场规则')
-    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的入场规则')
     expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
       expect.objectContaining({ reason: 'missing_exit_rules' }),
       expect.objectContaining({ reason: 'missing_entry_rules' }),
@@ -3270,8 +3329,104 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的出场规则')
-    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的入场规则')
+    expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({ reason: 'missing_exit_rules' }),
+      expect.objectContaining({ reason: 'missing_entry_rules' }),
+    ]))
+  })
+
+  it('consumes 低买高卖 as grid side semantics after answering 15m instead of falling back to legacy entry and exit blockers', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-grid-exact-repro-three-turn' })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        logic: {},
+        assistantPrompt: '逻辑图仍未完整，请继续补充。',
+      }),
+    })
+
+    const startResult = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在ok交易所 我想弄个网格策略 btc永续合约 在60000-80000的区间 每一格千分之5 不断低买高卖 单笔百分10资金',
+    })
+
+    const createdSession = buildPersistedSessionSnapshot(
+      's-grid-exact-repro-three-turn',
+      mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>,
+      {
+        clarificationState: startResult.clarificationState,
+        latestSpecDesc: startResult.specDesc ?? null,
+        semanticState: (mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>).semanticState,
+      },
+    )
+
+    mockRepo.findById.mockResolvedValueOnce({
+      ...createdSession,
+      updatedAt: '2026-04-17T10:00:00.000Z',
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        logic: {},
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    await service.continueSession('s-grid-exact-repro-three-turn', {
+      userId: 'u1',
+      message: '15m',
+      clarificationAnswers: {
+        'semantic.timeframe': '15m',
+      },
+    } as ContinueCodegenSessionDto)
+
+    const afterTimeframeUpdate = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, unknown>
+
+    mockRepo.findById.mockResolvedValueOnce(buildPersistedSessionSnapshot(
+      's-grid-exact-repro-three-turn',
+      createdSession,
+      {
+        ...afterTimeframeUpdate,
+        updatedAt: '2026-04-17T10:01:00.000Z',
+      },
+    ))
+
+    const result = await service.continueSession('s-grid-exact-repro-three-turn', {
+      userId: 'u1',
+      message: '低买高卖',
+    } as ContinueCodegenSessionDto)
+
+    expect(mockRepo.updateSession).toHaveBeenLastCalledWith(
+      's-grid-exact-repro-three-turn',
+      expect.objectContaining({
+        checklist: expect.objectContaining({
+          grid: expect.objectContaining({
+            lower: 60000,
+            upper: 80000,
+            stepPct: 0.5,
+            sideMode: 'bidirectional',
+          }),
+        }),
+        semanticState: expect.objectContaining({
+          triggers: expect.arrayContaining([
+            expect.objectContaining({
+              key: 'grid.range_rebalance',
+              params: expect.objectContaining({
+                rangeLower: 60000,
+                rangeUpper: 80000,
+                stepPct: 0.5,
+                sideMode: 'bidirectional',
+              }),
+              openSlots: expect.not.arrayContaining([
+                expect.objectContaining({ slotKey: 'grid.sideMode', status: 'open' }),
+              ]),
+            }),
+          ]),
+        }),
+      }),
+    )
     expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
       expect.objectContaining({ reason: 'missing_exit_rules' }),
       expect.objectContaining({ reason: 'missing_entry_rules' }),
@@ -7184,6 +7339,55 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s7', expect.objectContaining({
       status: 'PUBLISHED',
     }))
+  })
+
+  it('does not block confirmGenerate with the legacy entry and exit completion prompt when the semantic snapshot is complete and the canonical spec can compile', async () => {
+    const semanticCompleteChecklist = completeChecklist({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['收盘确认价格突破长期均线（50）时买入'],
+      exitRules: ['收盘确认价格跌破短期均线（20）时卖出'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'spot',
+        positionPct: 10,
+        stopLossPct: 5,
+        stopLossBasis: 'entry_avg_price',
+        takeProfitPct: 10,
+        takeProfitBasis: 'entry_avg_price',
+      },
+    })
+    const persistedSemanticState = (service as any).buildFallbackSemanticState(semanticCompleteChecklist)
+    mockRepo.findById.mockResolvedValue({
+      id: 's7-semantic-complete',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: semanticCompleteChecklist,
+      semanticState: persistedSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    const missingFieldsSpy = jest
+      .spyOn(CodegenConversationService.prototype as any, 'resolveChecklistMissingFields')
+      .mockReturnValue(['entryRules', 'exitRules'])
+    const confirmedCanonicalDigest = buildConfirmedCanonicalDigest(semanticCompleteChecklist, persistedSemanticState)
+    const readCanonicalDigestSpy = jest
+      .spyOn(CodegenConversationService.prototype as any, 'readCanonicalDigest')
+      .mockReturnValue(confirmedCanonicalDigest)
+
+    try {
+      const result = await service.continueSession('s7-semantic-complete', {
+        userId: 'u1',
+        message: '确认逻辑图',
+        confirmGenerate: true,
+        confirmedCanonicalDigest,
+      })
+
+      expect(result.status).toBe('GENERATING')
+    } finally {
+      readCanonicalDigestSpy.mockRestore()
+      missingFieldsSpy.mockRestore()
+    }
   })
 
   it('persists updated semanticState when confirmGenerate closes a semantic slot before GENERATING', async () => {
