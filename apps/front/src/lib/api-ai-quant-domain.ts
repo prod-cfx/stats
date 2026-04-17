@@ -223,6 +223,32 @@ export async function fetchAccountAiQuantStrategyDetail(
   }, 'FETCH_ACCOUNT_AI_QUANT_STRATEGY_DETAIL')
 }
 
+export async function fetchAccountAiQuantDeployResult(
+  deployRequestId: string,
+  userId: string,
+): Promise<AccountAiQuantStrategyDetail | null> {
+  return apiCall(async () => {
+    if (!deployRequestId?.trim()) {
+      throw new ApiError('deployRequestId is required', 'INVALID_INPUT')
+    }
+    if (!userId?.trim()) {
+      throw new ApiError('userId is required', 'INVALID_INPUT')
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/account/ai-quant/strategies/deploy-requests/${encodeURIComponent(deployRequestId.trim())}/result`,
+      {
+        method: 'GET',
+        headers: buildAccountAiQuantHeaders(userId.trim()),
+      },
+    )
+    const json = await parseAccountAiQuantJson(response, '获取 AI 量化部署结果失败')
+    return unwrapResponse<AccountAiQuantStrategyDetail | null>(
+      json as AccountAiQuantStrategyDetail | { data?: AccountAiQuantStrategyDetail | null; message?: string },
+    )
+  }, 'FETCH_ACCOUNT_AI_QUANT_DEPLOY_RESULT')
+}
+
 export async function performAccountAiQuantStrategyAction(
   strategyId: string,
   payload: { userId: string; action: AccountAiQuantStrategyAction },

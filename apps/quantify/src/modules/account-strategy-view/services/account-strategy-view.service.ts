@@ -661,6 +661,8 @@ export class AccountStrategyViewService {
       })
     }
 
+    const resolvedDeploy = await this.resolveDeployPayload(dto)
+
     let deployRequest: { id: string }
     try {
       deployRequest = await this.repo.createDeployRequestProcessing(
@@ -681,8 +683,6 @@ export class AccountStrategyViewService {
         status: conflict?.status ?? 'PROCESSING',
       })
     }
-
-    const resolvedDeploy = await this.resolveDeployPayload(dto)
     const exchangeBalance = dto.exchangeAccountId && this.tradingService
       ? await this.resolveExchangeBalanceSnapshot({
           userId: dto.userId,
@@ -734,7 +734,12 @@ export class AccountStrategyViewService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       const code = error instanceof DomainException ? error.code : ErrorCode.BAD_REQUEST
-      await this.repo.markDeployRequestFailed(deployRequest.id, String(code), message)
+      try {
+        await this.repo.markDeployRequestFailed(deployRequest.id, String(code), message)
+      } catch {
+        // Best effort only: preserve the original deploy failure when the
+        // failure marker cannot be persisted.
+      }
       throw error
     }
   }

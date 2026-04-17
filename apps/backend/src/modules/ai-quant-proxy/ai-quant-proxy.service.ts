@@ -48,6 +48,13 @@ export class AiQuantProxyService {
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
+  async getDeployResult(userId: string, authorization: string | undefined, deployRequestId: string) {
+    return this.quantifyClient.getDeployResult(deployRequestId, {
+      userId,
+      headers: this.userHeaders(userId, authorization),
+    }).catch(error => { throw this.mapQuantifyError(error) })
+  }
+
   async performAccountStrategyAction(
     userId: string,
     authorization: string | undefined,

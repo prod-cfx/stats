@@ -7,6 +7,7 @@ export {
   deleteAccountAiQuantStrategy,
   deleteAiQuantConversation,
   deployAccountAiQuantStrategy,
+  fetchAccountAiQuantDeployResult,
   fetchAccountAiQuantStrategies,
   fetchAccountAiQuantStrategyDetail,
   getLlmCodegenSession,
