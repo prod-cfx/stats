@@ -56,6 +56,57 @@ function resolvePartialCoverageNotice(inputSummary: unknown): {
   }
 }
 
+function resolveBacktestMarketType(inputSummary: unknown): 'spot' | 'perp' {
+  if (typeof inputSummary !== 'object' || inputSummary === null) {
+    return 'spot'
+  }
+
+  const marketType = (inputSummary as { marketType?: unknown }).marketType
+  return marketType === 'perp' ? 'perp' : 'spot'
+}
+
+function resolveBacktestSymbol(inputSummary: unknown, fallback: string): string {
+  if (typeof inputSummary !== 'object' || inputSummary === null) {
+    return fallback
+  }
+
+  const symbols = (inputSummary as { symbols?: unknown }).symbols
+  return Array.isArray(symbols) && typeof symbols[0] === 'string' && symbols[0].trim()
+    ? symbols[0]
+    : fallback
+}
+
+function resolveBacktestRangeDisplay(
+  inputSummary: unknown,
+  fallbackStartAt: string | null,
+  fallbackEndAt: string | null,
+): string {
+  if (typeof inputSummary === 'object' && inputSummary !== null) {
+    const candidate = inputSummary as {
+      appliedRange?: unknown
+      requestedRange?: unknown
+      dataRange?: unknown
+    }
+    const preferredRange =
+      isCoverageRange(candidate.appliedRange)
+        ? candidate.appliedRange
+        : isCoverageRange(candidate.requestedRange)
+          ? candidate.requestedRange
+          : isCoverageRange(candidate.dataRange)
+            ? candidate.dataRange
+            : null
+
+    if (preferredRange) {
+      return formatBacktestRange(
+        new Date(preferredRange.fromTs).toISOString(),
+        new Date(preferredRange.toTs).toISOString(),
+      )
+    }
+  }
+
+  return formatBacktestRange(fallbackStartAt, fallbackEndAt)
+}
+
 export default async function AiQuantBacktestDetailPage({
   params,
   searchParams,
@@ -74,13 +125,15 @@ export default async function AiQuantBacktestDetailPage({
     Promise.resolve(searchParams ?? {}),
   ])
   const lng = resolved.lng === 'en' ? 'en' : 'zh'
-  const symbol = typeof resolvedSearch.symbol === 'string' ? resolvedSearch.symbol : 'BTCUSDT'
-  const startAt = typeof resolvedSearch.startAt === 'string' ? resolvedSearch.startAt : null
-  const endAt = typeof resolvedSearch.endAt === 'string' ? resolvedSearch.endAt : null
-  const rangeDisplay = formatBacktestRange(startAt, endAt)
+  const fallbackSymbol = typeof resolvedSearch.symbol === 'string' ? resolvedSearch.symbol : 'BTCUSDT'
+  const fallbackStartAt = typeof resolvedSearch.startAt === 'string' ? resolvedSearch.startAt : null
+  const fallbackEndAt = typeof resolvedSearch.endAt === 'string' ? resolvedSearch.endAt : null
 
   const job = await fetchBacktestJobServer(resolved.id)
+  const symbol = resolveBacktestSymbol(job?.inputSummary, fallbackSymbol)
+  const rangeDisplay = resolveBacktestRangeDisplay(job?.inputSummary, fallbackStartAt, fallbackEndAt)
   const partialCoverageNotice = resolvePartialCoverageNotice(job?.inputSummary)
+  const marketType = resolveBacktestMarketType(job?.inputSummary)
   const metrics = job?.resultSummary
       ? {
         maxDrawdownPct: Number(job.resultSummary.maxDrawdownPct.toFixed(2)),
@@ -109,6 +162,7 @@ export default async function AiQuantBacktestDetailPage({
           lng={lng}
           id={resolved.id}
           symbol={symbol}
+          marketType={marketType}
           rangeDisplay={rangeDisplay}
           metrics={metrics}
           partialCoverageNotice={partialCoverageNotice}

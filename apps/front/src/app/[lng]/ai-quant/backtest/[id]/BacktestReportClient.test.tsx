@@ -93,6 +93,7 @@ describe('BacktestReportClient', () => {
           lng="zh"
           id="btjob-1"
           symbol="BTCUSDT"
+          marketType="perp"
           rangeDisplay="2026-03-01 ~ 2026-03-02"
           partialCoverageNotice={{
             requestedRange: '2026-03-01 00:00 UTC ~ 2026-03-02 00:00 UTC',
@@ -115,6 +116,8 @@ describe('BacktestReportClient', () => {
 
     expect(mockGetBacktestJobResult).toHaveBeenCalledWith('btjob-1')
     expect(container.textContent).toContain('交易明细')
+    expect(container.textContent).toContain('合约回测')
+    expect(container.textContent).toContain('BTCUSDT 合约')
     expect(container.textContent).toContain('开仓时间')
     expect(container.textContent).toContain('平仓时间')
     expect(container.textContent).toContain('2026-03-01 08:00')
@@ -135,6 +138,7 @@ describe('BacktestReportClient', () => {
           lng="zh"
           id="btjob-2"
           symbol="BTCUSDT"
+          marketType="perp"
           rangeDisplay="2026-03-01 ~ 2026-03-02"
           metrics={{
             maxDrawdownPct: 2.4,
@@ -198,6 +202,7 @@ describe('BacktestReportClient', () => {
           lng="en"
           id="btjob-open-position"
           symbol="BTCUSDT"
+          marketType="perp"
           rangeDisplay="2026-04-01 ~ 2026-04-15"
           metrics={{
             maxDrawdownPct: 0.32,
@@ -221,7 +226,70 @@ describe('BacktestReportClient', () => {
     expect(container.textContent).toContain('Closed Trades')
     expect(container.textContent).toContain('No closed trades were completed during this backtest.')
     expect(container.textContent).toContain('Open Positions')
-    expect(container.textContent).toContain('BTCUSDT:PERP')
+    expect(container.textContent).toContain('BTCUSDT Perp')
     expect(container.textContent).toContain('+2.39')
+  })
+
+  it('renders spot results with holding-oriented labels', async () => {
+    mockGetBacktestJobResult.mockResolvedValue({
+      summary: {
+        netProfit: 0,
+        netProfitPct: 0,
+        maxDrawdownPct: 0.32,
+        winRate: 0,
+        profitFactor: 0,
+        totalTrades: 0,
+        totalOpenTrades: 1,
+        openPnl: 2.3882611501623687,
+      },
+      equityCurve: [
+        { ts: Date.parse('2026-04-01T00:00:00.000Z'), equity: 1000 },
+        { ts: Date.parse('2026-04-02T00:00:00.000Z'), equity: 1002.39 },
+      ],
+      trades: [],
+      openPositions: [
+        {
+          symbol: 'BTCUSDT:SPOT',
+          qty: 0.0013702196462092872,
+          avgEntryPrice: 72238.52313,
+          unrealizedPnl: 2.3882611501623687,
+        },
+      ],
+    })
+
+    await act(async () => {
+      root.render(
+        <BacktestReportClient
+          lng="zh"
+          id="btjob-open-position-spot"
+          symbol="BTCUSDT"
+          marketType="spot"
+          rangeDisplay="2026-04-01 ~ 2026-04-15"
+          metrics={{
+            maxDrawdownPct: 0.32,
+            totalReturnPct: 0,
+            winRatePct: 0,
+            tradeCount: 0,
+            openTradeCount: 1,
+            openPnl: 2.39,
+          }}
+        />,
+      )
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).toContain('现货回测')
+    expect(container.textContent).toContain('BTCUSDT 现货')
+    expect(container.textContent).toContain('已完成交易')
+    expect(container.textContent).toContain('当前持仓')
+    expect(container.textContent).toContain('持仓浮盈浮亏')
+    expect(container.textContent).toContain('表现一般，建议结合当前持仓与持仓浮盈浮亏后再决定是否部署。')
+    expect(container.textContent).toContain('当前持仓')
+    expect(container.textContent).toContain('BTCUSDT 现货')
+    expect(container.textContent).not.toContain('未平仓持仓')
   })
 })

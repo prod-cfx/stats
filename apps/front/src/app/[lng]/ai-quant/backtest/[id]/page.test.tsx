@@ -11,11 +11,13 @@ jest.mock('@/lib/server-api', () => ({
 const mockBacktestReportClient = jest.fn(
   ({
     symbol,
+    marketType,
     rangeDisplay,
     metrics,
     partialCoverageNotice,
   }: {
     symbol: string
+    marketType?: 'spot' | 'perp'
     rangeDisplay: string
     metrics: {
       maxDrawdownPct: number
@@ -32,6 +34,7 @@ const mockBacktestReportClient = jest.fn(
   }) => (
     <section>
       <div>{symbol}</div>
+      <div>{marketType ?? 'spot'}</div>
       <div>{rangeDisplay}</div>
       <div>{metrics ? `${metrics.winRatePct}%` : '--'}</div>
       <div>{partialCoverageNotice?.appliedRange ?? 'full-range'}</div>
@@ -170,6 +173,7 @@ describe('AiQuantBacktestDetailPage', () => {
 
     expect(props).toMatchObject({
       id: 'backtest-2002',
+      marketType: 'spot',
       metrics: {
         maxDrawdownPct: 5.2,
         totalReturnPct: 8.8,
@@ -180,6 +184,31 @@ describe('AiQuantBacktestDetailPage', () => {
       },
     })
     expect(props).not.toHaveProperty('report')
+  })
+
+  it('passes job marketType through to BacktestReportClient', async () => {
+    mockFetchBacktestJobServer.mockResolvedValue({
+      inputSummary: {
+        marketType: 'perp',
+      },
+      resultSummary: {
+        netProfit: 12,
+        netProfitPct: 0.12,
+        maxDrawdownPct: 0.45,
+        winRate: 1,
+        profitFactor: 1.4,
+        totalTrades: 3,
+      },
+    })
+
+    const element = await AiQuantBacktestDetailPage({
+      params: { lng: 'zh', id: 'backtest-4004' },
+      searchParams: { symbol: 'BTCUSDT' },
+    })
+
+    renderToStaticMarkup(element)
+    const props = mockBacktestReportClient.mock.calls.at(-1)?.[0] as Record<string, unknown>
+    expect(props).toMatchObject({ marketType: 'perp' })
   })
 
   it('passes partial coverage notice when the server marks the backtest as partial', async () => {
@@ -255,5 +284,31 @@ describe('AiQuantBacktestDetailPage', () => {
     const element = await pagePromise
     const html = renderToStaticMarkup(element)
     expect(html).toContain('SOLUSDT')
+  })
+
+  it('falls back to job input summary for symbol and range when query params are missing', async () => {
+    mockFetchBacktestJobServer.mockResolvedValue({
+      inputSummary: {
+        symbols: ['SOLUSDT'],
+        requestedRange: {
+          fromTs: Date.parse('2026-04-01T00:00:00.000Z'),
+          toTs: Date.parse('2026-04-15T00:00:00.000Z'),
+        },
+      },
+    })
+
+    const element = await AiQuantBacktestDetailPage({
+      params: { lng: 'en', id: 'backtest-5005' },
+      searchParams: {},
+    })
+
+    renderToStaticMarkup(element)
+
+    const props = mockBacktestReportClient.mock.calls.at(-1)?.[0] as Record<string, unknown>
+
+    expect(props).toMatchObject({
+      symbol: 'SOLUSDT',
+      rangeDisplay: '2026-04-01 ~ 2026-04-15',
+    })
   })
 })

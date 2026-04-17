@@ -271,6 +271,7 @@
       "backtestMissingScriptCode": "Strategy code is empty. Please confirm and generate strategy code first.",
       "backtestCapabilityLoadFailed": "Failed to load backtest capabilities. Please try again later.",
       "backtestPayloadInvalid": "Invalid backtest payload: {{reason}}",
+      "backtestTimeout": "Backtest is still running and the client wait timed out. Please check the result later. Job ID: {{jobId}}",
       "returnToChat": "Return to Chat to Optimize",
       "graphTitle": "Strategy Logic Graph Confirmation",
       "version": "Version",

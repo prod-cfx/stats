@@ -4812,7 +4812,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     },
   )
 
-  it('consumes mixed partial override and partial confirmation in CONFIRM_INFERRED replies', async () => {
+  it('applies inferred override replies to risk bases in CONFIRM_INFERRED flows', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-mixed-inferred-risk-basis',
       userId: 'u1',
@@ -4837,7 +4837,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const result = await service.continueSession('s-mixed-inferred-risk-basis', {
       userId: 'u1',
-      message: '止盈按持仓收益率，止损这个默认值没问题',
+      message: '止盈按持仓收益率，止损按入场价',
     } as ContinueCodegenSessionDto)
 
     expect(result.status).toBe('CHECKLIST_GATE')
@@ -4854,7 +4854,145 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         }),
         constraintPack: expect.objectContaining({
           inferredConfirmation: expect.objectContaining({
-            confirmedKeys: ['risk.stopLossBasis'],
+            confirmedKeys: [],
+            overriddenKeys: expect.arrayContaining(['risk.stopLossBasis', 'risk.takeProfitBasis']),
+          }),
+        }),
+      }),
+    )
+  })
+
+  it.each(['这样可以', '可以了', '就这样', '没问题'])(
+    'records confirmed inferred risk basis keys for natural confirmation variant %s',
+    async (message) => {
+      mockRepo.findById.mockResolvedValue({
+        id: 's-natural-confirm-inferred-risk-basis-variant',
+        userId: 'u1',
+        status: 'DRAFTING',
+        checklist: completeChecklist({
+          entryRules: ['短均线上穿长均线（金叉）时做多'],
+          exitRules: ['短均线下穿长均线（死叉）时平多'],
+          riskRules: {
+            _inferredAssumptions: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+          },
+        }),
+        clarificationState: { status: 'CLEAR', items: [] },
+        constraintPack: {},
+      })
+      mockAi.chat.mockResolvedValue({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+        }),
+      })
+
+      const result = await service.continueSession('s-natural-confirm-inferred-risk-basis-variant', {
+        userId: 'u1',
+        message,
+      } as ContinueCodegenSessionDto)
+
+      expect(result.status).toBe('CHECKLIST_GATE')
+      expect(result.assistantPrompt).not.toContain('请确认这些推断是否成立')
+      expect(mockAi.chat).toHaveBeenCalledTimes(1)
+      expect(mockRepo.updateSession).toHaveBeenCalledWith(
+        's-natural-confirm-inferred-risk-basis-variant',
+        expect.objectContaining({
+          constraintPack: expect.objectContaining({
+            inferredConfirmation: expect.objectContaining({
+              confirmedKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+            }),
+          }),
+        }),
+      )
+    },
+  )
+
+  it('falls back to llm confirmation when rule matching is unclear for a short reply', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-llm-fallback-inferred-risk-basis',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: completeChecklist({
+        entryRules: ['短均线上穿长均线（金叉）时做多'],
+        exitRules: ['短均线下穿长均线（死叉）时平多'],
+        riskRules: {
+          _inferredAssumptions: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+        },
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockAi.chat
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          intent: 'confirm',
+          targetKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+        }),
+      })
+      .mockResolvedValueOnce({
+        content: JSON.stringify({
+          related: true,
+          logicReady: true,
+          assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+        }),
+      })
+
+    const result = await service.continueSession('s-llm-fallback-inferred-risk-basis', {
+      userId: 'u1',
+      message: '嗯',
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(mockAi.chat).toHaveBeenCalledTimes(2)
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-llm-fallback-inferred-risk-basis',
+      expect.objectContaining({
+        constraintPack: expect.objectContaining({
+          inferredConfirmation: expect.objectContaining({
+            confirmedKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+          }),
+        }),
+      }),
+    )
+  })
+
+  it('treats targeted default negation replies as inferred overrides', async () => {
+    mockRepo.findById.mockResolvedValue({
+      id: 's-default-negation-inferred-risk-basis',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: completeChecklist({
+        entryRules: ['短均线上穿长均线（金叉）时做多'],
+        exitRules: ['短均线下穿长均线（死叉）时平多'],
+        riskRules: {
+          _inferredAssumptions: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+        },
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+      }),
+    })
+
+    const result = await service.continueSession('s-default-negation-inferred-risk-basis', {
+      userId: 'u1',
+      message: '止盈不要按默认',
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('DRAFTING')
+    expect(mockAi.chat).toHaveBeenCalledTimes(1)
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-default-negation-inferred-risk-basis',
+      expect.objectContaining({
+        status: 'DRAFTING',
+        constraintPack: expect.objectContaining({
+          inferredConfirmation: expect.objectContaining({
             overriddenKeys: ['risk.takeProfitBasis'],
           }),
         }),
@@ -4904,6 +5042,30 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it.each([
+    {
+      name: '这样可以吗',
+      sessionId: 's-question-inferred-natural-confirmation',
+      message: '这样可以吗',
+      expectedConfirmedKey: 'risk.stopLossBasis',
+    },
+    {
+      name: '默认没问题吗',
+      sessionId: 's-question-inferred-default-confirmation',
+      message: '默认没问题吗',
+      expectedConfirmedKey: 'risk.takeProfitBasis',
+    },
+    {
+      name: '不对',
+      sessionId: 's-negative-inferred-reject',
+      message: '不对',
+      expectedConfirmedKey: 'risk.stopLossBasis',
+    },
+    {
+      name: '别按这个',
+      sessionId: 's-negative-inferred-reject-alt',
+      message: '别按这个',
+      expectedConfirmedKey: 'risk.takeProfitBasis',
+    },
     {
       name: '止损可以更宽一点',
       sessionId: 's-negative-inferred-stoploss-can-be-wider',

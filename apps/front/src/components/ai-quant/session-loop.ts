@@ -332,8 +332,14 @@ export function resolveChecklistPayload(input: {
 
 export function isShortConfirmationMessage(message: string): boolean {
   const text = message.trim().toLowerCase()
-  if (!text) return false
-  return /^(?:可以|确认|确认正确|正确|继续|按你说的来|就这样|好的?|行|ok|okay|yes|yep|同意|没问题)[。.!！?？\s]*$/i.test(text)
+  const normalized = text.replace(/[。.!！、；;：:\s]+$/g, '')
+  if (!normalized) return false
+  if (normalized.length > 12) return false
+  if (/[?？吗嘛吧呢]/.test(normalized)) return false
+  if (/(不|别|不要|不是|没问题吗|有问题|再改|修改|调整)/.test(normalized)) return false
+
+  return /^(?:这样)?可以(?:了)?$/.test(normalized)
+    || /^(?:就这样|确认正确|正确|继续|按你说的来|好的?|行|ok|okay|yes|yep|同意|没问题|这样对的|按这个来|确认)$/.test(normalized)
 }
 
 export function isAssistantDraftLikeMessage(message: string): boolean {

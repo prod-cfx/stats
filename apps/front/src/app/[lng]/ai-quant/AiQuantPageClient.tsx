@@ -439,6 +439,28 @@ export function AiQuantPageClient({
   const canDeploy = useMemo(() => {
     return isDeployableBacktestResult(activeConversation?.backtestResult)
   }, [activeConversation?.backtestResult])
+  const activeBacktestMarketType = useMemo(() => {
+    const resultMarketType = activeConversation?.backtestResult?.marketType
+    if (resultMarketType === 'spot' || resultMarketType === 'perp') {
+      return resultMarketType
+    }
+
+    const publishedMarketType = resolvePublishedBacktestMarketType({
+      publishedSnapshotId: activeConversation?.publishedSnapshotId ?? null,
+      publishedSnapshotStrategyConfig: activeConversation?.publishedSnapshotStrategyConfig ?? null,
+    })
+    if (publishedMarketType) {
+      return publishedMarketType
+    }
+
+    const paramMarketType = activeConversation?.paramValues.marketType
+    return paramMarketType === 'spot' || paramMarketType === 'perp' ? paramMarketType : null
+  }, [
+    activeConversation?.backtestResult?.marketType,
+    activeConversation?.paramValues.marketType,
+    activeConversation?.publishedSnapshotId,
+    activeConversation?.publishedSnapshotStrategyConfig,
+  ])
   const graphConfirmed = activeConversation?.logicGraph?.status === 'confirmed'
   const clarificationBlocked = activeConversation?.clarificationGate?.blocked === true
   const semanticViewConfirmable = canConfirmSemanticView({
@@ -584,6 +606,21 @@ export function AiQuantPageClient({
         : nextConversation
     })
 
+    if (activeConversation.clarificationGate?.blocked && currentPendingClarification) {
+      await requestBackendGraphGeneration({
+        conversationId: currentConversationId,
+        message: trimmedInput,
+        params: currentParams,
+        sessionId: currentSessionId,
+        usePresetRules: false,
+        confirmGenerate: false,
+        clarificationAnswers: {
+          [currentPendingClarification.key]: trimmedInput,
+        },
+      })
+      return
+    }
+
     const confirmPattern =
       /^(?:确认逻辑图|\/confirm|确认|可以|好的?|行|ok|okay|yes|同意|没问题)[。.!！?？\s]*$/i
     if (currentGraphStatus === 'draft' && confirmPattern.test(trimmedInput)) {
@@ -629,21 +666,6 @@ export function AiQuantPageClient({
         usePresetRules: false,
         confirmGenerate: true,
         confirmedCanonicalDigest: activeConversation.pendingCanonicalDigest ?? undefined,
-      })
-      return
-    }
-
-    if (activeConversation.clarificationGate?.blocked && currentPendingClarification) {
-      await requestBackendGraphGeneration({
-        conversationId: currentConversationId,
-        message: trimmedInput,
-        params: currentParams,
-        sessionId: currentSessionId,
-        usePresetRules: false,
-        confirmGenerate: false,
-        clarificationAnswers: {
-          [currentPendingClarification.key]: trimmedInput,
-        },
       })
       return
     }
@@ -1090,6 +1112,7 @@ export function AiQuantPageClient({
           {activeConversation.backtestResult && (
             <BacktestSummaryCard
               result={activeConversation.backtestResult}
+              marketType={activeBacktestMarketType}
               canDeploy={canDeploy}
               drawdownLimited
               onOpenFullScreen={() => {

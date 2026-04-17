@@ -9,6 +9,7 @@ import {
 
 function createInput(overrides: Partial<BuildBacktestPayloadInput> = {}): BuildBacktestPayloadInput {
   return {
+    marketType: 'perp',
     symbol: 'BTCUSDT',
     baseTimeframe: '15m',
     capabilities: {
@@ -141,6 +142,9 @@ describe('backtest-payload-builder', () => {
       id: 'strategy-1',
       protocolVersion: 'v1',
       publishedSnapshotId: 'snapshot-1',
+      params: {
+        marketType: 'perp',
+      },
     })
   })
 

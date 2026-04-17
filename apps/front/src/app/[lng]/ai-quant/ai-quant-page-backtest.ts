@@ -29,7 +29,7 @@ import {
 } from './ai-quant-page-conversation'
 
 export const BACKTEST_JOB_POLL_INTERVAL_MS = 1500
-export const BACKTEST_JOB_TIMEOUT_MS = 60_000
+export const BACKTEST_JOB_TIMEOUT_MS = 180_000
 
 type Translate = (key: string, options?: Record<string, unknown>) => string
 
@@ -43,11 +43,12 @@ function buildInvalidExecutionConfigMessage(args: {
 
   if (activeConversation.publishedSnapshotId) {
     if (
-      !activeConversation.publishedSnapshotStrategyConfig
-      || activeConversation.publishedSnapshotCompatibilityMetadata?.requiresRepublishForBacktest
+      !activeConversation.publishedSnapshotStrategyConfig ||
+      activeConversation.publishedSnapshotCompatibilityMetadata?.requiresRepublishForBacktest
     ) {
       return t('aiQuant.messages.backtestPayloadInvalid', {
-        reason: 'published_snapshot_backtest_truth_missing：当前已发布快照缺少策略市场绑定真相，请重新发布后再回测。',
+        reason:
+          'published_snapshot_backtest_truth_missing：当前已发布快照缺少策略市场绑定真相，请重新发布后再回测。',
       })
     }
   }
@@ -77,9 +78,9 @@ function buildInvalidExecutionConfigMessage(args: {
     invalidFields.push('手续费')
   }
   if (
-    executionConfig.priceSource !== 'open'
-    && executionConfig.priceSource !== 'close'
-    && executionConfig.priceSource !== 'mid'
+    executionConfig.priceSource !== 'open' &&
+    executionConfig.priceSource !== 'close' &&
+    executionConfig.priceSource !== 'mid'
   ) {
     invalidFields.push('成交价来源')
   }
@@ -92,6 +93,12 @@ function buildInvalidExecutionConfigMessage(args: {
 
   return t('aiQuant.messages.backtestPayloadInvalid', {
     reason: 'invalid_execution_config：回测执行参数无效，请重新检查后再试。',
+  })
+}
+
+function buildBacktestTimeoutMessage(args: { createdJobId: string; t: Translate }): string {
+  return args.t('aiQuant.messages.backtestTimeout', {
+    jobId: args.createdJobId,
   })
 }
 
@@ -158,8 +165,8 @@ export async function runAiQuantBacktest(args: {
   }
 
   if (
-    activeConversation.backtestExecutionState === 'submitting'
-    || activeConversation.backtestExecutionState === 'running'
+    activeConversation.backtestExecutionState === 'submitting' ||
+    activeConversation.backtestExecutionState === 'running'
   ) {
     releaseMutex()
     return
@@ -188,6 +195,7 @@ export async function runAiQuantBacktest(args: {
 
   let payload: ReturnType<typeof buildBacktestPayload>
   let backtestExchange: ConversationState['params']['exchange'] | null = null
+  let backtestMarketType: 'spot' | 'perp' | null = null
   try {
     const publishedMarketType = resolvePublishedBacktestMarketType({
       publishedSnapshotId: activeConversation.publishedSnapshotId,
@@ -210,32 +218,35 @@ export async function runAiQuantBacktest(args: {
         'PUBLISHED_SNAPSHOT_PARAMS_MISSING',
       )
     }
-    if (requiresRepublishForPublishedSnapshot({
-      publishedSnapshotId: activeConversation.publishedSnapshotId,
-      publishedSnapshotParamValues: activeConversation.publishedSnapshotParamValues,
-      publishedSnapshotCompatibilityMetadata: activeConversation.publishedSnapshotCompatibilityMetadata,
-      editableParamValues: activeConversation.paramValues,
-    })) {
-      throw new ApiError(
-        '当前参数已脱离已发布快照，请重新发布后再回测。',
-        'REPUBLISH_REQUIRED',
-      )
+    if (
+      requiresRepublishForPublishedSnapshot({
+        publishedSnapshotId: activeConversation.publishedSnapshotId,
+        publishedSnapshotParamValues: activeConversation.publishedSnapshotParamValues,
+        publishedSnapshotCompatibilityMetadata:
+          activeConversation.publishedSnapshotCompatibilityMetadata,
+        editableParamValues: activeConversation.paramValues,
+      })
+    ) {
+      throw new ApiError('当前参数已脱离已发布快照，请重新发布后再回测。', 'REPUBLISH_REQUIRED')
     }
 
     const executionConfig = resolveBacktestExecutionConfig(activeConversation.paramValues)
-    const snapshotStateTimeframes = activeConversation.publishedSnapshotBacktestConfigDefaults?.stateTimeframes ?? []
+    const snapshotStateTimeframes =
+      activeConversation.publishedSnapshotBacktestConfigDefaults?.stateTimeframes ?? []
     if (!executionConfig.allowPartialValid) {
       throw new BacktestPayloadBuilderError('invalid_execution_config')
     }
     backtestExchange = effectiveInputs.exchange
+    backtestMarketType = effectiveInputs.marketType
     payload = buildBacktestPayload({
       symbol: effectiveInputs.symbol,
       baseTimeframe: effectiveInputs.baseTimeframe,
       marketType: effectiveInputs.marketType,
       capabilities: backtestCapabilities,
-      stateTimeframes: snapshotStateTimeframes.length > 0
-        ? snapshotStateTimeframes
-        : [effectiveInputs.baseTimeframe],
+      stateTimeframes:
+        snapshotStateTimeframes.length > 0
+          ? snapshotStateTimeframes
+          : [effectiveInputs.baseTimeframe],
       initialCash: executionConfig.initialCash,
       leverage: executionConfig.leverage,
       execution: {
@@ -245,10 +256,10 @@ export async function runAiQuantBacktest(args: {
       },
       strategy: {
         id:
-          activeConversation.publishedStrategyInstanceId
-          ?? activeConversation.llmCodegenSessionId
-          ?? activeConversation.publishedSnapshotId
-          ?? '',
+          activeConversation.publishedStrategyInstanceId ??
+          activeConversation.llmCodegenSessionId ??
+          activeConversation.publishedSnapshotId ??
+          '',
         publishedSnapshotId: activeConversation.publishedSnapshotId ?? '',
       },
       range: resolveBacktestRangeInput(activeConversation.paramValues),
@@ -333,9 +344,9 @@ export async function runAiQuantBacktest(args: {
   const toFailureMessage = (reason: string) =>
     t('aiQuant.messages.backtestPayloadInvalid', { reason })
   const canContinue = () =>
-    isMountedRef.current
-    && backtestRunTokenRef.current.get(conversationId) === runToken
-    && activeConversationIdRef.current === conversationId
+    isMountedRef.current &&
+    backtestRunTokenRef.current.get(conversationId) === runToken &&
+    activeConversationIdRef.current === conversationId
 
   setConversationBacktestExecutionState(conversationId, 'submitting')
   updateConversationById(conversationId, curr => ({
@@ -383,7 +394,12 @@ export async function runAiQuantBacktest(args: {
       }
       if (Date.now() >= deadline) {
         setConversationBacktestExecutionState(conversationId, 'timeout')
-        updateBacktestMessage(toFailureMessage('timeout'))
+        updateBacktestMessage(
+          buildBacktestTimeoutMessage({
+            createdJobId: createdJob.id,
+            t,
+          }),
+        )
         return
       }
       await new Promise(resolve => window.setTimeout(resolve, BACKTEST_JOB_POLL_INTERVAL_MS))
@@ -414,6 +430,7 @@ export async function runAiQuantBacktest(args: {
         totalReturnPct: 0,
         winRatePct: 0,
         tradeCount: 0,
+        marketType: backtestMarketType,
         symbol: payload.symbols[0],
         startAt: new Date(payload.dataRange.fromTs).toISOString(),
         endAt: new Date(payload.dataRange.toTs).toISOString(),
@@ -429,14 +446,15 @@ export async function runAiQuantBacktest(args: {
         message.id === backtestMessageId
           ? {
               ...message,
-              content:
-                isOpenOnlyBacktestResult(result)
+              content: isDeployableBacktestResult(result)
+                ? t('aiQuant.messages.backtestSuccess', { drawdown: result.maxDrawdownPct })
+                : result.maxDrawdownPct > 20
+                  ? t('aiQuant.messages.backtestFail', { drawdown: result.maxDrawdownPct })
+                  : isOpenOnlyBacktestResult(result)
                   ? t('aiQuant.messages.backtestOpenTrades', { count: result.openTradeCount ?? 0 })
                   : result.tradeCount === 0
-                    ? t('aiQuant.messages.backtestNoTrades')
-                  : isDeployableBacktestResult(result)
-                    ? t('aiQuant.messages.backtestSuccess', { drawdown: result.maxDrawdownPct })
-                    : t('aiQuant.messages.backtestFail', { drawdown: result.maxDrawdownPct }),
+                  ? t('aiQuant.messages.backtestNoTrades')
+                  : t('aiQuant.messages.backtestFail', { drawdown: result.maxDrawdownPct }),
             }
           : message,
       ),
