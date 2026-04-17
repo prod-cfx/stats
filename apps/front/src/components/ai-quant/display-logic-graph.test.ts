@@ -95,6 +95,23 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
     expect(graph.blocks[1].items.map(item => item.text).join(' ')).toContain('15m 内上涨 2% 卖出')
   })
 
+  it('keeps multiple legacy exit rules on AND_AT_THEN instead of OR_THEN', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        entryRules: ['3m 内下跌 1% 买入'],
+        exitRules: ['15m 内上涨 2% 卖出', '30m 内上涨 3% 卖出'],
+      },
+      fallbackMeta: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'AND_AT_THEN', 'AND_AT_THEN', 'EXECUTE'])
+  })
+
   it('falls back neutrally for zero-valued price-change rules', () => {
     const graph = buildDisplayLogicGraphFromCodegenSpec({
       specDesc: {

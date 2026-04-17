@@ -334,7 +334,7 @@ function buildLegacyRuleBlocks(specDesc: DisplayLogicGraphSpecDesc | null): Disp
   }))
 
   const exitBlocks = exitRules.map((rule, index) => ({
-    type: index === 0 ? 'AND_AT_THEN' : 'OR_THEN',
+    type: entryBlocks.length === 0 && index === 0 ? 'IF' : 'AND_AT_THEN',
     items: [
       {
         kind: 'condition' as const,
