@@ -604,6 +604,53 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
   })
 })
 
+describe('accountStrategyViewRepository.deleteStrategyForUser', () => {
+  it('clears published session and snapshot bindings before deleting the strategy instance', async () => {
+    const tx = {
+      strategyInstance: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
+        delete: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
+      },
+      llmStrategyCodegenSession: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+      publishedStrategySnapshot: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    }
+
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
+
+    await repo.deleteStrategyForUser('user-1', 'strategy-instance-1')
+
+    expect(tx.llmStrategyCodegenSession.updateMany).toHaveBeenCalledWith({
+      where: {
+        userId: 'user-1',
+        strategyInstanceId: 'strategy-instance-1',
+      },
+      data: {
+        strategyInstanceId: null,
+      },
+    })
+    expect(tx.publishedStrategySnapshot.updateMany).toHaveBeenCalledWith({
+      where: {
+        strategyInstanceId: 'strategy-instance-1',
+        session: {
+          userId: 'user-1',
+        },
+      },
+      data: {
+        strategyInstanceId: null,
+      },
+    })
+    expect(tx.strategyInstance.delete).toHaveBeenCalledWith({
+      where: {
+        id: 'strategy-instance-1',
+      },
+    })
+  })
+})
+
 describe('accountStrategyViewRepository.listStrategiesForUser', () => {
   it('falls back to safe pagination defaults when page or limit are invalid', async () => {
     const findMany = jest.fn().mockResolvedValue([])

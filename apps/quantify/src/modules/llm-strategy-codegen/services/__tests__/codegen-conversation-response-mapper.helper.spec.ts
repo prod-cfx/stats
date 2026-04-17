@@ -1,6 +1,6 @@
 import { CodegenConversationResponseMapperHelper } from '../codegen-conversation-response-mapper.helper'
 
-describe('CodegenConversationResponseMapperHelper', () => {
+describe('codegenConversationResponseMapperHelper', () => {
   const helper = new CodegenConversationResponseMapperHelper()
 
   it('drops spec-facing fields when clarification gate remains blocked', () => {
@@ -74,6 +74,7 @@ describe('CodegenConversationResponseMapperHelper', () => {
     })).toMatchObject({
       publishedSnapshotCompatibilityMetadata: {
         isLegacySnapshot: true,
+        missingStrategyInstanceBinding: true,
         missingBacktestConfigDefaults: false,
         missingDeploymentExecutionDefaults: true,
         missingDeploymentExecutionConstraints: true,

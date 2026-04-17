@@ -839,6 +839,28 @@ export class AccountStrategyViewRepository {
         return
       }
 
+      await tx.llmStrategyCodegenSession.updateMany({
+        where: {
+          userId,
+          strategyInstanceId: strategy.id,
+        },
+        data: {
+          strategyInstanceId: null,
+        },
+      })
+
+      await tx.publishedStrategySnapshot.updateMany({
+        where: {
+          strategyInstanceId: strategy.id,
+          session: {
+            userId,
+          },
+        },
+        data: {
+          strategyInstanceId: null,
+        },
+      })
+
       await tx.strategyInstance.delete({
         where: {
           id: strategy.id,
