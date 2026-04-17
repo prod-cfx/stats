@@ -372,6 +372,7 @@ describe('codegenPublicationGenerationStage', () => {
     const expectedNormalizedIntent = semanticStateCompileBridge.buildNormalizedIntent(semanticState)
     const buildSpy = jest.spyOn(canonicalSpecBuilder, 'build')
     const buildFromNormalizedIntentSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromNormalizedIntent')
+    const executionEnvelopeBuild = jest.fn().mockReturnValue({})
 
     const stage = new CodegenPublicationGenerationStage(
       canonicalSpecBuilder,
@@ -403,7 +404,7 @@ describe('codegenPublicationGenerationStage', () => {
       { compile: jest.fn().mockReturnValue({ ir: { id: 'compiled-ir' }, graphSnapshot: {} }) } as any,
       { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
       { emit: jest.fn().mockReturnValue('strategy') } as any,
-      { build: jest.fn().mockReturnValue({}) } as any,
+      { build: executionEnvelopeBuild } as any,
       { parse: jest.fn().mockReturnValue({}) } as any,
     )
 
@@ -439,6 +440,10 @@ describe('codegenPublicationGenerationStage', () => {
         }),
       }),
     ]))
+    expect(executionEnvelopeBuild).toHaveBeenCalledWith(
+      artifacts.canonicalSpec,
+      expectedNormalizedIntent.position?.positionMode ?? null,
+    )
   })
 
   it('builds strategy summary from specProfile rather than legacy canonical-spec text heuristics', async () => {

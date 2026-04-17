@@ -122,7 +122,10 @@ export class CodegenPublicationGenerationStage {
         publishParams,
       }),
     })
-    const executionEnvelope = this.compiledScriptExecutionEnvelope.build(canonicalSpec)
+    const executionEnvelope = this.compiledScriptExecutionEnvelope.build(
+      canonicalSpec,
+      normalization.normalizedIntent.position?.positionMode ?? null,
+    )
     const ast = this.canonicalStrategyAstCompiler.compile(compiled.ir)
     let compiledScript = this.compiledScriptEmitter.emit({
       ast,
