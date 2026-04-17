@@ -1,4 +1,4 @@
-import type { CanonicalConditionNode, CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
+import type { CanonicalConditionNode, CanonicalRuleSideScope, CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
 import type { ChecklistRuleBasis } from '../types/codegen-checklist'
 import type { StrategyIR } from '../types/strategy-ir'
 import type {
@@ -1133,7 +1133,7 @@ export class CanonicalSpecBuilderService {
     return {
       id: `${input.trigger.phase}-${input.trigger.key.replace(/\./g, '-')}-${input.priority}`,
       phase: input.trigger.phase,
-      sideScope: input.trigger.sideScope ?? (input.trigger.phase === 'exit' ? 'both' : undefined),
+      sideScope: this.resolveNormalizedRuleSideScope(input.trigger, actions),
       priority: input.priority,
       condition: this.attachGateConditions(triggerCondition, input.gateTriggers),
       actions,
@@ -1147,6 +1147,31 @@ export class CanonicalSpecBuilderService {
         },
       },
     }
+  }
+
+  private resolveNormalizedRuleSideScope(
+    trigger: NormalizedTriggerAtom & { phase: 'entry' | 'exit' },
+    actions: CanonicalRuleV2['actions'],
+  ): CanonicalRuleSideScope | undefined {
+    if (trigger.sideScope) {
+      return trigger.sideScope
+    }
+
+    const resolvedScopes = new Set<Exclude<CanonicalRuleSideScope, 'flat'>>()
+    for (const action of actions) {
+      if (action.type === 'OPEN_LONG' || action.type === 'CLOSE_LONG') {
+        resolvedScopes.add('long')
+      }
+      if (action.type === 'OPEN_SHORT' || action.type === 'CLOSE_SHORT') {
+        resolvedScopes.add('short')
+      }
+    }
+
+    if (resolvedScopes.has('long') && resolvedScopes.has('short')) {
+      return 'both'
+    }
+
+    return resolvedScopes.values().next().value
   }
 
   private buildGridRulesFromNormalizedIntent(input: {

@@ -438,6 +438,66 @@ describe('canonicalSpecBuilderService', () => {
     ]))
   })
 
+  it('keeps bollinger touch_middle sideScope when building canonical rules from normalized intent', () => {
+    const service = new CanonicalSpecBuilderService()
+    const checklist = {
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+      },
+    }
+    const normalizedIntent = {
+      families: ['single-leg'],
+      triggers: [
+        {
+          key: 'bollinger.touch_middle',
+          phase: 'exit',
+          sideScope: 'short',
+          closureStatus: 'closed',
+          unresolvedSlots: [],
+          params: {
+            band: 'middle',
+            period: 20,
+            stdDev: 2,
+          },
+        },
+      ],
+      actions: [{ key: 'close_short' }],
+      risk: [],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_short',
+      },
+      unresolved: [],
+      normalizationNotes: [],
+    }
+
+    const spec = service.buildFromNormalizedIntent(checklist as any, normalizedIntent as any)
+
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'exit',
+        sideScope: 'short',
+        condition: expect.objectContaining({
+          key: 'bollinger.middle_revert',
+        }),
+        actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
+        metadata: expect.objectContaining({
+          normalized: expect.objectContaining({
+            source: 'normalized-intent',
+            triggerKeys: ['bollinger.touch_middle'],
+            actionKeys: ['CLOSE_SHORT'],
+            family: 'single-leg',
+          }),
+        }),
+      }),
+    ]))
+  })
+
   it('builds outside-band reduce rules when earlyStop asks to reduce exposure', () => {
     const service = new CanonicalSpecBuilderService()
 
@@ -950,6 +1010,85 @@ describe('canonicalSpecBuilderService', () => {
       expect.objectContaining({
         id: 'risk-stop-loss',
         phase: 'risk',
+      }),
+    ]))
+  })
+
+  it('expands bidirectional grid normalized intent into four directional rules', () => {
+    const service = new CanonicalSpecBuilderService()
+    const checklist = {
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+      },
+    }
+    const normalizedIntent = {
+      families: ['grid.range_rebalance'],
+      triggers: [],
+      actions: [
+        { key: 'open_long' },
+        { key: 'close_long' },
+        { key: 'open_short' },
+        { key: 'close_short' },
+      ],
+      risk: [],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_short',
+      },
+      grid: {
+        family: 'grid.range_rebalance',
+        range: {
+          lower: 60000,
+          upper: 80000,
+        },
+        stepPct: 0.5,
+        sideMode: 'bidirectional',
+        recycle: true,
+      },
+      unresolved: [],
+      normalizationNotes: [],
+    }
+
+    const spec = service.buildFromNormalizedIntent(checklist as any, normalizedIntent as any)
+    const gridRules = spec.rules.filter(rule => rule.metadata?.normalized?.family === 'grid.range_rebalance')
+
+    expect(gridRules).toHaveLength(4)
+    expect(gridRules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'entry-grid-range-rebalance-long',
+        phase: 'entry',
+        sideScope: 'long',
+        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+        metadata: expect.objectContaining({
+          normalized: expect.objectContaining({
+            triggerKeys: ['grid.range_rebalance'],
+            actionKeys: ['OPEN_LONG'],
+            family: 'grid.range_rebalance',
+          }),
+        }),
+      }),
+      expect.objectContaining({
+        id: 'exit-grid-range-rebalance-long',
+        phase: 'exit',
+        sideScope: 'long',
+        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+      }),
+      expect.objectContaining({
+        id: 'entry-grid-range-rebalance-short',
+        phase: 'entry',
+        sideScope: 'short',
+        actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
+      }),
+      expect.objectContaining({
+        id: 'exit-grid-range-rebalance-short',
+        phase: 'exit',
+        sideScope: 'short',
+        actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
       }),
     ]))
   })
