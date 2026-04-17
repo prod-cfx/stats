@@ -3211,6 +3211,73 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('does not regress the exact two-turn grid reproduction when timeframe is answered through executionContext.timeframe', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-grid-exact-repro-execution-context' })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        logic: {},
+        assistantPrompt: '逻辑图仍未完整，请继续补充。',
+      }),
+    })
+
+    const startResult = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在ok交易所 我想弄个网格策略 btc永续合约 在60000-80000的区间 每一格千分之5 不断低买高卖 单笔百分10资金',
+    })
+
+    const createdSession = buildPersistedSessionSnapshot(
+      's-grid-exact-repro-execution-context',
+      mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>,
+      {
+        clarificationState: {
+          ...(startResult.clarificationState as Record<string, unknown>),
+          items: [
+            {
+              key: 'executionContext.timeframe',
+              reason: 'missing_timeframe',
+              field: 'timeframe',
+              blocking: true,
+              question: '请确认策略主周期（例如 15m 或 1h）。',
+              status: 'pending',
+            },
+          ],
+        },
+        latestSpecDesc: startResult.specDesc ?? null,
+        semanticState: (mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>).semanticState,
+      },
+    )
+
+    mockRepo.findById.mockResolvedValue({
+      ...createdSession,
+      updatedAt: '2026-04-17T10:00:00.000Z',
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        logic: {},
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-grid-exact-repro-execution-context', {
+      userId: 'u1',
+      message: '15m',
+      clarificationAnswers: {
+        'executionContext.timeframe': '15m',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的出场规则')
+    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的入场规则')
+    expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({ reason: 'missing_exit_rules' }),
+      expect.objectContaining({ reason: 'missing_entry_rules' }),
+    ]))
+  })
+
   it('applies grid clarification answers into semantic snapshot and advances to the next grid slot', async () => {
     mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
       's-grid-clarification-followup',
