@@ -518,7 +518,9 @@ export class CodegenConversationService {
     const normalization = hasPersistedSemanticState
       ? this.buildNormalizationFromSemanticState(reducedSemanticState)
       : clarification.normalization
-    const canonicalSpec = this.buildCanonicalSpecForConversation(canonicalChecklist, normalization)
+    const canonicalSpec = hasPersistedSemanticState
+      ? this.canonicalSpecBuilder.buildFromNormalizedIntent(canonicalChecklist, normalization.normalizedIntent)
+      : this.buildCanonicalSpecForConversation(canonicalChecklist, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: clarification.executionContext.context,
@@ -744,7 +746,9 @@ export class CodegenConversationService {
     const normalization = hasPersistedSemanticState
       ? this.buildNormalizationFromSemanticState(reducedSemanticState)
       : clarification.normalization
-    const canonicalSpec = this.buildCanonicalSpecForConversation(canonicalChecklist, normalization)
+    const canonicalSpec = hasPersistedSemanticState
+      ? this.canonicalSpecBuilder.buildFromNormalizedIntent(canonicalChecklist, normalization.normalizedIntent)
+      : this.buildCanonicalSpecForConversation(canonicalChecklist, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: clarification.executionContext.context,

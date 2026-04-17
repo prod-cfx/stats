@@ -97,10 +97,27 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     checklist: Record<string, unknown>,
     semanticState?: Record<string, unknown>,
   ): string => {
-    const clarification = (service as any).resolveClarificationArtifacts(checklist)
-    const normalization = semanticState
-      ? (service as any).buildNormalizationFromSemanticState(semanticState)
-      : clarification.normalization
+    if (semanticState) {
+      const persistedChecklist = checklist
+      const currentSemanticState = semanticState
+      const semanticStateAfterAnswers = (service as any).applySemanticClarificationAnswers(
+        currentSemanticState,
+        { status: 'CLEAR', items: [] },
+        undefined,
+      )
+      const baseChecklist = (service as any).projectLegacyChecklistFromSemanticState(semanticStateAfterAnswers, persistedChecklist)
+      const mergedChecklist = (service as any).mergeChecklistSnapshots(baseChecklist, {})
+      const derivedSemanticState = (service as any).buildFallbackSemanticState(mergedChecklist)
+      const reducedSemanticState = (service as any).semanticStateMerge.merge({
+        persisted: semanticStateAfterAnswers,
+        derived: derivedSemanticState,
+      })
+      const canonicalChecklist = (service as any).projectLegacyChecklistFromSemanticState(reducedSemanticState, mergedChecklist)
+      const normalization = (service as any).buildNormalizationFromSemanticState(reducedSemanticState)
+      const canonicalSpec = canonicalSpecBuilder.buildFromNormalizedIntent(canonicalChecklist, normalization.normalizedIntent)
+      return canonicalDigestService.hash(canonicalSpec)
+    }
+    const normalization = (service as any).resolveClarificationArtifacts(checklist).normalization
     const canonicalSpec = (service as any).buildCanonicalSpecForConversation(checklist, normalization)
     return canonicalDigestService.hash(canonicalSpec)
   }
@@ -6727,12 +6744,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     })
     const semanticState = buildLockedGridSemanticState()
+    const projectedChecklist = (service as any).projectLegacyChecklistFromSemanticState(semanticState, checklist)
+    const confirmedCanonicalDigest = buildConfirmedCanonicalDigest(projectedChecklist, semanticState)
 
     mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
       's-golden-grid-publish',
       {
         status: 'CHECKLIST_GATE',
-        checklist,
+        checklist: projectedChecklist,
         semanticState,
         clarificationState: { status: 'CLEAR', items: [] },
         constraintPack: {},
@@ -6744,16 +6763,22 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(checklist, semanticState),
+      confirmedCanonicalDigest,
     })
 
     expect(result.status).toBe('GENERATING')
     await waitForTerminalStatus('s-golden-grid-publish')
 
+    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith('s-golden-grid-publish', expect.objectContaining({
+      latestSpecDesc: expect.objectContaining({
+        canonicalDigest: confirmedCanonicalDigest,
+      }),
+    }))
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-golden-grid-publish', expect.objectContaining({
       status: 'PUBLISHED',
     }))
     const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
+    expect(publishedSnapshot?.semanticGraph?.canonicalDigest).toBe(confirmedCanonicalDigest)
     expect(publishedSnapshot?.specSnapshot?.rules).toEqual(expect.arrayContaining([
       expect.objectContaining({
         phase: 'entry',

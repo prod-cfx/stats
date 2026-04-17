@@ -100,7 +100,7 @@ export class CodegenPublicationGenerationStage {
         }
       : this.intentNormalizer.normalize(compatibilityChecklist)
     const canonicalSpec = input.semanticState
-      ? this.canonicalSpecBuilder.buildFromNormalizedIntent(input.checklist, normalization.normalizedIntent)
+      ? this.canonicalSpecBuilder.buildFromNormalizedIntent(compatibilityChecklist, normalization.normalizedIntent)
       : this.canonicalSpecBuilder.build(compatibilityChecklist)
     const semanticView = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,

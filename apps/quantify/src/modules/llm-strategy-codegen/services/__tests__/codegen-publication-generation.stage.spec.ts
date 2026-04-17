@@ -213,6 +213,79 @@ describe('codegenPublicationGenerationStage', () => {
     updatedAt: '2026-04-15T10:00:00.000Z',
   })
 
+  const buildLockedGridSemanticState = (): SemanticState => ({
+    version: 1,
+    families: ['grid.range_rebalance'],
+    triggers: [
+      {
+        id: 'grid-entry',
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope: 'both',
+        params: {
+          rangeLower: 60000,
+          rangeUpper: 80000,
+          stepPct: 1,
+          sideMode: 'bidirectional',
+          recycle: true,
+          breakoutAction: 'pause',
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ],
+    actions: [],
+    risk: [],
+    position: {
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+    },
+    contextSlots: {
+      exchange: {
+        slotKey: 'exchange',
+        fieldPath: 'contextSlots.exchange',
+        value: 'okx',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认交易所。',
+        affectsExecution: true,
+      },
+      symbol: {
+        slotKey: 'symbol',
+        fieldPath: 'contextSlots.symbol',
+        value: 'BTCUSDT',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认交易标的。',
+        affectsExecution: true,
+      },
+      marketType: {
+        slotKey: 'marketType',
+        fieldPath: 'contextSlots.marketType',
+        value: 'perp',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认市场类型。',
+        affectsExecution: true,
+      },
+      timeframe: {
+        slotKey: 'timeframe',
+        fieldPath: 'contextSlots.timeframe',
+        value: '15m',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认周期。',
+        affectsExecution: true,
+      },
+    },
+    normalizationNotes: [],
+    updatedAt: '2026-04-15T10:00:00.000Z',
+  })
+
   it('keeps clarified bollinger middle-band summaries aligned through generation', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
@@ -286,9 +359,19 @@ describe('codegenPublicationGenerationStage', () => {
 
   it('routes semantic-state publication through normalized canonical compilation', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const digestService = new CanonicalSpecV2DigestService()
+    const semanticStateCompileBridge = new SemanticStateCompileBridgeService()
+    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const semanticState = buildLockedGridSemanticState()
+    const rawChecklist = {
+      symbols: ['ETHUSDT'],
+      timeframes: ['1h'],
+      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+    }
+    const projectedChecklist = semanticStateCompileBridge.buildLegacyChecklist(semanticState, rawChecklist)
+    const expectedNormalizedIntent = semanticStateCompileBridge.buildNormalizedIntent(semanticState)
     const buildSpy = jest.spyOn(canonicalSpecBuilder, 'build')
     const buildFromNormalizedIntentSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromNormalizedIntent')
-    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
 
     const stage = new CodegenPublicationGenerationStage(
       canonicalSpecBuilder,
@@ -324,34 +407,38 @@ describe('codegenPublicationGenerationStage', () => {
       { parse: jest.fn().mockReturnValue({}) } as any,
     )
 
-    await stage.generate({
-      checklist: {
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-        entryRules: ['K线收盘后确认突破布林带(30,2.5)上轨时做空'],
-        exitRules: ['价格回到布林带中轨(MA30)时平空'],
-        riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
-      },
-      semanticState: buildLockedBollingerSemanticState(),
-      message: bollingerGoldenCase.message,
+    const artifacts = await stage.generate({
+      checklist: rawChecklist,
+      semanticState,
+      message: '在 60000-80000 区间做 1% 步长的网格策略，突破区间就停掉',
     } as any)
 
     expect(buildFromNormalizedIntentSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-      }),
-      expect.objectContaining({
-        position: expect.objectContaining({
-          positionMode: 'short_only',
-        }),
-        triggers: expect.arrayContaining([
-          expect.objectContaining({ key: 'bollinger.touch_upper' }),
-          expect.objectContaining({ key: 'bollinger.touch_middle' }),
-        ]),
-      }),
+      projectedChecklist,
+      expectedNormalizedIntent,
     )
     expect(buildSpy).not.toHaveBeenCalled()
+    expect(artifacts.sessionSpecDesc.canonicalSpec).toEqual(artifacts.canonicalSpec)
+    expect(artifacts.sessionSpecDesc.normalizedIntent).toEqual(expectedNormalizedIntent)
+    expect(artifacts.canonicalSpec.market).toEqual(expect.objectContaining({
+      symbol: 'BTCUSDT',
+      defaultTimeframe: '15m',
+      marketType: 'perp',
+    }))
+    expect(artifacts.canonicalSpec.dataRequirements.requiredTimeframes).toEqual(['15m'])
+    expect(artifacts.canonicalSpec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        condition: expect.objectContaining({
+          key: 'grid.range_rebalance',
+        }),
+        metadata: expect.objectContaining({
+          normalized: expect.objectContaining({
+            family: 'grid.range_rebalance',
+          }),
+        }),
+      }),
+    ]))
   })
 
   it('builds strategy summary from specProfile rather than legacy canonical-spec text heuristics', async () => {
@@ -565,14 +652,14 @@ describe('codegenPublicationGenerationStage', () => {
     const semanticStateCompileBridge = new SemanticStateCompileBridgeService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
     const semanticState = buildLockedMaSemanticState()
-    const sourceChecklist = {
+    const projectedChecklist = semanticStateCompileBridge.buildLegacyChecklist(semanticState, {
       riskRules: completeRiskRules({
         marketType: 'spot',
       }),
-    }
+    })
     const expectedNormalizedIntent = semanticStateCompileBridge.buildNormalizedIntent(semanticState)
     const expectedDigest = digestService.hash(
-      canonicalSpecBuilder.buildFromNormalizedIntent(sourceChecklist, expectedNormalizedIntent),
+      canonicalSpecBuilder.buildFromNormalizedIntent(projectedChecklist, expectedNormalizedIntent),
     )
 
     const stage = new CodegenPublicationGenerationStage(
