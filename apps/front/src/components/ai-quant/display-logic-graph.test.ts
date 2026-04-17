@@ -73,6 +73,28 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
     expect(graph.blocks[2].items.map(item => item.text).join(' ')).toContain('永续')
   })
 
+  it('falls back to legacy entryRules and exitRules when canonical rules are missing', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        entryRules: ['3m 内下跌 1% 买入'],
+        exitRules: ['15m 内上涨 2% 卖出'],
+        riskRules: {
+          maxDrawdownPct: 20,
+        },
+      },
+      fallbackMeta: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'AND_AT_THEN', 'EXECUTE'])
+    expect(graph.blocks[0].items.map(item => item.text).join(' ')).toContain('3m 内下跌 1% 买入')
+    expect(graph.blocks[1].items.map(item => item.text).join(' ')).toContain('15m 内上涨 2% 卖出')
+  })
+
   it('falls back neutrally for zero-valued price-change rules', () => {
     const graph = buildDisplayLogicGraphFromCodegenSpec({
       specDesc: {

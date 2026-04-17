@@ -62,6 +62,9 @@ interface DisplayLogicGraphMarket {
 
 interface DisplayLogicGraphSpecDesc {
   rules?: DisplayLogicGraphRule[]
+  entryRules?: unknown
+  exitRules?: unknown
+  riskRules?: unknown
   lockedParams?: Record<string, unknown>
   canonicalSpec?: {
     market?: DisplayLogicGraphMarket
@@ -292,6 +295,37 @@ function extractRules(specDesc: DisplayLogicGraphSpecDesc | null): DisplayLogicG
   return Array.isArray(specDesc?.rules) ? specDesc.rules : []
 }
 
+function buildLegacyRuleBlocks(specDesc: DisplayLogicGraphSpecDesc | null): DisplayBlock[] {
+  if (!specDesc) return []
+
+  const entryRules = asStringList(specDesc.entryRules)
+  const exitRules = asStringList(specDesc.exitRules)
+
+  const entryBlocks = entryRules.map((rule, index) => ({
+    type: index === 0 ? 'IF' : 'AND_AT_THEN',
+    items: [
+      {
+        kind: 'condition' as const,
+        id: `legacy-entry-${index}`,
+        text: rule,
+      },
+    ],
+  }))
+
+  const exitBlocks = exitRules.map((rule, index) => ({
+    type: index === 0 ? 'AND_AT_THEN' : 'OR_THEN',
+    items: [
+      {
+        kind: 'condition' as const,
+        id: `legacy-exit-${index}`,
+        text: rule,
+      },
+    ],
+  }))
+
+  return [...entryBlocks, ...exitBlocks]
+}
+
 function extractExecuteMeta(specDesc: DisplayLogicGraphSpecDesc | null, fallbackMeta: BuildDisplayLogicGraphInput['fallbackMeta']) {
   const lockedParams = specDesc?.lockedParams ?? {}
   const market = specDesc?.canonicalSpec?.market ?? specDesc?.market ?? {}
@@ -442,7 +476,9 @@ export function buildDisplayLogicGraphFromCodegenSpec(input: BuildDisplayLogicGr
   const nextInput = input ?? {}
   const specDesc = isRecord(nextInput.specDesc) ? nextInput.specDesc as DisplayLogicGraphSpecDesc : null
   const rules = extractRules(specDesc)
-  const blocks = rules.map((rule, index) => buildConditionBlock(rule, index))
+  const blocks = rules.length > 0
+    ? rules.map((rule, index) => buildConditionBlock(rule, index))
+    : buildLegacyRuleBlocks(specDesc)
   const executeMeta = extractExecuteMeta(specDesc, nextInput.fallbackMeta)
 
   return {
