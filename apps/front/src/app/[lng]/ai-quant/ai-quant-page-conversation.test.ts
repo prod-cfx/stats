@@ -144,6 +144,67 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.publishedScriptGraphVersion).toBe(3)
   })
 
+  it('builds a display graph from server specDesc while keeping publication graph truth on logicGraph', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'conv-remote-1',
+      conversationTitle: 'remote',
+      status: 'PUBLISHED',
+      conversationMessages: [],
+      specDesc: {
+        rules: [
+          {
+            id: 'entry-1',
+            phase: 'entry',
+            condition: {
+              key: 'price.change_pct',
+              op: 'LTE',
+              value: -0.01,
+              params: {
+                timeframe: '3m',
+                basis: 'prev_close',
+              },
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+        },
+      },
+      semanticGraph: {
+        version: 7,
+        market: {
+          symbol: 'BTCUSDT',
+          primaryTimeframe: '15m',
+        },
+        nodes: [],
+        actions: [],
+        risk: [],
+      },
+      validationReport: null,
+      publicationGate: null,
+      canonicalDigest: 'sha256:canonical-1',
+      activeCodegenSessionId: 'session-1',
+      strategyInstanceId: null,
+      publishedSnapshotId: null,
+      publishedSnapshotParamValues: null,
+      publishedSnapshotStrategyConfig: null,
+      publishedSnapshotBacktestConfigDefaults: null,
+      publishedSnapshotDeploymentExecutionDefaults: null,
+      publishedSnapshotDeploymentExecutionConstraints: null,
+      publishedSnapshotCompatibilityMetadata: null,
+      scriptCode: 'return { ok: true }',
+      updatedAt: '2026-04-17T00:00:00.000Z',
+    } as Parameters<typeof createConversationFromServerConversation>[0], (key: string) => key)
+
+    expect(conversation.displayLogicGraph).not.toBeNull()
+    expect(conversation.displayLogicGraph?.blocks[0]?.items.map(item => item.text).join(' ')).toContain('3m 内相对前收盘下跌 1%')
+    expect(conversation.displayLogicGraph?.blocks.at(-1)?.items.map(item => item.text).join(' ')).toContain('BTCUSDT')
+    expect(conversation.publishedScriptGraphVersion).toBe(conversation.logicGraph?.version)
+    expect(conversation.logicGraph?.status).toBe('confirmed')
+  })
+
   it('resets transient backtest state and clears legacy implicit execution config during hydration', () => {
     const conversation = hydrateConversation({
       id: 'conv-1',
@@ -199,6 +260,106 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.paramValues.backtestFeeBps).toBeUndefined()
     expect(conversation.paramValues.backtestPriceSource).toBeUndefined()
     expect(conversation.paramValues.backtestAllowPartial).toBeUndefined()
+  })
+
+  it('hydrates older persisted conversations without display graphs safely', () => {
+    const conversation = hydrateConversation({
+      id: 'conv-legacy',
+      title: 'legacy',
+      messages: [],
+      params: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+      },
+      paramSchema: null,
+      paramValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+      },
+      backtestResult: null,
+      logicGraph: null,
+      semanticGraph: null,
+      validationReport: null,
+      clarificationGate: null,
+      publicationGate: null,
+      pendingCanonicalDigest: null,
+      llmCodegenSessionId: null,
+      publishedStrategyInstanceId: null,
+      publishedSnapshotId: null,
+      publishedScriptCode: null,
+      publishedScriptGraphVersion: null,
+      latestSignalMessage: null,
+      backtestExecutionState: 'idle',
+      updatedAt: 1,
+    })
+
+    expect(conversation.displayLogicGraph).toBeNull()
+  })
+
+  it('rejects malformed persisted display graphs during hydration', () => {
+    const conversation = hydrateConversation({
+      id: 'conv-malformed-display',
+      title: 'malformed',
+      messages: [],
+      params: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+      },
+      paramSchema: null,
+      paramValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+      },
+      backtestResult: null,
+      logicGraph: null,
+      displayLogicGraph: {
+        blocks: [
+          {
+            type: 'IF',
+            items: { invalid: true },
+          },
+        ],
+      } as unknown,
+      semanticGraph: null,
+      validationReport: null,
+      clarificationGate: null,
+      publicationGate: null,
+      pendingCanonicalDigest: null,
+      llmCodegenSessionId: null,
+      publishedStrategyInstanceId: null,
+      publishedSnapshotId: null,
+      publishedScriptCode: null,
+      publishedScriptGraphVersion: null,
+      latestSignalMessage: null,
+      backtestExecutionState: 'idle',
+      updatedAt: 1,
+    })
+
+    expect(conversation.displayLogicGraph).toBeNull()
   })
 
   it('does not treat missing published snapshot param truth as implicit executable defaults during hydration', () => {

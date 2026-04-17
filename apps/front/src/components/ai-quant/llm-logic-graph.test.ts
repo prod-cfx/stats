@@ -147,4 +147,120 @@ describe('buildLogicGraphFromCodegenSpec', () => {
     expect(graph.risk).toContain('亏损达到 5% -> FORCE_EXIT')
     expect(graph.actions.map(item => item.action)).toEqual(expect.arrayContaining(['SELL', 'BUY', 'CLOSE']))
   })
+
+  it('uses canonical timeframe when top-level market timeframes are missing', () => {
+    const graph = buildLogicGraphFromCodegenSpec(
+      {
+        canonicalSpec: {
+          market: {
+            timeframe: '1h',
+          },
+        },
+      },
+      {
+        exchange: 'binance',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '15m',
+        positionPct: 25,
+      },
+      13,
+    )
+
+    expect(graph.meta.timeframe).toBe('1h')
+  })
+
+  it('keeps the first exit trigger joined with AND when entry rules exist', () => {
+    const graph = buildLogicGraphFromCodegenSpec(
+      {
+        entryRules: ['3m 内下跌 1% 买入'],
+        exitRules: ['15m 内上涨 2% 卖出'],
+      },
+      {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      14,
+    )
+
+    expect(graph.trigger[1]?.id).toContain('exit')
+    expect(graph.trigger[1]?.join).toBe('AND')
+  })
+
+  it('describes price.change_pct rules with timeframe, basis, and direction', () => {
+    const graph = buildLogicGraphFromCodegenSpec(
+      {
+        rules: [
+          {
+            id: 'entry-price-change-1',
+            phase: 'entry',
+            condition: {
+              key: 'price.change_pct',
+              op: 'LTE',
+              value: -0.01,
+              params: {
+                timeframe: '3m',
+                lookbackBars: 1,
+                basis: 'prev_close',
+              },
+            },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.1 } }],
+          },
+          {
+            id: 'exit-price-change-1',
+            phase: 'exit',
+            condition: {
+              key: 'price.change_pct',
+              op: 'GTE',
+              value: 0.02,
+              params: {
+                timeframe: '15m',
+                lookbackBars: 1,
+                basis: 'prev_close',
+              },
+            },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+        market: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['3m', '15m'],
+        },
+        lockedParams: {
+          exchange: 'okx',
+          positionPct: 10,
+        },
+        canonicalSpec: {
+          market: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            timeframe: '3m',
+          },
+        },
+      },
+      {
+        exchange: 'binance',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '1h',
+        positionPct: 25,
+      },
+      12,
+    )
+
+    expect(graph.trigger).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'trigger-entry-price-change-1',
+        operator: '3m 内相对前收盘下跌 1%',
+      }),
+      expect.objectContaining({
+        id: 'trigger-exit-price-change-1',
+        operator: '15m 内相对前收盘上涨 2%',
+      }),
+    ]))
+    expect(graph.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'action-entry-price-change-1-0', action: 'BUY' }),
+      expect.objectContaining({ id: 'action-exit-price-change-1-0', action: 'CLOSE' }),
+    ]))
+  })
 })

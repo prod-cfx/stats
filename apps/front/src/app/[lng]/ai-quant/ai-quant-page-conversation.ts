@@ -19,6 +19,8 @@ import type {
   UserExchangeAccountStatus,
 } from '@/lib/api'
 import { readCanonicalDigest } from '@/components/ai-quant/canonical-confirmation'
+import type { DisplayLogicGraph } from '@/components/ai-quant/display-logic-graph'
+import { buildDisplayLogicGraphFromCodegenSpec } from '@/components/ai-quant/display-logic-graph'
 import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-graph'
 import { syncStrategyParamsFromCodegen } from '@/components/ai-quant/strategy-param-sync'
 
@@ -122,6 +124,7 @@ export interface ConversationState {
   paramValues: Record<string, unknown>
   backtestResult: BacktestResult | null
   logicGraph: StrategyLogicGraph | null
+  displayLogicGraph: DisplayLogicGraph | null
   codegenSpecDesc: Record<string, unknown> | null
   semanticGraph: LlmSemanticGraph | null
   validationReport: LlmSemanticGraphValidationReport | null
@@ -168,6 +171,93 @@ export function normalizeClarificationGate(input: unknown): LlmClarificationGate
     summary,
     items: items as LlmClarificationGate['items'],
     pendingItems: items as LlmClarificationGate['items'],
+  }
+}
+
+type DisplayBlockType = DisplayLogicGraph['blocks'][number]['type']
+type DisplayItemKind = DisplayLogicGraph['blocks'][number]['items'][number]['kind']
+
+const VALID_DISPLAY_BLOCK_TYPES = new Set<DisplayBlockType>(['IF', 'AND_AT_THEN', 'OR_THEN', 'EXECUTE'])
+const VALID_DISPLAY_ITEM_KINDS = new Set<DisplayItemKind>(['condition', 'action', 'execute'])
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function normalizeDisplayLogicGraphItem(item: unknown): DisplayLogicGraph['blocks'][number]['items'][number] | null {
+  if (!isRecord(item)) {
+    return null
+  }
+
+  const kind = typeof item.kind === 'string' ? item.kind : ''
+  if (!VALID_DISPLAY_ITEM_KINDS.has(kind as DisplayItemKind)) {
+    return null
+  }
+
+  const id = typeof item.id === 'string' && item.id.trim() ? item.id.trim() : ''
+  const text = typeof item.text === 'string' && item.text.trim() ? item.text.trim() : ''
+  if (!id || !text) {
+    return null
+  }
+
+  if (kind === 'execute') {
+    const key = typeof item.key === 'string' && item.key.trim() ? item.key.trim() : ''
+    if (!key) {
+      return null
+    }
+    const executeItem: DisplayLogicGraph['blocks'][number]['items'][number] = {
+      kind: 'execute',
+      id,
+      key,
+      text,
+    }
+    if (typeof item.value === 'string' && item.value.trim()) {
+      executeItem.value = item.value.trim()
+    }
+    return executeItem
+  }
+
+  return {
+    kind: kind as 'condition' | 'action',
+    id,
+    text,
+  }
+}
+
+function normalizeDisplayLogicGraph(value: unknown): DisplayLogicGraph | null {
+  if (!isRecord(value) || !Array.isArray(value.blocks)) {
+    return null
+  }
+
+  const blocks = value.blocks.map((block): DisplayLogicGraph['blocks'][number] | null => {
+    if (!isRecord(block)) {
+      return null
+    }
+    const type = typeof block.type === 'string' ? block.type : ''
+    if (!VALID_DISPLAY_BLOCK_TYPES.has(type as DisplayBlockType)) {
+      return null
+    }
+    if (!Array.isArray(block.items)) {
+      return null
+    }
+
+    const items = block.items.map(normalizeDisplayLogicGraphItem)
+    if (items.some(item => item === null)) {
+      return null
+    }
+
+    return {
+      type: type as DisplayLogicGraph['blocks'][number]['type'],
+      items: items as DisplayLogicGraph['blocks'][number]['items'],
+    }
+  })
+
+  if (blocks.some(block => block === null)) {
+    return null
+  }
+
+  return {
+    blocks: blocks as DisplayLogicGraph['blocks'],
   }
 }
 
@@ -1108,6 +1198,7 @@ export function createConversation(translate: (key: string) => string, now = Dat
     paramValues: { ...DEFAULT_PARAM_VALUES },
     backtestResult: null,
     logicGraph: null,
+    displayLogicGraph: null,
     codegenSpecDesc: null,
     semanticGraph: null,
     validationReport: null,
@@ -1285,16 +1376,17 @@ export function createConversationFromServerConversation(
     typeof response.semanticGraph?.version === 'number' && Number.isFinite(response.semanticGraph.version)
       ? response.semanticGraph.version
       : 1
+  const graphFallbackMeta = {
+    exchange: syncResult?.normalized.exchange ?? nextParams.exchange,
+    symbol: syncResult?.normalized.symbol ?? nextParams.symbol,
+    baseTimeframe: syncResult?.normalized.baseTimeframe ?? nextParams.baseTimeframe,
+    positionPct: syncResult?.normalized.positionPct ?? nextParams.positionPct,
+    executionTags: syncResult?.executionTags ?? [],
+  }
   const logicGraph = response.specDesc
     ? buildLogicGraphFromCodegenSpec(
         response.specDesc,
-        {
-          exchange: syncResult?.normalized.exchange ?? nextParams.exchange,
-          symbol: syncResult?.normalized.symbol ?? nextParams.symbol,
-          baseTimeframe: syncResult?.normalized.baseTimeframe ?? nextParams.baseTimeframe,
-          positionPct: syncResult?.normalized.positionPct ?? nextParams.positionPct,
-          executionTags: syncResult?.executionTags ?? [],
-        },
+        graphFallbackMeta,
         graphVersion,
         response.status === 'PUBLISHED'
         || response.status === 'CONSISTENCY_FAILED'
@@ -1303,6 +1395,12 @@ export function createConversationFromServerConversation(
           ? 'confirmed'
           : 'draft',
       )
+    : null
+  const displayLogicGraph = response.specDesc
+    ? normalizeDisplayLogicGraph(buildDisplayLogicGraphFromCodegenSpec({
+        specDesc: response.specDesc,
+        fallbackMeta: graphFallbackMeta,
+      }))
     : null
   const responseMessages = response.conversationMessages?.length
     ? response.conversationMessages.map((message, index) => ({
@@ -1338,6 +1436,7 @@ export function createConversationFromServerConversation(
     paramSchema: syncResult?.paramSchema ?? seed.paramSchema,
     paramValues: nextParamValues,
     logicGraph,
+    displayLogicGraph,
     codegenSpecDesc: response.specDesc ?? null,
     semanticGraph: response.semanticGraph ?? null,
     validationReport: response.validationReport ?? null,
@@ -1458,6 +1557,7 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
     paramValues: normalizedBacktestExecutionConfig.paramValues,
     backtestResult: item.backtestResult ?? null,
     logicGraph: item.logicGraph ?? null,
+    displayLogicGraph: normalizeDisplayLogicGraph(item.displayLogicGraph),
     codegenSpecDesc:
       item.codegenSpecDesc && typeof item.codegenSpecDesc === 'object' && !Array.isArray(item.codegenSpecDesc)
         ? item.codegenSpecDesc
