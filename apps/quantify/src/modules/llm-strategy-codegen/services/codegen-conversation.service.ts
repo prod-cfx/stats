@@ -2090,21 +2090,28 @@ export class CodegenConversationService {
     const projectedChecklist = args.useSemanticProjection
       ? this.projectLegacyChecklistFromSemanticState(args.semanticState, args.checklist)
       : args.checklist
+    const derivedSemanticState = this.buildFallbackSemanticState(projectedChecklist)
+    const reducedSemanticState = args.useSemanticProjection
+      ? this.semanticStateMerge.merge({
+          persisted: args.semanticState,
+          derived: derivedSemanticState,
+        })
+      : derivedSemanticState
     const clarification = this.resolveClarificationArtifacts(projectedChecklist)
     const semanticClarificationState = this.mergeSemanticClarificationState(
-      args.semanticState,
+      reducedSemanticState,
       clarification.clarificationState,
     )
 
     if (semanticClarificationState.status === 'NEEDS_CLARIFICATION') {
-      const assistantPrompt = this.buildSemanticClarificationPrompt(args.semanticState)
+      const assistantPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
         || this.clarificationQuestion.build(semanticClarificationState)
         || clarification.clarificationPrompt
         || '请先澄清这条规则，我再继续完善逻辑图。'
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         checklist: projectedChecklist,
-        semanticState: args.semanticState,
+        semanticState: reducedSemanticState,
         clarificationState: semanticClarificationState,
         constraintPack: {
           ...args.constraintPack,
@@ -2122,8 +2129,10 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
 
-    const normalization = this.buildNormalizationFromSemanticState(args.semanticState)
-    const canonicalSpec = this.buildCanonicalSpecForConversation(projectedChecklist, normalization)
+    const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
+    const canonicalSpec = args.useSemanticProjection
+      ? this.canonicalSpecBuilder.buildFromNormalizedIntent(projectedChecklist, normalization.normalizedIntent)
+      : this.buildCanonicalSpecForConversation(projectedChecklist, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: clarification.executionContext.context,
@@ -2142,7 +2151,7 @@ export class CodegenConversationService {
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         checklist: projectedChecklist,
-        semanticState: args.semanticState,
+        semanticState: reducedSemanticState,
         clarificationState: clarification.clarificationState,
         constraintPack: {
           ...args.constraintPack,
@@ -2166,7 +2175,7 @@ export class CodegenConversationService {
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         checklist: projectedChecklist,
-        semanticState: args.semanticState,
+        semanticState: reducedSemanticState,
         clarificationState: clarification.clarificationState,
         constraintPack: {
           ...args.constraintPack,
@@ -2190,7 +2199,7 @@ export class CodegenConversationService {
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         checklist: projectedChecklist,
-        semanticState: args.semanticState,
+        semanticState: reducedSemanticState,
         clarificationState: clarification.clarificationState,
         constraintPack: {
           ...args.constraintPack,
@@ -2235,7 +2244,7 @@ export class CodegenConversationService {
     await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
       status: 'CHECKLIST_GATE',
       checklist: projectedChecklist,
-      semanticState: args.semanticState,
+      semanticState: reducedSemanticState,
       clarificationState: clarification.clarificationState,
       constraintPack: {
         ...args.constraintPack,

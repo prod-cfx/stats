@@ -4655,6 +4655,169 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
   })
 
+  it('keeps structured clarification semantic digests aligned from checklist gate through publication', async () => {
+    mockRepo.createVersion.mockResolvedValue({ id: 'v-structured-grid' })
+
+    const sessionId = 's-structured-semantic-alignment'
+    const persistedChecklist = completeChecklist({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['在 60000-80000 区间做多网格，步长 1%，共 10 格'],
+      exitRules: ['在 60000-80000 区间做多网格，步长 1%，共 10 格，突破区间就停掉'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+      },
+      grid: {
+        lower: 60000,
+        upper: 80000,
+        stepPct: 1,
+        breakoutAction: 'pause',
+      },
+    })
+    const persistedSemanticState = buildLockedGridSemanticState({
+      triggers: [
+        {
+          id: 'grid-entry',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          sideScope: 'both',
+          params: {
+            rangeLower: 60000,
+            rangeUpper: 80000,
+            stepPct: 1,
+            recycle: true,
+            breakoutAction: 'pause',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'grid.sideMode',
+              fieldPath: 'triggers[0].params.sideMode',
+              status: 'open',
+              priority: 'core',
+              questionHint: '请确认网格方向（双向 / 只做多 / 只做空）。',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_short',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+    })
+    const clarificationState = {
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        {
+          key: 'grid.sideMode',
+          reason: 'grid_params_missing',
+          field: 'grid.sideMode',
+          blocking: true,
+          question: '请确认网格方向（双向 / 只做多 / 只做空）。',
+          status: 'pending',
+          allowedAnswers: ['bidirectional', 'long_only', 'short_only'],
+          slotId: JSON.stringify(['grid.sideMode', 'triggers[0].params.sideMode']),
+          slotKey: 'grid.sideMode',
+          fieldPath: 'triggers[0].params.sideMode',
+        },
+      ],
+    } as const
+
+    let currentSessionSnapshot = buildPersistedSessionSnapshot(sessionId, {
+      status: 'DRAFTING',
+      checklist: persistedChecklist,
+      semanticState: persistedSemanticState,
+      clarificationState,
+      constraintPack: {},
+      latestDraftCode: null,
+      latestSpecDesc: null,
+      rejectReason: null,
+      strategyInstanceId: null,
+    })
+    mockRepo.findById.mockImplementation(async () => currentSessionSnapshot)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const checklistGateResult = await service.continueSession(sessionId, {
+      userId: 'u1',
+      message: '双向网格',
+      clarificationAnswers: {
+        'grid.sideMode': 'bidirectional',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(checklistGateResult.status).toBe('CHECKLIST_GATE')
+    expect(checklistGateResult.canonicalDigest).toMatch(/^sha256:/)
+
+    const checklistGateUpdate = mockRepo.updateSession.mock.calls.find(call => call[0] === sessionId)?.[1] as Record<string, any>
+    expect(checklistGateUpdate).toEqual(expect.objectContaining({
+      status: 'CHECKLIST_GATE',
+      latestSpecDesc: expect.objectContaining({
+        canonicalDigest: checklistGateResult.canonicalDigest,
+      }),
+    }))
+    currentSessionSnapshot = {
+      ...currentSessionSnapshot,
+      status: 'CHECKLIST_GATE',
+      checklist: checklistGateUpdate.checklist ?? currentSessionSnapshot.checklist,
+      semanticState: checklistGateUpdate.semanticState ?? currentSessionSnapshot.semanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: checklistGateUpdate.constraintPack ?? currentSessionSnapshot.constraintPack,
+      latestSpecDesc: checklistGateUpdate.latestSpecDesc ?? currentSessionSnapshot.latestSpecDesc,
+    }
+
+    const confirmResult = await service.continueSession(sessionId, {
+      userId: 'u1',
+      message: '确认，直接生成代码',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: checklistGateResult.canonicalDigest ?? undefined,
+    })
+
+    expect(confirmResult.status).toBe('GENERATING')
+    await waitForTerminalStatus(sessionId)
+
+    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith(sessionId, expect.objectContaining({
+      latestSpecDesc: expect.objectContaining({
+        canonicalDigest: checklistGateResult.canonicalDigest,
+      }),
+    }))
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(sessionId, expect.objectContaining({
+      status: 'PUBLISHED',
+    }))
+
+    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0] as Record<string, any>
+    expect(publishedSnapshot).toEqual(expect.objectContaining({
+      semanticGraph: expect.objectContaining({
+        canonicalDigest: checklistGateResult.canonicalDigest,
+      }),
+      specSnapshot: expect.objectContaining({
+        rules: expect.arrayContaining([
+          expect.objectContaining({
+            metadata: expect.objectContaining({
+              normalized: expect.objectContaining({
+                family: 'grid.range_rebalance',
+              }),
+            }),
+          }),
+        ]),
+      }),
+    }))
+    expect(publishedSnapshot?.semanticGraph?.canonicalDigest).toBe(checklistGateUpdate.latestSpecDesc.canonicalDigest)
+    expect(publishedSnapshot?.semanticGraph?.canonicalDigest).toBe(checklistGateResult.canonicalDigest)
+  })
+
   it('keeps drafting when structured clarification answers resolve the explicit question but normalization remains blocked', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-clarification-normalization-blocked',
