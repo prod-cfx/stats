@@ -296,6 +296,79 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     updatedAt: '2026-04-15T10:00:00.000Z',
     ...overrides,
   })
+  const buildLockedGridSemanticState = (overrides: Record<string, any> = {}) => ({
+    version: 1,
+    families: ['grid.range_rebalance'],
+    triggers: [
+      {
+        id: 'grid-entry',
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope: 'both',
+        params: {
+          rangeLower: 60000,
+          rangeUpper: 80000,
+          stepPct: 1,
+          sideMode: 'bidirectional',
+          recycle: true,
+          breakoutAction: 'pause',
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ],
+    actions: [],
+    risk: [],
+    position: {
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+    },
+    contextSlots: {
+      exchange: {
+        slotKey: 'exchange',
+        fieldPath: 'contextSlots.exchange',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+        affectsExecution: true,
+        value: 'okx',
+      },
+      symbol: {
+        slotKey: 'symbol',
+        fieldPath: 'contextSlots.symbol',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+        affectsExecution: true,
+        value: 'BTCUSDT',
+      },
+      marketType: {
+        slotKey: 'marketType',
+        fieldPath: 'contextSlots.marketType',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认市场类型（现货或合约/perp）。',
+        affectsExecution: true,
+        value: 'perp',
+      },
+      timeframe: {
+        slotKey: 'timeframe',
+        fieldPath: 'contextSlots.timeframe',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+        affectsExecution: true,
+        value: '15m',
+      },
+    },
+    normalizationNotes: [],
+    updatedAt: '2026-04-15T10:00:00.000Z',
+    ...overrides,
+  })
   const buildPersistedSessionSnapshot = (
     sessionId: string,
     createdSession: Record<string, unknown>,
@@ -6630,6 +6703,83 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         ]),
       }),
     }))
+  })
+
+  it('covers the grid golden case through confirmGenerate with atomic grid rules intact', async () => {
+    mockRepo.createVersion.mockResolvedValue({ id: 'v-golden-grid' })
+
+    const checklist = completeChecklist({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['在 60000-80000 区间做多网格，步长 1%，共 10 格'],
+      exitRules: ['在 60000-80000 区间做多网格，步长 1%，共 10 格，突破区间就停掉'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+      },
+      grid: {
+        lower: 60000,
+        upper: 80000,
+        stepPct: 1,
+        sideMode: 'bidirectional',
+        breakoutAction: 'pause',
+      },
+    })
+    const semanticState = buildLockedGridSemanticState()
+
+    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
+      's-golden-grid-publish',
+      {
+        status: 'CHECKLIST_GATE',
+        checklist,
+        semanticState,
+        clarificationState: { status: 'CLEAR', items: [] },
+        constraintPack: {},
+        strategyInstanceId: null,
+      },
+    ))
+
+    const result = await service.continueSession('s-golden-grid-publish', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(checklist, semanticState),
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await waitForTerminalStatus('s-golden-grid-publish')
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-golden-grid-publish', expect.objectContaining({
+      status: 'PUBLISHED',
+    }))
+    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
+    expect(publishedSnapshot?.specSnapshot?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        condition: expect.objectContaining({
+          key: 'grid.range_rebalance',
+          op: 'LTE',
+        }),
+        metadata: expect.objectContaining({
+          normalized: expect.objectContaining({
+            family: 'grid.range_rebalance',
+          }),
+        }),
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        condition: expect.objectContaining({
+          key: 'grid.range_rebalance',
+          op: 'GTE',
+        }),
+        metadata: expect.objectContaining({
+          normalized: expect.objectContaining({
+            family: 'grid.range_rebalance',
+          }),
+        }),
+      }),
+    ]))
   })
 
   it('keeps updated Bollinger trigger semantics aligned through checklist gate and publication', async () => {

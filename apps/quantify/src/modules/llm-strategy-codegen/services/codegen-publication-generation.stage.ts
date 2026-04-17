@@ -90,7 +90,7 @@ export class CodegenPublicationGenerationStage {
     semanticState?: SemanticState
     message: string
   }): Promise<CodegenPublicationArtifacts> {
-    const sourceChecklist = input.semanticState
+    const compatibilityChecklist = input.semanticState
       ? this.semanticStateCompileBridge.buildLegacyChecklist(input.semanticState, input.checklist)
       : input.checklist
     const normalization = input.semanticState
@@ -98,26 +98,26 @@ export class CodegenPublicationGenerationStage {
           normalizedIntent: this.semanticStateCompileBridge.buildNormalizedIntent(input.semanticState),
           blocked: false,
         }
-      : this.intentNormalizer.normalize(sourceChecklist)
-    const canonicalSpec = input.semanticState && normalization.normalizedIntent.triggers.some(trigger => trigger.phase === 'gate')
-      ? this.canonicalSpecBuilder.buildFromNormalizedIntent(sourceChecklist, normalization.normalizedIntent)
-      : this.canonicalSpecBuilder.build(sourceChecklist)
+      : this.intentNormalizer.normalize(compatibilityChecklist)
+    const canonicalSpec = input.semanticState
+      ? this.canonicalSpecBuilder.buildFromNormalizedIntent(input.checklist, normalization.normalizedIntent)
+      : this.canonicalSpecBuilder.build(compatibilityChecklist)
     const semanticView = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
     })
     const userIntentSummary = this.strategySummaryBuilder.buildUserIntentSummary({
-      checklist: sourceChecklist,
+      checklist: compatibilityChecklist,
     })
-    const lockedParams = this.buildLockedParams(sourceChecklist)
+    const lockedParams = this.buildLockedParams(compatibilityChecklist)
     const publishParams = this.buildPublishParams({
       canonicalSpec,
-      checklist: sourceChecklist,
+      checklist: compatibilityChecklist,
       message: input.message,
     })
     const compiled = this.canonicalSpecV2IrCompiler.compile({
       canonicalSpec,
       fallback: this.buildCompiledIrFallback({
-        checklist: sourceChecklist,
+        checklist: compatibilityChecklist,
         lockedParams,
         publishParams,
       }),

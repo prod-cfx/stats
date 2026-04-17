@@ -2,6 +2,7 @@ import type { SemanticState } from '../../types/semantic-state'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2DigestService } from '../canonical-spec-v2-digest.service'
 import { CodegenPublicationGenerationStage } from '../codegen-publication-generation.stage'
+import { SemanticStateCompileBridgeService } from '../semantic-state-compile-bridge.service'
 import { SpecDescBuilderService } from '../spec-desc-builder.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
@@ -283,6 +284,76 @@ describe('codegenPublicationGenerationStage', () => {
     }))
   })
 
+  it('routes semantic-state publication through normalized canonical compilation', async () => {
+    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const buildSpy = jest.spyOn(canonicalSpecBuilder, 'build')
+    const buildFromNormalizedIntentSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromNormalizedIntent')
+    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+
+    const stage = new CodegenPublicationGenerationStage(
+      canonicalSpecBuilder,
+      { buildFromCanonicalSpec: jest.fn().mockReturnValue({}) } as any,
+      strategySummaryBuilder as any,
+      { evaluate: jest.fn().mockReturnValue({
+        status: 'PASSED',
+        specProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        scriptProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        checks: [],
+        summary: { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
+      }) } as any,
+      { compile: jest.fn().mockReturnValue({ ir: { id: 'compiled-ir' }, graphSnapshot: {} }) } as any,
+      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
+      { emit: jest.fn().mockReturnValue('strategy') } as any,
+      { build: jest.fn().mockReturnValue({}) } as any,
+      { parse: jest.fn().mockReturnValue({}) } as any,
+    )
+
+    await stage.generate({
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        entryRules: ['K线收盘后确认突破布林带(30,2.5)上轨时做空'],
+        exitRules: ['价格回到布林带中轨(MA30)时平空'],
+        riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+      },
+      semanticState: buildLockedBollingerSemanticState(),
+      message: bollingerGoldenCase.message,
+    } as any)
+
+    expect(buildFromNormalizedIntentSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+      }),
+      expect.objectContaining({
+        position: expect.objectContaining({
+          positionMode: 'short_only',
+        }),
+        triggers: expect.arrayContaining([
+          expect.objectContaining({ key: 'bollinger.touch_upper' }),
+          expect.objectContaining({ key: 'bollinger.touch_middle' }),
+        ]),
+      }),
+    )
+    expect(buildSpy).not.toHaveBeenCalled()
+  })
+
   it('builds strategy summary from specProfile rather than legacy canonical-spec text heuristics', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
@@ -491,18 +562,18 @@ describe('codegenPublicationGenerationStage', () => {
   it('keeps the MA golden case canonical digest stable through semanticState compile input', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const digestService = new CanonicalSpecV2DigestService()
+    const semanticStateCompileBridge = new SemanticStateCompileBridgeService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
     const semanticState = buildLockedMaSemanticState()
-    const expectedChecklist = {
-      symbols: ['BTCUSDT'],
-      timeframes: ['15m'],
-      entryRules: ['收盘确认价格突破长期均线（50）时买入'],
-      exitRules: ['收盘确认价格跌破短期均线（10）时卖出'],
+    const sourceChecklist = {
       riskRules: completeRiskRules({
         marketType: 'spot',
       }),
     }
-    const expectedDigest = digestService.hash(canonicalSpecBuilder.build(expectedChecklist))
+    const expectedNormalizedIntent = semanticStateCompileBridge.buildNormalizedIntent(semanticState)
+    const expectedDigest = digestService.hash(
+      canonicalSpecBuilder.buildFromNormalizedIntent(sourceChecklist, expectedNormalizedIntent),
+    )
 
     const stage = new CodegenPublicationGenerationStage(
       canonicalSpecBuilder,
