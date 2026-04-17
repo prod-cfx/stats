@@ -118,6 +118,7 @@
 
 ### 5.1 目标
 
+- 保持当前主数据流的节点与顺序不变，不改写会话主链与发布主链形状
 - 明确原子语义在发布主链路中的单向保真边界
 - 让复杂策略的一致性依赖于原子语义组合，而不是策略模板特判
 - 让 `canonicalSpec -> IR -> AST -> compiled script` 的每一层都成为保真投影或编译层，而不是再次理解层
@@ -126,6 +127,7 @@
 ### 5.2 非目标
 
 - 不重写整套语义系统
+- 不改动主数据流的核心节点与顺序，不把当前链路改造成另一套流程
 - 不删除所有 compatibility checklist projection 相关能力
 - 不按网格、布林带、均线等策略族逐个加模板特判
 - 不在本轮设计中一次性切到“原子语义直接输出脚本、完全取消 canonicalSpec/IR/AST”
@@ -150,6 +152,7 @@
 做法：
 
 - 保留 `semanticState / normalizedIntent -> canonicalSpec -> IR -> AST -> script`
+- 保留 `digest -> confirmGenerate -> publication -> consistency -> published snapshot` 的主顺序
 - 切断会改义的 compatibility 回投路径
 - 让后层只能编译前层，不能回填改写前层语义
 
@@ -345,6 +348,7 @@
 
 这次最小修复的核心，不是减少层数，而是收紧语义边界：
 
+- 不改主数据流节点与顺序
 - 保留 `semanticState / normalizedIntent -> canonicalSpec -> IR -> AST -> script`
 - 切断会改义的 compatibility 回投
 - 让后层只能单向编译前层
