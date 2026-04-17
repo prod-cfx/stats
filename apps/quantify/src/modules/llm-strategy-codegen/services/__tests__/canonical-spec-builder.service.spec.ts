@@ -438,7 +438,7 @@ describe('canonicalSpecBuilderService', () => {
     ]))
   })
 
-  it('keeps bollinger touch_middle sideScope when building canonical rules from normalized intent', () => {
+  it('falls back to exit sideScope from normalized bollinger actions when sideScope is omitted', () => {
     const service = new CanonicalSpecBuilderService()
     const checklist = {
       symbols: ['BTCUSDT'],
@@ -455,7 +455,6 @@ describe('canonicalSpecBuilderService', () => {
         {
           key: 'bollinger.touch_middle',
           phase: 'exit',
-          sideScope: 'short',
           closureStatus: 'closed',
           unresolvedSlots: [],
           params: {
@@ -465,7 +464,7 @@ describe('canonicalSpecBuilderService', () => {
           },
         },
       ],
-      actions: [{ key: 'close_short' }],
+      actions: [{ key: 'close_long' }],
       risk: [],
       position: {
         mode: 'fixed_ratio',
@@ -481,21 +480,72 @@ describe('canonicalSpecBuilderService', () => {
     expect(spec.rules).toEqual(expect.arrayContaining([
       expect.objectContaining({
         phase: 'exit',
-        sideScope: 'short',
+        sideScope: 'long',
         condition: expect.objectContaining({
           key: 'bollinger.middle_revert',
         }),
-        actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
+        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
         metadata: expect.objectContaining({
           normalized: expect.objectContaining({
             source: 'normalized-intent',
             triggerKeys: ['bollinger.touch_middle'],
-            actionKeys: ['CLOSE_SHORT'],
+            actionKeys: ['CLOSE_LONG'],
             family: 'single-leg',
           }),
         }),
       }),
     ]))
+  })
+
+  it('keeps entry sideScope unset when normalized intent omits it', () => {
+    const service = new CanonicalSpecBuilderService()
+    const checklist = {
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+      },
+    }
+    const normalizedIntent = {
+      families: ['single-leg'],
+      triggers: [
+        {
+          key: 'bollinger.touch_upper',
+          phase: 'entry',
+          closureStatus: 'closed',
+          unresolvedSlots: [],
+          params: {
+            band: 'upper',
+            period: 20,
+            stdDev: 2,
+          },
+        },
+      ],
+      actions: [{ key: 'open_long' }],
+      risk: [],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_short',
+      },
+      unresolved: [],
+      normalizationNotes: [],
+    }
+
+    const spec = service.buildFromNormalizedIntent(checklist as any, normalizedIntent as any)
+
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        condition: expect.objectContaining({
+          key: 'bollinger.upper_break',
+        }),
+        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+      }),
+    ]))
+    expect(spec.rules.find(rule => rule.phase === 'entry')?.sideScope).toBeUndefined()
   })
 
   it('builds outside-band reduce rules when earlyStop asks to reduce exposure', () => {

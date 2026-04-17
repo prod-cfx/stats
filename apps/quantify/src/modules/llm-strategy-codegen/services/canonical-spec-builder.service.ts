@@ -1157,6 +1157,10 @@ export class CanonicalSpecBuilderService {
       return trigger.sideScope
     }
 
+    if (trigger.phase !== 'exit') {
+      return undefined
+    }
+
     const resolvedScopes = new Set<Exclude<CanonicalRuleSideScope, 'flat'>>()
     for (const action of actions) {
       if (action.type === 'OPEN_LONG' || action.type === 'CLOSE_LONG') {
