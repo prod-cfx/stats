@@ -76,6 +76,7 @@ export class CompiledPublicationGateService {
 
   async publish(input: PublishCompiledSnapshotInput): Promise<{
     snapshotId: string
+    snapshotHash: string
     consistencyReport: Record<string, unknown>
   }> {
     if (input.clarificationState?.items.some(item => item.status === 'pending')) {
@@ -144,6 +145,7 @@ export class CompiledPublicationGateService {
 
     return {
       snapshotId: snapshot.id,
+      snapshotHash: snapshot.snapshotHash,
       consistencyReport,
     }
   }

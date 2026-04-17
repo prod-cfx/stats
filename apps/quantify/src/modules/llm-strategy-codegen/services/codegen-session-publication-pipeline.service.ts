@@ -1,9 +1,8 @@
+import type { CodegenSessionsRepository } from '../repositories/codegen-sessions.repository'
 import type { ChecklistPayload } from '../types/codegen-checklist'
 import type { SemanticState } from '../types/semantic-state'
 
 import { Injectable } from '@nestjs/common'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
-import { CodegenSessionsRepository } from '../repositories/codegen-sessions.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -23,7 +22,6 @@ import { CompiledScriptExecutionEnvelopeService } from './compiled-script-execut
 import { CompiledScriptParserService } from './compiled-script-parser.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RecommendationIndexService } from './recommendation-index.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { SemanticStateCompileBridgeService } from './semantic-state-compile-bridge.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { SpecDescBuilderService } from './spec-desc-builder.service'
@@ -167,7 +165,7 @@ export class CodegenSessionPublicationPipelineService {
         }
       }
 
-      let snapshot: { snapshotId: string, consistencyReport: Record<string, unknown> }
+      let snapshot: { snapshotId: string, snapshotHash: string, consistencyReport: Record<string, unknown> }
       try {
         snapshot = await this.persistenceStage.publish({
           sessionId: args.sessionId,
@@ -186,6 +184,15 @@ export class CodegenSessionPublicationPipelineService {
           scriptSummary: artifacts.scriptSummary as unknown as Record<string, unknown>,
           lockedParams: artifacts.lockedParams,
         })
+        if (strategyInstanceId) {
+          await this.sessionsRepo.bindPublishedSnapshotToStrategyInstance?.({
+            strategyInstanceId,
+            userId: args.userId,
+            publishedSnapshotId: snapshot.snapshotId,
+            snapshotHash: snapshot.snapshotHash,
+            strategyTemplateId,
+          })
+        }
       } catch (error) {
         const publicationGate = this.normalizePublicationGate(
           (error as { publicationGate?: unknown } | null)?.publicationGate,

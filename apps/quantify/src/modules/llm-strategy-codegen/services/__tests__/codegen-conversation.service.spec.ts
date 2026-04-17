@@ -5978,6 +5978,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       .spyOn(CompiledPublicationGateService.prototype, 'publish')
       .mockResolvedValue({
         snapshotId: 'snapshot-compiler-failed',
+        snapshotHash: 'snapshot-hash-compiler-failed',
         consistencyReport: {
           status: 'FAILED',
           semanticConsistency: { status: 'PASSED', checks: [] },

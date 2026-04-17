@@ -52,6 +52,7 @@ describe('codegenSessionPublicationPipeline', () => {
         strategyTemplateId: 'template-1',
         strategyInstanceId: 'instance-1',
       }),
+      bindPublishedSnapshotToStrategyInstance: jest.fn().mockResolvedValue(undefined),
       ...(overrides?.repo ?? {}),
     }
     const recommendationIndex = {
@@ -82,6 +83,7 @@ describe('codegenSessionPublicationPipeline', () => {
     const gate = overrides?.gate ?? {
       publish: jest.fn().mockResolvedValue({
         snapshotId: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
         consistencyReport: { status: 'PASSED' },
       }),
     }
@@ -160,6 +162,7 @@ describe('codegenSessionPublicationPipeline', () => {
       gate: {
         publish: jest.fn().mockResolvedValue({
           snapshotId: 'snapshot-2',
+          snapshotHash: 'snapshot-hash-2',
           consistencyReport: {
             status: 'FAILED',
             compilerConsistency: {
@@ -209,6 +212,13 @@ describe('codegenSessionPublicationPipeline', () => {
       }),
     }))
     expect(repo.ensureDraftStrategyInstanceBoundForPublishedSession).toHaveBeenCalled()
+    expect(repo.bindPublishedSnapshotToStrategyInstance).toHaveBeenCalledWith({
+      strategyInstanceId: 'instance-1',
+      userId: 'user-1',
+      publishedSnapshotId: 'snapshot-1',
+      snapshotHash: expect.any(String),
+      strategyTemplateId: 'template-1',
+    })
     expect(repo.updateSession).toHaveBeenCalledWith('session-4', expect.objectContaining({
       status: 'PUBLISHED',
       strategyInstanceId: 'instance-1',

@@ -1,5 +1,5 @@
-import { CodegenSessionsRepository } from './codegen-sessions.repository'
 import type { SemanticState } from '../types/semantic-state'
+import { CodegenSessionsRepository } from './codegen-sessions.repository'
 
 describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSession', () => {
   const buildInput = () => ({
@@ -198,6 +198,61 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
     expect(tx.llmStrategyCodegenSession.update).toHaveBeenCalledWith({
       where: { id: 'session-1' },
       data: { strategyInstanceId: 'instance-1' },
+    })
+  })
+
+  it('backfills published snapshot binding metadata onto the source strategy instance', async () => {
+    const tx = {
+      strategyInstance: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'instance-1',
+          metadata: {
+            source: 'llm-codegen-session',
+            codegenSessionId: 'session-1',
+          },
+        }),
+        update: jest.fn().mockResolvedValue({ id: 'instance-1' }),
+      },
+    }
+
+    const txHost = {
+      tx,
+      withTransaction: jest.fn(async (callback: () => Promise<unknown>) => callback()),
+    }
+    const repo = new CodegenSessionsRepository(txHost as any)
+
+    await repo.bindPublishedSnapshotToStrategyInstance({
+      strategyInstanceId: 'instance-1',
+      userId: 'user-1',
+      publishedSnapshotId: 'snapshot-1',
+      snapshotHash: 'snapshot-hash-1',
+      strategyTemplateId: 'template-1',
+    })
+
+    expect(tx.strategyInstance.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'instance-1',
+        createdBy: 'user-1',
+      },
+      select: {
+        id: true,
+        metadata: true,
+      },
+    })
+    expect(tx.strategyInstance.update).toHaveBeenCalledWith({
+      where: { id: 'instance-1' },
+      data: {
+        updatedBy: 'user-1',
+        metadata: {
+          source: 'llm-codegen-session',
+          codegenSessionId: 'session-1',
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+          sourceStrategyInstanceId: 'instance-1',
+          sourceStrategyTemplateId: 'template-1',
+        },
+      },
     })
   })
 
