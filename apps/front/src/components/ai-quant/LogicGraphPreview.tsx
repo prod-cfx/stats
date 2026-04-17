@@ -16,56 +16,23 @@ function formatLegacyConditionText(subject: string, operator: string, value: str
 }
 
 function buildDisplayGraph(graph: StrategyLogicGraph): DisplayLogicGraph {
-  const fallbackCondition = {
-    kind: 'condition' as const,
-    id: 'condition-fallback',
-    text: '条件待补充',
-  }
-
-  const triggerBlocks: DisplayBlock[] = graph.trigger.length > 0
+  const conditions = graph.trigger.length > 0
     ? graph.trigger.map((trigger, index) => ({
-        type: index === 0
-          ? 'IF'
-          : trigger.join === 'OR'
-            ? 'OR_THEN'
-            : 'AND_AT_THEN',
-        items: [
-          {
-            kind: 'condition' as const,
-            id: trigger.id,
-            text: formatLegacyConditionText(trigger.subject, trigger.operator, trigger.value),
-          },
-        ],
+        kind: 'condition' as const,
+        id: trigger.id,
+        text: `${index > 0 && trigger.join ? `${trigger.join} ` : ''}${formatLegacyConditionText(trigger.subject, trigger.operator, trigger.value)}`,
       }))
     : [{
-        type: 'IF',
-        items: [fallbackCondition],
+        kind: 'condition' as const,
+        id: 'condition-fallback',
+        text: '条件待补充',
       }]
 
-  const extraActions = [...graph.actions]
-
-  if (graph.trigger.length > 0) {
-    graph.trigger.forEach((trigger, index) => {
-      const currentBlock = triggerBlocks[index]
-      const nextAction = extraActions.shift()
-      if (nextAction) {
-        currentBlock.items.push({
-          kind: 'action',
-          id: nextAction.id,
-          text: `${nextAction.action} ${nextAction.amount} 的 ${nextAction.target}`,
-        })
-      }
-    })
-  }
-
-  const targetBlock = triggerBlocks[triggerBlocks.length - 1]
-  extraActions.forEach(action => {
-    targetBlock.items.push({
-      kind: 'action',
-      id: action.id,
-      text: `${action.action} ${action.amount} 的 ${action.target}`,
-    })
-  })
+  const actions = graph.actions.map(action => ({
+    kind: 'action' as const,
+    id: action.id,
+    text: `${action.action} ${action.amount} 的 ${action.target}`,
+  }))
 
   const executeItems = [
     {
@@ -106,7 +73,13 @@ function buildDisplayGraph(graph: StrategyLogicGraph): DisplayLogicGraph {
   ]
 
   const blocks: DisplayBlock[] = [
-    ...triggerBlocks,
+    {
+      type: 'IF',
+      items: [
+        ...conditions,
+        ...actions,
+      ],
+    },
     {
       type: 'EXECUTE',
       items: executeItems,

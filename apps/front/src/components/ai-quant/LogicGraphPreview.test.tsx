@@ -27,7 +27,7 @@ describe('LogicGraphPreview', () => {
     container.remove()
   })
 
-  it('renders display-style block headings instead of entry and exit sections', () => {
+  it('renders a display-style fallback graph instead of entry and exit sections', () => {
     act(() => {
       root.render(
         <LogicGraphPreview
@@ -93,11 +93,11 @@ describe('LogicGraphPreview', () => {
     })
 
     expect(container.textContent).toContain('IF')
-    expect(container.textContent).toContain('AND AT THEN')
-    expect(container.textContent).toContain('OR THEN')
     expect(container.textContent).toContain('EXECUTE')
     expect(container.textContent).not.toContain('ENTRY')
     expect(container.textContent).not.toContain('EXIT')
+    expect(container.textContent).toContain('AND BTCUSDT RSI 低于 30')
+    expect(container.textContent).toContain('OR BTCUSDT MACD 金叉')
     expect(container.textContent).toContain('BUY 10% 的 BTCUSDT')
     expect(container.textContent).toContain('aiQuant.messages.confirmedGraph')
     expect(container.querySelector('button')?.disabled).toBe(true)
