@@ -25,7 +25,6 @@ function getBlockHeading(type: DisplayBlock['type']) {
 }
 
 function getExecuteLabel(item: DisplayExecuteItem) {
-  if (item.value) return item.value
   return item.text
 }
 

@@ -105,6 +105,7 @@ describe('DisplayLogicGraphPreview', () => {
     expect(container.textContent).toContain('EXECUTE')
     expect(container.textContent).toContain('THEN')
     expect(container.textContent).toContain('开多')
+    expect(container.textContent).toContain('交易所: OKX')
     expect(container.textContent).toContain('aiQuant.messages.confirmedGraph')
     expect(container.querySelector('button')?.disabled).toBe(true)
   })
