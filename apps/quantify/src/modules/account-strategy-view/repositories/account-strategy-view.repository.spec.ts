@@ -50,7 +50,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       },
     }
 
-    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
 
     const result = await repo.deployStrategyForUser({
       userId: 'user-1',
@@ -161,7 +161,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       },
     }
 
-    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
 
     await repo.deployStrategyForUser({
       userId: 'user-1',
@@ -233,7 +233,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       },
     }
 
-    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
 
     await repo.deployStrategyForUser({
       userId: 'user-1',
@@ -294,7 +294,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       },
     }
 
-    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
 
     await expect(repo.deployStrategyForUser({
       userId: 'user-1',
@@ -361,7 +361,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       },
     }
 
-    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
 
     await repo.deployStrategyForUser({
       userId: 'user-1',
@@ -401,7 +401,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         update: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
       },
     }
-    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
 
     await repo.updateDeploymentExecutionConfig({
       strategyInstanceId: 'strategy-instance-1',
@@ -479,7 +479,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       },
     }
 
-    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
 
     await expect(repo.deployStrategyForUser({
       userId: 'user-1',
@@ -522,7 +522,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       },
     }
 
-    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
 
     await expect(repo.deployStrategyForUser({
       userId: 'user-1',
@@ -578,7 +578,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       },
     }
 
-    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
 
     await expect(repo.deployStrategyForUser({
       userId: 'user-1',
@@ -619,7 +619,7 @@ describe('accountStrategyViewRepository.deleteStrategyForUser', () => {
       },
     }
 
-    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any)
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
 
     await repo.deleteStrategyForUser('user-1', 'strategy-instance-1')
 
@@ -666,7 +666,7 @@ describe('accountStrategyViewRepository.listStrategiesForUser', () => {
       },
     }
 
-    const repo = new AccountStrategyViewRepository({ tx } as any)
+    const repo = new AccountStrategyViewRepository({ tx } as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
 
     const result = await repo.listStrategiesForUser({
       userId: 'user-1',
@@ -701,7 +701,7 @@ describe('accountStrategyViewRepository.listStrategiesForUser', () => {
       },
     }
 
-    const repo = new AccountStrategyViewRepository({ tx } as any)
+    const repo = new AccountStrategyViewRepository({ tx } as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
 
     await repo.listStrategiesForUser({
       userId: 'user-1',
@@ -734,7 +734,7 @@ describe('accountStrategyViewRepository.findStrategyForUser', () => {
       },
     }
 
-    const repo = new AccountStrategyViewRepository({ tx } as any)
+    const repo = new AccountStrategyViewRepository({ tx } as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
 
     await repo.findStrategyForUser('user-1', 'inst-1')
 
