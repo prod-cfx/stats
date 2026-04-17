@@ -763,7 +763,11 @@ export class CodegenConversationService {
       })
     }
 
-    const missingFields = this.resolveChecklistMissingFields(canonicalChecklist)
+    const missingFields = this.resolveActiveGateMissingFields(
+      canonicalChecklist,
+      semanticReadyForGenerate,
+      compileability,
+    )
     if (missingFields.length > 0) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
@@ -2122,7 +2126,12 @@ export class CodegenConversationService {
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
-    const missingFields = this.resolveChecklistMissingFields(projectedChecklist)
+    const semanticReadyForChecklistGate = this.findNextOpenSemanticSlot(args.semanticState) === null
+    const missingFields = this.resolveActiveGateMissingFields(
+      projectedChecklist,
+      semanticReadyForChecklistGate,
+      compileability,
+    )
     const decision = this.buildStrategyDecision({
       checklist: projectedChecklist,
       clarification,
@@ -3000,6 +3009,18 @@ export class CodegenConversationService {
       missing.push('exitRules')
     }
     return missing
+  }
+
+  private resolveActiveGateMissingFields(
+    checklist: ChecklistPayload,
+    semanticReady: boolean,
+    compileability: CanonicalCompileabilityReport,
+  ): string[] {
+    const missingFields = this.resolveChecklistMissingFields(checklist)
+    if (semanticReady && compileability.canCompile) {
+      return []
+    }
+    return missingFields
   }
 
   private evaluateCanonicalCompileability(spec: {
