@@ -3232,7 +3232,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>,
       {
         clarificationState: {
-          ...(startResult.clarificationState as Record<string, unknown>),
+          ...(startResult.clarificationState as unknown as Record<string, unknown>),
           items: [
             {
               key: 'executionContext.timeframe',
