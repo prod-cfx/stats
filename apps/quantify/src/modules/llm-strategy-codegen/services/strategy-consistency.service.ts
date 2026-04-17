@@ -66,8 +66,11 @@ export class StrategyConsistencyService {
     checks.push(this.checkFallback(scriptProfile))
     checks.push(this.checkIndicators(specProfile, scriptProfile))
     checks.push(this.checkRuleMappings(specProfile, scriptProfile))
+    checks.push(this.checkDirectionSensitiveIrAtom(specProfile, scriptProfile))
+    checks.push(this.checkAstProjection(specProfile, parsedProjection))
     checks.push(this.checkActions(specProfile, scriptProfile))
     checks.push(this.checkSizing(specProfile, scriptProfile))
+    checks.push(this.checkExecutionEnvelopePositionMode(input.canonicalSpec, parsedProjection))
     checks.push(this.checkMarketMetadata(input.canonicalSpec, parsedProjection))
 
     const summary = this.buildSummary(checks)
@@ -895,7 +898,6 @@ export class StrategyConsistencyService {
       timeframe: spec.version === 2 && typeof spec.market.defaultTimeframe === 'string'
         ? spec.market.defaultTimeframe
         : (typeof spec.market.timeframe === 'string' ? spec.market.timeframe : null),
-      positionMode: this.resolveExpectedPositionMode(spec),
     }
 
     if (!projection) {
@@ -914,7 +916,6 @@ export class StrategyConsistencyService {
       marketType: projection.executionModel.instrumentType === 'perpetual' ? 'perp' : 'spot',
       symbol: projection.executionModel.symbol,
       timeframe: projection.executionModel.primaryTimeframe,
-      positionMode: projection.executionModel.positionMode,
     }
 
     const comparableFields = (Object.entries(expected) as Array<[keyof typeof expected, string | null]>)
@@ -956,18 +957,54 @@ export class StrategyConsistencyService {
     }
   }
 
+  private checkExecutionEnvelopePositionMode(
+    spec: CanonicalStrategySpec,
+    projection: ReturnType<CompiledScriptParserService['parse']> | null,
+  ): StrategyConsistencyCheck {
+    const expected = this.resolveExpectedPositionMode(spec)
+
+    if (!projection) {
+      return {
+        key: 'compiler_consistency.execution_envelope.position_mode',
+        level: 'warning',
+        status: 'unprovable',
+        expected,
+        actual: null,
+        message: '脚本不是可解析的 compiled artifact，跳过 execution envelope positionMode 校验。',
+      }
+    }
+
+    const actual = projection.executionModel.positionMode
+    if (actual !== expected) {
+      return {
+        key: 'compiler_consistency.execution_envelope.position_mode',
+        level: 'critical',
+        status: 'failed',
+        expected,
+        actual,
+        message: `execution envelope positionMode 漂移：expected=${expected}, actual=${actual}`,
+      }
+    }
+
+    return {
+      key: 'compiler_consistency.execution_envelope.position_mode',
+      level: 'critical',
+      status: 'passed',
+      expected,
+      actual,
+      message: 'execution envelope positionMode 与 canonical spec 一致。',
+    }
+  }
+
   private resolveExpectedPositionMode(
     spec: CanonicalStrategySpec,
   ): 'long_only' | 'short_only' | 'long_short' {
     if (spec.version === 2) {
       const hasLongExposure = spec.rules.some(rule => rule.actions.some(action => (
         action.type === 'OPEN_LONG'
-        || action.type === 'CLOSE_LONG'
-        || action.type === 'REDUCE_LONG'
       )))
       const hasShortExposure = spec.rules.some(rule => rule.actions.some(action => (
         action.type === 'OPEN_SHORT'
-        || action.type === 'REDUCE_SHORT'
       )))
       if (hasLongExposure && hasShortExposure) return 'long_short'
       if (hasShortExposure) return 'short_only'
@@ -983,6 +1020,134 @@ export class StrategyConsistencyService {
     if (hasLongExposure && hasShortExposure) return 'long_short'
     if (hasShortExposure) return 'short_only'
     return 'long_only'
+  }
+
+  private checkDirectionSensitiveIrAtom(
+    specProfile: StrategySemanticProfile,
+    scriptProfile: StrategySemanticProfile,
+  ): StrategyConsistencyCheck {
+    const directionSensitiveKeys = new Set<StrategySemanticRuleKey>([
+      'bollinger.upper_break',
+      'bollinger.lower_break',
+      'bollinger.middle_revert',
+      'ma.golden_cross',
+      'ma.death_cross',
+      'macd.golden_cross',
+      'macd.death_cross',
+    ])
+    const expectedRules = specProfile.rules.filter(rule =>
+      directionSensitiveKeys.has(rule.key)
+      && (rule.sideScope === 'long' || rule.sideScope === 'short'),
+    )
+
+    if (expectedRules.length === 0) {
+      return {
+        key: 'compiler_consistency.ir_direction_sensitive_atom',
+        level: 'warning',
+        status: 'unprovable',
+        expected: [],
+        actual: scriptProfile.rules,
+        message: 'canonical spec 未包含可验证的方向敏感原子，跳过方向敏感原子校验。',
+      }
+    }
+
+    const drifts: string[] = []
+    for (const expectedRule of expectedRules) {
+      const matchingActionRules = scriptProfile.rules.filter(rule =>
+        rule.key === expectedRule.key
+        && rule.phase === expectedRule.phase
+        && rule.action === expectedRule.action,
+      )
+      if (matchingActionRules.length === 0) {
+        drifts.push(`${expectedRule.key}:${expectedRule.phase}:${expectedRule.action}: missing in script profile`)
+        continue
+      }
+      if (!matchingActionRules.some(rule => rule.sideScope === expectedRule.sideScope)) {
+        const actualScopes = Array.from(new Set(matchingActionRules.map(rule => rule.sideScope))).join(',')
+        drifts.push(`${expectedRule.key}:${expectedRule.phase}:${expectedRule.action}: expected=${expectedRule.sideScope}, actual=${actualScopes}`)
+      }
+    }
+
+    if (drifts.length > 0) {
+      return {
+        key: 'compiler_consistency.ir_direction_sensitive_atom',
+        level: 'critical',
+        status: 'failed',
+        expected: expectedRules,
+        actual: scriptProfile.rules,
+        message: `方向敏感原子在 IR/脚本语义中发生漂移：${drifts.join(' | ')}`,
+      }
+    }
+
+    return {
+      key: 'compiler_consistency.ir_direction_sensitive_atom',
+      level: 'critical',
+      status: 'passed',
+      expected: expectedRules,
+      actual: scriptProfile.rules,
+      message: '方向敏感原子在 IR/脚本语义中保持一致。',
+    }
+  }
+
+  private checkAstProjection(
+    specProfile: StrategySemanticProfile,
+    projection: ReturnType<CompiledScriptParserService['parse']> | null,
+  ): StrategyConsistencyCheck {
+    const expectedMiddleRevertRules = specProfile.rules.filter(rule =>
+      rule.key === 'bollinger.middle_revert'
+      && (rule.sideScope === 'long' || rule.sideScope === 'short'),
+    )
+    const uniqueExpectedScopes = Array.from(new Set(expectedMiddleRevertRules.map(rule => rule.sideScope)))
+
+    if (expectedMiddleRevertRules.length === 0 || uniqueExpectedScopes.length !== 1) {
+      return {
+        key: 'compiler_consistency.ast_projection',
+        level: 'warning',
+        status: 'unprovable',
+        expected: expectedMiddleRevertRules,
+        actual: null,
+        message: 'canonical spec 未包含可验证的 AST 定向投影规则，跳过 AST 投影校验。',
+      }
+    }
+
+    if (!projection) {
+      return {
+        key: 'compiler_consistency.ast_projection',
+        level: 'warning',
+        status: 'unprovable',
+        expected: expectedMiddleRevert,
+        actual: null,
+        message: '脚本不是可解析的 compiled artifact，跳过 AST 投影校验。',
+      }
+    }
+
+    const middlePredicate = projection.exprPool.find(expr =>
+      expr.nodeType === 'predicate'
+      && typeof expr.sourceRef === 'string'
+      && expr.sourceRef.includes('middle_revert'),
+    )
+    const expectedKind = uniqueExpectedScopes[0] === 'short' ? 'CROSS_UNDER' : 'CROSS_OVER'
+    const actualKind = middlePredicate?.nodeType === 'predicate' ? middlePredicate.payload.kind : null
+
+    if (actualKind !== expectedKind) {
+      return {
+        key: 'compiler_consistency.ast_projection',
+        level: 'critical',
+        status: 'failed',
+        expected: expectedKind,
+        actual: actualKind,
+        message: `AST 投影未保留方向敏感谓词：expected=${expectedKind}, actual=${actualKind ?? 'missing'}`,
+      }
+    }
+
+    return {
+      key: 'compiler_consistency.ast_projection',
+      level: 'critical',
+      status: 'passed',
+      expected: expectedKind,
+      actual: actualKind,
+      message: 'AST 投影保持了方向敏感谓词结构。',
+    }
   }
 
   private buildSummary(checks: StrategyConsistencyCheck[]): StrategyConsistencyReport['summary'] {
@@ -1023,6 +1188,18 @@ export class StrategyConsistencyService {
     predicateId: string
   }): StrategySemanticRuleKey | null {
     const predicateId = input.predicateId.toLowerCase()
+    if (
+      input.predicateKind === 'CROSS_OVER'
+      && (predicateId.includes('macd_golden_cross') || predicateId.includes('macd.golden_cross'))
+    ) {
+      return 'macd.golden_cross'
+    }
+    if (
+      input.predicateKind === 'CROSS_UNDER'
+      && (predicateId.includes('macd_death_cross') || predicateId.includes('macd.death_cross'))
+    ) {
+      return 'macd.death_cross'
+    }
     if (predicateId.includes('price_change_pct') || predicateId.includes('price.change_pct')) {
       return 'price.change_pct'
     }
@@ -1040,18 +1217,6 @@ export class StrategyConsistencyService {
     }
     if (predicateId.includes('indicator_below') || predicateId.includes('ma_death_cross') || predicateId.includes('death_cross')) {
       return 'ma.death_cross'
-    }
-    if (
-      input.predicateKind === 'CROSS_OVER'
-      && (predicateId.includes('macd_golden_cross') || predicateId.includes('macd.golden_cross'))
-    ) {
-      return 'macd.golden_cross'
-    }
-    if (
-      input.predicateKind === 'CROSS_UNDER'
-      && (predicateId.includes('macd_death_cross') || predicateId.includes('macd.death_cross'))
-    ) {
-      return 'macd.death_cross'
     }
     if (
       input.predicateKind === 'CROSS_OVER'

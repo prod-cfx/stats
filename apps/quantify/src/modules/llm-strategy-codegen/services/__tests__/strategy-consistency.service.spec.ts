@@ -227,9 +227,11 @@ strategy
     })
 
     expect(report.status).toBe('FAILED')
-    expect(report.checks.some(check => check.key === 'market.execution_model' && check.status === 'failed')).toBe(true)
     expect(report.checks.some(
-      check => check.key === 'market.execution_model'
+      check => check.key === 'compiler_consistency.execution_envelope.position_mode' && check.status === 'failed',
+    )).toBe(true)
+    expect(report.checks.some(
+      check => check.key === 'compiler_consistency.execution_envelope.position_mode'
         && String(check.message).includes('positionMode'),
     )).toBe(true)
   })
@@ -380,6 +382,96 @@ strategy
 
     expect(report.status).toBe('FAILED')
     expect(report.checks.some(check => check.key === 'rules.mapping' && check.status === 'failed')).toBe(true)
+    expect(report.checks.some(
+      check => check.key === 'compiler_consistency.ir_direction_sensitive_atom' && check.status === 'failed',
+    )).toBe(true)
+  })
+
+  it('fails when compiled AST projection flattens a short-side middle revert predicate', () => {
+    const canonicalSpec = {
+      version: 2 as const,
+      market: {
+        exchange: 'okx' as const,
+        symbol: 'BTCUSDT',
+        marketType: 'perp' as const,
+        timeframe: '15m',
+      },
+      indicators: [{ kind: 'bollingerBands' as const, params: { period: 20, stdDev: 2 } }],
+      sizing: { mode: 'RATIO' as const, value: 0.1 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE' as const,
+        fillTiming: 'NEXT_BAR_OPEN' as const,
+      },
+      dataRequirements: {
+        requiredTimeframes: ['15m'],
+      },
+      rules: [
+        {
+          id: 'entry-short',
+          phase: 'entry' as const,
+          sideScope: 'short' as const,
+          priority: 200,
+          condition: {
+            kind: 'atom' as const,
+            key: 'bollinger.upper_break',
+            semanticScope: 'market' as const,
+            op: 'CROSS_OVER' as const,
+          },
+          actions: [{ type: 'OPEN_SHORT' as const, sizing: { mode: 'RATIO' as const, value: 0.1 } }],
+        },
+        {
+          id: 'exit-short-middle',
+          phase: 'exit' as const,
+          sideScope: 'short' as const,
+          priority: 100,
+          condition: {
+            kind: 'atom' as const,
+            key: 'bollinger.middle_revert',
+            semanticScope: 'market' as const,
+          },
+          actions: [{ type: 'CLOSE_SHORT' as const }],
+        },
+      ],
+    }
+
+    const compiled = new CanonicalSpecV2IrCompilerService().compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+    const ast = new CanonicalStrategyAstCompilerService().compile(compiled.ir)
+    const driftedAst = {
+      ...ast,
+      exprPool: ast.exprPool.map(expr => (
+        typeof expr.sourceRef === 'string' && expr.sourceRef.includes('middle_revert')
+          ? {
+              ...expr,
+              payload: {
+                ...(expr.payload as Record<string, unknown>),
+                kind: 'OR',
+              },
+            }
+          : expr
+      )),
+    }
+    const script = new CompiledScriptEmitterService().emit({
+      ast: driftedAst as any,
+      executionEnvelope: new CompiledScriptExecutionEnvelopeService().build(canonicalSpec),
+    })
+
+    const report = consistency.evaluate({
+      canonicalSpec,
+      scriptCode: script,
+    })
+
+    expect(report.status).toBe('FAILED')
+    expect(report.checks.some(
+      check => check.key === 'compiler_consistency.ast_projection' && check.status === 'failed',
+    )).toBe(true)
   })
 
   it('passes when ratio sizing is derived from normalized positionPct params', () => {
