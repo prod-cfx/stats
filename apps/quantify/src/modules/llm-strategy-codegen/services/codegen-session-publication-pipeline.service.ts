@@ -1,8 +1,9 @@
-import type { CodegenSessionsRepository } from '../repositories/codegen-sessions.repository'
 import type { ChecklistPayload } from '../types/codegen-checklist'
 import type { SemanticState } from '../types/semantic-state'
 
 import { Injectable } from '@nestjs/common'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { CodegenSessionsRepository } from '../repositories/codegen-sessions.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
