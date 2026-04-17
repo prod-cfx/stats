@@ -5,6 +5,7 @@ describe('accountAiQuantStrategiesController', () => {
     const service = {
       listAccountStrategies: jest.fn().mockResolvedValue({ items: [], total: 0, page: 1, limit: 20 }),
       getAccountStrategyDetail: jest.fn().mockResolvedValue({ id: 'strategy-1' }),
+      getDeployResult: jest.fn().mockResolvedValue({ id: 'strategy-1', status: 'running' }),
       performAccountStrategyAction: jest.fn().mockResolvedValue({ id: 'strategy-1', status: 'running' }),
       deployAccountStrategy: jest.fn().mockResolvedValue({ id: 'strategy-1', status: 'draft' }),
       updateAccountStrategyExecutionLeverage: jest.fn().mockResolvedValue({ id: 'strategy-1', status: 'draft' }),

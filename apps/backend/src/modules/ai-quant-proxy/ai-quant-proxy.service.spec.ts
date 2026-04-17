@@ -11,6 +11,7 @@ describe('aiQuantProxyService', () => {
       get: jest.fn(),
       delete: jest.fn(),
       deleteAccountStrategy: jest.fn(),
+      getDeployResult: jest.fn(),
       deployAccountStrategy: jest.fn(),
       updateAccountStrategyExecutionLeverage: jest.fn(),
       startCodegen: jest.fn(),
@@ -148,6 +149,25 @@ describe('aiQuantProxyService', () => {
     })).resolves.toEqual({ id: 'strategy-1', status: 'draft' })
 
     expect(quantifyClient.deployAccountStrategy).toHaveBeenCalledTimes(2)
+  })
+
+  it('reconciles deploy success by deployRequestId after the final transient upstream failure', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.deployAccountStrategy
+      .mockRejectedValue(new QuantifyClientError('upstream timeout', 502, 'UPSTREAM_REQUEST_FAILED'))
+    quantifyClient.getDeployResult.mockResolvedValue({ id: 'strategy-1', status: 'running' })
+
+    await expect(service.deployAccountStrategy('user-1', 'Bearer token-1', {
+      name: 'My Strategy',
+      deployRequestId: 'deploy-req-reconcile-1',
+      publishedSnapshotId: 'snapshot-reconcile-1',
+    })).resolves.toEqual({ id: 'strategy-1', status: 'running' })
+
+    expect(quantifyClient.deployAccountStrategy).toHaveBeenCalledTimes(3)
+    expect(quantifyClient.getDeployResult).toHaveBeenCalledWith(
+      'deploy-req-reconcile-1',
+      { userId: 'user-1', headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
+    )
   })
 
   it('does not retry deploy for business validation errors', async () => {

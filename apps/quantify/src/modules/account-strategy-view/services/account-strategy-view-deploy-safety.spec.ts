@@ -93,6 +93,36 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
     expect(service.getStrategyDetail).toHaveBeenCalledWith('user-1', 'inst-existing')
   })
 
+  it('returns deploy result detail when deploy request is already succeeded', async () => {
+    const { service } = buildService({
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue({
+        id: 'req-1',
+        deployRequestId: 'deploy-req-1',
+        payloadHash: 'hash-1',
+        status: 'SUCCEEDED',
+        strategyInstanceId: 'inst-existing',
+      }),
+    })
+
+    await expect(service.getDeployResult('user-1', 'deploy-req-1')).resolves.toEqual({ id: 'inst-1' })
+    expect(service.getStrategyDetail).toHaveBeenCalledWith('user-1', 'inst-existing')
+  })
+
+  it('returns null when deploy request is not yet succeeded', async () => {
+    const { service } = buildService({
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue({
+        id: 'req-1',
+        deployRequestId: 'deploy-req-1',
+        payloadHash: 'hash-1',
+        status: 'PROCESSING',
+        strategyInstanceId: null,
+      }),
+    })
+
+    await expect(service.getDeployResult('user-1', 'deploy-req-1')).resolves.toBeNull()
+    expect(service.getStrategyDetail).not.toHaveBeenCalled()
+  })
+
   it('rejects idempotent conflict when same request id has different payload', async () => {
     const { service } = buildService({
       findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue({

@@ -88,6 +88,19 @@ export class AiQuantProxyService {
         const isTransientUpstreamFailure = this.isTransientUpstreamFailure(error)
         const isLastAttempt = attempt >= AiQuantProxyService.DEPLOY_RETRY_ATTEMPTS
         if (!isTransientUpstreamFailure || isLastAttempt) {
+          if (isTransientUpstreamFailure) {
+            const reconciledResult = await this.tryReconcileTransientDeployResult(
+              userId,
+              authorization,
+              body.deployRequestId,
+            )
+            if (reconciledResult) {
+              this.logger.warn(
+                `event=deploy_reconciled_after_transient_failure deployRequestId=${String(body.deployRequestId ?? '')} reason=${this.describeError(error)}`,
+              )
+              return reconciledResult
+            }
+          }
           throw this.mapQuantifyError(error)
         }
         this.logger.warn(`event=deploy_retry reason=${this.describeError(error)} attempt=${attempt}`)
@@ -417,6 +430,28 @@ export class AiQuantProxyService {
   private isTransientUpstreamFailure(error: unknown): boolean {
     const code = this.getQuantifyErrorCode(error)
     return typeof code === 'string' && AiQuantProxyService.TRANSIENT_UPSTREAM_CODES.has(code)
+  }
+
+  private async tryReconcileTransientDeployResult(
+    userId: string,
+    authorization: string | undefined,
+    deployRequestId: unknown,
+  ): Promise<unknown | null> {
+    if (typeof deployRequestId !== 'string' || deployRequestId.trim().length === 0) {
+      return null
+    }
+
+    try {
+      return await this.quantifyClient.getDeployResult(deployRequestId.trim(), {
+        userId,
+        headers: this.userHeaders(userId, authorization),
+      })
+    } catch (error) {
+      this.logger.warn(
+        `event=deploy_reconciliation_failed deployRequestId=${deployRequestId.trim()} reason=${this.describeError(error)}`,
+      )
+      return null
+    }
   }
 
   private getQuantifyErrorCode(error: unknown): string | undefined {

@@ -739,6 +739,23 @@ export class AccountStrategyViewService {
     }
   }
 
+  async getDeployResult(userId: string, deployRequestId: string): Promise<AccountStrategyDetailResponseDto | null> {
+    if (!userId) {
+      throw new MissingUserIdentityException()
+    }
+
+    const deployRequest = await this.repo.findDeployRequestByUserAndRequestId(userId, deployRequestId)
+    if (!deployRequest) {
+      return null
+    }
+
+    if (deployRequest.status !== 'SUCCEEDED' || !deployRequest.strategyInstanceId) {
+      return null
+    }
+
+    return this.getStrategyDetail(userId, deployRequest.strategyInstanceId)
+  }
+
   async updateDeploymentLeverage(
     strategyInstanceId: string,
     dto: AccountStrategyUpdateExecutionLeverageDto,
