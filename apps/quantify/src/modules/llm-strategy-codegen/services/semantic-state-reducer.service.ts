@@ -200,11 +200,11 @@ export class SemanticStateReducerService {
       return 'bidirectional'
     }
 
-    if (normalized === 'long_only' || /只做多|仅做多/u.test(answerText)) {
+    if (normalized === 'long_only' || /只做多|仅做多|做多网格|多头网格|做多|多头/u.test(answerText)) {
       return 'long_only'
     }
 
-    if (normalized === 'short_only' || /只做空|仅做空/u.test(answerText)) {
+    if (normalized === 'short_only' || /只做空|仅做空|做空网格|空头网格|做空|空头/u.test(answerText)) {
       return 'short_only'
     }
 

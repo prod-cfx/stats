@@ -178,6 +178,7 @@ describe('strategyIntentNormalizerService', () => {
         upper: 80000,
         stepPct: 0.5,
         sideMode: 'bidirectional',
+        breakoutAction: 'pause',
       },
       riskRules: { positionPct: 10 },
     } as any)
@@ -188,6 +189,7 @@ describe('strategyIntentNormalizerService', () => {
       range: { lower: 60000, upper: 80000 },
       stepPct: 0.5,
       sideMode: 'bidirectional',
+      breakoutAction: 'pause',
     }))
     expect(result.normalizedIntent.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -200,7 +202,36 @@ describe('strategyIntentNormalizerService', () => {
           rangeUpper: 80000,
           stepPct: 0.5,
           sideMode: 'bidirectional',
-          breakoutAction: 'continue',
+          breakoutAction: 'pause',
+        }),
+      }),
+    ]))
+  })
+
+  it('recognizes short-only grid wording and 每一格 percent syntax', () => {
+    const result = service.normalize({
+      market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp', timeframe: '15m' },
+      entryRules: ['做空网格，区间 60000-80000，每一格 1%，行情突破区间就停掉'],
+      riskRules: { positionPct: 10 },
+    } as any)
+
+    expect(result.blocked).toBe(false)
+    expect(result.normalizedIntent.grid).toEqual(expect.objectContaining({
+      range: { lower: 60000, upper: 80000 },
+      stepPct: 1,
+      sideMode: 'short_only',
+      breakoutAction: 'pause',
+    }))
+    expect(result.normalizedIntent.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope: 'short',
+        closureStatus: 'closed',
+        params: expect.objectContaining({
+          stepPct: 1,
+          sideMode: 'short_only',
+          breakoutAction: 'pause',
         }),
       }),
     ]))

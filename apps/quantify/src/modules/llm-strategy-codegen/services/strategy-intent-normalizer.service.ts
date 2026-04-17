@@ -567,6 +567,9 @@ export class StrategyIntentNormalizerService {
         stepPct: explicitGrid.stepPct,
         sideMode: explicitGrid.sideMode ?? 'bidirectional',
         recycle: true,
+        ...(explicitGrid.breakoutAction === 'pause' || explicitGrid.breakoutAction === 'continue'
+          ? { breakoutAction: explicitGrid.breakoutAction }
+          : {}),
       }
     }
 
@@ -575,7 +578,7 @@ export class StrategyIntentNormalizerService {
 
     const rangeMatch = combinedText.match(/(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)/u)
     const perMilleMatch = combinedText.match(/千分之\s*(\d+(?:\.\d+)?)/u)
-    const percentMatch = combinedText.match(/(?:步长|每格)\s*(\d+(?:\.\d+)?)\s*%/u)
+    const percentMatch = combinedText.match(/(?:步长|每一格|每格)\s*(\d+(?:\.\d+)?)\s*%/u)
     if (!rangeMatch?.[1] || !rangeMatch[2]) return null
 
     const stepPct = percentMatch?.[1]
@@ -592,6 +595,7 @@ export class StrategyIntentNormalizerService {
       stepPct,
       sideMode: this.resolveGridSideMode(combinedText),
       recycle: true,
+      breakoutAction: /突破.{0,8}(停|暂停|停止)/u.test(combinedText) ? 'pause' : 'continue',
     }
   }
 
@@ -601,7 +605,8 @@ export class StrategyIntentNormalizerService {
   ): NormalizedTriggerAtom[] {
     const combinedText = [...(checklist.entryRules ?? []), ...(checklist.exitRules ?? [])].join(' ')
     const structuredGrid = checklist.grid
-    const breakoutAction = /突破.{0,8}(停|暂停|停止)/u.test(combinedText) ? 'pause' : 'continue'
+    const breakoutAction = structuredGrid?.breakoutAction
+      ?? (/突破.{0,8}(停|暂停|停止)/u.test(combinedText) ? 'pause' : 'continue')
     if (grid) {
       return [this.createClosedTrigger({
         key: 'grid.range_rebalance',

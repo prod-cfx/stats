@@ -497,4 +497,57 @@ describe('SemanticStateReducerService', () => {
     }))
     expect(next.triggers[0]?.status).toBe('locked')
   })
+
+  it('accepts natural short-grid sideMode wording in semantic reduction', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['grid.range_rebalance'],
+        triggers: [
+          {
+            id: 'grid-entry',
+            key: 'grid.range_rebalance',
+            phase: 'entry',
+            params: {
+              rangeLower: 60000,
+              rangeUpper: 80000,
+              stepPct: 0.5,
+            },
+            status: 'open',
+            source: 'user_explicit',
+            openSlots: [
+              {
+                slotKey: 'grid.sideMode',
+                fieldPath: 'triggers[0].params.sideMode',
+                status: 'open',
+                priority: 'core',
+                questionHint: '请确认网格方向（双向 / 只做多 / 只做空）。',
+                affectsExecution: true,
+              },
+            ],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-16T10:00:00.000Z',
+      },
+      targetSlotKey: 'grid.sideMode',
+      targetFieldPath: 'triggers[0].params.sideMode',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'grid.sideMode',
+        fieldPath: 'triggers[0].params.sideMode',
+      }),
+      answer: '空头网格',
+      messageIndex: 13,
+    })
+
+    expect(next.triggers[0]?.params.sideMode).toBe('short_only')
+    expect(next.triggers[0]?.openSlots[0]).toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 'short_only',
+    }))
+  })
 })

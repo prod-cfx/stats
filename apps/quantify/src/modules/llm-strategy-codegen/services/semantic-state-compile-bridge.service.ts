@@ -64,6 +64,9 @@ export class SemanticStateCompileBridgeService {
       stepPct: activeGrid.params.stepPct as number,
       sideMode: (activeGrid.params.sideMode as StrategyNormalizedIntent['grid']['sideMode']) ?? 'bidirectional',
       recycle: activeGrid.params.recycle !== false,
+      ...(activeGrid.params.breakoutAction === 'pause' || activeGrid.params.breakoutAction === 'continue'
+        ? { breakoutAction: activeGrid.params.breakoutAction }
+        : {}),
     }
   }
 
@@ -187,8 +190,12 @@ export class SemanticStateCompileBridgeService {
       || activeGrid.params.sideMode === 'bidirectional'
       ? activeGrid.params.sideMode
       : undefined
+    const breakoutAction = activeGrid.params.breakoutAction === 'pause'
+      || activeGrid.params.breakoutAction === 'continue'
+      ? activeGrid.params.breakoutAction
+      : undefined
 
-    if (lower === undefined && upper === undefined && stepPct === undefined && sideMode === undefined) {
+    if (lower === undefined && upper === undefined && stepPct === undefined && sideMode === undefined && breakoutAction === undefined) {
       return undefined
     }
 
@@ -197,6 +204,7 @@ export class SemanticStateCompileBridgeService {
       ...(upper !== undefined ? { upper } : {}),
       ...(stepPct !== undefined ? { stepPct } : {}),
       ...(sideMode !== undefined ? { sideMode } : {}),
+      ...(breakoutAction !== undefined ? { breakoutAction } : {}),
     }
   }
 

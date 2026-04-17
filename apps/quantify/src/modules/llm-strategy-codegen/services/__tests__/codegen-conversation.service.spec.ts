@@ -468,6 +468,22 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('extracts short grid wording, 每一格 percent syntax, and breakout pause semantics from freeform input', () => {
+    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+
+    const checklist = (service as any).inferChecklistFromMessage(
+      '在okx交易所合约市场的BTCUSDT 15m上，做空网格，区间 60000-80000，每一格 1%，行情突破区间就停掉',
+    )
+
+    expect(checklist.grid).toEqual(expect.objectContaining({
+      lower: 60000,
+      upper: 80000,
+      stepPct: 1,
+      sideMode: 'short_only',
+      breakoutAction: 'pause',
+    }))
+  })
+
   it('starts in drafting and asks next key question from llm planner', async () => {
     const dto: StartCodegenSessionDto = {
       userId: 'u1',
@@ -1571,6 +1587,40 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         stepPct: 0.5,
         sideMode: 'bidirectional',
       },
+    }))
+  })
+
+  it('accepts natural short-grid sideMode clarification answers on the fallback checklist path', () => {
+    const nextChecklist = (service as any).applyClarificationAnswers(
+      {
+        grid: {
+          lower: 60000,
+          upper: 80000,
+          stepPct: 0.5,
+        },
+      },
+      {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'grid.sideMode',
+            reason: 'grid_params_missing',
+            field: 'grid.sideMode',
+            blocking: true,
+            question: '请确认网格方向（双向 / 只做多 / 只做空）。',
+            status: 'pending',
+          },
+        ],
+      },
+      {
+        'grid.sideMode': '空头网格',
+      },
+    )
+
+    expect(nextChecklist).toEqual(expect.objectContaining({
+      grid: expect.objectContaining({
+        sideMode: 'short_only',
+      }),
     }))
   })
 
@@ -3066,6 +3116,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             upper: 80000,
             stepPct: 0.5,
             sideMode: 'bidirectional',
+            breakoutAction: 'pause',
           }),
           timeframes: ['15m'],
         }),
@@ -3078,6 +3129,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
                 rangeLower: 60000,
                 rangeUpper: 80000,
                 stepPct: 0.5,
+                breakoutAction: 'pause',
               }),
             }),
           ]),

@@ -1915,10 +1915,10 @@ export class CodegenConversationService {
     if (normalized === 'bidirectional' || /双向|低买高卖|来回|往返|自动买卖|自动交易/u.test(answer)) {
       return 'bidirectional'
     }
-    if (normalized === 'long_only' || /只做多|仅做多/u.test(answer)) {
+    if (normalized === 'long_only' || /只做多|仅做多|做多网格|多头网格|做多|多头/u.test(answer)) {
       return 'long_only'
     }
-    if (normalized === 'short_only' || /只做空|仅做空/u.test(answer)) {
+    if (normalized === 'short_only' || /只做空|仅做空|做空网格|空头网格|做空|空头/u.test(answer)) {
       return 'short_only'
     }
 
@@ -3597,7 +3597,7 @@ export class CodegenConversationService {
         grid.upper = Number(rangeMatch[2])
       }
 
-      const percentMatch = text.match(/(?:步长|每格)\s*(\d+(?:\.\d+)?)\s*%/u)
+      const percentMatch = text.match(/(?:步长|每一格|每格)\s*(\d+(?:\.\d+)?)\s*%/u)
       const perMilleMatch = text.match(/千分之\s*(\d+(?:\.\d+)?)/u)
       if (percentMatch?.[1]) {
         grid.stepPct = Number(percentMatch[1])
@@ -3607,6 +3607,10 @@ export class CodegenConversationService {
 
       if (/双向|低买高卖|来回|往返|自动买卖|自动交易/u.test(text)) {
         grid.sideMode = 'bidirectional'
+      } else if (/做空网格|空头网格|做空|空头/u.test(text)) {
+        grid.sideMode = 'short_only'
+      } else if (/做多网格|多头网格|做多|多头/u.test(text)) {
+        grid.sideMode = 'long_only'
       } else if (/只做多|仅做多/u.test(text)) {
         grid.sideMode = 'long_only'
       } else if (/只做空|仅做空/u.test(text)) {
@@ -3615,6 +3619,12 @@ export class CodegenConversationService {
 
       if (!grid.sideMode) {
         grid.sideMode = 'bidirectional'
+      }
+
+      if (/突破.{0,8}(停|暂停|停止)/u.test(text)) {
+        grid.breakoutAction = 'pause'
+      } else if (/突破/u.test(text)) {
+        grid.breakoutAction = 'continue'
       }
     }
 
@@ -3859,12 +3869,15 @@ export class CodegenConversationService {
       const stepPct = typeof raw.stepPct === 'number' && Number.isFinite(raw.stepPct)
         ? raw.stepPct
         : undefined
+      const breakoutAction = raw.breakoutAction === 'pause' || raw.breakoutAction === 'continue'
+        ? raw.breakoutAction
+        : undefined
       const sideMode = typeof raw.sideMode === 'string'
         && (raw.sideMode === 'long_only' || raw.sideMode === 'short_only' || raw.sideMode === 'bidirectional')
         ? raw.sideMode
         : undefined
 
-      if (lower === undefined && upper === undefined && stepPct === undefined && !sideMode) {
+      if (lower === undefined && upper === undefined && stepPct === undefined && !sideMode && !breakoutAction) {
         return undefined
       }
 
@@ -3873,6 +3886,7 @@ export class CodegenConversationService {
         ...(upper !== undefined ? { upper } : {}),
         ...(stepPct !== undefined ? { stepPct } : {}),
         ...(sideMode ? { sideMode } : {}),
+        ...(breakoutAction ? { breakoutAction } : {}),
       }
     }
 

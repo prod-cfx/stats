@@ -96,6 +96,7 @@ export interface NormalizedGridIntent {
   stepPct: number
   sideMode: NormalizedGridSideMode
   recycle: boolean
+  breakoutAction?: 'pause' | 'continue'
 }
 
 export interface ObservationOnlyStateHint extends RecognizedSemanticMetadata {
