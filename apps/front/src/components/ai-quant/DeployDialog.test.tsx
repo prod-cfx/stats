@@ -113,4 +113,33 @@ describe('DeployDialog', () => {
     expect(confirmButton).toBeTruthy()
     expect((confirmButton as HTMLButtonElement).disabled).toBe(true)
   })
+
+  it('does not render leverage controls for spot deployments', async () => {
+    await act(async () => {
+      root.render(
+        <DeployDialog
+          open
+          canDeploy
+          deploySubmitting={false}
+          apiConfigured
+          exchange="okx"
+          marketType="spot"
+          accounts={[{
+            accountId: 'acct-1',
+            exchange: 'okx',
+            accountName: 'OKX Main',
+            apiKeyMask: 'OKX***1',
+            status: 'available',
+          }]}
+          selectedAccountId="acct-1"
+          lng="zh"
+          onSelectAccount={() => {}}
+          onConfirmDeploy={() => {}}
+        />,
+      )
+    })
+
+    expect(container.textContent).not.toContain('部署杠杆')
+    expect(container.querySelector('select[name="deployment-leverage"]')).toBeNull()
+  })
 })

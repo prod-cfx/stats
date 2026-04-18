@@ -127,31 +127,22 @@ export function DeployDialog({
             </select>
           </label>
 
-          {marketType === 'perp'
-            ? (
-                <label className="text-xs text-[color:var(--cf-muted)]">
-                  部署杠杆
-                  <select
-                    name="deployment-leverage"
-                    value={typeof selectedLeverage === 'number' ? String(selectedLeverage) : ''}
-                    onChange={event => onSelectLeverage?.(Number(event.target.value))}
-                    className="mt-1 h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)]"
-                  >
-                    <option value="">选择杠杆</option>
-                    {leverageOptions.map(option => (
-                      <option key={option} value={option}>{option}x</option>
-                    ))}
-                  </select>
-                </label>
-              )
-            : (
-                <div className="text-xs text-[color:var(--cf-muted)]">
-                  部署杠杆
-                  <div className="mt-1 flex h-9 items-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm text-[color:var(--cf-text)]">
-                    1x
-                  </div>
-                </div>
-              )}
+          {marketType === 'perp' && (
+            <label className="text-xs text-[color:var(--cf-muted)]">
+              部署杠杆
+              <select
+                name="deployment-leverage"
+                value={typeof selectedLeverage === 'number' ? String(selectedLeverage) : ''}
+                onChange={event => onSelectLeverage?.(Number(event.target.value))}
+                className="mt-1 h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)]"
+              >
+                <option value="">选择杠杆</option>
+                {leverageOptions.map(option => (
+                  <option key={option} value={option}>{option}x</option>
+                ))}
+              </select>
+            </label>
+          )}
         </div>
 
         {marketType === 'perp' && leverageOptions.length > 0 && (
