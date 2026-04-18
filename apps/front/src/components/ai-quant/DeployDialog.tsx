@@ -16,6 +16,7 @@ interface DeployDialogProps {
   deploySubmitting: boolean
   apiConfigured: boolean
   exchange: 'binance' | 'okx' | 'hyperliquid'
+  marketType: 'spot' | 'perp' | null
   accounts: DeployExchangeAccount[]
   selectedAccountId: string
   leverageOptions?: number[]
@@ -30,7 +31,6 @@ interface DeployDialogProps {
   } | null
   driftReasons?: string[]
   lng: 'zh' | 'en'
-  onSelectExchange: (exchange: 'binance' | 'okx' | 'hyperliquid') => void
   onSelectAccount: (accountId: string) => void
   onConfirmDeploy: () => Promise<void> | void
   onClose: () => void
@@ -42,6 +42,7 @@ export function DeployDialog({
   deploySubmitting,
   apiConfigured,
   exchange,
+  marketType,
   accounts,
   selectedAccountId,
   leverageOptions = [],
@@ -51,7 +52,6 @@ export function DeployDialog({
   deploymentBaseline = null,
   driftReasons = [],
   lng,
-  onSelectExchange,
   onSelectAccount,
   onConfirmDeploy,
   onClose,
@@ -60,10 +60,16 @@ export function DeployDialog({
   if (!open) return null
   const availableAccounts = accounts.filter(item => item.exchange === exchange && item.status === 'available')
   const accountReady = Boolean(selectedAccountId)
-  const leverageReady = leverageOptions.length === 0 || typeof selectedLeverage === 'number'
+  const leverageRequired = marketType === 'perp'
+  const leverageReady = !leverageRequired || leverageOptions.length === 0 || typeof selectedLeverage === 'number'
   const leverageRangeLabel = leverageOptions.length > 0
     ? `${Math.min(...leverageOptions)}x - ${Math.max(...leverageOptions)}x`
     : '--'
+  const marketTypeLabel = marketType === 'spot'
+    ? t('trade.market_type_spot', { defaultValue: '现货' })
+    : marketType === 'perp'
+      ? t('trade.perpTag', { defaultValue: '合约' })
+      : '--'
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
@@ -92,18 +98,19 @@ export function DeployDialog({
         )}
 
         <div className="mt-4 grid gap-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3 md:grid-cols-2">
-          <label className="text-xs text-[color:var(--cf-muted)]">
+          <div className="text-xs text-[color:var(--cf-muted)]">
             {t('aiQuant.exchange')}
-            <select
-              value={exchange}
-              onChange={event => onSelectExchange(event.target.value as 'binance' | 'okx' | 'hyperliquid')}
-              className="mt-1 h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)]"
-            >
-              <option value="binance">Binance</option>
-              <option value="okx">OKX</option>
-              <option value="hyperliquid">Hyperliquid</option>
-            </select>
-          </label>
+            <div className="mt-1 flex h-9 items-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm text-[color:var(--cf-text)]">
+              {exchange.toUpperCase()}
+            </div>
+          </div>
+
+          <div className="text-xs text-[color:var(--cf-muted)]">
+            {t('aiQuant.marketType', { defaultValue: '市场类型' })}
+            <div className="mt-1 flex h-9 items-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm text-[color:var(--cf-text)]">
+              {marketTypeLabel}
+            </div>
+          </div>
 
           <label className="text-xs text-[color:var(--cf-muted)]">
             {t('aiQuant.deployDialog.selectAccount')}
@@ -119,23 +126,34 @@ export function DeployDialog({
             </select>
           </label>
 
-          <label className="text-xs text-[color:var(--cf-muted)]">
-            部署杠杆
-            <select
-              name="deployment-leverage"
-              value={typeof selectedLeverage === 'number' ? String(selectedLeverage) : ''}
-              onChange={event => onSelectLeverage?.(Number(event.target.value))}
-              className="mt-1 h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)]"
-            >
-              <option value="">选择杠杆</option>
-              {leverageOptions.map(option => (
-                <option key={option} value={option}>{option}x</option>
-              ))}
-            </select>
-          </label>
+          {marketType === 'perp'
+            ? (
+                <label className="text-xs text-[color:var(--cf-muted)]">
+                  部署杠杆
+                  <select
+                    name="deployment-leverage"
+                    value={typeof selectedLeverage === 'number' ? String(selectedLeverage) : ''}
+                    onChange={event => onSelectLeverage?.(Number(event.target.value))}
+                    className="mt-1 h-9 w-full rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 text-sm text-[color:var(--cf-text)]"
+                  >
+                    <option value="">选择杠杆</option>
+                    {leverageOptions.map(option => (
+                      <option key={option} value={option}>{option}x</option>
+                    ))}
+                  </select>
+                </label>
+              )
+            : (
+                <div className="text-xs text-[color:var(--cf-muted)]">
+                  部署杠杆
+                  <div className="mt-1 flex h-9 items-center rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm text-[color:var(--cf-text)]">
+                    1x
+                  </div>
+                </div>
+              )}
         </div>
 
-        {leverageOptions.length > 0 && (
+        {marketType === 'perp' && leverageOptions.length > 0 && (
           <div className="mt-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-3 text-sm text-[color:var(--cf-text)]">
             <p className="font-semibold text-[color:var(--cf-text-strong)]">允许杠杆范围</p>
             <p className="mt-1">{leverageRangeLabel}</p>

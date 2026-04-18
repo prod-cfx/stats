@@ -81,6 +81,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
     expect(snapshotsRepository.findByIdForUser).toHaveBeenCalledWith('snapshot-1', 'user-1')
     expect(repo.deployStrategyForUser).toHaveBeenCalledWith(expect.objectContaining({
       exchange: 'okx',
+      marketType: 'spot',
       symbol: 'SOLUSDT',
       publishedSnapshotBinding: expect.objectContaining({
         publishedSnapshotId: 'snapshot-1',
@@ -169,6 +170,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
     expect(marketDataIngestionService.ensureSymbolsSubscribed).toHaveBeenCalledWith(['SOLUSDT'])
     expect(repo.deployStrategyForUser).toHaveBeenCalledWith(expect.objectContaining({
       exchange: 'okx',
+      marketType: 'spot',
       symbol: 'SOLUSDT',
       timeframe: '5m',
       positionPct: 10,
@@ -237,6 +239,65 @@ describe('accountStrategyViewService.deployStrategy', () => {
       message: 'account_strategy.deploy_snapshot_requires_republish',
     })
     expect(repo.deployStrategyForUser).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when the published snapshot is missing marketType truth', async () => {
+    const repo = {
+      deployStrategyForUser: jest.fn(),
+      findStrategyForUser: jest.fn().mockResolvedValue(null),
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-1' }),
+      markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
+      markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
+      upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+    }
+    const snapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-missing-market-type',
+        snapshotHash: 'snapshot-hash-missing-market-type',
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'SOLUSDT',
+          baseTimeframe: '5m',
+          positionPct: 10,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'GTC',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 1,
+          defaultLeverage: 1,
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['GTC'],
+        },
+        strategyInstanceId: 'inst-draft-1',
+        strategyTemplateId: 'template-1',
+      }),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn(), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn().mockResolvedValue(undefined) } as any,
+      undefined,
+      undefined,
+      undefined,
+      snapshotsRepository as any,
+    )
+
+    await expect(service.deployStrategy({
+      userId: 'user-1',
+      name: 'missing market type',
+      publishedSnapshotId: 'snapshot-missing-market-type',
+      deployRequestId: 'deploy-req-missing-market-type',
+      exchangeAccountId: 'acc-1',
+    } as any)).rejects.toMatchObject({
+      message: 'account_strategy.deploy_missing_required_fields',
+    })
   })
 
   it('seeds deploy account balances from the bound exchange account snapshot when available', async () => {

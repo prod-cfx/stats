@@ -687,11 +687,7 @@ export class AccountStrategyViewService {
       ? await this.resolveExchangeBalanceSnapshot({
           userId: dto.userId,
           exchangeId: resolvedDeploy.exchange,
-          marketType: this.resolveMarketType(
-            { exchange: resolvedDeploy.exchange },
-            resolvedDeploy.symbol,
-            resolvedDeploy.exchange,
-          ),
+          marketType: resolvedDeploy.marketType,
           exchangeAccountId: dto.exchangeAccountId,
           preferredAsset: this.resolvePreferredQuoteAsset(resolvedDeploy.symbol),
         })
@@ -705,6 +701,7 @@ export class AccountStrategyViewService {
         name: dto.name,
         exchange: resolvedDeploy.exchange,
         symbol: resolvedDeploy.symbol,
+        marketType: resolvedDeploy.marketType,
         timeframe: resolvedDeploy.timeframe,
         positionPct: resolvedDeploy.positionPct,
         publishedSnapshotBinding: {
@@ -799,10 +796,17 @@ export class AccountStrategyViewService {
 
     const strategyConfig = snapshotDetail.strategyConfig ?? {}
     const deploymentDefaults = snapshotDetail.deploymentExecutionDefaults ?? {}
+    const snapshotMarketType = this.readSnapshotMarketType(strategyConfig)
+    if (snapshotMarketType !== 'perp') {
+      throw new DomainException('account_strategy.deployment_leverage_not_supported_for_spot', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+      })
+    }
     const constraints = await this.resolveEffectiveLeverageConstraints({
       userId: dto.userId,
       exchangeId: this.resolveExchangeId(this.readString(strategyConfig, ['exchange']) ?? sub.exchangeAccount?.exchangeId ?? null),
-      marketType: this.readString(strategyConfig, ['marketType']) === 'perp' ? 'perp' : 'spot',
+      marketType: snapshotMarketType,
       symbol: this.readString(strategyConfig, ['symbol']),
       exchangeAccountId: sub.exchangeAccount?.id ?? null,
       deploymentExecutionConstraints: snapshotDetail.deploymentExecutionConstraints,
@@ -1598,9 +1602,9 @@ export class AccountStrategyViewService {
     const symbol = this.readString(strategyConfig, ['symbol'])
     const timeframe = this.readString(strategyConfig, ['baseTimeframe', 'timeframe', 'period'])
     const positionPct = this.readNumber(strategyConfig, ['positionPct', 'positionSizeRatioPercent'])
-    const marketType = this.readString(strategyConfig, ['marketType']) === 'perp' ? 'perp' : 'spot'
+    const marketType = this.readSnapshotMarketType(strategyConfig)
 
-    if (!exchange || !symbol || !timeframe || positionPct === null) {
+    if (!exchange || !symbol || !timeframe || positionPct === null || !marketType) {
       throw new DomainException('account_strategy.deploy_missing_required_fields', {
         code: ErrorCode.BAD_REQUEST,
         status: HttpStatus.BAD_REQUEST,
@@ -1609,6 +1613,7 @@ export class AccountStrategyViewService {
           symbol,
           timeframe,
           positionPct,
+          marketType,
           publishedSnapshotId,
         },
       })
@@ -1677,6 +1682,9 @@ export class AccountStrategyViewService {
     deploymentExecutionConstraints: Record<string, unknown> | null
   }): Promise<{ min: number, max: number, accountMax: number | null } | null> {
     if (!input.exchangeId || !input.symbol || !input.deploymentExecutionConstraints) return null
+    if (input.marketType === 'spot') {
+      return { min: 1, max: 1, accountMax: 1 }
+    }
     const platformRiskMaxLeverage = this.readNumber(input.deploymentExecutionConstraints, ['platformRiskMaxLeverage'])
     const strategyDeclaredLeverageRange = this.readRecord(input.deploymentExecutionConstraints.strategyDeclaredLeverageRange)
     const strategyMin = strategyDeclaredLeverageRange ? this.readNumber(strategyDeclaredLeverageRange, ['min']) : null
@@ -1697,5 +1705,11 @@ export class AccountStrategyViewService {
     const max = maxCandidates.length > 0 ? Math.min(...maxCandidates) : null
     if (!max || max < min) return null
     return { min, max, accountMax }
+  }
+
+  private readSnapshotMarketType(source: Record<string, unknown> | null | undefined): MarketType | null {
+    const raw = source ? this.readString(source, ['marketType']) : null
+    if (raw === 'spot' || raw === 'perp') return raw
+    return null
   }
 }

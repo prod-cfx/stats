@@ -411,6 +411,7 @@ describe('ai-quant-strategy-api-adapter', () => {
         strategyConfig: {
           exchange: 'binance',
           symbol: 'BTCUSDT',
+          marketType: 'perp',
           baseTimeframe: '15m',
           positionPct: 12,
           strategyDeclaredLeverageRange: {
@@ -526,9 +527,95 @@ describe('ai-quant-strategy-api-adapter', () => {
     expect(record.publishedSnapshotParamValues).toEqual({
       exchange: 'binance',
       symbol: 'BTCUSDT',
+      marketType: 'perp',
       baseTimeframe: '15m',
       positionPct: 12,
     })
+  })
+
+  it('disables leverage editing for spot deployments even when execution config exists', () => {
+    const record = mapAccountStrategyDetailToRecord({
+      id: 'inst-spot-snapshot',
+      name: 'spot snapshot detail',
+      status: 'running',
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      timeframe: '15m',
+      positionPct: 10,
+      isSubscribed: true,
+      metrics: {
+        returnPct: 0,
+        maxDrawdownPct: 0,
+        winRatePct: 0,
+        tradeCount: 0,
+      },
+      updatedAt: '2026-03-20T00:00:00.000Z',
+      totalPnl: 0,
+      todayPnl: 0,
+      equitySeries: [{ ts: '2026-03-20T00:00:00.000Z', value: 10000 }],
+      paramSchema: null,
+      paramValues: null,
+      snapshot: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+        publishedSnapshotId: 'snapshot-spot-1',
+        snapshotHash: 'snapshot-hash-spot-1',
+        deployAccountName: null,
+        deployAt: null,
+        paramSchema: null,
+        paramValues: null,
+        schemaVersion: 'v2',
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          marketType: 'spot',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
+        backtestConfigDefaults: null,
+        deploymentExecutionBaseline: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'GTC',
+        },
+        deploymentExecutionCurrent: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'GTC',
+        },
+        executionConfigVersion: 1,
+        compatibilityMetadata: {
+          isLegacySnapshot: false,
+          missingBacktestConfigDefaults: false,
+          missingDeploymentExecutionDefaults: false,
+          missingDeploymentExecutionConstraints: false,
+          requiresRepublishForBacktest: false,
+          requiresRepublishForDeploy: false,
+        },
+        consistencySummary: {
+          isConsistent: true,
+          driftReasons: [],
+        },
+        deploymentExecutionConstraints: {
+          effectiveAllowedLeverageRange: {
+            min: 1,
+            max: 1,
+          },
+          constraintExplanation: '现货固定为 1x。',
+        },
+      },
+      timeline: [],
+      accountOverview: null,
+      positionOverview: null,
+      latestOrders: [],
+    } as any)
+
+    expect(record.deploymentLeverageRange).toBeNull()
+    expect(record.canEditDeploymentLeverage).toBe(false)
   })
 
 })
