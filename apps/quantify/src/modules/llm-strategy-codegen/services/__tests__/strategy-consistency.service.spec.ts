@@ -451,7 +451,7 @@ strategy
           ? {
               ...expr,
               payload: {
-                ...(expr.payload as Record<string, unknown>),
+                ...(expr.payload as unknown as Record<string, unknown>),
                 kind: 'OR',
               },
             }
