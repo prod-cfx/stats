@@ -1251,14 +1251,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
-  it('still accepts legacy semanticUpdates output during the semanticPatch transition', async () => {
+  it('still accepts legacy semanticUpdates output with old nested planner keys during the semanticPatch transition', async () => {
     mockAi.chat.mockResolvedValueOnce({
       content: JSON.stringify({
         related: true,
         logicReady: true,
         assistantPrompt: '逻辑图已更新。请确认逻辑图。',
         semanticUpdates: {
-          triggers: [
+          triggerUpdates: [
             {
               key: 'indicator.above',
               phase: 'entry',
@@ -1280,20 +1280,20 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
               },
             },
           ],
-          actions: [
+          actionUpdates: [
             { key: 'open_long' },
             { key: 'close_long' },
           ],
-          risk: [
+          riskUpdates: [
             { key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
             { key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' } },
           ],
-          position: {
+          positionUpdate: {
             mode: 'fixed_ratio',
             value: 0.1,
             positionMode: 'long_only',
           },
-          contextSlots: {
+          contextUpdates: {
             exchange: 'okx',
             symbol: 'BTCUSDT',
             marketType: 'spot',
