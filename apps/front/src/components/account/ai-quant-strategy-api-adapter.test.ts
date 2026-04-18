@@ -616,6 +616,18 @@ describe('ai-quant-strategy-api-adapter', () => {
 
     expect(record.deploymentLeverageRange).toBeNull()
     expect(record.canEditDeploymentLeverage).toBe(false)
+    expect(record.deploymentExecutionBaseline).toEqual({
+      leverage: null,
+      priceSource: 'close',
+      orderType: 'market',
+      timeInForce: 'GTC',
+    })
+    expect(record.deploymentExecutionCurrent).toEqual({
+      leverage: null,
+      priceSource: 'close',
+      orderType: 'market',
+      timeInForce: 'GTC',
+    })
   })
 
 })

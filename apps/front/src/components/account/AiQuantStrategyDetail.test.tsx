@@ -107,4 +107,66 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('leverage drift')
     expect(Array.from(container.querySelectorAll('button')).some(button => button.textContent?.includes('更新杠杆'))).toBe(true)
   })
+
+  it('hides deployment leverage semantics for spot strategies', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={{
+            id: 'inst-spot-1',
+            name: 'Spot execution truth strategy',
+            status: 'running',
+            exchange: 'okx',
+            symbol: 'ETHUSDT',
+            timeframe: '15m',
+            positionPct: 10,
+            initialCapital: 10000,
+            metrics: { returnPct: 12, maxDrawdownPct: 6, winRatePct: 51, tradeCount: 22 },
+            equitySeries: [],
+            timeline: [],
+            paramSchema: null,
+            paramValues: null,
+            schemaVersion: null,
+            supportsDynamicParams: false,
+            publishedSnapshotId: 'snapshot-spot-1',
+            snapshotHash: 'hash-spot-1',
+            deploymentExecutionBaseline: {
+              leverage: null,
+              priceSource: 'close',
+              orderType: 'market',
+              timeInForce: 'gtc',
+            },
+            deploymentExecutionCurrent: {
+              leverage: null,
+              priceSource: 'close',
+              orderType: 'market',
+              timeInForce: 'gtc',
+            },
+            deploymentLeverageRange: null,
+            deploymentConstraintExplanation: null,
+            compatibilityMetadata: {
+              isLegacySnapshot: false,
+              missingBacktestConfigDefaults: false,
+              missingDeploymentExecutionDefaults: false,
+              missingDeploymentExecutionConstraints: false,
+              requiresRepublishForBacktest: false,
+              requiresRepublishForDeploy: false,
+            },
+            consistencySummary: {
+              isConsistent: true,
+              driftReasons: [],
+            },
+            canEditDeploymentLeverage: false,
+          }}
+        />,
+      )
+    })
+
+    expect(container.textContent).not.toContain('基线执行杠杆')
+    expect(container.textContent).not.toContain('当前执行杠杆')
+    expect(container.textContent).not.toContain('允许杠杆范围')
+    expect(Array.from(container.querySelectorAll('button')).some(button => button.textContent?.includes('更新杠杆'))).toBe(false)
+    expect(container.textContent).toContain('价格来源')
+  })
 })

@@ -118,6 +118,17 @@ export function AiQuantStrategyDetail({
     [strategy?.paramSchema, strategy?.paramValues],
   )
   const canEditLeverage = Boolean(strategy?.canEditDeploymentLeverage && onUpdateLeverage)
+  const showsDeploymentLeverage = useMemo(() => (
+    typeof strategy?.deploymentExecutionBaseline?.leverage === 'number'
+    || typeof strategy?.deploymentExecutionCurrent?.leverage === 'number'
+    || Boolean(strategy?.deploymentLeverageRange)
+    || canEditLeverage
+  ), [
+    canEditLeverage,
+    strategy?.deploymentExecutionBaseline?.leverage,
+    strategy?.deploymentExecutionCurrent?.leverage,
+    strategy?.deploymentLeverageRange,
+  ])
   const leverageOptions = useMemo(() => {
     if (!strategy?.deploymentLeverageRange) return []
     return Array.from({
@@ -217,26 +228,34 @@ export function AiQuantStrategyDetail({
             <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
               <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">执行配置</h2>
               <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                <p className="text-[color:var(--cf-muted)]">基线执行杠杆</p>
-                <p className="text-right text-[color:var(--cf-text-strong)]">
-                  {formatExecutionValue(strategy.deploymentExecutionBaseline?.leverage, 'x')}
-                </p>
-                <p className="text-[color:var(--cf-muted)]">当前执行杠杆</p>
-                <p className="text-right text-[color:var(--cf-text-strong)]">
-                  {formatExecutionValue(strategy.deploymentExecutionCurrent?.leverage, 'x')}
-                </p>
+                {showsDeploymentLeverage && (
+                  <>
+                    <p className="text-[color:var(--cf-muted)]">基线执行杠杆</p>
+                    <p className="text-right text-[color:var(--cf-text-strong)]">
+                      {formatExecutionValue(strategy.deploymentExecutionBaseline?.leverage, 'x')}
+                    </p>
+                    <p className="text-[color:var(--cf-muted)]">当前执行杠杆</p>
+                    <p className="text-right text-[color:var(--cf-text-strong)]">
+                      {formatExecutionValue(strategy.deploymentExecutionCurrent?.leverage, 'x')}
+                    </p>
+                  </>
+                )}
                 <p className="text-[color:var(--cf-muted)]">价格来源</p>
                 <p className="text-right text-[color:var(--cf-text-strong)]">
                   {formatExecutionValue(strategy.deploymentExecutionCurrent?.priceSource ?? strategy.deploymentExecutionBaseline?.priceSource)}
                 </p>
-                <p className="text-[color:var(--cf-muted)]">允许杠杆范围</p>
-                <p className="text-right text-[color:var(--cf-text-strong)]">
-                  {strategy.deploymentLeverageRange
-                    ? `${strategy.deploymentLeverageRange.min}x - ${strategy.deploymentLeverageRange.max}x`
-                    : '--'}
-                </p>
+                {showsDeploymentLeverage && (
+                  <>
+                    <p className="text-[color:var(--cf-muted)]">允许杠杆范围</p>
+                    <p className="text-right text-[color:var(--cf-text-strong)]">
+                      {strategy.deploymentLeverageRange
+                        ? `${strategy.deploymentLeverageRange.min}x - ${strategy.deploymentLeverageRange.max}x`
+                        : '--'}
+                    </p>
+                  </>
+                )}
               </div>
-              {strategy.deploymentConstraintExplanation && (
+              {showsDeploymentLeverage && strategy.deploymentConstraintExplanation && (
                 <p className="mt-3 text-xs text-[color:var(--cf-muted)]">{strategy.deploymentConstraintExplanation}</p>
               )}
               {strategy.consistencySummary?.driftReasons?.length

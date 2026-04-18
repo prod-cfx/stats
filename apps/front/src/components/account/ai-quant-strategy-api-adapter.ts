@@ -94,10 +94,13 @@ function normalizeBacktestConfigDefaults(
 
 function normalizeDeploymentExecutionConfig(
   config: AccountAiQuantDeploymentExecutionConfig | null | undefined,
+  marketType: 'spot' | 'perp' | null,
 ): AiQuantStrategyRecord['deploymentExecutionBaseline'] {
   if (!config) return null
   return {
-    leverage: typeof config.leverage === 'number' && Number.isFinite(config.leverage) ? config.leverage : null,
+    leverage: marketType === 'perp' && typeof config.leverage === 'number' && Number.isFinite(config.leverage)
+      ? config.leverage
+      : null,
     priceSource: typeof config.priceSource === 'string' ? config.priceSource : null,
     orderType: typeof config.orderType === 'string' ? config.orderType : null,
     timeInForce: typeof config.timeInForce === 'string' ? config.timeInForce : null,
@@ -230,8 +233,8 @@ export function mapAccountStrategyDetailToRecord(
     ...dynamicParams,
     publishedSnapshotParamValues,
     snapshotBacktestConfigDefaults: normalizeBacktestConfigDefaults(detail.snapshot.backtestConfigDefaults),
-    deploymentExecutionBaseline: normalizeDeploymentExecutionConfig(detail.snapshot.deploymentExecutionBaseline),
-    deploymentExecutionCurrent: normalizeDeploymentExecutionConfig(detail.snapshot.deploymentExecutionCurrent),
+    deploymentExecutionBaseline: normalizeDeploymentExecutionConfig(detail.snapshot.deploymentExecutionBaseline, snapshotMarketType),
+    deploymentExecutionCurrent: normalizeDeploymentExecutionConfig(detail.snapshot.deploymentExecutionCurrent, snapshotMarketType),
     executionConfigVersion:
       typeof detail.snapshot.executionConfigVersion === 'number'
         ? detail.snapshot.executionConfigVersion
