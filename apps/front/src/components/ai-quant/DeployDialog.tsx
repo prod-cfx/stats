@@ -60,6 +60,7 @@ export function DeployDialog({
   if (!open) return null
   const availableAccounts = accounts.filter(item => item.exchange === exchange && item.status === 'available')
   const accountReady = Boolean(selectedAccountId)
+  const marketTypeReady = marketType === 'spot' || marketType === 'perp'
   const leverageRequired = marketType === 'perp'
   const leverageReady = !leverageRequired || leverageOptions.length === 0 || typeof selectedLeverage === 'number'
   const leverageRangeLabel = leverageOptions.length > 0
@@ -189,7 +190,7 @@ export function DeployDialog({
           <button
             type="button"
             onClick={onConfirmDeploy}
-            disabled={!apiConfigured || !canDeploy || !accountReady || !leverageReady || deploySubmitting}
+            disabled={!apiConfigured || !canDeploy || !marketTypeReady || !accountReady || !leverageReady || deploySubmitting}
             className="from-primary to-secondary rounded-xl bg-gradient-to-r px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
             {t('aiQuant.deployDialog.confirmDeploy')}
