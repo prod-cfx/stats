@@ -1115,7 +1115,7 @@ export class StrategyConsistencyService {
         key: 'compiler_consistency.ast_projection',
         level: 'warning',
         status: 'unprovable',
-        expected: expectedMiddleRevert,
+        expected: expectedMiddleRevertRules,
         actual: null,
         message: '脚本不是可解析的 compiled artifact，跳过 AST 投影校验。',
       }
