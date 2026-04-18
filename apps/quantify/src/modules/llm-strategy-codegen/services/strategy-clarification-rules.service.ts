@@ -46,10 +46,6 @@ export class StrategyClarificationRulesService {
       }
     }
 
-    if (input.checklist) {
-      return this.detect(input.checklist)
-    }
-
     return {
       status: 'CLEAR',
       items: [],

@@ -94,7 +94,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     new CompiledPublicationGateService(mockRepo as unknown as PublishedStrategySnapshotsRepository),
   )
   const buildConfirmedCanonicalDigest = (
-    checklist: Record<string, unknown>,
+    checklist: Record<string, unknown> = {},
     semanticState?: Record<string, unknown>,
   ): string => {
     const clarification = (service as any).resolveClarificationArtifacts(checklist)
@@ -103,6 +103,17 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       : clarification.normalization
     const canonicalSpec = (service as any).buildCanonicalSpecForConversation(checklist, normalization)
     return canonicalDigestService.hash(canonicalSpec)
+  }
+  const readPersistedChecklist = (
+    session: { checklist?: Record<string, unknown>; semanticState?: Record<string, unknown> },
+  ): Record<string, unknown> => {
+    if (session.checklist) {
+      return session.checklist
+    }
+    if (session.semanticState) {
+      return (service as any).projectLegacyChecklistFromSemanticState(session.semanticState, {})
+    }
+    return {}
   }
   const completeRiskRules = (riskRules: Record<string, any> = {}) => ({
     exchange: 'okx',
@@ -535,6 +546,74 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       status: 'DRAFTING',
     }))
+  })
+
+  it('creates a drafting session without persisting or reading checklist payloads', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '先确认布林带参数。',
+        semanticPatch: {
+          families: ['single-leg'],
+          triggers: [
+            {
+              phase: 'entry',
+              key: 'bollinger.touch_upper',
+              sideScope: 'short',
+              params: {
+                indicator: 'bollinger',
+                period: 20,
+                stdDev: 2,
+                confirmationMode: 'touch',
+              },
+            },
+            {
+              phase: 'exit',
+              key: 'bollinger.touch_middle',
+              sideScope: 'short',
+              params: {
+                indicator: 'bollinger',
+                period: 20,
+                stdDev: 2,
+                confirmationMode: 'touch',
+              },
+            },
+          ],
+          actions: [
+            { key: 'open_short' },
+            { key: 'close_short' },
+          ],
+          position: {
+            mode: 'fixed_ratio',
+            value: 0.1,
+            positionMode: 'short_only',
+          },
+          context: {
+            exchange: 'okx',
+            marketType: 'perp',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-semantic-only-start' })
+
+    await service.startSession({
+      userId: 'u1',
+      initialMessage: '在 OKX 合约 BTCUSDT 15m，触及布林带上轨做空，回到中轨平空，仓位 10%',
+    })
+
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>
+
+    expect(createPayload.semanticState).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({ key: 'bollinger.touch_upper', sideScope: 'short' }),
+        expect.objectContaining({ key: 'bollinger.touch_middle', sideScope: 'short', phase: 'exit' }),
+      ]),
+    }))
+    expect(createPayload).not.toHaveProperty('checklist')
   })
 
   it('persists a dedicated conversation aggregate when starting a session', async () => {
@@ -1121,6 +1200,169 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       'semantic.confirmationMode.entry',
       'executionContext.exchange',
     ]))
+  })
+
+  it('keeps clarification blockers in semantic-slot language after continueSession', async () => {
+    const persistedSemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [],
+      actions: [],
+      risk: [
+        {
+          id: 'risk-stop-loss',
+          key: 'risk.stop_loss',
+          params: {
+            stopLossPct: 5,
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'risk.stopLoss.basis',
+              fieldPath: 'risk[0].params.stopLossBasis',
+              status: 'open',
+              priority: 'risk',
+              questionHint: '这里的止损按什么基准计算？',
+              affectsExecution: true,
+            },
+          ],
+        },
+        {
+          id: 'risk-take-profit',
+          key: 'risk.take_profit',
+          params: {
+            takeProfitPct: 10,
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'risk.takeProfit.basis',
+              fieldPath: 'risk[1].params.takeProfitBasis',
+              status: 'open',
+              priority: 'risk',
+              questionHint: '这里的止盈按什么基准计算？',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'short_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+          value: 'okx',
+        },
+        symbol: {
+          slotKey: 'symbol',
+          fieldPath: 'contextSlots.symbol',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+          affectsExecution: true,
+          value: 'BTCUSDT',
+        },
+        marketType: {
+          slotKey: 'marketType',
+          fieldPath: 'contextSlots.marketType',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认市场类型（现货或合约/perp）。',
+          affectsExecution: true,
+          value: 'perp',
+        },
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+          affectsExecution: true,
+          value: '15m',
+        },
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-19T08:00:00.000Z',
+    }
+    const persistedClarificationState = {
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        {
+          key: 'semantic.risk.stopLoss.basis',
+          reason: 'ambiguous_condition_basis',
+          field: 'risk.stopLoss.basis',
+          blocking: true,
+          question: '这里的止损按什么基准计算？',
+          status: 'pending',
+          slotId: buildSemanticSlotId({
+            slotKey: 'risk.stopLoss.basis',
+            fieldPath: 'risk[0].params.stopLossBasis',
+          }),
+          slotKey: 'risk.stopLoss.basis',
+          fieldPath: 'risk[0].params.stopLossBasis',
+        },
+        {
+          key: 'semantic.risk.takeProfit.basis',
+          reason: 'ambiguous_condition_basis',
+          field: 'risk.takeProfit.basis',
+          blocking: true,
+          question: '这里的止盈按什么基准计算？',
+          status: 'pending',
+          slotId: buildSemanticSlotId({
+            slotKey: 'risk.takeProfit.basis',
+            fieldPath: 'risk[1].params.takeProfitBasis',
+          }),
+          slotKey: 'risk.takeProfit.basis',
+          fieldPath: 'risk[1].params.takeProfitBasis',
+        },
+      ],
+      summary: '已识别止损与止盈阈值，但基准尚未确认。',
+    }
+
+    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
+      's-semantic-only-continue',
+      {
+        status: 'DRAFTING',
+        checklist: {},
+        semanticState: persistedSemanticState,
+        clarificationState: persistedClarificationState,
+        constraintPack: {},
+      },
+    ))
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-semantic-only-continue', {
+      userId: 'u1',
+      message: '这里的止损按入场均价',
+      clarificationAnswers: {
+        'semantic.risk.stopLoss.basis': 'entry_avg_price',
+      },
+    })
+
+    expect(result.clarificationState?.items.every(item => item.key.startsWith('semantic.'))).toBe(true)
+    expect(result.clarificationState?.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'entry.rules' }),
+      expect.objectContaining({ key: 'exit.rules' }),
+    ]))
+    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的入场规则')
+    expect(result.assistantPrompt).not.toContain('请补充至少一条明确的出场规则')
   })
 
   it('preserves explicit direction in bollinger fallback inference and does not ask direction clarification', async () => {
@@ -6464,11 +6706,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    const createdChecklist = readPersistedChecklist(createdSession)
     mockRepo.findById.mockResolvedValue({
       id: 's-golden-ma-publish',
       userId: 'u1',
       status: 'CHECKLIST_GATE',
-      checklist: createdSession.checklist,
+      checklist: createdChecklist,
       semanticState: createdSession.semanticState,
       clarificationState: createdSession.clarificationState,
       constraintPack: createdSession.constraintPack,
@@ -6479,7 +6722,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(createdSession.checklist, createdSession.semanticState),
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(createdChecklist, createdSession.semanticState),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -6663,11 +6906,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    const createdChecklist = readPersistedChecklist(createdSession)
     mockRepo.findById.mockResolvedValue({
       id: 's-golden-bollinger-publish',
       userId: 'u1',
       status: 'CHECKLIST_GATE',
-      checklist: createdSession.checklist,
+      checklist: createdChecklist,
       semanticState: createdSession.semanticState,
       clarificationState: createdSession.clarificationState,
       constraintPack: createdSession.constraintPack,
@@ -7039,11 +7283,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(started.canonicalDigest).toMatch(/^sha256:/)
 
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    const createdChecklist = readPersistedChecklist(createdSession)
     mockRepo.findById.mockResolvedValue({
       id: 's-golden-grid-publish',
       userId: 'u1',
       status: 'CHECKLIST_GATE',
-      checklist: createdSession.checklist,
+      checklist: createdChecklist,
       semanticState: createdSession.semanticState,
       clarificationState: createdSession.clarificationState,
       constraintPack: createdSession.constraintPack,
@@ -7054,7 +7299,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(createdSession.checklist, createdSession.semanticState),
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(createdChecklist, createdSession.semanticState),
     })
 
     expect(result.status).toBe('GENERATING')

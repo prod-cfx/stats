@@ -3,7 +3,6 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import { Type } from 'class-transformer'
 import {
   IsBoolean,
-  IsArray,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -41,35 +40,6 @@ export class ContinueCodegenSessionDto {
   @IsString()
   @IsNotEmpty()
   message!: string
-
-  @ApiPropertyOptional({ description: '增量更新的标的列表', type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  symbols?: string[]
-
-  @ApiPropertyOptional({ description: '增量更新的周期列表', type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  timeframes?: string[]
-
-  @ApiPropertyOptional({ description: '增量更新的入场规则', type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  entryRules?: string[]
-
-  @ApiPropertyOptional({ description: '增量更新的出场规则', type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  exitRules?: string[]
-
-  @ApiPropertyOptional({ description: '增量更新风控规则', type: 'object', additionalProperties: true })
-  @IsOptional()
-  @IsObject()
-  riskRules?: Record<string, unknown>
 
   @ApiPropertyOptional({
     description: '结构化澄清回答（key=澄清项 key，value=回答）',

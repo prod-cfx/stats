@@ -112,6 +112,42 @@ describe('strategyClarificationRulesService', () => {
     ]))
   })
 
+  it('keeps semantic-slot language when no semantic ambiguities remain', () => {
+    const state = service.detectFromAmbiguities({
+      executionContext: {
+        context: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        evidence: [],
+        ambiguities: [],
+      },
+      atomicResolution: {
+        atomicIntent: {
+          triggers: [],
+          actions: [],
+          sizing: null,
+          risk: [],
+          relations: [],
+        },
+        ambiguities: [],
+      },
+      checklist: {
+        riskRules: {
+          stopLossPct: 5,
+          takeProfitPct: 10,
+        },
+      },
+    })
+
+    expect(state).toEqual({
+      status: 'CLEAR',
+      items: [],
+    })
+  })
+
   it('turns atomic semantic forks into blocking clarification items', () => {
     const state = service.detectFromAmbiguities({
       executionContext: {

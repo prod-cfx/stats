@@ -34,7 +34,7 @@ export interface StartSessionBootstrapInput {
 
 export interface StartSessionBootstrapResult {
   status: LlmCodegenSessionStatus
-  shouldGateChecklist: boolean
+  shouldEnterConfirmationGate: boolean
   assistantPrompt: string
   initialHistory: string[]
 }
@@ -51,11 +51,11 @@ export function buildStartSessionBootstrap(
     && (input.compileability?.canCompile === false || input.normalizationBlocked === true)
     ? 'DRAFTING'
     : input.plannerStatus)
-  const shouldGateChecklist = status === 'CHECKLIST_GATE'
+  const shouldEnterConfirmationGate = status === 'CHECKLIST_GATE'
 
   const assistantPrompt = ((input.clarificationState.status === 'NEEDS_CLARIFICATION') || input.decisionKind === 'CONFIRM_INFERRED') && input.clarificationPrompt
     ? input.clarificationPrompt
-    : (shouldGateChecklist
+    : (shouldEnterConfirmationGate
         ? `${input.plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`
         : (input.normalizationBlocked && input.normalizationAssistantPrompt
             ? input.normalizationAssistantPrompt
@@ -65,7 +65,7 @@ export function buildStartSessionBootstrap(
 
   return {
     status,
-    shouldGateChecklist,
+    shouldEnterConfirmationGate,
     assistantPrompt,
     initialHistory: helper.appendConversationHistory([], input.initialMessage, assistantPrompt),
   }
