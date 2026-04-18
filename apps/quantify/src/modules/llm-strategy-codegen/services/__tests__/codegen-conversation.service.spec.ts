@@ -484,6 +484,33 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('does not let stop-loss and take-profit percentages bleed into each other when parsed from one sentence', () => {
+    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+
+    const checklist = (service as any).inferChecklistFromMessage(
+      '在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 60000-80000，采用双向网格，每格间距 0.5%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈',
+    )
+
+    expect(checklist.riskRules).toEqual(expect.objectContaining({
+      stopLossPct: 5,
+      takeProfitPct: 10,
+    }))
+  })
+
+  it('keeps risk clause percentages stable when stop-loss and take-profit share a natural language fragment', () => {
+    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+
+    const checklist = (service as any).inferChecklistFromMessage(
+      'OKX 永续合约 BTCUSDT 15m；入场后按入场均价亏损 5% 强制止损，盈利 10% 止盈，单笔仓位 10%',
+    )
+
+    expect(checklist.riskRules).toEqual(expect.objectContaining({
+      stopLossPct: 5,
+      takeProfitPct: 10,
+      positionPct: 10,
+    }))
+  })
+
   it('starts in drafting and asks next key question from llm planner', async () => {
     const dto: StartCodegenSessionDto = {
       userId: 'u1',

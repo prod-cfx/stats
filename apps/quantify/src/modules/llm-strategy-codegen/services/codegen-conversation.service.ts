@@ -3520,18 +3520,16 @@ export class CodegenConversationService {
     if (positionMatch?.[1]) {
       riskRules.positionPct = Number(positionMatch[1])
     }
-    const stopLossMatch = text.match(/止损[^%\n]{0,12}?(?:百分之?\s*)?(\d+(?:\.\d+)?)(?:\s*%|$)/)
-      ?? text.match(/亏损[≥>=]?\s*(?:百分之?\s*)?(\d+(?:\.\d+)?)(?:\s*%|$)/)
-    if (stopLossMatch?.[1]) {
-      riskRules.stopLossPct = Number(stopLossMatch[1])
+    const stopLossInfo = this.extractRiskRuleInfo(text, 'stopLoss')
+    if (typeof stopLossInfo.pct === 'number') {
+      riskRules.stopLossPct = stopLossInfo.pct
     }
-    const takeProfitMatch = text.match(/止盈[^%\n]{0,12}?(?:百分之?\s*)?(\d+(?:\.\d+)?)(?:\s*%|$)/)
-      ?? text.match(/(?:盈利|收益率)[≥>=]?\s*(?:百分之?\s*)?(\d+(?:\.\d+)?)(?:\s*%|$)/)
-    if (takeProfitMatch?.[1]) {
-      riskRules.takeProfitPct = Number(takeProfitMatch[1])
+    const takeProfitInfo = this.extractRiskRuleInfo(text, 'takeProfit')
+    if (typeof takeProfitInfo.pct === 'number') {
+      riskRules.takeProfitPct = takeProfitInfo.pct
     }
-    const stopLossClause = this.extractRiskRuleClause(text, 'stopLoss')
-    const takeProfitClause = this.extractRiskRuleClause(text, 'takeProfit')
+    const stopLossClause = stopLossInfo.clause
+    const takeProfitClause = takeProfitInfo.clause
     const stopLossBasis = this.resolveRiskBasis(stopLossClause, typeof riskRules.stopLossBasis === 'string'
       ? riskRules.stopLossBasis as ChecklistRuleBasis['kind']
       : null)
@@ -3989,11 +3987,55 @@ export class CodegenConversationService {
     text: string,
     kind: 'stopLoss' | 'takeProfit',
   ): string | null {
-    const pattern = kind === 'stopLoss'
-      ? /((?:止损|亏损)[^。；;\n]{0,24})/u
-      : /((?:止盈|盈利|收益率)[^。；;\n]{0,24})/u
-    const match = text.match(pattern)
-    return match?.[1]?.trim() ?? null
+    return this.extractRiskRuleInfo(text, kind).clause
+  }
+
+  private extractRiskRuleInfo(
+    text: string,
+    kind: 'stopLoss' | 'takeProfit',
+  ): {
+      clause: string | null
+      pct: number | null
+    } {
+    const keywords = kind === 'stopLoss'
+      ? [/止损/u, /亏损/u]
+      : [/止盈/u, /盈利/u, /收益率/u, /收益/u, /利润/u]
+    const clauses = this.splitRiskClauses(text)
+
+    for (const clause of clauses) {
+      if (!keywords.some(pattern => pattern.test(clause))) {
+        continue
+      }
+      const pct = this.extractPercentFromClause(clause)
+      return {
+        clause,
+        pct,
+      }
+    }
+
+    return {
+      clause: null,
+      pct: null,
+    }
+  }
+
+  private splitRiskClauses(text: string): string[] {
+    return text
+      .split(/[。；;\n，、]/u)
+      .map(clause => clause.trim())
+      .filter(Boolean)
+  }
+
+  private extractPercentFromClause(
+    clause: string,
+  ): number | null {
+    const percentMatch = clause.match(/(?:百分之?\s*)?(\d+(?:\.\d+)?)\s*%/u)
+      ?? clause.match(/(?:百分之?\s*)?(\d+(?:\.\d+)?)(?=\s*(?:止损|止盈|亏损|盈利|收益率|收益|利润|强制平仓|平仓|$))/u)
+    const raw = percentMatch?.[1]
+    if (!raw) return null
+
+    const value = Number(raw)
+    return Number.isFinite(value) ? value : null
   }
 
   private buildRiskSummarySegment(
