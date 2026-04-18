@@ -1251,6 +1251,83 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('still accepts legacy semanticUpdates output during the semanticPatch transition', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        semanticUpdates: {
+          triggers: [
+            {
+              key: 'indicator.above',
+              phase: 'entry',
+              params: {
+                indicator: 'ma',
+                referenceRole: 'long_term',
+                'reference.period': 50,
+                confirmationMode: 'close_confirm',
+              },
+            },
+            {
+              key: 'indicator.below',
+              phase: 'exit',
+              params: {
+                indicator: 'ma',
+                referenceRole: 'short_term',
+                'reference.period': 10,
+                confirmationMode: 'close_confirm',
+              },
+            },
+          ],
+          actions: [
+            { key: 'open_long' },
+            { key: 'close_long' },
+          ],
+          risk: [
+            { key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
+            { key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' } },
+          ],
+          position: {
+            mode: 'fixed_ratio',
+            value: 0.1,
+            positionMode: 'long_only',
+          },
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'spot',
+            timeframe: '15m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-semantic-updates-legacy' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '帮我做一个 MA50 上破买入、MA10 下破卖出的 OKX 现货 BTCUSDT 15m 策略',
+    })
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.canonicalDigest).toMatch(/^sha256:/)
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      checklist: expect.objectContaining({
+        entryRules: expect.arrayContaining(['收盘确认价格突破长期均线（50）时买入']),
+        exitRules: expect.arrayContaining(['收盘确认价格跌破短期均线（10）时卖出']),
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        riskRules: expect.objectContaining({
+          exchange: 'okx',
+          marketType: 'spot',
+          positionPct: 10,
+          stopLossPct: 5,
+          takeProfitPct: 10,
+        }),
+      }),
+    }))
+  })
+
   it('captures exchange and risk clauses from natural language without bypassing clarification flow', async () => {
     mockRepo.createSession.mockResolvedValue({ id: 's-real-pipeline-1' })
 

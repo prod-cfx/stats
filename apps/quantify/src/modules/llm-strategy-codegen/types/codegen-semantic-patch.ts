@@ -19,8 +19,4 @@ export interface CodegenSemanticPatch {
     value: number
     positionMode: string
   } | null
-  clarificationIntent?: {
-    targetSlotKeys: string[]
-    blockerReason: string
-  } | null
 }
