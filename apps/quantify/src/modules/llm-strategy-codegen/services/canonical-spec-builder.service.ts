@@ -307,6 +307,7 @@ export class CanonicalSpecBuilderService {
     const takeProfitRule = this.resolveTakeProfitRule(
       [...exitTexts, ...Object.values(riskRules).map(item => String(item))],
       riskRules,
+      dominantEntrySideScope,
     )
     const takeProfitBasis = this.resolveRiskBasis(
       typeof riskRules.takeProfit === 'string'
@@ -1103,7 +1104,11 @@ export class CanonicalSpecBuilderService {
     }
 
     for (const riskAtom of input.normalizedIntent.risk) {
-      const rule = this.buildRiskRuleFromNormalizedAtom(riskAtom, riskPriority--)
+      const rule = this.buildRiskRuleFromNormalizedAtom(
+        riskAtom,
+        riskPriority--,
+        input.normalizedIntent.position?.positionMode ?? null,
+      )
       if (rule) {
         rules.push(rule)
       }
@@ -1239,6 +1244,7 @@ export class CanonicalSpecBuilderService {
   private buildRiskRuleFromNormalizedAtom(
     riskAtom: NormalizedRiskAtom,
     priority: number,
+    positionMode: StrategyNormalizedIntent['position']['positionMode'] | null,
   ): CanonicalRuleV2 | null {
     if (riskAtom.key === 'risk.stop_loss_pct') {
       const valuePct = typeof riskAtom.params.valuePct === 'number' ? riskAtom.params.valuePct : null
@@ -1277,10 +1283,20 @@ export class CanonicalSpecBuilderService {
         return null
       }
       const basis = typeof riskAtom.params.basis === 'string' ? riskAtom.params.basis : 'entry_avg_price'
+      const actions = positionMode === 'short_only'
+        ? [{ type: 'CLOSE_SHORT' as const }]
+        : positionMode === 'long_only'
+          ? [{ type: 'CLOSE_LONG' as const }]
+          : [{ type: 'CLOSE_LONG' as const }, { type: 'CLOSE_SHORT' as const }]
+      const sideScope = positionMode === 'short_only'
+        ? 'short'
+        : positionMode === 'long_only'
+          ? 'long'
+          : 'both'
       return {
         id: 'risk-take-profit',
         phase: 'risk',
-        sideScope: 'both',
+        sideScope,
         priority,
         condition: {
           kind: 'atom',
@@ -1290,13 +1306,13 @@ export class CanonicalSpecBuilderService {
           value: Number((valuePct / 100).toFixed(4)),
           params: { basis },
         },
-        actions: [{ type: 'CLOSE_LONG' }, { type: 'CLOSE_SHORT' }],
+        actions,
         metadata: {
           basis,
           normalized: {
             source: 'normalized-intent',
             triggerKeys: [riskAtom.key],
-            actionKeys: ['CLOSE_LONG', 'CLOSE_SHORT'],
+            actionKeys: actions.map(action => action.type),
           },
         },
       }
@@ -1507,7 +1523,13 @@ export class CanonicalSpecBuilderService {
           key: 'indicator.above',
           semanticScope: 'market',
           op: 'GTE',
-          ...(typeof trigger.params.indicator === 'string' ? { params: { indicator: trigger.params.indicator } } : {}),
+          params: {
+            ...(typeof trigger.params.indicator === 'string' ? { indicator: trigger.params.indicator } : {}),
+            ...(typeof trigger.params.referenceRole === 'string' ? { referenceRole: trigger.params.referenceRole } : {}),
+            ...(typeof trigger.params['reference.period'] === 'number'
+              ? { 'reference.period': trigger.params['reference.period'] }
+              : {}),
+          },
         }
       case 'indicator.below':
         return {
@@ -1515,7 +1537,13 @@ export class CanonicalSpecBuilderService {
           key: 'indicator.below',
           semanticScope: 'market',
           op: 'LTE',
-          ...(typeof trigger.params.indicator === 'string' ? { params: { indicator: trigger.params.indicator } } : {}),
+          params: {
+            ...(typeof trigger.params.indicator === 'string' ? { indicator: trigger.params.indicator } : {}),
+            ...(typeof trigger.params.referenceRole === 'string' ? { referenceRole: trigger.params.referenceRole } : {}),
+            ...(typeof trigger.params['reference.period'] === 'number'
+              ? { 'reference.period': trigger.params['reference.period'] }
+              : {}),
+          },
         }
       case 'trend.direction':
       case 'market.regime':
@@ -1863,6 +1891,7 @@ export class CanonicalSpecBuilderService {
   private resolveTakeProfitRule(
     texts: string[],
     riskRules: Record<string, unknown> = {},
+    fallbackSideScope: 'long' | 'short' | null = null,
   ): {
     pct: number
     sideScope: 'long' | 'short' | 'both'
@@ -1878,7 +1907,7 @@ export class CanonicalSpecBuilderService {
         ...this.resolveExitActionSemantics(
           typeof riskRules.takeProfit === 'string' && riskRules.takeProfit.trim()
             ? riskRules.takeProfit
-            : '止盈',
+            : (fallbackSideScope === 'short' ? '平空止盈' : fallbackSideScope === 'long' ? '平多止盈' : '止盈'),
         ),
       }
     }

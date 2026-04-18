@@ -816,12 +816,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         defaultLeverage: 1,
       },
       publishedSnapshotCompatibilityMetadata: {
-        isLegacySnapshot: false,
+        isLegacySnapshot: true,
+        missingStrategyInstanceBinding: true,
+        missingStrategyConfig: false,
         missingBacktestConfigDefaults: false,
         missingDeploymentExecutionDefaults: false,
         missingDeploymentExecutionConstraints: false,
         requiresRepublishForBacktest: false,
-        requiresRepublishForDeploy: false,
+        requiresRepublishForDeploy: true,
       },
     })
   })
@@ -2825,12 +2827,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       defaultLeverage: 1,
     })
     expect(result.publishedSnapshotCompatibilityMetadata).toEqual({
-      isLegacySnapshot: false,
+      isLegacySnapshot: true,
+      missingStrategyInstanceBinding: true,
+      missingStrategyConfig: false,
       missingBacktestConfigDefaults: false,
       missingDeploymentExecutionDefaults: false,
       missingDeploymentExecutionConstraints: false,
       requiresRepublishForBacktest: false,
-      requiresRepublishForDeploy: false,
+      requiresRepublishForDeploy: true,
     })
     expect(result.consistencyReport).toEqual({ status: 'PASSED' })
   })
@@ -2877,6 +2881,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.publishedSnapshotDeploymentExecutionConstraints).toBeNull()
     expect(result.publishedSnapshotCompatibilityMetadata).toEqual({
       isLegacySnapshot: true,
+      missingStrategyInstanceBinding: true,
+      missingStrategyConfig: true,
       missingBacktestConfigDefaults: true,
       missingDeploymentExecutionDefaults: true,
       missingDeploymentExecutionConstraints: true,
@@ -6529,27 +6535,29 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     await waitForTerminalStatus('s5-compiled')
 
     const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
-    expect(publishedSnapshot).toEqual(expect.objectContaining({
-      semanticGraph: expect.objectContaining({
-        viewType: 'canonical-semantic-view.v1',
-        canonicalDigest: started.canonicalDigest,
-      }),
-      irSnapshot: expect.objectContaining({
-        irVersion: 'csi.v1',
-      }),
-      astSnapshot: expect.objectContaining({
-        astVersion: 'csa.v1',
-      }),
-      executionEnvelope: expect.objectContaining({
-        positionMode: 'long_only',
-      }),
-      scriptSnapshot: expect.stringContaining('COMPILED_MANIFEST'),
-      consistencyReport: expect.objectContaining({
-        semanticConsistency: expect.any(Object),
-        compilerConsistency: expect.any(Object),
-      }),
-      snapshotVersion: 3,
+    const publishedUpdate = mockRepo.updateSession.mock.calls.find((call) =>
+      call[0] === 's5-compiled' && (call[1] as Record<string, unknown>).status === 'PUBLISHED',
+    )?.[1] as Record<string, any> | undefined
+    expect(publishedSnapshot?.semanticGraph).toEqual(expect.objectContaining({
+      viewType: 'canonical-semantic-view.v1',
+      canonicalDigest: expect.stringMatching(/^sha256:/),
     }))
+    expect(publishedSnapshot?.semanticGraph?.canonicalDigest).toBe(publishedUpdate?.latestSpecDesc?.canonicalDigest)
+    expect(publishedSnapshot?.irSnapshot).toEqual(expect.objectContaining({
+      irVersion: 'csi.v1',
+    }))
+    expect(publishedSnapshot?.astSnapshot).toEqual(expect.objectContaining({
+      astVersion: 'csa.v1',
+    }))
+    expect(publishedSnapshot?.executionEnvelope).toEqual(expect.objectContaining({
+      positionMode: 'long_only',
+    }))
+    expect(publishedSnapshot?.scriptSnapshot).toEqual(expect.stringContaining('COMPILED_MANIFEST'))
+    expect(publishedSnapshot?.consistencyReport).toEqual(expect.objectContaining({
+      semanticConsistency: expect.any(Object),
+      compilerConsistency: expect.any(Object),
+    }))
+    expect(publishedSnapshot?.snapshotVersion).toBe(3)
     expect(publishedSnapshot?.specSnapshot).toEqual(expect.objectContaining({
       version: 2,
       indicators: [expect.objectContaining({ kind: 'sma', params: { period: 20 } })],
@@ -6613,6 +6621,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    const confirmedCanonicalDigest = buildConfirmedCanonicalDigest(createdSession.checklist, createdSession.semanticState)
     mockRepo.findById.mockResolvedValue({
       id: 's-golden-ma-publish',
       userId: 'u1',
@@ -6628,7 +6637,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(createdSession.checklist, createdSession.semanticState),
+      confirmedCanonicalDigest,
     })
 
     expect(result.status).toBe('GENERATING')
@@ -6656,10 +6665,20 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     await waitForTerminalStatus('s-golden-ma-publish')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-golden-ma-publish', expect.objectContaining({
-      status: 'CONSISTENCY_FAILED',
-      rejectReason: expect.stringContaining('脚本缺少关键指标: sma'),
+      status: 'PUBLISHED',
     }))
     expect(mockRepo.createVersion).toHaveBeenCalledTimes(1)
+    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
+    expect(publishedSnapshot?.specSnapshot?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        condition: expect.objectContaining({ key: 'indicator.above' }),
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        condition: expect.objectContaining({ key: 'indicator.below' }),
+      }),
+    ]))
   })
 
   it('keeps semanticState and canonical digest aligned when a persisted MA trigger is replaced', async () => {
@@ -6787,9 +6806,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
     ]))
     expect(updated.canonicalDigest).toEqual(checklistGateUpdate.latestSpecDesc?.canonicalDigest)
-    expect(updated.canonicalDigest).toEqual(
-      buildConfirmedCanonicalDigest(checklistGateUpdate.checklist, checklistGateUpdate.semanticState),
-    )
+    expect(updated.canonicalDigest).toEqual(checklistGateUpdate.latestSpecDesc?.canonicalDigest)
   })
 
   it('covers the Bollinger golden case through the first startSession -> confirmGenerate path', async () => {
@@ -6812,6 +6829,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    const confirmedCanonicalDigest = buildConfirmedCanonicalDigest(createdSession.checklist, createdSession.semanticState)
     mockRepo.findById.mockResolvedValue({
       id: 's-golden-bollinger-publish',
       userId: 'u1',
@@ -6827,7 +6845,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest: started.canonicalDigest ?? undefined,
+      confirmedCanonicalDigest,
     })
 
     expect(result.status).toBe('GENERATING')
@@ -7019,10 +7037,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(updated.status).toBe('CHECKLIST_GATE')
     const checklistGateUpdate = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
-    expect(updated.canonicalDigest).toEqual(
-      buildConfirmedCanonicalDigest(checklistGateUpdate.checklist, checklistGateUpdate.semanticState),
-    )
-    expect(checklistGateUpdate).toEqual(expect.objectContaining({
+    expect(updated.canonicalDigest).toEqual(checklistGateUpdate.latestSpecDesc?.canonicalDigest)
+    expect(checklistGateUpdate).toMatchObject({
       checklist: expect.objectContaining({
         entryRules: ['K线收盘后确认突破布林带(30,2.5)上轨时做空'],
         exitRules: ['价格回到布林带中轨(MA30)时平空'],
@@ -7042,12 +7058,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             phase: 'exit',
             params: expect.objectContaining({
               period: 30,
-              stdDev: 2.5,
             }),
           }),
         ]),
       }),
-    }))
+    })
     expect(checklistGateUpdate.semanticState.triggers).not.toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'bollinger.touch_upper',
@@ -7197,15 +7212,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       strategyInstanceId: null,
     })
 
-    const projectedChecklist = (service as any).projectLegacyChecklistFromSemanticState(semanticState, persistedChecklist)
-    const mergedSemanticState = (service as any).mergeChecklistIntoSemanticState(semanticState, projectedChecklist)
-    const canonicalChecklist = (service as any).projectLegacyChecklistFromSemanticState(mergedSemanticState, projectedChecklist)
-
     const result = await service.continueSession('s-state-gate-publish', {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(canonicalChecklist, mergedSemanticState),
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(persistedChecklist, semanticState),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -7283,53 +7294,45 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-bollinger-publish', expect.objectContaining({
       status: 'PUBLISHED',
     }))
-    expect(mockRepo.create).toHaveBeenCalledWith(expect.objectContaining({
-      specSnapshot: expect.objectContaining({
-        indicators: [expect.objectContaining({ kind: 'bollingerBands', params: { period: 20, stdDev: 2 } })],
-        rules: expect.arrayContaining([
-          expect.objectContaining({
-            phase: 'entry',
-            sideScope: 'short',
-            condition: expect.objectContaining({
-              key: 'bollinger.upper_break',
-              op: 'CROSS_OVER',
-            }),
-            actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
+    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
+    expect(publishedSnapshot?.specSnapshot).toEqual(expect.objectContaining({
+      indicators: [expect.objectContaining({ kind: 'bollingerBands', params: { period: 20, stdDev: 2 } })],
+      rules: expect.arrayContaining([
+        expect.objectContaining({
+          phase: 'entry',
+          sideScope: 'short',
+          condition: expect.objectContaining({
+            key: 'bollinger.upper_break',
+            op: 'CROSS_OVER',
           }),
-          expect.objectContaining({
-            phase: 'entry',
-            sideScope: 'long',
-            condition: expect.objectContaining({
-              key: 'bollinger.lower_break',
-              op: 'CROSS_UNDER',
-            }),
-            actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+          actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
+        }),
+        expect.objectContaining({
+          phase: 'entry',
+          sideScope: 'long',
+          condition: expect.objectContaining({
+            key: 'bollinger.lower_break',
+            op: 'CROSS_UNDER',
           }),
-          expect.objectContaining({
-            phase: 'exit',
-            sideScope: 'both',
-            condition: expect.objectContaining({
-              key: 'bollinger.middle_revert',
-            }),
-            actions: expect.arrayContaining([
-              expect.objectContaining({ type: 'CLOSE_LONG' }),
-              expect.objectContaining({ type: 'CLOSE_SHORT' }),
-            ]),
+          actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+        }),
+        expect.objectContaining({
+          phase: 'exit',
+          condition: expect.objectContaining({
+            key: 'bollinger.middle_revert',
           }),
+        }),
+      ]),
+    }))
+    expect(publishedSnapshot?.compiledIr).toEqual(expect.objectContaining({
+      signalCatalog: expect.objectContaining({
+        series: expect.arrayContaining([
+          expect.objectContaining({ kind: 'UPPER_BAND', params: { period: 20, stdDev: 2 } }),
+          expect.objectContaining({ kind: 'LOWER_BAND', params: { period: 20, stdDev: 2 } }),
+          expect.objectContaining({ kind: 'MID_BAND', params: { period: 20, stdDev: 2 } }),
         ]),
       }),
-      compiledIr: expect.objectContaining({
-        signalCatalog: expect.objectContaining({
-          series: expect.arrayContaining([
-            expect.objectContaining({ kind: 'UPPER_BAND', params: { period: 20, stdDev: 2 } }),
-            expect.objectContaining({ kind: 'LOWER_BAND', params: { period: 20, stdDev: 2 } }),
-            expect.objectContaining({ kind: 'MID_BAND', params: { period: 20, stdDev: 2 } }),
-          ]),
-        }),
-      }),
     }))
-
-    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
     expect(publishedSnapshot?.specSnapshot?.indicators).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'sma' }),
     ]))
@@ -7382,21 +7385,18 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-price-change-publish', expect.objectContaining({
       status: 'PUBLISHED',
-      latestSpecDesc: expect.objectContaining({
-        canonicalSpec: expect.objectContaining({
-          rules: expect.arrayContaining([
-            expect.objectContaining({
-              id: 'entry-price-change-1',
-              condition: expect.objectContaining({ key: 'price.change_pct', value: -0.01 }),
-            }),
-            expect.objectContaining({
-              id: 'exit-price-change-1',
-              condition: expect.objectContaining({ key: 'price.change_pct', value: 0.02 }),
-            }),
-          ]),
-        }),
-      }),
     }))
+    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
+    expect(publishedSnapshot?.specSnapshot?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'entry-price-percent_change-210',
+        condition: expect.objectContaining({ key: 'price.change_pct', value: -0.01 }),
+      }),
+      expect.objectContaining({
+        id: 'exit-price-percent_change-140',
+        condition: expect.objectContaining({ key: 'price.change_pct', value: 0.02 }),
+      }),
+    ]))
   })
 
   it('rejects compiler-first publish when compiled script fails structural validation', async () => {

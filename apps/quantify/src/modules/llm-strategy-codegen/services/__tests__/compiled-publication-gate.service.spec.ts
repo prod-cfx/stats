@@ -662,6 +662,32 @@ describe('compiledPublicationGateService', () => {
         market: { exchange: 'binance', symbol: 'BTCUSDT', marketType: 'spot', timeframe: '1h' },
         rules: [
           {
+            id: 'entry-long',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 200,
+            condition: {
+              kind: 'atom',
+              key: 'ma.golden_cross',
+              semanticScope: 'market',
+              op: 'CROSS_OVER',
+            },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.25 } }],
+          },
+          {
+            id: 'entry-short',
+            phase: 'entry',
+            sideScope: 'short',
+            priority: 190,
+            condition: {
+              kind: 'atom',
+              key: 'ma.death_cross',
+              semanticScope: 'market',
+              op: 'CROSS_UNDER',
+            },
+            actions: [{ type: 'OPEN_SHORT', sizing: { mode: 'RATIO', value: 0.25 } }],
+          },
+          {
             id: 'risk-outside-band-3-bars',
             phase: 'risk',
             sideScope: 'both',
@@ -733,6 +759,32 @@ describe('compiledPublicationGateService', () => {
         version: 2,
         market: { exchange: 'binance', symbol: 'BTCUSDT', marketType: 'spot', timeframe: '1h' },
         rules: [
+          {
+            id: 'entry-long',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 200,
+            condition: {
+              kind: 'atom',
+              key: 'ma.golden_cross',
+              semanticScope: 'market',
+              op: 'CROSS_OVER',
+            },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.25 } }],
+          },
+          {
+            id: 'entry-short',
+            phase: 'entry',
+            sideScope: 'short',
+            priority: 190,
+            condition: {
+              kind: 'atom',
+              key: 'ma.death_cross',
+              semanticScope: 'market',
+              op: 'CROSS_UNDER',
+            },
+            actions: [{ type: 'OPEN_SHORT', sizing: { mode: 'RATIO', value: 0.25 } }],
+          },
           {
             id: 'risk-outside-band-3-bars',
             phase: 'risk',

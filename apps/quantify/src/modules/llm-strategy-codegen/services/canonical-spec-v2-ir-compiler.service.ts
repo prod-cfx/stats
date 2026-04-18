@@ -423,6 +423,28 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
+      case 'indicator.above':
+      case 'indicator.below': {
+        const referencePeriod = this.readNumber(
+          [atom.params?.['reference.period']],
+          atom.params?.referenceRole === 'long_term'
+            ? context.movingAverage.slow
+            : context.movingAverage.fast,
+        )
+        const indicatorKind = typeof atom.params?.indicator === 'string'
+          ? atom.params.indicator.trim().toLowerCase()
+          : 'ma'
+        const referenceRef = indicatorKind === 'ema'
+          ? this.ensureSpecificMovingAverageSeries(context, 'EMA', referencePeriod)
+          : this.ensureSpecificMovingAverageSeries(context, 'SMA', referencePeriod)
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}`,
+          atom.key === 'indicator.above' ? 'GTE' : 'LTE',
+          [closeRef, referenceRef],
+        )
+      }
+
       case 'rsi.threshold_lte':
       case 'rsi.threshold_gte':
       case 'rsi.cross_over':
@@ -641,6 +663,25 @@ export class CanonicalSpecV2IrCompilerService {
       context.seriesMap.set(id, {
         id,
         kind: context.movingAverage.kind,
+        inputs: [closeRef],
+        params: { period },
+      })
+    }
+    return id
+  }
+
+  private ensureSpecificMovingAverageSeries(
+    context: CompileContext,
+    kind: 'EMA' | 'SMA',
+    period: number,
+  ): string {
+    const closeRef = this.ensurePriceSeries(context, 'close')
+    const prefix = kind.toLowerCase()
+    const id = `${prefix}_${period}_${context.timeframe}`
+    if (!context.seriesMap.has(id)) {
+      context.seriesMap.set(id, {
+        id,
+        kind,
         inputs: [closeRef],
         params: { period },
       })
@@ -991,12 +1032,9 @@ export class CanonicalSpecV2IrCompilerService {
   private resolvePositionMode(rules: CanonicalRuleV2[]): CanonicalStrategyIrV1['portfolio']['positionMode'] {
     const hasLong = rules.some(rule => rule.actions.some(action => (
       action.type === 'OPEN_LONG'
-      || action.type === 'CLOSE_LONG'
-      || action.type === 'REDUCE_LONG'
     )))
     const hasShort = rules.some(rule => rule.actions.some(action => (
       action.type === 'OPEN_SHORT'
-      || action.type === 'REDUCE_SHORT'
     )))
 
     if (hasLong && hasShort) return 'long_short'

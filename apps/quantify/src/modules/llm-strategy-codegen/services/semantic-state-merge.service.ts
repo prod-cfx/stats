@@ -43,7 +43,10 @@ export class SemanticStateMergeService {
     for (const persistedTrigger of persisted) {
       const matchIndex = next.findIndex((candidate, index) =>
         !consumedDerivedIndexes.has(index) && this.isSameTriggerIdentity(persistedTrigger, candidate))
-      if (matchIndex < 0) {
+      const replacementIndex = matchIndex >= 0
+        ? matchIndex
+        : this.findReplacementTriggerIndex(persistedTrigger, next, consumedDerivedIndexes)
+      if (replacementIndex < 0) {
         next.push({
           ...persistedTrigger,
           params: { ...persistedTrigger.params },
@@ -52,10 +55,11 @@ export class SemanticStateMergeService {
         continue
       }
 
-      const derivedTrigger = next[matchIndex]
-      consumedDerivedIndexes.add(matchIndex)
+      const derivedTrigger = next[replacementIndex]
+      consumedDerivedIndexes.add(replacementIndex)
       const preferPersisted = this.compareNodeStrength(persistedTrigger, derivedTrigger) > 0
-      next[matchIndex] = {
+      const strongerTrigger = preferPersisted ? persistedTrigger : derivedTrigger
+      next[replacementIndex] = {
         ...(preferPersisted ? derivedTrigger : persistedTrigger),
         ...(preferPersisted ? persistedTrigger : derivedTrigger),
         id: persistedTrigger.id,
@@ -63,7 +67,9 @@ export class SemanticStateMergeService {
         params: preferPersisted
           ? { ...derivedTrigger.params, ...persistedTrigger.params }
           : { ...persistedTrigger.params, ...derivedTrigger.params },
-        openSlots: this.mergeOpenSlots(persistedTrigger.openSlots, derivedTrigger.openSlots),
+        openSlots: this.shouldPreserveClosedSlots(strongerTrigger)
+          ? strongerTrigger.openSlots.map(slot => ({ ...slot }))
+          : this.mergeOpenSlots(persistedTrigger.openSlots, derivedTrigger.openSlots),
         status: derivedTrigger.status === 'locked' || persistedTrigger.status === 'superseded'
           ? derivedTrigger.status
           : persistedTrigger.status,
@@ -74,6 +80,29 @@ export class SemanticStateMergeService {
     }
 
     return next
+  }
+
+  private findReplacementTriggerIndex(
+    persistedTrigger: SemanticTriggerState,
+    derived: SemanticTriggerState[],
+    consumedDerivedIndexes: Set<number>,
+  ): number {
+    const candidates = derived
+      .map((trigger, index) => ({ trigger, index }))
+      .filter(({ trigger, index }) =>
+        !consumedDerivedIndexes.has(index)
+        && this.isSameTriggerReplacementFamily(persistedTrigger, trigger))
+
+    if (candidates.length !== 1) {
+      return -1
+    }
+
+    const persistedGroupSize = this.countTriggerReplacementFamily(persistedTrigger, derived)
+    if (persistedGroupSize > 1) {
+      return -1
+    }
+
+    return candidates[0]?.index ?? -1
   }
 
   private mergeActions(
@@ -221,6 +250,24 @@ export class SemanticStateMergeService {
     return this.haveCompatibleParamValues(left.params, right.params, identityKeys)
   }
 
+  private isSameTriggerReplacementFamily(
+    left: SemanticTriggerState,
+    right: SemanticTriggerState,
+  ): boolean {
+    if (left.phase !== right.phase || left.key !== right.key) {
+      return false
+    }
+
+    return !left.sideScope || !right.sideScope || left.sideScope === right.sideScope
+  }
+
+  private countTriggerReplacementFamily(
+    target: SemanticTriggerState,
+    triggers: SemanticTriggerState[],
+  ): number {
+    return triggers.filter(trigger => this.isSameTriggerReplacementFamily(target, trigger)).length
+  }
+
   private isSameActionIdentity(left: SemanticActionState, right: SemanticActionState): boolean {
     if (left.key !== right.key) {
       return false
@@ -272,6 +319,12 @@ export class SemanticStateMergeService {
     }
 
     return next
+  }
+
+  private shouldPreserveClosedSlots(
+    trigger: Pick<SemanticTriggerState, 'status' | 'openSlots'>,
+  ): boolean {
+    return trigger.status === 'locked' && trigger.openSlots.every(slot => slot.status !== 'open')
   }
 
   private mergeSlotState<T extends SemanticContextSlotState[keyof SemanticContextSlotState]>(

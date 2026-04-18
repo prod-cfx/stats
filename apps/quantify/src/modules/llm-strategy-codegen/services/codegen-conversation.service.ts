@@ -1305,6 +1305,43 @@ export class CodegenConversationService {
     })
   }
 
+  private mergeChecklistIntoSemanticState(
+    currentSemanticState: SemanticState,
+    checklist: ChecklistPayload,
+  ): SemanticState {
+    const derivedSemanticState = this.buildFallbackSemanticState(checklist)
+    const merged = this.semanticStateMerge.merge({
+      persisted: currentSemanticState,
+      derived: derivedSemanticState,
+    })
+    const preferredGateTriggers = new Map(
+      derivedSemanticState.triggers
+        .filter(trigger => trigger.phase === 'gate')
+        .map(trigger => [trigger.key, trigger]),
+    )
+
+    if (preferredGateTriggers.size === 0) {
+      return merged
+    }
+
+    const nextGateTriggers = Array.from(preferredGateTriggers.values()).map((preferred) => {
+      const matchedMergedGate = merged.triggers.find(trigger =>
+        trigger.phase === 'gate'
+        && trigger.key === preferred.key
+        && trigger.params.value === preferred.params.value)
+
+      return matchedMergedGate ?? preferred
+    })
+
+    return {
+      ...merged,
+      triggers: [
+        ...merged.triggers.filter(trigger => trigger.phase !== 'gate'),
+        ...nextGateTriggers,
+      ],
+    }
+  }
+
   private mergeProjectedRuleArrays(
     fallbackRules: string[] | undefined,
     projectedRules: string[] | undefined,
