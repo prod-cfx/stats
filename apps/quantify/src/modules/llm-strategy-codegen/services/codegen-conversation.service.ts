@@ -518,9 +518,7 @@ export class CodegenConversationService {
     const normalization = hasPersistedSemanticState
       ? this.buildNormalizationFromSemanticState(reducedSemanticState)
       : clarification.normalization
-    const canonicalSpec = hasPersistedSemanticState
-      ? this.canonicalSpecBuilder.buildFromNormalizedIntent(canonicalChecklist, normalization.normalizedIntent)
-      : this.buildCanonicalSpecForConversation(canonicalChecklist, normalization)
+    const canonicalSpec = this.buildCanonicalSpecForConversation(canonicalChecklist, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: clarification.executionContext.context,
@@ -758,9 +756,7 @@ export class CodegenConversationService {
     const normalization = hasPersistedSemanticState
       ? this.buildNormalizationFromSemanticState(reducedSemanticState)
       : clarification.normalization
-    const canonicalSpec = hasPersistedSemanticState
-      ? this.canonicalSpecBuilder.buildFromNormalizedIntent(canonicalChecklist, normalization.normalizedIntent)
-      : this.buildCanonicalSpecForConversation(canonicalChecklist, normalization)
+    const canonicalSpec = this.buildCanonicalSpecForConversation(canonicalChecklist, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: clarification.executionContext.context,
@@ -1319,43 +1315,6 @@ export class CodegenConversationService {
       entryRuleDrafts: semanticChecklist.entryRuleDrafts ?? fallbackChecklist.entryRuleDrafts,
       exitRuleDrafts: semanticChecklist.exitRuleDrafts ?? fallbackChecklist.exitRuleDrafts,
     })
-  }
-
-  private mergeChecklistIntoSemanticState(
-    currentSemanticState: SemanticState,
-    checklist: ChecklistPayload,
-  ): SemanticState {
-    const derivedSemanticState = this.buildFallbackSemanticState(checklist)
-    const merged = this.semanticStateMerge.merge({
-      persisted: currentSemanticState,
-      derived: derivedSemanticState,
-    })
-    const preferredGateTriggers = new Map(
-      derivedSemanticState.triggers
-        .filter(trigger => trigger.phase === 'gate')
-        .map(trigger => [trigger.key, trigger]),
-    )
-
-    if (preferredGateTriggers.size === 0) {
-      return merged
-    }
-
-    const nextGateTriggers = Array.from(preferredGateTriggers.values()).map((preferred) => {
-      const matchedMergedGate = merged.triggers.find(trigger =>
-        trigger.phase === 'gate'
-        && trigger.key === preferred.key
-        && trigger.params.value === preferred.params.value)
-
-      return matchedMergedGate ?? preferred
-    })
-
-    return {
-      ...merged,
-      triggers: [
-        ...merged.triggers.filter(trigger => trigger.phase !== 'gate'),
-        ...nextGateTriggers,
-      ],
-    }
   }
 
   private mergeProjectedRuleArrays(
@@ -2144,28 +2103,21 @@ export class CodegenConversationService {
     const projectedChecklist = args.useSemanticProjection
       ? this.projectLegacyChecklistFromSemanticState(args.semanticState, args.checklist)
       : args.checklist
-    const derivedSemanticState = this.buildFallbackSemanticState(projectedChecklist)
-    const reducedSemanticState = args.useSemanticProjection
-      ? this.semanticStateMerge.merge({
-          persisted: args.semanticState,
-          derived: derivedSemanticState,
-        })
-      : derivedSemanticState
     const clarification = this.resolveClarificationArtifacts(projectedChecklist)
     const semanticClarificationState = this.mergeSemanticClarificationState(
-      reducedSemanticState,
+      args.semanticState,
       clarification.clarificationState,
     )
 
     if (semanticClarificationState.status === 'NEEDS_CLARIFICATION') {
-      const assistantPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
+      const assistantPrompt = this.buildSemanticClarificationPrompt(args.semanticState)
         || this.clarificationQuestion.build(semanticClarificationState)
         || clarification.clarificationPrompt
         || '请先澄清这条规则，我再继续完善逻辑图。'
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         checklist: projectedChecklist,
-        semanticState: reducedSemanticState,
+        semanticState: args.semanticState,
         clarificationState: semanticClarificationState,
         constraintPack: {
           ...args.constraintPack,
@@ -2183,10 +2135,8 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
 
-    const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
-    const canonicalSpec = args.useSemanticProjection
-      ? this.canonicalSpecBuilder.buildFromNormalizedIntent(projectedChecklist, normalization.normalizedIntent)
-      : this.buildCanonicalSpecForConversation(projectedChecklist, normalization)
+    const normalization = this.buildNormalizationFromSemanticState(args.semanticState)
+    const canonicalSpec = this.buildCanonicalSpecForConversation(projectedChecklist, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: clarification.executionContext.context,
@@ -2205,7 +2155,7 @@ export class CodegenConversationService {
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         checklist: projectedChecklist,
-        semanticState: reducedSemanticState,
+        semanticState: args.semanticState,
         clarificationState: clarification.clarificationState,
         constraintPack: {
           ...args.constraintPack,
@@ -2229,7 +2179,7 @@ export class CodegenConversationService {
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         checklist: projectedChecklist,
-        semanticState: reducedSemanticState,
+        semanticState: args.semanticState,
         clarificationState: clarification.clarificationState,
         constraintPack: {
           ...args.constraintPack,
@@ -2253,7 +2203,7 @@ export class CodegenConversationService {
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         checklist: projectedChecklist,
-        semanticState: reducedSemanticState,
+        semanticState: args.semanticState,
         clarificationState: clarification.clarificationState,
         constraintPack: {
           ...args.constraintPack,
@@ -2298,7 +2248,7 @@ export class CodegenConversationService {
     await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
       status: 'CHECKLIST_GATE',
       checklist: projectedChecklist,
-      semanticState: reducedSemanticState,
+      semanticState: args.semanticState,
       clarificationState: clarification.clarificationState,
       constraintPack: {
         ...args.constraintPack,
