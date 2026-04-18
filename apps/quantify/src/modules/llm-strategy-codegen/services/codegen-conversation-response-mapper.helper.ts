@@ -83,6 +83,7 @@ export class CodegenConversationResponseMapperHelper {
   buildPublishedSnapshotProjection(args: {
     publishedSnapshotId: string | null
     snapshot: unknown
+    strategyInstanceId?: string | null
   }): PublishedSnapshotProjection {
     if (!args.publishedSnapshotId) {
       return {
@@ -99,9 +100,10 @@ export class CodegenConversationResponseMapperHelper {
     const backtestConfigDefaults = this.readRecord(snapshotRecord?.backtestConfigDefaults)
     const deploymentExecutionDefaults = this.readRecord(snapshotRecord?.deploymentExecutionDefaults)
     const deploymentExecutionConstraints = this.readRecord(snapshotRecord?.deploymentExecutionConstraints)
-    const strategyInstanceId = typeof snapshotRecord?.strategyInstanceId === 'string'
+    const snapshotStrategyInstanceId = typeof snapshotRecord?.strategyInstanceId === 'string'
       ? snapshotRecord.strategyInstanceId.trim()
       : ''
+    const strategyInstanceId = snapshotStrategyInstanceId || args.strategyInstanceId?.trim() || ''
 
     const missingStrategyConfig = !strategyConfig
     const missingBacktestConfigDefaults = !backtestConfigDefaults
@@ -121,8 +123,6 @@ export class CodegenConversationResponseMapperHelper {
           || missingBacktestConfigDefaults
           || missingDeploymentExecutionDefaults
           || missingDeploymentExecutionConstraints,
-        missingStrategyInstanceBinding,
-        missingStrategyConfig,
         missingBacktestConfigDefaults,
         missingDeploymentExecutionDefaults,
         missingDeploymentExecutionConstraints,

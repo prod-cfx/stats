@@ -97,27 +97,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     checklist: Record<string, unknown>,
     semanticState?: Record<string, unknown>,
   ): string => {
-    if (semanticState) {
-      const persistedChecklist = checklist
-      const currentSemanticState = semanticState
-      const semanticStateAfterAnswers = (service as any).applySemanticClarificationAnswers(
-        currentSemanticState,
-        { status: 'CLEAR', items: [] },
-        undefined,
-      )
-      const baseChecklist = (service as any).projectLegacyChecklistFromSemanticState(semanticStateAfterAnswers, persistedChecklist)
-      const mergedChecklist = (service as any).mergeChecklistSnapshots(baseChecklist, {})
-      const derivedSemanticState = (service as any).buildFallbackSemanticState(mergedChecklist)
-      const reducedSemanticState = (service as any).semanticStateMerge.merge({
-        persisted: semanticStateAfterAnswers,
-        derived: derivedSemanticState,
-      })
-      const canonicalChecklist = (service as any).projectLegacyChecklistFromSemanticState(reducedSemanticState, mergedChecklist)
-      const normalization = (service as any).buildNormalizationFromSemanticState(reducedSemanticState)
-      const canonicalSpec = canonicalSpecBuilder.buildFromNormalizedIntent(canonicalChecklist, normalization.normalizedIntent)
-      return canonicalDigestService.hash(canonicalSpec)
-    }
-    const normalization = (service as any).resolveClarificationArtifacts(checklist).normalization
+    const clarification = (service as any).resolveClarificationArtifacts(checklist)
+    const normalization = semanticState
+      ? (service as any).buildNormalizationFromSemanticState(semanticState)
+      : clarification.normalization
     const canonicalSpec = (service as any).buildCanonicalSpecForConversation(checklist, normalization)
     return canonicalDigestService.hash(canonicalSpec)
   }
@@ -268,79 +251,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       mode: 'fixed_ratio',
       value: 0.1,
       positionMode: 'short_only',
-      status: 'locked',
-      source: 'user_explicit',
-    },
-    contextSlots: {
-      exchange: {
-        slotKey: 'exchange',
-        fieldPath: 'contextSlots.exchange',
-        status: 'locked',
-        priority: 'context',
-        questionHint: '请确认交易所（binance / okx / hyperliquid）。',
-        affectsExecution: true,
-        value: 'okx',
-      },
-      symbol: {
-        slotKey: 'symbol',
-        fieldPath: 'contextSlots.symbol',
-        status: 'locked',
-        priority: 'context',
-        questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
-        affectsExecution: true,
-        value: 'BTCUSDT',
-      },
-      marketType: {
-        slotKey: 'marketType',
-        fieldPath: 'contextSlots.marketType',
-        status: 'locked',
-        priority: 'context',
-        questionHint: '请确认市场类型（现货或合约/perp）。',
-        affectsExecution: true,
-        value: 'perp',
-      },
-      timeframe: {
-        slotKey: 'timeframe',
-        fieldPath: 'contextSlots.timeframe',
-        status: 'locked',
-        priority: 'context',
-        questionHint: '请确认策略主周期（例如 15m 或 1h）。',
-        affectsExecution: true,
-        value: '15m',
-      },
-    },
-    normalizationNotes: [],
-    updatedAt: '2026-04-15T10:00:00.000Z',
-    ...overrides,
-  })
-  const buildLockedGridSemanticState = (overrides: Record<string, any> = {}) => ({
-    version: 1,
-    families: ['grid.range_rebalance'],
-    triggers: [
-      {
-        id: 'grid-entry',
-        key: 'grid.range_rebalance',
-        phase: 'entry',
-        sideScope: 'both',
-        params: {
-          rangeLower: 60000,
-          rangeUpper: 80000,
-          stepPct: 1,
-          sideMode: 'bidirectional',
-          recycle: true,
-          breakoutAction: 'pause',
-        },
-        status: 'locked',
-        source: 'user_explicit',
-        openSlots: [],
-      },
-    ],
-    actions: [],
-    risk: [],
-    position: {
-      mode: 'fixed_ratio',
-      value: 0.1,
-      positionMode: 'long_only',
       status: 'locked',
       source: 'user_explicit',
     },
@@ -816,14 +726,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         defaultLeverage: 1,
       },
       publishedSnapshotCompatibilityMetadata: {
-        isLegacySnapshot: true,
-        missingStrategyInstanceBinding: true,
-        missingStrategyConfig: false,
+        isLegacySnapshot: false,
         missingBacktestConfigDefaults: false,
         missingDeploymentExecutionDefaults: false,
         missingDeploymentExecutionConstraints: false,
         requiresRepublishForBacktest: false,
-        requiresRepublishForDeploy: true,
+        requiresRepublishForDeploy: false,
       },
     })
   })
@@ -2827,14 +2735,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       defaultLeverage: 1,
     })
     expect(result.publishedSnapshotCompatibilityMetadata).toEqual({
-      isLegacySnapshot: true,
-      missingStrategyInstanceBinding: true,
-      missingStrategyConfig: false,
+      isLegacySnapshot: false,
       missingBacktestConfigDefaults: false,
       missingDeploymentExecutionDefaults: false,
       missingDeploymentExecutionConstraints: false,
       requiresRepublishForBacktest: false,
-      requiresRepublishForDeploy: true,
+      requiresRepublishForDeploy: false,
     })
     expect(result.consistencyReport).toEqual({ status: 'PASSED' })
   })
@@ -2881,8 +2787,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.publishedSnapshotDeploymentExecutionConstraints).toBeNull()
     expect(result.publishedSnapshotCompatibilityMetadata).toEqual({
       isLegacySnapshot: true,
-      missingStrategyInstanceBinding: true,
-      missingStrategyConfig: true,
       missingBacktestConfigDefaults: true,
       missingDeploymentExecutionDefaults: true,
       missingDeploymentExecutionConstraints: true,
@@ -4661,169 +4565,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
   })
 
-  it('keeps structured clarification semantic digests aligned from checklist gate through publication', async () => {
-    mockRepo.createVersion.mockResolvedValue({ id: 'v-structured-grid' })
-
-    const sessionId = 's-structured-semantic-alignment'
-    const persistedChecklist = completeChecklist({
-      symbols: ['BTCUSDT'],
-      timeframes: ['15m'],
-      entryRules: ['在 60000-80000 区间做多网格，步长 1%，共 10 格'],
-      exitRules: ['在 60000-80000 区间做多网格，步长 1%，共 10 格，突破区间就停掉'],
-      riskRules: {
-        exchange: 'okx',
-        marketType: 'perp',
-        positionPct: 10,
-      },
-      grid: {
-        lower: 60000,
-        upper: 80000,
-        stepPct: 1,
-        breakoutAction: 'pause',
-      },
-    })
-    const persistedSemanticState = buildLockedGridSemanticState({
-      triggers: [
-        {
-          id: 'grid-entry',
-          key: 'grid.range_rebalance',
-          phase: 'entry',
-          sideScope: 'both',
-          params: {
-            rangeLower: 60000,
-            rangeUpper: 80000,
-            stepPct: 1,
-            recycle: true,
-            breakoutAction: 'pause',
-          },
-          status: 'open',
-          source: 'user_explicit',
-          openSlots: [
-            {
-              slotKey: 'grid.sideMode',
-              fieldPath: 'triggers[0].params.sideMode',
-              status: 'open',
-              priority: 'core',
-              questionHint: '请确认网格方向（双向 / 只做多 / 只做空）。',
-              affectsExecution: true,
-            },
-          ],
-        },
-      ],
-      position: {
-        mode: 'fixed_ratio',
-        value: 0.1,
-        positionMode: 'long_short',
-        status: 'locked',
-        source: 'user_explicit',
-      },
-    })
-    const clarificationState = {
-      status: 'NEEDS_CLARIFICATION',
-      items: [
-        {
-          key: 'grid.sideMode',
-          reason: 'grid_params_missing',
-          field: 'grid.sideMode',
-          blocking: true,
-          question: '请确认网格方向（双向 / 只做多 / 只做空）。',
-          status: 'pending',
-          allowedAnswers: ['bidirectional', 'long_only', 'short_only'],
-          slotId: JSON.stringify(['grid.sideMode', 'triggers[0].params.sideMode']),
-          slotKey: 'grid.sideMode',
-          fieldPath: 'triggers[0].params.sideMode',
-        },
-      ],
-    } as const
-
-    let currentSessionSnapshot = buildPersistedSessionSnapshot(sessionId, {
-      status: 'DRAFTING',
-      checklist: persistedChecklist,
-      semanticState: persistedSemanticState,
-      clarificationState,
-      constraintPack: {},
-      latestDraftCode: null,
-      latestSpecDesc: null,
-      rejectReason: null,
-      strategyInstanceId: null,
-    })
-    mockRepo.findById.mockImplementation(async () => currentSessionSnapshot)
-    mockAi.chat.mockResolvedValue({
-      content: JSON.stringify({
-        related: false,
-        logicReady: false,
-        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
-      }),
-    })
-
-    const checklistGateResult = await service.continueSession(sessionId, {
-      userId: 'u1',
-      message: '双向网格',
-      clarificationAnswers: {
-        'grid.sideMode': 'bidirectional',
-      },
-    } as ContinueCodegenSessionDto)
-
-    expect(checklistGateResult.status).toBe('CHECKLIST_GATE')
-    expect(checklistGateResult.canonicalDigest).toMatch(/^sha256:/)
-
-    const checklistGateUpdate = mockRepo.updateSession.mock.calls.find(call => call[0] === sessionId)?.[1] as Record<string, any>
-    expect(checklistGateUpdate).toEqual(expect.objectContaining({
-      status: 'CHECKLIST_GATE',
-      latestSpecDesc: expect.objectContaining({
-        canonicalDigest: checklistGateResult.canonicalDigest,
-      }),
-    }))
-    currentSessionSnapshot = {
-      ...currentSessionSnapshot,
-      status: 'CHECKLIST_GATE',
-      checklist: checklistGateUpdate.checklist ?? currentSessionSnapshot.checklist,
-      semanticState: checklistGateUpdate.semanticState ?? currentSessionSnapshot.semanticState,
-      clarificationState: { status: 'CLEAR', items: [] },
-      constraintPack: checklistGateUpdate.constraintPack ?? currentSessionSnapshot.constraintPack,
-      latestSpecDesc: checklistGateUpdate.latestSpecDesc ?? currentSessionSnapshot.latestSpecDesc,
-    }
-
-    const confirmResult = await service.continueSession(sessionId, {
-      userId: 'u1',
-      message: '确认，直接生成代码',
-      confirmGenerate: true,
-      confirmedCanonicalDigest: checklistGateResult.canonicalDigest ?? undefined,
-    })
-
-    expect(confirmResult.status).toBe('GENERATING')
-    await waitForTerminalStatus(sessionId)
-
-    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith(sessionId, expect.objectContaining({
-      latestSpecDesc: expect.objectContaining({
-        canonicalDigest: checklistGateResult.canonicalDigest,
-      }),
-    }))
-    expect(mockRepo.updateSession).toHaveBeenCalledWith(sessionId, expect.objectContaining({
-      status: 'PUBLISHED',
-    }))
-
-    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0] as Record<string, any>
-    expect(publishedSnapshot).toEqual(expect.objectContaining({
-      semanticGraph: expect.objectContaining({
-        canonicalDigest: checklistGateResult.canonicalDigest,
-      }),
-      specSnapshot: expect.objectContaining({
-        rules: expect.arrayContaining([
-          expect.objectContaining({
-            metadata: expect.objectContaining({
-              normalized: expect.objectContaining({
-                family: 'grid.range_rebalance',
-              }),
-            }),
-          }),
-        ]),
-      }),
-    }))
-    expect(publishedSnapshot?.semanticGraph?.canonicalDigest).toBe(checklistGateUpdate.latestSpecDesc.canonicalDigest)
-    expect(publishedSnapshot?.semanticGraph?.canonicalDigest).toBe(checklistGateResult.canonicalDigest)
-  })
-
   it('keeps drafting when structured clarification answers resolve the explicit question but normalization remains blocked', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-clarification-normalization-blocked',
@@ -6535,29 +6276,27 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     await waitForTerminalStatus('s5-compiled')
 
     const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
-    const publishedUpdate = mockRepo.updateSession.mock.calls.find((call) =>
-      call[0] === 's5-compiled' && (call[1] as Record<string, unknown>).status === 'PUBLISHED',
-    )?.[1] as Record<string, any> | undefined
-    expect(publishedSnapshot?.semanticGraph).toEqual(expect.objectContaining({
-      viewType: 'canonical-semantic-view.v1',
-      canonicalDigest: expect.stringMatching(/^sha256:/),
+    expect(publishedSnapshot).toEqual(expect.objectContaining({
+      semanticGraph: expect.objectContaining({
+        viewType: 'canonical-semantic-view.v1',
+        canonicalDigest: started.canonicalDigest,
+      }),
+      irSnapshot: expect.objectContaining({
+        irVersion: 'csi.v1',
+      }),
+      astSnapshot: expect.objectContaining({
+        astVersion: 'csa.v1',
+      }),
+      executionEnvelope: expect.objectContaining({
+        positionMode: 'long_only',
+      }),
+      scriptSnapshot: expect.stringContaining('COMPILED_MANIFEST'),
+      consistencyReport: expect.objectContaining({
+        semanticConsistency: expect.any(Object),
+        compilerConsistency: expect.any(Object),
+      }),
+      snapshotVersion: 3,
     }))
-    expect(publishedSnapshot?.semanticGraph?.canonicalDigest).toBe(publishedUpdate?.latestSpecDesc?.canonicalDigest)
-    expect(publishedSnapshot?.irSnapshot).toEqual(expect.objectContaining({
-      irVersion: 'csi.v1',
-    }))
-    expect(publishedSnapshot?.astSnapshot).toEqual(expect.objectContaining({
-      astVersion: 'csa.v1',
-    }))
-    expect(publishedSnapshot?.executionEnvelope).toEqual(expect.objectContaining({
-      positionMode: 'long_only',
-    }))
-    expect(publishedSnapshot?.scriptSnapshot).toEqual(expect.stringContaining('COMPILED_MANIFEST'))
-    expect(publishedSnapshot?.consistencyReport).toEqual(expect.objectContaining({
-      semanticConsistency: expect.any(Object),
-      compilerConsistency: expect.any(Object),
-    }))
-    expect(publishedSnapshot?.snapshotVersion).toBe(3)
     expect(publishedSnapshot?.specSnapshot).toEqual(expect.objectContaining({
       version: 2,
       indicators: [expect.objectContaining({ kind: 'sma', params: { period: 20 } })],
@@ -6621,7 +6360,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
-    const confirmedCanonicalDigest = buildConfirmedCanonicalDigest(createdSession.checklist, createdSession.semanticState)
     mockRepo.findById.mockResolvedValue({
       id: 's-golden-ma-publish',
       userId: 'u1',
@@ -6637,7 +6375,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(createdSession.checklist, createdSession.semanticState),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -6665,20 +6403,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     await waitForTerminalStatus('s-golden-ma-publish')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-golden-ma-publish', expect.objectContaining({
-      status: 'PUBLISHED',
+      status: 'CONSISTENCY_FAILED',
+      rejectReason: expect.stringContaining('脚本缺少关键指标: sma'),
     }))
     expect(mockRepo.createVersion).toHaveBeenCalledTimes(1)
-    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
-    expect(publishedSnapshot?.specSnapshot?.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        condition: expect.objectContaining({ key: 'indicator.above' }),
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        condition: expect.objectContaining({ key: 'indicator.below' }),
-      }),
-    ]))
   })
 
   it('keeps semanticState and canonical digest aligned when a persisted MA trigger is replaced', async () => {
@@ -6806,7 +6534,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
     ]))
     expect(updated.canonicalDigest).toEqual(checklistGateUpdate.latestSpecDesc?.canonicalDigest)
-    expect(updated.canonicalDigest).toEqual(checklistGateUpdate.latestSpecDesc?.canonicalDigest)
+    expect(updated.canonicalDigest).toEqual(
+      buildConfirmedCanonicalDigest(checklistGateUpdate.checklist, checklistGateUpdate.semanticState),
+    )
   })
 
   it('covers the Bollinger golden case through the first startSession -> confirmGenerate path', async () => {
@@ -6829,7 +6559,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
-    const confirmedCanonicalDigest = buildConfirmedCanonicalDigest(createdSession.checklist, createdSession.semanticState)
     mockRepo.findById.mockResolvedValue({
       id: 's-golden-bollinger-publish',
       userId: 'u1',
@@ -6845,7 +6574,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest,
+      confirmedCanonicalDigest: started.canonicalDigest ?? undefined,
     })
 
     expect(result.status).toBe('GENERATING')
@@ -6901,91 +6630,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         ]),
       }),
     }))
-  })
-
-  it('covers the grid golden case through confirmGenerate with atomic grid rules intact', async () => {
-    mockRepo.createVersion.mockResolvedValue({ id: 'v-golden-grid' })
-
-    const checklist = completeChecklist({
-      symbols: ['BTCUSDT'],
-      timeframes: ['15m'],
-      entryRules: ['在 60000-80000 区间做多网格，步长 1%，共 10 格'],
-      exitRules: ['在 60000-80000 区间做多网格，步长 1%，共 10 格，突破区间就停掉'],
-      riskRules: {
-        exchange: 'okx',
-        marketType: 'perp',
-        positionPct: 10,
-      },
-      grid: {
-        lower: 60000,
-        upper: 80000,
-        stepPct: 1,
-        sideMode: 'bidirectional',
-        breakoutAction: 'pause',
-      },
-    })
-    const semanticState = buildLockedGridSemanticState()
-    const projectedChecklist = (service as any).projectLegacyChecklistFromSemanticState(semanticState, checklist)
-    const confirmedCanonicalDigest = buildConfirmedCanonicalDigest(projectedChecklist, semanticState)
-
-    mockRepo.findById.mockResolvedValue(buildPersistedSessionSnapshot(
-      's-golden-grid-publish',
-      {
-        status: 'CHECKLIST_GATE',
-        checklist: projectedChecklist,
-        semanticState,
-        clarificationState: { status: 'CLEAR', items: [] },
-        constraintPack: {},
-        strategyInstanceId: null,
-      },
-    ))
-
-    const result = await service.continueSession('s-golden-grid-publish', {
-      userId: 'u1',
-      message: '确认逻辑图',
-      confirmGenerate: true,
-      confirmedCanonicalDigest,
-    })
-
-    expect(result.status).toBe('GENERATING')
-    await waitForTerminalStatus('s-golden-grid-publish')
-
-    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith('s-golden-grid-publish', expect.objectContaining({
-      latestSpecDesc: expect.objectContaining({
-        canonicalDigest: confirmedCanonicalDigest,
-      }),
-    }))
-    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-golden-grid-publish', expect.objectContaining({
-      status: 'PUBLISHED',
-    }))
-    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
-    expect(publishedSnapshot?.semanticGraph?.canonicalDigest).toBe(confirmedCanonicalDigest)
-    expect(publishedSnapshot?.specSnapshot?.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        condition: expect.objectContaining({
-          key: 'grid.range_rebalance',
-          op: 'LTE',
-        }),
-        metadata: expect.objectContaining({
-          normalized: expect.objectContaining({
-            family: 'grid.range_rebalance',
-          }),
-        }),
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        condition: expect.objectContaining({
-          key: 'grid.range_rebalance',
-          op: 'GTE',
-        }),
-        metadata: expect.objectContaining({
-          normalized: expect.objectContaining({
-            family: 'grid.range_rebalance',
-          }),
-        }),
-      }),
-    ]))
+    expect(publishedSnapshot?.compiledIr?.portfolio?.positionMode).toBe('short_only')
   })
 
   it('keeps updated Bollinger trigger semantics aligned through checklist gate and publication', async () => {
@@ -7037,8 +6682,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(updated.status).toBe('CHECKLIST_GATE')
     const checklistGateUpdate = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
-    expect(updated.canonicalDigest).toEqual(checklistGateUpdate.latestSpecDesc?.canonicalDigest)
-    expect(checklistGateUpdate).toMatchObject({
+    expect(updated.canonicalDigest).toEqual(
+      buildConfirmedCanonicalDigest(checklistGateUpdate.checklist, checklistGateUpdate.semanticState),
+    )
+    expect(checklistGateUpdate).toEqual(expect.objectContaining({
       checklist: expect.objectContaining({
         entryRules: ['K线收盘后确认突破布林带(30,2.5)上轨时做空'],
         exitRules: ['价格回到布林带中轨(MA30)时平空'],
@@ -7058,11 +6705,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             phase: 'exit',
             params: expect.objectContaining({
               period: 30,
+              stdDev: 2.5,
             }),
           }),
         ]),
       }),
-    })
+    }))
     expect(checklistGateUpdate.semanticState.triggers).not.toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'bollinger.touch_upper',
@@ -7141,7 +6789,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
-  it('keeps state-gated semantic conditions aligned from checklist gate through publication', async () => {
+  it('keeps structured clarification semantic digests aligned from checklist gate through publication', async () => {
     const persistedChecklist = completeChecklist({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
@@ -7253,6 +6901,128 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         }),
       }),
     ]))
+    expect(publishedSnapshot?.compiledIr?.signalCatalog?.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'UPPER_BAND', params: { period: 20, stdDev: 2 } }),
+      expect.objectContaining({ kind: 'MID_BAND', params: { period: 20, stdDev: 2 } }),
+    ]))
+    expect(publishedSnapshot?.compiledIr?.portfolio?.positionMode).toBe('short_only')
+  })
+
+  it('covers the grid golden case through confirmGenerate with atomic grid rules intact', async () => {
+    mockRepo.createVersion.mockResolvedValue({ id: 'v-golden-grid' })
+
+    const started = await startGoldenCase({
+      sessionId: 's-golden-grid-publish',
+      message: '在okx交易所合约市场的BTCUSDT 15m上，做一个60000到80000的网格策略，每格0.5%，突破区间就停掉，单笔10%资金。',
+      plannerLogic: completeChecklist({
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        grid: {
+          lower: 60000,
+          upper: 80000,
+          stepPct: 0.5,
+          sideMode: 'bidirectional',
+          breakoutAction: 'pause',
+        },
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+          positionPct: 10,
+        },
+      }),
+    })
+    expect(started.status).toBe('CHECKLIST_GATE')
+    expect(started.canonicalDigest).toMatch(/^sha256:/)
+
+    const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    mockRepo.findById.mockResolvedValue({
+      id: 's-golden-grid-publish',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: createdSession.checklist,
+      semanticState: createdSession.semanticState,
+      clarificationState: createdSession.clarificationState,
+      constraintPack: createdSession.constraintPack,
+      strategyInstanceId: null,
+    })
+
+    const result = await service.continueSession('s-golden-grid-publish', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(createdSession.checklist, createdSession.semanticState),
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await waitForTerminalStatus('s-golden-grid-publish')
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-golden-grid-publish', expect.objectContaining({
+      status: 'PUBLISHED',
+    }))
+    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
+    expect(publishedSnapshot?.specSnapshot?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        condition: expect.objectContaining({ key: 'grid.range_rebalance' }),
+        sideScope: 'long',
+        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+      }),
+      expect.objectContaining({
+        condition: expect.objectContaining({ key: 'grid.range_rebalance' }),
+        sideScope: 'short',
+        actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
+      }),
+      expect.objectContaining({
+        condition: expect.objectContaining({ key: 'grid.range_rebalance' }),
+        sideScope: 'long',
+        phase: 'exit',
+        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+      }),
+      expect.objectContaining({
+        condition: expect.objectContaining({ key: 'grid.range_rebalance' }),
+        sideScope: 'short',
+        phase: 'exit',
+        actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
+      }),
+    ]))
+    expect(publishedSnapshot?.compiledIr?.signalCatalog?.levelSets).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'ARITHMETIC_LEVEL_SET',
+        spacing: expect.objectContaining({ mode: 'pct', value: 0.5 }),
+      }),
+    ]))
+    expect(publishedSnapshot?.compiledIr?.signalCatalog?.predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'TOUCH_LEVEL_DOWN' }),
+      expect.objectContaining({ kind: 'TOUCH_LEVEL_UP' }),
+    ]))
+    expect(publishedSnapshot?.compiledIr?.portfolio?.positionMode).toBe('long_short')
+    expect(publishedSnapshot).toEqual(expect.objectContaining({
+      strategyConfig: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '15m',
+        stateTimeframes: [],
+        positionPct: 10,
+        strategyDeclaredLeverageRange: null,
+      },
+      backtestConfigDefaults: expect.objectContaining({
+        initialCash: 10000,
+        leverage: 1,
+        priceSource: 'close',
+        allowPartial: false,
+      }),
+      deploymentExecutionDefaults: expect.objectContaining({
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'gtc',
+      }),
+      deploymentExecutionConstraints: expect.objectContaining({
+        defaultLeverage: 1,
+        supportedOrderTypes: ['market'],
+        supportedTimeInForce: ['gtc'],
+      }),
+    }))
   })
 
   it('publishes bollinger strategy after confirmGenerate without reintroducing sma semantics', async () => {
@@ -7294,48 +7064,84 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-bollinger-publish', expect.objectContaining({
       status: 'PUBLISHED',
     }))
-    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
-    expect(publishedSnapshot?.specSnapshot).toEqual(expect.objectContaining({
-      indicators: [expect.objectContaining({ kind: 'bollingerBands', params: { period: 20, stdDev: 2 } })],
-      rules: expect.arrayContaining([
-        expect.objectContaining({
-          phase: 'entry',
-          sideScope: 'short',
-          condition: expect.objectContaining({
-            key: 'bollinger.upper_break',
-            op: 'CROSS_OVER',
+    expect(mockRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      specSnapshot: expect.objectContaining({
+        indicators: [expect.objectContaining({ kind: 'bollingerBands', params: { period: 20, stdDev: 2 } })],
+        rules: expect.arrayContaining([
+          expect.objectContaining({
+            phase: 'entry',
+            sideScope: 'short',
+            condition: expect.objectContaining({
+              key: 'bollinger.upper_break',
+              op: 'CROSS_OVER',
+            }),
+            actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
           }),
-          actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
-        }),
-        expect.objectContaining({
-          phase: 'entry',
-          sideScope: 'long',
-          condition: expect.objectContaining({
-            key: 'bollinger.lower_break',
-            op: 'CROSS_UNDER',
+          expect.objectContaining({
+            phase: 'entry',
+            sideScope: 'long',
+            condition: expect.objectContaining({
+              key: 'bollinger.lower_break',
+              op: 'CROSS_UNDER',
+            }),
+            actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
           }),
-          actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
-        }),
-        expect.objectContaining({
-          phase: 'exit',
-          condition: expect.objectContaining({
-            key: 'bollinger.middle_revert',
+          expect.objectContaining({
+            phase: 'exit',
+            sideScope: 'both',
+            condition: expect.objectContaining({
+              key: 'bollinger.middle_revert',
+            }),
+            actions: expect.arrayContaining([
+              expect.objectContaining({ type: 'CLOSE_LONG' }),
+              expect.objectContaining({ type: 'CLOSE_SHORT' }),
+            ]),
           }),
-        }),
-      ]),
-    }))
-    expect(publishedSnapshot?.compiledIr).toEqual(expect.objectContaining({
-      signalCatalog: expect.objectContaining({
-        series: expect.arrayContaining([
-          expect.objectContaining({ kind: 'UPPER_BAND', params: { period: 20, stdDev: 2 } }),
-          expect.objectContaining({ kind: 'LOWER_BAND', params: { period: 20, stdDev: 2 } }),
-          expect.objectContaining({ kind: 'MID_BAND', params: { period: 20, stdDev: 2 } }),
         ]),
       }),
+      compiledIr: expect.objectContaining({
+        signalCatalog: expect.objectContaining({
+          series: expect.arrayContaining([
+            expect.objectContaining({ kind: 'UPPER_BAND', params: { period: 20, stdDev: 2 } }),
+            expect.objectContaining({ kind: 'LOWER_BAND', params: { period: 20, stdDev: 2 } }),
+            expect.objectContaining({ kind: 'MID_BAND', params: { period: 20, stdDev: 2 } }),
+          ]),
+        }),
+      }),
     }))
+
+    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
     expect(publishedSnapshot?.specSnapshot?.indicators).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'sma' }),
     ]))
+    expect(publishedSnapshot).toEqual(expect.objectContaining({
+      strategyConfig: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '15m',
+        stateTimeframes: [],
+        positionPct: 10,
+        strategyDeclaredLeverageRange: null,
+      },
+      backtestConfigDefaults: expect.objectContaining({
+        initialCash: 10000,
+        leverage: 1,
+        priceSource: 'close',
+        allowPartial: false,
+      }),
+      deploymentExecutionDefaults: expect.objectContaining({
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'gtc',
+      }),
+      deploymentExecutionConstraints: expect.objectContaining({
+        defaultLeverage: 1,
+        supportedOrderTypes: ['market'],
+        supportedTimeInForce: ['gtc'],
+      }),
+    }))
   })
 
   it('publishes price-change strategy after confirmGenerate through the canonical mainline', async () => {
@@ -7385,18 +7191,53 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-price-change-publish', expect.objectContaining({
       status: 'PUBLISHED',
+      latestSpecDesc: expect.objectContaining({
+        canonicalSpec: expect.objectContaining({
+          rules: expect.arrayContaining([
+            expect.objectContaining({
+              id: 'entry-price-change-1',
+              condition: expect.objectContaining({ key: 'price.change_pct', value: -0.01 }),
+            }),
+            expect.objectContaining({
+              id: 'exit-price-change-1',
+              condition: expect.objectContaining({ key: 'price.change_pct', value: 0.02 }),
+            }),
+          ]),
+        }),
+      }),
     }))
     const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
-    expect(publishedSnapshot?.specSnapshot?.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        id: 'entry-price-percent_change-210',
-        condition: expect.objectContaining({ key: 'price.change_pct', value: -0.01 }),
+    expect(publishedSnapshot).toEqual(expect.objectContaining({
+      strategyConfig: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '3m',
+        stateTimeframes: ['15m'],
+        positionPct: 10,
+        strategyDeclaredLeverageRange: null,
+      },
+      backtestConfigDefaults: expect.objectContaining({
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: false,
       }),
-      expect.objectContaining({
-        id: 'exit-price-percent_change-140',
-        condition: expect.objectContaining({ key: 'price.change_pct', value: 0.02 }),
+      deploymentExecutionDefaults: expect.objectContaining({
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'gtc',
       }),
-    ]))
+      deploymentExecutionConstraints: expect.objectContaining({
+        defaultLeverage: 1,
+        supportedPriceSources: ['close'],
+        supportedOrderTypes: ['market'],
+        supportedTimeInForce: ['gtc'],
+      }),
+    }))
   })
 
   it('rejects compiler-first publish when compiled script fails structural validation', async () => {

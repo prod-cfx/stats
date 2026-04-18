@@ -11,7 +11,6 @@ import type {
   CanonicalConditionAtom,
   CanonicalConditionNode,
   CanonicalRuleAction,
-  CanonicalRuleSideScope,
   CanonicalRuleV2,
   CanonicalStrategySpecV2,
 } from '../types/canonical-strategy-spec'
@@ -42,7 +41,6 @@ interface CompileCanonicalSpecV2ToIrResult {
 
 interface CompileContext {
   timeframe: string
-  ruleSideScope?: CanonicalRuleSideScope
   seriesMap: Map<string, SeriesDef>
   levelSetMap: Map<string, LevelSetDef>
   predicateMap: Map<string, PredicateDef>
@@ -125,7 +123,6 @@ export class CanonicalSpecV2IrCompilerService {
         continue
       }
 
-      context.ruleSideScope = rule.sideScope
       const when = this.compileCondition(rule.condition, context, rule.id)
       const actions = this.compileActions(rule, input.canonicalSpec, input.fallback.positionPct)
       if (actions.length === 0) {
@@ -141,7 +138,6 @@ export class CanonicalSpecV2IrCompilerService {
         actions,
       })
     }
-    delete context.ruleSideScope
 
     const maxLookback = this.resolveMaxLookback(seriesMap)
     const positionMode = this.resolvePositionMode(input.canonicalSpec.rules)
@@ -211,13 +207,7 @@ export class CanonicalSpecV2IrCompilerService {
         .map((rule, index) => ({
           id: `trigger-${rule.id}`,
           phase: rule.phase,
-          operator: this.describeCondition(rule.condition, {
-            movingAverage,
-            rsi,
-            macd,
-            bollinger,
-            sideScope: rule.sideScope,
-          }),
+          operator: this.describeCondition(rule.condition, { movingAverage, rsi, macd, bollinger }),
           join: index > 0 ? 'AND' : undefined,
         })),
       actions: input.canonicalSpec.rules.flatMap((rule, ruleIndex) => {
@@ -423,28 +413,6 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
-      case 'indicator.above':
-      case 'indicator.below': {
-        const referencePeriod = this.readNumber(
-          [atom.params?.['reference.period']],
-          atom.params?.referenceRole === 'long_term'
-            ? context.movingAverage.slow
-            : context.movingAverage.fast,
-        )
-        const indicatorKind = typeof atom.params?.indicator === 'string'
-          ? atom.params.indicator.trim().toLowerCase()
-          : 'ma'
-        const referenceRef = indicatorKind === 'ema'
-          ? this.ensureSpecificMovingAverageSeries(context, 'EMA', referencePeriod)
-          : this.ensureSpecificMovingAverageSeries(context, 'SMA', referencePeriod)
-        return this.upsertPredicate(
-          context.predicateMap,
-          `${seed}_${atom.key.replace(/\./g, '_')}`,
-          atom.key === 'indicator.above' ? 'GTE' : 'LTE',
-          [closeRef, referenceRef],
-        )
-      }
-
       case 'rsi.threshold_lte':
       case 'rsi.threshold_gte':
       case 'rsi.cross_over':
@@ -552,22 +520,6 @@ export class CanonicalSpecV2IrCompilerService {
 
       case 'bollinger.middle_revert': {
         const midRef = this.ensureBollingerSeries(context, 'MID_BAND')
-        if (context.ruleSideScope === 'short') {
-          return this.upsertPredicate(
-            context.predicateMap,
-            `${seed}_middle_revert`,
-            'CROSS_UNDER',
-            [closeRef, midRef],
-          )
-        }
-        if (context.ruleSideScope === 'long') {
-          return this.upsertPredicate(
-            context.predicateMap,
-            `${seed}_middle_revert`,
-            'CROSS_OVER',
-            [closeRef, midRef],
-          )
-        }
         const over = this.upsertPredicate(context.predicateMap, `${seed}_middle_over`, 'CROSS_OVER', [closeRef, midRef])
         const under = this.upsertPredicate(context.predicateMap, `${seed}_middle_under`, 'CROSS_UNDER', [closeRef, midRef])
         return this.upsertPredicate(context.predicateMap, `${seed}_middle_revert`, 'OR', [over, under])
@@ -663,25 +615,6 @@ export class CanonicalSpecV2IrCompilerService {
       context.seriesMap.set(id, {
         id,
         kind: context.movingAverage.kind,
-        inputs: [closeRef],
-        params: { period },
-      })
-    }
-    return id
-  }
-
-  private ensureSpecificMovingAverageSeries(
-    context: CompileContext,
-    kind: 'EMA' | 'SMA',
-    period: number,
-  ): string {
-    const closeRef = this.ensurePriceSeries(context, 'close')
-    const prefix = kind.toLowerCase()
-    const id = `${prefix}_${period}_${context.timeframe}`
-    if (!context.seriesMap.has(id)) {
-      context.seriesMap.set(id, {
-        id,
-        kind,
         inputs: [closeRef],
         params: { period },
       })
@@ -1032,9 +965,11 @@ export class CanonicalSpecV2IrCompilerService {
   private resolvePositionMode(rules: CanonicalRuleV2[]): CanonicalStrategyIrV1['portfolio']['positionMode'] {
     const hasLong = rules.some(rule => rule.actions.some(action => (
       action.type === 'OPEN_LONG'
+      || action.type === 'REDUCE_LONG'
     )))
     const hasShort = rules.some(rule => rule.actions.some(action => (
       action.type === 'OPEN_SHORT'
+      || action.type === 'REDUCE_SHORT'
     )))
 
     if (hasLong && hasShort) return 'long_short'
@@ -1059,7 +994,6 @@ export class CanonicalSpecV2IrCompilerService {
       rsi: CompileContext['rsi']
       macd: CompileContext['macd']
       bollinger: CompileContext['bollinger']
-      sideScope?: CanonicalRuleSideScope
     },
   ): string {
     if (condition.kind === 'AND' || condition.kind === 'OR') {
@@ -1121,12 +1055,6 @@ export class CanonicalSpecV2IrCompilerService {
         return `CROSS_UNDER(CLOSE,LOWER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
 
       case 'bollinger.middle_revert':
-        if (config.sideScope === 'short') {
-          return `CROSS_UNDER(CLOSE,MID_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
-        }
-        if (config.sideScope === 'long') {
-          return `CROSS_OVER(CLOSE,MID_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
-        }
         return `OR(CROSS_OVER(CLOSE,MID_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev})),CROSS_UNDER(CLOSE,MID_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev})))`
 
       case 'bollinger.bars_outside': {

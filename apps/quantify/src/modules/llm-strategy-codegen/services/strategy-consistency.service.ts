@@ -16,7 +16,9 @@ import type {
 import { createHash } from 'node:crypto'
 import { canonicalSerialize } from '@ai/shared/script-engine/compiled-runtime'
 import { Injectable } from '@nestjs/common'
- 
+
+import { CanonicalSpecV2IrCompilerService } from './canonical-spec-v2-ir-compiler.service'
+import { CanonicalStrategyAstCompilerService } from './canonical-strategy-ast-compiler.service'
 import { CompiledScriptParserService } from './compiled-script-parser.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { ScriptProfileExtractorService } from './script-profile-extractor.service'
@@ -27,6 +29,8 @@ export class StrategyConsistencyService {
   constructor(
     private readonly scriptProfileExtractor: ScriptProfileExtractorService,
     private readonly compiledScriptParser: CompiledScriptParserService = new CompiledScriptParserService(),
+    private readonly canonicalSpecV2IrCompiler: CanonicalSpecV2IrCompilerService = new CanonicalSpecV2IrCompilerService(),
+    private readonly canonicalStrategyAstCompiler: CanonicalStrategyAstCompilerService = new CanonicalStrategyAstCompilerService(),
   ) {}
 
   audit(input: {
@@ -34,12 +38,16 @@ export class StrategyConsistencyService {
     ir: CanonicalStrategyIrV1
     scriptCode: string
   }): StrategyConsistencyReport {
-    const scriptProfile = this.extractCompiledScriptProfile(input.scriptCode)
+    const parsedProjection = this.tryParseCompiledProjection(input.scriptCode)
+    const scriptProfile = this.extractCompiledScriptProfile(input.scriptCode, parsedProjection)
     const specProfile = this.irToProfile(input.ir)
     const checks: StrategyConsistencyCheck[] = []
 
     checks.push(this.checkSemanticGraphDigest(input.semanticGraph, input.ir))
+    checks.push(this.checkIrDirectionSensitiveAtom(input.semanticGraph, input.ir))
     checks.push(this.checkIrSupportsSemanticGraph(input.semanticGraph, input.ir))
+    checks.push(this.checkAstProjection(input.ir, parsedProjection))
+    checks.push(this.checkExecutionEnvelopePositionMode(input.ir, parsedProjection))
     checks.push(this.checkCompiledScriptMatchesIr(input.ir, input.scriptCode))
 
     const summary = this.buildSummary(checks)
@@ -66,12 +74,14 @@ export class StrategyConsistencyService {
     checks.push(this.checkFallback(scriptProfile))
     checks.push(this.checkIndicators(specProfile, scriptProfile))
     checks.push(this.checkRuleMappings(specProfile, scriptProfile))
-    checks.push(this.checkDirectionSensitiveIrAtom(specProfile, scriptProfile))
-    checks.push(this.checkAstProjection(specProfile, parsedProjection))
     checks.push(this.checkActions(specProfile, scriptProfile))
     checks.push(this.checkSizing(specProfile, scriptProfile))
-    checks.push(this.checkExecutionEnvelopePositionMode(input.canonicalSpec, parsedProjection))
     checks.push(this.checkMarketMetadata(input.canonicalSpec, parsedProjection))
+    const compiledIr = this.tryCompileCanonicalIr(input.canonicalSpec)
+    if (compiledIr) {
+      checks.push(this.checkAstProjection(compiledIr, parsedProjection))
+      checks.push(this.checkExecutionEnvelopePositionMode(compiledIr, parsedProjection))
+    }
 
     const summary = this.buildSummary(checks)
 
@@ -101,6 +111,22 @@ export class StrategyConsistencyService {
   ): ReturnType<CompiledScriptParserService['parse']> | null {
     try {
       return this.compiledScriptParser.parse(scriptCode)
+    } catch {
+      return null
+    }
+  }
+
+  private tryCompileCanonicalIr(spec: CanonicalStrategySpec): CanonicalStrategyIrV1 | null {
+    if (spec.version !== 2) {
+      return null
+    }
+
+    try {
+      const compiled = this.canonicalSpecV2IrCompiler.compile({
+        canonicalSpec: spec,
+        fallback: this.buildCanonicalSpecV2Fallback(spec),
+      })
+      return compiled.ir
     } catch {
       return null
     }
@@ -477,6 +503,195 @@ export class StrategyConsistencyService {
         actual: null,
         message: error instanceof Error ? error.message : 'compiled script parse failed',
       }
+    }
+  }
+
+  private checkIrDirectionSensitiveAtom(
+    semanticGraph: SemanticStrategyGraph,
+    ir: CanonicalStrategyIrV1,
+  ): StrategyConsistencyCheck {
+    const failures: string[] = []
+    const bollingerNodes = semanticGraph.nodes
+      .filter(node => node.kind === 'bollinger_band_touch')
+      .map((node) => {
+        const record = node as unknown as {
+          id: string
+          params: {
+            band?: string
+            direction?: string
+          }
+        }
+
+        return {
+          id: record.id,
+          band: record.params.band ?? '',
+          direction: record.params.direction ?? '',
+        }
+      })
+
+    for (const node of bollingerNodes) {
+      const predicateId = `predicate_${node.id}`
+      const predicate = ir.signalCatalog.predicates.find(item => item.id === predicateId)
+
+      if (node.band === 'middle') {
+        const abovePredicate = ir.signalCatalog.predicates.find(item => item.id === `${predicateId}_above`)
+        const belowPredicate = ir.signalCatalog.predicates.find(item => item.id === `${predicateId}_below`)
+        const unionPredicate = predicate
+        if (!abovePredicate || !belowPredicate || !unionPredicate) {
+          failures.push(`${node.id}: missing middle-band predicate projection`)
+          continue
+        }
+        if (abovePredicate.kind !== 'CROSS_OVER' || belowPredicate.kind !== 'CROSS_UNDER' || unionPredicate.kind !== 'OR') {
+          failures.push(`${node.id}: expected CROSS_OVER/CROSS_UNDER -> OR, actual=${abovePredicate.kind}/${belowPredicate.kind}/${unionPredicate.kind}`)
+        }
+        continue
+      }
+
+      const expectedKind = node.band === 'upper' ? 'CROSS_OVER' : 'CROSS_UNDER'
+      if (!predicate) {
+        failures.push(`${node.id}: missing predicate projection`)
+        continue
+      }
+
+      if (predicate.kind !== expectedKind) {
+        failures.push(`${node.id}: expected ${expectedKind}, actual=${predicate.kind}`)
+      }
+    }
+
+    return {
+      key: 'compiler_consistency.ir_direction_sensitive_atom',
+      level: 'critical',
+      status: failures.length === 0 ? 'passed' : 'failed',
+      expected: bollingerNodes.map((node) => ({
+        nodeId: node.id,
+        band: node.band,
+        direction: node.direction,
+      })),
+      actual: ir.signalCatalog.predicates
+        .filter(predicate => predicate.id.includes('entry') || predicate.id.includes('exit'))
+        .map(predicate => ({
+          id: predicate.id,
+          kind: predicate.kind,
+          args: predicate.args,
+        })),
+      message: failures.length === 0
+        ? 'IR direction-sensitive atom projection与 semanticGraph 一致。'
+        : failures.join('；'),
+    }
+  }
+
+  private checkAstProjection(
+    ir: CanonicalStrategyIrV1,
+    projection: ReturnType<CompiledScriptParserService['parse']> | null,
+  ): StrategyConsistencyCheck {
+    const expectedAst = this.canonicalStrategyAstCompiler.compile(ir)
+
+    if (!projection) {
+      return {
+        key: 'compiler_consistency.ast_projection',
+        level: 'critical',
+        status: 'unprovable',
+        expected: expectedAst.manifest,
+        actual: null,
+        message: '脚本不是可解析的 compiled artifact，跳过 AST projection 校验。',
+      }
+    }
+
+    const expectedAstProjection = {
+      astVersion: expectedAst.astVersion,
+      executionModel: expectedAst.executionModel,
+      dataRequirements: expectedAst.dataRequirements,
+      exprPool: expectedAst.exprPool,
+      guards: expectedAst.guards,
+      decisionPrograms: expectedAst.decisionPrograms,
+      orderPrograms: expectedAst.orderPrograms,
+      topology: expectedAst.topology,
+    }
+    const expectedManifest = {
+      irVersion: expectedAst.manifest.irVersion,
+      astVersion: expectedAst.astVersion,
+      irHash: expectedAst.manifest.irHash,
+      specHash: expectedAst.manifest.specHash,
+      compileVersion: expectedAst.manifest.compileVersion,
+      astDigest: this.hashCanonicalJson(expectedAstProjection),
+    }
+    const actual = {
+      manifest: {
+        irVersion: projection.compiledManifest.irVersion,
+        astVersion: projection.compiledManifest.astVersion,
+        irHash: projection.compiledManifest.irHash,
+        specHash: projection.compiledManifest.specHash,
+        compileVersion: projection.compiledManifest.compileVersion,
+        astDigest: projection.compiledManifest.astDigest,
+      },
+      executionModel: this.stripExecutionEnvelope(projection.executionModel),
+      dataRequirements: projection.dataRequirements,
+      exprPool: projection.exprPool,
+      guards: projection.guards,
+      decisionPrograms: projection.decisionPrograms,
+      orderPrograms: projection.orderPrograms,
+      topology: projection.topology,
+    }
+
+    const expected = {
+      manifest: expectedManifest,
+      executionModel: expectedAst.executionModel,
+      dataRequirements: expectedAst.dataRequirements,
+      exprPool: expectedAst.exprPool,
+      guards: expectedAst.guards,
+      decisionPrograms: expectedAst.decisionPrograms,
+      orderPrograms: expectedAst.orderPrograms,
+      topology: expectedAst.topology,
+    }
+
+    const mismatches: string[] = []
+    for (const key of ['manifest', 'executionModel', 'dataRequirements', 'exprPool', 'guards', 'decisionPrograms', 'orderPrograms', 'topology'] as const) {
+      if (this.hashCanonicalJson(expected[key]) !== this.hashCanonicalJson(actual[key])) {
+        mismatches.push(key)
+      }
+    }
+
+    return {
+      key: 'compiler_consistency.ast_projection',
+      level: 'critical',
+      status: mismatches.length === 0 ? 'passed' : 'failed',
+      expected,
+      actual,
+      message: mismatches.length === 0
+        ? 'AST projection 与 IR 编译结果一致。'
+        : `AST projection 漂移: ${mismatches.join(', ')}`,
+    }
+  }
+
+  private checkExecutionEnvelopePositionMode(
+    ir: CanonicalStrategyIrV1,
+    projection: ReturnType<CompiledScriptParserService['parse']> | null,
+  ): StrategyConsistencyCheck {
+    const expected = this.resolveExpectedPositionModeFromIr(ir)
+
+    if (!projection) {
+      return {
+        key: 'compiler_consistency.execution_envelope.position_mode',
+        level: 'critical',
+        status: 'unprovable',
+        expected,
+        actual: null,
+        message: '脚本不是可解析的 compiled artifact，跳过 execution envelope positionMode 校验。',
+      }
+    }
+
+    const actual = projection.executionModel.positionMode
+    const passed = actual === expected
+
+    return {
+      key: 'compiler_consistency.execution_envelope.position_mode',
+      level: 'critical',
+      status: passed ? 'passed' : 'failed',
+      expected,
+      actual,
+      message: passed
+        ? 'execution envelope positionMode 与 IR 一致。'
+        : `execution envelope positionMode 漂移: expected=${expected}, actual=${actual}`,
     }
   }
 
@@ -898,6 +1113,7 @@ export class StrategyConsistencyService {
       timeframe: spec.version === 2 && typeof spec.market.defaultTimeframe === 'string'
         ? spec.market.defaultTimeframe
         : (typeof spec.market.timeframe === 'string' ? spec.market.timeframe : null),
+      positionMode: this.resolveExpectedPositionMode(spec),
     }
 
     if (!projection) {
@@ -916,6 +1132,7 @@ export class StrategyConsistencyService {
       marketType: projection.executionModel.instrumentType === 'perpetual' ? 'perp' : 'spot',
       symbol: projection.executionModel.symbol,
       timeframe: projection.executionModel.primaryTimeframe,
+      positionMode: projection.executionModel.positionMode,
     }
 
     const comparableFields = (Object.entries(expected) as Array<[keyof typeof expected, string | null]>)
@@ -957,54 +1174,17 @@ export class StrategyConsistencyService {
     }
   }
 
-  private checkExecutionEnvelopePositionMode(
-    spec: CanonicalStrategySpec,
-    projection: ReturnType<CompiledScriptParserService['parse']> | null,
-  ): StrategyConsistencyCheck {
-    const expected = this.resolveExpectedPositionMode(spec)
-
-    if (!projection) {
-      return {
-        key: 'compiler_consistency.execution_envelope.position_mode',
-        level: 'warning',
-        status: 'unprovable',
-        expected,
-        actual: null,
-        message: '脚本不是可解析的 compiled artifact，跳过 execution envelope positionMode 校验。',
-      }
-    }
-
-    const actual = projection.executionModel.positionMode
-    if (actual !== expected) {
-      return {
-        key: 'compiler_consistency.execution_envelope.position_mode',
-        level: 'critical',
-        status: 'failed',
-        expected,
-        actual,
-        message: `execution envelope positionMode 漂移：expected=${expected}, actual=${actual}`,
-      }
-    }
-
-    return {
-      key: 'compiler_consistency.execution_envelope.position_mode',
-      level: 'critical',
-      status: 'passed',
-      expected,
-      actual,
-      message: 'execution envelope positionMode 与 canonical spec 一致。',
-    }
-  }
-
   private resolveExpectedPositionMode(
     spec: CanonicalStrategySpec,
   ): 'long_only' | 'short_only' | 'long_short' {
     if (spec.version === 2) {
       const hasLongExposure = spec.rules.some(rule => rule.actions.some(action => (
         action.type === 'OPEN_LONG'
+        || action.type === 'REDUCE_LONG'
       )))
       const hasShortExposure = spec.rules.some(rule => rule.actions.some(action => (
         action.type === 'OPEN_SHORT'
+        || action.type === 'REDUCE_SHORT'
       )))
       if (hasLongExposure && hasShortExposure) return 'long_short'
       if (hasShortExposure) return 'short_only'
@@ -1020,134 +1200,6 @@ export class StrategyConsistencyService {
     if (hasLongExposure && hasShortExposure) return 'long_short'
     if (hasShortExposure) return 'short_only'
     return 'long_only'
-  }
-
-  private checkDirectionSensitiveIrAtom(
-    specProfile: StrategySemanticProfile,
-    scriptProfile: StrategySemanticProfile,
-  ): StrategyConsistencyCheck {
-    const directionSensitiveKeys = new Set<StrategySemanticRuleKey>([
-      'bollinger.upper_break',
-      'bollinger.lower_break',
-      'bollinger.middle_revert',
-      'ma.golden_cross',
-      'ma.death_cross',
-      'macd.golden_cross',
-      'macd.death_cross',
-    ])
-    const expectedRules = specProfile.rules.filter(rule =>
-      directionSensitiveKeys.has(rule.key)
-      && (rule.sideScope === 'long' || rule.sideScope === 'short'),
-    )
-
-    if (expectedRules.length === 0) {
-      return {
-        key: 'compiler_consistency.ir_direction_sensitive_atom',
-        level: 'warning',
-        status: 'unprovable',
-        expected: [],
-        actual: scriptProfile.rules,
-        message: 'canonical spec 未包含可验证的方向敏感原子，跳过方向敏感原子校验。',
-      }
-    }
-
-    const drifts: string[] = []
-    for (const expectedRule of expectedRules) {
-      const matchingActionRules = scriptProfile.rules.filter(rule =>
-        rule.key === expectedRule.key
-        && rule.phase === expectedRule.phase
-        && rule.action === expectedRule.action,
-      )
-      if (matchingActionRules.length === 0) {
-        drifts.push(`${expectedRule.key}:${expectedRule.phase}:${expectedRule.action}: missing in script profile`)
-        continue
-      }
-      if (!matchingActionRules.some(rule => rule.sideScope === expectedRule.sideScope)) {
-        const actualScopes = Array.from(new Set(matchingActionRules.map(rule => rule.sideScope))).join(',')
-        drifts.push(`${expectedRule.key}:${expectedRule.phase}:${expectedRule.action}: expected=${expectedRule.sideScope}, actual=${actualScopes}`)
-      }
-    }
-
-    if (drifts.length > 0) {
-      return {
-        key: 'compiler_consistency.ir_direction_sensitive_atom',
-        level: 'critical',
-        status: 'failed',
-        expected: expectedRules,
-        actual: scriptProfile.rules,
-        message: `方向敏感原子在 IR/脚本语义中发生漂移：${drifts.join(' | ')}`,
-      }
-    }
-
-    return {
-      key: 'compiler_consistency.ir_direction_sensitive_atom',
-      level: 'critical',
-      status: 'passed',
-      expected: expectedRules,
-      actual: scriptProfile.rules,
-      message: '方向敏感原子在 IR/脚本语义中保持一致。',
-    }
-  }
-
-  private checkAstProjection(
-    specProfile: StrategySemanticProfile,
-    projection: ReturnType<CompiledScriptParserService['parse']> | null,
-  ): StrategyConsistencyCheck {
-    const expectedMiddleRevertRules = specProfile.rules.filter(rule =>
-      rule.key === 'bollinger.middle_revert'
-      && (rule.sideScope === 'long' || rule.sideScope === 'short'),
-    )
-    const uniqueExpectedScopes = Array.from(new Set(expectedMiddleRevertRules.map(rule => rule.sideScope)))
-
-    if (expectedMiddleRevertRules.length === 0 || uniqueExpectedScopes.length !== 1) {
-      return {
-        key: 'compiler_consistency.ast_projection',
-        level: 'warning',
-        status: 'unprovable',
-        expected: expectedMiddleRevertRules,
-        actual: null,
-        message: 'canonical spec 未包含可验证的 AST 定向投影规则，跳过 AST 投影校验。',
-      }
-    }
-
-    if (!projection) {
-      return {
-        key: 'compiler_consistency.ast_projection',
-        level: 'warning',
-        status: 'unprovable',
-        expected: expectedMiddleRevertRules,
-        actual: null,
-        message: '脚本不是可解析的 compiled artifact，跳过 AST 投影校验。',
-      }
-    }
-
-    const middlePredicate = projection.exprPool.find(expr =>
-      expr.nodeType === 'predicate'
-      && typeof expr.sourceRef === 'string'
-      && expr.sourceRef.includes('middle_revert'),
-    )
-    const expectedKind = uniqueExpectedScopes[0] === 'short' ? 'CROSS_UNDER' : 'CROSS_OVER'
-    const actualKind = middlePredicate?.nodeType === 'predicate' ? middlePredicate.payload.kind : null
-
-    if (actualKind !== expectedKind) {
-      return {
-        key: 'compiler_consistency.ast_projection',
-        level: 'critical',
-        status: 'failed',
-        expected: expectedKind,
-        actual: actualKind,
-        message: `AST 投影未保留方向敏感谓词：expected=${expectedKind}, actual=${actualKind ?? 'missing'}`,
-      }
-    }
-
-    return {
-      key: 'compiler_consistency.ast_projection',
-      level: 'critical',
-      status: 'passed',
-      expected: expectedKind,
-      actual: actualKind,
-      message: 'AST 投影保持了方向敏感谓词结构。',
-    }
   }
 
   private buildSummary(checks: StrategyConsistencyCheck[]): StrategyConsistencyReport['summary'] {
@@ -1188,16 +1240,10 @@ export class StrategyConsistencyService {
     predicateId: string
   }): StrategySemanticRuleKey | null {
     const predicateId = input.predicateId.toLowerCase()
-    if (
-      input.predicateKind === 'CROSS_OVER'
-      && (predicateId.includes('macd_golden_cross') || predicateId.includes('macd.golden_cross'))
-    ) {
+    if (predicateId.includes('macd_golden_cross') || predicateId.includes('macd.golden_cross')) {
       return 'macd.golden_cross'
     }
-    if (
-      input.predicateKind === 'CROSS_UNDER'
-      && (predicateId.includes('macd_death_cross') || predicateId.includes('macd.death_cross'))
-    ) {
+    if (predicateId.includes('macd_death_cross') || predicateId.includes('macd.death_cross')) {
       return 'macd.death_cross'
     }
     if (predicateId.includes('price_change_pct') || predicateId.includes('price.change_pct')) {
@@ -1313,6 +1359,70 @@ export class StrategyConsistencyService {
     return `sha256:${digest}`
   }
 
+  private stripExecutionEnvelope(
+    executionModel: ReturnType<CompiledScriptParserService['parse']>['executionModel'],
+  ): {
+    venue: 'binance' | 'okx' | 'hyperliquid'
+    instrumentType: 'spot' | 'perpetual'
+    symbol: string
+    primaryTimeframe: string
+    timeframeAlignment: 'strict'
+    signalEvaluation: 'bar_close'
+    fillPolicy: 'next_bar_open' | 'same_bar_close' | 'intra_bar_limit_match'
+    defaultOrderType: 'market' | 'limit'
+    allowPartialFill: boolean
+  } {
+    return {
+      venue: executionModel.venue,
+      instrumentType: executionModel.instrumentType,
+      symbol: executionModel.symbol,
+      primaryTimeframe: executionModel.primaryTimeframe,
+      timeframeAlignment: executionModel.timeframeAlignment,
+      signalEvaluation: executionModel.signalEvaluation,
+      fillPolicy: executionModel.fillPolicy,
+      defaultOrderType: executionModel.defaultOrderType,
+      allowPartialFill: executionModel.allowPartialFill,
+    }
+  }
+
+  private resolveExpectedPositionModeFromIr(
+    ir: CanonicalStrategyIrV1,
+  ): 'long_only' | 'short_only' | 'long_short' {
+    const hasLongExposure = ir.ruleBlocks.some(rule => rule.actions.some(action => (
+      action.kind === 'OPEN_LONG'
+      || action.kind === 'REDUCE_LONG'
+    )))
+    const hasShortExposure = ir.ruleBlocks.some(rule => rule.actions.some(action => (
+      action.kind === 'OPEN_SHORT'
+      || action.kind === 'REDUCE_SHORT'
+    )))
+
+    if (hasLongExposure && hasShortExposure) return 'long_short'
+    if (hasShortExposure) return 'short_only'
+    return 'long_only'
+  }
+
+  private buildCanonicalSpecV2Fallback(spec: Extract<CanonicalStrategySpec, { version: 2 }>): {
+    exchange: 'binance' | 'okx' | 'hyperliquid'
+    symbol: string
+    baseTimeframe: string
+    positionPct: number
+  } {
+    const exchange = spec.market.exchange
+    const symbol = spec.market.symbol ?? 'BTCUSDT'
+    const baseTimeframe = spec.market.defaultTimeframe ?? spec.market.timeframe ?? spec.dataRequirements.requiredTimeframes[0] ?? '15m'
+    const positionPct = spec.sizing && spec.sizing.mode === 'RATIO'
+      ? Number((spec.sizing.value * 100).toFixed(4))
+      : 10
+
+    return {
+      exchange,
+      symbol,
+      baseTimeframe,
+      positionPct,
+    }
+  }
+
   private buildLegacyRuleMappings(spec: Exclude<CanonicalStrategySpec, CanonicalStrategySpecV2>): StrategySemanticRuleMapping[] {
     const mappings = new Map<StrategySemanticRuleKey, CanonicalAction>()
     const register = (trigger: string, action: CanonicalAction) => {
@@ -1424,6 +1534,10 @@ export class StrategyConsistencyService {
     if ((/\blowest(?:low)?\b/i.test(trigger) || /通道下轨|通道下沿|前低|唐奇安.*下轨|donchian.*lower|breakdown/i.test(trigger)) && (/<=|<|下穿|跌破|breakdown/i.test(trigger))) {
       return 'breakout.channel_low_break'
     }
+    if (/\bmacd\b|指数平滑异同/iu.test(trigger)) {
+      if (/金叉|上穿/u.test(trigger)) return 'macd.golden_cross'
+      if (/死叉|下穿/u.test(trigger)) return 'macd.death_cross'
+    }
     if (/金叉|上穿/.test(trigger) && /均线|\bma\b|\bsma\b|\bema\b/i.test(trigger)) return 'ma.golden_cross'
     if (/死叉|下穿/.test(trigger) && /均线|\bma\b|\bsma\b|\bema\b/i.test(trigger)) return 'ma.death_cross'
     if (/\brsi\b|相对强弱|超买|超卖/iu.test(trigger)) {
@@ -1431,10 +1545,6 @@ export class StrategyConsistencyService {
       if (/下穿|跌破/u.test(trigger)) return 'rsi.cross_under'
       if (/<=|＜=|小于等于|低于|小于|超卖|低位/u.test(trigger)) return 'rsi.threshold_lte'
       if (/>=|＞=|大于等于|高于|大于|超买|高位/u.test(trigger)) return 'rsi.threshold_gte'
-    }
-    if (/\bmacd\b|指数平滑异同/iu.test(trigger)) {
-      if (/金叉|上穿/u.test(trigger)) return 'macd.golden_cross'
-      if (/死叉|下穿/u.test(trigger)) return 'macd.death_cross'
     }
     if (/止盈|take[_\s-]?profit/i.test(trigger)) return 'risk.take_profit_pct'
     if (/移动止损|trailing[_\s-]?stop/i.test(trigger)) return 'risk.trailing_stop_pct'

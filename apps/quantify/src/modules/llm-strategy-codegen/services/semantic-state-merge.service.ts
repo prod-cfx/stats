@@ -41,12 +41,8 @@ export class SemanticStateMergeService {
     const consumedDerivedIndexes = new Set<number>()
 
     for (const persistedTrigger of persisted) {
-      const matchIndex = next.findIndex((candidate, index) =>
-        !consumedDerivedIndexes.has(index) && this.isSameTriggerIdentity(persistedTrigger, candidate))
-      const replacementIndex = matchIndex >= 0
-        ? matchIndex
-        : this.findReplacementTriggerIndex(persistedTrigger, next, consumedDerivedIndexes)
-      if (replacementIndex < 0) {
+      const matchIndex = this.findBestTriggerMatchIndex(persistedTrigger, next, consumedDerivedIndexes)
+      if (matchIndex < 0) {
         next.push({
           ...persistedTrigger,
           params: { ...persistedTrigger.params },
@@ -55,11 +51,10 @@ export class SemanticStateMergeService {
         continue
       }
 
-      const derivedTrigger = next[replacementIndex]
-      consumedDerivedIndexes.add(replacementIndex)
+      const derivedTrigger = next[matchIndex]
+      consumedDerivedIndexes.add(matchIndex)
       const preferPersisted = this.compareNodeStrength(persistedTrigger, derivedTrigger) > 0
-      const strongerTrigger = preferPersisted ? persistedTrigger : derivedTrigger
-      next[replacementIndex] = {
+      next[matchIndex] = {
         ...(preferPersisted ? derivedTrigger : persistedTrigger),
         ...(preferPersisted ? persistedTrigger : derivedTrigger),
         id: persistedTrigger.id,
@@ -67,9 +62,7 @@ export class SemanticStateMergeService {
         params: preferPersisted
           ? { ...derivedTrigger.params, ...persistedTrigger.params }
           : { ...persistedTrigger.params, ...derivedTrigger.params },
-        openSlots: this.shouldPreserveClosedSlots(strongerTrigger)
-          ? strongerTrigger.openSlots.map(slot => ({ ...slot }))
-          : this.mergeOpenSlots(persistedTrigger.openSlots, derivedTrigger.openSlots),
+        openSlots: this.mergeOpenSlots(persistedTrigger.openSlots, derivedTrigger.openSlots),
         status: derivedTrigger.status === 'locked' || persistedTrigger.status === 'superseded'
           ? derivedTrigger.status
           : persistedTrigger.status,
@@ -82,27 +75,27 @@ export class SemanticStateMergeService {
     return next
   }
 
-  private findReplacementTriggerIndex(
+  private findBestTriggerMatchIndex(
     persistedTrigger: SemanticTriggerState,
-    derived: SemanticTriggerState[],
+    derivedTriggers: SemanticTriggerState[],
     consumedDerivedIndexes: Set<number>,
   ): number {
-    const candidates = derived
-      .map((trigger, index) => ({ trigger, index }))
-      .filter(({ trigger, index }) =>
-        !consumedDerivedIndexes.has(index)
-        && this.isSameTriggerReplacementFamily(persistedTrigger, trigger))
+    let bestIndex = -1
+    let bestScore = -1
 
-    if (candidates.length !== 1) {
-      return -1
+    for (const [index, candidate] of derivedTriggers.entries()) {
+      if (consumedDerivedIndexes.has(index) || !this.isSameTriggerIdentity(persistedTrigger, candidate)) {
+        continue
+      }
+
+      const score = this.scoreTriggerMatch(persistedTrigger, candidate)
+      if (score > bestScore) {
+        bestScore = score
+        bestIndex = index
+      }
     }
 
-    const persistedGroupSize = this.countTriggerReplacementFamily(persistedTrigger, derived)
-    if (persistedGroupSize > 1) {
-      return -1
-    }
-
-    return candidates[0]?.index ?? -1
+    return bestIndex
   }
 
   private mergeActions(
@@ -233,39 +226,40 @@ export class SemanticStateMergeService {
       return false
     }
 
-    const identityKeys = [
+    const stableIdentityKeys = [
       'indicator',
       'referenceRole',
-      'reference.period',
-      'period',
-      'stdDev',
-      'value',
-      'rangeLower',
-      'rangeUpper',
-      'stepPct',
-      'sideMode',
-      'breakoutAction',
+      'basis',
     ] as const
 
-    return this.haveCompatibleParamValues(left.params, right.params, identityKeys)
+    return this.haveCompatibleParamValues(left.params, right.params, stableIdentityKeys)
   }
 
-  private isSameTriggerReplacementFamily(
-    left: SemanticTriggerState,
-    right: SemanticTriggerState,
-  ): boolean {
-    if (left.phase !== right.phase || left.key !== right.key) {
-      return false
+  private scoreTriggerMatch(left: SemanticTriggerState, right: SemanticTriggerState): number {
+    let score = 0
+
+    if (left.sideScope && right.sideScope && left.sideScope === right.sideScope) {
+      score += 5
     }
 
-    return !left.sideScope || !right.sideScope || left.sideScope === right.sideScope
-  }
+    const candidateKeys = new Set([
+      ...Object.keys(left.params),
+      ...Object.keys(right.params),
+    ])
+    for (const key of candidateKeys) {
+      if (left.params[key] !== undefined && left.params[key] === right.params[key]) {
+        score += 1
+      }
+    }
 
-  private countTriggerReplacementFamily(
-    target: SemanticTriggerState,
-    triggers: SemanticTriggerState[],
-  ): number {
-    return triggers.filter(trigger => this.isSameTriggerReplacementFamily(target, trigger)).length
+    const leftSlotKeys = new Set(left.openSlots.map(slot => slot.slotKey))
+    for (const slot of right.openSlots) {
+      if (leftSlotKeys.has(slot.slotKey)) {
+        score += 3
+      }
+    }
+
+    return score
   }
 
   private isSameActionIdentity(left: SemanticActionState, right: SemanticActionState): boolean {
@@ -319,12 +313,6 @@ export class SemanticStateMergeService {
     }
 
     return next
-  }
-
-  private shouldPreserveClosedSlots(
-    trigger: Pick<SemanticTriggerState, 'status' | 'openSlots'>,
-  ): boolean {
-    return trigger.status === 'locked' && trigger.openSlots.every(slot => slot.status !== 'open')
   }
 
   private mergeSlotState<T extends SemanticContextSlotState[keyof SemanticContextSlotState]>(

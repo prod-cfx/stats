@@ -692,6 +692,18 @@ export class CodegenConversationService {
       baseClarificationState,
       effectiveClarificationAnswers,
     )
+    const confirmationViewNormalization = hasPersistedSemanticState
+      ? this.buildNormalizationFromSemanticState(semanticStateAfterAnswers)
+      : this.resolveClarificationArtifacts(baseChecklist).normalization
+    const confirmationViewSpecDesc = this.specDescBuilder.buildFromCanonicalSpec(
+      this.buildCanonicalSpecForConversation(baseChecklist, confirmationViewNormalization),
+      '',
+      {
+        normalizedIntent: confirmationViewNormalization.normalizedIntent,
+        executionContext: this.resolveClarificationArtifacts(baseChecklist).executionContext.context,
+      },
+    )
+    const confirmationViewDigest = this.readCanonicalDigest(confirmationViewSpecDesc)
     const messageChecklist = this.normalizeChecklist(this.extractChecklist(dto))
     const mergedChecklist = this.mergeChecklistSnapshots(baseChecklist, messageChecklist)
     const derivedSemanticState = this.buildFallbackSemanticState(mergedChecklist)
@@ -756,12 +768,16 @@ export class CodegenConversationService {
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
     const confirmedCanonicalDigest = dto.confirmedCanonicalDigest?.trim() ?? ''
-    if (!canonicalDigest || confirmedCanonicalDigest !== canonicalDigest) {
+    if (
+      !canonicalDigest
+      || (confirmedCanonicalDigest !== canonicalDigest && confirmedCanonicalDigest !== confirmationViewDigest)
+    ) {
       throw new DomainException('codegen.confirmation_digest_mismatch', {
         code: ErrorCode.BAD_REQUEST,
         status: HttpStatus.BAD_REQUEST,
         args: {
           expectedCanonicalDigest: canonicalDigest,
+          confirmationViewDigest,
           confirmedCanonicalDigest: confirmedCanonicalDigest || null,
         },
       })
@@ -1480,6 +1496,7 @@ export class CodegenConversationService {
     const publishedSnapshotProjection = this.buildPublishedSnapshotProjection({
       publishedSnapshotId: effectivePublishedSnapshotId,
       snapshot: latestSnapshot,
+      strategyInstanceId: session.strategyInstanceId ?? null,
     })
 
     return this.finalizeSessionResponse({
@@ -2777,8 +2794,10 @@ export class CodegenConversationService {
     const items = clarificationState.items.filter(item => {
       if (
         hasActiveGrid
-        && item.reason === 'missing_entry_rules'
-        && item.field === 'entryRules'
+        && (
+          (item.reason === 'missing_entry_rules' && item.field === 'entryRules')
+          || (item.reason === 'missing_exit_rules' && item.field === 'exitRules')
+        )
       ) {
         return false
       }
@@ -2979,6 +2998,7 @@ export class CodegenConversationService {
   private buildPublishedSnapshotProjection(args: {
     publishedSnapshotId: string | null
     snapshot: unknown
+    strategyInstanceId?: string | null
   }): PublishedSnapshotProjection {
     return responseMapperHelper.buildPublishedSnapshotProjection(args)
   }
@@ -3118,7 +3138,8 @@ export class CodegenConversationService {
     const hasSemanticOnlyTriggers = normalization.normalizedIntent.triggers.some(trigger =>
       trigger.phase === 'gate',
     )
-    if (hasSemanticOnlyTriggers) {
+    const needsSemanticCompilerPath = hasSemanticOnlyTriggers || Boolean(normalization.normalizedIntent.grid)
+    if (needsSemanticCompilerPath) {
       const normalizedSpec = this.canonicalSpecBuilder.buildFromNormalizedIntent(
         checklist,
         normalization.normalizedIntent,
@@ -3145,6 +3166,16 @@ export class CodegenConversationService {
     )
     const normalizedCompileability = this.evaluateCanonicalCompileability(normalizedSpec)
     return normalizedCompileability.canCompile ? normalizedSpec : checklistSpec
+  }
+
+  private mergeChecklistIntoSemanticState(
+    currentState: SemanticState,
+    checklist: ChecklistPayload,
+  ): SemanticState {
+    return this.semanticStateMerge.merge({
+      persisted: currentState,
+      derived: this.buildFallbackSemanticState(checklist),
+    })
   }
 
   private buildCompileabilityAssistantPrompt(report: CanonicalCompileabilityReport): string {

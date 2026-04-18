@@ -458,7 +458,7 @@ export class CompiledPublicationGateService {
       return actions.some((action) => {
         if (!action || typeof action !== 'object' || Array.isArray(action)) return false
         const type = (action as Record<string, unknown>).type
-        return type === 'OPEN_LONG'
+        return type === 'OPEN_LONG' || type === 'REDUCE_LONG'
       })
     })
     const hasShortExposure = rules.some((rule) => {
@@ -469,7 +469,7 @@ export class CompiledPublicationGateService {
       return actions.some((action) => {
         if (!action || typeof action !== 'object' || Array.isArray(action)) return false
         const type = (action as Record<string, unknown>).type
-        return type === 'OPEN_SHORT'
+        return type === 'OPEN_SHORT' || type === 'REDUCE_SHORT'
       })
     })
 

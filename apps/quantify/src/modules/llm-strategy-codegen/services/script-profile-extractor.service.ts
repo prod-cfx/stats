@@ -158,12 +158,6 @@ export class ScriptProfileExtractorService {
       if (/\bgrid\b|网格|touch_level|level[_\s]?set/.test(window)) {
         push('grid.range_rebalance')
       }
-      if (this.hasMovingAverageCrossEvidence(window, 'up')) {
-        push('ma.golden_cross')
-      }
-      if (this.hasMovingAverageCrossEvidence(window, 'down')) {
-        push('ma.death_cross')
-      }
       if (/\brsi\b|相对强弱|超买|超卖/.test(window)) {
         if (/cross[_\s]?over|上穿|突破/.test(window)) {
           push('rsi.cross_over')
@@ -185,6 +179,12 @@ export class ScriptProfileExtractorService {
         if (/death[_\s]?cross|死叉|下穿/.test(window)) {
           push('macd.death_cross')
         }
+      }
+      if (this.hasMovingAverageCrossEvidence(window, 'up')) {
+        push('ma.golden_cross')
+      }
+      if (this.hasMovingAverageCrossEvidence(window, 'down')) {
+        push('ma.death_cross')
       }
       if (this.hasChannelBreakEvidence(window, 'high')) {
         push('breakout.channel_high_break')

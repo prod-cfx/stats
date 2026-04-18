@@ -90,7 +90,7 @@ export class CodegenPublicationGenerationStage {
     semanticState?: SemanticState
     message: string
   }): Promise<CodegenPublicationArtifacts> {
-    const compatibilityChecklist = input.semanticState
+    const sourceChecklist = input.semanticState
       ? this.semanticStateCompileBridge.buildLegacyChecklist(input.semanticState, input.checklist)
       : input.checklist
     const normalization = input.semanticState
@@ -98,34 +98,34 @@ export class CodegenPublicationGenerationStage {
           normalizedIntent: this.semanticStateCompileBridge.buildNormalizedIntent(input.semanticState),
           blocked: false,
         }
-      : this.intentNormalizer.normalize(compatibilityChecklist)
-    const canonicalSpec = input.semanticState
-      ? this.canonicalSpecBuilder.buildFromNormalizedIntent(compatibilityChecklist, normalization.normalizedIntent)
-      : this.canonicalSpecBuilder.build(compatibilityChecklist)
+      : this.intentNormalizer.normalize(sourceChecklist)
+    const canonicalSpec = input.semanticState && (
+      normalization.normalizedIntent.triggers.some(trigger => trigger.phase === 'gate')
+      || Boolean(normalization.normalizedIntent.grid)
+    )
+      ? this.canonicalSpecBuilder.buildFromNormalizedIntent(sourceChecklist, normalization.normalizedIntent)
+      : this.canonicalSpecBuilder.build(sourceChecklist)
     const semanticView = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
     })
     const userIntentSummary = this.strategySummaryBuilder.buildUserIntentSummary({
-      checklist: compatibilityChecklist,
+      checklist: sourceChecklist,
     })
-    const lockedParams = this.buildLockedParams(compatibilityChecklist)
+    const lockedParams = this.buildLockedParams(sourceChecklist)
     const publishParams = this.buildPublishParams({
       canonicalSpec,
-      checklist: compatibilityChecklist,
+      checklist: sourceChecklist,
       message: input.message,
     })
     const compiled = this.canonicalSpecV2IrCompiler.compile({
       canonicalSpec,
       fallback: this.buildCompiledIrFallback({
-        checklist: compatibilityChecklist,
+        checklist: sourceChecklist,
         lockedParams,
         publishParams,
       }),
     })
-    const executionEnvelope = this.compiledScriptExecutionEnvelope.build(
-      canonicalSpec,
-      normalization.normalizedIntent.position?.positionMode ?? null,
-    )
+    const executionEnvelope = this.compiledScriptExecutionEnvelope.build(canonicalSpec)
     const ast = this.canonicalStrategyAstCompiler.compile(compiled.ir)
     let compiledScript = this.compiledScriptEmitter.emit({
       ast,
