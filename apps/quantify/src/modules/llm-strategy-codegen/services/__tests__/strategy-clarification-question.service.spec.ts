@@ -195,8 +195,9 @@ describe('strategyClarificationQuestionService', () => {
   it('requires the conversation planner prompt to summarize first and keep logicReady false while blockers remain', () => {
     const prompt = buildConversationPlannerSystemPrompt()
 
-    expect(prompt).toContain('你的职责是生成 semantic update candidates 与自然语言交互')
-    expect(prompt).toContain('"semanticUpdates"?: {')
+    expect(prompt).toContain('你的职责是生成 semantic planning notes 与自然语言交互')
+    expect(prompt).toContain('"semanticPatch"?: {')
+    expect(prompt).toContain('clarificationIntent 必须指向未闭合的 semantic slots')
     expect(prompt).not.toContain('标的/周期/风控可后续配置，不应强制先问这些。')
     expect(prompt).not.toContain('交易所、周期、仓位、risk metadata 可后续补充。')
   })
