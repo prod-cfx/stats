@@ -544,6 +544,20 @@ describe('aiQuantProxyService', () => {
     })
   })
 
+  it('retries transient upstream failure for get backtesting job and eventually succeeds', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.getBacktestJob
+      .mockRejectedValueOnce(new QuantifyClientError('gateway', 503, 'UPSTREAM_REQUEST_FAILED'))
+      .mockResolvedValueOnce({ id: 'job-1', status: 'running' })
+
+    await expect(service.getBacktestJob('user-1', 'Bearer token-1', 'job-1', 'req-1')).resolves.toEqual({
+      id: 'job-1',
+      status: 'running',
+    })
+
+    expect(quantifyClient.getBacktestJob).toHaveBeenCalledTimes(2)
+  })
+
   it('maps transient upstream error to retryable error for get backtesting job result', async () => {
     const { service, quantifyClient } = createService()
     quantifyClient.getBacktestJobResult.mockRejectedValue(new QuantifyClientError('gateway', 502, 'UPSTREAM_INVALID_RESPONSE'))
@@ -552,6 +566,20 @@ describe('aiQuantProxyService', () => {
       status: 503,
       code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
     })
+  })
+
+  it('retries transient upstream failure for get backtesting job result and eventually succeeds', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.getBacktestJobResult
+      .mockRejectedValueOnce(new QuantifyClientError('gateway', 502, 'UPSTREAM_INVALID_RESPONSE'))
+      .mockResolvedValueOnce({ id: 'job-1', status: 'succeeded' })
+
+    await expect(service.getBacktestJobResult('user-1', 'Bearer token-1', 'job-1', 'req-1')).resolves.toEqual({
+      id: 'job-1',
+      status: 'succeeded',
+    })
+
+    expect(quantifyClient.getBacktestJobResult).toHaveBeenCalledTimes(2)
   })
 
   it('preserves business error when creating backtesting job fails', async () => {

@@ -33,6 +33,32 @@ export const BACKTEST_JOB_TIMEOUT_MS = 180_000
 
 type Translate = (key: string, options?: Record<string, unknown>) => string
 
+function isTransientBacktestError(error: unknown): boolean {
+  const candidate = error as {
+    code?: unknown
+    statusCode?: unknown
+    status?: unknown
+    details?: { error?: { code?: unknown; requestId?: unknown } }
+  } | null
+  const code = candidate?.code
+  const nestedCode = candidate?.details?.error?.code
+  const status = typeof candidate?.statusCode === 'number'
+    ? candidate.statusCode
+    : typeof candidate?.status === 'number'
+      ? candidate.status
+      : undefined
+
+  if (
+    code === 'SERVICE_TEMPORARILY_UNAVAILABLE'
+    || code === 'API_TIMEOUT'
+    || nestedCode === 'SERVICE_TEMPORARILY_UNAVAILABLE'
+  ) {
+    return true
+  }
+
+  return status === 502 || status === 503 || status === 504
+}
+
 function buildInvalidExecutionConfigMessage(args: {
   activeConversation: ConversationState
   executionConfig: ReturnType<typeof resolveBacktestExecutionConfig>
@@ -406,7 +432,25 @@ export async function runAiQuantBacktest(args: {
       if (!canContinue()) {
         return
       }
-      latestJob = await getBacktestJob(createdJob.id)
+      try {
+        latestJob = await getBacktestJob(createdJob.id)
+      } catch (error) {
+        if (!isTransientBacktestError(error)) {
+          throw error
+        }
+        const diagnostics = error instanceof ApiError
+          ? {
+              jobId: createdJob.id,
+              code: error.code,
+              statusCode: error.statusCode,
+              requestId: (error.details as { error?: { requestId?: unknown } } | undefined)?.error?.requestId,
+            }
+          : {
+              jobId: createdJob.id,
+            }
+        console.warn('[ai-quant][backtest-job-poll] transient failure, retrying', diagnostics)
+        continue
+      }
     }
 
     if (!canContinue()) {
@@ -418,7 +462,30 @@ export async function runAiQuantBacktest(args: {
       return
     }
 
-    const jobResult = await getBacktestJobResult(createdJob.id)
+    let jobResult
+    try {
+      jobResult = await getBacktestJobResult(createdJob.id)
+    } catch (error) {
+      if (!isTransientBacktestError(error)) {
+        throw error
+      }
+      const diagnostics = error instanceof ApiError
+        ? {
+            jobId: createdJob.id,
+            code: error.code,
+            statusCode: error.statusCode,
+            requestId: (error.details as { error?: { requestId?: unknown } } | undefined)?.error?.requestId,
+          }
+        : {
+            jobId: createdJob.id,
+          }
+      console.warn('[ai-quant][backtest-job-result] transient failure, retrying', diagnostics)
+      await new Promise(resolve => window.setTimeout(resolve, BACKTEST_JOB_POLL_INTERVAL_MS))
+      if (!canContinue()) {
+        return
+      }
+      jobResult = await getBacktestJobResult(createdJob.id)
+    }
     if (!canContinue()) {
       return
     }

@@ -486,6 +486,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
     } as any)).rejects.toMatchObject({
       message: 'account_strategy.published_snapshot_not_found',
     })
+    expect(repo.createDeployRequestProcessing).not.toHaveBeenCalled()
     expect(repo.deployStrategyForUser).not.toHaveBeenCalled()
   })
 

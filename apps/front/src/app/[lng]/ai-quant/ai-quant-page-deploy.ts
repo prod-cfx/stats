@@ -3,6 +3,7 @@ import type { Dispatch, SetStateAction } from 'react'
 import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
 import {
   deployAccountAiQuantStrategy,
+  fetchAccountAiQuantDeployResult,
   fetchUserExchangeAccountStatuses,
 } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
@@ -10,6 +11,32 @@ import { extractCodegenErrorMessage } from './ai-quant-page-codegen'
 import { mapExchangeStatusesToDeployAccounts } from './ai-quant-page-conversation'
 
 type Translate = (key: string, options?: Record<string, unknown>) => string
+
+function isTransientDeployError(error: unknown): boolean {
+  const candidate = error as {
+    code?: unknown
+    statusCode?: unknown
+    status?: unknown
+    details?: { error?: { code?: unknown } }
+  } | null
+  const code = candidate?.code
+  const nestedCode = candidate?.details?.error?.code
+  const status = typeof candidate?.statusCode === 'number'
+    ? candidate.statusCode
+    : typeof candidate?.status === 'number'
+      ? candidate.status
+      : undefined
+
+  if (
+    code === 'SERVICE_TEMPORARILY_UNAVAILABLE'
+    || code === 'API_TIMEOUT'
+    || nestedCode === 'SERVICE_TEMPORARILY_UNAVAILABLE'
+  ) {
+    return true
+  }
+
+  return status === 502 || status === 503 || status === 504
+}
 
 export function createDeployRequestId(): string {
   if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
@@ -124,18 +151,29 @@ export async function confirmAiQuantDeploy(args: {
       return
     }
 
-    await deployAccountAiQuantStrategy({
-      userId: sessionUserId,
-      name: strategyName,
-      deployRequestId: requestId,
-      publishedSnapshotId,
-      exchangeAccountId: account.accountId,
-      exchangeAccountName: account.accountName,
-      deploymentExecutionConfig:
-        typeof selectedDeployLeverage === 'number'
-          ? { leverage: selectedDeployLeverage }
-          : undefined,
-    })
+    try {
+      await deployAccountAiQuantStrategy({
+        userId: sessionUserId,
+        name: strategyName,
+        deployRequestId: requestId,
+        publishedSnapshotId,
+        exchangeAccountId: account.accountId,
+        exchangeAccountName: account.accountName,
+        deploymentExecutionConfig:
+          typeof selectedDeployLeverage === 'number'
+            ? { leverage: selectedDeployLeverage }
+            : undefined,
+      })
+    } catch (error) {
+      if (!isTransientDeployError(error)) {
+        throw error
+      }
+
+      const reconciled = await fetchAccountAiQuantDeployResult(requestId, sessionUserId)
+      if (!reconciled) {
+        throw error
+      }
+    }
     setDeployOpen(false)
     setDeployRequestId(null)
     updateActiveConversation(curr => ({

@@ -68,6 +68,14 @@ describe('accountAiQuantStrategiesController', () => {
     })
   })
 
+  it('looks up deploy result with backend-controlled user identity', async () => {
+    const { controller, service } = createController()
+
+    await controller.deployResult('user-1', 'Bearer token-1', 'deploy-req-1')
+
+    expect(service.getDeployResult).toHaveBeenCalledWith('user-1', 'Bearer token-1', 'deploy-req-1')
+  })
+
   it('updates execution leverage with backend-controlled user identity', async () => {
     const { controller, service } = createController()
 

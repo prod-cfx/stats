@@ -12,6 +12,9 @@ export class AiQuantProxyService {
   private static readonly BACKTEST_CAPABILITIES_BACKOFF_BASE_MS = 200
   private static readonly BACKTEST_CAPABILITIES_BACKOFF_MAX_MS = 1_500
   private static readonly BACKTEST_CAPABILITIES_BACKOFF_JITTER_MS = 100
+  private static readonly BACKTEST_JOB_RETRY_ATTEMPTS = 3
+  private static readonly BACKTEST_JOB_BACKOFF_BASE_MS = 200
+  private static readonly BACKTEST_JOB_BACKOFF_MAX_MS = 800
   private static readonly CODEGEN_REQUEST_TIMEOUT_MS = 60_000
   private static readonly DEPLOY_RETRY_ATTEMPTS = 3
   private static readonly DEPLOY_BACKOFF_BASE_MS = 200
@@ -43,6 +46,13 @@ export class AiQuantProxyService {
 
   async getAccountStrategyDetail(userId: string, authorization: string | undefined, strategyId: string) {
     return this.quantifyClient.getAccountStrategyDetail(strategyId, {
+      userId,
+      headers: this.userHeaders(userId, authorization),
+    }).catch(error => { throw this.mapQuantifyError(error) })
+  }
+
+  async getDeployResult(userId: string, authorization: string | undefined, deployRequestId: string) {
+    return this.quantifyClient.getDeployResult(deployRequestId, {
       userId,
       headers: this.userHeaders(userId, authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
@@ -311,17 +321,55 @@ export class AiQuantProxyService {
   }
 
   async getBacktestJob(userId: string, authorization: string | undefined, id: string, requestId?: string) {
-    return this.quantifyClient.getBacktestJob(id, {
-      userId,
-      headers: this.userProxyHeaders(userId, authorization, requestId),
-    }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
+    for (let attempt = 1; attempt <= AiQuantProxyService.BACKTEST_JOB_RETRY_ATTEMPTS; attempt += 1) {
+      try {
+        return await this.quantifyClient.getBacktestJob(id, {
+          userId,
+          headers: this.userProxyHeaders(userId, authorization, requestId),
+        })
+      } catch (error) {
+        const isTransientUpstreamFailure = this.isTransientUpstreamFailure(error)
+        const isLastAttempt = attempt >= AiQuantProxyService.BACKTEST_JOB_RETRY_ATTEMPTS
+        if (!isTransientUpstreamFailure || isLastAttempt) {
+          throw this.mapBacktestingJobError(error, requestId)
+        }
+        this.logger.warn(
+          `event=backtesting_job_retry jobId=${id} reason=${this.describeError(error)} attempt=${attempt} requestId=${requestId ?? 'N/A'}`,
+        )
+        await this.sleep(this.getBacktestJobBackoffMs(attempt))
+      }
+    }
+
+    throw new DomainException('Backtesting upstream temporarily unavailable', {
+      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+    })
   }
 
   async getBacktestJobResult(userId: string, authorization: string | undefined, id: string, requestId?: string) {
-    return this.quantifyClient.getBacktestJobResult(id, {
-      userId,
-      headers: this.userProxyHeaders(userId, authorization, requestId),
-    }).catch(error => { throw this.mapBacktestingJobError(error, requestId) })
+    for (let attempt = 1; attempt <= AiQuantProxyService.BACKTEST_JOB_RETRY_ATTEMPTS; attempt += 1) {
+      try {
+        return await this.quantifyClient.getBacktestJobResult(id, {
+          userId,
+          headers: this.userProxyHeaders(userId, authorization, requestId),
+        })
+      } catch (error) {
+        const isTransientUpstreamFailure = this.isTransientUpstreamFailure(error)
+        const isLastAttempt = attempt >= AiQuantProxyService.BACKTEST_JOB_RETRY_ATTEMPTS
+        if (!isTransientUpstreamFailure || isLastAttempt) {
+          throw this.mapBacktestingJobError(error, requestId)
+        }
+        this.logger.warn(
+          `event=backtesting_job_result_retry jobId=${id} reason=${this.describeError(error)} attempt=${attempt} requestId=${requestId ?? 'N/A'}`,
+        )
+        await this.sleep(this.getBacktestJobBackoffMs(attempt))
+      }
+    }
+
+    throw new DomainException('Backtesting upstream temporarily unavailable', {
+      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+    })
   }
 
   private userHeaders(userId: string, authorization: string | undefined) {
@@ -430,6 +478,13 @@ export class AiQuantProxyService {
   private isTransientUpstreamFailure(error: unknown): boolean {
     const code = this.getQuantifyErrorCode(error)
     return typeof code === 'string' && AiQuantProxyService.TRANSIENT_UPSTREAM_CODES.has(code)
+  }
+
+  private getBacktestJobBackoffMs(attempt: number): number {
+    return Math.min(
+      AiQuantProxyService.BACKTEST_JOB_BACKOFF_MAX_MS,
+      AiQuantProxyService.BACKTEST_JOB_BACKOFF_BASE_MS * (2 ** (attempt - 1)),
+    )
   }
 
   private async tryReconcileTransientDeployResult(

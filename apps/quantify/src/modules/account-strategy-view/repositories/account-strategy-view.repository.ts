@@ -8,6 +8,8 @@ import { PAGINATION_CONSTANTS } from '@/common/constants/pagination.constants'
 import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { ExchangeAccountNotFoundException } from '@/modules/exchange-accounts/exceptions'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime value import
+import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma } from '@/prisma/prisma.types'
 import { DeployModeAccountMismatchException, DeployStrategyInstanceNotFoundException } from '../exceptions'
 
@@ -56,7 +58,10 @@ interface ExistingInstanceSnapshotBinding {
 
 @Injectable()
 export class AccountStrategyViewRepository {
-  constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
+  constructor(
+    private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
+    private readonly prisma: PrismaService,
+  ) {}
 
   async deployStrategyForUser(input: DeployStrategyInput): Promise<{ strategyInstanceId: string; mode: 'TESTNET' | 'LIVE' }> {
     const normalizedName = this.normalizeStrategyName(input.name)
@@ -397,7 +402,7 @@ export class AccountStrategyViewRepository {
   }
 
   async findDeployRequestByUserAndRequestId(userId: string, deployRequestId: string) {
-    return this.txHost.tx.deployRequest.findUnique({
+    return this.prisma.deployRequest.findUnique({
       where: {
         userId_deployRequestId: {
           userId,
@@ -408,7 +413,7 @@ export class AccountStrategyViewRepository {
   }
 
   async createDeployRequestProcessing(userId: string, deployRequestId: string, payloadHash: string) {
-    return this.txHost.tx.deployRequest.create({
+    return this.prisma.deployRequest.create({
       data: {
         userId,
         deployRequestId,
@@ -419,7 +424,7 @@ export class AccountStrategyViewRepository {
   }
 
   async markDeployRequestSucceeded(id: string, strategyInstanceId: string) {
-    return this.txHost.tx.deployRequest.update({
+    return this.prisma.deployRequest.update({
       where: { id },
       data: {
         status: 'SUCCEEDED',
@@ -431,7 +436,7 @@ export class AccountStrategyViewRepository {
   }
 
   async markDeployRequestFailed(id: string, errorCode: string, errorMessage: string) {
-    return this.txHost.tx.deployRequest.update({
+    return this.prisma.deployRequest.update({
       where: { id },
       data: {
         status: 'FAILED',

@@ -158,6 +158,23 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
           strategyInstanceId: null,
         }),
     })
+    ;(service as any).resolveDeployPayload = jest.fn().mockResolvedValue({
+      exchange: 'okx',
+      symbol: 'SOLUSDT',
+      timeframe: '5m',
+      positionPct: 10,
+      marketType: 'spot',
+      deploymentExecutionConfig: {
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'GTC',
+      },
+      publishedSnapshotId: 'snapshot-1',
+      snapshotHash: 'snapshot-hash-1',
+      sourceStrategyInstanceId: 'inst-1',
+      sourceStrategyTemplateId: 'template-1',
+    })
 
     await expect(service.deployStrategy({
       userId: 'user-1',
@@ -175,6 +192,23 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       createDeployRequestProcessing: jest.fn().mockRejectedValue(new Error('fk constraint failed')),
       findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
     })
+    ;(service as any).resolveDeployPayload = jest.fn().mockResolvedValue({
+      exchange: 'okx',
+      symbol: 'SOLUSDT',
+      timeframe: '5m',
+      positionPct: 10,
+      marketType: 'spot',
+      deploymentExecutionConfig: {
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'GTC',
+      },
+      publishedSnapshotId: 'snapshot-1',
+      snapshotHash: 'snapshot-hash-1',
+      sourceStrategyInstanceId: 'inst-1',
+      sourceStrategyTemplateId: 'template-1',
+    })
 
     await expect(service.deployStrategy({
       userId: 'user-1',
@@ -185,5 +219,42 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       timeframe: '5m',
       positionPct: 10,
     } as any)).rejects.toThrow('fk constraint failed')
+  })
+
+  it('preserves the original deploy error when marking the deploy request as failed also errors', async () => {
+    const originalError = new DomainException('deploy write failed', {
+      code: 'INTERNAL_SERVER_ERROR' as any,
+      status: 500,
+    })
+    const { service } = buildService({
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-1' }),
+      deployStrategyForUser: jest.fn().mockRejectedValue(originalError),
+      markDeployRequestFailed: jest.fn().mockRejectedValue(new Error('failed marker write failed')),
+    })
+    ;(service as any).resolveDeployPayload = jest.fn().mockResolvedValue({
+      exchange: 'okx',
+      symbol: 'SOLUSDT',
+      timeframe: '5m',
+      positionPct: 10,
+      marketType: 'spot',
+      deploymentExecutionConfig: {
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'GTC',
+      },
+      publishedSnapshotId: 'snapshot-1',
+      snapshotHash: 'snapshot-hash-1',
+      sourceStrategyInstanceId: 'inst-1',
+      sourceStrategyTemplateId: 'template-1',
+    })
+
+    await expect(service.deployStrategy({
+      userId: 'user-1',
+      deployRequestId: 'same-4',
+      name: 'OKX SOL 5m',
+      exchangeAccountId: 'acct-1',
+    } as any)).rejects.toBe(originalError)
   })
 })

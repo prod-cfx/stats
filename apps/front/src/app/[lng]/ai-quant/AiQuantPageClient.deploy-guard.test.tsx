@@ -8,6 +8,7 @@ import { AiQuantPageClient } from './AiQuantPageClient'
 
 const mockPush = jest.fn()
 const mockDeployAccountAiQuantStrategy = jest.fn()
+const mockFetchAccountAiQuantDeployResult = jest.fn()
 const mockFetchUserExchangeAccountStatuses = jest.fn()
 
 jest.mock('react-i18next', () => ({
@@ -124,6 +125,7 @@ jest.mock('@/components/ai-quant/backtest-capability-client', () => ({
 
 jest.mock('@/lib/api', () => ({
   deployAccountAiQuantStrategy: (...args: unknown[]) => mockDeployAccountAiQuantStrategy(...args),
+  fetchAccountAiQuantDeployResult: (...args: unknown[]) => mockFetchAccountAiQuantDeployResult(...args),
   continueLlmCodegenSession: jest.fn(),
   fetchUserExchangeAccountStatuses: (...args: unknown[]) => mockFetchUserExchangeAccountStatuses(...args),
   getLlmCodegenSession: jest.fn(),
@@ -232,6 +234,7 @@ describe('AiQuantPageClient deploy guard', () => {
       },
     ])
     mockFetchUserExchangeAccountStatuses.mockResolvedValueOnce([])
+    mockFetchAccountAiQuantDeployResult.mockReset()
   })
 
   afterEach(async () => {
@@ -438,5 +441,131 @@ describe('AiQuantPageClient deploy guard', () => {
 
     expect(mockDeployAccountAiQuantStrategy).not.toHaveBeenCalled()
     expect(mockFetchUserExchangeAccountStatuses).toHaveBeenCalledTimes(1)
+  })
+
+  it('reconciles transient deploy failure by deployRequestId and records success instead of failure', async () => {
+    mockFetchUserExchangeAccountStatuses.mockReset()
+    mockDeployAccountAiQuantStrategy.mockReset()
+    mockFetchAccountAiQuantDeployResult.mockReset()
+
+    mockFetchUserExchangeAccountStatuses.mockResolvedValue([
+      {
+        id: 'acct-binance-1',
+        exchangeId: 'binance',
+        isBound: true,
+        name: 'Binance Main',
+        maskedCredential: 'BIN****01',
+        isTestnet: false,
+        lastValidatedAt: null,
+        createdAt: null,
+      },
+    ])
+
+    const transientError = Object.assign(new Error('deploy transient failed'), {
+      code: 'SERVICE_TEMPORARILY_UNAVAILABLE',
+      status: 503,
+      details: {
+        error: {
+          code: 'SERVICE_TEMPORARILY_UNAVAILABLE',
+          requestId: 'deploy-req-503',
+        },
+      },
+      message: 'Backtesting upstream temporarily unavailable (SERVICE_TEMPORARILY_UNAVAILABLE, HTTP 503, requestId deploy-req-503)',
+    })
+
+    mockDeployAccountAiQuantStrategy.mockRejectedValue(transientError)
+    mockFetchAccountAiQuantDeployResult.mockResolvedValue({
+      id: 'strategy-1',
+      name: 'Binance strategy',
+      status: 'running',
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      positionPct: 10,
+      isSubscribed: true,
+      metrics: {
+        returnPct: 0,
+        maxDrawdownPct: 0,
+        winRatePct: 0,
+        tradeCount: 0,
+      },
+      updatedAt: '2026-04-17T00:00:00.000Z',
+      totalPnl: 0,
+      todayPnl: 0,
+      equitySeries: [],
+      timeline: [],
+      latestOrders: [],
+      snapshot: {
+        publishedSnapshotId: 'snapshot-1',
+        snapshotHash: 'hash-1',
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+        paramSchema: null,
+        paramValues: null,
+        schemaVersion: null,
+        deployAccountName: 'Binance Main',
+        deployAt: null,
+        strategyConfig: null,
+        backtestConfigDefaults: null,
+        deploymentExecutionBaseline: null,
+        deploymentExecutionCurrent: null,
+        deploymentExecutionConstraints: null,
+        effectiveAllowedLeverageRange: null,
+        compatibilityMetadata: null,
+        consistencySummary: {
+          isConsistent: true,
+          driftReasons: [],
+          consistencyScore: 100,
+        },
+        executionConfigVersion: 1,
+      },
+      accountOverview: {
+        initialBalance: null,
+        totalEquity: null,
+        availableBalance: null,
+        totalPnl: null,
+        todayPnl: null,
+        baseCurrency: null,
+      },
+      positionOverview: {
+        openPositionsCount: null,
+        closedPositionsCount: null,
+        totalRealizedPnl: null,
+        totalUnrealizedPnl: null,
+      },
+      deployment: null,
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="open-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="select-account"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="confirm-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockDeployAccountAiQuantStrategy).toHaveBeenCalledTimes(1)
+    expect(mockFetchAccountAiQuantDeployResult).toHaveBeenCalledTimes(1)
   })
 })

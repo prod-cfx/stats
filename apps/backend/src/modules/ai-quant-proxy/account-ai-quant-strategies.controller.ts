@@ -79,6 +79,15 @@ export class AccountAiQuantStrategiesController {
     })
   }
 
+  @Get('deploy-requests/:deployRequestId/result')
+  async deployResult(
+    @CurrentUser('id') userId: string,
+    @Headers('authorization') authorization: string | undefined,
+    @Param('deployRequestId') deployRequestId: string,
+  ): Promise<unknown> {
+    return this.service.getDeployResult(userId, authorization, deployRequestId)
+  }
+
   @Post(':id/execution/leverage')
   async updateExecutionLeverage(
     @CurrentUser('id') userId: string,

@@ -116,7 +116,6 @@ export class AccountStrategyViewController {
     })
   }
 
-  @Transactional()
   @Post('deploy')
   @ApiOperation({ summary: '部署当前用户的 AI Quant 策略' })
   @ApiHeader({ name: 'authorization', required: false })
