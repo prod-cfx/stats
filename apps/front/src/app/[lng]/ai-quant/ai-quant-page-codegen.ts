@@ -972,7 +972,7 @@ export async function requestAiQuantCodegen(args: {
         confirmGenerate,
         confirmedCanonicalDigest,
         clarificationAnswers,
-        ...checklistPayload,
+        ...(confirmGenerate ? {} : checklistPayload),
       })
 
     const advanceConfirmGenerate = async (

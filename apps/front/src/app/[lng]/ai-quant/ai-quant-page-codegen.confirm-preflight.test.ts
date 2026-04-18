@@ -110,4 +110,90 @@ describe('ai-quant-page-codegen confirm preflight reconciliation', () => {
     expect(mockGetLlmCodegenSession.mock.calls).toEqual([['session-1']])
     expect(mockContinueLlmCodegenSession).toHaveBeenCalled()
   })
+
+  it('does not resend checklist payload when confirmGenerate continues an existing session', async () => {
+    const primaryConversation = {
+      id: 'conv-1',
+      title: 'conv-1',
+      messages: [{ id: 'welcome', role: 'assistant', content: 'hello' }],
+      params: DEFAULT_PARAMS,
+      paramSchema: DEFAULT_PARAM_SCHEMA,
+      paramValues: DEFAULT_PARAM_VALUES,
+      backtestResult: null,
+      logicGraph: {
+        version: 1,
+        status: 'confirmed',
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+          positionPct: 10,
+        },
+      },
+      codegenSpecDesc: {
+        canonicalDigest: 'sha256:canonical-1',
+        rules: [
+          {
+            phase: 'entry',
+            condition: { key: 'bollinger.upper_break' },
+            actions: [{ type: 'OPEN_SHORT' }],
+          },
+        ],
+      },
+      semanticGraph: null,
+      validationReport: null,
+      clarificationGate: null,
+      publicationGate: null,
+      pendingCanonicalDigest: 'sha256:canonical-1',
+      llmCodegenSessionId: 'session-1',
+      publishedStrategyInstanceId: null,
+      publishedSnapshotId: null,
+      publishedScriptCode: null,
+      publishedScriptGraphVersion: null,
+      latestSignalMessage: null,
+      backtestExecutionState: 'idle',
+      updatedAt: 1,
+    }
+
+    mockGetLlmCodegenSession.mockResolvedValueOnce({
+      id: 'session-1',
+      status: 'CHECKLIST_GATE',
+      canonicalDigest: 'sha256:canonical-1',
+      specDesc: {
+        canonicalDigest: 'sha256:canonical-1',
+      },
+    })
+    mockContinueLlmCodegenSession.mockResolvedValueOnce({
+      id: 'session-1',
+      status: 'GENERATING',
+    })
+
+    await requestAiQuantCodegen({
+      backtestCapabilities: null,
+      callingMessage: () => 'loading',
+      codegenRequestMutexRef: { current: new Set<string>() },
+      confirmGenerate: true,
+      confirmedCanonicalDigest: 'sha256:canonical-1',
+      conversationId: 'conv-1',
+      conversations: [primaryConversation] as any,
+      message: 'Confirm code generation',
+      params: DEFAULT_PARAMS,
+      sessionId: 'session-1',
+      sessionUserId: 'u-1',
+      setCodegenBusyConversationIds: jest.fn() as any,
+      setConversations: jest.fn() as any,
+      t: (key: string) => key,
+    })
+
+    expect(mockContinueLlmCodegenSession).toHaveBeenCalledWith('session-1', {
+      message: 'Confirm code generation',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: 'sha256:canonical-1',
+      clarificationAnswers: undefined,
+    })
+  })
+
 })
