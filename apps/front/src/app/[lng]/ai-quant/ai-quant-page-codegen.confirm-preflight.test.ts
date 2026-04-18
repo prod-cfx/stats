@@ -196,4 +196,81 @@ describe('ai-quant-page-codegen confirm preflight reconciliation', () => {
     })
   })
 
+  it('does not resend checklist payload when a normal continue uses an existing session', async () => {
+    const primaryConversation = {
+      id: 'conv-1',
+      title: 'conv-1',
+      messages: [{ id: 'welcome', role: 'assistant', content: 'hello' }],
+      params: DEFAULT_PARAMS,
+      paramSchema: DEFAULT_PARAM_SCHEMA,
+      paramValues: DEFAULT_PARAM_VALUES,
+      backtestResult: null,
+      logicGraph: {
+        version: 1,
+        status: 'draft',
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+          positionPct: 10,
+        },
+      },
+      codegenSpecDesc: {
+        canonicalDigest: 'sha256:canonical-2',
+        rules: [
+          {
+            phase: 'entry',
+            condition: { key: 'bollinger.upper_break' },
+            actions: [{ type: 'OPEN_SHORT' }],
+          },
+        ],
+      },
+      semanticGraph: null,
+      validationReport: null,
+      clarificationGate: null,
+      publicationGate: null,
+      pendingCanonicalDigest: 'sha256:canonical-2',
+      llmCodegenSessionId: 'session-1',
+      publishedStrategyInstanceId: null,
+      publishedSnapshotId: null,
+      publishedScriptCode: null,
+      publishedScriptGraphVersion: null,
+      latestSignalMessage: null,
+      backtestExecutionState: 'idle',
+      updatedAt: 1,
+    }
+
+    mockContinueLlmCodegenSession.mockResolvedValueOnce({
+      id: 'session-1',
+      status: 'DRAFTING',
+    })
+
+    await requestAiQuantCodegen({
+      backtestCapabilities: null,
+      callingMessage: () => 'loading',
+      codegenRequestMutexRef: { current: new Set<string>() },
+      confirmGenerate: false,
+      confirmedCanonicalDigest: undefined,
+      conversationId: 'conv-1',
+      conversations: [primaryConversation] as any,
+      message: '继续完善策略',
+      params: DEFAULT_PARAMS,
+      sessionId: 'session-1',
+      sessionUserId: 'u-1',
+      setCodegenBusyConversationIds: jest.fn() as any,
+      setConversations: jest.fn() as any,
+      t: (key: string) => key,
+    })
+
+    expect(mockContinueLlmCodegenSession).toHaveBeenCalledWith('session-1', {
+      message: '继续完善策略',
+      confirmGenerate: false,
+      confirmedCanonicalDigest: undefined,
+      clarificationAnswers: undefined,
+    })
+  })
+
 })
