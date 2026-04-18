@@ -310,18 +310,20 @@ export class AccountStrategyViewService {
       userId,
       source: row,
     })
+    const snapshotStrategyConfig = resolvedSnapshot.strategyConfig
+    const snapshotMarketType = this.readSnapshotMarketType(snapshotStrategyConfig)
     const detailLeverageConstraints = await this.resolveEffectiveLeverageConstraints({
       userId,
       exchangeId: this.resolveExchangeId(
-        resolvedSnapshot.strategyConfig
-          ? this.readString(resolvedSnapshot.strategyConfig, ['exchange', 'exchangeId', 'provider'])
+        snapshotStrategyConfig
+          ? this.readString(snapshotStrategyConfig, ['exchange', 'exchangeId', 'provider'])
           : exchangeId,
       ),
-      marketType: resolvedSnapshot.strategyConfig && this.readString(resolvedSnapshot.strategyConfig, ['marketType']) === 'perp'
+      marketType: snapshotMarketType === 'perp'
         ? 'perp'
         : marketType,
-      symbol: resolvedSnapshot.strategyConfig
-        ? this.readString(resolvedSnapshot.strategyConfig, ['symbol'])
+      symbol: snapshotStrategyConfig
+        ? this.readString(snapshotStrategyConfig, ['symbol'])
         : symbol,
       exchangeAccountId: sub?.exchangeAccount?.id ?? null,
       deploymentExecutionConstraints: resolvedSnapshot.deploymentExecutionConstraints,
@@ -331,12 +333,31 @@ export class AccountStrategyViewService {
     const baselineExecutionConfig = resolvedSnapshot.deploymentExecutionDefaults
     const driftReasons: string[] = []
     if (baselineExecutionConfig && deploymentExecutionConfig) {
-      for (const field of ['leverage', 'priceSource', 'orderType', 'timeInForce']) {
+      const driftFields = snapshotMarketType === 'perp'
+        ? ['leverage', 'priceSource', 'orderType', 'timeInForce']
+        : ['priceSource', 'orderType', 'timeInForce']
+      for (const field of driftFields) {
         if (baselineExecutionConfig[field] !== deploymentExecutionConfig[field]) {
           driftReasons.push(field)
         }
       }
     }
+    const snapshotDeploymentExecutionBaseline = snapshotMarketType === 'spot'
+      ? this.stripLeverageFromExecutionConfig(resolvedSnapshot.deploymentExecutionDefaults)
+      : resolvedSnapshot.deploymentExecutionDefaults
+    const snapshotDeploymentExecutionCurrent = snapshotMarketType === 'spot'
+      ? this.stripLeverageFromExecutionConfig(deploymentExecutionConfig)
+      : deploymentExecutionConfig
+    const snapshotDeploymentExecutionConstraints = snapshotMarketType === 'spot'
+      ? this.stripLeverageFromExecutionConstraints(resolvedSnapshot.deploymentExecutionConstraints)
+      : (resolvedSnapshot.deploymentExecutionConstraints
+          ? {
+              ...resolvedSnapshot.deploymentExecutionConstraints,
+              ...(detailLeverageConstraints
+                ? { accountMaxLeverage: detailLeverageConstraints.accountMax }
+                : {}),
+            }
+          : null)
 
     const detail: AccountStrategyDetailResponseDto = {
       id: row.id,
@@ -380,27 +401,20 @@ export class AccountStrategyViewService {
         schemaVersion: dynamicParams.schemaVersion,
         deployAccountName: sub?.exchangeAccount?.name ?? null,
         deployAt: sub?.subscribedAt?.toISOString() ?? row.startedAt?.toISOString() ?? null,
-        strategyConfig: resolvedSnapshot.strategyConfig,
+        strategyConfig: snapshotStrategyConfig,
         backtestConfigDefaults: resolvedSnapshot.backtestConfigDefaults
           ? {
               ...resolvedSnapshot.backtestConfigDefaults,
               stateTimeframes: this.readStringArray(
-                resolvedSnapshot.strategyConfig,
+                snapshotStrategyConfig,
                 ['stateTimeframes'],
               ),
             }
           : null,
-        deploymentExecutionBaseline: resolvedSnapshot.deploymentExecutionDefaults,
-        deploymentExecutionCurrent: deploymentExecutionConfig,
-        deploymentExecutionConstraints: resolvedSnapshot.deploymentExecutionConstraints
-          ? {
-              ...resolvedSnapshot.deploymentExecutionConstraints,
-              ...(detailLeverageConstraints
-                ? { accountMaxLeverage: detailLeverageConstraints.accountMax }
-                : {}),
-            }
-          : null,
-        effectiveAllowedLeverageRange: detailLeverageConstraints
+        deploymentExecutionBaseline: snapshotDeploymentExecutionBaseline,
+        deploymentExecutionCurrent: snapshotDeploymentExecutionCurrent,
+        deploymentExecutionConstraints: snapshotDeploymentExecutionConstraints,
+        effectiveAllowedLeverageRange: snapshotMarketType === 'perp' && detailLeverageConstraints
           ? {
               min: detailLeverageConstraints.min,
               max: detailLeverageConstraints.max,
@@ -438,7 +452,9 @@ export class AccountStrategyViewService {
             exchangeAccountId: sub?.exchangeAccount?.id ?? null,
             exchangeAccountName: sub?.exchangeAccount?.name ?? null,
             executionConfig: {
-              leverage: deploymentExecutionConfig ? this.readNumber(deploymentExecutionConfig, ['leverage']) : null,
+              leverage: snapshotMarketType === 'perp' && deploymentExecutionConfig
+                ? this.readNumber(deploymentExecutionConfig, ['leverage'])
+                : null,
               priceSource: deploymentExecutionConfig ? this.readString(deploymentExecutionConfig, ['priceSource']) : null,
               orderType: deploymentExecutionConfig ? this.readString(deploymentExecutionConfig, ['orderType']) : null,
               timeInForce: deploymentExecutionConfig ? this.readString(deploymentExecutionConfig, ['timeInForce']) : null,
@@ -446,7 +462,7 @@ export class AccountStrategyViewService {
             executionConfigVersion: typeof (row as Record<string, unknown>).executionConfigVersion === 'number'
               ? ((row as Record<string, unknown>).executionConfigVersion as number)
               : null,
-            effectiveAllowedLeverageRange: detailLeverageConstraints
+            effectiveAllowedLeverageRange: snapshotMarketType === 'perp' && detailLeverageConstraints
               ? { min: detailLeverageConstraints.min, max: detailLeverageConstraints.max }
               : null,
             driftFields: driftReasons,
@@ -687,11 +703,7 @@ export class AccountStrategyViewService {
       ? await this.resolveExchangeBalanceSnapshot({
           userId: dto.userId,
           exchangeId: resolvedDeploy.exchange,
-          marketType: this.resolveMarketType(
-            { exchange: resolvedDeploy.exchange },
-            resolvedDeploy.symbol,
-            resolvedDeploy.exchange,
-          ),
+          marketType: resolvedDeploy.marketType,
           exchangeAccountId: dto.exchangeAccountId,
           preferredAsset: this.resolvePreferredQuoteAsset(resolvedDeploy.symbol),
         })
@@ -705,6 +717,7 @@ export class AccountStrategyViewService {
         name: dto.name,
         exchange: resolvedDeploy.exchange,
         symbol: resolvedDeploy.symbol,
+        marketType: resolvedDeploy.marketType,
         timeframe: resolvedDeploy.timeframe,
         positionPct: resolvedDeploy.positionPct,
         publishedSnapshotBinding: {
@@ -799,10 +812,17 @@ export class AccountStrategyViewService {
 
     const strategyConfig = snapshotDetail.strategyConfig ?? {}
     const deploymentDefaults = snapshotDetail.deploymentExecutionDefaults ?? {}
+    const snapshotMarketType = this.readSnapshotMarketType(strategyConfig)
+    if (snapshotMarketType !== 'perp') {
+      throw new DomainException('account_strategy.deployment_leverage_not_supported_for_spot', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+      })
+    }
     const constraints = await this.resolveEffectiveLeverageConstraints({
       userId: dto.userId,
       exchangeId: this.resolveExchangeId(this.readString(strategyConfig, ['exchange']) ?? sub.exchangeAccount?.exchangeId ?? null),
-      marketType: this.readString(strategyConfig, ['marketType']) === 'perp' ? 'perp' : 'spot',
+      marketType: snapshotMarketType,
       symbol: this.readString(strategyConfig, ['symbol']),
       exchangeAccountId: sub.exchangeAccount?.id ?? null,
       deploymentExecutionConstraints: snapshotDetail.deploymentExecutionConstraints,
@@ -1598,9 +1618,9 @@ export class AccountStrategyViewService {
     const symbol = this.readString(strategyConfig, ['symbol'])
     const timeframe = this.readString(strategyConfig, ['baseTimeframe', 'timeframe', 'period'])
     const positionPct = this.readNumber(strategyConfig, ['positionPct', 'positionSizeRatioPercent'])
-    const marketType = this.readString(strategyConfig, ['marketType']) === 'perp' ? 'perp' : 'spot'
+    const marketType = this.readSnapshotMarketType(strategyConfig)
 
-    if (!exchange || !symbol || !timeframe || positionPct === null) {
+    if (!exchange || !symbol || !timeframe || positionPct === null || !marketType) {
       throw new DomainException('account_strategy.deploy_missing_required_fields', {
         code: ErrorCode.BAD_REQUEST,
         status: HttpStatus.BAD_REQUEST,
@@ -1609,6 +1629,7 @@ export class AccountStrategyViewService {
           symbol,
           timeframe,
           positionPct,
+          marketType,
           publishedSnapshotId,
         },
       })
@@ -1677,6 +1698,9 @@ export class AccountStrategyViewService {
     deploymentExecutionConstraints: Record<string, unknown> | null
   }): Promise<{ min: number, max: number, accountMax: number | null } | null> {
     if (!input.exchangeId || !input.symbol || !input.deploymentExecutionConstraints) return null
+    if (input.marketType === 'spot') {
+      return { min: 1, max: 1, accountMax: 1 }
+    }
     const platformRiskMaxLeverage = this.readNumber(input.deploymentExecutionConstraints, ['platformRiskMaxLeverage'])
     const strategyDeclaredLeverageRange = this.readRecord(input.deploymentExecutionConstraints.strategyDeclaredLeverageRange)
     const strategyMin = strategyDeclaredLeverageRange ? this.readNumber(strategyDeclaredLeverageRange, ['min']) : null
@@ -1697,5 +1721,34 @@ export class AccountStrategyViewService {
     const max = maxCandidates.length > 0 ? Math.min(...maxCandidates) : null
     if (!max || max < min) return null
     return { min, max, accountMax }
+  }
+
+  private readSnapshotMarketType(source: Record<string, unknown> | null | undefined): MarketType | null {
+    const raw = source ? this.readString(source, ['marketType']) : null
+    if (raw === 'spot' || raw === 'perp') return raw
+    return null
+  }
+
+  private stripLeverageFromExecutionConfig(
+    config: Record<string, unknown> | null | undefined,
+  ): Record<string, unknown> | null {
+    if (!config) return null
+    const { leverage: _leverage, ...rest } = config
+    return rest
+  }
+
+  private stripLeverageFromExecutionConstraints(
+    constraints: Record<string, unknown> | null | undefined,
+  ): Record<string, unknown> | null {
+    if (!constraints) return null
+    const {
+      defaultLeverage: _defaultLeverage,
+      platformRiskMaxLeverage: _platformRiskMaxLeverage,
+      strategyDeclaredLeverageRange: _strategyDeclaredLeverageRange,
+      effectiveAllowedLeverageRange: _effectiveAllowedLeverageRange,
+      accountMaxLeverage: _accountMaxLeverage,
+      ...rest
+    } = constraints
+    return rest
   }
 }

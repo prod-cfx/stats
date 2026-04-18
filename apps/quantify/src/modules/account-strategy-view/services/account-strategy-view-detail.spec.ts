@@ -1717,4 +1717,155 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(detail.todayPnl).toBe(20.12)
     expect(detail.accountOverview?.todayPnl).toBe(20.12)
   })
+
+  it('removes deployment leverage semantics from spot strategy detail responses', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-spot-1',
+        name: 'Spot strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-spot-1',
+          snapshotHash: 'snapshot-hash-spot-1',
+        },
+        params: { exchange: 'okx', symbol: 'ETHUSDT', timeframe: '15m', positionPct: 10, marketType: 'spot' },
+        strategyTemplateId: 'tpl-spot-1',
+        strategyTemplate: {
+          defaultParams: {},
+          paramsSchema: null,
+          rulesVersion: 1,
+        },
+        subscriptions: [{
+          userId: 'user-1',
+          status: 'active',
+          customParams: {},
+          subscribedAt: new Date('2026-04-18T13:38:30.553Z'),
+          exchangeAccount: { id: 'acct-spot-1', name: 'OKX Demo', exchangeId: 'okx' },
+        }],
+        startedAt: new Date('2026-04-18T13:38:30.541Z'),
+        updatedAt: new Date('2026-04-18T13:38:30.543Z'),
+        updatedBy: 'user-1',
+        deploymentExecutionConfig: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'gtc',
+        },
+        executionConfigVersion: 1,
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue({
+        id: 'acc-spot-1',
+        initialBalance: 56254.09959300132,
+        equity: 56254.09959300132,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 0,
+        baseCurrency: 'USDT',
+      }),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadLatestDailySnapshot: jest.fn().mockResolvedValue(null),
+      loadClosedPositionPnlSeries: jest.fn().mockResolvedValue([]),
+      loadPositionFinancials: jest.fn().mockResolvedValue({
+        openCostBasis: 0,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 0,
+      }),
+      loadOpenPositionsForValuation: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: {
+          createdAt: new Date('2026-04-18T13:37:28.984Z'),
+          startedAt: new Date('2026-04-18T13:38:30.541Z'),
+          stoppedAt: null,
+        },
+        subscription: { subscribedAt: new Date('2026-04-18T13:38:30.553Z') },
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn() } as any,
+      undefined,
+      undefined,
+      { getLeverageConstraints: jest.fn() } as any,
+      {
+        findByIdForUser: jest.fn().mockResolvedValue({
+          id: 'snapshot-spot-1',
+          snapshotHash: 'snapshot-hash-spot-1',
+          strategyConfig: {
+            exchange: 'okx',
+            symbol: 'ETHUSDT',
+            baseTimeframe: '15m',
+            marketType: 'spot',
+            positionPct: 10,
+          },
+          backtestConfigDefaults: {
+            initialCash: 10000,
+            leverage: 1,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: false,
+          },
+          deploymentExecutionDefaults: {
+            leverage: 1,
+            priceSource: 'close',
+            orderType: 'market',
+            timeInForce: 'gtc',
+          },
+          deploymentExecutionConstraints: {
+            defaultLeverage: 1,
+            supportedOrderTypes: ['market'],
+            supportedTimeInForce: ['gtc'],
+            supportedPriceSources: ['close'],
+            platformRiskMaxLeverage: 1,
+            constraintExplanation: 'strategy/default constraints pending account-capability intersection',
+          },
+          paramsSnapshot: {
+            symbol: 'ETHUSDT',
+            exchange: 'okx',
+            timeframe: '15m',
+            marketType: 'spot',
+            positionPct: 10,
+          },
+          strategyTemplateId: 'tpl-spot-1',
+          strategyInstanceId: 'inst-spot-1',
+        }),
+      } as any,
+    )
+
+    const detail = await service.getStrategyDetail('user-1', 'inst-spot-1')
+
+    expect(detail.snapshot.deploymentExecutionBaseline).toEqual({
+      priceSource: 'close',
+      orderType: 'market',
+      timeInForce: 'gtc',
+    })
+    expect(detail.snapshot.deploymentExecutionCurrent).toEqual({
+      priceSource: 'close',
+      orderType: 'market',
+      timeInForce: 'gtc',
+    })
+    expect(detail.snapshot.deploymentExecutionConstraints).toEqual({
+      supportedOrderTypes: ['market'],
+      supportedTimeInForce: ['gtc'],
+      supportedPriceSources: ['close'],
+      constraintExplanation: 'strategy/default constraints pending account-capability intersection',
+    })
+    expect(detail.snapshot.effectiveAllowedLeverageRange).toBeNull()
+    expect(detail.deployment).toEqual(expect.objectContaining({
+      executionConfig: {
+        leverage: null,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'gtc',
+      },
+      effectiveAllowedLeverageRange: null,
+    }))
+  })
 })

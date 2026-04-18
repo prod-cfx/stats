@@ -15,7 +15,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         create: jest.fn(),
       },
       exchangeAccount: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true }),
+        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true, exchangeId: 'okx' }),
       },
       strategyTemplate: {
         findUnique: jest.fn(),
@@ -57,6 +57,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       name: 'OKX SOLUSDT 5m AI策略',
       exchange: 'okx',
       symbol: 'SOLUSDT',
+      marketType: 'spot',
       timeframe: '5m',
       positionPct: 10,
       deploymentExecutionConfig: {
@@ -93,6 +94,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         },
         executionConfigVersion: 1,
         params: expect.objectContaining({
+          marketType: 'spot',
           deploymentExecutionConfig: {
             leverage: 4,
             priceSource: 'mark',
@@ -126,7 +128,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         create: jest.fn(),
       },
       exchangeAccount: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true }),
+        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true, exchangeId: 'okx' }),
       },
       strategyTemplate: {
         findUnique: jest.fn(),
@@ -168,6 +170,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       name: undefined as any,
       exchange: 'okx',
       symbol: 'SOLUSDT',
+      marketType: 'spot',
       timeframe: '5m',
       positionPct: 10,
       exchangeAccountId: 'exchange-account-1',
@@ -198,7 +201,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         findUnique: jest.fn().mockResolvedValue({ id: 'user-1' }),
       },
       exchangeAccount: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true }),
+        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true, exchangeId: 'okx' }),
       },
       strategyTemplate: {
         findUnique: jest.fn(),
@@ -240,6 +243,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       name: 'snapshot deploy',
       exchange: 'okx',
       symbol: 'SOLUSDT',
+      marketType: 'spot',
       timeframe: '5m',
       positionPct: 10,
       exchangeAccountId: 'exchange-account-1',
@@ -273,7 +277,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         findUnique: jest.fn().mockResolvedValue({ id: 'user-1' }),
       },
       exchangeAccount: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true }),
+        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true, exchangeId: 'okx' }),
       },
       strategyTemplate: {
         findUnique: jest.fn(),
@@ -301,6 +305,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       name: 'snapshot deploy',
       exchange: 'okx',
       symbol: 'SOLUSDT',
+      marketType: 'spot',
       timeframe: '5m',
       positionPct: 10,
       exchangeAccountId: 'exchange-account-1',
@@ -326,7 +331,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         create: jest.fn(),
       },
       exchangeAccount: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true }),
+        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true, exchangeId: 'okx' }),
       },
       strategyTemplate: {
         findUnique: jest.fn(),
@@ -368,6 +373,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       name: 'OKX SOLUSDT 5m AI策略',
       exchange: 'okx',
       symbol: 'SOLUSDT',
+      marketType: 'spot',
       timeframe: '5m',
       positionPct: 10,
       exchangeAccountId: 'exchange-account-1',
@@ -486,6 +492,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       name: 'BTC test',
       exchange: 'binance',
       symbol: 'BTCUSDT',
+      marketType: 'spot',
       timeframe: '1h',
       positionPct: 10,
       exchangeAccountId: 'missing-account',
@@ -494,6 +501,56 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
 
     expect(tx.exchangeAccount.create).not.toHaveBeenCalled()
     expect(tx.userStrategySubscription.create).not.toHaveBeenCalled()
+  })
+
+  it('rejects deploy when the selected exchange account does not match the snapshot exchange', async () => {
+    const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'user-1' }),
+      },
+      exchangeAccount: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true, exchangeId: 'binance' }),
+      },
+      strategyTemplate: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+      },
+      strategyInstance: {
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        create: jest.fn(),
+      },
+      userStrategySubscription: {
+        findFirst: jest.fn(),
+        create: jest.fn(),
+      },
+      userStrategyAccount: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+      },
+    }
+
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
+
+    await expect(repo.deployStrategyForUser({
+      userId: 'user-1',
+      name: 'spot deploy',
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      marketType: 'spot',
+      timeframe: '15m',
+      positionPct: 10,
+      exchangeAccountId: 'exchange-account-1',
+      publishedSnapshotBinding: {
+        bindingSource: 'PUBLISHED_SNAPSHOT',
+        publishedSnapshotId: 'snapshot-spot',
+        snapshotHash: 'snapshot-hash-spot',
+        sourceStrategyInstanceId: 'strategy-instance-1',
+        sourceStrategyTemplateId: 'template-1',
+      },
+    } as any)).rejects.toMatchObject({
+      message: 'account_strategy.deploy_exchange_account_mismatch',
+    })
   })
 
   it('rejects deploy when no real exchange account is available instead of creating a mock account', async () => {
@@ -529,6 +586,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       name: 'BTC test',
       exchange: 'binance',
       symbol: 'BTCUSDT',
+      marketType: 'spot',
       timeframe: '1h',
       positionPct: 10,
     })).rejects.toThrow('Exchange account not found')
@@ -543,7 +601,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         findUnique: jest.fn().mockResolvedValue({ id: 'user-1' }),
       },
       exchangeAccount: {
-        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true }),
+        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true, exchangeId: 'okx' }),
       },
       strategyTemplate: {
         findUnique: jest.fn(),
@@ -585,6 +643,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       name: 'OKX SOLUSDT 5m AI策略',
       exchange: 'okx',
       symbol: 'SOLUSDT',
+      marketType: 'spot',
       timeframe: '5m',
       positionPct: 10,
       publishedSnapshotBinding: {

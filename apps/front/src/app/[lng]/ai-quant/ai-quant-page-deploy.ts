@@ -51,6 +51,7 @@ export async function confirmAiQuantDeploy(args: {
   deployRequestId: string | null
   selectedDeployAccountId: string
   selectedDeployExchange: QuantParams['exchange']
+  selectedDeployMarketType: 'spot' | 'perp' | null
   selectedDeployLeverage: number | null
   sessionUserId: string
   setDeployOpen: Dispatch<SetStateAction<boolean>>
@@ -68,6 +69,7 @@ export async function confirmAiQuantDeploy(args: {
     deployRequestId,
     selectedDeployAccountId,
     selectedDeployExchange,
+    selectedDeployMarketType,
     selectedDeployLeverage,
     sessionUserId,
     setDeployOpen,
@@ -131,6 +133,24 @@ export async function confirmAiQuantDeploy(args: {
       return
     }
 
+    if (!selectedDeployMarketType) {
+      updateActiveConversation(curr => ({
+        ...curr,
+        messages: [
+          ...curr.messages,
+          {
+            id: `deploy-truth-missing-${Date.now()}`,
+            role: 'assistant',
+            content: t('aiQuant.messages.deployRepublishRequired', {
+              defaultValue: '当前已发布快照缺少可部署绑定真相，请重新发布后再部署。',
+            }),
+          },
+        ],
+        updatedAt: Date.now(),
+      }))
+      return
+    }
+
     const latestExchangeAccounts = mapExchangeStatusesToDeployAccounts(
       await fetchUserExchangeAccountStatuses(),
     )
@@ -160,7 +180,7 @@ export async function confirmAiQuantDeploy(args: {
         exchangeAccountId: account.accountId,
         exchangeAccountName: account.accountName,
         deploymentExecutionConfig:
-          typeof selectedDeployLeverage === 'number'
+          selectedDeployMarketType === 'perp' && typeof selectedDeployLeverage === 'number'
             ? { leverage: selectedDeployLeverage }
             : undefined,
       })
