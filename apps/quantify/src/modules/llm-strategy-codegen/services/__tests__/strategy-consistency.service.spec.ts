@@ -70,6 +70,48 @@ strategy
 
     expect(report.status).toBe('PASSED')
     expect(report.checks.every(check => check.status === 'passed')).toBe(true)
+    expect(report.checks.some(
+      check => check.key === 'compiler_consistency.ast_projection' && check.status === 'passed',
+    )).toBe(true)
+    expect(report.checks.some(
+      check => check.key === 'compiler_consistency.execution_envelope.position_mode' && check.status === 'passed',
+    )).toBe(true)
+  })
+
+  it('fails with direction-sensitive atom drift at the IR layer', () => {
+    const semanticGraph = createBollingerSemanticGraph()
+    const ir = new SemanticGraphCompilerService().compile(semanticGraph)
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const script = new CompiledScriptEmitterService().emit({
+      ast,
+      executionEnvelope: createExecutionEnvelope(),
+    })
+    const driftedIr = {
+      ...ir,
+      signalCatalog: {
+        ...ir.signalCatalog,
+        predicates: ir.signalCatalog.predicates.map(predicate => (
+          predicate.id === 'predicate_entry-upper-short'
+            ? { ...predicate, kind: 'CROSS_UNDER' as const }
+            : predicate
+        )),
+      },
+    }
+
+    const report = consistency.audit({
+      semanticGraph,
+      ir: driftedIr,
+      scriptCode: script,
+    })
+
+    expect(report.status).toBe('FAILED')
+    expect(report.checks.some(
+      check => check.key === 'compiler_consistency.ir_direction_sensitive_atom'
+        && check.status === 'failed',
+    )).toBe(true)
+    expect(report.checks.some(
+      check => check.key === 'script.ir_manifest' && check.status === 'failed',
+    )).toBe(true)
   })
 
   it('passes when canonical spec v2 compiles into a published-aligned script with ratio sizing', () => {
@@ -156,7 +198,7 @@ strategy
     expect(report.checks.some(check => check.key === 'market.execution_model' && check.status === 'failed')).toBe(true)
   })
 
-  it('fails when compiled execution positionMode drifts from canonical spec intent', () => {
+  it('fails with explicit execution envelope position-mode drift without a generic script mismatch', () => {
     const canonicalSpec = {
       version: 2 as const,
       market: {
@@ -227,10 +269,11 @@ strategy
     })
 
     expect(report.status).toBe('FAILED')
-    expect(report.checks.some(check => check.key === 'market.execution_model' && check.status === 'failed')).toBe(true)
     expect(report.checks.some(
-      check => check.key === 'market.execution_model'
-        && String(check.message).includes('positionMode'),
+      check => check.key === 'compiler_consistency.ast_projection' && check.status === 'passed',
+    )).toBe(true)
+    expect(report.checks.some(
+      check => check.key === 'compiler_consistency.execution_envelope.position_mode' && check.status === 'failed',
     )).toBe(true)
   })
 
@@ -304,6 +347,12 @@ strategy
     expect(report.status).toBe('PASSED')
     expect(report.checks.some(
       check => check.key === 'market.execution_model' && check.status === 'passed',
+    )).toBe(true)
+    expect(report.checks.some(
+      check => check.key === 'compiler_consistency.ast_projection' && check.status === 'passed',
+    )).toBe(true)
+    expect(report.checks.some(
+      check => check.key === 'compiler_consistency.execution_envelope.position_mode' && check.status === 'passed',
     )).toBe(true)
   })
 

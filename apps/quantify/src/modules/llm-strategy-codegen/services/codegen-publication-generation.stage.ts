@@ -99,7 +99,10 @@ export class CodegenPublicationGenerationStage {
           blocked: false,
         }
       : this.intentNormalizer.normalize(sourceChecklist)
-    const canonicalSpec = input.semanticState && normalization.normalizedIntent.triggers.some(trigger => trigger.phase === 'gate')
+    const canonicalSpec = input.semanticState && (
+      normalization.normalizedIntent.triggers.some(trigger => trigger.phase === 'gate')
+      || Boolean(normalization.normalizedIntent.grid)
+    )
       ? this.canonicalSpecBuilder.buildFromNormalizedIntent(sourceChecklist, normalization.normalizedIntent)
       : this.canonicalSpecBuilder.build(sourceChecklist)
     const semanticView = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {

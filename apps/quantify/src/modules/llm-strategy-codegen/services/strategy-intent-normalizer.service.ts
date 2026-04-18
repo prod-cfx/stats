@@ -24,11 +24,11 @@ export class StrategyIntentNormalizerService {
     const stateHints = this.normalizeStateHints(checklist)
     const grid = this.normalizeGrid(checklist)
     const gridTriggers = this.buildGridTriggerAtoms(checklist, grid)
-    const triggers = this.sortTriggers([
+    const triggers = this.sortTriggers(this.harmonizeBollingerTriggers([
       ...entryNormalization.triggers,
       ...exitNormalization.triggers,
       ...gridTriggers,
-    ])
+    ]))
     const risk = this.normalizeRisk(checklist.riskRules)
     const actions = this.normalizeActions(triggers, grid)
     const families = this.resolveFamilies(triggers, grid)
@@ -177,23 +177,12 @@ export class StrategyIntentNormalizerService {
       })
     }
     if (stateGates.marketRegime) {
-      const hintIndex = hints.length
       hints.push({
         type: 'regime',
         value: stateGates.marketRegime,
         mode: 'observation_only',
-        closureStatus: 'open',
-        unresolvedSlots: [
-          {
-            slotKey: 'regimeDefinition',
-            fieldPath: `stateHints[${hintIndex}].definition`,
-            reason: 'missing_definition',
-            questionHint: '震荡行情怎么判断？',
-            priority: 'behavior',
-            affectsExecution: true,
-            evidenceText: stateGates.marketRegime,
-          },
-        ],
+        closureStatus: 'closed',
+        unresolvedSlots: [],
         evidenceText: stateGates.marketRegime,
       })
     }
@@ -837,6 +826,35 @@ export class StrategyIntentNormalizerService {
       const leftKey = `${left.phase}:${left.key}:${JSON.stringify(left.params)}:${left.sideScope ?? ''}:${JSON.stringify(left.resolutionHints ?? {})}`
       const rightKey = `${right.phase}:${right.key}:${JSON.stringify(right.params)}:${right.sideScope ?? ''}:${JSON.stringify(right.resolutionHints ?? {})}`
       return leftKey.localeCompare(rightKey)
+    })
+  }
+
+  private harmonizeBollingerTriggers(
+    triggers: NormalizedTriggerAtom[],
+  ): NormalizedTriggerAtom[] {
+    const reference = triggers.find(trigger => (
+      (trigger.key === 'bollinger.touch_upper' || trigger.key === 'bollinger.touch_lower')
+      && typeof trigger.params.period === 'number'
+      && typeof trigger.params.stdDev === 'number'
+    ))
+
+    if (!reference) {
+      return triggers
+    }
+
+    return triggers.map((trigger) => {
+      if (!trigger.key.startsWith('bollinger.touch_')) {
+        return trigger
+      }
+
+      return {
+        ...trigger,
+        params: {
+          ...trigger.params,
+          ...(typeof trigger.params.period === 'number' ? {} : { period: reference.params.period }),
+          ...(typeof trigger.params.stdDev === 'number' ? {} : { stdDev: reference.params.stdDev }),
+        },
+      }
     })
   }
 

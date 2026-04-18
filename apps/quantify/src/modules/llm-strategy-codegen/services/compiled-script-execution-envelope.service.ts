@@ -11,7 +11,6 @@ export class CompiledScriptExecutionEnvelopeService {
 
     const hasLongExposure = spec.rules.some(rule => rule.actions.some(action => (
       action.type === 'OPEN_LONG'
-      || action.type === 'CLOSE_LONG'
       || action.type === 'REDUCE_LONG'
     )))
     const hasShortExposure = spec.rules.some(rule => rule.actions.some(action => (

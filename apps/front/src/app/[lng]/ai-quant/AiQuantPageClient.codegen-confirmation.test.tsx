@@ -1731,6 +1731,201 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     )
   })
 
+  it('does not resend one-sided bollinger checklist fields when confirmGenerate is driven by a full dual-side specDesc', async () => {
+    localStorage.clear()
+    seedDraftConversation(Date.now(), {
+      pendingCanonicalDigest: 'sha256:canonical-bollinger-1',
+      semanticGraph: null,
+      validationReport: null,
+    })
+    const stored = readStoredConversations<Record<string, unknown>>()
+    localStorage.setItem(
+      'ai_quant_conversations_v1',
+      JSON.stringify([
+        {
+          ...stored[0],
+          logicGraph: {
+            version: 1,
+            status: 'draft',
+            trigger: [
+              {
+                id: 'entry-upper-only',
+                operator: '价格向上突破布林带上轨',
+              },
+            ],
+            actions: [],
+            risk: [],
+            meta: {
+              exchange: 'okx',
+              symbol: 'BTCUSDT',
+              timeframe: '15m',
+              positionPct: 10,
+            },
+          },
+          codegenSpecDesc: {
+            canonicalDigest: 'sha256:canonical-bollinger-1',
+            rules: [
+              {
+                phase: 'entry',
+                condition: { key: 'bollinger.upper_break' },
+                actions: [{ type: 'OPEN_SHORT' }],
+              },
+              {
+                phase: 'entry',
+                condition: { key: 'bollinger.lower_break' },
+                actions: [{ type: 'OPEN_LONG' }],
+              },
+              {
+                phase: 'exit',
+                condition: { key: 'bollinger.middle_revert' },
+                actions: [{ type: 'CLOSE_LONG' }, { type: 'CLOSE_SHORT' }],
+              },
+            ],
+            market: {
+              symbols: ['BTCUSDT'],
+              timeframes: ['15m'],
+            },
+            lockedParams: {
+              exchange: 'okx',
+              marketType: 'perp',
+              positionPct: 10,
+            },
+          },
+        },
+      ]),
+    )
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="confirm-graph"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockContinueLlmCodegenSession).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        confirmGenerate: true,
+        confirmedCanonicalDigest: 'sha256:canonical-bollinger-1',
+      }),
+    )
+    const continuePayload = mockContinueLlmCodegenSession.mock.calls.at(-1)?.[1] as Record<string, unknown>
+    expect(continuePayload).not.toHaveProperty('entryRules')
+    expect(continuePayload).not.toHaveProperty('exitRules')
+    expect(continuePayload).not.toHaveProperty('riskRules')
+    expect(continuePayload).not.toHaveProperty('symbols')
+    expect(continuePayload).not.toHaveProperty('timeframes')
+  })
+
+  it('does not resend default maxDrawdownPct when confirmGenerate is driven by a grid specDesc', async () => {
+    localStorage.clear()
+    seedDraftConversation(Date.now(), {
+      pendingCanonicalDigest: 'sha256:canonical-grid-1',
+      semanticGraph: null,
+      validationReport: null,
+    })
+    const stored = readStoredConversations<Record<string, unknown>>()
+    localStorage.setItem(
+      'ai_quant_conversations_v1',
+      JSON.stringify([
+        {
+          ...stored[0],
+          logicGraph: {
+            version: 1,
+            status: 'draft',
+            trigger: [
+              {
+                id: 'grid-entry-vague',
+                operator: '网格区间交易',
+              },
+            ],
+            actions: [],
+            risk: [],
+            meta: {
+              exchange: 'okx',
+              symbol: 'BTCUSDT',
+              timeframe: '15m',
+              positionPct: 10,
+            },
+          },
+          codegenSpecDesc: {
+            canonicalDigest: 'sha256:canonical-grid-1',
+            rules: [
+              {
+                phase: 'entry',
+                sideScope: 'long',
+                condition: { key: 'grid.range_rebalance' },
+                actions: [{ type: 'OPEN_LONG' }],
+              },
+              {
+                phase: 'entry',
+                sideScope: 'short',
+                condition: { key: 'grid.range_rebalance' },
+                actions: [{ type: 'OPEN_SHORT' }],
+              },
+              {
+                phase: 'exit',
+                sideScope: 'long',
+                condition: { key: 'grid.range_rebalance' },
+                actions: [{ type: 'CLOSE_LONG' }],
+              },
+              {
+                phase: 'exit',
+                sideScope: 'short',
+                condition: { key: 'grid.range_rebalance' },
+                actions: [{ type: 'CLOSE_SHORT' }],
+              },
+            ],
+            market: {
+              symbols: ['BTCUSDT'],
+              timeframes: ['15m'],
+            },
+            lockedParams: {
+              exchange: 'okx',
+              marketType: 'perp',
+              positionPct: 10,
+              gridLower: 60000,
+              gridUpper: 80000,
+              gridStepPct: 0.5,
+            },
+          },
+        },
+      ]),
+    )
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="confirm-graph"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockContinueLlmCodegenSession).toHaveBeenCalledWith(
+      'session-1',
+      expect.objectContaining({
+        confirmGenerate: true,
+        confirmedCanonicalDigest: 'sha256:canonical-grid-1',
+      }),
+    )
+    const continuePayload = mockContinueLlmCodegenSession.mock.calls.at(-1)?.[1] as Record<string, unknown>
+    expect(continuePayload).not.toHaveProperty('riskRules')
+    expect(JSON.stringify(continuePayload)).not.toContain('maxDrawdownPct')
+    expect(continuePayload).not.toHaveProperty('entryRules')
+    expect(continuePayload).not.toHaveProperty('exitRules')
+  })
+
   it('blocks chat-based confirmation when semantic graph validation is not ok', async () => {
     localStorage.clear()
     seedDraftConversation(Date.now(), {

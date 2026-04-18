@@ -2,6 +2,7 @@ import type { SemanticState } from '../../types/semantic-state'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2DigestService } from '../canonical-spec-v2-digest.service'
 import { CodegenPublicationGenerationStage } from '../codegen-publication-generation.stage'
+import { SemanticStateCompileBridgeService } from '../semantic-state-compile-bridge.service'
 import { SpecDescBuilderService } from '../spec-desc-builder.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
@@ -212,6 +213,79 @@ describe('codegenPublicationGenerationStage', () => {
     updatedAt: '2026-04-15T10:00:00.000Z',
   })
 
+  const buildLockedGridSemanticState = (): SemanticState => ({
+    version: 1,
+    families: ['grid.range_rebalance'],
+    triggers: [
+      {
+        id: 'grid-entry',
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope: 'both',
+        params: {
+          rangeLower: 60000,
+          rangeUpper: 80000,
+          stepPct: 1,
+          sideMode: 'bidirectional',
+          recycle: true,
+          breakoutAction: 'pause',
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ],
+    actions: [],
+    risk: [],
+    position: {
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+    },
+    contextSlots: {
+      exchange: {
+        slotKey: 'exchange',
+        fieldPath: 'contextSlots.exchange',
+        value: 'okx',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认交易所。',
+        affectsExecution: true,
+      },
+      symbol: {
+        slotKey: 'symbol',
+        fieldPath: 'contextSlots.symbol',
+        value: 'BTCUSDT',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认交易标的。',
+        affectsExecution: true,
+      },
+      marketType: {
+        slotKey: 'marketType',
+        fieldPath: 'contextSlots.marketType',
+        value: 'perp',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认市场类型。',
+        affectsExecution: true,
+      },
+      timeframe: {
+        slotKey: 'timeframe',
+        fieldPath: 'contextSlots.timeframe',
+        value: '15m',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认周期。',
+        affectsExecution: true,
+      },
+    },
+    normalizationNotes: [],
+    updatedAt: '2026-04-15T10:00:00.000Z',
+  })
+
   it('keeps clarified bollinger middle-band summaries aligned through generation', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
@@ -281,6 +355,94 @@ describe('codegenPublicationGenerationStage', () => {
     expect(artifacts.sessionSpecDesc.summaryObservation).toEqual(expect.objectContaining({
       status: 'aligned',
     }))
+  })
+
+  it('routes semantic-state publication through normalized canonical compilation', async () => {
+    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const semanticStateCompileBridge = new SemanticStateCompileBridgeService()
+    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const semanticState = buildLockedGridSemanticState()
+    const rawChecklist = {
+      symbols: ['ETHUSDT'],
+      timeframes: ['1h'],
+      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+    }
+    const projectedChecklist = semanticStateCompileBridge.buildLegacyChecklist(semanticState, rawChecklist)
+    const expectedNormalizedIntent = semanticStateCompileBridge.buildNormalizedIntent(semanticState)
+    const buildSpy = jest.spyOn(canonicalSpecBuilder, 'build')
+    const buildFromNormalizedIntentSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromNormalizedIntent')
+    const executionEnvelopeBuild = jest.fn().mockReturnValue({})
+
+    const stage = new CodegenPublicationGenerationStage(
+      canonicalSpecBuilder,
+      { buildFromCanonicalSpec: jest.fn().mockReturnValue({}) } as any,
+      strategySummaryBuilder as any,
+      { evaluate: jest.fn().mockReturnValue({
+        status: 'PASSED',
+        specProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        scriptProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        checks: [],
+        summary: { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
+      }) } as any,
+      { compile: jest.fn().mockReturnValue({ ir: { id: 'compiled-ir' }, graphSnapshot: {} }) } as any,
+      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
+      { emit: jest.fn().mockReturnValue('strategy') } as any,
+      { build: executionEnvelopeBuild } as any,
+      { parse: jest.fn().mockReturnValue({}) } as any,
+    )
+
+    const artifacts = await stage.generate({
+      checklist: rawChecklist,
+      semanticState,
+      message: '在 60000-80000 区间做 1% 步长的网格策略，突破区间就停掉',
+    } as any)
+
+    expect(buildFromNormalizedIntentSpy).toHaveBeenCalledWith(
+      projectedChecklist,
+      expectedNormalizedIntent,
+    )
+    expect(buildSpy).not.toHaveBeenCalled()
+    expect(artifacts.sessionSpecDesc.canonicalSpec).toEqual(artifacts.canonicalSpec)
+    expect(artifacts.sessionSpecDesc.normalizedIntent).toEqual(expectedNormalizedIntent)
+    expect(artifacts.canonicalSpec.market).toEqual(expect.objectContaining({
+      symbol: 'BTCUSDT',
+      defaultTimeframe: '15m',
+      marketType: 'perp',
+    }))
+    expect(artifacts.canonicalSpec.dataRequirements.requiredTimeframes).toEqual(['15m'])
+    expect(artifacts.canonicalSpec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        condition: expect.objectContaining({
+          key: 'grid.range_rebalance',
+        }),
+        metadata: expect.objectContaining({
+          normalized: expect.objectContaining({
+            family: 'grid.range_rebalance',
+          }),
+        }),
+      }),
+    ]))
+    expect(executionEnvelopeBuild).toHaveBeenCalledWith(
+      artifacts.canonicalSpec,
+      expectedNormalizedIntent.position?.positionMode ?? null,
+    )
   })
 
   it('builds strategy summary from specProfile rather than legacy canonical-spec text heuristics', async () => {
@@ -491,18 +653,18 @@ describe('codegenPublicationGenerationStage', () => {
   it('keeps the MA golden case canonical digest stable through semanticState compile input', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const digestService = new CanonicalSpecV2DigestService()
+    const semanticStateCompileBridge = new SemanticStateCompileBridgeService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
     const semanticState = buildLockedMaSemanticState()
-    const expectedChecklist = {
-      symbols: ['BTCUSDT'],
-      timeframes: ['15m'],
-      entryRules: ['收盘确认价格突破长期均线（50）时买入'],
-      exitRules: ['收盘确认价格跌破短期均线（10）时卖出'],
+    const projectedChecklist = semanticStateCompileBridge.buildLegacyChecklist(semanticState, {
       riskRules: completeRiskRules({
         marketType: 'spot',
       }),
-    }
-    const expectedDigest = digestService.hash(canonicalSpecBuilder.build(expectedChecklist))
+    })
+    const expectedNormalizedIntent = semanticStateCompileBridge.buildNormalizedIntent(semanticState)
+    const expectedDigest = digestService.hash(
+      canonicalSpecBuilder.buildFromNormalizedIntent(projectedChecklist, expectedNormalizedIntent),
+    )
 
     const stage = new CodegenPublicationGenerationStage(
       canonicalSpecBuilder,

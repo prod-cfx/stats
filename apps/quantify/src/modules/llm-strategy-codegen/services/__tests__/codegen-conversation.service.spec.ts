@@ -484,6 +484,33 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('does not let stop-loss and take-profit percentages bleed into each other when parsed from one sentence', () => {
+    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+
+    const checklist = (service as any).inferChecklistFromMessage(
+      '在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 60000-80000，采用双向网格，每格间距 0.5%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈',
+    )
+
+    expect(checklist.riskRules).toEqual(expect.objectContaining({
+      stopLossPct: 5,
+      takeProfitPct: 10,
+    }))
+  })
+
+  it('keeps risk clause percentages stable when stop-loss and take-profit share a natural language fragment', () => {
+    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+
+    const checklist = (service as any).inferChecklistFromMessage(
+      'OKX 永续合约 BTCUSDT 15m；入场后按入场均价亏损 5% 强制止损，盈利 10% 止盈，单笔仓位 10%',
+    )
+
+    expect(checklist.riskRules).toEqual(expect.objectContaining({
+      stopLossPct: 5,
+      takeProfitPct: 10,
+      positionPct: 10,
+    }))
+  })
+
   it('starts in drafting and asks next key question from llm planner', async () => {
     const dto: StartCodegenSessionDto = {
       userId: 'u1',
@@ -6630,6 +6657,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         ]),
       }),
     }))
+    expect(publishedSnapshot?.compiledIr?.portfolio?.positionMode).toBe('short_only')
   })
 
   it('keeps updated Bollinger trigger semantics aligned through checklist gate and publication', async () => {
@@ -6788,7 +6816,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
-  it('keeps state-gated semantic conditions aligned from checklist gate through publication', async () => {
+  it('keeps structured clarification semantic digests aligned from checklist gate through publication', async () => {
     const persistedChecklist = completeChecklist({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
@@ -6859,15 +6887,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       strategyInstanceId: null,
     })
 
-    const projectedChecklist = (service as any).projectLegacyChecklistFromSemanticState(semanticState, persistedChecklist)
-    const mergedSemanticState = (service as any).mergeChecklistIntoSemanticState(semanticState, projectedChecklist)
-    const canonicalChecklist = (service as any).projectLegacyChecklistFromSemanticState(mergedSemanticState, projectedChecklist)
-
     const result = await service.continueSession('s-state-gate-publish', {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(canonicalChecklist, mergedSemanticState),
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(persistedChecklist, semanticState),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -6904,6 +6928,128 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         }),
       }),
     ]))
+    expect(publishedSnapshot?.compiledIr?.signalCatalog?.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'UPPER_BAND', params: { period: 20, stdDev: 2 } }),
+      expect.objectContaining({ kind: 'MID_BAND', params: { period: 20, stdDev: 2 } }),
+    ]))
+    expect(publishedSnapshot?.compiledIr?.portfolio?.positionMode).toBe('short_only')
+  })
+
+  it('covers the grid golden case through confirmGenerate with atomic grid rules intact', async () => {
+    mockRepo.createVersion.mockResolvedValue({ id: 'v-golden-grid' })
+
+    const started = await startGoldenCase({
+      sessionId: 's-golden-grid-publish',
+      message: '在okx交易所合约市场的BTCUSDT 15m上，做一个60000到80000的网格策略，每格0.5%，突破区间就停掉，单笔10%资金。',
+      plannerLogic: completeChecklist({
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        grid: {
+          lower: 60000,
+          upper: 80000,
+          stepPct: 0.5,
+          sideMode: 'bidirectional',
+          breakoutAction: 'pause',
+        },
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+          positionPct: 10,
+        },
+      }),
+    })
+    expect(started.status).toBe('CHECKLIST_GATE')
+    expect(started.canonicalDigest).toMatch(/^sha256:/)
+
+    const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    mockRepo.findById.mockResolvedValue({
+      id: 's-golden-grid-publish',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: createdSession.checklist,
+      semanticState: createdSession.semanticState,
+      clarificationState: createdSession.clarificationState,
+      constraintPack: createdSession.constraintPack,
+      strategyInstanceId: null,
+    })
+
+    const result = await service.continueSession('s-golden-grid-publish', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(createdSession.checklist, createdSession.semanticState),
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await waitForTerminalStatus('s-golden-grid-publish')
+
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-golden-grid-publish', expect.objectContaining({
+      status: 'PUBLISHED',
+    }))
+    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
+    expect(publishedSnapshot?.specSnapshot?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        condition: expect.objectContaining({ key: 'grid.range_rebalance' }),
+        sideScope: 'long',
+        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+      }),
+      expect.objectContaining({
+        condition: expect.objectContaining({ key: 'grid.range_rebalance' }),
+        sideScope: 'short',
+        actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
+      }),
+      expect.objectContaining({
+        condition: expect.objectContaining({ key: 'grid.range_rebalance' }),
+        sideScope: 'long',
+        phase: 'exit',
+        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+      }),
+      expect.objectContaining({
+        condition: expect.objectContaining({ key: 'grid.range_rebalance' }),
+        sideScope: 'short',
+        phase: 'exit',
+        actions: [expect.objectContaining({ type: 'CLOSE_SHORT' })],
+      }),
+    ]))
+    expect(publishedSnapshot?.compiledIr?.signalCatalog?.levelSets).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'ARITHMETIC_LEVEL_SET',
+        spacing: expect.objectContaining({ mode: 'pct', value: 0.5 }),
+      }),
+    ]))
+    expect(publishedSnapshot?.compiledIr?.signalCatalog?.predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'TOUCH_LEVEL_DOWN' }),
+      expect.objectContaining({ kind: 'TOUCH_LEVEL_UP' }),
+    ]))
+    expect(publishedSnapshot?.compiledIr?.portfolio?.positionMode).toBe('long_short')
+    expect(publishedSnapshot).toEqual(expect.objectContaining({
+      strategyConfig: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '15m',
+        stateTimeframes: [],
+        positionPct: 10,
+        strategyDeclaredLeverageRange: null,
+      },
+      backtestConfigDefaults: expect.objectContaining({
+        initialCash: 10000,
+        leverage: 1,
+        priceSource: 'close',
+        allowPartial: false,
+      }),
+      deploymentExecutionDefaults: expect.objectContaining({
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'gtc',
+      }),
+      deploymentExecutionConstraints: expect.objectContaining({
+        defaultLeverage: 1,
+        supportedOrderTypes: ['market'],
+        supportedTimeInForce: ['gtc'],
+      }),
+    }))
   })
 
   it('publishes bollinger strategy after confirmGenerate without reintroducing sma semantics', async () => {
@@ -6995,6 +7141,34 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(publishedSnapshot?.specSnapshot?.indicators).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'sma' }),
     ]))
+    expect(publishedSnapshot).toEqual(expect.objectContaining({
+      strategyConfig: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '15m',
+        stateTimeframes: [],
+        positionPct: 10,
+        strategyDeclaredLeverageRange: null,
+      },
+      backtestConfigDefaults: expect.objectContaining({
+        initialCash: 10000,
+        leverage: 1,
+        priceSource: 'close',
+        allowPartial: false,
+      }),
+      deploymentExecutionDefaults: expect.objectContaining({
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'gtc',
+      }),
+      deploymentExecutionConstraints: expect.objectContaining({
+        defaultLeverage: 1,
+        supportedOrderTypes: ['market'],
+        supportedTimeInForce: ['gtc'],
+      }),
+    }))
   })
 
   it('publishes price-change strategy after confirmGenerate through the canonical mainline', async () => {
@@ -7057,6 +7231,38 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             }),
           ]),
         }),
+      }),
+    }))
+    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
+    expect(publishedSnapshot).toEqual(expect.objectContaining({
+      strategyConfig: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '3m',
+        stateTimeframes: ['15m'],
+        positionPct: 10,
+        strategyDeclaredLeverageRange: null,
+      },
+      backtestConfigDefaults: expect.objectContaining({
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: false,
+      }),
+      deploymentExecutionDefaults: expect.objectContaining({
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'gtc',
+      }),
+      deploymentExecutionConstraints: expect.objectContaining({
+        defaultLeverage: 1,
+        supportedPriceSources: ['close'],
+        supportedOrderTypes: ['market'],
+        supportedTimeInForce: ['gtc'],
       }),
     }))
   })

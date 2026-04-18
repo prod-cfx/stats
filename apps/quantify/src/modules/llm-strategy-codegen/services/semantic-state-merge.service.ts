@@ -41,8 +41,7 @@ export class SemanticStateMergeService {
     const consumedDerivedIndexes = new Set<number>()
 
     for (const persistedTrigger of persisted) {
-      const matchIndex = next.findIndex((candidate, index) =>
-        !consumedDerivedIndexes.has(index) && this.isSameTriggerIdentity(persistedTrigger, candidate))
+      const matchIndex = this.findBestTriggerMatchIndex(persistedTrigger, next, consumedDerivedIndexes)
       if (matchIndex < 0) {
         next.push({
           ...persistedTrigger,
@@ -74,6 +73,29 @@ export class SemanticStateMergeService {
     }
 
     return next
+  }
+
+  private findBestTriggerMatchIndex(
+    persistedTrigger: SemanticTriggerState,
+    derivedTriggers: SemanticTriggerState[],
+    consumedDerivedIndexes: Set<number>,
+  ): number {
+    let bestIndex = -1
+    let bestScore = -1
+
+    for (const [index, candidate] of derivedTriggers.entries()) {
+      if (consumedDerivedIndexes.has(index) || !this.isSameTriggerIdentity(persistedTrigger, candidate)) {
+        continue
+      }
+
+      const score = this.scoreTriggerMatch(persistedTrigger, candidate)
+      if (score > bestScore) {
+        bestScore = score
+        bestIndex = index
+      }
+    }
+
+    return bestIndex
   }
 
   private mergeActions(
@@ -204,21 +226,40 @@ export class SemanticStateMergeService {
       return false
     }
 
-    const identityKeys = [
+    const stableIdentityKeys = [
       'indicator',
       'referenceRole',
-      'reference.period',
-      'period',
-      'stdDev',
-      'value',
-      'rangeLower',
-      'rangeUpper',
-      'stepPct',
-      'sideMode',
-      'breakoutAction',
+      'basis',
     ] as const
 
-    return this.haveCompatibleParamValues(left.params, right.params, identityKeys)
+    return this.haveCompatibleParamValues(left.params, right.params, stableIdentityKeys)
+  }
+
+  private scoreTriggerMatch(left: SemanticTriggerState, right: SemanticTriggerState): number {
+    let score = 0
+
+    if (left.sideScope && right.sideScope && left.sideScope === right.sideScope) {
+      score += 5
+    }
+
+    const candidateKeys = new Set([
+      ...Object.keys(left.params),
+      ...Object.keys(right.params),
+    ])
+    for (const key of candidateKeys) {
+      if (left.params[key] !== undefined && left.params[key] === right.params[key]) {
+        score += 1
+      }
+    }
+
+    const leftSlotKeys = new Set(left.openSlots.map(slot => slot.slotKey))
+    for (const slot of right.openSlots) {
+      if (leftSlotKeys.has(slot.slotKey)) {
+        score += 3
+      }
+    }
+
+    return score
   }
 
   private isSameActionIdentity(left: SemanticActionState, right: SemanticActionState): boolean {

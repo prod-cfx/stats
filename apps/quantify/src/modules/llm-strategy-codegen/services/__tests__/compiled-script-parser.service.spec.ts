@@ -1,4 +1,5 @@
 import type { CanonicalStrategyIrV1 } from '../../types/canonical-strategy-ir'
+import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
 import { CompiledScriptParserService } from '../compiled-script-parser.service'
@@ -38,6 +39,41 @@ describe('compiledScriptParserService', () => {
     const tamperedScript = validCompiledScript.replace("protocolVersion: 'v1'", 'protocolVersion: "v1"')
 
     expect(() => parser.parse(tamperedScript)).toThrow('codegen.compiled_script_invalid')
+  })
+
+  it('round-trips a short-side bollinger middle revert script without reintroducing both close programs', () => {
+    const emitter = new CompiledScriptEmitterService()
+    const parser = new CompiledScriptParserService()
+    const script = emitter.emit({
+      ast: createShortSideAstFixture(),
+      executionEnvelope: createExecutionEnvelope(),
+    })
+
+    const parsed = parser.parse(script)
+
+    expect(parsed.exprPool).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceRef: 'exit_short_middle_middle_revert',
+        nodeType: 'predicate',
+        payload: expect.objectContaining({
+          kind: 'CROSS_UNDER',
+        }),
+      }),
+    ]))
+    expect(parsed.exprPool).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceRef: 'exit_short_middle_middle_revert',
+        payload: expect.objectContaining({
+          kind: 'OR',
+        }),
+      }),
+    ]))
+    expect(parsed.decisionPrograms).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceRef: 'exit-short-middle',
+        actions: [expect.objectContaining({ kind: 'CLOSE_SHORT' })],
+      }),
+    ]))
   })
 })
 
@@ -120,6 +156,65 @@ function createAstFixture() {
   }
 
   return compiler.compile(ir)
+}
+
+function createShortSideAstFixture() {
+  const compiler = new CanonicalStrategyAstCompilerService()
+  const irCompiler = new CanonicalSpecV2IrCompilerService()
+
+  return compiler.compile(irCompiler.compile({
+    canonicalSpec: {
+      version: 2,
+      market: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        timeframe: '15m',
+      },
+      indicators: [{ kind: 'bollingerBands', params: { period: 20, stdDev: 2 } }],
+      sizing: { mode: 'RATIO', value: 0.1 },
+      executionPolicy: {
+        signalTiming: 'BAR_CLOSE',
+        fillTiming: 'NEXT_BAR_OPEN',
+      },
+      dataRequirements: {
+        requiredTimeframes: ['15m'],
+      },
+      rules: [
+        {
+          id: 'entry-short',
+          phase: 'entry',
+          sideScope: 'short',
+          priority: 200,
+          condition: {
+            kind: 'atom',
+            key: 'ma.death_cross',
+            semanticScope: 'market',
+            op: 'CROSS_UNDER',
+          },
+          actions: [{ type: 'OPEN_SHORT', sizing: { mode: 'RATIO', value: 0.1 } }],
+        },
+        {
+          id: 'exit-short-middle',
+          phase: 'exit',
+          sideScope: 'short',
+          priority: 100,
+          condition: {
+            kind: 'atom',
+            key: 'bollinger.middle_revert',
+            semanticScope: 'market',
+          },
+          actions: [{ type: 'CLOSE_SHORT' }],
+        },
+      ],
+    },
+    fallback: {
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
+      positionPct: 10,
+    },
+  }).ir)
 }
 
 function createExecutionEnvelope() {

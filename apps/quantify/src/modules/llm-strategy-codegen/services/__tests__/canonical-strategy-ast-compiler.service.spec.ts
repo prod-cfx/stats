@@ -1,4 +1,5 @@
 import type { CanonicalStrategyIrV1 } from '../../types/canonical-strategy-ir'
+import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 
 describe('canonicalStrategyAstCompilerService', () => {
@@ -100,5 +101,91 @@ describe('canonicalStrategyAstCompilerService', () => {
     }))
     expect(ast.manifest.structuralDigest).toMatch(/^sha256:/)
     expect(ast.manifest.irHash).toMatch(/^sha256:/)
+  })
+
+  it('keeps short-side bollinger middle revert as a short-only decision program', () => {
+    const irCompiler = new CanonicalSpecV2IrCompilerService()
+    const astCompiler = new CanonicalStrategyAstCompilerService()
+
+    const compiled = irCompiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        indicators: [{ kind: 'bollingerBands', params: { period: 20, stdDev: 2 } }],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['15m'],
+        },
+        rules: [
+          {
+            id: 'entry-short',
+            phase: 'entry',
+            sideScope: 'short',
+            priority: 200,
+            condition: {
+              kind: 'atom',
+              key: 'ma.death_cross',
+              semanticScope: 'market',
+              op: 'CROSS_UNDER',
+            },
+            actions: [{ type: 'OPEN_SHORT', sizing: { mode: 'RATIO', value: 0.1 } }],
+          },
+          {
+            id: 'exit-short-middle',
+            phase: 'exit',
+            sideScope: 'short',
+            priority: 100,
+            condition: {
+              kind: 'atom',
+              key: 'bollinger.middle_revert',
+              semanticScope: 'market',
+            },
+            actions: [{ type: 'CLOSE_SHORT' }],
+          },
+        ],
+      },
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+    })
+
+    const ast = astCompiler.compile(compiled.ir)
+
+    expect(ast.exprPool).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceRef: 'exit_short_middle_middle_revert',
+        nodeType: 'predicate',
+        payload: expect.objectContaining({
+          kind: 'CROSS_UNDER',
+        }),
+      }),
+    ]))
+    expect(ast.exprPool).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceRef: 'exit_short_middle_middle_revert',
+        payload: expect.objectContaining({
+          kind: 'OR',
+        }),
+      }),
+    ]))
+    expect(ast.decisionPrograms).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sourceRef: 'exit-short-middle',
+        phase: 'exit',
+        actions: [expect.objectContaining({ kind: 'CLOSE_SHORT' })],
+      }),
+    ]))
   })
 })
