@@ -10,6 +10,13 @@
 
 ---
 
+## Execution Environment Prerequisites
+
+- Run all commands from the repository root: `/Users/zengmengdan/coinfulx-new/stats`.
+- Prefer the normal `dx` flow first. If a `dx test` / `dx build` command fails only because the current execution context is missing local environment config, reuse the existing environment config files from the local `stats` root workspace instead of inventing new env files.
+- If the active Node runtime is too old for the repo/toolchain and blocks `dx`, switch to the higher Node version already available on the local machine, then rerun the same command.
+- These environment fallbacks are execution-only helpers. They do not change the feature scope, runtime architecture, or the semantic-only migration design.
+
 ## File Structure
 
 ### Create
