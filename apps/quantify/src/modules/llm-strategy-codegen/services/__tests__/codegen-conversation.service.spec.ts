@@ -894,7 +894,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const chatCall = mockAi.chat.mock.calls[0]?.[0] as { messages?: Array<{ role?: string; content?: string }> }
     const systemPrompt = chatCall.messages?.find(message => message.role === 'system')?.content ?? ''
 
-    expect(systemPrompt).toContain('semanticUpdates 只表达当前消息涉及的增量语义')
+    expect(systemPrompt).toContain('semanticPatch 只表达当前消息涉及的增量语义')
     expect(systemPrompt).toContain('不得臆造新的核心交易规则')
     expect(systemPrompt).not.toContain('必须直接给出完整入场+出场规则草案')
   })
@@ -1174,14 +1174,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
-  it('accepts planner semanticUpdates output and projects it into checklist-compatible state', async () => {
+  it('accepts planner semanticPatch output and projects it into checklist-compatible state', async () => {
     mockAi.chat.mockResolvedValueOnce({
       content: JSON.stringify({
         related: true,
         logicReady: true,
         assistantPrompt: '逻辑图已更新。请确认逻辑图。',
-        semanticUpdates: {
-          triggerUpdates: [
+        semanticPatch: {
+          triggers: [
             {
               key: 'indicator.above',
               phase: 'entry',
@@ -1203,20 +1203,20 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
               },
             },
           ],
-          actionUpdates: [
+          actions: [
             { key: 'open_long' },
             { key: 'close_long' },
           ],
-          riskUpdates: [
+          risk: [
             { key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
             { key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' } },
           ],
-          positionUpdate: {
+          position: {
             mode: 'fixed_ratio',
             value: 0.1,
             positionMode: 'long_only',
           },
-          contextUpdates: {
+          contextSlots: {
             exchange: 'okx',
             symbol: 'BTCUSDT',
             marketType: 'spot',

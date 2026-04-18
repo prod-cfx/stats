@@ -8,6 +8,7 @@ import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
 import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant-conversations.repository'
 import type { ChecklistPayload, ChecklistRuleBasis, ChecklistRuleDraft } from '../types/codegen-checklist'
+import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { StrategyAmbiguity } from '../types/strategy-ambiguity'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
@@ -4389,6 +4390,7 @@ export class CodegenConversationService {
           logicReady?: unknown
           assistantPrompt?: unknown
           logic?: unknown
+          semanticPatch?: unknown
           semanticUpdates?: unknown
         }
         const related = typeof parsed.related === 'boolean' ? parsed.related : true
@@ -4398,8 +4400,9 @@ export class CodegenConversationService {
           : (logicReady
               ? '我已整理出策略逻辑，请确认逻辑图。'
               : '我先继续完善策略逻辑，请补充一个关键条件。')
+        const semanticPatch = this.normalizeSemanticPatch(parsed.semanticPatch ?? parsed.semanticUpdates)
         const logic = this.mergeChecklistSnapshots(
-          this.buildPlannerLogicFromSemanticUpdates(currentLogic, parsed.semanticUpdates),
+          this.buildPlannerLogicFromSemanticUpdates(currentLogic, semanticPatch),
           this.normalizeChecklist((parsed.logic ?? {}) as Record<string, unknown>),
         )
         return {
@@ -4407,6 +4410,7 @@ export class CodegenConversationService {
           logicReady,
           assistantPrompt,
           logic,
+          ...(semanticPatch ? { semanticPatch } : {}),
         } satisfies ConversationPlan
       } catch {
         return {
@@ -4446,30 +4450,34 @@ export class CodegenConversationService {
 
   private buildPlannerLogicFromSemanticUpdates(
     currentLogic: ChecklistPayload,
-    semanticUpdates: unknown,
+    semanticPatch: unknown,
   ): ChecklistPayload {
-    if (!semanticUpdates || typeof semanticUpdates !== 'object' || Array.isArray(semanticUpdates)) {
+    if (!semanticPatch || typeof semanticPatch !== 'object' || Array.isArray(semanticPatch)) {
       return {}
     }
 
-    const record = semanticUpdates as Record<string, unknown>
-    const triggerUpdates = Array.isArray(record.triggerUpdates)
-      ? record.triggerUpdates
-        .map((item, index) => this.toPlannerTriggerState(item, index))
-        .filter((item): item is SemanticTriggerState => item !== null)
-      : []
-    const actionUpdates = Array.isArray(record.actionUpdates)
-      ? record.actionUpdates
-        .map((item, index) => this.toPlannerActionState(item, index))
-        .filter((item): item is SemanticState['actions'][number] => item !== null)
-      : []
-    const riskUpdates = Array.isArray(record.riskUpdates)
-      ? record.riskUpdates
-        .map((item, index) => this.toPlannerRiskState(item, index))
-        .filter((item): item is SemanticState['risk'][number] => item !== null)
-      : []
-    const positionUpdate = this.toPlannerPositionState(record.positionUpdate)
-    const contextSlots = this.toPlannerContextSlots(record.contextUpdates)
+    const record = semanticPatch as Record<string, unknown>
+    const triggerItems = Array.isArray(record.triggers)
+      ? record.triggers
+      : (Array.isArray(record.triggerUpdates) ? record.triggerUpdates : [])
+    const actionItems = Array.isArray(record.actions)
+      ? record.actions
+      : (Array.isArray(record.actionUpdates) ? record.actionUpdates : [])
+    const riskItems = Array.isArray(record.risk)
+      ? record.risk
+      : (Array.isArray(record.riskUpdates) ? record.riskUpdates : [])
+    const positionUpdate = this.toPlannerPositionState(record.position ?? record.positionUpdate)
+    const contextSlots = this.toPlannerContextSlots(record.contextSlots ?? record.contextUpdates)
+
+    const triggerUpdates = triggerItems
+      .map((item, index) => this.toPlannerTriggerState(item, index))
+      .filter((item): item is SemanticTriggerState => item !== null)
+    const actionUpdates = actionItems
+      .map((item, index) => this.toPlannerActionState(item, index))
+      .filter((item): item is SemanticState['actions'][number] => item !== null)
+    const riskUpdates = riskItems
+      .map((item, index) => this.toPlannerRiskState(item, index))
+      .filter((item): item is SemanticState['risk'][number] => item !== null)
 
     if (
       triggerUpdates.length === 0
@@ -4882,6 +4890,14 @@ export class CodegenConversationService {
     )
 
     return conflicts
+  }
+
+  private normalizeSemanticPatch(semanticPatch: unknown): CodegenSemanticPatch | null {
+    if (!semanticPatch || typeof semanticPatch !== 'object' || Array.isArray(semanticPatch)) {
+      return null
+    }
+
+    return semanticPatch as CodegenSemanticPatch
   }
 
   private appendConversationHistory(
