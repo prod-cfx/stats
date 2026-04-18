@@ -359,7 +359,6 @@ describe('codegenPublicationGenerationStage', () => {
 
   it('routes semantic-state publication through normalized canonical compilation', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
-    const digestService = new CanonicalSpecV2DigestService()
     const semanticStateCompileBridge = new SemanticStateCompileBridgeService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
     const semanticState = buildLockedGridSemanticState()
