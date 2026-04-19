@@ -497,9 +497,6 @@ export class CodegenConversationService {
       { preserveLegacyFallback: !hasPersistedSemanticState },
     )
     const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
-    const hasBlockingClarificationItems =
-      clarificationState.status === 'NEEDS_CLARIFICATION'
-      && clarificationState.items.some(item => item.blocking && item.status === 'pending')
     const clarificationPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
       || this.clarificationQuestion.build(clarificationState)
       || clarification.clarificationPrompt
