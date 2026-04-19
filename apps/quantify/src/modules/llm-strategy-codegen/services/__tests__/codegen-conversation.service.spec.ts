@@ -1600,6 +1600,201 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('continues from semanticState when persisted checklist payload is absent', async () => {
+    const persistedSemanticState = buildLockedMaSemanticState({
+      triggers: [
+        {
+          id: 'entry-ma',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'long_term',
+            'reference.period': 50,
+            confirmationMode: 'close_confirm',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'action-1', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      ],
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+          value: 'okx',
+        },
+        symbol: {
+          slotKey: 'symbol',
+          fieldPath: 'contextSlots.symbol',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+          affectsExecution: true,
+          value: 'BTCUSDT',
+        },
+        marketType: {
+          slotKey: 'marketType',
+          fieldPath: 'contextSlots.marketType',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认市场类型（现货或合约/perp）。',
+          affectsExecution: true,
+          value: 'spot',
+        },
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+          affectsExecution: true,
+          value: '15m',
+        },
+      },
+    })
+
+    mockRepo.findById.mockResolvedValue({
+      id: 's-semantic-first-continue',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: null,
+      semanticState: persistedSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'indicator.below',
+              phase: 'exit',
+              params: {
+                indicator: 'ma',
+                referenceRole: 'short_term',
+                'reference.period': 10,
+                confirmationMode: 'close_confirm',
+              },
+            },
+          ],
+          actions: [
+            { key: 'close_long' },
+          ],
+        },
+      }),
+    })
+
+    const result = await service.continueSession('s-semantic-first-continue', {
+      userId: 'u1',
+      message: '出场改成 MA10 下破卖出',
+    })
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-semantic-first-continue', expect.objectContaining({
+      semanticState: expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({ key: 'indicator.above', phase: 'entry' }),
+          expect.objectContaining({
+            key: 'indicator.below',
+            phase: 'exit',
+            params: expect.objectContaining({ 'reference.period': 10 }),
+          }),
+        ]),
+      }),
+      checklist: expect.objectContaining({
+        entryRules: expect.any(Array),
+        exitRules: expect.any(Array),
+      }),
+    }))
+  })
+
+  it('confirms generation from semanticState when persisted checklist payload is absent', async () => {
+    const persistedSemanticState = buildLockedMaSemanticState({
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+          value: 'okx',
+        },
+        symbol: {
+          slotKey: 'symbol',
+          fieldPath: 'contextSlots.symbol',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+          affectsExecution: true,
+          value: 'BTCUSDT',
+        },
+        marketType: {
+          slotKey: 'marketType',
+          fieldPath: 'contextSlots.marketType',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认市场类型（现货或合约/perp）。',
+          affectsExecution: true,
+          value: 'spot',
+        },
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+          affectsExecution: true,
+          value: '15m',
+        },
+      },
+    })
+    const projectedChecklist = (service as any).projectLegacyChecklistFromSemanticState(persistedSemanticState, {})
+
+    mockRepo.findById.mockResolvedValue({
+      id: 's-semantic-first-confirm',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: null,
+      semanticState: persistedSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      strategyInstanceId: null,
+    })
+
+    const result = await service.continueSession('s-semantic-first-confirm', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(projectedChecklist, persistedSemanticState),
+    })
+
+    expect(result.status).toBe('GENERATING')
+    expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith('s-semantic-first-confirm', expect.objectContaining({
+      semanticState: expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({ key: 'indicator.above', phase: 'entry' }),
+          expect.objectContaining({ key: 'indicator.below', phase: 'exit' }),
+        ]),
+      }),
+      checklist: expect.objectContaining({
+        entryRules: expect.any(Array),
+        exitRules: expect.any(Array),
+      }),
+    }))
+  })
+
   it('captures exchange and risk clauses from natural language without bypassing clarification flow', async () => {
     mockRepo.createSession.mockResolvedValue({ id: 's-real-pipeline-1' })
 

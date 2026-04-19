@@ -186,13 +186,15 @@ export class CodegenConversationService {
       })
     }
     const seedChecklist = this.inferChecklistFromMessage(dto.initialMessage)
-    const seedSemanticState = this.buildFallbackSemanticState(seedChecklist)
-    const plan = await this.planConversationByLlm(dto.initialMessage ?? '', seedChecklist, {
+    const seedSemanticState = this.createEmptySemanticState()
+    const plannerChecklist = seedChecklist
+    const plan = await this.planConversationByLlm(dto.initialMessage ?? '', plannerChecklist, {
       providerCode: this.resolveProviderCode(undefined),
       model: undefined,
     })
     const initialSemanticState = this.applyConversationPlanToSemanticState({
       currentState: seedSemanticState,
+      compatibilityChecklist: seedChecklist,
       plan,
     })
     const checklist = this.projectLegacyChecklistFromSemanticState(initialSemanticState, seedChecklist)
@@ -381,9 +383,7 @@ export class CodegenConversationService {
       effectiveClarificationAnswers,
     )
     const baseChecklistAfterAnswers = this.applyClarificationAnswers(
-      hasPersistedSemanticState
-        ? this.projectLegacyChecklistFromSemanticState(semanticStateAfterAnswers, persistedChecklist)
-        : persistedChecklist,
+      this.projectLegacyChecklistFromSemanticState(semanticStateAfterAnswers, persistedChecklist),
       baseClarificationState,
       effectiveClarificationAnswers,
     )
@@ -397,21 +397,11 @@ export class CodegenConversationService {
       },
     )
     const baseChecklist = inferredConfirmation.checklist
-    const derivedBaseSemanticState = this.buildFallbackSemanticState(baseChecklist)
-    const baseSemanticState = hasPersistedSemanticState
-      ? this.semanticStateMerge.merge({
-          persisted: semanticStateAfterAnswers,
-          derived: derivedBaseSemanticState,
-        })
-      : derivedBaseSemanticState
+    const baseSemanticState = semanticStateAfterAnswers
     const clarificationStateAfterAnswers = hasStructuredClarificationAnswers
       ? this.resolveClarificationArtifacts(baseChecklist).clarificationState
       : this.withClarificationSummary(baseClarificationState, baseChecklist)
-    const messageSemanticState = this.buildFallbackSemanticState(this.inferChecklistFromMessage(dto.message))
-    const preMergedSemanticState = this.semanticStateMerge.merge({
-      persisted: baseSemanticState,
-      derived: messageSemanticState,
-    })
+    const preMergedSemanticState = baseSemanticState
     const preMergedChecklist = this.projectLegacyChecklistFromSemanticState(preMergedSemanticState, baseChecklist)
     const constraintPack = inferredConfirmation.constraintPack
     const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, dto.guideConfig)
@@ -461,6 +451,7 @@ export class CodegenConversationService {
     }
     const reducedSemanticState = this.applyConversationPlanToSemanticState({
       currentState: preMergedSemanticState,
+      compatibilityChecklist: this.inferChecklistFromMessage(dto.message),
       plan,
     })
     const canonicalChecklist = this.projectLegacyChecklistFromSemanticState(reducedSemanticState, preMergedChecklist)
@@ -512,9 +503,7 @@ export class CodegenConversationService {
       dto.message,
       plan.assistantPrompt,
     )
-    const normalization = hasPersistedSemanticState
-      ? this.buildNormalizationFromSemanticState(reducedSemanticState)
-      : clarification.normalization
+    const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
     const canonicalSpec = this.buildCanonicalSpecForConversation(canonicalChecklist, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
@@ -681,15 +670,11 @@ export class CodegenConversationService {
       effectiveClarificationAnswers,
     )
     const baseChecklist = this.applyClarificationAnswers(
-      hasPersistedSemanticState
-        ? this.projectLegacyChecklistFromSemanticState(semanticStateAfterAnswers, persistedChecklist)
-        : persistedChecklist,
+      this.projectLegacyChecklistFromSemanticState(semanticStateAfterAnswers, persistedChecklist),
       baseClarificationState,
       effectiveClarificationAnswers,
     )
-    const confirmationViewNormalization = hasPersistedSemanticState
-      ? this.buildNormalizationFromSemanticState(semanticStateAfterAnswers)
-      : this.resolveClarificationArtifacts(baseChecklist).normalization
+    const confirmationViewNormalization = this.buildNormalizationFromSemanticState(semanticStateAfterAnswers)
     const confirmationViewSpecDesc = this.specDescBuilder.buildFromCanonicalSpec(
       this.buildCanonicalSpecForConversation(baseChecklist, confirmationViewNormalization),
       '',
@@ -699,12 +684,7 @@ export class CodegenConversationService {
       },
     )
     const confirmationViewDigest = this.readCanonicalDigest(confirmationViewSpecDesc)
-    const messageSemanticState = this.buildFallbackSemanticState(this.inferChecklistFromMessage(dto.message))
-    const preMergedSemanticState = this.semanticStateMerge.merge({
-      persisted: semanticStateAfterAnswers,
-      derived: messageSemanticState,
-    })
-    const reducedSemanticState = preMergedSemanticState
+    const reducedSemanticState = semanticStateAfterAnswers
     const canonicalChecklist = this.projectLegacyChecklistFromSemanticState(reducedSemanticState, baseChecklist)
     const clarification = this.resolveClarificationArtifacts(canonicalChecklist)
     const clarificationState = this.buildClarificationFromSemanticState(
@@ -745,9 +725,7 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
-    const normalization = hasPersistedSemanticState
-      ? this.buildNormalizationFromSemanticState(reducedSemanticState)
-      : clarification.normalization
+    const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
     const canonicalSpec = this.buildCanonicalSpecForConversation(canonicalChecklist, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
@@ -1321,11 +1299,13 @@ export class CodegenConversationService {
 
   private applyConversationPlanToSemanticState(input: {
     currentState: SemanticState
+    compatibilityChecklist?: ChecklistPayload
     plan: ConversationPlan
   }): SemanticState {
     let nextState = input.currentState
 
-    if (input.plan.logic) {
+    const hasSemanticPatch = Boolean(input.plan.semanticPatch)
+    if (!hasSemanticPatch && input.plan.logic) {
       nextState = this.semanticStateMerge.merge({
         persisted: nextState,
         derived: this.buildFallbackSemanticState(input.plan.logic),
@@ -1338,9 +1318,33 @@ export class CodegenConversationService {
         persisted: nextState,
         derived: semanticPatchState,
       })
+    } else if (input.compatibilityChecklist && Object.keys(input.compatibilityChecklist).length > 0) {
+      nextState = this.semanticStateMerge.merge({
+        persisted: nextState,
+        derived: this.buildFallbackSemanticState(input.compatibilityChecklist),
+      })
     }
 
     return nextState
+  }
+
+  private createEmptySemanticState(): SemanticState {
+    return {
+      version: 1,
+      families: [],
+      triggers: [],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: new Date().toISOString(),
+    }
   }
 
   private projectLegacyChecklistFromSemanticState(
