@@ -340,8 +340,9 @@ export class StrategyClarificationRulesService {
   private detectRequiredRuleItems(input: ClarificationChecklistInput): StrategyClarificationItem[] {
     const items: StrategyClarificationItem[] = []
     const hasClosedLoopSemantics = this.hasClosedLoopExitSemantics(input)
+    const hasSelfContainedGridSemantics = this.hasSelfContainedGridSemantics(input)
 
-    if (!this.hasAnyRule(input.entryRules)) {
+    if (!this.hasAnyRule(input.entryRules) && !hasSelfContainedGridSemantics) {
       items.push({
         key: 'entry.rules',
         reason: 'missing_entry_rules',
@@ -352,7 +353,7 @@ export class StrategyClarificationRulesService {
       })
     }
 
-    if (!this.hasAnyRule(input.exitRules) && !hasClosedLoopSemantics) {
+    if (!this.hasAnyRule(input.exitRules) && !hasClosedLoopSemantics && !hasSelfContainedGridSemantics) {
       items.push({
         key: 'exit.rules',
         reason: 'missing_exit_rules',
@@ -861,7 +862,23 @@ export class StrategyClarificationRulesService {
       || /低买高卖|高卖低买/u.test(text)
   }
 
+  private hasSelfContainedGridSemantics(input: ClarificationChecklistInput): boolean {
+    if (!this.looksLikeGridStrategy(input)) {
+      return false
+    }
+
+    const range = this.readGridRange(input)
+    return typeof range.lower === 'number'
+      && typeof range.upper === 'number'
+      && typeof this.readGridStepPct(input) === 'number'
+      && this.hasGridSideMode(input)
+  }
+
   private hasClosedLoopExitSemantics(input: ClarificationChecklistInput): boolean {
+    if (this.hasSelfContainedGridSemantics(input)) {
+      return true
+    }
+
     const text = this.collectRuleTexts(input).join(' ')
     if (!text) return false
 

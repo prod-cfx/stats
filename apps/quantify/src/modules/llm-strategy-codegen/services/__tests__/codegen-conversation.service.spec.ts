@@ -2860,6 +2860,165 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('does not reopen execution-context prompts once the staging price-change transcript has locked runtime context', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-staging-price-change-repro' })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '策略逻辑已完整，请确认逻辑图。',
+        logic: {
+          entryRules: ['3分钟之内跌1%买入'],
+          exitRules: ['15分钟之内涨2%卖出'],
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'spot',
+            positionPct: 10,
+            stopLossPct: 5,
+            takeProfitPct: 10,
+          },
+        },
+      }),
+    })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在 OKX 现货市场里，3 分钟内跌 1% 买入，15 分钟内涨 2% 卖出，止损 5%，止盈 10%，单笔使用 10% 资金。',
+    })
+
+    expect(started.status).toBe('DRAFTING')
+    expect(started.assistantPrompt).toContain('请确认策略交易标的')
+
+    const createdSession = buildPersistedSessionSnapshot(
+      's-staging-price-change-repro',
+      mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>,
+      {
+        clarificationState: started.clarificationState,
+        latestSpecDesc: started.specDesc ?? null,
+        semanticState: (mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>).semanticState,
+      },
+    )
+
+    mockRepo.findById.mockResolvedValueOnce({
+      ...createdSession,
+      updatedAt: '2026-04-17T10:00:00.000Z',
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const afterSymbol = await service.continueSession('s-staging-price-change-repro', {
+      userId: 'u1',
+      message: 'BTCUSDT',
+      clarificationAnswers: {
+        'executionContext.symbol': 'BTCUSDT',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(afterSymbol.status).toBe('CHECKLIST_GATE')
+    expect(afterSymbol.canonicalDigest).toMatch(/^sha256:/)
+    expect(afterSymbol.assistantPrompt).not.toContain('请确认策略交易标的')
+    expect(afterSymbol.assistantPrompt).not.toContain('请确认策略主周期')
+    expect(afterSymbol.clarificationState?.items).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({
+        key: 'executionContext.symbol',
+        status: 'pending',
+      }),
+    ]))
+    expect(afterSymbol.clarificationState?.items).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({
+        key: 'executionContext.symbol',
+        status: 'pending',
+      }),
+      expect.objectContaining({
+        key: 'executionContext.timeframe',
+        status: 'pending',
+      }),
+    ]))
+  })
+
+  it('does not regress the staging dual-side Bollinger prompt into a compileability blocker', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-staging-bollinger-repro' })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        logic: completeChecklist({
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+          entryRules: ['K线收盘后确认突破布林带(20,2)上轨时做空', 'K线收盘后确认突破布林带(20,2)下轨时做多'],
+          exitRules: ['价格回到布林带中轨(MA20)时平仓'],
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'perp',
+            positionPct: 10,
+          },
+        }),
+      }),
+    })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX 合约 BTCUSDT 15m，价格触及/突破布林带(20,2)上轨时做空，触及/突破下轨时做多；多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓；单笔仓位 10%。',
+    })
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.assistantPrompt).toContain('确认逻辑图')
+    expect(result.assistantPrompt).not.toContain('请补充入场和出场条件')
+    expect(result.assistantPrompt).not.toContain('当前规则还不能稳定生成脚本')
+    expect(result.clarificationState).toEqual(expect.objectContaining({
+      status: 'CLEAR',
+    }))
+  })
+
+  it('does not regress the staging bidirectional grid prompt into a checklist-era compileability blocker', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-staging-grid-repro' })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        logic: completeChecklist({
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+          grid: {
+            lower: 60000,
+            upper: 80000,
+            stepPct: 0.5,
+            sideMode: 'bidirectional',
+          },
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'perp',
+            positionPct: 10,
+            stopLossPct: 5,
+            stopLossBasis: 'entry_avg_price',
+            takeProfitPct: 10,
+            takeProfitBasis: 'entry_avg_price',
+          },
+        }),
+      }),
+    })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 60000-80000，采用双向网格，每格间距 0.5%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈。',
+    })
+
+    expect(result.status === 'CHECKLIST_GATE' || result.status === 'DRAFTING').toBe(true)
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('请补充能明确落成主链规则的入场/出场条件')
+    expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({ reason: 'missing_entry_rules' }),
+      expect.objectContaining({ reason: 'missing_exit_rules' }),
+    ]))
+  })
+
   it('keeps MA golden case stable across conversation artifacts', async () => {
     const started = await startGoldenCase({
       sessionId: 's-golden-ma',
