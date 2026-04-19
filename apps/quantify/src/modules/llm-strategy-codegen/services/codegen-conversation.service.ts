@@ -505,7 +505,11 @@ export class CodegenConversationService {
       plan.assistantPrompt,
     )
     const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
-    const canonicalSpec = this.buildCanonicalSpecForConversation(canonicalChecklist, normalization, reducedSemanticState)
+    const canonicalSpec = this.buildCanonicalSpecForConversation(
+      canonicalChecklist,
+      normalization,
+      hasPersistedSemanticState ? reducedSemanticState : undefined,
+    )
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: clarification.executionContext.context,
@@ -677,7 +681,11 @@ export class CodegenConversationService {
     )
     const confirmationViewNormalization = this.buildNormalizationFromSemanticState(semanticStateAfterAnswers)
     const confirmationViewSpecDesc = this.specDescBuilder.buildFromCanonicalSpec(
-      this.buildCanonicalSpecForConversation(baseChecklist, confirmationViewNormalization, semanticStateAfterAnswers),
+      this.buildCanonicalSpecForConversation(
+        baseChecklist,
+        confirmationViewNormalization,
+        hasPersistedSemanticState ? semanticStateAfterAnswers : undefined,
+      ),
       '',
       {
         normalizedIntent: confirmationViewNormalization.normalizedIntent,
@@ -728,7 +736,11 @@ export class CodegenConversationService {
     }
 
     const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
-    const canonicalSpec = this.buildCanonicalSpecForConversation(canonicalChecklist, normalization, reducedSemanticState)
+    const canonicalSpec = this.buildCanonicalSpecForConversation(
+      canonicalChecklist,
+      normalization,
+      hasPersistedSemanticState ? reducedSemanticState : undefined,
+    )
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: clarification.executionContext.context,
@@ -2174,7 +2186,11 @@ export class CodegenConversationService {
     }
 
     const normalization = this.buildNormalizationFromSemanticState(args.semanticState)
-    const canonicalSpec = this.buildCanonicalSpecForConversation(projectedChecklist, normalization, args.semanticState)
+    const canonicalSpec = this.buildCanonicalSpecForConversation(
+      projectedChecklist,
+      normalization,
+      args.useSemanticProjection ? args.semanticState : undefined,
+    )
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: clarification.executionContext.context,

@@ -6838,16 +6838,17 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(started.status).toBe('CHECKLIST_GATE')
     expect(started.canonicalDigest).toMatch(/^sha256:/)
+    const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    const createdChecklist = readPersistedChecklist(createdSession)
 
     mockRepo.findById.mockResolvedValue({
       id: 's5',
       userId: 'u1',
       status: 'CHECKLIST_GATE',
-      checklist: completeChecklist({
-        entryRules: ['短均线上穿长均线（金叉）时做多'],
-        exitRules: ['短均线下穿长均线（死叉）时平多'],
-      }),
-      constraintPack: {},
+      checklist: createdChecklist,
+      semanticState: createdSession.semanticState,
+      clarificationState: createdSession.clarificationState,
+      constraintPack: createdSession.constraintPack,
     })
 
     const dto: ContinueCodegenSessionDto = {
@@ -6976,26 +6977,24 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       initialMessage: '在okx交易所合约市场的BTCUSDT 1小时图上，短均线上穿长均线（金叉）时做多，短均线下穿长均线（死叉）时平多',
     })
+    const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    const createdChecklist = readPersistedChecklist(createdSession)
 
     mockRepo.findById.mockResolvedValue({
       id: 's5-compiled',
       userId: 'u1',
       status: 'CHECKLIST_GATE',
-      checklist: completeChecklist({
-        entryRules: ['短均线上穿长均线（金叉）时做多'],
-        exitRules: ['短均线下穿长均线（死叉）时平多'],
-      }),
-      constraintPack: {},
+      checklist: createdChecklist,
+      semanticState: createdSession.semanticState,
+      clarificationState: createdSession.clarificationState,
+      constraintPack: createdSession.constraintPack,
     })
 
     await service.continueSession('s5-compiled', {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(completeChecklist({
-        entryRules: ['短均线上穿长均线（金叉）时做多'],
-        exitRules: ['短均线下穿长均线（死叉）时平多'],
-      })),
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(createdChecklist, createdSession.semanticState),
     })
 
     await waitForTerminalStatus('s5-compiled')
@@ -7129,10 +7128,20 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     await waitForTerminalStatus('s-golden-ma-publish')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-golden-ma-publish', expect.objectContaining({
-      status: 'CONSISTENCY_FAILED',
-      rejectReason: expect.stringContaining('脚本缺少关键指标: sma'),
+      status: 'PUBLISHED',
     }))
     expect(mockRepo.createVersion).toHaveBeenCalledTimes(1)
+    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
+    expect(publishedSnapshot?.specSnapshot?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        condition: expect.objectContaining({ key: 'ma.golden_cross' }),
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        condition: expect.objectContaining({ key: 'ma.death_cross' }),
+      }),
+    ]))
   })
 
   it('keeps semanticState and canonical digest aligned when a persisted MA trigger is replaced', async () => {

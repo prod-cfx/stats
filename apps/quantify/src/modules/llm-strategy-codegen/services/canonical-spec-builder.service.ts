@@ -1566,29 +1566,25 @@ export class CanonicalSpecBuilderService {
       case 'indicator.above':
         return {
           kind: 'atom',
-          key: 'indicator.above',
+          key: CANONICAL_RULE_KEYS.movingAverageGoldenCross,
           semanticScope: 'market',
-          op: 'GTE',
+          op: 'CROSS_OVER',
           params: {
-            ...(typeof trigger.params.indicator === 'string' ? { indicator: trigger.params.indicator } : {}),
-            ...(typeof trigger.params.referenceRole === 'string' ? { referenceRole: trigger.params.referenceRole } : {}),
-            ...(typeof trigger.params['reference.period'] === 'number'
-              ? { 'reference.period': trigger.params['reference.period'] }
-              : {}),
+            indicator: typeof trigger.params.indicator === 'string' && trigger.params.indicator.trim().toLowerCase() === 'ema'
+              ? 'ema'
+              : 'sma',
           },
         }
       case 'indicator.below':
         return {
           kind: 'atom',
-          key: 'indicator.below',
+          key: CANONICAL_RULE_KEYS.movingAverageDeathCross,
           semanticScope: 'market',
-          op: 'LTE',
+          op: 'CROSS_UNDER',
           params: {
-            ...(typeof trigger.params.indicator === 'string' ? { indicator: trigger.params.indicator } : {}),
-            ...(typeof trigger.params.referenceRole === 'string' ? { referenceRole: trigger.params.referenceRole } : {}),
-            ...(typeof trigger.params['reference.period'] === 'number'
-              ? { 'reference.period': trigger.params['reference.period'] }
-              : {}),
+            indicator: typeof trigger.params.indicator === 'string' && trigger.params.indicator.trim().toLowerCase() === 'ema'
+              ? 'ema'
+              : 'sma',
           },
         }
       case 'trend.direction':
