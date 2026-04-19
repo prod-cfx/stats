@@ -219,7 +219,7 @@ export class CodegenConversationService {
     })
     const normalization = this.buildNormalizationFromSemanticState(initialSemanticState)
     const initialCanonicalSpec = plannerStatus === 'CHECKLIST_GATE'
-      ? this.buildCanonicalSpecForConversation(checklist, normalization)
+      ? this.buildCanonicalSpecForConversation(checklist, normalization, initialSemanticState)
       : null
     const compileability = initialCanonicalSpec
       ? this.evaluateCanonicalCompileability(initialCanonicalSpec)
@@ -505,7 +505,7 @@ export class CodegenConversationService {
       plan.assistantPrompt,
     )
     const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
-    const canonicalSpec = this.buildCanonicalSpecForConversation(canonicalChecklist, normalization)
+    const canonicalSpec = this.buildCanonicalSpecForConversation(canonicalChecklist, normalization, reducedSemanticState)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: clarification.executionContext.context,
@@ -677,7 +677,7 @@ export class CodegenConversationService {
     )
     const confirmationViewNormalization = this.buildNormalizationFromSemanticState(semanticStateAfterAnswers)
     const confirmationViewSpecDesc = this.specDescBuilder.buildFromCanonicalSpec(
-      this.buildCanonicalSpecForConversation(baseChecklist, confirmationViewNormalization),
+      this.buildCanonicalSpecForConversation(baseChecklist, confirmationViewNormalization, semanticStateAfterAnswers),
       '',
       {
         normalizedIntent: confirmationViewNormalization.normalizedIntent,
@@ -728,7 +728,7 @@ export class CodegenConversationService {
     }
 
     const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
-    const canonicalSpec = this.buildCanonicalSpecForConversation(canonicalChecklist, normalization)
+    const canonicalSpec = this.buildCanonicalSpecForConversation(canonicalChecklist, normalization, reducedSemanticState)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: clarification.executionContext.context,
@@ -2174,7 +2174,7 @@ export class CodegenConversationService {
     }
 
     const normalization = this.buildNormalizationFromSemanticState(args.semanticState)
-    const canonicalSpec = this.buildCanonicalSpecForConversation(projectedChecklist, normalization)
+    const canonicalSpec = this.buildCanonicalSpecForConversation(projectedChecklist, normalization, args.semanticState)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: clarification.executionContext.context,
@@ -3093,10 +3093,20 @@ export class CodegenConversationService {
   private buildCanonicalSpecForConversation(
     checklist: ChecklistPayload,
     normalization: NormalizationResult,
+    semanticState?: SemanticState,
   ) {
     const checklistSpec = this.canonicalSpecBuilder.build(checklist)
     if (normalization.blocked) {
       return checklistSpec
+    }
+
+    if (semanticState) {
+      const normalizedSpec = this.canonicalSpecBuilder.buildFromNormalizedIntent(
+        this.buildSemanticCanonicalContext(semanticState),
+        normalization.normalizedIntent,
+      )
+      const normalizedCompileability = this.evaluateCanonicalCompileability(normalizedSpec)
+      return normalizedCompileability.canCompile ? normalizedSpec : checklistSpec
     }
 
     const hasSemanticOnlyTriggers = normalization.normalizedIntent.triggers.some(trigger =>
@@ -3130,6 +3140,43 @@ export class CodegenConversationService {
     )
     const normalizedCompileability = this.evaluateCanonicalCompileability(normalizedSpec)
     return normalizedCompileability.canCompile ? normalizedSpec : checklistSpec
+  }
+
+  private buildSemanticCanonicalContext(semanticState: SemanticState): {
+    market: {
+      exchange?: 'binance' | 'okx' | 'hyperliquid'
+      marketType?: 'spot' | 'perp'
+      defaultTimeframe?: string | null
+    }
+    symbols?: string[]
+    timeframes?: string[]
+  } {
+    const exchange = this.readSemanticContextValue(semanticState.contextSlots.exchange)
+    const symbol = this.readSemanticContextValue(semanticState.contextSlots.symbol)
+    const marketType = this.readSemanticContextValue(semanticState.contextSlots.marketType)
+    const timeframe = this.readSemanticContextValue(semanticState.contextSlots.timeframe)
+
+    return {
+      market: {
+        ...(exchange === 'binance' || exchange === 'okx' || exchange === 'hyperliquid'
+          ? { exchange }
+          : {}),
+        ...(marketType === 'spot' || marketType === 'perp'
+          ? { marketType }
+          : {}),
+        ...(timeframe ? { defaultTimeframe: timeframe } : {}),
+      },
+      ...(symbol ? { symbols: [symbol] } : {}),
+      ...(timeframe ? { timeframes: [timeframe] } : {}),
+    }
+  }
+
+  private readSemanticContextValue(slot: SemanticSlotState | null): string | null {
+    if (!slot || typeof slot.value !== 'string' || slot.value.trim().length === 0) {
+      return null
+    }
+
+    return slot.value.trim()
   }
 
   private mergeChecklistIntoSemanticState(

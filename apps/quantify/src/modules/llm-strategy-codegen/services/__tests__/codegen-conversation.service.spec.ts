@@ -101,22 +101,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const normalization = semanticState
       ? (service as any).buildNormalizationFromSemanticState(semanticState)
       : clarification.normalization
-    const canonicalSpec = (service as any).buildCanonicalSpecForConversation(checklist, normalization)
+    const canonicalSpec = (service as any).buildCanonicalSpecForConversation(checklist, normalization, semanticState)
     return canonicalDigestService.hash(canonicalSpec)
   }
-  const buildSemanticCanonicalContext = (semanticState: Record<string, any>) => ({
-    market: {
-      exchange: semanticState?.contextSlots?.exchange?.value,
-      marketType: semanticState?.contextSlots?.marketType?.value,
-      defaultTimeframe: semanticState?.contextSlots?.timeframe?.value ?? null,
-    },
-    ...(semanticState?.contextSlots?.symbol?.value
-      ? { symbols: [semanticState.contextSlots.symbol.value] }
-      : {}),
-    ...(semanticState?.contextSlots?.timeframe?.value
-      ? { timeframes: [semanticState.contextSlots.timeframe.value] }
-      : {}),
-  })
   const readPersistedChecklist = (
     session: { checklist?: Record<string, unknown>; semanticState?: Record<string, unknown> },
   ): Record<string, unknown> => {
@@ -129,27 +116,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     return {}
   }
 
-  it('builds semantic-only canonical specs for confirmation digest calculation without compatibility checklist projection', () => {
-    const semanticState = buildLockedMaSemanticState()
-    const normalization = (service as any).buildNormalizationFromSemanticState(semanticState)
-
-    const canonicalSpec = (service as any).buildCanonicalSpecForConversation(
-      buildSemanticCanonicalContext(semanticState),
-      normalization,
-    )
-
-    expect(canonicalSpec.market).toEqual(expect.objectContaining({
-      exchange: 'okx',
-      symbol: 'BTCUSDT',
-      marketType: 'perp',
-      defaultTimeframe: '1h',
-    }))
-    expect(canonicalSpec.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        condition: expect.objectContaining({ key: 'indicator.above' }),
-      }),
-    ]))
-  })
   const completeRiskRules = (riskRules: Record<string, any> = {}) => ({
     exchange: 'okx',
     marketType: 'perp',
@@ -6914,6 +6880,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       exitRules: ['价格跌破短期均线（20）时卖出'],
     })
     const persistedSemanticState = buildLockedMaSemanticState()
+    const buildFromNormalizedIntentSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromNormalizedIntent')
     mockRepo.findById.mockResolvedValue({
       id: 's5-semantic-generate',
       userId: 'u1',
@@ -6927,20 +6894,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       persistedSemanticState,
       persistedChecklist,
     )
-    const reducedSemanticState = (service as any).mergeChecklistIntoSemanticState(
-      persistedSemanticState,
-      canonicalChecklist,
-    )
-    const finalChecklist = (service as any).projectLegacyChecklistFromSemanticState(
-      reducedSemanticState,
-      canonicalChecklist,
-    )
-
     const result = await service.continueSession('s5-semantic-generate', {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(finalChecklist, reducedSemanticState),
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(canonicalChecklist, persistedSemanticState),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -6961,6 +6919,23 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         ]),
       }),
     }))
+    expect(buildFromNormalizedIntentSpy).toHaveBeenCalledWith(
+      {
+        market: {
+          exchange: 'okx',
+          marketType: 'perp',
+          defaultTimeframe: '1h',
+        },
+        symbols: ['BTCUSDT'],
+        timeframes: ['1h'],
+      },
+      expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({ key: 'indicator.above', phase: 'entry' }),
+          expect.objectContaining({ key: 'indicator.below', phase: 'exit' }),
+        ]),
+      }),
+    )
   })
 
   it('publishes canonical snapshot, semantic view, and compiled artifacts after confirmGenerate', async () => {
@@ -8413,15 +8388,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       answeredSemanticState,
       persistedChecklist,
     )
-    const reducedSemanticState = (service as any).mergeChecklistIntoSemanticState(
-      answeredSemanticState,
-      canonicalChecklist,
-    )
-    const finalChecklist = (service as any).projectLegacyChecklistFromSemanticState(
-      reducedSemanticState,
-      canonicalChecklist,
-    )
-
     const result = await service.continueSession('s7-semantic-confirm-answer', {
       userId: 'u1',
       message: '确认，直接生成代码',
@@ -8429,7 +8395,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         'semantic.reference.period.entry': 'MA50',
       },
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(finalChecklist, reducedSemanticState),
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(canonicalChecklist, answeredSemanticState),
     })
 
     expect(result.status).toBe('GENERATING')
