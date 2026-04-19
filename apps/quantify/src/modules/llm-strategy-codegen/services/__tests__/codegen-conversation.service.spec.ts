@@ -104,6 +104,19 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const canonicalSpec = (service as any).buildCanonicalSpecForConversation(checklist, normalization)
     return canonicalDigestService.hash(canonicalSpec)
   }
+  const buildSemanticCanonicalContext = (semanticState: Record<string, any>) => ({
+    market: {
+      exchange: semanticState?.contextSlots?.exchange?.value,
+      marketType: semanticState?.contextSlots?.marketType?.value,
+      defaultTimeframe: semanticState?.contextSlots?.timeframe?.value ?? null,
+    },
+    ...(semanticState?.contextSlots?.symbol?.value
+      ? { symbols: [semanticState.contextSlots.symbol.value] }
+      : {}),
+    ...(semanticState?.contextSlots?.timeframe?.value
+      ? { timeframes: [semanticState.contextSlots.timeframe.value] }
+      : {}),
+  })
   const readPersistedChecklist = (
     session: { checklist?: Record<string, unknown>; semanticState?: Record<string, unknown> },
   ): Record<string, unknown> => {
@@ -115,6 +128,28 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }
     return {}
   }
+
+  it('builds semantic-only canonical specs for confirmation digest calculation without compatibility checklist projection', () => {
+    const semanticState = buildLockedMaSemanticState()
+    const normalization = (service as any).buildNormalizationFromSemanticState(semanticState)
+
+    const canonicalSpec = (service as any).buildCanonicalSpecForConversation(
+      buildSemanticCanonicalContext(semanticState),
+      normalization,
+    )
+
+    expect(canonicalSpec.market).toEqual(expect.objectContaining({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      marketType: 'perp',
+      defaultTimeframe: '1h',
+    }))
+    expect(canonicalSpec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        condition: expect.objectContaining({ key: 'indicator.above' }),
+      }),
+    ]))
+  })
   const completeRiskRules = (riskRules: Record<string, any> = {}) => ({
     exchange: 'okx',
     marketType: 'perp',

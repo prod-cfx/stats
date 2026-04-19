@@ -414,7 +414,15 @@ describe('codegenPublicationGenerationStage', () => {
     } as any)
 
     expect(buildFromNormalizedIntentSpy).toHaveBeenCalledWith(
-      projectedChecklist,
+      {
+        market: {
+          exchange: 'okx',
+          marketType: 'perp',
+          defaultTimeframe: '15m',
+        },
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+      },
       expectedNormalizedIntent,
     )
     expect(buildSpy).not.toHaveBeenCalled()
@@ -439,10 +447,62 @@ describe('codegenPublicationGenerationStage', () => {
         }),
       }),
     ]))
-    expect(executionEnvelopeBuild).toHaveBeenCalledWith(
-      artifacts.canonicalSpec,
-      expectedNormalizedIntent.position?.positionMode ?? null,
+    expect(executionEnvelopeBuild).toHaveBeenCalledWith(artifacts.canonicalSpec)
+  })
+
+  it('does not call buildLegacyChecklist during publication generation', async () => {
+    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const bridge = new SemanticStateCompileBridgeService()
+    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const legacySpy = jest.spyOn(bridge, 'buildLegacyChecklist')
+    const stage = new CodegenPublicationGenerationStage(
+      canonicalSpecBuilder,
+      { buildFromCanonicalSpec: jest.fn().mockReturnValue({}) } as any,
+      strategySummaryBuilder as any,
+      { evaluate: jest.fn().mockReturnValue({
+        status: 'PASSED',
+        specProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        scriptProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        checks: [],
+        summary: { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
+      }) } as any,
+      { compile: jest.fn().mockReturnValue({ ir: { id: 'compiled-ir' }, graphSnapshot: {} }) } as any,
+      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
+      { emit: jest.fn().mockReturnValue('strategy') } as any,
+      { build: jest.fn().mockReturnValue({}) } as any,
+      { parse: jest.fn().mockReturnValue({}) } as any,
+      undefined,
+      undefined,
+      bridge,
     )
+
+    await stage.generate({
+      checklist: {
+        symbols: ['ETHUSDT'],
+        timeframes: ['1h'],
+        riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+      },
+      semanticState: buildLockedBollingerSemanticState(),
+      message: '确认逻辑图',
+    } as any)
+
+    expect(legacySpy).not.toHaveBeenCalled()
   })
 
   it('builds strategy summary from specProfile rather than legacy canonical-spec text heuristics', async () => {
@@ -653,17 +713,20 @@ describe('codegenPublicationGenerationStage', () => {
   it('keeps the MA golden case canonical digest stable through semanticState compile input', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const digestService = new CanonicalSpecV2DigestService()
-    const semanticStateCompileBridge = new SemanticStateCompileBridgeService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
     const semanticState = buildLockedMaSemanticState()
-    const projectedChecklist = semanticStateCompileBridge.buildLegacyChecklist(semanticState, {
-      riskRules: completeRiskRules({
-        marketType: 'spot',
-      }),
-    })
+    const semanticStateCompileBridge = new SemanticStateCompileBridgeService()
     const expectedNormalizedIntent = semanticStateCompileBridge.buildNormalizedIntent(semanticState)
     const expectedDigest = digestService.hash(
-      canonicalSpecBuilder.buildFromNormalizedIntent(projectedChecklist, expectedNormalizedIntent),
+      canonicalSpecBuilder.buildFromNormalizedIntent({
+        market: {
+          exchange: 'okx',
+          marketType: 'spot',
+          defaultTimeframe: '15m',
+        },
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+      }, expectedNormalizedIntent),
     )
 
     const stage = new CodegenPublicationGenerationStage(

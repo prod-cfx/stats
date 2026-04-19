@@ -103,9 +103,7 @@ export class SpecDescBuilderService {
       embedding: null,
       normalizedIntent,
       ...(stateHints.length > 0 ? { stateHints } : {}),
-      semanticSource: canonicalSpec.version === 2 && canonicalSpec.metadata?.normalized
-        ? canonicalSpec.metadata.normalized.semanticViewSource
-        : 'rule-derived',
+      semanticSource: this.resolveSemanticSource(canonicalSpec, normalizedIntent),
     }
   }
 
@@ -124,6 +122,16 @@ export class SpecDescBuilderService {
       styleTags.push('mean-reversion')
     }
     return styleTags
+  }
+
+  private resolveSemanticSource(
+    canonicalSpec: CanonicalStrategySpec,
+    normalizedIntent: StrategyNormalizedIntent | null | undefined,
+  ): string {
+    if (canonicalSpec.version === 2 && canonicalSpec.metadata?.normalized) {
+      return canonicalSpec.metadata.normalized.semanticViewSource
+    }
+    return normalizedIntent ? 'normalized-canonical-truth' : 'rule-derived'
   }
 
 }

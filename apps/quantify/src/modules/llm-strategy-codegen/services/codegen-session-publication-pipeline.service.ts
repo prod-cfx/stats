@@ -1,5 +1,6 @@
 import type { ChecklistPayload } from '../types/codegen-checklist'
 import type { SemanticState } from '../types/semantic-state'
+import type { CodegenPublicationGenerationInput } from './codegen-publication-generation.stage'
 
 import { Injectable } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -88,11 +89,12 @@ export class CodegenSessionPublicationPipelineService {
     existingStrategyInstanceId?: string | null
   }): Promise<void> {
     try {
-      const artifacts = await this.generationStage.generate({
+      const generationInput: CodegenPublicationGenerationInput = {
         checklist: args.checklist,
         semanticState: args.semanticState,
         message: args.message,
-      })
+      }
+      const artifacts = await this.generationStage.generate(generationInput)
       let strategyInstanceId = args.existingStrategyInstanceId
         ?? await this.sessionsRepo.findSessionStrategyInstanceId(args.sessionId)
 

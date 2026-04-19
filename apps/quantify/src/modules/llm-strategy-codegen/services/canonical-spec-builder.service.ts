@@ -31,6 +31,12 @@ interface ChecklistSnapshot {
   market?: unknown
 }
 
+interface NormalizedIntentCompileContext {
+  symbols?: unknown
+  timeframes?: unknown
+  market?: unknown
+}
+
 @Injectable()
 export class CanonicalSpecBuilderService {
   constructor(
@@ -418,17 +424,15 @@ export class CanonicalSpecBuilderService {
   }
 
   buildFromNormalizedIntent(
-    checklist: ChecklistSnapshot,
+    context: NormalizedIntentCompileContext,
     normalizedIntent: StrategyNormalizedIntent,
   ): CanonicalStrategySpecV2 {
-    const normalizedChecklist = checklist as ChecklistSnapshot & Parameters<typeof buildChecklistRuleDrafts>[0]
-    const ruleDrafts = buildChecklistRuleDrafts(normalizedChecklist)
-    const riskRules = checklist.riskRules && typeof checklist.riskRules === 'object' && !Array.isArray(checklist.riskRules)
-      ? checklist.riskRules as Record<string, unknown>
+    const riskRules = 'riskRules' in context && context.riskRules && typeof context.riskRules === 'object' && !Array.isArray(context.riskRules)
+      ? context.riskRules as Record<string, unknown>
       : {}
-    const market = this.resolveMarket(normalizedChecklist, riskRules, ruleDrafts)
+    const market = this.resolveNormalizedIntentMarket(context)
     const sizing = this.resolveSizingFromNormalizedIntent(normalizedIntent) ?? this.resolveSizing(riskRules)
-    const requiredTimeframes = this.resolveNormalizedRequiredTimeframes(normalizedIntent, ruleDrafts, market.defaultTimeframe)
+    const requiredTimeframes = this.resolveNormalizedRequiredTimeframes(normalizedIntent, context, market.defaultTimeframe)
     const indicators = this.resolveIndicatorsFromNormalizedIntent(normalizedIntent)
     const rules = this.buildRulesFromNormalizedIntent({
       normalizedIntent,
@@ -950,10 +954,19 @@ export class CanonicalSpecBuilderService {
 
   private resolveNormalizedRequiredTimeframes(
     normalizedIntent: StrategyNormalizedIntent,
-    ruleDrafts: ReturnType<typeof buildChecklistRuleDrafts>,
+    context: NormalizedIntentCompileContext,
     fallbackTimeframe: string | null,
   ): string[] {
-    const ordered = new Set(resolveRequiredRuleTimeframes(ruleDrafts, fallbackTimeframe))
+    const ordered = new Set<string>()
+    const timeframes = Array.isArray(context.timeframes)
+      ? context.timeframes
+        .filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+        .map(item => item.trim())
+      : []
+
+    for (const timeframe of timeframes) {
+      ordered.add(timeframe)
+    }
 
     for (const trigger of normalizedIntent.triggers) {
       const window = typeof trigger.params.window === 'string' ? trigger.params.window.trim() : ''
@@ -968,6 +981,39 @@ export class CanonicalSpecBuilderService {
     }
 
     return [...ordered]
+  }
+
+  private resolveNormalizedIntentMarket(
+    context: NormalizedIntentCompileContext,
+  ): CanonicalStrategySpecV2['market'] {
+    const symbols = Array.isArray(context.symbols) ? context.symbols : []
+    const market = context.market && typeof context.market === 'object' && !Array.isArray(context.market)
+      ? context.market as Record<string, unknown>
+      : null
+    const riskRules = 'riskRules' in context && context.riskRules && typeof context.riskRules === 'object' && !Array.isArray(context.riskRules)
+      ? context.riskRules as Record<string, unknown>
+      : {}
+    const rawSymbol = typeof symbols[0] === 'string' ? symbols[0].trim().toUpperCase() : ''
+    const marketExchange = typeof market?.exchange === 'string' ? market.exchange.trim().toLowerCase() : ''
+    const marketType = typeof market?.marketType === 'string' ? market.marketType.trim().toLowerCase() : ''
+    const riskExchange = typeof riskRules.exchange === 'string' ? riskRules.exchange.trim().toLowerCase() : ''
+    const riskMarketType = typeof riskRules.marketType === 'string' ? riskRules.marketType.trim().toLowerCase() : ''
+    const defaultTimeframe = typeof market?.defaultTimeframe === 'string' && market.defaultTimeframe.trim().length > 0
+      ? market.defaultTimeframe.trim()
+      : (Array.isArray(context.timeframes)
+          ? context.timeframes.find((item): item is string => typeof item === 'string' && item.trim().length > 0)?.trim() ?? null
+          : null)
+
+    return {
+      exchange: marketExchange === 'okx' || marketExchange === 'hyperliquid' || marketExchange === 'binance'
+        ? marketExchange
+        : (riskExchange === 'okx' || riskExchange === 'hyperliquid' || riskExchange === 'binance'
+            ? riskExchange
+            : 'binance'),
+      symbol: rawSymbol || null,
+      marketType: marketType === 'perp' ? 'perp' : (riskMarketType === 'perp' ? 'perp' : 'spot'),
+      defaultTimeframe,
+    }
   }
 
   private resolveIndicatorsFromNormalizedIntent(
