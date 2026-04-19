@@ -214,13 +214,13 @@ describe('aiQuantProxyService', () => {
 
     await service.startCodegen('user-1', 'Bearer token-1', {
       initialMessage: 'build me a strategy',
-      symbols: ['BTCUSDT'],
+      guideConfig: { symbolExample: 'BTCUSDT' },
     })
 
     expect(quantifyClient.startCodegen).toHaveBeenCalledWith(
       {
         initialMessage: 'build me a strategy',
-        symbols: ['BTCUSDT'],
+        guideConfig: { symbolExample: 'BTCUSDT' },
       },
       {
         userId: 'user-1',

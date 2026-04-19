@@ -77,8 +77,23 @@ const BacktestBarDto = z
 const RunBacktestDto = z
   .object({
     symbols: z.array(z.string()),
-    baseTimeframe: z.enum(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w']),
-    stateTimeframes: z.array(z.enum(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w'])),
+    baseTimeframe: z.enum([
+      '1m',
+      '3m',
+      '5m',
+      '15m',
+      '30m',
+      '1h',
+      '4h',
+      '6h',
+      '8h',
+      '12h',
+      '1d',
+      '1w',
+    ]),
+    stateTimeframes: z.array(
+      z.enum(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w']),
+    ),
     initialCash: z.number(),
     leverage: z.number().optional(),
     allowPartial: z.boolean().optional(),
@@ -96,6 +111,8 @@ const BacktestJobSummaryDto = z
     winRate: z.number(),
     profitFactor: z.number(),
     totalTrades: z.number(),
+    totalOpenTrades: z.number().optional(),
+    openPnl: z.number().optional(),
   })
   .passthrough()
 const BacktestEquityPointDto = z.object({ ts: z.number(), equity: z.number() }).passthrough()
@@ -160,6 +177,13 @@ const BacktestReportResponseDto = z
     pendingSignals: z.array(BacktestPendingSignalDto).optional(),
   })
   .passthrough()
+const BacktestJobErrorDetailsDto = z
+  .object({
+    code: z.string().optional(),
+    message: z.string(),
+    args: z.object({}).partial().passthrough().optional(),
+  })
+  .passthrough()
 const BacktestJobRangeDto = z.object({ fromTs: z.number(), toTs: z.number() }).passthrough()
 const BacktestJobInputSummaryDto = z
   .object({
@@ -167,7 +191,8 @@ const BacktestJobInputSummaryDto = z
     baseTimeframe: z.string(),
     stateTimeframes: z.array(z.string()),
     initialCash: z.number(),
-    leverage: z.number().nullish(),
+    leverage: z.number().optional(),
+    marketType: z.enum(['spot', 'perp']),
     dataRange: BacktestJobRangeDto,
     requestedRange: BacktestJobRangeDto,
     appliedRange: BacktestJobRangeDto.optional(),
@@ -190,6 +215,7 @@ const BacktestJobResponseDto = z
     startedAt: z.string().optional(),
     finishedAt: z.string().optional(),
     error: z.string().optional(),
+    errorDetails: BacktestJobErrorDetailsDto.optional(),
     inputSummary: BacktestJobInputSummaryDto,
     resultSummary: BacktestJobSummaryDto.optional(),
   })
@@ -429,33 +455,13 @@ const AccountStrategyListItemDto = z
   })
   .passthrough()
 const AccountStrategyEquityPointDto = z.object({ ts: z.string(), value: z.number() }).passthrough()
-const AccountStrategyExecutionConfigDto = z
-  .object({
-    leverage: z.number().nullish(),
-    priceSource: z.string().nullish(),
-    orderType: z.string().nullish(),
-    timeInForce: z.string().nullish(),
-  })
-  .partial()
-  .passthrough()
-const AccountStrategyCompatibilityMetadataDto = z
-  .object({
-    isLegacySnapshot: z.boolean().optional(),
-    missingBacktestConfigDefaults: z.boolean().optional(),
-    missingDeploymentExecutionDefaults: z.boolean().optional(),
-    missingDeploymentExecutionConstraints: z.boolean().optional(),
-    requiresRepublishForBacktest: z.boolean().optional(),
-    requiresRepublishForDeploy: z.boolean().optional(),
-  })
-  .partial()
-  .passthrough()
+const AccountStrategyLeverageRangeDto = z.object({ min: z.number(), max: z.number() }).passthrough()
 const AccountStrategyConsistencySummaryDto = z
   .object({
-    isConsistent: z.boolean().optional(),
-    consistencyScore: z.number().optional(),
-    driftReasons: z.array(z.string()).optional(),
+    isConsistent: z.boolean(),
+    driftReasons: z.array(z.string()),
+    consistencyScore: z.number().nullish(),
   })
-  .partial()
   .passthrough()
 const AccountStrategySnapshotDto = z
   .object({
@@ -467,18 +473,18 @@ const AccountStrategySnapshotDto = z
     positionPct: z.number().nullable(),
     paramSchema: z.object({}).partial().passthrough().nullable(),
     paramValues: z.object({}).partial().passthrough().nullable(),
+    strategyConfig: z.object({}).partial().passthrough().nullable(),
+    backtestConfigDefaults: z.object({}).partial().passthrough().nullable(),
+    deploymentExecutionBaseline: z.object({}).partial().passthrough().nullable(),
+    deploymentExecutionCurrent: z.object({}).partial().passthrough().nullable(),
+    deploymentExecutionConstraints: z.object({}).partial().passthrough().nullable(),
+    effectiveAllowedLeverageRange: AccountStrategyLeverageRangeDto.nullable(),
+    compatibilityMetadata: z.object({}).partial().passthrough().nullable(),
+    consistencySummary: AccountStrategyConsistencySummaryDto.nullable(),
+    executionConfigVersion: z.number().nullable(),
     schemaVersion: z.string().nullable(),
     deployAccountName: z.string().nullable(),
     deployAt: z.string().nullable(),
-    strategyConfig: z.object({}).partial().passthrough().nullish(),
-    backtestConfigDefaults: z.object({}).partial().passthrough().nullish(),
-    deploymentExecutionBaseline: AccountStrategyExecutionConfigDto.nullish(),
-    deploymentExecutionCurrent: AccountStrategyExecutionConfigDto.nullish(),
-    deploymentExecutionConstraints: z.object({}).partial().passthrough().nullish(),
-    effectiveAllowedLeverageRange: z.object({}).partial().passthrough().nullish(),
-    executionConfigVersion: z.number().nullable(),
-    compatibilityMetadata: AccountStrategyCompatibilityMetadataDto.nullish(),
-    consistencySummary: AccountStrategyConsistencySummaryDto.nullish(),
   })
   .partial()
   .passthrough()
@@ -522,6 +528,27 @@ const AccountStrategyLatestOrderDto = z
     orderId: z.string().nullish(),
   })
   .passthrough()
+const AccountStrategyExecutionConfigDto = z
+  .object({
+    leverage: z.number().nullable(),
+    priceSource: z.string().nullable(),
+    orderType: z.string().nullable(),
+    timeInForce: z.string().nullable(),
+  })
+  .partial()
+  .passthrough()
+const AccountStrategyDeploymentDto = z
+  .object({
+    exchangeAccountId: z.string().nullish(),
+    exchangeAccountName: z.string().nullish(),
+    executionConfig: AccountStrategyExecutionConfigDto,
+    executionConfigVersion: z.number().nullish(),
+    effectiveAllowedLeverageRange: AccountStrategyLeverageRangeDto.nullish(),
+    driftFields: z.array(z.string()),
+    reReadAtNextEligibleExecutionCycle: z.boolean(),
+    updatedBy: z.string().nullish(),
+  })
+  .passthrough()
 const AccountStrategyDetailResponseDto = z
   .object({
     id: z.string(),
@@ -545,6 +572,7 @@ const AccountStrategyDetailResponseDto = z
     accountOverview: AccountStrategyAccountOverviewDto,
     positionOverview: AccountStrategyPositionOverviewDto,
     latestOrders: z.array(AccountStrategyLatestOrderDto),
+    deployment: AccountStrategyDeploymentDto.nullish(),
   })
   .passthrough()
 const AccountStrategyActionDto = z
@@ -566,14 +594,11 @@ const AccountStrategyDeployDto = z
     userDailyMaxQuote: z.number().optional(),
     userMaxRiskFraction: z.number().optional(),
     exchangeAccountName: z.string().optional(),
-    leverage: z.number().optional(),
+    deploymentExecutionConfig: z.object({}).partial().passthrough().optional(),
   })
   .passthrough()
 const AccountStrategyUpdateExecutionLeverageDto = z
-  .object({
-    userId: z.string().optional(),
-    leverage: z.number(),
-  })
+  .object({ userId: z.string().optional(), leverage: z.number(), reason: z.string().optional() })
   .passthrough()
 const CreateStrategyInstanceDto = z
   .object({
@@ -1101,6 +1126,11 @@ const AiQuantConversationResponseDto = z
     scriptCode: z.string().optional(),
     publishedSnapshotId: z.string().optional(),
     publishedSnapshotParamValues: z.object({}).partial().passthrough().optional(),
+    publishedSnapshotStrategyConfig: z.object({}).partial().passthrough().nullish(),
+    publishedSnapshotBacktestConfigDefaults: z.object({}).partial().passthrough().nullish(),
+    publishedSnapshotDeploymentExecutionDefaults: z.object({}).partial().passthrough().nullish(),
+    publishedSnapshotDeploymentExecutionConstraints: z.object({}).partial().passthrough().nullish(),
+    publishedSnapshotCompatibilityMetadata: z.object({}).partial().passthrough().nullish(),
     strategyInstanceId: z.string().optional(),
     rejectReason: z.string().optional(),
   })
@@ -1116,16 +1146,7 @@ const CodegenGuideConfigDto = z
   .partial()
   .passthrough()
 const StartCodegenSessionDto = z
-  .object({
-    userId: z.string(),
-    initialMessage: z.string(),
-    symbols: z.array(z.string()),
-    timeframes: z.array(z.string()),
-    entryRules: z.array(z.string()),
-    exitRules: z.array(z.string()),
-    riskRules: z.object({}).partial().passthrough(),
-    guideConfig: CodegenGuideConfigDto,
-  })
+  .object({ userId: z.string(), initialMessage: z.string(), guideConfig: CodegenGuideConfigDto })
   .partial()
   .passthrough()
 const CodegenConversationMessageDto = z
@@ -1135,6 +1156,10 @@ const StrategyClarificationItemDto = z
   .object({
     key: z.string(),
     reason: z.enum([
+      'missing_entry_rules',
+      'missing_exit_rules',
+      'missing_stop_loss_rule',
+      'missing_take_profit_rule',
       'missing_action_uniqueness',
       'missing_side_scope',
       'direction_ambiguous',
@@ -1144,18 +1169,15 @@ const StrategyClarificationItemDto = z
       'missing_symbol',
       'missing_timeframe',
       'missing_market_type',
+      'missing_position_pct',
       'missing_position_mode',
       'conflicting_market_scope',
       'invalid_spot_short_combo',
+      'grid_params_missing',
+      'ambiguous_state_gate',
+      'atomic_semantic_fork',
     ]),
-    field: z.enum([
-      'exchange',
-      'symbol',
-      'timeframe',
-      'marketType',
-      'positionMode',
-      'riskRules.earlyStop.action',
-    ]),
+    field: z.string(),
     blocking: z.boolean(),
     allowedAnswers: z.array(z.string()).optional(),
     ruleId: z.string().optional(),
@@ -1173,6 +1195,7 @@ const StrategyClarificationStateDto = z
 const StrategyClarificationGateDto = z
   .object({
     blocked: z.boolean(),
+    summary: z.string().nullish(),
     items: z.array(StrategyClarificationItemDto),
     pendingItems: z.array(StrategyClarificationItemDto),
   })
@@ -1205,6 +1228,11 @@ const CodegenSessionResponseDto = z
     scriptCode: z.string().nullish(),
     publishedSnapshotId: z.string().nullish(),
     publishedSnapshotParamValues: z.object({}).partial().passthrough().nullish(),
+    publishedSnapshotStrategyConfig: z.object({}).partial().passthrough().nullish(),
+    publishedSnapshotBacktestConfigDefaults: z.object({}).partial().passthrough().nullish(),
+    publishedSnapshotDeploymentExecutionDefaults: z.object({}).partial().passthrough().nullish(),
+    publishedSnapshotDeploymentExecutionConstraints: z.object({}).partial().passthrough().nullish(),
+    publishedSnapshotCompatibilityMetadata: z.object({}).partial().passthrough().nullish(),
     consistencyReport: z.object({}).partial().passthrough().nullish(),
     specDesc: z.object({}).partial().passthrough().nullish(),
     canonicalDigest: z.string().nullish(),
@@ -1224,11 +1252,6 @@ const ContinueCodegenSessionDto = z
   .object({
     userId: z.string().optional(),
     message: z.string(),
-    symbols: z.array(z.string()).optional(),
-    timeframes: z.array(z.string()).optional(),
-    entryRules: z.array(z.string()).optional(),
-    exitRules: z.array(z.string()).optional(),
-    riskRules: z.object({}).partial().passthrough().optional(),
     clarificationAnswers: z.record(z.string()).optional(),
     guideConfig: CodegenGuideConfigDto.optional(),
     confirmGenerate: z.boolean().optional(),
@@ -1420,6 +1443,7 @@ export const schemas = {
   BacktestOpenPositionDto,
   BacktestPendingSignalDto,
   BacktestReportResponseDto,
+  BacktestJobErrorDetailsDto,
   BacktestJobRangeDto,
   BacktestJobInputSummaryDto,
   BacktestJobResponseDto,
@@ -1448,14 +1472,15 @@ export const schemas = {
   AccountStrategyMetricsDto,
   AccountStrategyListItemDto,
   AccountStrategyEquityPointDto,
-  AccountStrategyExecutionConfigDto,
-  AccountStrategyCompatibilityMetadataDto,
+  AccountStrategyLeverageRangeDto,
   AccountStrategyConsistencySummaryDto,
   AccountStrategySnapshotDto,
   AccountStrategyTimelineEventDto,
   AccountStrategyAccountOverviewDto,
   AccountStrategyPositionOverviewDto,
   AccountStrategyLatestOrderDto,
+  AccountStrategyExecutionConfigDto,
+  AccountStrategyDeploymentDto,
   AccountStrategyDetailResponseDto,
   AccountStrategyActionDto,
   AccountStrategyDeployDto,
@@ -1701,6 +1726,35 @@ const endpoints = makeApi([
   },
   {
     method: 'post',
+    path: '/account/ai-quant/strategies/:id/execution/leverage',
+    alias: 'AccountStrategyViewController_updateDeploymentLeverage',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: AccountStrategyUpdateExecutionLeverageDto,
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+    ],
+    response: AccountStrategyDetailResponseDto,
+  },
+  {
+    method: 'post',
     path: '/account/ai-quant/strategies/deploy',
     alias: 'AccountStrategyViewController_deploy',
     requestFormat: 'json',
@@ -1724,18 +1778,13 @@ const endpoints = makeApi([
     response: AccountStrategyDetailResponseDto,
   },
   {
-    method: 'post',
-    path: '/account/ai-quant/strategies/:id/execution/leverage',
-    alias: 'AccountStrategyViewController_updateExecutionLeverage',
+    method: 'get',
+    path: '/account/ai-quant/strategies/deploy-requests/:deployRequestId/result',
+    alias: 'AccountStrategyViewController_deployResult',
     requestFormat: 'json',
     parameters: [
       {
-        name: 'body',
-        type: 'Body',
-        schema: AccountStrategyUpdateExecutionLeverageDto,
-      },
-      {
-        name: 'id',
+        name: 'deployRequestId',
         type: 'Path',
         schema: z.string(),
       },

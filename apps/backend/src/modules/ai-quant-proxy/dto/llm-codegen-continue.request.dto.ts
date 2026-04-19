@@ -1,7 +1,6 @@
 import type { ValidationArguments, ValidatorConstraintInterface } from 'class-validator'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import {
-  IsArray,
   IsBoolean,
   IsInt,
   IsNumber,
@@ -31,35 +30,6 @@ export class LlmCodegenContinueRequestDto {
   @ApiProperty()
   @IsString()
   message!: string
-
-  @ApiPropertyOptional({ type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  symbols?: string[]
-
-  @ApiPropertyOptional({ type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  timeframes?: string[]
-
-  @ApiPropertyOptional({ type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  entryRules?: string[]
-
-  @ApiPropertyOptional({ type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  exitRules?: string[]
-
-  @ApiPropertyOptional({ type: 'object', additionalProperties: true })
-  @IsOptional()
-  @IsObject()
-  riskRules?: Record<string, unknown>
 
   @ApiPropertyOptional({ type: 'object', additionalProperties: { type: 'string' } })
   @IsOptional()

@@ -54,4 +54,24 @@ describe('backend contract generated AI Quant codegen responses', () => {
     expect(deploySnippet).not.toContain('strategyInstanceId')
     expect(updateSnippet).toContain('leverage: z.number()')
   })
+
+  it('keeps backend AI Quant codegen request contracts semantic-only', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+
+    const startSchemaStart = source.indexOf('const LlmCodegenStartRequestDto = z')
+    const continueSchemaStart = source.indexOf('const LlmCodegenContinueRequestDto = z')
+
+    expect(startSchemaStart).toBeGreaterThanOrEqual(0)
+    expect(continueSchemaStart).toBeGreaterThanOrEqual(0)
+
+    const startSchemaEnd = source.indexOf('\nconst ', startSchemaStart + 1)
+    const continueSchemaEnd = source.indexOf('\nconst ', continueSchemaStart + 1)
+    const startSnippet = source.slice(startSchemaStart, startSchemaEnd === -1 ? undefined : startSchemaEnd)
+    const continueSnippet = source.slice(continueSchemaStart, continueSchemaEnd === -1 ? undefined : continueSchemaEnd)
+
+    for (const removedField of ['symbols', 'timeframes', 'entryRules', 'exitRules', 'riskRules']) {
+      expect(startSnippet).not.toContain(`${removedField}:`)
+      expect(continueSnippet).not.toContain(`${removedField}:`)
+    }
+  })
 })
