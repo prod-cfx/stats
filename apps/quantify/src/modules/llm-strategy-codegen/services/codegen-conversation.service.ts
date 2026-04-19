@@ -675,11 +675,15 @@ export class CodegenConversationService {
       effectiveClarificationAnswers,
     )
     const baseChecklist = this.applyClarificationAnswers(
-      this.projectLegacyChecklistFromSemanticState(semanticStateAfterAnswers, persistedChecklist),
+      hasPersistedSemanticState
+        ? this.projectLegacyChecklistFromSemanticState(semanticStateAfterAnswers, persistedChecklist)
+        : persistedChecklist,
       baseClarificationState,
       effectiveClarificationAnswers,
     )
-    const confirmationViewNormalization = this.buildNormalizationFromSemanticState(semanticStateAfterAnswers)
+    const confirmationViewNormalization = hasPersistedSemanticState
+      ? this.buildNormalizationFromSemanticState(semanticStateAfterAnswers)
+      : this.resolveClarificationArtifacts(baseChecklist).normalization
     const confirmationViewSpecDesc = this.specDescBuilder.buildFromCanonicalSpec(
       this.buildCanonicalSpecForConversation(
         baseChecklist,
@@ -694,7 +698,9 @@ export class CodegenConversationService {
     )
     const confirmationViewDigest = this.readCanonicalDigest(confirmationViewSpecDesc)
     const reducedSemanticState = semanticStateAfterAnswers
-    const canonicalChecklist = this.projectLegacyChecklistFromSemanticState(reducedSemanticState, baseChecklist)
+    const canonicalChecklist = hasPersistedSemanticState
+      ? this.projectLegacyChecklistFromSemanticState(reducedSemanticState, baseChecklist)
+      : baseChecklist
     const clarification = this.resolveClarificationArtifacts(canonicalChecklist)
     const clarificationState = this.buildClarificationFromSemanticState(
       reducedSemanticState,
@@ -839,8 +845,8 @@ export class CodegenConversationService {
     void this.publicationPipeline.run({
       sessionId: session.id,
       userId: sessionUserId,
-      checklist: {},
-      semanticState: reducedSemanticState,
+      checklist: hasPersistedSemanticState ? {} : canonicalChecklist,
+      semanticState: hasPersistedSemanticState ? reducedSemanticState : undefined,
       canonicalSpecOverride: hasPersistedSemanticState ? canonicalSpec : undefined,
       message: dto.message,
       model: dto.model,
@@ -3123,7 +3129,9 @@ export class CodegenConversationService {
         normalization.normalizedIntent,
       )
       const normalizedCompileability = this.evaluateCanonicalCompileability(normalizedSpec)
-      return normalizedCompileability.canCompile ? normalizedSpec : checklistSpec
+      return normalizedCompileability.canCompile && this.isCanonicalSpecPublishable(normalizedSpec)
+        ? normalizedSpec
+        : checklistSpec
     }
 
     const hasSemanticOnlyTriggers = normalization.normalizedIntent.triggers.some(trigger =>
@@ -3157,6 +3165,28 @@ export class CodegenConversationService {
     )
     const normalizedCompileability = this.evaluateCanonicalCompileability(normalizedSpec)
     return normalizedCompileability.canCompile ? normalizedSpec : checklistSpec
+  }
+
+  private isCanonicalSpecPublishable(spec: ReturnType<CanonicalSpecBuilderService['build']>): boolean {
+    if (spec.version !== 2) {
+      return false
+    }
+
+    return spec.rules.every(rule => this.isConditionPublishable(rule.condition))
+  }
+
+  private isConditionPublishable(condition: { kind: string; key?: string; children?: unknown[] }): boolean {
+    if (condition.kind === 'AND' || condition.kind === 'OR' || condition.kind === 'NOT') {
+      return (condition.children ?? []).every(child =>
+        this.isConditionPublishable(child as Parameters<CodegenConversationService['isConditionPublishable']>[0]),
+      )
+    }
+
+    if (condition.kind !== 'atom') {
+      return false
+    }
+
+    return condition.key !== 'indicator.above' && condition.key !== 'indicator.below'
   }
 
   private buildSemanticCanonicalContext(semanticState: SemanticState): {

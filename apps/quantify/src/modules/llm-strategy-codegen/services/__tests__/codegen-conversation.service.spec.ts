@@ -2643,13 +2643,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any> | undefined
+    const createdChecklist = createdSession ? readPersistedChecklist(createdSession) : {}
 
     expect(started.status).toBe('CHECKLIST_GATE')
     expect(started.assistantPrompt).not.toContain('存在暂不支持的规则片段')
-    expect(createdSession?.checklist?.entryRules).toContain('收盘确认价格突破长期均线（50）时买入')
-    expect(createdSession?.checklist?.exitRules).toContain('收盘确认价格跌破短期均线（10）时卖出')
-    expect(createdSession?.checklist?.entryRules).not.toContain('满足入场条件后开仓')
-    expect(createdSession?.checklist?.exitRules).not.toContain('满足出场条件后平仓')
+    expect(createdChecklist.entryRules).toContain('收盘确认价格突破长期均线（50）时买入')
+    expect(createdChecklist.exitRules).toContain('收盘确认价格跌破短期均线（10）时卖出')
+    expect(createdChecklist.entryRules).not.toContain('满足入场条件后开仓')
+    expect(createdChecklist.exitRules).not.toContain('满足出场条件后平仓')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       semanticState: expect.objectContaining({
         triggers: expect.arrayContaining([
@@ -7929,7 +7930,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('GENERATING')
     await waitForTerminalStatus('s-price-change-publish')
 
-    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-price-change-publish', expect.objectContaining({
+    const publishedUpdate = mockRepo.updateSession.mock.calls.find(call =>
+      call[0] === 's-price-change-publish' && (call[1] as { status?: string }).status === 'PUBLISHED',
+    )?.[1] as Record<string, any> | undefined
+    expect(publishedUpdate).toEqual(expect.objectContaining({
       status: 'PUBLISHED',
       latestSpecDesc: expect.objectContaining({
         canonicalSpec: expect.objectContaining({

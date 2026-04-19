@@ -710,9 +710,9 @@ export class CanonicalSpecBuilderService {
     sideScope: 'long' | 'short'
     sizing: { mode: 'RATIO'; value: number } | null
   }): CanonicalRuleV2 | null {
-    const ruleKey = /金叉|上穿/u.test(input.ruleText)
+    const ruleKey = /金叉|上穿|突破/u.test(input.ruleText)
       ? 'ma.golden_cross'
-      : /死叉|下穿/u.test(input.ruleText)
+      : /死叉|下穿|跌破/u.test(input.ruleText)
           ? 'ma.death_cross'
           : null
     if (!ruleKey) return null
