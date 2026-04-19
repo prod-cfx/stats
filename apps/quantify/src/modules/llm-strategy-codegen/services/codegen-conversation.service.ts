@@ -7,7 +7,7 @@ import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
 import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant-conversations.repository'
-import type { ChecklistPayload, ChecklistRuleBasis, ChecklistRuleDraft } from '../types/codegen-checklist'
+import type { ChecklistPayload, ChecklistRuleBasis, ChecklistRuleDraft } from '../types/checklist-compat'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { StrategyAmbiguity } from '../types/strategy-ambiguity'
@@ -42,7 +42,7 @@ import {
 } from '../types/strategy-clarification'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
-import { buildChecklistRuleDrafts, resolveChecklistDefaultTimeframe } from './checklist-rule-drafts'
+import { buildChecklistRuleDrafts, resolveChecklistDefaultTimeframe } from './checklist-compat'
 import {
   CodegenConversationContextHelper,
   MAX_PLANNER_HISTORY_LINES,
@@ -75,8 +75,8 @@ import { StrategyCompileabilityDecisionService } from './strategy-compileability
 import { StrategyExecutionContextService } from './strategy-execution-context.service'
 import { StrategyIntentNormalizerService } from './strategy-intent-normalizer.service'
 import { StrategyIntentResolutionService } from './strategy-intent-resolution.service'
-import { SemanticStateCompileBridgeService } from './semantic-state-compile-bridge.service'
 import { SemanticStateMergeService } from './semantic-state-merge.service'
+import { buildNormalizedIntentFromSemanticState } from './semantic-state-normalization'
 import { SemanticStateProjectionService } from './semantic-state-projection.service'
 import { SemanticStateReducerService } from './semantic-state-reducer.service'
 import { InferredConfirmationClassifierService } from './inferred-confirmation-classifier.service'
@@ -168,7 +168,6 @@ export class CodegenConversationService {
     private readonly intentResolution: StrategyIntentResolutionService = new StrategyIntentResolutionService(),
     private readonly semanticStateReducer: SemanticStateReducerService = new SemanticStateReducerService(),
     private readonly semanticStateProjection: SemanticStateProjectionService = new SemanticStateProjectionService(),
-    private readonly semanticStateCompileBridge: SemanticStateCompileBridgeService = new SemanticStateCompileBridgeService(),
     private readonly semanticStateMerge: SemanticStateMergeService = new SemanticStateMergeService(),
   ) {
     this.inferredConfirmationClassifier = new InferredConfirmationClassifierService(this.aiService)
@@ -1310,7 +1309,7 @@ export class CodegenConversationService {
     state: SemanticState,
     fallbackChecklist: ChecklistPayload,
   ): ChecklistPayload {
-    const semanticChecklist = this.semanticStateCompileBridge.buildLegacyChecklist(state, {
+    const semanticChecklist = this.buildLegacyChecklistFromSemanticState(state, {
       ...fallbackChecklist,
       riskRules: fallbackChecklist.riskRules ? { ...fallbackChecklist.riskRules } : undefined,
       stateGates: fallbackChecklist.stateGates ? { ...fallbackChecklist.stateGates } : undefined,
@@ -3176,6 +3175,246 @@ export class CodegenConversationService {
     return slot.value.trim()
   }
 
+  private buildLegacyChecklistFromSemanticState(
+    state: SemanticState,
+    fallbackChecklist: ChecklistPayload = {},
+  ): ChecklistPayload {
+    const projectedGrid = this.buildLegacyGrid(state.triggers)
+    const nextChecklist: ChecklistPayload = {
+      ...fallbackChecklist,
+      riskRules: fallbackChecklist.riskRules ? { ...fallbackChecklist.riskRules } : undefined,
+      stateGates: fallbackChecklist.stateGates ? { ...fallbackChecklist.stateGates } : undefined,
+      market: fallbackChecklist.market ? { ...fallbackChecklist.market } : undefined,
+      grid: fallbackChecklist.grid ? { ...fallbackChecklist.grid } : undefined,
+    }
+
+    const entryRules = this.buildProjectedRulesForPhase(state, 'entry')
+    const exitRules = this.buildProjectedRulesForPhase(state, 'exit')
+
+    if (entryRules.length > 0) {
+      nextChecklist.entryRules = entryRules
+      nextChecklist.entryRuleDrafts = undefined
+    }
+    if (exitRules.length > 0) {
+      nextChecklist.exitRules = exitRules
+      nextChecklist.exitRuleDrafts = undefined
+    }
+
+    const projectedStateGates = this.buildProjectedStateGates(state)
+    if (Object.keys(projectedStateGates).length > 0) {
+      nextChecklist.stateGates = {
+        ...(nextChecklist.stateGates ?? {}),
+        ...projectedStateGates,
+      }
+    }
+
+    const riskRules = {
+      ...(nextChecklist.riskRules ?? {}),
+    } as Record<string, unknown>
+
+    for (const risk of state.risk) {
+      if (risk.key === 'risk.stop_loss_pct' && typeof risk.params.valuePct === 'number') {
+        riskRules.stopLossPct = risk.params.valuePct
+      }
+      if (risk.key === 'risk.take_profit_pct' && typeof risk.params.valuePct === 'number') {
+        riskRules.takeProfitPct = risk.params.valuePct
+      }
+      if (risk.key === 'risk.max_drawdown_pct' && typeof risk.params.valuePct === 'number') {
+        riskRules.maxDrawdownPct = risk.params.valuePct
+      }
+      if (risk.key === 'risk.max_single_loss_pct' && typeof risk.params.valuePct === 'number') {
+        riskRules.maxSingleLossPct = risk.params.valuePct
+      }
+      if (
+        (risk.key === 'risk.stop_loss_pct' || risk.key === 'risk.take_profit_pct')
+        && typeof risk.params.basis === 'string'
+      ) {
+        if (risk.key === 'risk.stop_loss_pct') {
+          riskRules.stopLossBasis = risk.params.basis
+        }
+        if (risk.key === 'risk.take_profit_pct') {
+          riskRules.takeProfitBasis = risk.params.basis
+        }
+      }
+    }
+
+    if (state.position?.mode === 'fixed_ratio' && Number.isFinite(state.position.value)) {
+      riskRules.positionPct = state.position.value <= 1
+        ? state.position.value * 100
+        : state.position.value
+    }
+
+    const exchange = this.readSemanticContextValue(state.contextSlots.exchange)
+    const symbol = this.readSemanticContextValue(state.contextSlots.symbol)
+    const marketType = this.readSemanticContextValue(state.contextSlots.marketType)
+    const timeframe = this.readSemanticContextValue(state.contextSlots.timeframe)
+
+    if (exchange) riskRules.exchange = exchange
+    if (marketType) riskRules.marketType = marketType
+    if (Object.keys(riskRules).length > 0) {
+      nextChecklist.riskRules = riskRules
+    }
+    if (symbol) {
+      nextChecklist.symbols = [symbol]
+    }
+    if (timeframe) {
+      nextChecklist.timeframes = [timeframe]
+    }
+    if (projectedGrid) {
+      nextChecklist.grid = {
+        ...(nextChecklist.grid ?? {}),
+        ...projectedGrid,
+      }
+    }
+
+    return nextChecklist
+  }
+
+  private buildLegacyGrid(
+    triggers: SemanticTriggerState[],
+  ): ChecklistPayload['grid'] | undefined {
+    const activeGrid = triggers.find(trigger =>
+      trigger.key === 'grid.range_rebalance'
+      && trigger.status !== 'superseded'
+    )
+    if (!activeGrid) {
+      return undefined
+    }
+
+    const lower = typeof activeGrid.params.rangeLower === 'number'
+      ? activeGrid.params.rangeLower as number
+      : undefined
+    const upper = typeof activeGrid.params.rangeUpper === 'number'
+      ? activeGrid.params.rangeUpper as number
+      : undefined
+    const stepPct = typeof activeGrid.params.stepPct === 'number'
+      ? activeGrid.params.stepPct as number
+      : undefined
+    const sideMode = activeGrid.params.sideMode === 'long_only'
+      || activeGrid.params.sideMode === 'short_only'
+      || activeGrid.params.sideMode === 'bidirectional'
+      ? activeGrid.params.sideMode
+      : undefined
+    const breakoutAction = activeGrid.params.breakoutAction === 'pause'
+      || activeGrid.params.breakoutAction === 'continue'
+      ? activeGrid.params.breakoutAction
+      : undefined
+
+    if (lower === undefined && upper === undefined && stepPct === undefined && sideMode === undefined && breakoutAction === undefined) {
+      return undefined
+    }
+
+    return {
+      ...(lower !== undefined ? { lower } : {}),
+      ...(upper !== undefined ? { upper } : {}),
+      ...(stepPct !== undefined ? { stepPct } : {}),
+      ...(sideMode !== undefined ? { sideMode } : {}),
+      ...(breakoutAction !== undefined ? { breakoutAction } : {}),
+    }
+  }
+
+  private buildProjectedStateGates(state: SemanticState): NonNullable<ChecklistPayload['stateGates']> {
+    const nextStateGates: NonNullable<ChecklistPayload['stateGates']> = {}
+
+    for (const trigger of state.triggers) {
+      if (trigger.phase !== 'gate') continue
+
+      if (trigger.key === 'market.regime' && typeof trigger.params.value === 'string') {
+        nextStateGates.marketRegime = trigger.params.value as NonNullable<ChecklistPayload['stateGates']>['marketRegime']
+      }
+      if (trigger.key === 'trend.direction' && typeof trigger.params.value === 'string') {
+        nextStateGates.trendDirection = trigger.params.value as NonNullable<ChecklistPayload['stateGates']>['trendDirection']
+      }
+      if (trigger.key === 'volatility.state' && typeof trigger.params.value === 'string') {
+        nextStateGates.volatilityState = trigger.params.value as NonNullable<ChecklistPayload['stateGates']>['volatilityState']
+      }
+    }
+
+    return nextStateGates
+  }
+
+  private buildProjectedRulesForPhase(
+    state: SemanticState,
+    phase: 'entry' | 'exit',
+  ): string[] {
+    return state.triggers
+      .filter(trigger => trigger.phase === phase && trigger.status !== 'superseded')
+      .map(trigger => this.buildProjectedRuleText(trigger))
+      .filter((rule): rule is string => Boolean(rule))
+  }
+
+  private buildProjectedRuleText(trigger: SemanticTriggerState): string | null {
+    if (
+      (trigger.key === 'indicator.above' || trigger.key === 'indicator.below')
+      && trigger.params.indicator === 'ma'
+    ) {
+      return this.buildProjectedMovingAverageRule(trigger)
+    }
+
+    if (
+      trigger.key === 'bollinger.touch_upper'
+      || trigger.key === 'bollinger.touch_lower'
+      || trigger.key === 'bollinger.touch_middle'
+    ) {
+      return this.buildProjectedBollingerRule(trigger)
+    }
+
+    return null
+  }
+
+  private buildProjectedMovingAverageRule(trigger: SemanticTriggerState): string | null {
+    const referenceRole = trigger.params.referenceRole === 'short_term' ? '短期均线' : '长期均线'
+    const referencePeriod = typeof trigger.params['reference.period'] === 'number'
+      ? `（${trigger.params['reference.period']}）`
+      : ''
+    const confirmationPrefix = trigger.params.confirmationMode === 'close_confirm'
+      ? '收盘确认'
+      : (trigger.params.confirmationMode === 'touch' ? '盘中' : '')
+    const verb = trigger.key === 'indicator.above' ? '突破' : '跌破'
+    const action = trigger.phase === 'entry'
+      ? (trigger.sideScope === 'short' ? '做空' : '买入')
+      : (trigger.sideScope === 'short' ? '平空' : '卖出')
+
+    return `${confirmationPrefix}价格${verb}${referenceRole}${referencePeriod}时${action}`
+  }
+
+  private buildProjectedBollingerRule(trigger: SemanticTriggerState): string | null {
+    const period = this.readPositiveNumber(trigger.params.period) ?? 20
+    const stdDev = this.readPositiveNumber(trigger.params.stdDev) ?? 2
+    const confirmationPrefix = trigger.params.confirmationMode === 'close_confirm'
+      ? 'K线收盘后确认'
+      : '触及'
+
+    if (trigger.phase === 'entry') {
+      const band = trigger.key === 'bollinger.touch_upper'
+        ? '上轨'
+        : trigger.key === 'bollinger.touch_lower'
+          ? '下轨'
+          : '中轨'
+      const action = trigger.sideScope === 'short' ? '做空' : '做多'
+      return `${confirmationPrefix}突破布林带(${period},${this.formatPositiveNumber(stdDev)})${band}时${action}`
+    }
+
+    if (trigger.phase === 'exit' && trigger.key === 'bollinger.touch_middle') {
+      const action = trigger.sideScope === 'short'
+        ? '平空'
+        : trigger.sideScope === 'long'
+          ? '平多'
+          : '平仓'
+      return `价格回到布林带中轨(MA${period})时${action}`
+    }
+
+    return null
+  }
+
+  private readPositiveNumber(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null
+  }
+
+  private formatPositiveNumber(value: number): string {
+    return Number.isInteger(value) ? String(value) : String(value)
+  }
+
   private mergeChecklistIntoSemanticState(
     currentState: SemanticState,
     checklist: ChecklistPayload,
@@ -3292,7 +3531,7 @@ export class CodegenConversationService {
   private buildNormalizationFromSemanticState(
     semanticState: SemanticState,
   ): NormalizationResult {
-    const normalizedIntent = this.semanticStateCompileBridge.buildNormalizedIntent(semanticState)
+    const normalizedIntent = buildNormalizedIntentFromSemanticState(semanticState)
     const nextOpenSlot = this.findNextOpenSemanticSlot(semanticState)
 
     return {
@@ -4516,7 +4755,7 @@ export class CodegenConversationService {
       return {}
     }
 
-    return this.semanticStateCompileBridge.buildLegacyChecklist(semanticState, currentLogic)
+    return this.projectLegacyChecklistFromSemanticState(semanticState, currentLogic)
   }
 
   private buildSemanticStateFromPlannerPatch(

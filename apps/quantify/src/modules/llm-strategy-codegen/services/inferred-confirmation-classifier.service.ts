@@ -1,4 +1,4 @@
-import type { ChecklistPayload, ChecklistRuleBasis } from '../types/codegen-checklist'
+import type { ChecklistPayload, ChecklistRuleBasis } from '../types/checklist-compat'
 import type { AiService } from '@/modules/ai/ai.service'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 import { Injectable } from '@nestjs/common'

@@ -1,4 +1,4 @@
-import type { ChecklistPayload } from '../types/codegen-checklist'
+import type { ChecklistPayload } from '../types/checklist-compat'
 import type { CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec-v2'
 import type { SemanticState } from '../types/semantic-state'
 import type { CodegenPublicationGenerationInput } from './codegen-publication-generation.stage'
@@ -25,7 +25,6 @@ import { CompiledScriptExecutionEnvelopeService } from './compiled-script-execut
 import { CompiledScriptParserService } from './compiled-script-parser.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RecommendationIndexService } from './recommendation-index.service'
-import { SemanticStateCompileBridgeService } from './semantic-state-compile-bridge.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { SpecDescBuilderService } from './spec-desc-builder.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -57,7 +56,6 @@ export class CodegenSessionPublicationPipelineService {
     compiledScriptParser: CompiledScriptParserService,
     strategySummaryObservation: StrategySummaryObservationService,
     compiledPublicationGate: CompiledPublicationGateService,
-    semanticStateCompileBridge: SemanticStateCompileBridgeService = new SemanticStateCompileBridgeService(),
   ) {
     this.generationStage = new CodegenPublicationGenerationStage(
       canonicalSpecBuilder,
@@ -70,8 +68,6 @@ export class CodegenSessionPublicationPipelineService {
       compiledScriptExecutionEnvelope,
       compiledScriptParser,
       strategySummaryObservation,
-      undefined,
-      semanticStateCompileBridge,
     )
     this.persistenceStage = new CodegenPublicationPersistenceStage(
       sessionsRepo,

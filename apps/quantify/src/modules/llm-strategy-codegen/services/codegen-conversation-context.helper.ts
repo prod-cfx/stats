@@ -4,7 +4,7 @@ import type {
   ConstraintPackSnapshot,
 } from '../constants/constraint-pack'
 import type { CodegenGuideConfigDto } from '../dto/codegen-guide-config.dto'
-import type { ChecklistPayload } from '../types/codegen-checklist'
+import type { ChecklistPayload } from '../types/checklist-compat'
 
 import { createDefaultConstraintPack } from '../constants/constraint-pack'
 

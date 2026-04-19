@@ -1,5 +1,5 @@
 import type { CanonicalConditionNode, CanonicalRuleSideScope, CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
-import type { ChecklistRuleBasis } from '../types/codegen-checklist'
+import type { ChecklistRuleBasis } from '../types/checklist-compat'
 import type { StrategyIR } from '../types/strategy-ir'
 import type {
   NormalizedGridIntent,
@@ -14,7 +14,7 @@ import {
   resolveChecklistDefaultTimeframe,
   resolveRequiredRuleTimeframes,
   resolveRulePhaseDefaultTimeframe,
-} from './checklist-rule-drafts'
+} from './checklist-compat'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 import { StrategyIrCanonicalAdapterService } from './strategy-ir-canonical-adapter.service'
 

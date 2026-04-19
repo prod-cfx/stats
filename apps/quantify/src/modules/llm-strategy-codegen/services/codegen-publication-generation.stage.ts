@@ -1,5 +1,5 @@
 import type { CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec-v2'
-import type { ChecklistPayload } from '../types/codegen-checklist'
+import type { ChecklistPayload } from '../types/checklist-compat'
 import type { SemanticState } from '../types/semantic-state'
 import type { StrategyConsistencyReport } from '../types/strategy-consistency-report'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
@@ -10,13 +10,12 @@ import type { CanonicalStrategyAstCompilerService } from './canonical-strategy-a
 import type { CompiledScriptEmitterService } from './compiled-script-emitter.service'
 import type { CompiledScriptExecutionEnvelopeService } from './compiled-script-execution-envelope.service'
 import type { CompiledScriptParserService } from './compiled-script-parser.service'
-import type { SemanticStateCompileBridgeService } from './semantic-state-compile-bridge.service'
 import type { SpecDescBuilderService } from './spec-desc-builder.service'
 import type { StrategyConsistencyService } from './strategy-consistency.service'
 import type { StrategySummaryBuilderService } from './strategy-summary-builder.service'
 import type { StrategySummaryObservationReport } from './strategy-summary-observation.service'
-import { resolveChecklistDefaultTimeframe } from './checklist-rule-drafts'
-import { SemanticStateCompileBridgeService as RuntimeSemanticStateCompileBridgeService } from './semantic-state-compile-bridge.service'
+import { resolveChecklistDefaultTimeframe } from './checklist-compat'
+import { buildNormalizedIntentFromSemanticState } from './semantic-state-normalization'
 import { StrategyIntentNormalizerService } from './strategy-intent-normalizer.service'
 import { StrategySummaryObservationService } from './strategy-summary-observation.service'
 
@@ -89,7 +88,6 @@ export class CodegenPublicationGenerationStage {
     private readonly compiledScriptParser: CompiledScriptParserService,
     private readonly strategySummaryObservation: StrategySummaryObservationService = new StrategySummaryObservationService(),
     private readonly intentNormalizer: StrategyIntentNormalizerService = new StrategyIntentNormalizerService(),
-    private readonly semanticStateCompileBridge: SemanticStateCompileBridgeService = new RuntimeSemanticStateCompileBridgeService(),
   ) {}
 
   async generate(input: CodegenPublicationGenerationInput): Promise<CodegenPublicationArtifacts> {
@@ -418,7 +416,7 @@ export class CodegenPublicationGenerationStage {
     blocked: boolean
   } {
     return {
-      normalizedIntent: this.semanticStateCompileBridge.buildNormalizedIntent(semanticState),
+      normalizedIntent: buildNormalizedIntentFromSemanticState(semanticState),
       blocked: false,
     }
   }

@@ -11,6 +11,7 @@ const {
 describe('ai-quant session-loop', () => {
   it('does not export resolveChecklistPayload after semantic-only preflight migration', () => {
     expect('resolveChecklistPayload' in sessionLoop).toBe(false)
+    expect('resolveChecklistConfirmationPayload' in sessionLoop).toBe(false)
   })
 
   it('recognizes short confirmation messages', () => {

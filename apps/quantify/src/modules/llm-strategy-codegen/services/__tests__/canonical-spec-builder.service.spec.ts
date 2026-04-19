@@ -95,7 +95,7 @@ describe('canonicalSpecBuilderService', () => {
         stopLossPct: 5,
         stopLossBasis: 'entry_avg_price',
       },
-    }, normalizedIntent)
+    } as any, normalizedIntent)
 
     expect(spec.market).toEqual({
       exchange: 'okx',

@@ -1,4 +1,4 @@
-import type { ChecklistRuleBasis } from '../types/codegen-checklist'
+import type { ChecklistRuleBasis } from '../types/checklist-compat'
 
 export type PercentageRuleFamily =
   | 'risk.stop_loss_pct'

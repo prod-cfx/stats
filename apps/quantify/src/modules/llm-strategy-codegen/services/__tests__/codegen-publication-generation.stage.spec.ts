@@ -2,7 +2,7 @@ import type { SemanticState } from '../../types/semantic-state'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2DigestService } from '../canonical-spec-v2-digest.service'
 import { CodegenPublicationGenerationStage } from '../codegen-publication-generation.stage'
-import { SemanticStateCompileBridgeService } from '../semantic-state-compile-bridge.service'
+import { buildNormalizedIntentFromSemanticState } from '../semantic-state-normalization'
 import { SpecDescBuilderService } from '../spec-desc-builder.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
@@ -359,7 +359,6 @@ describe('codegenPublicationGenerationStage', () => {
 
   it('routes semantic-state publication through normalized canonical compilation', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
-    const semanticStateCompileBridge = new SemanticStateCompileBridgeService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
     const semanticState = buildLockedGridSemanticState()
     const rawChecklist = {
@@ -367,8 +366,7 @@ describe('codegenPublicationGenerationStage', () => {
       timeframes: ['1h'],
       riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
     }
-    const projectedChecklist = semanticStateCompileBridge.buildLegacyChecklist(semanticState, rawChecklist)
-    const expectedNormalizedIntent = semanticStateCompileBridge.buildNormalizedIntent(semanticState)
+    const expectedNormalizedIntent = buildNormalizedIntentFromSemanticState(semanticState)
     const buildSpy = jest.spyOn(canonicalSpecBuilder, 'build')
     const buildFromNormalizedIntentSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromNormalizedIntent')
     const executionEnvelopeBuild = jest.fn().mockReturnValue({})
@@ -448,61 +446,6 @@ describe('codegenPublicationGenerationStage', () => {
       }),
     ]))
     expect(executionEnvelopeBuild).toHaveBeenCalledWith(artifacts.canonicalSpec)
-  })
-
-  it('does not call buildLegacyChecklist during publication generation', async () => {
-    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
-    const bridge = new SemanticStateCompileBridgeService()
-    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
-    const legacySpy = jest.spyOn(bridge, 'buildLegacyChecklist')
-    const stage = new CodegenPublicationGenerationStage(
-      canonicalSpecBuilder,
-      { buildFromCanonicalSpec: jest.fn().mockReturnValue({}) } as any,
-      strategySummaryBuilder as any,
-      { evaluate: jest.fn().mockReturnValue({
-        status: 'PASSED',
-        specProfile: {
-          indicators: [],
-          actions: [],
-          ruleMappings: [],
-          rules: [],
-          sizing: null,
-          requiredParams: [],
-          fallbackDetected: false,
-        },
-        scriptProfile: {
-          indicators: [],
-          actions: [],
-          ruleMappings: [],
-          rules: [],
-          sizing: null,
-          requiredParams: [],
-          fallbackDetected: false,
-        },
-        checks: [],
-        summary: { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
-      }) } as any,
-      { compile: jest.fn().mockReturnValue({ ir: { id: 'compiled-ir' }, graphSnapshot: {} }) } as any,
-      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
-      { emit: jest.fn().mockReturnValue('strategy') } as any,
-      { build: jest.fn().mockReturnValue({}) } as any,
-      { parse: jest.fn().mockReturnValue({}) } as any,
-      undefined,
-      undefined,
-      bridge,
-    )
-
-    await stage.generate({
-      checklist: {
-        symbols: ['ETHUSDT'],
-        timeframes: ['1h'],
-        riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
-      },
-      semanticState: buildLockedBollingerSemanticState(),
-      message: '确认逻辑图',
-    } as any)
-
-    expect(legacySpy).not.toHaveBeenCalled()
   })
 
   it('builds strategy summary from specProfile rather than legacy canonical-spec text heuristics', async () => {
@@ -715,8 +658,7 @@ describe('codegenPublicationGenerationStage', () => {
     const digestService = new CanonicalSpecV2DigestService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
     const semanticState = buildLockedMaSemanticState()
-    const semanticStateCompileBridge = new SemanticStateCompileBridgeService()
-    const expectedNormalizedIntent = semanticStateCompileBridge.buildNormalizedIntent(semanticState)
+    const expectedNormalizedIntent = buildNormalizedIntentFromSemanticState(semanticState)
     const expectedDigest = digestService.hash(
       canonicalSpecBuilder.buildFromNormalizedIntent({
         market: {
@@ -784,6 +726,152 @@ describe('codegenPublicationGenerationStage', () => {
         ]),
       }),
     }))
+  })
+
+  it('keeps the Bollinger golden case canonical digest stable through semantic-only compile input', async () => {
+    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const digestService = new CanonicalSpecV2DigestService()
+    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const semanticState = buildLockedBollingerSemanticState()
+    const expectedNormalizedIntent = buildNormalizedIntentFromSemanticState(semanticState)
+    const expectedDigest = digestService.hash(
+      canonicalSpecBuilder.buildFromNormalizedIntent({
+        market: {
+          exchange: 'okx',
+          marketType: 'perp',
+          defaultTimeframe: '15m',
+        },
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+      }, expectedNormalizedIntent),
+    )
+
+    const stage = new CodegenPublicationGenerationStage(
+      canonicalSpecBuilder,
+      new SpecDescBuilderService(canonicalSpecBuilder),
+      strategySummaryBuilder,
+      { evaluate: jest.fn().mockReturnValue({
+        status: 'PASSED',
+        specProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        scriptProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        checks: [],
+        summary: { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
+      }) } as any,
+      { compile: jest.fn().mockReturnValue({ ir: { source: { graphDigest: 'sha256:bollinger' } }, graphSnapshot: {} }) } as any,
+      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
+      { emit: jest.fn().mockReturnValue('strategy') } as any,
+      { build: jest.fn().mockReturnValue({}) } as any,
+      { parse: jest.fn().mockReturnValue({}) } as any,
+    )
+
+    const artifacts = await stage.generate({
+      checklist: {},
+      semanticState,
+      message: bollingerGoldenCase.message,
+    } as any)
+
+    expect(artifacts.sessionSpecDesc.canonicalDigest).toMatch(bollingerGoldenCase.expectedDigestPattern)
+    expect(artifacts.sessionSpecDesc).toEqual(expect.objectContaining({
+      canonicalDigest: expectedDigest,
+      normalizedIntent: expect.objectContaining({
+        triggers: expect.arrayContaining([
+          expect.objectContaining({ key: 'bollinger.touch_upper', phase: 'entry', sideScope: 'short' }),
+          expect.objectContaining({ key: 'bollinger.touch_middle', phase: 'exit', sideScope: 'short' }),
+        ]),
+      }),
+    }))
+  })
+
+  it('keeps the grid semantic digest stable through semantic-only compile input', async () => {
+    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const digestService = new CanonicalSpecV2DigestService()
+    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const semanticState = buildLockedGridSemanticState()
+    const expectedNormalizedIntent = buildNormalizedIntentFromSemanticState(semanticState)
+    const expectedDigest = digestService.hash(
+      canonicalSpecBuilder.buildFromNormalizedIntent({
+        market: {
+          exchange: 'okx',
+          marketType: 'perp',
+          defaultTimeframe: '15m',
+        },
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+      }, expectedNormalizedIntent),
+    )
+
+    const stage = new CodegenPublicationGenerationStage(
+      canonicalSpecBuilder,
+      new SpecDescBuilderService(canonicalSpecBuilder),
+      strategySummaryBuilder,
+      { evaluate: jest.fn().mockReturnValue({
+        status: 'PASSED',
+        specProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        scriptProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        checks: [],
+        summary: { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
+      }) } as any,
+      { compile: jest.fn().mockReturnValue({ ir: { source: { graphDigest: 'sha256:grid' } }, graphSnapshot: {} }) } as any,
+      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
+      { emit: jest.fn().mockReturnValue('strategy') } as any,
+      { build: jest.fn().mockReturnValue({}) } as any,
+      { parse: jest.fn().mockReturnValue({}) } as any,
+    )
+
+    const artifacts = await stage.generate({
+      checklist: {},
+      semanticState,
+      message: '在 okx 合约 BTCUSDT 15m 上做 60000-80000、每格 1%、突破暂停的双向网格。',
+    } as any)
+
+    expect(artifacts.sessionSpecDesc).toEqual(expect.objectContaining({
+      canonicalDigest: expectedDigest,
+      normalizedIntent: expect.objectContaining({
+        grid: expect.objectContaining({
+          family: 'grid.range_rebalance',
+          range: { lower: 60000, upper: 80000 },
+          stepPct: 1,
+          breakoutAction: 'pause',
+        }),
+      }),
+    }))
+    expect(artifacts.publishParams).toEqual({
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      marketType: 'perp',
+    })
   })
 
   it('derives semantic publication params and locked params without checklist fallback payload', async () => {

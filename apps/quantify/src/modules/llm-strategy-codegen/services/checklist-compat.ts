@@ -1,4 +1,4 @@
-import type { ChecklistPayload, ChecklistRuleBasis, ChecklistRuleDraft } from '../types/codegen-checklist'
+import type { ChecklistPayload, ChecklistRuleBasis, ChecklistRuleDraft } from '../types/checklist-compat'
 
 export interface ChecklistRuleDraftCollection {
   entry: ChecklistRuleDraft[]

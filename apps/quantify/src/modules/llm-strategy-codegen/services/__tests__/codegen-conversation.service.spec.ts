@@ -1093,7 +1093,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       initialMessage: '在okx交易所合约市场的BTCUSDT 15分钟图上，突破布林带上轨交易，仓位10%',
       exitRules: ['价格回到布林带中轨(MA20)时平仓'],
       riskRules: completeRiskRules(),
-    })
+    } as any)
 
     expect(result.status).toBe('DRAFTING')
     expect(result.assistantPrompt).toContain('请补充至少一条明确的出场规则')
@@ -1374,7 +1374,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       initialMessage: '在okx交易所合约市场的BTCUSDT 15分钟图上，突破布林带上轨做空，仓位10%',
       exitRules: ['价格回到布林带中轨(MA20)时平仓'],
       riskRules: completeRiskRules(),
-    })
+    } as any)
 
     expect(result.status).toBe('DRAFTING')
     expect(result.assistantPrompt).not.toContain('缺少方向约束')
@@ -1974,7 +1974,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u-1',
       initialMessage: '在okx交易所合约市场的BTCUSDT 15分钟图上，突破布林带上轨交易，回到中轨卖出，仓位10%',
       riskRules: completeRiskRules(),
-    })
+    } as any)
 
     expect(result.status).toBe('DRAFTING')
     expect(result.assistantPrompt).toContain('请确认止损规则')
@@ -2000,7 +2000,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u-1',
       initialMessage: '在okx交易所合约市场的BTCUSDT 15分钟图上，突破布林带上轨交易后回到中轨卖出，仓位10%',
       riskRules: completeRiskRules(),
-    })
+    } as any)
 
     expect(result.status).toBe('DRAFTING')
     expect(result.assistantPrompt).toContain('请确认止损规则')
@@ -2450,7 +2450,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         stopLossPct: 5,
         takeProfitPct: 10,
       },
-    })
+    } as any)
 
     expect(result.status).toBe('DRAFTING')
     expect(result.assistantPrompt).toContain('以下内容是系统推断')
@@ -7506,6 +7506,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         ]),
       }),
     }))
+    const semanticGeneratingUpdate = mockRepo.tryMarkGenerating.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(buildConfirmedCanonicalDigest(
+      semanticGeneratingUpdate.checklist,
+      semanticGeneratingUpdate.semanticState,
+    )).toBe(updated.canonicalDigest)
 
     await waitForTerminalStatus('s-semantic-bollinger-replace')
 
@@ -7676,6 +7681,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
     const createdChecklist = readPersistedChecklist(createdSession)
+    expect(createdChecklist.grid).toEqual({
+      lower: 60000,
+      upper: 80000,
+      stepPct: 0.5,
+      sideMode: 'bidirectional',
+      breakoutAction: 'pause',
+    })
+    expect(buildConfirmedCanonicalDigest(createdChecklist, createdSession.semanticState)).toBe(started.canonicalDigest)
     mockRepo.findById.mockResolvedValue({
       id: 's-golden-grid-publish',
       userId: 'u1',

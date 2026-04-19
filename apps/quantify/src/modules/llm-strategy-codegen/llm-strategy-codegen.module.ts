@@ -15,7 +15,6 @@ import { CanonicalSpecV2ValidatorService } from './services/canonical-spec-v2-va
 import { CanonicalStrategyAstCompilerService } from './services/canonical-strategy-ast-compiler.service'
 import { CanonicalStrategyIrCanonicalizerService } from './services/canonical-strategy-ir-canonicalizer.service'
 import { CanonicalStrategyIrValidatorService } from './services/canonical-strategy-ir-validator.service'
-import { ChecklistGateService } from './services/checklist-gate.service'
 import { CodegenConversationService } from './services/codegen-conversation.service'
 import { CodegenSessionPublicationPipelineService } from './services/codegen-session-publication-pipeline.service'
 import { CompiledPublicationGateService } from './services/compiled-publication-gate.service'
@@ -26,7 +25,6 @@ import { RecommendationIndexService } from './services/recommendation-index.serv
 import { RuntimeGuardrailService } from './services/runtime-guardrail.service'
 import { ScriptProfileExtractorService } from './services/script-profile-extractor.service'
 import { SemanticStateProjectionService } from './services/semantic-state-projection.service'
-import { SemanticStateCompileBridgeService } from './services/semantic-state-compile-bridge.service'
 import { SemanticStateMergeService } from './services/semantic-state-merge.service'
 import { SemanticStateReducerService } from './services/semantic-state-reducer.service'
 import { SpecDescBuilderService } from './services/spec-desc-builder.service'
@@ -50,10 +48,8 @@ import { StrategySummaryObservationService } from './services/strategy-summary-o
     AiQuantConversationsRepository,
     CodegenSessionsRepository,
     PublishedStrategySnapshotsRepository,
-    ChecklistGateService,
     StaticGuardrailService,
     RuntimeGuardrailService,
-    SemanticStateCompileBridgeService,
     SemanticStateMergeService,
     SemanticStateReducerService,
     SemanticStateProjectionService,
