@@ -8454,6 +8454,170 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('preserves explicit Bollinger exit and risk rules when a follow-up message completes a compileability-blocked conversation with only a partial semanticPatch', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-bollinger-exit-followup' })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '当前规则还不能稳定生成脚本：未识别可编译出场规则。请补充能明确落成主链规则的入场/出场条件后再确认逻辑图。',
+        logic: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+          entryRules: ['K线收盘后确认突破布林带(20,2)上轨时做空', 'K线收盘后确认突破布林带(20,2)下轨时做多'],
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'perp',
+            positionPct: 10,
+          },
+        },
+      }),
+    })
+
+    const started = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX 合约 BTCUSDT 15m，价格触及/突破布林带(20,2)上轨时做空，触及/突破下轨时做多；多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓；单笔仓位 10%。',
+    })
+
+    expect(started.status).toBe('DRAFTING')
+    const createdSession = buildPersistedSessionSnapshot(
+      's-bollinger-exit-followup',
+      mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>,
+      {
+        clarificationState: started.clarificationState,
+        latestSpecDesc: started.specDesc ?? null,
+        semanticState: (mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, unknown>).semanticState,
+      },
+    )
+
+    mockRepo.findById.mockResolvedValueOnce({
+      ...createdSession,
+      updatedAt: '2026-04-19T20:00:00.000Z',
+    })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '当前已理解为：在 OKX 永续 BTCUSDT 15m 上，价格触及/突破布林带(20,2)上轨做空，价格触及/突破下轨做多；多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓；单笔仓位 10%。请确认该策略逻辑是否正确。',
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'bollinger.touch_upper',
+              phase: 'entry',
+              sideScope: 'short',
+              params: { indicator: 'bollinger', period: 20, stdDev: 2, confirmationMode: 'close_confirm' },
+            },
+            {
+              key: 'bollinger.touch_lower',
+              phase: 'entry',
+              sideScope: 'long',
+              params: { indicator: 'bollinger', period: 20, stdDev: 2, confirmationMode: 'close_confirm' },
+            },
+          ],
+          actions: [
+            { key: 'open_short' },
+            { key: 'open_long' },
+          ],
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'perp',
+            timeframe: '15m',
+          },
+          position: {
+            mode: 'fixed_ratio',
+            value: 0.1,
+            positionMode: 'long_short',
+          },
+        },
+        logic: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+          entryRules: ['K线收盘后确认突破布林带(20,2)上轨时做空', 'K线收盘后确认突破布林带(20,2)下轨时做多'],
+          exitRules: ['多单在价格回到布林带中轨(MA20)时平仓', '空单在价格跌破布林带中轨(MA20)时平仓'],
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'perp',
+            positionPct: 10,
+            stopLossPct: 5,
+            stopLossBasis: 'entry_avg_price',
+            takeProfitPct: 10,
+            takeProfitBasis: 'entry_avg_price',
+          },
+        },
+      }),
+    })
+
+    const updated = await service.continueSession('s-bollinger-exit-followup', {
+      userId: 'u1',
+      message: '出场：多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓',
+    })
+
+    expect(updated.status).toBe('CHECKLIST_GATE')
+    const checklistGateUpdate = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(checklistGateUpdate.semanticState).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({ key: 'bollinger.touch_upper', phase: 'entry' }),
+        expect.objectContaining({ key: 'bollinger.touch_lower', phase: 'entry' }),
+        expect.objectContaining({ key: 'bollinger.touch_middle', phase: 'exit' }),
+      ]),
+      risk: expect.arrayContaining([
+        expect.objectContaining({ key: 'risk.stop_loss_pct' }),
+        expect.objectContaining({ key: 'risk.take_profit_pct' }),
+      ]),
+    }))
+    expect(updated.assistantPrompt).toContain('请确认是否按此逻辑生成')
+
+    mockRepo.findById.mockResolvedValueOnce(buildSemanticEraSessionFixture({
+      id: 's-bollinger-exit-followup',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      semanticState: checklistGateUpdate.semanticState,
+      clarificationState: checklistGateUpdate.clarificationState,
+      constraintPack: checklistGateUpdate.constraintPack,
+      latestSpecDesc: checklistGateUpdate.latestSpecDesc,
+      strategyInstanceId: null,
+    }))
+
+    const result = await service.continueSession('s-bollinger-exit-followup', {
+      userId: 'u1',
+      message: 'Confirm code generation',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: updated.canonicalDigest ?? readCanonicalDigestFromSpecDesc(checklistGateUpdate.latestSpecDesc),
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await waitForTerminalStatus('s-bollinger-exit-followup')
+
+    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
+    expect(publishedSnapshot?.specSnapshot?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'short',
+        condition: expect.objectContaining({ key: 'bollinger.upper_break' }),
+        actions: [expect.objectContaining({ type: 'OPEN_SHORT' })],
+      }),
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'long',
+        condition: expect.objectContaining({ key: 'bollinger.lower_break' }),
+        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        actions: expect.arrayContaining([expect.objectContaining({ type: 'CLOSE_LONG' })]),
+      }),
+      expect.objectContaining({
+        id: 'risk-stop-loss',
+        phase: 'risk',
+      }),
+      expect.objectContaining({
+        id: 'risk-take-profit',
+        phase: 'risk',
+      }),
+    ]))
+  })
+
   it('rejects compiler-first publish when compiled script fails structural validation', async () => {
     const emitSpy = jest
       .spyOn(CompiledScriptEmitterService.prototype, 'emit')
