@@ -653,6 +653,19 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('does not let take-profit inherit the stop-loss percentage when both are written inline without punctuation', () => {
+    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+
+    const checklist = (service as any).inferChecklistFromMessage(
+      '在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金 止损5% 止盈10%',
+    )
+
+    expect(checklist.riskRules).toEqual(expect.objectContaining({
+      stopLossPct: 5,
+      takeProfitPct: 10,
+    }))
+  })
+
   it('starts in drafting and asks next key question from llm planner', async () => {
     const dto: StartCodegenSessionDto = {
       userId: 'u1',
@@ -3037,7 +3050,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     expect(result.status).toBe('CHECKLIST_GATE')
-    expect(result.assistantPrompt).toContain('确认逻辑图')
+    expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
     expect(result.assistantPrompt).not.toContain('请补充入场和出场条件')
     expect(result.assistantPrompt).not.toContain('当前规则还不能稳定生成脚本')
     expect(result.clarificationState).toEqual(expect.objectContaining({
@@ -3086,6 +3099,66 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expect.objectContaining({ reason: 'missing_entry_rules' }),
       expect.objectContaining({ reason: 'missing_exit_rules' }),
     ]))
+  })
+
+  it('uses server-side semantic summary instead of planner free text when grid clarification closes into checklist gate', async () => {
+    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+      id: 's-grid-confirmation-copy',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+        grid: {
+          lower: 60000,
+          upper: 80000,
+          sideMode: 'bidirectional',
+        },
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+          positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
+        },
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'grid.stepPct',
+            reason: 'grid_params_missing',
+            field: 'grid.stepPct',
+            blocking: true,
+            question: '请确认网格步长（例如每格 0.5%）。',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    }))
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '我当前理解的策略是：在 OKX 交易 BTCUSDT 永续合约，15m 周期，采用 60000-80000 的双向网格，步长 0.5%，单笔使用 10% 资金，仅做多，按入场均价亏损 5% 止损、盈利 10% 止盈；请确认以上理解是否正确。',
+      }),
+    })
+
+    const result = await service.continueSession('s-grid-confirmation-copy', {
+      userId: 'u1',
+      message: '0.5%',
+      clarificationAnswers: {
+        'grid.stepPct': '0.5%',
+      },
+    } as ContinueCodegenSessionDto)
+
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.assistantPrompt).toContain('双向网格')
+    expect(result.assistantPrompt).not.toContain('仅做多')
+    expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
   })
 
   it('keeps MA golden case stable across conversation artifacts', async () => {

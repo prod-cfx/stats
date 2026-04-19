@@ -25,6 +25,7 @@ export interface StartSessionBootstrapInput {
   plannerStatus: LlmCodegenSessionStatus
   clarificationState: StrategyClarificationState & { summary?: string | null }
   clarificationPrompt: string | null
+  confirmationAssistantPrompt?: string | null
   decisionKind?: 'DIRECT_COMPILE' | 'CONFIRM_INFERRED' | 'ASK_CLARIFY'
   plan: ConversationPlan
   compileability: CanonicalCompileabilityReport | null
@@ -56,7 +57,9 @@ export function buildStartSessionBootstrap(
   const assistantPrompt = ((input.clarificationState.status === 'NEEDS_CLARIFICATION') || input.decisionKind === 'CONFIRM_INFERRED') && input.clarificationPrompt
     ? input.clarificationPrompt
     : (shouldEnterConfirmationGate
-        ? `${input.plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`
+        ? (input.confirmationAssistantPrompt?.trim()
+            ? input.confirmationAssistantPrompt.trim()
+            : `${input.plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`)
         : (input.normalizationBlocked && input.normalizationAssistantPrompt
             ? input.normalizationAssistantPrompt
             : (input.compileability && !input.compileability.canCompile

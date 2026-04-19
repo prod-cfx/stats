@@ -273,11 +273,15 @@ export class CodegenConversationService {
       : (semanticClarificationPrompt
           || clarification.clarificationPrompt
           || this.clarificationQuestion.build(clarificationState))
+    const confirmationAssistantPrompt = plannerStatus === 'CHECKLIST_GATE'
+      ? this.buildChecklistGateAssistantPrompt(checklist)
+      : null
     const bootstrap = buildStartSessionBootstrap({
       initialMessage: dto.initialMessage,
       plannerStatus,
       clarificationState,
       clarificationPrompt,
+      confirmationAssistantPrompt,
       decisionKind: decision.kind,
       plan,
       compileability,
@@ -645,13 +649,20 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
+    const checklistGateAssistantPrompt = this.buildChecklistGateAssistantPrompt(canonicalChecklist)
+    const historyAfterChecklistGate = this.appendConversationHistory(
+      constraintPack.conversationHistory ?? [],
+      dto.message,
+      checklistGateAssistantPrompt,
+    )
+
     await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
       status: 'CHECKLIST_GATE',
       semanticState: reducedSemanticState,
       clarificationState,
       constraintPack: {
         ...nextConstraintPack,
-        conversationHistory: historyAfterPlanner,
+        conversationHistory: historyAfterChecklistGate,
       },
       latestSpecDesc: specDesc,
     }))
@@ -662,7 +673,7 @@ export class CodegenConversationService {
       missingFields: [],
       specDesc,
       canonicalDigest,
-      assistantPrompt: `${plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`,
+      assistantPrompt: checklistGateAssistantPrompt,
       clarificationState,
     })
     return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
@@ -2379,13 +2390,20 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
 
+    const checklistGateAssistantPrompt = this.buildChecklistGateAssistantPrompt(projectedChecklist)
+    const historyAfterChecklistGate = this.appendConversationHistory(
+      args.constraintPack.conversationHistory ?? [],
+      args.message,
+      checklistGateAssistantPrompt,
+    )
+
     await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
       status: 'CHECKLIST_GATE',
       semanticState: args.semanticState,
       clarificationState: clarification.clarificationState,
       constraintPack: {
         ...args.constraintPack,
-        conversationHistory: historyAfterAnswer,
+        conversationHistory: historyAfterChecklistGate,
       },
       latestSpecDesc: specDesc,
     }))
@@ -2394,7 +2412,7 @@ export class CodegenConversationService {
       id: args.session.id,
       status: 'CHECKLIST_GATE',
       missingFields: [],
-      assistantPrompt: '逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。',
+      assistantPrompt: checklistGateAssistantPrompt,
       clarificationState: clarification.clarificationState,
       specDesc,
       canonicalDigest,
@@ -2939,6 +2957,7 @@ export class CodegenConversationService {
         executionContext.symbol,
         executionContext.timeframe,
       ].filter(Boolean).join(' '),
+      this.buildGridSummarySegment(checklist.grid),
       entryRule ? `入场：${formatDraft(entryRule)}` : '',
       exitRule ? `出场：${formatDraft(exitRule)}` : '',
       this.buildRiskSummarySegment('止损', checklist.riskRules, 'stopLoss'),
@@ -2947,6 +2966,33 @@ export class CodegenConversationService {
     ].filter(Boolean)
 
     return segments.length > 0 ? segments.join('；') : null
+  }
+
+  private buildChecklistGateAssistantPrompt(checklist: ChecklistPayload): string {
+    const summary = this.buildClarificationSummary(checklist)
+    if (summary) {
+      return `我当前理解的策略是：${summary}。请确认是否按此逻辑生成。`
+    }
+
+    return '逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。'
+  }
+
+  private buildGridSummarySegment(grid: ChecklistPayload['grid']): string {
+    if (!grid) return ''
+
+    const range = typeof grid.lower === 'number' && typeof grid.upper === 'number'
+      ? `${grid.lower}-${grid.upper}`
+      : ''
+    const step = typeof grid.stepPct === 'number' ? `步长 ${grid.stepPct}%` : ''
+    const sideMode = grid.sideMode === 'bidirectional'
+      ? '双向网格'
+      : grid.sideMode === 'long_only'
+        ? '仅做多网格'
+        : grid.sideMode === 'short_only'
+          ? '仅做空网格'
+          : '网格'
+    const parts = [sideMode, range, step].filter(Boolean)
+    return parts.length > 0 ? `网格：${parts.join('，')}` : ''
   }
 
   private resolveExecutionContextForSummary(checklist: ChecklistPayload): {
@@ -4450,7 +4496,7 @@ export class CodegenConversationService {
       if (!keywords.some(pattern => pattern.test(clause))) {
         continue
       }
-      const pct = this.extractPercentFromClause(clause)
+      const pct = this.extractPercentFromClause(clause, kind)
       return {
         clause,
         pct,
@@ -4472,7 +4518,27 @@ export class CodegenConversationService {
 
   private extractPercentFromClause(
     clause: string,
+    kind?: 'stopLoss' | 'takeProfit',
   ): number | null {
+    const keywordSpecificMatch = kind === 'stopLoss'
+      ? (
+          clause.match(/(?:止损|亏损)\s*(?:百分之?\s*)?(\d+(?:\.\d+)?)(?:\s*%|$)/u)
+          ?? clause.match(/(?:百分之?\s*)?(\d+(?:\.\d+)?)\s*%(?=[^。；;\n，、]{0,16}(?:止损|亏损))/u)
+        )
+      : kind === 'takeProfit'
+        ? (
+            clause.match(/(?:止盈|盈利|收益率|收益|利润)\s*(?:百分之?\s*)?(\d+(?:\.\d+)?)(?:\s*%|$)/u)
+            ?? clause.match(/(?:百分之?\s*)?(\d+(?:\.\d+)?)\s*%(?=[^。；;\n，、]{0,16}(?:止盈|盈利|收益率|收益|利润))/u)
+          )
+        : null
+    const specificRaw = keywordSpecificMatch?.[1]
+    if (specificRaw) {
+      const specificValue = Number(specificRaw)
+      if (Number.isFinite(specificValue)) {
+        return specificValue
+      }
+    }
+
     const percentMatch = clause.match(/(?:百分之?\s*)?(\d+(?:\.\d+)?)\s*%/u)
       ?? clause.match(/(?:百分之?\s*)?(\d+(?:\.\d+)?)(?=\s*(?:止损|止盈|亏损|盈利|收益率|收益|利润|强制平仓|平仓|$))/u)
     const raw = percentMatch?.[1]
