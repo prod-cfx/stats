@@ -1811,8 +1811,10 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     expect(mockContinueLlmCodegenSession).toHaveBeenCalledWith(
       'session-1',
       expect.objectContaining({
+        message: 'aiQuant.messages.confirmGenerate',
         confirmGenerate: true,
         confirmedCanonicalDigest: 'sha256:canonical-bollinger-1',
+        clarificationAnswers: undefined,
       }),
     )
     const continuePayload = mockContinueLlmCodegenSession.mock.calls.at(-1)?.[1] as Record<string, unknown>
@@ -1915,8 +1917,10 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     expect(mockContinueLlmCodegenSession).toHaveBeenCalledWith(
       'session-1',
       expect.objectContaining({
+        message: 'aiQuant.messages.confirmGenerate',
         confirmGenerate: true,
         confirmedCanonicalDigest: 'sha256:canonical-grid-1',
+        clarificationAnswers: undefined,
       }),
     )
     const continuePayload = mockContinueLlmCodegenSession.mock.calls.at(-1)?.[1] as Record<string, unknown>

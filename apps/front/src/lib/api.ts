@@ -498,11 +498,6 @@ export interface LlmSemanticGraphValidationReport {
 
 export interface StartLlmCodegenSessionPayload {
   initialMessage?: string
-  symbols?: string[]
-  timeframes?: string[]
-  entryRules?: string[]
-  exitRules?: string[]
-  riskRules?: Record<string, unknown>
 }
 
 export interface ContinueLlmCodegenSessionPayload {
@@ -510,11 +505,6 @@ export interface ContinueLlmCodegenSessionPayload {
   confirmGenerate?: boolean
   confirmedCanonicalDigest?: string
   clarificationAnswers?: Record<string, string>
-  symbols?: string[]
-  timeframes?: string[]
-  entryRules?: string[]
-  exitRules?: string[]
-  riskRules?: Record<string, unknown>
   providerCode?: string
   model?: string
   temperature?: number

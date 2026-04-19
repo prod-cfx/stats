@@ -23,6 +23,73 @@ describe('ai-quant-page-codegen confirm preflight reconciliation', () => {
     jest.clearAllMocks()
   })
 
+  it('starts a new session with semantic-only payload', async () => {
+    mockStartLlmCodegenSession.mockResolvedValueOnce({
+      id: 'session-new',
+      status: 'DRAFTING',
+    })
+
+    await requestAiQuantCodegen({
+      backtestCapabilities: null,
+      callingMessage: () => 'loading',
+      codegenRequestMutexRef: { current: new Set<string>() },
+      conversationId: 'conv-1',
+      conversations: [{
+        id: 'conv-1',
+        title: 'conv-1',
+        messages: [{ id: 'welcome', role: 'assistant', content: 'hello' }],
+        params: DEFAULT_PARAMS,
+        paramSchema: DEFAULT_PARAM_SCHEMA,
+        paramValues: DEFAULT_PARAM_VALUES,
+        backtestResult: null,
+        logicGraph: null,
+        codegenSpecDesc: {
+          canonicalDigest: 'sha256:canonical-1',
+          rules: [
+            { phase: 'entry', condition: { key: 'bollinger.upper_break' } },
+          ],
+          market: {
+            symbols: ['BTCUSDT'],
+            timeframes: ['15m'],
+          },
+          lockedParams: {
+            positionPct: 10,
+          },
+        },
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: 'sha256:canonical-1',
+        llmCodegenSessionId: null,
+        publishedStrategyInstanceId: null,
+        publishedSnapshotId: null,
+        publishedScriptCode: null,
+        publishedScriptGraphVersion: null,
+        latestSignalMessage: null,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+      }] as any,
+      message: '帮我生成一版布林带策略',
+      params: DEFAULT_PARAMS,
+      sessionId: null,
+      sessionUserId: 'u-1',
+      setCodegenBusyConversationIds: jest.fn() as any,
+      setConversations: jest.fn() as any,
+      t: (key: string) => key,
+    })
+
+    expect(mockStartLlmCodegenSession).toHaveBeenCalledWith({
+      initialMessage: '帮我生成一版布林带策略',
+    })
+    const payload = mockStartLlmCodegenSession.mock.calls.at(-1)?.[0] as Record<string, unknown>
+    expect(payload).not.toHaveProperty('symbols')
+    expect(payload).not.toHaveProperty('timeframes')
+    expect(payload).not.toHaveProperty('entryRules')
+    expect(payload).not.toHaveProperty('exitRules')
+    expect(payload).not.toHaveProperty('riskRules')
+  })
+
   it('continues the active session after a terminal preflight reconciliation fetch', async () => {
     const primaryConversation = {
       id: 'conv-1',
@@ -194,6 +261,12 @@ describe('ai-quant-page-codegen confirm preflight reconciliation', () => {
       confirmedCanonicalDigest: 'sha256:canonical-1',
       clarificationAnswers: undefined,
     })
+    const confirmPayload = mockContinueLlmCodegenSession.mock.calls.at(-1)?.[1] as Record<string, unknown>
+    expect(confirmPayload).not.toHaveProperty('symbols')
+    expect(confirmPayload).not.toHaveProperty('timeframes')
+    expect(confirmPayload).not.toHaveProperty('entryRules')
+    expect(confirmPayload).not.toHaveProperty('exitRules')
+    expect(confirmPayload).not.toHaveProperty('riskRules')
   })
 
   it('does not resend checklist payload when a normal continue uses an existing session', async () => {
@@ -271,6 +344,12 @@ describe('ai-quant-page-codegen confirm preflight reconciliation', () => {
       confirmedCanonicalDigest: undefined,
       clarificationAnswers: undefined,
     })
+    const continuePayload = mockContinueLlmCodegenSession.mock.calls.at(-1)?.[1] as Record<string, unknown>
+    expect(continuePayload).not.toHaveProperty('symbols')
+    expect(continuePayload).not.toHaveProperty('timeframes')
+    expect(continuePayload).not.toHaveProperty('entryRules')
+    expect(continuePayload).not.toHaveProperty('exitRules')
+    expect(continuePayload).not.toHaveProperty('riskRules')
   })
 
 })
