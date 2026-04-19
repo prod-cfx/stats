@@ -1,4 +1,5 @@
 import type { ChecklistPayload } from '../types/codegen-checklist'
+import type { CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec-v2'
 import type { SemanticState } from '../types/semantic-state'
 import type { CodegenPublicationGenerationInput } from './codegen-publication-generation.stage'
 
@@ -84,6 +85,7 @@ export class CodegenSessionPublicationPipelineService {
     userId: string
     checklist: ChecklistPayload
     semanticState?: SemanticState
+    canonicalSpecOverride?: CanonicalStrategySpecV2
     message: string
     model?: string
     existingStrategyInstanceId?: string | null
@@ -92,6 +94,7 @@ export class CodegenSessionPublicationPipelineService {
       const generationInput: CodegenPublicationGenerationInput = {
         checklist: args.checklist,
         semanticState: args.semanticState,
+        canonicalSpecOverride: args.canonicalSpecOverride,
         message: args.message,
       }
       const artifacts = await this.generationStage.generate(generationInput)

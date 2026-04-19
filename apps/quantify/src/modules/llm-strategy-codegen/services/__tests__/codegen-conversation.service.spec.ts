@@ -6940,6 +6940,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
     expect(publicationPipelineRunSpy).toHaveBeenCalledWith(expect.objectContaining({
       checklist: {},
+      canonicalSpecOverride: expect.objectContaining({
+        version: 2,
+      }),
       semanticState: expect.objectContaining({
         triggers: expect.any(Array),
       }),

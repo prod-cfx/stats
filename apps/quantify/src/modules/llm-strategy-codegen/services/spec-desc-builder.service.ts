@@ -131,7 +131,7 @@ export class SpecDescBuilderService {
     if (canonicalSpec.version === 2 && canonicalSpec.metadata?.normalized) {
       return canonicalSpec.metadata.normalized.semanticViewSource
     }
-    return normalizedIntent ? 'normalized-canonical-truth' : 'rule-derived'
+    return 'rule-derived'
   }
 
 }

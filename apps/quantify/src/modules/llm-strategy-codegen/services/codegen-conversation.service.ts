@@ -841,6 +841,7 @@ export class CodegenConversationService {
       userId: sessionUserId,
       checklist: {},
       semanticState: reducedSemanticState,
+      canonicalSpecOverride: hasPersistedSemanticState ? canonicalSpec : undefined,
       message: dto.message,
       model: dto.model,
       existingStrategyInstanceId: session.strategyInstanceId ?? null,

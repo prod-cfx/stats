@@ -73,6 +73,7 @@ export interface CodegenPublicationGenerationInput {
   checklist: ChecklistPayload
   semanticState?: SemanticState
   message: string
+  canonicalSpecOverride?: CanonicalStrategySpecV2
 }
 
 export class CodegenPublicationGenerationStage {
@@ -95,12 +96,13 @@ export class CodegenPublicationGenerationStage {
     const normalization = input.semanticState
       ? this.buildNormalizationFromSemanticState(input.semanticState)
       : this.intentNormalizer.normalize(input.checklist)
-    const canonicalSpec = input.semanticState
+    const canonicalSpec = input.canonicalSpecOverride
+      ?? (input.semanticState
       ? this.canonicalSpecBuilder.buildFromNormalizedIntent(
           this.buildSemanticCanonicalContext(input.semanticState),
           normalization.normalizedIntent,
         )
-      : this.canonicalSpecBuilder.build(input.checklist)
+      : this.canonicalSpecBuilder.build(input.checklist))
     const semanticView = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
     })

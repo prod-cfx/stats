@@ -843,6 +843,69 @@ describe('codegenPublicationGenerationStage', () => {
     }))
   })
 
+  it('reuses the confirmed canonical selection and labels fallback semanticSource as rule-derived', async () => {
+    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const buildFromNormalizedIntentSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromNormalizedIntent')
+    const canonicalSpecOverride = canonicalSpecBuilder.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['1h'],
+      entryRules: ['EMA7 上穿 EMA21 做多'],
+      exitRules: ['EMA7 下穿 EMA21 平多'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+        stopLossPct: 5,
+        stopLossBasis: 'entry_avg_price',
+      },
+    } as any)
+    const stage = new CodegenPublicationGenerationStage(
+      canonicalSpecBuilder,
+      new SpecDescBuilderService(canonicalSpecBuilder),
+      strategySummaryBuilder,
+      { evaluate: jest.fn().mockReturnValue({
+        status: 'PASSED',
+        specProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        scriptProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        checks: [],
+        summary: { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
+      }) } as any,
+      { compile: jest.fn().mockReturnValue({ ir: { source: { graphDigest: 'sha256:fallback' } }, graphSnapshot: {} }) } as any,
+      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
+      { emit: jest.fn().mockReturnValue('strategy') } as any,
+      { build: jest.fn().mockReturnValue({}) } as any,
+      { parse: jest.fn().mockReturnValue({}) } as any,
+    )
+
+    const artifacts = await stage.generate({
+      checklist: {},
+      semanticState: buildLockedMaSemanticState(),
+      canonicalSpecOverride,
+      message: '确认逻辑图',
+    } as any)
+
+    expect(buildFromNormalizedIntentSpy).not.toHaveBeenCalled()
+    expect(artifacts.canonicalSpec).toEqual(canonicalSpecOverride)
+    expect(artifacts.semanticView.semanticSource).toBe('rule-derived')
+  })
+
   it('keeps the Bollinger golden case semantic graph stable through semanticState compile input', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
