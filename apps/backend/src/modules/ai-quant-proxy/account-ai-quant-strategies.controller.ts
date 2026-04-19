@@ -1,16 +1,27 @@
 import type { AiQuantProxyService } from './ai-quant-proxy.service'
 import { Body, Controller, Delete, Get, Headers, Inject, Param, Post, Query } from '@nestjs/common'
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
+import { ApiBearerAuth, ApiExtraModels, ApiHeader, ApiOkResponse, ApiOperation, ApiTags, getSchemaPath } from '@nestjs/swagger'
+import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
+import { buildBaseResponseSchema } from '@/common/swagger/base-response-schema.helper'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
 import { AiQuantProxyService as AiQuantProxyServiceToken } from './ai-quant-proxy.service'
 import { AccountAiQuantActionRequestDto } from './dto/account-ai-quant-action.request.dto'
 import { AccountAiQuantDeployRequestDto } from './dto/account-ai-quant-deploy.request.dto'
 import { AccountAiQuantListQueryDto } from './dto/account-ai-quant-list-query.dto'
+import {
+  AccountAiQuantStrategyDetailResponseDto,
+  AccountAiQuantStrategyListItemResponseDto,
+} from './dto/account-ai-quant-strategy.response.dto'
 import { AccountAiQuantUpdateExecutionLeverageRequestDto } from './dto/account-ai-quant-update-execution-leverage.request.dto'
 
 @ApiTags('account-ai-quant')
 @ApiBearerAuth('bearer')
+@ApiExtraModels(
+  BasePaginationResponseDto,
+  AccountAiQuantStrategyListItemResponseDto,
+  AccountAiQuantStrategyDetailResponseDto,
+)
 @Auth()
 @Controller('account/ai-quant/strategies')
 export class AccountAiQuantStrategiesController {
@@ -28,6 +39,23 @@ export class AccountAiQuantStrategiesController {
   ) {}
 
   @Get()
+  @ApiOperation({ summary: 'List the authenticated user AI Quant strategies through the backend proxy.' })
+  @ApiHeader({ name: 'authorization', required: false })
+  @ApiOkResponse({
+    schema: {
+      allOf: [
+        { $ref: getSchemaPath(BasePaginationResponseDto) },
+        {
+          properties: {
+            items: {
+              type: 'array',
+              items: { $ref: getSchemaPath(AccountAiQuantStrategyListItemResponseDto) },
+            },
+          },
+        },
+      ],
+    },
+  })
   async list(
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,
@@ -43,6 +71,9 @@ export class AccountAiQuantStrategiesController {
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Get AI Quant strategy detail through the backend proxy.' })
+  @ApiHeader({ name: 'authorization', required: false })
+  @ApiOkResponse({ schema: buildBaseResponseSchema(AccountAiQuantStrategyDetailResponseDto) })
   async detail(
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,
@@ -52,6 +83,9 @@ export class AccountAiQuantStrategiesController {
   }
 
   @Post(':id/actions')
+  @ApiOperation({ summary: 'Perform AI Quant strategy actions through the backend proxy.' })
+  @ApiHeader({ name: 'authorization', required: false })
+  @ApiOkResponse({ schema: buildBaseResponseSchema(AccountAiQuantStrategyDetailResponseDto) })
   async action(
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,
@@ -64,6 +98,9 @@ export class AccountAiQuantStrategiesController {
   }
 
   @Post('deploy')
+  @ApiOperation({ summary: 'Deploy an AI Quant strategy through the backend proxy.' })
+  @ApiHeader({ name: 'authorization', required: false })
+  @ApiOkResponse({ schema: buildBaseResponseSchema(AccountAiQuantStrategyDetailResponseDto) })
   async deploy(
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,
@@ -75,11 +112,30 @@ export class AccountAiQuantStrategiesController {
       publishedSnapshotId: dto.publishedSnapshotId,
       exchangeAccountId: dto.exchangeAccountId,
       exchangeAccountName: dto.exchangeAccountName,
-      leverage: dto.leverage,
+      deploymentExecutionConfig: dto.deploymentExecutionConfig,
     })
   }
 
   @Get('deploy-requests/:deployRequestId/result')
+  @ApiOperation({ summary: 'Get AI Quant deploy result through the backend proxy.' })
+  @ApiHeader({ name: 'authorization', required: false })
+  @ApiOkResponse({
+    schema: {
+      type: 'object',
+      required: ['data'],
+      properties: {
+        data: {
+          oneOf: [
+            { $ref: getSchemaPath(AccountAiQuantStrategyDetailResponseDto) },
+            { type: 'null' },
+          ],
+        },
+        message: {
+          type: 'string',
+        },
+      },
+    },
+  })
   async deployResult(
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,
@@ -89,6 +145,9 @@ export class AccountAiQuantStrategiesController {
   }
 
   @Post(':id/execution/leverage')
+  @ApiOperation({ summary: 'Update deployed AI Quant leverage through the backend proxy.' })
+  @ApiHeader({ name: 'authorization', required: false })
+  @ApiOkResponse({ schema: buildBaseResponseSchema(AccountAiQuantStrategyDetailResponseDto) })
   async updateExecutionLeverage(
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,

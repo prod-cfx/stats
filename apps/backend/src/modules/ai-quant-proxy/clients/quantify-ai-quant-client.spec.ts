@@ -13,7 +13,7 @@ describe('quantifyAiQuantClient', () => {
       AccountStrategyViewController_detail: jest.fn(),
       AccountStrategyViewController_list: jest.fn(),
       AccountStrategyViewController_deploy: jest.fn(),
-      AccountStrategyViewController_updateExecutionLeverage: jest.fn(),
+      AccountStrategyViewController_updateDeploymentLeverage: jest.fn(),
       BacktestingController_getCapabilities: jest.fn(),
       BacktestingController_createJob: jest.fn(),
       BacktestingController_checkSymbolSupport: jest.fn(),
@@ -230,7 +230,7 @@ describe('quantifyAiQuantClient', () => {
       publishedSnapshotId: 'snapshot-1',
       name: 'My Strategy',
       deployRequestId: 'deploy-1',
-      leverage: 4,
+      deploymentExecutionConfig: { leverage: 4 },
     }, {
       userId: 'user-1',
       headers: { authorization: 'Bearer token-1' },
@@ -246,7 +246,7 @@ describe('quantifyAiQuantClient', () => {
       publishedSnapshotId: 'snapshot-1',
       name: 'My Strategy',
       deployRequestId: 'deploy-1',
-      leverage: 4,
+      deploymentExecutionConfig: { leverage: 4 },
     }, {
       headers: {
         'x-user-id': 'user-1',
@@ -257,7 +257,7 @@ describe('quantifyAiQuantClient', () => {
 
   it('uses the leverage-only contract alias for post-deploy execution updates', async () => {
     const contract = createContractMock()
-    contract.AccountStrategyViewController_updateExecutionLeverage.mockResolvedValue({
+    contract.AccountStrategyViewController_updateDeploymentLeverage.mockResolvedValue({
       data: {
         id: 'strategy-1',
         snapshot: {
@@ -283,7 +283,7 @@ describe('quantifyAiQuantClient', () => {
       },
     })
 
-    expect(contract.AccountStrategyViewController_updateExecutionLeverage).toHaveBeenCalledWith({
+    expect(contract.AccountStrategyViewController_updateDeploymentLeverage).toHaveBeenCalledWith({
       leverage: 6,
     }, {
       params: { id: 'strategy-1' },

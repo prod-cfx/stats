@@ -1,5 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
-import { IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator'
+import { IsNotEmpty, IsObject, IsOptional, IsString } from 'class-validator'
 
 export class AccountAiQuantDeployRequestDto {
   @ApiProperty()
@@ -27,9 +27,12 @@ export class AccountAiQuantDeployRequestDto {
   @IsString()
   exchangeAccountName?: string
 
-  @ApiPropertyOptional({ description: 'Requested deployment leverage passthrough.' })
+  @ApiPropertyOptional({
+    description: 'Deployment execution config passthrough (currently leverage override).',
+    type: 'object',
+    additionalProperties: true,
+  })
   @IsOptional()
-  @IsNumber()
-  @Min(1)
-  leverage?: number
+  @IsObject()
+  deploymentExecutionConfig?: Record<string, unknown>
 }

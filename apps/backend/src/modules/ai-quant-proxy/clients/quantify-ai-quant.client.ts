@@ -113,7 +113,7 @@ export class QuantifyAiQuantClient {
   ) {
     return this.runRequest(
       signal =>
-        this.client.AccountStrategyViewController_updateExecutionLeverage(body, {
+        this.client.AccountStrategyViewController_updateDeploymentLeverage(body, {
           params: { id: strategyId },
           headers: buildUserHeaders(options.userId, options.headers?.authorization),
           signal,

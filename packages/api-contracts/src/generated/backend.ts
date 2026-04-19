@@ -185,6 +185,57 @@ const AiQuantConversationResponseDto = z
     rejectReason: z.string().optional(),
   })
   .passthrough()
+const BasePaginationResponseDto = z
+  .object({
+    total: z.number(),
+    page: z.number(),
+    limit: z.number(),
+    items: z.array(z.object({}).partial().passthrough()),
+  })
+  .passthrough()
+const AccountAiQuantStrategyListItemResponseDto = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    status: z.enum(['running', 'stopped', 'draft']),
+    exchange: z.string().nullish(),
+    symbol: z.string().nullish(),
+    timeframe: z.string().nullish(),
+    positionPct: z.number().nullish(),
+    paramSchema: z.object({}).partial().passthrough().nullish(),
+    paramValues: z.object({}).partial().passthrough().nullish(),
+    schemaVersion: z.string().nullish(),
+    isSubscribed: z.boolean(),
+    metrics: z.object({}).partial().passthrough(),
+    updatedAt: z.string(),
+  })
+  .passthrough()
+const AccountAiQuantStrategyDetailResponseDto = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    status: z.enum(['running', 'stopped', 'draft']),
+    exchange: z.string().nullish(),
+    symbol: z.string().nullish(),
+    timeframe: z.string().nullish(),
+    positionPct: z.number().nullish(),
+    paramSchema: z.object({}).partial().passthrough().nullish(),
+    paramValues: z.object({}).partial().passthrough().nullish(),
+    schemaVersion: z.string().nullish(),
+    isSubscribed: z.boolean(),
+    metrics: z.object({}).partial().passthrough(),
+    updatedAt: z.string(),
+    totalPnl: z.number().nullish(),
+    todayPnl: z.number().nullish(),
+    equitySeries: z.array(z.object({}).partial().passthrough()),
+    snapshot: z.object({}).partial().passthrough(),
+    timeline: z.array(z.object({}).partial().passthrough()),
+    accountOverview: z.object({}).partial().passthrough(),
+    positionOverview: z.object({}).partial().passthrough(),
+    latestOrders: z.array(z.object({}).partial().passthrough()),
+    deployment: z.object({}).partial().passthrough().nullish(),
+  })
+  .passthrough()
 const AccountAiQuantActionRequestDto = z.object({ action: z.enum(['run', 'stop']) }).passthrough()
 const AccountAiQuantDeployRequestDto = z
   .object({
@@ -193,7 +244,7 @@ const AccountAiQuantDeployRequestDto = z
     publishedSnapshotId: z.string(),
     exchangeAccountId: z.string().optional(),
     exchangeAccountName: z.string().optional(),
-    leverage: z.number().optional(),
+    deploymentExecutionConfig: z.object({}).partial().passthrough().optional(),
   })
   .passthrough()
 const AccountAiQuantUpdateExecutionLeverageRequestDto = z
@@ -333,14 +384,6 @@ const AdminUserInfoDto = z
     menuPermissions: z.array(z.string()),
     featurePermissions: z.array(z.string()),
     apiPermissions: z.array(z.string()),
-  })
-  .passthrough()
-const BasePaginationResponseDto = z
-  .object({
-    total: z.number(),
-    page: z.number(),
-    limit: z.number(),
-    items: z.array(z.object({}).partial().passthrough()),
   })
   .passthrough()
 const CreateAdminUserDto = z
@@ -1170,6 +1213,9 @@ export const schemas = {
   CreateAccountExchangeAccountDto,
   AiQuantConversationMessageResponseDto,
   AiQuantConversationResponseDto,
+  BasePaginationResponseDto,
+  AccountAiQuantStrategyListItemResponseDto,
+  AccountAiQuantStrategyDetailResponseDto,
   AccountAiQuantActionRequestDto,
   AccountAiQuantDeployRequestDto,
   AccountAiQuantUpdateExecutionLeverageRequestDto,
@@ -1189,7 +1235,6 @@ export const schemas = {
   AdminUserDto,
   AdminMenuPermissionDto,
   AdminUserInfoDto,
-  BasePaginationResponseDto,
   CreateAdminUserDto,
   UpdateAdminUserDto,
   CreateAdminRoleDto,
@@ -1308,7 +1353,7 @@ const endpoints = makeApi([
       {
         name: 'authorization',
         type: 'Header',
-        schema: z.string(),
+        schema: z.string().optional(),
       },
       {
         name: 'page',
@@ -1336,7 +1381,12 @@ const endpoints = makeApi([
         schema: z.boolean().optional(),
       },
     ],
-    response: z.void(),
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(AccountAiQuantStrategyListItemResponseDto) })
+        .partial()
+        .passthrough(),
+    ),
   },
   {
     method: 'get',
@@ -1347,7 +1397,7 @@ const endpoints = makeApi([
       {
         name: 'authorization',
         type: 'Header',
-        schema: z.string(),
+        schema: z.string().optional(),
       },
       {
         name: 'id',
@@ -1355,7 +1405,9 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: z
+      .object({ data: AccountAiQuantStrategyDetailResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'delete',
@@ -1390,7 +1442,7 @@ const endpoints = makeApi([
       {
         name: 'authorization',
         type: 'Header',
-        schema: z.string(),
+        schema: z.string().optional(),
       },
       {
         name: 'id',
@@ -1398,7 +1450,9 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: z
+      .object({ data: AccountAiQuantStrategyDetailResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'post',
@@ -1414,7 +1468,7 @@ const endpoints = makeApi([
       {
         name: 'authorization',
         type: 'Header',
-        schema: z.string(),
+        schema: z.string().optional(),
       },
       {
         name: 'id',
@@ -1422,7 +1476,9 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: z
+      .object({ data: AccountAiQuantStrategyDetailResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'post',
@@ -1438,10 +1494,12 @@ const endpoints = makeApi([
       {
         name: 'authorization',
         type: 'Header',
-        schema: z.string(),
+        schema: z.string().optional(),
       },
     ],
-    response: z.void(),
+    response: z
+      .object({ data: AccountAiQuantStrategyDetailResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'get',
@@ -1452,7 +1510,7 @@ const endpoints = makeApi([
       {
         name: 'authorization',
         type: 'Header',
-        schema: z.string(),
+        schema: z.string().optional(),
       },
       {
         name: 'deployRequestId',
@@ -1460,7 +1518,12 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: z
+      .object({
+        data: z.union([AccountAiQuantStrategyDetailResponseDto, z.null()]),
+        message: z.string().optional(),
+      })
+      .passthrough(),
   },
   {
     method: 'get',

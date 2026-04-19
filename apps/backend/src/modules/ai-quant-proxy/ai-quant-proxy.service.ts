@@ -86,7 +86,9 @@ export class AiQuantProxyService {
     }
     if (body.exchangeAccountId !== undefined) payload.exchangeAccountId = body.exchangeAccountId
     if (body.exchangeAccountName !== undefined) payload.exchangeAccountName = body.exchangeAccountName
-    if (body.leverage !== undefined) payload.leverage = body.leverage
+    if (body.deploymentExecutionConfig !== undefined) {
+      payload.deploymentExecutionConfig = body.deploymentExecutionConfig
+    }
 
     for (let attempt = 1; attempt <= AiQuantProxyService.DEPLOY_RETRY_ATTEMPTS; attempt += 1) {
       try {

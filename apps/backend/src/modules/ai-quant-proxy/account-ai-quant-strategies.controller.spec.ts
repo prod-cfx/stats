@@ -55,7 +55,7 @@ describe('accountAiQuantStrategiesController', () => {
       publishedSnapshotId: 'snapshot-1',
       exchangeAccountId: 'exchange-account-1',
       exchangeAccountName: 'Binance Testnet',
-      leverage: 3,
+      deploymentExecutionConfig: { leverage: 3 },
     })
 
     expect(service.deployAccountStrategy).toHaveBeenCalledWith('user-1', 'Bearer token-1', {
@@ -64,7 +64,7 @@ describe('accountAiQuantStrategiesController', () => {
       publishedSnapshotId: 'snapshot-1',
       exchangeAccountId: 'exchange-account-1',
       exchangeAccountName: 'Binance Testnet',
-      leverage: 3,
+      deploymentExecutionConfig: { leverage: 3 },
     })
   })
 
