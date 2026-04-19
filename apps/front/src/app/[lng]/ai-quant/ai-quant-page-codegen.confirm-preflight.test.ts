@@ -90,6 +90,115 @@ describe('ai-quant-page-codegen confirm preflight reconciliation', () => {
     expect(payload).not.toHaveProperty('riskRules')
   })
 
+  it('blocks local request submission when semantic-era params are invalid', async () => {
+    await requestAiQuantCodegen({
+      backtestCapabilities: null,
+      callingMessage: () => 'loading',
+      codegenRequestMutexRef: { current: new Set<string>() },
+      conversationId: 'conv-1',
+      conversations: [{
+        id: 'conv-1',
+        title: 'conv-1',
+        messages: [{ id: 'welcome', role: 'assistant', content: 'hello' }],
+        params: DEFAULT_PARAMS,
+        paramSchema: DEFAULT_PARAM_SCHEMA,
+        paramValues: DEFAULT_PARAM_VALUES,
+        backtestResult: null,
+        logicGraph: null,
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: null,
+        llmCodegenSessionId: null,
+        publishedStrategyInstanceId: null,
+        publishedSnapshotId: null,
+        publishedScriptCode: null,
+        publishedScriptGraphVersion: null,
+        latestSignalMessage: null,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+      }] as any,
+      message: '帮我生成策略',
+      params: {
+        ...DEFAULT_PARAMS,
+        symbol: '   ',
+      },
+      sessionId: null,
+      sessionUserId: 'u-1',
+      setCodegenBusyConversationIds: jest.fn() as any,
+      setConversations: jest.fn() as any,
+      t: (key: string) => key,
+    })
+
+    expect(mockStartLlmCodegenSession).not.toHaveBeenCalled()
+    expect(mockContinueLlmCodegenSession).not.toHaveBeenCalled()
+    expect(mockGetLlmCodegenSession).not.toHaveBeenCalled()
+  })
+
+  it('injects structured preset context when usePresetRules starts generation', async () => {
+    mockStartLlmCodegenSession.mockResolvedValueOnce({
+      id: 'session-preset',
+      status: 'DRAFTING',
+    })
+
+    await requestAiQuantCodegen({
+      backtestCapabilities: null,
+      callingMessage: () => 'loading',
+      codegenRequestMutexRef: { current: new Set<string>() },
+      conversationId: 'conv-1',
+      conversations: [{
+        id: 'conv-1',
+        title: 'conv-1',
+        messages: [{ id: 'welcome', role: 'assistant', content: 'hello' }],
+        params: DEFAULT_PARAMS,
+        paramSchema: DEFAULT_PARAM_SCHEMA,
+        paramValues: DEFAULT_PARAM_VALUES,
+        backtestResult: null,
+        logicGraph: null,
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: null,
+        llmCodegenSessionId: null,
+        publishedStrategyInstanceId: null,
+        publishedSnapshotId: null,
+        publishedScriptCode: null,
+        publishedScriptGraphVersion: null,
+        latestSignalMessage: null,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+      }] as any,
+      message: '网格策略模板, generate logic graph',
+      params: {
+        ...DEFAULT_PARAMS,
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '1h',
+        positionPct: 25,
+      },
+      sessionId: null,
+      sessionUserId: 'u-1',
+      setCodegenBusyConversationIds: jest.fn() as any,
+      setConversations: jest.fn() as any,
+      t: (key: string) => key,
+      usePresetRules: true,
+    })
+
+    expect(mockStartLlmCodegenSession).toHaveBeenCalledTimes(1)
+    expect(mockStartLlmCodegenSession).toHaveBeenCalledWith(expect.objectContaining({
+      initialMessage: expect.stringContaining('exchange=okx'),
+    }))
+    const payload = mockStartLlmCodegenSession.mock.calls.at(-1)?.[0] as { initialMessage?: string }
+    expect(payload.initialMessage).toContain('symbol=ETHUSDT')
+    expect(payload.initialMessage).toContain('timeframe=1h')
+    expect(payload.initialMessage).toContain('positionPct=25')
+    expect(payload.initialMessage).toContain('网格策略模板, generate logic graph')
+  })
+
   it('continues the active session after a terminal preflight reconciliation fetch', async () => {
     const primaryConversation = {
       id: 'conv-1',

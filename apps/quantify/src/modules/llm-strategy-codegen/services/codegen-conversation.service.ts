@@ -497,6 +497,9 @@ export class CodegenConversationService {
       { preserveLegacyFallback: !hasPersistedSemanticState },
     )
     const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const hasBlockingClarificationItems =
+      clarificationState.status === 'NEEDS_CLARIFICATION'
+      && clarificationState.items.some(item => item.blocking && item.status === 'pending')
     const clarificationPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
       || this.clarificationQuestion.build(clarificationState)
       || clarification.clarificationPrompt
@@ -722,12 +725,19 @@ export class CodegenConversationService {
       ? this.projectLegacyChecklistFromSemanticState(reducedSemanticState, baseChecklist)
       : baseChecklist
     const clarification = this.resolveClarificationArtifacts(canonicalChecklist)
-    const clarificationState = this.buildClarificationFromSemanticState(
+    const clarificationState = this.mergePersistedBlockingClarificationItems(
+      this.buildClarificationFromSemanticState(
+        reducedSemanticState,
+        canonicalChecklist,
+        { preserveLegacyFallback: !hasPersistedSemanticState },
+      ),
+      baseClarificationState,
       reducedSemanticState,
-      canonicalChecklist,
-      { preserveLegacyFallback: !hasPersistedSemanticState },
     )
     const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const hasBlockingClarificationItems =
+      clarificationState.status === 'NEEDS_CLARIFICATION'
+      && clarificationState.items.some(item => item.blocking && item.status === 'pending')
     const clarificationPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
       || this.clarificationQuestion.build(clarificationState)
       || clarification.clarificationPrompt
@@ -737,7 +747,7 @@ export class CodegenConversationService {
       dto.message,
     )
 
-    if (clarificationState.status === 'NEEDS_CLARIFICATION' && !semanticReadyForGenerate) {
+    if (hasBlockingClarificationItems) {
       const assistantPrompt = clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。'
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
@@ -1289,6 +1299,42 @@ export class CodegenConversationService {
         }
 
     return this.mergeSemanticClarificationState(semanticState, fallbackState)
+  }
+
+  private mergePersistedBlockingClarificationItems(
+    clarificationState: StrategyClarificationStateWithSummary,
+    persistedClarificationState: StrategyClarificationState | null,
+    semanticState: SemanticState,
+  ): StrategyClarificationStateWithSummary {
+    const persistedBlockingItems = persistedClarificationState?.status === 'NEEDS_CLARIFICATION'
+      ? persistedClarificationState.items.filter(item =>
+          item.blocking
+          && item.status === 'pending'
+          && !this.isResolvedBySemanticState(item, semanticState),
+        )
+      : []
+
+    if (persistedBlockingItems.length === 0) {
+      return clarificationState
+    }
+
+    const seenKeys = new Set(
+      clarificationState.items.map(item => `${item.key}::${item.reason}::${item.fieldPath ?? ''}`),
+    )
+    const mergedItems = [...clarificationState.items]
+    for (const item of persistedBlockingItems) {
+      const itemKey = `${item.key}::${item.reason}::${item.fieldPath ?? ''}`
+      if (!seenKeys.has(itemKey)) {
+        mergedItems.push(item)
+        seenKeys.add(itemKey)
+      }
+    }
+
+    return {
+      ...clarificationState,
+      status: mergedItems.length > 0 ? 'NEEDS_CLARIFICATION' : 'CLEAR',
+      items: mergedItems,
+    }
   }
 
   private isLegacyChecklistCompletenessItem(item: StrategyClarificationItem): boolean {

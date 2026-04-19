@@ -2089,6 +2089,96 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('GENERATING')
   })
 
+  it('keeps confirmGenerate blocked when legacy clarification blockers remain after semantic slots are closed', async () => {
+    const activeGateSpy = jest.spyOn(service as any, 'resolveActiveGateMissingFields').mockReturnValue(['entryRules'])
+    const persistedSemanticState = buildLockedMaSemanticState({
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+          value: 'okx',
+        },
+        symbol: {
+          slotKey: 'symbol',
+          fieldPath: 'contextSlots.symbol',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+          affectsExecution: true,
+          value: 'BTCUSDT',
+        },
+        marketType: {
+          slotKey: 'marketType',
+          fieldPath: 'contextSlots.marketType',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认市场类型（现货或合约/perp）。',
+          affectsExecution: true,
+          value: 'spot',
+        },
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+          affectsExecution: true,
+          value: '15m',
+        },
+      },
+    })
+    const projectedChecklist = (service as any).projectLegacyChecklistFromSemanticState(persistedSemanticState, {})
+
+    mockRepo.findById.mockResolvedValue({
+      id: 's-confirm-semantic-legacy-blocker',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: null,
+      semanticState: persistedSemanticState,
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'market.scope',
+            field: 'marketType',
+            reason: 'conflicting_market_scope',
+            question: '你要做现货还是合约？现货不能做空。',
+            blocking: true,
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+      strategyInstanceId: null,
+    })
+
+    const result = await service.continueSession('s-confirm-semantic-legacy-blocker', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(projectedChecklist, persistedSemanticState),
+    })
+
+    expect(activeGateSpy).not.toHaveBeenCalled()
+    expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('现货')
+    expect(result.clarificationState).toEqual(expect.objectContaining({
+      status: 'NEEDS_CLARIFICATION',
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          reason: 'conflicting_market_scope',
+          status: 'pending',
+          blocking: true,
+        }),
+      ]),
+    }))
+  })
+
   it('captures exchange and risk clauses from natural language without bypassing clarification flow', async () => {
     mockRepo.createSession.mockResolvedValue({ id: 's-real-pipeline-1' })
 
