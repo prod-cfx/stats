@@ -827,7 +827,7 @@ export class CodegenConversationService {
     void this.publicationPipeline.run({
       sessionId: session.id,
       userId: sessionUserId,
-      checklist: canonicalChecklist,
+      checklist: {},
       semanticState: reducedSemanticState,
       message: dto.message,
       model: dto.model,

@@ -786,6 +786,63 @@ describe('codegenPublicationGenerationStage', () => {
     }))
   })
 
+  it('derives semantic publication params and locked params without checklist fallback payload', async () => {
+    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const stage = new CodegenPublicationGenerationStage(
+      canonicalSpecBuilder,
+      new SpecDescBuilderService(canonicalSpecBuilder),
+      strategySummaryBuilder,
+      { evaluate: jest.fn().mockReturnValue({
+        status: 'PASSED',
+        specProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        scriptProfile: {
+          indicators: [],
+          actions: [],
+          ruleMappings: [],
+          rules: [],
+          sizing: null,
+          requiredParams: [],
+          fallbackDetected: false,
+        },
+        checks: [],
+        summary: { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
+      }) } as any,
+      { compile: jest.fn().mockReturnValue({ ir: { source: { graphDigest: 'sha256:semantic' } }, graphSnapshot: {} }) } as any,
+      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
+      { emit: jest.fn().mockReturnValue('strategy') } as any,
+      { build: jest.fn().mockReturnValue({}) } as any,
+      { parse: jest.fn().mockReturnValue({}) } as any,
+    )
+
+    const artifacts = await stage.generate({
+      checklist: {},
+      semanticState: buildLockedBollingerSemanticState(),
+      message: '确认逻辑图',
+    } as any)
+
+    expect(artifacts.publishParams).toEqual({
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      marketType: 'perp',
+    })
+    expect(artifacts.lockedParams).toEqual(expect.objectContaining({
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      marketType: 'perp',
+      exchange: 'okx',
+      positionPct: 10,
+    }))
+  })
+
   it('keeps the Bollinger golden case semantic graph stable through semanticState compile input', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())

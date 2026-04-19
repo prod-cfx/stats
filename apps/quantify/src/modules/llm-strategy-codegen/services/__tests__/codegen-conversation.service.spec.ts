@@ -6881,6 +6881,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
     const persistedSemanticState = buildLockedMaSemanticState()
     const buildFromNormalizedIntentSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromNormalizedIntent')
+    const publicationPipelineRunSpy = jest.spyOn(publicationPipeline, 'run').mockResolvedValue(undefined)
     mockRepo.findById.mockResolvedValue({
       id: 's5-semantic-generate',
       userId: 'u1',
@@ -6936,6 +6937,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         ]),
       }),
     )
+    expect(publicationPipelineRunSpy).toHaveBeenCalledWith(expect.objectContaining({
+      checklist: {},
+      semanticState: expect.objectContaining({
+        triggers: expect.any(Array),
+      }),
+    }))
   })
 
   it('publishes canonical snapshot, semantic view, and compiled artifacts after confirmGenerate', async () => {

@@ -109,18 +109,23 @@ export class CodegenPublicationGenerationStage {
       : this.strategySummaryBuilder.buildUserIntentSummary({
           checklist: input.checklist,
         })
-    const lockedParams = this.buildLockedParams({
-      checklist: input.checklist,
-      semanticState: input.semanticState,
-      canonicalSpec,
-      normalizedIntent: normalization.normalizedIntent,
-    })
-    const publishParams = this.buildPublishParams({
-      canonicalSpec,
-      checklist: input.checklist,
-      semanticState: input.semanticState,
-      message: input.message,
-    })
+    const lockedParams = input.semanticState
+      ? this.buildSemanticLockedParams({
+          semanticState: input.semanticState,
+          canonicalSpec,
+          normalizedIntent: normalization.normalizedIntent,
+        })
+      : this.buildChecklistLockedParams(input.checklist)
+    const publishParams = input.semanticState
+      ? this.buildSemanticPublishParams({
+          canonicalSpec,
+          semanticState: input.semanticState,
+        })
+      : this.buildChecklistPublishParams({
+          canonicalSpec,
+          checklist: input.checklist,
+          message: input.message,
+        })
     const compiled = this.canonicalSpecV2IrCompiler.compile({
       canonicalSpec,
       fallback: this.buildCompiledIrFallback({
@@ -210,39 +215,31 @@ export class CodegenPublicationGenerationStage {
     }
   }
 
-  private buildPublishParams(args: {
+  private buildChecklistPublishParams(args: {
     canonicalSpec: CanonicalStrategySpecV2
     checklist: ChecklistPayload
-    semanticState?: SemanticState
     message: string
   }): {
     symbol: string
     timeframe: string
     marketType: 'spot' | 'perp'
   } {
-    const semanticSymbol = this.readSemanticContextValue(args.semanticState?.contextSlots.symbol)
-    const semanticMarketType = this.readSemanticContextValue(args.semanticState?.contextSlots.marketType)
-    const semanticTimeframe = this.readSemanticContextValue(args.semanticState?.contextSlots.timeframe)
-    const rawSymbol = semanticSymbol
-      ?? args.canonicalSpec.market.symbol
+    const rawSymbol = args.canonicalSpec.market.symbol
       ?? args.checklist.symbols?.[0]
       ?? 'BTCUSDT'
     const requiredTimeframes = args.canonicalSpec.dataRequirements.requiredTimeframes
     const baseTimeframe = requiredTimeframes[0]
       ?? args.canonicalSpec.market.defaultTimeframe
-      ?? semanticTimeframe
       ?? resolveChecklistDefaultTimeframe(args.checklist)
       ?? '5m'
     return {
       symbol: normalizePublishedSymbol(rawSymbol),
       timeframe: baseTimeframe,
-      marketType: semanticMarketType === 'spot' || semanticMarketType === 'perp'
-        ? semanticMarketType
-        : (args.canonicalSpec.market.marketType ?? inferPublishedMarketType({
-            symbol: rawSymbol,
-            checklist: args.checklist,
-            message: args.message,
-          })),
+      marketType: args.canonicalSpec.market.marketType ?? inferPublishedMarketType({
+        symbol: rawSymbol,
+        checklist: args.checklist,
+        message: args.message,
+      }),
     }
   }
 
@@ -275,17 +272,7 @@ export class CodegenPublicationGenerationStage {
     }
   }
 
-  private buildLockedParams(args: {
-    checklist: ChecklistPayload
-    semanticState?: SemanticState
-    canonicalSpec: CanonicalStrategySpecV2
-    normalizedIntent: StrategyNormalizedIntent
-  }): Record<string, unknown> {
-    if (args.semanticState) {
-      return this.buildSemanticLockedParams(args)
-    }
-
-    const checklist = args.checklist
+  private buildChecklistLockedParams(checklist: ChecklistPayload): Record<string, unknown> {
     const riskRules = checklist.riskRules ?? {}
     const locked: Record<string, unknown> = {}
 
@@ -332,7 +319,6 @@ export class CodegenPublicationGenerationStage {
   }
 
   private buildSemanticLockedParams(args: {
-    checklist: ChecklistPayload
     semanticState: SemanticState
     canonicalSpec: CanonicalStrategySpecV2
     normalizedIntent: StrategyNormalizedIntent
@@ -395,6 +381,34 @@ export class CodegenPublicationGenerationStage {
     }
 
     return locked
+  }
+
+  private buildSemanticPublishParams(args: {
+    canonicalSpec: CanonicalStrategySpecV2
+    semanticState: SemanticState
+  }): {
+    symbol: string
+    timeframe: string
+    marketType: 'spot' | 'perp'
+  } {
+    const semanticSymbol = this.readSemanticContextValue(args.semanticState.contextSlots.symbol)
+    const semanticMarketType = this.readSemanticContextValue(args.semanticState.contextSlots.marketType)
+    const semanticTimeframe = this.readSemanticContextValue(args.semanticState.contextSlots.timeframe)
+
+    return {
+      symbol: normalizePublishedSymbol(
+        semanticSymbol
+          ?? args.canonicalSpec.market.symbol
+          ?? 'BTCUSDT',
+      ),
+      timeframe: args.canonicalSpec.dataRequirements.requiredTimeframes[0]
+        ?? args.canonicalSpec.market.defaultTimeframe
+        ?? semanticTimeframe
+        ?? '5m',
+      marketType: semanticMarketType === 'spot' || semanticMarketType === 'perp'
+        ? semanticMarketType
+        : args.canonicalSpec.market.marketType,
+    }
   }
 
   private buildNormalizationFromSemanticState(semanticState: SemanticState): {
