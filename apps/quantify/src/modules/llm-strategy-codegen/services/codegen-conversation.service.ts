@@ -186,11 +186,16 @@ export class CodegenConversationService {
       })
     }
     const seedChecklist = this.inferChecklistFromMessage(dto.initialMessage)
+    const seedSemanticState = this.buildFallbackSemanticState(seedChecklist)
     const plan = await this.planConversationByLlm(dto.initialMessage ?? '', seedChecklist, {
       providerCode: this.resolveProviderCode(undefined),
       model: undefined,
     })
-    const checklist = this.mergeChecklistSnapshots(seedChecklist, plan.logic ?? {})
+    const initialSemanticState = this.applyConversationPlanToSemanticState({
+      currentState: seedSemanticState,
+      plan,
+    })
+    const checklist = this.projectLegacyChecklistFromSemanticState(initialSemanticState, seedChecklist)
     const recommendationStyle = this.inferRecommendationStyleFromContext(
       dto.initialMessage,
       checklist,
@@ -202,16 +207,16 @@ export class CodegenConversationService {
       recommendationStyle,
     }
     const clarification = this.resolveClarificationArtifacts(checklist)
-    const initialSemanticState = this.buildFallbackSemanticState(checklist)
-    const clarificationState = this.mergeSemanticClarificationState(
+    const clarificationState = this.buildClarificationFromSemanticState(
       initialSemanticState,
-      clarification.clarificationState,
+      checklist,
+      { preserveLegacyFallback: false },
     )
     const plannerStatus: LlmCodegenSessionStatus = this.stateMachine.resolvePlannerStatus({
       logicReady: plan.logicReady,
       clarificationState,
     })
-    const normalization = clarification.normalization
+    const normalization = this.buildNormalizationFromSemanticState(initialSemanticState)
     const initialCanonicalSpec = plannerStatus === 'CHECKLIST_GATE'
       ? this.buildCanonicalSpecForConversation(checklist, normalization)
       : null
@@ -402,8 +407,12 @@ export class CodegenConversationService {
     const clarificationStateAfterAnswers = hasStructuredClarificationAnswers
       ? this.resolveClarificationArtifacts(baseChecklist).clarificationState
       : this.withClarificationSummary(baseClarificationState, baseChecklist)
-    const messageChecklist = this.inferChecklistFromMessage(dto.message)
-    const preMergedChecklist = this.mergeChecklistSnapshots(baseChecklist, messageChecklist)
+    const messageSemanticState = this.buildFallbackSemanticState(this.inferChecklistFromMessage(dto.message))
+    const preMergedSemanticState = this.semanticStateMerge.merge({
+      persisted: baseSemanticState,
+      derived: messageSemanticState,
+    })
+    const preMergedChecklist = this.projectLegacyChecklistFromSemanticState(preMergedSemanticState, baseChecklist)
     const constraintPack = inferredConfirmation.constraintPack
     const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, dto.guideConfig)
     const plan = await this.planConversationByLlm(dto.message, preMergedChecklist, {
@@ -450,24 +459,18 @@ export class CodegenConversationService {
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
-    const mergedChecklist = this.mergeChecklistSnapshots(preMergedChecklist, plan.logic ?? {})
-    const derivedSemanticState = this.buildFallbackSemanticState(mergedChecklist)
-    const reducedSemanticState = hasPersistedSemanticState
-      ? this.semanticStateMerge.merge({
-          persisted: semanticStateAfterAnswers,
-          derived: derivedSemanticState,
-        })
-      : derivedSemanticState
-    const canonicalChecklist = hasPersistedSemanticState
-      ? this.projectLegacyChecklistFromSemanticState(reducedSemanticState, mergedChecklist)
-      : mergedChecklist
+    const reducedSemanticState = this.applyConversationPlanToSemanticState({
+      currentState: preMergedSemanticState,
+      plan,
+    })
+    const canonicalChecklist = this.projectLegacyChecklistFromSemanticState(reducedSemanticState, preMergedChecklist)
     const clarification = this.resolveClarificationArtifacts(canonicalChecklist)
-    const clarificationState = this.mergeSemanticClarificationState(
+    const clarificationState = this.buildClarificationFromSemanticState(
       reducedSemanticState,
-      clarification.clarificationState,
+      canonicalChecklist,
+      { preserveLegacyFallback: !hasPersistedSemanticState },
     )
-    const semanticReadyForGenerate = hasPersistedSemanticState
-      && this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
     const clarificationPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
       || this.clarificationQuestion.build(clarificationState)
       || clarification.clarificationPrompt
@@ -520,7 +523,7 @@ export class CodegenConversationService {
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
     const decision = this.buildStrategyDecision({
-      checklist: mergedChecklist,
+      checklist: canonicalChecklist,
       clarification,
       compileability,
       constraintPack: nextConstraintPack,
@@ -696,25 +699,20 @@ export class CodegenConversationService {
       },
     )
     const confirmationViewDigest = this.readCanonicalDigest(confirmationViewSpecDesc)
-    const messageChecklist = this.normalizeChecklist(this.extractChecklist(dto))
-    const mergedChecklist = this.mergeChecklistSnapshots(baseChecklist, messageChecklist)
-    const derivedSemanticState = this.buildFallbackSemanticState(mergedChecklist)
-    const reducedSemanticState = hasPersistedSemanticState
-      ? this.semanticStateMerge.merge({
-          persisted: semanticStateAfterAnswers,
-          derived: derivedSemanticState,
-        })
-      : derivedSemanticState
-    const canonicalChecklist = hasPersistedSemanticState
-      ? this.projectLegacyChecklistFromSemanticState(reducedSemanticState, mergedChecklist)
-      : mergedChecklist
+    const messageSemanticState = this.buildFallbackSemanticState(this.inferChecklistFromMessage(dto.message))
+    const preMergedSemanticState = this.semanticStateMerge.merge({
+      persisted: semanticStateAfterAnswers,
+      derived: messageSemanticState,
+    })
+    const reducedSemanticState = preMergedSemanticState
+    const canonicalChecklist = this.projectLegacyChecklistFromSemanticState(reducedSemanticState, baseChecklist)
     const clarification = this.resolveClarificationArtifacts(canonicalChecklist)
-    const clarificationState = this.mergeSemanticClarificationState(
+    const clarificationState = this.buildClarificationFromSemanticState(
       reducedSemanticState,
-      clarification.clarificationState,
+      canonicalChecklist,
+      { preserveLegacyFallback: !hasPersistedSemanticState },
     )
-    const semanticReadyForGenerate = hasPersistedSemanticState
-      && this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
     const clarificationPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
       || this.clarificationQuestion.build(clarificationState)
       || clarification.clarificationPrompt

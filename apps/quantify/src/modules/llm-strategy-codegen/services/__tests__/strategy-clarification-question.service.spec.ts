@@ -111,6 +111,20 @@ describe('strategyClarificationQuestionService', () => {
     expect(prompt).not.toContain('轨外3根时是全平还是减仓')
   })
 
+  it('prioritizes semantic-slot wording before legacy checklist completeness wording', () => {
+    const prompt = questionService.build({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        { key: 'entry.rules', reason: 'missing_entry_rules', field: 'entryRules', blocking: true, question: '请补充至少一条明确的入场规则。', status: 'pending' },
+        { key: 'semantic.reference.period.entry', reason: 'missing_entry_rules', field: 'reference.period.entry', blocking: true, question: '长期均线是多少？', status: 'pending' },
+      ],
+    })
+
+    expect(prompt).toContain('待确认的指标参数槽位')
+    expect(prompt).toContain('长期均线是多少')
+    expect(prompt).not.toContain('请补充至少一条明确的入场规则')
+  })
+
   it('returns empty prompt when no clarification is needed', () => {
     expect(questionService.build({ status: 'CLEAR', items: [] })).toBe('')
   })

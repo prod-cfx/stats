@@ -1474,21 +1474,36 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       initialMessage: '帮我做一个 MA50 上破买入、MA10 下破卖出的 OKX 现货 BTCUSDT 15m 策略',
     })
 
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
     expect(result.status).toBe('CHECKLIST_GATE')
     expect(result.canonicalDigest).toMatch(/^sha256:/)
-    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
-      checklist: expect.objectContaining({
-        entryRules: expect.arrayContaining(['收盘确认价格突破长期均线（50）时买入']),
-        exitRules: expect.arrayContaining(['收盘确认价格跌破短期均线（10）时卖出']),
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-        riskRules: expect.objectContaining({
-          exchange: 'okx',
-          marketType: 'spot',
-          positionPct: 10,
-          stopLossPct: 5,
-          takeProfitPct: 10,
+    expect(createPayload).not.toHaveProperty('checklist')
+    expect(createPayload.semanticState).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.above',
+          phase: 'entry',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            'reference.period': 50,
+            confirmationMode: 'close_confirm',
+          }),
         }),
+        expect.objectContaining({
+          key: 'indicator.below',
+          phase: 'exit',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            'reference.period': 10,
+            confirmationMode: 'close_confirm',
+          }),
+        }),
+      ]),
+      contextSlots: expect.objectContaining({
+        exchange: expect.objectContaining({ value: 'okx' }),
+        symbol: expect.objectContaining({ value: 'BTCUSDT' }),
+        marketType: expect.objectContaining({ value: 'spot' }),
+        timeframe: expect.objectContaining({ value: '15m' }),
       }),
     }))
   })
@@ -1551,21 +1566,36 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       initialMessage: '帮我做一个 MA50 上破买入、MA10 下破卖出的 OKX 现货 BTCUSDT 15m 策略',
     })
 
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
     expect(result.status).toBe('CHECKLIST_GATE')
     expect(result.canonicalDigest).toMatch(/^sha256:/)
-    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
-      checklist: expect.objectContaining({
-        entryRules: expect.arrayContaining(['收盘确认价格突破长期均线（50）时买入']),
-        exitRules: expect.arrayContaining(['收盘确认价格跌破短期均线（10）时卖出']),
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-        riskRules: expect.objectContaining({
-          exchange: 'okx',
-          marketType: 'spot',
-          positionPct: 10,
-          stopLossPct: 5,
-          takeProfitPct: 10,
+    expect(createPayload).not.toHaveProperty('checklist')
+    expect(createPayload.semanticState).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.above',
+          phase: 'entry',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            'reference.period': 50,
+            confirmationMode: 'close_confirm',
+          }),
         }),
+        expect.objectContaining({
+          key: 'indicator.below',
+          phase: 'exit',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            'reference.period': 10,
+            confirmationMode: 'close_confirm',
+          }),
+        }),
+      ]),
+      contextSlots: expect.objectContaining({
+        exchange: expect.objectContaining({ value: 'okx' }),
+        symbol: expect.objectContaining({ value: 'BTCUSDT' }),
+        marketType: expect.objectContaining({ value: 'spot' }),
+        timeframe: expect.objectContaining({ value: '15m' }),
       }),
     }))
   })
