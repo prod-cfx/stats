@@ -751,34 +751,6 @@ export class CodegenConversationService {
       })
     }
 
-    const missingFields = this.resolveActiveGateMissingFields(
-      canonicalChecklist,
-      semanticReadyForGenerate,
-      compileability,
-    )
-    if (missingFields.length > 0) {
-      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
-        status: 'DRAFTING',
-        checklist: updateChecklist,
-        semanticState: reducedSemanticState,
-        clarificationState,
-        constraintPack: {
-          ...constraintPack,
-          conversationHistory: historyAfterConfirm,
-        },
-        latestSpecDesc: specDesc,
-      }))
-
-      const response = this.finalizeSessionResponse({
-        id: session.id,
-        status: 'DRAFTING',
-        missingFields,
-        assistantPrompt: '请先补全入场和出场规则，再确认生成代码。',
-        clarificationState,
-      })
-      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
-    }
-
     if (normalization.blocked && !semanticReadyForGenerate) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
@@ -2209,36 +2181,12 @@ export class CodegenConversationService {
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
-    const missingFields = this.resolveChecklistMissingFields(projectedChecklist)
     const decision = this.buildStrategyDecision({
       checklist: projectedChecklist,
       clarification,
       compileability,
       constraintPack: args.constraintPack,
     })
-
-    if (missingFields.length > 0) {
-      await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
-        status: 'DRAFTING',
-        checklist: updateChecklist,
-        semanticState: args.semanticState,
-        clarificationState: clarification.clarificationState,
-        constraintPack: {
-          ...args.constraintPack,
-          conversationHistory: historyAfterAnswer,
-        },
-        latestSpecDesc: specDesc,
-      }))
-
-      const response = this.finalizeSessionResponse({
-        id: args.session.id,
-        status: 'DRAFTING',
-        missingFields,
-        assistantPrompt: '请先补全入场和出场规则，再确认生成代码。',
-        clarificationState: clarification.clarificationState,
-      })
-      return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
-    }
 
     if (decision.kind === 'CONFIRM_INFERRED') {
       const assistantPrompt = this.clarificationQuestion.buildFromDecision(decision)

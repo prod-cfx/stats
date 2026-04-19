@@ -1791,6 +1791,147 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(generatingPayload).not.toHaveProperty('checklist')
   })
 
+  it('does not fall back to checklist completeness in continueWithStructuredClarificationAnswers when semantic slots are closed', async () => {
+    const missingFieldsSpy = jest.spyOn(service as any, 'resolveChecklistMissingFields').mockReturnValue(['entryRules', 'exitRules'])
+    const persistedSemanticState = buildLockedMaSemanticState({
+      risk: [
+        {
+          id: 'risk-stop-loss',
+          key: 'risk.stop_loss',
+          params: {
+            stopLossPct: 5,
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'risk.stopLoss.basis',
+              fieldPath: 'risk[0].params.stopLossBasis',
+              status: 'open',
+              priority: 'risk',
+              questionHint: '这里的止损按什么基准计算？',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+    })
+
+    mockRepo.findById.mockResolvedValue({
+      id: 's-structured-semantic-no-checklist-gate',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: null,
+      semanticState: persistedSemanticState,
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'semantic.risk.stopLoss.basis',
+            reason: 'ambiguous_condition_basis',
+            field: 'risk.stopLoss.basis',
+            blocking: true,
+            question: '这里的止损按什么基准计算？',
+            status: 'pending',
+            slotId: buildSemanticSlotId({
+              slotKey: 'risk.stopLoss.basis',
+              fieldPath: 'risk[0].params.stopLossBasis',
+            }),
+            slotKey: 'risk.stopLoss.basis',
+            fieldPath: 'risk[0].params.stopLossBasis',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息和策略无关，请继续描述交易逻辑。',
+      }),
+    })
+
+    const result = await service.continueSession('s-structured-semantic-no-checklist-gate', {
+      userId: 'u1',
+      message: '按入场均价',
+      clarificationAnswers: {
+        'semantic.risk.stopLoss.basis': 'entry_avg_price',
+      },
+    })
+
+    expect(missingFieldsSpy).not.toHaveBeenCalled()
+    expect(result.status).toBe('DRAFTING')
+    expect(result.missingFields).toEqual([])
+    expect(result.assistantPrompt).not.toContain('请先补全入场和出场规则，再确认生成代码。')
+  })
+
+  it('does not fall back to checklist completeness in continueConfirmedSession when semantic state is ready', async () => {
+    const activeGateSpy = jest.spyOn(service as any, 'resolveActiveGateMissingFields').mockReturnValue(['entryRules', 'exitRules'])
+    const persistedSemanticState = buildLockedMaSemanticState({
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+          value: 'okx',
+        },
+        symbol: {
+          slotKey: 'symbol',
+          fieldPath: 'contextSlots.symbol',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+          affectsExecution: true,
+          value: 'BTCUSDT',
+        },
+        marketType: {
+          slotKey: 'marketType',
+          fieldPath: 'contextSlots.marketType',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认市场类型（现货或合约/perp）。',
+          affectsExecution: true,
+          value: 'spot',
+        },
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+          affectsExecution: true,
+          value: '15m',
+        },
+      },
+    })
+    const projectedChecklist = (service as any).projectLegacyChecklistFromSemanticState(persistedSemanticState, {})
+
+    mockRepo.findById.mockResolvedValue({
+      id: 's-confirm-semantic-no-checklist-gate',
+      userId: 'u1',
+      status: 'CHECKLIST_GATE',
+      checklist: null,
+      semanticState: persistedSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      strategyInstanceId: null,
+    })
+
+    const result = await service.continueSession('s-confirm-semantic-no-checklist-gate', {
+      userId: 'u1',
+      message: '确认逻辑图',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(projectedChecklist, persistedSemanticState),
+    })
+
+    expect(activeGateSpy).not.toHaveBeenCalled()
+    expect(result.status).toBe('GENERATING')
+  })
+
   it('captures exchange and risk clauses from natural language without bypassing clarification flow', async () => {
     mockRepo.createSession.mockResolvedValue({ id: 's-real-pipeline-1' })
 
