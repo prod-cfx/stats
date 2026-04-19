@@ -1360,8 +1360,7 @@ export class CodegenConversationService {
       })
     }
 
-    const hasSemanticPatch = Boolean(input.plan.semanticPatch)
-    if (!hasSemanticPatch && input.plan.logic) {
+    if (input.plan.logic) {
       nextState = this.semanticStateMerge.merge({
         persisted: nextState,
         derived: this.buildFallbackSemanticState(input.plan.logic),

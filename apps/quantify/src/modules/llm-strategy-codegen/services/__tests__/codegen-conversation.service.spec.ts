@@ -1661,6 +1661,75 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('does not persist an incomplete semanticPatch as an empty semanticState when planner logic is already complete', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '策略逻辑已完整，请确认逻辑图。',
+        semanticPatch: {
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'spot',
+            timeframe: '3m',
+          },
+          risk: [
+            { key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
+            { key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' } },
+          ],
+          position: {
+            mode: 'fixed_ratio',
+            value: 0.1,
+            positionMode: 'long_only',
+          },
+        },
+        logic: {
+          symbols: ['BTCUSDT'],
+          timeframes: ['3m', '15m'],
+          entryRules: ['3m 内下跌 1% 买入'],
+          exitRules: ['15m 内上涨 2% 卖出'],
+          entryRuleBases: { 'entry-1': 'prev_close' },
+          exitRuleBases: { 'exit-1': 'entry_avg_price' },
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'spot',
+            positionPct: 10,
+            stopLossPct: 5,
+            stopLossBasis: 'entry_avg_price',
+            takeProfitPct: 10,
+            takeProfitBasis: 'entry_avg_price',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-semantic-partial-patch' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在 okx 现货 BTCUSDT 上，3 分钟内跌 1% 买入，15 分钟内相对入场价涨 2% 卖出，止损 5%，止盈 10%，单笔 10%。',
+    })
+
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(createPayload.semanticState).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'price.percent_change',
+          phase: 'entry',
+        }),
+        expect.objectContaining({
+          key: 'price.percent_change',
+          phase: 'exit',
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'open_long' }),
+        expect.objectContaining({ key: 'close_long' }),
+      ]),
+    }))
+  })
+
   it('still accepts legacy semanticUpdates output with old nested planner keys during the semanticPatch transition', async () => {
     mockAi.chat.mockResolvedValueOnce({
       content: JSON.stringify({
