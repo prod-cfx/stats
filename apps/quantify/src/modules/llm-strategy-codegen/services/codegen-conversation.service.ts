@@ -187,11 +187,10 @@ export class CodegenConversationService {
     }
     const seedChecklist = this.inferChecklistFromMessage(dto.initialMessage)
     const seedSemanticState = this.createEmptySemanticState()
-    const plannerChecklist = seedChecklist
-    const plan = await this.planConversationByLlm(dto.initialMessage ?? '', plannerChecklist, {
+    const plan = await this.planConversationByLlm(dto.initialMessage ?? '', seedSemanticState, {
       providerCode: this.resolveProviderCode(undefined),
       model: undefined,
-    })
+    }, [], seedChecklist)
     const initialSemanticState = this.applyConversationPlanToSemanticState({
       currentState: seedSemanticState,
       compatibilityChecklist: seedChecklist,
@@ -405,10 +404,10 @@ export class CodegenConversationService {
     const preMergedChecklist = this.projectLegacyChecklistFromSemanticState(preMergedSemanticState, baseChecklist)
     const constraintPack = inferredConfirmation.constraintPack
     const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, dto.guideConfig)
-    const plan = await this.planConversationByLlm(dto.message, preMergedChecklist, {
+    const plan = await this.planConversationByLlm(dto.message, preMergedSemanticState, {
       providerCode: this.resolveProviderCode(dto.providerCode),
       model: dto.model,
-    }, constraintPack.conversationHistory ?? [])
+    }, constraintPack.conversationHistory ?? [], baseChecklist)
     if (!plan.related) {
       if (hasStructuredClarificationAnswers) {
         return this.continueWithStructuredClarificationAnswers({
@@ -416,6 +415,7 @@ export class CodegenConversationService {
           checklist: baseChecklist,
           semanticState: baseSemanticState,
           useSemanticProjection: hasPersistedSemanticState,
+          persistChecklist: session.checklist !== null && session.checklist !== undefined,
           clarificationState: clarificationStateAfterAnswers,
           constraintPack,
           message: dto.message,
@@ -471,6 +471,7 @@ export class CodegenConversationService {
       constraintPack.recommendationStyle,
     )
     const nextConstraintPack = this.withGuidePrompt(constraintPack, guidePrompt, recommendationStyle)
+    const updateChecklist = this.resolveChecklistCompatibilityPayload(session.checklist, canonicalChecklist)
     if (clarificationState.status === 'NEEDS_CLARIFICATION') {
       const assistantPrompt = clarificationPrompt || plan.assistantPrompt || '请先澄清这条规则，我再继续完善逻辑图。'
       const historyAfterClarification = this.appendConversationHistory(
@@ -480,7 +481,7 @@ export class CodegenConversationService {
       )
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        checklist: canonicalChecklist,
+        checklist: updateChecklist,
         semanticState: reducedSemanticState,
         clarificationState,
         constraintPack: {
@@ -524,7 +525,7 @@ export class CodegenConversationService {
     if (!plan.logicReady) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        checklist: canonicalChecklist,
+        checklist: updateChecklist,
         semanticState: reducedSemanticState,
         clarificationState,
         constraintPack: {
@@ -546,7 +547,7 @@ export class CodegenConversationService {
     if (decision.kind === 'CONFIRM_INFERRED') {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        checklist: canonicalChecklist,
+        checklist: updateChecklist,
         semanticState: reducedSemanticState,
         clarificationState,
         constraintPack: {
@@ -568,7 +569,7 @@ export class CodegenConversationService {
     if (normalization.blocked && !semanticReadyForGenerate) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        checklist: canonicalChecklist,
+        checklist: updateChecklist,
         semanticState: reducedSemanticState,
         clarificationState,
         constraintPack: {
@@ -592,7 +593,7 @@ export class CodegenConversationService {
     if (!compileability.canCompile && !semanticReadyForGenerate) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        checklist: canonicalChecklist,
+        checklist: updateChecklist,
         semanticState: reducedSemanticState,
         clarificationState,
         constraintPack: {
@@ -613,7 +614,7 @@ export class CodegenConversationService {
 
     await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
       status: 'CHECKLIST_GATE',
-      checklist: canonicalChecklist,
+      checklist: updateChecklist,
       semanticState: reducedSemanticState,
       clarificationState,
       constraintPack: {
@@ -697,6 +698,7 @@ export class CodegenConversationService {
       || this.clarificationQuestion.build(clarificationState)
       || clarification.clarificationPrompt
     const constraintPack = this.readConstraintPack(session.constraintPack)
+    const updateChecklist = this.resolveChecklistCompatibilityPayload(session.checklist, canonicalChecklist)
     const historyAfterConfirm = this.appendConversationHistory(
       constraintPack.conversationHistory ?? [],
       dto.message,
@@ -706,7 +708,7 @@ export class CodegenConversationService {
       const assistantPrompt = clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。'
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        checklist: canonicalChecklist,
+        checklist: updateChecklist,
         semanticState: reducedSemanticState,
         clarificationState,
         constraintPack: {
@@ -757,7 +759,7 @@ export class CodegenConversationService {
     if (missingFields.length > 0) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        checklist: canonicalChecklist,
+        checklist: updateChecklist,
         semanticState: reducedSemanticState,
         clarificationState,
         constraintPack: {
@@ -780,7 +782,7 @@ export class CodegenConversationService {
     if (normalization.blocked && !semanticReadyForGenerate) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        checklist: canonicalChecklist,
+        checklist: updateChecklist,
         semanticState: reducedSemanticState,
         clarificationState,
         constraintPack: {
@@ -804,7 +806,7 @@ export class CodegenConversationService {
     if (!compileability.canCompile && !semanticReadyForGenerate) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        checklist: canonicalChecklist,
+        checklist: updateChecklist,
         semanticState: reducedSemanticState,
         clarificationState,
         constraintPack: {
@@ -824,7 +826,7 @@ export class CodegenConversationService {
     }
 
     const markGeneratingInput = this.stateMachine.buildGeneratingUpdate({
-      checklist: canonicalChecklist,
+      checklist: updateChecklist,
       semanticState: reducedSemanticState,
       clarificationState,
       constraintPack: {
@@ -1284,6 +1286,15 @@ export class CodegenConversationService {
         }
 
     return this.mergeSemanticClarificationState(semanticState, fallbackState)
+  }
+
+  private resolveChecklistCompatibilityPayload(
+    persistedChecklistPayload: Prisma.JsonValue | null | undefined,
+    projectedChecklist: ChecklistPayload,
+  ): ChecklistPayload | undefined {
+    return persistedChecklistPayload === null || persistedChecklistPayload === undefined
+      ? undefined
+      : projectedChecklist
   }
 
   private isLegacyChecklistCompletenessItem(item: StrategyClarificationItem): boolean {
@@ -2143,6 +2154,7 @@ export class CodegenConversationService {
     checklist: ChecklistPayload
     semanticState: SemanticState
     useSemanticProjection: boolean
+    persistChecklist: boolean
     clarificationState: StrategyClarificationState
     constraintPack: ReturnType<CodegenConversationService['readConstraintPack']>
     message: string
@@ -2155,6 +2167,7 @@ export class CodegenConversationService {
     const projectedChecklist = args.useSemanticProjection
       ? this.projectLegacyChecklistFromSemanticState(args.semanticState, args.checklist)
       : args.checklist
+    const updateChecklist = args.persistChecklist ? projectedChecklist : undefined
     const clarification = this.resolveClarificationArtifacts(projectedChecklist)
     const semanticClarificationState = this.buildClarificationFromSemanticState(
       args.semanticState,
@@ -2169,7 +2182,7 @@ export class CodegenConversationService {
         || '请先澄清这条规则，我再继续完善逻辑图。'
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        checklist: projectedChecklist,
+        checklist: updateChecklist,
         semanticState: args.semanticState,
         clarificationState: semanticClarificationState,
         constraintPack: {
@@ -2207,7 +2220,7 @@ export class CodegenConversationService {
     if (missingFields.length > 0) {
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        checklist: projectedChecklist,
+        checklist: updateChecklist,
         semanticState: args.semanticState,
         clarificationState: clarification.clarificationState,
         constraintPack: {
@@ -2231,7 +2244,7 @@ export class CodegenConversationService {
       const assistantPrompt = this.clarificationQuestion.buildFromDecision(decision)
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        checklist: projectedChecklist,
+        checklist: updateChecklist,
         semanticState: args.semanticState,
         clarificationState: clarification.clarificationState,
         constraintPack: {
@@ -2255,7 +2268,7 @@ export class CodegenConversationService {
     if (normalization.blocked) {
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        checklist: projectedChecklist,
+        checklist: updateChecklist,
         semanticState: args.semanticState,
         clarificationState: clarification.clarificationState,
         constraintPack: {
@@ -2279,7 +2292,7 @@ export class CodegenConversationService {
     if (!compileability.canCompile) {
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        checklist: projectedChecklist,
+        checklist: updateChecklist,
         semanticState: args.semanticState,
         clarificationState: clarification.clarificationState,
         constraintPack: {
@@ -2300,7 +2313,7 @@ export class CodegenConversationService {
 
     await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
       status: 'CHECKLIST_GATE',
-      checklist: projectedChecklist,
+      checklist: updateChecklist,
       semanticState: args.semanticState,
       clarificationState: clarification.clarificationState,
       constraintPack: {
@@ -4392,9 +4405,10 @@ export class CodegenConversationService {
 
   private async planConversationByLlm(
     message: string,
-    currentLogic: ChecklistPayload,
+    currentSemanticState: SemanticState,
     options?: { providerCode?: string, model?: string },
     history: string[] = [],
+    compatibilityChecklist: ChecklistPayload = {},
   ): Promise<ConversationPlan> {
     const text = message.trim()
     if (!text) {
@@ -4420,7 +4434,8 @@ export class CodegenConversationService {
             role: 'user',
             content: JSON.stringify({
               message: text,
-              currentLogic,
+              currentSemanticState,
+              compatibilityChecklist,
               history: history.slice(-MAX_PLANNER_HISTORY_LINES),
             }),
           },
@@ -4454,7 +4469,7 @@ export class CodegenConversationService {
               : '我先继续完善策略逻辑，请补充一个关键条件。')
         const semanticPatch = this.normalizeSemanticPatch(parsed.semanticPatch ?? parsed.semanticUpdates)
         const logic = this.mergeChecklistSnapshots(
-          this.buildPlannerLogicFromSemanticUpdates(currentLogic, semanticPatch),
+          this.buildPlannerLogicFromSemanticUpdates(compatibilityChecklist, semanticPatch),
           this.normalizeChecklist((parsed.logic ?? {}) as Record<string, unknown>),
         )
         return {

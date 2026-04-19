@@ -39,7 +39,7 @@ export class CodegenConversationStateMachine {
 
   buildConversationUpdate(input: {
     status: LlmCodegenConversationStatus
-    checklist: ChecklistPayload
+    checklist?: ChecklistPayload | null
     semanticState?: SemanticState | null
     clarificationState: StrategyClarificationState
     constraintPack: ConstraintPackSnapshot
@@ -47,7 +47,7 @@ export class CodegenConversationStateMachine {
   }): Prisma.LlmStrategyCodegenSessionUpdateInput {
     return {
       status: input.status,
-      checklist: input.checklist as Prisma.InputJsonValue,
+      ...(input.checklist !== undefined ? { checklist: input.checklist as Prisma.InputJsonValue | null } : {}),
       ...(input.semanticState ? { semanticState: input.semanticState as unknown as Prisma.InputJsonValue } : {}),
       clarificationState: input.clarificationState as unknown as Prisma.InputJsonValue,
       constraintPack: input.constraintPack as unknown as Prisma.InputJsonValue,
@@ -56,7 +56,7 @@ export class CodegenConversationStateMachine {
   }
 
   buildGeneratingUpdate(input: {
-    checklist: ChecklistPayload
+    checklist?: ChecklistPayload | null
     semanticState?: SemanticState | null
     clarificationState: StrategyClarificationState
     constraintPack: ConstraintPackSnapshot
@@ -64,7 +64,7 @@ export class CodegenConversationStateMachine {
   }): Prisma.LlmStrategyCodegenSessionUpdateInput {
     return {
       status: 'GENERATING',
-      checklist: input.checklist as Prisma.InputJsonValue,
+      ...(input.checklist !== undefined ? { checklist: input.checklist as Prisma.InputJsonValue | null } : {}),
       ...(input.semanticState ? { semanticState: input.semanticState as unknown as Prisma.InputJsonValue } : {}),
       clarificationState: input.clarificationState as unknown as Prisma.InputJsonValue,
       constraintPack: input.constraintPack as unknown as Prisma.InputJsonValue,

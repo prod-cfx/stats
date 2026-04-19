@@ -1712,11 +1712,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           }),
         ]),
       }),
-      checklist: expect.objectContaining({
-        entryRules: expect.any(Array),
-        exitRules: expect.any(Array),
-      }),
     }))
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, unknown>
+    expect(updatePayload).not.toHaveProperty('checklist')
   })
 
   it('confirms generation from semanticState when persisted checklist payload is absent', async () => {
@@ -1788,11 +1786,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           expect.objectContaining({ key: 'indicator.below', phase: 'exit' }),
         ]),
       }),
-      checklist: expect.objectContaining({
-        entryRules: expect.any(Array),
-        exitRules: expect.any(Array),
-      }),
     }))
+    const generatingPayload = mockRepo.tryMarkGenerating.mock.calls.at(-1)?.[1] as Record<string, unknown>
+    expect(generatingPayload).not.toHaveProperty('checklist')
   })
 
   it('captures exchange and risk clauses from natural language without bypassing clarification flow', async () => {
