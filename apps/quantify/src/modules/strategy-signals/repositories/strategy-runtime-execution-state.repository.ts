@@ -39,7 +39,7 @@ export class StrategyRuntimeExecutionStateRepository {
     })
   }
 
-  upsertReadyState(input: UpsertReadyStateInput): Promise<StrategyRuntimeExecutionState> {
+  async upsertReadyState(input: UpsertReadyStateInput): Promise<StrategyRuntimeExecutionState> {
     const where = {
       strategyInstanceId_publishedSnapshotId_executionSemanticKey: {
         strategyInstanceId: input.strategyInstanceId,
@@ -48,23 +48,32 @@ export class StrategyRuntimeExecutionStateRepository {
       },
     }
 
-    return this.txHost.tx.strategyRuntimeExecutionState.upsert({
+    const existing = await this.txHost.tx.strategyRuntimeExecutionState.findUnique({ where })
+    if (!existing) {
+      return this.txHost.tx.strategyRuntimeExecutionState.create({
+        data: {
+          strategyInstance: { connect: { id: input.strategyInstanceId } },
+          publishedSnapshotId: input.publishedSnapshotId,
+          snapshotHash: input.snapshotHash,
+          executionSemanticKey: input.executionSemanticKey,
+          status: 'ready',
+        },
+      })
+    }
+
+    if (existing.snapshotHash !== input.snapshotHash) {
+      throw new Error('snapshot_hash_mismatch')
+    }
+
+    return this.txHost.tx.strategyRuntimeExecutionState.update({
       where,
-      update: {
-        snapshotHash: input.snapshotHash,
+      data: {
         status: 'ready',
         failureReason: null,
         failureCode: null,
         lastAttemptAt: null,
         consumedAt: null,
         cooldownUntil: null,
-      },
-      create: {
-        strategyInstance: { connect: { id: input.strategyInstanceId } },
-        publishedSnapshotId: input.publishedSnapshotId,
-        snapshotHash: input.snapshotHash,
-        executionSemanticKey: input.executionSemanticKey,
-        status: 'ready',
       },
     })
   }

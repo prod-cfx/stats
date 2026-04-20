@@ -30,6 +30,10 @@ class InMemoryRuntimeExecutionStateRepository {
   async upsertReadyState(input: Omit<RuntimeStateRecord, 'status'> & { status?: 'ready' }) {
     const key = this.keyOf(input)
     const existing = this.records.get(key)
+    if (existing && existing.snapshotHash !== input.snapshotHash) {
+      throw new Error('snapshot_hash_mismatch')
+    }
+
     const next: RuntimeStateRecord = {
       ...existing,
       strategyInstanceId: input.strategyInstanceId,
@@ -214,6 +218,27 @@ describe('strategyRuntimeExecutionStateService', () => {
       snapshotHash: 'sha256:old',
       executionSemanticKey: 'on_start.entry.primary',
       status: 'ready',
+    })).rejects.toThrow('snapshot_hash_mismatch')
+  })
+
+  it('fails closed when deploy initialization sees an existing semantic key with a different snapshot hash', async () => {
+    const { service } = createService()
+    const snapshot = createSnapshot([
+      { id: 'entry-primary', phase: 'entry' },
+    ])
+
+    await service.initializeStatesForDeploy({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      snapshotHash: 'sha256:old',
+      snapshot,
+    })
+
+    await expect(service.initializeStatesForDeploy({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      snapshotHash: 'sha256:new',
+      snapshot,
     })).rejects.toThrow('snapshot_hash_mismatch')
   })
 })
