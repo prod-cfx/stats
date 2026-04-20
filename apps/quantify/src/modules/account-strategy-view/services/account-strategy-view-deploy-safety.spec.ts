@@ -26,6 +26,7 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
   const buildService = (options?: {
     repoOverrides?: Record<string, unknown>
     runtimeExecutionStateService?: { initializeStatesForDeploy: jest.Mock }
+    snapshotsRepository?: Record<string, unknown>
   }) => {
     const repo = {
       deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-1', mode: 'TESTNET' }),
@@ -42,6 +43,39 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
     const marketDataIngestionService = {
       ensureSymbolsSubscribed: jest.fn().mockResolvedValue(undefined),
     }
+    const snapshotsRepository = options?.snapshotsRepository ?? {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'SOLUSDT',
+          baseTimeframe: '5m',
+          marketType: 'spot',
+          positionPct: 10,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'GTC',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 5,
+          defaultLeverage: 1,
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['GTC'],
+        },
+        strategyInstanceId: 'inst-draft-1',
+        strategyTemplateId: 'template-1',
+        astSnapshot: { decisionPrograms: [{ phase: 'entry' }] },
+      }),
+    }
+
+    const runtimeExecutionStateService = options && Object.prototype.hasOwnProperty.call(options, 'runtimeExecutionStateService')
+      ? options.runtimeExecutionStateService
+      : { initializeStatesForDeploy: jest.fn().mockResolvedValue([]) }
 
     const service = new AccountStrategyViewService(
       repo as any,
@@ -51,8 +85,8 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       undefined as any,
       undefined,
       undefined,
-      undefined,
-      options?.runtimeExecutionStateService as any,
+      snapshotsRepository as any,
+      runtimeExecutionStateService as any,
     )
     service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-1' } as any)
 
@@ -70,6 +104,33 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       timeframe: '5m',
       positionPct: 10,
     } as any)).rejects.toBeInstanceOf(DomainException)
+  })
+
+  it('fails closed when runtime execution state initialization service is unavailable', async () => {
+    const { service, repo } = buildService({
+      runtimeExecutionStateService: undefined as any,
+    })
+
+    await expect(service.deployStrategy({
+      userId: 'user-1',
+      name: 'OKX SOL 5m',
+      exchange: 'okx',
+      symbol: 'SOLUSDT',
+      timeframe: '5m',
+      positionPct: 10,
+      publishedSnapshotId: 'snapshot-1',
+      deployRequestId: 'deploy-req-no-runtime-service',
+      exchangeAccountId: 'acc-1',
+    } as any)).rejects.toMatchObject({
+      message: 'account_strategy.deploy_runtime_execution_state_service_unavailable',
+    })
+
+    expect(repo.markDeployRequestSucceeded).not.toHaveBeenCalled()
+    expect(repo.markDeployRequestFailed).toHaveBeenCalledWith(
+      'req-1',
+      'SERVICE_TEMPORARILY_UNAVAILABLE',
+      'account_strategy.deploy_runtime_execution_state_service_unavailable',
+    )
   })
 
   it('returns existing result for succeeded idempotent request', async () => {

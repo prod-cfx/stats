@@ -1,5 +1,11 @@
 import { AccountStrategyViewService } from './account-strategy-view.service'
 
+function createRuntimeExecutionStateService() {
+  return {
+    initializeStatesForDeploy: jest.fn().mockResolvedValue([]),
+  }
+}
+
 describe('accountStrategyViewService.deployStrategy', () => {
   it('initializes runtime execution states from the published snapshot after deploy succeeds and before success is marked', async () => {
     const repo = {
@@ -146,6 +152,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       undefined,
       undefined,
       snapshotsRepository as any,
+      createRuntimeExecutionStateService() as any,
     )
     service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-okx-1' } as any)
 
@@ -236,6 +243,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       undefined,
       undefined,
       snapshotsRepository as any,
+      createRuntimeExecutionStateService() as any,
     )
     service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-okx-1' } as any)
 
@@ -311,6 +319,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       undefined,
       undefined,
       snapshotsRepository as any,
+      createRuntimeExecutionStateService() as any,
     )
 
     await expect(service.deployStrategy({
@@ -371,6 +380,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       undefined,
       undefined,
       snapshotsRepository as any,
+      createRuntimeExecutionStateService() as any,
     )
 
     await expect(service.deployStrategy({
@@ -450,6 +460,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       undefined,
       tradingService as any,
       snapshotsRepository as any,
+      createRuntimeExecutionStateService() as any,
     )
     service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-okx-1' } as any)
 
@@ -538,6 +549,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       undefined,
       tradingService as any,
       snapshotsRepository as any,
+      createRuntimeExecutionStateService() as any,
     )
     service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-okx-1' } as any)
 
@@ -575,6 +587,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       undefined,
       undefined,
       snapshotsRepository as any,
+      createRuntimeExecutionStateService() as any,
     )
 
     const hashA = (service as any).hashDeployPayload({
@@ -621,6 +634,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       undefined,
       undefined,
       snapshotsRepository as any,
+      createRuntimeExecutionStateService() as any,
     )
 
     await expect(service.deployStrategy({
@@ -690,6 +704,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       undefined,
       tradingService as any,
       snapshotsRepository as any,
+      createRuntimeExecutionStateService() as any,
     )
     service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-okx-exec-1' } as any)
 
@@ -755,6 +770,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       undefined,
       undefined,
       snapshotsRepository as any,
+      createRuntimeExecutionStateService() as any,
     )
 
     await expect(service.deployStrategy({

@@ -77,7 +77,7 @@ export class AccountStrategyViewService {
     @Optional() private readonly configService?: ConfigService,
     @Optional() private readonly tradingService?: TradingService,
     @Optional() private readonly publishedSnapshotsRepository?: PublishedStrategySnapshotsRepository,
-    @Optional() private readonly runtimeExecutionStateService?: StrategyRuntimeExecutionStateService,
+    private readonly runtimeExecutionStateService?: StrategyRuntimeExecutionStateService,
   ) {}
 
   async listStrategies(
@@ -744,14 +744,12 @@ export class AccountStrategyViewService {
         strategyInstanceId: deployResult.strategyInstanceId,
         ...riskProfile,
       })
-      if (this.runtimeExecutionStateService) {
-        await this.runtimeExecutionStateService.initializeStatesForDeploy({
-          strategyInstanceId: deployResult.strategyInstanceId,
-          publishedSnapshotId: resolvedDeploy.publishedSnapshotId,
-          snapshotHash: resolvedDeploy.snapshotHash,
-          snapshot: resolvedDeploy.snapshot,
-        })
-      }
+      await this.requireRuntimeExecutionStateService().initializeStatesForDeploy({
+        strategyInstanceId: deployResult.strategyInstanceId,
+        publishedSnapshotId: resolvedDeploy.publishedSnapshotId,
+        snapshotHash: resolvedDeploy.snapshotHash,
+        snapshot: resolvedDeploy.snapshot,
+      })
       await this.repo.markDeployRequestSucceeded(deployRequest.id, deployResult.strategyInstanceId)
 
       return this.getStrategyDetail(dto.userId, deployResult.strategyInstanceId)
@@ -903,6 +901,17 @@ export class AccountStrategyViewService {
       return (error as { code?: unknown }).code === 'P2002'
     }
     return false
+  }
+
+  private requireRuntimeExecutionStateService(): StrategyRuntimeExecutionStateService {
+    if (!this.runtimeExecutionStateService) {
+      throw new DomainException('account_strategy.deploy_runtime_execution_state_service_unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+      })
+    }
+
+    return this.runtimeExecutionStateService
   }
 
   private assertStrategyVisible<T extends { status?: string | null }>(
