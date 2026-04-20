@@ -236,6 +236,18 @@ export interface AccountAiQuantConsistencySummary {
   consistencyScore?: number | null
 }
 
+export interface AccountAiQuantRuntimeExecutionState {
+  executionSemanticKey: string
+  status: string
+  failureReason: string | null
+  failureCode: string | null
+  lastAttemptAt: string | null
+  consumedAt: string | null
+  cooldownUntil: string | null
+  publishedSnapshotId: string
+  snapshotHash: string
+}
+
 export interface AccountAiQuantStrategyListItem {
   id: string
   name: string
@@ -293,6 +305,7 @@ export interface AccountAiQuantStrategyDetail extends AccountAiQuantStrategyList
   equitySeries: AccountAiQuantStrategyEquityPoint[]
   snapshot: AccountAiQuantStrategySnapshot
   timeline: AccountAiQuantStrategyTimelineEvent[]
+  runtimeExecutionStates: AccountAiQuantRuntimeExecutionState[]
   accountOverview: {
     initialBalance: number | null
     totalEquity: number | null

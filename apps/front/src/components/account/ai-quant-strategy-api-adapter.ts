@@ -6,6 +6,7 @@ import type {
   AccountAiQuantDeploymentExecutionConstraints,
   AccountAiQuantLeverageRange,
   AccountAiQuantPublishedStrategyConfig,
+  AccountAiQuantRuntimeExecutionState,
   AccountAiQuantSnapshotCompatibilityMetadata,
   AccountAiQuantStrategyDetail,
   AccountAiQuantStrategyListItem,
@@ -132,6 +133,24 @@ function normalizeConsistencySummary(
   }
 }
 
+function normalizeRuntimeExecutionStates(
+  states: AccountAiQuantRuntimeExecutionState[] | null | undefined,
+): AiQuantStrategyRecord['runtimeExecutionStates'] {
+  if (!Array.isArray(states) || states.length === 0) return []
+
+  return states.map(state => ({
+    executionSemanticKey: state.executionSemanticKey,
+    status: state.status,
+    failureReason: state.failureReason ?? null,
+    failureCode: state.failureCode ?? null,
+    lastAttemptAt: state.lastAttemptAt ?? null,
+    consumedAt: state.consumedAt ?? null,
+    cooldownUntil: state.cooldownUntil ?? null,
+    publishedSnapshotId: state.publishedSnapshotId,
+    snapshotHash: state.snapshotHash,
+  }))
+}
+
 function buildStrategyBoundPublishedSnapshotParamValues(input: {
   exchange: AiQuantStrategyRecord['exchange']
   strategyConfig: AccountAiQuantPublishedStrategyConfig | null | undefined
@@ -231,6 +250,7 @@ export function mapAccountStrategyDetailToRecord(
       tradeCount: normalizeNumber(detail.metrics.tradeCount),
     },
     ...dynamicParams,
+    runtimeExecutionStates: normalizeRuntimeExecutionStates(detail.runtimeExecutionStates),
     publishedSnapshotParamValues,
     snapshotBacktestConfigDefaults: normalizeBacktestConfigDefaults(detail.snapshot.backtestConfigDefaults),
     deploymentExecutionBaseline: normalizeDeploymentExecutionConfig(detail.snapshot.deploymentExecutionBaseline, snapshotMarketType),

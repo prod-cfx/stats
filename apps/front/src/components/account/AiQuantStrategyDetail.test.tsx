@@ -169,4 +169,107 @@ describe('AiQuantStrategyDetail', () => {
     expect(Array.from(container.querySelectorAll('button')).some(button => button.textContent?.includes('更新杠杆'))).toBe(false)
     expect(container.textContent).toContain('价格来源')
   })
+
+  it('renders runtime execution states with user-visible status, reason, and attempt timestamps', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={{
+            id: 'inst-runtime-1',
+            name: 'Runtime state strategy',
+            status: 'running',
+            exchange: 'okx',
+            symbol: 'BTC-USDT-SWAP',
+            timeframe: '15m',
+            positionPct: 10,
+            initialCapital: 10000,
+            metrics: { returnPct: 12, maxDrawdownPct: 6, winRatePct: 51, tradeCount: 22 },
+            equitySeries: [],
+            timeline: [],
+            paramSchema: null,
+            paramValues: null,
+            schemaVersion: null,
+            supportsDynamicParams: false,
+            runtimeExecutionStates: [
+              {
+                executionSemanticKey: 'on_start.entry.primary',
+                status: 'failed',
+                failureReason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+                failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+                lastAttemptAt: '2026-03-20 10:03',
+                consumedAt: null,
+                cooldownUntil: null,
+                publishedSnapshotId: 'snapshot-1',
+                snapshotHash: 'hash-1',
+              },
+              {
+                executionSemanticKey: 'on_start.exit.primary',
+                status: 'consumed',
+                failureReason: null,
+                failureCode: null,
+                lastAttemptAt: '2026-03-20 10:08',
+                consumedAt: '2026-03-20 10:08',
+                cooldownUntil: null,
+                publishedSnapshotId: 'snapshot-1',
+                snapshotHash: 'hash-1',
+              },
+            ],
+          }}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('运行时执行语义状态')
+    expect(container.textContent).toContain('on_start.entry.primary')
+    expect(container.textContent).toContain('失败')
+    expect(container.textContent).toContain('最近尝试')
+    expect(container.textContent).toContain('2026-03-20 10:03')
+    expect(container.textContent).toContain('未生成可执行信号')
+    expect(container.textContent).toContain('on_start.exit.primary')
+    expect(container.textContent).toContain('已执行')
+    expect(container.textContent).toContain('已执行时间')
+    expect(container.textContent).toContain('2026-03-20 10:08')
+  })
+
+  it('keeps runtime execution state section hidden for legacy or unbound strategies with no states', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={{
+            id: 'inst-runtime-empty',
+            name: 'Legacy strategy',
+            status: 'stopped',
+            exchange: 'okx',
+            symbol: 'BTC-USDT-SWAP',
+            timeframe: '15m',
+            positionPct: 10,
+            initialCapital: 10000,
+            metrics: { returnPct: 0, maxDrawdownPct: 0, winRatePct: 0, tradeCount: 0 },
+            equitySeries: [],
+            timeline: [],
+            paramSchema: null,
+            paramValues: null,
+            schemaVersion: null,
+            supportsDynamicParams: false,
+            publishedSnapshotId: null,
+            snapshotHash: null,
+            runtimeExecutionStates: [],
+            compatibilityMetadata: {
+              isLegacySnapshot: true,
+              missingBacktestConfigDefaults: true,
+              missingDeploymentExecutionDefaults: true,
+              missingDeploymentExecutionConstraints: true,
+              requiresRepublishForBacktest: true,
+              requiresRepublishForDeploy: true,
+            },
+          }}
+        />,
+      )
+    })
+
+    expect(container.textContent).not.toContain('运行时执行语义状态')
+    expect(container.textContent).toContain('需要重新发布')
+  })
 })
