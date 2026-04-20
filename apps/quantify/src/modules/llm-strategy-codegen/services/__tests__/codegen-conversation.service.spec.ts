@@ -1111,7 +1111,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       messages: expect.arrayContaining([
         expect.objectContaining({
           role: 'system',
-          content: expect.stringContaining('不得跳过必答市场、周期、仓位或关键风控字段'),
+          content: expect.stringContaining('服务端 semanticState / clarificationState / compilation gate 是唯一权威'),
         }),
       ]),
     }))
@@ -1119,6 +1119,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const chatCall = mockAi.chat.mock.calls[0]?.[0] as { messages?: Array<{ role?: string; content?: string }> }
     const systemPrompt = chatCall.messages?.find(message => message.role === 'system')?.content ?? ''
 
+    expect(systemPrompt).toContain('logicReady 只是建议性自评')
     expect(systemPrompt).toContain('semanticPatch 只表达当前消息涉及的增量语义')
     expect(systemPrompt).toContain('不得臆造新的核心交易规则')
     expect(systemPrompt).not.toContain('必须直接给出完整入场+出场规则草案')
@@ -2784,7 +2785,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).toContain('risk.takeProfitBasis')
   })
 
-  it('starts in checklist gate when llm says logic is ready', async () => {
+  it('starts in confirm gate when server-side semantic state is already complete and planner also marks logic ready', async () => {
     const dto: StartCodegenSessionDto = {
       userId: 'u1',
       initialMessage: '在okx交易所合约市场的BTCUSDT 3分钟图上，3分钟跌1%做多，5分钟涨2%平多',
@@ -2826,7 +2827,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         digest: result.canonicalDigest,
       }),
     }))
-    expect(result.assistantPrompt).toContain('确认逻辑图')
+    expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       semanticState: expect.objectContaining({
         version: 1,
@@ -3873,7 +3874,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
-  it('stays in drafting when planner says logicReady is false even with a detailed message', async () => {
+  it('stays in drafting when server-side semantic state still needs clarification even if planner says logicReady is false', async () => {
     const dto: StartCodegenSessionDto = {
       userId: 'u1',
       initialMessage: [
@@ -7378,7 +7379,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
-  it('moves to checklist gate when llm planner marks logic ready', async () => {
+  it('moves to confirm gate when server-side semantic state is complete and planner marks logic ready', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's4',
       userId: 'u1',
