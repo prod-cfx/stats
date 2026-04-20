@@ -437,13 +437,15 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       latestSpecDesc,
     }
   }
-  const readFixtureCanonicalDigest = (fixture: Record<string, any>): string => {
-    const digest = fixture.latestSpecDesc?.canonicalDigest
+  const readCanonicalDigestFromSpecDesc = (specDesc: Record<string, any> | null | undefined): string => {
+    const digest = specDesc?.canonicalDigest
     if (typeof digest !== 'string' || !digest) {
-      throw new Error('missing fixture canonical digest')
+      throw new Error('missing spec desc canonical digest')
     }
     return digest
   }
+  const readFixtureCanonicalDigest = (fixture: Record<string, any>): string =>
+    readCanonicalDigestFromSpecDesc(fixture.latestSpecDesc)
   const buildSemanticOnlyCanonicalDigest = (semanticState: Record<string, any>): string => {
     const projectedChecklist = (service as any).projectLegacyChecklistFromSemanticState(semanticState, {})
     return buildConfirmedCanonicalDigest(projectedChecklist, semanticState)
