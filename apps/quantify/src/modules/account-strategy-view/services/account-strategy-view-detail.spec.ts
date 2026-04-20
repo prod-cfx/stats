@@ -516,6 +516,17 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         trades: [],
       }),
     }
+    const runtimeExecutionStateService = {
+      loadStatesForBinding: jest.fn().mockResolvedValue([
+        {
+          strategyInstanceId: 'inst-legacy-1',
+          publishedSnapshotId: 'snapshot-legacy-1',
+          snapshotHash: 'snapshot-legacy-hash-1',
+          executionSemanticKey: 'on_start.entry.primary',
+          status: 'ready',
+        },
+      ]),
+    }
     const service = new AccountStrategyViewService(
       repo as any,
       { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() } as any,
@@ -532,6 +543,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
           lockedParams: { exchange: 'okx', positionPct: 10 },
         }),
       } as any,
+      runtimeExecutionStateService as any,
     )
 
     const detail = await service.getStrategyDetail('user-1', 'inst-legacy-1')
@@ -550,12 +562,14 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       requiresRepublishForDeploy: true,
     })
     expect(detail.deployment).toBeNull()
+    expect(detail.runtimeExecutionStates).toEqual([])
     expect(detail.snapshot.paramValues).toEqual({
       exchange: 'okx',
       symbol: 'BTCUSDT',
       timeframe: '15m',
       positionPct: 10,
     })
+    expect(runtimeExecutionStateService.loadStatesForBinding).not.toHaveBeenCalled()
   })
 
   it('marks missing bound snapshots as invalid compatibility state and hides deployment truth', async () => {
@@ -606,6 +620,9 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         trades: [],
       }),
     }
+    const runtimeExecutionStateService = {
+      loadStatesForBinding: jest.fn(),
+    }
     const service = new AccountStrategyViewService(
       repo as any,
       { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() } as any,
@@ -617,6 +634,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       {
         findByIdForUser: jest.fn().mockResolvedValue(null),
       } as any,
+      runtimeExecutionStateService as any,
     )
 
     const detail = await service.getStrategyDetail('user-1', 'inst-missing-snapshot-1')
@@ -631,7 +649,9 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       requiresRepublishForDeploy: true,
       invalidBinding: true,
     })
+    expect(detail.runtimeExecutionStates).toEqual([])
     expect(detail.deployment).toBeNull()
+    expect(runtimeExecutionStateService.loadStatesForBinding).not.toHaveBeenCalled()
   })
 
   it('rejects detail when strategy is not actively subscribed', async () => {
