@@ -3756,10 +3756,6 @@ export class CodegenConversationService {
     decisionKind: 'DIRECT_COMPILE' | 'CONFIRM_INFERRED' | 'ASK_CLARIFY'
     semanticReadyForGenerate: boolean
   }): 'clarification' | 'decision' | 'normalization' | 'compileability' | 'confirm_gate' | null {
-    if (!this.hasDeterministicStrategySemantics(input.semanticState, input.checklist)) {
-      return null
-    }
-
     if (input.clarificationState.status === 'NEEDS_CLARIFICATION') {
       return 'clarification'
     }
@@ -3772,8 +3768,20 @@ export class CodegenConversationService {
       return 'normalization'
     }
 
-    if (!input.compileability.canCompile) {
+    const hasDeterministicStrategySemantics = this.hasDeterministicStrategySemantics(
+      input.semanticState,
+      input.checklist,
+    )
+    const hasCompileabilitySignal = hasDeterministicStrategySemantics
+      || input.compileability.entryRuleCount > 0
+      || input.compileability.exitRuleCount > 0
+
+    if (!input.compileability.canCompile && hasCompileabilitySignal) {
       return 'compileability'
+    }
+
+    if (!hasDeterministicStrategySemantics) {
+      return null
     }
 
     return !input.normalization.blocked

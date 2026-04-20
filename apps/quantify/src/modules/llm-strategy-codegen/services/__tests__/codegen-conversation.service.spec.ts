@@ -7318,7 +7318,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
   })
 
-  it('keeps drafting and returns unrelated guidance when planner marks message unrelated', async () => {
+  it('returns the real clarification prompt when planner marks message unrelated before rich strategy semantics exist', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's3',
       userId: 'u1',
@@ -7354,27 +7354,28 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('无关')
-    expect((result as any).clarificationGate).toEqual({
+    expect(result.assistantPrompt).toContain('请确认交易所')
+    expect(result.assistantPrompt).not.toContain('无关')
+    expect((result as any).clarificationGate).toEqual(expect.objectContaining({
       blocked: true,
-      summary: null,
-      items: [
+      items: expect.arrayContaining([
         expect.objectContaining({
-          key: 'market.marketType',
+          key: 'executionContext.exchange',
           status: 'pending',
           blocking: true,
         }),
-      ],
-      pendingItems: [
+      ]),
+      pendingItems: expect.arrayContaining([
         expect.objectContaining({
-          key: 'market.marketType',
+          key: 'executionContext.exchange',
           status: 'pending',
           blocking: true,
         }),
-      ],
-    })
-    expect(result.canonicalDigest).toBeNull()
-    expect(mockRepo.updateSession).not.toHaveBeenCalled()
+      ]),
+    }))
+    expect(mockRepo.updateSession).toHaveBeenCalledWith('s3', expect.objectContaining({
+      status: 'DRAFTING',
+    }))
   })
 
   it('moves to checklist gate when llm planner marks logic ready', async () => {
