@@ -27,6 +27,7 @@ interface DeployStrategyInput {
   name: string
   exchange: 'binance' | 'okx' | 'hyperliquid'
   symbol: string
+  marketType: 'spot' | 'perp'
   timeframe: string
   positionPct: number
   deploymentExecutionConfig?: {
@@ -88,10 +89,21 @@ export class AccountStrategyViewRepository {
             id: input.exchangeAccountId,
             userId: input.userId,
           },
-          select: { id: true, isTestnet: true },
+          select: { id: true, isTestnet: true, exchangeId: true },
         })
         if (!matchedAccount) {
           throw new ExchangeAccountNotFoundException({ accountId: input.exchangeAccountId })
+        }
+        if (matchedAccount.exchangeId !== input.exchange) {
+          throw new DomainException('account_strategy.deploy_exchange_account_mismatch', {
+            code: ErrorCode.BAD_REQUEST,
+            status: HttpStatus.BAD_REQUEST,
+            args: {
+              exchangeAccountId: input.exchangeAccountId,
+              expectedExchange: input.exchange,
+              actualExchange: matchedAccount.exchangeId,
+            },
+          })
         }
         resolvedExchangeAccountId = matchedAccount.id
         resolvedAccountIsTestnet = matchedAccount.isTestnet
@@ -158,6 +170,7 @@ export class AccountStrategyViewRepository {
           ...this.asRecord(existingInstance.params),
           exchange: input.exchange,
           symbol: input.symbol,
+          marketType: input.marketType,
           timeframe: input.timeframe,
           positionPct: input.positionPct,
           ...(input.deploymentExecutionConfig

@@ -41,6 +41,7 @@ describe('DeployDialog', () => {
           deploySubmitting={false}
           apiConfigured
           exchange="okx"
+          marketType="perp"
           accounts={[{
             accountId: 'acct-1',
             exchange: 'okx',
@@ -50,7 +51,6 @@ describe('DeployDialog', () => {
           }]}
           selectedAccountId="acct-1"
           lng="zh"
-          onSelectExchange={() => {}}
           onSelectAccount={() => {}}
           onConfirmDeploy={() => {}}
           leverageOptions={[1, 2, 3, 4, 5]}
@@ -81,5 +81,65 @@ describe('DeployDialog', () => {
       leverageSelect.dispatchEvent(new Event('change', { bubbles: true }))
     }
     expect(onSelectLeverage).toHaveBeenCalledWith(5)
+  })
+
+  it('disables confirm when snapshot market type truth is missing', async () => {
+    await act(async () => {
+      root.render(
+        <DeployDialog
+          open
+          canDeploy
+          deploySubmitting={false}
+          apiConfigured
+          exchange="okx"
+          marketType={null}
+          accounts={[{
+            accountId: 'acct-1',
+            exchange: 'okx',
+            accountName: 'OKX Main',
+            apiKeyMask: 'OKX***1',
+            status: 'available',
+          }]}
+          selectedAccountId="acct-1"
+          lng="zh"
+          onSelectAccount={() => {}}
+          onConfirmDeploy={() => {}}
+        />,
+      )
+    })
+
+    const confirmButton = [...container.querySelectorAll('button')]
+      .find(button => button.textContent?.includes('aiQuant.deployDialog.confirmDeploy'))
+    expect(confirmButton).toBeTruthy()
+    expect((confirmButton as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('does not render leverage controls for spot deployments', async () => {
+    await act(async () => {
+      root.render(
+        <DeployDialog
+          open
+          canDeploy
+          deploySubmitting={false}
+          apiConfigured
+          exchange="okx"
+          marketType="spot"
+          accounts={[{
+            accountId: 'acct-1',
+            exchange: 'okx',
+            accountName: 'OKX Main',
+            apiKeyMask: 'OKX***1',
+            status: 'available',
+          }]}
+          selectedAccountId="acct-1"
+          lng="zh"
+          onSelectAccount={() => {}}
+          onConfirmDeploy={() => {}}
+        />,
+      )
+    })
+
+    expect(container.textContent).not.toContain('部署杠杆')
+    expect(container.querySelector('select[name="deployment-leverage"]')).toBeNull()
   })
 })

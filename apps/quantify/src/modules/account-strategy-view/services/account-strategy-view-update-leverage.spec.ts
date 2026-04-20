@@ -226,4 +226,76 @@ describe('accountStrategyViewService.updateDeploymentLeverage', () => {
     })
     expect(service.getStrategyDetail).toHaveBeenCalledWith('user-1', 'inst-1')
   })
+
+  it('rejects leverage updates for spot deployments', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-1',
+        name: 'ETH strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        strategyTemplateId: 'tpl-1',
+        params: { symbol: 'ETHUSDT' },
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+        },
+        deploymentExecutionConfig: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'GTC',
+        },
+        executionConfigVersion: 1,
+        subscriptions: [{
+          userId: 'user-1',
+          status: 'active',
+          customParams: {},
+          exchangeAccount: { id: 'acct-1', name: 'Main', exchangeId: 'okx' },
+        }],
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue({ id: 'strategy-account-1' }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn(), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn() } as any,
+      undefined,
+      undefined,
+      undefined,
+      {
+        findByIdForUser: jest.fn().mockResolvedValue({
+          id: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+          strategyConfig: {
+            exchange: 'okx',
+            symbol: 'ETHUSDT',
+            baseTimeframe: '15m',
+            marketType: 'spot',
+            positionPct: 10,
+          },
+          deploymentExecutionDefaults: {
+            leverage: 1,
+            priceSource: 'close',
+            orderType: 'market',
+            timeInForce: 'GTC',
+          },
+          deploymentExecutionConstraints: {
+            platformRiskMaxLeverage: 1,
+            defaultLeverage: 1,
+          },
+        }),
+      } as any,
+    )
+
+    await expect(service.updateDeploymentLeverage('inst-1', {
+      userId: 'user-1',
+      leverage: 2,
+    } as any)).rejects.toMatchObject({
+      message: 'account_strategy.deployment_leverage_not_supported_for_spot',
+    })
+  })
 })

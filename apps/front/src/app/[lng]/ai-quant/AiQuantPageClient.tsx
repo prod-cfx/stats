@@ -56,6 +56,7 @@ import {
   invalidateConversationPublication,
   mapExchangeStatusesToDeployAccounts,
   normalizeParamsFromValues,
+  resolveEffectivePublishedBacktestInputs,
   readPersistedConversations,
   resolvePublishedBacktestMarketType,
   serializePersistedConversations,
@@ -452,6 +453,13 @@ export function AiQuantPageClient({
   const canDeploy = useMemo(() => {
     return isDeployableBacktestResult(activeConversation?.backtestResult)
   }, [activeConversation?.backtestResult])
+  const activePublishedDeployTruth = useMemo(() => resolveEffectivePublishedBacktestInputs({
+    publishedSnapshotId: activeConversation?.publishedSnapshotId ?? null,
+    publishedSnapshotStrategyConfig: activeConversation?.publishedSnapshotStrategyConfig ?? null,
+  }), [
+    activeConversation?.publishedSnapshotId,
+    activeConversation?.publishedSnapshotStrategyConfig,
+  ])
   const activeBacktestMarketType = useMemo(() => {
     const resultMarketType = activeConversation?.backtestResult?.marketType
     if (resultMarketType === 'spot' || resultMarketType === 'perp') {
@@ -914,8 +922,12 @@ export function AiQuantPageClient({
   }, [session?.userId])
 
   useEffect(() => {
+    if (activePublishedDeployTruth?.exchange) {
+      setSelectedDeployExchange(activePublishedDeployTruth.exchange)
+      return
+    }
     setSelectedDeployExchange(activeConversation.params.exchange)
-  }, [activeConversation.params.exchange])
+  }, [activeConversation.params.exchange, activePublishedDeployTruth?.exchange])
 
   useEffect(() => {
     if (!deployOpen) return
@@ -1189,7 +1201,9 @@ export function AiQuantPageClient({
                 setDeployRequestId(createDeployRequestId())
                 const baselineLeverage = activeConversation.publishedSnapshotDeploymentExecutionDefaults?.leverage
                 setSelectedDeployLeverage(
-                  typeof baselineLeverage === 'number' && Number.isFinite(baselineLeverage)
+                  activePublishedDeployTruth?.marketType === 'perp'
+                    && typeof baselineLeverage === 'number'
+                    && Number.isFinite(baselineLeverage)
                     ? baselineLeverage
                     : null,
                 )
@@ -1213,26 +1227,16 @@ export function AiQuantPageClient({
         canDeploy={canDeploy}
         deploySubmitting={deploySubmitting}
         apiConfigured={apiConfigured}
-        exchange={selectedDeployExchange}
+        exchange={activePublishedDeployTruth?.exchange ?? selectedDeployExchange}
+        marketType={activePublishedDeployTruth?.marketType ?? null}
         accounts={deployAccounts}
         selectedAccountId={selectedDeployAccountId}
-        leverageOptions={deployLeverageOptions}
+        leverageOptions={activePublishedDeployTruth?.marketType === 'perp' ? deployLeverageOptions : []}
         selectedLeverage={selectedDeployLeverage ?? undefined}
         onSelectLeverage={setSelectedDeployLeverage}
         leverageExplanation={activeConversation.publishedSnapshotDeploymentExecutionConstraints?.constraintExplanation ?? null}
         deploymentBaseline={activeConversation.publishedSnapshotDeploymentExecutionDefaults ?? null}
         driftReasons={[]}
-        onSelectExchange={nextExchange => {
-          if (
-            nextExchange !== 'binance' &&
-            nextExchange !== 'okx' &&
-            nextExchange !== 'hyperliquid'
-          ) {
-            return
-          }
-          setSelectedDeployExchange(nextExchange)
-          setSelectedDeployAccountId('')
-        }}
         onSelectAccount={setSelectedDeployAccountId}
         onConfirmDeploy={async () => {
           if (deploySubmitting) {
@@ -1244,7 +1248,8 @@ export function AiQuantPageClient({
             apiConfigHref,
             deployRequestId,
             selectedDeployAccountId,
-            selectedDeployExchange,
+            selectedDeployExchange: activePublishedDeployTruth?.exchange ?? selectedDeployExchange,
+            selectedDeployMarketType: activePublishedDeployTruth?.marketType ?? null,
             selectedDeployLeverage,
             sessionUserId: session.userId,
             setDeployOpen,

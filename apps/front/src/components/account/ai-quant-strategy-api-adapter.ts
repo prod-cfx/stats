@@ -94,10 +94,13 @@ function normalizeBacktestConfigDefaults(
 
 function normalizeDeploymentExecutionConfig(
   config: AccountAiQuantDeploymentExecutionConfig | null | undefined,
+  marketType: 'spot' | 'perp' | null,
 ): AiQuantStrategyRecord['deploymentExecutionBaseline'] {
   if (!config) return null
   return {
-    leverage: typeof config.leverage === 'number' && Number.isFinite(config.leverage) ? config.leverage : null,
+    leverage: marketType === 'perp' && typeof config.leverage === 'number' && Number.isFinite(config.leverage)
+      ? config.leverage
+      : null,
     priceSource: typeof config.priceSource === 'string' ? config.priceSource : null,
     orderType: typeof config.orderType === 'string' ? config.orderType : null,
     timeInForce: typeof config.timeInForce === 'string' ? config.timeInForce : null,
@@ -207,6 +210,10 @@ export function mapAccountStrategyDetailToRecord(
     detail.snapshot.paramValues ?? detail.paramValues,
     detail.snapshot.schemaVersion ?? detail.schemaVersion,
   )
+  const snapshotMarketType =
+    detail.snapshot.strategyConfig?.marketType === 'spot' || detail.snapshot.strategyConfig?.marketType === 'perp'
+      ? detail.snapshot.strategyConfig.marketType
+      : null
 
   return {
     id: detail.id,
@@ -226,22 +233,25 @@ export function mapAccountStrategyDetailToRecord(
     ...dynamicParams,
     publishedSnapshotParamValues,
     snapshotBacktestConfigDefaults: normalizeBacktestConfigDefaults(detail.snapshot.backtestConfigDefaults),
-    deploymentExecutionBaseline: normalizeDeploymentExecutionConfig(detail.snapshot.deploymentExecutionBaseline),
-    deploymentExecutionCurrent: normalizeDeploymentExecutionConfig(detail.snapshot.deploymentExecutionCurrent),
+    deploymentExecutionBaseline: normalizeDeploymentExecutionConfig(detail.snapshot.deploymentExecutionBaseline, snapshotMarketType),
+    deploymentExecutionCurrent: normalizeDeploymentExecutionConfig(detail.snapshot.deploymentExecutionCurrent, snapshotMarketType),
     executionConfigVersion:
       typeof detail.snapshot.executionConfigVersion === 'number'
         ? detail.snapshot.executionConfigVersion
         : null,
-    deploymentLeverageRange: normalizeLeverageRange(
-      detail.snapshot.effectiveAllowedLeverageRange
-        ?? detail.snapshot.deploymentExecutionConstraints?.effectiveAllowedLeverageRange,
-    ),
+    deploymentLeverageRange: snapshotMarketType === 'perp'
+      ? normalizeLeverageRange(
+          detail.snapshot.effectiveAllowedLeverageRange
+            ?? detail.snapshot.deploymentExecutionConstraints?.effectiveAllowedLeverageRange,
+        )
+      : null,
     deploymentConstraintExplanation:
       detail.snapshot.deploymentExecutionConstraints?.constraintExplanation ?? null,
     compatibilityMetadata: normalizeCompatibilityMetadata(detail.snapshot.compatibilityMetadata),
     consistencySummary: normalizeConsistencySummary(detail.snapshot.consistencySummary),
     canEditDeploymentLeverage:
-      Boolean(detail.snapshot.deploymentExecutionCurrent)
+      snapshotMarketType === 'perp'
+      && Boolean(detail.snapshot.deploymentExecutionCurrent)
       && detail.snapshot.compatibilityMetadata?.requiresRepublishForDeploy !== true,
     publishedSnapshotId: detail.snapshot.publishedSnapshotId ?? null,
     snapshotHash: detail.snapshot.snapshotHash ?? null,

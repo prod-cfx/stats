@@ -60,20 +60,20 @@ jest.mock('@/components/ai-quant/DeployDialog', () => ({
   DeployDialog: ({
     open,
     exchange,
+    marketType,
     selectedAccountId,
     selectedLeverage,
     deploySubmitting,
-    onSelectExchange,
     onSelectAccount,
     onSelectLeverage,
     onConfirmDeploy,
   }: {
     open: boolean
     exchange: 'binance' | 'okx' | 'hyperliquid'
+    marketType: 'spot' | 'perp' | null
     selectedAccountId: string
     selectedLeverage?: number
     deploySubmitting: boolean
-    onSelectExchange: (exchange: 'binance' | 'okx' | 'hyperliquid') => void
     onSelectAccount: (accountId: string) => void
     onSelectLeverage?: (leverage: number) => void
     onConfirmDeploy: () => Promise<void> | void
@@ -82,11 +82,9 @@ jest.mock('@/components/ai-quant/DeployDialog', () => ({
       ? (
             <div>
             <div data-testid="selected-exchange">{exchange}</div>
+            <div data-testid="selected-market-type">{marketType ?? ''}</div>
             <div data-testid="selected-leverage">{selectedLeverage ?? ''}</div>
-            <button type="button" data-testid="select-hyperliquid" onClick={() => onSelectExchange('hyperliquid')}>
-              select hyperliquid
-            </button>
-            <button type="button" data-testid="select-account" onClick={() => onSelectAccount('acct-hyper-1')}>
+            <button type="button" data-testid="select-account" onClick={() => onSelectAccount('acct-binance-1')}>
               select account
             </button>
             <button type="button" data-testid="select-leverage" onClick={() => onSelectLeverage?.(4)}>
@@ -187,6 +185,13 @@ function seedDeployableConversation(now = Date.now()) {
       llmCodegenSessionId: null,
       publishedStrategyInstanceId: 'strategy-1',
       publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotStrategyConfig: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
       publishedSnapshotDeploymentExecutionDefaults: {
         leverage: 2,
         priceSource: 'mark',
@@ -273,7 +278,7 @@ describe('AiQuantPageClient deploy guard', () => {
     expect(mockPush).toHaveBeenCalledWith('/zh/account?tab=ai-quant#exchange-api')
   })
 
-  it('submits hyperliquid when the user switches deploy exchange to hyperliquid', async () => {
+  it('locks deploy exchange and market type to the published snapshot truth', async () => {
     mockFetchUserExchangeAccountStatuses.mockReset()
     mockDeployAccountAiQuantStrategy.mockReset()
     mockFetchUserExchangeAccountStatuses.mockResolvedValue([
@@ -284,16 +289,6 @@ describe('AiQuantPageClient deploy guard', () => {
         name: 'Binance Main',
         maskedCredential: 'BIN****01',
         isTestnet: false,
-        lastValidatedAt: null,
-        createdAt: null,
-      },
-      {
-        id: 'acct-hyper-1',
-        exchangeId: 'hyperliquid',
-        isBound: true,
-        name: 'Hyper Testnet',
-        maskedCredential: 'HYP****01',
-        isTestnet: true,
         lastValidatedAt: null,
         createdAt: null,
       },
@@ -312,12 +307,7 @@ describe('AiQuantPageClient deploy guard', () => {
     })
 
     expect(container.querySelector('[data-testid="selected-exchange"]')?.textContent).toBe('binance')
-
-    await act(async () => {
-      container.querySelector('[data-testid="select-hyperliquid"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
-    })
-
-    expect(container.querySelector('[data-testid="selected-exchange"]')?.textContent).toBe('hyperliquid')
+    expect(container.querySelector('[data-testid="selected-market-type"]')?.textContent).toBe('perp')
 
     await act(async () => {
       container.querySelector('[data-testid="select-account"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
@@ -330,8 +320,7 @@ describe('AiQuantPageClient deploy guard', () => {
     expect(mockDeployAccountAiQuantStrategy).toHaveBeenCalledWith(
       expect.objectContaining({
         publishedSnapshotId: 'snapshot-1',
-        exchangeAccountId: 'acct-hyper-1',
-        exchangeAccountName: 'Hyper Testnet',
+        exchangeAccountId: 'acct-binance-1',
       }),
     )
     expect(mockDeployAccountAiQuantStrategy).toHaveBeenCalledWith(
@@ -385,6 +374,57 @@ describe('AiQuantPageClient deploy guard', () => {
         deploymentExecutionConfig: expect.objectContaining({
           leverage: 4,
         }),
+      }),
+    )
+  })
+
+  it('omits deployment leverage for spot snapshots and keeps market type locked', async () => {
+    localStorage.clear()
+    seedDeployableConversation(Date.now())
+    const stored = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    stored[0].publishedSnapshotStrategyConfig = {
+      ...stored[0].publishedSnapshotStrategyConfig,
+      marketType: 'spot',
+    }
+    localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(stored))
+
+    mockFetchUserExchangeAccountStatuses.mockReset()
+    mockDeployAccountAiQuantStrategy.mockReset()
+    mockFetchUserExchangeAccountStatuses.mockResolvedValue([
+      {
+        id: 'acct-binance-1',
+        exchangeId: 'binance',
+        isBound: true,
+        name: 'Binance Main',
+        maskedCredential: 'BIN****01',
+        isTestnet: false,
+        lastValidatedAt: null,
+        createdAt: null,
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="open-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(container.querySelector('[data-testid="selected-market-type"]')?.textContent).toBe('spot')
+
+    await act(async () => {
+      container.querySelector('[data-testid="select-account"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      container.querySelector('[data-testid="confirm-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mockDeployAccountAiQuantStrategy).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        deploymentExecutionConfig: expect.anything(),
       }),
     )
   })
