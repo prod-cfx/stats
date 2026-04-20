@@ -91,7 +91,14 @@ describe('AI Quant proxy HTTP (E2E)', () => {
       .send({
         userId: 'forged-user-id',
         initialMessage: 'build me a strategy',
+        timeframes: ['15m'],
         symbols: ['BTCUSDT'],
+        entryRules: ['跌破均线买入'],
+        exitRules: ['反弹到阻力位卖出'],
+        riskRules: {
+          positionPct: 10,
+          stopLossPct: 5,
+        },
       })
       .expect(201)
 
@@ -102,5 +109,20 @@ describe('AI Quant proxy HTTP (E2E)', () => {
       userId: 'e2e-user-id',
       timeoutMs: 60_000,
     }))
+    expect(quantifyClient.startCodegen).not.toHaveBeenCalledWith(expect.objectContaining({
+      symbols: expect.anything(),
+    }), expect.anything())
+    expect(quantifyClient.startCodegen).not.toHaveBeenCalledWith(expect.objectContaining({
+      timeframes: expect.anything(),
+    }), expect.anything())
+    expect(quantifyClient.startCodegen).not.toHaveBeenCalledWith(expect.objectContaining({
+      entryRules: expect.anything(),
+    }), expect.anything())
+    expect(quantifyClient.startCodegen).not.toHaveBeenCalledWith(expect.objectContaining({
+      exitRules: expect.anything(),
+    }), expect.anything())
+    expect(quantifyClient.startCodegen).not.toHaveBeenCalledWith(expect.objectContaining({
+      riskRules: expect.anything(),
+    }), expect.anything())
   })
 })

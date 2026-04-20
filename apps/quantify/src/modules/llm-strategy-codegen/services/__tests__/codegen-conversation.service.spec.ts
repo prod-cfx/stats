@@ -6365,8 +6365,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
   })
 
-  it('defaults stop-loss and take-profit basis but stays in inferred-confirmation drafting when the user only provides percentages', async () => {
-    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+  it('persists the updated spec snapshot when structured answers move drafting into inferred confirmation', async () => {
+    const sessionFixture = buildSemanticEraSessionFixture({
       id: 's-default-risk-basis-answer',
       userId: 'u1',
       status: 'DRAFTING',
@@ -6403,7 +6403,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         ],
       },
       constraintPack: {},
-    }))
+    })
+    const previousDigest = readFixtureCanonicalDigest(sessionFixture)
+    mockRepo.findById.mockResolvedValue(sessionFixture)
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
         related: false,
@@ -6423,10 +6425,20 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(result.status).toBe('DRAFTING')
     expect(result.assistantPrompt).toContain('请确认这些推断是否成立')
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.latestSpecDesc).toEqual(expect.objectContaining({
+      canonicalDigest: expect.stringMatching(/^sha256:/),
+    }))
+    expect(updatePayload.latestSpecDesc.canonicalDigest).not.toBe(previousDigest)
+    expect(result.specDesc).toEqual(updatePayload.latestSpecDesc)
+    expect(result.canonicalDigest).toBe(updatePayload.latestSpecDesc.canonicalDigest)
     expect(mockRepo.updateSession).toHaveBeenCalledWith(
       's-default-risk-basis-answer',
       expect.objectContaining({
         status: 'DRAFTING',
+        latestSpecDesc: expect.objectContaining({
+          canonicalDigest: expect.stringMatching(/^sha256:/),
+        }),
       }),
     )
   })

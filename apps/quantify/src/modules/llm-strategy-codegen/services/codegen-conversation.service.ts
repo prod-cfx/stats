@@ -532,6 +532,7 @@ export class CodegenConversationService {
               ? this.buildCompileabilityAssistantPrompt(compileability)
               : this.buildChecklistGateAssistantPrompt(canonicalChecklist, normalization.normalizedIntent)
       const targetStatus = deterministicAuthority === 'confirm_gate' ? 'CONFIRM_GATE' : 'DRAFTING'
+      const shouldPersistDecisionSpecDesc = deterministicAuthority === 'decision' && hasStructuredClarificationAnswers
       const shouldPersistDeterministicOutcome = plan.related
         || hasStructuredClarificationAnswers
         || inferredConfirmation.consumed
@@ -544,6 +545,12 @@ export class CodegenConversationService {
           status: targetStatus,
           missingFields: [],
           ...(deterministicAuthority === 'confirm_gate'
+            ? {
+                specDesc,
+                canonicalDigest,
+              }
+            : {}),
+          ...(shouldPersistDecisionSpecDesc
             ? {
                 specDesc,
                 canonicalDigest,
@@ -571,7 +578,7 @@ export class CodegenConversationService {
           ...nextConstraintPack,
           conversationHistory: historyAfterDeterministicOutcome,
         },
-        ...(deterministicAuthority === 'confirm_gate' || deterministicAuthority === 'normalization'
+        ...(deterministicAuthority === 'confirm_gate' || deterministicAuthority === 'normalization' || shouldPersistDecisionSpecDesc
           ? { latestSpecDesc: specDesc }
           : {}),
       }))
@@ -581,6 +588,12 @@ export class CodegenConversationService {
         status: targetStatus,
         missingFields: [],
         ...(deterministicAuthority === 'confirm_gate'
+          ? {
+              specDesc,
+              canonicalDigest,
+            }
+          : {}),
+        ...(shouldPersistDecisionSpecDesc
           ? {
               specDesc,
               canonicalDigest,
@@ -2572,6 +2585,7 @@ export class CodegenConversationService {
         assistantPrompt,
         clarificationState: clarification.clarificationState,
         specDesc,
+        canonicalDigest,
       })
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
