@@ -191,7 +191,7 @@ const BacktestJobInputSummaryDto = z
     baseTimeframe: z.string(),
     stateTimeframes: z.array(z.string()),
     initialCash: z.number(),
-    leverage: z.number().optional(),
+    leverage: z.number().nullish(),
     marketType: z.enum(['spot', 'perp']),
     dataRange: BacktestJobRangeDto,
     requestedRange: BacktestJobRangeDto,

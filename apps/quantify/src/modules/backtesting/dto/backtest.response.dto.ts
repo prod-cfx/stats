@@ -58,7 +58,7 @@ export class BacktestJobInputSummaryDto {
   @ApiProperty()
   initialCash!: number
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   leverage?: number | null
 
   @ApiProperty({ enum: ['spot', 'perp'] })
