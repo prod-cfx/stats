@@ -75,12 +75,19 @@ export class StrategyRuntimeExecutionStateService {
   }
 
   async loadExecutableStates(binding: RuntimeStateBinding): Promise<RuntimeExecutionStateRecord[]> {
+    const validatedStates = await this.loadStatesForBinding(binding)
+
+    return validatedStates
+      .filter(state => state.status === 'ready')
+      .sort((left, right) => left.executionSemanticKey.localeCompare(right.executionSemanticKey))
+  }
+
+  async loadStatesForBinding(binding: RuntimeStateBinding): Promise<RuntimeExecutionStateRecord[]> {
     const states = await this.repository.findByInstanceAndSnapshot(binding.strategyInstanceId, binding.publishedSnapshotId)
 
     const validatedStates = await Promise.all(states.map(async state => this.validateSnapshotBinding(binding, state)))
 
     return validatedStates
-      .filter(state => state.status === 'ready')
       .sort((left, right) => left.executionSemanticKey.localeCompare(right.executionSemanticKey))
   }
 

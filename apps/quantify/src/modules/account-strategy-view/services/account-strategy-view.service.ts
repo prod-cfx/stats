@@ -313,6 +313,11 @@ export class AccountStrategyViewService {
       userId,
       source: row,
     })
+    const runtimeExecutionStates = await this.resolveRuntimeExecutionStates({
+      strategyInstanceId,
+      publishedSnapshotId: resolvedSnapshot.publishedSnapshotId,
+      snapshotHash: resolvedSnapshot.snapshotHash,
+    })
     const snapshotStrategyConfig = resolvedSnapshot.strategyConfig
     const snapshotMarketType = this.readSnapshotMarketType(snapshotStrategyConfig)
     const detailLeverageConstraints = await this.resolveEffectiveLeverageConstraints({
@@ -449,6 +454,7 @@ export class AccountStrategyViewService {
         totalUnrealizedPnl: account ? resolvedUnrealizedPnl : null,
       },
       latestOrders: buildAccountStrategyLatestOrders(timelineSource.trades),
+      runtimeExecutionStates,
       deployment: !resolvedSnapshot.publishedSnapshotId || resolvedSnapshot.compatibilityMetadata?.requiresRepublishForDeploy
         ? null
         : {
@@ -486,6 +492,34 @@ export class AccountStrategyViewService {
     }
 
     return detail
+  }
+
+  private async resolveRuntimeExecutionStates(input: {
+    strategyInstanceId: string
+    publishedSnapshotId: string | null
+    snapshotHash: string | null
+  }): Promise<AccountStrategyDetailResponseDto['runtimeExecutionStates']> {
+    if (!input.publishedSnapshotId || !input.snapshotHash || !this.runtimeExecutionStateService) {
+      return []
+    }
+
+    const states = await this.runtimeExecutionStateService.loadStatesForBinding({
+      strategyInstanceId: input.strategyInstanceId,
+      publishedSnapshotId: input.publishedSnapshotId,
+      snapshotHash: input.snapshotHash,
+    })
+
+    return states.map(state => ({
+      executionSemanticKey: state.executionSemanticKey,
+      status: state.status,
+      failureReason: state.failureReason ?? null,
+      failureCode: state.failureCode ?? null,
+      lastAttemptAt: state.lastAttemptAt?.toISOString() ?? null,
+      consumedAt: state.consumedAt?.toISOString() ?? null,
+      cooldownUntil: state.cooldownUntil?.toISOString() ?? null,
+      publishedSnapshotId: state.publishedSnapshotId,
+      snapshotHash: state.snapshotHash,
+    }))
   }
 
   private async resolveBoundSnapshotDetail(input: {

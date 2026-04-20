@@ -222,6 +222,22 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         maxLeverage: 4,
       }),
     }
+    const runtimeExecutionStateService = {
+      loadStatesForBinding: jest.fn().mockResolvedValue([
+        {
+          strategyInstanceId: 'inst-1',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+          executionSemanticKey: 'on_start.entry.primary',
+          status: 'failed',
+          failureReason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+          failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+          lastAttemptAt: new Date('2026-03-20T10:03:00.000Z'),
+          consumedAt: null,
+          cooldownUntil: null,
+        },
+      ]),
+    }
     const service = new AccountStrategyViewService(
       repo as any,
       statsService as any,
@@ -231,6 +247,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       undefined,
       tradingService as any,
       publishedSnapshotsRepository as any,
+      runtimeExecutionStateService as any,
     )
     const detail = await service.getStrategyDetail('user-1', 'inst-1')
 
@@ -330,6 +347,17 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       defaultLeverage: 3,
       accountMaxLeverage: 4,
     }))
+    expect(detail.runtimeExecutionStates).toEqual([{
+      executionSemanticKey: 'on_start.entry.primary',
+      status: 'failed',
+      failureReason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+      failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+      lastAttemptAt: '2026-03-20T10:03:00.000Z',
+      consumedAt: null,
+      cooldownUntil: null,
+      publishedSnapshotId: 'snapshot-1',
+      snapshotHash: 'snapshot-hash-1',
+    }])
     expect(detail.snapshot.effectiveAllowedLeverageRange).toEqual({ min: 1, max: 4 })
     expect(detail.snapshot.compatibilityMetadata).toEqual({
       isLegacySnapshot: false,
@@ -442,6 +470,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(detail.snapshot.deploymentExecutionCurrent).toBeNull()
     expect(detail.snapshot.deploymentExecutionConstraints).toBeNull()
     expect(detail.snapshot.compatibilityMetadata).toBeNull()
+    expect(detail.runtimeExecutionStates).toEqual([])
     expect(detail.deployment).toBeNull()
     expect(publishedSnapshotsRepository.findByIdForUser).not.toHaveBeenCalled()
   })
