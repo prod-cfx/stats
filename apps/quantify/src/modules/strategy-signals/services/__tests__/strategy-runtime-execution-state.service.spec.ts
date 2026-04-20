@@ -1,3 +1,6 @@
+import { TransactionHost } from '@nestjs-cls/transactional'
+import { Test } from '@nestjs/testing'
+import { StrategyRuntimeExecutionStateRepository } from '../../repositories/strategy-runtime-execution-state.repository'
 import { StrategyRuntimeExecutionStateService } from '../strategy-runtime-execution-state.service'
 
 type RuntimeStateRecord = {
@@ -124,6 +127,28 @@ function createService(repository = new InMemoryRuntimeExecutionStateRepository(
 }
 
 describe('strategyRuntimeExecutionStateService', () => {
+  it('is injectable through Nest using the concrete repository provider metadata', async () => {
+    const txHost = {
+      tx: {
+        strategyRuntimeExecutionState: {
+          findMany: jest.fn().mockResolvedValue([]),
+          findUnique: jest.fn().mockResolvedValue(null),
+          create: jest.fn(),
+          update: jest.fn(),
+        },
+      },
+    }
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        StrategyRuntimeExecutionStateRepository,
+        StrategyRuntimeExecutionStateService,
+        { provide: TransactionHost, useValue: txHost },
+      ],
+    }).compile()
+
+    expect(moduleRef.get(StrategyRuntimeExecutionStateService)).toBeInstanceOf(StrategyRuntimeExecutionStateService)
+  })
+
   it('keeps only one state row per instance snapshot semantic key and initializes it as ready', async () => {
     const { service, repository } = createService()
     const snapshot = createSnapshot([

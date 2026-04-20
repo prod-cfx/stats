@@ -1,8 +1,9 @@
 import type { StrategyRuntimeExecutionState } from '@/prisma/prisma.types'
 import type {
-  StrategyRuntimeExecutionStateRepository,
   UpsertReadyStateInput,
 } from '../repositories/strategy-runtime-execution-state.repository'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class metadata
+import { StrategyRuntimeExecutionStateRepository } from '../repositories/strategy-runtime-execution-state.repository'
 import { Injectable } from '@nestjs/common'
 
 export type RuntimeExecutionStateStatus = 'ready' | 'consumed' | 'failed' | 'cooldown'
@@ -42,12 +43,7 @@ const RUNTIME_EXECUTION_STATE_STATUSES: RuntimeExecutionStateStatus[] = ['ready'
 
 @Injectable()
 export class StrategyRuntimeExecutionStateService {
-  constructor(
-    private readonly repository: Pick<
-      StrategyRuntimeExecutionStateRepository,
-      'findByInstanceAndSnapshot' | 'upsertReadyState'
-    >,
-  ) {}
+  constructor(private readonly repository: StrategyRuntimeExecutionStateRepository) {}
 
   buildExecutionSemanticKeysFromSnapshot(snapshot: unknown): string[] {
     const decisionPrograms = this.readDecisionPrograms(snapshot)

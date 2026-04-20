@@ -50,15 +50,24 @@ export class StrategyRuntimeExecutionStateRepository {
 
     const existing = await this.txHost.tx.strategyRuntimeExecutionState.findUnique({ where })
     if (!existing) {
-      return this.txHost.tx.strategyRuntimeExecutionState.create({
-        data: {
-          strategyInstance: { connect: { id: input.strategyInstanceId } },
-          publishedSnapshotId: input.publishedSnapshotId,
-          snapshotHash: input.snapshotHash,
-          executionSemanticKey: input.executionSemanticKey,
-          status: 'ready',
-        },
-      })
+      try {
+        return await this.txHost.tx.strategyRuntimeExecutionState.create({
+          data: this.buildCreateData(input),
+        })
+      } catch (error) {
+        if (!this.isUniqueConstraintError(error)) throw error
+
+        const conflicted = await this.txHost.tx.strategyRuntimeExecutionState.findUnique({ where })
+        if (!conflicted) throw error
+        if (conflicted.snapshotHash !== input.snapshotHash) {
+          throw new Error('snapshot_hash_mismatch')
+        }
+
+        return this.txHost.tx.strategyRuntimeExecutionState.update({
+          where,
+          data: this.buildReadyResetData(),
+        })
+      }
     }
 
     if (existing.snapshotHash !== input.snapshotHash) {
@@ -67,14 +76,7 @@ export class StrategyRuntimeExecutionStateRepository {
 
     return this.txHost.tx.strategyRuntimeExecutionState.update({
       where,
-      data: {
-        status: 'ready',
-        failureReason: null,
-        failureCode: null,
-        lastAttemptAt: null,
-        consumedAt: null,
-        cooldownUntil: null,
-      },
+      data: this.buildReadyResetData(),
     })
   }
 
@@ -133,5 +135,33 @@ export class StrategyRuntimeExecutionStateRepository {
         cooldownUntil: input.cooldownUntil,
       },
     })
+  }
+
+  private buildCreateData(input: UpsertReadyStateInput) {
+    return {
+      strategyInstance: { connect: { id: input.strategyInstanceId } },
+      publishedSnapshotId: input.publishedSnapshotId,
+      snapshotHash: input.snapshotHash,
+      executionSemanticKey: input.executionSemanticKey,
+      status: 'ready',
+    }
+  }
+
+  private buildReadyResetData() {
+    return {
+      status: 'ready',
+      failureReason: null,
+      failureCode: null,
+      lastAttemptAt: null,
+      consumedAt: null,
+      cooldownUntil: null,
+    }
+  }
+
+  private isUniqueConstraintError(error: unknown): error is { code: string } {
+    return typeof error === 'object'
+      && error !== null
+      && 'code' in error
+      && (error as { code?: unknown }).code === 'P2002'
   }
 }

@@ -74,4 +74,58 @@ describe('strategyRuntimeExecutionStateRepository', () => {
     expect(tx.strategyRuntimeExecutionState.create).not.toHaveBeenCalled()
     expect(tx.strategyRuntimeExecutionState.update).not.toHaveBeenCalled()
   })
+
+  it('recovers from create-time unique conflicts only when the raced row keeps the same snapshot hash', async () => {
+    const tx = {
+      strategyRuntimeExecutionState: {
+        findUnique: jest.fn()
+          .mockResolvedValueOnce(null)
+          .mockResolvedValueOnce({
+            id: 'runtime-state-1',
+            strategyInstanceId: 'inst-1',
+            publishedSnapshotId: 'snap-1',
+            snapshotHash: 'sha256:snap-1',
+            executionSemanticKey: 'on_start.entry.primary',
+            status: 'failed',
+          }),
+        create: jest.fn().mockRejectedValue(Object.assign(new Error('duplicate key'), { code: 'P2002' })),
+        update: jest.fn().mockResolvedValue({
+          id: 'runtime-state-1',
+          strategyInstanceId: 'inst-1',
+          publishedSnapshotId: 'snap-1',
+          snapshotHash: 'sha256:snap-1',
+          executionSemanticKey: 'on_start.entry.primary',
+          status: 'ready',
+        }),
+      },
+    }
+    const repo = new StrategyRuntimeExecutionStateRepository(createTxHost(tx))
+
+    const result = await repo.upsertReadyState({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      snapshotHash: 'sha256:snap-1',
+      executionSemanticKey: 'on_start.entry.primary',
+    })
+
+    expect(tx.strategyRuntimeExecutionState.findUnique).toHaveBeenCalledTimes(2)
+    expect(tx.strategyRuntimeExecutionState.update).toHaveBeenCalledWith({
+      where: {
+        strategyInstanceId_publishedSnapshotId_executionSemanticKey: {
+          strategyInstanceId: 'inst-1',
+          publishedSnapshotId: 'snap-1',
+          executionSemanticKey: 'on_start.entry.primary',
+        },
+      },
+      data: {
+        status: 'ready',
+        failureReason: null,
+        failureCode: null,
+        lastAttemptAt: null,
+        consumedAt: null,
+        cooldownUntil: null,
+      },
+    })
+    expect(result.status).toBe('ready')
+  })
 })
