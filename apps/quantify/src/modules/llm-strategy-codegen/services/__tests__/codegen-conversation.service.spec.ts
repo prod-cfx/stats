@@ -10162,6 +10162,15 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
     }))
     expect(updatePayload.semanticState).toEqual(expect.objectContaining({
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'open_long' }),
+        expect.objectContaining({ key: 'close_long' }),
+      ]),
+      position: expect.objectContaining({
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+      }),
       contextSlots: expect.objectContaining({
         exchange: expect.objectContaining({ value: 'okx' }),
         symbol: expect.objectContaining({ value: 'ORDIUSDT' }),
@@ -10169,6 +10178,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         timeframe: expect.objectContaining({ value: '1h' }),
       }),
     }))
+    expect(updatePayload.semanticState.actions).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_short' }),
+      expect.objectContaining({ key: 'close_short' }),
+    ]))
     expect(result.assistantPrompt).toContain('入场：1h 立即开始时市价买入一次')
     expect(result.assistantPrompt).toContain('出场：1h 当前K线收盘价相对于上一根K线收盘价上涨≥1%时卖出平仓')
     expect(result.assistantPrompt).not.toContain('BTCUSDT 15m')

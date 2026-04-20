@@ -218,12 +218,17 @@ export class CodegenConversationService {
       providerCode: this.resolveProviderCode(undefined),
       model: undefined,
     }, [], seedChecklist)
-    const initialSemanticState = this.applyConversationPlanToSemanticState({
+    let initialSemanticState = this.applyConversationPlanToSemanticState({
       currentState: seedSemanticState,
       compatibilityChecklist: seedChecklist,
       plan,
-      preferCompatibilityChecklist: true,
     })
+    if (this.shouldReapplyDeterministicStartSeedChecklist(seedChecklist)) {
+      initialSemanticState = this.semanticStateMerge.merge({
+        persisted: initialSemanticState,
+        derived: this.buildFallbackSemanticState(seedChecklist),
+      })
+    }
     const checklist = this.mergeChecklistSnapshots(
       this.projectLegacyChecklistFromSemanticState(initialSemanticState, seedChecklist),
       plan.logic ?? {},
@@ -1340,35 +1345,9 @@ export class CodegenConversationService {
     currentState: SemanticState
     compatibilityChecklist?: ChecklistPayload
     plan: ConversationPlan
-    preferCompatibilityChecklist?: boolean
   }): SemanticState {
     let nextState = input.currentState
     const semanticPatchState = this.buildSemanticStateFromPlannerPatch(input.plan.semanticPatch)
-
-    if (input.preferCompatibilityChecklist) {
-      if (input.plan.logic) {
-        nextState = this.semanticStateMerge.merge({
-          persisted: nextState,
-          derived: this.buildFallbackSemanticState(input.plan.logic),
-        })
-      }
-
-      if (semanticPatchState) {
-        nextState = this.semanticStateMerge.merge({
-          persisted: nextState,
-          derived: semanticPatchState,
-        })
-      }
-
-      if (input.compatibilityChecklist && Object.keys(input.compatibilityChecklist).length > 0) {
-        nextState = this.semanticStateMerge.merge({
-          persisted: nextState,
-          derived: this.buildFallbackSemanticState(input.compatibilityChecklist),
-        })
-      }
-
-      return nextState
-    }
 
     if (!semanticPatchState && input.compatibilityChecklist && Object.keys(input.compatibilityChecklist).length > 0) {
       nextState = this.semanticStateMerge.merge({
@@ -1392,6 +1371,56 @@ export class CodegenConversationService {
     }
 
     return nextState
+  }
+
+  private shouldReapplyDeterministicStartSeedChecklist(
+    checklist: ChecklistPayload,
+  ): boolean {
+    if (Object.keys(checklist).length === 0) {
+      return false
+    }
+
+    const seedSemanticState = this.buildFallbackSemanticState(checklist)
+    return this.hasCompleteBidirectionalGridSeed(seedSemanticState)
+      || this.hasCompleteSymmetricBollingerSeed(seedSemanticState)
+  }
+
+  private hasCompleteBidirectionalGridSeed(state: SemanticState): boolean {
+    return state.triggers.some(trigger => (
+      trigger.key === 'grid.range_rebalance'
+      && trigger.phase === 'entry'
+      && trigger.status === 'locked'
+      && trigger.sideScope === 'both'
+      && typeof trigger.params.rangeLower === 'number'
+      && typeof trigger.params.rangeUpper === 'number'
+      && typeof trigger.params.stepPct === 'number'
+      && trigger.params.sideMode === 'bidirectional'
+    ))
+  }
+
+  private hasCompleteSymmetricBollingerSeed(state: SemanticState): boolean {
+    const hasUpperShortEntry = state.triggers.some(trigger => (
+      trigger.key === 'bollinger.touch_upper'
+      && trigger.phase === 'entry'
+      && trigger.status === 'locked'
+      && trigger.sideScope === 'short'
+    ))
+    const hasLowerLongEntry = state.triggers.some(trigger => (
+      trigger.key === 'bollinger.touch_lower'
+      && trigger.phase === 'entry'
+      && trigger.status === 'locked'
+      && trigger.sideScope === 'long'
+    ))
+    const hasMiddleExit = state.triggers.some(trigger => (
+      trigger.key === 'bollinger.touch_middle'
+      && trigger.phase === 'exit'
+      && trigger.status === 'locked'
+    ))
+
+    return hasUpperShortEntry
+      && hasLowerLongEntry
+      && hasMiddleExit
+      && state.position?.positionMode === 'long_short'
   }
 
   private createEmptySemanticState(): SemanticState {
