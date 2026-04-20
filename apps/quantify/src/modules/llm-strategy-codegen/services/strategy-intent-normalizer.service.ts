@@ -92,6 +92,11 @@ export class StrategyIntentNormalizerService {
         triggers.push(percentChange)
         continue
       }
+      const executionIntent = this.tryNormalizeExecutionIntent(rule, phase)
+      if (executionIntent) {
+        triggers.push(executionIntent)
+        continue
+      }
       const pnlChange = this.tryNormalizePositionPnl(rule, phase, bases?.[`${phase}-${index + 1}`])
       if (pnlChange) {
         triggers.push(pnlChange)
@@ -158,6 +163,32 @@ export class StrategyIntentNormalizerService {
         valuePct,
         ...(window ? { window } : {}),
         basis: basis ?? 'prev_close',
+      },
+    })
+  }
+
+  private tryNormalizeExecutionIntent(
+    rule: string,
+    phase: 'entry' | 'exit',
+  ): NormalizedTriggerAtom | null {
+    const hasImmediateCue = /立即|立刻|马上|启动时|开始时|一开始|开局|开始后/u.test(rule)
+    const hasDirectMarketCue = /直接/u.test(rule) && /市价|当前价/u.test(rule)
+    const hasSingleExecutionCue = /一次|一次性|首根|首次/u.test(rule)
+    const hasTimingCue = hasImmediateCue || hasDirectMarketCue || hasSingleExecutionCue
+    if (!hasTimingCue) return null
+
+    const hasActionWord = /市价买入|买入|开仓|做多|市价卖出|卖出|平仓|平多|平空|做空/u.test(rule)
+    if (!hasActionWord) return null
+
+    const sideScope = this.resolveSideScope(rule, phase) ?? 'long'
+    return this.createClosedTrigger({
+      key: 'execution.on_start',
+      phase,
+      ...(sideScope ? { sideScope } : {}),
+      params: {
+        timing: 'on_start',
+        orderType: 'market',
+        occurrence: 'once',
       },
     })
   }

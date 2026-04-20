@@ -354,6 +354,23 @@ export class CanonicalSpecV2IrCompilerService {
     const closeRef = this.ensurePriceSeries(context, 'close')
 
     switch (atom.key) {
+      case 'execution.on_start': {
+        const barIndexRef = 'bar_index'
+        if (!context.seriesMap.has(barIndexRef)) {
+          context.seriesMap.set(barIndexRef, {
+            id: barIndexRef,
+            kind: 'BAR_INDEX',
+          })
+        }
+        const thresholdRef = this.ensureConstSeries(context, 1)
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}`,
+          'EQ',
+          [barIndexRef, thresholdRef],
+        )
+      }
+
       case 'price.change_pct': {
         const timeframe = typeof atom.params?.timeframe === 'string' && atom.params.timeframe.trim().length > 0
           ? atom.params.timeframe.trim()
@@ -1009,6 +1026,9 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     switch (condition.key) {
+      case 'execution.on_start':
+        return 'EQ(BAR_INDEX,1)'
+
       case 'ma.golden_cross':
       case 'ma.death_cross': {
         const operator = condition.key === 'ma.golden_cross' ? 'CROSS_OVER' : 'CROSS_UNDER'

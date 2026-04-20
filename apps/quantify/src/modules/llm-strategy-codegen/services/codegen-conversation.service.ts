@@ -274,7 +274,7 @@ export class CodegenConversationService {
           || clarification.clarificationPrompt
           || this.clarificationQuestion.build(clarificationState))
     const confirmationAssistantPrompt = plannerStatus === 'CHECKLIST_GATE'
-      ? this.buildChecklistGateAssistantPrompt(checklist)
+      ? this.buildChecklistGateAssistantPrompt(checklist, normalization.normalizedIntent)
       : null
     const bootstrap = buildStartSessionBootstrap({
       initialMessage: dto.initialMessage,
@@ -650,7 +650,7 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
-    const checklistGateAssistantPrompt = this.buildChecklistGateAssistantPrompt(canonicalChecklist)
+    const checklistGateAssistantPrompt = this.buildChecklistGateAssistantPrompt(canonicalChecklist, normalization.normalizedIntent)
     const historyAfterChecklistGate = this.appendConversationHistory(
       constraintPack.conversationHistory ?? [],
       dto.message,
@@ -1465,7 +1465,9 @@ export class CodegenConversationService {
     }
 
     return (
-      (/均线|\bma\b|\bsma\b|\bema\b/iu.test(text) && (/突破|跌破|金叉|死叉/u.test(text)))
+      /当前K线收盘价相对于.+(?:上涨|下跌).+?(?:买入|卖出|平仓|开仓|平多|平空)/u.test(text)
+      || /立即开始时市价(?:买入|卖出|做多|做空|平仓|平多|平空)一次/u.test(text)
+      || (/均线|\bma\b|\bsma\b|\bema\b/iu.test(text) && (/突破|跌破|金叉|死叉/u.test(text)))
       || /布林带|上轨|下轨|中轨/u.test(text)
     )
   }
@@ -2392,7 +2394,7 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
 
-    const checklistGateAssistantPrompt = this.buildChecklistGateAssistantPrompt(projectedChecklist)
+    const checklistGateAssistantPrompt = this.buildChecklistGateAssistantPrompt(projectedChecklist, normalization.normalizedIntent)
     const historyAfterChecklistGate = this.appendConversationHistory(
       args.constraintPack.conversationHistory ?? [],
       args.message,
@@ -2938,7 +2940,10 @@ export class CodegenConversationService {
       || item.reason === 'missing_take_profit_rule'
   }
 
-  private buildClarificationSummary(checklist: ChecklistPayload): string | null {
+  private buildClarificationSummary(
+    checklist: ChecklistPayload,
+    normalizedIntent?: StrategyNormalizedIntent | null,
+  ): string | null {
     const drafts = buildChecklistRuleDrafts(checklist)
     const executionContext = this.resolveExecutionContextForSummary(checklist)
     const entryRule = drafts.entry[0]
@@ -2946,11 +2951,23 @@ export class CodegenConversationService {
     const positionPct = typeof checklist.riskRules?.positionPct === 'number'
       ? `${checklist.riskRules.positionPct}% 仓位`
       : ''
+    const formatRuleSummaryText = (text: string, timeframe?: string | null): string => {
+      const trimmed = text.trim()
+      if (!trimmed) return ''
+      if (/^\d+[mhd]\s+/u.test(trimmed) || !timeframe) {
+        return trimmed
+      }
+      return `${timeframe} ${trimmed}`.trim()
+    }
     const formatDraft = (draft: ChecklistRuleDraft | undefined): string => {
       if (!draft) return ''
       const normalizedText = draft.text.replace(/^\d+[mhd]\s+/u, '').trim()
-      return `${draft.timeframe ? `${draft.timeframe} ` : ''}${normalizedText}`.trim()
+      return formatRuleSummaryText(normalizedText, draft.timeframe)
     }
+    const entrySummary = this.buildNormalizedTriggerSummary(normalizedIntent, 'entry', executionContext.timeframe)
+      || (entryRule ? formatDraft(entryRule) : '')
+    const exitSummary = this.buildNormalizedTriggerSummary(normalizedIntent, 'exit', executionContext.timeframe)
+      || (exitRule ? formatDraft(exitRule) : '')
 
     const segments = [
       [
@@ -2960,8 +2977,8 @@ export class CodegenConversationService {
         executionContext.timeframe,
       ].filter(Boolean).join(' '),
       this.buildGridSummarySegment(checklist.grid),
-      entryRule ? `入场：${formatDraft(entryRule)}` : '',
-      exitRule ? `出场：${formatDraft(exitRule)}` : '',
+      entrySummary ? `入场：${entrySummary}` : '',
+      exitSummary ? `出场：${exitSummary}` : '',
       this.buildRiskSummarySegment('止损', checklist.riskRules, 'stopLoss'),
       this.buildRiskSummarySegment('止盈', checklist.riskRules, 'takeProfit'),
       positionPct,
@@ -2970,8 +2987,11 @@ export class CodegenConversationService {
     return segments.length > 0 ? segments.join('；') : null
   }
 
-  private buildChecklistGateAssistantPrompt(checklist: ChecklistPayload): string {
-    const summary = this.buildClarificationSummary(checklist)
+  private buildChecklistGateAssistantPrompt(
+    checklist: ChecklistPayload,
+    normalizedIntent?: StrategyNormalizedIntent | null,
+  ): string {
+    const summary = this.buildClarificationSummary(checklist, normalizedIntent)
     if (summary) {
       return `我当前理解的策略是：${summary}。请确认是否按此逻辑生成。`
     }
@@ -3026,11 +3046,50 @@ export class CodegenConversationService {
     }
   }
 
+  private buildNormalizedTriggerSummary(
+    normalizedIntent: StrategyNormalizedIntent | null | undefined,
+    phase: 'entry' | 'exit',
+    fallbackTimeframe: string,
+  ): string {
+    const trigger = normalizedIntent?.triggers.find(item =>
+      item.phase === phase
+      && item.closureStatus === 'closed',
+    )
+    if (!trigger) {
+      return ''
+    }
+
+    const projected = this.buildProjectedRuleText({
+      id: `summary-${phase}`,
+      key: trigger.key,
+      phase: trigger.phase,
+      params: {
+        ...trigger.params,
+        ...(trigger.resolutionHints?.confirmation
+          ? { confirmationMode: trigger.resolutionHints.confirmation }
+          : {}),
+      },
+      ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    })
+    if (!projected) {
+      return ''
+    }
+
+    if (/^\d+[mhd]\s+/u.test(projected) || !fallbackTimeframe) {
+      return projected
+    }
+
+    return `${fallbackTimeframe} ${projected}`.trim()
+  }
+
   private buildNormalizationAssistantPrompt(
     checklist: ChecklistPayload,
     normalization: NormalizationResult,
   ): string {
-    const summary = this.buildClarificationSummary(checklist)
+    const summary = this.buildClarificationSummary(checklist, normalization.normalizedIntent)
     const normalizedFamilies = normalization.normalizedIntent.families.join('、')
     const normalizedLine = normalizedFamilies
       ? `当前已归一到的语义族：${normalizedFamilies}。`
@@ -3292,7 +3351,9 @@ export class CodegenConversationService {
     }
 
     const needsNormalizedFallback = normalization.normalizedIntent.triggers.some(trigger =>
-      trigger.key === 'indicator.above' || trigger.key === 'indicator.below',
+      trigger.key === 'indicator.above'
+      || trigger.key === 'indicator.below'
+      || trigger.key === 'execution.on_start',
     )
     if (!needsNormalizedFallback) {
       return checklistSpec
@@ -3539,6 +3600,14 @@ export class CodegenConversationService {
   }
 
   private buildProjectedRuleText(trigger: SemanticTriggerState): string | null {
+    if (trigger.key === 'execution.on_start') {
+      return this.buildProjectedExecutionRule(trigger)
+    }
+
+    if (trigger.key === 'price.percent_change') {
+      return this.buildProjectedPercentChangeRule(trigger)
+    }
+
     if (
       (trigger.key === 'indicator.above' || trigger.key === 'indicator.below')
       && trigger.params.indicator === 'ma'
@@ -3555,6 +3624,48 @@ export class CodegenConversationService {
     }
 
     return null
+  }
+
+  private buildProjectedExecutionRule(trigger: SemanticTriggerState): string | null {
+    if (trigger.phase === 'entry') {
+      if (trigger.sideScope === 'short') {
+        return '立即开始时市价做空一次'
+      }
+      return '立即开始时市价买入一次'
+    }
+
+    if (trigger.phase === 'exit') {
+      if (trigger.sideScope === 'short') {
+        return '立即开始时市价平空一次'
+      }
+      return '立即开始时市价卖出一次'
+    }
+
+    return null
+  }
+
+  private buildProjectedPercentChangeRule(trigger: SemanticTriggerState): string | null {
+    const valuePct = typeof trigger.params.valuePct === 'number'
+      ? trigger.params.valuePct
+      : null
+    if (valuePct === null || !Number.isFinite(valuePct) || valuePct === 0) {
+      return null
+    }
+
+    const timeframe = typeof trigger.params.window === 'string' && trigger.params.window.trim().length > 0
+      ? `${trigger.params.window.trim()} `
+      : ''
+    const basis = typeof trigger.params.basis === 'string' ? trigger.params.basis : 'prev_close'
+    const basisLabel = basis === 'entry_avg_price' || basis === 'position_pnl'
+      ? '开仓均价'
+      : '上一根K线收盘价'
+    const direction = valuePct > 0 ? '上涨' : '下跌'
+    const pctText = `${Math.abs(valuePct)}%`
+    const action = trigger.phase === 'entry'
+      ? (trigger.sideScope === 'short' ? '做空开仓' : '买入开仓')
+      : (trigger.sideScope === 'short' ? '卖出平空' : '卖出平仓')
+
+    return `${timeframe}当前K线收盘价相对于${basisLabel}${direction}≥${pctText}时${action}`.trim()
   }
 
   private buildProjectedMovingAverageRule(trigger: SemanticTriggerState): string | null {
@@ -3928,6 +4039,20 @@ export class CodegenConversationService {
     }
 
     if (entryRules.length === 0) {
+      const immediateExecutionRule = this.inferImmediateExecutionRule(directionalFragments, 'entry')
+      if (immediateExecutionRule) {
+        entryRules.push(immediateExecutionRule)
+      }
+    }
+
+    if (exitRules.length === 0) {
+      const immediateExecutionRule = this.inferImmediateExecutionRule(directionalFragments, 'exit')
+      if (immediateExecutionRule) {
+        exitRules.push(immediateExecutionRule)
+      }
+    }
+
+    if (entryRules.length === 0) {
       const hasBollinger = /布林|bollinger/i.test(text)
       const hasUpperBand = /上轨|upper/i.test(text)
       const hasLowerBand = /下轨|lower/i.test(text)
@@ -4115,6 +4240,38 @@ export class CodegenConversationService {
       grid: Object.keys(grid).length > 0 ? grid : undefined,
       market: Object.keys(inferredMarket).length > 0 ? inferredMarket : { defaultTimeframe: timeframes[0] ?? null },
     }
+  }
+
+  private inferImmediateExecutionRule(
+    fragments: string[],
+    phase: 'entry' | 'exit',
+  ): string | null {
+    for (const fragment of fragments) {
+      const hasTemporalExecutionCue = /立即|立刻|马上|启动时|开始时|一开始|开局/u.test(fragment)
+      const hasDirectMarketCue = /直接/u.test(fragment) && /市价|当前价/u.test(fragment)
+      const hasExecutionCue = hasTemporalExecutionCue || hasDirectMarketCue
+      if (!hasExecutionCue) {
+        continue
+      }
+
+      if (phase === 'entry') {
+        if (/买入|开仓|做多/u.test(fragment)) {
+          return '立即开始时市价买入一次'
+        }
+        if (/做空|卖出开空|开空/u.test(fragment)) {
+          return '立即开始时市价做空一次'
+        }
+        continue
+      }
+
+      if (/平空/u.test(fragment)) {
+        return '立即开始时市价平空一次'
+      }
+      if (/卖出|平仓|平多/u.test(fragment)) {
+        return '立即开始时市价卖出一次'
+      }
+    }
+    return null
   }
 
   private inferMovingAverageBreakoutRuleFromFragments(

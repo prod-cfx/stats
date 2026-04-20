@@ -6,6 +6,7 @@ describe('strategyIntentNormalizerService', () => {
 
   it('registers the first-wave atom and family catalog', () => {
     expect(FIRST_WAVE_TRIGGER_ATOMS).toEqual(expect.arrayContaining([
+      'execution.on_start',
       'price.percent_change',
       'trend.direction',
       'market.regime',
@@ -81,6 +82,44 @@ describe('strategyIntentNormalizerService', () => {
       positionMode: 'long_only',
     })
     expect(result.normalizedIntent.unresolved).toEqual([])
+  })
+
+  it('normalizes immediate market-entry wording into a generic execution trigger', () => {
+    const result = service.normalize({
+      market: { exchange: 'okx', symbol: 'ORDIUSDT', marketType: 'spot', timeframe: '1h' },
+      entryRules: ['立即开始时市价买入一次'],
+      exitRules: ['当前K线收盘价相对于上一根K线收盘价上涨≥1%时卖出平仓'],
+      exitRuleBases: { 'exit-1': 'prev_close' },
+      riskRules: { positionPct: 10, stopLossPct: 5, takeProfitPct: 10 },
+    } as any)
+
+    expect(result.blocked).toBe(false)
+    expect(result.normalizedIntent.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'execution.on_start',
+        phase: 'entry',
+        sideScope: 'long',
+        closureStatus: 'closed',
+        params: expect.objectContaining({
+          timing: 'on_start',
+          orderType: 'market',
+          occurrence: 'once',
+        }),
+      }),
+      expect.objectContaining({
+        key: 'price.percent_change',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          valuePct: 1,
+          basis: 'prev_close',
+        }),
+      }),
+    ]))
+    expect(result.normalizedIntent.actions).toEqual([
+      { key: 'open_long' },
+      { key: 'close_long' },
+    ])
   })
 
   it('preserves explicit touch-plus-close bollinger semantics during normalization', () => {

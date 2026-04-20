@@ -1249,6 +1249,9 @@ export class StrategyConsistencyService {
     if (predicateId.includes('price_change_pct') || predicateId.includes('price.change_pct')) {
       return 'price.change_pct'
     }
+    if (predicateId.includes('execution_on_start') || predicateId.includes('execution.on_start')) {
+      return 'execution.on_start'
+    }
     if (predicateId.includes('bollinger_touch_upper') || predicateId.includes('upper_break')) {
       return 'bollinger.upper_break'
     }
@@ -1589,7 +1592,8 @@ export class StrategyConsistencyService {
   }
 
   private isSupportedRuleKey(key: string): key is StrategySemanticRuleKey {
-    return key === 'price.change_pct'
+    return key === 'execution.on_start'
+      || key === 'price.change_pct'
       || key === 'bollinger.upper_break'
       || key === 'bollinger.lower_break'
       || key === 'bollinger.middle_revert'

@@ -1447,6 +1447,12 @@ export class CanonicalSpecBuilderService {
     defaultTimeframe: string | null,
   ): CanonicalConditionNode | null {
     switch (trigger.key) {
+      case 'execution.on_start':
+        return {
+          kind: 'atom',
+          key: CANONICAL_RULE_KEYS.executionOnStart,
+          semanticScope: 'market',
+        }
       case 'price.percent_change': {
         const valuePct = typeof trigger.params.valuePct === 'number' ? trigger.params.valuePct : null
         if (valuePct === null || !Number.isFinite(valuePct) || valuePct === 0) {

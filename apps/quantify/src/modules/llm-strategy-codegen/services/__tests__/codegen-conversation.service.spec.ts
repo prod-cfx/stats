@@ -9644,7 +9644,15 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).toContain('未识别可编译入场规则')
   })
 
-  it('keeps drafting when follow-up logic closes semantic slots but still only has a generic immediate-entry placeholder', async () => {
+  it('projects generic execution intent into semantic entry rules and keeps confirmation summary complete', async () => {
+    const localChecklist = (service as any).inferChecklistFromMessage('立即开始时市价买入一次')
+    expect(localChecklist.entryRules).toEqual(['立即开始时市价买入一次'])
+    const localProjectedChecklist = (service as any).projectLegacyChecklistFromSemanticState(
+      (service as any).buildFallbackSemanticState(localChecklist),
+      localChecklist,
+    )
+    expect(localProjectedChecklist.entryRules).toEqual(['立即开始时市价买入一次'])
+
     mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
       id: 's-immediate-entry-placeholder',
       userId: 'u1',
@@ -9694,11 +9702,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const result = await service.continueSession('s-immediate-entry-placeholder', {
       userId: 'u1',
-      message: '立即市价买入',
+      message: '立即开始时市价买入一次',
     })
 
-    expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('未识别可编译入场规则')
-    expect(result.assistantPrompt).not.toContain('请确认是否按此逻辑生成')
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.assistantPrompt).toContain('入场：1h 立即开始时市价买入一次')
+    expect(result.assistantPrompt).toContain('出场：1h 当前K线收盘价相对于上一根K线收盘价上涨≥1%时卖出平仓')
+    expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
   })
 })
