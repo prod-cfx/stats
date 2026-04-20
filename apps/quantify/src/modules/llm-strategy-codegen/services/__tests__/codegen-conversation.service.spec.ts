@@ -834,7 +834,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.findById.mockResolvedValue({
       id: 'session-1',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: {},
       clarificationState: { status: 'CLEAR', items: [] },
       constraintPack: { conversationHistory: ['U: 原始 session 消息'] },
@@ -859,7 +859,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           { role: 'user', content: '来自会话聚合的用户消息' },
           { role: 'assistant', content: '来自会话聚合的助手消息' },
         ],
-        status: 'CHECKLIST_GATE',
+        status: 'CONFIRM_GATE',
       }),
     ])
   })
@@ -1643,7 +1643,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.canonicalDigest).toMatch(/^sha256:/)
     expect(createPayload).not.toHaveProperty('checklist')
     expect(createPayload.semanticState).toEqual(expect.objectContaining({
@@ -1726,7 +1726,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(createPayload.semanticState).toEqual(expect.objectContaining({
       triggers: expect.arrayContaining([
         expect.objectContaining({
@@ -1804,7 +1804,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.canonicalDigest).toMatch(/^sha256:/)
     expect(createPayload).not.toHaveProperty('checklist')
     expect(createPayload.semanticState).toEqual(expect.objectContaining({
@@ -1937,7 +1937,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '出场改成 MA10 下破卖出',
     })
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-semantic-first-continue', expect.objectContaining({
       semanticState: expect.objectContaining({
         triggers: expect.arrayContaining([
@@ -2000,7 +2000,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-semantic-first-confirm',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: null,
       semanticState: persistedSemanticState,
       clarificationState: { status: 'CLEAR', items: [] },
@@ -2154,7 +2154,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-confirm-semantic-no-checklist-gate',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: null,
       semanticState: persistedSemanticState,
       clarificationState: { status: 'CLEAR', items: [] },
@@ -2220,7 +2220,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-confirm-semantic-legacy-blocker',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: null,
       semanticState: persistedSemanticState,
       clarificationState: {
@@ -2814,7 +2814,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const result = await service.startSession(dto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.specDesc).toBeTruthy()
     expect(result.canonicalDigest).toMatch(/^sha256:/)
     expect(result.specDesc).toEqual(expect.objectContaining({
@@ -2877,7 +2877,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       initialMessage: '在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金',
     })
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.specDesc).toBeTruthy()
     expect(result.canonicalDigest).toMatch(/^sha256:/)
     expect(result.specDesc).toEqual(expect.objectContaining({
@@ -2921,7 +2921,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expect.objectContaining({ reason: 'missing_entry_rules' }),
       expect.objectContaining({ reason: 'missing_exit_rules' }),
     ]))
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.assistantPrompt).toContain('确认逻辑图')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       semanticState: expect.objectContaining({
@@ -3003,7 +3003,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(afterSymbol.status).toBe('CHECKLIST_GATE')
+    expect(afterSymbol.status).toBe('CONFIRM_GATE')
     expect(afterSymbol.canonicalDigest).toMatch(/^sha256:/)
     expect(afterSymbol.assistantPrompt).not.toContain('请确认策略交易标的')
     expect(afterSymbol.assistantPrompt).not.toContain('请确认策略主周期')
@@ -3051,7 +3051,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       initialMessage: 'OKX 合约 BTCUSDT 15m，价格触及/突破布林带(20,2)上轨时做空，触及/突破下轨时做多；多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓；单笔仓位 10%。',
     })
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
     expect(result.assistantPrompt).not.toContain('请补充入场和出场条件')
     expect(result.assistantPrompt).not.toContain('当前规则还不能稳定生成脚本')
@@ -3094,7 +3094,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       initialMessage: '在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 60000-80000，采用双向网格，每格间距 0.5%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈。',
     })
 
-    expect(result.status === 'CHECKLIST_GATE' || result.status === 'DRAFTING').toBe(true)
+    expect(result.status === 'CONFIRM_GATE' || result.status === 'DRAFTING').toBe(true)
     expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
     expect(result.assistantPrompt).not.toContain('请补充能明确落成主链规则的入场/出场条件')
     expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
@@ -3157,7 +3157,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.assistantPrompt).toContain('双向网格')
     expect(result.assistantPrompt).not.toContain('仅做多')
     expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
@@ -3187,7 +3187,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any> | undefined
     const createdChecklist = createdSession ? readPersistedChecklist(createdSession) : {}
 
-    expect(started.status).toBe('CHECKLIST_GATE')
+    expect(started.status).toBe('CONFIRM_GATE')
     expect(started.assistantPrompt).not.toContain('存在暂不支持的规则片段')
     expect(createdChecklist.entryRules).toContain('收盘确认价格突破长期均线（50）时买入')
     expect(createdChecklist.exitRules).toContain('收盘确认价格跌破短期均线（10）时卖出')
@@ -4156,7 +4156,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-blocked-clarification',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: {
         entryRules: ['突破布林带上轨交易'],
         exitRules: ['价格回到布林带中轨(MA20)时平仓'],
@@ -4264,7 +4264,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.clarificationState).toEqual(expect.objectContaining({
       status: 'CLEAR',
     }))
@@ -4273,7 +4273,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
     expect(result.canonicalDigest).toMatch(/^sha256:/)
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-clarification-answers', expect.objectContaining({
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       semanticState: expect.objectContaining({
         contextSlots: expect.objectContaining({
           exchange: expect.objectContaining({
@@ -4365,10 +4365,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.assistantPrompt).not.toContain('请确认交易所')
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-clarification-inferred-defaults', expect.objectContaining({
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       semanticState: expect.objectContaining({
         contextSlots: expect.objectContaining({
           exchange: expect.objectContaining({
@@ -5782,7 +5782,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(mockRepo.updateSession).toHaveBeenCalledWith(
       's-clarification-action-uniqueness',
       expect.objectContaining({
@@ -5898,7 +5898,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.canonicalDigest).toMatch(/^sha256:/)
     expect((result as any).clarificationGate).toEqual(expect.objectContaining({
       blocked: false,
@@ -5906,7 +5906,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.updateSession).toHaveBeenCalledWith(
       's-clarification-unrelated-answer',
       expect.objectContaining({
-        status: 'CHECKLIST_GATE',
+        status: 'CONFIRM_GATE',
         latestSpecDesc: expect.objectContaining({
           canonicalDigest: expect.stringMatching(/^sha256:/),
         }),
@@ -6004,7 +6004,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '改成 Binance',
     })
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.clarificationState).toEqual(expect.objectContaining({
       status: 'CLEAR',
     }))
@@ -6045,7 +6045,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '维持 OKX BTCUSDT 15m',
     })
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.clarificationState).toEqual(expect.objectContaining({
       status: 'CLEAR',
       items: [],
@@ -6104,7 +6104,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.missingFields).toEqual([])
     expect(result.clarificationState).toEqual(expect.objectContaining({
       status: 'CLEAR',
@@ -6162,11 +6162,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(mockRepo.updateSession).toHaveBeenCalledWith(
       's-missing-exit-rule-answer',
       expect.objectContaining({
-        status: 'CHECKLIST_GATE',
+        status: 'CONFIRM_GATE',
         latestSpecDesc: expect.objectContaining({
           canonicalDigest: expect.stringMatching(/^sha256:/),
         }),
@@ -6230,14 +6230,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.clarificationState).toEqual(expect.objectContaining({
       status: 'CLEAR',
     }))
     expect(mockRepo.updateSession).toHaveBeenCalledWith(
       's-default-risk-basis-answer',
       expect.objectContaining({
-        status: 'CHECKLIST_GATE',
+        status: 'CONFIRM_GATE',
         latestSpecDesc: expect.objectContaining({
           canonicalDigest: expect.stringMatching(/^sha256:/),
         }),
@@ -6281,7 +6281,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '继续',
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.assistantPrompt).not.toContain('risk.stopLossBasis')
     expect(result.assistantPrompt).not.toContain('risk.takeProfitBasis')
   })
@@ -6315,10 +6315,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '这个是对的',
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.assistantPrompt).not.toContain('请确认这些推断是否成立')
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-confirm-inferred-risk-basis', expect.objectContaining({
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       latestSpecDesc: expect.objectContaining({
         canonicalDigest: expect.stringMatching(/^sha256:/),
       }),
@@ -6390,10 +6390,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         message,
       } as ContinueCodegenSessionDto)
 
-      expect(result.status).toBe('CHECKLIST_GATE')
+      expect(result.status).toBe('CONFIRM_GATE')
       expect(result.assistantPrompt).not.toContain('请确认这些推断是否成立')
       expect(mockRepo.updateSession).toHaveBeenCalledWith('s-confirm-inferred-risk-basis-variant', expect.objectContaining({
-        status: 'CHECKLIST_GATE',
+        status: 'CONFIRM_GATE',
         latestSpecDesc: expect.objectContaining({
           canonicalDigest: expect.stringMatching(/^sha256:/),
         }),
@@ -6430,12 +6430,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '止盈按持仓收益率，止损按入场价',
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.assistantPrompt).not.toContain('请确认这些推断是否成立')
     expect(mockRepo.updateSession).toHaveBeenCalledWith(
       's-mixed-inferred-risk-basis',
       expect.objectContaining({
-        status: 'CHECKLIST_GATE',
+        status: 'CONFIRM_GATE',
         latestSpecDesc: expect.objectContaining({
           canonicalDigest: expect.stringMatching(/^sha256:/),
         }),
@@ -6474,11 +6474,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         message,
       } as ContinueCodegenSessionDto)
 
-      expect(result.status).toBe('CHECKLIST_GATE')
+      expect(result.status).toBe('CONFIRM_GATE')
       expect(result.assistantPrompt).not.toContain('请确认这些推断是否成立')
       expect(mockAi.chat).toHaveBeenCalledTimes(1)
       expect(mockRepo.updateSession).toHaveBeenCalledWith('s-natural-confirm-inferred-risk-basis-variant', expect.objectContaining({
-        status: 'CHECKLIST_GATE',
+        status: 'CONFIRM_GATE',
         latestSpecDesc: expect.objectContaining({
           canonicalDigest: expect.stringMatching(/^sha256:/),
         }),
@@ -6561,10 +6561,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '止盈不要按默认',
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(mockAi.chat).toHaveBeenCalledTimes(1)
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-default-negation-inferred-risk-basis', expect.objectContaining({
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       latestSpecDesc: expect.objectContaining({
         canonicalDigest: expect.stringMatching(/^sha256:/),
       }),
@@ -6606,7 +6606,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '继续',
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.assistantPrompt).not.toContain('请确认这些推断是否成立')
     expect(result.assistantPrompt).not.toContain('risk.stopLossBasis')
     expect(result.assistantPrompt).not.toContain('risk.takeProfitBasis')
@@ -6710,10 +6710,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         message,
       } as ContinueCodegenSessionDto)
 
-      expect(result.status).toBe('CHECKLIST_GATE')
+      expect(result.status).toBe('CONFIRM_GATE')
       expect(result.assistantPrompt).not.toContain('请确认这些推断是否成立')
       const updatePayload = mockRepo.updateSession.mock.calls[0]?.[1] as Record<string, any>
-      expect(updatePayload.status).toBe('CHECKLIST_GATE')
+      expect(updatePayload.status).toBe('CONFIRM_GATE')
       expect(updatePayload.latestSpecDesc?.canonicalDigest).toMatch(/^sha256:/)
       expect(expectedConfirmedKey).toMatch(/^risk\./)
     },
@@ -6753,10 +6753,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '默认即可',
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.assistantPrompt).not.toContain('请确认这些推断是否成立')
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-single-inferred-default-confirmation', expect.objectContaining({
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       latestSpecDesc: expect.objectContaining({
         canonicalDigest: expect.stringMatching(/^sha256:/),
       }),
@@ -6850,7 +6850,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.assistantPrompt).not.toContain('以下内容是系统推断')
     expect(result.canonicalDigest).toMatch(/^sha256:/)
   })
@@ -6905,14 +6905,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.clarificationState).toEqual(expect.objectContaining({
       status: 'CLEAR',
     }))
     expect(mockRepo.updateSession).toHaveBeenCalledWith(
       's-position-pct-clarification-answer',
       expect.objectContaining({
-        status: 'CHECKLIST_GATE',
+        status: 'CONFIRM_GATE',
         latestSpecDesc: expect.objectContaining({
           canonicalDigest: expect.stringMatching(/^sha256:/),
         }),
@@ -6981,7 +6981,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.assistantPrompt).toContain('确认逻辑图')
     expect((result as any).clarificationGate).toEqual(expect.objectContaining({
       blocked: false,
@@ -7094,7 +7094,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(mockRepo.updateSession).toHaveBeenCalledWith(
       's-basis-natural-short-answer',
       expect.objectContaining({
@@ -7167,11 +7167,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     } as ContinueCodegenSessionDto)
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(mockRepo.updateSession).toHaveBeenCalledWith(
       's-exit-basis-sync',
       expect.objectContaining({
-        status: 'CHECKLIST_GATE',
+        status: 'CONFIRM_GATE',
         latestSpecDesc: expect.objectContaining({
           canonicalDigest: expect.stringMatching(/^sha256:/),
         }),
@@ -7378,7 +7378,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       initialMessage: '在okx交易所合约市场的BTCUSDT 1小时图上，短均线上穿长均线（金叉）时做多，短均线下穿长均线（死叉）时平多',
     })
 
-    expect(started.status).toBe('CHECKLIST_GATE')
+    expect(started.status).toBe('CONFIRM_GATE')
     expect(started.canonicalDigest).toMatch(/^sha256:/)
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
     const createdChecklist = readPersistedChecklist(createdSession)
@@ -7386,7 +7386,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's5',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: createdChecklist,
       semanticState: createdSession.semanticState,
       clarificationState: createdSession.clarificationState,
@@ -7429,7 +7429,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's5-semantic-generate',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: persistedChecklist,
       semanticState: persistedSemanticState,
       clarificationState: { status: 'CLEAR', items: [] },
@@ -7522,7 +7522,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's5-compiled',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: createdChecklist,
       semanticState: createdSession.semanticState,
       clarificationState: createdSession.clarificationState,
@@ -7628,7 +7628,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's-golden-ma-publish',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: createdChecklist,
       semanticState: createdSession.semanticState,
       clarificationState: createdSession.clarificationState,
@@ -7741,7 +7741,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.findById.mockResolvedValueOnce({
       id: 's-semantic-ma-replace',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: persistedChecklist,
       semanticState: currentSemanticState,
       clarificationState: { status: 'CLEAR', items: [] },
@@ -7779,8 +7779,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const checklistGateUpdate = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
     const projectedChecklist = checklistGateUpdate.checklist
       ?? (service as any).projectLegacyChecklistFromSemanticState(checklistGateUpdate.semanticState, persistedChecklist)
-    expect(updated.status).toBe('CHECKLIST_GATE')
-    expect(checklistGateUpdate.status).toBe('CHECKLIST_GATE')
+    expect(updated.status).toBe('CONFIRM_GATE')
+    expect(checklistGateUpdate.status).toBe('CONFIRM_GATE')
     expect(projectedChecklist).toEqual(expect.objectContaining({
       entryRules: expect.arrayContaining(['收盘确认价格突破长期均线（200）时买入']),
       exitRules: expect.arrayContaining([expect.stringContaining('短期均线（20）')]),
@@ -7833,7 +7833,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's-golden-bollinger-publish',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: createdChecklist,
       semanticState: createdSession.semanticState,
       clarificationState: createdSession.clarificationState,
@@ -7917,7 +7917,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's-semantic-bollinger-replace',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: persistedChecklist,
       semanticState: buildLockedBollingerSemanticState(),
       clarificationState: { status: 'CLEAR', items: [] },
@@ -7949,7 +7949,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '把布林带改成 30 周期 2.5 倍标准差',
     })
 
-    expect(updated.status).toBe('CHECKLIST_GATE')
+    expect(updated.status).toBe('CONFIRM_GATE')
     const checklistGateUpdate = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
     const projectedChecklist = checklistGateUpdate.checklist
       ?? (service as any).projectLegacyChecklistFromSemanticState(checklistGateUpdate.semanticState, persistedChecklist)
@@ -8002,7 +8002,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.findById.mockResolvedValueOnce({
       id: 's-semantic-bollinger-replace',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: checklistGateUpdate.checklist,
       semanticState: checklistGateUpdate.semanticState,
       clarificationState: checklistGateUpdate.clarificationState,
@@ -8122,7 +8122,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
       id: 's-state-gate-publish',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: persistedChecklist,
       semanticState,
       clarificationState: { status: 'CLEAR', items: [] },
@@ -8201,7 +8201,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         },
       }),
     })
-    expect(started.status).toBe('CHECKLIST_GATE')
+    expect(started.status).toBe('CONFIRM_GATE')
     expect(started.canonicalDigest).toMatch(/^sha256:/)
 
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
@@ -8217,7 +8217,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.findById.mockResolvedValue({
       id: 's-golden-grid-publish',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: createdChecklist,
       semanticState: createdSession.semanticState,
       clarificationState: createdSession.clarificationState,
@@ -8323,7 +8323,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's-bollinger-publish',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       strategyInstanceId: null,
       checklist,
       clarificationState: { status: 'CLEAR', items: [] },
@@ -8412,7 +8412,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's-price-change-publish',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       strategyInstanceId: null,
       checklist: completeChecklist({
         symbols: ['BTCUSDT'],
@@ -8597,7 +8597,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '出场：多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓',
     })
 
-    expect(updated.status).toBe('CHECKLIST_GATE')
+    expect(updated.status).toBe('CONFIRM_GATE')
     const checklistGateUpdate = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
     expect(checklistGateUpdate.semanticState).toEqual(expect.objectContaining({
       triggers: expect.arrayContaining([
@@ -8615,7 +8615,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.findById.mockResolvedValueOnce(buildSemanticEraSessionFixture({
       id: 's-bollinger-exit-followup',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       semanticState: checklistGateUpdate.semanticState,
       clarificationState: checklistGateUpdate.clarificationState,
       constraintPack: checklistGateUpdate.constraintPack,
@@ -8670,7 +8670,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's-runtime-invalid',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       strategyInstanceId: null,
       checklist: completeChecklist({
         symbols: ['BTCUSDT'],
@@ -8749,7 +8749,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's-compiler-consistency-failed',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       strategyInstanceId: null,
       checklist: completeChecklist({
         symbols: ['BTCUSDT'],
@@ -8794,7 +8794,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.findById.mockResolvedValue({
       id: 'session-1',
       userId: 'u-1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: completeChecklist({
         symbols: ['BTCUSDT'],
         timeframes: ['15m'],
@@ -8852,7 +8852,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's6',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: completeChecklist({
         entryRules: ['RSI 14 低于 30 时做多'],
         exitRules: ['收益率达到 5% 止盈'],
@@ -8948,7 +8948,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.findById.mockResolvedValue({
       id: 's7-semantic-complete',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: semanticCompleteChecklist,
       semanticState: persistedSemanticState,
       clarificationState: { status: 'CLEAR', items: [] },
@@ -9111,7 +9111,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's8',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: completeChecklist({
         entryRules: ['突破关键阻力位后入场'],
         exitRules: ['跌破最近支撑位出场'],
@@ -9141,7 +9141,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's8-publish-fail',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: completeChecklist({
         entryRules: ['突破关键阻力位后入场'],
         exitRules: ['跌破最近支撑位出场'],
@@ -9188,7 +9188,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's8-publication-blocked',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: {
         symbols: ['BTCUSDT'],
         timeframes: ['1h'],
@@ -9263,7 +9263,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's9',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: completeChecklist({
         entryRules: ['价格突破阻力位入场'],
         exitRules: ['跌破支撑位出场'],
@@ -9326,7 +9326,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's-consistency',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: {
         symbols: ['BTCUSDT'],
         timeframes: ['15m'],
@@ -9396,7 +9396,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's-v1',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       checklist: {
         symbols: ['BTCUSDT'],
         timeframes: ['15m'],
@@ -9448,7 +9448,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's-new-instance',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       strategyInstanceId: null,
       checklist: completeChecklist({
         symbols: ['BTCUSDT'],
@@ -9499,7 +9499,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's-perp-publish',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       strategyInstanceId: null,
       checklist: {
         symbols: ['BTCUSDT'],
@@ -9564,7 +9564,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's-existing-instance',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       strategyInstanceId: 'instance-existing',
       checklist: completeChecklist({
         symbols: ['BTCUSDT'],
@@ -9610,7 +9610,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's-instance-failed',
       userId: 'u1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       strategyInstanceId: null,
       checklist: completeChecklist({
         symbols: ['BTCUSDT'],
@@ -9747,7 +9747,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '立即开始时市价买入一次',
     })
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.assistantPrompt).toContain('入场：1h 立即开始时市价买入一次')
     expect(result.assistantPrompt).toContain('出场：1h 当前K线收盘价相对于上一根K线收盘价上涨≥1%时卖出平仓')
     expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
