@@ -102,7 +102,7 @@ describe('aiQuantProxyService', () => {
       deployRequestId: 'deploy-req-1',
       publishedSnapshotId: 'snapshot-1',
       exchangeAccountId: 'acc-1',
-      leverage: 4,
+      deploymentExecutionConfig: { leverage: 4 },
     })
 
     expect(quantifyClient.deployAccountStrategy).toHaveBeenCalledWith(
@@ -112,7 +112,7 @@ describe('aiQuantProxyService', () => {
         deployRequestId: 'deploy-req-1',
         publishedSnapshotId: 'snapshot-1',
         exchangeAccountId: 'acc-1',
-        leverage: 4,
+        deploymentExecutionConfig: { leverage: 4 },
       },
       { userId: 'user-1', headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
     )
@@ -214,13 +214,13 @@ describe('aiQuantProxyService', () => {
 
     await service.startCodegen('user-1', 'Bearer token-1', {
       initialMessage: 'build me a strategy',
-      symbols: ['BTCUSDT'],
+      guideConfig: { symbolExample: 'BTCUSDT' },
     })
 
     expect(quantifyClient.startCodegen).toHaveBeenCalledWith(
       {
         initialMessage: 'build me a strategy',
-        symbols: ['BTCUSDT'],
+        guideConfig: { symbolExample: 'BTCUSDT' },
       },
       {
         userId: 'user-1',

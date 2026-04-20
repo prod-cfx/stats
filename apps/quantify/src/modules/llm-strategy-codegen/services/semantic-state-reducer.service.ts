@@ -8,6 +8,10 @@ interface SupportedSlotReduction {
   slotValue: number | string
 }
 
+interface SupportedContextReduction {
+  slotValue: string
+}
+
 @Injectable()
 export class SemanticStateReducerService {
   applyClarificationAnswer(input: {
@@ -51,7 +55,8 @@ export class SemanticStateReducerService {
           return buildSemanticSlotId(item) === input.targetSlotId
         }
 
-        return item.slotKey === input.targetSlotKey && item.fieldPath === input.targetFieldPath
+        return item.slotKey === input.targetSlotKey
+          && (input.targetFieldPath ? item.fieldPath === input.targetFieldPath : true)
       })
       if (!slot) continue
 
@@ -77,6 +82,31 @@ export class SemanticStateReducerService {
       }
 
       trigger.status = trigger.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+      break
+    }
+
+    for (const contextKey of ['exchange', 'symbol', 'marketType', 'timeframe'] as const) {
+      const slot = nextState.contextSlots[contextKey]
+      if (!slot || slot.status !== 'open') continue
+
+      const matchesTarget = input.targetSlotId
+        ? buildSemanticSlotId(slot) === input.targetSlotId
+        : slot.slotKey === input.targetSlotKey
+          && (input.targetFieldPath ? slot.fieldPath === input.targetFieldPath : true)
+      if (!matchesTarget) continue
+
+      const reduction = this.reduceSupportedContextSlot(slot.slotKey, answerText)
+      if (!reduction) {
+        break
+      }
+
+      slot.value = reduction.slotValue
+      slot.status = 'locked'
+      slot.evidence = {
+        text: answerText,
+        messageIndex: input.messageIndex,
+        source: 'user_explicit',
+      }
       break
     }
 
@@ -146,6 +176,32 @@ export class SemanticStateReducerService {
     }
 
     return null
+  }
+
+  private reduceSupportedContextSlot(
+    slotKey: SemanticSlotState['slotKey'],
+    answerText: string,
+  ): SupportedContextReduction | null {
+    const normalized = answerText.trim()
+    if (!normalized) {
+      return null
+    }
+
+    if (slotKey === 'marketType') {
+      if (/现货|spot/iu.test(normalized)) {
+        return { slotValue: 'spot' }
+      }
+      if (/合约|perp|永续/iu.test(normalized)) {
+        return { slotValue: 'perp' }
+      }
+      return null
+    }
+
+    if (slotKey === 'exchange') {
+      return { slotValue: normalized.toLowerCase() }
+    }
+
+    return { slotValue: normalized }
   }
 
   private normalizeGridSlotKey(slotKey: string): 'grid.range.lower' | 'grid.range.upper' | 'grid.stepPct' | 'grid.sideMode' | null {

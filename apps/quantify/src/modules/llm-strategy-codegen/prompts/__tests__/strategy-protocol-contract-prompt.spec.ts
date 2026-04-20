@@ -18,4 +18,13 @@ describe('strategyProtocolContractPrompt', () => {
 
     expect(second).toBe(first)
   })
+
+  it('describes clarification in terms of semantic slots instead of missing checklist fields', () => {
+    const prompt = buildStrategyProtocolTypeContractPrompt()
+
+    expect(prompt).toContain('open semantic slots')
+    expect(prompt).toContain('sideScope')
+    expect(prompt).toContain('basis')
+    expect(prompt).not.toContain('missing entryRules')
+  })
 })

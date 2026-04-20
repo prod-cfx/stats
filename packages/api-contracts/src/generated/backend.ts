@@ -155,6 +155,87 @@ const CreateAccountExchangeAccountDto = z
       .optional(),
   })
   .passthrough()
+const AiQuantConversationMessageResponseDto = z
+  .object({ role: z.enum(['user', 'assistant']), content: z.string() })
+  .passthrough()
+const AiQuantConversationResponseDto = z
+  .object({
+    id: z.string(),
+    activeCodegenSessionId: z.string().optional(),
+    conversationTitle: z.string().optional(),
+    conversationMessages: z.array(AiQuantConversationMessageResponseDto).optional(),
+    status: z.string().optional(),
+    createdAt: z.string().optional(),
+    updatedAt: z.string().optional(),
+    canonicalDigest: z.string().optional(),
+    specDesc: z.object({}).partial().passthrough().optional(),
+    semanticGraph: z.object({}).partial().passthrough().optional(),
+    validationReport: z.object({}).partial().passthrough().optional(),
+    clarificationGate: z.object({}).partial().passthrough().optional(),
+    publicationGate: z.object({}).partial().passthrough().optional(),
+    scriptCode: z.string().optional(),
+    publishedSnapshotId: z.string().optional(),
+    publishedSnapshotParamValues: z.object({}).partial().passthrough().optional(),
+    publishedSnapshotStrategyConfig: z.object({}).partial().passthrough().nullish(),
+    publishedSnapshotBacktestConfigDefaults: z.object({}).partial().passthrough().nullish(),
+    publishedSnapshotDeploymentExecutionDefaults: z.object({}).partial().passthrough().nullish(),
+    publishedSnapshotDeploymentExecutionConstraints: z.object({}).partial().passthrough().nullish(),
+    publishedSnapshotCompatibilityMetadata: z.object({}).partial().passthrough().nullish(),
+    strategyInstanceId: z.string().optional(),
+    rejectReason: z.string().optional(),
+  })
+  .passthrough()
+const BasePaginationResponseDto = z
+  .object({
+    total: z.number(),
+    page: z.number(),
+    limit: z.number(),
+    items: z.array(z.object({}).partial().passthrough()),
+  })
+  .passthrough()
+const AccountAiQuantStrategyListItemResponseDto = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    status: z.enum(['running', 'stopped', 'draft']),
+    exchange: z.string().nullish(),
+    symbol: z.string().nullish(),
+    timeframe: z.string().nullish(),
+    positionPct: z.number().nullish(),
+    paramSchema: z.object({}).partial().passthrough().nullish(),
+    paramValues: z.object({}).partial().passthrough().nullish(),
+    schemaVersion: z.string().nullish(),
+    isSubscribed: z.boolean(),
+    metrics: z.object({}).partial().passthrough(),
+    updatedAt: z.string(),
+  })
+  .passthrough()
+const AccountAiQuantStrategyDetailResponseDto = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    status: z.enum(['running', 'stopped', 'draft']),
+    exchange: z.string().nullish(),
+    symbol: z.string().nullish(),
+    timeframe: z.string().nullish(),
+    positionPct: z.number().nullish(),
+    paramSchema: z.object({}).partial().passthrough().nullish(),
+    paramValues: z.object({}).partial().passthrough().nullish(),
+    schemaVersion: z.string().nullish(),
+    isSubscribed: z.boolean(),
+    metrics: z.object({}).partial().passthrough(),
+    updatedAt: z.string(),
+    totalPnl: z.number().nullish(),
+    todayPnl: z.number().nullish(),
+    equitySeries: z.array(z.object({}).partial().passthrough()),
+    snapshot: z.object({}).partial().passthrough(),
+    timeline: z.array(z.object({}).partial().passthrough()),
+    accountOverview: z.object({}).partial().passthrough(),
+    positionOverview: z.object({}).partial().passthrough(),
+    latestOrders: z.array(z.object({}).partial().passthrough()),
+    deployment: z.object({}).partial().passthrough().nullish(),
+  })
+  .passthrough()
 const AccountAiQuantActionRequestDto = z.object({ action: z.enum(['run', 'stop']) }).passthrough()
 const AccountAiQuantDeployRequestDto = z
   .object({
@@ -163,59 +244,11 @@ const AccountAiQuantDeployRequestDto = z
     publishedSnapshotId: z.string(),
     exchangeAccountId: z.string().optional(),
     exchangeAccountName: z.string().optional(),
-    leverage: z.number().optional(),
+    deploymentExecutionConfig: z.object({}).partial().passthrough().optional(),
   })
   .passthrough()
 const AccountAiQuantUpdateExecutionLeverageRequestDto = z
   .object({ leverage: z.number() })
-  .passthrough()
-const AccountAiQuantExecutionConfigDto = z
-  .object({
-    leverage: z.number().nullish(),
-    priceSource: z.string().nullish(),
-    orderType: z.string().nullish(),
-    timeInForce: z.string().nullish(),
-  })
-  .partial()
-  .passthrough()
-const AccountAiQuantCompatibilityMetadataDto = z
-  .object({
-    isLegacySnapshot: z.boolean().optional(),
-    requiresRepublishForBacktest: z.boolean().optional(),
-    requiresRepublishForDeploy: z.boolean().optional(),
-  })
-  .partial()
-  .passthrough()
-const AccountAiQuantConsistencySummaryDto = z
-  .object({
-    isConsistent: z.boolean().optional(),
-    consistencyScore: z.number().optional(),
-    driftReasons: z.array(z.string()).optional(),
-  })
-  .partial()
-  .passthrough()
-const AccountAiQuantStrategySnapshotResponseDto = z
-  .object({
-    strategyConfig: z.object({}).partial().passthrough().nullish(),
-    backtestConfigDefaults: z.object({}).partial().passthrough().nullish(),
-    deploymentExecutionBaseline: AccountAiQuantExecutionConfigDto.nullish(),
-    deploymentExecutionCurrent: AccountAiQuantExecutionConfigDto.nullish(),
-    deploymentExecutionConstraints: z.object({}).partial().passthrough().nullish(),
-    effectiveAllowedLeverageRange: z.object({}).partial().passthrough().nullish(),
-    executionConfigVersion: z.number().nullish(),
-    compatibilityMetadata: AccountAiQuantCompatibilityMetadataDto.nullish(),
-    consistencySummary: AccountAiQuantConsistencySummaryDto.nullish(),
-  })
-  .partial()
-  .passthrough()
-const AccountAiQuantStrategyDetailResponseDto = z
-  .object({
-    id: z.string(),
-    name: z.string().optional(),
-    status: z.string().optional(),
-    snapshot: AccountAiQuantStrategySnapshotResponseDto.nullish(),
-  })
-  .partial()
   .passthrough()
 const BacktestingSymbolSupportRequestDto = z
   .object({ exchange: z.enum(['binance', 'okx', 'hyperliquid']), symbol: z.string() })
@@ -224,40 +257,11 @@ const BacktestingSymbolSupportResponseDto = z
   .object({ status: z.enum(['supported', 'refreshed_then_supported', 'not_supported']) })
   .passthrough()
 const LlmCodegenStartRequestDto = z
-  .object({
-    initialMessage: z.string(),
-    symbols: z.array(z.string()),
-    timeframes: z.array(z.string()),
-    entryRules: z.array(z.string()),
-    exitRules: z.array(z.string()),
-    riskRules: z.object({}).partial().passthrough(),
-    guideConfig: z.object({}).partial().passthrough(),
-  })
+  .object({ initialMessage: z.string(), guideConfig: z.object({}).partial().passthrough() })
   .partial()
   .passthrough()
-const LlmCodegenContinueRequestDto = z
-  .object({
-    message: z.string(),
-    symbols: z.array(z.string()).optional(),
-    timeframes: z.array(z.string()).optional(),
-    entryRules: z.array(z.string()).optional(),
-    exitRules: z.array(z.string()).optional(),
-    riskRules: z.object({}).partial().passthrough().optional(),
-    clarificationAnswers: z.record(z.string()).optional(),
-    guideConfig: z.object({}).partial().passthrough().optional(),
-    confirmGenerate: z.boolean().optional(),
-    confirmedCanonicalDigest: z.string().optional(),
-    providerCode: z.string().optional(),
-    model: z.string().optional(),
-    temperature: z.number().optional(),
-    maxTokens: z.number().optional(),
-  })
-  .passthrough()
 const CodegenConversationMessageResponseDto = z
-  .object({
-    role: z.enum(['user', 'assistant']),
-    content: z.string(),
-  })
+  .object({ role: z.enum(['user', 'assistant']), content: z.string() })
   .passthrough()
 const CodegenSessionResponseDto = z
   .object({
@@ -281,6 +285,11 @@ const CodegenSessionResponseDto = z
     scriptCode: z.string().nullish(),
     publishedSnapshotId: z.string().nullish(),
     publishedSnapshotParamValues: z.object({}).partial().passthrough().nullish(),
+    publishedSnapshotStrategyConfig: z.object({}).partial().passthrough().nullish(),
+    publishedSnapshotBacktestConfigDefaults: z.object({}).partial().passthrough().nullish(),
+    publishedSnapshotDeploymentExecutionDefaults: z.object({}).partial().passthrough().nullish(),
+    publishedSnapshotDeploymentExecutionConstraints: z.object({}).partial().passthrough().nullish(),
+    publishedSnapshotCompatibilityMetadata: z.object({}).partial().passthrough().nullish(),
     consistencyReport: z.object({}).partial().passthrough().nullish(),
     specDesc: z.object({}).partial().passthrough().nullish(),
     canonicalDigest: z.string().nullish(),
@@ -292,6 +301,19 @@ const CodegenSessionResponseDto = z
     strategyInstanceId: z.string().nullish(),
     rejectReason: z.string().nullish(),
     assistantPrompt: z.string().optional(),
+  })
+  .passthrough()
+const LlmCodegenContinueRequestDto = z
+  .object({
+    message: z.string(),
+    clarificationAnswers: z.record(z.string()).optional(),
+    guideConfig: z.object({}).partial().passthrough().optional(),
+    confirmGenerate: z.boolean().optional(),
+    confirmedCanonicalDigest: z.string().optional(),
+    providerCode: z.string().optional(),
+    model: z.string().optional(),
+    temperature: z.number().optional(),
+    maxTokens: z.number().optional(),
   })
   .passthrough()
 const Function = z.object({}).partial().passthrough()
@@ -362,14 +384,6 @@ const AdminUserInfoDto = z
     menuPermissions: z.array(z.string()),
     featurePermissions: z.array(z.string()),
     apiPermissions: z.array(z.string()),
-  })
-  .passthrough()
-const BasePaginationResponseDto = z
-  .object({
-    total: z.number(),
-    page: z.number(),
-    limit: z.number(),
-    items: z.array(z.object({}).partial().passthrough()),
   })
   .passthrough()
 const CreateAdminUserDto = z
@@ -1197,20 +1211,20 @@ export const schemas = {
   BindTelegramRequestDto,
   AccountExchangeAccountResponseDto,
   CreateAccountExchangeAccountDto,
+  AiQuantConversationMessageResponseDto,
+  AiQuantConversationResponseDto,
+  BasePaginationResponseDto,
+  AccountAiQuantStrategyListItemResponseDto,
+  AccountAiQuantStrategyDetailResponseDto,
   AccountAiQuantActionRequestDto,
   AccountAiQuantDeployRequestDto,
   AccountAiQuantUpdateExecutionLeverageRequestDto,
-  AccountAiQuantExecutionConfigDto,
-  AccountAiQuantCompatibilityMetadataDto,
-  AccountAiQuantConsistencySummaryDto,
-  AccountAiQuantStrategySnapshotResponseDto,
-  AccountAiQuantStrategyDetailResponseDto,
   BacktestingSymbolSupportRequestDto,
   BacktestingSymbolSupportResponseDto,
   LlmCodegenStartRequestDto,
-  LlmCodegenContinueRequestDto,
   CodegenConversationMessageResponseDto,
   CodegenSessionResponseDto,
+  LlmCodegenContinueRequestDto,
   Function,
   AdminLoginDto,
   AdminProfileDto,
@@ -1221,7 +1235,6 @@ export const schemas = {
   AdminUserDto,
   AdminMenuPermissionDto,
   AdminUserInfoDto,
-  BasePaginationResponseDto,
   CreateAdminUserDto,
   UpdateAdminUserDto,
   CreateAdminRoleDto,
@@ -1300,6 +1313,39 @@ export const schemas = {
 const endpoints = makeApi([
   {
     method: 'get',
+    path: '/account/ai-quant/conversations',
+    alias: 'AccountAiQuantConversationsController_list',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+    ],
+    response: z.array(AiQuantConversationResponseDto),
+  },
+  {
+    method: 'delete',
+    path: '/account/ai-quant/conversations/:id',
+    alias: 'AccountAiQuantConversationsController_remove',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'get',
     path: '/account/ai-quant/strategies',
     alias: 'AccountAiQuantStrategiesController_list',
     requestFormat: 'json',
@@ -1307,7 +1353,7 @@ const endpoints = makeApi([
       {
         name: 'authorization',
         type: 'Header',
-        schema: z.string(),
+        schema: z.string().optional(),
       },
       {
         name: 'page',
@@ -1335,7 +1381,12 @@ const endpoints = makeApi([
         schema: z.boolean().optional(),
       },
     ],
-    response: z.void(),
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(AccountAiQuantStrategyListItemResponseDto) })
+        .partial()
+        .passthrough(),
+    ),
   },
   {
     method: 'get',
@@ -1346,7 +1397,7 @@ const endpoints = makeApi([
       {
         name: 'authorization',
         type: 'Header',
-        schema: z.string(),
+        schema: z.string().optional(),
       },
       {
         name: 'id',
@@ -1354,7 +1405,9 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: AccountAiQuantStrategyDetailResponseDto,
+    response: z
+      .object({ data: AccountAiQuantStrategyDetailResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'delete',
@@ -1389,7 +1442,7 @@ const endpoints = makeApi([
       {
         name: 'authorization',
         type: 'Header',
-        schema: z.string(),
+        schema: z.string().optional(),
       },
       {
         name: 'id',
@@ -1397,7 +1450,35 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: z
+      .object({ data: AccountAiQuantStrategyDetailResponseDto, message: z.string().optional() })
+      .passthrough(),
+  },
+  {
+    method: 'post',
+    path: '/account/ai-quant/strategies/:id/execution/leverage',
+    alias: 'AccountAiQuantStrategiesController_updateExecutionLeverage',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: z.object({ leverage: z.number() }).passthrough(),
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({ data: AccountAiQuantStrategyDetailResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'post',
@@ -1413,34 +1494,36 @@ const endpoints = makeApi([
       {
         name: 'authorization',
         type: 'Header',
-        schema: z.string(),
+        schema: z.string().optional(),
       },
     ],
-    response: AccountAiQuantStrategyDetailResponseDto,
+    response: z
+      .object({ data: AccountAiQuantStrategyDetailResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
-    method: 'post',
-    path: '/account/ai-quant/strategies/:id/execution/leverage',
-    alias: 'AccountAiQuantStrategiesController_updateExecutionLeverage',
+    method: 'get',
+    path: '/account/ai-quant/strategies/deploy-requests/:deployRequestId/result',
+    alias: 'AccountAiQuantStrategiesController_deployResult',
     requestFormat: 'json',
     parameters: [
       {
-        name: 'body',
-        type: 'Body',
-        schema: AccountAiQuantUpdateExecutionLeverageRequestDto,
-      },
-      {
         name: 'authorization',
         type: 'Header',
-        schema: z.string(),
+        schema: z.string().optional(),
       },
       {
-        name: 'id',
+        name: 'deployRequestId',
         type: 'Path',
         schema: z.string(),
       },
     ],
-    response: AccountAiQuantStrategyDetailResponseDto,
+    response: z
+      .object({
+        data: z.union([AccountAiQuantStrategyDetailResponseDto, z.null()]),
+        message: z.string().optional(),
+      })
+      .passthrough(),
   },
   {
     method: 'get',

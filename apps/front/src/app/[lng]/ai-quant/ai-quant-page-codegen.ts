@@ -11,9 +11,6 @@ import {
 import { readCanonicalDigest } from '@/components/ai-quant/canonical-confirmation'
 import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-graph'
 import {
-  resolveChecklistPayload,
-} from '@/components/ai-quant/session-loop'
-import {
   applyCapabilitiesToParamSchema,
   syncStrategyParamsFromCodegen,
 } from '@/components/ai-quant/strategy-param-sync'
@@ -785,6 +782,48 @@ function updateConversationById(
   setConversations(prev => prev.map(conv => (conv.id === conversationId ? updater(conv) : conv)))
 }
 
+function getSemanticRequestValidationError(params: QuantParams): string | null {
+  if (!['binance', 'okx', 'hyperliquid'].includes(params.exchange)) {
+    return '请求前校验失败：请先确认交易所参数有效。'
+  }
+
+  if (!params.symbol.trim()) {
+    return '请求前校验失败：请先确认交易标的。'
+  }
+
+  if (!params.baseTimeframe.trim()) {
+    return '请求前校验失败：请先确认策略周期。'
+  }
+
+  if (!Number.isFinite(params.positionPct) || params.positionPct <= 0 || params.positionPct > 100) {
+    return '请求前校验失败：仓位比例需要在 0 到 100 之间。'
+  }
+
+  return null
+}
+
+function buildSemanticRequestMessage(args: {
+  message: string
+  params: QuantParams
+  usePresetRules: boolean
+}): string {
+  const { message, params, usePresetRules } = args
+  const trimmedMessage = message.trim()
+  if (!usePresetRules) {
+    return trimmedMessage
+  }
+
+  return [
+    trimmedMessage,
+    '',
+    '[preset_context]',
+    `exchange=${params.exchange}`,
+    `symbol=${params.symbol.trim()}`,
+    `timeframe=${params.baseTimeframe.trim()}`,
+    `positionPct=${params.positionPct}`,
+  ].join('\n')
+}
+
 export async function requestAiQuantCodegen(args: {
   backtestCapabilities: BacktestCapabilities | null
   callingMessage: (elapsedSec: number) => string
@@ -823,6 +862,26 @@ export async function requestAiQuantCodegen(args: {
   } = args
 
   if (!sessionUserId) return
+  const trimmedMessage = message.trim()
+  if (!trimmedMessage) {
+    return
+  }
+  const validationError = getSemanticRequestValidationError(targetParams)
+  if (validationError) {
+    updateConversationById(setConversations, conversationId, curr => ({
+      ...curr,
+      messages: [
+        ...curr.messages,
+        {
+          id: `a-validation-${Date.now()}`,
+          role: 'assistant',
+          content: validationError,
+        },
+      ],
+      updatedAt: Date.now(),
+    }))
+    return
+  }
   if (codegenRequestMutexRef.current.has(conversationId)) return
   codegenRequestMutexRef.current.add(conversationId)
   setCodegenBusyConversationIds(prev =>
@@ -830,12 +889,11 @@ export async function requestAiQuantCodegen(args: {
   )
 
   let activeSessionId = sessionId
-  const trimmedMessage = message.trim()
-  if (!trimmedMessage) {
-    codegenRequestMutexRef.current.delete(conversationId)
-    setCodegenBusyConversationIds(prev => prev.filter(id => id !== conversationId))
-    return
-  }
+  const requestMessage = buildSemanticRequestMessage({
+    message: trimmedMessage,
+    params: targetParams,
+    usePresetRules,
+  })
 
   const loadingMessageId = `a-loading-${Date.now()}`
   const startedAt = Date.now()
@@ -918,57 +976,15 @@ export async function requestAiQuantCodegen(args: {
 
   try {
     const currentConversation = conversations.find(conv => conv.id === conversationId)
-    const checklistResult = resolveChecklistPayload({
-      usePresetRules,
-      confirmGenerate,
-      message: trimmedMessage,
-      sessionId,
-      graph: currentConversation?.logicGraph,
-      specDesc: currentConversation?.codegenSpecDesc ?? null,
-      params: targetParams,
-      paramSchema: currentConversation?.paramSchema ?? null,
-      paramValues: currentConversation?.paramValues ?? null,
-    })
-    if ('error' in checklistResult) {
-      const errorMessage =
-        checklistResult.error.code === 'MISSING_REQUIRED_PARAMS'
-          ? t('aiQuant.messages.missingRequiredParams', {
-              keys: checklistResult.error.missingKeys.join(', '),
-              defaultValue: `Missing required parameters: ${checklistResult.error.missingKeys.join(', ')}`,
-            })
-          : t('aiQuant.messages.invalidParams', {
-              details: Object.entries(checklistResult.error.fieldErrors ?? {})
-                .map(([key, reason]) => `${key}(${reason})`)
-                .join(', '),
-              defaultValue: `Parameter validation failed: ${Object.entries(
-                checklistResult.error.fieldErrors ?? {},
-              )
-                .map(([key, reason]) => `${key}(${reason})`)
-                .join(', ')}`,
-            })
-      updateConversationById(setConversations, conversationId, curr => ({
-        ...curr,
-        latestSignalMessage: null,
-        messages: [
-          ...curr.messages.map(msg =>
-            msg.id === loadingMessageId ? { ...msg, content: errorMessage } : msg,
-          ),
-        ],
-        updatedAt: Date.now(),
-      }))
-      return
-    }
-    const checklistPayload = checklistResult
 
     const startNewSession = async () =>
       startLlmCodegenSession({
-        initialMessage: trimmedMessage,
-        ...checklistPayload,
+        initialMessage: requestMessage,
       })
 
     const continueSession = async (id: string) =>
       continueLlmCodegenSession(id, {
-        message: trimmedMessage,
+        message: requestMessage,
         confirmGenerate,
         confirmedCanonicalDigest,
         clarificationAnswers,

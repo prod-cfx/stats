@@ -127,7 +127,6 @@ model LlmStrategyCodegenSession {
   userId             String                  @map("user_id")
   strategyInstanceId String?                 @map("strategy_instance_id")
   status             LlmCodegenSessionStatus @default(DRAFTING)
-  checklist          Json?
   semanticState      Json?                   @map("semantic_state")
   constraintPack     Json?                   @map("constraint_pack")
   clarificationState Json?                   @map("clarification_state")

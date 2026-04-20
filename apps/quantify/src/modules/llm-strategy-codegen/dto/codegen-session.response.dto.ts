@@ -1,7 +1,6 @@
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import {
-  STRATEGY_CLARIFICATION_FIELDS,
   STRATEGY_CLARIFICATION_ITEM_STATUSES,
   STRATEGY_CLARIFICATION_REASONS,
   STRATEGY_CLARIFICATION_STATUSES,
@@ -14,7 +13,7 @@ class StrategyClarificationItemDto {
   @ApiProperty({ description: '澄清触发原因', enum: STRATEGY_CLARIFICATION_REASONS })
   reason!: string
 
-  @ApiProperty({ description: '澄清字段', enum: STRATEGY_CLARIFICATION_FIELDS })
+  @ApiProperty({ description: '澄清字段或语义槽位标识' })
   field!: string
 
   @ApiProperty({ description: '是否阻断主流程', example: true })

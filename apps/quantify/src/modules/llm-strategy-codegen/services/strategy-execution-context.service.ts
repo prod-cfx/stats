@@ -1,7 +1,7 @@
-import type { ChecklistPayload } from '../types/codegen-checklist'
+import type { ChecklistPayload } from '../types/checklist-compat'
 import type { StrategyExecutionContext, StrategyExecutionContextResolution } from '../types/strategy-execution-context'
 import { Injectable } from '@nestjs/common'
-import { resolveChecklistDefaultTimeframe } from './checklist-rule-drafts'
+import { resolveChecklistDefaultTimeframe } from './checklist-compat'
 
 @Injectable()
 export class StrategyExecutionContextService {

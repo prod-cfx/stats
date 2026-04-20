@@ -21,11 +21,14 @@ describe('backend contract generated AI Quant codegen responses', () => {
     }
   })
 
-  it('keeps account AI Quant passthrough aliases typed for detail, deploy, and leverage-only update', () => {
+  it('keeps account AI Quant passthrough aliases typed for list, detail, action, deploy, deployResult, and leverage-only update', () => {
     const source = readFileSync(generatedPath, 'utf8')
     const aliases = [
+      'AccountAiQuantStrategiesController_list',
       'AccountAiQuantStrategiesController_detail',
+      'AccountAiQuantStrategiesController_action',
       'AccountAiQuantStrategiesController_deploy',
+      'AccountAiQuantStrategiesController_deployResult',
       'AccountAiQuantStrategiesController_updateExecutionLeverage',
     ]
 
@@ -38,7 +41,7 @@ describe('backend contract generated AI Quant codegen responses', () => {
     }
   })
 
-  it('includes leverage passthrough fields in backend AI Quant request contracts', () => {
+  it('includes deployment execution config fields in backend AI Quant request contracts', () => {
     const source = readFileSync(generatedPath, 'utf8')
 
     const deploySchemaStart = source.indexOf('const AccountAiQuantDeployRequestDto = z')
@@ -50,8 +53,28 @@ describe('backend contract generated AI Quant codegen responses', () => {
     const deploySnippet = source.slice(deploySchemaStart, deploySchemaStart + 500)
     const updateSnippet = source.slice(updateSchemaStart, updateSchemaStart + 300)
 
-    expect(deploySnippet).toContain('leverage: z.number().optional()')
+    expect(deploySnippet).toContain('deploymentExecutionConfig: z.object({}).partial().passthrough().optional()')
     expect(deploySnippet).not.toContain('strategyInstanceId')
     expect(updateSnippet).toContain('leverage: z.number()')
+  })
+
+  it('keeps backend AI Quant codegen request contracts semantic-only', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+
+    const startSchemaStart = source.indexOf('const LlmCodegenStartRequestDto = z')
+    const continueSchemaStart = source.indexOf('const LlmCodegenContinueRequestDto = z')
+
+    expect(startSchemaStart).toBeGreaterThanOrEqual(0)
+    expect(continueSchemaStart).toBeGreaterThanOrEqual(0)
+
+    const startSchemaEnd = source.indexOf('\nconst ', startSchemaStart + 1)
+    const continueSchemaEnd = source.indexOf('\nconst ', continueSchemaStart + 1)
+    const startSnippet = source.slice(startSchemaStart, startSchemaEnd === -1 ? undefined : startSchemaEnd)
+    const continueSnippet = source.slice(continueSchemaStart, continueSchemaEnd === -1 ? undefined : continueSchemaEnd)
+
+    for (const removedField of ['symbols', 'timeframes', 'entryRules', 'exitRules', 'riskRules']) {
+      expect(startSnippet).not.toContain(`${removedField}:`)
+      expect(continueSnippet).not.toContain(`${removedField}:`)
+    }
   })
 })

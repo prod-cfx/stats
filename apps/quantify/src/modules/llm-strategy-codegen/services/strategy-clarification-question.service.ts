@@ -10,24 +10,24 @@ type StrategyClarificationPromptState = StrategyClarificationState & {
 const REASON_PRIORITY: Record<StrategyClarificationItem['reason'], number> = {
   conflicting_market_scope: 1,
   invalid_spot_short_combo: 1,
-  missing_entry_rules: 2,
-  missing_exit_rules: 2,
-  missing_stop_loss_rule: 2,
-  missing_take_profit_rule: 2,
-  missing_action_uniqueness: 2,
-  missing_side_scope: 2,
-  direction_ambiguous: 2,
-  ambiguous_risk_effect: 3,
+  atomic_semantic_fork: 2,
+  missing_action_uniqueness: 3,
+  missing_side_scope: 3,
+  direction_ambiguous: 3,
   missing_exchange: 4,
   missing_symbol: 4,
   missing_timeframe: 4,
   missing_market_type: 4,
   missing_position_pct: 4,
   missing_position_mode: 4,
-  ambiguous_condition_basis: 5,
-  grid_params_missing: 3,
-  ambiguous_state_gate: 3,
-  atomic_semantic_fork: 2,
+  ambiguous_condition_basis: 7,
+  ambiguous_risk_effect: 8,
+  grid_params_missing: 5,
+  ambiguous_state_gate: 5,
+  missing_entry_rules: 20,
+  missing_exit_rules: 20,
+  missing_stop_loss_rule: 20,
+  missing_take_profit_rule: 20,
 }
 
 @Injectable()
@@ -76,7 +76,7 @@ export class StrategyClarificationQuestionService {
     const target = pendingItems
       .map((item, index) => ({ item, index }))
       .sort((a, b) => {
-        const priorityDelta = REASON_PRIORITY[a.item.reason] - REASON_PRIORITY[b.item.reason]
+        const priorityDelta = this.readItemPriority(a.item) - this.readItemPriority(b.item)
         if (priorityDelta !== 0) return priorityDelta
         return a.index - b.index
       })[0]?.item
@@ -91,6 +91,18 @@ export class StrategyClarificationQuestionService {
   }
 
   private renderGapLabel(item: StrategyClarificationItem): string {
+    if (item.key.startsWith('semantic.')) {
+      if (item.key.includes('confirmationMode')) return '待确认的触发语义槽位。'
+      if (item.key.includes('reference.period')) return '待确认的指标参数槽位。'
+      if (item.key.includes('risk.')) return '待确认的风控语义槽位。'
+      return '待确认的策略语义槽位。'
+    }
+    if (item.key.startsWith('grid.')) {
+      return '网格参数。'
+    }
+    if (item.key.startsWith('executionContext.')) {
+      return '待确认的执行上下文槽位。'
+    }
     if (
       item.reason === 'missing_entry_rules'
       || item.reason === 'missing_exit_rules'
@@ -138,11 +150,27 @@ export class StrategyClarificationQuestionService {
 
   private renderDecisionGapLabel(reason: string): string {
     if (reason === 'trigger_semantics_fork') return '执行语义分叉。'
-    if (reason === 'basis_ambiguity') return '条件比较基准。'
-    if (reason === 'direction_ambiguity') return '缺少方向约束。'
-    if (reason === 'runtime_context_missing') return '关键市场约束信息。'
-    if (reason === 'exit_semantics_missing') return '核心交易语义。'
+    if (reason === 'basis_ambiguity') return '待确认的语义槽位。'
+    if (reason === 'direction_ambiguity') return '待确认的语义槽位。'
+    if (reason === 'runtime_context_missing') return '待确认的执行上下文槽位。'
+    if (reason === 'exit_semantics_missing') return '待确认的策略语义槽位。'
     return '关键条件。'
+  }
+
+  private readItemPriority(item: StrategyClarificationItem): number {
+    if (item.key.startsWith('semantic.')) {
+      if (item.key.includes('confirmationMode')) return 2
+      if (item.key.includes('reference.period')) return 2
+      if (item.key.includes('risk.')) return 4
+      return 3
+    }
+    if (item.key.startsWith('executionContext.')) {
+      return 6
+    }
+    if (item.key.startsWith('grid.')) {
+      return 5
+    }
+    return REASON_PRIORITY[item.reason] ?? 99
   }
 
   private pickHighestPriorityAmbiguity(ambiguities: StrategyAmbiguity[]): StrategyAmbiguity | null {

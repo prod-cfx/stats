@@ -54,7 +54,7 @@ describe('buildStartSessionBootstrap', () => {
     }, () => 'compile prompt')
 
     expect(result.status).toBe('CHECKLIST_GATE')
-    expect(result.shouldGateChecklist).toBe(true)
+    expect(result.shouldEnterConfirmationGate).toBe(true)
     expect(result.assistantPrompt).toContain('逻辑图已更新。请确认逻辑图')
   })
 
@@ -81,7 +81,7 @@ describe('buildStartSessionBootstrap', () => {
     }, report => `compile failed: ${report.reasons.join(',')}`)
 
     expect(result.status).toBe('DRAFTING')
-    expect(result.shouldGateChecklist).toBe(false)
+    expect(result.shouldEnterConfirmationGate).toBe(false)
     expect(result.assistantPrompt).toBe('compile failed: missing exit')
   })
 })

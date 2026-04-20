@@ -1,4 +1,4 @@
-import type { ChecklistPayload } from '../types/codegen-checklist'
+import type { ChecklistPayload } from '../types/checklist-compat'
 import type {
   NormalizedActionAtom,
   NormalizedGridIntent,

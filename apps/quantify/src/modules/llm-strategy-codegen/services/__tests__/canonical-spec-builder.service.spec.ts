@@ -95,7 +95,7 @@ describe('canonicalSpecBuilderService', () => {
         stopLossPct: 5,
         stopLossBasis: 'entry_avg_price',
       },
-    }, normalizedIntent)
+    } as any, normalizedIntent)
 
     expect(spec.market).toEqual({
       exchange: 'okx',
@@ -148,6 +148,104 @@ describe('canonicalSpecBuilderService', () => {
         source: 'normalized-intent',
       }),
     }))
+  })
+
+  it('builds canonical spec directly from normalized semantic intent without compatibility checklist projection', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.buildFromNormalizedIntent({
+      market: { exchange: 'okx', marketType: 'perp', defaultTimeframe: '15m' },
+    }, {
+      families: ['single-leg'],
+      triggers: [
+        {
+          key: 'bollinger.touch_upper',
+          phase: 'entry',
+          sideScope: 'short',
+          params: { period: 20, stdDev: 2, confirmationMode: 'touch' },
+          closureStatus: 'closed',
+          unresolvedSlots: [],
+        },
+      ],
+      actions: [{ key: 'open_short' }],
+      risk: [],
+      position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'short_only' },
+      unresolved: [],
+      normalizationNotes: [],
+    })
+
+    expect(spec.market).toEqual({
+      exchange: 'okx',
+      symbol: null,
+      marketType: 'perp',
+      defaultTimeframe: '15m',
+    })
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        sideScope: 'short',
+        condition: expect.objectContaining({ key: 'bollinger.upper_break' }),
+      }),
+    ]))
+  })
+
+  it('preserves price-vs-single-ma breakout semantics for indicator.above/below normalized triggers', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.buildFromNormalizedIntent({
+      market: { exchange: 'okx', marketType: 'perp', defaultTimeframe: '1h' },
+      symbols: ['BTCUSDT'],
+      timeframes: ['1h'],
+    }, {
+      families: ['single-leg'],
+      triggers: [
+        {
+          key: 'indicator.above',
+          phase: 'entry',
+          params: { indicator: 'ma', referenceRole: 'long_term', 'reference.period': 50 },
+          closureStatus: 'closed',
+          unresolvedSlots: [],
+        },
+        {
+          key: 'indicator.below',
+          phase: 'exit',
+          params: { indicator: 'ma', referenceRole: 'short_term', 'reference.period': 20 },
+          closureStatus: 'closed',
+          unresolvedSlots: [],
+        },
+      ],
+      actions: [{ key: 'open_long' }, { key: 'close_long' }],
+      risk: [],
+      position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_only' },
+      unresolved: [],
+      normalizationNotes: [],
+    })
+
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        condition: expect.objectContaining({
+          key: 'indicator.above',
+          op: 'GTE',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            referenceRole: 'long_term',
+            'reference.period': 50,
+          }),
+        }),
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        condition: expect.objectContaining({
+          key: 'indicator.below',
+          op: 'LTE',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            referenceRole: 'short_term',
+            'reference.period': 20,
+          }),
+        }),
+      }),
+    ]))
   })
 
   it('normalizes single-trade sizing language into positionPct', () => {

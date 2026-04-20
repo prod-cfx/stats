@@ -475,6 +475,158 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
     }))
   })
 
+  it('persists codegen sessions without a checklist column', async () => {
+    const semanticState: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-15T10:00:00.000Z',
+    }
+
+    const tx = {
+      llmStrategyCodegenSession: {
+        create: jest.fn().mockResolvedValue({
+          id: 'session-1',
+          userId: 'u1',
+          status: 'DRAFTING',
+          semanticState,
+          clarificationState: { status: 'CLEAR', items: [] },
+          constraintPack: null,
+          latestDraftCode: null,
+          latestSpecDesc: { canonicalDigest: 'sha256:1' },
+          graphSnapshot: null,
+          semanticGraph: null,
+          validationReport: null,
+          compiledIr: null,
+          rejectReason: null,
+          strategyInstanceId: null,
+          createdAt: new Date('2026-04-15T10:00:00.000Z'),
+          updatedAt: new Date('2026-04-15T10:00:00.000Z'),
+        }),
+      },
+    }
+    const txHost = {
+      tx,
+      withTransaction: jest.fn(async (callback: () => Promise<unknown>) => callback()),
+    }
+    const repo = new CodegenSessionsRepository(txHost as any)
+
+    await repo.createSession({
+      userId: 'u1',
+      status: 'DRAFTING' as any,
+      semanticState,
+      clarificationState: { status: 'CLEAR', items: [] } as any,
+      constraintPack: null,
+      latestDraftCode: null,
+      latestSpecDesc: { canonicalDigest: 'sha256:1' } as any,
+      rejectReason: null,
+      strategyInstanceId: null,
+    } as any)
+
+    expect(tx.llmStrategyCodegenSession.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.not.objectContaining({
+        checklist: expect.anything(),
+      }),
+      select: expect.not.objectContaining({
+        checklist: true,
+      }),
+    }))
+  })
+
+  it('updates and requeues codegen sessions without reading or writing a checklist column', async () => {
+    const sessionRow = {
+      id: 'session-1',
+      userId: 'user-1',
+      status: 'DRAFTING',
+      semanticState: {
+        version: 1,
+        families: [],
+        triggers: [],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: {
+          exchange: null,
+          symbol: null,
+          marketType: null,
+          timeframe: null,
+        },
+        normalizationNotes: [],
+        updatedAt: '2026-04-15T10:00:00.000Z',
+      },
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: null,
+      latestDraftCode: null,
+      latestSpecDesc: { canonicalDigest: 'sha256:1' },
+      graphSnapshot: null,
+      semanticGraph: null,
+      validationReport: null,
+      compiledIr: null,
+      rejectReason: null,
+      strategyInstanceId: null,
+      createdAt: new Date('2026-04-15T10:00:00.000Z'),
+      updatedAt: new Date('2026-04-15T10:00:00.000Z'),
+    }
+
+    const tx = {
+      llmStrategyCodegenSession: {
+        update: jest.fn().mockResolvedValue({
+          ...sessionRow,
+          status: 'VALIDATING_STATIC',
+          latestDraftCode: 'code',
+        }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    }
+    const txHost = {
+      tx,
+      withTransaction: jest.fn(async (callback: () => Promise<unknown>) => callback()),
+    }
+    const repo = new CodegenSessionsRepository(txHost as any)
+
+    await repo.updateSession('session-1', {
+      status: 'VALIDATING_STATIC',
+      latestDraftCode: 'code',
+    } as any)
+    await repo.tryMarkGenerating('session-1', {
+      status: 'GENERATING',
+      latestSpecDesc: { canonicalDigest: 'sha256:2' },
+    } as any)
+    await repo.tryRequeueFromProcessing('session-1', {
+      status: 'DRAFTING',
+      rejectReason: null,
+    } as any)
+
+    expect(tx.llmStrategyCodegenSession.update).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.not.objectContaining({
+        checklist: expect.anything(),
+      }),
+      select: expect.not.objectContaining({
+        checklist: true,
+      }),
+    }))
+    expect(tx.llmStrategyCodegenSession.updateMany).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      data: expect.not.objectContaining({
+        checklist: expect.anything(),
+      }),
+    }))
+    expect(tx.llmStrategyCodegenSession.updateMany).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      data: expect.not.objectContaining({
+        checklist: expect.anything(),
+      }),
+    }))
+  })
+
   it('falls back when semantic_state column is missing during session reads and writes', async () => {
     const missingSemanticStateColumnError = Object.assign(
       new Error('The column `semantic_state` does not exist in the current database.'),

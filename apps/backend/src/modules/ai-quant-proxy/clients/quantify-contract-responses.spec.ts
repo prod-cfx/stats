@@ -11,7 +11,8 @@ describe('quantify contract generated responses', () => {
       'AccountStrategyViewController_detail',
       'AccountStrategyViewController_action',
       'AccountStrategyViewController_deploy',
-      'AccountStrategyViewController_updateExecutionLeverage',
+      'AccountStrategyViewController_deployResult',
+      'AccountStrategyViewController_updateDeploymentLeverage',
       'BacktestingController_getCapabilities',
       'BacktestingController_createJob',
       'BacktestingController_getJob',
@@ -117,7 +118,7 @@ describe('quantify contract generated responses', () => {
     expect(snippet).toContain('rejectReason: z.string().nullish()')
   })
 
-  it('includes leverage passthrough fields in quantify AI Quant request contracts', () => {
+  it('includes deployment execution config fields in quantify AI Quant request contracts', () => {
     const source = readFileSync(generatedPath, 'utf8')
 
     const deploySchemaStart = source.indexOf('const AccountStrategyDeployDto = z')
@@ -129,7 +130,27 @@ describe('quantify contract generated responses', () => {
     const deploySnippet = source.slice(deploySchemaStart, deploySchemaStart + 900)
     const updateSnippet = source.slice(updateSchemaStart, updateSchemaStart + 300)
 
-    expect(deploySnippet).toContain('leverage: z.number().optional()')
+    expect(deploySnippet).toContain('deploymentExecutionConfig: z.object({}).partial().passthrough().optional()')
     expect(updateSnippet).toContain('leverage: z.number()')
+  })
+
+  it('keeps quantify AI Quant codegen request contracts semantic-only', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+
+    const startSchemaStart = source.indexOf('const StartCodegenSessionDto = z')
+    const continueSchemaStart = source.indexOf('const ContinueCodegenSessionDto = z')
+
+    expect(startSchemaStart).toBeGreaterThanOrEqual(0)
+    expect(continueSchemaStart).toBeGreaterThanOrEqual(0)
+
+    const startSchemaEnd = source.indexOf('\nconst ', startSchemaStart + 1)
+    const continueSchemaEnd = source.indexOf('\nconst ', continueSchemaStart + 1)
+    const startSnippet = source.slice(startSchemaStart, startSchemaEnd === -1 ? undefined : startSchemaEnd)
+    const continueSnippet = source.slice(continueSchemaStart, continueSchemaEnd === -1 ? undefined : continueSchemaEnd)
+
+    for (const removedField of ['symbols', 'timeframes', 'entryRules', 'exitRules', 'riskRules']) {
+      expect(startSnippet).not.toContain(`${removedField}:`)
+      expect(continueSnippet).not.toContain(`${removedField}:`)
+    }
   })
 })

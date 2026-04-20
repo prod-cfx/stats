@@ -1,7 +1,7 @@
-import type { ChecklistPayload, ChecklistRuleBasis } from '../types/codegen-checklist'
+import type { ChecklistPayload, ChecklistRuleBasis } from '../types/checklist-compat'
 import type { SemanticStrategyGraph } from '../types/semantic-strategy-graph'
 import { Injectable } from '@nestjs/common'
-import { buildChecklistRuleDrafts, resolveChecklistDefaultTimeframe, resolveRulePhaseDefaultTimeframe } from './checklist-rule-drafts'
+import { buildChecklistRuleDrafts, resolveChecklistDefaultTimeframe, resolveRulePhaseDefaultTimeframe } from './checklist-compat'
 
 export interface SemanticGraphBuildResult {
   graph: SemanticStrategyGraph | null

@@ -1,4 +1,5 @@
-import type { ChecklistPayload } from '../types/codegen-checklist'
+import type { ChecklistPayload } from '../types/checklist-compat'
+import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { StrategyClarificationState } from '../types/strategy-clarification'
 
@@ -9,6 +10,7 @@ export interface ConversationPlan {
   logicReady: boolean
   assistantPrompt: string
   logic?: ChecklistPayload
+  semanticPatch?: CodegenSemanticPatch
 }
 
 export interface CanonicalCompileabilityReport {
@@ -23,6 +25,7 @@ export interface StartSessionBootstrapInput {
   plannerStatus: LlmCodegenSessionStatus
   clarificationState: StrategyClarificationState & { summary?: string | null }
   clarificationPrompt: string | null
+  confirmationAssistantPrompt?: string | null
   decisionKind?: 'DIRECT_COMPILE' | 'CONFIRM_INFERRED' | 'ASK_CLARIFY'
   plan: ConversationPlan
   compileability: CanonicalCompileabilityReport | null
@@ -32,7 +35,7 @@ export interface StartSessionBootstrapInput {
 
 export interface StartSessionBootstrapResult {
   status: LlmCodegenSessionStatus
-  shouldGateChecklist: boolean
+  shouldEnterConfirmationGate: boolean
   assistantPrompt: string
   initialHistory: string[]
 }
@@ -49,12 +52,14 @@ export function buildStartSessionBootstrap(
     && (input.compileability?.canCompile === false || input.normalizationBlocked === true)
     ? 'DRAFTING'
     : input.plannerStatus)
-  const shouldGateChecklist = status === 'CHECKLIST_GATE'
+  const shouldEnterConfirmationGate = status === 'CHECKLIST_GATE'
 
   const assistantPrompt = ((input.clarificationState.status === 'NEEDS_CLARIFICATION') || input.decisionKind === 'CONFIRM_INFERRED') && input.clarificationPrompt
     ? input.clarificationPrompt
-    : (shouldGateChecklist
-        ? `${input.plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`
+    : (shouldEnterConfirmationGate
+        ? (input.confirmationAssistantPrompt?.trim()
+            ? input.confirmationAssistantPrompt.trim()
+            : `${input.plan.assistantPrompt}\n逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。`)
         : (input.normalizationBlocked && input.normalizationAssistantPrompt
             ? input.normalizationAssistantPrompt
             : (input.compileability && !input.compileability.canCompile
@@ -63,7 +68,7 @@ export function buildStartSessionBootstrap(
 
   return {
     status,
-    shouldGateChecklist,
+    shouldEnterConfirmationGate,
     assistantPrompt,
     initialHistory: helper.appendConversationHistory([], input.initialMessage, assistantPrompt),
   }

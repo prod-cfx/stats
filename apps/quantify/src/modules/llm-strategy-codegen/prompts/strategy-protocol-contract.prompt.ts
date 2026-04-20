@@ -111,6 +111,7 @@ export function buildStrategyProtocolTypeContractPrompt(): string {
 
   cachedContract = [
     '// 以下类型由 @ai/shared 的真实 TypeScript 类型定义自动生成',
+    '// 澄清时请围绕 open semantic slots 追问，例如 sideScope 与 basis，而不是 checklist 字段。',
     ...declarations,
     '',
     '// 最终必须满足的绑定（编译器按此约束校验）',

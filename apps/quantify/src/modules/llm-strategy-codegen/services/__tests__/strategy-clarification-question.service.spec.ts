@@ -111,6 +111,20 @@ describe('strategyClarificationQuestionService', () => {
     expect(prompt).not.toContain('轨外3根时是全平还是减仓')
   })
 
+  it('prioritizes semantic-slot wording before legacy checklist completeness wording', () => {
+    const prompt = questionService.build({
+      status: 'NEEDS_CLARIFICATION',
+      items: [
+        { key: 'entry.rules', reason: 'missing_entry_rules', field: 'entryRules', blocking: true, question: '请补充至少一条明确的入场规则。', status: 'pending' },
+        { key: 'semantic.reference.period.entry', reason: 'missing_entry_rules', field: 'reference.period.entry', blocking: true, question: '长期均线是多少？', status: 'pending' },
+      ],
+    })
+
+    expect(prompt).toContain('待确认的指标参数槽位')
+    expect(prompt).toContain('长期均线是多少')
+    expect(prompt).not.toContain('请补充至少一条明确的入场规则')
+  })
+
   it('returns empty prompt when no clarification is needed', () => {
     expect(questionService.build({ status: 'CLEAR', items: [] })).toBe('')
   })
@@ -195,8 +209,9 @@ describe('strategyClarificationQuestionService', () => {
   it('requires the conversation planner prompt to summarize first and keep logicReady false while blockers remain', () => {
     const prompt = buildConversationPlannerSystemPrompt()
 
-    expect(prompt).toContain('你的职责是生成 semantic update candidates 与自然语言交互')
-    expect(prompt).toContain('"semanticUpdates"?: {')
+    expect(prompt).toContain('你的职责是生成 semantic planning notes 与自然语言交互')
+    expect(prompt).toContain('"semanticPatch"?: {')
+    expect(prompt).toContain('assistantPrompt 必须指向未闭合语义槽')
     expect(prompt).not.toContain('标的/周期/风控可后续配置，不应强制先问这些。')
     expect(prompt).not.toContain('交易所、周期、仓位、risk metadata 可后续补充。')
   })

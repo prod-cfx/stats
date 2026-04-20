@@ -27,11 +27,6 @@ export class LlmStrategyCodegenController {
   ): Promise<CodegenSessionResponseDto> {
     return this.service.startCodegen(userId, authorization, {
       initialMessage: dto.initialMessage,
-      symbols: dto.symbols,
-      timeframes: dto.timeframes,
-      entryRules: dto.entryRules,
-      exitRules: dto.exitRules,
-      riskRules: dto.riskRules,
       guideConfig: dto.guideConfig,
     })
   }
@@ -59,11 +54,6 @@ export class LlmStrategyCodegenController {
   ): Promise<CodegenSessionResponseDto> {
     return this.service.continueCodegen(userId, authorization, id, {
       message: dto.message,
-      symbols: dto.symbols,
-      timeframes: dto.timeframes,
-      entryRules: dto.entryRules,
-      exitRules: dto.exitRules,
-      riskRules: dto.riskRules,
       clarificationAnswers: dto.clarificationAnswers,
       guideConfig: dto.guideConfig,
       confirmGenerate: dto.confirmGenerate,
