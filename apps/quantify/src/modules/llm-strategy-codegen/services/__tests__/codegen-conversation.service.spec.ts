@@ -3103,6 +3103,56 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('enters confirm gate from deterministic semantic state when planner returns empty content for a complete strategy', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-empty-planner-complete' })
+    mockAi.chat.mockResolvedValueOnce({ content: '   ' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX 现货 BTCUSDT 3m，3m 内跌 1% 买入，15m 内按入场均价涨 2% 卖出，单笔 10% 仓位，按入场均价亏损 5% 止损、盈利 10% 止盈。',
+    })
+
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.canonicalDigest).toMatch(/^sha256:/)
+    expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
+    expect(result.assistantPrompt).not.toContain('请补充入场和出场条件')
+    expect(result.clarificationState).toEqual(expect.objectContaining({
+      status: 'CLEAR',
+    }))
+  })
+
+  it('enters confirm gate from deterministic semantic state when planner returns invalid json for a complete strategy', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-invalid-json-complete' })
+    mockAi.chat.mockResolvedValueOnce({ content: '{invalid json' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX 现货 BTCUSDT 3m，3m 内跌 1% 买入，15m 内按入场均价涨 2% 卖出，单笔 10% 仓位，按入场均价亏损 5% 止损、盈利 10% 止盈。',
+    })
+
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
+    expect(result.assistantPrompt).not.toContain('请补充入场和出场条件')
+    expect(result.clarificationState).toEqual(expect.objectContaining({
+      status: 'CLEAR',
+    }))
+  })
+
+  it('enters confirm gate from deterministic semantic state when planner transport retries still fail for a complete strategy', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-transport-failed-complete' })
+    mockAi.chat.mockRejectedValue(new Error('planner upstream timeout'))
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX 现货 BTCUSDT 3m，3m 内跌 1% 买入，15m 内按入场均价涨 2% 卖出，单笔 10% 仓位，按入场均价亏损 5% 止损、盈利 10% 止盈。',
+    })
+
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
+    expect(result.assistantPrompt).not.toContain('请补充入场和出场条件')
+    expect(mockAi.chat).toHaveBeenCalledTimes(2)
+  })
+
   it('uses server-side semantic summary instead of planner free text when grid clarification closes into checklist gate', async () => {
     mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
       id: 's-grid-confirmation-copy',
@@ -9684,6 +9734,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(result.status).toBe('DRAFTING')
     expect(result.assistantPrompt).toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).toContain('未识别可编译出场规则')
+    expect(result.assistantPrompt).not.toContain('请补充能明确落成主链规则的入场/出场条件')
   })
 
   it('projects generic execution intent into semantic entry rules and keeps confirmation summary complete', async () => {

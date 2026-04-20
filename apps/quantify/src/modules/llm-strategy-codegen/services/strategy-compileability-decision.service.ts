@@ -20,7 +20,7 @@ export class StrategyCompileabilityDecisionService {
           key: 'compileability',
           reason: 'compileability_blocked',
           priority: 40,
-          question: `当前规则还不能稳定生成脚本：${input.compileability.reasons.join('，')}。请补充能明确落成主链规则的入场/出场条件后再确认逻辑图。`,
+          question: `当前规则还不能稳定生成脚本：${input.compileability.reasons.join('，')}。请按这些阻塞点补充可程序化规则后，我再继续整理逻辑图。`,
         }
       : null
 

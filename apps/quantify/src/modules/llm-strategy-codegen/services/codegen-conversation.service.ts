@@ -20,7 +20,7 @@ import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.in
 import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { getHelperDocs } from '@ai/shared/script-engine/helpers'
-import { HttpStatus, Injectable } from '@nestjs/common'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { defaultEnvAccessor } from '@/common/env/env.accessor'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -173,6 +173,7 @@ function normalizeDirectionalPercentRule(
 
 @Injectable()
 export class CodegenConversationService {
+  private readonly logger = new Logger(CodegenConversationService.name)
   private readonly strictUnsupportedTargets = new Map<string, number>()
   private readonly stateMachine = new CodegenConversationStateMachine()
   private readonly inferredConfirmationClassifier: InferredConfirmationClassifierService
@@ -242,22 +243,24 @@ export class CodegenConversationService {
       checklist,
       { preserveLegacyFallback: false },
     )
-    const plannerStatus: LlmCodegenSessionStatus = this.stateMachine.resolvePlannerStatus({
-      logicReady: plan.logicReady,
-      clarificationState,
-    })
     const normalization = this.buildNormalizationFromSemanticState(initialSemanticState)
-    const initialCanonicalSpec = plannerStatus === 'CONFIRM_GATE'
-      ? this.buildCanonicalSpecForConversation(checklist, normalization, initialSemanticState)
-      : null
-    const compileability = initialCanonicalSpec
-      ? this.evaluateCanonicalCompileability(initialCanonicalSpec)
-      : null
+    const initialCanonicalSpec = this.buildCanonicalSpecForConversation(
+      checklist,
+      normalization,
+      initialSemanticState,
+    )
+    const compileability = this.evaluateCanonicalCompileability(initialCanonicalSpec)
     const decision = this.buildStrategyDecision({
       checklist,
       clarification,
       compileability,
       constraintPack: initialConstraintPack,
+    })
+    const plannerStatus = this.resolveDeterministicStartSessionStatus({
+      clarificationState,
+      normalizationBlocked: normalization.blocked,
+      compileability,
+      decisionKind: decision.kind,
     })
     const nextInitialSemanticSlot = this.findNextOpenSemanticSlot(initialSemanticState)
     const semanticClarificationPrompt = nextInitialSemanticSlot
@@ -3732,7 +3735,7 @@ export class CodegenConversationService {
   }
 
   private buildCompileabilityAssistantPrompt(report: CanonicalCompileabilityReport): string {
-    return `当前规则还不能稳定生成脚本：${report.reasons.join('，')}。请补充能明确落成主链规则的入场/出场条件后再确认逻辑图。`
+    return `当前规则还不能稳定生成脚本：${report.reasons.join('，')}。请按这些阻塞点补充可程序化规则后，我再继续整理逻辑图。`
   }
 
   private buildStrategyDecision(input: {
@@ -3754,6 +3757,20 @@ export class CodegenConversationService {
       ),
       compileability: input.compileability,
     })
+  }
+
+  private resolveDeterministicStartSessionStatus(input: {
+    clarificationState: Pick<StrategyClarificationState, 'status'>
+    normalizationBlocked: boolean
+    compileability: CanonicalCompileabilityReport
+    decisionKind: 'DIRECT_COMPILE' | 'CONFIRM_INFERRED' | 'ASK_CLARIFY'
+  }): LlmCodegenSessionStatus {
+    return input.clarificationState.status === 'CLEAR'
+      && input.decisionKind === 'DIRECT_COMPILE'
+      && !input.normalizationBlocked
+      && input.compileability.canCompile
+      ? 'CONFIRM_GATE'
+      : 'DRAFTING'
   }
 
   private mapClarificationReasonToBlockingReason(reason: StrategyClarificationItem['reason']): string {
@@ -5040,6 +5057,7 @@ export class CodegenConversationService {
 
       const content = result.content?.trim() ?? ''
       if (!content) {
+        this.logPlannerFallback('empty_content')
         return {
           related: true,
           logicReady: false,
@@ -5048,13 +5066,13 @@ export class CodegenConversationService {
       }
 
       try {
-        const parsed = JSON.parse(content) as {
-          related?: unknown
-          logicReady?: unknown
-          assistantPrompt?: unknown
-          logic?: unknown
-          semanticPatch?: unknown
-          semanticUpdates?: unknown
+        const parsedValue = JSON.parse(content) as unknown
+        const parsed = this.readPlannerPayload(parsedValue)
+        const schemaMismatchReasons = this.collectPlannerSchemaMismatchReasons(parsedValue, parsed)
+        if (schemaMismatchReasons.length > 0) {
+          this.logPlannerFallback('schema_mismatch', {
+            fields: schemaMismatchReasons.join(','),
+          })
         }
         const related = typeof parsed.related === 'boolean' ? parsed.related : true
         const logicReady = typeof parsed.logicReady === 'boolean' ? parsed.logicReady : false
@@ -5076,6 +5094,7 @@ export class CodegenConversationService {
           ...(semanticPatch ? { semanticPatch } : {}),
         } satisfies ConversationPlan
       } catch {
+        this.logPlannerFallback('invalid_json', { contentLength: content.length })
         return {
           related: true,
           logicReady: false,
@@ -5091,6 +5110,7 @@ export class CodegenConversationService {
       const messageText = error instanceof Error ? error.message : String(error)
       const nonRetryableModelError = /model\s+not\s+exist|model.*not.*found/i.test(messageText)
       if (nonRetryableModelError) {
+        this.logPlannerFallback('model_not_found', { error: this.summarizePlannerError(error) })
         return {
           related: true,
           logicReady: false,
@@ -5098,9 +5118,15 @@ export class CodegenConversationService {
           logic: this.inferChecklistFromMessage(text),
         }
       }
+      this.logPlannerFallback('transport_failure_retrying', {
+        error: this.summarizePlannerError(error),
+      })
       try {
         return await classifyOnce()
-      } catch {
+      } catch (retryError) {
+        this.logPlannerFallback('transport_failure_retry_exhausted', {
+          error: this.summarizePlannerError(retryError),
+        })
         return {
           related: true,
           logicReady: false,
@@ -5121,6 +5147,78 @@ export class CodegenConversationService {
     }
 
     return this.projectLegacyChecklistFromSemanticState(semanticState, currentLogic)
+  }
+
+  private readPlannerPayload(value: unknown): {
+    related?: unknown
+    logicReady?: unknown
+    assistantPrompt?: unknown
+    logic?: unknown
+    semanticPatch?: unknown
+    semanticUpdates?: unknown
+  } {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return {}
+    }
+
+    return value as {
+      related?: unknown
+      logicReady?: unknown
+      assistantPrompt?: unknown
+      logic?: unknown
+      semanticPatch?: unknown
+      semanticUpdates?: unknown
+    }
+  }
+
+  private collectPlannerSchemaMismatchReasons(
+    rawValue: unknown,
+    parsed: {
+      related?: unknown
+      logicReady?: unknown
+      assistantPrompt?: unknown
+      logic?: unknown
+      semanticPatch?: unknown
+      semanticUpdates?: unknown
+    },
+  ): string[] {
+    const reasons: string[] = []
+    if (!rawValue || typeof rawValue !== 'object' || Array.isArray(rawValue)) {
+      reasons.push('root')
+      return reasons
+    }
+    if (parsed.related !== undefined && typeof parsed.related !== 'boolean') {
+      reasons.push('related')
+    }
+    if (parsed.logicReady !== undefined && typeof parsed.logicReady !== 'boolean') {
+      reasons.push('logicReady')
+    }
+    if (parsed.assistantPrompt !== undefined && typeof parsed.assistantPrompt !== 'string') {
+      reasons.push('assistantPrompt')
+    }
+    if (parsed.logic !== undefined && (!parsed.logic || typeof parsed.logic !== 'object' || Array.isArray(parsed.logic))) {
+      reasons.push('logic')
+    }
+
+    return reasons
+  }
+
+  private summarizePlannerError(error: unknown): string {
+    const message = error instanceof Error ? error.message : String(error)
+    return message.trim().slice(0, 160)
+  }
+
+  private logPlannerFallback(
+    reason: 'empty_content' | 'schema_mismatch' | 'invalid_json' | 'model_not_found' | 'transport_failure_retrying' | 'transport_failure_retry_exhausted',
+    context: Record<string, string | number | boolean | undefined> = {},
+  ): void {
+    const contextSuffix = Object.entries(context)
+      .filter(([, value]) => value !== undefined && value !== '')
+      .map(([key, value]) => `${key}=${String(value)}`)
+      .join(' ')
+    this.logger.warn(
+      `event=codegen_conversation_planner_fallback reason=${reason}${contextSuffix ? ` ${contextSuffix}` : ''}`,
+    )
   }
 
   private buildSemanticStateFromPlannerPatch(
