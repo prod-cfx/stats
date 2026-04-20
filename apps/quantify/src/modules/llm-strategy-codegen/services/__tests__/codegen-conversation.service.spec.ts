@@ -3155,8 +3155,16 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(result.status).toBe('CONFIRM_GATE')
     expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('reason=schema_mismatch'))
-    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('fields=related,logicReady,assistantPrompt,semanticPatch'))
+    const warnMessages = warnSpy.mock.calls.map(call => String(call[0] ?? ''))
+    expect(warnMessages).toEqual(expect.arrayContaining([
+      expect.stringContaining('reason=schema_mismatch'),
+    ]))
+    const schemaMismatchMessage = warnMessages.find(message => message.includes('reason=schema_mismatch')) ?? ''
+    expect(schemaMismatchMessage).toContain('fields=')
+    expect(schemaMismatchMessage).toContain('related')
+    expect(schemaMismatchMessage).toContain('logicReady')
+    expect(schemaMismatchMessage).toContain('assistantPrompt')
+    expect(schemaMismatchMessage).toContain('semanticPatch')
   })
 
   it('enters confirm gate from deterministic semantic state when planner transport retries still fail for a complete strategy', async () => {
@@ -3172,6 +3180,25 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
     expect(result.assistantPrompt).not.toContain('请补充入场和出场条件')
     expect(mockAi.chat).toHaveBeenCalledTimes(2)
+  })
+
+  it('classifies model_not_found planner fallback in startSession without surfacing it to the user', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-model-not-found-complete' })
+    mockAi.chat.mockRejectedValueOnce(new Error('model not exist: planner-model'))
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX 现货 BTCUSDT 3m，3m 内跌 1% 买入，15m 内按入场均价涨 2% 卖出，单笔 10% 仓位，按入场均价亏损 5% 止损、盈利 10% 止盈。',
+    })
+
+    const warnMessages = warnSpy.mock.calls.map(call => String(call[0] ?? ''))
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
+    expect(result.assistantPrompt).not.toContain('model')
+    expect(warnMessages).toEqual(expect.arrayContaining([
+      expect.stringContaining('reason=model_not_found'),
+    ]))
   })
 
   it('uses server-side semantic summary instead of planner free text when grid clarification closes into checklist gate', async () => {

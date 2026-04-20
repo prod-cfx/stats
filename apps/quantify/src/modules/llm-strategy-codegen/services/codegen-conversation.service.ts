@@ -256,7 +256,7 @@ export class CodegenConversationService {
       compileability,
       constraintPack: initialConstraintPack,
     })
-    const plannerStatus = this.resolveDeterministicStartSessionStatus({
+    const initialStatus = this.resolveInitialStartSessionStatus({
       clarificationState,
       normalizationBlocked: normalization.blocked,
       compileability,
@@ -276,12 +276,12 @@ export class CodegenConversationService {
       : (semanticClarificationPrompt
           || clarification.clarificationPrompt
           || this.clarificationQuestion.build(clarificationState))
-    const confirmationAssistantPrompt = plannerStatus === 'CONFIRM_GATE'
+    const confirmationAssistantPrompt = initialStatus === 'CONFIRM_GATE'
       ? this.buildChecklistGateAssistantPrompt(checklist, normalization.normalizedIntent)
       : null
     const bootstrap = buildStartSessionBootstrap({
       initialMessage: dto.initialMessage,
-      plannerStatus,
+      initialStatus,
       clarificationState,
       clarificationPrompt,
       confirmationAssistantPrompt,
@@ -3759,7 +3759,7 @@ export class CodegenConversationService {
     })
   }
 
-  private resolveDeterministicStartSessionStatus(input: {
+  private resolveInitialStartSessionStatus(input: {
     clarificationState: Pick<StrategyClarificationState, 'status'>
     normalizationBlocked: boolean
     compileability: CanonicalCompileabilityReport

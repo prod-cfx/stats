@@ -4,7 +4,7 @@ describe('buildStartSessionBootstrap', () => {
   it('prefers clarification prompt and appends normalized history', () => {
     const result = buildStartSessionBootstrap({
       initialMessage: ' 帮我做个策略 ',
-      plannerStatus: 'DRAFTING',
+      initialStatus: 'DRAFTING',
       clarificationState: {
         status: 'NEEDS_CLARIFICATION',
         items: [{
@@ -34,7 +34,7 @@ describe('buildStartSessionBootstrap', () => {
   it('uses confirm gate confirmation prompt when compileable', () => {
     const result = buildStartSessionBootstrap({
       initialMessage: '确认一下',
-      plannerStatus: 'CONFIRM_GATE',
+      initialStatus: 'CONFIRM_GATE',
       clarificationState: {
         status: 'CLEAR',
         items: [],
@@ -61,7 +61,7 @@ describe('buildStartSessionBootstrap', () => {
   it('falls back to compileability prompt when confirm gate cannot compile', () => {
     const result = buildStartSessionBootstrap({
       initialMessage: '确认一下',
-      plannerStatus: 'CONFIRM_GATE',
+      initialStatus: 'CONFIRM_GATE',
       clarificationState: {
         status: 'CLEAR',
         items: [],
