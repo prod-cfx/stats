@@ -7379,7 +7379,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
-  it('moves to confirm gate when server-side semantic state is complete and planner marks logic ready', async () => {
+  it('stays in drafting when server-side semantic state still needs clarification even if planner marks logic ready', async () => {
     mockRepo.findById.mockResolvedValue({
       id: 's4',
       userId: 'u1',
