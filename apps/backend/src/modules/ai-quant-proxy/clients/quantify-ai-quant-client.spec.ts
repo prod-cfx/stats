@@ -532,14 +532,13 @@ describe('quantifyAiQuantClient', () => {
 
   it('converts request timeouts into QuantifyClientError without leaking raw Error construction', async () => {
     jest.useFakeTimers()
-    const contract = createContractMock()
-    contract.LiveLlmStrategyCodegenController_getSession.mockImplementation((config?: { signal?: AbortSignal }) => {
-      const signal = config?.signal
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockImplementation((_, config) => {
+      const signal = (config as { signal?: AbortSignal } | undefined)?.signal
       return new Promise((_, reject) => {
         signal?.addEventListener('abort', () => reject(signal.reason), { once: true })
       })
     })
-    mockedCreateQuantifyApiClient.mockReturnValue(contract as never)
+    mockedCreateQuantifyApiClient.mockReturnValue(createContractMock() as never)
 
     const envWithTimeout = {
       getString: jest.fn((key: string) => key === 'QUANTIFY_API_BASE_URL' ? 'http://quantify.test/api/v1' : undefined),
@@ -564,18 +563,18 @@ describe('quantifyAiQuantClient', () => {
     await jest.advanceTimersByTimeAsync(1000)
 
     await assertion
+    fetchSpy.mockRestore()
   })
 
   it('prefers per-request timeout overrides over the global timeout setting', async () => {
     jest.useFakeTimers()
-    const contract = createContractMock()
-    contract.LiveLlmStrategyCodegenController_getSession.mockImplementation((config?: { signal?: AbortSignal }) => {
-      const signal = config?.signal
+    const fetchSpy = jest.spyOn(globalThis, 'fetch').mockImplementation((_, config) => {
+      const signal = (config as { signal?: AbortSignal } | undefined)?.signal
       return new Promise((_, reject) => {
         signal?.addEventListener('abort', () => reject(signal.reason), { once: true })
       })
     })
-    mockedCreateQuantifyApiClient.mockReturnValue(contract as never)
+    mockedCreateQuantifyApiClient.mockReturnValue(createContractMock() as never)
 
     const envWithTimeout = {
       getString: jest.fn((key: string) => key === 'QUANTIFY_API_BASE_URL' ? 'http://quantify.test/api/v1' : undefined),
@@ -601,5 +600,6 @@ describe('quantifyAiQuantClient', () => {
     await jest.advanceTimersByTimeAsync(2500)
 
     await assertion
+    fetchSpy.mockRestore()
   })
 })
