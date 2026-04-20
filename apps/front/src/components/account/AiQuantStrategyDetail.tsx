@@ -240,6 +240,15 @@ export function AiQuantStrategyDetail({
         </section>
       )}
 
+      {strategy.compatibilityMetadata?.invalidBinding && (
+        <section className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+          <p className="font-semibold text-rose-100">快照绑定已失效</p>
+          <p className="mt-1">
+            当前部署实例的运行时绑定与快照真相不一致，已自动隐藏执行配置与运行时状态。请重新发布并重新部署。
+          </p>
+        </section>
+      )}
+
       {strategy.runtimeExecutionStates && strategy.runtimeExecutionStates.length > 0 && (
         <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
           <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">运行时执行语义状态</h2>

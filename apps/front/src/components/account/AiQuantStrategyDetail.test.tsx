@@ -272,4 +272,44 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).not.toContain('运行时执行语义状态')
     expect(container.textContent).toContain('需要重新发布')
   })
+
+  it('shows an explicit invalid binding warning when runtime truth is suppressed', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={{
+            id: 'inst-invalid-binding',
+            name: 'Invalid binding strategy',
+            status: 'stopped',
+            exchange: 'okx',
+            symbol: 'BTC-USDT-SWAP',
+            timeframe: '15m',
+            positionPct: 10,
+            initialCapital: 10000,
+            metrics: { returnPct: 0, maxDrawdownPct: 0, winRatePct: 0, tradeCount: 0 },
+            equitySeries: [],
+            timeline: [],
+            paramSchema: null,
+            paramValues: null,
+            schemaVersion: null,
+            supportsDynamicParams: false,
+            runtimeExecutionStates: [],
+            compatibilityMetadata: {
+              isLegacySnapshot: false,
+              missingBacktestConfigDefaults: false,
+              missingDeploymentExecutionDefaults: false,
+              missingDeploymentExecutionConstraints: false,
+              requiresRepublishForBacktest: false,
+              requiresRepublishForDeploy: false,
+              invalidBinding: true,
+            },
+          }}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('快照绑定已失效')
+    expect(container.textContent).toContain('请重新发布并重新部署')
+  })
 })

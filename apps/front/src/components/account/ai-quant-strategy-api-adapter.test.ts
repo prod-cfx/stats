@@ -754,4 +754,68 @@ describe('ai-quant-strategy-api-adapter', () => {
     expect(legacy.runtimeExecutionStates).toEqual([])
   })
 
+  it('preserves invalidBinding compatibility metadata for detail rendering', () => {
+    const record = mapAccountStrategyDetailToRecord({
+      id: 'inst-invalid-binding',
+      name: 'invalid binding',
+      status: 'stopped',
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      positionPct: 10,
+      isSubscribed: true,
+      metrics: {
+        returnPct: 0,
+        maxDrawdownPct: 0,
+        winRatePct: 0,
+        tradeCount: 0,
+      },
+      updatedAt: '2026-03-20T00:00:00.000Z',
+      totalPnl: 0,
+      todayPnl: 0,
+      equitySeries: [],
+      snapshot: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+        publishedSnapshotId: 'snapshot-invalid-1',
+        snapshotHash: 'snapshot-invalid-hash-1',
+        paramSchema: null,
+        paramValues: null,
+        schemaVersion: null,
+        compatibilityMetadata: {
+          isLegacySnapshot: false,
+          missingBacktestConfigDefaults: false,
+          missingDeploymentExecutionDefaults: false,
+          missingDeploymentExecutionConstraints: false,
+          requiresRepublishForBacktest: false,
+          requiresRepublishForDeploy: false,
+          invalidBinding: true,
+        },
+      },
+      timeline: [],
+      runtimeExecutionStates: [],
+      accountOverview: {
+        initialBalance: 10000,
+        totalEquity: 10000,
+        availableBalance: 10000,
+        totalPnl: 0,
+        todayPnl: 0,
+        baseCurrency: 'USDT',
+      },
+      positionOverview: {
+        openPositionsCount: 0,
+        closedPositionsCount: 0,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 0,
+      },
+      latestOrders: [],
+    } as any)
+
+    expect(record.compatibilityMetadata).toEqual(expect.objectContaining({
+      invalidBinding: true,
+    }))
+  })
+
 })

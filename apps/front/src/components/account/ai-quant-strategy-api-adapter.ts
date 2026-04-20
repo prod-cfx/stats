@@ -119,6 +119,7 @@ function normalizeCompatibilityMetadata(
     missingDeploymentExecutionConstraints: metadata.missingDeploymentExecutionConstraints === true,
     requiresRepublishForBacktest: metadata.requiresRepublishForBacktest === true,
     requiresRepublishForDeploy: metadata.requiresRepublishForDeploy === true,
+    ...(metadata.invalidBinding === true ? { invalidBinding: true } : {}),
   }
 }
 

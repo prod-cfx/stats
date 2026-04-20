@@ -80,6 +80,7 @@ export interface AiQuantStrategyRecord {
     missingDeploymentExecutionConstraints: boolean
     requiresRepublishForBacktest: boolean
     requiresRepublishForDeploy: boolean
+    invalidBinding?: boolean | null
   } | null
   consistencySummary?: {
     isConsistent: boolean

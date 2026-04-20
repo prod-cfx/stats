@@ -228,6 +228,7 @@ export interface AccountAiQuantSnapshotCompatibilityMetadata {
   missingDeploymentExecutionConstraints: boolean
   requiresRepublishForBacktest: boolean
   requiresRepublishForDeploy: boolean
+  invalidBinding?: boolean | null
 }
 
 export interface AccountAiQuantConsistencySummary {
