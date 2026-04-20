@@ -20,6 +20,22 @@ export class SemanticStateProjectionService {
           ].join(' ')
         }
 
+        if (trigger.key === 'execution.on_start') {
+          return trigger.phase === 'entry'
+            ? '入场：立即开始时市价执行一次'
+            : '出场：立即开始时市价执行一次'
+        }
+
+        if (trigger.key === 'price.percent_change') {
+          const basis = typeof trigger.params.basis === 'string' ? trigger.params.basis : 'prev_close'
+          const basisLabel = basis === 'entry_avg_price' || basis === 'position_pnl'
+            ? '开仓均价'
+            : '前收盘'
+          const direction = typeof trigger.params.valuePct === 'number' && trigger.params.valuePct > 0 ? '上涨' : '下跌'
+          const pctText = typeof trigger.params.valuePct === 'number' ? `${Math.abs(trigger.params.valuePct)}%` : '阈值待补充'
+          return `${trigger.phase === 'entry' ? '入场' : '出场'}：价格相对${basisLabel}${direction}${pctText}`
+        }
+
         if (trigger.key === 'indicator.above' && trigger.params['reference.period']) {
           return `入场：突破 MA${trigger.params['reference.period']}`
         }

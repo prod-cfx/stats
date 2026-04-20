@@ -188,6 +188,80 @@ describe('canonicalSpecBuilderService', () => {
     ]))
   })
 
+  it('does not treat a bare asset symbol as a canonical market symbol', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      symbols: ['BTC'],
+      timeframes: ['1h'],
+      entryRules: ['3m 内下跌 1% 买入'],
+      exitRules: ['15m 内上涨 2% 卖出'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'spot',
+        positionPct: 10,
+      },
+    })
+
+    expect(spec.market.symbol).toBeNull()
+  })
+
+  it('builds canonical spec from generic execution triggers without falling back to compatibility placeholders', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.buildFromNormalizedIntent({
+      market: { exchange: 'okx', marketType: 'spot', defaultTimeframe: '1h' },
+      symbols: ['ORDIUSDT'],
+      timeframes: ['1h'],
+    }, {
+      families: ['single-leg'],
+      triggers: [
+        {
+          key: 'execution.on_start',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
+          closureStatus: 'closed',
+          unresolvedSlots: [],
+        },
+        {
+          key: 'price.percent_change',
+          phase: 'exit',
+          sideScope: 'long',
+          params: { valuePct: 1, basis: 'prev_close', window: '1h' },
+          closureStatus: 'closed',
+          unresolvedSlots: [],
+        },
+      ],
+      actions: [{ key: 'open_long' }, { key: 'close_long' }],
+      risk: [],
+      position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_only' },
+      unresolved: [],
+      normalizationNotes: [],
+    })
+
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'long',
+        condition: expect.objectContaining({
+          key: 'execution.on_start',
+        }),
+        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        sideScope: 'long',
+        condition: expect.objectContaining({
+          key: 'price.change_pct',
+          op: 'GTE',
+          value: 0.01,
+        }),
+        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+      }),
+    ]))
+  })
+
   it('preserves price-vs-single-ma breakout semantics for indicator.above/below normalized triggers', () => {
     const service = new CanonicalSpecBuilderService()
 

@@ -8,6 +8,7 @@ export const DEFAULT_INDICATOR_PARAMS = {
 } as const
 
 export const CANONICAL_RULE_KEYS = {
+  executionOnStart: 'execution.on_start',
   bollingerUpperBreak: 'bollinger.upper_break',
   bollingerLowerBreak: 'bollinger.lower_break',
   bollingerMiddleRevert: 'bollinger.middle_revert',
@@ -26,6 +27,7 @@ export const CANONICAL_RULE_KEYS = {
 export type CanonicalRuleKeyValue = (typeof CANONICAL_RULE_KEYS)[keyof typeof CANONICAL_RULE_KEYS]
 
 export const FIRST_WAVE_TRIGGER_ATOMS = [
+  'execution.on_start',
   'price.percent_change',
   'price.breakout_up',
   'price.breakout_down',

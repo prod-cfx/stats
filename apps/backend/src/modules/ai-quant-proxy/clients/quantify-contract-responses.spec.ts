@@ -78,9 +78,12 @@ describe('quantify contract generated responses', () => {
   it('keeps generated backtesting request schemas aligned with expanded market timeframes', () => {
     const source = readFileSync(generatedPath, 'utf8')
 
-    expect(source).toContain("baseTimeframe: z.enum(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w'])")
-    expect(source).toContain("stateTimeframes: z.array(z.enum(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w']))")
-    expect(source).toContain("timeframe: z.enum(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w'])")
+    const requiredTimeframeLiteral = "'1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w'"
+
+    expect(source).toContain('baseTimeframe: z.enum([')
+    expect(source).toContain('stateTimeframes: z.array(')
+    expect(source).toContain('timeframe: z.enum([')
+    expect(source).toContain(requiredTimeframeLiteral)
   })
 
   it('allows spot backtest contracts to omit request leverage and accept nullable job leverage', () => {
@@ -88,15 +91,19 @@ describe('quantify contract generated responses', () => {
 
     const runDtoStart = source.indexOf('const RunBacktestDto = z')
     const jobSummaryStart = source.indexOf('const BacktestJobInputSummaryDto = z')
+    const backtestSummaryStart = source.indexOf('const BacktestJobSummaryDto = z')
 
     expect(runDtoStart).toBeGreaterThanOrEqual(0)
     expect(jobSummaryStart).toBeGreaterThanOrEqual(0)
+    expect(backtestSummaryStart).toBeGreaterThanOrEqual(0)
 
     const runDtoSnippet = source.slice(runDtoStart, runDtoStart + 500)
     const jobSummarySnippet = source.slice(jobSummaryStart, jobSummaryStart + 500)
+    const backtestSummarySnippet = source.slice(backtestSummaryStart, backtestSummaryStart + 400)
 
     expect(runDtoSnippet).toContain('leverage: z.number().optional()')
     expect(jobSummarySnippet).toContain('leverage: z.number().nullish()')
+    expect(backtestSummarySnippet).toContain('profitFactor: z.number().nullable()')
   })
 
   it('keeps nullable AI Quant codegen session fields nullable in the generated contracts', () => {

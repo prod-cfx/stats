@@ -194,6 +194,78 @@ describe('canonicalSpecV2IrCompilerService', () => {
     expect(result.ir.market.timeframes).toEqual(['3m', '15m'])
   })
 
+  it('compiles generic execution-on-start entry rules into deterministic runtime predicates', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const result = compiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'ORDIUSDT',
+          marketType: 'spot',
+          timeframe: '1h',
+        },
+        indicators: [],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['1h'],
+        },
+        rules: [
+          {
+            id: 'entry-on-start',
+            phase: 'entry',
+            priority: 200,
+            sideScope: 'long',
+            condition: {
+              kind: 'atom',
+              key: 'execution.on_start',
+              semanticScope: 'market',
+            },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.1 } }],
+          },
+          {
+            id: 'exit-prev-close-rise',
+            phase: 'exit',
+            priority: 100,
+            sideScope: 'long',
+            condition: {
+              kind: 'atom',
+              key: 'price.change_pct',
+              semanticScope: 'market',
+              op: 'GTE',
+              value: 0.01,
+              params: { timeframe: '1h', lookbackBars: 1, basis: 'prev_close' },
+            },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+      } as any,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'ORDIUSDT',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+    })
+
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'BAR_INDEX' }),
+      expect.objectContaining({ kind: 'PRICE_CHANGE_PCT', timeframe: '1h' }),
+    ]))
+    expect(result.ir.ruleBlocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'entry-on-start',
+        phase: 'entry',
+        actions: [expect.objectContaining({ kind: 'OPEN_LONG' })],
+      }),
+    ]))
+  })
+
   it('compiles bollinger outside-band reduce rule with okx perp market metadata', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 
@@ -420,14 +492,15 @@ describe('canonicalSpecV2IrCompilerService', () => {
         kind: 'CROSS_UNDER',
         args: ['close_15m', 'mid_band_20_2_15m'],
       }),
-    ]))
-    expect(result.ir.signalCatalog.predicates).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: 'OR' }),
+      expect.objectContaining({
+        kind: 'OR',
+        args: ['exit_short_middle_middle_over', 'exit_short_middle_middle_under'],
+      }),
     ]))
     expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
       expect.objectContaining({
         phase: 'exit',
-        operator: 'CROSS_UNDER(CLOSE,MID_BAND(CLOSE,20,2))',
+        operator: 'OR(CROSS_OVER(CLOSE,MID_BAND(CLOSE,20,2)),CROSS_UNDER(CLOSE,MID_BAND(CLOSE,20,2)))',
       }),
     ]))
     expect(result.ir.ruleBlocks).toEqual(expect.arrayContaining([

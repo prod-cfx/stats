@@ -15,6 +15,7 @@ import {
   resolveRequiredRuleTimeframes,
   resolveRulePhaseDefaultTimeframe,
 } from './checklist-compat'
+import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 import { StrategyIrCanonicalAdapterService } from './strategy-ir-canonical-adapter.service'
 
@@ -569,7 +570,7 @@ export class CanonicalSpecBuilderService {
     const market = checklist.market && typeof checklist.market === 'object' && !Array.isArray(checklist.market)
       ? checklist.market as Record<string, unknown>
       : null
-    const rawSymbol = typeof symbols[0] === 'string' ? symbols[0].trim().toUpperCase() : ''
+    const rawSymbol = typeof symbols[0] === 'string' ? canonicalizeStrategySymbolInput(symbols[0]) ?? '' : ''
     const rawTimeframe = resolveRulePhaseDefaultTimeframe(
       ruleDrafts.entry,
       resolveChecklistDefaultTimeframe(checklist as Parameters<typeof resolveChecklistDefaultTimeframe>[0]),
@@ -1447,6 +1448,12 @@ export class CanonicalSpecBuilderService {
     defaultTimeframe: string | null,
   ): CanonicalConditionNode | null {
     switch (trigger.key) {
+      case 'execution.on_start':
+        return {
+          kind: 'atom',
+          key: CANONICAL_RULE_KEYS.executionOnStart,
+          semanticScope: 'market',
+        }
       case 'price.percent_change': {
         const valuePct = typeof trigger.params.valuePct === 'number' ? trigger.params.valuePct : null
         if (valuePct === null || !Number.isFinite(valuePct) || valuePct === 0) {

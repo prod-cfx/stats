@@ -1,5 +1,43 @@
 export type MarketScopeField = 'exchange' | 'marketType' | 'symbol' | 'timeframe'
 
+const KNOWN_QUOTES = [
+  'USDT',
+  'USDC',
+  'USD',
+  'FDUSD',
+  'TUSD',
+  'BUSD',
+] as const
+
+export function canonicalizeStrategySymbolInput(
+  value: string | null | undefined,
+): string | null {
+  if (typeof value !== 'string') return null
+
+  const trimmed = value.trim()
+  if (!trimmed) return null
+
+  const upper = trimmed
+    .toUpperCase()
+    .replace(/:SPOT$/u, '')
+    .replace(/:PERP$/u, '')
+    .replace(/-SWAP$/u, '')
+    .replace(/[/-]/gu, '')
+
+  for (const quote of KNOWN_QUOTES) {
+    if (!upper.endsWith(quote) || upper.length <= quote.length) {
+      continue
+    }
+    const base = upper.slice(0, -quote.length)
+    if (!/^[A-Z0-9]{2,20}$/u.test(base)) {
+      continue
+    }
+    return `${base}${quote}`
+  }
+
+  return null
+}
+
 export function normalizeMarketScopeValue(
   field: MarketScopeField,
   value: string | null | undefined,
@@ -9,7 +47,7 @@ export function normalizeMarketScopeValue(
   const trimmed = value.trim()
   if (!trimmed) return null
 
-  if (field === 'symbol') return trimmed.toUpperCase()
+  if (field === 'symbol') return canonicalizeStrategySymbolInput(trimmed)
   return trimmed.toLowerCase()
 }
 

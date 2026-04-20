@@ -3846,6 +3846,48 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('keeps asking for a complete trading pair when planner only returns a base asset symbol', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '策略逻辑已完整，请确认逻辑图。',
+        logic: {
+          symbols: ['BTC'],
+          timeframes: ['3m', '15m'],
+          entryRules: ['3分钟之内跌1%买入'],
+          exitRules: ['15分钟之内涨2%卖出'],
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'spot',
+            positionPct: 10,
+            stopLossPct: 5,
+            takeProfitPct: 10,
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-base-asset-only' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金 止损5% 止盈10%',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('请确认策略交易标的')
+    expect(result.assistantPrompt).not.toContain('请确认是否按此逻辑生成')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      semanticState: expect.objectContaining({
+        contextSlots: expect.objectContaining({
+          symbol: expect.objectContaining({
+            status: 'open',
+          }),
+        }),
+      }),
+    }))
+  })
+
   it('extracts generic moving-average breakout rules for the historical MA baseline sentence', () => {
     const inferred = (service as any).inferChecklistFromMessage(
       '当价格突破一条长期均线时买入，跌破短期均线时卖出',
@@ -9644,7 +9686,15 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).toContain('未识别可编译入场规则')
   })
 
-  it('keeps drafting when follow-up logic closes semantic slots but still only has a generic immediate-entry placeholder', async () => {
+  it('projects generic execution intent into semantic entry rules and keeps confirmation summary complete', async () => {
+    const localChecklist = (service as any).inferChecklistFromMessage('立即开始时市价买入一次')
+    expect(localChecklist.entryRules).toEqual(['立即开始时市价买入一次'])
+    const localProjectedChecklist = (service as any).projectLegacyChecklistFromSemanticState(
+      (service as any).buildFallbackSemanticState(localChecklist),
+      localChecklist,
+    )
+    expect(localProjectedChecklist.entryRules).toEqual(['立即开始时市价买入一次'])
+
     mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
       id: 's-immediate-entry-placeholder',
       userId: 'u1',
@@ -9694,11 +9744,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const result = await service.continueSession('s-immediate-entry-placeholder', {
       userId: 'u1',
-      message: '立即市价买入',
+      message: '立即开始时市价买入一次',
     })
 
-    expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('未识别可编译入场规则')
-    expect(result.assistantPrompt).not.toContain('请确认是否按此逻辑生成')
+    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.assistantPrompt).toContain('入场：1h 立即开始时市价买入一次')
+    expect(result.assistantPrompt).toContain('出场：1h 当前K线收盘价相对于上一根K线收盘价上涨≥1%时卖出平仓')
+    expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
   })
 })

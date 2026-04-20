@@ -21,8 +21,8 @@ export class BacktestJobSummaryDto {
   @ApiProperty()
   winRate!: number
 
-  @ApiProperty()
-  profitFactor!: number
+  @ApiProperty({ nullable: true })
+  profitFactor!: number | null
 
   @ApiProperty()
   totalTrades!: number
@@ -58,7 +58,7 @@ export class BacktestJobInputSummaryDto {
   @ApiProperty()
   initialCash!: number
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ nullable: true })
   leverage?: number | null
 
   @ApiProperty({ enum: ['spot', 'perp'] })
