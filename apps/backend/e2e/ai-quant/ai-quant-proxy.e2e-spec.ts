@@ -97,11 +97,6 @@ describe('AI Quant proxy HTTP (E2E)', () => {
 
     expect(quantifyClient.startCodegen).toHaveBeenCalledWith({
       initialMessage: 'build me a strategy',
-      symbols: ['BTCUSDT'],
-      timeframes: undefined,
-      entryRules: undefined,
-      exitRules: undefined,
-      riskRules: undefined,
       guideConfig: undefined,
     }, expect.objectContaining({
       userId: 'e2e-user-id',
