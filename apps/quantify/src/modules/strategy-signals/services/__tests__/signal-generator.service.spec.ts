@@ -193,7 +193,10 @@ describe('signalGeneratorService coordinator behavior', () => {
       takeProfit: 110,
       rawResponse: '{"direction":"BUY"}',
     })
-    const createSignal = jest.spyOn(service as any, 'createSignalWithCooldownAndLock').mockResolvedValue(undefined)
+    const createSignal = jest.spyOn(service as any, 'createSignalWithCooldownAndLock').mockResolvedValue({
+      created: true,
+      signalId: 'signal-1',
+    })
     jest.spyOn(service as any, 'isStrategyLocked').mockResolvedValue(false)
     jest.spyOn(service as any, 'resetStrategyFailure').mockResolvedValue(undefined)
 
@@ -244,6 +247,7 @@ describe('signalGeneratorService coordinator behavior', () => {
         publishedSnapshotId: 'snapshot-1',
       }),
       false,
+      undefined,
     )
   })
 
@@ -296,10 +300,23 @@ describe('signalGeneratorService coordinator behavior', () => {
       takeProfit: 110,
       rawResponse: '{"direction":"BUY"}',
     })
-    jest.spyOn(service as any, 'createSignalWithCooldownAndLock').mockResolvedValue({
-      created: true,
-      signalId: 'signal-1',
-    })
+    jest.spyOn(service as any, 'createSignalWithCooldownAndLock').mockImplementation(
+      async (
+        _instance: unknown,
+        _strategy: unknown,
+        _group: unknown,
+        _config: unknown,
+        _indicatorValues: unknown,
+        _latestIndicatorTime: unknown,
+        _aiPayload: unknown,
+        _runtimeProvenance: unknown,
+        _skipCooldown: boolean,
+        onCreatedInTransaction?: () => Promise<void>,
+      ) => {
+        await onCreatedInTransaction?.()
+        return { created: true, signalId: 'signal-1' }
+      },
+    )
     jest.spyOn(service as any, 'resetStrategyFailure').mockResolvedValue(undefined)
 
     await (service as any).processStrategyInstance(

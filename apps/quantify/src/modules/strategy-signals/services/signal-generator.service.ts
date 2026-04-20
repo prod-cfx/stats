@@ -618,6 +618,7 @@ export class SignalGeneratorService {
     aiPayload: AiSignalPayload & { rawResponse: string },
     runtimeProvenance: Prisma.JsonObject,
     skipCooldown = false,
+    onCreatedInTransaction?: (signalId: string) => Promise<void>,
   ) {
     return this.persistenceStage.createSignalWithCooldownAndLock(
       instance,
@@ -629,6 +630,7 @@ export class SignalGeneratorService {
       aiPayload,
       runtimeProvenance,
       skipCooldown,
+      onCreatedInTransaction,
     )
   }
 
@@ -1094,7 +1096,7 @@ export class SignalGeneratorService {
 
     await this.resetStrategyFailure(instance.id)
 
-    const signalResult = await this.createSignalWithCooldownAndLock(
+    await this.createSignalWithCooldownAndLock(
       instance,
       strategy,
       {
@@ -1108,14 +1110,16 @@ export class SignalGeneratorService {
       aiPayload,
       runtimeProvenance,
       options.skipCooldown ?? false,
+      activeRuntimeState && this.runtimeExecutionStateRepository
+        ? async () => {
+            await this.runtimeExecutionStateRepository!.markConsumed({
+              strategyInstanceId: activeRuntimeState.strategyInstanceId,
+              publishedSnapshotId: activeRuntimeState.publishedSnapshotId,
+              executionSemanticKey: activeRuntimeState.executionSemanticKey,
+            })
+          }
+        : undefined,
     )
-    if (signalResult?.created && signalResult.signalId && activeRuntimeState && this.runtimeExecutionStateRepository) {
-      await this.runtimeExecutionStateRepository.markConsumed({
-        strategyInstanceId: activeRuntimeState.strategyInstanceId,
-        publishedSnapshotId: activeRuntimeState.publishedSnapshotId,
-        executionSemanticKey: activeRuntimeState.executionSemanticKey,
-      })
-    }
   }
 
   private async resolveRuntimeStrategySource(

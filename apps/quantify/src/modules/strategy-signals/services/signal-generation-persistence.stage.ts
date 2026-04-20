@@ -66,6 +66,7 @@ export class SignalGenerationPersistenceStage {
     aiPayload: AiSignalPayload & { rawResponse: string },
     runtimeProvenance: Prisma.JsonObject,
     skipCooldown = false,
+    onCreatedInTransaction?: (signalId: string) => Promise<void>,
   ): Promise<{ created: boolean; signalId: string | null }> {
     const cooldownSince = new Date(Date.now() - config.cooldownMinutes * 60 * 1000)
 
@@ -111,6 +112,10 @@ export class SignalGenerationPersistenceStage {
           runtimeProvenance,
         },
       })
+
+      if (onCreatedInTransaction) {
+        await onCreatedInTransaction(signal.id)
+      }
 
       return { created: true as const, signalId: signal.id }
     })
