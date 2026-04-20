@@ -26,6 +26,8 @@ import { StrategyInstanceStatsService } from '@/modules/strategy-instances/servi
 import { StrategyInstancesService } from '@/modules/strategy-instances/services/strategy-instances.service'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '@/modules/strategy-signals/types/strategy-signals-config.type'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { StrategyRuntimeExecutionStateService } from '@/modules/strategy-signals/services/strategy-runtime-execution-state.service'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { TradingService } from '@/modules/trading/trading.service'
 import { Prisma } from '@/prisma/prisma.types'
 import { AccountStrategyAction } from '../dto/account-strategy-action.dto'
@@ -75,6 +77,7 @@ export class AccountStrategyViewService {
     @Optional() private readonly configService?: ConfigService,
     @Optional() private readonly tradingService?: TradingService,
     @Optional() private readonly publishedSnapshotsRepository?: PublishedStrategySnapshotsRepository,
+    @Optional() private readonly runtimeExecutionStateService?: StrategyRuntimeExecutionStateService,
   ) {}
 
   async listStrategies(
@@ -741,6 +744,14 @@ export class AccountStrategyViewService {
         strategyInstanceId: deployResult.strategyInstanceId,
         ...riskProfile,
       })
+      if (this.runtimeExecutionStateService) {
+        await this.runtimeExecutionStateService.initializeStatesForDeploy({
+          strategyInstanceId: deployResult.strategyInstanceId,
+          publishedSnapshotId: resolvedDeploy.publishedSnapshotId,
+          snapshotHash: resolvedDeploy.snapshotHash,
+          snapshot: resolvedDeploy.snapshot,
+        })
+      }
       await this.repo.markDeployRequestSucceeded(deployRequest.id, deployResult.strategyInstanceId)
 
       return this.getStrategyDetail(dto.userId, deployResult.strategyInstanceId)
@@ -1568,6 +1579,7 @@ export class AccountStrategyViewService {
     snapshotHash: string
     sourceStrategyInstanceId: string | null
     sourceStrategyTemplateId: string | null
+    snapshot: unknown
   }> {
     if (!this.publishedSnapshotsRepository) {
       throw new DomainException('account_strategy.deploy_snapshot_repository_unavailable', {
@@ -1686,6 +1698,7 @@ export class AccountStrategyViewService {
       snapshotHash: snapshot.snapshotHash,
       sourceStrategyInstanceId: snapshot.strategyInstanceId,
       sourceStrategyTemplateId: snapshot.strategyTemplateId,
+      snapshot,
     }
   }
 
