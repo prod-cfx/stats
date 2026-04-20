@@ -654,6 +654,107 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(runtimeExecutionStateService.loadStatesForBinding).not.toHaveBeenCalled()
   })
 
+  it('fails closed when bound runtime execution states cannot be validated', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-runtime-invalid-1',
+        name: 'Runtime invalid strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-runtime-invalid-1',
+          snapshotHash: 'snapshot-runtime-invalid-hash-1',
+        },
+        params: { exchange: 'okx', symbol: 'BTCUSDT', timeframe: '15m', positionPct: 10 },
+        strategyTemplateId: 'tpl-runtime-invalid-1',
+        strategyTemplate: {
+          defaultParams: {},
+          paramsSchema: null,
+          rulesVersion: 1,
+        },
+        subscriptions: [{
+          userId: 'user-1',
+          status: 'active',
+          customParams: {},
+          subscribedAt: new Date('2026-03-20T10:00:00.000Z'),
+          exchangeAccount: { id: 'acct-1', exchangeId: 'okx', name: '主账户' },
+        }],
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+        deploymentExecutionConfig: {
+          leverage: 2,
+          priceSource: 'mark',
+          orderType: 'market',
+          timeInForce: 'IOC',
+        },
+        executionConfigVersion: 1,
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue(null),
+      findLatestExecutedAccountByUserAndSymbol: jest.fn().mockResolvedValue(null),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: {
+          createdAt: new Date('2026-03-18T10:00:00.000Z'),
+          startedAt: new Date('2026-03-20T10:01:00.000Z'),
+          stoppedAt: null,
+        },
+        subscription: { subscribedAt: new Date('2026-03-20T10:00:00.000Z') },
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const runtimeExecutionStateService = {
+      loadStatesForBinding: jest.fn().mockRejectedValue(new Error('snapshot_hash_mismatch')),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn() } as any,
+      undefined,
+      undefined,
+      undefined,
+      {
+        findByIdForUser: jest.fn().mockResolvedValue({
+          id: 'snapshot-runtime-invalid-1',
+          snapshotHash: 'snapshot-runtime-invalid-hash-1',
+          strategyConfig: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            baseTimeframe: '15m',
+            marketType: 'perp',
+            positionPct: 10,
+          },
+          backtestConfigDefaults: { initialCash: 10000 },
+          deploymentExecutionDefaults: {
+            leverage: 2,
+            priceSource: 'mark',
+            orderType: 'market',
+            timeInForce: 'IOC',
+          },
+          deploymentExecutionConstraints: {
+            platformRiskMaxLeverage: 5,
+            defaultLeverage: 2,
+          },
+          paramsSnapshot: { symbol: 'BTCUSDT', timeframe: '15m' },
+          lockedParams: { exchange: 'okx', positionPct: 10 },
+        }),
+      } as any,
+      runtimeExecutionStateService as any,
+    )
+
+    const detail = await service.getStrategyDetail('user-1', 'inst-runtime-invalid-1')
+
+    expect(detail.runtimeExecutionStates).toEqual([])
+    expect(detail.snapshot.compatibilityMetadata).toEqual(expect.objectContaining({
+      invalidBinding: true,
+    }))
+    expect(detail.deployment).toBeNull()
+    expect(runtimeExecutionStateService.loadStatesForBinding).toHaveBeenCalled()
+  })
+
   it('rejects detail when strategy is not actively subscribed', async () => {
     const repo = {
       findStrategyForUser: jest.fn().mockResolvedValue({

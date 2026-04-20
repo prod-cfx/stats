@@ -313,12 +313,22 @@ export class AccountStrategyViewService {
       userId,
       source: row,
     })
-    const runtimeExecutionStates = await this.resolveRuntimeExecutionStates({
-      strategyInstanceId,
-      publishedSnapshotId: resolvedSnapshot.publishedSnapshotId,
-      snapshotHash: resolvedSnapshot.snapshotHash,
-      compatibilityMetadata: resolvedSnapshot.compatibilityMetadata,
-    })
+    let runtimeExecutionStates: AccountStrategyDetailResponseDto['runtimeExecutionStates'] = []
+    let runtimeExecutionStateInvalid = false
+    try {
+      runtimeExecutionStates = await this.resolveRuntimeExecutionStates({
+        strategyInstanceId,
+        publishedSnapshotId: resolvedSnapshot.publishedSnapshotId,
+        snapshotHash: resolvedSnapshot.snapshotHash,
+        compatibilityMetadata: resolvedSnapshot.compatibilityMetadata,
+      })
+    } catch {
+      runtimeExecutionStateInvalid = true
+      resolvedSnapshot.compatibilityMetadata = {
+        ...(resolvedSnapshot.compatibilityMetadata ?? {}),
+        invalidBinding: true,
+      }
+    }
     const snapshotStrategyConfig = resolvedSnapshot.strategyConfig
     const snapshotMarketType = this.readSnapshotMarketType(snapshotStrategyConfig)
     const detailLeverageConstraints = await this.resolveEffectiveLeverageConstraints({
@@ -456,7 +466,10 @@ export class AccountStrategyViewService {
       },
       latestOrders: buildAccountStrategyLatestOrders(timelineSource.trades),
       runtimeExecutionStates,
-      deployment: !resolvedSnapshot.publishedSnapshotId || resolvedSnapshot.compatibilityMetadata?.requiresRepublishForDeploy
+      deployment: !resolvedSnapshot.publishedSnapshotId
+        || resolvedSnapshot.compatibilityMetadata?.requiresRepublishForDeploy
+        || resolvedSnapshot.compatibilityMetadata?.invalidBinding === true
+        || runtimeExecutionStateInvalid
         ? null
         : {
             exchangeAccountId: sub?.exchangeAccount?.id ?? null,
@@ -511,31 +524,23 @@ export class AccountStrategyViewService {
       return []
     }
 
-    try {
-      const states = await this.runtimeExecutionStateService.loadStatesForBinding({
-        strategyInstanceId: input.strategyInstanceId,
-        publishedSnapshotId: input.publishedSnapshotId,
-        snapshotHash: input.snapshotHash,
-      })
+    const states = await this.runtimeExecutionStateService.loadStatesForBinding({
+      strategyInstanceId: input.strategyInstanceId,
+      publishedSnapshotId: input.publishedSnapshotId,
+      snapshotHash: input.snapshotHash,
+    })
 
-      if (!Array.isArray(states)) {
-        return []
-      }
-
-      return states.map(state => ({
-        executionSemanticKey: state.executionSemanticKey,
-        status: state.status,
-        failureReason: state.failureReason ?? null,
-        failureCode: state.failureCode ?? null,
-        lastAttemptAt: state.lastAttemptAt?.toISOString() ?? null,
-        consumedAt: state.consumedAt?.toISOString() ?? null,
-        cooldownUntil: state.cooldownUntil?.toISOString() ?? null,
-        publishedSnapshotId: state.publishedSnapshotId,
-        snapshotHash: state.snapshotHash,
-      }))
-    } catch {
-      return []
-    }
+    return states.map(state => ({
+      executionSemanticKey: state.executionSemanticKey,
+      status: state.status,
+      failureReason: state.failureReason ?? null,
+      failureCode: state.failureCode ?? null,
+      lastAttemptAt: state.lastAttemptAt?.toISOString() ?? null,
+      consumedAt: state.consumedAt?.toISOString() ?? null,
+      cooldownUntil: state.cooldownUntil?.toISOString() ?? null,
+      publishedSnapshotId: state.publishedSnapshotId,
+      snapshotHash: state.snapshotHash,
+    }))
   }
 
   private async resolveBoundSnapshotDetail(input: {
