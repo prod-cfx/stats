@@ -3974,13 +3974,6 @@ export class CodegenConversationService {
 
     const symbolMatches = upper.match(/\b[A-Z]{2,12}(?:USDT|USDC|USD)\b/g) ?? []
     const symbols = Array.from(new Set(symbolMatches))
-    if (symbols.length === 0) {
-      if (/比特币|大饼|BTC/i.test(text)) {
-        symbols.push('BTCUSDT')
-      } else if (/以太|ETH/i.test(text)) {
-        symbols.push('ETHUSDT')
-      }
-    }
 
     const timeframeMatches = Array.from(text.matchAll(/(\d{1,4})\s*(min|分钟|小时|[mhd天])/gi))
     const timeframes = Array.from(new Set(timeframeMatches.map(([, value, unit]) => {

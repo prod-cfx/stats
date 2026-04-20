@@ -2,6 +2,7 @@ import type { ChecklistPayload } from '../types/checklist-compat'
 import type { StrategyExecutionContext, StrategyExecutionContextResolution } from '../types/strategy-execution-context'
 import { Injectable } from '@nestjs/common'
 import { resolveChecklistDefaultTimeframe } from './checklist-compat'
+import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 
 @Injectable()
 export class StrategyExecutionContextService {
@@ -74,8 +75,7 @@ export class StrategyExecutionContextService {
     const raw = values?.[0]
     if (typeof raw !== 'string') return null
 
-    const normalized = raw.trim()
-    return normalized.length > 0 ? normalized : null
+    return canonicalizeStrategySymbolInput(raw)
   }
 
   private readExchange(checklist: ChecklistPayload): StrategyExecutionContext['exchange'] {

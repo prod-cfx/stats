@@ -188,6 +188,24 @@ describe('canonicalSpecBuilderService', () => {
     ]))
   })
 
+  it('does not treat a bare asset symbol as a canonical market symbol', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      symbols: ['BTC'],
+      timeframes: ['1h'],
+      entryRules: ['3m 内下跌 1% 买入'],
+      exitRules: ['15m 内上涨 2% 卖出'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'spot',
+        positionPct: 10,
+      },
+    })
+
+    expect(spec.market.symbol).toBeNull()
+  })
+
   it('builds canonical spec from generic execution triggers without falling back to compatibility placeholders', () => {
     const service = new CanonicalSpecBuilderService()
 

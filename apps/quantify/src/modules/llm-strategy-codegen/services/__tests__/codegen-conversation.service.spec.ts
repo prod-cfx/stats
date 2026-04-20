@@ -3846,6 +3846,48 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('keeps asking for a complete trading pair when planner only returns a base asset symbol', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '策略逻辑已完整，请确认逻辑图。',
+        logic: {
+          symbols: ['BTC'],
+          timeframes: ['3m', '15m'],
+          entryRules: ['3分钟之内跌1%买入'],
+          exitRules: ['15分钟之内涨2%卖出'],
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'spot',
+            positionPct: 10,
+            stopLossPct: 5,
+            takeProfitPct: 10,
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-base-asset-only' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金 止损5% 止盈10%',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('请确认策略交易标的')
+    expect(result.assistantPrompt).not.toContain('请确认是否按此逻辑生成')
+    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
+      semanticState: expect.objectContaining({
+        contextSlots: expect.objectContaining({
+          symbol: expect.objectContaining({
+            status: 'open',
+          }),
+        }),
+      }),
+    }))
+  })
+
   it('extracts generic moving-average breakout rules for the historical MA baseline sentence', () => {
     const inferred = (service as any).inferChecklistFromMessage(
       '当价格突破一条长期均线时买入，跌破短期均线时卖出',
