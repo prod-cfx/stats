@@ -24,6 +24,7 @@ export type {
   StrategyInstanceRiskProfile,
   StrategyInstanceSafetyState,
   StrategyPnlDaily,
+  StrategyRuntimeExecutionState,
   StrategySignalState,
   StrategyTemplate,
   Symbol,
