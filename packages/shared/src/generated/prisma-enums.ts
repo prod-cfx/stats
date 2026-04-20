@@ -117,7 +117,7 @@ export type LlmStrategyRunStatus = (typeof LlmStrategyRunStatus)[keyof typeof Ll
 
 export const LlmCodegenSessionStatus = {
   DRAFTING: 'DRAFTING',
-  CHECKLIST_GATE: 'CHECKLIST_GATE',
+  CONFIRM_GATE: 'CONFIRM_GATE',
   GENERATING: 'GENERATING',
   VALIDATING_STATIC: 'VALIDATING_STATIC',
   VALIDATING_RUNTIME: 'VALIDATING_RUNTIME',
@@ -128,6 +128,12 @@ export const LlmCodegenSessionStatus = {
   REJECTED: 'REJECTED',
 } as const
 export type LlmCodegenSessionStatus = (typeof LlmCodegenSessionStatus)[keyof typeof LlmCodegenSessionStatus]
+
+export const AiQuantConversationMessageRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const
+export type AiQuantConversationMessageRole = (typeof AiQuantConversationMessageRole)[keyof typeof AiQuantConversationMessageRole]
 
 export const SymbolType = {
   CRYPTO: 'CRYPTO',
