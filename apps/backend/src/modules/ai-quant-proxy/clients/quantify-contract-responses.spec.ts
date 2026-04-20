@@ -88,15 +88,19 @@ describe('quantify contract generated responses', () => {
 
     const runDtoStart = source.indexOf('const RunBacktestDto = z')
     const jobSummaryStart = source.indexOf('const BacktestJobInputSummaryDto = z')
+    const backtestSummaryStart = source.indexOf('const BacktestJobSummaryDto = z')
 
     expect(runDtoStart).toBeGreaterThanOrEqual(0)
     expect(jobSummaryStart).toBeGreaterThanOrEqual(0)
+    expect(backtestSummaryStart).toBeGreaterThanOrEqual(0)
 
     const runDtoSnippet = source.slice(runDtoStart, runDtoStart + 500)
     const jobSummarySnippet = source.slice(jobSummaryStart, jobSummaryStart + 500)
+    const backtestSummarySnippet = source.slice(backtestSummaryStart, backtestSummaryStart + 400)
 
     expect(runDtoSnippet).toContain('leverage: z.number().optional()')
     expect(jobSummarySnippet).toContain('leverage: z.number().nullish()')
+    expect(backtestSummarySnippet).toContain('profitFactor: z.number().nullable()')
   })
 
   it('keeps nullable AI Quant codegen session fields nullable in the generated contracts', () => {

@@ -21,8 +21,8 @@ export class BacktestJobSummaryDto {
   @ApiProperty()
   winRate!: number
 
-  @ApiProperty()
-  profitFactor!: number
+  @ApiProperty({ nullable: true })
+  profitFactor!: number | null
 
   @ApiProperty()
   totalTrades!: number

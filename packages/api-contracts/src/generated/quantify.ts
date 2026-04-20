@@ -109,7 +109,7 @@ const BacktestJobSummaryDto = z
     netProfitPct: z.number(),
     maxDrawdownPct: z.number(),
     winRate: z.number(),
-    profitFactor: z.number(),
+    profitFactor: z.number().nullable(),
     totalTrades: z.number(),
     totalOpenTrades: z.number().optional(),
     openPnl: z.number().optional(),
