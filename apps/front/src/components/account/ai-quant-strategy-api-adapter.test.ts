@@ -816,6 +816,11 @@ describe('ai-quant-strategy-api-adapter', () => {
     expect(record.compatibilityMetadata).toEqual(expect.objectContaining({
       invalidBinding: true,
     }))
+    expect(record.deploymentExecutionBaseline).toBeNull()
+    expect(record.deploymentExecutionCurrent).toBeNull()
+    expect(record.deploymentLeverageRange).toBeNull()
+    expect(record.canEditDeploymentLeverage).toBe(false)
+    expect(record.deploy).toBeUndefined()
   })
 
 })

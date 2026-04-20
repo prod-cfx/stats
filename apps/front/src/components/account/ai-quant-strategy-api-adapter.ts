@@ -234,6 +234,7 @@ export function mapAccountStrategyDetailToRecord(
     detail.snapshot.strategyConfig?.marketType === 'spot' || detail.snapshot.strategyConfig?.marketType === 'perp'
       ? detail.snapshot.strategyConfig.marketType
       : null
+  const invalidBinding = detail.snapshot.compatibilityMetadata?.invalidBinding === true
 
   return {
     id: detail.id,
@@ -254,24 +255,30 @@ export function mapAccountStrategyDetailToRecord(
     runtimeExecutionStates: normalizeRuntimeExecutionStates(detail.runtimeExecutionStates),
     publishedSnapshotParamValues,
     snapshotBacktestConfigDefaults: normalizeBacktestConfigDefaults(detail.snapshot.backtestConfigDefaults),
-    deploymentExecutionBaseline: normalizeDeploymentExecutionConfig(detail.snapshot.deploymentExecutionBaseline, snapshotMarketType),
-    deploymentExecutionCurrent: normalizeDeploymentExecutionConfig(detail.snapshot.deploymentExecutionCurrent, snapshotMarketType),
+    deploymentExecutionBaseline: invalidBinding
+      ? null
+      : normalizeDeploymentExecutionConfig(detail.snapshot.deploymentExecutionBaseline, snapshotMarketType),
+    deploymentExecutionCurrent: invalidBinding
+      ? null
+      : normalizeDeploymentExecutionConfig(detail.snapshot.deploymentExecutionCurrent, snapshotMarketType),
     executionConfigVersion:
       typeof detail.snapshot.executionConfigVersion === 'number'
         ? detail.snapshot.executionConfigVersion
         : null,
-    deploymentLeverageRange: snapshotMarketType === 'perp'
+    deploymentLeverageRange: !invalidBinding && snapshotMarketType === 'perp'
       ? normalizeLeverageRange(
           detail.snapshot.effectiveAllowedLeverageRange
             ?? detail.snapshot.deploymentExecutionConstraints?.effectiveAllowedLeverageRange,
         )
       : null,
-    deploymentConstraintExplanation:
-      detail.snapshot.deploymentExecutionConstraints?.constraintExplanation ?? null,
+    deploymentConstraintExplanation: invalidBinding
+      ? null
+      : detail.snapshot.deploymentExecutionConstraints?.constraintExplanation ?? null,
     compatibilityMetadata: normalizeCompatibilityMetadata(detail.snapshot.compatibilityMetadata),
     consistencySummary: normalizeConsistencySummary(detail.snapshot.consistencySummary),
     canEditDeploymentLeverage:
-      snapshotMarketType === 'perp'
+      !invalidBinding
+      && snapshotMarketType === 'perp'
       && Boolean(detail.snapshot.deploymentExecutionCurrent)
       && detail.snapshot.compatibilityMetadata?.requiresRepublishForDeploy !== true,
     publishedSnapshotId: detail.snapshot.publishedSnapshotId ?? null,
@@ -317,7 +324,7 @@ export function mapAccountStrategyDetailToRecord(
       event: item.event,
       note: item.note ?? undefined,
     })),
-    deploy: detail.snapshot.deployAt
+    deploy: !invalidBinding && detail.snapshot.deployAt
       ? {
           exchange,
           accountId: '',
