@@ -188,4 +188,79 @@ describe('canonicalStrategyAstCompilerService', () => {
       }),
     ]))
   })
+
+  it('keeps expr deps and decision when refs aligned with the emitted expr ids for execution and price-change strategies', () => {
+    const irCompiler = new CanonicalSpecV2IrCompilerService()
+    const astCompiler = new CanonicalStrategyAstCompilerService()
+
+    const compiled = irCompiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          timeframe: '1h',
+        },
+        indicators: [],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['1h'],
+        },
+        rules: [
+          {
+            id: 'entry-on-start',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 200,
+            condition: {
+              kind: 'atom',
+              key: 'execution.on_start',
+              semanticScope: 'market',
+            },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.1 } }],
+          },
+          {
+            id: 'exit-prev-close-rise',
+            phase: 'exit',
+            sideScope: 'long',
+            priority: 100,
+            condition: {
+              kind: 'atom',
+              key: 'price.change_pct',
+              semanticScope: 'market',
+              op: 'GTE',
+              value: 0.01,
+              params: { timeframe: '1h', lookbackBars: 1, basis: 'prev_close' },
+            },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+      } as any,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+    })
+
+    const ast = astCompiler.compile(compiled.ir)
+    const exprIds = new Set(ast.exprPool.map(expr => expr.id))
+
+    for (const expr of ast.exprPool) {
+      expect(exprIds).toContain(expr.id)
+      for (const dep of expr.deps) {
+        expect(exprIds).toContain(dep)
+      }
+    }
+
+    for (const program of ast.decisionPrograms) {
+      expect(exprIds).toContain(program.when)
+    }
+  })
 })

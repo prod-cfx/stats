@@ -47,45 +47,17 @@ export class CanonicalStrategyAstCompilerService {
   }
 
   private compileExprPool(ir: CanonicalStrategyIrV1): ExprNode[] {
-    const seriesIndex = new Map(ir.signalCatalog.series.map(series => [series.id, series]))
-
-    const orderedSeries = [...ir.signalCatalog.series].sort((left, right) => {
-      const leftRank = this.seriesRank(left, seriesIndex)
-      const rightRank = this.seriesRank(right, seriesIndex)
-      if (leftRank !== rightRank) return leftRank - rightRank
-
-      const leftPeriod = left.params?.period
-      const rightPeriod = right.params?.period
-      if (typeof leftPeriod === 'number' && typeof rightPeriod === 'number' && leftPeriod !== rightPeriod) {
-        return leftPeriod - rightPeriod
-      }
-
-      return left.id.localeCompare(right.id)
-    })
-
-    const orderedLevelSets = [...ir.signalCatalog.levelSets].sort((left, right) => left.id.localeCompare(right.id))
-
-    const predicatePriority = new Map<string, number>()
-    for (const ruleBlock of ir.ruleBlocks) {
-      const current = predicatePriority.get(ruleBlock.when)
-      if (current === undefined || ruleBlock.priority < current) {
-        predicatePriority.set(ruleBlock.when, ruleBlock.priority)
-      }
-    }
-
-    const orderedPredicates = [...ir.signalCatalog.predicates].sort((left, right) => {
-      const leftPriority = predicatePriority.get(left.id) ?? Number.MAX_SAFE_INTEGER
-      const rightPriority = predicatePriority.get(right.id) ?? Number.MAX_SAFE_INTEGER
-      if (leftPriority !== rightPriority) return leftPriority - rightPriority
-      return left.id.localeCompare(right.id)
-    })
+    const orderedSeries = this.orderedSeries(ir)
+    const orderedLevelSets = this.orderedLevelSets(ir)
+    const orderedPredicates = this.orderedPredicates(ir)
+    const exprIdIndex = this.buildExprIdIndex(ir, orderedSeries, orderedLevelSets, orderedPredicates)
 
     const seriesNodes = orderedSeries.map((series, index) => ({
       id: `expr_${String(index + 1).padStart(2, '0')}_${series.id}`,
       sourceRef: series.id,
       nodeType: 'series' as const,
       payload: series,
-      deps: (series.inputs ?? []).map(dep => this.exprIdFor(dep, ir)),
+      deps: (series.inputs ?? []).map(dep => this.exprIdFor(dep, exprIdIndex)),
     }))
 
     const levelSetNodes = orderedLevelSets.map((levelSet, index) => ({
@@ -97,7 +69,7 @@ export class CanonicalStrategyAstCompilerService {
         levelSet.anchorRef,
         levelSet.hardBounds?.lowerRef,
         levelSet.hardBounds?.upperRef,
-      ].filter((dep): dep is string => typeof dep === 'string').map(dep => this.exprIdFor(dep, ir)),
+      ].filter((dep): dep is string => typeof dep === 'string').map(dep => this.exprIdFor(dep, exprIdIndex)),
     }))
 
     const predicateNodes = orderedPredicates.map((predicate, index) => ({
@@ -105,7 +77,7 @@ export class CanonicalStrategyAstCompilerService {
       sourceRef: predicate.id,
       nodeType: 'predicate' as const,
       payload: predicate,
-      deps: predicate.args.map(dep => this.exprIdFor(dep, ir)),
+      deps: predicate.args.map(dep => this.exprIdFor(dep, exprIdIndex)),
     }))
 
     return [...seriesNodes, ...levelSetNodes, ...predicateNodes]
@@ -120,11 +92,17 @@ export class CanonicalStrategyAstCompilerService {
   }
 
   private compileDecisionPrograms(ir: CanonicalStrategyIrV1): DecisionProgramNode[] {
+    const exprIdIndex = this.buildExprIdIndex(
+      ir,
+      this.orderedSeries(ir),
+      this.orderedLevelSets(ir),
+      this.orderedPredicates(ir),
+    )
     return ir.ruleBlocks.map((ruleBlock, index) => ({
       id: `decision_${String(index + 1).padStart(2, '0')}_${ruleBlock.id}`,
       sourceRef: ruleBlock.id,
       phase: ruleBlock.phase,
-      when: this.exprIdFor(ruleBlock.when, ir),
+      when: this.exprIdFor(ruleBlock.when, exprIdIndex),
       priority: ruleBlock.priority,
       cooldownBars: ruleBlock.cooldownBars,
       actions: ruleBlock.actions,
@@ -196,19 +174,57 @@ export class CanonicalStrategyAstCompilerService {
     }
   }
 
-  private exprIdFor(sourceRef: string, ir: CanonicalStrategyIrV1): string {
-    const seriesPosition = ir.signalCatalog.series.findIndex(item => item.id === sourceRef)
-    if (seriesPosition >= 0) {
-      return `expr_${String(seriesPosition + 1).padStart(2, '0')}_${sourceRef}`
-    }
+  private exprIdFor(sourceRef: string, exprIdIndex: Map<string, string>): string {
+    return exprIdIndex.get(sourceRef) ?? `expr_unknown_${sourceRef}`
+  }
 
-    const orderedLevelSets = [...ir.signalCatalog.levelSets].sort((left, right) => left.id.localeCompare(right.id))
-    const levelSetPosition = orderedLevelSets.findIndex(item => item.id === sourceRef)
-    const seriesCount = ir.signalCatalog.series.length
-    if (levelSetPosition >= 0) {
-      return `expr_${String(seriesCount + levelSetPosition + 1).padStart(2, '0')}_${sourceRef}`
-    }
+  private buildExprIdIndex(
+    ir: CanonicalStrategyIrV1,
+    orderedSeries = this.orderedSeries(ir),
+    orderedLevelSets = this.orderedLevelSets(ir),
+    orderedPredicates = this.orderedPredicates(ir),
+  ): Map<string, string> {
+    const index = new Map<string, string>()
 
+    orderedSeries.forEach((series, position) => {
+      index.set(series.id, `expr_${String(position + 1).padStart(2, '0')}_${series.id}`)
+    })
+    orderedLevelSets.forEach((levelSet, position) => {
+      index.set(levelSet.id, `expr_${String(orderedSeries.length + position + 1).padStart(2, '0')}_${levelSet.id}`)
+    })
+    orderedPredicates.forEach((predicate, position) => {
+      index.set(
+        predicate.id,
+        `expr_${String(orderedSeries.length + orderedLevelSets.length + position + 1).padStart(2, '0')}_${predicate.id}`,
+      )
+    })
+
+    return index
+  }
+
+  private orderedSeries(ir: CanonicalStrategyIrV1): SeriesDef[] {
+    const seriesIndex = new Map(ir.signalCatalog.series.map(series => [series.id, series]))
+
+    return [...ir.signalCatalog.series].sort((left, right) => {
+      const leftRank = this.seriesRank(left, seriesIndex)
+      const rightRank = this.seriesRank(right, seriesIndex)
+      if (leftRank !== rightRank) return leftRank - rightRank
+
+      const leftPeriod = left.params?.period
+      const rightPeriod = right.params?.period
+      if (typeof leftPeriod === 'number' && typeof rightPeriod === 'number' && leftPeriod !== rightPeriod) {
+        return leftPeriod - rightPeriod
+      }
+
+      return left.id.localeCompare(right.id)
+    })
+  }
+
+  private orderedLevelSets(ir: CanonicalStrategyIrV1) {
+    return [...ir.signalCatalog.levelSets].sort((left, right) => left.id.localeCompare(right.id))
+  }
+
+  private orderedPredicates(ir: CanonicalStrategyIrV1): PredicateDef[] {
     const predicatePriority = new Map<string, number>()
     for (const ruleBlock of ir.ruleBlocks) {
       const current = predicatePriority.get(ruleBlock.when)
@@ -216,14 +232,13 @@ export class CanonicalStrategyAstCompilerService {
         predicatePriority.set(ruleBlock.when, ruleBlock.priority)
       }
     }
-    const orderedPredicates = [...ir.signalCatalog.predicates].sort((left, right) => {
+
+    return [...ir.signalCatalog.predicates].sort((left, right) => {
       const leftPriority = predicatePriority.get(left.id) ?? Number.MAX_SAFE_INTEGER
       const rightPriority = predicatePriority.get(right.id) ?? Number.MAX_SAFE_INTEGER
       if (leftPriority !== rightPriority) return leftPriority - rightPriority
       return left.id.localeCompare(right.id)
     })
-    const predicatePosition = orderedPredicates.findIndex(item => item.id === sourceRef)
-    return `expr_${String(seriesCount + orderedLevelSets.length + predicatePosition + 1).padStart(2, '0')}_${sourceRef}`
   }
 
   private seriesRank(series: SeriesDef, seriesIndex: Map<string, SeriesDef>): number {
