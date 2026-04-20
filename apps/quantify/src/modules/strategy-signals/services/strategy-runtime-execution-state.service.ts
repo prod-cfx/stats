@@ -38,7 +38,6 @@ type RuntimeExecutionStateSource = RuntimeStateBinding & {
   cooldownUntil?: Date | null
 }
 
-const SEMANTIC_KEY_LABELS = ['primary', 'secondary', 'tertiary', 'quaternary'] as const
 const RUNTIME_EXECUTION_STATE_STATUSES: RuntimeExecutionStateStatus[] = ['ready', 'consumed', 'failed', 'cooldown']
 
 @Injectable()
@@ -46,16 +45,9 @@ export class StrategyRuntimeExecutionStateService {
   constructor(private readonly repository: StrategyRuntimeExecutionStateRepository) {}
 
   buildExecutionSemanticKeysFromSnapshot(snapshot: unknown): string[] {
-    const decisionPrograms = this.readDecisionPrograms(snapshot)
-    if (!decisionPrograms.length) return []
-
-    const counts = new Map<'entry' | 'exit' | 'rebalance', number>()
-
-    return decisionPrograms.map(({ phase }) => {
-      const nextCount = (counts.get(phase) ?? 0) + 1
-      counts.set(phase, nextCount)
-      return `on_start.${phase}.${this.resolveSemanticLabel(nextCount)}`
-    })
+    const explicitKeys = this.readExplicitRuntimeExecutionSemantics(snapshot)
+    if (!explicitKeys.length) return []
+    return [...new Set(explicitKeys)]
   }
 
   async initializeStatesForDeploy(input: InitializeRuntimeExecutionStatesInput): Promise<string[]> {
@@ -126,29 +118,32 @@ export class StrategyRuntimeExecutionStateService {
     return this.validateSnapshotBinding(binding, state)
   }
 
-  private readDecisionPrograms(snapshot: unknown): Array<{ phase: 'entry' | 'exit' | 'rebalance' }> {
+  private readExplicitRuntimeExecutionSemantics(snapshot: unknown): string[] {
     const root = this.readRecord(snapshot)
     const astSnapshot = this.readRecord(root?.astSnapshot)
-    const astDecisionPrograms = this.readDecisionProgramsFromArray(astSnapshot?.decisionPrograms)
-    if (astDecisionPrograms.length > 0) return astDecisionPrograms
-
-    const compiledIr = this.readRecord(root?.compiledIr)
-    return this.readDecisionProgramsFromArray(compiledIr?.ruleBlocks)
+    return [
+      ...this.readSemanticKeyArray(root?.runtimeExecutionSemantics),
+      ...this.readSemanticKeyArray(astSnapshot?.runtimeExecutionSemantics),
+    ]
   }
 
-  private readDecisionProgramsFromArray(value: unknown): Array<{ phase: 'entry' | 'exit' | 'rebalance' }> {
+  private readSemanticKeyArray(value: unknown): string[] {
     if (!Array.isArray(value)) return []
 
     return value.flatMap((item) => {
-      const phase = this.readDecisionPhase(this.readRecord(item)?.phase)
-      return phase ? [{ phase }] : []
-    })
-  }
+      if (typeof item === 'string') {
+        const normalized = item.trim()
+        return this.isSupportedSemanticKey(normalized) ? [normalized] : []
+      }
 
-  private readDecisionPhase(value: unknown): 'entry' | 'exit' | 'rebalance' | null {
-    return value === 'entry' || value === 'exit' || value === 'rebalance'
-      ? value
-      : null
+      const record = this.readRecord(item)
+      const key = typeof record?.key === 'string'
+        ? record.key.trim()
+        : typeof record?.executionSemanticKey === 'string'
+          ? record.executionSemanticKey.trim()
+          : ''
+      return this.isSupportedSemanticKey(key) ? [key] : []
+    })
   }
 
   private readRecord(value: unknown): Record<string, unknown> | null {
@@ -157,8 +152,8 @@ export class StrategyRuntimeExecutionStateService {
       : null
   }
 
-  private resolveSemanticLabel(index: number): string {
-    return SEMANTIC_KEY_LABELS[index - 1] ?? `slot_${index}`
+  private isSupportedSemanticKey(key: string): boolean {
+    return /^on_start\.(entry|exit|rebalance)\.[a-z0-9_-]+$/i.test(key)
   }
 
   private normalizeStatus(status: string): RuntimeExecutionStateStatus {

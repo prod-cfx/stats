@@ -63,10 +63,7 @@ export class StrategyRuntimeExecutionStateRepository {
           throw new Error('snapshot_hash_mismatch')
         }
 
-        return this.txHost.tx.strategyRuntimeExecutionState.update({
-          where,
-          data: this.buildReadyResetData(),
-        })
+        return conflicted
       }
     }
 
@@ -74,10 +71,7 @@ export class StrategyRuntimeExecutionStateRepository {
       throw new Error('snapshot_hash_mismatch')
     }
 
-    return this.txHost.tx.strategyRuntimeExecutionState.update({
-      where,
-      data: this.buildReadyResetData(),
-    })
+    return existing
   }
 
   markConsumed(input: RuntimeExecutionStateKeyInput): Promise<StrategyRuntimeExecutionState> {
@@ -144,17 +138,6 @@ export class StrategyRuntimeExecutionStateRepository {
       snapshotHash: input.snapshotHash,
       executionSemanticKey: input.executionSemanticKey,
       status: 'ready',
-    }
-  }
-
-  private buildReadyResetData() {
-    return {
-      status: 'ready',
-      failureReason: null,
-      failureCode: null,
-      lastAttemptAt: null,
-      consumedAt: null,
-      cooldownUntil: null,
     }
   }
 

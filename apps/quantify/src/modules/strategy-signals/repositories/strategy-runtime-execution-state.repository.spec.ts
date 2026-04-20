@@ -75,6 +75,40 @@ describe('strategyRuntimeExecutionStateRepository', () => {
     expect(tx.strategyRuntimeExecutionState.update).not.toHaveBeenCalled()
   })
 
+  it('keeps an existing same-snapshot runtime state instead of resetting it to ready', async () => {
+    const tx = {
+      strategyRuntimeExecutionState: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'runtime-state-1',
+          strategyInstanceId: 'inst-1',
+          publishedSnapshotId: 'snap-1',
+          snapshotHash: 'sha256:snap-1',
+          executionSemanticKey: 'on_start.entry.primary',
+          status: 'consumed',
+          failureReason: null,
+          failureCode: null,
+          lastAttemptAt: new Date('2026-04-20T10:00:00.000Z'),
+          consumedAt: new Date('2026-04-20T10:00:00.000Z'),
+          cooldownUntil: null,
+        }),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+    }
+    const repo = new StrategyRuntimeExecutionStateRepository(createTxHost(tx))
+
+    const result = await repo.upsertReadyState({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      snapshotHash: 'sha256:snap-1',
+      executionSemanticKey: 'on_start.entry.primary',
+    })
+
+    expect(tx.strategyRuntimeExecutionState.create).not.toHaveBeenCalled()
+    expect(tx.strategyRuntimeExecutionState.update).not.toHaveBeenCalled()
+    expect(result.status).toBe('consumed')
+  })
+
   it('recovers from create-time unique conflicts only when the raced row keeps the same snapshot hash', async () => {
     const tx = {
       strategyRuntimeExecutionState: {
@@ -89,14 +123,7 @@ describe('strategyRuntimeExecutionStateRepository', () => {
             status: 'failed',
           }),
         create: jest.fn().mockRejectedValue(Object.assign(new Error('duplicate key'), { code: 'P2002' })),
-        update: jest.fn().mockResolvedValue({
-          id: 'runtime-state-1',
-          strategyInstanceId: 'inst-1',
-          publishedSnapshotId: 'snap-1',
-          snapshotHash: 'sha256:snap-1',
-          executionSemanticKey: 'on_start.entry.primary',
-          status: 'ready',
-        }),
+        update: jest.fn(),
       },
     }
     const repo = new StrategyRuntimeExecutionStateRepository(createTxHost(tx))
@@ -109,23 +136,7 @@ describe('strategyRuntimeExecutionStateRepository', () => {
     })
 
     expect(tx.strategyRuntimeExecutionState.findUnique).toHaveBeenCalledTimes(2)
-    expect(tx.strategyRuntimeExecutionState.update).toHaveBeenCalledWith({
-      where: {
-        strategyInstanceId_publishedSnapshotId_executionSemanticKey: {
-          strategyInstanceId: 'inst-1',
-          publishedSnapshotId: 'snap-1',
-          executionSemanticKey: 'on_start.entry.primary',
-        },
-      },
-      data: {
-        status: 'ready',
-        failureReason: null,
-        failureCode: null,
-        lastAttemptAt: null,
-        consumedAt: null,
-        cooldownUntil: null,
-      },
-    })
-    expect(result.status).toBe('ready')
+    expect(tx.strategyRuntimeExecutionState.update).not.toHaveBeenCalled()
+    expect(result.status).toBe('failed')
   })
 })

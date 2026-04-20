@@ -36,9 +36,11 @@ class InMemoryRuntimeExecutionStateRepository {
     if (existing && existing.snapshotHash !== input.snapshotHash) {
       throw new Error('snapshot_hash_mismatch')
     }
+    if (existing) {
+      return existing
+    }
 
     const next: RuntimeStateRecord = {
-      ...existing,
       strategyInstanceId: input.strategyInstanceId,
       publishedSnapshotId: input.publishedSnapshotId,
       snapshotHash: input.snapshotHash,
@@ -113,6 +115,7 @@ function createSnapshot(decisionPrograms: Array<{ id: string, phase: 'entry' | '
   return {
     id: 'snap-1',
     snapshotHash: 'sha256:snap-1',
+    runtimeExecutionSemantics: decisionPrograms.map(program => `on_start.${program.phase}.${program.id}`),
     astSnapshot: {
       decisionPrograms,
     },
@@ -175,7 +178,7 @@ describe('strategyRuntimeExecutionStateService', () => {
       strategyInstanceId: 'inst-1',
       publishedSnapshotId: 'snap-1',
       snapshotHash: 'sha256:snap-1',
-      executionSemanticKey: 'on_start.entry.primary',
+      executionSemanticKey: 'on_start.entry.entry-primary',
       status: 'ready',
     })
   })
@@ -199,19 +202,19 @@ describe('strategyRuntimeExecutionStateService', () => {
     await repository.markConsumed({
       strategyInstanceId: 'inst-1',
       publishedSnapshotId: 'snap-1',
-      executionSemanticKey: 'on_start.entry.primary',
+      executionSemanticKey: 'on_start.entry.entry-primary',
     })
     await repository.markFailed({
       strategyInstanceId: 'inst-1',
       publishedSnapshotId: 'snap-1',
-      executionSemanticKey: 'on_start.exit.primary',
+      executionSemanticKey: 'on_start.exit.exit-primary',
       failureReason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
       failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
     })
     await repository.markCooldown({
       strategyInstanceId: 'inst-1',
       publishedSnapshotId: 'snap-1',
-      executionSemanticKey: 'on_start.rebalance.primary',
+      executionSemanticKey: 'on_start.rebalance.rebalance-primary',
       failureReason: 'COOLDOWN_AFTER_FAILURE',
       failureCode: 'COOLDOWN_AFTER_FAILURE',
       cooldownUntil: new Date('2026-04-20T09:00:00.000Z'),
@@ -225,7 +228,7 @@ describe('strategyRuntimeExecutionStateService', () => {
 
     expect(executableStates).toHaveLength(1)
     expect(executableStates[0]).toMatchObject({
-      executionSemanticKey: 'on_start.entry.secondary',
+      executionSemanticKey: 'on_start.entry.entry-secondary',
       status: 'ready',
     })
   })
@@ -265,5 +268,48 @@ describe('strategyRuntimeExecutionStateService', () => {
       snapshotHash: 'sha256:new',
       snapshot,
     })).rejects.toThrow('snapshot_hash_mismatch')
+  })
+
+  it('does not re-arm an existing semantic key when the same snapshot is deployed again', async () => {
+    const { service, repository } = createService()
+    const snapshot = createSnapshot([
+      { id: 'entry-primary', phase: 'entry' },
+    ])
+
+    await service.initializeStatesForDeploy({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      snapshotHash: 'sha256:snap-1',
+      snapshot,
+    })
+    await repository.markConsumed({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      executionSemanticKey: 'on_start.entry.entry-primary',
+    })
+
+    await service.initializeStatesForDeploy({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      snapshotHash: 'sha256:snap-1',
+      snapshot,
+    })
+
+    const states = await repository.findByInstanceAndSnapshot('inst-1', 'snap-1')
+    expect(states).toHaveLength(1)
+    expect(states[0]).toMatchObject({
+      executionSemanticKey: 'on_start.entry.entry-primary',
+      status: 'consumed',
+    })
+  })
+
+  it('does not invent runtime semantics when the snapshot has no explicit lifecycle declaration', () => {
+    const { service } = createService()
+
+    expect(service.buildExecutionSemanticKeysFromSnapshot({
+      astSnapshot: {
+        decisionPrograms: [{ id: 'entry-primary', phase: 'entry' }],
+      },
+    })).toEqual([])
   })
 })
