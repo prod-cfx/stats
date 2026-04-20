@@ -81,7 +81,7 @@ describe('AI Quant proxy HTTP (E2E)', () => {
   it('should inject authenticated user id into codegen session creation', async () => {
     quantifyClient.startCodegen.mockResolvedValue({
       id: 'session-1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
     })
 
     const api = createApiClient(app)
