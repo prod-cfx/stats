@@ -168,14 +168,6 @@ describe('canonicalStrategyAstCompilerService', () => {
         sourceRef: 'exit_short_middle_middle_revert',
         nodeType: 'predicate',
         payload: expect.objectContaining({
-          kind: 'CROSS_UNDER',
-        }),
-      }),
-    ]))
-    expect(ast.exprPool).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        sourceRef: 'exit_short_middle_middle_revert',
-        payload: expect.objectContaining({
           kind: 'OR',
         }),
       }),

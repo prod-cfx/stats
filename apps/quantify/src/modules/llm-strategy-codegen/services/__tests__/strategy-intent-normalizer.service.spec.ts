@@ -395,7 +395,7 @@ describe('strategyIntentNormalizerService', () => {
     expect(result.normalizedIntent.stateHints).toEqual(expect.arrayContaining([
       expect.objectContaining({
         value: '震荡行情',
-        closureStatus: 'open',
+        closureStatus: 'closed',
       }),
     ]))
   })

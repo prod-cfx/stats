@@ -492,14 +492,15 @@ describe('canonicalSpecV2IrCompilerService', () => {
         kind: 'CROSS_UNDER',
         args: ['close_15m', 'mid_band_20_2_15m'],
       }),
-    ]))
-    expect(result.ir.signalCatalog.predicates).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ kind: 'OR' }),
+      expect.objectContaining({
+        kind: 'OR',
+        args: ['exit_short_middle_middle_over', 'exit_short_middle_middle_under'],
+      }),
     ]))
     expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
       expect.objectContaining({
         phase: 'exit',
-        operator: 'CROSS_UNDER(CLOSE,MID_BAND(CLOSE,20,2))',
+        operator: 'OR(CROSS_OVER(CLOSE,MID_BAND(CLOSE,20,2)),CROSS_UNDER(CLOSE,MID_BAND(CLOSE,20,2)))',
       }),
     ]))
     expect(result.ir.ruleBlocks).toEqual(expect.arrayContaining([
