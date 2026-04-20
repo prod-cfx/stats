@@ -3772,11 +3772,8 @@ export class CodegenConversationService {
       input.semanticState,
       input.checklist,
     )
-    const hasCompileabilitySignal = hasDeterministicStrategySemantics
-      || input.compileability.entryRuleCount > 0
-      || input.compileability.exitRuleCount > 0
 
-    if (!input.compileability.canCompile && hasCompileabilitySignal) {
+    if (!input.compileability.canCompile) {
       return 'compileability'
     }
 

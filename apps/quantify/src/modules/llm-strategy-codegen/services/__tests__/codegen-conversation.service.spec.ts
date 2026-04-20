@@ -8900,6 +8900,41 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('这条消息看起来和策略无关')
   })
 
+  it('returns zero-signal compileability blockers instead of unrelated guidance when semantic slots are closed', async () => {
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-unrelated-zero-signal-compileability-blocker',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState: buildLockedMaSemanticState({
+        triggers: [],
+        actions: [],
+        risk: [],
+        position: null,
+        families: [],
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-unrelated-zero-signal-compileability-blocker', {
+      userId: 'u1',
+      message: '继续',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).toContain('未识别可编译出场规则')
+    expect(result.assistantPrompt).not.toContain('这条消息看起来和策略无关')
+  })
+
   it('rejects compiler-first publish when compiled script fails structural validation', async () => {
     const emitSpy = jest
       .spyOn(CompiledScriptEmitterService.prototype, 'emit')
