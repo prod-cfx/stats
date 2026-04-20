@@ -5,6 +5,7 @@ import type { PublishedStrategySnapshotsRepository } from '../../repositories/pu
 import type { RecommendationIndexService } from '../recommendation-index.service'
 import type { AiService } from '@/modules/ai/ai.service'
 import { restoreProcessEnv, setProcessEnvValue, snapshotProcessEnv } from '@/common/env/env.accessor'
+import { Logger } from '@nestjs/common'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2DigestService } from '../canonical-spec-v2-digest.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
@@ -3136,6 +3137,26 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.clarificationState).toEqual(expect.objectContaining({
       status: 'CLEAR',
     }))
+  })
+
+  it('classifies parseable malformed planner payloads as schema_mismatch in startSession', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-schema-mismatch-complete' })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        semanticPatch: 'bad-patch',
+      }),
+    })
+    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX 现货 BTCUSDT 3m，3m 内跌 1% 买入，15m 内按入场均价涨 2% 卖出，单笔 10% 仓位，按入场均价亏损 5% 止损、盈利 10% 止盈。',
+    })
+
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('reason=schema_mismatch'))
+    expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('fields=related,logicReady,assistantPrompt,semanticPatch'))
   })
 
   it('enters confirm gate from deterministic semantic state when planner transport retries still fail for a complete strategy', async () => {

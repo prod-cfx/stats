@@ -5187,17 +5187,30 @@ export class CodegenConversationService {
       reasons.push('root')
       return reasons
     }
-    if (parsed.related !== undefined && typeof parsed.related !== 'boolean') {
+
+    if (parsed.related === undefined || typeof parsed.related !== 'boolean') {
       reasons.push('related')
     }
-    if (parsed.logicReady !== undefined && typeof parsed.logicReady !== 'boolean') {
+    if (parsed.logicReady === undefined || typeof parsed.logicReady !== 'boolean') {
       reasons.push('logicReady')
     }
-    if (parsed.assistantPrompt !== undefined && typeof parsed.assistantPrompt !== 'string') {
+    if (parsed.assistantPrompt === undefined || typeof parsed.assistantPrompt !== 'string') {
       reasons.push('assistantPrompt')
     }
     if (parsed.logic !== undefined && (!parsed.logic || typeof parsed.logic !== 'object' || Array.isArray(parsed.logic))) {
       reasons.push('logic')
+    }
+    if (
+      parsed.semanticPatch !== undefined
+      && (!parsed.semanticPatch || typeof parsed.semanticPatch !== 'object' || Array.isArray(parsed.semanticPatch))
+    ) {
+      reasons.push('semanticPatch')
+    }
+    if (
+      parsed.semanticUpdates !== undefined
+      && (!parsed.semanticUpdates || typeof parsed.semanticUpdates !== 'object' || Array.isArray(parsed.semanticUpdates))
+    ) {
+      reasons.push('semanticUpdates')
     }
 
     return reasons
