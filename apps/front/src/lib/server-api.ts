@@ -26,7 +26,7 @@ export interface BacktestJobResultSummary {
   netProfitPct: number
   maxDrawdownPct: number
   winRate: number
-  profitFactor: number
+  profitFactor: number | null
   totalTrades: number
   totalOpenTrades?: number
   openPnl?: number
