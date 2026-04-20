@@ -41,7 +41,7 @@ const CODEGEN_PROCESSING_STATUSES = new Set([
 const CODEGEN_RECOVERABLE_STATUSES = new Set([
   ...CODEGEN_TERMINAL_STATUSES,
   ...CODEGEN_PROCESSING_STATUSES,
-  'CHECKLIST_GATE',
+  'CONFIRM_GATE',
   'CONSISTENCY_FAILED',
 ])
 
@@ -232,7 +232,7 @@ export function buildCodegenReplyContent(args: {
     }
     return publishedReply
   }
-  if (response.status === 'CHECKLIST_GATE') {
+  if (response.status === 'CONFIRM_GATE') {
     return confirmGenerate ? checklistContinuedMessage : checklistUpdatedMessage
   }
   if (isCodegenProcessingStatus(response.status)) {
@@ -383,7 +383,7 @@ export function applyCodegenResponseToConversationState(args: {
   const nextVersion = (conversation.logicGraph?.version || 0) + 1
   const shouldReuseCodegenSession = !isCodegenTerminalStatus(response.status)
   const shouldUpdateGraph =
-    (response.status === 'CHECKLIST_GATE' || response.status === 'PUBLISHED')
+    (response.status === 'CONFIRM_GATE' || response.status === 'PUBLISHED')
     && Boolean(response.specDesc)
   const syncResult = shouldUpdateGraph
     ? syncStrategyParamsFromCodegen({
@@ -945,7 +945,7 @@ export async function requestAiQuantCodegen(args: {
     while (isCodegenProcessingStatus(current.status) && Date.now() < deadline) {
       await new Promise(resolve => window.setTimeout(resolve, 1500))
       current = await getLlmCodegenSession(id)
-      if (isCodegenTerminalStatus(current.status) || current.status === 'CHECKLIST_GATE') {
+      if (isCodegenTerminalStatus(current.status) || current.status === 'CONFIRM_GATE') {
         return current
       }
     }
@@ -999,7 +999,7 @@ export async function requestAiQuantCodegen(args: {
       }
       let current = initial
       let attempts = 0
-      while (current.status === 'CHECKLIST_GATE' && attempts < 2) {
+      while (current.status === 'CONFIRM_GATE' && attempts < 2) {
         current = await continueSession(id)
         attempts += 1
       }

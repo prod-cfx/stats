@@ -373,7 +373,7 @@ describe('quantifyAiQuantClient', () => {
       text: async () => JSON.stringify({
         data: {
           id: 'session-1',
-          status: 'CHECKLIST_GATE',
+          status: 'CONFIRM_GATE',
         },
       }),
     } as Response)
@@ -385,7 +385,7 @@ describe('quantifyAiQuantClient', () => {
       headers: { authorization: 'Bearer test-token' },
     })).resolves.toEqual({
       id: 'session-1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
     })
 
     expect(fetchSpy).toHaveBeenCalledWith(

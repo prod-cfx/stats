@@ -748,7 +748,7 @@ describe('ai-quant-page-conversation', () => {
     const conversation = createConversationFromServerConversation({
       id: 'server-conv-clarification',
       conversationTitle: '澄清会话',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       canonicalDigest: 'sha256:canonical-3',
       clarificationGate: {
         blocked: false,
