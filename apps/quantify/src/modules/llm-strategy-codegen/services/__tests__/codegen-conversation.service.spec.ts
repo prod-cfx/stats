@@ -8760,6 +8760,145 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
+  it('returns a real semantic clarification prompt when planner marks an unrelated reply and required slots are still missing', async () => {
+    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+      id: 's-unrelated-missing-symbol',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        timeframes: ['15m'],
+        entryRules: ['3m 内跌 1% 买入'],
+        exitRules: ['15m 内涨 2% 卖出'],
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'perp',
+          positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
+        },
+      },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'executionContext.symbol',
+            reason: 'missing_symbol',
+            field: 'symbol',
+            blocking: true,
+            question: '请确认策略交易标的（例如 BTCUSDT）。',
+            status: 'pending',
+          },
+        ],
+      },
+      constraintPack: {},
+    }))
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-unrelated-missing-symbol', {
+      userId: 'u1',
+      message: '继续',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('请确认策略交易标的')
+    expect(result.assistantPrompt).not.toContain('这条消息看起来和策略无关')
+  })
+
+  it('returns compileability blockers when semantic state is complete but planner follow-up is unrelated', async () => {
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-unrelated-compileability-blocker',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState: buildLockedMaSemanticState({
+        triggers: [
+          {
+            id: 'entry-ma',
+            key: 'indicator.above',
+            phase: 'entry',
+            params: {
+              indicator: 'ma',
+              referenceRole: 'long_term',
+              'reference.period': 50,
+              confirmationMode: 'close_confirm',
+            },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          },
+        ],
+        actions: [
+          { id: 'action-1', key: 'open_long', status: 'locked', source: 'user_explicit' },
+        ],
+        risk: [],
+        contextSlots: {
+          exchange: {
+            slotKey: 'exchange',
+            fieldPath: 'contextSlots.exchange',
+            status: 'locked',
+            priority: 'context',
+            questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+            affectsExecution: true,
+            value: 'okx',
+          },
+          symbol: {
+            slotKey: 'symbol',
+            fieldPath: 'contextSlots.symbol',
+            status: 'locked',
+            priority: 'context',
+            questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+            affectsExecution: true,
+            value: 'BTCUSDT',
+          },
+          marketType: {
+            slotKey: 'marketType',
+            fieldPath: 'contextSlots.marketType',
+            status: 'locked',
+            priority: 'context',
+            questionHint: '请确认市场类型（现货或合约/perp）。',
+            affectsExecution: true,
+            value: 'perp',
+          },
+          timeframe: {
+            slotKey: 'timeframe',
+            fieldPath: 'contextSlots.timeframe',
+            status: 'locked',
+            priority: 'context',
+            questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+            affectsExecution: true,
+            value: '15m',
+          },
+        },
+      }),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-unrelated-compileability-blocker', {
+      userId: 'u1',
+      message: '继续',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('未识别可编译出场规则')
+    expect(result.assistantPrompt).not.toContain('这条消息看起来和策略无关')
+  })
+
   it('rejects compiler-first publish when compiled script fails structural validation', async () => {
     const emitSpy = jest
       .spyOn(CompiledScriptEmitterService.prototype, 'emit')

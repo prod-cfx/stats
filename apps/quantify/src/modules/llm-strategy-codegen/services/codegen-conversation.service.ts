@@ -447,6 +447,140 @@ export class CodegenConversationService {
       providerCode: this.resolveProviderCode(dto.providerCode),
       model: dto.model,
     }, constraintPack.conversationHistory ?? [], baseChecklist)
+    const plannerCompatibilityChecklist = hasPersistedSemanticState
+      ? this.inferChecklistFromMessage(dto.message)
+      : preMergedChecklist
+    const reducedSemanticState = this.applyConversationPlanToSemanticState({
+      currentState: preMergedSemanticState,
+      compatibilityChecklist: plannerCompatibilityChecklist,
+      plan,
+    })
+    const canonicalChecklist = this.mergeChecklistSnapshots(
+      this.projectLegacyChecklistFromSemanticState(reducedSemanticState, preMergedChecklist),
+      plan.logic ?? {},
+    )
+    const clarification = this.resolveClarificationArtifacts(canonicalChecklist)
+    const clarificationState = this.buildClarificationFromSemanticState(
+      reducedSemanticState,
+      canonicalChecklist,
+      { preserveLegacyFallback: !hasPersistedSemanticState },
+    )
+    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const clarificationPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
+      || this.clarificationQuestion.build(clarificationState)
+      || clarification.clarificationPrompt
+    const recommendationStyle = this.inferRecommendationStyleFromContext(
+      dto.message,
+      canonicalChecklist,
+      constraintPack.recommendationStyle,
+    )
+    const nextConstraintPack = this.withGuidePrompt(constraintPack, guidePrompt, recommendationStyle)
+    const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
+    const canonicalSpec = this.buildCanonicalSpecForConversation(
+      canonicalChecklist,
+      normalization,
+      hasPersistedSemanticState ? reducedSemanticState : undefined,
+    )
+    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
+      normalizedIntent: normalization.normalizedIntent,
+      executionContext: clarification.executionContext.context,
+    })
+    const canonicalDigest = this.readCanonicalDigest(specDesc)
+    const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
+    const decision = this.buildStrategyDecision({
+      checklist: canonicalChecklist,
+      clarification,
+      compileability,
+      constraintPack: nextConstraintPack,
+    })
+    const decisionPrompt = decision.kind === 'CONFIRM_INFERRED'
+      ? this.clarificationQuestion.buildFromDecision(decision)
+      : clarification.clarificationPrompt
+    const deterministicAuthority = this.resolveContinueSessionDeterministicAuthority({
+      semanticState: reducedSemanticState,
+      checklist: canonicalChecklist,
+      clarificationState,
+      normalization,
+      compileability,
+      decisionKind: decision.kind,
+      semanticReadyForGenerate,
+    })
+    const semanticStateChanged = JSON.stringify(reducedSemanticState) !== JSON.stringify(preMergedSemanticState)
+
+    if (deterministicAuthority) {
+      const assistantPrompt = deterministicAuthority === 'clarification'
+        ? (clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。')
+        : deterministicAuthority === 'decision'
+          ? (decisionPrompt || '请先确认当前推断，我再继续整理逻辑图。')
+          : deterministicAuthority === 'normalization'
+            ? this.buildNormalizationAssistantPrompt(canonicalChecklist, normalization)
+            : deterministicAuthority === 'compileability'
+              ? this.buildCompileabilityAssistantPrompt(compileability)
+              : this.buildChecklistGateAssistantPrompt(canonicalChecklist, normalization.normalizedIntent)
+      const targetStatus = deterministicAuthority === 'confirm_gate' ? 'CONFIRM_GATE' : 'DRAFTING'
+      const shouldPersistDeterministicOutcome = plan.related
+        || hasStructuredClarificationAnswers
+        || inferredConfirmation.consumed
+        || semanticStateChanged
+        || session.status !== targetStatus
+
+      if (!shouldPersistDeterministicOutcome && !plan.related) {
+        const response = this.finalizeSessionResponse({
+          id: session.id,
+          status: targetStatus,
+          missingFields: [],
+          ...(deterministicAuthority === 'confirm_gate'
+            ? {
+                specDesc,
+                canonicalDigest,
+              }
+            : {}),
+          ...(deterministicAuthority === 'normalization'
+            ? { specDesc }
+            : {}),
+          assistantPrompt,
+          clarificationState,
+        })
+        return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+      }
+
+      const historyAfterDeterministicOutcome = this.appendConversationHistory(
+        constraintPack.conversationHistory ?? [],
+        dto.message,
+        assistantPrompt,
+      )
+      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
+        status: targetStatus,
+        semanticState: reducedSemanticState,
+        clarificationState,
+        constraintPack: {
+          ...nextConstraintPack,
+          conversationHistory: historyAfterDeterministicOutcome,
+        },
+        ...(deterministicAuthority === 'confirm_gate' || deterministicAuthority === 'normalization'
+          ? { latestSpecDesc: specDesc }
+          : {}),
+      }))
+
+      const response = this.finalizeSessionResponse({
+        id: session.id,
+        status: targetStatus,
+        missingFields: [],
+        ...(deterministicAuthority === 'confirm_gate'
+          ? {
+              specDesc,
+              canonicalDigest,
+            }
+          : {}),
+        ...(deterministicAuthority === 'normalization'
+          ? { specDesc }
+          : {}),
+        assistantPrompt,
+        clarificationState,
+      })
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+    }
+
     if (!plan.related) {
       if (hasStructuredClarificationAnswers) {
         return this.continueWithStructuredClarificationAnswers({
@@ -486,85 +620,11 @@ export class CodegenConversationService {
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
-    const reducedSemanticState = this.applyConversationPlanToSemanticState({
-      currentState: preMergedSemanticState,
-      compatibilityChecklist: hasPersistedSemanticState
-        ? this.inferChecklistFromMessage(dto.message)
-        : preMergedChecklist,
-      plan,
-    })
-    const canonicalChecklist = this.mergeChecklistSnapshots(
-      this.projectLegacyChecklistFromSemanticState(reducedSemanticState, preMergedChecklist),
-      plan.logic ?? {},
-    )
-    const clarification = this.resolveClarificationArtifacts(canonicalChecklist)
-    const clarificationState = this.buildClarificationFromSemanticState(
-      reducedSemanticState,
-      canonicalChecklist,
-      { preserveLegacyFallback: !hasPersistedSemanticState },
-    )
-    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
-    const clarificationPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
-      || this.clarificationQuestion.build(clarificationState)
-      || clarification.clarificationPrompt
-    const recommendationStyle = this.inferRecommendationStyleFromContext(
-      dto.message,
-      canonicalChecklist,
-      constraintPack.recommendationStyle,
-    )
-    const nextConstraintPack = this.withGuidePrompt(constraintPack, guidePrompt, recommendationStyle)
-    if (clarificationState.status === 'NEEDS_CLARIFICATION') {
-      const assistantPrompt = clarificationPrompt || plan.assistantPrompt || '请先澄清这条规则，我再继续完善逻辑图。'
-      const historyAfterClarification = this.appendConversationHistory(
-        constraintPack.conversationHistory ?? [],
-        dto.message,
-        assistantPrompt,
-      )
-      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
-        status: 'DRAFTING',
-        semanticState: reducedSemanticState,
-        clarificationState,
-        constraintPack: {
-          ...nextConstraintPack,
-          conversationHistory: historyAfterClarification,
-        },
-      }))
-
-      const response = this.finalizeSessionResponse({
-        id: session.id,
-        status: 'DRAFTING',
-        missingFields: [],
-        assistantPrompt,
-        clarificationState,
-      })
-      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
-    }
     const historyAfterPlanner = this.appendConversationHistory(
       constraintPack.conversationHistory ?? [],
       dto.message,
       plan.assistantPrompt,
     )
-    const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
-    const canonicalSpec = this.buildCanonicalSpecForConversation(
-      canonicalChecklist,
-      normalization,
-      hasPersistedSemanticState ? reducedSemanticState : undefined,
-    )
-    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
-      normalizedIntent: normalization.normalizedIntent,
-      executionContext: clarification.executionContext.context,
-    })
-    const canonicalDigest = this.readCanonicalDigest(specDesc)
-    const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
-    const decision = this.buildStrategyDecision({
-      checklist: canonicalChecklist,
-      clarification,
-      compileability,
-      constraintPack: nextConstraintPack,
-    })
-    const decisionPrompt = decision.kind === 'CONFIRM_INFERRED'
-      ? this.clarificationQuestion.buildFromDecision(decision)
-      : clarification.clarificationPrompt
 
     if (!plan.logicReady) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
@@ -587,97 +647,11 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
-    if (decision.kind === 'CONFIRM_INFERRED') {
-      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
-        status: 'DRAFTING',
-        semanticState: reducedSemanticState,
-        clarificationState,
-        constraintPack: {
-          ...nextConstraintPack,
-          conversationHistory: historyAfterPlanner,
-        },
-      }))
-
-      const response = this.finalizeSessionResponse({
-        id: session.id,
-        status: 'DRAFTING',
-        missingFields: [],
-        assistantPrompt: decisionPrompt,
-        clarificationState,
-      })
-      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
-    }
-
-    if (normalization.blocked && !semanticReadyForGenerate) {
-      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
-        status: 'DRAFTING',
-        semanticState: reducedSemanticState,
-        clarificationState,
-        constraintPack: {
-          ...nextConstraintPack,
-          conversationHistory: historyAfterPlanner,
-        },
-        latestSpecDesc: specDesc,
-      }))
-
-      const response = this.finalizeSessionResponse({
-        id: session.id,
-        status: 'DRAFTING',
-        missingFields: [],
-        assistantPrompt: this.buildNormalizationAssistantPrompt(canonicalChecklist, normalization),
-        clarificationState,
-        specDesc,
-      })
-      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
-    }
-
-    const hasUnresolvedGenericCompileabilityGap = this.hasUnresolvedGenericCompileabilityGap(canonicalChecklist)
-    if (!compileability.canCompile && (!semanticReadyForGenerate || hasUnresolvedGenericCompileabilityGap)) {
-      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
-        status: 'DRAFTING',
-        semanticState: reducedSemanticState,
-        clarificationState,
-        constraintPack: {
-          ...nextConstraintPack,
-          conversationHistory: historyAfterPlanner,
-        },
-      }))
-
-      const response = this.finalizeSessionResponse({
-        id: session.id,
-        status: 'DRAFTING',
-        missingFields: [],
-        assistantPrompt: this.buildCompileabilityAssistantPrompt(compileability),
-        clarificationState,
-      })
-      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
-    }
-
-    const checklistGateAssistantPrompt = this.buildChecklistGateAssistantPrompt(canonicalChecklist, normalization.normalizedIntent)
-    const historyAfterChecklistGate = this.appendConversationHistory(
-      constraintPack.conversationHistory ?? [],
-      dto.message,
-      checklistGateAssistantPrompt,
-    )
-
-    await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
-      status: 'CONFIRM_GATE',
-      semanticState: reducedSemanticState,
-      clarificationState,
-      constraintPack: {
-        ...nextConstraintPack,
-        conversationHistory: historyAfterChecklistGate,
-      },
-      latestSpecDesc: specDesc,
-    }))
-
     const response = this.finalizeSessionResponse({
       id: session.id,
-      status: 'CONFIRM_GATE',
+      status: 'DRAFTING',
       missingFields: [],
-      specDesc,
-      canonicalDigest,
-      assistantPrompt: checklistGateAssistantPrompt,
+      assistantPrompt: plan.assistantPrompt,
       clarificationState,
     })
     return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
@@ -3771,6 +3745,56 @@ export class CodegenConversationService {
       && input.compileability.canCompile
       ? 'CONFIRM_GATE'
       : 'DRAFTING'
+  }
+
+  private resolveContinueSessionDeterministicAuthority(input: {
+    semanticState: SemanticState
+    checklist: ChecklistPayload
+    clarificationState: Pick<StrategyClarificationState, 'status'>
+    normalization: NormalizationResult
+    compileability: CanonicalCompileabilityReport
+    decisionKind: 'DIRECT_COMPILE' | 'CONFIRM_INFERRED' | 'ASK_CLARIFY'
+    semanticReadyForGenerate: boolean
+  }): 'clarification' | 'decision' | 'normalization' | 'compileability' | 'confirm_gate' | null {
+    if (!this.hasDeterministicStrategySemantics(input.semanticState, input.checklist)) {
+      return null
+    }
+
+    if (input.clarificationState.status === 'NEEDS_CLARIFICATION') {
+      return 'clarification'
+    }
+
+    if (input.decisionKind === 'CONFIRM_INFERRED') {
+      return 'decision'
+    }
+
+    if (input.normalization.blocked && !input.semanticReadyForGenerate) {
+      return 'normalization'
+    }
+
+    if (!input.compileability.canCompile) {
+      return 'compileability'
+    }
+
+    return !input.normalization.blocked
+      ? 'confirm_gate'
+      : null
+  }
+
+  private hasDeterministicStrategySemantics(
+    semanticState: SemanticState,
+    checklist: ChecklistPayload,
+  ): boolean {
+    const hasChecklistRules = (checklist.entryRules?.length ?? 0) > 0
+      || (checklist.exitRules?.length ?? 0) > 0
+    const hasGrid = Boolean(
+      checklist.grid
+      && Object.values(checklist.grid).some(value => value !== undefined && value !== null),
+    )
+    const hasSemanticTriggers = semanticState.triggers.some(trigger => trigger.status !== 'superseded')
+    const hasSemanticActions = semanticState.actions.some(action => action.status !== 'superseded')
+
+    return hasChecklistRules || hasGrid || hasSemanticTriggers || hasSemanticActions
   }
 
   private mapClarificationReasonToBlockingReason(reason: StrategyClarificationItem['reason']): string {
