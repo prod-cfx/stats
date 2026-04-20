@@ -317,6 +317,7 @@ export class AccountStrategyViewService {
       strategyInstanceId,
       publishedSnapshotId: resolvedSnapshot.publishedSnapshotId,
       snapshotHash: resolvedSnapshot.snapshotHash,
+      compatibilityMetadata: resolvedSnapshot.compatibilityMetadata,
     })
     const snapshotStrategyConfig = resolvedSnapshot.strategyConfig
     const snapshotMarketType = this.readSnapshotMarketType(snapshotStrategyConfig)
@@ -498,28 +499,43 @@ export class AccountStrategyViewService {
     strategyInstanceId: string
     publishedSnapshotId: string | null
     snapshotHash: string | null
+    compatibilityMetadata: Record<string, unknown> | null
   }): Promise<AccountStrategyDetailResponseDto['runtimeExecutionStates']> {
-    if (!input.publishedSnapshotId || !input.snapshotHash || !this.runtimeExecutionStateService) {
+    if (
+      !input.publishedSnapshotId
+      || !input.snapshotHash
+      || !this.runtimeExecutionStateService
+      || input.compatibilityMetadata?.requiresRepublishForDeploy === true
+      || input.compatibilityMetadata?.invalidBinding === true
+    ) {
       return []
     }
 
-    const states = await this.runtimeExecutionStateService.loadStatesForBinding({
-      strategyInstanceId: input.strategyInstanceId,
-      publishedSnapshotId: input.publishedSnapshotId,
-      snapshotHash: input.snapshotHash,
-    })
+    try {
+      const states = await this.runtimeExecutionStateService.loadStatesForBinding({
+        strategyInstanceId: input.strategyInstanceId,
+        publishedSnapshotId: input.publishedSnapshotId,
+        snapshotHash: input.snapshotHash,
+      })
 
-    return states.map(state => ({
-      executionSemanticKey: state.executionSemanticKey,
-      status: state.status,
-      failureReason: state.failureReason ?? null,
-      failureCode: state.failureCode ?? null,
-      lastAttemptAt: state.lastAttemptAt?.toISOString() ?? null,
-      consumedAt: state.consumedAt?.toISOString() ?? null,
-      cooldownUntil: state.cooldownUntil?.toISOString() ?? null,
-      publishedSnapshotId: state.publishedSnapshotId,
-      snapshotHash: state.snapshotHash,
-    }))
+      if (!Array.isArray(states)) {
+        return []
+      }
+
+      return states.map(state => ({
+        executionSemanticKey: state.executionSemanticKey,
+        status: state.status,
+        failureReason: state.failureReason ?? null,
+        failureCode: state.failureCode ?? null,
+        lastAttemptAt: state.lastAttemptAt?.toISOString() ?? null,
+        consumedAt: state.consumedAt?.toISOString() ?? null,
+        cooldownUntil: state.cooldownUntil?.toISOString() ?? null,
+        publishedSnapshotId: state.publishedSnapshotId,
+        snapshotHash: state.snapshotHash,
+      }))
+    } catch {
+      return []
+    }
   }
 
   private async resolveBoundSnapshotDetail(input: {
