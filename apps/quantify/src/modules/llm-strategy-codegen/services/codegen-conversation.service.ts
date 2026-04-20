@@ -247,7 +247,7 @@ export class CodegenConversationService {
       clarificationState,
     })
     const normalization = this.buildNormalizationFromSemanticState(initialSemanticState)
-    const initialCanonicalSpec = plannerStatus === 'CHECKLIST_GATE'
+    const initialCanonicalSpec = plannerStatus === 'CONFIRM_GATE'
       ? this.buildCanonicalSpecForConversation(checklist, normalization, initialSemanticState)
       : null
     const compileability = initialCanonicalSpec
@@ -273,7 +273,7 @@ export class CodegenConversationService {
       : (semanticClarificationPrompt
           || clarification.clarificationPrompt
           || this.clarificationQuestion.build(clarificationState))
-    const confirmationAssistantPrompt = plannerStatus === 'CHECKLIST_GATE'
+    const confirmationAssistantPrompt = plannerStatus === 'CONFIRM_GATE'
       ? this.buildChecklistGateAssistantPrompt(checklist, normalization.normalizedIntent)
       : null
     const bootstrap = buildStartSessionBootstrap({
@@ -658,7 +658,7 @@ export class CodegenConversationService {
     )
 
     await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       semanticState: reducedSemanticState,
       clarificationState,
       constraintPack: {
@@ -670,7 +670,7 @@ export class CodegenConversationService {
 
     const response = this.finalizeSessionResponse({
       id: session.id,
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       missingFields: [],
       specDesc,
       canonicalDigest,
@@ -2402,7 +2402,7 @@ export class CodegenConversationService {
     )
 
     await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       semanticState: args.semanticState,
       clarificationState: clarification.clarificationState,
       constraintPack: {
@@ -2414,7 +2414,7 @@ export class CodegenConversationService {
 
     const response = this.finalizeSessionResponse({
       id: args.session.id,
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       missingFields: [],
       assistantPrompt: checklistGateAssistantPrompt,
       clarificationState: clarification.clarificationState,

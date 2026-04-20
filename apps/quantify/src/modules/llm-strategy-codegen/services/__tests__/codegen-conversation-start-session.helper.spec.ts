@@ -31,10 +31,10 @@ describe('buildStartSessionBootstrap', () => {
     expect(result.initialHistory).toEqual(['U: 帮我做个策略', 'A: 请先补充交易对'])
   })
 
-  it('uses checklist gate confirmation prompt when compileable', () => {
+  it('uses confirm gate confirmation prompt when compileable', () => {
     const result = buildStartSessionBootstrap({
       initialMessage: '确认一下',
-      plannerStatus: 'CHECKLIST_GATE',
+      plannerStatus: 'CONFIRM_GATE',
       clarificationState: {
         status: 'CLEAR',
         items: [],
@@ -53,15 +53,15 @@ describe('buildStartSessionBootstrap', () => {
       },
     }, () => 'compile prompt')
 
-    expect(result.status).toBe('CHECKLIST_GATE')
+    expect(result.status).toBe('CONFIRM_GATE')
     expect(result.shouldEnterConfirmationGate).toBe(true)
     expect(result.assistantPrompt).toContain('逻辑图已更新。请确认逻辑图')
   })
 
-  it('falls back to compileability prompt when checklist gate cannot compile', () => {
+  it('falls back to compileability prompt when confirm gate cannot compile', () => {
     const result = buildStartSessionBootstrap({
       initialMessage: '确认一下',
-      plannerStatus: 'CHECKLIST_GATE',
+      plannerStatus: 'CONFIRM_GATE',
       clarificationState: {
         status: 'CLEAR',
         items: [],

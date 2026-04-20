@@ -48,11 +48,11 @@ export function buildStartSessionBootstrap(
 ): StartSessionBootstrapResult {
   const status: LlmCodegenSessionStatus = input.decisionKind === 'CONFIRM_INFERRED'
     ? 'DRAFTING'
-    : (input.plannerStatus === 'CHECKLIST_GATE'
+    : (input.plannerStatus === 'CONFIRM_GATE'
     && (input.compileability?.canCompile === false || input.normalizationBlocked === true)
     ? 'DRAFTING'
     : input.plannerStatus)
-  const shouldEnterConfirmationGate = status === 'CHECKLIST_GATE'
+  const shouldEnterConfirmationGate = status === 'CONFIRM_GATE'
 
   const assistantPrompt = ((input.clarificationState.status === 'NEEDS_CLARIFICATION') || input.decisionKind === 'CONFIRM_INFERRED') && input.clarificationPrompt
     ? input.clarificationPrompt
