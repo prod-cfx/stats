@@ -54,6 +54,8 @@ import {
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { SignalGeneratorRepository } from '../repositories/signal-generator.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { StrategyRuntimeExecutionStateRepository } from '../repositories/strategy-runtime-execution-state.repository'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { StrategySignalStateRepository } from '../repositories/strategy-signal-state.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingSignalRepository } from '../repositories/trading-signal.repository'
@@ -69,6 +71,8 @@ import { SignalGenerationPersistenceStage } from './signal-generation-persistenc
 import { SignalGenerationSchedulerStage } from './signal-generation-scheduler.stage'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { SignalTelemetryService } from './signal-telemetry.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { StrategyRuntimeExecutionStateService } from './strategy-runtime-execution-state.service'
 
 const DEFAULT_BAR_LIMIT = 100
 const MAX_SCRIPT_TIMEOUT_MS = 5000
@@ -82,6 +86,7 @@ type StrategyInstanceWithTemplate = Prisma.StrategyInstanceGetPayload<{
 type RuntimeStrategySource = {
   strategy: StrategyTemplate
   provenance: Prisma.JsonObject
+  executionSemanticKeys?: string[]
 }
 
 @Injectable()
@@ -114,6 +119,8 @@ export class SignalGeneratorService {
     private readonly env: EnvService,
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
     @Optional() private readonly publishedSnapshotsRepository?: PublishedStrategySnapshotsRepository,
+    @Optional() private readonly runtimeExecutionStateService?: StrategyRuntimeExecutionStateService,
+    @Optional() private readonly runtimeExecutionStateRepository?: StrategyRuntimeExecutionStateRepository,
   ) {
     this.schedulerStage = new SignalGenerationSchedulerStage(
       this.schedulerRegistry,
@@ -375,6 +382,7 @@ export class SignalGeneratorService {
         instance,
         runtimeStrategy,
         runtimeProvenance,
+        runtimeSource.executionSemanticKeys ?? [],
         config,
         options,
       )
@@ -611,7 +619,7 @@ export class SignalGeneratorService {
     runtimeProvenance: Prisma.JsonObject,
     skipCooldown = false,
   ) {
-    await this.persistenceStage.createSignalWithCooldownAndLock(
+    return this.persistenceStage.createSignalWithCooldownAndLock(
       instance,
       strategy,
       group,
@@ -996,6 +1004,7 @@ export class SignalGeneratorService {
     instance: StrategyInstanceWithTemplate,
     strategy: StrategyTemplate,
     runtimeProvenance: Prisma.JsonObject,
+    executionSemanticKeys: string[],
     config: StrategySignalsRuntimeConfig,
     options: { skipCooldown?: boolean } = {},
   ) {
@@ -1007,6 +1016,20 @@ export class SignalGeneratorService {
     const params = this.buildEffectiveParams(strategy, instance) ?? {}
     const symbolCode = this.readString(params.symbol)
     const timeframe = this.readRuntimeTimeframe(params.timeframe ?? params.baseTimeframe)
+    if (executionSemanticKeys.length > 0 && !this.runtimeExecutionStateRepository) {
+      this.logger.warn(
+        `Strategy instance ${instance.id} requires runtime execution state repository for published snapshot execution`,
+      )
+      return
+    }
+    const activeRuntimeState = await this.loadPublishedSnapshotRuntimeState(
+      instance,
+      runtimeProvenance,
+      executionSemanticKeys,
+    )
+    if (executionSemanticKeys.length > 0 && !activeRuntimeState) {
+      return
+    }
 
     if (!symbolCode || !timeframe) {
       this.logger.warn(
@@ -1051,6 +1074,15 @@ export class SignalGeneratorService {
 
     if (!aiPayload) {
       await this.handleStrategyFailure(instance.id, config)
+      if (activeRuntimeState && this.runtimeExecutionStateRepository) {
+        await this.runtimeExecutionStateRepository.markFailed({
+          strategyInstanceId: activeRuntimeState.strategyInstanceId,
+          publishedSnapshotId: activeRuntimeState.publishedSnapshotId,
+          executionSemanticKey: activeRuntimeState.executionSemanticKey,
+          failureReason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+          failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+        })
+      }
       this.telemetry.recordGeneration({
         strategyId: strategy.id,
         symbolCode,
@@ -1062,7 +1094,7 @@ export class SignalGeneratorService {
 
     await this.resetStrategyFailure(instance.id)
 
-    await this.createSignalWithCooldownAndLock(
+    const signalResult = await this.createSignalWithCooldownAndLock(
       instance,
       strategy,
       {
@@ -1077,6 +1109,13 @@ export class SignalGeneratorService {
       runtimeProvenance,
       options.skipCooldown ?? false,
     )
+    if (signalResult?.created && signalResult.signalId && activeRuntimeState && this.runtimeExecutionStateRepository) {
+      await this.runtimeExecutionStateRepository.markConsumed({
+        strategyInstanceId: activeRuntimeState.strategyInstanceId,
+        publishedSnapshotId: activeRuntimeState.publishedSnapshotId,
+        executionSemanticKey: activeRuntimeState.executionSemanticKey,
+      })
+    }
   }
 
   private async resolveRuntimeStrategySource(
@@ -1106,6 +1145,12 @@ export class SignalGeneratorService {
     if (!this.publishedSnapshotsRepository) {
       this.logger.warn(
         `Strategy instance ${instance.id} requires published snapshot ${binding.publishedSnapshotId}, but snapshot repository is unavailable`,
+      )
+      return null
+    }
+    if (!this.runtimeExecutionStateService) {
+      this.logger.warn(
+        `Strategy instance ${instance.id} requires runtime execution state service for published snapshot execution`,
       )
       return null
     }
@@ -1143,6 +1188,57 @@ export class SignalGeneratorService {
         sourceStrategyTemplateId: snapshot.strategyTemplateId ?? binding.sourceStrategyTemplateId ?? strategy.id,
         executionContentSource: 'PUBLISHED_SNAPSHOT',
       },
+      executionSemanticKeys: this.runtimeExecutionStateService?.buildExecutionSemanticKeysFromSnapshot(snapshot) ?? [],
+    }
+  }
+
+  private async loadPublishedSnapshotRuntimeState(
+    instance: StrategyInstanceWithTemplate,
+    runtimeProvenance: Prisma.JsonObject,
+    executionSemanticKeys: string[],
+  ): Promise<{
+    strategyInstanceId: string
+    publishedSnapshotId: string
+    executionSemanticKey: string
+  } | null> {
+    if (executionSemanticKeys.length === 0) {
+      return null
+    }
+
+    if (!this.runtimeExecutionStateService) {
+      this.logger.warn(
+        `Strategy instance ${instance.id} requires runtime execution state service for published snapshot semantics`,
+      )
+      return null
+    }
+
+    const publishedSnapshotId = this.readString(runtimeProvenance.publishedSnapshotId)
+    const snapshotHash = this.readString(runtimeProvenance.snapshotHash)
+    if (!publishedSnapshotId || !snapshotHash) {
+      this.logger.warn(
+        `Strategy instance ${instance.id} is missing published snapshot binding provenance for runtime execution state`,
+      )
+      return null
+    }
+
+    const executableStates = await this.runtimeExecutionStateService.loadExecutableStates({
+      strategyInstanceId: instance.id,
+      publishedSnapshotId,
+      snapshotHash,
+    })
+    if (!executableStates.length) {
+      return null
+    }
+
+    const readyState = executableStates.find(state => executionSemanticKeys.includes(state.executionSemanticKey))
+    if (!readyState) {
+      return null
+    }
+
+    return {
+      strategyInstanceId: readyState.strategyInstanceId,
+      publishedSnapshotId: readyState.publishedSnapshotId,
+      executionSemanticKey: readyState.executionSemanticKey,
     }
   }
 
