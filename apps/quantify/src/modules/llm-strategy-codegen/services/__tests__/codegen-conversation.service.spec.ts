@@ -9643,4 +9643,62 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('DRAFTING')
     expect(result.assistantPrompt).toContain('未识别可编译入场规则')
   })
+
+  it('keeps drafting when follow-up logic closes semantic slots but still only has a generic immediate-entry placeholder', async () => {
+    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+      id: 's-immediate-entry-placeholder',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {
+        symbols: ['ORDIUSDT'],
+        timeframes: ['1h'],
+        exitRules: ['当前K线收盘价相对于上一根K线收盘价上涨≥1%时卖出平仓'],
+        exitRuleBases: { 'exit-1': 'prev_close' },
+        riskRules: {
+          exchange: 'okx',
+          marketType: 'spot',
+          positionPct: 10,
+          stopLossPct: 5,
+          stopLossBasis: 'entry_avg_price',
+          takeProfitPct: 10,
+          takeProfitBasis: 'entry_avg_price',
+        },
+      },
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    }))
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+        logic: {
+          symbols: ['ORDIUSDT'],
+          timeframes: ['1h'],
+          entryRules: ['满足入场条件后开仓'],
+          exitRules: ['当前K线收盘价相对于上一根K线收盘价上涨≥1%时卖出平仓'],
+          entryRuleBases: {},
+          exitRuleBases: { 'exit-1': 'prev_close' },
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'spot',
+            positionPct: 10,
+            stopLossPct: 5,
+            stopLossBasis: 'entry_avg_price',
+            takeProfitPct: 10,
+            takeProfitBasis: 'entry_avg_price',
+          },
+        },
+      }),
+    })
+
+    const result = await service.continueSession('s-immediate-entry-placeholder', {
+      userId: 'u1',
+      message: '立即市价买入',
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(result.assistantPrompt).toContain('未识别可编译入场规则')
+    expect(result.assistantPrompt).not.toContain('请确认是否按此逻辑生成')
+  })
 })

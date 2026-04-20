@@ -628,7 +628,8 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
-    if (!compileability.canCompile && !semanticReadyForGenerate) {
+    const hasUnresolvedGenericCompileabilityGap = this.hasUnresolvedGenericCompileabilityGap(canonicalChecklist)
+    if (!compileability.canCompile && (!semanticReadyForGenerate || hasUnresolvedGenericCompileabilityGap)) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         semanticState: reducedSemanticState,
@@ -828,7 +829,8 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
-    if (!compileability.canCompile && !semanticReadyForGenerate) {
+    const hasUnresolvedGenericCompileabilityGap = this.hasUnresolvedGenericCompileabilityGap(canonicalChecklist)
+    if (!compileability.canCompile && (!semanticReadyForGenerate || hasUnresolvedGenericCompileabilityGap)) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
         semanticState: reducedSemanticState,
@@ -5310,6 +5312,17 @@ export class CodegenConversationService {
       : text === '满足出场条件后平仓'
         || text === '短均线下穿长均线（死叉）出场'
         || text === '触发止盈/止损阈值出场'
+  }
+
+  private hasUnresolvedGenericCompileabilityGap(checklist: ChecklistPayload): boolean {
+    const entryRules = checklist.entryRules ?? []
+    const exitRules = checklist.exitRules ?? []
+    const entryHasGenericOnly = entryRules.some(rule => this.isGenericChecklistPlaceholderRule(rule, 'entry'))
+      && !entryRules.some(rule => !this.isGenericChecklistPlaceholderRule(rule, 'entry'))
+    const exitHasGenericOnly = exitRules.some(rule => this.isGenericChecklistPlaceholderRule(rule, 'exit'))
+      && !exitRules.some(rule => !this.isGenericChecklistPlaceholderRule(rule, 'exit'))
+
+    return entryHasGenericOnly || exitHasGenericOnly
   }
 
   private isLikelySameRule(baseRule: string, patchRule: string): boolean {
