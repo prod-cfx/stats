@@ -3062,7 +3062,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
-  it('does not regress the staging bidirectional grid prompt into a checklist-era compileability blocker', async () => {
+  it('mandatory regression: strategy 3 exact bidirectional grid prompt stays deterministic in startSession instead of trusting planner-authored grid semantics', async () => {
     mockRepo.createSession.mockResolvedValue({ id: 's-staging-grid-repro' })
     mockAi.chat.mockResolvedValueOnce({
       content: JSON.stringify({
@@ -3070,21 +3070,22 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         logicReady: true,
         assistantPrompt: '逻辑图已更新。请确认逻辑图。',
         logic: completeChecklist({
-          symbols: ['BTCUSDT'],
-          timeframes: ['15m'],
+          symbols: ['ETHUSDT'],
+          timeframes: ['1h'],
           grid: {
             lower: 60000,
             upper: 80000,
-            stepPct: 0.5,
-            sideMode: 'bidirectional',
+            stepPct: 1,
+            sideMode: 'long_only',
+            breakoutAction: 'pause',
           },
           riskRules: {
-            exchange: 'okx',
-            marketType: 'perp',
-            positionPct: 10,
-            stopLossPct: 5,
+            exchange: 'binance',
+            marketType: 'spot',
+            positionPct: 25,
+            stopLossPct: 3,
             stopLossBasis: 'entry_avg_price',
-            takeProfitPct: 10,
+            takeProfitPct: 6,
             takeProfitBasis: 'entry_avg_price',
           },
         }),
@@ -3096,9 +3097,103 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       initialMessage: '在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 60000-80000，采用双向网格，每格间距 0.5%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈。',
     })
 
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
     expect(result.status === 'CONFIRM_GATE' || result.status === 'DRAFTING').toBe(true)
-    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
-    expect(result.assistantPrompt).not.toContain('请补充能明确落成主链规则的入场/出场条件')
+    expect(createPayload.semanticState.contextSlots).toEqual(expect.objectContaining({
+      exchange: expect.objectContaining({ value: 'okx' }),
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
+      marketType: expect.objectContaining({ value: 'perp' }),
+      timeframe: expect.objectContaining({ value: '15m' }),
+    }))
+    expect(createPayload.semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.stop_loss_pct',
+        params: expect.objectContaining({ valuePct: 5, basis: 'entry_avg_price' }),
+      }),
+      expect.objectContaining({
+        key: 'risk.take_profit_pct',
+        params: expect.objectContaining({ valuePct: 10, basis: 'entry_avg_price' }),
+      }),
+    ]))
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope: 'both',
+        params: expect.objectContaining({
+          rangeLower: 60000,
+          rangeUpper: 80000,
+          stepPct: 0.5,
+          sideMode: 'bidirectional',
+        }),
+      }),
+    ]))
+    expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({ reason: 'missing_entry_rules' }),
+      expect.objectContaining({ reason: 'missing_exit_rules' }),
+    ]))
+  })
+
+  it('mandatory regression: strategy 4 exact symmetric Bollinger prompt stays deterministic in startSession instead of collapsing to planner-authored short-only logic', async () => {
+    mockRepo.createSession.mockResolvedValue({ id: 's-bollinger-symmetric-regression' })
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '策略逻辑已完整，请确认逻辑图。',
+        logic: completeChecklist({
+          symbols: ['BTCUSDT'],
+          timeframes: ['15m'],
+          entryRules: ['K线收盘后确认突破布林带(30,2.5)上轨时做空'],
+          exitRules: ['价格回到布林带中轨(MA30)时平空'],
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'perp',
+            positionPct: 10,
+          },
+        }),
+      }),
+    })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: 'OKX 合约 BTCUSDT 15m，价格触及/突破布林带(20,2)上轨时做空，触及/突破下轨时做多；多空单都回到布林带中轨(MA20)时平仓；单笔仓位 10%。',
+    })
+
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.status === 'CONFIRM_GATE' || result.status === 'DRAFTING').toBe(true)
+    expect(createPayload.semanticState.contextSlots).toEqual(expect.objectContaining({
+      exchange: expect.objectContaining({ value: 'okx' }),
+      symbol: expect.objectContaining({ value: 'BTCUSDT' }),
+      marketType: expect.objectContaining({ value: 'perp' }),
+      timeframe: expect.objectContaining({ value: '15m' }),
+    }))
+    expect(createPayload.semanticState.position).toEqual(expect.objectContaining({
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_short',
+    }))
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'bollinger.touch_upper',
+        phase: 'entry',
+        sideScope: 'short',
+        params: expect.objectContaining({ period: 20, stdDev: 2 }),
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_lower',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ period: 20, stdDev: 2 }),
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_middle',
+        phase: 'exit',
+        params: expect.objectContaining({ period: 20 }),
+      }),
+    ]))
     expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
       expect.objectContaining({ reason: 'missing_entry_rules' }),
       expect.objectContaining({ reason: 'missing_exit_rules' }),
@@ -3945,7 +4040,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
-  it('keeps asking for a complete trading pair when planner only returns a base asset symbol', async () => {
+  it('mandatory regression: strategy 2 exact raw price-change prompt keeps deterministic clarification in startSession when planner pretends the logic is complete', async () => {
     mockAi.chat.mockResolvedValue({
       content: JSON.stringify({
         related: true,
@@ -3973,18 +4068,41 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       initialMessage: '在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金 止损5% 止盈10%',
     })
 
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+    const projectedChecklist = readPersistedChecklist(createPayload)
+
     expect(result.status).toBe('DRAFTING')
     expect(result.assistantPrompt).toContain('请确认策略交易标的')
     expect(result.assistantPrompt).not.toContain('请确认是否按此逻辑生成')
-    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
-      semanticState: expect.objectContaining({
-        contextSlots: expect.objectContaining({
-          symbol: expect.objectContaining({
-            status: 'open',
-          }),
-        }),
+    expect(projectedChecklist).toEqual(expect.objectContaining({
+      entryRules: ['3m 当前K线收盘价相对于上一根K线收盘价下跌≥1%时买入开仓'],
+      exitRules: ['15m 当前K线收盘价相对于上一根K线收盘价上涨≥2%时卖出平仓'],
+      riskRules: expect.objectContaining({
+        exchange: 'okx',
+        marketType: 'spot',
+        positionPct: 10,
+        stopLossBasis: 'entry_avg_price',
+        stopLossPct: 5,
+        takeProfitBasis: 'entry_avg_price',
+        takeProfitPct: 10,
       }),
     }))
+    expect(createPayload.semanticState).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({ key: 'price.percent_change', phase: 'entry' }),
+        expect.objectContaining({ key: 'price.percent_change', phase: 'exit' }),
+      ]),
+      contextSlots: expect.objectContaining({
+        exchange: expect.objectContaining({ value: 'okx', status: 'locked' }),
+        symbol: expect.objectContaining({ status: 'open' }),
+      }),
+    }))
+    expect(result.clarificationState?.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'executionContext.symbol',
+        reason: 'missing_symbol',
+      }),
+    ]))
   })
 
   it('extracts generic moving-average breakout rules for the historical MA baseline sentence', () => {
@@ -9962,7 +10080,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('请补充能明确落成主链规则的入场/出场条件')
   })
 
-  it('projects generic execution intent into semantic entry rules and keeps confirmation summary complete', async () => {
+  it('mandatory regression: strategy 1 ORDI spot follow-up keeps continueSession deterministic when planner tries to replace the server-side strategy', async () => {
     const localChecklist = (service as any).inferChecklistFromMessage('立即开始时市价买入一次')
     expect(localChecklist.entryRules).toEqual(['立即开始时市价买入一次'])
     const localProjectedChecklist = (service as any).projectLegacyChecklistFromSemanticState(
@@ -10023,9 +10141,37 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       message: '立即开始时市价买入一次',
     })
 
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    const projectedChecklist = updatePayload.checklist
+      ?? (service as any).projectLegacyChecklistFromSemanticState(updatePayload.semanticState, {})
+
     expect(result.status).toBe('CONFIRM_GATE')
+    expect(projectedChecklist).toEqual(expect.objectContaining({
+      symbols: ['ORDIUSDT'],
+      timeframes: ['1h'],
+      entryRules: ['立即开始时市价买入一次'],
+      exitRules: ['当前K线收盘价相对于上一根K线收盘价上涨≥1%时卖出平仓'],
+      riskRules: expect.objectContaining({
+        exchange: 'okx',
+        marketType: 'spot',
+        positionPct: 10,
+        stopLossPct: 5,
+        stopLossBasis: 'entry_avg_price',
+        takeProfitPct: 10,
+        takeProfitBasis: 'entry_avg_price',
+      }),
+    }))
+    expect(updatePayload.semanticState).toEqual(expect.objectContaining({
+      contextSlots: expect.objectContaining({
+        exchange: expect.objectContaining({ value: 'okx' }),
+        symbol: expect.objectContaining({ value: 'ORDIUSDT' }),
+        marketType: expect.objectContaining({ value: 'spot' }),
+        timeframe: expect.objectContaining({ value: '1h' }),
+      }),
+    }))
     expect(result.assistantPrompt).toContain('入场：1h 立即开始时市价买入一次')
     expect(result.assistantPrompt).toContain('出场：1h 当前K线收盘价相对于上一根K线收盘价上涨≥1%时卖出平仓')
+    expect(result.assistantPrompt).not.toContain('BTCUSDT 15m')
     expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
   })
 })
