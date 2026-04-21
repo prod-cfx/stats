@@ -180,6 +180,29 @@ describe('SemanticSeedExtractorService', () => {
     })
   })
 
+  it('extracts unpunctuated Chinese percent-change entry and exit synonyms independently', () => {
+    const patch = service.extract('BTCUSDT 3分钟之内跌百分1入场 15分钟之内涨百分2出场 单笔用百分10资金')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.percent_change',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ valuePct: -1, window: '3m' }),
+      }),
+      expect.objectContaining({
+        key: 'price.percent_change',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({ valuePct: 2, window: '15m' }),
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+  })
+
   it('extracts EMA crossover semantics into the existing cross-over atoms', () => {
     const patch = service.extract('EMA7 上穿 EMA21 做多；EMA7 下穿 EMA21 平多；单笔 10%。')
 

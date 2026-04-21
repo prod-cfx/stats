@@ -419,7 +419,7 @@ export class SemanticSeedExtractorService {
   }
 
   private splitPercentChangeClauses(segment: string): string[] {
-    const clausePattern = /\d{1,2}\s*(?:m|h|d|分钟|分|小时|时|天|日)[^；;。,，]*?(?:上涨|下跌|涨|跌)[^；;。,，]*?(?:\d+(?:\.\d+)?\s*%|百分之?\s*\d+(?:\.\d+)?)[^；;。,，]*?(?:买入|卖出|平仓|平多|平空|做多|做空|开多|开空)/giu
+    const clausePattern = /\d{1,2}\s*(?:m|h|d|分钟|分|小时|时|天|日)[^；;。,，]*?(?:上涨|下跌|涨|跌)[^；;。,，]*?(?:\d+(?:\.\d+)?\s*%|百分之?\s*\d+(?:\.\d+)?)[^；;。,，]*?(?:买入|卖出|入场|出场|离场|开仓|平仓|平多|平空|做多|做空|开多|开空)/giu
     const matches = Array.from(segment.matchAll(clausePattern))
       .map(match => match[0].trim())
       .filter(Boolean)
@@ -462,19 +462,21 @@ export class SemanticSeedExtractorService {
     if (/卖出平多|平多|卖出多单/u.test(segment)) {
       return { phase: 'exit', sideScope: 'long' }
     }
+    if (/出场|离场/u.test(segment)) {
+      return { phase: 'exit', sideScope: /做空|开空|空单|short/u.test(segment) ? 'short' : 'long' }
+    }
     if (/做空|开空|空单|short/u.test(segment)) {
       return { phase: 'entry', sideScope: 'short' }
     }
-    if (/做多|开多|买入|long/u.test(segment)) {
+    if (/卖出/u.test(segment)) {
+      return { phase: 'exit', sideScope: /做空|开空|空单|short/u.test(segment) ? 'short' : 'long' }
+    }
+    if (/做多|开多|买入|入场|开仓|long/u.test(segment)) {
       return { phase: 'entry', sideScope: 'long' }
     }
     if (/平仓/u.test(segment)) {
       return { phase: 'exit', sideScope: /做空|开空|空单|short/u.test(segment) ? 'short' : 'long' }
     }
-    if (/卖出/u.test(segment)) {
-      return { phase: 'exit', sideScope: /做空|开空|空单|short/u.test(segment) ? 'short' : 'long' }
-    }
-
     return null
   }
 
