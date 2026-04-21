@@ -663,6 +663,48 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(summary).toContain('出场：15m 价格回到布林带中轨(MA20)时平多；15m 价格回到布林带中轨(MA20)时平空')
   })
 
+  it('falls back to all draft rules when any closed normalized trigger cannot be projected', () => {
+    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+
+    const summary = (service as any).buildClarificationSummary({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: [
+        '价格突破布林带(20,2)下轨时做多',
+        'RSI 小于等于 30 时做多',
+      ],
+      exitRules: ['价格回到布林带中轨(MA20)时平多'],
+      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+    }, {
+      families: ['single-leg'],
+      triggers: [
+        {
+          key: 'bollinger.touch_lower',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { indicator: 'bollinger', period: 20, stdDev: 2, confirmationMode: 'close_confirm' },
+          closureStatus: 'closed',
+          unresolvedSlots: [],
+        },
+        {
+          key: 'oscillator.rsi_lte',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { value: 30 },
+          closureStatus: 'closed',
+          unresolvedSlots: [],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_only' },
+      unresolved: [],
+      normalizationNotes: [],
+    })
+
+    expect(summary).toContain('入场：15m 价格突破布林带(20,2)下轨时做多；15m RSI 小于等于 30 时做多')
+  })
+
   it('seeds checklist.grid for vague grid prompts even before numeric params are known', () => {
     const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
 

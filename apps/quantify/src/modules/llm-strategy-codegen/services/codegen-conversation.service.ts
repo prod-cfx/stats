@@ -3186,8 +3186,6 @@ export class CodegenConversationService {
   ): string | null {
     const drafts = buildChecklistRuleDrafts(checklist)
     const executionContext = this.resolveExecutionContextForSummary(checklist)
-    const entryRule = drafts.entry[0]
-    const exitRule = drafts.exit[0]
     const positionPct = typeof checklist.riskRules?.positionPct === 'number'
       ? `${checklist.riskRules.positionPct}% 仓位`
       : ''
@@ -3204,10 +3202,16 @@ export class CodegenConversationService {
       const normalizedText = draft.text.replace(/^\d+[mhd]\s+/u, '').trim()
       return formatRuleSummaryText(normalizedText, draft.timeframe)
     }
+    const formatDrafts = (items: ChecklistRuleDraft[]): string => {
+      const summaries = items
+        .map(item => formatDraft(item))
+        .filter(Boolean)
+      return Array.from(new Set(summaries)).join('；')
+    }
     const entrySummary = this.buildNormalizedTriggerSummary(normalizedIntent, 'entry', executionContext.timeframe)
-      || (entryRule ? formatDraft(entryRule) : '')
+      || formatDrafts(drafts.entry)
     const exitSummary = this.buildNormalizedTriggerSummary(normalizedIntent, 'exit', executionContext.timeframe)
-      || (exitRule ? formatDraft(exitRule) : '')
+      || formatDrafts(drafts.exit)
 
     const segments = [
       [
@@ -3317,14 +3321,16 @@ export class CodegenConversationService {
           openSlots: [],
         })
         if (!projected) {
-          return ''
+          return null
         }
 
         return /^\d+[mhd]\s+/u.test(projected) || !fallbackTimeframe
           ? projected
           : `${fallbackTimeframe} ${projected}`.trim()
       })
-      .filter(Boolean)
+    if (projectedSummaries.some(item => item === null)) {
+      return ''
+    }
 
     return Array.from(new Set(projectedSummaries)).join('；')
   }
