@@ -10,6 +10,7 @@ import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant
 import type { ChecklistPayload, ChecklistRuleBasis, ChecklistRuleDraft } from '../types/checklist-compat'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
+import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
 import type { StrategyAmbiguity } from '../types/strategy-ambiguity'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyBlockingReason, StrategyInferredAssumption } from '../types/strategy-decision'
@@ -3700,24 +3701,10 @@ export class CodegenConversationService {
   }
 
   async testEngine(dto: TestLlmCodegenEngineDto): Promise<LlmCodegenEngineTestResponseDto> {
-    const checklist = this.extractChecklist(dto)
-    const missing: string[] = []
-    if (!Array.isArray(checklist.entryRules) || checklist.entryRules.length === 0) {
-      missing.push('entryRules')
-    }
-    if (!Array.isArray(checklist.exitRules) || checklist.exitRules.length === 0) {
-      missing.push('exitRules')
-    }
-    if (missing.length > 0) {
-      throw new DomainException('codegen.missing_required_fields', {
-        code: ErrorCode.BAD_REQUEST,
-        status: HttpStatus.BAD_REQUEST,
-        args: { missingFields: missing },
-      })
-    }
+    const constraintPayload = this.resolveTestEngineConstraintPayload(dto)
 
     const providerCode = this.resolveProviderCode(dto.providerCode)
-    const scriptCode = await this.generateScript(checklist, dto.message, {
+    const scriptCode = await this.generateScript(constraintPayload, dto.message, {
       providerCode,
       model: dto.model,
       temperature: dto.temperature,
@@ -3749,16 +3736,24 @@ export class CodegenConversationService {
     }
   }
 
-  private extractChecklist(
-    input: TestLlmCodegenEngineDto,
-  ): ChecklistPayload {
-    return {
-      symbols: input.symbols,
-      timeframes: input.timeframes,
-      entryRules: input.entryRules,
-      exitRules: input.exitRules,
-      riskRules: input.riskRules,
+  private resolveTestEngineConstraintPayload(
+    dto: TestLlmCodegenEngineDto,
+  ): CanonicalStrategySpec | Record<string, unknown> {
+    if (dto.semanticState && this.hasPersistedSemanticState(dto.semanticState as unknown as Prisma.JsonValue)) {
+      const semanticState = dto.semanticState as unknown as SemanticState
+      const normalization = this.buildNormalizationFromSemanticState(semanticState)
+      return this.buildCanonicalSpecForConversation({}, normalization, semanticState)
     }
+
+    if (dto.canonicalSpec && typeof dto.canonicalSpec === 'object' && !Array.isArray(dto.canonicalSpec)) {
+      return dto.canonicalSpec
+    }
+
+    throw new DomainException('codegen.missing_required_fields', {
+      code: ErrorCode.BAD_REQUEST,
+      status: HttpStatus.BAD_REQUEST,
+      args: { missingFields: ['semanticState'] },
+    })
   }
 
   private resolveChecklistMissingFields(checklist: ChecklistPayload): string[] {
@@ -5071,7 +5066,7 @@ export class CodegenConversationService {
   }
 
   private async generateScript(
-    checklist: ChecklistPayload,
+    constraintPayload: CanonicalStrategySpec | Record<string, unknown>,
     userMessage: string,
     options?: GenerationOptions,
   ): Promise<string> {
@@ -5083,7 +5078,7 @@ export class CodegenConversationService {
       },
       {
         role: 'user',
-        content: `需求: ${userMessage}\n约束: ${JSON.stringify(checklist)}`,
+        content: `需求: ${userMessage}\n约束: ${JSON.stringify(constraintPayload)}`,
       },
     ]
 

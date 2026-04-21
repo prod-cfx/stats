@@ -922,6 +922,70 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(createPayload).not.toHaveProperty('checklist')
   })
 
+  it('rejects engine tests when semantic input is missing', async () => {
+    await expect(service.testEngine({
+      userId: 'u1',
+      message: '测试',
+    } as any)).rejects.toMatchObject({
+      args: { missingFields: ['semanticState'] },
+    })
+  })
+
+  it('rejects engine tests that only send legacy checklist fields', async () => {
+    await expect(service.testEngine({
+      userId: 'u1',
+      message: '测试',
+      symbols: ['BTCUSDT'],
+      timeframes: ['1h'],
+      entryRules: ['RSI 14 低于 30 时做多'],
+      exitRules: ['收益率达到 5% 止盈'],
+      riskRules: { positionPct: 10 },
+    } as any)).rejects.toMatchObject({
+      args: { missingFields: ['semanticState'] },
+    })
+  })
+
+  it('tests engine generation from semanticState through canonical spec constraints', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 75, entryPrice: 62000, stopLoss: 61000, takeProfit: 64000, reasoning: "semantic", positionSizeRatio: 0.1 }',
+    })
+
+    const result = await service.testEngine({
+      userId: 'u1',
+      message: '请测试语义态生成策略脚本',
+      semanticState: buildLockedMaSemanticState(),
+    } as any)
+
+    expect(result.staticPassed).toBe(true)
+    expect(result.runtimePassed).toBe(true)
+    expect(result.outputPassed).toBe(true)
+    const prompt = mockAi.chat.mock.calls[0]?.[0]?.messages?.[1]?.content as string
+    expect(prompt).toContain('"version":2')
+    expect(prompt).not.toContain('entryRules')
+  })
+
+  it('tests engine generation from a provided canonicalSpec without checklist fallback', async () => {
+    const semanticState = buildLockedMaSemanticState()
+    const normalization = (service as any).buildNormalizationFromSemanticState(semanticState)
+    const canonicalSpec = (service as any).buildCanonicalSpecForConversation({}, normalization, semanticState)
+    mockAi.chat.mockResolvedValueOnce({
+      content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 75, entryPrice: 62000, stopLoss: 61000, takeProfit: 64000, reasoning: "canonical", positionSizeRatio: 0.1 }',
+    })
+
+    const result = await service.testEngine({
+      userId: 'u1',
+      message: '请测试 canonical spec 生成策略脚本',
+      canonicalSpec,
+    } as any)
+
+    expect(result.staticPassed).toBe(true)
+    expect(result.runtimePassed).toBe(true)
+    expect(result.outputPassed).toBe(true)
+    const prompt = mockAi.chat.mock.calls[0]?.[0]?.messages?.[1]?.content as string
+    expect(prompt).toContain('"version":2')
+    expect(prompt).not.toContain('entryRules')
+  })
+
 
   it('fills deterministic context before required semantic open slots when semanticPatch omits context', async () => {
     mockAi.chat.mockResolvedValueOnce({

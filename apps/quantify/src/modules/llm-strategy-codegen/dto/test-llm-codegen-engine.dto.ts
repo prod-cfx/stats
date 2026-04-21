@@ -1,6 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
 import {
-  IsArray,
   IsInt,
   IsNotEmpty,
   IsNumber,
@@ -22,34 +21,15 @@ export class TestLlmCodegenEngineDto {
   @IsNotEmpty()
   message!: string
 
-  @ApiPropertyOptional({ description: '标的列表', type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  symbols?: string[]
-
-  @ApiPropertyOptional({ description: '周期列表', type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  timeframes?: string[]
-
-  @ApiPropertyOptional({ description: '入场规则列表', type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  entryRules?: string[]
-
-  @ApiPropertyOptional({ description: '出场规则列表', type: [String] })
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  exitRules?: string[]
-
-  @ApiPropertyOptional({ description: '风控规则', type: 'object', additionalProperties: true })
+  @ApiPropertyOptional({ description: '语义状态快照', type: 'object', additionalProperties: true })
   @IsOptional()
   @IsObject()
-  riskRules?: Record<string, unknown>
+  semanticState?: Record<string, unknown>
+
+  @ApiPropertyOptional({ description: 'Canonical 策略规格快照', type: 'object', additionalProperties: true })
+  @IsOptional()
+  @IsObject()
+  canonicalSpec?: Record<string, unknown>
 
   @ApiPropertyOptional({ description: 'LLM 提供商编码，默认 strategy-codegen' })
   @IsOptional()
