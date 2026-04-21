@@ -20,7 +20,7 @@ The AI Quant codegen path no longer uses planner `logic`, publication checklist 
 ## Verification Commands
 
 - `npx nx test quantify --runTestsByPath src/modules/llm-strategy-codegen/services/__tests__/semantic-only-strategy-regression.spec.ts --runInBand`
-  - Passed: 9 tests.
+  - Passed: 10 tests.
 - `npx nx test quantify --runTestsByPath src/modules/llm-strategy-codegen/services/__tests__/semantic-seed-extractor.service.spec.ts src/modules/llm-strategy-codegen/services/__tests__/codegen-conversation.service.spec.ts src/modules/llm-strategy-codegen/services/__tests__/codegen-publication-generation.stage.spec.ts --runInBand`
   - Passed in worker verification.
 - `dx build quantify --dev`
