@@ -5,13 +5,7 @@ export interface OrdinarySemanticGraphStrategyFixture {
     related: true
     logicReady: true
     assistantPrompt: string
-    logic: {
-      symbols: string[]
-      timeframes: string[]
-      entryRules: string[]
-      exitRules: string[]
-      riskRules: Record<string, unknown>
-    }
+    semanticPatch: Record<string, unknown>
   }
   expected: {
     symbol: string
@@ -31,16 +25,24 @@ export const ordinarySemanticGraphStrategyFixtures: OrdinarySemanticGraphStrateg
       related: true,
       logicReady: true,
       assistantPrompt: '逻辑已完整，请确认后生成代码。',
-      logic: {
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-        entryRules: ['突破布林带上轨做空', '突破布林带下轨做多'],
-        exitRules: ['价格回到布林带中轨（MA20）平仓'],
-        riskRules: {
-          positionPct: 10,
-          stopLossPct: 5,
-          outsideBandRule: '价格连续3根K线在轨外时提前减仓',
-        },
+      semanticPatch: {
+        contextSlots: { symbol: 'BTCUSDT', timeframe: '15m' },
+        triggers: [
+          { key: 'bollinger.touch_upper', phase: 'entry', sideScope: 'short', params: { band: 'upper' } },
+          { key: 'bollinger.touch_lower', phase: 'entry', sideScope: 'long', params: { band: 'lower' } },
+          { key: 'bollinger.touch_middle', phase: 'exit', sideScope: 'both', params: { band: 'middle', period: 20 } },
+          { key: 'bollinger.bars_outside', phase: 'risk', sideScope: 'both', params: { bars: 3 } },
+        ],
+        actions: [
+          { key: 'open_short' },
+          { key: 'open_long' },
+          { key: 'close_short' },
+          { key: 'close_long' },
+        ],
+        risk: [
+          { key: 'risk.stop_loss_pct', params: { valuePct: 5 } },
+        ],
+        position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_short' },
       },
     },
     expected: {
@@ -59,15 +61,20 @@ export const ordinarySemanticGraphStrategyFixtures: OrdinarySemanticGraphStrateg
       related: true,
       logicReady: true,
       assistantPrompt: '逻辑已完整，请确认后生成代码。',
-      logic: {
-        symbols: ['BTCUSDT'],
-        timeframes: ['3m', '15m'],
-        entryRules: ['当前K线收盘价相对于上一根K线收盘价下跌≥1%时买入开仓'],
-        exitRules: ['当前K线收盘价相对于开仓均价上涨≥2%时卖出平仓'],
-        riskRules: {
-          positionPct: 10,
-          stopLossPct: 5,
-        },
+      semanticPatch: {
+        contextSlots: { symbol: 'BTCUSDT', timeframe: '3m' },
+        triggers: [
+          { key: 'price.percent_change', phase: 'entry', sideScope: 'long', params: { valuePct: -1, basis: 'prev_close', window: '3m' } },
+          { key: 'price.percent_change', phase: 'exit', sideScope: 'long', params: { valuePct: 2, basis: 'entry_avg_price', window: '15m' } },
+        ],
+        actions: [
+          { key: 'open_long' },
+          { key: 'close_long' },
+        ],
+        risk: [
+          { key: 'risk.stop_loss_pct', params: { valuePct: 5 } },
+        ],
+        position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_only' },
       },
     },
     expected: {
@@ -86,15 +93,24 @@ export const ordinarySemanticGraphStrategyFixtures: OrdinarySemanticGraphStrateg
       related: true,
       logicReady: true,
       assistantPrompt: '逻辑已完整，请确认后生成代码。',
-      logic: {
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-        entryRules: ['在60000-80000固定区间按步长1%，共21格执行区间网格买入'],
-        exitRules: ['价格触达上方网格卖出'],
-        riskRules: {
-          positionPct: 1,
-          maxSingleLossPct: 2,
-        },
+      semanticPatch: {
+        contextSlots: { symbol: 'BTCUSDT', timeframe: '15m' },
+        triggers: [
+          {
+            key: 'grid.range_rebalance',
+            phase: 'entry',
+            sideScope: 'long',
+            params: { rangeLower: 60000, rangeUpper: 80000, stepPct: 1 },
+          },
+        ],
+        actions: [
+          { key: 'open_long' },
+          { key: 'close_long' },
+        ],
+        risk: [
+          { key: 'risk.max_single_loss_pct', params: { valuePct: 2 } },
+        ],
+        position: { mode: 'fixed_ratio', value: 0.01, positionMode: 'long_only' },
       },
     },
     expected: {
