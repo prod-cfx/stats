@@ -16,13 +16,6 @@ export const ALLOWED_HELPER_PREFIXES = [
   'helpers.signal.',
 ] as const
 
-export const REQUIRED_CHECKLIST_FIELDS = [
-  'entryRules',
-  'exitRules',
-] as const
-
-export type ChecklistField = typeof REQUIRED_CHECKLIST_FIELDS[number]
-
 export interface ConstraintPackInferredConfirmationSnapshot {
   confirmedKeys: string[]
   overriddenKeys: string[]

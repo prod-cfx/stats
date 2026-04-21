@@ -175,7 +175,7 @@ describe('codegenSessionPublicationPipeline', () => {
       repo as any,
       recommendationIndex as any,
       canonicalSpecBuilder,
-      new SpecDescBuilderService(canonicalSpecBuilder),
+      new SpecDescBuilderService(),
       consistency as any,
       summaryBuilder as any,
       new CanonicalSpecV2IrCompilerService(),

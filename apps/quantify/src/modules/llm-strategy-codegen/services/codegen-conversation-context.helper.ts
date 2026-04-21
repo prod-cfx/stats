@@ -4,7 +4,7 @@ import type {
   ConstraintPackSnapshot,
 } from '../constants/constraint-pack'
 import type { CodegenGuideConfigDto } from '../dto/codegen-guide-config.dto'
-import type { ChecklistPayload } from '../types/checklist-compat'
+import type { StrategyLogicSnapshot } from '../types/strategy-logic-snapshot'
 
 import { createDefaultConstraintPack } from '../constants/constraint-pack'
 
@@ -137,12 +137,12 @@ export class CodegenConversationContextHelper {
 
   inferRecommendationStyleFromContext(
     message: string | undefined,
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     currentStyle?: RecommendationStyle,
   ): RecommendationStyle | undefined {
-    const fromChecklist = this.detectRecommendationStyleFromChecklist(checklist)
-    if (fromChecklist) {
-      return fromChecklist
+    const fromLogicSnapshot = this.detectRecommendationStyleFromLogicSnapshot(checklist)
+    if (fromLogicSnapshot) {
+      return fromLogicSnapshot
     }
     const text = (message ?? '').trim()
     if (text) {
@@ -156,7 +156,7 @@ export class CodegenConversationContextHelper {
     return currentStyle
   }
 
-  private detectRecommendationStyleFromChecklist(checklist: ChecklistPayload): RecommendationStyle | undefined {
+  private detectRecommendationStyleFromLogicSnapshot(checklist: StrategyLogicSnapshot): RecommendationStyle | undefined {
     const rules = [...(checklist.entryRules ?? []), ...(checklist.exitRules ?? [])].join(' ')
     if (!rules.trim()) return undefined
     if (/金叉|死叉|均线|ma|moving average/i.test(rules)) return 'ma'

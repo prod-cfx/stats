@@ -643,7 +643,7 @@ describe('codegenPublicationGenerationStage', () => {
 
     const stage = new CodegenPublicationGenerationStage(
       canonicalSpecBuilder,
-      new SpecDescBuilderService(canonicalSpecBuilder),
+      new SpecDescBuilderService(),
       strategySummaryBuilder,
       { evaluate: jest.fn().mockReturnValue({
         status: 'PASSED',
@@ -709,7 +709,7 @@ describe('codegenPublicationGenerationStage', () => {
 
     const stage = new CodegenPublicationGenerationStage(
       canonicalSpecBuilder,
-      new SpecDescBuilderService(canonicalSpecBuilder),
+      new SpecDescBuilderService(),
       strategySummaryBuilder,
       { evaluate: jest.fn().mockReturnValue({
         status: 'PASSED',
@@ -775,7 +775,7 @@ describe('codegenPublicationGenerationStage', () => {
 
     const stage = new CodegenPublicationGenerationStage(
       canonicalSpecBuilder,
-      new SpecDescBuilderService(canonicalSpecBuilder),
+      new SpecDescBuilderService(),
       strategySummaryBuilder,
       { evaluate: jest.fn().mockReturnValue({
         status: 'PASSED',
@@ -832,7 +832,7 @@ describe('codegenPublicationGenerationStage', () => {
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
     const stage = new CodegenPublicationGenerationStage(
       canonicalSpecBuilder,
-      new SpecDescBuilderService(canonicalSpecBuilder),
+      new SpecDescBuilderService(),
       strategySummaryBuilder,
       { evaluate: jest.fn().mockReturnValue({
         status: 'PASSED',
@@ -901,7 +901,7 @@ describe('codegenPublicationGenerationStage', () => {
     } as any)
     const stage = new CodegenPublicationGenerationStage(
       canonicalSpecBuilder,
-      new SpecDescBuilderService(canonicalSpecBuilder),
+      new SpecDescBuilderService(),
       strategySummaryBuilder,
       { evaluate: jest.fn().mockReturnValue({
         status: 'PASSED',
@@ -955,7 +955,7 @@ describe('codegenPublicationGenerationStage', () => {
 
     const stage = new CodegenPublicationGenerationStage(
       canonicalSpecBuilder,
-      new SpecDescBuilderService(canonicalSpecBuilder),
+      new SpecDescBuilderService(),
       strategySummaryBuilder,
       { evaluate: jest.fn().mockReturnValue({
         status: 'PASSED',

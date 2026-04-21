@@ -6,7 +6,7 @@ import { Injectable } from '@nestjs/common'
 import { ScriptProfileExtractorService } from './script-profile-extractor.service'
 import { normalizeStrategySemanticProfile } from './strategy-semantic-profile-normalizer'
 
-interface ChecklistSnapshot {
+interface StrategyLogicSnapshotInput {
   symbols?: unknown
   timeframes?: unknown
   entryRules?: unknown
@@ -34,10 +34,10 @@ export class StrategySummaryBuilderService {
   constructor(private readonly scriptProfileExtractor: ScriptProfileExtractorService) {}
 
   buildUserIntentSummary(input: {
-    checklist: ChecklistSnapshot
+    checklist: StrategyLogicSnapshotInput
     message?: string
   }): StrategySummary {
-    const normalized = this.normalizeChecklist(input.checklist)
+    const normalized = this.normalizeLogicSnapshot(input.checklist)
     const checklistText = [
       normalized.entryRules.join('\n'),
       normalized.exitRules.join('\n'),
@@ -170,7 +170,7 @@ export class StrategySummaryBuilderService {
     }
   }
 
-  private normalizeChecklist(checklist: ChecklistSnapshot): {
+  private normalizeLogicSnapshot(checklist: StrategyLogicSnapshotInput): {
     symbols: string[]
     timeframes: string[]
     entryRules: string[]

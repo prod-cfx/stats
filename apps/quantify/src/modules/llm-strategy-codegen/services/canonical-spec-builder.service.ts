@@ -1,5 +1,5 @@
 import type { CanonicalConditionNode, CanonicalRuleSideScope, CanonicalRuleV2, CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec'
-import type { ChecklistRuleBasis } from '../types/checklist-compat'
+import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { StrategyIR } from '../types/strategy-ir'
 import type {
   NormalizedGridIntent,
@@ -10,16 +10,16 @@ import type {
 import { Injectable } from '@nestjs/common'
 import { CANONICAL_RULE_KEYS, DEFAULT_INDICATOR_PARAMS } from '../constants/canonical-strategy-capabilities'
 import {
-  buildChecklistRuleDrafts,
-  resolveChecklistDefaultTimeframe,
+  buildStrategyRuleDrafts,
+  resolveStrategyDefaultTimeframe,
   resolveRequiredRuleTimeframes,
   resolveRulePhaseDefaultTimeframe,
-} from './checklist-compat'
+} from './rule-draft-projection'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 import { StrategyIrCanonicalAdapterService } from './strategy-ir-canonical-adapter.service'
 
-interface ChecklistSnapshot {
+interface StrategyLogicSnapshotInput {
   symbols?: unknown
   timeframes?: unknown
   entryRules?: unknown
@@ -44,9 +44,9 @@ export class CanonicalSpecBuilderService {
     private readonly strategyIrCanonicalAdapter: StrategyIrCanonicalAdapterService = new StrategyIrCanonicalAdapterService(),
   ) {}
 
-  build(checklist: ChecklistSnapshot): CanonicalStrategySpecV2 {
-    const normalizedChecklist = checklist as ChecklistSnapshot & Parameters<typeof buildChecklistRuleDrafts>[0]
-    const ruleDrafts = buildChecklistRuleDrafts(normalizedChecklist)
+  build(checklist: StrategyLogicSnapshotInput): CanonicalStrategySpecV2 {
+    const normalizedLogicSnapshot = checklist as StrategyLogicSnapshotInput & Parameters<typeof buildStrategyRuleDrafts>[0]
+    const ruleDrafts = buildStrategyRuleDrafts(normalizedLogicSnapshot)
     const entryRules = Array.isArray(checklist.entryRules) ? checklist.entryRules : []
     const exitRules = Array.isArray(checklist.exitRules) ? checklist.exitRules : []
     const riskRules = checklist.riskRules && typeof checklist.riskRules === 'object' && !Array.isArray(checklist.riskRules)
@@ -56,7 +56,7 @@ export class CanonicalSpecBuilderService {
     const exitTexts = exitRules.map(item => String(item))
     const sharedGridParams = this.resolveGridParams([...entryTexts, ...exitTexts].join(' '))
     const sizing = this.resolveSizing(riskRules)
-    const market = this.resolveMarket(normalizedChecklist, riskRules, ruleDrafts)
+    const market = this.resolveMarket(normalizedLogicSnapshot, riskRules, ruleDrafts)
     const indicators = this.resolveIndicators(entryTexts, exitTexts, riskRules)
     const requiredTimeframes = resolveRequiredRuleTimeframes(ruleDrafts, market.defaultTimeframe)
     const dominantEntrySideScope = this.resolveDominantEntrySideScope(entryTexts)
@@ -539,9 +539,9 @@ export class CanonicalSpecBuilderService {
   private resolveRiskBasis(
     ruleText: string | null,
     explicitBasis: unknown,
-  ): ChecklistRuleBasis['kind'] | null {
+  ): StrategyRuleBasis['kind'] | null {
     if (typeof explicitBasis === 'string' && explicitBasis.trim()) {
-      return explicitBasis.trim() as ChecklistRuleBasis['kind']
+      return explicitBasis.trim() as StrategyRuleBasis['kind']
     }
     if (!ruleText?.trim()) {
       return null
@@ -562,9 +562,9 @@ export class CanonicalSpecBuilderService {
   }
 
   private resolveMarket(
-    checklist: ChecklistSnapshot,
+    checklist: StrategyLogicSnapshotInput,
     riskRules: Record<string, unknown>,
-    ruleDrafts: ReturnType<typeof buildChecklistRuleDrafts>,
+    ruleDrafts: ReturnType<typeof buildStrategyRuleDrafts>,
   ): CanonicalStrategySpecV2['market'] {
     const symbols = Array.isArray(checklist.symbols) ? checklist.symbols : []
     const market = checklist.market && typeof checklist.market === 'object' && !Array.isArray(checklist.market)
@@ -573,7 +573,7 @@ export class CanonicalSpecBuilderService {
     const rawSymbol = typeof symbols[0] === 'string' ? canonicalizeStrategySymbolInput(symbols[0]) ?? '' : ''
     const rawTimeframe = resolveRulePhaseDefaultTimeframe(
       ruleDrafts.entry,
-      resolveChecklistDefaultTimeframe(checklist as Parameters<typeof resolveChecklistDefaultTimeframe>[0]),
+      resolveStrategyDefaultTimeframe(checklist as Parameters<typeof resolveStrategyDefaultTimeframe>[0]),
     ) ?? ruleDrafts.exit.find(draft => draft.timeframe)?.timeframe ?? ''
     const riskExchange = typeof riskRules.exchange === 'string' ? riskRules.exchange.trim().toLowerCase() : ''
     const riskMarketType = typeof riskRules.marketType === 'string' ? riskRules.marketType.trim().toLowerCase() : ''

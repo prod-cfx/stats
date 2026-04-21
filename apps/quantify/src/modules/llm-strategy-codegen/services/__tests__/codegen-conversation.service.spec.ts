@@ -78,7 +78,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   }
   const canonicalSpecBuilder = new CanonicalSpecBuilderService()
   const canonicalDigestService = new CanonicalSpecV2DigestService()
-  const specDescBuilder = new SpecDescBuilderService(canonicalSpecBuilder)
+  const specDescBuilder = new SpecDescBuilderService()
   const publicationPipeline = new CodegenSessionPublicationPipelineService(
     mockRepo as unknown as CodegenSessionsRepository,
     mockRecommendation as unknown as RecommendationIndexService,
@@ -112,7 +112,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       return session.checklist
     }
     if (session.semanticState) {
-      return (service as any).projectLegacyChecklistFromSemanticState(session.semanticState, {})
+      return (service as any).projectLegacyLogicSnapshotFromSemanticState(session.semanticState, {})
     }
     return {}
   }
@@ -461,17 +461,17 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const rawChecklist = fixture.checklist && typeof fixture.checklist === 'object' && !Array.isArray(fixture.checklist)
       ? fixture.checklist as Record<string, any>
       : {}
-    const normalizedChecklist = fixture.checklist && typeof fixture.checklist === 'object' && !Array.isArray(fixture.checklist)
-      ? (service as any).normalizeChecklist(fixture.checklist)
+    const normalizedLogicSnapshot = fixture.checklist && typeof fixture.checklist === 'object' && !Array.isArray(fixture.checklist)
+      ? (service as any).normalizeLogicSnapshot(fixture.checklist)
       : {}
     const semanticState = (service as any).hasPersistedSemanticState(fixture.semanticState)
       ? fixture.semanticState
-      : (Object.keys(normalizedChecklist).length > 0
-          ? (service as any).buildFallbackSemanticState(normalizedChecklist)
+      : (Object.keys(normalizedLogicSnapshot).length > 0
+          ? (service as any).buildFallbackSemanticState(normalizedLogicSnapshot)
           : null)
     const baselineChecklist = semanticState
-      ? (service as any).projectLegacyChecklistFromSemanticState(semanticState, normalizedChecklist)
-      : normalizedChecklist
+      ? (service as any).projectLegacyLogicSnapshotFromSemanticState(semanticState, normalizedLogicSnapshot)
+      : normalizedLogicSnapshot
     const normalization = semanticState
       ? (service as any).buildNormalizationFromSemanticState(semanticState)
       : (service as any).resolveClarificationArtifacts(baselineChecklist).normalization
@@ -493,14 +493,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     if (
       typeof rawChecklist.riskRules?.stopLossPct === 'number'
       && rawChecklist.riskRules?.stopLossBasis == null
-      && normalizedChecklist.riskRules?.stopLossBasis === 'entry_avg_price'
+      && normalizedLogicSnapshot.riskRules?.stopLossBasis === 'entry_avg_price'
     ) {
       inferredAssumptions.add('risk.stopLossBasis')
     }
     if (
       typeof rawChecklist.riskRules?.takeProfitPct === 'number'
       && rawChecklist.riskRules?.takeProfitBasis == null
-      && normalizedChecklist.riskRules?.takeProfitBasis === 'entry_avg_price'
+      && normalizedLogicSnapshot.riskRules?.takeProfitBasis === 'entry_avg_price'
     ) {
       inferredAssumptions.add('risk.takeProfitBasis')
     }
@@ -547,7 +547,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   const readFixtureCanonicalDigest = (fixture: Record<string, any>): string =>
     readCanonicalDigestFromSpecDesc(fixture.latestSpecDesc)
   const buildSemanticOnlyCanonicalDigest = (semanticState: Record<string, any>): string => {
-    const projectedChecklist = (service as any).projectLegacyChecklistFromSemanticState(semanticState, {})
+    const projectedChecklist = (service as any).projectLegacyLogicSnapshotFromSemanticState(semanticState, {})
     return buildConfirmedCanonicalDigest(projectedChecklist, semanticState)
   }
   const markFixtureInferredRiskBasisDefaults = (
@@ -2066,7 +2066,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
 
 
-  it('accepts planner semanticPatch output and projects it into checklist-compatible state', async () => {
+  it('accepts planner semanticPatch output and projects it into logic snapshot state', async () => {
     mockAi.chat.mockResolvedValueOnce({
       content: JSON.stringify({
         related: true,
@@ -2570,7 +2570,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         },
       },
     })
-    const projectedChecklist = (service as any).projectLegacyChecklistFromSemanticState(persistedSemanticState, {})
+    const projectedChecklist = (service as any).projectLegacyLogicSnapshotFromSemanticState(persistedSemanticState, {})
 
     mockRepo.findById.mockResolvedValue({
       id: 's-semantic-first-confirm',
@@ -2600,7 +2600,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
     }))
     const generatingPayload = mockRepo.tryMarkGenerating.mock.calls.at(-1)?.[1] as Record<string, any>
-    const generatedChecklist = (service as any).projectLegacyChecklistFromSemanticState(generatingPayload.semanticState, {})
+    const generatedChecklist = (service as any).projectLegacyLogicSnapshotFromSemanticState(generatingPayload.semanticState, {})
     expect(generatedChecklist).toEqual(expect.objectContaining({
       entryRules: expect.arrayContaining(['收盘确认价格突破长期均线（50）时买入']),
       exitRules: expect.arrayContaining(['收盘确认价格跌破短期均线（20）时卖出']),
@@ -2608,7 +2608,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('does not fall back to checklist completeness in continueWithStructuredClarificationAnswers when semantic slots are closed', async () => {
-    const missingFieldsSpy = jest.spyOn(service as any, 'resolveChecklistMissingFields').mockReturnValue(['entryRules', 'exitRules'])
+    const missingFieldsSpy = jest.spyOn(service as any, 'resolveLogicSnapshotMissingFields').mockReturnValue(['entryRules', 'exitRules'])
     const persistedSemanticState = buildLockedMaSemanticState({
       risk: [
         {
@@ -2725,7 +2725,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         },
       },
     })
-    const projectedChecklist = (service as any).projectLegacyChecklistFromSemanticState(persistedSemanticState, {})
+    const projectedChecklist = (service as any).projectLegacyLogicSnapshotFromSemanticState(persistedSemanticState, {})
 
     mockRepo.findById.mockResolvedValue({
       id: 's-confirm-semantic-no-checklist-gate',
@@ -2978,7 +2978,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         },
       },
     })
-    const projectedChecklist = (service as any).projectLegacyChecklistFromSemanticState(persistedSemanticState, {})
+    const projectedChecklist = (service as any).projectLegacyLogicSnapshotFromSemanticState(persistedSemanticState, {})
 
     mockRepo.findById.mockResolvedValue({
       id: 's-confirm-semantic-legacy-blocker',
@@ -3687,7 +3687,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('projects short-side MA semantic triggers back into checklist rules without rewriting them into long actions', () => {
-    const projected = (service as any).projectLegacyChecklistFromSemanticState({
+    const projected = (service as any).projectLegacyLogicSnapshotFromSemanticState({
       version: 1,
       families: ['single-leg'],
       triggers: [
@@ -3745,8 +3745,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(projected.exitRules).toEqual(['收盘确认价格突破长期均线（50）时平空'])
   })
 
-  it('keeps semantic MA rules when projectLegacyChecklistFromSemanticState projects over generic checklist placeholders', () => {
-    const projected = (service as any).projectLegacyChecklistFromSemanticState({
+  it('keeps semantic MA rules when projectLegacyLogicSnapshotFromSemanticState projects over generic checklist placeholders', () => {
+    const projected = (service as any).projectLegacyLogicSnapshotFromSemanticState({
       version: 1,
       families: ['single-leg'],
       triggers: [
@@ -3978,8 +3978,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       ],
       exitRules: ['收盘确认价格跌破短期均线（10）时卖出'],
     }
-    const mergedSemanticState = (service as any).mergeChecklistIntoSemanticState(currentSemanticState, checklist)
-    const projectedChecklist = (service as any).projectLegacyChecklistFromSemanticState(mergedSemanticState, checklist)
+    const mergedSemanticState = (service as any).mergeLogicSnapshotIntoSemanticState(currentSemanticState, checklist)
+    const projectedChecklist = (service as any).projectLegacyLogicSnapshotFromSemanticState(mergedSemanticState, checklist)
 
     expect(mergedSemanticState.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -4058,7 +4058,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       position: null,
     })
 
-    const mergedSemanticState = (service as any).mergeChecklistIntoSemanticState(currentSemanticState, {
+    const mergedSemanticState = (service as any).mergeLogicSnapshotIntoSemanticState(currentSemanticState, {
       entryRules: [
         '价格突破长期均线（50）时买入',
         '价格突破短期均线（20）时买入',
@@ -4130,7 +4130,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       position: null,
     })
 
-    const mergedSemanticState = (service as any).mergeChecklistIntoSemanticState(currentSemanticState, {
+    const mergedSemanticState = (service as any).mergeLogicSnapshotIntoSemanticState(currentSemanticState, {
       entryRules: [
         '价格突破长期均线（50）时买入',
         '价格突破短期均线（20）时买入',
@@ -4195,7 +4195,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     })
 
-    const mergedSemanticState = (service as any).mergeChecklistIntoSemanticState(currentSemanticState, checklist)
+    const mergedSemanticState = (service as any).mergeLogicSnapshotIntoSemanticState(currentSemanticState, checklist)
 
     expect(mergedSemanticState.triggers.filter((trigger: any) => trigger.phase === 'gate')).toEqual([
       expect.objectContaining({
@@ -8138,7 +8138,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       constraintPack: {},
     })
     const missingFieldsSpy = jest
-      .spyOn(CodegenConversationService.prototype as any, 'resolveChecklistMissingFields')
+      .spyOn(CodegenConversationService.prototype as any, 'resolveLogicSnapshotMissingFields')
       .mockReturnValue(['entryRules', 'exitRules'])
     const confirmedCanonicalDigest = buildConfirmedCanonicalDigest(semanticCompleteChecklist, persistedSemanticState)
     const readCanonicalDigestSpy = jest

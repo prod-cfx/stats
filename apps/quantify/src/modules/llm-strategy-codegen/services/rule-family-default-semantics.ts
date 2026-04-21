@@ -1,4 +1,4 @@
-import type { ChecklistRuleBasis } from '../types/checklist-compat'
+import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 
 export type PercentageRuleFamily =
   | 'risk.stop_loss_pct'
@@ -10,7 +10,7 @@ export type PercentageRuleFamily =
 
 export interface RuleFamilySemantics {
   family: PercentageRuleFamily
-  defaultBasis: ChecklistRuleBasis['kind'] | null
+  defaultBasis: StrategyRuleBasis['kind'] | null
   requiresUserBasis: boolean
 }
 
@@ -74,7 +74,7 @@ export function classifyPercentageRuleFamily(input: {
   }
 }
 
-export function extractExplicitRiskBasis(rule: string): ChecklistRuleBasis['kind'] | null {
+export function extractExplicitRiskBasis(rule: string): StrategyRuleBasis['kind'] | null {
   const normalized = rule.trim().toLowerCase()
   if (!normalized) return null
 
@@ -88,8 +88,8 @@ export function extractExplicitRiskBasis(rule: string): ChecklistRuleBasis['kind
 
 export function resolveDefaultRiskBasis(
   rule: string,
-  explicitBasis: ChecklistRuleBasis['kind'] | null | undefined,
-): ChecklistRuleBasis['kind'] | null {
+  explicitBasis: StrategyRuleBasis['kind'] | null | undefined,
+): StrategyRuleBasis['kind'] | null {
   const normalizedExplicit = typeof explicitBasis === 'string' && explicitBasis.trim()
     ? explicitBasis
     : null

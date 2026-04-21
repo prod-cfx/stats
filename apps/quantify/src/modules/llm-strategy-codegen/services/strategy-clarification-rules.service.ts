@@ -1,4 +1,4 @@
-import type { ChecklistPayload } from '../types/checklist-compat'
+import type { StrategyLogicSnapshot } from '../types/strategy-logic-snapshot'
 import type { AtomicIntentResolution, StrategyAmbiguity } from '../types/strategy-ambiguity'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyExecutionContextResolution } from '../types/strategy-execution-context'
@@ -8,7 +8,7 @@ import { classifyPercentageRuleFamily } from './rule-family-default-semantics'
 import { buildSemanticSlotId } from '../types/semantic-state'
 import { resolveSemanticClarificationMetadata } from './semantic-clarification-metadata'
 
-type ClarificationChecklistInput = ChecklistPayload
+type StrategyClarificationInput = StrategyLogicSnapshot
 
 interface MarketScopeConflict {
   field: 'exchange' | 'marketType' | 'symbol' | 'timeframe'
@@ -32,7 +32,7 @@ export class StrategyClarificationRulesService {
   detectFromAmbiguities(input: {
     executionContext: StrategyExecutionContextResolution
     atomicResolution: AtomicIntentResolution
-    checklist?: ClarificationChecklistInput | null
+    checklist?: StrategyClarificationInput | null
   }): StrategyClarificationState {
     const items: StrategyClarificationItem[] = [
       ...this.fromExecutionContextAmbiguities(input.executionContext),
@@ -52,7 +52,7 @@ export class StrategyClarificationRulesService {
     }
   }
 
-  detect(input: ClarificationChecklistInput): StrategyClarificationState {
+  detect(input: StrategyClarificationInput): StrategyClarificationState {
     const entryDetection = this.detectEntryItems(input.entryRules ?? [])
     const items: StrategyClarificationItem[] = [
       ...this.detectRequiredRuleItems(input),
@@ -82,7 +82,7 @@ export class StrategyClarificationRulesService {
     }
   }
 
-  collectEvidence(input: ClarificationChecklistInput): {
+  collectEvidence(input: StrategyClarificationInput): {
     clarificationState: StrategyClarificationState
     evidence: Array<{ key: string, reason: string, priority: number, question?: string }>
     blockingReasons: Array<{ key: string, reason: string, priority: number, question: string }>
@@ -134,7 +134,7 @@ export class StrategyClarificationRulesService {
 
   private fromAtomicAmbiguities(
     ambiguities: StrategyAmbiguity[],
-    checklist?: ClarificationChecklistInput | null,
+    checklist?: StrategyClarificationInput | null,
   ): StrategyClarificationItem[] {
     return ambiguities.flatMap<StrategyClarificationItem>((ambiguity) => {
       if (ambiguity.kind === 'open_semantic_slot' || ambiguity.kind === 'semantic_conflict') {
@@ -255,7 +255,7 @@ export class StrategyClarificationRulesService {
   }
 
   private detectMarketItems(
-    input: ClarificationChecklistInput,
+    input: StrategyClarificationInput,
     hasShortEntry: boolean,
     hasActionUniquenessConflict: boolean,
   ): StrategyClarificationItem[] {
@@ -337,7 +337,7 @@ export class StrategyClarificationRulesService {
     return items
   }
 
-  private detectRequiredRuleItems(input: ClarificationChecklistInput): StrategyClarificationItem[] {
+  private detectRequiredRuleItems(input: StrategyClarificationInput): StrategyClarificationItem[] {
     const items: StrategyClarificationItem[] = []
     const hasClosedLoopSemantics = this.hasClosedLoopExitSemantics(input)
     const hasSelfContainedGridSemantics = this.hasSelfContainedGridSemantics(input)
@@ -404,7 +404,7 @@ export class StrategyClarificationRulesService {
     }]
   }
 
-  private detectGridItems(input: ClarificationChecklistInput): StrategyClarificationItem[] {
+  private detectGridItems(input: StrategyClarificationInput): StrategyClarificationItem[] {
     if (!this.looksLikeGridStrategy(input)) {
       return []
     }
@@ -460,7 +460,7 @@ export class StrategyClarificationRulesService {
     return items
   }
 
-  private detectStateGateItems(input: ClarificationChecklistInput): StrategyClarificationItem[] {
+  private detectStateGateItems(input: StrategyClarificationInput): StrategyClarificationItem[] {
     if (!this.looksLikeStateGate(input)) {
       return []
     }
@@ -493,7 +493,7 @@ export class StrategyClarificationRulesService {
 
   private readMarketType(
     riskRules: Record<string, unknown> | undefined,
-    market?: ClarificationChecklistInput['market'],
+    market?: StrategyClarificationInput['market'],
   ): 'spot' | 'perp' | null {
     const raw = typeof market?.marketType === 'string' ? market.marketType : riskRules?.marketType
     if (typeof raw !== 'string') return null
@@ -503,7 +503,7 @@ export class StrategyClarificationRulesService {
 
   private readExchange(
     riskRules: Record<string, unknown> | undefined,
-    market?: ClarificationChecklistInput['market'],
+    market?: StrategyClarificationInput['market'],
   ): 'binance' | 'okx' | 'hyperliquid' | null {
     const raw = typeof market?.exchange === 'string' ? market.exchange : riskRules?.exchange
     if (typeof raw !== 'string') return null
@@ -539,7 +539,7 @@ export class StrategyClarificationRulesService {
     }]
   }
 
-  private detectBasisItems(input: ClarificationChecklistInput): StrategyClarificationItem[] {
+  private detectBasisItems(input: StrategyClarificationInput): StrategyClarificationItem[] {
     const items: StrategyClarificationItem[] = []
     const exitRules = input.exitRules ?? []
 
@@ -682,7 +682,7 @@ export class StrategyClarificationRulesService {
     })
   }
 
-  private hasStopLossRule(input: ClarificationChecklistInput): boolean {
+  private hasStopLossRule(input: StrategyClarificationInput): boolean {
     if (typeof input.riskRules?.stopLossPct === 'number') {
       return true
     }
@@ -691,7 +691,7 @@ export class StrategyClarificationRulesService {
       || this.hasRuleText(input.exitRules, /止损|stop[\s_-]?loss/i)
   }
 
-  private hasTakeProfitRule(input: ClarificationChecklistInput): boolean {
+  private hasTakeProfitRule(input: StrategyClarificationInput): boolean {
     if (typeof input.riskRules?.takeProfitPct === 'number') {
       return true
     }
@@ -750,7 +750,7 @@ export class StrategyClarificationRulesService {
     return '主周期'
   }
 
-  private looksLikeGridStrategy(input: ClarificationChecklistInput): boolean {
+  private looksLikeGridStrategy(input: StrategyClarificationInput): boolean {
     if (
       typeof input.grid?.lower === 'number'
       || typeof input.grid?.upper === 'number'
@@ -763,7 +763,7 @@ export class StrategyClarificationRulesService {
     return this.collectRuleTexts(input).some(text => GRID_STRATEGY_PATTERN.test(text))
   }
 
-  private looksLikeStateGate(input: ClarificationChecklistInput): boolean {
+  private looksLikeStateGate(input: StrategyClarificationInput): boolean {
     if (
       input.stateGates?.trendDirection
       || input.stateGates?.marketRegime
@@ -775,7 +775,7 @@ export class StrategyClarificationRulesService {
     return this.collectRuleTexts(input).some(text => STATE_GATE_PATTERN.test(text))
   }
 
-  private collectRuleTexts(input: ClarificationChecklistInput): string[] {
+  private collectRuleTexts(input: StrategyClarificationInput): string[] {
     const riskTexts = Object.values(input.riskRules ?? {}).flatMap((value) => {
       if (typeof value === 'string' && value.trim().length > 0) {
         return [value.trim()]
@@ -792,7 +792,7 @@ export class StrategyClarificationRulesService {
       .filter(text => text.length > 0)
   }
 
-  private readGridRange(input: ClarificationChecklistInput): { lower?: number, upper?: number } {
+  private readGridRange(input: StrategyClarificationInput): { lower?: number, upper?: number } {
     if (typeof input.grid?.lower === 'number' && typeof input.grid?.upper === 'number') {
       return {
         lower: input.grid.lower,
@@ -820,7 +820,7 @@ export class StrategyClarificationRulesService {
     }
   }
 
-  private readGridStepPct(input: ClarificationChecklistInput): number | null {
+  private readGridStepPct(input: StrategyClarificationInput): number | null {
     if (typeof input.grid?.stepPct === 'number') {
       return input.grid.stepPct
     }
@@ -846,7 +846,7 @@ export class StrategyClarificationRulesService {
     return null
   }
 
-  private hasGridSideMode(input: ClarificationChecklistInput): boolean {
+  private hasGridSideMode(input: StrategyClarificationInput): boolean {
     if (
       input.grid?.sideMode === 'long_only'
       || input.grid?.sideMode === 'short_only'
@@ -862,7 +862,7 @@ export class StrategyClarificationRulesService {
       || /低买高卖|高卖低买/u.test(text)
   }
 
-  private hasSelfContainedGridSemantics(input: ClarificationChecklistInput): boolean {
+  private hasSelfContainedGridSemantics(input: StrategyClarificationInput): boolean {
     if (!this.looksLikeGridStrategy(input)) {
       return false
     }
@@ -874,7 +874,7 @@ export class StrategyClarificationRulesService {
       && this.hasGridSideMode(input)
   }
 
-  private hasClosedLoopExitSemantics(input: ClarificationChecklistInput): boolean {
+  private hasClosedLoopExitSemantics(input: StrategyClarificationInput): boolean {
     if (this.hasSelfContainedGridSemantics(input)) {
       return true
     }
@@ -885,7 +885,7 @@ export class StrategyClarificationRulesService {
     return /网格/u.test(text) && /低买高卖|高卖低买|上方网格卖出|网格卖出/u.test(text)
   }
 
-  private riskRulesOptionalUnderCurrentSemantics(input: ClarificationChecklistInput): boolean {
+  private riskRulesOptionalUnderCurrentSemantics(input: StrategyClarificationInput): boolean {
     return this.hasClosedLoopExitSemantics(input)
   }
 
@@ -930,7 +930,7 @@ export class StrategyClarificationRulesService {
   }
 
   private findFirstAmbiguousBollingerRule(
-    checklist?: ClarificationChecklistInput | null,
+    checklist?: StrategyClarificationInput | null,
   ): { phase: 'entry' | 'exit', index: number, text: string } | null {
     if (!checklist) return null
 
