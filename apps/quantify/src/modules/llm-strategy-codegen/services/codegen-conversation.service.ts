@@ -3186,8 +3186,6 @@ export class CodegenConversationService {
   ): string | null {
     const drafts = buildChecklistRuleDrafts(checklist)
     const executionContext = this.resolveExecutionContextForSummary(checklist)
-    const entryRule = drafts.entry[0]
-    const exitRule = drafts.exit[0]
     const positionPct = typeof checklist.riskRules?.positionPct === 'number'
       ? `${checklist.riskRules.positionPct}% 仓位`
       : ''
@@ -3204,10 +3202,16 @@ export class CodegenConversationService {
       const normalizedText = draft.text.replace(/^\d+[mhd]\s+/u, '').trim()
       return formatRuleSummaryText(normalizedText, draft.timeframe)
     }
+    const formatDrafts = (items: ChecklistRuleDraft[]): string => {
+      const summaries = items
+        .map(item => formatDraft(item))
+        .filter(Boolean)
+      return Array.from(new Set(summaries)).join('；')
+    }
     const entrySummary = this.buildNormalizedTriggerSummary(normalizedIntent, 'entry', executionContext.timeframe)
-      || (entryRule ? formatDraft(entryRule) : '')
+      || formatDrafts(drafts.entry)
     const exitSummary = this.buildNormalizedTriggerSummary(normalizedIntent, 'exit', executionContext.timeframe)
-      || (exitRule ? formatDraft(exitRule) : '')
+      || formatDrafts(drafts.exit)
 
     const segments = [
       [
@@ -3291,38 +3295,45 @@ export class CodegenConversationService {
     phase: 'entry' | 'exit',
     fallbackTimeframe: string,
   ): string {
-    const trigger = normalizedIntent?.triggers.find(item =>
+    const triggers = normalizedIntent?.triggers.filter(item =>
       item.phase === phase
       && item.closureStatus === 'closed',
-    )
-    if (!trigger) {
+    ) ?? []
+    if (triggers.length === 0) {
       return ''
     }
 
-    const projected = this.buildProjectedRuleText({
-      id: `summary-${phase}`,
-      key: trigger.key,
-      phase: trigger.phase,
-      params: {
-        ...trigger.params,
-        ...(trigger.resolutionHints?.confirmation
-          ? { confirmationMode: trigger.resolutionHints.confirmation }
-          : {}),
-      },
-      ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
-      status: 'locked',
-      source: 'user_explicit',
-      openSlots: [],
-    })
-    if (!projected) {
+    const projectedSummaries = triggers
+      .map((trigger, index) => {
+        const projected = this.buildProjectedRuleText({
+          id: `summary-${phase}-${index + 1}`,
+          key: trigger.key,
+          phase: trigger.phase,
+          params: {
+            ...trigger.params,
+            ...(trigger.resolutionHints?.confirmation
+              ? { confirmationMode: trigger.resolutionHints.confirmation }
+              : {}),
+          },
+          ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
+          status: 'locked',
+          source: 'user_explicit',
+          ...(trigger.evidenceText ? { evidence: { text: trigger.evidenceText, source: 'user_explicit' as const } } : {}),
+          openSlots: [],
+        })
+        if (!projected) {
+          return null
+        }
+
+        return /^\d+[mhd]\s+/u.test(projected) || !fallbackTimeframe
+          ? projected
+          : `${fallbackTimeframe} ${projected}`.trim()
+      })
+    if (projectedSummaries.some(item => item === null)) {
       return ''
     }
 
-    if (/^\d+[mhd]\s+/u.test(projected) || !fallbackTimeframe) {
-      return projected
-    }
-
-    return `${fallbackTimeframe} ${projected}`.trim()
+    return Array.from(new Set(projectedSummaries)).join('；')
   }
 
   private buildNormalizationAssistantPrompt(
@@ -3942,15 +3953,43 @@ export class CodegenConversationService {
     }
 
     if (trigger.phase === 'exit' && trigger.key === 'bollinger.touch_middle') {
-      const action = trigger.sideScope === 'short'
-        ? '平空'
-        : trigger.sideScope === 'long'
-          ? '平多'
-          : '平仓'
+      const action = this.resolveProjectedExitAction(trigger, {
+        long: '平多',
+        short: '平空',
+        generic: '平仓',
+      })
       return `价格回到布林带中轨(MA${period})时${action}`
     }
 
     return null
+  }
+
+  private resolveProjectedExitAction(
+    trigger: SemanticTriggerState,
+    labels: {
+      long: string
+      short: string
+      generic: string
+    },
+  ): string {
+    const evidenceText = trigger.evidence?.text?.trim() ?? ''
+    if (/平多/u.test(evidenceText)) {
+      return labels.long
+    }
+    if (/平空/u.test(evidenceText)) {
+      return labels.short
+    }
+    if (/平仓|离场|出场/u.test(evidenceText)) {
+      return labels.generic
+    }
+
+    if (trigger.sideScope === 'short') {
+      return labels.short
+    }
+    if (trigger.sideScope === 'long') {
+      return labels.long
+    }
+    return labels.generic
   }
 
   private readPositiveNumber(value: unknown): number | null {

@@ -171,6 +171,31 @@ describe('strategyIntentNormalizerService', () => {
     expect(result.normalizedIntent.unresolved).toEqual([])
   })
 
+  it('maps 多单 and 空单 Bollinger middle exits to their explicit sides', () => {
+    const result = service.normalize({
+      market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp', timeframe: '15m' },
+      entryRules: ['触及布林带上轨做空', '触及布林带下轨做多'],
+      exitRules: [
+        '多单在价格回到布林带中轨(MA20)时平仓',
+        '空单在价格跌破布林带中轨(MA20)时平仓',
+      ],
+      riskRules: { positionPct: 10 },
+    } as any)
+
+    expect(result.normalizedIntent.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'bollinger.touch_middle',
+        phase: 'exit',
+        sideScope: 'long',
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_middle',
+        phase: 'exit',
+        sideScope: 'short',
+      }),
+    ]))
+  })
+
   it('normalizes a fixed-range grid into the grid.range_rebalance family', () => {
     const result = service.normalize({
       market: { exchange: 'okx', symbol: 'BTCUSDT', marketType: 'perp', timeframe: '15m' },
