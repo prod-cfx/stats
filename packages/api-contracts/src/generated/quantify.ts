@@ -221,13 +221,22 @@ const BacktestJobResponseDto = z
   })
   .passthrough()
 const BacktestCapabilitiesResponseDto = z
-  .object({ allowedSymbols: z.array(z.string()), allowedBaseTimeframes: z.array(z.string()) })
+  .object({ allowedBaseTimeframes: z.array(z.string()) })
   .passthrough()
 const CheckBacktestSymbolDto = z
-  .object({ exchange: z.enum(['binance', 'okx', 'hyperliquid']), symbol: z.string() })
+  .object({
+    exchange: z.enum(['binance', 'okx', 'hyperliquid']),
+    marketType: z.enum(['spot', 'perp']),
+    symbol: z.string(),
+    baseTimeframe: z.string(),
+  })
   .passthrough()
 const BacktestSymbolSupportResponseDto = z
-  .object({ status: z.enum(['supported', 'refreshed_then_supported', 'not_supported']) })
+  .object({
+    status: z.enum(['supported', 'not_supported']),
+    reasonCode: z.string().optional(),
+    args: z.object({}).partial().passthrough().optional(),
+  })
   .passthrough()
 const BasePaginationResponseDto = z
   .object({
@@ -528,6 +537,19 @@ const AccountStrategyLatestOrderDto = z
     orderId: z.string().nullish(),
   })
   .passthrough()
+const RuntimeExecutionStateDto = z
+  .object({
+    executionSemanticKey: z.string(),
+    status: z.enum(['ready', 'consumed', 'failed', 'cooldown']),
+    failureReason: z.string().nullish(),
+    failureCode: z.string().nullish(),
+    lastAttemptAt: z.string().datetime({ offset: true }).nullish(),
+    consumedAt: z.string().datetime({ offset: true }).nullish(),
+    cooldownUntil: z.string().datetime({ offset: true }).nullish(),
+    publishedSnapshotId: z.string(),
+    snapshotHash: z.string(),
+  })
+  .passthrough()
 const AccountStrategyExecutionConfigDto = z
   .object({
     leverage: z.number().nullable(),
@@ -572,6 +594,7 @@ const AccountStrategyDetailResponseDto = z
     accountOverview: AccountStrategyAccountOverviewDto,
     positionOverview: AccountStrategyPositionOverviewDto,
     latestOrders: z.array(AccountStrategyLatestOrderDto),
+    runtimeExecutionStates: z.array(RuntimeExecutionStateDto),
     deployment: AccountStrategyDeploymentDto.nullish(),
   })
   .passthrough()
@@ -1479,6 +1502,7 @@ export const schemas = {
   AccountStrategyAccountOverviewDto,
   AccountStrategyPositionOverviewDto,
   AccountStrategyLatestOrderDto,
+  RuntimeExecutionStateDto,
   AccountStrategyExecutionConfigDto,
   AccountStrategyDeploymentDto,
   AccountStrategyDetailResponseDto,

@@ -75,6 +75,17 @@ describe('quantify contract generated responses', () => {
     }
   })
 
+  it('removes symbol whitelists from generated backtest capability contracts', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+
+    const capabilitiesStart = source.indexOf('const BacktestCapabilitiesResponseDto = z')
+    expect(capabilitiesStart).toBeGreaterThanOrEqual(0)
+
+    const snippet = source.slice(capabilitiesStart, capabilitiesStart + 400)
+    expect(snippet).not.toContain('allowedSymbols')
+    expect(snippet).toContain('allowedBaseTimeframes')
+  })
+
   it('keeps generated backtesting request schemas aligned with expanded market timeframes', () => {
     const source = readFileSync(generatedPath, 'utf8')
 
