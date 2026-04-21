@@ -153,7 +153,6 @@ describe('StrategyDetailPageClient', () => {
       updatedAt: '2026-04-10T00:00:00.000Z',
     })
     mockFetchBacktestCapabilities.mockResolvedValue({
-      allowedSymbols: ['BTCUSDT'],
       allowedBaseTimeframes: ['3m'],
     })
     mockBuildBacktestPayload.mockReturnValue({
