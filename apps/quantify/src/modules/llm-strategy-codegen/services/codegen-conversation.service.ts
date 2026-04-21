@@ -3782,8 +3782,9 @@ export class CodegenConversationService {
       && typeof contextSlots.symbol !== 'undefined'
       && typeof contextSlots.marketType !== 'undefined'
       && typeof contextSlots.timeframe !== 'undefined'
-      && (payload.triggers as unknown[]).every(item => this.hasSemanticOpenSlots(item))
-      && (payload.risk as unknown[]).every(item => this.hasSemanticOpenSlots(item))
+      && (payload.triggers as unknown[]).every(item => this.isSemanticTriggerInput(item))
+      && (payload.actions as unknown[]).every(item => this.isSemanticActionInput(item))
+      && (payload.risk as unknown[]).every(item => this.isSemanticRiskInput(item))
       && (
         payload.position === null
         || (
@@ -3805,6 +3806,38 @@ export class CodegenConversationService {
       && Array.isArray((item as Record<string, unknown>).openSlots)
   }
 
+  private isSemanticTriggerInput(item: unknown): boolean {
+    return this.hasSemanticOpenSlots(item)
+      && typeof (item as Record<string, unknown>).key === 'string'
+      && typeof (item as Record<string, unknown>).phase === 'string'
+      && Boolean((item as Record<string, unknown>).params)
+      && typeof (item as Record<string, unknown>).params === 'object'
+      && !Array.isArray((item as Record<string, unknown>).params)
+  }
+
+  private isSemanticActionInput(item: unknown): boolean {
+    return Boolean(item)
+      && typeof item === 'object'
+      && !Array.isArray(item)
+      && typeof (item as Record<string, unknown>).key === 'string'
+      && (
+        typeof (item as Record<string, unknown>).params === 'undefined'
+        || (
+          Boolean((item as Record<string, unknown>).params)
+          && typeof (item as Record<string, unknown>).params === 'object'
+          && !Array.isArray((item as Record<string, unknown>).params)
+        )
+      )
+  }
+
+  private isSemanticRiskInput(item: unknown): boolean {
+    return this.hasSemanticOpenSlots(item)
+      && typeof (item as Record<string, unknown>).key === 'string'
+      && Boolean((item as Record<string, unknown>).params)
+      && typeof (item as Record<string, unknown>).params === 'object'
+      && !Array.isArray((item as Record<string, unknown>).params)
+  }
+
   private isCanonicalSpecV2Input(payload: Record<string, unknown>): boolean {
     const market = payload.market as Record<string, unknown> | undefined
     const dataRequirements = payload.dataRequirements as Record<string, unknown> | undefined
@@ -3814,6 +3847,11 @@ export class CodegenConversationService {
       && !Array.isArray(market)
       && typeof market.symbol === 'string'
       && typeof market.marketType === 'string'
+      && Array.isArray(payload.indicators)
+      && (payload.sizing === null || (Boolean(payload.sizing) && typeof payload.sizing === 'object' && !Array.isArray(payload.sizing)))
+      && Boolean(payload.executionPolicy)
+      && typeof payload.executionPolicy === 'object'
+      && !Array.isArray(payload.executionPolicy)
       && Boolean(dataRequirements)
       && typeof dataRequirements === 'object'
       && !Array.isArray(dataRequirements)
@@ -3828,10 +3866,19 @@ export class CodegenConversationService {
       && typeof rule === 'object'
       && !Array.isArray(rule)
       && typeof (rule as Record<string, unknown>).phase === 'string'
+      && ['entry', 'exit', 'risk', 'rebalance'].includes((rule as Record<string, unknown>).phase as string)
       && Boolean((rule as Record<string, unknown>).condition)
       && typeof (rule as Record<string, unknown>).condition === 'object'
       && !Array.isArray((rule as Record<string, unknown>).condition)
+      && typeof ((rule as Record<string, unknown>).condition as Record<string, unknown>).kind === 'string'
       && Array.isArray((rule as Record<string, unknown>).actions)
+      && ((rule as Record<string, unknown>).actions as unknown[]).length > 0
+      && ((rule as Record<string, unknown>).actions as unknown[]).every(action =>
+        Boolean(action)
+        && typeof action === 'object'
+        && !Array.isArray(action)
+        && typeof (action as Record<string, unknown>).type === 'string',
+      )
   }
 
   private resolveChecklistMissingFields(checklist: ChecklistPayload): string[] {
