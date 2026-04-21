@@ -3794,7 +3794,10 @@ export class CodegenConversationService {
           && !Array.isArray(payload.position)
           && (
             typeof (payload.position as Record<string, unknown>).openSlots === 'undefined'
-            || Array.isArray((payload.position as Record<string, unknown>).openSlots)
+            || (
+              Array.isArray((payload.position as Record<string, unknown>).openSlots)
+              && ((payload.position as Record<string, unknown>).openSlots as unknown[]).every(slot => this.isSemanticSlotInput(slot))
+            )
           )
         )
       )
@@ -3805,6 +3808,19 @@ export class CodegenConversationService {
       && typeof item === 'object'
       && !Array.isArray(item)
       && Array.isArray((item as Record<string, unknown>).openSlots)
+      && ((item as Record<string, unknown>).openSlots as unknown[]).every(slot => this.isSemanticSlotInput(slot))
+  }
+
+  private isSemanticSlotInput(slot: unknown): boolean {
+    return Boolean(slot)
+      && typeof slot === 'object'
+      && !Array.isArray(slot)
+      && typeof (slot as Record<string, unknown>).slotKey === 'string'
+      && typeof (slot as Record<string, unknown>).fieldPath === 'string'
+      && typeof (slot as Record<string, unknown>).status === 'string'
+      && typeof (slot as Record<string, unknown>).priority === 'string'
+      && typeof (slot as Record<string, unknown>).questionHint === 'string'
+      && typeof (slot as Record<string, unknown>).affectsExecution === 'boolean'
   }
 
   private isSemanticTriggerInput(item: unknown): boolean {

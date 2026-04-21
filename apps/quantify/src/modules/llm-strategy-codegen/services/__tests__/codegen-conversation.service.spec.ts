@@ -1026,6 +1026,25 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
   })
 
+  it('rejects engine semanticState with malformed nested open slots', async () => {
+    await expect(service.testEngine({
+      userId: 'u1',
+      message: '请测试语义态生成策略脚本',
+      semanticState: {
+        ...buildLockedMaSemanticState(),
+        triggers: [
+          {
+            ...buildLockedMaSemanticState().triggers[0],
+            openSlots: [null],
+          },
+        ],
+      },
+    } as any)).rejects.toMatchObject({
+      message: 'codegen.invalid_semantic_input',
+      args: { field: 'semanticState' },
+    })
+  })
+
   it('rejects engine semanticState without families array', async () => {
     const { families: _families, ...semanticStateWithoutFamilies } = buildLockedMaSemanticState()
 
