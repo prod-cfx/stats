@@ -654,33 +654,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     restoreProcessEnv(envSnapshot)
   })
 
-  it('does not let entry timeframe bleed into exit extraction', () => {
-    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
 
-    const checklist = (service as any).inferChecklistFromMessage(
-      '在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金',
-    )
-
-    expect(checklist.entryRules).toEqual(['3m 内下跌 1% 买入'])
-    expect(checklist.exitRules).toEqual(['15m 内上涨 2% 卖出'])
-    expect(checklist.timeframes).toEqual(['3m', '15m'])
-    expect(checklist.entryRuleDrafts?.[0]).toMatchObject({ timeframe: '3m' })
-    expect(checklist.exitRuleDrafts?.[0]).toMatchObject({ timeframe: '15m' })
-  })
-
-  it('does not let entry clause bleed into exit extraction when phrased as 入场/出场', () => {
-    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
-
-    const checklist = (service as any).inferChecklistFromMessage(
-      '在okx交易所 我想买btc 3分钟之内跌百分1入场 15分钟之内涨百分2出场 单笔用百分10资金',
-    )
-
-    expect(checklist.entryRules).toEqual(['3m 内下跌 1% 买入'])
-    expect(checklist.exitRules).toEqual(['15m 内上涨 2% 卖出'])
-    expect(checklist.entryRuleDrafts?.[0]).toMatchObject({ timeframe: '3m' })
-    expect(checklist.exitRuleDrafts?.[0]).toMatchObject({ timeframe: '15m' })
-    expect(checklist.market).toMatchObject({ exchange: 'okx', defaultTimeframe: '3m' })
-  })
 
   it('builds clarification summary from rule-level timeframes instead of checklist.timeframes[0]', () => {
     const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
@@ -850,73 +824,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(summary).toContain('入场：15m 价格突破布林带(20,2)下轨时做多；15m RSI 小于等于 30 时做多')
   })
 
-  it('seeds checklist.grid for vague grid prompts even before numeric params are known', () => {
-    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
 
-    const checklist = (service as any).inferChecklistFromMessage(
-      '在okx交易所合约市场的BTCUSDT 15m上，帮我做一个网格策略，在一个区间里挂单，行情突破区间就停掉',
-    )
 
-    expect(checklist.grid).toEqual(expect.objectContaining({
-      sideMode: 'bidirectional',
-    }))
-  })
 
-  it('extracts short grid wording, 每一格 percent syntax, and breakout pause semantics from freeform input', () => {
-    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
 
-    const checklist = (service as any).inferChecklistFromMessage(
-      '在okx交易所合约市场的BTCUSDT 15m上，做空网格，区间 60000-80000，每一格 1%，行情突破区间就停掉',
-    )
-
-    expect(checklist.grid).toEqual(expect.objectContaining({
-      lower: 60000,
-      upper: 80000,
-      stepPct: 1,
-      sideMode: 'short_only',
-      breakoutAction: 'pause',
-    }))
-  })
-
-  it('does not let stop-loss and take-profit percentages bleed into each other when parsed from one sentence', () => {
-    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
-
-    const checklist = (service as any).inferChecklistFromMessage(
-      '在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 60000-80000，采用双向网格，每格间距 0.5%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈',
-    )
-
-    expect(checklist.riskRules).toEqual(expect.objectContaining({
-      stopLossPct: 5,
-      takeProfitPct: 10,
-    }))
-  })
-
-  it('keeps risk clause percentages stable when stop-loss and take-profit share a natural language fragment', () => {
-    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
-
-    const checklist = (service as any).inferChecklistFromMessage(
-      'OKX 永续合约 BTCUSDT 15m；入场后按入场均价亏损 5% 强制止损，盈利 10% 止盈，单笔仓位 10%',
-    )
-
-    expect(checklist.riskRules).toEqual(expect.objectContaining({
-      stopLossPct: 5,
-      takeProfitPct: 10,
-      positionPct: 10,
-    }))
-  })
-
-  it('does not let take-profit inherit the stop-loss percentage when both are written inline without punctuation', () => {
-    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
-
-    const checklist = (service as any).inferChecklistFromMessage(
-      '在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出 单笔用百分10资金 止损5% 止盈10%',
-    )
-
-    expect(checklist.riskRules).toEqual(expect.objectContaining({
-      stopLossPct: 5,
-      takeProfitPct: 10,
-    }))
-  })
 
   it('starts in drafting and asks next key question from llm planner', async () => {
     const dto: StartCodegenSessionDto = {
@@ -1659,30 +1570,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(userPrompt).toContain('"marketType":"perp"')
   })
 
-  it('stays in DRAFTING when an entry rule can resolve to both OPEN_LONG and OPEN_SHORT', async () => {
-    mockRepo.createSession.mockResolvedValue({ id: 's-clarify-1' })
-
-    const result = await service.startSession({
-      userId: 'u-1',
-      initialMessage: '在okx交易所合约市场的BTCUSDT 15分钟图上，突破布林带上轨交易，仓位10%',
-      exitRules: ['价格回到布林带中轨(MA20)时平仓'],
-      riskRules: completeRiskRules(),
-    } as any)
-
-    expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('未识别可编译出场规则')
-    expect(result.assistantPrompt).toContain('出场')
-    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
-      semanticState: expect.objectContaining({
-        triggers: expect.arrayContaining([
-          expect.objectContaining({
-            key: 'bollinger.touch_upper',
-            sideScope: 'short',
-          }),
-        ]),
-      }),
-    }))
-  })
 
   it('asks for missing exchange from execution-context diagnostics before checklist fallback gaps', async () => {
     mockRepo.createSession.mockResolvedValue({ id: 's-execution-context-clarify' })
@@ -1941,31 +1828,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('请补充至少一条明确的出场规则')
   })
 
-  it('preserves explicit direction in bollinger fallback inference and does not ask direction clarification', async () => {
-    mockRepo.createSession.mockResolvedValue({ id: 's-clarify-2' })
-
-    const result = await service.startSession({
-      userId: 'u-1',
-      initialMessage: '在okx交易所合约市场的BTCUSDT 15分钟图上，突破布林带上轨做空，仓位10%',
-      exitRules: ['价格回到布林带中轨(MA20)时平仓'],
-      riskRules: completeRiskRules(),
-    } as any)
-
-    expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('未识别可编译出场规则')
-    expect(result.assistantPrompt).toContain('出场')
-    expect(result.assistantPrompt).not.toContain('只做空，还是也允许做多')
-    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
-      semanticState: expect.objectContaining({
-        triggers: expect.arrayContaining([
-          expect.objectContaining({
-            key: 'bollinger.touch_upper',
-            sideScope: 'short',
-          }),
-        ]),
-      }),
-    }))
-  })
 
 
   it('accepts planner semanticPatch output and projects it into checklist-compatible state', async () => {
@@ -2929,53 +2791,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
 
-  it('keeps deterministic direction when only exit wording includes sell action', async () => {
-    mockRepo.createSession.mockResolvedValue({ id: 's-clarify-3' })
 
-    const result = await service.startSession({
-      userId: 'u-1',
-      initialMessage: '在okx交易所合约市场的BTCUSDT 15分钟图上，突破布林带上轨交易，回到中轨卖出，仓位10%，亏损5%止损',
-      riskRules: completeRiskRules(),
-    } as any)
-
-    expect(result.status).toBe('CONFIRM_GATE')
-    expect(result.canonicalDigest).toMatch(/^sha256:/)
-    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
-      status: 'CONFIRM_GATE',
-      semanticState: expect.objectContaining({
-        triggers: expect.arrayContaining([
-          expect.objectContaining({
-            key: 'bollinger.touch_upper',
-            sideScope: 'short',
-          }),
-        ]),
-      }),
-    }))
-  })
-
-  it('keeps deterministic direction for same-sentence no-comma exit wording after upper-band trigger', async () => {
-    mockRepo.createSession.mockResolvedValue({ id: 's-clarify-4' })
-
-    const result = await service.startSession({
-      userId: 'u-1',
-      initialMessage: '在okx交易所合约市场的BTCUSDT 15分钟图上，突破布林带上轨交易后回到中轨卖出，仓位10%，亏损5%止损',
-      riskRules: completeRiskRules(),
-    } as any)
-
-    expect(result.status).toBe('CONFIRM_GATE')
-    expect(result.canonicalDigest).toMatch(/^sha256:/)
-    expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
-      status: 'CONFIRM_GATE',
-      semanticState: expect.objectContaining({
-        triggers: expect.arrayContaining([
-          expect.objectContaining({
-            key: 'bollinger.touch_upper',
-            sideScope: 'short',
-          }),
-        ]),
-      }),
-    }))
-  })
 
   it('keeps closed-loop grid wording out of template exit and risk clarification prompts', async () => {
     mockRepo.createSession.mockResolvedValue({ id: 's-grid-clarify-1' })
@@ -3478,102 +3294,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
 
 
-  it('enters confirm gate from deterministic semantic state when planner returns empty content for a complete strategy', async () => {
-    mockRepo.createSession.mockResolvedValue({ id: 's-empty-planner-complete' })
-    mockAi.chat.mockResolvedValueOnce({ content: '   ' })
 
-    const result = await service.startSession({
-      userId: 'u1',
-      initialMessage: 'OKX 现货 BTCUSDT 3m，3m 内跌 1% 买入，15m 内按入场均价涨 2% 卖出，单笔 10% 仓位，按入场均价亏损 5% 止损、盈利 10% 止盈。',
-    })
 
-    expect(result.status).toBe('CONFIRM_GATE')
-    expect(result.canonicalDigest).toMatch(/^sha256:/)
-    expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
-    expect(result.assistantPrompt).not.toContain('请补充入场和出场条件')
-    expect(result.clarificationState).toEqual(expect.objectContaining({
-      status: 'CLEAR',
-    }))
-  })
 
-  it('enters confirm gate from deterministic semantic state when planner returns invalid json for a complete strategy', async () => {
-    mockRepo.createSession.mockResolvedValue({ id: 's-invalid-json-complete' })
-    mockAi.chat.mockResolvedValueOnce({ content: '{invalid json' })
 
-    const result = await service.startSession({
-      userId: 'u1',
-      initialMessage: 'OKX 现货 BTCUSDT 3m，3m 内跌 1% 买入，15m 内按入场均价涨 2% 卖出，单笔 10% 仓位，按入场均价亏损 5% 止损、盈利 10% 止盈。',
-    })
-
-    expect(result.status).toBe('CONFIRM_GATE')
-    expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
-    expect(result.assistantPrompt).not.toContain('请补充入场和出场条件')
-    expect(result.clarificationState).toEqual(expect.objectContaining({
-      status: 'CLEAR',
-    }))
-  })
-
-  it('classifies parseable malformed planner payloads as schema_mismatch in startSession', async () => {
-    mockRepo.createSession.mockResolvedValue({ id: 's-schema-mismatch-complete' })
-    mockAi.chat.mockResolvedValueOnce({
-      content: JSON.stringify({
-        semanticPatch: 'bad-patch',
-      }),
-    })
-    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
-
-    const result = await service.startSession({
-      userId: 'u1',
-      initialMessage: 'OKX 现货 BTCUSDT 3m，3m 内跌 1% 买入，15m 内按入场均价涨 2% 卖出，单笔 10% 仓位，按入场均价亏损 5% 止损、盈利 10% 止盈。',
-    })
-
-    expect(result.status).toBe('CONFIRM_GATE')
-    expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
-    const warnMessages = warnSpy.mock.calls.map(call => String(call[0] ?? ''))
-    expect(warnMessages).toEqual(expect.arrayContaining([
-      expect.stringContaining('reason=schema_mismatch'),
-    ]))
-    const schemaMismatchMessage = warnMessages.find(message => message.includes('reason=schema_mismatch')) ?? ''
-    expect(schemaMismatchMessage).toContain('fields=')
-    expect(schemaMismatchMessage).toContain('related')
-    expect(schemaMismatchMessage).toContain('logicReady')
-    expect(schemaMismatchMessage).toContain('assistantPrompt')
-    expect(schemaMismatchMessage).toContain('semanticPatch')
-  })
-
-  it('enters confirm gate from deterministic semantic state when planner transport retries still fail for a complete strategy', async () => {
-    mockRepo.createSession.mockResolvedValue({ id: 's-transport-failed-complete' })
-    mockAi.chat.mockRejectedValue(new Error('planner upstream timeout'))
-
-    const result = await service.startSession({
-      userId: 'u1',
-      initialMessage: 'OKX 现货 BTCUSDT 3m，3m 内跌 1% 买入，15m 内按入场均价涨 2% 卖出，单笔 10% 仓位，按入场均价亏损 5% 止损、盈利 10% 止盈。',
-    })
-
-    expect(result.status).toBe('CONFIRM_GATE')
-    expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
-    expect(result.assistantPrompt).not.toContain('请补充入场和出场条件')
-    expect(mockAi.chat).toHaveBeenCalledTimes(2)
-  })
-
-  it('classifies model_not_found planner fallback in startSession without surfacing it to the user', async () => {
-    mockRepo.createSession.mockResolvedValue({ id: 's-model-not-found-complete' })
-    mockAi.chat.mockRejectedValueOnce(new Error('model not exist: planner-model'))
-    const warnSpy = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined)
-
-    const result = await service.startSession({
-      userId: 'u1',
-      initialMessage: 'OKX 现货 BTCUSDT 3m，3m 内跌 1% 买入，15m 内按入场均价涨 2% 卖出，单笔 10% 仓位，按入场均价亏损 5% 止损、盈利 10% 止盈。',
-    })
-
-    const warnMessages = warnSpy.mock.calls.map(call => String(call[0] ?? ''))
-    expect(result.status).toBe('CONFIRM_GATE')
-    expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
-    expect(result.assistantPrompt).not.toContain('model')
-    expect(warnMessages).toEqual(expect.arrayContaining([
-      expect.stringContaining('reason=model_not_found'),
-    ]))
-  })
 
   it('uses server-side semantic summary instead of planner free text when grid clarification closes into checklist gate', async () => {
     mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
@@ -4613,14 +4337,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
-  it('extracts generic moving-average breakout rules for the historical MA baseline sentence', () => {
-    const inferred = (service as any).inferChecklistFromMessage(
-      '当价格突破一条长期均线时买入，跌破短期均线时卖出',
-    )
-
-    expect(inferred.entryRules).toEqual(['价格突破长期均线时买入'])
-    expect(inferred.exitRules).toEqual(['价格跌破短期均线时卖出'])
-  })
 
   it('returns strategyInstanceId in session snapshot response', async () => {
     mockRepo.findLatestBySessionId.mockResolvedValue({
@@ -5019,120 +4735,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
-  it('preserves inferred default risk-basis metadata after context clarification so confirmation remains required', async () => {
-    const sessionFixture = buildSemanticEraSessionFixture({
-      id: 's-clarification-inferred-defaults',
-      userId: 'u1',
-      status: 'DRAFTING',
-      checklist: {
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-        entryRules: ['价格突破阻力位入场'],
-        exitRules: ['跌破支撑位出场'],
-        riskRules: {
-          marketType: 'perp',
-          positionPct: 10,
-          stopLossPct: 5,
-          takeProfitPct: 10,
-        },
-      },
-      clarificationState: {
-        status: 'NEEDS_CLARIFICATION',
-        items: [
-          {
-            key: 'executionContext.exchange',
-            reason: 'missing_exchange',
-            field: 'exchange',
-            blocking: true,
-            question: '请确认交易所（binance / okx / hyperliquid）。',
-            status: 'pending',
-          },
-        ],
-      },
-      constraintPack: {},
-    })
-    expect(sessionFixture.latestSpecDesc).toEqual(expect.objectContaining({
-      normalizedIntent: expect.objectContaining({
-        risk: expect.arrayContaining([
-          expect.objectContaining({
-            key: 'risk.stop_loss_pct',
-            source: 'system_default',
-            params: expect.objectContaining({
-              basis: 'entry_avg_price',
-              basisSource: 'system_default',
-            }),
-          }),
-          expect.objectContaining({
-            key: 'risk.take_profit_pct',
-            source: 'system_default',
-            params: expect.objectContaining({
-              basis: 'entry_avg_price',
-              basisSource: 'system_default',
-            }),
-          }),
-        ]),
-      }),
-    }))
-    mockRepo.findById.mockResolvedValue(sessionFixture)
-    mockAi.chat.mockResolvedValue({
-      content: JSON.stringify({
-        related: true,
-        logicReady: true,
-        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
-      }),
-    })
-
-    const result = await service.continueSession('s-clarification-inferred-defaults', {
-      userId: 'u1',
-      message: '继续',
-      clarificationAnswers: {
-        'executionContext.exchange': 'okx',
-      },
-    } as ContinueCodegenSessionDto)
-
-    expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('请确认这些推断是否成立')
-    expect(result.assistantPrompt).not.toContain('请确认交易所')
-    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-clarification-inferred-defaults', expect.objectContaining({
-      status: 'DRAFTING',
-      semanticState: expect.objectContaining({
-        contextSlots: expect.objectContaining({
-          exchange: expect.objectContaining({
-            value: 'okx',
-            status: 'locked',
-          }),
-        }),
-      }),
-    }))
-    expect(sessionFixture.latestSpecDesc).toEqual(expect.objectContaining({
-      normalizedIntent: expect.objectContaining({
-        risk: expect.arrayContaining([
-          expect.objectContaining({
-            key: 'risk.stop_loss_pct',
-            source: 'system_default',
-            params: expect.objectContaining({
-              basis: 'entry_avg_price',
-              basisSource: 'system_default',
-            }),
-          }),
-          expect.objectContaining({
-            key: 'risk.take_profit_pct',
-            source: 'system_default',
-            params: expect.objectContaining({
-              basis: 'entry_avg_price',
-              basisSource: 'system_default',
-            }),
-          }),
-        ]),
-      }),
-    }))
-    expect(result.clarificationState?.items).toEqual(expect.not.arrayContaining([
-      expect.objectContaining({
-        key: 'executionContext.exchange',
-        status: 'pending',
-      }),
-    ]))
-  })
 
 
 
@@ -6336,93 +5938,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     },
   )
 
-  it('falls back to llm confirmation when rule matching is unclear for a short reply and then advances to confirm gate', async () => {
-    const sessionFixture = markFixtureInferredRiskBasisDefaults(buildSemanticEraSessionFixture({
-      id: 's-llm-fallback-inferred-risk-basis',
-      userId: 'u1',
-      status: 'DRAFTING',
-      checklist: completeChecklist({
-        entryRules: ['短均线上穿长均线（金叉）时做多'],
-        exitRules: ['短均线下穿长均线（死叉）时平多'],
-        riskRules: {
-          _inferredAssumptions: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
-        },
-      }),
-      clarificationState: { status: 'CLEAR', items: [] },
-      constraintPack: {},
-    }))
-    mockRepo.findById.mockResolvedValue(sessionFixture)
-    mockAi.chat
-      .mockResolvedValueOnce({
-        content: JSON.stringify({
-          intent: 'confirm',
-          targetKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
-        }),
-      })
-      .mockResolvedValueOnce({
-        content: JSON.stringify({
-          related: true,
-          logicReady: true,
-          assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
-        }),
-      })
 
-    const result = await service.continueSession('s-llm-fallback-inferred-risk-basis', {
-      userId: 'u1',
-      message: '嗯',
-    } as ContinueCodegenSessionDto)
-
-    expect(result.status).toBe('CONFIRM_GATE')
-    expect(mockAi.chat).toHaveBeenCalledTimes(2)
-    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-llm-fallback-inferred-risk-basis', expect.objectContaining({
-      status: 'CONFIRM_GATE',
-      latestSpecDesc: expect.objectContaining({
-        canonicalDigest: expect.stringMatching(/^sha256:/),
-      }),
-    }))
-  })
-
-  it('treats targeted default negation replies as inferred overrides while keeping remaining inferred confirmation in drafting', async () => {
-    const sessionFixture = markFixtureInferredRiskBasisDefaults(buildSemanticEraSessionFixture({
-      id: 's-default-negation-inferred-risk-basis',
-      userId: 'u1',
-      status: 'DRAFTING',
-      checklist: completeChecklist({
-        entryRules: ['短均线上穿长均线（金叉）时做多'],
-        exitRules: ['短均线下穿长均线（死叉）时平多'],
-        riskRules: {
-          _inferredAssumptions: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
-        },
-      }),
-      clarificationState: { status: 'CLEAR', items: [] },
-      constraintPack: {},
-    }))
-    mockRepo.findById.mockResolvedValue(sessionFixture)
-    mockAi.chat.mockResolvedValue({
-      content: JSON.stringify({
-        related: true,
-        logicReady: true,
-        assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
-      }),
-    })
-
-    const result = await service.continueSession('s-default-negation-inferred-risk-basis', {
-      userId: 'u1',
-      message: '止盈不要按默认',
-    } as ContinueCodegenSessionDto)
-
-    expect(result.status).toBe('DRAFTING')
-    expect(mockAi.chat).toHaveBeenCalledTimes(1)
-    expect(result.assistantPrompt).toContain('请确认这些推断是否成立')
-    expect(mockRepo.updateSession).toHaveBeenCalledWith('s-default-negation-inferred-risk-basis', expect.objectContaining({
-      status: 'DRAFTING',
-      constraintPack: expect.objectContaining({
-        inferredConfirmation: expect.objectContaining({
-          overriddenKeys: expect.arrayContaining(['risk.takeProfitBasis']),
-        }),
-      }),
-    }))
-  })
 
   it('does not re-enter CONFIRM_INFERRED for keys already marked overridden', async () => {
     mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
@@ -6464,113 +5980,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('risk.stopLossBasis')
     expect(result.assistantPrompt).not.toContain('risk.takeProfitBasis')
   })
-
-  it.each([
-    {
-      name: '这样可以吗',
-      sessionId: 's-question-inferred-natural-confirmation',
-      message: '这样可以吗',
-      expectedConfirmedKey: 'risk.stopLossBasis',
-    },
-    {
-      name: '默认没问题吗',
-      sessionId: 's-question-inferred-default-confirmation',
-      message: '默认没问题吗',
-      expectedConfirmedKey: 'risk.takeProfitBasis',
-    },
-    {
-      name: '不对',
-      sessionId: 's-negative-inferred-reject',
-      message: '不对',
-      expectedConfirmedKey: 'risk.stopLossBasis',
-    },
-    {
-      name: '别按这个',
-      sessionId: 's-negative-inferred-reject-alt',
-      message: '别按这个',
-      expectedConfirmedKey: 'risk.takeProfitBasis',
-    },
-    {
-      name: '止损可以更宽一点',
-      sessionId: 's-negative-inferred-stoploss-can-be-wider',
-      message: '止损可以更宽一点',
-      expectedConfirmedKey: 'risk.stopLossBasis',
-    },
-    {
-      name: '止盈默认没问题吗',
-      sessionId: 's-negative-inferred-takeprofit-question',
-      message: '止盈默认没问题吗',
-      expectedConfirmedKey: 'risk.takeProfitBasis',
-    },
-    {
-      name: '止盈默认没问题吗。',
-      sessionId: 's-negative-inferred-takeprofit-question-with-period',
-      message: '止盈默认没问题吗。',
-      expectedConfirmedKey: 'risk.takeProfitBasis',
-    },
-    {
-      name: '止盈默认没问题吗！',
-      sessionId: 's-negative-inferred-takeprofit-question-with-exclamation',
-      message: '止盈默认没问题吗！',
-      expectedConfirmedKey: 'risk.takeProfitBasis',
-    },
-    {
-      name: '止盈默认没问题吗；',
-      sessionId: 's-negative-inferred-takeprofit-question-with-semicolon',
-      message: '止盈默认没问题吗；',
-      expectedConfirmedKey: 'risk.takeProfitBasis',
-    },
-    {
-      name: '止盈默认没问题吧',
-      sessionId: 's-negative-inferred-takeprofit-question-with-ba',
-      message: '止盈默认没问题吧',
-      expectedConfirmedKey: 'risk.takeProfitBasis',
-    },
-    {
-      name: '止损默认不成立',
-      sessionId: 's-negative-inferred-stoploss-negated',
-      message: '止损默认不成立',
-      expectedConfirmedKey: 'risk.stopLossBasis',
-    },
-  ])(
-    'keeps inferred confirmation drafting for semantic-only reply variant %s',
-    async ({ sessionId, message, expectedConfirmedKey }) => {
-      const sessionFixture = markFixtureInferredRiskBasisDefaults(buildSemanticEraSessionFixture({
-        id: sessionId,
-        userId: 'u1',
-        status: 'DRAFTING',
-        checklist: completeChecklist({
-          entryRules: ['短均线上穿长均线（金叉）时做多'],
-          exitRules: ['短均线下穿长均线（死叉）时平多'],
-          riskRules: {
-            _inferredAssumptions: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
-          },
-        }),
-        clarificationState: { status: 'CLEAR', items: [] },
-        constraintPack: {},
-      }))
-      mockRepo.findById.mockResolvedValue(sessionFixture)
-      mockAi.chat.mockResolvedValue({
-        content: JSON.stringify({
-          related: true,
-          logicReady: true,
-          assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
-        }),
-      })
-
-      const result = await service.continueSession(sessionId, {
-        userId: 'u1',
-        message,
-      } as ContinueCodegenSessionDto)
-
-      expect(result.status).toBe('DRAFTING')
-      expect(result.assistantPrompt).toContain('请确认这些推断是否成立')
-      const updatePayload = mockRepo.updateSession.mock.calls[0]?.[1] as Record<string, any>
-      expect(updatePayload.status).toBe('DRAFTING')
-      expect(updatePayload.latestSpecDesc).toBeUndefined()
-      expect(expectedConfirmedKey).toMatch(/^risk\./)
-    },
-  )
 
   it('confirms the only remaining inferred key for a short default-only reply', async () => {
     const sessionFixture = markFixtureInferredRiskBasisDefaults(
@@ -6616,18 +6025,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
-  it('preserves explicit non-default risk basis from natural language', () => {
-    const checklist = (service as any).inferChecklistFromMessage(
-      '在 OKX 现货 ETHUSDT，15分钟上涨1%买入，止损按持仓亏损 5%，止盈按持仓收益率 10%，仓位 10%',
-    )
-
-    expect(checklist.riskRules).toEqual(expect.objectContaining({
-      stopLossPct: 5,
-      stopLossBasis: 'position_pnl',
-      takeProfitPct: 10,
-      takeProfitBasis: 'position_pnl',
-    }))
-  })
 
   it('keeps drafting after basis clarification when stop-loss basis still comes from system default inference', async () => {
     const sessionFixture = markFixtureInferredRiskBasisDefaults(

@@ -151,26 +151,6 @@ function normalizePublishedSymbol(raw: string): string {
   return raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
 }
 
-function normalizeDirectionalPercentRule(
-  fragment: string,
-  phase: 'entry' | 'exit',
-): string {
-  const timeframeMatch = fragment.match(/(\d{1,4})\s*(min|分钟|小时|[mhd天])/iu)
-  const value = timeframeMatch?.[1]
-  const unit = timeframeMatch?.[2]?.toLowerCase() ?? ''
-  const timeframe = value
-    ? (unit === 'm' || unit === 'min' || unit === '分钟'
-        ? `${value}m`
-        : (unit === 'h' || unit === '小时' ? `${value}h` : `${value}d`))
-    : null
-  const percentMatch = fragment.match(/(\d+(?:\.\d+)?)\s*%|百分之?\s*(\d+(?:\.\d+)?)/u)
-  const percent = percentMatch?.[1] ?? percentMatch?.[2] ?? '0'
-  const direction = phase === 'entry' ? '下跌' : '上涨'
-  const action = phase === 'entry' ? '买入' : '卖出'
-  const prefix = timeframe ? `${timeframe} 内` : ''
-
-  return `${prefix}${direction} ${percent}% ${action}`.trim()
-}
 
 @Injectable()
 export class CodegenConversationService {
@@ -214,7 +194,6 @@ export class CodegenConversationService {
         status: HttpStatus.UNAUTHORIZED,
       })
     }
-    const seedChecklist = this.inferChecklistFromMessage(dto.initialMessage)
     const seedSemanticState = this.mergeSemanticPatchIntoState(
       this.createEmptySemanticState(),
       this.extractSemanticPatchFromMessage(dto.initialMessage),
@@ -223,15 +202,11 @@ export class CodegenConversationService {
       providerCode: this.resolveProviderCode(undefined),
       model: undefined,
     }, [])
-    const startSeedChecklist = this.withTargetedStartSessionSeedContext(
-      seedChecklist,
-      dto.initialMessage,
-    )
     let initialSemanticState = this.applyConversationPlanToSemanticState({
       currentState: seedSemanticState,
       plan,
     })
-    const checklist = this.projectLegacyChecklistFromSemanticState(initialSemanticState, startSeedChecklist)
+    const checklist = this.projectLegacyChecklistFromSemanticState(initialSemanticState, {})
     const recommendationStyle = this.inferRecommendationStyleFromContext(
       dto.initialMessage,
       checklist,
@@ -414,10 +389,6 @@ export class CodegenConversationService {
       (session as { semanticState?: Prisma.JsonValue | null }).semanticState,
     )
     const currentSemanticState = this.readSemanticState((session as { semanticState?: Prisma.JsonValue | null }).semanticState)
-    const persistedChecklist = this.restoreInferredAssumptionsFromLatestSpecDesc(
-      session.latestSpecDesc,
-      this.readChecklistPayload((session as { checklist?: Prisma.JsonValue | null }).checklist),
-    )
     const semanticStateAfterAnswers = this.applySemanticClarificationAnswers(
       currentSemanticState,
       baseClarificationState,
@@ -425,7 +396,7 @@ export class CodegenConversationService {
     )
     const semanticBaseChecklistAfterAnswers = this.projectLegacyChecklistFromSemanticState(
       semanticStateAfterAnswers,
-      persistedChecklist,
+      {},
     )
     const baseChecklistAfterAnswers = this.applyClarificationAnswers(
       semanticBaseChecklistAfterAnswers,
@@ -450,7 +421,7 @@ export class CodegenConversationService {
       baseSemanticState,
       this.extractSemanticPatchFromMessage(dto.message),
     )
-    const preMergedChecklist = this.projectLegacyChecklistFromSemanticState(preMergedSemanticState, baseChecklist)
+    const preMergedChecklist = this.projectLegacyChecklistFromSemanticState(preMergedSemanticState, {})
     const constraintPack = inferredConfirmation.constraintPack
     const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, dto.guideConfig)
     const plan = await this.planConversationByLlm(dto.message, preMergedSemanticState, {
@@ -462,12 +433,12 @@ export class CodegenConversationService {
       plan,
     })
     const reducedSemanticState = plannedSemanticState
-    const canonicalChecklist = this.projectLegacyChecklistFromSemanticState(reducedSemanticState, preMergedChecklist)
+    const canonicalChecklist = this.projectLegacyChecklistFromSemanticState(reducedSemanticState, {})
     const clarification = this.resolveClarificationArtifacts(canonicalChecklist)
     const clarificationState = this.buildClarificationFromSemanticState(
       reducedSemanticState,
       canonicalChecklist,
-      { preserveLegacyFallback: !hasPersistedSemanticState },
+      { preserveLegacyFallback: false },
     )
     const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
     const clarificationPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
@@ -483,7 +454,7 @@ export class CodegenConversationService {
     const canonicalSpec = this.buildCanonicalSpecForConversation(
       canonicalChecklist,
       normalization,
-      hasPersistedSemanticState ? reducedSemanticState : undefined,
+      reducedSemanticState,
     )
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
@@ -1784,43 +1755,7 @@ export class CodegenConversationService {
       && position.value > 0
   }
 
-  private withTargetedStartSessionSeedContext(
-    checklist: ChecklistPayload,
-    message: string | undefined,
-  ): ChecklistPayload {
-    if ((checklist.symbols?.length ?? 0) > 0) {
-      return checklist
-    }
 
-    const inferredSymbol = this.inferBareAssetUsdtSymbol(message)
-    if (!inferredSymbol) {
-      return checklist
-    }
-
-    return this.normalizeChecklist({
-      ...checklist,
-      symbols: [inferredSymbol],
-    })
-  }
-
-  private inferBareAssetUsdtSymbol(message?: string): string | null {
-    if (!message) {
-      return null
-    }
-
-    const upper = message.toUpperCase()
-    if (/\b[A-Z]{2,12}(?:USDT|USDC|USD)\b/u.test(upper)) {
-      return null
-    }
-
-    const matched = upper.match(/(?:想买|买入|买|卖出|卖|做多|做空|交易)\s*([A-Z]{2,10})\b/u)
-    const asset = matched?.[1]?.trim()
-    if (!asset || ['OKX', 'BINANCE', 'SWAP', 'SPOT', 'PERP', 'USDT', 'USD'].includes(asset)) {
-      return null
-    }
-
-    return `${asset}USDT`
-  }
 
   private createEmptySemanticState(): SemanticState {
     return {
@@ -4668,371 +4603,8 @@ export class CodegenConversationService {
     }
   }
 
-  private inferChecklistFromMessage(message?: string): ChecklistPayload {
-    if (!message || !message.trim()) {
-      return {}
-    }
-    const text = message.trim()
-    const upper = text.toUpperCase()
 
-    const symbolMatches = upper.match(/\b[A-Z]{2,12}(?:USDT|USDC|USD)\b/g) ?? []
-    const symbols = Array.from(new Set(symbolMatches))
 
-    const timeframeMatches = Array.from(text.matchAll(/(\d{1,4})\s*(min|分钟|小时|[mhd天])/gi))
-    const timeframes = Array.from(new Set(timeframeMatches.map(([, value, unit]) => {
-      const normalizedUnit = unit.toLowerCase()
-      if (normalizedUnit === 'm' || normalizedUnit === 'min' || normalizedUnit === '分钟') return `${value}m`
-      if (normalizedUnit === 'h' || normalizedUnit === '小时') return `${value}h`
-      return `${value}d`
-    })))
-
-    const entryRules: string[] = []
-    const exitRules: string[] = []
-    const entryRuleBases: Record<string, ChecklistRuleBasis['kind']> = {}
-    const exitRuleBases: Record<string, ChecklistRuleBasis['kind']> = {}
-
-    const percentToken = '\\d+(?:\\.\\d+)?\\s*%|百分之?\\s*\\d+(?:\\.\\d+)?'
-    const directionalFragments = text
-      .split(/[，。；;\n]/u)
-      .flatMap(fragment => fragment.split(/(?<=买入|卖出|开仓|平仓|入场|出场|离场)/u))
-      .map(fragment => fragment.trim())
-      .filter(Boolean)
-
-    const buyDropFragment = directionalFragments.find(fragment =>
-      /(?:跌|下跌|回撤).{0,20}?(?:买入|开仓|入场)/u.test(fragment),
-    )
-    const sellRiseFragment = directionalFragments.find(fragment =>
-      /(?:涨|上涨|反弹).{0,20}?(?:卖出|平仓|离场|出场)/u.test(fragment),
-    )
-    if (buyDropFragment && new RegExp(percentToken, 'u').test(buyDropFragment)) {
-      entryRules.push(normalizeDirectionalPercentRule(buyDropFragment, 'entry'))
-      entryRuleBases['entry-1'] = 'prev_close'
-    }
-
-    if (sellRiseFragment && new RegExp(percentToken, 'u').test(sellRiseFragment)) {
-      exitRules.push(normalizeDirectionalPercentRule(sellRiseFragment, 'exit'))
-      exitRuleBases['exit-1'] = 'prev_close'
-    }
-
-    if (entryRules.length === 0) {
-      const entryMovingAverageBreakout = this.inferMovingAverageBreakoutRuleFromFragments(
-        directionalFragments,
-        'entry',
-      )
-      if (entryMovingAverageBreakout) {
-        entryRules.push(entryMovingAverageBreakout)
-      }
-    }
-
-    if (exitRules.length === 0) {
-      const exitMovingAverageBreakout = this.inferMovingAverageBreakoutRuleFromFragments(
-        directionalFragments,
-        'exit',
-      )
-      if (exitMovingAverageBreakout) {
-        exitRules.push(exitMovingAverageBreakout)
-      }
-    }
-
-    if (entryRules.length === 0) {
-      const immediateExecutionRule = this.inferImmediateExecutionRule(directionalFragments, 'entry')
-      if (immediateExecutionRule) {
-        entryRules.push(immediateExecutionRule)
-      }
-    }
-
-    if (exitRules.length === 0) {
-      const immediateExecutionRule = this.inferImmediateExecutionRule(directionalFragments, 'exit')
-      if (immediateExecutionRule) {
-        exitRules.push(immediateExecutionRule)
-      }
-    }
-
-    if (entryRules.length === 0) {
-      const hasBollinger = /布林|bollinger/i.test(text)
-      const hasUpperBand = /上轨|upper/i.test(text)
-      const hasLowerBand = /下轨|lower/i.test(text)
-      const hasTouchCue = /触及|触碰|碰到|touch/iu.test(text)
-      const hasCloseConfirmCue = /收盘确认|收盘后确认|收盘|收于|收在|close/iu.test(text)
-      const bollingerParamsMatch = text.match(/布林带\s*[（(]\s*(\d{1,3})\s*[,，]\s*(\d+(?:\.\d+)?)\s*[)）]/u)
-      const bollingerLabel = bollingerParamsMatch?.[1] && bollingerParamsMatch[2]
-        ? `布林带(${bollingerParamsMatch[1]},${bollingerParamsMatch[2]})`
-        : '布林带'
-      const upperBandDirection = this.detectDirectionInTriggerFragment(
-        text,
-        /(?:布林|bollinger).{0,12}(?:上轨|upper)|(?:上轨|upper).{0,12}(?:布林|bollinger)|(?:突破|站上|收盘).{0,8}(?:上轨|upper)/i,
-      )
-      const lowerBandDirection = this.detectDirectionInTriggerFragment(
-        text,
-        /(?:布林|bollinger).{0,12}(?:下轨|lower)|(?:下轨|lower).{0,12}(?:布林|bollinger)|(?:突破|跌破|收盘).{0,8}(?:下轨|lower)/i,
-      )
-      const pushEntryRule = (rule: string) => {
-        if (!entryRules.includes(rule)) {
-          entryRules.push(rule)
-        }
-      }
-      if (hasBollinger && hasUpperBand && upperBandDirection === 'short' && hasTouchCue && hasCloseConfirmCue) {
-        pushEntryRule(`触及${bollingerLabel}上轨后收盘确认做空`)
-      }
-      if (hasBollinger && hasUpperBand && upperBandDirection === 'long' && hasTouchCue && hasCloseConfirmCue) {
-        pushEntryRule(`触及${bollingerLabel}上轨后收盘确认做多`)
-      }
-      if (hasBollinger && hasLowerBand && lowerBandDirection === 'long' && hasTouchCue && hasCloseConfirmCue) {
-        pushEntryRule(`触及${bollingerLabel}下轨后收盘确认做多`)
-      }
-      if (hasBollinger && hasLowerBand && lowerBandDirection === 'short' && hasTouchCue && hasCloseConfirmCue) {
-        pushEntryRule(`触及${bollingerLabel}下轨后收盘确认做空`)
-      }
-      if (hasBollinger && hasUpperBand && upperBandDirection === 'short' && hasTouchCue) {
-        pushEntryRule(`触及${bollingerLabel}上轨时做空`)
-      }
-      if (hasBollinger && hasUpperBand && upperBandDirection === 'long' && hasTouchCue) {
-        pushEntryRule(`触及${bollingerLabel}上轨时做多`)
-      }
-      if (hasBollinger && hasLowerBand && lowerBandDirection === 'long' && hasTouchCue) {
-        pushEntryRule(`触及${bollingerLabel}下轨时做多`)
-      }
-      if (hasBollinger && hasLowerBand && lowerBandDirection === 'short' && hasTouchCue) {
-        pushEntryRule(`触及${bollingerLabel}下轨时做空`)
-      }
-      if (hasBollinger && hasUpperBand && upperBandDirection === 'short' && /突破|交易|开仓|入场|站上|收盘/.test(text)) {
-        pushEntryRule(`K线收盘后确认突破${bollingerLabel}上轨时做空`)
-      }
-      if (hasBollinger && hasUpperBand && upperBandDirection === 'long' && /突破|交易|开仓|入场|站上|收盘/.test(text)) {
-        pushEntryRule(`K线收盘后确认突破${bollingerLabel}上轨时做多`)
-      }
-      if (hasBollinger && hasUpperBand && !upperBandDirection && /突破|交易|开仓|入场|站上|收盘/.test(text)) {
-        pushEntryRule(`突破${bollingerLabel}上轨交易`)
-      }
-      if (hasBollinger && hasLowerBand && lowerBandDirection === 'long' && /突破|跌破|交易|开仓|入场|收盘/.test(text)) {
-        pushEntryRule(`K线收盘后确认突破${bollingerLabel}下轨时做多`)
-      }
-      if (hasBollinger && hasLowerBand && lowerBandDirection === 'short' && /突破|跌破|交易|开仓|入场|收盘/.test(text)) {
-        pushEntryRule(`K线收盘后确认突破${bollingerLabel}下轨时做空`)
-      }
-      if (hasBollinger && hasLowerBand && !lowerBandDirection && /突破|跌破|交易|开仓|入场|收盘/.test(text)) {
-        pushEntryRule(`跌破${bollingerLabel}下轨交易`)
-      }
-      if (entryRules.length === 0 && /金叉|上穿.{0,8}均线|均线.{0,8}上穿|\bma\b|moving average/i.test(text)) {
-        entryRules.push('短均线上穿长均线（金叉）入场')
-      } else if (entryRules.length === 0 && /(?:突破|站上|收盘价?.{0,8}高于).{0,16}(?:阻力|前高|关键位)|阻力位/.test(text)) {
-        entryRules.push('价格收盘确认突破关键阻力位入场')
-      } else if (entryRules.length === 0 && /买入|开仓|入场/.test(text)) {
-        entryRules.push('满足入场条件后开仓')
-      }
-    }
-    if (exitRules.length === 0) {
-      const middleBandPeriod = text.match(/中轨\s*\(?(?:MA|ma)\s*(\d{1,3})\)?/u)?.[1]
-        ?? text.match(/布林带\s*[（(]\s*(\d{1,3})\s*[,，]\s*(\d+(?:\.\d+)?)\s*[)）]/u)?.[1]
-      const middleBandAction = /平空/u.test(text)
-        ? '平空'
-        : (/平多|卖出/u.test(text) ? '平多' : '平仓')
-      if (/布林|bollinger/iu.test(text) && /中轨|middle|ma20|均线20/i.test(text) && /平仓|平多|平空|离场|出场|卖出/u.test(text)) {
-        exitRules.push(`价格回到布林带中轨(MA${middleBandPeriod ?? '20'})时${middleBandAction}`)
-      } else if (/死叉|下穿.{0,8}均线|均线.{0,8}下穿|\bma\b|moving average/i.test(text)) {
-        exitRules.push('短均线下穿长均线（死叉）出场')
-      } else if (/跌破.{0,16}(?:支撑|前低|关键位)|支撑位/.test(text)) {
-        exitRules.push('价格跌破关键支撑位出场')
-      } else if (/止盈|止损|回撤/.test(text)) {
-        exitRules.push('触发止盈/止损阈值出场')
-      } else if (/平仓|离场|出场|卖出/.test(text)) {
-        exitRules.push('满足出场条件后平仓')
-      }
-    }
-
-    const riskRules: Record<string, unknown> = {}
-    const grid: NonNullable<ChecklistPayload['grid']> = {}
-    if (/\bokx\b/i.test(text)) {
-      riskRules.exchange = 'okx'
-    } else if (/hyperliquid/i.test(text)) {
-      riskRules.exchange = 'hyperliquid'
-    } else if (/binance/i.test(text)) {
-      riskRules.exchange = 'binance'
-    }
-
-    if (/永续|perp|swap|合约/i.test(text)) {
-      riskRules.marketType = 'perp'
-    } else if (/现货|spot/i.test(text)) {
-      riskRules.marketType = 'spot'
-    }
-
-    const positionMatch = text.match(/仓位\s*(\d+(?:\.\d+)?)\s*%/u)
-      ?? text.match(/单笔(?:使用|投入)?\s*(\d+(?:\.\d+)?)\s*%\s*资金/u)
-      ?? text.match(/(?:仓位|单笔(?:用|使用)?|使用)\s*(?:百分之?\s*)?(\d+(?:\.\d+)?)(?:\s*%|资金|仓位|$)/u)
-      ?? text.match(/(?:仓位|单笔(?:用|使用)?).{0,8}?(\d+(?:\.\d+)?)\s*%/u)
-    if (positionMatch?.[1]) {
-      riskRules.positionPct = Number(positionMatch[1])
-    }
-    const stopLossInfo = this.extractRiskRuleInfo(text, 'stopLoss')
-    if (typeof stopLossInfo.pct === 'number') {
-      riskRules.stopLossPct = stopLossInfo.pct
-    }
-    const takeProfitInfo = this.extractRiskRuleInfo(text, 'takeProfit')
-    if (typeof takeProfitInfo.pct === 'number') {
-      riskRules.takeProfitPct = takeProfitInfo.pct
-    }
-    const stopLossClause = stopLossInfo.clause
-    const takeProfitClause = takeProfitInfo.clause
-    const stopLossBasis = this.resolveRiskBasis(stopLossClause, typeof riskRules.stopLossBasis === 'string'
-      ? riskRules.stopLossBasis as ChecklistRuleBasis['kind']
-      : null)
-    if (stopLossBasis && typeof riskRules.stopLossPct === 'number') {
-      riskRules.stopLossBasis = stopLossBasis
-    }
-    const takeProfitBasis = this.resolveRiskBasis(takeProfitClause, typeof riskRules.takeProfitBasis === 'string'
-      ? riskRules.takeProfitBasis as ChecklistRuleBasis['kind']
-      : null)
-    if (takeProfitBasis && typeof riskRules.takeProfitPct === 'number') {
-      riskRules.takeProfitBasis = takeProfitBasis
-    }
-    const drawdownMatch = text.match(/最大回撤\s*(?:百分之?\s*)?(\d+(?:\.\d+)?)(?:\s*%|$)/)
-    if (drawdownMatch?.[1]) {
-      riskRules.maxDrawdownPct = Number(drawdownMatch[1])
-    }
-    const earlyStopMatch = text.match(/((?:价格)?连续\s*3\s*根K线[^。；;\n]{0,40}?轨外[^。；;\n]{0,40}?(?:提前止损|减仓|全平|平仓))/i)
-    if (earlyStopMatch?.[1]) {
-      riskRules.earlyStop = earlyStopMatch[1].trim()
-    }
-    if (/网格|grid/iu.test(text)) {
-      const rangeMatch = text.match(/(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)/u)
-      if (rangeMatch?.[1] && rangeMatch[2]) {
-        grid.lower = Number(rangeMatch[1])
-        grid.upper = Number(rangeMatch[2])
-      }
-
-      const percentMatch = text.match(/(?:步长|每一格(?:间距)?|每格(?:间距)?)\s*(\d+(?:\.\d+)?)\s*%/u)
-      const perMilleMatch = text.match(/千分之\s*(\d+(?:\.\d+)?)/u)
-      if (percentMatch?.[1]) {
-        grid.stepPct = Number(percentMatch[1])
-      } else if (perMilleMatch?.[1]) {
-        grid.stepPct = Number(perMilleMatch[1]) / 10
-      }
-
-      if (/双向|低买高卖|来回|往返|自动买卖|自动交易/u.test(text)) {
-        grid.sideMode = 'bidirectional'
-      } else if (/做空网格|空头网格|做空|空头/u.test(text)) {
-        grid.sideMode = 'short_only'
-      } else if (/做多网格|多头网格|做多|多头/u.test(text)) {
-        grid.sideMode = 'long_only'
-      } else if (/只做多|仅做多/u.test(text)) {
-        grid.sideMode = 'long_only'
-      } else if (/只做空|仅做空/u.test(text)) {
-        grid.sideMode = 'short_only'
-      }
-
-      if (!grid.sideMode) {
-        grid.sideMode = 'bidirectional'
-      }
-
-      if (/突破.{0,8}停/u.test(text)) {
-        grid.breakoutAction = 'pause'
-      } else if (/突破/u.test(text)) {
-        grid.breakoutAction = 'continue'
-      }
-    }
-
-    const inferredMarket = {
-      ...(riskRules.exchange === 'okx' || riskRules.exchange === 'binance' || riskRules.exchange === 'hyperliquid'
-        ? { exchange: riskRules.exchange as ChecklistPayload['market']['exchange'] }
-        : {}),
-      ...(riskRules.marketType === 'spot' || riskRules.marketType === 'perp'
-        ? { marketType: riskRules.marketType as ChecklistPayload['market']['marketType'] }
-        : {}),
-      ...(timeframes[0] ? { defaultTimeframe: timeframes[0] } : {}),
-    }
-
-    const drafts = buildChecklistRuleDrafts({
-      symbols: symbols.length > 0 ? symbols : undefined,
-      timeframes: timeframes.length > 0 ? timeframes : undefined,
-      entryRules: entryRules.length > 0 ? entryRules : undefined,
-      exitRules: exitRules.length > 0 ? exitRules : undefined,
-      entryRuleBases: Object.keys(entryRuleBases).length > 0 ? entryRuleBases : undefined,
-      exitRuleBases: Object.keys(exitRuleBases).length > 0 ? exitRuleBases : undefined,
-      riskRules: Object.keys(riskRules).length > 0 ? riskRules : undefined,
-      grid: Object.keys(grid).length > 0 ? grid : undefined,
-      market: Object.keys(inferredMarket).length > 0 ? inferredMarket : undefined,
-    })
-
-    return {
-      symbols: symbols.length > 0 ? symbols : undefined,
-      timeframes: timeframes.length > 0 ? timeframes : undefined,
-      entryRules: entryRules.length > 0 ? entryRules : undefined,
-      exitRules: exitRules.length > 0 ? exitRules : undefined,
-      entryRuleBases: Object.keys(entryRuleBases).length > 0 ? entryRuleBases : undefined,
-      exitRuleBases: Object.keys(exitRuleBases).length > 0 ? exitRuleBases : undefined,
-      entryRuleDrafts: drafts.entry,
-      exitRuleDrafts: drafts.exit,
-      riskRules: Object.keys(riskRules).length > 0 ? riskRules : undefined,
-      grid: Object.keys(grid).length > 0 ? grid : undefined,
-      market: Object.keys(inferredMarket).length > 0 ? inferredMarket : { defaultTimeframe: timeframes[0] ?? null },
-    }
-  }
-
-  private inferImmediateExecutionRule(
-    fragments: string[],
-    phase: 'entry' | 'exit',
-  ): string | null {
-    for (const fragment of fragments) {
-      const hasTemporalExecutionCue = /立即|立刻|马上|启动时|开始时|一开始|开局/u.test(fragment)
-      const hasDirectMarketCue = /直接/u.test(fragment) && /市价|当前价/u.test(fragment)
-      const hasExecutionCue = hasTemporalExecutionCue || hasDirectMarketCue
-      if (!hasExecutionCue) {
-        continue
-      }
-
-      if (phase === 'entry') {
-        if (/买入|开仓|做多/u.test(fragment)) {
-          return '立即开始时市价买入一次'
-        }
-        if (/做空|卖出开空|开空/u.test(fragment)) {
-          return '立即开始时市价做空一次'
-        }
-        continue
-      }
-
-      if (/平空/u.test(fragment)) {
-        return '立即开始时市价平空一次'
-      }
-      if (/卖出|平仓|平多/u.test(fragment)) {
-        return '立即开始时市价卖出一次'
-      }
-    }
-    return null
-  }
-
-  private inferMovingAverageBreakoutRuleFromFragments(
-    fragments: string[],
-    phase: 'entry' | 'exit',
-  ): string | null {
-    const actionPattern = phase === 'entry'
-      ? /买入|开仓|入场/u
-      : /卖出|平仓|离场|出场/u
-
-    for (const fragment of fragments) {
-      if (!actionPattern.test(fragment)) {
-        continue
-      }
-      if (!/均线|ema|sma|ma/iu.test(fragment)) {
-        continue
-      }
-
-      const referenceRole = /长期|长线|长周期|long[\s-]?term/iu.test(fragment)
-        ? '长期均线'
-        : (/短期|短线|短周期|short[\s-]?term/iu.test(fragment) ? '短期均线' : null)
-      if (!referenceRole) {
-        continue
-      }
-
-      if (/突破|上穿|站上|上方|高于/u.test(fragment)) {
-        return `价格突破${referenceRole}时${phase === 'entry' ? '买入' : '卖出'}`
-      }
-      if (/跌破|下穿|失守|下方|低于/u.test(fragment)) {
-        return `价格跌破${referenceRole}时${phase === 'entry' ? '买入' : '卖出'}`
-      }
-    }
-
-    return null
-  }
 
   private detectDirectionInTriggerFragment(
     text: string,
