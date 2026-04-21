@@ -14,11 +14,15 @@ export interface FetchBacktestCapabilitiesOptions {
 
 export interface BacktestSymbolSupportCheckInput {
   exchange: string
+  marketType?: 'spot' | 'perp'
   symbol: string
+  baseTimeframe?: string
 }
 
 export interface BacktestSymbolSupportCheckPayload {
   status: string
+  reasonCode?: string
+  args?: Record<string, unknown>
 }
 
 export type BacktestJobPhase = 'queued' | 'running' | 'succeeded' | 'failed'

@@ -13,6 +13,10 @@ import {
   buildBacktestPayload,
   isBacktestPayloadBuilderError,
 } from '@/components/ai-quant/backtest-payload-builder'
+import {
+  buildLocalizedBacktestErrorMessage,
+  parseAiQuantErrorMeta,
+} from '@/components/ai-quant/ai-quant-error-stage'
 
 import { checkBacktestSymbolSupport } from '@/components/ai-quant/backtest-symbol-support-client'
 import { ApiError } from '@/lib/errors'
@@ -126,6 +130,32 @@ function buildBacktestTimeoutMessage(args: { createdJobId: string; t: Translate 
   return args.t('aiQuant.messages.backtestTimeout', {
     jobId: args.createdJobId,
   })
+}
+
+function buildDynamicBacktestAvailabilityMessage(
+  t: Translate,
+  code: string | undefined,
+  args?: Record<string, unknown>,
+): string | null {
+  if (!code) return null
+
+  if (
+    code === 'BACKTEST_SNAPSHOT_REQUIRED'
+    || code === 'BACKTEST_SNAPSHOT_SYMBOL_MISSING'
+    || code === 'BACKTEST_SYMBOL_UNAVAILABLE'
+    || code === 'BACKTEST_SYMBOL_REFRESH_FAILED'
+    || code === 'BACKTEST_MARKET_DATA_UNAVAILABLE'
+    || code === 'BACKTEST_SERVICE_TEMPORARILY_UNAVAILABLE'
+    || code === 'SERVICE_TEMPORARILY_UNAVAILABLE'
+  ) {
+    return buildLocalizedBacktestErrorMessage(t, 400, {
+      code,
+      stage: 'backtest',
+      args,
+    })
+  }
+
+  return null
 }
 
 export async function runAiQuantBacktest(args: {
@@ -367,8 +397,9 @@ export async function runAiQuantBacktest(args: {
       }
     })
   }
-  const toFailureMessage = (reason: string) =>
-    t('aiQuant.messages.backtestPayloadInvalid', { reason })
+  const toFailureMessage = (reason: string, errorArgs?: Record<string, unknown>) =>
+    buildDynamicBacktestAvailabilityMessage(t, reason, errorArgs)
+    ?? t('aiQuant.messages.backtestPayloadInvalid', { reason })
   const canContinue = () =>
     isMountedRef.current &&
     backtestRunTokenRef.current.get(conversationId) === runToken &&
@@ -394,14 +425,25 @@ export async function runAiQuantBacktest(args: {
   try {
     const support = await checkBacktestSymbolSupport({
       exchange: backtestExchange ?? activeConversation.params.exchange,
+      marketType:
+        backtestMarketType
+        ?? resolvePublishedBacktestMarketType({
+          publishedSnapshotId: activeConversation.publishedSnapshotId,
+          publishedSnapshotStrategyConfig: activeConversation.publishedSnapshotStrategyConfig,
+        })
+        ?? 'spot',
       symbol: payload.symbols[0],
+      baseTimeframe: payload.baseTimeframe,
     })
     if (!canContinue()) {
       return
     }
     if (support.status === 'not_supported') {
       setConversationBacktestExecutionState(conversationId, 'failed')
-      updateBacktestMessage(toFailureMessage('symbol_not_supported'))
+      updateBacktestMessage(
+        buildDynamicBacktestAvailabilityMessage(t, support.reasonCode, support.args)
+          ?? toFailureMessage('symbol_not_supported'),
+      )
       return
     }
 
@@ -532,10 +574,18 @@ export async function runAiQuantBacktest(args: {
       return
     }
     setConversationBacktestExecutionState(conversationId, 'failed')
-    const message =
-      error instanceof ApiError
-        ? error.message?.trim() || toFailureMessage('unknown_error')
-        : toFailureMessage('unknown_error')
+    const message = (() => {
+      if (!(error instanceof ApiError)) {
+        return toFailureMessage('unknown_error')
+      }
+
+      const meta = parseAiQuantErrorMeta(error.details)
+      return (
+        buildDynamicBacktestAvailabilityMessage(t, error.code || meta.code, meta.args)
+        ?? error.message?.trim()
+        ?? toFailureMessage('unknown_error')
+      )
+    })()
     updateBacktestMessage(message)
   } finally {
     releaseMutex()
