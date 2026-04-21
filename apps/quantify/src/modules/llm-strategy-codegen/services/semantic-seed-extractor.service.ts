@@ -257,50 +257,64 @@ export class SemanticSeedExtractorService {
   private pushBollingerTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
     if (!/布林带/u.test(segment)) return
 
-    const bandParams = this.extractBollingerBandParams(segment)
-    const confirmationMode = this.extractConfirmationMode(segment)
+    const clauses = segment.includes('，') || segment.includes(',')
+      ? segment.split(/[，,]/u).map(clause => clause.trim()).filter(Boolean)
+      : [segment]
+    const segmentBandParams = this.extractBollingerBandParams(segment)
 
-    if (/上轨/u.test(segment)) {
-      this.pushTrigger(triggers, seen, {
-        key: 'bollinger.touch_upper',
-        phase: 'entry',
-        sideScope: 'short',
-        params: {
-          band: 'upper',
-          ...(bandParams?.period !== undefined ? { period: bandParams.period } : {}),
-          ...(bandParams?.stdDev !== undefined ? { stdDev: bandParams.stdDev } : {}),
-          ...(confirmationMode ? { confirmationMode } : {}),
-        },
-      })
-    }
+    for (const clause of clauses) {
+      const bandParams = this.extractBollingerBandParams(clause) ?? segmentBandParams
+      const confirmationMode = this.extractConfirmationMode(clause) ?? this.extractConfirmationMode(segment)
+      const intent = this.resolveTradeIntent(clause)
 
-    if (/下轨/u.test(segment)) {
-      this.pushTrigger(triggers, seen, {
-        key: 'bollinger.touch_lower',
-        phase: 'entry',
-        sideScope: 'long',
-        params: {
-          band: 'lower',
-          ...(bandParams?.period !== undefined ? { period: bandParams.period } : {}),
-          ...(bandParams?.stdDev !== undefined ? { stdDev: bandParams.stdDev } : {}),
-          ...(confirmationMode ? { confirmationMode } : {}),
-        },
-      })
-    }
+      if (/上轨/u.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'bollinger.touch_upper',
+          phase: intent?.phase ?? 'entry',
+          sideScope: intent?.sideScope ?? 'short',
+          params: {
+            band: 'upper',
+            ...(bandParams?.period !== undefined ? { period: bandParams.period } : {}),
+            ...(bandParams?.stdDev !== undefined ? { stdDev: bandParams.stdDev } : {}),
+            ...(confirmationMode ? { confirmationMode } : {}),
+          },
+        })
+      }
 
-    if (/中轨/u.test(segment)) {
-      this.pushTrigger(triggers, seen, {
-        key: 'bollinger.touch_middle',
-        phase: 'exit',
-        sideScope: 'both',
-        params: {
-          band: 'middle',
-          ...(bandParams?.period !== undefined ? { period: bandParams.period } : {}),
-          ...(bandParams?.stdDev !== undefined ? { stdDev: bandParams.stdDev } : {}),
-          ...(confirmationMode ? { confirmationMode } : {}),
-        },
-      })
+      if (/下轨/u.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'bollinger.touch_lower',
+          phase: intent?.phase ?? 'entry',
+          sideScope: intent?.sideScope ?? 'long',
+          params: {
+            band: 'lower',
+            ...(bandParams?.period !== undefined ? { period: bandParams.period } : {}),
+            ...(bandParams?.stdDev !== undefined ? { stdDev: bandParams.stdDev } : {}),
+            ...(confirmationMode ? { confirmationMode } : {}),
+          },
+        })
+      }
+
+      if (/中轨/u.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'bollinger.touch_middle',
+          phase: 'exit',
+          sideScope: this.resolveBollingerMiddleSideScope(clause),
+          params: {
+            band: 'middle',
+            ...(bandParams?.period !== undefined ? { period: bandParams.period } : {}),
+            ...(bandParams?.stdDev !== undefined ? { stdDev: bandParams.stdDev } : {}),
+            ...(confirmationMode ? { confirmationMode } : {}),
+          },
+        })
+      }
     }
+  }
+
+  private resolveBollingerMiddleSideScope(clause: string): 'long' | 'short' | 'both' {
+    if (/平空|买回空单|买回平空/u.test(clause)) return 'short'
+    if (/平多|卖出多单|卖出平多/u.test(clause)) return 'long'
+    return 'both'
   }
 
   private pushMovingAverageCrossTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {

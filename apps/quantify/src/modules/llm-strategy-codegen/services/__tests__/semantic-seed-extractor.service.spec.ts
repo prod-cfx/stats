@@ -681,6 +681,24 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.triggers?.find(trigger => trigger.key === 'bollinger.touch_middle')?.params).not.toHaveProperty('confirmationMode')
   })
 
+  it('respects explicit long intent for Bollinger upper-band wording', () => {
+    const patch = service.extract('突破布林带上轨买入做多；单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'bollinger.touch_upper',
+        phase: 'entry',
+        sideScope: 'long',
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+    ]))
+    expect(patch.actions).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_short' }),
+    ]))
+  })
+
   it('extracts fixed-range grid semantics into a semantic patch', () => {
     const patch = service.extract('OKX 合约 BTCUSDT 15m；在 60000-80000 区间执行双向网格，步长 0.5%，单笔 10%。')
 
