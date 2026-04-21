@@ -9,6 +9,7 @@ export const NORMALIZED_INTENT_FAMILIES = [
 export type NormalizedIntentFamily = (typeof NORMALIZED_INTENT_FAMILIES)[number]
 
 export const NORMALIZED_TRIGGER_ATOM_KEYS = [
+  'execution.on_start',
   'price.percent_change',
   'price.breakout_up',
   'price.breakout_down',

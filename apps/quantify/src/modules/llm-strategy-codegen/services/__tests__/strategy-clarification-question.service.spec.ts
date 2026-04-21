@@ -206,10 +206,12 @@ describe('strategyClarificationQuestionService', () => {
     expect(prompt).toContain('这里的 5% 止损是按持仓亏损')
   })
 
-  it('requires the conversation planner prompt to summarize first and keep logicReady false while blockers remain', () => {
+  it('requires the conversation planner prompt to treat server-side semantic state as authoritative while blockers remain', () => {
     const prompt = buildConversationPlannerSystemPrompt()
 
-    expect(prompt).toContain('你的职责是生成 semantic planning notes 与自然语言交互')
+    expect(prompt).toContain('服务端 semanticState / clarificationState / compilation gate 是唯一权威')
+    expect(prompt).toContain('logicReady 只是建议性自评')
+    expect(prompt).toContain('你的职责是生成 semantic planning notes 与自然语言交互，并给出可采纳的 semanticPatch 草案，不是定义真实策略状态')
     expect(prompt).toContain('"semanticPatch"?: {')
     expect(prompt).toContain('assistantPrompt 必须指向未闭合语义槽')
     expect(prompt).not.toContain('标的/周期/风控可后续配置，不应强制先问这些。')

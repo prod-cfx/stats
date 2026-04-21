@@ -79,6 +79,7 @@ function evaluateSeries(
         ? node.payload.value
         : null
     case 'PRICE':
+    case 'BAR_INDEX':
     case 'PRICE_CHANGE_PCT':
     case 'EMA':
     case 'SMA':
@@ -408,6 +409,13 @@ function resolveSeriesValueAt(
         const window = collectBarHistory(period, offset + (node.payload.offsetBars ?? 0) + 1, bars)
         if (window.length === 0) return null
         return Math.min(...window.map(bar => bar.low))
+      }
+      case 'BAR_INDEX': {
+        const raw = (ctx as Record<string, unknown>).__compiledDecisionState
+        const barIndex = raw && typeof raw === 'object' && !Array.isArray(raw)
+          ? (raw as { barIndex?: unknown }).barIndex
+          : null
+        return typeof barIndex === 'number' && Number.isFinite(barIndex) ? barIndex : null
       }
       case 'POSITION_BARS_HELD': {
         const raw = (ctx.position as Record<string, unknown> | undefined)?.barsHeld

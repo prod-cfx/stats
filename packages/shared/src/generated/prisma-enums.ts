@@ -117,7 +117,7 @@ export type LlmStrategyRunStatus = (typeof LlmStrategyRunStatus)[keyof typeof Ll
 
 export const LlmCodegenSessionStatus = {
   DRAFTING: 'DRAFTING',
-  CHECKLIST_GATE: 'CHECKLIST_GATE',
+  CONFIRM_GATE: 'CONFIRM_GATE',
   GENERATING: 'GENERATING',
   VALIDATING_STATIC: 'VALIDATING_STATIC',
   VALIDATING_RUNTIME: 'VALIDATING_RUNTIME',
@@ -288,4 +288,3 @@ export const ExchangeId = {
   hyperliquid: 'hyperliquid',
 } as const
 export type ExchangeId = (typeof ExchangeId)[keyof typeof ExchangeId]
-

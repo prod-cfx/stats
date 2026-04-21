@@ -1,4 +1,5 @@
 import {
+  canonicalizeStrategySymbolInput,
   isEquivalentMarketScopeValue,
   normalizeMarketScopeValue,
 } from '../market-scope-equivalence'
@@ -9,6 +10,21 @@ describe('marketScopeEquivalence', () => {
     expect(normalizeMarketScopeValue('marketType', ' PERP ')).toBe('perp')
     expect(normalizeMarketScopeValue('symbol', ' btcusdt ')).toBe('BTCUSDT')
     expect(normalizeMarketScopeValue('timeframe', ' 15M ')).toBe('15m')
+  })
+
+  it('canonicalizes complete strategy symbol inputs across spot and perp notations', () => {
+    expect(canonicalizeStrategySymbolInput('btcusdt')).toBe('BTCUSDT')
+    expect(canonicalizeStrategySymbolInput('BTC/USDT')).toBe('BTCUSDT')
+    expect(canonicalizeStrategySymbolInput('BTC-USDT')).toBe('BTCUSDT')
+    expect(canonicalizeStrategySymbolInput('BTC-USDT-SWAP')).toBe('BTCUSDT')
+    expect(canonicalizeStrategySymbolInput('BTCUSDT:PERP')).toBe('BTCUSDT')
+    expect(canonicalizeStrategySymbolInput('BTCUSDT:SPOT')).toBe('BTCUSDT')
+  })
+
+  it('rejects incomplete strategy symbol inputs that only provide a base asset', () => {
+    expect(canonicalizeStrategySymbolInput('BTC')).toBeNull()
+    expect(canonicalizeStrategySymbolInput('ETH')).toBeNull()
+    expect(canonicalizeStrategySymbolInput('ORDI')).toBeNull()
   })
 
   it('treats whitespace and casing drift as equivalent', () => {

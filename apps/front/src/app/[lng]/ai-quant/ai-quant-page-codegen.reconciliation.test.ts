@@ -32,7 +32,7 @@ describe('ai-quant-page-codegen reconciliation', () => {
       } as any,
       response: {
         id: 'session-1',
-        status: 'CHECKLIST_GATE',
+        status: 'CONFIRM_GATE',
         canonicalDigest: 'sha256:remote',
       },
     })
@@ -50,7 +50,7 @@ describe('ai-quant-page-codegen reconciliation', () => {
       } as any,
       response: {
         id: 'session-1',
-        status: 'CHECKLIST_GATE',
+        status: 'CONFIRM_GATE',
         canonicalDigest: 'sha256:canonical-1',
         clarificationGate: {
           blocked: true,

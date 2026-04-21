@@ -210,7 +210,7 @@ describe('aiQuantProxyService', () => {
 
   it('forwards codegen start payload with authorization header', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.startCodegen.mockResolvedValue({ id: 'session-1', status: 'CHECKLIST_GATE' })
+    quantifyClient.startCodegen.mockResolvedValue({ id: 'session-1', status: 'CONFIRM_GATE' })
 
     await service.startCodegen('user-1', 'Bearer token-1', {
       initialMessage: 'build me a strategy',
@@ -232,7 +232,7 @@ describe('aiQuantProxyService', () => {
 
   it('forwards codegen continue payload without injecting userId', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.continueCodegen.mockResolvedValue({ id: 'session-1', status: 'CHECKLIST_GATE' })
+    quantifyClient.continueCodegen.mockResolvedValue({ id: 'session-1', status: 'CONFIRM_GATE' })
 
     await service.continueCodegen('user-1', 'Bearer token-1', 'session-1', {
       message: '继续',

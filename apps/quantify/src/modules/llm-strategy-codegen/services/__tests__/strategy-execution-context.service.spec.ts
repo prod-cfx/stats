@@ -112,6 +112,51 @@ describe('strategyExecutionContextService', () => {
     expect(result.ambiguities).toEqual([])
   })
 
+  it('keeps symbol missing when only a base asset is provided', () => {
+    const result = service.resolve({
+      symbols: ['BTC'],
+      timeframes: ['1h'],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'spot',
+        positionPct: 10,
+      },
+      market: {
+        defaultTimeframe: '1h',
+      },
+    })
+
+    expect(result.context).toEqual({
+      exchange: 'okx',
+      symbol: null,
+      marketType: 'spot',
+      timeframe: '1h',
+    })
+    expect(result.ambiguities).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'execution_context_missing',
+        field: 'symbol',
+        reason: 'missing_symbol',
+      }),
+    ]))
+  })
+
+  it('accepts complete pair inputs across spot and perp notations', () => {
+    const spot = service.resolve({
+      symbols: ['BTC/USDT'],
+      riskRules: { exchange: 'okx', marketType: 'spot', positionPct: 10 },
+      market: { defaultTimeframe: '1h' },
+    } as any)
+    const perp = service.resolve({
+      symbols: ['BTC-USDT-SWAP'],
+      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+      market: { defaultTimeframe: '1h' },
+    } as any)
+
+    expect(spot.context.symbol).toBe('BTCUSDT')
+    expect(perp.context.symbol).toBe('BTCUSDT')
+  })
+
   it('does not force timeframe as a blocker when the strategy remains uniquely compilable without it', () => {
     const result = service.resolve({
       symbols: ['BTCUSDT'],

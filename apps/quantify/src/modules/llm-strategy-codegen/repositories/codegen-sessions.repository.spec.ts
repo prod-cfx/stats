@@ -851,7 +851,7 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
         findUnique: jest.fn().mockResolvedValue(sessionRow),
         update: jest.fn().mockResolvedValue({
           ...sessionRow,
-          status: 'CHECKLIST_GATE',
+          status: 'CONFIRM_GATE',
           graphSnapshot: {
             graphVersion: 'gss.v1',
             nodes: [{ id: 'entry-1' }],
@@ -903,7 +903,7 @@ describe('codegenSessionsRepository.createDraftStrategyInstanceFromPublishedSess
     } as any)
     await repo.findById('session-1')
     await repo.updateSession('session-1', {
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       graphSnapshot: {
         graphVersion: 'gss.v1',
         nodes: [{ id: 'entry-1' }],

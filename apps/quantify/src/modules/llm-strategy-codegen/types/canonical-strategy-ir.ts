@@ -53,6 +53,7 @@ export interface SeriesDef {
   id: string
   kind:
     | 'PRICE'
+    | 'BAR_INDEX'
     | 'CONST'
     | 'MARKET_REGIME'
     | 'TREND_DIRECTION'

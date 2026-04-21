@@ -597,7 +597,7 @@ describe('AiQuantPageClient backtest range integration', () => {
     listAiQuantConversations.mockResolvedValue([
       {
         id: 'session-1',
-        status: 'CHECKLIST_GATE',
+        status: 'CONFIRM_GATE',
         updatedAt: '2026-04-10T12:00:00.000Z',
         conversationTitle: 'server-conv',
         conversationMessages: [
@@ -677,14 +677,14 @@ describe('AiQuantPageClient backtest range integration', () => {
     listAiQuantConversations.mockResolvedValue([
       {
         id: 'conv-1',
-        status: 'CHECKLIST_GATE',
+        status: 'CONFIRM_GATE',
         updatedAt: '2026-04-10T12:00:00.000Z',
         conversationTitle: 'server-conv-1',
         conversationMessages: [{ role: 'assistant', content: 'server-message-1' }],
       },
       {
         id: 'conv-2',
-        status: 'CHECKLIST_GATE',
+        status: 'CONFIRM_GATE',
         updatedAt: '2026-04-10T12:01:00.000Z',
         conversationTitle: 'server-conv-2',
         conversationMessages: [{ role: 'assistant', content: 'server-message-2' }],

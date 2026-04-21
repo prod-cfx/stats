@@ -7,6 +7,11 @@ export interface SemanticContract {
 }
 
 const SEMANTIC_CONTRACTS: Record<string, SemanticContract> = {
+  'execution.on_start': {
+    semanticKey: 'execution.on_start',
+    family: 'trigger',
+    requiredParams: ['timing', 'orderType', 'occurrence'],
+  },
   'indicator.above': {
     semanticKey: 'indicator.above',
     family: 'trigger',

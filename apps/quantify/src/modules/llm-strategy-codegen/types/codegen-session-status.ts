@@ -1,4 +1,4 @@
-export type LlmCodegenConversationStatus = 'DRAFTING' | 'CHECKLIST_GATE'
+export type LlmCodegenConversationStatus = 'DRAFTING' | 'CONFIRM_GATE'
 export type LlmCodegenPipelineStatus =
   | 'GENERATING'
   | 'VALIDATING_STATIC'
@@ -14,7 +14,7 @@ export type LlmCodegenSessionStatus =
 
 export const CODEGEN_CONFIRMABLE_SESSION_STATUSES = [
   'DRAFTING',
-  'CHECKLIST_GATE',
+  'CONFIRM_GATE',
 ] as const satisfies readonly LlmCodegenConversationStatus[]
 
 export const CODEGEN_PROCESSING_SESSION_STATUSES = [

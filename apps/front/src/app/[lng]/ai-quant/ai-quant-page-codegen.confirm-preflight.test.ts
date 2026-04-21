@@ -336,7 +336,7 @@ describe('ai-quant-page-codegen confirm preflight reconciliation', () => {
 
     mockGetLlmCodegenSession.mockResolvedValueOnce({
       id: 'session-1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       canonicalDigest: 'sha256:canonical-1',
       specDesc: {
         canonicalDigest: 'sha256:canonical-1',

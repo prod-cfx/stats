@@ -1068,7 +1068,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
 
     mockContinueLlmCodegenSession.mockResolvedValueOnce({
       id: 'session-1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       clarificationGate: null,
       canonicalDigest: 'sha256:canonical-2',
       semanticGraph: validSemanticGraph,
@@ -1151,7 +1151,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
 
     mockContinueLlmCodegenSession.mockResolvedValueOnce({
       id: 'session-1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       clarificationGate: null,
       canonicalDigest: 'sha256:canonical-2',
       semanticGraph: validSemanticGraph,
@@ -1292,7 +1292,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
 
     mockContinueLlmCodegenSession.mockResolvedValueOnce({
       id: 'session-1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       clarificationGate: null,
       canonicalDigest: 'sha256:canonical-ma50',
       semanticGraph: validSemanticGraph,
@@ -1380,7 +1380,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
 
     mockContinueLlmCodegenSession.mockResolvedValueOnce({
       id: 'session-1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       publicationGate: null,
       canonicalDigest: 'sha256:canonical-2',
       semanticGraph: validSemanticGraph,
@@ -1523,7 +1523,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     mockContinueLlmCodegenSession
       .mockResolvedValueOnce({
         id: 'session-1',
-        status: 'CHECKLIST_GATE',
+        status: 'CONFIRM_GATE',
         canonicalDigest: 'sha256:canonical-2',
         semanticGraph: validSemanticGraph,
         validationReport: { ok: true, errors: [] },
