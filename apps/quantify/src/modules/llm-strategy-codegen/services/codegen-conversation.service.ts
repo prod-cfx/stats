@@ -1071,7 +1071,6 @@ export class CodegenConversationService {
     const hasExecutableSemantics = stateWithExplicitDeterministicRisk.families.length > 0
       || stateWithExplicitDeterministicRisk.triggers.length > 0
       || stateWithExplicitDeterministicRisk.actions.length > 0
-      || stateWithExplicitDeterministicRisk.risk.length > 0
 
     if (!hasExecutableSemantics) {
       return {
@@ -1158,7 +1157,7 @@ export class CodegenConversationService {
       return state
     }
 
-    if (this.hasProtectiveRisk(state.risk)) {
+    if (this.hasStopLossRisk(state.risk)) {
       return state
     }
 
@@ -1281,6 +1280,17 @@ export class CodegenConversationService {
         || risk.key === 'risk.max_drawdown_pct'
         || risk.key === 'risk.max_single_loss_pct'
         || risk.key === 'risk.trailing_stop_pct'
+    })
+  }
+
+  private hasStopLossRisk(riskItems: SemanticState['risk']): boolean {
+    return riskItems.some((risk) => {
+      if (risk.status !== 'locked' || risk.key !== 'risk.stop_loss_pct') {
+        return false
+      }
+
+      const threshold = risk.params.valuePct
+      return typeof threshold === 'number' && Number.isFinite(threshold) && threshold > 0
     })
   }
 
