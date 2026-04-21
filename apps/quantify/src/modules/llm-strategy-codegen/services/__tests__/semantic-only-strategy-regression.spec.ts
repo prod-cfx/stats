@@ -373,8 +373,8 @@ describe('semantic-only strategy regression verification', () => {
           ],
         },
       ],
-      actions: [{ key: 'open_long' }],
-      position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_only' },
+      actions: [{ id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit' }],
+      position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_only', status: 'locked', source: 'user_explicit' },
       risk: [],
       contextSlots: {
         exchange: null,
