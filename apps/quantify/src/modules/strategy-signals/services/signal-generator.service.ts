@@ -643,6 +643,7 @@ export class SignalGeneratorService {
     config: StrategySignalsRuntimeConfig,
     referencePrice?: number,
     manualTrigger = false,
+    compiledDecisionState?: { barIndex: number; lastTriggeredByProgram: Record<string, number> },
   ): Promise<(AiSignalPayload & { rawResponse: string }) | null> {
     const isStrictCodegen = this.isStrictPublishedCodegenTemplate(strategy)
     let promptData: Record<string, any> = {}
@@ -667,15 +668,18 @@ export class SignalGeneratorService {
           const bars = this.normalizeRuntimeBars(marketBars ?? [], {
             requireFinalLatestBar,
           })
-          const scriptContext = buildStrategyContext({
-            bars,
-            symbol: symbol.code,
-            timeframe,
-            indicators,
-            currentPrice: referencePrice || 0,
-            timestamp: Date.now(),
-            params: this.buildEffectiveParams(strategy, instance),
-          })
+          const scriptContext = {
+            ...buildStrategyContext({
+              bars,
+              symbol: symbol.code,
+              timeframe,
+              indicators,
+              currentPrice: referencePrice || 0,
+              timestamp: Date.now(),
+              params: this.buildEffectiveParams(strategy, instance),
+            }),
+            ...(compiledDecisionState ? { __compiledDecisionState: compiledDecisionState } : {}),
+          }
 
           let result = await engine.execute(compiledScript.executableCode, {
             context: scriptContext,
@@ -1080,6 +1084,7 @@ export class SignalGeneratorService {
       config,
       referencePrice,
       options.skipCooldown ?? false,
+      this.buildCompiledDecisionStateForRuntimeExecution(activeRuntimeState),
     )
 
     if (!aiPayload) {
@@ -1743,6 +1748,21 @@ export class SignalGeneratorService {
     markPrice: number | undefined,
   ): { currentQty?: number; equity?: number; markPrice?: number } {
     return this.decisionStage.buildDecisionContext(indicators, markPrice)
+  }
+
+  private buildCompiledDecisionStateForRuntimeExecution(
+    activeRuntimeState: { executionSemanticKey: string } | null,
+  ): { barIndex: number; lastTriggeredByProgram: Record<string, number> } | undefined {
+    if (!activeRuntimeState) return undefined
+
+    if (activeRuntimeState.executionSemanticKey.startsWith('on_start.')) {
+      return {
+        barIndex: 1,
+        lastTriggeredByProgram: {},
+      }
+    }
+
+    return undefined
   }
 
   private requiresExplicitDecisionContext(decision: StrategyDecisionV1): boolean {
