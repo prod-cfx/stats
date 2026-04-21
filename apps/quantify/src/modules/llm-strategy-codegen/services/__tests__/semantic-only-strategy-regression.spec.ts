@@ -35,6 +35,7 @@ interface RejectedCaseResult {
 
 interface SemanticStateFactory {
   buildSemanticStateFromPlannerPatch: (semanticPatch: unknown) => SemanticState | null
+  findNextOpenSemanticSlot: (semanticState: SemanticState) => { slotKey: string; questionHint: string } | null
 }
 
 describe('semantic-only strategy regression verification', () => {
@@ -345,6 +346,52 @@ describe('semantic-only strategy regression verification', () => {
       value: 0.01,
       positionMode: 'long_only',
     })
+  })
+
+  it('keeps incomplete MA semantics in semantic clarification instead of checklist fallback', () => {
+    const semanticState: SemanticState = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-ma-open',
+          key: 'indicator.above',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { indicator: 'ma', referenceRole: 'long_term' },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'reference.period.entry',
+              fieldPath: 'triggers[0].params.reference.period',
+              status: 'open',
+              priority: 'core',
+              questionHint: '长期均线是多少？',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      actions: [{ key: 'open_long' }],
+      position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_only' },
+      risk: [],
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    }
+
+    expectSemanticArtifactsAreChecklistFree(semanticState)
+
+    const nextOpenSlot = semanticStateFactory.findNextOpenSemanticSlot(semanticState)
+    expect(nextOpenSlot).toEqual(expect.objectContaining({
+      slotKey: 'reference.period.entry',
+    }))
   })
 
   it('publishes percent-change entry and position-basis exit semantics', async () => {

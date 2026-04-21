@@ -15,6 +15,7 @@ The AI Quant codegen path no longer uses planner `logic`, publication checklist 
 - Publishes: on-start market entry with stop loss.
 - Explicit gap: MA price-vs-reference (`indicator.above` / `indicator.below`) rejects with `codegen.canonical_spec_v2_condition_unsupported:indicator.above` after checklist fallback removal.
 - Explicit gap: fixed-range grid wording `按 1% 网格买入...` is not yet extracted as grid semantics unless range/step wording is explicit.
+- Clarify: incomplete MA semantics without a reference period stays in semantic clarification via `reference.period.entry`; it does not fall back to checklist-derived rules.
 
 ## Verification Commands
 
