@@ -14,13 +14,13 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 import { buildBaseResponseSchema } from '@/common/swagger/base-response-schema.helper'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestRunnerService } from './core/backtest-runner.service'
-// eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时类元数据
 import {
   BacktestCapabilitiesResponseDto,
   BacktestJobResponseDto,
   BacktestReportResponseDto,
   BacktestSymbolSupportResponseDto,
 } from './dto/backtest.response.dto'
+// eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时类元数据
 import { CheckBacktestSymbolDto } from './dto/check-backtest-symbol.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时类元数据
 import { RunBacktestDto } from './dto/run-backtest.dto'
@@ -94,7 +94,7 @@ export class BacktestingController {
       return this.jobsService.createJob(normalizedInput, callerUserId)
     } catch (error) {
       if (error instanceof DomainException) {
-        throw error
+        throw this.normalizeStructuredBacktestDomainException(error)
       }
       const message = error instanceof Error ? error.message : String(error)
       this.logger.error(
@@ -104,6 +104,7 @@ export class BacktestingController {
         code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
         status: HttpStatus.SERVICE_UNAVAILABLE,
         args: {
+          reasonCode: 'BACKTEST_SERVICE_TEMPORARILY_UNAVAILABLE',
           symbols: dto.symbols,
           strategyId: dto.strategy?.id,
           reasonMessage: message,
@@ -190,7 +191,7 @@ export class BacktestingController {
       })
     } catch (error) {
       if (error instanceof DomainException) {
-        throw error
+        throw this.normalizeStructuredBacktestDomainException(error)
       }
       const message = error instanceof Error ? error.message : String(error)
       this.logger.error(
@@ -202,6 +203,7 @@ export class BacktestingController {
         args: {
           exchange: dto.exchange,
           symbol: dto.symbol,
+          reasonCode: 'BACKTEST_SERVICE_TEMPORARILY_UNAVAILABLE',
           reasonMessage: message,
         },
       })
@@ -214,6 +216,7 @@ export class BacktestingController {
       throw new DomainException('backtest.snapshot_required', {
         code: ErrorCode.BAD_REQUEST,
         status: HttpStatus.BAD_REQUEST,
+        args: { reasonCode: 'BACKTEST_SNAPSHOT_REQUIRED' },
       })
     }
 
@@ -249,5 +252,53 @@ export class BacktestingController {
       strategy,
       bars: dto.bars ?? [],
     } as BacktestRunInput
+  }
+
+  private normalizeStructuredBacktestDomainException(error: DomainException): DomainException {
+    const response = error.getResponse()
+    const responseArgs =
+      response && typeof response === 'object' && 'args' in response && response.args && typeof response.args === 'object'
+        ? response.args as Record<string, unknown>
+        : undefined
+    const existingArgs = responseArgs ?? error.args
+    if (typeof existingArgs?.reasonCode === 'string' && existingArgs.reasonCode.trim().length > 0) {
+      return error
+    }
+
+    const reasonCode = this.inferStructuredBacktestReasonCode(error.message, existingArgs)
+    if (!reasonCode) {
+      return error
+    }
+
+    return new DomainException(error.message, {
+      code: error.code,
+      status: error.getStatus(),
+      args: {
+        ...(existingArgs ?? {}),
+        reasonCode,
+      },
+    })
+  }
+
+  private inferStructuredBacktestReasonCode(
+    message: string,
+    args?: Record<string, unknown>,
+  ): string | null {
+    switch (message) {
+      case 'backtest.snapshot_required':
+        return 'BACKTEST_SNAPSHOT_REQUIRED'
+      case 'backtest.snapshot_params_missing': {
+        const missingFields = Array.isArray(args?.missingFields)
+          ? args.missingFields.filter((field): field is string => typeof field === 'string')
+          : []
+        return missingFields.length === 0 || missingFields.includes('symbol')
+          ? 'BACKTEST_SNAPSHOT_SYMBOL_MISSING'
+          : 'BACKTEST_SNAPSHOT_REQUIRED'
+      }
+      case 'backtesting.symbol_support_temporarily_unavailable':
+        return 'BACKTEST_SYMBOL_REFRESH_FAILED'
+      default:
+        return null
+    }
   }
 }

@@ -539,7 +539,9 @@ describe('AiQuantPageClient capability gating', () => {
 
     expect(mockCheckBacktestSymbolSupport).toHaveBeenCalledWith({
       exchange: 'binance',
+      marketType: 'perp',
       symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
     })
     expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
   })
@@ -663,7 +665,9 @@ describe('AiQuantPageClient capability gating', () => {
 
     expect(mockCheckBacktestSymbolSupport).toHaveBeenCalledWith({
       exchange: 'okx',
+      marketType: 'perp',
       symbol: 'ETHUSDC',
+      baseTimeframe: '15m',
     })
     expect(mockCreateBacktestJob).not.toHaveBeenCalled()
     expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestPayloadInvalid')
