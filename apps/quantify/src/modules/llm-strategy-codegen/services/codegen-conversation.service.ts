@@ -3291,38 +3291,42 @@ export class CodegenConversationService {
     phase: 'entry' | 'exit',
     fallbackTimeframe: string,
   ): string {
-    const trigger = normalizedIntent?.triggers.find(item =>
+    const triggers = normalizedIntent?.triggers.filter(item =>
       item.phase === phase
       && item.closureStatus === 'closed',
-    )
-    if (!trigger) {
+    ) ?? []
+    if (triggers.length === 0) {
       return ''
     }
 
-    const projected = this.buildProjectedRuleText({
-      id: `summary-${phase}`,
-      key: trigger.key,
-      phase: trigger.phase,
-      params: {
-        ...trigger.params,
-        ...(trigger.resolutionHints?.confirmation
-          ? { confirmationMode: trigger.resolutionHints.confirmation }
-          : {}),
-      },
-      ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
-      status: 'locked',
-      source: 'user_explicit',
-      openSlots: [],
-    })
-    if (!projected) {
-      return ''
-    }
+    const projectedSummaries = triggers
+      .map((trigger, index) => {
+        const projected = this.buildProjectedRuleText({
+          id: `summary-${phase}-${index + 1}`,
+          key: trigger.key,
+          phase: trigger.phase,
+          params: {
+            ...trigger.params,
+            ...(trigger.resolutionHints?.confirmation
+              ? { confirmationMode: trigger.resolutionHints.confirmation }
+              : {}),
+          },
+          ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        })
+        if (!projected) {
+          return ''
+        }
 
-    if (/^\d+[mhd]\s+/u.test(projected) || !fallbackTimeframe) {
-      return projected
-    }
+        return /^\d+[mhd]\s+/u.test(projected) || !fallbackTimeframe
+          ? projected
+          : `${fallbackTimeframe} ${projected}`.trim()
+      })
+      .filter(Boolean)
 
-    return `${fallbackTimeframe} ${projected}`.trim()
+    return Array.from(new Set(projectedSummaries)).join('；')
   }
 
   private buildNormalizationAssistantPrompt(
