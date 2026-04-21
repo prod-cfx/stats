@@ -146,6 +146,75 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch).not.toHaveProperty('grid')
   })
 
+  it('keeps EMA crossover clauses from emitting unrelated above/below atoms', () => {
+    const patch = service.extract('EMA7 上穿 EMA21 做多；EMA7 下穿 EMA21 平多；单笔 10%。')
+
+    expect(patch.triggers?.map(trigger => trigger.key)).toEqual(expect.arrayContaining([
+      'indicator.cross_over',
+      'indicator.cross_under',
+    ]))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'indicator.above' }),
+      expect.objectContaining({ key: 'indicator.below' }),
+    ]))
+  })
+
+  it('maps short crossover wording to entry and exit by intent rather than direction', () => {
+    const entryPatch = service.extract('EMA7 下穿 EMA21 做空；单笔 10%。')
+    expect(entryPatch).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.cross_under',
+          phase: 'entry',
+          sideScope: 'short',
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'open_short' }),
+      ]),
+    }))
+    expect(entryPatch.actions).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'close_short' }),
+    ]))
+
+    const exitPatch = service.extract('EMA7 上穿 EMA21 平空；单笔 10%。')
+    expect(exitPatch).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.cross_over',
+          phase: 'exit',
+          sideScope: 'short',
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'close_short' }),
+      ]),
+    }))
+    expect(exitPatch.actions).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_short' }),
+    ]))
+  })
+
+  it('prefers explicit open-short wording over generic sell wording', () => {
+    const patch = service.extract('EMA7 上穿 EMA21 卖出开空；单笔 10%。')
+
+    expect(patch).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.cross_over',
+          phase: 'entry',
+          sideScope: 'short',
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'open_short' }),
+      ]),
+    }))
+    expect(patch.actions).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'close_short' }),
+    ]))
+  })
+
   it('extracts Bollinger dual-side semantics into a semantic patch', () => {
     const patch = service.extract('OKX 合约 BTCUSDT 15m；K线收盘后确认突破布林带(20,2)上轨时做空，突破下轨时做多；价格回到布林带中轨时平仓；单笔 10%，亏损 5% 止损。')
 

@@ -71,7 +71,10 @@ export class SemanticSeedExtractorService {
     const segments = this.splitSegments(text)
 
     for (const segment of segments) {
-      this.pushMovingAverageCrossTrigger(segment, triggers, seen)
+      const handledCross = this.pushMovingAverageCrossTrigger(segment, triggers, seen)
+      if (handledCross) {
+        continue
+      }
       this.pushMovingAverageTrigger(segment, triggers, seen)
       this.pushBollingerTriggers(segment, triggers, seen)
       this.pushGridTrigger(segment, triggers, seen)
@@ -274,25 +277,26 @@ export class SemanticSeedExtractorService {
     }
   }
 
-  private pushMovingAverageCrossTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
-    if (!/(?:\bEMA\s*\d+|\bMA\s*\d+)/iu.test(segment)) return
-    if (!/上穿|下穿|cross over|cross under|金叉|死叉/iu.test(segment)) return
+  private pushMovingAverageCrossTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): boolean {
+    if (!/(?:\bEMA\s*\d+|\bMA\s*\d+)/iu.test(segment)) return false
+    if (!/上穿|下穿|cross over|cross under|金叉|死叉/iu.test(segment)) return false
 
     const periods = Array.from(segment.matchAll(/\b(?:EMA|MA)\s*(\d{1,4})/giu))
       .map(match => Number(match[1]))
       .filter(value => Number.isFinite(value))
-    if (periods.length < 2) return
+    if (periods.length < 2) return false
 
     const indicator = /\bEMA\s*\d+/iu.test(segment) ? 'ema' : 'ma'
     const fastPeriod = periods[0]
     const slowPeriod = periods[1]
-    const sideScope = /做空|开空|卖空|平空/u.test(segment) ? 'short' : 'long'
+    const intent = this.resolveTradeIntent(segment)
+    if (!intent) return false
 
     if (/上穿|cross over|金叉/iu.test(segment)) {
       this.pushTrigger(triggers, seen, {
         key: 'indicator.cross_over',
-        phase: 'entry',
-        sideScope,
+        phase: intent.phase,
+        sideScope: intent.sideScope,
         params: {
           indicator,
           fastPeriod,
@@ -304,8 +308,8 @@ export class SemanticSeedExtractorService {
     if (/下穿|cross under|死叉/iu.test(segment)) {
       this.pushTrigger(triggers, seen, {
         key: 'indicator.cross_under',
-        phase: 'exit',
-        sideScope,
+        phase: intent.phase,
+        sideScope: intent.sideScope,
         params: {
           indicator,
           fastPeriod,
@@ -313,6 +317,8 @@ export class SemanticSeedExtractorService {
         },
       })
     }
+
+    return true
   }
 
   private pushGridTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
@@ -422,17 +428,17 @@ export class SemanticSeedExtractorService {
     if (/卖出平多|平多|卖出多单/u.test(segment)) {
       return { phase: 'exit', sideScope: 'long' }
     }
-    if (/平仓/u.test(segment)) {
-      return { phase: 'exit', sideScope: /做空|开空|空单|short/u.test(segment) ? 'short' : 'long' }
-    }
-    if (/卖出/u.test(segment)) {
-      return { phase: 'exit', sideScope: /做空|开空|空单|short/u.test(segment) ? 'short' : 'long' }
-    }
     if (/做空|开空|空单|short/u.test(segment)) {
       return { phase: 'entry', sideScope: 'short' }
     }
     if (/做多|开多|买入|long/u.test(segment)) {
       return { phase: 'entry', sideScope: 'long' }
+    }
+    if (/平仓/u.test(segment)) {
+      return { phase: 'exit', sideScope: /做空|开空|空单|short/u.test(segment) ? 'short' : 'long' }
+    }
+    if (/卖出/u.test(segment)) {
+      return { phase: 'exit', sideScope: /做空|开空|空单|short/u.test(segment) ? 'short' : 'long' }
     }
 
     return null
