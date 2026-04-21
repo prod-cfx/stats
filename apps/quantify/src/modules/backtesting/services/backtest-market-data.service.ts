@@ -1,5 +1,9 @@
 import type { MarketTimeframe, MarketType as SharedMarketType } from '@ai/shared'
 import type { BacktestRunInput, Bar, Timeframe } from '../types/backtesting.types'
+import type {
+  BacktestSymbolAvailabilityCheckInput,
+  BacktestSymbolAvailabilityResult,
+} from './backtest-symbol-availability.service'
 import type { MarketDataProvider, ProviderSymbol } from '@/modules/market-data/interfaces/market-data-provider.interface'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Logger } from '@nestjs/common'
@@ -109,6 +113,69 @@ export class BacktestMarketDataService {
       return (await this.hasSupportedSymbol(normalizedExchange, normalizedSymbol))
         ? 'refreshed_then_supported'
         : 'not_supported'
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : String(error)
+      this.logger.error(
+        `event=backtest_symbol_support_refresh_failed exchange=${normalizedExchange} symbol=${normalizedSymbol} reason=${reason}`,
+      )
+      throw new DomainException('backtesting.symbol_support_temporarily_unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        args: {
+          exchange: normalizedExchange,
+          symbol: normalizedSymbol,
+          reasonMessage: reason,
+        },
+      })
+    }
+  }
+
+  async ensureBacktestSymbolAvailable(
+    input: BacktestSymbolAvailabilityCheckInput,
+  ): Promise<BacktestSymbolAvailabilityResult> {
+    const normalizedExchange = this.normalizeExchange(input.exchange)
+    const requestedSymbol = normalizeExactCode(input.symbol)
+    const normalizedSymbol = this.normalizeAvailabilitySymbol(requestedSymbol, input.marketType)
+    if (await this.hasSupportedSymbol(normalizedExchange, normalizedSymbol)) {
+      if (await this.hasHistoricalBars(normalizedExchange, normalizedSymbol, input.baseTimeframe as Timeframe)) {
+        return { supported: true }
+      }
+      return {
+        supported: false,
+        reasonCode: 'BACKTEST_MARKET_DATA_UNAVAILABLE',
+        args: this.buildAvailabilityArgs(input, normalizedExchange, requestedSymbol),
+      }
+    }
+
+    const provider = this.getProvider(normalizedExchange)
+    try {
+      const providerSymbols = await provider.fetchSymbols([normalizedSymbol])
+      if (providerSymbols.length === 0) {
+        return {
+          supported: false,
+          reasonCode: 'BACKTEST_SYMBOL_UNAVAILABLE',
+          args: this.buildAvailabilityArgs(input, normalizedExchange, requestedSymbol),
+        }
+      }
+
+      await this.marketDataService.upsertSymbolsFromProvider(providerSymbols, provider.name.toUpperCase())
+      if (await this.hasSupportedSymbol(normalizedExchange, normalizedSymbol)) {
+        if (await this.hasHistoricalBars(normalizedExchange, normalizedSymbol, input.baseTimeframe as Timeframe)) {
+          return { supported: true }
+        }
+
+        return {
+          supported: false,
+          reasonCode: 'BACKTEST_MARKET_DATA_UNAVAILABLE',
+          args: this.buildAvailabilityArgs(input, normalizedExchange, requestedSymbol),
+        }
+      }
+
+      return {
+        supported: false,
+        reasonCode: 'BACKTEST_SYMBOL_UNAVAILABLE',
+        args: this.buildAvailabilityArgs(input, normalizedExchange, requestedSymbol),
+      }
     } catch (error) {
       const reason = error instanceof Error ? error.message : String(error)
       this.logger.error(
@@ -248,6 +315,41 @@ export class BacktestMarketDataService {
     return Boolean(found)
   }
 
+  private async hasHistoricalBars(
+    exchange: BacktestExchangeId,
+    symbol: string,
+    timeframe: Timeframe,
+  ): Promise<boolean> {
+    const provider = this.getProvider(exchange)
+    const bars = await provider.fetchHistoricalBars({
+      symbol,
+      timeframe: timeframe as MarketTimeframe,
+      limit: 1,
+    })
+    return Array.isArray(bars) && bars.length > 0
+  }
+
+  private normalizeAvailabilitySymbol(
+    symbol: string,
+    marketType: 'spot' | 'perp',
+  ): string {
+    if (!symbol) {
+      throw new DomainException('backtesting.symbol_check_invalid_symbol', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: { symbol },
+      })
+    }
+
+    if (symbol.includes(':')) {
+      return symbol
+    }
+
+    return marketType === 'perp'
+      ? toSymbolCode(symbol, 'PERP')
+      : normalizeRequestedCode(symbol)
+  }
+
   private extractExchange(params: Record<string, unknown>): BacktestExchangeId | null {
     if (typeof params.exchange !== 'string') return null
     try {
@@ -347,6 +449,19 @@ export class BacktestMarketDataService {
     }
 
     return [symbol, toSymbolCode(symbol, 'PERP'), normalizeRequestedCode(symbol)]
+  }
+
+  private buildAvailabilityArgs(
+    input: BacktestSymbolAvailabilityCheckInput,
+    exchange: BacktestExchangeId,
+    symbol: string,
+  ): Record<string, unknown> {
+    return {
+      exchange,
+      symbol,
+      marketType: input.marketType,
+      baseTimeframe: input.baseTimeframe,
+    }
   }
 
   private resolveSymbolId(symbol: string, rowMap: Map<string, string>): string | undefined {

@@ -180,7 +180,12 @@ export class BacktestingController {
   ) {
     await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     try {
-      return await this.symbolSupportService.checkSupport(dto.exchange, dto.symbol)
+      return await this.symbolSupportService.checkSupport({
+        exchange: dto.exchange,
+        marketType: dto.marketType,
+        symbol: dto.symbol,
+        baseTimeframe: dto.baseTimeframe,
+      })
     } catch (error) {
       if (error instanceof DomainException) {
         throw error

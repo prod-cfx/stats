@@ -6,8 +6,17 @@ export class CheckBacktestSymbolDto {
   @IsIn(['binance', 'okx', 'hyperliquid'])
   exchange!: 'binance' | 'okx' | 'hyperliquid'
 
+  @ApiProperty({ enum: ['spot', 'perp'] })
+  @IsIn(['spot', 'perp'])
+  marketType!: 'spot' | 'perp'
+
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
   symbol!: string
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  baseTimeframe!: string
 }

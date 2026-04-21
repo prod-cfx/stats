@@ -155,7 +155,12 @@ describe('backtestingController', () => {
     await c.getJob('Bearer token', 'user-1', 'job-1')
     await c.getJobResult('Bearer token', 'user-1', 'job-1')
     await c.getCapabilities('req-1')
-    await c.checkSymbolSupport('Bearer token', 'user-1', 'req-3', { exchange: 'okx', symbol: 'ETHUSDC' })
+    await c.checkSymbolSupport('Bearer token', 'user-1', 'req-3', {
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ETHUSDC',
+      baseTimeframe: '1h',
+    })
 
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenCalledTimes(5)
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(1, 'Bearer token', 'user-1')
@@ -176,7 +181,12 @@ describe('backtestingController', () => {
     expect(jobs.getJobResult).toHaveBeenCalledWith('job-1', 'user-1')
     expect(capabilities.getCapabilities).toHaveBeenCalledTimes(1)
     expect(capabilities.getCapabilities).toHaveBeenCalledWith('req-1')
-    expect(symbolSupport.checkSymbolSupport).toHaveBeenCalledWith('okx', 'ETHUSDC')
+    expect(symbolSupport.checkSymbolSupport).toHaveBeenCalledWith({
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ETHUSDC',
+      baseTimeframe: '1h',
+    })
     expect(adapter.build).not.toHaveBeenCalled()
   })
 
@@ -331,7 +341,12 @@ describe('backtestingController', () => {
 
     const c = mod.get(BacktestingController)
 
-    await expect(c.checkSymbolSupport('Bearer token', 'user-1', 'req-4', { exchange: 'okx', symbol: 'BTCUSDT' })).rejects.toMatchObject({
+    await expect(c.checkSymbolSupport('Bearer token', 'user-1', 'req-4', {
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'BTCUSDT',
+      baseTimeframe: '1h',
+    })).rejects.toMatchObject({
       code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
       status: HttpStatus.SERVICE_UNAVAILABLE,
       args: { exchange: 'okx', symbol: 'BTCUSDT', reasonMessage: 'catalog crashed' },
