@@ -40,16 +40,14 @@ describe('backtest-capability-client', () => {
     jest.resetAllMocks()
   })
 
-  it('success returns allowedSymbols and allowedBaseTimeframes', async () => {
+  it('success returns generic backtest capabilities without symbol whitelists', async () => {
     mockClient.BacktestingProxyController_capabilities.mockResolvedValue({
       data: {
-        allowedSymbols: ['BTCUSDT', 'ETHUSDT'],
         allowedBaseTimeframes: ['1m', '5m'],
       },
     })
 
     await expect(fetchBacktestCapabilities()).resolves.toEqual({
-      allowedSymbols: ['BTCUSDT', 'ETHUSDT'],
       allowedBaseTimeframes: ['1m', '5m'],
     })
 
@@ -65,7 +63,6 @@ describe('backtest-capability-client', () => {
   it('empty sets are recognized as unavailable and throw ApiError', async () => {
     mockClient.BacktestingProxyController_capabilities.mockResolvedValue({
       data: {
-        allowedSymbols: [],
         allowedBaseTimeframes: [],
       },
     })
@@ -113,13 +110,11 @@ describe('backtest-capability-client', () => {
       })
       .mockResolvedValueOnce({
         data: {
-          allowedSymbols: ['BTCUSDT'],
           allowedBaseTimeframes: ['15m'],
         },
       })
 
     await expect(fetchBacktestCapabilities()).resolves.toEqual({
-      allowedSymbols: ['BTCUSDT'],
       allowedBaseTimeframes: ['15m'],
     })
     expect(mockClient.BacktestingProxyController_capabilities).toHaveBeenCalledTimes(2)

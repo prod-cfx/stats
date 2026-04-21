@@ -344,7 +344,6 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
     mockBuildBacktestPayload.mockReturnValue(defaultPayload())
     mockFetchBacktestCapabilities.mockResolvedValue({
-      allowedSymbols: ['BTCUSDT'],
       allowedBaseTimeframes: ['15m'],
     })
     mockCheckBacktestSymbolSupport.mockResolvedValue({
@@ -1326,7 +1325,6 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       activeConversation,
       activeConversationIdRef: { current: activeConversation.id },
       backtestCapabilities: {
-        allowedSymbols: ['BTCUSDT'],
         allowedBaseTimeframes: ['15m'],
       },
       backtestCapabilityState: 'ready',
@@ -1548,7 +1546,6 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       activeConversation,
       activeConversationIdRef: { current: activeConversation.id },
       backtestCapabilities: {
-        allowedSymbols: ['BTCUSDT'],
         allowedBaseTimeframes: ['15m'],
       },
       backtestCapabilityState: 'ready',
@@ -1593,7 +1590,6 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       activeConversation,
       activeConversationIdRef: { current: activeConversation.id },
       backtestCapabilities: {
-        allowedSymbols: ['BTCUSDT'],
         allowedBaseTimeframes: ['15m'],
       },
       backtestCapabilityState: 'ready',
@@ -1641,7 +1637,6 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       activeConversation,
       activeConversationIdRef: { current: activeConversation.id },
       backtestCapabilities: {
-        allowedSymbols: ['BTCUSDT'],
         allowedBaseTimeframes: ['15m'],
       },
       backtestCapabilityState: 'ready',

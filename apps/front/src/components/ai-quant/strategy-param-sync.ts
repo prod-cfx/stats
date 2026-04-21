@@ -115,16 +115,6 @@ function normalizeSymbol(raw: string): string {
   return raw.replace('/', '').replace(/\s+/g, '').toUpperCase()
 }
 
-function mergeUnique(listA: string[], listB: string[]): string[] {
-  const next = new Set<string>()
-  for (const value of [...listA, ...listB]) {
-    if (value.trim()) {
-      next.add(value)
-    }
-  }
-  return [...next]
-}
-
 function inferExchange(text: string, fallback: StrategyParamSyncFallback['exchange']): StrategyParamSyncFallback['exchange'] {
   if (/okx|欧易/i.test(text)) return 'okx'
   if (/hyperliquid/i.test(text)) return 'hyperliquid'
@@ -267,7 +257,6 @@ export function syncStrategyParamsFromCodegen(args: {
     : asStringArray(typed.exitRules)
   const marketSymbols = asStringArray(market.symbols)
   const marketTimeframes = asStringArray(market.timeframes)
-  const allowedSymbols = args.capabilities?.allowedSymbols ?? []
   const allowedBaseTimeframes = args.capabilities?.allowedBaseTimeframes ?? []
   const contextText = `${args.contextText ?? ''} ${entryRules.join(' ')} ${exitRules.join(' ')}`.trim()
 
@@ -276,7 +265,6 @@ export function syncStrategyParamsFromCodegen(args: {
   const symbolFromMarket = inferSymbol(marketSymbols[0] ?? '', args.fallback.symbol)
   const symbolFromContext = inferSymbol(contextText, args.fallback.symbol, true)
   const nextSymbol = symbolFromContext !== args.fallback.symbol ? symbolFromContext : symbolFromMarket
-  const symbolEnum = [nextSymbol, ...allowedSymbols.filter(item => item !== nextSymbol)]
   const nextBaseTimeframe = inferBaseTimeframe(marketTimeframes, args.fallback.baseTimeframe, allowedBaseTimeframes)
   const parsedPositionPct = parseNumber(riskRules.positionPct)
     ?? parseNumber(contextText.match(/(\d+(?:\.\d+)?)%\s*(?:总仓位|仓位)/)?.[1])
@@ -319,7 +307,7 @@ export function syncStrategyParamsFromCodegen(args: {
     symbol: {
       type: 'string',
       title: 'Symbol',
-      enum: symbolEnum,
+      enum: [nextSymbol],
     },
     baseTimeframe: {
       type: 'string',
@@ -399,12 +387,9 @@ export function applyCapabilitiesToParamSchema(
 
   const symbolProperty = asObject(properties.symbol)
   if (symbolProperty) {
-    const nextSymbolEnum = capabilities?.allowedSymbols?.length
-      ? mergeUnique(asStringArray(symbolProperty.enum), capabilities.allowedSymbols)
-      : asStringArray(symbolProperty.enum)
     nextProperties.symbol = {
       ...symbolProperty,
-      enum: nextSymbolEnum,
+      enum: asStringArray(symbolProperty.enum),
     }
   }
 

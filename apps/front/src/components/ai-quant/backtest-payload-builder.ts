@@ -27,7 +27,6 @@ export interface BuildBacktestPayloadInput {
   symbol: string
   baseTimeframe: string
   capabilities: {
-    allowedSymbols: string[]
     allowedBaseTimeframes: string[]
   }
   stateTimeframes: string[]
