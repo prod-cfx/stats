@@ -784,6 +784,68 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
+  it('maps protective risk clarification answers to explicit canonical risk atoms', () => {
+    const buildState = (): SemanticState => ({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [],
+      actions: [],
+      risk: [
+        {
+          id: 'protective-exit',
+          key: 'risk.protective_exit',
+          params: {},
+          status: 'open',
+          source: 'derived',
+          openSlots: [
+            {
+              slotKey: 'risk.protective_exit',
+              fieldPath: 'risk[0].params.valuePct',
+              status: 'open',
+              priority: 'risk',
+              questionHint: '请确认保护性退出条件。',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      position: null,
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-04-16T10:00:00.000Z',
+    })
+
+    const maxDrawdown = service.applyClarificationAnswer({
+      currentState: buildState(),
+      targetSlotKey: 'risk.protective_exit',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'risk.protective_exit',
+        fieldPath: 'risk[0].params.valuePct',
+      }),
+      answer: '最大回撤 12%',
+    })
+    const maxSingleLoss = service.applyClarificationAnswer({
+      currentState: buildState(),
+      targetSlotKey: 'risk.protective_exit',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'risk.protective_exit',
+        fieldPath: 'risk[0].params.valuePct',
+      }),
+      answer: '单笔最大亏损 3%',
+    })
+
+    expect(maxDrawdown.risk[0]).toEqual(expect.objectContaining({
+      key: 'risk.max_drawdown_pct',
+      params: expect.objectContaining({ valuePct: 12 }),
+      status: 'locked',
+    }))
+    expect(maxSingleLoss.risk[0]).toEqual(expect.objectContaining({
+      key: 'risk.max_single_loss_pct',
+      params: expect.objectContaining({ valuePct: 3 }),
+      status: 'locked',
+    }))
+  })
+
   it('keeps percent clarification slots open when answers are not parseable percentages', () => {
     const positionState: SemanticState = {
       version: 1,
@@ -881,5 +943,98 @@ describe('SemanticStateReducerService', () => {
       expect(afterRiskAnswer.risk[0]?.openSlots[0]).not.toHaveProperty('value')
       expect(afterRiskAnswer.risk[0]?.openSlots[0]).not.toHaveProperty('evidence')
     }
+  })
+
+  it('keeps protective risk open when a percent answer lacks risk semantics', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [],
+        actions: [],
+        risk: [
+          {
+            id: 'protective-exit',
+            key: 'risk.protective_exit',
+            params: {},
+            status: 'open',
+            source: 'derived',
+            openSlots: [
+              {
+                slotKey: 'risk.protective_exit',
+                fieldPath: 'risk[0].params.valuePct',
+                status: 'open',
+                priority: 'risk',
+                questionHint: '请确认保护性退出条件。',
+                affectsExecution: true,
+              },
+            ],
+          },
+        ],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-16T10:00:00.000Z',
+      },
+      targetSlotKey: 'risk.protective_exit',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'risk.protective_exit',
+        fieldPath: 'risk[0].params.valuePct',
+      }),
+      answer: '5%',
+    })
+
+    expect(next.risk[0]).toEqual(expect.objectContaining({
+      key: 'risk.protective_exit',
+      status: 'open',
+      params: {},
+    }))
+    expect(next.risk[0]?.openSlots[0]).toEqual(expect.objectContaining({
+      status: 'open',
+    }))
+  })
+
+  it('does not treat standalone 非 as percent-answer negation', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [],
+        actions: [],
+        risk: [],
+        position: {
+          mode: 'fixed_fraction',
+          value: 0,
+          positionMode: 'one_way',
+          status: 'open',
+          source: 'derived',
+          openSlots: [
+            {
+              slotKey: 'position.sizing',
+              fieldPath: 'position.value',
+              status: 'open',
+              priority: 'core',
+              questionHint: '请确认每次使用多少仓位。',
+              affectsExecution: true,
+            },
+          ],
+        },
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-16T10:00:00.000Z',
+      },
+      targetSlotKey: 'position.sizing',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'position.sizing',
+        fieldPath: 'position.value',
+      }),
+      answer: '非常保守，5%',
+    })
+
+    expect(next.position).toEqual(expect.objectContaining({
+      value: 0.05,
+      status: 'locked',
+      source: 'user_explicit',
+    }))
   })
 })

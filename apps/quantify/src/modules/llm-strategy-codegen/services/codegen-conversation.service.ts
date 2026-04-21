@@ -1281,7 +1281,6 @@ export class CodegenConversationService {
         || risk.key === 'risk.max_drawdown_pct'
         || risk.key === 'risk.max_single_loss_pct'
         || risk.key === 'risk.trailing_stop_pct'
-        || /(?:stop|loss|protective_exit)/iu.test(risk.key)
     })
   }
 
@@ -1520,6 +1519,17 @@ export class CodegenConversationService {
       return this.hasProtectiveRisk(semanticState.risk)
     }
 
+    if (this.isTakeProfitClarificationItem(item)) {
+      return this.hasLockedExitSemantics(semanticState)
+        || semanticState.risk.some(risk =>
+          risk.key === 'risk.take_profit_pct'
+          && risk.status === 'locked'
+          && typeof risk.params.valuePct === 'number'
+          && Number.isFinite(risk.params.valuePct)
+          && risk.params.valuePct > 0,
+        )
+    }
+
     if (item.reason !== 'ambiguous_state_gate') {
       return false
     }
@@ -1547,6 +1557,13 @@ export class CodegenConversationService {
       || item.key === 'risk.stopLoss.rule'
       || item.key === 'risk.protective_exit'
       || item.slotKey === 'risk.protective_exit'
+  }
+
+  private isTakeProfitClarificationItem(item: StrategyClarificationItem): boolean {
+    return item.reason === 'missing_take_profit_rule'
+      || item.field === 'riskRules.takeProfitPct'
+      || item.key === 'riskRules.takeProfitPct'
+      || item.key === 'risk.takeProfit.rule'
   }
 
   private findNextOpenSemanticSlot(state: SemanticState): SemanticSlotState | null {
@@ -2932,21 +2949,28 @@ export class CodegenConversationService {
           this.projectLegacyChecklistFromSemanticState(args.semanticState, args.checklist),
         )
       : args.checklist
+    const reducedSemanticState = this.withRequiredSemanticOpenSlots(
+      args.semanticState,
+      projectedChecklist,
+      {
+        preserveLockedPositionSizing: this.hasValidLockedPositionSizing(args.semanticState.position),
+      },
+    )
     const clarification = this.resolveClarificationArtifacts(projectedChecklist)
     const semanticClarificationState = this.buildClarificationFromSemanticState(
-      args.semanticState,
+      reducedSemanticState,
       projectedChecklist,
       { preserveLegacyFallback: !args.useSemanticProjection },
     )
 
     if (semanticClarificationState.status === 'NEEDS_CLARIFICATION') {
-      const assistantPrompt = this.buildSemanticClarificationPrompt(args.semanticState)
+      const assistantPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
         || this.clarificationQuestion.build(semanticClarificationState)
         || clarification.clarificationPrompt
         || '请先澄清这条规则，我再继续完善逻辑图。'
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        semanticState: args.semanticState,
+        semanticState: reducedSemanticState,
         clarificationState: semanticClarificationState,
         constraintPack: {
           ...args.constraintPack,
@@ -2964,11 +2988,11 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
 
-    const normalization = this.buildNormalizationFromSemanticState(args.semanticState)
+    const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
     const canonicalSpec = this.buildCanonicalSpecForConversation(
       projectedChecklist,
       normalization,
-      args.useSemanticProjection ? args.semanticState : undefined,
+      args.useSemanticProjection ? reducedSemanticState : undefined,
     )
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
@@ -2988,8 +3012,8 @@ export class CodegenConversationService {
       const assistantPrompt = this.clarificationQuestion.buildFromDecision(decision)
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        semanticState: args.semanticState,
-        clarificationState: clarification.clarificationState,
+        semanticState: reducedSemanticState,
+        clarificationState: semanticClarificationState,
         constraintPack: {
           ...args.constraintPack,
           conversationHistory: historyAfterAnswer,
@@ -3002,7 +3026,7 @@ export class CodegenConversationService {
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt,
-        clarificationState: clarification.clarificationState,
+        clarificationState: semanticClarificationState,
         specDesc,
         canonicalDigest,
       })
@@ -3012,8 +3036,8 @@ export class CodegenConversationService {
     if (normalization.blocked) {
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        semanticState: args.semanticState,
-        clarificationState: clarification.clarificationState,
+        semanticState: reducedSemanticState,
+        clarificationState: semanticClarificationState,
         constraintPack: {
           ...args.constraintPack,
           conversationHistory: historyAfterAnswer,
@@ -3026,7 +3050,7 @@ export class CodegenConversationService {
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt: this.buildNormalizationAssistantPrompt(projectedChecklist, normalization),
-        clarificationState: clarification.clarificationState,
+        clarificationState: semanticClarificationState,
         specDesc,
       })
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
@@ -3035,8 +3059,8 @@ export class CodegenConversationService {
     if (!compileability.canCompile) {
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        semanticState: args.semanticState,
-        clarificationState: clarification.clarificationState,
+        semanticState: reducedSemanticState,
+        clarificationState: semanticClarificationState,
         constraintPack: {
           ...args.constraintPack,
           conversationHistory: historyAfterAnswer,
@@ -3048,7 +3072,7 @@ export class CodegenConversationService {
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt: this.buildCompileabilityAssistantPrompt(compileability),
-        clarificationState: clarification.clarificationState,
+        clarificationState: semanticClarificationState,
       })
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
@@ -3062,8 +3086,8 @@ export class CodegenConversationService {
 
     await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
       status: 'CONFIRM_GATE',
-      semanticState: args.semanticState,
-      clarificationState: clarification.clarificationState,
+      semanticState: reducedSemanticState,
+      clarificationState: semanticClarificationState,
       constraintPack: {
         ...args.constraintPack,
         conversationHistory: historyAfterChecklistGate,
@@ -3076,7 +3100,7 @@ export class CodegenConversationService {
       status: 'CONFIRM_GATE',
       missingFields: [],
       assistantPrompt: checklistGateAssistantPrompt,
-      clarificationState: clarification.clarificationState,
+      clarificationState: semanticClarificationState,
       specDesc,
       canonicalDigest,
     })

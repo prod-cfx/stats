@@ -141,7 +141,12 @@ export class SemanticStateReducerService {
         source: 'user_explicit' as const,
       }
 
-      risk.key = 'risk.stop_loss_pct'
+      const riskKey = this.resolveProtectiveRiskAnswerKey(answerText)
+      if (!riskKey) {
+        break
+      }
+
+      risk.key = riskKey
       risk.params = {
         valuePct: percentValue,
         basis: 'entry_avg_price',
@@ -318,7 +323,7 @@ export class SemanticStateReducerService {
 
   private parsePercentAnswer(answerText: string): number | null {
     const normalized = answerText.trim()
-    if (!normalized || /(?:不是|并非|不要|别|非|not)/iu.test(normalized) || /-\s*\d/u.test(normalized)) {
+    if (!normalized || /(?:不是|并非|不要|别|not)/iu.test(normalized) || /-\s*\d/u.test(normalized)) {
       return null
     }
 
@@ -342,6 +347,26 @@ export class SemanticStateReducerService {
 
   private isValidPercentValue(value: number): boolean {
     return Number.isFinite(value) && value > 0 && value <= 100
+  }
+
+  private resolveProtectiveRiskAnswerKey(answerText: string): 'risk.stop_loss_pct' | 'risk.max_drawdown_pct' | 'risk.max_single_loss_pct' | 'risk.trailing_stop_pct' | null {
+    if (/最大回撤|max\s*drawdown/iu.test(answerText)) {
+      return 'risk.max_drawdown_pct'
+    }
+
+    if (/单笔|单次|每笔|max\s*single/iu.test(answerText) && /亏损|损失|loss/iu.test(answerText)) {
+      return 'risk.max_single_loss_pct'
+    }
+
+    if (/移动止损|trailing/iu.test(answerText)) {
+      return 'risk.trailing_stop_pct'
+    }
+
+    if (/止损|亏损|损失|stop[\s_-]?loss|loss/iu.test(answerText)) {
+      return 'risk.stop_loss_pct'
+    }
+
+    return null
   }
 
   private parseGridSideModeAnswer(answerText: string): 'long_only' | 'short_only' | 'bidirectional' | null {

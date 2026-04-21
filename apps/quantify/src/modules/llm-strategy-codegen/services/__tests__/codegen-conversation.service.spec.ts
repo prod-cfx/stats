@@ -8630,7 +8630,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         confirmedCanonicalDigest: confirmedDigest,
         clarificationAnswers: {
           'sizing.positionPct': '10%',
-          'semantic.risk.protective_exit': '5%',
+          'semantic.risk.protective_exit': '亏损 5% 止损',
         },
       } as ContinueCodegenSessionDto)
 
