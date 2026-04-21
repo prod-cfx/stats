@@ -75,6 +75,30 @@ describe('quantify contract generated responses', () => {
     }
   })
 
+  it('wraps account strategy detail-style aliases in transport-envelope response schemas', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+
+    expect(source).toContain('const AccountStrategyDetailTransportEnvelope = z')
+    expect(source).toContain('data: AccountStrategyDetailResponseDto')
+    expect(source).toContain('message: z.string().optional()')
+    expect(source).toContain('.passthrough()')
+
+    const aliases = [
+      'AccountStrategyViewController_detail',
+      'AccountStrategyViewController_action',
+      'AccountStrategyViewController_deploy',
+      'AccountStrategyViewController_deployResult',
+      'AccountStrategyViewController_updateDeploymentLeverage',
+    ] as const
+
+    for (const alias of aliases) {
+      const start = source.indexOf(`alias: '${alias}'`)
+      expect(start).toBeGreaterThanOrEqual(0)
+      const snippet = source.slice(start, start + 700)
+      expect(snippet).toContain('response: AccountStrategyDetailTransportEnvelope')
+    }
+  })
+
   it('removes symbol whitelists from generated backtest capability contracts', () => {
     const source = readFileSync(generatedPath, 'utf8')
 
