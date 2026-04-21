@@ -994,6 +994,55 @@ describe('SemanticStateReducerService', () => {
     }))
   })
 
+  it('keeps trailing-stop answers open until that risk is canonical-compilable', () => {
+    const next = service.applyClarificationAnswer({
+      currentState: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [],
+        actions: [],
+        risk: [
+          {
+            id: 'protective-exit',
+            key: 'risk.protective_exit',
+            params: {},
+            status: 'open',
+            source: 'derived',
+            openSlots: [
+              {
+                slotKey: 'risk.protective_exit',
+                fieldPath: 'risk[0].params.valuePct',
+                status: 'open',
+                priority: 'risk',
+                questionHint: '请确认保护性退出条件。',
+                affectsExecution: true,
+              },
+            ],
+          },
+        ],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-16T10:00:00.000Z',
+      },
+      targetSlotKey: 'risk.protective_exit',
+      targetSlotId: buildSemanticSlotId({
+        slotKey: 'risk.protective_exit',
+        fieldPath: 'risk[0].params.valuePct',
+      }),
+      answer: '移动止损 5%',
+    })
+
+    expect(next.risk[0]).toEqual(expect.objectContaining({
+      key: 'risk.protective_exit',
+      status: 'open',
+      params: {},
+    }))
+    expect(next.risk[0]?.openSlots[0]).toEqual(expect.objectContaining({
+      status: 'open',
+    }))
+  })
+
   it('does not treat standalone 非 as percent-answer negation', () => {
     const next = service.applyClarificationAnswer({
       currentState: {

@@ -359,7 +359,7 @@ export class SemanticStateReducerService {
     }
 
     if (/移动止损|trailing/iu.test(answerText)) {
-      return 'risk.trailing_stop_pct'
+      return null
     }
 
     if (/止损|亏损|损失|stop[\s_-]?loss|loss/iu.test(answerText)) {

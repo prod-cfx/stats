@@ -1279,7 +1279,6 @@ export class CodegenConversationService {
       return risk.key === 'risk.stop_loss_pct'
         || risk.key === 'risk.max_drawdown_pct'
         || risk.key === 'risk.max_single_loss_pct'
-        || risk.key === 'risk.trailing_stop_pct'
     })
   }
 
