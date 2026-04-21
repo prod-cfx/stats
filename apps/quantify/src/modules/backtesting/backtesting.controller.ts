@@ -86,17 +86,19 @@ export class BacktestingController {
     @Headers('x-request-id') requestId: string | undefined,
     @Body() dto: RunBacktestDto,
   ) {
+    let normalizedInput: BacktestRunInput | null = null
     try {
       const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
       const strategy = await this.resolveStrategy(dto, callerUserId)
-      return this.jobsService.createJob({ ...dto, strategy, bars: dto.bars ?? [] } as BacktestRunInput, callerUserId)
+      normalizedInput = this.normalizeSnapshotTruthInput(dto, strategy)
+      return this.jobsService.createJob(normalizedInput, callerUserId)
     } catch (error) {
       if (error instanceof DomainException) {
         throw error
       }
       const message = error instanceof Error ? error.message : String(error)
       this.logger.error(
-        `event=backtesting_create_job_failed requestId=${requestId ?? 'N/A'} symbols=${dto.symbols.join(',')} strategyId=${dto.strategy?.id ?? 'N/A'} reason=${message}`,
+        `event=backtesting_create_job_failed requestId=${requestId ?? 'N/A'} symbols=${(normalizedInput?.symbols ?? dto.symbols).join(',')} strategyId=${normalizedInput?.strategy?.id ?? dto.strategy?.id ?? 'N/A'} reason=${message}`,
       )
       throw new DomainException('backtesting.job_temporarily_unavailable', {
         code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
@@ -221,5 +223,31 @@ export class BacktestingController {
       publishedSnapshotId,
       userId,
     })
+  }
+
+  private normalizeSnapshotTruthInput(
+    dto: RunBacktestDto,
+    strategy: BacktestRunInput['strategy'],
+  ): BacktestRunInput {
+    const params = strategy.params as Record<string, unknown>
+    const strategyStateTimeframes = (strategy as { stateTimeframes?: unknown }).stateTimeframes
+    const symbol = typeof params.symbol === 'string' && params.symbol.trim()
+      ? params.symbol.trim()
+      : dto.symbols[0]
+    const baseTimeframe = typeof params.timeframe === 'string' && params.timeframe.trim()
+      ? params.timeframe.trim() as BacktestRunInput['baseTimeframe']
+      : dto.baseTimeframe
+    const stateTimeframes = Array.isArray(strategyStateTimeframes)
+      ? strategyStateTimeframes as BacktestRunInput['stateTimeframes']
+      : dto.stateTimeframes ?? []
+
+    return {
+      ...dto,
+      symbols: symbol ? [symbol] : dto.symbols,
+      baseTimeframe,
+      stateTimeframes,
+      strategy,
+      bars: dto.bars ?? [],
+    } as BacktestRunInput
   }
 }

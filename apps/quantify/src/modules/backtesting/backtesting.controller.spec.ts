@@ -176,7 +176,11 @@ describe('backtestingController', () => {
       userId: 'user-1',
     })
     expect(runner.run).toHaveBeenCalledWith({ ...dto, strategy: adapted })
-    expect(jobs.createJob).toHaveBeenCalledWith({ ...dto, strategy: adapted }, 'user-1')
+    expect(jobs.createJob).toHaveBeenCalledWith(expect.objectContaining({
+      strategy: adapted,
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+    }), 'user-1')
     expect(jobs.getJob).toHaveBeenCalledWith('job-1', 'user-1')
     expect(jobs.getJobResult).toHaveBeenCalledWith('job-1', 'user-1')
     expect(capabilities.getCapabilities).toHaveBeenCalledTimes(1)
@@ -235,6 +239,60 @@ describe('backtestingController', () => {
       publishedSnapshotId: 'snapshot-1',
       userId: 'user-1',
     })
+  })
+
+  it('normalizes create-job inputs to published snapshot truth before delegating to jobs service', async () => {
+    const runner = { run: jest.fn() }
+    const jobs = { createJob: jest.fn().mockResolvedValue({ id: 'job-1', status: 'queued' }), getJob: jest.fn(), getJobResult: jest.fn() }
+    const adapted = {
+      id: 'instance-1',
+      params: {
+        exchange: 'okx',
+        symbol: 'ORDIUSDT',
+        marketType: 'spot',
+        timeframe: '1h',
+      },
+      stateTimeframes: ['4h'],
+      fn: jest.fn(),
+      snapshotId: 'snapshot-1',
+    }
+    const snapshotLoader = { load: jest.fn().mockResolvedValue(adapted) }
+    const caller = { resolveCallerUserIdFromAuthorization: jest.fn().mockResolvedValue('user-1') }
+    const capabilities = { getCapabilities: jest.fn() }
+    const symbolSupport = { checkSymbolSupport: jest.fn() }
+
+    const mod = await Test.createTestingModule({
+      controllers: [BacktestingController],
+      providers: [
+        { provide: BacktestRunnerService, useValue: runner },
+        { provide: BacktestJobsService, useValue: jobs },
+        { provide: BacktestCallerIdentityService, useValue: caller },
+        { provide: BacktestCapabilitiesService, useValue: capabilities },
+        { provide: BacktestSnapshotLoaderService, useValue: snapshotLoader },
+        { provide: BacktestSymbolSupportService, useValue: { checkSupport: symbolSupport.checkSymbolSupport } },
+        { provide: BacktestStrategyAdapterService, useValue: { build: jest.fn() } },
+      ],
+    }).compile()
+
+    const c = mod.get(BacktestingController)
+    await c.createJob('Bearer token', 'user-1', 'req-job-truth', {
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['1h'],
+      initialCash: 10000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: { id: 's1', protocolVersion: 'v1', publishedSnapshotId: 'snapshot-1', params: { marketType: 'spot' } },
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [],
+    } as any)
+
+    expect(jobs.createJob).toHaveBeenCalledWith(expect.objectContaining({
+      symbols: ['ORDIUSDT'],
+      baseTimeframe: '1h',
+      stateTimeframes: ['4h'],
+      strategy: adapted,
+    }), 'user-1')
   })
 
   it('loads published snapshot strategy even when legacy strategy id is omitted', async () => {

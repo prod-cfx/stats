@@ -1,4 +1,6 @@
 import type { BacktestRunInput } from '../types/backtesting.types'
+import { ErrorCode } from '@ai/shared'
+import { HttpStatus } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { BacktestJobsService } from './backtest-jobs.service'
 
@@ -14,7 +16,12 @@ function createInput(): BacktestRunInput {
     execution: { slippageBps: 5, feeBps: 4, priceSource: 'mid' },
     strategy: {
       id: 's1',
-      params: {},
+      params: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        timeframe: '5m',
+      },
       fn: () => ({ type: 'NOOP' }),
     },
     dataRange: { fromTs: 1, toTs: 2 },
@@ -62,6 +69,7 @@ function createMarketDataMock(
   ]) as any[]
 
   return {
+    ensureBacktestSymbolAvailable: jest.fn().mockResolvedValue({ supported: true }),
     prepareData: jest.fn().mockResolvedValue(undefined),
     resolveCoverage: jest.fn().mockResolvedValue(coverage),
     loadBars: jest.fn().mockResolvedValue(bars),
@@ -114,14 +122,42 @@ function createPrismaMock(backtestJob = createPrismaBacktestJobMock()) {
   }
 }
 
+function createAvailabilityMock(
+  result: { supported: true } | { supported: false; reasonCode: string; args?: Record<string, unknown> } = { supported: true },
+) {
+  return {
+    check: jest.fn().mockResolvedValue(result),
+  }
+}
+
+function createService(args?: {
+  runner?: { run: jest.Mock }
+  marketData?: ReturnType<typeof createMarketDataMock>
+  availability?: ReturnType<typeof createAvailabilityMock>
+  prisma?: ReturnType<typeof createPrismaMock>
+}) {
+  const runner = args?.runner ?? { run: jest.fn().mockImplementation(() => new Promise(() => {})) }
+  const marketData = args?.marketData ?? createMarketDataMock()
+  const availability = args?.availability ?? createAvailabilityMock()
+  const prisma = args?.prisma ?? createPrismaMock()
+
+  return {
+    runner,
+    marketData,
+    availability,
+    prisma,
+    service: new BacktestJobsService(
+      runner as never,
+      marketData as never,
+      availability as never,
+      prisma as never,
+    ),
+  }
+}
+
 describe('backtestJobsService', () => {
   it('persists created jobs with queued status and owner identity', async () => {
-    const runner = {
-      run: jest.fn().mockImplementation(() => new Promise(() => {})),
-    }
-    const marketData = createMarketDataMock()
-    const prisma = createPrismaMock()
-    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+    const { service, marketData, prisma, availability } = createService()
 
     const created = await service.createJob(createInput(), OWNER_USER_ID)
 
@@ -134,18 +170,15 @@ describe('backtestJobsService', () => {
         }),
       }),
     )
+    expect(availability.check).not.toHaveBeenCalled()
     expect(created.status).toBe('queued')
   })
 
   it('persists snapshot tracing fields when strategy was loaded from a published snapshot', async () => {
-    const runner = {
-      run: jest.fn().mockImplementation(() => new Promise(() => {})),
-    }
-    const marketData = createMarketDataMock()
-    const prisma = createPrismaMock()
-    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+    const { service, marketData, prisma, availability } = createService()
     const input = createInput()
     Object.assign(input.strategy as Record<string, unknown>, {
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
       strategyInstanceId: 'instance-1',
       strategyTemplateId: 'template-1',
       snapshotId: 'snapshot-1',
@@ -174,6 +207,103 @@ describe('backtestJobsService', () => {
         }),
       }),
     )
+    expect(availability.check).toHaveBeenCalledWith(expect.objectContaining({
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      marketType: 'spot',
+      baseTimeframe: '5m',
+    }))
+  })
+
+  it('checks snapshot-bound symbol availability before creating a backtest job', async () => {
+    const runner = {
+      run: jest.fn().mockImplementation(() => new Promise(() => {})),
+    }
+    const marketData = createMarketDataMock()
+    const prisma = createPrismaMock()
+    const availability = {
+      check: jest.fn().mockResolvedValue({ supported: true }),
+    }
+    const service = new BacktestJobsService(
+      runner as never,
+      marketData as never,
+      availability as never,
+      prisma as never,
+    )
+    const input = createInput()
+    input.symbols = ['BTCUSDT']
+    input.baseTimeframe = '5m'
+    Object.assign(input.strategy as Record<string, unknown>, {
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+      snapshotId: 'snapshot-1',
+    })
+    input.strategy.params = {
+      exchange: 'okx',
+      symbol: 'ORDIUSDT',
+      marketType: 'spot',
+      timeframe: '1h',
+    }
+
+    await service.createJob(input, OWNER_USER_ID)
+
+    expect(availability.check).toHaveBeenCalledWith({
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ORDIUSDT',
+      baseTimeframe: '1h',
+    })
+  })
+
+  it('rejects create-job with a structured business error when snapshot-bound symbol is unavailable', async () => {
+    const runner = {
+      run: jest.fn().mockImplementation(() => new Promise(() => {})),
+    }
+    const marketData = createMarketDataMock()
+    const prisma = createPrismaMock()
+    const availability = {
+      check: jest.fn().mockResolvedValue({
+        supported: false,
+        reasonCode: 'BACKTEST_SYMBOL_UNAVAILABLE',
+        args: {
+          exchange: 'okx',
+          marketType: 'spot',
+          symbol: 'ORDIUSDT',
+          baseTimeframe: '1h',
+        },
+      }),
+    }
+    const service = new BacktestJobsService(
+      runner as never,
+      marketData as never,
+      availability as never,
+      prisma as never,
+    )
+    const input = createInput()
+    Object.assign(input.strategy as Record<string, unknown>, {
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+      snapshotId: 'snapshot-1',
+    })
+    input.strategy.params = {
+      exchange: 'okx',
+      symbol: 'ORDIUSDT',
+      marketType: 'spot',
+      timeframe: '1h',
+    }
+
+    await expect(service.createJob(input, OWNER_USER_ID)).rejects.toMatchObject({
+      message: 'backtesting.symbol_unavailable',
+      code: ErrorCode.BAD_REQUEST,
+      status: HttpStatus.BAD_REQUEST,
+      args: {
+        reasonCode: 'BACKTEST_SYMBOL_UNAVAILABLE',
+        exchange: 'okx',
+        marketType: 'spot',
+        symbol: 'ORDIUSDT',
+        baseTimeframe: '1h',
+        snapshotId: 'snapshot-1',
+      },
+    })
+    expect(prisma.backtestJob.create).not.toHaveBeenCalled()
   })
 
   it('stores succeeded result in prisma and returns it from getJobResult', async () => {
@@ -186,9 +316,7 @@ describe('backtestJobsService', () => {
         bySymbol: [],
       }),
     }
-    const marketData = createMarketDataMock()
-    const prisma = createPrismaMock()
-    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+    const { service, marketData, prisma, availability } = createService({ runner })
 
     const created = await service.createJob(createInput(), OWNER_USER_ID)
     await flushMicrotasks()
@@ -236,8 +364,7 @@ describe('backtestJobsService', () => {
       }),
     }
     const marketData = createMarketDataMock()
-    const prisma = createPrismaMock()
-    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+    const { service, prisma, availability } = createService({ runner, marketData })
 
     const created = await service.createJob(createInput(), OWNER_USER_ID)
     await flushMicrotasks()
@@ -282,8 +409,7 @@ describe('backtestJobsService', () => {
       }),
     }
     const marketData = createMarketDataMock()
-    const prisma = createPrismaMock()
-    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+    const { service, prisma, availability } = createService({ runner, marketData })
 
     const created = await service.createJob(createInput(), OWNER_USER_ID)
     await flushMicrotasks()
@@ -304,8 +430,7 @@ describe('backtestJobsService', () => {
       run: jest.fn().mockRejectedValue(new Error('boom')),
     }
     const marketData = createMarketDataMock()
-    const prisma = createPrismaMock()
-    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+    const { service, prisma, availability } = createService({ runner, marketData })
 
     const created = await service.createJob(createInput(), OWNER_USER_ID)
     await flushMicrotasks()
@@ -322,12 +447,7 @@ describe('backtestJobsService', () => {
   })
 
   it('rejects result query when job is not completed', async () => {
-    const runner = {
-      run: jest.fn().mockImplementation(() => new Promise(() => {})),
-    }
-    const marketData = createMarketDataMock()
-    const prisma = createPrismaMock()
-    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+    const { service, marketData, prisma, availability } = createService()
     const created = await service.createJob(createInput(), OWNER_USER_ID)
 
     await expect(service.getJobResult(created.id, OWNER_USER_ID)).rejects.toThrow(
@@ -336,12 +456,7 @@ describe('backtestJobsService', () => {
   })
 
   it('rejects reading job for non-owner user', async () => {
-    const runner = {
-      run: jest.fn().mockImplementation(() => new Promise(() => {})),
-    }
-    const marketData = createMarketDataMock()
-    const prisma = createPrismaMock()
-    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+    const { service, marketData, prisma, availability } = createService()
     const created = await service.createJob(createInput(), OWNER_USER_ID)
 
     await expect(service.getJob(created.id, 'user-2')).rejects.toThrow('backtest.job_not_found')
@@ -355,6 +470,7 @@ describe('backtestJobsService', () => {
       run: jest.fn(),
     }
     const marketData = createMarketDataMock()
+    const availability = createAvailabilityMock()
     const prisma = {
       backtestJob: {
         findUnique: jest.fn().mockResolvedValue({
@@ -370,7 +486,7 @@ describe('backtestJobsService', () => {
         }),
       },
     }
-    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+    const service = new BacktestJobsService(runner as never, marketData as never, availability as never, prisma as never)
 
     await expect(service.getJob('job-invalid', OWNER_USER_ID)).rejects.toThrow(
       'backtest.job_invalid_status',
@@ -382,6 +498,7 @@ describe('backtestJobsService', () => {
       run: jest.fn(),
     }
     const marketData = createMarketDataMock()
+    const availability = createAvailabilityMock()
     const prisma = {
       backtestJob: {
         findUnique: jest.fn().mockResolvedValue({
@@ -399,7 +516,7 @@ describe('backtestJobsService', () => {
         }),
       },
     }
-    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+    const service = new BacktestJobsService(runner as never, marketData as never, availability as never, prisma as never)
 
     await expect(service.getJobResult('job-invalid-result', OWNER_USER_ID)).rejects.toThrow(
       'backtest.job_invalid_status',
@@ -425,8 +542,7 @@ describe('backtestJobsService', () => {
         appliedRange: { fromTs: 2, toTs: 3 },
       }),
     })
-    const prisma = createPrismaMock()
-    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+    const { service, prisma, availability } = createService({ runner, marketData })
     const created = await service.createJob(input, OWNER_USER_ID)
     await flushMicrotasks()
 
@@ -460,8 +576,7 @@ describe('backtestJobsService', () => {
         appliedRange: { fromTs: 2, toTs: 3 },
       }),
     })
-    const prisma = createPrismaMock()
-    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+    const { service, prisma, availability } = createService({ runner, marketData })
 
     const created = await service.createJob(input, OWNER_USER_ID)
     await flushMicrotasks()
@@ -496,9 +611,7 @@ describe('backtestJobsService', () => {
         bySymbol: [],
       }),
     }
-    const marketData = createMarketDataMock()
-    const prisma = createPrismaMock()
-    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+    const { service, marketData, prisma, availability } = createService({ runner })
 
     const first = await service.createJob(createInput(), OWNER_USER_ID)
     await flushMicrotasks()
@@ -521,12 +634,7 @@ describe('backtestJobsService', () => {
   })
 
   it('throws not found when prisma cannot find the job', async () => {
-    const runner = {
-      run: jest.fn().mockImplementation(() => new Promise(() => {})),
-    }
-    const marketData = createMarketDataMock()
-    const prisma = createPrismaMock()
-    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+    const { service, marketData, prisma, availability } = createService()
 
     await expect(service.getJob('missing', OWNER_USER_ID)).rejects.toBeInstanceOf(DomainException)
     await expect(service.getJob('missing', OWNER_USER_ID)).rejects.toThrow('backtest.job_not_found')
@@ -543,12 +651,13 @@ describe('backtestJobsService', () => {
       }),
     }
     const marketData = createMarketDataMock()
+    const availability = createAvailabilityMock()
     const prisma = createPrismaMock()
     prisma.backtestJob.create.mockRejectedValueOnce(Object.assign(
       new Error('The table `public.backtest_jobs` does not exist in the current database.'),
       { code: 'P2021' },
     ))
-    const service = new BacktestJobsService(runner as never, marketData as never, prisma as never)
+    const service = new BacktestJobsService(runner as never, marketData as never, availability as never, prisma as never)
 
     const created = await service.createJob(createInput(), OWNER_USER_ID)
     await flushMicrotasks()
