@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { StrategyDetailPageClient } from './StrategyDetailPageClient'
+import { ApiError } from '@/lib/errors'
 
 const mockPush = jest.fn()
 const mockFetchDetail = jest.fn()
@@ -29,6 +30,12 @@ jest.mock('@/hooks/use-auth', () => ({
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, options?: Record<string, unknown>) => {
+      if (key === 'aiQuant.messages.backtestSnapshotMarketTypeMissing') {
+        return 'The published snapshot is missing the market type truth required for backtesting. Please republish the strategy and try again.'
+      }
+      if (key === 'aiQuant.messages.backtestSnapshotTimeframeMissing') {
+        return 'The published snapshot is missing the base timeframe truth required for backtesting. Please republish the strategy and try again.'
+      }
       if (key === 'aiQuant.messages.backtestSymbolUnavailable') {
         return `Backtesting is not available for ${String(options?.symbol ?? '')} yet. Please confirm that historical market data for this symbol has been enabled.`
       }
@@ -279,6 +286,42 @@ describe('StrategyDetailPageClient', () => {
       'Backtesting is not available for BTCUSDT yet. Please confirm that historical market data for this symbol has been enabled.',
     )
     expect(mockCreateBacktestJob).not.toHaveBeenCalled()
+  })
+
+  it('shows localized snapshot-market-type-missing detail-page backtest messaging in english', async () => {
+    mockCheckBacktestSymbolSupport.mockResolvedValue({
+      status: 'supported',
+    })
+    mockCreateBacktestJob.mockRejectedValueOnce(
+      new ApiError('Bad Request', 'BACKTEST_SNAPSHOT_MARKET_TYPE_MISSING', 400, {
+        error: {
+          code: 'BAD_REQUEST',
+          stage: 'backtest',
+          args: {
+            reasonCode: 'BACKTEST_SNAPSHOT_MARKET_TYPE_MISSING',
+            snapshotId: 'snapshot-1',
+          },
+        },
+      }),
+    )
+
+    await act(async () => {
+      root.render(<StrategyDetailPageClient lng="en" id="inst-1" />)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(container.querySelector('[data-testid="backtest-error"]')?.textContent).toBe(
+      'The published snapshot is missing the market type truth required for backtesting. Please republish the strategy and try again.',
+    )
   })
 
   it('runs spot backtests from strategy detail without sending leverage', async () => {

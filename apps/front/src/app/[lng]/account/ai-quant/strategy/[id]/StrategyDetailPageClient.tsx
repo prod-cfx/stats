@@ -95,6 +95,8 @@ function buildDynamicBacktestAvailabilityMessage(
   if (
     code === 'BACKTEST_SNAPSHOT_REQUIRED'
     || code === 'BACKTEST_SNAPSHOT_SYMBOL_MISSING'
+    || code === 'BACKTEST_SNAPSHOT_MARKET_TYPE_MISSING'
+    || code === 'BACKTEST_SNAPSHOT_TIMEFRAME_MISSING'
     || code === 'BACKTEST_SYMBOL_UNAVAILABLE'
     || code === 'BACKTEST_SYMBOL_REFRESH_FAILED'
     || code === 'BACKTEST_MARKET_DATA_UNAVAILABLE'

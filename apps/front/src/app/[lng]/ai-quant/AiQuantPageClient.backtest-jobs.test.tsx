@@ -203,6 +203,10 @@ function createLocalizedBacktestTranslator(lng: 'zh' | 'en') {
 
     const translations = {
       zh: {
+        'aiQuant.messages.backtestSnapshotMarketTypeMissing':
+          '当前已发布快照缺少市场类型真相，暂时无法回测。请重新发布策略后再试。',
+        'aiQuant.messages.backtestSnapshotTimeframeMissing':
+          '当前已发布快照缺少主周期真相，暂时无法回测。请重新发布策略后再试。',
         'aiQuant.messages.backtestSymbolUnavailable':
           '当前策略标的 {{symbol}} 暂不支持回测，请先确认该标的的历史行情能力是否已接入。',
         'aiQuant.messages.backtestMarketDataUnavailable':
@@ -211,6 +215,10 @@ function createLocalizedBacktestTranslator(lng: 'zh' | 'en') {
           '回测服务暂时不可用，请稍后重试。',
       },
       en: {
+        'aiQuant.messages.backtestSnapshotMarketTypeMissing':
+          'The published snapshot is missing the market type truth required for backtesting. Please republish the strategy and try again.',
+        'aiQuant.messages.backtestSnapshotTimeframeMissing':
+          'The published snapshot is missing the base timeframe truth required for backtesting. Please republish the strategy and try again.',
         'aiQuant.messages.backtestSymbolUnavailable':
           'Backtesting is not available for {{symbol}} yet. Please confirm that historical market data for this symbol has been enabled.',
         'aiQuant.messages.backtestMarketDataUnavailable':
@@ -1693,6 +1701,100 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     })
 
     expect(currentConversation.messages.at(-1)?.content).toContain('ORDIUSDT 当前缺少 1h 历史行情数据')
+  })
+
+  it('renders a user-readable zh message for BACKTEST_SNAPSHOT_MARKET_TYPE_MISSING from create-job failures', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    const activeConversation = {
+      ...seeded[0],
+      publishedScriptGraphVersion: 1,
+      publishedScriptCode: 'return { ok: true }',
+    } as ConversationState
+
+    mockCheckBacktestSymbolSupport.mockResolvedValueOnce({
+      status: 'supported',
+    })
+    mockCreateBacktestJob.mockRejectedValueOnce(
+      new ApiError('Bad Request', 'BACKTEST_SNAPSHOT_MARKET_TYPE_MISSING', 400, {
+        error: {
+          code: 'BAD_REQUEST',
+          stage: 'backtest',
+          args: {
+            reasonCode: 'BACKTEST_SNAPSHOT_MARKET_TYPE_MISSING',
+            snapshotId: 'snapshot-1',
+          },
+        },
+      }),
+    )
+
+    let currentConversation = activeConversation
+    await runAiQuantBacktest({
+      activeConversation,
+      activeConversationIdRef: { current: activeConversation.id },
+      backtestCapabilities: {
+        allowedBaseTimeframes: ['15m'],
+      },
+      backtestCapabilityState: 'ready',
+      backtestRunMutexRef: { current: new Set<string>() },
+      backtestRunTokenRef: { current: new Map<string, number>() },
+      graphConfirmed: true,
+      isMountedRef: { current: true },
+      setConversationBacktestExecutionState: jest.fn(),
+      t: createLocalizedBacktestTranslator('zh'),
+      updateConversationById: (_conversationId, updater) => {
+        currentConversation = updater(currentConversation)
+      },
+    })
+
+    expect(currentConversation.messages.at(-1)?.content).toContain('当前已发布快照缺少市场类型真相')
+  })
+
+  it('renders a user-readable en message for BACKTEST_SNAPSHOT_TIMEFRAME_MISSING from create-job failures', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    const activeConversation = {
+      ...seeded[0],
+      publishedScriptGraphVersion: 1,
+      publishedScriptCode: 'return { ok: true }',
+    } as ConversationState
+
+    mockCheckBacktestSymbolSupport.mockResolvedValueOnce({
+      status: 'supported',
+    })
+    mockCreateBacktestJob.mockRejectedValueOnce(
+      new ApiError('Bad Request', 'BACKTEST_SNAPSHOT_TIMEFRAME_MISSING', 400, {
+        error: {
+          code: 'BAD_REQUEST',
+          stage: 'backtest',
+          args: {
+            reasonCode: 'BACKTEST_SNAPSHOT_TIMEFRAME_MISSING',
+            snapshotId: 'snapshot-1',
+          },
+        },
+      }),
+    )
+
+    let currentConversation = activeConversation
+    await runAiQuantBacktest({
+      activeConversation,
+      activeConversationIdRef: { current: activeConversation.id },
+      backtestCapabilities: {
+        allowedBaseTimeframes: ['15m'],
+      },
+      backtestCapabilityState: 'ready',
+      backtestRunMutexRef: { current: new Set<string>() },
+      backtestRunTokenRef: { current: new Map<string, number>() },
+      graphConfirmed: true,
+      isMountedRef: { current: true },
+      setConversationBacktestExecutionState: jest.fn(),
+      t: createLocalizedBacktestTranslator('en'),
+      updateConversationById: (_conversationId, updater) => {
+        currentConversation = updater(currentConversation)
+      },
+    })
+
+    expect(currentConversation.messages.at(-1)?.content).toContain(
+      'The published snapshot is missing the base timeframe truth required for backtesting.',
+    )
   })
 
   it('renders a user-readable en message for BACKTEST_SERVICE_TEMPORARILY_UNAVAILABLE from create-job failures', async () => {
