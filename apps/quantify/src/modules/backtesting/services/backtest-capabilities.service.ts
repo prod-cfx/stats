@@ -6,7 +6,6 @@ import { normalizeBacktestCapabilityConfig } from '../backtest-capability-config
 import { BacktestCapabilitiesRepository } from '../repositories/backtest-capabilities.repository'
 
 export interface BacktestCapabilitiesDto {
-  allowedSymbols: string[]
   allowedBaseTimeframes: string[]
 }
 
@@ -31,10 +30,14 @@ export class BacktestCapabilitiesService {
         throw this.createUnavailableError('invalid_active_config')
       }
 
+      const response: BacktestCapabilitiesDto = {
+        allowedBaseTimeframes: result.allowedBaseTimeframes,
+      }
+
       this.logger.log(
         `event=backtesting_capabilities_loaded stage=capability requestId=${requestId ?? 'N/A'} durationMs=${Date.now() - startedAt}`,
       )
-      return result
+      return response
     } catch (error) {
       this.logger.error(
         `event=backtesting_capabilities_failed stage=capability requestId=${requestId ?? 'N/A'} reason=${this.describeError(error)} durationMs=${Date.now() - startedAt}`,

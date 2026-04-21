@@ -14,14 +14,13 @@ describe('backtestCapabilitiesService', () => {
     service = new BacktestCapabilitiesService(repository)
   })
 
-  it('returns normalized capabilities from active config', async () => {
+  it('returns only generic capabilities and ignores symbol whitelist fields from active config', async () => {
     repository.findActiveConfig.mockResolvedValue({
-      allowedSymbols: [' BTCUSDT ', 'ETHUSDT'],
+      allowedSymbols: [' BTCUSDT ', 1],
       allowedBaseTimeframes: [' 1m ', '5m'],
     })
 
     await expect(service.getCapabilities('req-1')).resolves.toEqual({
-      allowedSymbols: ['BTCUSDT', 'ETHUSDT'],
       allowedBaseTimeframes: ['1m', '5m'],
     })
   })
@@ -38,7 +37,6 @@ describe('backtestCapabilitiesService', () => {
 
   it('throws service unavailable when config fields are dirty', async () => {
     repository.findActiveConfig.mockResolvedValue({
-      allowedSymbols: ['BTCUSDT', 1],
       allowedBaseTimeframes: ['1m', ''],
     })
 
@@ -51,7 +49,6 @@ describe('backtestCapabilitiesService', () => {
 
   it('throws service unavailable when fields are not arrays', async () => {
     repository.findActiveConfig.mockResolvedValue({
-      allowedSymbols: 'BTCUSDT',
       allowedBaseTimeframes: { value: ['1m'] },
     })
 

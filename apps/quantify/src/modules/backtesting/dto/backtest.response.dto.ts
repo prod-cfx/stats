@@ -132,9 +132,6 @@ export class BacktestJobResponseDto {
 
 export class BacktestCapabilitiesResponseDto {
   @ApiProperty({ type: [String] })
-  allowedSymbols!: string[]
-
-  @ApiProperty({ type: [String] })
   allowedBaseTimeframes!: string[]
 }
 

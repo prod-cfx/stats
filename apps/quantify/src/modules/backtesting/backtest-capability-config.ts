@@ -8,6 +8,10 @@ export interface BacktestCapabilitiesConfigRecord {
 }
 
 export interface NormalizedBacktestCapabilitiesConfig {
+  allowedBaseTimeframes: string[]
+}
+
+export interface ResolvedBacktestCapabilitiesConfig {
   allowedSymbols: string[]
   allowedBaseTimeframes: string[]
 }
@@ -107,22 +111,20 @@ export function normalizeBacktestCapabilityConfig(
     return null
   }
 
-  const allowedSymbols = normalizeConfiguredStringArray(config.allowedSymbols)
   const allowedBaseTimeframes = normalizeConfiguredBacktestCapabilityTimeframes(config.allowedBaseTimeframes)
 
-  if (!allowedSymbols || !allowedBaseTimeframes) {
+  if (!allowedBaseTimeframes) {
     return null
   }
 
   return {
-    allowedSymbols,
     allowedBaseTimeframes,
   }
 }
 
 export function resolveConfiguredBacktestCapabilityConfig(
   env?: EnvAccessor | NodeJS.ProcessEnv,
-): NormalizedBacktestCapabilitiesConfig {
+): ResolvedBacktestCapabilitiesConfig {
   const read = (key: string): string | undefined => {
     if (!env) {
       return defaultEnvAccessor.raw(key)

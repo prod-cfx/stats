@@ -10,6 +10,9 @@ export class BacktestCapabilitiesRepository {
 
   findActiveConfig() {
     return this.txHost.tx.backtestCapabilityConfig.findFirst({
+      select: {
+        allowedBaseTimeframes: true,
+      },
       where: { isActive: true },
       orderBy: { updatedAt: 'desc' },
     })
