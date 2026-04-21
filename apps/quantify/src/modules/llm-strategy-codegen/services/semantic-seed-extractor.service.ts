@@ -278,47 +278,56 @@ export class SemanticSeedExtractorService {
   }
 
   private pushMovingAverageCrossTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): boolean {
-    if (!/(?:\bEMA\s*\d+|\bMA\s*\d+)/iu.test(segment)) return false
-    if (!/上穿|下穿|cross over|cross under|金叉|死叉/iu.test(segment)) return false
+    const clauses = segment.includes('，') || segment.includes(',')
+      ? segment.split(/[，,]/u).map(clause => clause.trim()).filter(Boolean)
+      : [segment]
 
-    const periods = Array.from(segment.matchAll(/\b(?:EMA|MA)\s*(\d{1,4})/giu))
-      .map(match => Number(match[1]))
-      .filter(value => Number.isFinite(value))
-    if (periods.length < 2) return false
+    let handled = false
+    for (const clause of clauses) {
+      if (!/(?:\bEMA\s*\d+|\bMA\s*\d+)/iu.test(clause)) continue
+      if (!/上穿|下穿|cross over|cross under|金叉|死叉/iu.test(clause)) continue
 
-    const indicator = /\bEMA\s*\d+/iu.test(segment) ? 'ema' : 'ma'
-    const fastPeriod = periods[0]
-    const slowPeriod = periods[1]
-    const intent = this.resolveTradeIntent(segment)
-    if (!intent) return false
+      const periods = Array.from(clause.matchAll(/\b(?:EMA|MA)\s*(\d{1,4})/giu))
+        .map(match => Number(match[1]))
+        .filter(value => Number.isFinite(value))
+      if (periods.length < 2) continue
 
-    if (/上穿|cross over|金叉/iu.test(segment)) {
-      this.pushTrigger(triggers, seen, {
-        key: 'indicator.cross_over',
-        phase: intent.phase,
-        sideScope: intent.sideScope,
-        params: {
-          indicator,
-          fastPeriod,
-          slowPeriod,
-        },
-      })
+      const indicator = /\bEMA\s*\d+/iu.test(clause) ? 'ema' : 'ma'
+      const fastPeriod = periods[0]
+      const slowPeriod = periods[1]
+      const intent = this.resolveTradeIntent(clause)
+      if (!intent) continue
+
+      if (/上穿|cross over|金叉/iu.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'indicator.cross_over',
+          phase: intent.phase,
+          sideScope: intent.sideScope,
+          params: {
+            indicator,
+            fastPeriod,
+            slowPeriod,
+          },
+        })
+        handled = true
+      }
+
+      if (/下穿|cross under|死叉/iu.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'indicator.cross_under',
+          phase: intent.phase,
+          sideScope: intent.sideScope,
+          params: {
+            indicator,
+            fastPeriod,
+            slowPeriod,
+          },
+        })
+        handled = true
+      }
     }
 
-    if (/下穿|cross under|死叉/iu.test(segment)) {
-      this.pushTrigger(triggers, seen, {
-        key: 'indicator.cross_under',
-        phase: intent.phase,
-        sideScope: intent.sideScope,
-        params: {
-          indicator,
-          fastPeriod,
-          slowPeriod,
-        },
-      })
-    }
-
-    return true
+    return handled
   }
 
   private pushGridTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
