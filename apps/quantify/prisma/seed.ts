@@ -118,7 +118,6 @@ async function seedBacktestCapabilityConfig() {
     await client.backtestCapabilityConfig.update({
       where: { id: existing.id },
       data: {
-        allowedSymbols: capabilityConfig.allowedSymbols,
         allowedBaseTimeframes: capabilityConfig.allowedBaseTimeframes,
         isActive: true,
       },
@@ -126,7 +125,6 @@ async function seedBacktestCapabilityConfig() {
   } else {
     await client.backtestCapabilityConfig.create({
       data: {
-        allowedSymbols: capabilityConfig.allowedSymbols,
         allowedBaseTimeframes: capabilityConfig.allowedBaseTimeframes,
         isActive: true,
       },
