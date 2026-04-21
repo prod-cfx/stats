@@ -10,6 +10,7 @@ import {
   getSchemaPath,
 } from '@nestjs/swagger'
 import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
+import { buildBaseResponseSchema } from '@/common/swagger/base-response-schema.helper'
 import { AccountStrategyActionDto } from '../dto/account-strategy-action.dto'
 import { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
 import { AccountStrategyDetailResponseDto } from '../dto/account-strategy-detail.response.dto'
@@ -73,7 +74,7 @@ export class AccountStrategyViewController {
   @ApiOperation({ summary: '按部署请求 ID 查询当前用户的 AI Quant 部署结果' })
   @ApiHeader({ name: 'authorization', required: false })
   @ApiHeader({ name: 'x-user-id', required: false })
-  @ApiOkResponse({ type: AccountStrategyDetailResponseDto })
+  @ApiOkResponse({ schema: buildBaseResponseSchema(AccountStrategyDetailResponseDto) })
   async deployResult(
     @Param('deployRequestId') deployRequestId: string,
     @Headers('authorization') authorization?: string,
@@ -87,7 +88,7 @@ export class AccountStrategyViewController {
   @ApiOperation({ summary: '获取当前用户的 AI Quant 策略详情' })
   @ApiHeader({ name: 'authorization', required: false })
   @ApiHeader({ name: 'x-user-id', required: false })
-  @ApiOkResponse({ type: AccountStrategyDetailResponseDto })
+  @ApiOkResponse({ schema: buildBaseResponseSchema(AccountStrategyDetailResponseDto) })
   async detail(
     @Param('id') id: string,
     @Headers('authorization') authorization?: string,
@@ -102,7 +103,7 @@ export class AccountStrategyViewController {
   @ApiOperation({ summary: '对当前用户的 AI Quant 策略执行操作' })
   @ApiHeader({ name: 'authorization', required: false })
   @ApiHeader({ name: 'x-user-id', required: false })
-  @ApiOkResponse({ type: AccountStrategyDetailResponseDto })
+  @ApiOkResponse({ schema: buildBaseResponseSchema(AccountStrategyDetailResponseDto) })
   async action(
     @Param('id') id: string,
     @Body() dto: AccountStrategyActionDto,
@@ -120,7 +121,7 @@ export class AccountStrategyViewController {
   @ApiOperation({ summary: '部署当前用户的 AI Quant 策略' })
   @ApiHeader({ name: 'authorization', required: false })
   @ApiHeader({ name: 'x-user-id', required: false })
-  @ApiOkResponse({ type: AccountStrategyDetailResponseDto })
+  @ApiOkResponse({ schema: buildBaseResponseSchema(AccountStrategyDetailResponseDto) })
   async deploy(
     @Body() dto: AccountStrategyDeployDto,
     @Headers('authorization') authorization?: string,
@@ -138,7 +139,7 @@ export class AccountStrategyViewController {
   @ApiOperation({ summary: '更新当前用户 AI Quant 策略的部署杠杆' })
   @ApiHeader({ name: 'authorization', required: false })
   @ApiHeader({ name: 'x-user-id', required: false })
-  @ApiOkResponse({ type: AccountStrategyDetailResponseDto })
+  @ApiOkResponse({ schema: buildBaseResponseSchema(AccountStrategyDetailResponseDto) })
   async updateDeploymentLeverage(
     @Param('id') id: string,
     @Body() dto: AccountStrategyUpdateExecutionLeverageDto,

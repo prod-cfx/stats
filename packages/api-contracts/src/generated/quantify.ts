@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { makeApi, Zodios, type ZodiosInstance, type ZodiosOptions } from '@zodios/core'
 import { z } from 'zod'
 
@@ -229,7 +228,20 @@ const CheckBacktestSymbolDto = z
     exchange: z.enum(['binance', 'okx', 'hyperliquid']),
     marketType: z.enum(['spot', 'perp']),
     symbol: z.string(),
-    baseTimeframe: z.string(),
+    baseTimeframe: z.enum([
+      '1m',
+      '3m',
+      '5m',
+      '15m',
+      '30m',
+      '1h',
+      '4h',
+      '6h',
+      '8h',
+      '12h',
+      '1d',
+      '1w',
+    ]),
   })
   .passthrough()
 const BacktestSymbolSupportResponseDto = z
@@ -1578,7 +1590,7 @@ const AccountStrategyDetailTransportEnvelope = z
   .object({ data: AccountStrategyDetailResponseDto, message: z.string().optional() })
   .passthrough()
 
-const endpoints: any = makeApi([
+const endpoints = makeApi([
   {
     method: 'get',
     path: '/account/ai-quant/conversations',
@@ -1698,7 +1710,9 @@ const endpoints: any = makeApi([
         schema: z.string().optional(),
       },
     ],
-    response: AccountStrategyDetailTransportEnvelope,
+    response: z
+      .object({ data: AccountStrategyDetailResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'delete',
@@ -1751,7 +1765,9 @@ const endpoints: any = makeApi([
         schema: z.string().optional(),
       },
     ],
-    response: AccountStrategyDetailTransportEnvelope,
+    response: z
+      .object({ data: AccountStrategyDetailResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'post',
@@ -1780,7 +1796,9 @@ const endpoints: any = makeApi([
         schema: z.string().optional(),
       },
     ],
-    response: AccountStrategyDetailTransportEnvelope,
+    response: z
+      .object({ data: AccountStrategyDetailResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'post',
@@ -1804,7 +1822,9 @@ const endpoints: any = makeApi([
         schema: z.string().optional(),
       },
     ],
-    response: AccountStrategyDetailTransportEnvelope,
+    response: z
+      .object({ data: AccountStrategyDetailResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'get',
@@ -1828,7 +1848,9 @@ const endpoints: any = makeApi([
         schema: z.string().optional(),
       },
     ],
-    response: AccountStrategyDetailTransportEnvelope,
+    response: z
+      .object({ data: AccountStrategyDetailResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'post',
@@ -3898,10 +3920,10 @@ const endpoints: any = makeApi([
   },
 ])
 
-export type QuantifyApi = any
+export type QuantifyApi = typeof endpoints
 
-export const aiQuantifyClient: any = new Zodios('/api/v1', endpoints)
+export const aiQuantifyClient: ZodiosInstance<QuantifyApi> = new Zodios('/api/v1', endpoints)
 
-export function createApiClient(baseUrl: string, options?: ZodiosOptions): any {
+export function createApiClient(baseUrl: string, options?: ZodiosOptions): ZodiosInstance<QuantifyApi> {
   return new Zodios(baseUrl, endpoints, options)
 }

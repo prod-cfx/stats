@@ -251,10 +251,32 @@ const AccountAiQuantUpdateExecutionLeverageRequestDto = z
   .object({ leverage: z.number() })
   .passthrough()
 const BacktestingSymbolSupportRequestDto = z
-  .object({ exchange: z.enum(['binance', 'okx', 'hyperliquid']), symbol: z.string() })
+  .object({
+    exchange: z.enum(['binance', 'okx', 'hyperliquid']),
+    marketType: z.enum(['spot', 'perp']),
+    symbol: z.string(),
+    baseTimeframe: z.enum([
+      '1m',
+      '3m',
+      '5m',
+      '15m',
+      '30m',
+      '1h',
+      '4h',
+      '6h',
+      '8h',
+      '12h',
+      '1d',
+      '1w',
+    ]),
+  })
   .passthrough()
 const BacktestingSymbolSupportResponseDto = z
-  .object({ status: z.enum(['supported', 'refreshed_then_supported', 'not_supported']) })
+  .object({
+    status: z.enum(['supported', 'refreshed_then_supported', 'not_supported']),
+    reasonCode: z.string().optional(),
+    args: z.object({}).partial().passthrough().optional(),
+  })
   .passthrough()
 const LlmCodegenStartRequestDto = z
   .object({ initialMessage: z.string(), guideConfig: z.object({}).partial().passthrough() })

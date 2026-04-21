@@ -78,7 +78,6 @@ describe('quantify contract generated responses', () => {
   it('wraps account strategy detail-style aliases in transport-envelope response schemas', () => {
     const source = readFileSync(generatedPath, 'utf8')
 
-    expect(source).toContain('const AccountStrategyDetailTransportEnvelope = z')
     expect(source).toContain('data: AccountStrategyDetailResponseDto')
     expect(source).toContain('message: z.string().optional()')
     expect(source).toContain('.passthrough()')
@@ -95,7 +94,10 @@ describe('quantify contract generated responses', () => {
       const start = source.indexOf(`alias: '${alias}'`)
       expect(start).toBeGreaterThanOrEqual(0)
       const snippet = source.slice(start, start + 700)
-      expect(snippet).toContain('response: AccountStrategyDetailTransportEnvelope')
+      expect(snippet).toContain('response: z')
+      expect(snippet).toContain('data: AccountStrategyDetailResponseDto')
+      expect(snippet).toContain('message: z.string().optional()')
+      expect(snippet).toContain('.passthrough()')
     }
   })
 
