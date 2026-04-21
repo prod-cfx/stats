@@ -201,18 +201,20 @@ export class SemanticSeedExtractorService {
   }
 
   private pushMovingAverageTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
-    if (!/MA\s*\d+|均线/u.test(segment)) return
-    const referencePeriod = this.extractNumber(segment, [/MA\s*(\d{1,4})/iu, /均线\s*(\d{1,4})/u])
+    if (!/(?:MA|EMA)\s*\d+|均线/u.test(segment)) return
+    const referencePeriod = this.extractNumber(segment, [/(?:MA|EMA)\s*(\d{1,4})/iu, /均线\s*(\d{1,4})/u])
     if (referencePeriod === null) return
 
     const confirmationMode = this.extractConfirmationMode(segment)
+    const indicator = /\bEMA\s*\d+/iu.test(segment) ? 'ema' : 'ma'
+
     if (/突破|上穿|站上|高于/u.test(segment) && /买入|做多|开多/u.test(segment)) {
       this.pushTrigger(triggers, seen, {
         key: 'indicator.above',
         phase: 'entry',
         sideScope: 'long',
         params: {
-          indicator: 'ma',
+          indicator,
           referenceRole: referencePeriod >= 20 ? 'long_term' : 'short_term',
           'reference.period': referencePeriod,
           ...(confirmationMode ? { confirmationMode } : {}),
@@ -226,7 +228,7 @@ export class SemanticSeedExtractorService {
         phase: 'exit',
         sideScope: 'long',
         params: {
-          indicator: 'ma',
+          indicator,
           referenceRole: referencePeriod >= 20 ? 'long_term' : 'short_term',
           'reference.period': referencePeriod,
           ...(confirmationMode ? { confirmationMode } : {}),

@@ -63,6 +63,52 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch).not.toHaveProperty('grid')
   })
 
+  it('extracts EMA price-vs-reference semantics into the existing indicator atoms', () => {
+    const patch = service.extract('OKX 现货 BTCUSDT 15m；价格站上 EMA50 买入；价格跌破 EMA20 平仓；单笔 10%。')
+
+    expect(patch).toEqual(expect.objectContaining({
+      contextSlots: expect.objectContaining({
+        exchange: 'okx',
+        marketType: 'spot',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+      }),
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.above',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ema',
+            referenceRole: 'long_term',
+            'reference.period': 50,
+          }),
+        }),
+        expect.objectContaining({
+          key: 'indicator.below',
+          phase: 'exit',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ema',
+            referenceRole: 'long_term',
+            'reference.period': 20,
+          }),
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'open_long' }),
+        expect.objectContaining({ key: 'close_long' }),
+      ]),
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+      },
+    }))
+    expect(patch).not.toHaveProperty('risk')
+    expect(patch).not.toHaveProperty('grid')
+  })
+
   it('extracts EMA crossover semantics into the existing cross-over atoms', () => {
     const patch = service.extract('EMA7 上穿 EMA21 做多；EMA7 下穿 EMA21 平多；单笔 10%。')
 
