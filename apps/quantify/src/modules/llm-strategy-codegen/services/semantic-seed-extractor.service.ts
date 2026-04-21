@@ -384,6 +384,14 @@ export class SemanticSeedExtractorService {
   }
 
   private pushPercentChangeTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+    const clauses = this.splitPercentChangeClauses(segment)
+    if (clauses.length > 1) {
+      for (const clause of clauses) {
+        this.pushPercentChangeTrigger(clause, triggers, seen)
+      }
+      return
+    }
+
     if (!/%|百分/u.test(segment)) return
     if (!this.hasExplicitPriceChangeContext(segment)) return
     if (!this.hasExplicitPriceChangeDirection(segment)) return
@@ -408,6 +416,14 @@ export class SemanticSeedExtractorService {
         ...(window ? { window } : {}),
       },
     })
+  }
+
+  private splitPercentChangeClauses(segment: string): string[] {
+    const clausePattern = /\d{1,2}\s*(?:m|h|d|分钟|分|小时|时|天|日)[^；;。,，]*?(?:上涨|下跌|涨|跌)[^；;。,，]*?(?:\d+(?:\.\d+)?\s*%|百分之?\s*\d+(?:\.\d+)?)[^；;。,，]*?(?:买入|卖出|平仓|平多|平空|做多|做空|开多|开空)/giu
+    const matches = Array.from(segment.matchAll(clausePattern))
+      .map(match => match[0].trim())
+      .filter(Boolean)
+    return matches.length > 1 ? matches : [segment]
   }
 
   private pushTrigger(triggers: SeedTrigger[], seen: Set<string>, trigger: SeedTrigger): void {
