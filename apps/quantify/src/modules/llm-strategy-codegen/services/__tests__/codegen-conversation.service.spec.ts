@@ -8818,14 +8818,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
       }),
     ]))
-    expect(publishedSnapshot?.specSnapshot?.rules).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        actions: expect.arrayContaining([expect.objectContaining({ type: 'OPEN_SHORT' })]),
-      }),
-      expect.objectContaining({
-        actions: expect.arrayContaining([expect.objectContaining({ type: 'CLOSE_SHORT' })]),
-      }),
-    ]))
+    const publishedActionTypes = publishedSnapshot?.specSnapshot?.rules
+      ?.flatMap((rule: { actions?: Array<{ type?: string }> }) => rule.actions ?? [])
+      .map((action: { type?: string }) => action.type) ?? []
+    expect(publishedActionTypes).not.toContain('OPEN_SHORT')
+    expect(publishedActionTypes).not.toContain('CLOSE_SHORT')
     expect(publishedSnapshot?.compiledIr?.portfolio?.positionMode).toBe('long_only')
   })
 
