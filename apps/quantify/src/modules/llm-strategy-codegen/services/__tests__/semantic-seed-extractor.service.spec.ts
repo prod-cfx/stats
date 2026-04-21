@@ -63,6 +63,47 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch).not.toHaveProperty('grid')
   })
 
+  it('extracts EMA crossover semantics into the existing cross-over atoms', () => {
+    const patch = service.extract('EMA7 上穿 EMA21 做多；EMA7 下穿 EMA21 平多；单笔 10%。')
+
+    expect(patch).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.cross_over',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ema',
+            fastPeriod: 7,
+            slowPeriod: 21,
+          }),
+        }),
+        expect.objectContaining({
+          key: 'indicator.cross_under',
+          phase: 'exit',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ema',
+            fastPeriod: 7,
+            slowPeriod: 21,
+          }),
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'open_long' }),
+        expect.objectContaining({ key: 'close_long' }),
+      ]),
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+      },
+    }))
+    expect(patch).not.toHaveProperty('contextSlots')
+    expect(patch).not.toHaveProperty('risk')
+    expect(patch).not.toHaveProperty('grid')
+  })
+
   it('extracts Bollinger dual-side semantics into a semantic patch', () => {
     const patch = service.extract('OKX 合约 BTCUSDT 15m；K线收盘后确认突破布林带(20,2)上轨时做空，突破下轨时做多；价格回到布林带中轨时平仓；单笔 10%，亏损 5% 止损。')
 
@@ -104,7 +145,6 @@ describe('SemanticSeedExtractorService', () => {
             band: 'middle',
             period: 20,
             stdDev: 2,
-            confirmationMode: 'close_confirm',
           }),
         }),
       ]),
@@ -130,6 +170,7 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch).not.toHaveProperty('exitRules')
     expect(patch).not.toHaveProperty('riskRules')
     expect(patch).not.toHaveProperty('grid')
+    expect(patch.triggers?.find(trigger => trigger.key === 'bollinger.touch_middle')?.params).not.toHaveProperty('confirmationMode')
   })
 
   it('extracts fixed-range grid semantics into a semantic patch', () => {

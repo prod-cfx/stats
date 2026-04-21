@@ -71,6 +71,7 @@ export class SemanticSeedExtractorService {
     const segments = this.splitSegments(text)
 
     for (const segment of segments) {
+      this.pushMovingAverageCrossTrigger(segment, triggers, seen)
       this.pushMovingAverageTrigger(segment, triggers, seen)
       this.pushBollingerTriggers(segment, triggers, seen)
       this.pushGridTrigger(segment, triggers, seen)
@@ -214,7 +215,7 @@ export class SemanticSeedExtractorService {
           indicator: 'ma',
           referenceRole: referencePeriod >= 20 ? 'long_term' : 'short_term',
           'reference.period': referencePeriod,
-          confirmationMode,
+          ...(confirmationMode ? { confirmationMode } : {}),
         },
       })
     }
@@ -228,7 +229,7 @@ export class SemanticSeedExtractorService {
           indicator: 'ma',
           referenceRole: referencePeriod >= 20 ? 'long_term' : 'short_term',
           'reference.period': referencePeriod,
-          confirmationMode,
+          ...(confirmationMode ? { confirmationMode } : {}),
         },
       })
     }
@@ -252,7 +253,7 @@ export class SemanticSeedExtractorService {
           band: 'upper',
           period,
           stdDev,
-          confirmationMode,
+          ...(confirmationMode ? { confirmationMode } : {}),
         },
       })
     }
@@ -266,7 +267,7 @@ export class SemanticSeedExtractorService {
           band: 'lower',
           period,
           stdDev,
-          confirmationMode,
+          ...(confirmationMode ? { confirmationMode } : {}),
         },
       })
     }
@@ -280,7 +281,48 @@ export class SemanticSeedExtractorService {
           band: 'middle',
           period,
           stdDev,
-          confirmationMode: 'close_confirm',
+          ...(confirmationMode ? { confirmationMode } : {}),
+        },
+      })
+    }
+  }
+
+  private pushMovingAverageCrossTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+    if (!/(?:\bEMA\s*\d+|\bMA\s*\d+)/iu.test(segment)) return
+    if (!/上穿|下穿|cross over|cross under|金叉|死叉/iu.test(segment)) return
+
+    const periods = Array.from(segment.matchAll(/\b(?:EMA|MA)\s*(\d{1,4})/giu))
+      .map(match => Number(match[1]))
+      .filter(value => Number.isFinite(value))
+    if (periods.length < 2) return
+
+    const indicator = /\bEMA\s*\d+/iu.test(segment) ? 'ema' : 'ma'
+    const fastPeriod = periods[0]
+    const slowPeriod = periods[1]
+    const sideScope = /做空|开空|卖空|平空/u.test(segment) ? 'short' : 'long'
+
+    if (/上穿|cross over|金叉/iu.test(segment)) {
+      this.pushTrigger(triggers, seen, {
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        sideScope,
+        params: {
+          indicator,
+          fastPeriod,
+          slowPeriod,
+        },
+      })
+    }
+
+    if (/下穿|cross under|死叉/iu.test(segment)) {
+      this.pushTrigger(triggers, seen, {
+        key: 'indicator.cross_under',
+        phase: 'exit',
+        sideScope,
+        params: {
+          indicator,
+          fastPeriod,
+          slowPeriod,
         },
       })
     }
@@ -388,11 +430,11 @@ export class SemanticSeedExtractorService {
     return 'prev_close'
   }
 
-  private extractConfirmationMode(segment: string): 'close_confirm' | 'touch' {
+  private extractConfirmationMode(segment: string): 'close_confirm' | null {
     if (/收盘|确认|close/u.test(segment)) {
       return 'close_confirm'
     }
-    return 'touch'
+    return null
   }
 
   private extractExchange(text: string): string | null {
