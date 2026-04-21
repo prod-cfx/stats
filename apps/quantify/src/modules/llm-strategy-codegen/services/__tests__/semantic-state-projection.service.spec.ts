@@ -265,6 +265,7 @@ describe('SemanticStateProjectionService', () => {
         {
           id: 'risk-1',
           key: 'stop_loss.percent',
+          params: {},
           status: 'open',
           source: 'user_explicit',
           openSlots: [
