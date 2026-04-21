@@ -964,6 +964,45 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(prompt).not.toContain('entryRules')
   })
 
+  it('rejects malformed engine semanticState without throwing internal errors', async () => {
+    await expect(service.testEngine({
+      userId: 'u1',
+      message: '请测试语义态生成策略脚本',
+      semanticState: {
+        version: 1,
+        triggers: [],
+        actions: [],
+        risk: [],
+      },
+    } as any)).rejects.toMatchObject({
+      message: 'codegen.invalid_semantic_input',
+      args: { field: 'semanticState' },
+    })
+  })
+
+  it('rejects engine semanticState trigger objects that cannot be safely traversed', async () => {
+    await expect(service.testEngine({
+      userId: 'u1',
+      message: '请测试语义态生成策略脚本',
+      semanticState: {
+        ...buildLockedMaSemanticState(),
+        triggers: [
+          {
+            id: 'bad-trigger',
+            key: 'indicator.above',
+            phase: 'entry',
+            params: {},
+            status: 'locked',
+            source: 'user_explicit',
+          },
+        ],
+      },
+    } as any)).rejects.toMatchObject({
+      message: 'codegen.invalid_semantic_input',
+      args: { field: 'semanticState' },
+    })
+  })
+
   it('tests engine generation from a provided canonicalSpec without checklist fallback', async () => {
     const semanticState = buildLockedMaSemanticState()
     const normalization = (service as any).buildNormalizationFromSemanticState(semanticState)
@@ -986,6 +1025,32 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(prompt).not.toContain('entryRules')
   })
 
+  it('rejects malformed engine canonicalSpec input', async () => {
+    await expect(service.testEngine({
+      userId: 'u1',
+      message: '请测试 canonical spec 生成策略脚本',
+      canonicalSpec: {},
+    } as any)).rejects.toMatchObject({
+      message: 'codegen.invalid_semantic_input',
+      args: { field: 'canonicalSpec' },
+    })
+  })
+
+  it('rejects structurally unusable engine canonicalSpec v2 input', async () => {
+    await expect(service.testEngine({
+      userId: 'u1',
+      message: '请测试 canonical spec 生成策略脚本',
+      canonicalSpec: {
+        version: 2,
+        market: {},
+        dataRequirements: {},
+        rules: [],
+      },
+    } as any)).rejects.toMatchObject({
+      message: 'codegen.invalid_semantic_input',
+      args: { field: 'canonicalSpec' },
+    })
+  })
 
   it('fills deterministic context before required semantic open slots when semanticPatch omits context', async () => {
     mockAi.chat.mockResolvedValueOnce({

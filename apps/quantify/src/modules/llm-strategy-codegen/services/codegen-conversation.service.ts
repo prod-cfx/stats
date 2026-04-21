@@ -3739,13 +3739,27 @@ export class CodegenConversationService {
   private resolveTestEngineConstraintPayload(
     dto: TestLlmCodegenEngineDto,
   ): CanonicalStrategySpec | Record<string, unknown> {
-    if (dto.semanticState && this.hasPersistedSemanticState(dto.semanticState as unknown as Prisma.JsonValue)) {
+    if (dto.semanticState) {
+      if (!this.isValidSemanticStateInput(dto.semanticState)) {
+        throw new DomainException('codegen.invalid_semantic_input', {
+          code: ErrorCode.BAD_REQUEST,
+          status: HttpStatus.BAD_REQUEST,
+          args: { field: 'semanticState' },
+        })
+      }
       const semanticState = dto.semanticState as unknown as SemanticState
       const normalization = this.buildNormalizationFromSemanticState(semanticState)
       return this.buildCanonicalSpecForConversation({}, normalization, semanticState)
     }
 
-    if (dto.canonicalSpec && typeof dto.canonicalSpec === 'object' && !Array.isArray(dto.canonicalSpec)) {
+    if (dto.canonicalSpec) {
+      if (!this.isCanonicalSpecV2Input(dto.canonicalSpec)) {
+        throw new DomainException('codegen.invalid_semantic_input', {
+          code: ErrorCode.BAD_REQUEST,
+          status: HttpStatus.BAD_REQUEST,
+          args: { field: 'canonicalSpec' },
+        })
+      }
       return dto.canonicalSpec
     }
 
@@ -3754,6 +3768,70 @@ export class CodegenConversationService {
       status: HttpStatus.BAD_REQUEST,
       args: { missingFields: ['semanticState'] },
     })
+  }
+
+  private isValidSemanticStateInput(payload: Record<string, unknown>): boolean {
+    const contextSlots = payload.contextSlots as Record<string, unknown> | undefined
+    return this.hasPersistedSemanticState(payload as unknown as Prisma.JsonValue)
+      && Array.isArray(payload.normalizationNotes)
+      && typeof payload.updatedAt === 'string'
+      && Boolean(contextSlots)
+      && typeof contextSlots === 'object'
+      && !Array.isArray(contextSlots)
+      && typeof contextSlots.exchange !== 'undefined'
+      && typeof contextSlots.symbol !== 'undefined'
+      && typeof contextSlots.marketType !== 'undefined'
+      && typeof contextSlots.timeframe !== 'undefined'
+      && (payload.triggers as unknown[]).every(item => this.hasSemanticOpenSlots(item))
+      && (payload.risk as unknown[]).every(item => this.hasSemanticOpenSlots(item))
+      && (
+        payload.position === null
+        || (
+          Boolean(payload.position)
+          && typeof payload.position === 'object'
+          && !Array.isArray(payload.position)
+          && (
+            typeof (payload.position as Record<string, unknown>).openSlots === 'undefined'
+            || Array.isArray((payload.position as Record<string, unknown>).openSlots)
+          )
+        )
+      )
+  }
+
+  private hasSemanticOpenSlots(item: unknown): boolean {
+    return Boolean(item)
+      && typeof item === 'object'
+      && !Array.isArray(item)
+      && Array.isArray((item as Record<string, unknown>).openSlots)
+  }
+
+  private isCanonicalSpecV2Input(payload: Record<string, unknown>): boolean {
+    const market = payload.market as Record<string, unknown> | undefined
+    const dataRequirements = payload.dataRequirements as Record<string, unknown> | undefined
+    return payload.version === 2
+      && Boolean(market)
+      && typeof market === 'object'
+      && !Array.isArray(market)
+      && typeof market.symbol === 'string'
+      && typeof market.marketType === 'string'
+      && Boolean(dataRequirements)
+      && typeof dataRequirements === 'object'
+      && !Array.isArray(dataRequirements)
+      && Array.isArray(dataRequirements.requiredTimeframes)
+      && Array.isArray(payload.rules)
+      && payload.rules.length > 0
+      && payload.rules.every(rule => this.isCanonicalSpecV2RuleInput(rule))
+  }
+
+  private isCanonicalSpecV2RuleInput(rule: unknown): boolean {
+    return Boolean(rule)
+      && typeof rule === 'object'
+      && !Array.isArray(rule)
+      && typeof (rule as Record<string, unknown>).phase === 'string'
+      && Boolean((rule as Record<string, unknown>).condition)
+      && typeof (rule as Record<string, unknown>).condition === 'object'
+      && !Array.isArray((rule as Record<string, unknown>).condition)
+      && Array.isArray((rule as Record<string, unknown>).actions)
   }
 
   private resolveChecklistMissingFields(checklist: ChecklistPayload): string[] {
