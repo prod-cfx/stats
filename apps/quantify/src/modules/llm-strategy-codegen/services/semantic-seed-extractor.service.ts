@@ -605,8 +605,8 @@ export class SemanticSeedExtractorService {
   }
 
   private extractSymbol(text: string): string | null {
-    const match = text.match(/\b([A-Z0-9]{2,20}(?:USDT|USDC|USD))\b/u)
-    return match?.[1] ?? null
+    const match = text.match(/\b([A-Z0-9]{2,20}(?:USDT|USDC|USD))\b/iu)
+    return match?.[1]?.toUpperCase() ?? null
   }
 
   private extractFirstTimeframe(text: string): string | null {
