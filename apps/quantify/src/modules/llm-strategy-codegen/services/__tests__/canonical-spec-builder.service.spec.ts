@@ -1,5 +1,5 @@
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
-import { CodegenConversationService } from '../codegen-conversation.service'
+import { SemanticSeedExtractorService } from '../semantic-seed-extractor.service'
 import { StrategyIntentNormalizerService } from '../strategy-intent-normalizer.service'
 
 describe('canonicalSpecBuilderService', () => {
@@ -322,14 +322,18 @@ describe('canonicalSpecBuilderService', () => {
     ]))
   })
 
-  it('normalizes single-trade sizing language into positionPct', () => {
-    const conversationService = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+  it('normalizes single-trade sizing language into semantic position sizing', () => {
+    const extractor = new SemanticSeedExtractorService()
 
-    const checklist = (conversationService as any).inferChecklistFromMessage(
+    const semanticPatch = extractor.extract(
       '在 OKX 现货市场交易 BTCUSDT，单笔使用 10% 资金',
     )
 
-    expect(checklist.riskRules?.positionPct).toBe(10)
+    expect(semanticPatch.position).toEqual({
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+    })
   })
 
   it('fills default entry-price basis for stop-loss and take-profit when checklist omits them', () => {

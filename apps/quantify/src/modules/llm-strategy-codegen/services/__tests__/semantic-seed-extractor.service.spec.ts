@@ -109,6 +109,16 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch).not.toHaveProperty('grid')
   })
 
+  it('extracts single-trade fund sizing into semantic position sizing', () => {
+    const patch = service.extract('在 OKX 现货市场交易 BTCUSDT，单笔使用 10% 资金')
+
+    expect(patch.position).toEqual({
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+    })
+  })
+
   it('extracts EMA crossover semantics into the existing cross-over atoms', () => {
     const patch = service.extract('EMA7 上穿 EMA21 做多；EMA7 下穿 EMA21 平多；单笔 10%。')
 

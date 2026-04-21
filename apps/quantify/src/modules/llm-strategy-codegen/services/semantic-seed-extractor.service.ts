@@ -175,8 +175,10 @@ export class SemanticSeedExtractorService {
   ): NonNullable<CodegenSemanticPatch['position']> | null {
     const percent = this.extractPercent(text, [
       /单笔\s*(\d+(?:\.\d+)?)\s*%/u,
+      /单笔\s*(?:使用|用|投入)?\s*(\d+(?:\.\d+)?)\s*%\s*(?:资金|仓位)?/u,
       /仓位\s*(\d+(?:\.\d+)?)\s*%/u,
       /(\d+(?:\.\d+)?)\s*%\s*仓位/u,
+      /(\d+(?:\.\d+)?)\s*%\s*资金/u,
       /每笔\s*(\d+(?:\.\d+)?)\s*%/u,
     ])
 
