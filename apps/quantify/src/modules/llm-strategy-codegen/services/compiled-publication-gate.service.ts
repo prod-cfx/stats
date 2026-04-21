@@ -196,18 +196,16 @@ export class CompiledPublicationGateService {
   }
 
   private buildRuntimeExecutionSemantics(ast: StrategyAstV1): string[] {
-    const counts = new Map<'entry' | 'exit' | 'rebalance', number>()
-
-    return ast.decisionPrograms.flatMap((program) => {
+    const firstMarkedProgram = ast.decisionPrograms.find((program) => {
       const markerSource = `${program.sourceRef} ${program.id}`
-      if (!ON_START_SOURCE_REF_PATTERN.test(markerSource)) {
-        return []
-      }
-
-      const nextCount = (counts.get(program.phase) ?? 0) + 1
-      counts.set(program.phase, nextCount)
-      return [`on_start.${program.phase}.${this.resolveSemanticLabel(nextCount)}`]
+      return ON_START_SOURCE_REF_PATTERN.test(markerSource)
     })
+
+    if (!firstMarkedProgram) {
+      return []
+    }
+
+    return [`on_start.${firstMarkedProgram.phase}.${this.resolveSemanticLabel(1)}`]
   }
 
   private resolveSemanticLabel(index: number): string {

@@ -183,7 +183,7 @@ describe('strategyRuntimeExecutionStateService', () => {
     })
   })
 
-  it('loads only ready executable states after consumed failed and cooldown transitions', async () => {
+  it('collapses multiple explicit snapshot semantics into a single executable runtime state', async () => {
     const { service, repository } = createService()
     const snapshot = createSnapshot([
       { id: 'entry-primary', phase: 'entry' },
@@ -199,27 +199,6 @@ describe('strategyRuntimeExecutionStateService', () => {
       snapshot,
     })
 
-    await repository.markConsumed({
-      strategyInstanceId: 'inst-1',
-      publishedSnapshotId: 'snap-1',
-      executionSemanticKey: 'on_start.entry.entry-primary',
-    })
-    await repository.markFailed({
-      strategyInstanceId: 'inst-1',
-      publishedSnapshotId: 'snap-1',
-      executionSemanticKey: 'on_start.exit.exit-primary',
-      failureReason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
-      failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
-    })
-    await repository.markCooldown({
-      strategyInstanceId: 'inst-1',
-      publishedSnapshotId: 'snap-1',
-      executionSemanticKey: 'on_start.rebalance.rebalance-primary',
-      failureReason: 'COOLDOWN_AFTER_FAILURE',
-      failureCode: 'COOLDOWN_AFTER_FAILURE',
-      cooldownUntil: new Date('2026-04-20T09:00:00.000Z'),
-    })
-
     const executableStates = await service.loadExecutableStates({
       strategyInstanceId: 'inst-1',
       publishedSnapshotId: 'snap-1',
@@ -228,7 +207,7 @@ describe('strategyRuntimeExecutionStateService', () => {
 
     expect(executableStates).toHaveLength(1)
     expect(executableStates[0]).toMatchObject({
-      executionSemanticKey: 'on_start.entry.entry-secondary',
+      executionSemanticKey: 'on_start.entry.entry-primary',
       status: 'ready',
     })
   })

@@ -323,7 +323,7 @@ describe('signalGeneratorService coordinator behavior', () => {
       {
         id: 'instance-1',
         llmModel: 'gpt-5.4',
-        params: { symbol: 'BTCUSDT', timeframe: '15m' },
+        params: {},
         metadata: {
           bindingSource: 'PUBLISHED_SNAPSHOT',
           publishedSnapshotId: 'snapshot-1',
@@ -399,7 +399,7 @@ describe('signalGeneratorService coordinator behavior', () => {
       {
         id: 'instance-1',
         llmModel: 'gpt-5.4',
-        params: { symbol: 'BTCUSDT', timeframe: '15m' },
+        params: {},
         metadata: {
           bindingSource: 'PUBLISHED_SNAPSHOT',
           publishedSnapshotId: 'snapshot-1',
@@ -427,6 +427,155 @@ describe('signalGeneratorService coordinator behavior', () => {
       failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
     })
     expect(runtimeExecutionStateRepository.markConsumed).not.toHaveBeenCalled()
+  })
+
+  it('marks a ready on_start snapshot semantic as failed when the bound symbol cannot be loaded', async () => {
+    const publishedSnapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyInstanceId: 'source-instance-1',
+        strategyTemplateId: 'template-1',
+        scriptSnapshot: 'return "snapshot-script"',
+        astSnapshot: {
+          decisionPrograms: [{ id: 'entry-primary', phase: 'entry' }],
+        },
+        paramsSnapshot: {
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+        },
+      }),
+    }
+    const { generatorRepository, runtimeExecutionStateRepository, runtimeExecutionStateService, service } = createService({
+      publishedSnapshotsRepository,
+      generatorRepository: {
+        findSymbolByCode: jest.fn().mockResolvedValue(null),
+      },
+      runtimeExecutionStateService: {
+        buildExecutionSemanticKeysFromSnapshot: jest.fn().mockReturnValue(['on_start.entry.primary']),
+        loadExecutableStates: jest.fn().mockResolvedValue([{
+          strategyInstanceId: 'instance-1',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+          executionSemanticKey: 'on_start.entry.primary',
+          status: 'ready',
+        }]),
+      },
+    })
+
+    jest.spyOn(service as any, 'isStrategyLocked').mockResolvedValue(false)
+    jest.spyOn(service as any, 'handleStrategyFailure').mockResolvedValue(undefined)
+
+    await (service as any).processStrategyInstance(
+      {
+        id: 'instance-1',
+        llmModel: 'gpt-5.4',
+        params: { symbol: 'BTCUSDT', timeframe: '15m' },
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+        },
+        strategyTemplate: {
+          id: 'template-1',
+          promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+          script: 'return \"template-script\"',
+        },
+      },
+      config,
+    )
+
+    expect(generatorRepository.findSymbolByCode).toHaveBeenCalledWith('BTCUSDT')
+    expect(runtimeExecutionStateRepository.markFailed).toHaveBeenCalledWith({
+      strategyInstanceId: 'instance-1',
+      publishedSnapshotId: 'snapshot-1',
+      executionSemanticKey: 'on_start.entry.primary',
+      failureReason: 'SYMBOL_NOT_FOUND',
+      failureCode: 'SYMBOL_NOT_FOUND',
+    })
+    expect(runtimeExecutionStateRepository.markConsumed).not.toHaveBeenCalled()
+  })
+
+  it('consumes a ready on_start snapshot semantic when cooldown prevents creating a duplicate signal', async () => {
+    const publishedSnapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyInstanceId: 'source-instance-1',
+        strategyTemplateId: 'template-1',
+        scriptSnapshot: 'return "snapshot-script"',
+        astSnapshot: {
+          decisionPrograms: [{ id: 'entry-primary', phase: 'entry' }],
+        },
+        paramsSnapshot: {
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+        },
+      }),
+    }
+    const { runtimeExecutionStateRepository, runtimeExecutionStateService, service } = createService({
+      publishedSnapshotsRepository,
+      generatorRepository: {
+        findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-1', code: 'BTCUSDT' }),
+      },
+      runtimeExecutionStateService: {
+        buildExecutionSemanticKeysFromSnapshot: jest.fn().mockReturnValue(['on_start.entry.primary']),
+        loadExecutableStates: jest.fn().mockResolvedValue([{
+          strategyInstanceId: 'instance-1',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+          executionSemanticKey: 'on_start.entry.primary',
+          status: 'ready',
+        }]),
+      },
+    })
+
+    jest.spyOn(service as any, 'isStrategyLocked').mockResolvedValue(false)
+    jest.spyOn(service as any, 'loadLatestBar').mockResolvedValue({
+      close: 100,
+      time: new Date('2026-04-20T09:00:00.000Z'),
+      timestamp: Date.now(),
+    })
+    jest.spyOn(service as any, 'generateSignalWithAi').mockResolvedValue({
+      signalType: 'ENTRY',
+      direction: 'BUY',
+      confidence: 88,
+      entryPrice: 100,
+      stopLoss: 90,
+      takeProfit: 110,
+      rawResponse: '{"direction":"BUY"}',
+    })
+    jest.spyOn(service as any, 'createSignalWithCooldownAndLock').mockResolvedValue({
+      created: false,
+      signalId: null,
+    })
+    jest.spyOn(service as any, 'resetStrategyFailure').mockResolvedValue(undefined)
+
+    await (service as any).processStrategyInstance(
+      {
+        id: 'instance-1',
+        llmModel: 'gpt-5.4',
+        params: { symbol: 'BTCUSDT', timeframe: '15m' },
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+        },
+        strategyTemplate: {
+          id: 'template-1',
+          promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+          script: 'return \"template-script\"',
+        },
+      },
+      config,
+    )
+
+    expect(runtimeExecutionStateRepository.markConsumed).toHaveBeenCalledWith({
+      strategyInstanceId: 'instance-1',
+      publishedSnapshotId: 'snapshot-1',
+      executionSemanticKey: 'on_start.entry.primary',
+    })
+    expect(runtimeExecutionStateRepository.markFailed).not.toHaveBeenCalled()
   })
 
   it('does not rerun a published snapshot when no ready on_start semantic remains', async () => {

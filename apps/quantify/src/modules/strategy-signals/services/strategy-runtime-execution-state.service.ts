@@ -47,7 +47,7 @@ export class StrategyRuntimeExecutionStateService {
   buildExecutionSemanticKeysFromSnapshot(snapshot: unknown): string[] {
     const explicitKeys = this.readExplicitRuntimeExecutionSemantics(snapshot)
     if (!explicitKeys.length) return []
-    return [...new Set(explicitKeys)]
+    return [explicitKeys[0]!]
   }
 
   async initializeStatesForDeploy(input: InitializeRuntimeExecutionStatesInput): Promise<string[]> {

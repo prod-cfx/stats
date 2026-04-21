@@ -1038,6 +1038,10 @@ export class SignalGeneratorService {
         `Published snapshot runtime params missing symbol/timeframe for instance ${instance.id}, skipping generation`,
       )
       await this.handleStrategyFailure(instance.id, config)
+      await this.markRuntimeExecutionStateFailed(activeRuntimeState, {
+        failureReason: 'SNAPSHOT_RUNTIME_PARAMS_MISSING',
+        failureCode: 'SNAPSHOT_RUNTIME_PARAMS_MISSING',
+      })
       this.telemetry.recordGeneration({
         strategyId: strategy.id,
         symbolCode: symbolCode ?? 'N/A',
@@ -1051,6 +1055,10 @@ export class SignalGeneratorService {
     if (!symbol) {
       this.logger.warn(`Symbol ${symbolCode} not found for published snapshot runtime on instance ${instance.id}`)
       await this.handleStrategyFailure(instance.id, config)
+      await this.markRuntimeExecutionStateFailed(activeRuntimeState, {
+        failureReason: 'SYMBOL_NOT_FOUND',
+        failureCode: 'SYMBOL_NOT_FOUND',
+      })
       this.telemetry.recordGeneration({
         strategyId: strategy.id,
         symbolCode,
@@ -1076,15 +1084,10 @@ export class SignalGeneratorService {
 
     if (!aiPayload) {
       await this.handleStrategyFailure(instance.id, config)
-      if (activeRuntimeState && this.runtimeExecutionStateRepository) {
-        await this.runtimeExecutionStateRepository.markFailed({
-          strategyInstanceId: activeRuntimeState.strategyInstanceId,
-          publishedSnapshotId: activeRuntimeState.publishedSnapshotId,
-          executionSemanticKey: activeRuntimeState.executionSemanticKey,
-          failureReason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
-          failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
-        })
-      }
+      await this.markRuntimeExecutionStateFailed(activeRuntimeState, {
+        failureReason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+        failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+      })
       this.telemetry.recordGeneration({
         strategyId: strategy.id,
         symbolCode,
@@ -1096,7 +1099,7 @@ export class SignalGeneratorService {
 
     await this.resetStrategyFailure(instance.id)
 
-    await this.createSignalWithCooldownAndLock(
+    const createdSignal = await this.createSignalWithCooldownAndLock(
       instance,
       strategy,
       {
@@ -1112,14 +1115,14 @@ export class SignalGeneratorService {
       options.skipCooldown ?? false,
       activeRuntimeState && this.runtimeExecutionStateRepository
         ? async () => {
-            await this.runtimeExecutionStateRepository!.markConsumed({
-              strategyInstanceId: activeRuntimeState.strategyInstanceId,
-              publishedSnapshotId: activeRuntimeState.publishedSnapshotId,
-              executionSemanticKey: activeRuntimeState.executionSemanticKey,
-            })
+            await this.markRuntimeExecutionStateConsumed(activeRuntimeState)
           }
         : undefined,
     )
+
+    if (!createdSignal.created) {
+      await this.markRuntimeExecutionStateConsumed(activeRuntimeState)
+    }
   }
 
   private async resolveRuntimeStrategySource(
@@ -1244,6 +1247,48 @@ export class SignalGeneratorService {
       publishedSnapshotId: readyState.publishedSnapshotId,
       executionSemanticKey: readyState.executionSemanticKey,
     }
+  }
+
+  private async markRuntimeExecutionStateConsumed(
+    activeRuntimeState: {
+      strategyInstanceId: string
+      publishedSnapshotId: string
+      executionSemanticKey: string
+    } | null,
+  ): Promise<void> {
+    if (!activeRuntimeState || !this.runtimeExecutionStateRepository) {
+      return
+    }
+
+    await this.runtimeExecutionStateRepository.markConsumed({
+      strategyInstanceId: activeRuntimeState.strategyInstanceId,
+      publishedSnapshotId: activeRuntimeState.publishedSnapshotId,
+      executionSemanticKey: activeRuntimeState.executionSemanticKey,
+    })
+  }
+
+  private async markRuntimeExecutionStateFailed(
+    activeRuntimeState: {
+      strategyInstanceId: string
+      publishedSnapshotId: string
+      executionSemanticKey: string
+    } | null,
+    args: {
+      failureReason: string
+      failureCode: string
+    },
+  ): Promise<void> {
+    if (!activeRuntimeState || !this.runtimeExecutionStateRepository) {
+      return
+    }
+
+    await this.runtimeExecutionStateRepository.markFailed({
+      strategyInstanceId: activeRuntimeState.strategyInstanceId,
+      publishedSnapshotId: activeRuntimeState.publishedSnapshotId,
+      executionSemanticKey: activeRuntimeState.executionSemanticKey,
+      failureReason: args.failureReason,
+      failureCode: args.failureCode,
+    })
   }
 
   private readSnapshotBinding(metadata: unknown): {
