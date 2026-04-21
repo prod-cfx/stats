@@ -222,6 +222,33 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('keeps crossover and non-crossover clauses local within the same semicolon segment', () => {
+    const patch = service.extract('EMA7 上穿 EMA21 做多，价格跌破 MA50 平多；单笔 10%。')
+
+    expect(patch).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.cross_over',
+          phase: 'entry',
+          sideScope: 'long',
+        }),
+        expect.objectContaining({
+          key: 'indicator.below',
+          phase: 'exit',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            'reference.period': 50,
+          }),
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'open_long' }),
+        expect.objectContaining({ key: 'close_long' }),
+      ]),
+    }))
+  })
+
   it('prefers explicit open-short wording over generic sell wording', () => {
     const patch = service.extract('EMA7 上穿 EMA21 卖出开空；单笔 10%。')
 

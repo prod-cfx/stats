@@ -71,10 +71,7 @@ export class SemanticSeedExtractorService {
     const segments = this.splitSegments(text)
 
     for (const segment of segments) {
-      const handledCross = this.pushMovingAverageCrossTrigger(segment, triggers, seen)
-      if (handledCross) {
-        continue
-      }
+      this.pushMovingAverageCrossTrigger(segment, triggers, seen)
       this.pushMovingAverageTrigger(segment, triggers, seen)
       this.pushBollingerTriggers(segment, triggers, seen)
       this.pushGridTrigger(segment, triggers, seen)
@@ -201,6 +198,7 @@ export class SemanticSeedExtractorService {
 
     for (const clause of clauses) {
       if (!/(?:MA|EMA)\s*\d+|均线/u.test(clause)) continue
+      if (/(?:上穿|下穿|cross over|cross under|金叉|死叉)/iu.test(clause)) continue
       const referencePeriod = this.extractNumber(clause, [/(?:MA|EMA)\s*(\d{1,4})/iu, /均线\s*(\d{1,4})/u])
       if (referencePeriod === null) continue
 
