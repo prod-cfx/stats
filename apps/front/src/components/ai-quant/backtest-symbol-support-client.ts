@@ -11,9 +11,9 @@ export interface BacktestSymbolSupportResult {
 
 export interface CheckBacktestSymbolSupportInput {
   exchange: string
-  marketType?: 'spot' | 'perp'
+  marketType: 'spot' | 'perp'
   symbol: string
-  baseTimeframe?: string
+  baseTimeframe: string
 }
 
 function isSupportedStatus(value: unknown): value is BacktestSymbolSupportStatus {

@@ -26,6 +26,17 @@ jest.mock('@/hooks/use-auth', () => ({
   }),
 }))
 
+jest.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, options?: Record<string, unknown>) => {
+      if (key === 'aiQuant.messages.backtestSymbolUnavailable') {
+        return `Backtesting is not available for ${String(options?.symbol ?? '')} yet. Please confirm that historical market data for this symbol has been enabled.`
+      }
+      return key
+    },
+  }),
+}))
+
 jest.mock('@/components/account/AiQuantStrategyDetail', () => ({
   AiQuantStrategyDetail: ({
     onRunBacktest,
@@ -227,6 +238,12 @@ describe('StrategyDetailPageClient', () => {
         },
       }),
     )
+    expect(mockCheckBacktestSymbolSupport).toHaveBeenCalledWith({
+      exchange: 'binance',
+      marketType: 'perp',
+      symbol: 'BTCUSDT',
+      baseTimeframe: '3m',
+    })
     expect(mockCreateBacktestJob).toHaveBeenCalledWith(
       mockBuildBacktestPayload.mock.results[0]?.value,
     )
@@ -235,6 +252,33 @@ describe('StrategyDetailPageClient', () => {
     )
     expect(mockGetBacktestJob).not.toHaveBeenCalled()
     expect(container.querySelector('[data-testid="backtest-error"]')?.textContent).toBe('')
+  })
+
+  it('shows localized not-supported detail-page backtest messaging in english', async () => {
+    mockCheckBacktestSymbolSupport.mockResolvedValue({
+      status: 'not_supported',
+      reasonCode: 'BACKTEST_SYMBOL_UNAVAILABLE',
+      args: { symbol: 'BTCUSDT' },
+    })
+
+    await act(async () => {
+      root.render(<StrategyDetailPageClient lng="en" id="inst-1" />)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(container.querySelector('[data-testid="backtest-error"]')?.textContent).toBe(
+      'Backtesting is not available for BTCUSDT yet. Please confirm that historical market data for this symbol has been enabled.',
+    )
+    expect(mockCreateBacktestJob).not.toHaveBeenCalled()
   })
 
   it('runs spot backtests from strategy detail without sending leverage', async () => {

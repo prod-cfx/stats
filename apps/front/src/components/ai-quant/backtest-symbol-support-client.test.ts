@@ -27,19 +27,28 @@ describe('backtest-symbol-support-client', () => {
 
     const result = await checkBacktestSymbolSupport({
       exchange: 'okx',
+      marketType: 'spot',
       symbol: 'ETHUSDC',
+      baseTimeframe: '15m',
     })
 
     expect(result).toEqual({ status: 'supported' })
     expect(mockPostBacktestSymbolSupportCheck).toHaveBeenCalledWith({
       exchange: 'okx',
+      marketType: 'spot',
       symbol: 'ETHUSDC',
+      baseTimeframe: '15m',
     })
   })
 
   it('rethrows auth errors from unified api layer', async () => {
     mockPostBacktestSymbolSupportCheck.mockRejectedValueOnce(new AuthenticationError('UNAUTHENTICATED'))
-    const request = checkBacktestSymbolSupport({ exchange: 'okx', symbol: 'ETHUSDC' })
+    const request = checkBacktestSymbolSupport({
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ETHUSDC',
+      baseTimeframe: '15m',
+    })
 
     await expect(request).rejects.toBeInstanceOf(AuthenticationError)
     await expect(request).rejects.toMatchObject({
@@ -50,7 +59,12 @@ describe('backtest-symbol-support-client', () => {
 
   it('rethrows ApiError from unified api layer', async () => {
     mockPostBacktestSymbolSupportCheck.mockRejectedValueOnce(new ApiError('Request timeout', 'API_TIMEOUT', 408))
-    const request = checkBacktestSymbolSupport({ exchange: 'okx', symbol: 'ETHUSDC' })
+    const request = checkBacktestSymbolSupport({
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ETHUSDC',
+      baseTimeframe: '15m',
+    })
 
     await expect(request).rejects.toBeInstanceOf(ApiError)
     await expect(request).rejects.toMatchObject({
@@ -63,7 +77,12 @@ describe('backtest-symbol-support-client', () => {
     mockPostBacktestSymbolSupportCheck.mockResolvedValueOnce({
       status: 'unexpected',
     } as never)
-    const request = checkBacktestSymbolSupport({ exchange: 'okx', symbol: 'ETHUSDC' })
+    const request = checkBacktestSymbolSupport({
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ETHUSDC',
+      baseTimeframe: '15m',
+    })
 
     await expect(request).rejects.toBeInstanceOf(ApiError)
     await expect(request).rejects.toMatchObject({
