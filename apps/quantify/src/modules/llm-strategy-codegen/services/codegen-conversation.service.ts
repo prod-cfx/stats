@@ -3318,6 +3318,7 @@ export class CodegenConversationService {
           ...(trigger.sideScope ? { sideScope: trigger.sideScope } : {}),
           status: 'locked',
           source: 'user_explicit',
+          ...(trigger.evidenceText ? { evidence: { text: trigger.evidenceText, source: 'user_explicit' as const } } : {}),
           openSlots: [],
         })
         if (!projected) {
@@ -3952,15 +3953,43 @@ export class CodegenConversationService {
     }
 
     if (trigger.phase === 'exit' && trigger.key === 'bollinger.touch_middle') {
-      const action = trigger.sideScope === 'short'
-        ? '平空'
-        : trigger.sideScope === 'long'
-          ? '平多'
-          : '平仓'
+      const action = this.resolveProjectedExitAction(trigger, {
+        long: '平多',
+        short: '平空',
+        generic: '平仓',
+      })
       return `价格回到布林带中轨(MA${period})时${action}`
     }
 
     return null
+  }
+
+  private resolveProjectedExitAction(
+    trigger: SemanticTriggerState,
+    labels: {
+      long: string
+      short: string
+      generic: string
+    },
+  ): string {
+    const evidenceText = trigger.evidence?.text?.trim() ?? ''
+    if (/平多/u.test(evidenceText)) {
+      return labels.long
+    }
+    if (/平空/u.test(evidenceText)) {
+      return labels.short
+    }
+    if (/平仓|离场|出场/u.test(evidenceText)) {
+      return labels.generic
+    }
+
+    if (trigger.sideScope === 'short') {
+      return labels.short
+    }
+    if (trigger.sideScope === 'long') {
+      return labels.long
+    }
+    return labels.generic
   }
 
   private readPositiveNumber(value: unknown): number | null {

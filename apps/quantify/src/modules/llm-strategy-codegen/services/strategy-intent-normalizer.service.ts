@@ -257,6 +257,7 @@ export class StrategyIntentNormalizerService {
           ...(stdDev !== null ? { stdDev } : {}),
         },
         resolutionHints: { confirmation: this.resolveBollingerConfirmationHint(rule) },
+        evidenceText: rule,
       })
     }
 
@@ -271,6 +272,7 @@ export class StrategyIntentNormalizerService {
           ...(stdDev !== null ? { stdDev } : {}),
         },
         resolutionHints: { confirmation: this.resolveBollingerConfirmationHint(rule) },
+        evidenceText: rule,
       })
     }
 
@@ -285,6 +287,7 @@ export class StrategyIntentNormalizerService {
           ...(stdDev !== null ? { stdDev } : {}),
         },
         resolutionHints: { confirmation: this.resolveBollingerConfirmationHint(rule) },
+        evidenceText: rule,
       })
     }
 
@@ -951,7 +954,7 @@ export class StrategyIntentNormalizerService {
   }
 
   private createClosedTrigger(
-    trigger: Omit<NormalizedTriggerAtom, 'closureStatus' | 'unresolvedSlots' | 'evidenceText'>,
+    trigger: Omit<NormalizedTriggerAtom, 'closureStatus' | 'unresolvedSlots'>,
   ): NormalizedTriggerAtom {
     return {
       ...trigger,
