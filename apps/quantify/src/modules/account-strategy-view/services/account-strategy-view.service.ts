@@ -9,7 +9,7 @@ import type { StrategySignalsRuntimeConfig } from '@/modules/strategy-signals/ty
 import type { ExchangeId, MarketType, UnifiedBalance } from '@/modules/trading/core/types'
 import { createHash } from 'node:crypto'
 import { ErrorCode } from '@ai/shared'
-import { HttpStatus, Injectable, Optional } from '@nestjs/common'
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { ConfigService } from '@nestjs/config'
 import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
@@ -67,6 +67,7 @@ interface StrategyAccountFallback {
 @Injectable()
 export class AccountStrategyViewService {
   private static readonly BEST_EFFORT_EXTERNAL_TIMEOUT_MS = 1_500
+  private readonly logger = new Logger(AccountStrategyViewService.name)
 
   constructor(
     private readonly repo: AccountStrategyViewRepository,
@@ -322,11 +323,19 @@ export class AccountStrategyViewService {
         snapshotHash: resolvedSnapshot.snapshotHash,
         compatibilityMetadata: resolvedSnapshot.compatibilityMetadata,
       })
-    } catch {
-      runtimeExecutionStateInvalid = true
-      resolvedSnapshot.compatibilityMetadata = {
-        ...(resolvedSnapshot.compatibilityMetadata ?? {}),
-        invalidBinding: true,
+    } catch (error) {
+      if (this.isRuntimeExecutionBindingMismatch(error)) {
+        runtimeExecutionStateInvalid = true
+        resolvedSnapshot.compatibilityMetadata = {
+          ...(resolvedSnapshot.compatibilityMetadata ?? {}),
+          invalidBinding: true,
+        }
+      } else {
+        this.logger.warn(
+          `Failed to load runtime execution states for strategy instance ${strategyInstanceId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
       }
     }
     const snapshotStrategyConfig = resolvedSnapshot.strategyConfig
@@ -541,6 +550,16 @@ export class AccountStrategyViewService {
       publishedSnapshotId: state.publishedSnapshotId,
       snapshotHash: state.snapshotHash,
     }))
+  }
+
+  private isRuntimeExecutionBindingMismatch(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false
+    }
+
+    return error.message === 'strategy_instance_mismatch'
+      || error.message === 'published_snapshot_mismatch'
+      || error.message === 'snapshot_hash_mismatch'
   }
 
   private async resolveBoundSnapshotDetail(input: {
