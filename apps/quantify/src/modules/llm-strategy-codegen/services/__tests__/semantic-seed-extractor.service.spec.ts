@@ -159,6 +159,31 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('keeps single-reference price-vs-reference wording as above/below atoms even with crossover words', () => {
+    const patch = service.extract('价格上穿 MA50 买入；单笔 10%。')
+
+    expect(patch).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.above',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            'reference.period': 50,
+          }),
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'open_long' }),
+      ]),
+    }))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'indicator.cross_over' }),
+      expect.objectContaining({ key: 'indicator.cross_under' }),
+    ]))
+  })
+
   it('maps short crossover wording to entry and exit by intent rather than direction', () => {
     const entryPatch = service.extract('EMA7 下穿 EMA21 做空；单笔 10%。')
     expect(entryPatch).toEqual(expect.objectContaining({
@@ -224,6 +249,33 @@ describe('SemanticSeedExtractorService', () => {
 
   it('keeps crossover and non-crossover clauses local within the same semicolon segment', () => {
     const patch = service.extract('EMA7 上穿 EMA21 做多，价格跌破 MA50 平多；单笔 10%。')
+
+    expect(patch).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.cross_over',
+          phase: 'entry',
+          sideScope: 'long',
+        }),
+        expect.objectContaining({
+          key: 'indicator.below',
+          phase: 'exit',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            'reference.period': 50,
+          }),
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'open_long' }),
+        expect.objectContaining({ key: 'close_long' }),
+      ]),
+    }))
+  })
+
+  it('keeps mixed crossover and MA exit clauses local within the same semicolon segment', () => {
+    const patch = service.extract('EMA7 上穿 EMA21 做多，价格下穿 MA50 平多；单笔 10%。')
 
     expect(patch).toEqual(expect.objectContaining({
       triggers: expect.arrayContaining([

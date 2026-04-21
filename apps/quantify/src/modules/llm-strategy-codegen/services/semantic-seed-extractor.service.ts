@@ -198,7 +198,7 @@ export class SemanticSeedExtractorService {
 
     for (const clause of clauses) {
       if (!/(?:MA|EMA)\s*\d+|均线/u.test(clause)) continue
-      if (/(?:上穿|下穿|cross over|cross under|金叉|死叉)/iu.test(clause)) continue
+      if (this.isTrueMovingAverageCrossClause(clause)) continue
       const referencePeriod = this.extractNumber(clause, [/(?:MA|EMA)\s*(\d{1,4})/iu, /均线\s*(\d{1,4})/u])
       if (referencePeriod === null) continue
 
@@ -275,24 +275,20 @@ export class SemanticSeedExtractorService {
     }
   }
 
-  private pushMovingAverageCrossTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): boolean {
+  private pushMovingAverageCrossTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
     const clauses = segment.includes('，') || segment.includes(',')
       ? segment.split(/[，,]/u).map(clause => clause.trim()).filter(Boolean)
       : [segment]
 
-    let handled = false
     for (const clause of clauses) {
-      if (!/(?:\bEMA\s*\d+|\bMA\s*\d+)/iu.test(clause)) continue
-      if (!/上穿|下穿|cross over|cross under|金叉|死叉/iu.test(clause)) continue
+      if (!this.isTrueMovingAverageCrossClause(clause)) continue
 
       const periods = Array.from(clause.matchAll(/\b(?:EMA|MA)\s*(\d{1,4})/giu))
         .map(match => Number(match[1]))
         .filter(value => Number.isFinite(value))
-      if (periods.length < 2) continue
+      if (periods.length < 2 && !/金叉|死叉/iu.test(clause)) continue
 
       const indicator = /\bEMA\s*\d+/iu.test(clause) ? 'ema' : 'ma'
-      const fastPeriod = periods[0]
-      const slowPeriod = periods[1]
       const intent = this.resolveTradeIntent(clause)
       if (!intent) continue
 
@@ -303,11 +299,10 @@ export class SemanticSeedExtractorService {
           sideScope: intent.sideScope,
           params: {
             indicator,
-            fastPeriod,
-            slowPeriod,
+            ...(periods[0] !== undefined ? { fastPeriod: periods[0] } : {}),
+            ...(periods[1] !== undefined ? { slowPeriod: periods[1] } : {}),
           },
         })
-        handled = true
       }
 
       if (/下穿|cross under|死叉/iu.test(clause)) {
@@ -317,15 +312,12 @@ export class SemanticSeedExtractorService {
           sideScope: intent.sideScope,
           params: {
             indicator,
-            fastPeriod,
-            slowPeriod,
+            ...(periods[0] !== undefined ? { fastPeriod: periods[0] } : {}),
+            ...(periods[1] !== undefined ? { slowPeriod: periods[1] } : {}),
           },
         })
-        handled = true
       }
     }
-
-    return handled
   }
 
   private pushGridTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
@@ -449,6 +441,20 @@ export class SemanticSeedExtractorService {
     }
 
     return null
+  }
+
+  private isTrueMovingAverageCrossClause(clause: string): boolean {
+    if (/金叉|死叉/iu.test(clause)) {
+      return true
+    }
+
+    const hasCrossWord = /上穿|下穿|cross over|cross under/iu.test(clause)
+    if (!hasCrossWord) {
+      return false
+    }
+
+    const referenceCount = Array.from(clause.matchAll(/\b(?:EMA|MA)\s*(\d{1,4})/giu)).length
+    return referenceCount >= 2
   }
 
   private hasExplicitPriceChangeContext(segment: string): boolean {
