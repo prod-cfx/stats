@@ -126,9 +126,7 @@ describe('SemanticSeedExtractorService', () => {
       symbol: 'BTCUSDT',
       timeframe: '15m',
     }))
-    expect(patch.contextSlots).not.toEqual(expect.objectContaining({
-      exchange: 'bybit',
-    }))
+    expect(patch.contextSlots).not.toHaveProperty('exchange')
   })
 
   it('normalizes lowercase full trading-pair symbols', () => {
@@ -706,6 +704,32 @@ describe('SemanticSeedExtractorService', () => {
     ]))
     expect(patch.actions).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'open_short' }),
+    ]))
+  })
+
+  it('narrows generic Bollinger middle close wording when position side is explicit', () => {
+    const shortPatch = service.extract('做空时价格回到布林带中轨平仓；单笔 10%。')
+    expect(shortPatch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'bollinger.touch_middle',
+        phase: 'exit',
+        sideScope: 'short',
+      }),
+    ]))
+    expect(shortPatch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'close_short' }),
+    ]))
+    expect(shortPatch.actions).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+
+    const longPatch = service.extract('做多时价格回到布林带中轨平仓；单笔 10%。')
+    expect(longPatch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'bollinger.touch_middle',
+        phase: 'exit',
+        sideScope: 'long',
+      }),
     ]))
   })
 

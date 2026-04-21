@@ -312,8 +312,8 @@ export class SemanticSeedExtractorService {
   }
 
   private resolveBollingerMiddleSideScope(clause: string): 'long' | 'short' | 'both' {
-    if (/平空|买回空单|买回平空/u.test(clause)) return 'short'
-    if (/平多|卖出多单|卖出平多/u.test(clause)) return 'long'
+    if (/平空|买回空单|买回平空|做空.*平仓|空单.*平仓/u.test(clause)) return 'short'
+    if (/平多|卖出多单|卖出平多|做多.*平仓|多单.*平仓/u.test(clause)) return 'long'
     return 'both'
   }
 
