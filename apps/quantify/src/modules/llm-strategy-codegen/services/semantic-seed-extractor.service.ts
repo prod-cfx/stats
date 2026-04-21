@@ -140,7 +140,9 @@ export class SemanticSeedExtractorService {
 
     const stopLoss = this.extractPercent(text, [
       /亏损\s*(\d+(?:\.\d+)?)\s*%/u,
+      /亏损\s*百分之?\s*(\d+(?:\.\d+)?)/u,
       /(\d+(?:\.\d+)?)\s*%\s*(?:止损|亏损)/u,
+      /百分之?\s*(\d+(?:\.\d+)?)\s*(?:止损|亏损)/u,
     ])
     if (stopLoss !== null) {
       risk.push({
@@ -154,7 +156,9 @@ export class SemanticSeedExtractorService {
 
     const takeProfit = this.extractPercent(text, [
       /盈利\s*(\d+(?:\.\d+)?)\s*%/u,
+      /盈利\s*百分之?\s*(\d+(?:\.\d+)?)/u,
       /(\d+(?:\.\d+)?)\s*%\s*(?:止盈|盈利)/u,
+      /百分之?\s*(\d+(?:\.\d+)?)\s*(?:止盈|盈利)/u,
     ])
     if (takeProfit !== null) {
       risk.push({
@@ -176,10 +180,14 @@ export class SemanticSeedExtractorService {
     const percent = this.extractPercent(text, [
       /单笔\s*(\d+(?:\.\d+)?)\s*%/u,
       /单笔\s*(?:使用|用|投入)?\s*(\d+(?:\.\d+)?)\s*%\s*(?:资金|仓位)?/u,
+      /单笔\s*(?:使用|用|投入)?\s*百分之?\s*(\d+(?:\.\d+)?)\s*(?:资金|仓位)?/u,
       /仓位\s*(\d+(?:\.\d+)?)\s*%/u,
+      /仓位\s*百分之?\s*(\d+(?:\.\d+)?)/u,
       /(\d+(?:\.\d+)?)\s*%\s*仓位/u,
       /(\d+(?:\.\d+)?)\s*%\s*资金/u,
+      /百分之?\s*(\d+(?:\.\d+)?)\s*(?:仓位|资金)/u,
       /每笔\s*(\d+(?:\.\d+)?)\s*%/u,
+      /每笔\s*百分之?\s*(\d+(?:\.\d+)?)/u,
     ])
 
     if (percent === null) {
@@ -376,14 +384,14 @@ export class SemanticSeedExtractorService {
   }
 
   private pushPercentChangeTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
-    if (!/%/.test(segment)) return
+    if (!/%|百分/u.test(segment)) return
     if (!this.hasExplicitPriceChangeContext(segment)) return
     if (!this.hasExplicitPriceChangeDirection(segment)) return
 
     const intent = this.resolveTradeIntent(segment)
     if (!intent) return
 
-    const valuePct = this.extractPercent(segment, [/(\d+(?:\.\d+)?)\s*%/u])
+    const valuePct = this.extractPercent(segment, [/(\d+(?:\.\d+)?)\s*%/u, /百分之?\s*(\d+(?:\.\d+)?)/u])
     if (valuePct === null) return
 
     const direction = /下跌|跌|回落|回调/u.test(segment) ? -Math.abs(valuePct) : Math.abs(valuePct)
@@ -512,6 +520,7 @@ export class SemanticSeedExtractorService {
 
   private hasExplicitPriceChangeContext(segment: string): boolean {
     return /(相对|上一根|前一根|前收盘|收盘价|开仓均价|入场价|成本价|持仓盈亏|盈亏|pnl|收益率)/iu.test(segment)
+      || /(?:\d{1,2}\s*(?:m|h|d|分钟|分|小时|时|天|日)).*(?:上涨|下跌|涨|跌).*(?:%|百分)/iu.test(segment)
   }
 
   private hasExplicitPriceChangeDirection(segment: string): boolean {
@@ -565,9 +574,20 @@ export class SemanticSeedExtractorService {
   }
 
   private extractFirstTimeframe(text: string): string | null {
-    const match = text.match(/\b(\d{1,2})(m|h|d)\b/iu)
-    if (!match?.[1] || !match[2]) return null
-    return `${match[1]}${match[2].toLowerCase()}`
+    const compactMatch = text.match(/\b(\d{1,2})(m|h|d)\b/iu)
+    if (compactMatch?.[1] && compactMatch[2]) {
+      return `${compactMatch[1]}${compactMatch[2].toLowerCase()}`
+    }
+
+    const chineseMatch = text.match(/(\d{1,2})\s*(分钟|分|小时|时|天|日)/u)
+    if (!chineseMatch?.[1] || !chineseMatch[2]) return null
+    const unit = chineseMatch[2]
+    const suffix = unit === '分钟' || unit === '分'
+      ? 'm'
+      : unit === '小时' || unit === '时'
+        ? 'h'
+        : 'd'
+    return `${chineseMatch[1]}${suffix}`
   }
 
   private extractNumber(text: string, patterns: RegExp[]): number | null {
