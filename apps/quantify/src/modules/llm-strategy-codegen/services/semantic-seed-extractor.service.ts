@@ -469,6 +469,12 @@ export class SemanticSeedExtractorService {
     const refs = Array.from(normalized.matchAll(/(?:EMA|MA)(\d{1,4})/giu))
       .map(match => Number(match[1]))
       .filter(value => Number.isFinite(value))
+    const barePairMatch = normalized.match(/(\d{1,4})[\/和与、](\d{1,4})均线/)
+      ?? normalized.match(/(\d{1,4})均线.*?(\d{1,4})均线/)
+    const barePairRefs = barePairMatch
+      ? [Number(barePairMatch[1]), Number(barePairMatch[2])].filter(value => Number.isFinite(value))
+      : []
+    const resolvedRefs = refs.length > 0 ? refs : barePairRefs
 
     const hasUpWord = /上穿|crossover|金叉/iu.test(normalized)
     const hasDownWord = /下穿|crossunder|死叉/iu.test(normalized)
@@ -476,12 +482,13 @@ export class SemanticSeedExtractorService {
       return null
     }
 
-    const hasPairMarkers = /[\/和与、]/u.test(normalized) || /均线/iu.test(normalized) || refs.length >= 2
+    const hasPairMarkers = /[\/和与、]/u.test(normalized) || /均线/iu.test(normalized) || resolvedRefs.length >= 2
     if (!hasPairMarkers) {
       return null
     }
 
     const isExplicitPairCross = /(?:EMA|MA)\d{1,4}.*?(?:上穿|下穿|crossover|crossunder).*(?:EMA|MA)\d{1,4}/iu.test(normalized)
+      || /(\d{1,4})[\/和与、](\d{1,4})均线.*?(?:上穿|下穿|crossover|crossunder)/iu.test(normalized)
     const isGoldenCrossPair = /(?:EMA|MA)\d{1,4}.*?(?:和|\/|与|、)?(?:EMA|MA)\d{1,4}.*?(?:金叉|死叉)/iu.test(normalized)
       || /(?:\d{1,4})\s*[\/和与、]\s*(?:\d{1,4})\s*均线.*?(?:金叉|死叉)/iu.test(normalized)
 
@@ -490,8 +497,8 @@ export class SemanticSeedExtractorService {
     }
 
     const direction: 'up' | 'down' = hasUpWord ? 'up' : 'down'
-    const fastPeriod = refs[0]
-    const slowPeriod = refs[1]
+    const fastPeriod = resolvedRefs[0]
+    const slowPeriod = resolvedRefs[1]
 
     return {
       indicator,

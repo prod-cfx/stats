@@ -444,6 +444,28 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
+  it('normalizes bare-number MA pair death-cross wording with extracted periods', () => {
+    const patch = service.extract('5/20 均线死叉平多；单笔 10%。')
+
+    expect(patch).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.cross_under',
+          phase: 'exit',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            fastPeriod: 5,
+            slowPeriod: 20,
+          }),
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'close_long' }),
+      ]),
+    }))
+  })
+
   it('aligns english crossover and crossunder wording with crossover atoms', () => {
     const patch = service.extract('EMA7 crossover EMA21 做多；EMA7 crossunder EMA21 平多；单笔 10%。')
 
