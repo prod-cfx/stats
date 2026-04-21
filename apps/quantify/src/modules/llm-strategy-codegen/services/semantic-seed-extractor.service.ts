@@ -444,17 +444,8 @@ export class SemanticSeedExtractorService {
   }
 
   private isTrueMovingAverageCrossClause(clause: string): boolean {
-    if (/金叉|死叉/iu.test(clause)) {
-      return true
-    }
-
-    const hasCrossWord = /上穿|下穿|cross over|cross under/iu.test(clause)
-    if (!hasCrossWord) {
-      return false
-    }
-
-    const referenceCount = Array.from(clause.matchAll(/\b(?:EMA|MA)\s*(\d{1,4})/giu)).length
-    return referenceCount >= 2
+    const normalized = clause.replace(/\s+/gu, '')
+    return /(?:EMA|MA)\d{1,4}.*?(?:上穿|下穿|crossover|crossunder|金叉|死叉).*(?:EMA|MA)\d{1,4}/iu.test(normalized)
   }
 
   private hasExplicitPriceChangeContext(segment: string): boolean {

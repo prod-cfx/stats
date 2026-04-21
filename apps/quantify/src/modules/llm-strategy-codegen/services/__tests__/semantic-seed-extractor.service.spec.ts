@@ -184,6 +184,31 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('does not treat mixed single-reference upper wording as a true crossover', () => {
+    const patch = service.extract('价格上穿 MA50 且高于 MA200 买入；单笔 10%。')
+
+    expect(patch).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.above',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            'reference.period': 50,
+          }),
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'open_long' }),
+      ]),
+    }))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'indicator.cross_over' }),
+      expect.objectContaining({ key: 'indicator.cross_under' }),
+    ]))
+  })
+
   it('maps short crossover wording to entry and exit by intent rather than direction', () => {
     const entryPatch = service.extract('EMA7 下穿 EMA21 做空；单笔 10%。')
     expect(entryPatch).toEqual(expect.objectContaining({
@@ -318,6 +343,17 @@ describe('SemanticSeedExtractorService', () => {
     }))
     expect(patch.actions).not.toEqual(expect.arrayContaining([
       expect.objectContaining({ key: 'close_short' }),
+    ]))
+  })
+
+  it('does not emit MA crossover triggers for MACD金叉 wording', () => {
+    const patch = service.extract('MACD 金叉做多；单笔 10%。')
+
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'indicator.cross_over' }),
+      expect.objectContaining({ key: 'indicator.cross_under' }),
+      expect.objectContaining({ key: 'indicator.above' }),
+      expect.objectContaining({ key: 'indicator.below' }),
     ]))
   })
 
