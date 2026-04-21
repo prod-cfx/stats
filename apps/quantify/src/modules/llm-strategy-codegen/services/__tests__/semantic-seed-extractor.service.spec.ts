@@ -120,8 +120,6 @@ describe('SemanticSeedExtractorService', () => {
           sideScope: 'long',
           params: expect.objectContaining({
             indicator: 'ema',
-            fastPeriod: 7,
-            slowPeriod: 21,
           }),
         }),
         expect.objectContaining({
@@ -130,8 +128,6 @@ describe('SemanticSeedExtractorService', () => {
           sideScope: 'long',
           params: expect.objectContaining({
             indicator: 'ema',
-            fastPeriod: 7,
-            slowPeriod: 21,
           }),
         }),
       ]),
@@ -189,8 +185,6 @@ describe('SemanticSeedExtractorService', () => {
           sideScope: 'both',
           params: expect.objectContaining({
             band: 'middle',
-            period: 20,
-            stdDev: 2,
           }),
         }),
       ]),
@@ -262,6 +256,33 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch).not.toHaveProperty('grid')
   })
 
+  it('keeps MA price-vs-reference periods local to each clause', () => {
+    const patch = service.extract('OKX 现货 BTCUSDT 15m；突破 MA50 买入，跌破 MA10 卖出；单笔 10%。')
+
+    expect(patch).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.above',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            'reference.period': 50,
+          }),
+        }),
+        expect.objectContaining({
+          key: 'indicator.below',
+          phase: 'exit',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            'reference.period': 10,
+          }),
+        }),
+      ]),
+    }))
+  })
+
   it('extracts percent-change and on-start semantics into semantic patches', () => {
     const percentChangePatch = service.extract('BTCUSDT 3m 当前K线收盘价相对上一根K线收盘价下跌 1% 时买入；15m 相对开仓均价上涨 2% 时卖出；5% 止损；10% 仓位。')
     expect(percentChangePatch).toEqual(expect.objectContaining({
@@ -312,6 +333,9 @@ describe('SemanticSeedExtractorService', () => {
     expect(percentChangePatch).not.toHaveProperty('riskRules')
     expect(percentChangePatch).not.toHaveProperty('grid')
 
+    const sizingOnlyPatch = service.extract('10% 仓位买入')
+    expect(sizingOnlyPatch).not.toHaveProperty('triggers')
+
     const onStartPatch = service.extract('立即开始时市价买入一次；1h；BTCUSDT；单笔 10%；亏损 5% 止损。')
     expect(onStartPatch).toEqual(expect.objectContaining({
       contextSlots: expect.objectContaining({
@@ -349,5 +373,38 @@ describe('SemanticSeedExtractorService', () => {
     expect(onStartPatch).not.toHaveProperty('exitRules')
     expect(onStartPatch).not.toHaveProperty('riskRules')
     expect(onStartPatch).not.toHaveProperty('grid')
+
+    const closeOnlyPatch = service.extract('立即市价平仓一次；1h；BTCUSDT；单笔 10%。')
+    expect(closeOnlyPatch).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'execution.on_start',
+          phase: 'exit',
+          sideScope: 'long',
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'close_long' }),
+      ]),
+    }))
+    expect(closeOnlyPatch.actions).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+    ]))
+  })
+
+  it('does not inject Bollinger period/stdDev when the band text omits them', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 15m；突破布林带上轨做空；单笔 10%。')
+
+    const upper = patch.triggers?.find(trigger => trigger.key === 'bollinger.touch_upper')
+    expect(upper).toEqual(expect.objectContaining({
+      key: 'bollinger.touch_upper',
+      phase: 'entry',
+      sideScope: 'short',
+      params: expect.objectContaining({
+        band: 'upper',
+      }),
+    }))
+    expect(upper?.params).not.toHaveProperty('period')
+    expect(upper?.params).not.toHaveProperty('stdDev')
   })
 })

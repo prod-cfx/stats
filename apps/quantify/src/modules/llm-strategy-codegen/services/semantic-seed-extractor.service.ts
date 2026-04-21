@@ -104,15 +104,6 @@ export class SemanticSeedExtractorService {
         continue
       }
 
-      if (trigger.key === 'execution.on_start') {
-        if (/做空|开空|卖空/u.test(text)) {
-          push('open_short')
-        } else {
-          push('open_long')
-        }
-        continue
-      }
-
       if (trigger.phase === 'entry') {
         if (trigger.sideScope === 'short') {
           push('open_short')
@@ -201,32 +192,29 @@ export class SemanticSeedExtractorService {
   }
 
   private pushMovingAverageTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
-    if (!/(?:MA|EMA)\s*\d+|均线/u.test(segment)) return
-    const referencePeriod = this.extractNumber(segment, [/(?:MA|EMA)\s*(\d{1,4})/iu, /均线\s*(\d{1,4})/u])
-    if (referencePeriod === null) return
+    const clauses = segment.includes('，') || segment.includes(',')
+      ? segment.split(/[，,]/u).map(clause => clause.trim()).filter(Boolean)
+      : [segment]
 
-    const confirmationMode = this.extractConfirmationMode(segment)
-    const indicator = /\bEMA\s*\d+/iu.test(segment) ? 'ema' : 'ma'
+    for (const clause of clauses) {
+      if (!/(?:MA|EMA)\s*\d+|均线/u.test(clause)) continue
+      const referencePeriod = this.extractNumber(clause, [/(?:MA|EMA)\s*(\d{1,4})/iu, /均线\s*(\d{1,4})/u])
+      if (referencePeriod === null) continue
 
-    if (/突破|上穿|站上|高于/u.test(segment) && /买入|做多|开多/u.test(segment)) {
+      const intent = this.resolveTradeIntent(clause)
+      if (!intent) continue
+
+      const confirmationMode = this.extractConfirmationMode(clause)
+      const indicator = /\bEMA\s*\d+/iu.test(clause) ? 'ema' : 'ma'
+      const key = /突破|上穿|站上|高于/u.test(clause)
+        ? 'indicator.above'
+        : (/跌破|下穿|失守|低于/u.test(clause) ? 'indicator.below' : null)
+      if (!key) continue
+
       this.pushTrigger(triggers, seen, {
-        key: 'indicator.above',
-        phase: 'entry',
-        sideScope: 'long',
-        params: {
-          indicator,
-          referenceRole: referencePeriod >= 20 ? 'long_term' : 'short_term',
-          'reference.period': referencePeriod,
-          ...(confirmationMode ? { confirmationMode } : {}),
-        },
-      })
-    }
-
-    if (/跌破|下穿|失守|低于/u.test(segment) && /卖出|平仓|做空|开空/u.test(segment)) {
-      this.pushTrigger(triggers, seen, {
-        key: 'indicator.below',
-        phase: 'exit',
-        sideScope: 'long',
+        key,
+        phase: intent.phase,
+        sideScope: intent.sideScope,
         params: {
           indicator,
           referenceRole: referencePeriod >= 20 ? 'long_term' : 'short_term',
@@ -240,10 +228,7 @@ export class SemanticSeedExtractorService {
   private pushBollingerTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
     if (!/布林带/u.test(segment)) return
 
-    const period = this.extractNumber(segment, [/布林带\s*[（(]\s*(\d{1,4})\s*[，,]\s*\d+(?:\.\d+)?\s*[)）]/u])
-      ?? 20
-    const stdDev = this.extractNumber(segment, [/布林带\s*[（(]\s*\d{1,4}\s*[，,]\s*(\d+(?:\.\d+)?)\s*[)）]/u])
-      ?? 2
+    const bandParams = this.extractBollingerBandParams(segment)
     const confirmationMode = this.extractConfirmationMode(segment)
 
     if (/上轨/u.test(segment)) {
@@ -253,8 +238,8 @@ export class SemanticSeedExtractorService {
         sideScope: 'short',
         params: {
           band: 'upper',
-          period,
-          stdDev,
+          ...(bandParams?.period !== undefined ? { period: bandParams.period } : {}),
+          ...(bandParams?.stdDev !== undefined ? { stdDev: bandParams.stdDev } : {}),
           ...(confirmationMode ? { confirmationMode } : {}),
         },
       })
@@ -267,8 +252,8 @@ export class SemanticSeedExtractorService {
         sideScope: 'long',
         params: {
           band: 'lower',
-          period,
-          stdDev,
+          ...(bandParams?.period !== undefined ? { period: bandParams.period } : {}),
+          ...(bandParams?.stdDev !== undefined ? { stdDev: bandParams.stdDev } : {}),
           ...(confirmationMode ? { confirmationMode } : {}),
         },
       })
@@ -281,8 +266,8 @@ export class SemanticSeedExtractorService {
         sideScope: 'both',
         params: {
           band: 'middle',
-          period,
-          stdDev,
+          ...(bandParams?.period !== undefined ? { period: bandParams.period } : {}),
+          ...(bandParams?.stdDev !== undefined ? { stdDev: bandParams.stdDev } : {}),
           ...(confirmationMode ? { confirmationMode } : {}),
         },
       })
@@ -359,10 +344,13 @@ export class SemanticSeedExtractorService {
     if (!/立即|立刻|马上|开始时|启动时|一开始/u.test(segment)) return
     if (!/市价|当前价/u.test(segment) || !/买入|卖出|开仓|平仓|做多|做空/u.test(segment)) return
 
+    const intent = this.resolveTradeIntent(segment)
+    if (!intent) return
+
     this.pushTrigger(triggers, seen, {
       key: 'execution.on_start',
-      phase: /卖出|平仓|做空/u.test(segment) ? 'exit' : 'entry',
-      sideScope: /卖出|做空/u.test(segment) ? 'short' : 'long',
+      phase: intent.phase,
+      sideScope: intent.sideScope,
       params: {
         timing: 'on_start',
         orderType: 'market',
@@ -372,7 +360,12 @@ export class SemanticSeedExtractorService {
   }
 
   private pushPercentChangeTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
-    if (!/%/.test(segment) || !/买入|卖出|做多|做空|平仓/u.test(segment)) return
+    if (!/%/.test(segment)) return
+    if (!this.hasExplicitPriceChangeContext(segment)) return
+    if (!this.hasExplicitPriceChangeDirection(segment)) return
+
+    const intent = this.resolveTradeIntent(segment)
+    if (!intent) return
 
     const valuePct = this.extractPercent(segment, [/(\d+(?:\.\d+)?)\s*%/u])
     if (valuePct === null) return
@@ -383,8 +376,8 @@ export class SemanticSeedExtractorService {
 
     this.pushTrigger(triggers, seen, {
       key: 'price.percent_change',
-      phase: /卖出|平仓|做空/u.test(segment) ? 'exit' : 'entry',
-      sideScope: 'long',
+      phase: intent.phase,
+      sideScope: intent.sideScope,
       params: {
         valuePct: direction,
         basis,
@@ -420,6 +413,48 @@ export class SemanticSeedExtractorService {
       return 'position_pnl'
     }
     return 'entry_avg_price'
+  }
+
+  private resolveTradeIntent(segment: string): { phase: 'entry' | 'exit'; sideScope: 'long' | 'short' } | null {
+    if (/买回平空|平空|买回空单/u.test(segment)) {
+      return { phase: 'exit', sideScope: 'short' }
+    }
+    if (/卖出平多|平多|卖出多单/u.test(segment)) {
+      return { phase: 'exit', sideScope: 'long' }
+    }
+    if (/平仓/u.test(segment)) {
+      return { phase: 'exit', sideScope: /做空|开空|空单|short/u.test(segment) ? 'short' : 'long' }
+    }
+    if (/卖出/u.test(segment)) {
+      return { phase: 'exit', sideScope: /做空|开空|空单|short/u.test(segment) ? 'short' : 'long' }
+    }
+    if (/做空|开空|空单|short/u.test(segment)) {
+      return { phase: 'entry', sideScope: 'short' }
+    }
+    if (/做多|开多|买入|long/u.test(segment)) {
+      return { phase: 'entry', sideScope: 'long' }
+    }
+
+    return null
+  }
+
+  private hasExplicitPriceChangeContext(segment: string): boolean {
+    return /(相对|上一根|前一根|前收盘|收盘价|开仓均价|入场价|成本价|持仓盈亏|盈亏|pnl|收益率)/iu.test(segment)
+  }
+
+  private hasExplicitPriceChangeDirection(segment: string): boolean {
+    return /(上涨|下跌|涨|跌|回落|回调|反弹)/u.test(segment)
+  }
+
+  private extractBollingerBandParams(segment: string): { period?: number; stdDev?: number } | null {
+    const match = segment.match(/布林带\s*[（(]\s*(\d{1,4})\s*[，,]\s*(\d+(?:\.\d+)?)\s*[)）]/u)
+    if (!match?.[1] || !match[2]) return null
+
+    const period = Number(match[1])
+    const stdDev = Number(match[2])
+    if (!Number.isFinite(period) || !Number.isFinite(stdDev)) return null
+
+    return { period, stdDev }
   }
 
   private resolvePercentBasis(segment: string): 'prev_close' | 'entry_avg_price' | 'position_pnl' {
