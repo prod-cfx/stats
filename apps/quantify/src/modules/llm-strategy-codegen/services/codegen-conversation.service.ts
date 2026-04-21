@@ -20,7 +20,7 @@ import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.in
 import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { getHelperDocs } from '@ai/shared/script-engine/helpers'
-import { HttpStatus, Injectable } from '@nestjs/common'
+import { HttpStatus, Injectable, Logger } from '@nestjs/common'
 import { defaultEnvAccessor } from '@/common/env/env.accessor'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -173,6 +173,7 @@ function normalizeDirectionalPercentRule(
 
 @Injectable()
 export class CodegenConversationService {
+  private readonly logger = new Logger(CodegenConversationService.name)
   private readonly strictUnsupportedTargets = new Map<string, number>()
   private readonly stateMachine = new CodegenConversationStateMachine()
   private readonly inferredConfirmationClassifier: InferredConfirmationClassifierService
@@ -217,13 +218,24 @@ export class CodegenConversationService {
       providerCode: this.resolveProviderCode(undefined),
       model: undefined,
     }, [], seedChecklist)
-    const initialSemanticState = this.applyConversationPlanToSemanticState({
+    const startSeedChecklist = this.withTargetedStartSessionSeedContext(
+      seedChecklist,
+      dto.initialMessage,
+      plan.logic,
+    )
+    let initialSemanticState = this.applyConversationPlanToSemanticState({
       currentState: seedSemanticState,
-      compatibilityChecklist: seedChecklist,
+      compatibilityChecklist: startSeedChecklist,
       plan,
     })
+    if (this.shouldReapplyDeterministicStartSeedChecklist(startSeedChecklist)) {
+      initialSemanticState = this.semanticStateMerge.merge({
+        persisted: initialSemanticState,
+        derived: this.buildFallbackSemanticState(startSeedChecklist),
+      })
+    }
     const checklist = this.mergeChecklistSnapshots(
-      this.projectLegacyChecklistFromSemanticState(initialSemanticState, seedChecklist),
+      this.projectLegacyChecklistFromSemanticState(initialSemanticState, startSeedChecklist),
       plan.logic ?? {},
     )
     const recommendationStyle = this.inferRecommendationStyleFromContext(
@@ -242,22 +254,25 @@ export class CodegenConversationService {
       checklist,
       { preserveLegacyFallback: false },
     )
-    const plannerStatus: LlmCodegenSessionStatus = this.stateMachine.resolvePlannerStatus({
-      logicReady: plan.logicReady,
-      clarificationState,
-    })
     const normalization = this.buildNormalizationFromSemanticState(initialSemanticState)
-    const initialCanonicalSpec = plannerStatus === 'CHECKLIST_GATE'
-      ? this.buildCanonicalSpecForConversation(checklist, normalization, initialSemanticState)
-      : null
-    const compileability = initialCanonicalSpec
-      ? this.evaluateCanonicalCompileability(initialCanonicalSpec)
-      : null
+    const initialCanonicalSpec = this.buildCanonicalSpecForConversation(
+      checklist,
+      normalization,
+      initialSemanticState,
+    )
+    const compileability = this.evaluateCanonicalCompileability(initialCanonicalSpec)
     const decision = this.buildStrategyDecision({
       checklist,
       clarification,
+      effectiveBlockingReasons: this.buildEffectiveBlockingReasonsFromClarificationState(clarificationState),
       compileability,
       constraintPack: initialConstraintPack,
+    })
+    const initialStatus = this.resolveInitialStartSessionStatus({
+      clarificationState,
+      normalizationBlocked: normalization.blocked,
+      compileability,
+      decisionKind: decision.kind,
     })
     const nextInitialSemanticSlot = this.findNextOpenSemanticSlot(initialSemanticState)
     const semanticClarificationPrompt = nextInitialSemanticSlot
@@ -273,12 +288,12 @@ export class CodegenConversationService {
       : (semanticClarificationPrompt
           || clarification.clarificationPrompt
           || this.clarificationQuestion.build(clarificationState))
-    const confirmationAssistantPrompt = plannerStatus === 'CHECKLIST_GATE'
+    const confirmationAssistantPrompt = initialStatus === 'CONFIRM_GATE'
       ? this.buildChecklistGateAssistantPrompt(checklist, normalization.normalizedIntent)
       : null
     const bootstrap = buildStartSessionBootstrap({
       initialMessage: dto.initialMessage,
-      plannerStatus,
+      initialStatus,
       clarificationState,
       clarificationPrompt,
       confirmationAssistantPrompt,
@@ -405,17 +420,18 @@ export class CodegenConversationService {
       (session as { semanticState?: Prisma.JsonValue | null }).semanticState,
     )
     const currentSemanticState = this.readSemanticState((session as { semanticState?: Prisma.JsonValue | null }).semanticState)
+    const persistedChecklist = this.restoreInferredAssumptionsFromLatestSpecDesc(
+      session.latestSpecDesc,
+      this.readChecklistPayload((session as { checklist?: Prisma.JsonValue | null }).checklist),
+    )
     const semanticStateAfterAnswers = this.applySemanticClarificationAnswers(
       currentSemanticState,
       baseClarificationState,
       effectiveClarificationAnswers,
     )
-    const semanticBaseChecklistAfterAnswers = this.restoreInferredAssumptionsFromLatestSpecDesc(
-      session.latestSpecDesc,
-      this.projectLegacyChecklistFromSemanticState(
-        semanticStateAfterAnswers,
-        {},
-      ),
+    const semanticBaseChecklistAfterAnswers = this.projectLegacyChecklistFromSemanticState(
+      semanticStateAfterAnswers,
+      persistedChecklist,
     )
     const baseChecklistAfterAnswers = this.applyClarificationAnswers(
       semanticBaseChecklistAfterAnswers,
@@ -444,6 +460,154 @@ export class CodegenConversationService {
       providerCode: this.resolveProviderCode(dto.providerCode),
       model: dto.model,
     }, constraintPack.conversationHistory ?? [], baseChecklist)
+    const plannerCompatibilityChecklist = hasPersistedSemanticState
+      ? this.inferChecklistFromMessage(dto.message)
+      : preMergedChecklist
+    const reducedSemanticState = this.applyConversationPlanToSemanticState({
+      currentState: preMergedSemanticState,
+      compatibilityChecklist: plannerCompatibilityChecklist,
+      plan,
+    })
+    const canonicalChecklist = this.mergeChecklistSnapshots(
+      this.projectLegacyChecklistFromSemanticState(reducedSemanticState, preMergedChecklist),
+      plan.logic ?? {},
+    )
+    const clarification = this.resolveClarificationArtifacts(canonicalChecklist)
+    const clarificationState = this.buildClarificationFromSemanticState(
+      reducedSemanticState,
+      canonicalChecklist,
+      { preserveLegacyFallback: !hasPersistedSemanticState },
+    )
+    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const clarificationPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
+      || this.clarificationQuestion.build(clarificationState)
+      || clarification.clarificationPrompt
+    const recommendationStyle = this.inferRecommendationStyleFromContext(
+      dto.message,
+      canonicalChecklist,
+      constraintPack.recommendationStyle,
+    )
+    const nextConstraintPack = this.withGuidePrompt(constraintPack, guidePrompt, recommendationStyle)
+    const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
+    const canonicalSpec = this.buildCanonicalSpecForConversation(
+      canonicalChecklist,
+      normalization,
+      hasPersistedSemanticState ? reducedSemanticState : undefined,
+    )
+    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
+      normalizedIntent: normalization.normalizedIntent,
+      executionContext: clarification.executionContext.context,
+    })
+    const canonicalDigest = this.readCanonicalDigest(specDesc)
+    const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
+    const decision = this.buildStrategyDecision({
+      checklist: canonicalChecklist,
+      clarification,
+      effectiveBlockingReasons: this.buildEffectiveBlockingReasonsFromClarificationState(clarificationState),
+      compileability,
+      constraintPack: nextConstraintPack,
+    })
+    const decisionPrompt = decision.kind === 'CONFIRM_INFERRED'
+      ? this.clarificationQuestion.buildFromDecision(decision)
+      : clarification.clarificationPrompt
+    const deterministicAuthority = this.resolveContinueSessionDeterministicAuthority({
+      semanticState: reducedSemanticState,
+      checklist: canonicalChecklist,
+      clarificationState,
+      normalization,
+      compileability,
+      decisionKind: decision.kind,
+      semanticReadyForGenerate,
+    })
+    const semanticStateChanged = JSON.stringify(reducedSemanticState) !== JSON.stringify(preMergedSemanticState)
+
+    if (deterministicAuthority) {
+      const assistantPrompt = deterministicAuthority === 'clarification'
+        ? (clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。')
+        : deterministicAuthority === 'decision'
+          ? (decisionPrompt || '请先确认当前推断，我再继续整理逻辑图。')
+          : deterministicAuthority === 'normalization'
+            ? this.buildNormalizationAssistantPrompt(canonicalChecklist, normalization)
+            : deterministicAuthority === 'compileability'
+              ? this.buildCompileabilityAssistantPrompt(compileability)
+              : this.buildChecklistGateAssistantPrompt(canonicalChecklist, normalization.normalizedIntent)
+      const targetStatus = deterministicAuthority === 'confirm_gate' ? 'CONFIRM_GATE' : 'DRAFTING'
+      const shouldPersistDecisionSpecDesc = deterministicAuthority === 'decision' && hasStructuredClarificationAnswers
+      const shouldPersistDeterministicOutcome = plan.related
+        || hasStructuredClarificationAnswers
+        || inferredConfirmation.consumed
+        || semanticStateChanged
+        || session.status !== targetStatus
+
+      if (!shouldPersistDeterministicOutcome && !plan.related) {
+        const response = this.finalizeSessionResponse({
+          id: session.id,
+          status: targetStatus,
+          missingFields: [],
+          ...(deterministicAuthority === 'confirm_gate'
+            ? {
+                specDesc,
+                canonicalDigest,
+              }
+            : {}),
+          ...(shouldPersistDecisionSpecDesc
+            ? {
+                specDesc,
+                canonicalDigest,
+              }
+            : {}),
+          ...(deterministicAuthority === 'normalization'
+            ? { specDesc }
+            : {}),
+          assistantPrompt,
+          clarificationState,
+        })
+        return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+      }
+
+      const historyAfterDeterministicOutcome = this.appendConversationHistory(
+        constraintPack.conversationHistory ?? [],
+        dto.message,
+        assistantPrompt,
+      )
+      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
+        status: targetStatus,
+        semanticState: reducedSemanticState,
+        clarificationState,
+        constraintPack: {
+          ...nextConstraintPack,
+          conversationHistory: historyAfterDeterministicOutcome,
+        },
+        ...(deterministicAuthority === 'confirm_gate' || deterministicAuthority === 'normalization' || shouldPersistDecisionSpecDesc
+          ? { latestSpecDesc: specDesc }
+          : {}),
+      }))
+
+      const response = this.finalizeSessionResponse({
+        id: session.id,
+        status: targetStatus,
+        missingFields: [],
+        ...(deterministicAuthority === 'confirm_gate'
+          ? {
+              specDesc,
+              canonicalDigest,
+            }
+          : {}),
+        ...(shouldPersistDecisionSpecDesc
+          ? {
+              specDesc,
+              canonicalDigest,
+            }
+          : {}),
+        ...(deterministicAuthority === 'normalization'
+          ? { specDesc }
+          : {}),
+        assistantPrompt,
+        clarificationState,
+      })
+      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+    }
+
     if (!plan.related) {
       if (hasStructuredClarificationAnswers) {
         return this.continueWithStructuredClarificationAnswers({
@@ -483,85 +647,11 @@ export class CodegenConversationService {
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
-    const reducedSemanticState = this.applyConversationPlanToSemanticState({
-      currentState: preMergedSemanticState,
-      compatibilityChecklist: hasPersistedSemanticState
-        ? this.inferChecklistFromMessage(dto.message)
-        : preMergedChecklist,
-      plan,
-    })
-    const canonicalChecklist = this.mergeChecklistSnapshots(
-      this.projectLegacyChecklistFromSemanticState(reducedSemanticState, preMergedChecklist),
-      plan.logic ?? {},
-    )
-    const clarification = this.resolveClarificationArtifacts(canonicalChecklist)
-    const clarificationState = this.buildClarificationFromSemanticState(
-      reducedSemanticState,
-      canonicalChecklist,
-      { preserveLegacyFallback: !hasPersistedSemanticState },
-    )
-    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
-    const clarificationPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
-      || this.clarificationQuestion.build(clarificationState)
-      || clarification.clarificationPrompt
-    const recommendationStyle = this.inferRecommendationStyleFromContext(
-      dto.message,
-      canonicalChecklist,
-      constraintPack.recommendationStyle,
-    )
-    const nextConstraintPack = this.withGuidePrompt(constraintPack, guidePrompt, recommendationStyle)
-    if (clarificationState.status === 'NEEDS_CLARIFICATION') {
-      const assistantPrompt = clarificationPrompt || plan.assistantPrompt || '请先澄清这条规则，我再继续完善逻辑图。'
-      const historyAfterClarification = this.appendConversationHistory(
-        constraintPack.conversationHistory ?? [],
-        dto.message,
-        assistantPrompt,
-      )
-      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
-        status: 'DRAFTING',
-        semanticState: reducedSemanticState,
-        clarificationState,
-        constraintPack: {
-          ...nextConstraintPack,
-          conversationHistory: historyAfterClarification,
-        },
-      }))
-
-      const response = this.finalizeSessionResponse({
-        id: session.id,
-        status: 'DRAFTING',
-        missingFields: [],
-        assistantPrompt,
-        clarificationState,
-      })
-      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
-    }
     const historyAfterPlanner = this.appendConversationHistory(
       constraintPack.conversationHistory ?? [],
       dto.message,
       plan.assistantPrompt,
     )
-    const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
-    const canonicalSpec = this.buildCanonicalSpecForConversation(
-      canonicalChecklist,
-      normalization,
-      hasPersistedSemanticState ? reducedSemanticState : undefined,
-    )
-    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
-      normalizedIntent: normalization.normalizedIntent,
-      executionContext: clarification.executionContext.context,
-    })
-    const canonicalDigest = this.readCanonicalDigest(specDesc)
-    const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
-    const decision = this.buildStrategyDecision({
-      checklist: canonicalChecklist,
-      clarification,
-      compileability,
-      constraintPack: nextConstraintPack,
-    })
-    const decisionPrompt = decision.kind === 'CONFIRM_INFERRED'
-      ? this.clarificationQuestion.buildFromDecision(decision)
-      : clarification.clarificationPrompt
 
     if (!plan.logicReady) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
@@ -584,97 +674,11 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
-    if (decision.kind === 'CONFIRM_INFERRED') {
-      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
-        status: 'DRAFTING',
-        semanticState: reducedSemanticState,
-        clarificationState,
-        constraintPack: {
-          ...nextConstraintPack,
-          conversationHistory: historyAfterPlanner,
-        },
-      }))
-
-      const response = this.finalizeSessionResponse({
-        id: session.id,
-        status: 'DRAFTING',
-        missingFields: [],
-        assistantPrompt: decisionPrompt,
-        clarificationState,
-      })
-      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
-    }
-
-    if (normalization.blocked && !semanticReadyForGenerate) {
-      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
-        status: 'DRAFTING',
-        semanticState: reducedSemanticState,
-        clarificationState,
-        constraintPack: {
-          ...nextConstraintPack,
-          conversationHistory: historyAfterPlanner,
-        },
-        latestSpecDesc: specDesc,
-      }))
-
-      const response = this.finalizeSessionResponse({
-        id: session.id,
-        status: 'DRAFTING',
-        missingFields: [],
-        assistantPrompt: this.buildNormalizationAssistantPrompt(canonicalChecklist, normalization),
-        clarificationState,
-        specDesc,
-      })
-      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
-    }
-
-    const hasUnresolvedGenericCompileabilityGap = this.hasUnresolvedGenericCompileabilityGap(canonicalChecklist)
-    if (!compileability.canCompile && (!semanticReadyForGenerate || hasUnresolvedGenericCompileabilityGap)) {
-      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
-        status: 'DRAFTING',
-        semanticState: reducedSemanticState,
-        clarificationState,
-        constraintPack: {
-          ...nextConstraintPack,
-          conversationHistory: historyAfterPlanner,
-        },
-      }))
-
-      const response = this.finalizeSessionResponse({
-        id: session.id,
-        status: 'DRAFTING',
-        missingFields: [],
-        assistantPrompt: this.buildCompileabilityAssistantPrompt(compileability),
-        clarificationState,
-      })
-      return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
-    }
-
-    const checklistGateAssistantPrompt = this.buildChecklistGateAssistantPrompt(canonicalChecklist, normalization.normalizedIntent)
-    const historyAfterChecklistGate = this.appendConversationHistory(
-      constraintPack.conversationHistory ?? [],
-      dto.message,
-      checklistGateAssistantPrompt,
-    )
-
-    await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
-      status: 'CHECKLIST_GATE',
-      semanticState: reducedSemanticState,
-      clarificationState,
-      constraintPack: {
-        ...nextConstraintPack,
-        conversationHistory: historyAfterChecklistGate,
-      },
-      latestSpecDesc: specDesc,
-    }))
-
     const response = this.finalizeSessionResponse({
       id: session.id,
-      status: 'CHECKLIST_GATE',
+      status: 'DRAFTING',
       missingFields: [],
-      specDesc,
-      canonicalDigest,
-      assistantPrompt: checklistGateAssistantPrompt,
+      assistantPrompt: plan.assistantPrompt,
       clarificationState,
     })
     return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
@@ -686,6 +690,10 @@ export class CodegenConversationService {
     sessionUserId: string,
   ): Promise<CodegenSessionResponseDto> {
     const baseClarificationState = this.readClarificationState(session.clarificationState)
+    const persistedChecklist = this.restoreInferredAssumptionsFromLatestSpecDesc(
+      session.latestSpecDesc,
+      this.readChecklistPayload(session.checklist),
+    )
     const inferredSemanticClarificationAnswers = this.inferFreeformSemanticClarificationAnswers(
       baseClarificationState,
       dto.message,
@@ -701,12 +709,9 @@ export class CodegenConversationService {
       baseClarificationState,
       effectiveClarificationAnswers,
     )
-    const confirmationBaseChecklist = this.restoreInferredAssumptionsFromLatestSpecDesc(
-      session.latestSpecDesc,
-      this.projectLegacyChecklistFromSemanticState(
-        semanticStateAfterAnswers,
-        {},
-      ),
+    const confirmationBaseChecklist = this.projectLegacyChecklistFromSemanticState(
+      semanticStateAfterAnswers,
+      persistedChecklist,
     )
     const baseChecklist = this.applyClarificationAnswers(
       confirmationBaseChecklist,
@@ -744,6 +749,22 @@ export class CodegenConversationService {
       reducedSemanticState,
     )
     const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const confirmedCanonicalDigest = dto.confirmedCanonicalDigest?.trim() ?? ''
+    if (confirmedCanonicalDigest) {
+      const confirmationViewDigest = this.readCanonicalDigest(confirmationViewSpecDesc)
+      if (!confirmationViewDigest || confirmedCanonicalDigest !== confirmationViewDigest) {
+        throw new DomainException('codegen.confirmation_digest_mismatch', {
+          code: ErrorCode.BAD_REQUEST,
+          status: HttpStatus.BAD_REQUEST,
+          args: {
+            expectedCanonicalDigest: confirmationViewDigest,
+            confirmationViewDigest,
+            confirmedCanonicalDigest,
+          },
+        })
+      }
+    }
+
     const hasBlockingClarificationItems =
       clarificationState.status === 'NEEDS_CLARIFICATION'
       && clarificationState.items.some(item => item.blocking && item.status === 'pending')
@@ -755,6 +776,32 @@ export class CodegenConversationService {
       constraintPack.conversationHistory ?? [],
       dto.message,
     )
+    const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
+    const canonicalSpec = this.buildCanonicalSpecForConversation(
+      canonicalChecklist,
+      normalization,
+      hasPersistedSemanticState ? reducedSemanticState : undefined,
+    )
+    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
+      normalizedIntent: normalization.normalizedIntent,
+      executionContext: clarification.executionContext.context,
+    })
+    const canonicalDigest = this.readCanonicalDigest(specDesc)
+    const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
+    if (
+      !canonicalDigest
+      || (confirmedCanonicalDigest !== canonicalDigest && confirmedCanonicalDigest !== confirmationViewDigest)
+    ) {
+      throw new DomainException('codegen.confirmation_digest_mismatch', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: {
+          expectedCanonicalDigest: canonicalDigest,
+          confirmationViewDigest,
+          confirmedCanonicalDigest: confirmedCanonicalDigest || null,
+        },
+      })
+    }
 
     if (hasBlockingClarificationItems) {
       const assistantPrompt = clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。'
@@ -776,34 +823,6 @@ export class CodegenConversationService {
         clarificationState,
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
-    }
-
-    const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
-    const canonicalSpec = this.buildCanonicalSpecForConversation(
-      canonicalChecklist,
-      normalization,
-      hasPersistedSemanticState ? reducedSemanticState : undefined,
-    )
-    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
-      normalizedIntent: normalization.normalizedIntent,
-      executionContext: clarification.executionContext.context,
-    })
-    const canonicalDigest = this.readCanonicalDigest(specDesc)
-    const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
-    const confirmedCanonicalDigest = dto.confirmedCanonicalDigest?.trim() ?? ''
-    if (
-      !canonicalDigest
-      || (confirmedCanonicalDigest !== canonicalDigest && confirmedCanonicalDigest !== confirmationViewDigest)
-    ) {
-      throw new DomainException('codegen.confirmation_digest_mismatch', {
-        code: ErrorCode.BAD_REQUEST,
-        status: HttpStatus.BAD_REQUEST,
-        args: {
-          expectedCanonicalDigest: canonicalDigest,
-          confirmationViewDigest,
-          confirmedCanonicalDigest: confirmedCanonicalDigest || null,
-        },
-      })
     }
 
     if (normalization.blocked && !semanticReadyForGenerate) {
@@ -1078,6 +1097,16 @@ export class CodegenConversationService {
       questionHint,
       affectsExecution: true,
     }
+  }
+
+  private readChecklistPayload(
+    payload: Prisma.JsonValue | null | undefined,
+  ): ChecklistPayload {
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return {}
+    }
+
+    return this.normalizeChecklist(payload as Record<string, unknown>)
   }
 
   private mergeSemanticClarificationState(
@@ -1364,8 +1393,8 @@ export class CodegenConversationService {
     plan: ConversationPlan
   }): SemanticState {
     let nextState = input.currentState
-
     const semanticPatchState = this.buildSemanticStateFromPlannerPatch(input.plan.semanticPatch)
+
     if (!semanticPatchState && input.compatibilityChecklist && Object.keys(input.compatibilityChecklist).length > 0) {
       nextState = this.semanticStateMerge.merge({
         persisted: nextState,
@@ -1388,6 +1417,95 @@ export class CodegenConversationService {
     }
 
     return nextState
+  }
+
+  private shouldReapplyDeterministicStartSeedChecklist(
+    checklist: ChecklistPayload,
+  ): boolean {
+    if (Object.keys(checklist).length === 0) {
+      return false
+    }
+
+    const seedSemanticState = this.buildFallbackSemanticState(checklist)
+    return this.hasCompleteBidirectionalGridSeed(seedSemanticState)
+      || this.hasCompleteSymmetricBollingerSeed(seedSemanticState)
+  }
+
+  private hasCompleteBidirectionalGridSeed(state: SemanticState): boolean {
+    return state.triggers.some(trigger => (
+      trigger.key === 'grid.range_rebalance'
+      && trigger.phase === 'entry'
+      && trigger.status === 'locked'
+      && trigger.sideScope === 'both'
+      && typeof trigger.params.rangeLower === 'number'
+      && typeof trigger.params.rangeUpper === 'number'
+      && typeof trigger.params.stepPct === 'number'
+      && trigger.params.sideMode === 'bidirectional'
+    ))
+  }
+
+  private hasCompleteSymmetricBollingerSeed(state: SemanticState): boolean {
+    const hasUpperShortEntry = state.triggers.some(trigger => (
+      trigger.key === 'bollinger.touch_upper'
+      && trigger.phase === 'entry'
+      && trigger.status === 'locked'
+      && trigger.sideScope === 'short'
+    ))
+    const hasLowerLongEntry = state.triggers.some(trigger => (
+      trigger.key === 'bollinger.touch_lower'
+      && trigger.phase === 'entry'
+      && trigger.status === 'locked'
+      && trigger.sideScope === 'long'
+    ))
+    const hasMiddleExit = state.triggers.some(trigger => (
+      trigger.key === 'bollinger.touch_middle'
+      && trigger.phase === 'exit'
+      && trigger.status === 'locked'
+    ))
+
+    return hasUpperShortEntry
+      && hasLowerLongEntry
+      && hasMiddleExit
+      && state.position?.positionMode === 'long_short'
+  }
+
+  private withTargetedStartSessionSeedContext(
+    checklist: ChecklistPayload,
+    message: string | undefined,
+    plannerLogic?: ChecklistPayload,
+  ): ChecklistPayload {
+    if ((checklist.symbols?.length ?? 0) > 0 || (plannerLogic?.symbols?.length ?? 0) > 0) {
+      return checklist
+    }
+
+    const inferredSymbol = this.inferBareAssetUsdtSymbol(message)
+    if (!inferredSymbol) {
+      return checklist
+    }
+
+    return this.normalizeChecklist({
+      ...checklist,
+      symbols: [inferredSymbol],
+    })
+  }
+
+  private inferBareAssetUsdtSymbol(message?: string): string | null {
+    if (!message) {
+      return null
+    }
+
+    const upper = message.toUpperCase()
+    if (/\b[A-Z]{2,12}(?:USDT|USDC|USD)\b/u.test(upper)) {
+      return null
+    }
+
+    const matched = upper.match(/(?:想买|买入|买|卖出|卖|做多|做空|交易)\s*([A-Z]{2,10})\b/u)
+    const asset = matched?.[1]?.trim()
+    if (!asset || ['OKX', 'BINANCE', 'SWAP', 'SPOT', 'PERP', 'USDT', 'USD'].includes(asset)) {
+      return null
+    }
+
+    return `${asset}USDT`
   }
 
   private createEmptySemanticState(): SemanticState {
@@ -1762,13 +1880,14 @@ export class CodegenConversationService {
       return checklist
     }
 
+    const expandedAnswers = this.expandClarificationAnswers(checklist, clarificationState, answers)
     let nextChecklist = this.normalizeChecklist({
       ...checklist,
       riskRules: checklist.riskRules ? { ...checklist.riskRules } : undefined,
     })
 
     for (const item of clarificationState?.items ?? []) {
-      const rawAnswer = answers[item.key]
+      const rawAnswer = expandedAnswers[item.key]
       if (typeof rawAnswer !== 'string' || !rawAnswer.trim()) {
         continue
       }
@@ -1776,7 +1895,123 @@ export class CodegenConversationService {
       nextChecklist = this.applyClarificationAnswer(nextChecklist, item, rawAnswer.trim())
     }
 
+    nextChecklist = this.clearInferredAssumptionsResolvedByClarificationAnswers(
+      nextChecklist,
+      clarificationState,
+      expandedAnswers,
+    )
+
     return this.normalizeChecklist(nextChecklist)
+  }
+
+  private expandClarificationAnswers(
+    checklist: ChecklistPayload,
+    clarificationState: StrategyClarificationState | null,
+    answers: Record<string, string>,
+  ): Record<string, string> {
+    const expanded = { ...answers }
+    const exitBasisItems = (clarificationState?.items ?? []).filter(item =>
+      item.reason === 'ambiguous_condition_basis'
+      && item.field === 'exitRules.basis'
+      && item.status === 'pending',
+    )
+    if (exitBasisItems.length <= 1) {
+      return expanded
+    }
+
+    const answeredExitBasis = exitBasisItems.find(item => typeof expanded[item.key] === 'string' && expanded[item.key].trim().length > 0)
+    if (!answeredExitBasis) {
+      return expanded
+    }
+
+    const answeredBasis = this.normalizeBasisClarificationAnswer(expanded[answeredExitBasis.key])
+    if (!answeredBasis || !this.shouldBroadcastExitBasisAnswer(checklist, exitBasisItems)) {
+      return expanded
+    }
+
+    for (const item of exitBasisItems) {
+      if (!expanded[item.key]?.trim()) {
+        expanded[item.key] = expanded[answeredExitBasis.key]
+      }
+    }
+
+    return expanded
+  }
+
+  private shouldBroadcastExitBasisAnswer(
+    checklist: ChecklistPayload,
+    exitBasisItems: StrategyClarificationItem[],
+  ): boolean {
+    const ruleIndexes = exitBasisItems
+      .map(item => this.readClarificationRuleIndex(item))
+      .filter((index): index is number => index !== null)
+    if (ruleIndexes.length <= 1) {
+      return false
+    }
+
+    return ruleIndexes.every((index) => {
+      const ruleText = checklist.exitRules?.[index] ?? ''
+      return /止损|止盈|盈利|亏损|收益/u.test(ruleText)
+    })
+  }
+
+  private clearInferredAssumptionsResolvedByClarificationAnswers(
+    checklist: ChecklistPayload,
+    clarificationState: StrategyClarificationState | null,
+    answers: Record<string, string>,
+  ): ChecklistPayload {
+    const currentAssumptions = Array.isArray(checklist.riskRules?._inferredAssumptions)
+      ? checklist.riskRules._inferredAssumptions.filter((item): item is string => typeof item === 'string')
+      : []
+    if (currentAssumptions.length === 0) {
+      return checklist
+    }
+
+    const resolvedKeys = new Set<string>()
+    for (const item of clarificationState?.items ?? []) {
+      const rawAnswer = answers[item.key]
+      if (typeof rawAnswer !== 'string' || !rawAnswer.trim() || item.reason !== 'ambiguous_condition_basis') {
+        continue
+      }
+
+      if (item.field === 'riskRules.stopLossBasis') {
+        resolvedKeys.add('risk.stopLossBasis')
+        continue
+      }
+      if (item.field === 'riskRules.takeProfitBasis') {
+        resolvedKeys.add('risk.takeProfitBasis')
+        continue
+      }
+      if (item.field !== 'exitRules.basis') {
+        continue
+      }
+
+      const ruleIndex = this.readClarificationRuleIndex(item)
+      const ruleText = ruleIndex === null ? '' : (checklist.exitRules?.[ruleIndex] ?? '')
+      if (/止损|亏损/u.test(ruleText)) {
+        resolvedKeys.add('risk.stopLossBasis')
+      }
+      if (/止盈|盈利|收益/u.test(ruleText)) {
+        resolvedKeys.add('risk.takeProfitBasis')
+      }
+    }
+
+    if (resolvedKeys.size === 0) {
+      return checklist
+    }
+
+    const nextAssumptions = currentAssumptions.filter(item => !resolvedKeys.has(item))
+    const nextRiskRules = { ...(checklist.riskRules ?? {}) }
+    if (nextAssumptions.length > 0) {
+      nextRiskRules._inferredAssumptions = nextAssumptions
+    } else {
+      delete nextRiskRules._inferredAssumptions
+    }
+
+    return {
+      ...checklist,
+      riskRules: nextRiskRules,
+    }
   }
 
   private applyClarificationAnswer(
@@ -1911,37 +2146,40 @@ export class CodegenConversationService {
         const ruleIndex = this.readClarificationRuleIndex(item)
         if (ruleIndex === null) return checklist
         const ruleText = checklist.exitRules?.[ruleIndex] ?? ''
+        const nextRiskRules = {
+          ...(checklist.riskRules ?? {}),
+          ...(/止损|亏损/u.test(ruleText) ? { stopLossBasis: basis } : {}),
+          ...(/止盈|盈利|收益率/u.test(ruleText) ? { takeProfitBasis: basis } : {}),
+        }
         return this.normalizeChecklist({
           ...checklist,
           exitRuleBases: {
             ...(checklist.exitRuleBases ?? {}),
             [`exit-${ruleIndex + 1}`]: basis,
           },
-          riskRules: {
-            ...(checklist.riskRules ?? {}),
-            ...(/止损|亏损/u.test(ruleText) ? { stopLossBasis: basis } : {}),
-            ...(/止盈|盈利|收益率/u.test(ruleText) ? { takeProfitBasis: basis } : {}),
-          },
+          riskRules: this.pruneResolvedRiskInferredAssumptions(nextRiskRules, nextRiskRules),
         })
       }
 
       if (item.field === 'riskRules.stopLossBasis') {
+        const nextRiskRules = {
+          ...(checklist.riskRules ?? {}),
+          stopLossBasis: basis,
+        }
         return this.normalizeChecklist({
           ...checklist,
-          riskRules: {
-            ...(checklist.riskRules ?? {}),
-            stopLossBasis: basis,
-          },
+          riskRules: this.pruneResolvedRiskInferredAssumptions(nextRiskRules, nextRiskRules),
         })
       }
 
       if (item.field === 'riskRules.takeProfitBasis') {
+        const nextRiskRules = {
+          ...(checklist.riskRules ?? {}),
+          takeProfitBasis: basis,
+        }
         return this.normalizeChecklist({
           ...checklist,
-          riskRules: {
-            ...(checklist.riskRules ?? {}),
-            takeProfitBasis: basis,
-          },
+          riskRules: this.pruneResolvedRiskInferredAssumptions(nextRiskRules, nextRiskRules),
         })
       }
 
@@ -2322,6 +2560,7 @@ export class CodegenConversationService {
     const decision = this.buildStrategyDecision({
       checklist: projectedChecklist,
       clarification,
+      effectiveBlockingReasons: this.buildEffectiveBlockingReasonsFromClarificationState(semanticClarificationState),
       compileability,
       constraintPack: args.constraintPack,
     })
@@ -2346,6 +2585,7 @@ export class CodegenConversationService {
         assistantPrompt,
         clarificationState: clarification.clarificationState,
         specDesc,
+        canonicalDigest,
       })
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
@@ -2402,7 +2642,7 @@ export class CodegenConversationService {
     )
 
     await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       semanticState: args.semanticState,
       clarificationState: clarification.clarificationState,
       constraintPack: {
@@ -2414,7 +2654,7 @@ export class CodegenConversationService {
 
     const response = this.finalizeSessionResponse({
       id: args.session.id,
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
       missingFields: [],
       assistantPrompt: checklistGateAssistantPrompt,
       clarificationState: clarification.clarificationState,
@@ -2993,7 +3233,7 @@ export class CodegenConversationService {
   ): string {
     const summary = this.buildClarificationSummary(checklist, normalizedIntent)
     if (summary) {
-      return `我当前理解的策略是：${summary}。请确认是否按此逻辑生成。`
+      return `我当前理解的策略是：${summary}。请确认逻辑图；请确认是否按此逻辑生成。`
     }
 
     return '逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。'
@@ -3732,12 +3972,13 @@ export class CodegenConversationService {
   }
 
   private buildCompileabilityAssistantPrompt(report: CanonicalCompileabilityReport): string {
-    return `当前规则还不能稳定生成脚本：${report.reasons.join('，')}。请补充能明确落成主链规则的入场/出场条件后再确认逻辑图。`
+    return `当前规则还不能稳定生成脚本：${report.reasons.join('，')}。请按这些阻塞点补充可程序化规则后，我再继续整理逻辑图。`
   }
 
   private buildStrategyDecision(input: {
     checklist: ChecklistPayload
     clarification: ReturnType<CodegenConversationService['resolveClarificationArtifacts']>
+    effectiveBlockingReasons?: StrategyBlockingReason[]
     compileability: CanonicalCompileabilityReport | null
     constraintPack: ConstraintPackSnapshot
   }) {
@@ -3747,13 +3988,110 @@ export class CodegenConversationService {
 
     return this.uniquenessDecision.decide({
       normalizedSummary,
-      blockingReasons: input.clarification.blockingReasons,
+      blockingReasons: input.effectiveBlockingReasons ?? input.clarification.blockingReasons,
       inferredAssumptions: this.collectInferredAssumptions(
         input.checklist,
         input.constraintPack,
       ),
       compileability: input.compileability,
     })
+  }
+
+  private resolveInitialStartSessionStatus(input: {
+    clarificationState: Pick<StrategyClarificationState, 'status'>
+    normalizationBlocked: boolean
+    compileability: CanonicalCompileabilityReport
+    decisionKind: 'DIRECT_COMPILE' | 'CONFIRM_INFERRED' | 'ASK_CLARIFY'
+  }): LlmCodegenSessionStatus {
+    return input.clarificationState.status === 'CLEAR'
+      && input.decisionKind === 'DIRECT_COMPILE'
+      && !input.normalizationBlocked
+      && input.compileability.canCompile
+      ? 'CONFIRM_GATE'
+      : 'DRAFTING'
+  }
+
+  private buildEffectiveBlockingReasonsFromClarificationState(
+    clarificationState: Pick<StrategyClarificationState, 'status' | 'items'>,
+  ): StrategyBlockingReason[] {
+    if (clarificationState.status !== 'NEEDS_CLARIFICATION') {
+      return []
+    }
+
+    return clarificationState.items
+      .filter(item => item.blocking && item.status === 'pending')
+      .map(item => ({
+        key: item.key,
+        reason: this.mapClarificationReasonToBlockingReason(item.reason),
+        priority: typeof item.priority === 'number' ? item.priority : this.estimateBlockingReasonPriority(item.reason),
+        question: item.question,
+      }))
+  }
+
+  private estimateBlockingReasonPriority(
+    reason: StrategyClarificationItem['reason'],
+  ): number {
+    if (reason === 'conflicting_market_scope' || reason === 'invalid_spot_short_combo') return 100
+    if (reason === 'missing_entry_rules' || reason === 'missing_exit_rules' || reason === 'missing_action_uniqueness' || reason === 'missing_side_scope' || reason === 'direction_ambiguous' || reason === 'atomic_semantic_fork') return 90
+    if (reason === 'missing_stop_loss_rule' || reason === 'missing_take_profit_rule' || reason === 'grid_params_missing' || reason === 'ambiguous_risk_effect' || reason === 'ambiguous_state_gate') return 70
+    if (reason === 'missing_exchange' || reason === 'missing_symbol' || reason === 'missing_market_type' || reason === 'missing_timeframe' || reason === 'missing_position_pct' || reason === 'missing_position_mode') return 60
+    if (reason === 'ambiguous_condition_basis') return 50
+    return 10
+  }
+
+  private resolveContinueSessionDeterministicAuthority(input: {
+    semanticState: SemanticState
+    checklist: ChecklistPayload
+    clarificationState: Pick<StrategyClarificationState, 'status'>
+    normalization: NormalizationResult
+    compileability: CanonicalCompileabilityReport
+    decisionKind: 'DIRECT_COMPILE' | 'CONFIRM_INFERRED' | 'ASK_CLARIFY'
+    semanticReadyForGenerate: boolean
+  }): 'clarification' | 'decision' | 'normalization' | 'compileability' | 'confirm_gate' | null {
+    if (input.clarificationState.status === 'NEEDS_CLARIFICATION') {
+      return 'clarification'
+    }
+
+    if (input.decisionKind === 'CONFIRM_INFERRED') {
+      return 'decision'
+    }
+
+    if (input.normalization.blocked && !input.semanticReadyForGenerate) {
+      return 'normalization'
+    }
+
+    const hasDeterministicStrategySemantics = this.hasDeterministicStrategySemantics(
+      input.semanticState,
+      input.checklist,
+    )
+
+    if (!input.compileability.canCompile) {
+      return 'compileability'
+    }
+
+    if (!hasDeterministicStrategySemantics) {
+      return null
+    }
+
+    return !input.normalization.blocked
+      ? 'confirm_gate'
+      : null
+  }
+
+  private hasDeterministicStrategySemantics(
+    semanticState: SemanticState,
+    checklist: ChecklistPayload,
+  ): boolean {
+    const hasChecklistRules = (checklist.entryRules?.length ?? 0) > 0
+      || (checklist.exitRules?.length ?? 0) > 0
+    const hasGrid = Boolean(
+      checklist.grid
+      && Object.values(checklist.grid).some(value => value !== undefined && value !== null),
+    )
+    const hasSemanticTriggers = semanticState.triggers.some(trigger => trigger.status !== 'superseded')
+    const hasSemanticActions = semanticState.actions.some(action => action.status !== 'superseded')
+
+    return hasChecklistRules || hasGrid || hasSemanticTriggers || hasSemanticActions
   }
 
   private mapClarificationReasonToBlockingReason(reason: StrategyClarificationItem['reason']): string {
@@ -4051,6 +4389,10 @@ export class CodegenConversationService {
       const hasLowerBand = /下轨|lower/i.test(text)
       const hasTouchCue = /触及|触碰|碰到|touch/iu.test(text)
       const hasCloseConfirmCue = /收盘确认|收盘后确认|收盘|收于|收在|close/iu.test(text)
+      const bollingerParamsMatch = text.match(/布林带\s*[（(]\s*(\d{1,3})\s*[,，]\s*(\d+(?:\.\d+)?)\s*[)）]/u)
+      const bollingerLabel = bollingerParamsMatch?.[1] && bollingerParamsMatch[2]
+        ? `布林带(${bollingerParamsMatch[1]},${bollingerParamsMatch[2]})`
+        : '布林带'
       const upperBandDirection = this.detectDirectionInTriggerFragment(
         text,
         /(?:布林|bollinger).{0,12}(?:上轨|upper)|(?:上轨|upper).{0,12}(?:布林|bollinger)|(?:突破|站上|收盘).{0,8}(?:上轨|upper)/i,
@@ -4059,44 +4401,70 @@ export class CodegenConversationService {
         text,
         /(?:布林|bollinger).{0,12}(?:下轨|lower)|(?:下轨|lower).{0,12}(?:布林|bollinger)|(?:突破|跌破|收盘).{0,8}(?:下轨|lower)/i,
       )
+      const pushEntryRule = (rule: string) => {
+        if (!entryRules.includes(rule)) {
+          entryRules.push(rule)
+        }
+      }
       if (hasBollinger && hasUpperBand && upperBandDirection === 'short' && hasTouchCue && hasCloseConfirmCue) {
-        entryRules.push('触及布林带上轨后收盘确认做空')
-      } else if (hasBollinger && hasUpperBand && upperBandDirection === 'long' && hasTouchCue && hasCloseConfirmCue) {
-        entryRules.push('触及布林带上轨后收盘确认做多')
-      } else if (hasBollinger && hasLowerBand && lowerBandDirection === 'long' && hasTouchCue && hasCloseConfirmCue) {
-        entryRules.push('触及布林带下轨后收盘确认做多')
-      } else if (hasBollinger && hasLowerBand && lowerBandDirection === 'short' && hasTouchCue && hasCloseConfirmCue) {
-        entryRules.push('触及布林带下轨后收盘确认做空')
-      } else if (hasBollinger && hasUpperBand && upperBandDirection === 'short' && hasTouchCue) {
-        entryRules.push('触及布林带上轨时做空')
-      } else if (hasBollinger && hasUpperBand && upperBandDirection === 'long' && hasTouchCue) {
-        entryRules.push('触及布林带上轨时做多')
-      } else if (hasBollinger && hasLowerBand && lowerBandDirection === 'long' && hasTouchCue) {
-        entryRules.push('触及布林带下轨时做多')
-      } else if (hasBollinger && hasLowerBand && lowerBandDirection === 'short' && hasTouchCue) {
-        entryRules.push('触及布林带下轨时做空')
-      } else if (hasBollinger && hasUpperBand && upperBandDirection === 'short' && /突破|交易|开仓|入场|站上|收盘/.test(text)) {
-        entryRules.push('K线收盘后确认突破布林带上轨时做空')
-      } else if (hasBollinger && hasUpperBand && upperBandDirection === 'long' && /突破|交易|开仓|入场|站上|收盘/.test(text)) {
-        entryRules.push('K线收盘后确认突破布林带上轨时做多')
-      } else if (hasBollinger && hasUpperBand && /突破|交易|开仓|入场|站上|收盘/.test(text)) {
-        entryRules.push('突破布林带上轨交易')
-      } else if (hasBollinger && hasLowerBand && lowerBandDirection === 'long' && /突破|跌破|交易|开仓|入场|收盘/.test(text)) {
-        entryRules.push('K线收盘后确认突破布林带下轨时做多')
-      } else if (hasBollinger && hasLowerBand && lowerBandDirection === 'short' && /突破|跌破|交易|开仓|入场|收盘/.test(text)) {
-        entryRules.push('K线收盘后确认突破布林带下轨时做空')
-      } else if (hasBollinger && hasLowerBand && /突破|跌破|交易|开仓|入场|收盘/.test(text)) {
-        entryRules.push('跌破布林带下轨交易')
-      } else if (/金叉|上穿.{0,8}均线|均线.{0,8}上穿|\bma\b|moving average/i.test(text)) {
+        pushEntryRule(`触及${bollingerLabel}上轨后收盘确认做空`)
+      }
+      if (hasBollinger && hasUpperBand && upperBandDirection === 'long' && hasTouchCue && hasCloseConfirmCue) {
+        pushEntryRule(`触及${bollingerLabel}上轨后收盘确认做多`)
+      }
+      if (hasBollinger && hasLowerBand && lowerBandDirection === 'long' && hasTouchCue && hasCloseConfirmCue) {
+        pushEntryRule(`触及${bollingerLabel}下轨后收盘确认做多`)
+      }
+      if (hasBollinger && hasLowerBand && lowerBandDirection === 'short' && hasTouchCue && hasCloseConfirmCue) {
+        pushEntryRule(`触及${bollingerLabel}下轨后收盘确认做空`)
+      }
+      if (hasBollinger && hasUpperBand && upperBandDirection === 'short' && hasTouchCue) {
+        pushEntryRule(`触及${bollingerLabel}上轨时做空`)
+      }
+      if (hasBollinger && hasUpperBand && upperBandDirection === 'long' && hasTouchCue) {
+        pushEntryRule(`触及${bollingerLabel}上轨时做多`)
+      }
+      if (hasBollinger && hasLowerBand && lowerBandDirection === 'long' && hasTouchCue) {
+        pushEntryRule(`触及${bollingerLabel}下轨时做多`)
+      }
+      if (hasBollinger && hasLowerBand && lowerBandDirection === 'short' && hasTouchCue) {
+        pushEntryRule(`触及${bollingerLabel}下轨时做空`)
+      }
+      if (hasBollinger && hasUpperBand && upperBandDirection === 'short' && /突破|交易|开仓|入场|站上|收盘/.test(text)) {
+        pushEntryRule(`K线收盘后确认突破${bollingerLabel}上轨时做空`)
+      }
+      if (hasBollinger && hasUpperBand && upperBandDirection === 'long' && /突破|交易|开仓|入场|站上|收盘/.test(text)) {
+        pushEntryRule(`K线收盘后确认突破${bollingerLabel}上轨时做多`)
+      }
+      if (hasBollinger && hasUpperBand && !upperBandDirection && /突破|交易|开仓|入场|站上|收盘/.test(text)) {
+        pushEntryRule(`突破${bollingerLabel}上轨交易`)
+      }
+      if (hasBollinger && hasLowerBand && lowerBandDirection === 'long' && /突破|跌破|交易|开仓|入场|收盘/.test(text)) {
+        pushEntryRule(`K线收盘后确认突破${bollingerLabel}下轨时做多`)
+      }
+      if (hasBollinger && hasLowerBand && lowerBandDirection === 'short' && /突破|跌破|交易|开仓|入场|收盘/.test(text)) {
+        pushEntryRule(`K线收盘后确认突破${bollingerLabel}下轨时做空`)
+      }
+      if (hasBollinger && hasLowerBand && !lowerBandDirection && /突破|跌破|交易|开仓|入场|收盘/.test(text)) {
+        pushEntryRule(`跌破${bollingerLabel}下轨交易`)
+      }
+      if (entryRules.length === 0 && /金叉|上穿.{0,8}均线|均线.{0,8}上穿|\bma\b|moving average/i.test(text)) {
         entryRules.push('短均线上穿长均线（金叉）入场')
-      } else if (/(?:突破|站上|收盘价?.{0,8}高于).{0,16}(?:阻力|前高|关键位)|阻力位/.test(text)) {
+      } else if (entryRules.length === 0 && /(?:突破|站上|收盘价?.{0,8}高于).{0,16}(?:阻力|前高|关键位)|阻力位/.test(text)) {
         entryRules.push('价格收盘确认突破关键阻力位入场')
-      } else if (/买入|开仓|入场/.test(text)) {
+      } else if (entryRules.length === 0 && /买入|开仓|入场/.test(text)) {
         entryRules.push('满足入场条件后开仓')
       }
     }
     if (exitRules.length === 0) {
-      if (/死叉|下穿.{0,8}均线|均线.{0,8}下穿|\bma\b|moving average/i.test(text)) {
+      const middleBandPeriod = text.match(/中轨\s*\(?(?:MA|ma)\s*(\d{1,3})\)?/u)?.[1]
+        ?? text.match(/布林带\s*[（(]\s*(\d{1,3})\s*[,，]\s*(\d+(?:\.\d+)?)\s*[)）]/u)?.[1]
+      const middleBandAction = /平空/u.test(text)
+        ? '平空'
+        : (/平多|卖出/u.test(text) ? '平多' : '平仓')
+      if (/布林|bollinger/iu.test(text) && /中轨|middle|ma20|均线20/i.test(text) && /平仓|平多|平空|离场|出场|卖出/u.test(text)) {
+        exitRules.push(`价格回到布林带中轨(MA${middleBandPeriod ?? '20'})时${middleBandAction}`)
+      } else if (/死叉|下穿.{0,8}均线|均线.{0,8}下穿|\bma\b|moving average/i.test(text)) {
         exitRules.push('短均线下穿长均线（死叉）出场')
       } else if (/跌破.{0,16}(?:支撑|前低|关键位)|支撑位/.test(text)) {
         exitRules.push('价格跌破关键支撑位出场')
@@ -4167,7 +4535,7 @@ export class CodegenConversationService {
         grid.upper = Number(rangeMatch[2])
       }
 
-      const percentMatch = text.match(/(?:步长|每一格|每格)\s*(\d+(?:\.\d+)?)\s*%/u)
+      const percentMatch = text.match(/(?:步长|每一格(?:间距)?|每格(?:间距)?)\s*(\d+(?:\.\d+)?)\s*%/u)
       const perMilleMatch = text.match(/千分之\s*(\d+(?:\.\d+)?)/u)
       if (percentMatch?.[1]) {
         grid.stepPct = Number(percentMatch[1])
@@ -4191,7 +4559,7 @@ export class CodegenConversationService {
         grid.sideMode = 'bidirectional'
       }
 
-      if (/突破.{0,8}(停|暂停|停止)/u.test(text)) {
+      if (/突破.{0,8}停/u.test(text)) {
         grid.breakoutAction = 'pause'
       } else if (/突破/u.test(text)) {
         grid.breakoutAction = 'continue'
@@ -5040,6 +5408,7 @@ export class CodegenConversationService {
 
       const content = result.content?.trim() ?? ''
       if (!content) {
+        this.logPlannerFallback('empty_content')
         return {
           related: true,
           logicReady: false,
@@ -5048,13 +5417,13 @@ export class CodegenConversationService {
       }
 
       try {
-        const parsed = JSON.parse(content) as {
-          related?: unknown
-          logicReady?: unknown
-          assistantPrompt?: unknown
-          logic?: unknown
-          semanticPatch?: unknown
-          semanticUpdates?: unknown
+        const parsedValue = JSON.parse(content) as unknown
+        const parsed = this.readPlannerPayload(parsedValue)
+        const schemaMismatchReasons = this.collectPlannerSchemaMismatchReasons(parsedValue, parsed)
+        if (schemaMismatchReasons.length > 0) {
+          this.logPlannerFallback('schema_mismatch', {
+            fields: schemaMismatchReasons.join(','),
+          })
         }
         const related = typeof parsed.related === 'boolean' ? parsed.related : true
         const logicReady = typeof parsed.logicReady === 'boolean' ? parsed.logicReady : false
@@ -5076,6 +5445,7 @@ export class CodegenConversationService {
           ...(semanticPatch ? { semanticPatch } : {}),
         } satisfies ConversationPlan
       } catch {
+        this.logPlannerFallback('invalid_json', { contentLength: content.length })
         return {
           related: true,
           logicReady: false,
@@ -5091,6 +5461,7 @@ export class CodegenConversationService {
       const messageText = error instanceof Error ? error.message : String(error)
       const nonRetryableModelError = /model\s+not\s+exist|model.*not.*found/i.test(messageText)
       if (nonRetryableModelError) {
+        this.logPlannerFallback('model_not_found', { error: this.summarizePlannerError(error) })
         return {
           related: true,
           logicReady: false,
@@ -5098,9 +5469,15 @@ export class CodegenConversationService {
           logic: this.inferChecklistFromMessage(text),
         }
       }
+      this.logPlannerFallback('transport_failure_retrying', {
+        error: this.summarizePlannerError(error),
+      })
       try {
         return await classifyOnce()
-      } catch {
+      } catch (retryError) {
+        this.logPlannerFallback('transport_failure_retry_exhausted', {
+          error: this.summarizePlannerError(retryError),
+        })
         return {
           related: true,
           logicReady: false,
@@ -5121,6 +5498,91 @@ export class CodegenConversationService {
     }
 
     return this.projectLegacyChecklistFromSemanticState(semanticState, currentLogic)
+  }
+
+  private readPlannerPayload(value: unknown): {
+    related?: unknown
+    logicReady?: unknown
+    assistantPrompt?: unknown
+    logic?: unknown
+    semanticPatch?: unknown
+    semanticUpdates?: unknown
+  } {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) {
+      return {}
+    }
+
+    return value as {
+      related?: unknown
+      logicReady?: unknown
+      assistantPrompt?: unknown
+      logic?: unknown
+      semanticPatch?: unknown
+      semanticUpdates?: unknown
+    }
+  }
+
+  private collectPlannerSchemaMismatchReasons(
+    rawValue: unknown,
+    parsed: {
+      related?: unknown
+      logicReady?: unknown
+      assistantPrompt?: unknown
+      logic?: unknown
+      semanticPatch?: unknown
+      semanticUpdates?: unknown
+    },
+  ): string[] {
+    const reasons: string[] = []
+    if (!rawValue || typeof rawValue !== 'object' || Array.isArray(rawValue)) {
+      reasons.push('root')
+      return reasons
+    }
+
+    if (parsed.related === undefined || typeof parsed.related !== 'boolean') {
+      reasons.push('related')
+    }
+    if (parsed.logicReady === undefined || typeof parsed.logicReady !== 'boolean') {
+      reasons.push('logicReady')
+    }
+    if (parsed.assistantPrompt === undefined || typeof parsed.assistantPrompt !== 'string') {
+      reasons.push('assistantPrompt')
+    }
+    if (parsed.logic !== undefined && (!parsed.logic || typeof parsed.logic !== 'object' || Array.isArray(parsed.logic))) {
+      reasons.push('logic')
+    }
+    if (
+      parsed.semanticPatch !== undefined
+      && (!parsed.semanticPatch || typeof parsed.semanticPatch !== 'object' || Array.isArray(parsed.semanticPatch))
+    ) {
+      reasons.push('semanticPatch')
+    }
+    if (
+      parsed.semanticUpdates !== undefined
+      && (!parsed.semanticUpdates || typeof parsed.semanticUpdates !== 'object' || Array.isArray(parsed.semanticUpdates))
+    ) {
+      reasons.push('semanticUpdates')
+    }
+
+    return reasons
+  }
+
+  private summarizePlannerError(error: unknown): string {
+    const message = error instanceof Error ? error.message : String(error)
+    return message.trim().slice(0, 160)
+  }
+
+  private logPlannerFallback(
+    reason: 'empty_content' | 'schema_mismatch' | 'invalid_json' | 'model_not_found' | 'transport_failure_retrying' | 'transport_failure_retry_exhausted',
+    context: Record<string, string | number | boolean | undefined> = {},
+  ): void {
+    const contextSuffix = Object.entries(context)
+      .filter(([, value]) => value !== undefined && value !== '')
+      .map(([key, value]) => `${key}=${String(value)}`)
+      .join(' ')
+    this.logger.warn(
+      `event=codegen_conversation_planner_fallback reason=${reason}${contextSuffix ? ` ${contextSuffix}` : ''}`,
+    )
   }
 
   private buildSemanticStateFromPlannerPatch(

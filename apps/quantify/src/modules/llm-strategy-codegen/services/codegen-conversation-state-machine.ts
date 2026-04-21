@@ -20,7 +20,7 @@ export class CodegenConversationStateMachine {
     clarificationState: Pick<StrategyClarificationState, 'status'>
   }): LlmCodegenConversationStatus {
     return input.logicReady && input.clarificationState.status === 'CLEAR'
-      ? 'CHECKLIST_GATE'
+      ? 'CONFIRM_GATE'
       : 'DRAFTING'
   }
 

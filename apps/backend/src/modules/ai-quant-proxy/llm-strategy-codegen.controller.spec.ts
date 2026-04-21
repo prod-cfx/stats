@@ -24,7 +24,7 @@ describe('llmStrategyCodegenController', () => {
 
   it('forwards confirmedCanonicalDigest on continueSession', async () => {
     const service = {
-      continueCodegen: jest.fn().mockResolvedValue({ id: 'session-1', status: 'CHECKLIST_GATE' }),
+      continueCodegen: jest.fn().mockResolvedValue({ id: 'session-1', status: 'CONFIRM_GATE' }),
     }
     const controller = new LlmStrategyCodegenController(service as never)
 

@@ -3,11 +3,11 @@ import { CodegenConversationStateMachine } from '../codegen-conversation-state-m
 describe('codegenConversationStateMachine', () => {
   const machine = new CodegenConversationStateMachine()
 
-  it('classifies planner-ready clear sessions into checklist gate', () => {
+  it('classifies planner-ready clear sessions into confirm gate', () => {
     expect(machine.resolvePlannerStatus({
       logicReady: true,
       clarificationState: { status: 'CLEAR' },
-    })).toBe('CHECKLIST_GATE')
+    })).toBe('CONFIRM_GATE')
   })
 
   it('keeps ambiguous sessions in drafting', () => {

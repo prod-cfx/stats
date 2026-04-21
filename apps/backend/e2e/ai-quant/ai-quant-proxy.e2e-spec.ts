@@ -81,7 +81,7 @@ describe('AI Quant proxy HTTP (E2E)', () => {
   it('should inject authenticated user id into codegen session creation', async () => {
     quantifyClient.startCodegen.mockResolvedValue({
       id: 'session-1',
-      status: 'CHECKLIST_GATE',
+      status: 'CONFIRM_GATE',
     })
 
     const api = createApiClient(app)
@@ -91,21 +91,38 @@ describe('AI Quant proxy HTTP (E2E)', () => {
       .send({
         userId: 'forged-user-id',
         initialMessage: 'build me a strategy',
+        timeframes: ['15m'],
         symbols: ['BTCUSDT'],
+        entryRules: ['跌破均线买入'],
+        exitRules: ['反弹到阻力位卖出'],
+        riskRules: {
+          positionPct: 10,
+          stopLossPct: 5,
+        },
       })
       .expect(201)
 
     expect(quantifyClient.startCodegen).toHaveBeenCalledWith({
       initialMessage: 'build me a strategy',
-      symbols: ['BTCUSDT'],
-      timeframes: undefined,
-      entryRules: undefined,
-      exitRules: undefined,
-      riskRules: undefined,
       guideConfig: undefined,
     }, expect.objectContaining({
       userId: 'e2e-user-id',
       timeoutMs: 60_000,
     }))
+    expect(quantifyClient.startCodegen).not.toHaveBeenCalledWith(expect.objectContaining({
+      symbols: expect.anything(),
+    }), expect.anything())
+    expect(quantifyClient.startCodegen).not.toHaveBeenCalledWith(expect.objectContaining({
+      timeframes: expect.anything(),
+    }), expect.anything())
+    expect(quantifyClient.startCodegen).not.toHaveBeenCalledWith(expect.objectContaining({
+      entryRules: expect.anything(),
+    }), expect.anything())
+    expect(quantifyClient.startCodegen).not.toHaveBeenCalledWith(expect.objectContaining({
+      exitRules: expect.anything(),
+    }), expect.anything())
+    expect(quantifyClient.startCodegen).not.toHaveBeenCalledWith(expect.objectContaining({
+      riskRules: expect.anything(),
+    }), expect.anything())
   })
 })

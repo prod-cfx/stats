@@ -271,7 +271,7 @@ const CodegenSessionResponseDto = z
     conversationMessages: z.array(CodegenConversationMessageResponseDto).optional(),
     status: z.enum([
       'DRAFTING',
-      'CHECKLIST_GATE',
+      'CONFIRM_GATE',
       'GENERATING',
       'VALIDATING_STATIC',
       'VALIDATING_RUNTIME',
