@@ -3828,20 +3828,23 @@ export class CodegenConversationService {
     normalization: NormalizationResult,
     semanticState?: SemanticState,
   ) {
-    const checklistSpec = this.canonicalSpecBuilder.build(checklist)
-    if (normalization.blocked) {
-      return checklistSpec
-    }
-
     if (semanticState) {
-      const normalizedSpec = this.canonicalSpecBuilder.buildFromNormalizedIntent(
+      return this.canonicalSpecBuilder.buildFromNormalizedIntent(
         this.buildSemanticCanonicalContext(semanticState),
         normalization.normalizedIntent,
       )
-      const normalizedCompileability = this.evaluateCanonicalCompileability(normalizedSpec)
-      return normalizedCompileability.canCompile && this.isCanonicalSpecPublishable(normalizedSpec)
-        ? normalizedSpec
-        : checklistSpec
+    }
+
+    return this.buildCanonicalSpecFromLegacyChecklist(checklist, normalization)
+  }
+
+  private buildCanonicalSpecFromLegacyChecklist(
+    legacyChecklist: ChecklistPayload,
+    normalization: NormalizationResult,
+  ) {
+    const legacySpec = this.canonicalSpecBuilder.build(legacyChecklist)
+    if (normalization.blocked) {
+      return legacySpec
     }
 
     const hasSemanticOnlyTriggers = normalization.normalizedIntent.triggers.some(trigger =>
@@ -3850,11 +3853,11 @@ export class CodegenConversationService {
     const needsSemanticCompilerPath = hasSemanticOnlyTriggers || Boolean(normalization.normalizedIntent.grid)
     if (needsSemanticCompilerPath) {
       const normalizedSpec = this.canonicalSpecBuilder.buildFromNormalizedIntent(
-        checklist,
+        legacyChecklist,
         normalization.normalizedIntent,
       )
       const normalizedCompileability = this.evaluateCanonicalCompileability(normalizedSpec)
-      return normalizedCompileability.canCompile ? normalizedSpec : checklistSpec
+      return normalizedCompileability.canCompile ? normalizedSpec : legacySpec
     }
 
     const needsNormalizedFallback = normalization.normalizedIntent.triggers.some(trigger =>
@@ -3863,42 +3866,20 @@ export class CodegenConversationService {
       || trigger.key === 'execution.on_start',
     )
     if (!needsNormalizedFallback) {
-      return checklistSpec
+      return legacySpec
     }
 
-    const checklistCompileability = this.evaluateCanonicalCompileability(checklistSpec)
-    if (checklistCompileability.canCompile) {
-      return checklistSpec
+    const legacyCompileability = this.evaluateCanonicalCompileability(legacySpec)
+    if (legacyCompileability.canCompile) {
+      return legacySpec
     }
 
     const normalizedSpec = this.canonicalSpecBuilder.buildFromNormalizedIntent(
-      checklist,
+      legacyChecklist,
       normalization.normalizedIntent,
     )
     const normalizedCompileability = this.evaluateCanonicalCompileability(normalizedSpec)
-    return normalizedCompileability.canCompile ? normalizedSpec : checklistSpec
-  }
-
-  private isCanonicalSpecPublishable(spec: ReturnType<CanonicalSpecBuilderService['build']>): boolean {
-    if (spec.version !== 2) {
-      return false
-    }
-
-    return spec.rules.every(rule => this.isConditionPublishable(rule.condition))
-  }
-
-  private isConditionPublishable(condition: { kind: string; key?: string; children?: unknown[] }): boolean {
-    if (condition.kind === 'AND' || condition.kind === 'OR' || condition.kind === 'NOT') {
-      return (condition.children ?? []).every(child =>
-        this.isConditionPublishable(child as Parameters<CodegenConversationService['isConditionPublishable']>[0]),
-      )
-    }
-
-    if (condition.kind !== 'atom') {
-      return false
-    }
-
-    return condition.key !== 'indicator.above' && condition.key !== 'indicator.below'
+    return normalizedCompileability.canCompile ? normalizedSpec : legacySpec
   }
 
   private buildSemanticCanonicalContext(semanticState: SemanticState): {

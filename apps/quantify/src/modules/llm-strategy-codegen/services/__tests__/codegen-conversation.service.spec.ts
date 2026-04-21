@@ -6721,7 +6721,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           related: true,
           logicReady: true,
           assistantPrompt: '已确认逻辑，开始生成。',
-          semanticPatch: maSemanticPatch(50, 10, { marketType: 'perp', timeframe: '1h' }),
+          semanticPatch: bollingerSemanticPatch(20, 2, { marketType: 'perp', timeframe: '1h' }),
         }),
       })
     mockRepo.createSession.mockResolvedValue({ id: 's5' })
@@ -6729,7 +6729,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const started = await service.startSession({
       userId: 'u1',
-      initialMessage: '在okx交易所合约市场的BTCUSDT 1小时图上，短均线上穿长均线（金叉）时做多，短均线下穿长均线（死叉）时平多',
+      initialMessage: '在okx交易所合约市场的BTCUSDT 1小时图上，K线收盘突破布林带上轨时做空，回到布林带中轨时平空',
     })
 
     expect(started.status).toBe('CONFIRM_GATE')
@@ -6791,6 +6791,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       clarificationState: { status: 'CLEAR', items: [] },
       constraintPack: {},
     })
+    const buildChecklistSpy = jest.spyOn(canonicalSpecBuilder, 'build')
     mockRepo.findById.mockResolvedValue(sessionFixture)
     const result = await service.continueSession('s5-semantic-generate', {
       userId: 'u1',
@@ -6830,6 +6831,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         ]),
       }),
     )
+    expect(buildChecklistSpy).not.toHaveBeenCalled()
     expect(publicationPipelineRunSpy).toHaveBeenCalledWith(expect.objectContaining({
       checklist: {},
       canonicalSpecOverride: expect.objectContaining({
@@ -6842,7 +6844,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
 
-  it('covers the MA golden case through the first startSession -> confirmGenerate path', async () => {
+  it('rejects the MA golden case after confirmGenerate instead of publishing through checklist fallback', async () => {
     await startGoldenCase({
       sessionId: 's-golden-ma-publish',
       message: maGoldenCase.message,
@@ -6905,20 +6907,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     await waitForTerminalStatus('s-golden-ma-publish')
 
     expect(mockRepo.updateSession).toHaveBeenCalledWith('s-golden-ma-publish', expect.objectContaining({
-      status: 'PUBLISHED',
+      status: 'REJECTED',
+      rejectReason: expect.stringContaining('codegen.canonical_spec_v2_condition_unsupported:indicator.above'),
     }))
-    expect(mockRepo.createVersion).toHaveBeenCalledTimes(1)
-    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
-    expect(publishedSnapshot?.specSnapshot?.rules).toEqual(expect.arrayContaining([
-      expect.objectContaining({
-        phase: 'entry',
-        condition: expect.objectContaining({ key: 'ma.golden_cross' }),
-      }),
-      expect.objectContaining({
-        phase: 'exit',
-        condition: expect.objectContaining({ key: 'ma.death_cross' }),
-      }),
-    ]))
+    expect(mockRepo.createVersion).not.toHaveBeenCalled()
   })
 
 
