@@ -1,3 +1,4 @@
+import type { SemanticState } from '../../types/semantic-state'
 import type { CompiledScriptParserService } from '../compiled-script-parser.service'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
@@ -12,12 +13,93 @@ jest.mock('../../repositories/published-strategy-snapshots.repository', () => ({
 }))
 
 describe('codegenSessionPublicationPipeline', () => {
-  const checklist = {
-    symbols: ['BTCUSDT'],
-    timeframes: ['5m'],
-    entryRules: ['短均线上穿长均线（金叉）时做多'],
-    exitRules: ['短均线下穿长均线（死叉）时平多'],
-    riskRules: { positionPct: 10 },
+  const semanticState: SemanticState = {
+    version: 1,
+    families: ['single-leg'],
+    triggers: [
+      {
+        id: 'entry-bollinger-upper',
+        key: 'bollinger.touch_upper',
+        phase: 'entry',
+        params: {
+          indicator: 'bollinger',
+          period: 30,
+          stdDev: 2.5,
+          confirmationMode: 'close_confirm',
+        },
+        sideScope: 'short',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'exit-bollinger-middle',
+        key: 'bollinger.touch_middle',
+        phase: 'exit',
+        params: {
+          indicator: 'bollinger',
+          period: 30,
+          stdDev: 2.5,
+          confirmationMode: 'close_confirm',
+        },
+        sideScope: 'short',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ],
+    actions: [
+      { id: 'action-open-short', key: 'open_short', status: 'locked', source: 'user_explicit' },
+      { id: 'action-close-short', key: 'close_short', status: 'locked', source: 'user_explicit' },
+    ],
+    risk: [],
+    position: {
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'short_only',
+      status: 'locked',
+      source: 'user_explicit',
+    },
+    contextSlots: {
+      exchange: {
+        slotKey: 'exchange',
+        fieldPath: 'contextSlots.exchange',
+        value: 'okx',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认交易所。',
+        affectsExecution: true,
+      },
+      symbol: {
+        slotKey: 'symbol',
+        fieldPath: 'contextSlots.symbol',
+        value: 'BTCUSDT',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认交易标的。',
+        affectsExecution: true,
+      },
+      marketType: {
+        slotKey: 'marketType',
+        fieldPath: 'contextSlots.marketType',
+        value: 'perp',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认市场类型。',
+        affectsExecution: true,
+      },
+      timeframe: {
+        slotKey: 'timeframe',
+        fieldPath: 'contextSlots.timeframe',
+        value: '5m',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认周期。',
+        affectsExecution: true,
+      },
+    },
+    normalizationNotes: [],
+    updatedAt: '2026-04-15T10:00:00.000Z',
   }
 
   const baseProfile = {
@@ -116,7 +198,7 @@ describe('codegenSessionPublicationPipeline', () => {
     await pipeline.run({
       sessionId: 'session-1',
       userId: 'user-1',
-      checklist,
+      semanticState,
       message: '生成策略',
     })
 
@@ -147,7 +229,7 @@ describe('codegenSessionPublicationPipeline', () => {
     await pipeline.run({
       sessionId: 'session-2',
       userId: 'user-1',
-      checklist,
+      semanticState,
       message: '生成策略',
     })
 
@@ -178,7 +260,7 @@ describe('codegenSessionPublicationPipeline', () => {
     await pipeline.run({
       sessionId: 'session-3',
       userId: 'user-1',
-      checklist,
+      semanticState,
       message: '生成策略',
     })
 
@@ -195,7 +277,7 @@ describe('codegenSessionPublicationPipeline', () => {
     await pipeline.run({
       sessionId: 'session-4',
       userId: 'user-1',
-      checklist,
+      semanticState,
       message: '生成策略',
       model: 'gpt-4.1',
     })
@@ -211,6 +293,9 @@ describe('codegenSessionPublicationPipeline', () => {
         }),
       }),
     }))
+    expect(JSON.stringify(repo.createVersion.mock.calls[0][0].specDesc)).not.toContain('entryRules')
+    expect(JSON.stringify(repo.createVersion.mock.calls[0][0].specDesc)).not.toContain('exitRules')
+    expect(JSON.stringify(repo.createVersion.mock.calls[0][0].specDesc)).not.toContain('riskRules')
     expect(repo.ensureDraftStrategyInstanceBoundForPublishedSession).toHaveBeenCalled()
     expect(repo.bindPublishedSnapshotToStrategyInstance).toHaveBeenCalledWith({
       strategyInstanceId: 'instance-1',
@@ -236,7 +321,7 @@ describe('codegenSessionPublicationPipeline', () => {
     await pipeline.run({
       sessionId: 'session-5',
       userId: 'user-1',
-      checklist,
+      semanticState,
       message: '生成策略',
     })
 

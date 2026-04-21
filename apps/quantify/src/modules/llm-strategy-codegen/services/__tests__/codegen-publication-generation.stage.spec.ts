@@ -332,14 +332,7 @@ describe('codegenPublicationGenerationStage', () => {
     )
 
     const artifacts = await stage.generate({
-      checklist: {
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-        entryRules: ['收盘价突破上轨时做空'],
-        exitRules: ['价格回到中轨（20日均线）时平仓'],
-        riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10, stopLossPct: 5 },
-      },
-      message: '中轨（20日均线）回归平仓',
+      semanticState: buildLockedBollingerSemanticState(),
     })
 
     expect(consistencyEvaluate).toHaveBeenCalledWith(expect.objectContaining({
@@ -361,11 +354,6 @@ describe('codegenPublicationGenerationStage', () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
     const semanticState = buildLockedGridSemanticState()
-    const rawChecklist = {
-      symbols: ['ETHUSDT'],
-      timeframes: ['1h'],
-      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
-    }
     const expectedNormalizedIntent = buildNormalizedIntentFromSemanticState(semanticState)
     const buildSpy = jest.spyOn(canonicalSpecBuilder, 'build')
     const buildFromNormalizedIntentSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromNormalizedIntent')
@@ -405,11 +393,7 @@ describe('codegenPublicationGenerationStage', () => {
       { parse: jest.fn().mockReturnValue({}) } as any,
     )
 
-    const artifacts = await stage.generate({
-      checklist: rawChecklist,
-      semanticState,
-      message: '在 60000-80000 区间做 1% 步长的网格策略，突破区间就停掉',
-    } as any)
+    const artifacts = await stage.generate({ semanticState })
 
     expect(buildFromNormalizedIntentSpy).toHaveBeenCalledWith(
       {
@@ -426,6 +410,9 @@ describe('codegenPublicationGenerationStage', () => {
     expect(buildSpy).not.toHaveBeenCalled()
     expect(artifacts.sessionSpecDesc.canonicalSpec).toEqual(artifacts.canonicalSpec)
     expect(artifacts.sessionSpecDesc.normalizedIntent).toEqual(expectedNormalizedIntent)
+    expect(JSON.stringify(artifacts.sessionSpecDesc)).not.toContain('entryRules')
+    expect(JSON.stringify(artifacts.sessionSpecDesc)).not.toContain('exitRules')
+    expect(JSON.stringify(artifacts.sessionSpecDesc)).not.toContain('riskRules')
     expect(artifacts.canonicalSpec.market).toEqual(expect.objectContaining({
       symbol: 'BTCUSDT',
       defaultTimeframe: '15m',
@@ -494,14 +481,7 @@ describe('codegenPublicationGenerationStage', () => {
     )
 
     const artifacts = await stage.generate({
-      checklist: {
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-        entryRules: ['价格突破关键阻力位入场'],
-        exitRules: ['价格跌破关键支撑位出场'],
-        riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
-      },
-      message: '做一个策略',
+      semanticState: buildLockedBollingerSemanticState(),
     })
 
     expect(artifacts.strategySummary.indicators).toEqual(['bollingerBands'])
@@ -509,18 +489,11 @@ describe('codegenPublicationGenerationStage', () => {
     expect(artifacts.strategySummary.exitRule).toBe('bollinger.middle_revert')
   })
 
-  it('records summary drift as observational diagnostics instead of formal consistency checks', async () => {
+  it('records summary observation from semantic canonical summaries instead of checklist text', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const realSummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
     const strategySummaryBuilder = {
-      buildUserIntentSummary: jest.fn().mockReturnValue({
-        strategyType: 'bollinger',
-        indicators: ['bollingerBands', 'sma'],
-        entryRule: 'bollinger.upper_break_short',
-        exitRule: 'bollinger.middle_revert',
-        market: { symbol: 'BTCUSDT', timeframe: '15m', marketType: 'perp' },
-        sizing: { mode: 'RATIO', evidence: 'explicit' },
-      }),
+      buildStrategySummary: realSummaryBuilder.buildStrategySummary.bind(realSummaryBuilder),
       buildSummaryFromProfile: realSummaryBuilder.buildSummaryFromProfile.bind(realSummaryBuilder),
     }
     const consistencyEvaluate = jest.fn().mockReturnValue({
@@ -566,22 +539,12 @@ describe('codegenPublicationGenerationStage', () => {
     )
 
     const artifacts = await stage.generate({
-      checklist: {
-        symbols: ['BTCUSDT'],
-        timeframes: ['15m'],
-        entryRules: ['收盘价突破上轨时做空'],
-        exitRules: ['价格回到中轨（20日均线）时平仓'],
-        riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
-      },
-      message: '我要一个会被旧 summary 误识别为 sma 的布林带策略',
+      semanticState: buildLockedBollingerSemanticState(),
     })
 
     expect(artifacts.semanticConsistency.checks.some((check: { key: string }) => check.key === 'summary.alignment')).toBe(false)
     expect(artifacts.sessionSpecDesc.summaryObservation).toEqual(expect.objectContaining({
-      status: 'drifted',
-      warnings: expect.arrayContaining([
-        expect.stringContaining('用户意图.indicators'),
-      ]),
+      status: 'aligned',
     }))
   })
 
@@ -628,17 +591,24 @@ describe('codegenPublicationGenerationStage', () => {
       { parse: jest.fn().mockReturnValue({}) } as any,
     )
 
-    const artifacts = await stage.generate({
-      checklist: {
+    const semanticState = buildLockedMaSemanticState()
+    const canonicalSpecOverride = canonicalSpecBuilder.buildFromNormalizedIntent(
+      {
+        market: {
+          exchange: 'okx',
+          marketType: 'spot',
+          defaultTimeframe: '15m',
+        },
         symbols: ['BTCUSDT'],
         timeframes: ['15m', '3m'],
-        entryRules: ['3m 内下跌 1% 买入'],
-        exitRules: ['15m 内上涨 2% 卖出'],
-        entryRuleDrafts: [{ id: 'entry-1', phase: 'entry', text: '3m 内下跌 1% 买入', timeframe: '3m' }],
-        exitRuleDrafts: [{ id: 'exit-1', phase: 'exit', text: '15m 内上涨 2% 卖出', timeframe: '15m', basis: 'entry_avg_price' }],
-        riskRules: { exchange: 'okx', marketType: 'spot', positionPct: 10, stopLossPct: 5 },
       },
-      message: 'OKX BTCUSDT；3 分钟内下跌 1% 买入；15 分钟内上涨 2% 卖出；单笔 10% 资金',
+      buildNormalizedIntentFromSemanticState(semanticState),
+    )
+    canonicalSpecOverride.dataRequirements.requiredTimeframes = ['3m', '15m']
+
+    const artifacts = await stage.generate({
+      semanticState,
+      canonicalSpecOverride,
     })
 
     expect(compile).toHaveBeenCalledWith(expect.objectContaining({
@@ -705,16 +675,7 @@ describe('codegenPublicationGenerationStage', () => {
       { parse: jest.fn().mockReturnValue({}) } as any,
     )
 
-    const artifacts = await stage.generate({
-      checklist: {
-        riskRules: {
-          exchange: 'okx',
-          marketType: 'spot',
-        },
-      },
-      semanticState,
-      message: maGoldenCase.message,
-    } as any)
+    const artifacts = await stage.generate({ semanticState })
 
     expect(artifacts.sessionSpecDesc.canonicalDigest).toMatch(maGoldenCase.expectedDigestPattern)
     expect(artifacts.sessionSpecDesc).toEqual(expect.objectContaining({
@@ -780,11 +741,7 @@ describe('codegenPublicationGenerationStage', () => {
       { parse: jest.fn().mockReturnValue({}) } as any,
     )
 
-    const artifacts = await stage.generate({
-      checklist: {},
-      semanticState,
-      message: bollingerGoldenCase.message,
-    } as any)
+    const artifacts = await stage.generate({ semanticState })
 
     expect(artifacts.sessionSpecDesc.canonicalDigest).toMatch(bollingerGoldenCase.expectedDigestPattern)
     expect(artifacts.sessionSpecDesc).toEqual(expect.objectContaining({
@@ -850,11 +807,7 @@ describe('codegenPublicationGenerationStage', () => {
       { parse: jest.fn().mockReturnValue({}) } as any,
     )
 
-    const artifacts = await stage.generate({
-      checklist: {},
-      semanticState,
-      message: '在 okx 合约 BTCUSDT 15m 上做 60000-80000、每格 1%、突破暂停的双向网格。',
-    } as any)
+    const artifacts = await stage.generate({ semanticState })
 
     expect(artifacts.sessionSpecDesc).toEqual(expect.objectContaining({
       canonicalDigest: expectedDigest,
@@ -912,10 +865,8 @@ describe('codegenPublicationGenerationStage', () => {
     )
 
     const artifacts = await stage.generate({
-      checklist: {},
       semanticState: buildLockedBollingerSemanticState(),
-      message: '确认逻辑图',
-    } as any)
+    })
 
     expect(artifacts.publishParams).toEqual({
       symbol: 'BTCUSDT',
@@ -983,11 +934,9 @@ describe('codegenPublicationGenerationStage', () => {
     )
 
     const artifacts = await stage.generate({
-      checklist: {},
       semanticState: buildLockedMaSemanticState(),
       canonicalSpecOverride,
-      message: '确认逻辑图',
-    } as any)
+    })
 
     expect(buildFromNormalizedIntentSpy).not.toHaveBeenCalled()
     expect(artifacts.canonicalSpec).toEqual(canonicalSpecOverride)
@@ -1045,15 +994,8 @@ describe('codegenPublicationGenerationStage', () => {
     )
 
     const artifacts = await stage.generate({
-      checklist: {
-        riskRules: {
-          exchange: 'okx',
-          marketType: 'perp',
-        },
-      },
       semanticState: buildLockedBollingerSemanticState(),
-      message: bollingerGoldenCase.message,
-    } as any)
+    })
 
     expect(compile).toHaveBeenCalledWith(expect.objectContaining({
       canonicalSpec: expect.objectContaining({

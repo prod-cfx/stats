@@ -1,5 +1,4 @@
 import type { CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec-v2'
-import type { ChecklistPayload } from '../types/checklist-compat'
 import type { SemanticState } from '../types/semantic-state'
 import type { StrategyConsistencyReport } from '../types/strategy-consistency-report'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
@@ -14,9 +13,7 @@ import type { SpecDescBuilderService } from './spec-desc-builder.service'
 import type { StrategyConsistencyService } from './strategy-consistency.service'
 import type { StrategySummaryBuilderService } from './strategy-summary-builder.service'
 import type { StrategySummaryObservationReport } from './strategy-summary-observation.service'
-import { resolveChecklistDefaultTimeframe } from './checklist-compat'
 import { buildNormalizedIntentFromSemanticState } from './semantic-state-normalization'
-import { StrategyIntentNormalizerService } from './strategy-intent-normalizer.service'
 import { StrategySummaryObservationService } from './strategy-summary-observation.service'
 
 export interface CompiledScriptValidationResult {
@@ -30,19 +27,6 @@ export interface CompiledScriptValidationResult {
 
 function normalizePublishedSymbol(raw: string): string {
   return raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
-}
-
-function inferPublishedMarketType(args: {
-  symbol: string
-  checklist: ChecklistPayload
-  message: string
-}): 'spot' | 'perp' {
-  if (args.symbol.endsWith(':PERP')) return 'perp'
-  if (args.symbol.endsWith(':SPOT')) return 'spot'
-  const riskRules = args.checklist.riskRules ?? {}
-  const marketType = typeof riskRules.marketType === 'string' ? riskRules.marketType.trim().toLowerCase() : ''
-  if (marketType === 'perp' || marketType === 'spot') return marketType
-  return /永续|perp|swap|合约/i.test(args.message) ? 'perp' : 'spot'
 }
 
 export interface CodegenPublicationArtifacts {
@@ -69,9 +53,7 @@ export interface CodegenPublicationArtifacts {
 }
 
 export interface CodegenPublicationGenerationInput {
-  checklist: ChecklistPayload
-  semanticState?: SemanticState
-  message: string
+  semanticState: SemanticState
   canonicalSpecOverride?: CanonicalStrategySpecV2
 }
 
@@ -87,45 +69,28 @@ export class CodegenPublicationGenerationStage {
     private readonly compiledScriptExecutionEnvelope: CompiledScriptExecutionEnvelopeService,
     private readonly compiledScriptParser: CompiledScriptParserService,
     private readonly strategySummaryObservation: StrategySummaryObservationService = new StrategySummaryObservationService(),
-    private readonly intentNormalizer: StrategyIntentNormalizerService = new StrategyIntentNormalizerService(),
   ) {}
 
   async generate(input: CodegenPublicationGenerationInput): Promise<CodegenPublicationArtifacts> {
-    const normalization = input.semanticState
-      ? this.buildNormalizationFromSemanticState(input.semanticState)
-      : this.intentNormalizer.normalize(input.checklist)
+    const normalization = this.buildNormalizationFromSemanticState(input.semanticState)
     const canonicalSpec = input.canonicalSpecOverride
-      ?? (input.semanticState
-      ? this.canonicalSpecBuilder.buildFromNormalizedIntent(
-          this.buildSemanticCanonicalContext(input.semanticState),
-          normalization.normalizedIntent,
-        )
-      : this.canonicalSpecBuilder.build(input.checklist))
+      ?? this.canonicalSpecBuilder.buildFromNormalizedIntent(
+        this.buildSemanticCanonicalContext(input.semanticState),
+        normalization.normalizedIntent,
+      )
     const semanticView = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
     })
-    const userIntentSummary = input.semanticState
-      ? this.strategySummaryBuilder.buildStrategySummary(canonicalSpec)
-      : this.strategySummaryBuilder.buildUserIntentSummary({
-          checklist: input.checklist,
-        })
-    const lockedParams = input.semanticState
-      ? this.buildSemanticLockedParams({
-          semanticState: input.semanticState,
-          canonicalSpec,
-          normalizedIntent: normalization.normalizedIntent,
-        })
-      : this.buildChecklistLockedParams(input.checklist)
-    const publishParams = input.semanticState
-      ? this.buildSemanticPublishParams({
-          canonicalSpec,
-          semanticState: input.semanticState,
-        })
-      : this.buildChecklistPublishParams({
-          canonicalSpec,
-          checklist: input.checklist,
-          message: input.message,
-        })
+    const userIntentSummary = this.strategySummaryBuilder.buildStrategySummary(canonicalSpec)
+    const lockedParams = this.buildSemanticLockedParams({
+      semanticState: input.semanticState,
+      canonicalSpec,
+      normalizedIntent: normalization.normalizedIntent,
+    })
+    const publishParams = this.buildSemanticPublishParams({
+      canonicalSpec,
+      semanticState: input.semanticState,
+    })
     const compiled = this.canonicalSpecV2IrCompiler.compile({
       canonicalSpec,
       fallback: this.buildCompiledIrFallback({
@@ -215,34 +180,6 @@ export class CodegenPublicationGenerationStage {
     }
   }
 
-  private buildChecklistPublishParams(args: {
-    canonicalSpec: CanonicalStrategySpecV2
-    checklist: ChecklistPayload
-    message: string
-  }): {
-    symbol: string
-    timeframe: string
-    marketType: 'spot' | 'perp'
-  } {
-    const rawSymbol = args.canonicalSpec.market.symbol
-      ?? args.checklist.symbols?.[0]
-      ?? 'BTCUSDT'
-    const requiredTimeframes = args.canonicalSpec.dataRequirements.requiredTimeframes
-    const baseTimeframe = requiredTimeframes[0]
-      ?? args.canonicalSpec.market.defaultTimeframe
-      ?? resolveChecklistDefaultTimeframe(args.checklist)
-      ?? '5m'
-    return {
-      symbol: normalizePublishedSymbol(rawSymbol),
-      timeframe: baseTimeframe,
-      marketType: args.canonicalSpec.market.marketType ?? inferPublishedMarketType({
-        symbol: rawSymbol,
-        checklist: args.checklist,
-        message: args.message,
-      }),
-    }
-  }
-
   private buildCompiledIrFallback(args: {
     lockedParams: Record<string, unknown>
     publishParams: {
@@ -270,52 +207,6 @@ export class CodegenPublicationGenerationStage {
         ? positionPct
         : 10,
     }
-  }
-
-  private buildChecklistLockedParams(checklist: ChecklistPayload): Record<string, unknown> {
-    const riskRules = checklist.riskRules ?? {}
-    const locked: Record<string, unknown> = {}
-
-    const rawSymbol = checklist.symbols?.[0]
-    if (typeof rawSymbol === 'string' && rawSymbol.trim()) {
-      locked.symbol = normalizePublishedSymbol(rawSymbol)
-    }
-
-    const rawTimeframe = resolveChecklistDefaultTimeframe(checklist)
-    if (typeof rawTimeframe === 'string' && rawTimeframe.trim()) {
-      locked.timeframe = rawTimeframe.trim()
-    }
-
-    const marketType = typeof riskRules.marketType === 'string'
-      ? riskRules.marketType.trim().toLowerCase()
-      : ''
-    if (marketType === 'spot' || marketType === 'perp') {
-      locked.marketType = marketType
-    }
-
-    const exchange = typeof riskRules.exchange === 'string'
-      ? riskRules.exchange.trim().toLowerCase()
-      : ''
-    if (exchange === 'binance' || exchange === 'okx' || exchange === 'hyperliquid') {
-      locked.exchange = exchange
-    }
-
-    if (typeof riskRules.positionPct === 'number' && Number.isFinite(riskRules.positionPct)) {
-      locked.positionPct = riskRules.positionPct
-    }
-
-    const stopLossPct = typeof riskRules.stopLossPct === 'number'
-      ? riskRules.stopLossPct
-      : (typeof riskRules.stopLoss === 'number' ? riskRules.stopLoss : null)
-    if (typeof stopLossPct === 'number' && Number.isFinite(stopLossPct)) {
-      locked.stopLossPct = stopLossPct
-    }
-
-    if (typeof riskRules.maxDrawdownPct === 'number' && Number.isFinite(riskRules.maxDrawdownPct)) {
-      locked.maxDrawdownPct = riskRules.maxDrawdownPct
-    }
-
-    return locked
   }
 
   private buildSemanticLockedParams(args: {

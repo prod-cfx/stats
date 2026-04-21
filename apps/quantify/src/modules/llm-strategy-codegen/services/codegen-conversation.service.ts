@@ -867,9 +867,8 @@ export class CodegenConversationService {
     void this.publicationPipeline.run({
       sessionId: session.id,
       userId: sessionUserId,
-      checklist: hasPersistedSemanticState ? {} : canonicalChecklist,
-      semanticState: hasPersistedSemanticState ? reducedSemanticState : undefined,
-      canonicalSpecOverride: hasPersistedSemanticState ? canonicalSpec : undefined,
+      semanticState: reducedSemanticState,
+      canonicalSpecOverride: canonicalSpec,
       message: dto.message,
       model: dto.model,
       existingStrategyInstanceId: session.strategyInstanceId ?? null,

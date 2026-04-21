@@ -6833,7 +6833,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     )
     expect(buildChecklistSpy).not.toHaveBeenCalled()
     expect(publicationPipelineRunSpy).toHaveBeenCalledWith(expect.objectContaining({
-      checklist: {},
       canonicalSpecOverride: expect.objectContaining({
         version: 2,
       }),
@@ -6841,6 +6840,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         triggers: expect.any(Array),
       }),
     }))
+    expect(publicationPipelineRunSpy.mock.calls[0][0]).not.toHaveProperty('checklist')
   })
 
 
