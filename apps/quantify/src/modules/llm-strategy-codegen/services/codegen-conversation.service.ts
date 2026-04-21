@@ -3773,6 +3773,7 @@ export class CodegenConversationService {
   private isValidSemanticStateInput(payload: Record<string, unknown>): boolean {
     const contextSlots = payload.contextSlots as Record<string, unknown> | undefined
     return this.hasPersistedSemanticState(payload as unknown as Prisma.JsonValue)
+      && Array.isArray(payload.families)
       && Array.isArray(payload.normalizationNotes)
       && typeof payload.updatedAt === 'string'
       && Boolean(contextSlots)
@@ -3871,14 +3872,48 @@ export class CodegenConversationService {
       && typeof (rule as Record<string, unknown>).condition === 'object'
       && !Array.isArray((rule as Record<string, unknown>).condition)
       && typeof ((rule as Record<string, unknown>).condition as Record<string, unknown>).kind === 'string'
+      && this.isCanonicalConditionInput((rule as Record<string, unknown>).condition)
       && Array.isArray((rule as Record<string, unknown>).actions)
       && ((rule as Record<string, unknown>).actions as unknown[]).length > 0
-      && ((rule as Record<string, unknown>).actions as unknown[]).every(action =>
-        Boolean(action)
-        && typeof action === 'object'
-        && !Array.isArray(action)
-        && typeof (action as Record<string, unknown>).type === 'string',
-      )
+      && ((rule as Record<string, unknown>).actions as unknown[]).every(action => this.isCanonicalActionInput(action))
+  }
+
+  private isCanonicalConditionInput(condition: unknown): boolean {
+    if (!condition || typeof condition !== 'object' || Array.isArray(condition)) return false
+    const kind = (condition as Record<string, unknown>).kind
+    if (kind === 'atom') {
+      return typeof (condition as Record<string, unknown>).key === 'string'
+        && ((condition as Record<string, unknown>).key as string).trim().length > 0
+    }
+    if (kind === 'AND' || kind === 'OR') {
+      const children = (condition as Record<string, unknown>).children
+      return Array.isArray(children)
+        && children.length > 0
+        && children.every(child => this.isCanonicalConditionInput(child))
+    }
+    if (kind === 'NOT') {
+      const children = (condition as Record<string, unknown>).children
+      return Array.isArray(children)
+        && children.length === 1
+        && this.isCanonicalConditionInput(children[0])
+    }
+    return false
+  }
+
+  private isCanonicalActionInput(action: unknown): boolean {
+    if (!action || typeof action !== 'object' || Array.isArray(action)) return false
+    const type = (action as Record<string, unknown>).type
+    return typeof type === 'string'
+      && [
+        'OPEN_LONG',
+        'OPEN_SHORT',
+        'CLOSE_LONG',
+        'CLOSE_SHORT',
+        'REDUCE_LONG',
+        'REDUCE_SHORT',
+        'FORCE_EXIT',
+        'BLOCK_NEW_ENTRY',
+      ].includes(type)
   }
 
   private resolveChecklistMissingFields(checklist: ChecklistPayload): string[] {

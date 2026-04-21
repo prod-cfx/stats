@@ -1026,6 +1026,19 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
   })
 
+  it('rejects engine semanticState without families array', async () => {
+    const { families: _families, ...semanticStateWithoutFamilies } = buildLockedMaSemanticState()
+
+    await expect(service.testEngine({
+      userId: 'u1',
+      message: '请测试语义态生成策略脚本',
+      semanticState: semanticStateWithoutFamilies,
+    } as any)).rejects.toMatchObject({
+      message: 'codegen.invalid_semantic_input',
+      args: { field: 'semanticState' },
+    })
+  })
+
   it('tests engine generation from a provided canonicalSpec without checklist fallback', async () => {
     const semanticState = buildLockedMaSemanticState()
     const normalization = (service as any).buildNormalizationFromSemanticState(semanticState)
@@ -1092,6 +1105,32 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             priority: 100,
             condition: {},
             actions: [],
+          },
+        ],
+      },
+    } as any)).rejects.toMatchObject({
+      message: 'codegen.invalid_semantic_input',
+      args: { field: 'canonicalSpec' },
+    })
+  })
+
+  it('rejects canonicalSpec rules with unusable condition or action shapes', async () => {
+    const semanticState = buildLockedMaSemanticState()
+    const normalization = (service as any).buildNormalizationFromSemanticState(semanticState)
+    const canonicalSpec = (service as any).buildCanonicalSpecForConversation({}, normalization, semanticState)
+
+    await expect(service.testEngine({
+      userId: 'u1',
+      message: '请测试 canonical spec 生成策略脚本',
+      canonicalSpec: {
+        ...canonicalSpec,
+        rules: [
+          {
+            id: 'bad-rule',
+            phase: 'entry',
+            priority: 100,
+            condition: { kind: 'atom' },
+            actions: [{ type: '' }],
           },
         ],
       },
