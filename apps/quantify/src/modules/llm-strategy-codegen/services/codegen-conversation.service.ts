@@ -63,6 +63,7 @@ import { isEquivalentMarketScopeValue } from './market-scope-equivalence'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RuntimeGuardrailService } from './runtime-guardrail.service'
+import { SemanticSeedExtractorService } from './semantic-seed-extractor.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { SpecDescBuilderService } from './spec-desc-builder.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -197,6 +198,7 @@ export class CodegenConversationService {
     private readonly semanticStateReducer: SemanticStateReducerService = new SemanticStateReducerService(),
     private readonly semanticStateProjection: SemanticStateProjectionService = new SemanticStateProjectionService(),
     private readonly semanticStateMerge: SemanticStateMergeService = new SemanticStateMergeService(),
+    private readonly semanticSeedExtractor: SemanticSeedExtractorService = new SemanticSeedExtractorService(),
   ) {
     this.inferredConfirmationClassifier = new InferredConfirmationClassifierService(this.aiService)
   }
@@ -213,31 +215,23 @@ export class CodegenConversationService {
       })
     }
     const seedChecklist = this.inferChecklistFromMessage(dto.initialMessage)
-    const seedSemanticState = this.createEmptySemanticState()
+    const seedSemanticState = this.mergeSemanticPatchIntoState(
+      this.createEmptySemanticState(),
+      this.extractSemanticPatchFromMessage(dto.initialMessage),
+    )
     const plan = await this.planConversationByLlm(dto.initialMessage ?? '', seedSemanticState, {
       providerCode: this.resolveProviderCode(undefined),
       model: undefined,
-    }, [], seedChecklist)
+    }, [])
     const startSeedChecklist = this.withTargetedStartSessionSeedContext(
       seedChecklist,
       dto.initialMessage,
-      plan.logic,
     )
     let initialSemanticState = this.applyConversationPlanToSemanticState({
       currentState: seedSemanticState,
-      compatibilityChecklist: startSeedChecklist,
       plan,
     })
-    if (this.shouldReapplyDeterministicStartSeedChecklist(startSeedChecklist)) {
-      initialSemanticState = this.semanticStateMerge.merge({
-        persisted: initialSemanticState,
-        derived: this.buildFallbackSemanticState(startSeedChecklist),
-      })
-    }
-    const checklist = this.mergeChecklistSnapshots(
-      this.projectLegacyChecklistFromSemanticState(initialSemanticState, startSeedChecklist),
-      plan.logic ?? {},
-    )
+    const checklist = this.projectLegacyChecklistFromSemanticState(initialSemanticState, startSeedChecklist)
     const recommendationStyle = this.inferRecommendationStyleFromContext(
       dto.initialMessage,
       checklist,
@@ -452,26 +446,23 @@ export class CodegenConversationService {
     const clarificationStateAfterAnswers = hasStructuredClarificationAnswers
       ? this.resolveClarificationArtifacts(baseChecklist).clarificationState
       : this.withClarificationSummary(baseClarificationState, baseChecklist)
-    const preMergedSemanticState = baseSemanticState
+    const preMergedSemanticState = this.mergeSemanticPatchIntoState(
+      baseSemanticState,
+      this.extractSemanticPatchFromMessage(dto.message),
+    )
     const preMergedChecklist = this.projectLegacyChecklistFromSemanticState(preMergedSemanticState, baseChecklist)
     const constraintPack = inferredConfirmation.constraintPack
     const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, dto.guideConfig)
     const plan = await this.planConversationByLlm(dto.message, preMergedSemanticState, {
       providerCode: this.resolveProviderCode(dto.providerCode),
       model: dto.model,
-    }, constraintPack.conversationHistory ?? [], baseChecklist)
-    const plannerCompatibilityChecklist = hasPersistedSemanticState
-      ? this.inferChecklistFromMessage(dto.message)
-      : preMergedChecklist
-    const reducedSemanticState = this.applyConversationPlanToSemanticState({
+    }, constraintPack.conversationHistory ?? [])
+    const plannedSemanticState = this.applyConversationPlanToSemanticState({
       currentState: preMergedSemanticState,
-      compatibilityChecklist: plannerCompatibilityChecklist,
       plan,
     })
-    const canonicalChecklist = this.mergeChecklistSnapshots(
-      this.projectLegacyChecklistFromSemanticState(reducedSemanticState, preMergedChecklist),
-      plan.logic ?? {},
-    )
+    const reducedSemanticState = plannedSemanticState
+    const canonicalChecklist = this.projectLegacyChecklistFromSemanticState(reducedSemanticState, preMergedChecklist)
     const clarification = this.resolveClarificationArtifacts(canonicalChecklist)
     const clarificationState = this.buildClarificationFromSemanticState(
       reducedSemanticState,
@@ -1749,28 +1740,10 @@ export class CodegenConversationService {
 
   private applyConversationPlanToSemanticState(input: {
     currentState: SemanticState
-    compatibilityChecklist?: ChecklistPayload
     plan: ConversationPlan
   }): SemanticState {
     let nextState = input.currentState
     const semanticPatchState = this.buildSemanticStateFromPlannerPatch(input.plan.semanticPatch)
-
-    if (!semanticPatchState && input.compatibilityChecklist && Object.keys(input.compatibilityChecklist).length > 0) {
-      nextState = this.semanticStateMerge.merge({
-        persisted: nextState,
-        derived: this.buildFallbackSemanticState(input.compatibilityChecklist),
-      })
-    }
-
-    if (input.plan.logic) {
-      nextState = this.semanticStateMerge.merge({
-        persisted: nextState,
-        derived: this.withoutSemanticPatchDuplicateAtoms(
-          this.buildFallbackSemanticState(input.plan.logic),
-          semanticPatchState,
-        ),
-      })
-    }
 
     if (semanticPatchState) {
       nextState = this.semanticStateMerge.merge({
@@ -1779,11 +1752,7 @@ export class CodegenConversationService {
       })
     }
 
-    const requiredSlotChecklist = this.mergeChecklistSnapshots(
-      input.compatibilityChecklist ?? {},
-      input.plan.logic ?? {},
-    )
-    return this.withRequiredSemanticOpenSlots(nextState, requiredSlotChecklist, {
+    return this.withRequiredSemanticOpenSlots(nextState, {}, {
       preserveLockedPositionSizing: Boolean(
         this.hasValidLockedPositionSizing(semanticPatchState?.position)
         || this.hasValidLockedPositionSizing(input.currentState.position),
@@ -1791,68 +1760,19 @@ export class CodegenConversationService {
     })
   }
 
-  private withoutSemanticPatchDuplicateAtoms(
-    fallbackState: SemanticState,
-    semanticPatchState: SemanticState | null,
+  private mergeSemanticPatchIntoState(
+    currentState: SemanticState,
+    semanticPatch?: CodegenSemanticPatch,
   ): SemanticState {
+    const semanticPatchState = this.buildSemanticStateFromPlannerPatch(semanticPatch)
     if (!semanticPatchState) {
-      return fallbackState
+      return currentState
     }
 
-    return {
-      ...fallbackState,
-      triggers: fallbackState.triggers.filter(trigger =>
-        !semanticPatchState.triggers.some(patchTrigger =>
-          this.isSameSemanticTriggerAtom(trigger, patchTrigger),
-        ),
-      ),
-      actions: fallbackState.actions.filter(action =>
-        !semanticPatchState.actions.some(patchAction =>
-          this.isSameSemanticActionAtom(action, patchAction),
-        ),
-      ),
-      risk: fallbackState.risk.filter(risk =>
-        !semanticPatchState.risk.some(patchRisk =>
-          this.isSameSemanticRiskAtom(risk, patchRisk),
-        ),
-      ),
-      position: semanticPatchState.position ? null : fallbackState.position,
-    }
-  }
-
-  private isSameSemanticTriggerAtom(
-    left: SemanticTriggerState,
-    right: SemanticTriggerState,
-  ): boolean {
-    return left.phase === right.phase
-      && left.key === right.key
-      && (!left.sideScope || left.sideScope === right.sideScope)
-      && this.haveCompatibleSemanticParams(left.params, right.params)
-  }
-
-  private isSameSemanticActionAtom(
-    left: SemanticState['actions'][number],
-    right: SemanticState['actions'][number],
-  ): boolean {
-    return left.key === right.key
-      && this.haveCompatibleSemanticParams(left.params ?? {}, right.params ?? {})
-  }
-
-  private isSameSemanticRiskAtom(
-    left: SemanticState['risk'][number],
-    right: SemanticState['risk'][number],
-  ): boolean {
-    return left.key === right.key
-      && this.haveCompatibleSemanticParams(left.params, right.params)
-  }
-
-  private haveCompatibleSemanticParams(
-    left: Record<string, unknown>,
-    right: Record<string, unknown>,
-  ): boolean {
-    return Object.keys(left).every(key =>
-      right[key] !== undefined && left[key] === right[key],
-    )
+    return this.semanticStateMerge.merge({
+      persisted: currentState,
+      derived: semanticPatchState,
+    })
   }
 
   private hasValidLockedPositionSizing(
@@ -1864,62 +1784,11 @@ export class CodegenConversationService {
       && position.value > 0
   }
 
-  private shouldReapplyDeterministicStartSeedChecklist(
-    checklist: ChecklistPayload,
-  ): boolean {
-    if (Object.keys(checklist).length === 0) {
-      return false
-    }
-
-    const seedSemanticState = this.buildFallbackSemanticState(checklist)
-    return this.hasCompleteBidirectionalGridSeed(seedSemanticState)
-      || this.hasCompleteSymmetricBollingerSeed(seedSemanticState)
-  }
-
-  private hasCompleteBidirectionalGridSeed(state: SemanticState): boolean {
-    return state.triggers.some(trigger => (
-      trigger.key === 'grid.range_rebalance'
-      && trigger.phase === 'entry'
-      && trigger.status === 'locked'
-      && trigger.sideScope === 'both'
-      && typeof trigger.params.rangeLower === 'number'
-      && typeof trigger.params.rangeUpper === 'number'
-      && typeof trigger.params.stepPct === 'number'
-      && trigger.params.sideMode === 'bidirectional'
-    ))
-  }
-
-  private hasCompleteSymmetricBollingerSeed(state: SemanticState): boolean {
-    const hasUpperShortEntry = state.triggers.some(trigger => (
-      trigger.key === 'bollinger.touch_upper'
-      && trigger.phase === 'entry'
-      && trigger.status === 'locked'
-      && trigger.sideScope === 'short'
-    ))
-    const hasLowerLongEntry = state.triggers.some(trigger => (
-      trigger.key === 'bollinger.touch_lower'
-      && trigger.phase === 'entry'
-      && trigger.status === 'locked'
-      && trigger.sideScope === 'long'
-    ))
-    const hasMiddleExit = state.triggers.some(trigger => (
-      trigger.key === 'bollinger.touch_middle'
-      && trigger.phase === 'exit'
-      && trigger.status === 'locked'
-    ))
-
-    return hasUpperShortEntry
-      && hasLowerLongEntry
-      && hasMiddleExit
-      && state.position?.positionMode === 'long_short'
-  }
-
   private withTargetedStartSessionSeedContext(
     checklist: ChecklistPayload,
     message: string | undefined,
-    plannerLogic?: ChecklistPayload,
   ): ChecklistPayload {
-    if ((checklist.symbols?.length ?? 0) > 0 || (plannerLogic?.symbols?.length ?? 0) > 0) {
+    if ((checklist.symbols?.length ?? 0) > 0) {
       return checklist
     }
 
@@ -5868,7 +5737,6 @@ export class CodegenConversationService {
     currentSemanticState: SemanticState,
     options?: { providerCode?: string, model?: string },
     history: string[] = [],
-    compatibilityChecklist: ChecklistPayload = {},
   ): Promise<ConversationPlan> {
     const text = message.trim()
     if (!text) {
@@ -5895,7 +5763,6 @@ export class CodegenConversationService {
             content: JSON.stringify({
               message: text,
               currentSemanticState,
-              compatibilityChecklist,
               history: history.slice(-MAX_PLANNER_HISTORY_LINES),
             }),
           },
@@ -5904,11 +5771,13 @@ export class CodegenConversationService {
 
       const content = result.content?.trim() ?? ''
       if (!content) {
+        const semanticPatch = this.extractSemanticPatchFromMessage(text)
         this.logPlannerFallback('empty_content')
         return {
           related: true,
           logicReady: false,
           assistantPrompt: '我先理解到你的交易想法了。请补充入场和出场触发条件，我再整理成逻辑图。',
+          ...(semanticPatch ? { semanticPatch } : {}),
         } satisfies ConversationPlan
       }
 
@@ -5929,24 +5798,20 @@ export class CodegenConversationService {
               ? '我已整理出策略逻辑，请确认逻辑图。'
               : '我先继续完善策略逻辑，请补充一个关键条件。')
         const semanticPatch = this.normalizeSemanticPatch(parsed.semanticPatch ?? parsed.semanticUpdates)
-        const logic = this.mergeChecklistSnapshots(
-          this.buildPlannerLogicFromSemanticUpdates(compatibilityChecklist, semanticPatch),
-          this.normalizeChecklist((parsed.logic ?? {}) as Record<string, unknown>),
-        )
         return {
           related,
           logicReady,
           assistantPrompt,
-          logic,
           ...(semanticPatch ? { semanticPatch } : {}),
         } satisfies ConversationPlan
       } catch {
+        const semanticPatch = this.extractSemanticPatchFromMessage(text)
         this.logPlannerFallback('invalid_json', { contentLength: content.length })
         return {
           related: true,
           logicReady: false,
           assistantPrompt: '我先继续完善策略逻辑，请补充入场和出场条件。',
-          logic: this.inferChecklistFromMessage(text),
+          ...(semanticPatch ? { semanticPatch } : {}),
         } satisfies ConversationPlan
       }
     }
@@ -5957,12 +5822,13 @@ export class CodegenConversationService {
       const messageText = error instanceof Error ? error.message : String(error)
       const nonRetryableModelError = /model\s+not\s+exist|model.*not.*found/i.test(messageText)
       if (nonRetryableModelError) {
+        const semanticPatch = this.extractSemanticPatchFromMessage(text)
         this.logPlannerFallback('model_not_found', { error: this.summarizePlannerError(error) })
         return {
           related: true,
           logicReady: false,
           assistantPrompt: '我先继续完善策略逻辑，请补充入场和出场条件。',
-          logic: this.inferChecklistFromMessage(text),
+          ...(semanticPatch ? { semanticPatch } : {}),
         }
       }
       this.logPlannerFallback('transport_failure_retrying', {
@@ -5971,6 +5837,7 @@ export class CodegenConversationService {
       try {
         return await classifyOnce()
       } catch (retryError) {
+        const semanticPatch = this.extractSemanticPatchFromMessage(text)
         this.logPlannerFallback('transport_failure_retry_exhausted', {
           error: this.summarizePlannerError(retryError),
         })
@@ -5978,29 +5845,23 @@ export class CodegenConversationService {
           related: true,
           logicReady: false,
           assistantPrompt: '我先继续完善策略逻辑，请补充入场和出场条件。',
-          logic: this.inferChecklistFromMessage(text),
+          ...(semanticPatch ? { semanticPatch } : {}),
         }
       }
     }
   }
 
-  private buildPlannerLogicFromSemanticUpdates(
-    currentLogic: ChecklistPayload,
-    semanticPatch: unknown,
-  ): ChecklistPayload {
-    const semanticState = this.buildSemanticStateFromPlannerPatch(semanticPatch)
-    if (!semanticState) {
-      return {}
-    }
-
-    return this.projectLegacyChecklistFromSemanticState(semanticState, currentLogic)
+  private extractSemanticPatchFromMessage(message?: string): CodegenSemanticPatch | undefined {
+    const patch = this.semanticSeedExtractor.extract(message)
+    return patch.contextSlots || patch.triggers || patch.actions || patch.risk || patch.position
+      ? patch
+      : undefined
   }
 
   private readPlannerPayload(value: unknown): {
     related?: unknown
     logicReady?: unknown
     assistantPrompt?: unknown
-    logic?: unknown
     semanticPatch?: unknown
     semanticUpdates?: unknown
   } {
@@ -6012,7 +5873,6 @@ export class CodegenConversationService {
       related?: unknown
       logicReady?: unknown
       assistantPrompt?: unknown
-      logic?: unknown
       semanticPatch?: unknown
       semanticUpdates?: unknown
     }
@@ -6024,7 +5884,6 @@ export class CodegenConversationService {
       related?: unknown
       logicReady?: unknown
       assistantPrompt?: unknown
-      logic?: unknown
       semanticPatch?: unknown
       semanticUpdates?: unknown
     },
@@ -6043,9 +5902,6 @@ export class CodegenConversationService {
     }
     if (parsed.assistantPrompt === undefined || typeof parsed.assistantPrompt !== 'string') {
       reasons.push('assistantPrompt')
-    }
-    if (parsed.logic !== undefined && (!parsed.logic || typeof parsed.logic !== 'object' || Array.isArray(parsed.logic))) {
-      reasons.push('logic')
     }
     if (
       parsed.semanticPatch !== undefined
