@@ -399,6 +399,75 @@ describe('SemanticStateMergeService', () => {
     }))
   })
 
+  it('coalesces equivalent Bollinger triggers with different confirmation modes', () => {
+    const merged = service.merge({
+      persisted: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [
+          {
+            id: 'entry-upper-touch',
+            key: 'bollinger.touch_upper',
+            phase: 'entry',
+            sideScope: 'short',
+            params: {
+              indicator: 'bollinger',
+              period: 20,
+              stdDev: 2,
+              confirmationMode: 'touch',
+            },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-16T10:00:00.000Z',
+      },
+      derived: {
+        version: 1,
+        families: ['single-leg'],
+        triggers: [
+          {
+            id: 'entry-upper-close',
+            key: 'bollinger.touch_upper',
+            phase: 'entry',
+            sideScope: 'short',
+            params: {
+              indicator: 'bollinger',
+              period: 20,
+              stdDev: 2,
+              confirmationMode: 'close_confirm',
+            },
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          },
+        ],
+        actions: [],
+        risk: [],
+        position: null,
+        contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+        normalizationNotes: [],
+        updatedAt: '2026-04-16T10:01:00.000Z',
+      },
+    })
+
+    expect(merged.triggers).toHaveLength(1)
+    expect(merged.triggers[0]).toEqual(expect.objectContaining({
+      key: 'bollinger.touch_upper',
+      phase: 'entry',
+      sideScope: 'short',
+      params: expect.objectContaining({
+        confirmationMode: 'close_confirm',
+      }),
+    }))
+  })
+
   it('keeps stronger persisted position, actions, and risk atoms when a weaker derived round only provides looser replacements', () => {
     const merged = service.merge({
       persisted: {

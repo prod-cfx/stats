@@ -9018,6 +9018,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(updated.status).toBe('CONFIRM_GATE')
     const checklistGateUpdate = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updated.assistantPrompt).toContain('入场：15m K线收盘后确认突破布林带(20,2)上轨时做空；15m K线收盘后确认突破布林带(20,2)下轨时做多')
+    expect(updated.assistantPrompt).toContain('出场：15m 价格回到布林带中轨(MA20)时平多；15m 价格回到布林带中轨(MA20)时平空')
+    expect(updated.assistantPrompt.match(/上轨时做空/gu)).toHaveLength(1)
     expect(checklistGateUpdate.semanticState).toEqual(expect.objectContaining({
       triggers: expect.arrayContaining([
         expect.objectContaining({ key: 'bollinger.touch_upper', phase: 'entry' }),
