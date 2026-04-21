@@ -184,7 +184,7 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
-  it('does not treat mixed single-reference upper wording as a true crossover', () => {
+  it('keeps mixed MA filter wording as multiple above atoms without crossover', () => {
     const patch = service.extract('价格上穿 MA50 且高于 MA200 买入；单笔 10%。')
 
     expect(patch).toEqual(expect.objectContaining({
@@ -196,6 +196,15 @@ describe('SemanticSeedExtractorService', () => {
           params: expect.objectContaining({
             indicator: 'ma',
             'reference.period': 50,
+          }),
+        }),
+        expect.objectContaining({
+          key: 'indicator.above',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            'reference.period': 200,
           }),
         }),
       ]),
@@ -355,6 +364,47 @@ describe('SemanticSeedExtractorService', () => {
       expect.objectContaining({ key: 'indicator.above' }),
       expect.objectContaining({ key: 'indicator.below' }),
     ]))
+  })
+
+  it('normalizes MA pair golden-cross wording into crossover atoms', () => {
+    const patch = service.extract('MA5 和 MA20 金叉做多；单笔 10%。')
+
+    expect(patch).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.cross_over',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            fastPeriod: 5,
+            slowPeriod: 20,
+          }),
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'open_long' }),
+      ]),
+    }))
+  })
+
+  it('aligns english crossover and crossunder wording with crossover atoms', () => {
+    const patch = service.extract('EMA7 crossover EMA21 做多；EMA7 crossunder EMA21 平多；单笔 10%。')
+
+    expect(patch).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.cross_over',
+          phase: 'entry',
+          sideScope: 'long',
+        }),
+        expect.objectContaining({
+          key: 'indicator.cross_under',
+          phase: 'exit',
+          sideScope: 'long',
+        }),
+      ]),
+    }))
   })
 
   it('extracts Bollinger dual-side semantics into a semantic patch', () => {
