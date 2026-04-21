@@ -77,6 +77,7 @@ export interface SemanticPositionState {
   status: SemanticNodeStatus
   source: SemanticSource
   evidence?: SemanticEvidence
+  openSlots?: SemanticSlotState[]
 }
 
 export interface SemanticState {

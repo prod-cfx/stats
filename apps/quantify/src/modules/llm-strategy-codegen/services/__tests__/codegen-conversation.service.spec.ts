@@ -133,6 +133,17 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     timeframes: checklist.timeframes ?? ['1h'],
     riskRules: completeRiskRules(checklist.riskRules ?? {}),
   })
+  const lockedStopLossRisk = () => ({
+    id: 'risk-stop-loss',
+    key: 'risk.stop_loss_pct',
+    params: {
+      valuePct: 5,
+      basis: 'entry_avg_price',
+    },
+    status: 'locked',
+    source: 'user_explicit',
+    openSlots: [],
+  })
   const buildLockedMaSemanticState = (overrides: Record<string, any> = {}) => ({
     version: 1,
     families: ['single-leg'],
@@ -910,6 +921,596 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       ]),
     }))
     expect(createPayload).not.toHaveProperty('checklist')
+  })
+
+  it('adds required semantic open slots when startSession is built from semanticPatch without position or risk', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '逻辑图仍未完整，请继续补充。',
+        semanticPatch: {
+          families: ['single-leg'],
+          triggers: [
+            {
+              phase: 'entry',
+              key: 'bollinger.touch_upper',
+              sideScope: 'short',
+              params: {
+                indicator: 'bollinger',
+                period: 20,
+                stdDev: 2,
+                confirmationMode: 'close_confirm',
+              },
+            },
+            {
+              phase: 'exit',
+              key: 'bollinger.touch_middle',
+              sideScope: 'short',
+              params: {
+                indicator: 'bollinger',
+                period: 20,
+                stdDev: 2,
+                confirmationMode: 'close_confirm',
+              },
+            },
+          ],
+          actions: [
+            { key: 'open_short' },
+            { key: 'close_short' },
+          ],
+          context: {
+            exchange: 'okx',
+            marketType: 'perp',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-semantic-patch-required-open-slots' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在 OKX 合约 BTCUSDT 15m，触及布林带上轨做空，回到中轨平空',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.status).toBe('DRAFTING')
+    expect(createPayload.semanticState.position).toEqual(expect.objectContaining({
+      mode: 'fixed_ratio',
+      value: 0,
+      positionMode: 'short_only',
+      status: 'open',
+      source: 'derived',
+      openSlots: expect.arrayContaining([
+        expect.objectContaining({
+          slotKey: 'position.sizing',
+          fieldPath: 'position.value',
+          status: 'open',
+        }),
+      ]),
+    }))
+    expect(createPayload.semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'risk-protective-exit',
+        key: 'risk.protective_exit',
+        status: 'open',
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({
+            slotKey: 'risk.protective_exit',
+            fieldPath: 'risk[protective].params',
+            status: 'open',
+          }),
+        ]),
+      }),
+    ]))
+    expect(createPayload.clarificationState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'position.sizing',
+        reason: 'missing_position_pct',
+      }),
+      expect.objectContaining({
+        slotKey: 'risk.protective_exit',
+        reason: 'missing_stop_loss_rule',
+      }),
+    ]))
+  })
+
+  it('fills deterministic context before required semantic open slots when semanticPatch omits context', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '请补充仓位和止损规则。',
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'price.percent_change',
+              phase: 'entry',
+              params: {
+                direction: 'down',
+                valuePct: 1,
+                window: '3m',
+              },
+            },
+            {
+              key: 'price.percent_change',
+              phase: 'exit',
+              params: {
+                direction: 'up',
+                valuePct: 2,
+                window: '15m',
+              },
+            },
+          ],
+          actions: [
+            { key: 'open_long' },
+            { key: 'close_long' },
+          ],
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-semantic-patch-deterministic-context' })
+
+    await service.startSession({
+      userId: 'u1',
+      initialMessage: '在 OKX 合约 BTCUSDT 15m，3分钟跌1%买入，15分钟涨2%卖出',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(createPayload.semanticState.contextSlots).toEqual(expect.objectContaining({
+      exchange: expect.objectContaining({ status: 'locked', value: 'okx' }),
+      symbol: expect.objectContaining({ status: 'locked', value: 'BTCUSDT' }),
+      marketType: expect.objectContaining({ status: 'locked', value: 'perp' }),
+      timeframe: expect.objectContaining({ status: 'locked', value: '15m' }),
+    }))
+    expect(createPayload.semanticState.triggers).toHaveLength(2)
+    expect(createPayload.semanticState.actions).toHaveLength(2)
+    expect(createPayload.semanticState.position.openSlots).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'position.sizing',
+        status: 'open',
+      }),
+    ]))
+    expect(createPayload.semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.protective_exit',
+        status: 'open',
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({
+            slotKey: 'risk.protective_exit',
+            status: 'open',
+          }),
+        ]),
+      }),
+    ]))
+    expect(createPayload.clarificationState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'position.sizing',
+        reason: 'missing_position_pct',
+      }),
+      expect.objectContaining({
+        slotKey: 'risk.protective_exit',
+        reason: 'missing_stop_loss_rule',
+      }),
+    ]))
+    expect(createPayload.clarificationState.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'missing_take_profit_rule',
+      }),
+    ]))
+  })
+
+  it('keeps deterministic percent-change params when semanticPatch omits threshold details', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '请补充仓位和止损规则。',
+        logic: {
+          entryRules: ['3分钟之内跌百分1买入'],
+          exitRules: ['15分钟之内涨百分2卖出'],
+          entryRuleBases: { 'entry-1': 'prev_close' },
+          exitRuleBases: { 'exit-1': 'prev_close' },
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'spot',
+          },
+          symbols: ['BTCUSDT'],
+          timeframes: ['3m', '15m'],
+        },
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'price.percent_change',
+              phase: 'entry',
+              params: {
+                direction: 'down',
+              },
+            },
+          ],
+          actions: [
+            { key: 'open_long' },
+          ],
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'spot',
+            timeframe: '3m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-partial-semantic-patch-keeps-deterministic-params' })
+
+    await service.startSession({
+      userId: 'u1',
+      initialMessage: '在okx交易所 BTCUSDT 3分钟之内跌百分1买入 15分钟之内涨百分2卖出',
+    })
+
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.percent_change',
+        phase: 'entry',
+        params: expect.objectContaining({
+          valuePct: -1,
+          window: '3m',
+          basis: 'prev_close',
+        }),
+      }),
+      expect.objectContaining({
+        key: 'price.percent_change',
+        phase: 'exit',
+        params: expect.objectContaining({
+          valuePct: 2,
+          window: '15m',
+          basis: 'prev_close',
+        }),
+      }),
+    ]))
+  })
+
+  it('does not dedupe deterministic trigger scope when semanticPatch omits sideScope', () => {
+    const fallbackState = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'fallback-entry-short',
+          key: 'price.percent_change',
+          phase: 'entry',
+          sideScope: 'short',
+          params: { valuePct: -1, window: '3m', basis: 'prev_close' },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-04-21T10:00:00.000Z',
+    }
+    const patchState = {
+      ...fallbackState,
+      triggers: [
+        {
+          id: 'planner-entry',
+          key: 'price.percent_change',
+          phase: 'entry',
+          params: { valuePct: -1, window: '3m', basis: 'prev_close' },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+    }
+
+    const result = (service as any).withoutSemanticPatchDuplicateAtoms(fallbackState, patchState)
+
+    expect(result.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'fallback-entry-short',
+        sideScope: 'short',
+      }),
+    ]))
+  })
+
+  it('clears stale open position sizing slots when locked position sizing is already valid', () => {
+    const currentState = {
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry',
+          key: 'price.percent_change',
+          phase: 'entry',
+          params: { valuePct: 1 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [{ id: 'open', key: 'open_long', status: 'locked', source: 'user_explicit' }],
+      risk: [{ id: 'risk', key: 'risk.stop_loss_pct', params: { valuePct: 5 }, status: 'locked', source: 'user_explicit', openSlots: [] }],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [
+          {
+            slotKey: 'position.sizing',
+            fieldPath: 'position.value',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认单笔仓位百分比（例如 10%）。',
+            affectsExecution: true,
+          },
+        ],
+      },
+      contextSlots: {
+        exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: 'okx', status: 'locked', priority: 'context', questionHint: '请确认交易所（binance / okx / hyperliquid）。', affectsExecution: true },
+        symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: 'BTCUSDT', status: 'locked', priority: 'context', questionHint: '请确认策略交易标的（例如 BTCUSDT）。', affectsExecution: true },
+        marketType: { slotKey: 'marketType', fieldPath: 'contextSlots.marketType', value: 'spot', status: 'locked', priority: 'context', questionHint: '请确认市场类型（现货或合约/perp）。', affectsExecution: true },
+        timeframe: { slotKey: 'timeframe', fieldPath: 'contextSlots.timeframe', value: '3m', status: 'locked', priority: 'context', questionHint: '请确认策略主周期（例如 15m 或 1h）。', affectsExecution: true },
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-21T10:00:00.000Z',
+    }
+
+    const result = (service as any).applyConversationPlanToSemanticState({
+      currentState,
+      plan: { related: true, logicReady: false, assistantPrompt: '继续' },
+    })
+
+    expect(result.position.openSlots).toEqual([])
+    expect((service as any).findNextOpenSemanticSlot(result)).toBeNull()
+  })
+
+  it('opens position sizing when semanticPatch carries a zero fixed-ratio position', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '逻辑图仍未完整，请继续补充。',
+        semanticPatch: {
+          families: ['single-leg'],
+          triggers: [
+            {
+              phase: 'entry',
+              key: 'indicator.above',
+              params: {
+                indicator: 'ma',
+                referenceRole: 'long_term',
+                'reference.period': 50,
+                confirmationMode: 'close_confirm',
+              },
+            },
+            {
+              phase: 'exit',
+              key: 'indicator.below',
+              params: {
+                indicator: 'ma',
+                referenceRole: 'short_term',
+                'reference.period': 20,
+                confirmationMode: 'close_confirm',
+              },
+            },
+          ],
+          actions: [
+            { key: 'open_long' },
+            { key: 'close_long' },
+          ],
+          position: {
+            mode: 'fixed_ratio',
+            value: 0,
+            positionMode: 'long_only',
+          },
+          context: {
+            exchange: 'okx',
+            marketType: 'perp',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-semantic-patch-zero-position' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在 OKX 合约 BTCUSDT 15m，MA50 上破做多，MA20 下破平仓',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.status).toBe('DRAFTING')
+    expect(createPayload.semanticState.position).toEqual(expect.objectContaining({
+      mode: 'fixed_ratio',
+      value: 0,
+      positionMode: 'long_only',
+      status: 'open',
+      source: 'derived',
+      openSlots: expect.arrayContaining([
+        expect.objectContaining({
+          slotKey: 'position.sizing',
+          fieldPath: 'position.value',
+          status: 'open',
+        }),
+      ]),
+    }))
+    expect(createPayload.semanticState.position).not.toEqual(expect.objectContaining({
+      status: 'locked',
+      openSlots: [],
+    }))
+    expect(createPayload.clarificationState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'position.sizing',
+        reason: 'missing_position_pct',
+      }),
+    ]))
+  })
+
+  it('creates a semantic position sizing slot instead of locking the default when position is missing on startSession', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        logic: {},
+        assistantPrompt: '逻辑图仍未完整，请继续补充。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-open-position-sizing-start' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在 okx 合约 BTCUSDT 15m，突破布林带上轨做空，价格回到布林带中轨平空，亏损 5% 止损',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.status).toBe('DRAFTING')
+    expect(createPayload.semanticState.position).toEqual(expect.objectContaining({
+      mode: 'fixed_ratio',
+      value: 0,
+      positionMode: 'short_only',
+      status: 'open',
+      source: 'derived',
+      openSlots: [
+        {
+          slotKey: 'position.sizing',
+          fieldPath: 'position.value',
+          status: 'open',
+          priority: 'risk',
+          questionHint: '请确认单笔仓位百分比（例如 10%）。',
+          affectsExecution: true,
+        },
+      ],
+    }))
+    expect(createPayload.semanticState.position).not.toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 0.1,
+    }))
+    expect(createPayload.clarificationState).toEqual(expect.objectContaining({
+      status: 'NEEDS_CLARIFICATION',
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          reason: 'missing_position_pct',
+          slotKey: 'position.sizing',
+          fieldPath: 'position.value',
+        }),
+      ]),
+    }))
+  })
+
+  it('keeps missing position sizing as a semantic slot while execution context is still open on startSession', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        logic: {},
+        assistantPrompt: '逻辑图仍未完整，请继续补充。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-open-position-with-open-context-start' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '突破布林带上轨做空，价格回到布林带中轨平空，亏损 5% 止损',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.status).toBe('DRAFTING')
+    expect(createPayload.semanticState.position).toEqual(expect.objectContaining({
+      mode: 'fixed_ratio',
+      value: 0,
+      positionMode: 'short_only',
+      status: 'open',
+      source: 'derived',
+      openSlots: expect.arrayContaining([
+        expect.objectContaining({
+          slotKey: 'position.sizing',
+          fieldPath: 'position.value',
+          status: 'open',
+        }),
+      ]),
+    }))
+    expect(createPayload.semanticState.contextSlots).toEqual(expect.objectContaining({
+      exchange: expect.objectContaining({ slotKey: 'exchange', status: 'open' }),
+      symbol: expect.objectContaining({ slotKey: 'symbol', status: 'open' }),
+      marketType: expect.objectContaining({ slotKey: 'marketType', status: 'open' }),
+      timeframe: expect.objectContaining({ slotKey: 'timeframe', status: 'open' }),
+    }))
+    expect(createPayload.clarificationState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'position.sizing',
+        reason: 'missing_position_pct',
+      }),
+      expect.objectContaining({
+        reason: 'missing_exchange',
+      }),
+    ]))
+  })
+
+  it('creates a semantic protective risk slot without requiring take profit when explicit exit exists on startSession', async () => {
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        logic: {},
+        assistantPrompt: '逻辑图仍未完整，请继续补充。',
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-open-protective-risk-start' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在 okx 合约 BTCUSDT 15m，突破布林带上轨做空，价格回到布林带中轨平空，仓位 10%',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.status).toBe('DRAFTING')
+    expect(createPayload.semanticState.position).toEqual(expect.objectContaining({
+      mode: 'fixed_ratio',
+      value: 0.1,
+      status: 'locked',
+    }))
+    expect(createPayload.semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'risk-protective-exit',
+        key: 'risk.protective_exit',
+        params: {},
+        status: 'open',
+        source: 'derived',
+        openSlots: [
+          {
+            slotKey: 'risk.protective_exit',
+            fieldPath: 'risk[protective].params',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认止损类保护规则（例如亏损 5% 止损）。',
+            affectsExecution: true,
+          },
+        ],
+      }),
+    ]))
+    expect(createPayload.clarificationState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'missing_stop_loss_rule',
+        slotKey: 'risk.protective_exit',
+        fieldPath: 'risk[protective].params',
+      }),
+    ]))
+    expect(createPayload.clarificationState.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'missing_take_profit_rule',
+      }),
+    ]))
   })
 
   it('persists a dedicated conversation aggregate when starting a session', async () => {
@@ -1808,6 +2409,163 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('keeps the protective exit slot open when planner stop-loss patch omits a threshold', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'indicator.above',
+              phase: 'entry',
+              params: {
+                indicator: 'ma',
+                referenceRole: 'long_term',
+                'reference.period': 50,
+                confirmationMode: 'close_confirm',
+              },
+            },
+            {
+              key: 'indicator.below',
+              phase: 'exit',
+              params: {
+                indicator: 'ma',
+                referenceRole: 'short_term',
+                'reference.period': 10,
+                confirmationMode: 'close_confirm',
+              },
+            },
+          ],
+          actions: [
+            { key: 'open_long' },
+            { key: 'close_long' },
+          ],
+          risk: [
+            { key: 'risk.stop_loss_pct', params: {} },
+          ],
+          position: {
+            mode: 'fixed_ratio',
+            value: 0.1,
+            positionMode: 'long_only',
+          },
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'spot',
+            timeframe: '15m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-semantic-risk-threshold' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '帮我做一个 MA50 上破买入、MA10 下破卖出的 OKX 现货 BTCUSDT 15m 策略，止损规则先按规划补上。',
+    })
+
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.status).toBe('DRAFTING')
+    expect(createPayload.semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.protective_exit',
+        status: 'open',
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({
+            slotKey: 'risk.protective_exit',
+            status: 'open',
+          }),
+        ]),
+      }),
+    ]))
+    expect(createPayload.clarificationState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'missing_stop_loss_rule',
+        slotKey: 'risk.protective_exit',
+      }),
+    ]))
+    expect(createPayload.clarificationState.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'missing_take_profit_rule',
+      }),
+    ]))
+  })
+
+  it('treats locked max drawdown as protective risk without asking for stop loss', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'indicator.above',
+              phase: 'entry',
+              params: {
+                indicator: 'ma',
+                referenceRole: 'long_term',
+                'reference.period': 50,
+                confirmationMode: 'close_confirm',
+              },
+            },
+            {
+              key: 'indicator.below',
+              phase: 'exit',
+              params: {
+                indicator: 'ma',
+                referenceRole: 'short_term',
+                'reference.period': 10,
+                confirmationMode: 'close_confirm',
+              },
+            },
+          ],
+          actions: [
+            { key: 'open_long' },
+            { key: 'close_long' },
+          ],
+          risk: [
+            { key: 'risk.max_drawdown_pct', params: { valuePct: 12 } },
+          ],
+          position: {
+            mode: 'fixed_ratio',
+            value: 0.1,
+            positionMode: 'long_only',
+          },
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'spot',
+            timeframe: '15m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-semantic-risk-max-drawdown' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '帮我做一个 MA50 上破买入、MA10 下破卖出的 OKX 现货 BTCUSDT 15m 策略，最大回撤 12%。',
+    })
+
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.status).toBe('CONFIRM_GATE')
+    expect(createPayload.semanticState.risk).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.protective_exit',
+      }),
+    ]))
+    expect(createPayload.clarificationState.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'missing_stop_loss_rule',
+      }),
+    ]))
+  })
+
   it('does not persist an incomplete semanticPatch as an empty semanticState when planner logic is already complete', async () => {
     mockAi.chat.mockResolvedValueOnce({
       content: JSON.stringify({
@@ -2060,6 +2818,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           actions: [
             { key: 'close_long' },
           ],
+          risk: [
+            { key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
+          ],
         },
       }),
     })
@@ -2088,6 +2849,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
   it('confirms generation from semanticState when persisted checklist payload is absent', async () => {
     const persistedSemanticState = buildLockedMaSemanticState({
+      risk: [lockedStopLossRisk()],
       contextSlots: {
         exchange: {
           slotKey: 'exchange',
@@ -2242,6 +3004,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   it('does not fall back to checklist completeness in continueConfirmedSession when semantic state is ready', async () => {
     const activeGateSpy = jest.spyOn(service as any, 'resolveActiveGateMissingFields').mockReturnValue(['entryRules', 'exitRules'])
     const persistedSemanticState = buildLockedMaSemanticState({
+      risk: [lockedStopLossRisk()],
       contextSlots: {
         exchange: {
           slotKey: 'exchange',
@@ -2305,9 +3068,196 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.status).toBe('GENERATING')
   })
 
+  it('keeps confirmGenerate drafting with protective risk slot when context and position answers complete prerequisites', async () => {
+    const activeGateSpy = jest.spyOn(service as any, 'resolveActiveGateMissingFields').mockReturnValue([])
+    const persistedSemanticState = buildLockedMaSemanticState({
+      risk: [],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0,
+        positionMode: 'long_only',
+        status: 'open',
+        source: 'derived',
+        openSlots: [
+          {
+            slotKey: 'position.sizing',
+            fieldPath: 'position.value',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认单笔仓位百分比（例如 10%）。',
+            affectsExecution: true,
+          },
+        ],
+      },
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'open',
+          priority: 'context',
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+        },
+        symbol: {
+          slotKey: 'symbol',
+          fieldPath: 'contextSlots.symbol',
+          status: 'open',
+          priority: 'context',
+          questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+          affectsExecution: true,
+        },
+        marketType: {
+          slotKey: 'marketType',
+          fieldPath: 'contextSlots.marketType',
+          status: 'open',
+          priority: 'context',
+          questionHint: '请确认市场类型（现货或合约/perp）。',
+          affectsExecution: true,
+        },
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          status: 'open',
+          priority: 'context',
+          questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+          affectsExecution: true,
+        },
+      },
+    })
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-confirm-required-protective-risk',
+      userId: 'u1',
+      status: 'CONFIRM_GATE',
+      checklist: null,
+      semanticState: persistedSemanticState,
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'semantic.position.sizing',
+            reason: 'missing_position_pct',
+            field: 'riskRules.positionPct',
+            blocking: true,
+            question: '请确认单笔仓位百分比（例如 10%）。',
+            status: 'answered',
+            slotId: buildSemanticSlotId({
+              slotKey: 'position.sizing',
+              fieldPath: 'position.value',
+            }),
+            slotKey: 'position.sizing',
+            fieldPath: 'position.value',
+          },
+          {
+            key: 'executionContext.exchange',
+            reason: 'missing_exchange',
+            field: 'exchange',
+            blocking: true,
+            question: '请确认交易所（binance / okx / hyperliquid）。',
+            status: 'answered',
+            slotKey: 'exchange',
+            fieldPath: 'contextSlots.exchange',
+          },
+          {
+            key: 'executionContext.symbol',
+            reason: 'missing_symbol',
+            field: 'symbol',
+            blocking: true,
+            question: '请确认策略交易标的（例如 BTCUSDT）。',
+            status: 'answered',
+            slotKey: 'symbol',
+            fieldPath: 'contextSlots.symbol',
+          },
+          {
+            key: 'executionContext.marketType',
+            reason: 'missing_market_type',
+            field: 'marketType',
+            blocking: true,
+            question: '请确认市场类型（现货或合约/perp）。',
+            status: 'answered',
+            slotKey: 'marketType',
+            fieldPath: 'contextSlots.marketType',
+          },
+          {
+            key: 'executionContext.timeframe',
+            reason: 'missing_timeframe',
+            field: 'timeframe',
+            blocking: true,
+            question: '请确认策略主周期（例如 15m 或 1h）。',
+            status: 'answered',
+            slotKey: 'timeframe',
+            fieldPath: 'contextSlots.timeframe',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    const confirmedDigest = 'sha256:confirm-required-protective-risk'
+    const readCanonicalDigestSpy = jest
+      .spyOn(service as any, 'readCanonicalDigest')
+      .mockReturnValue(confirmedDigest)
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+
+    try {
+      const result = await service.continueSession('s-confirm-required-protective-risk', {
+        userId: 'u1',
+        message: 'OKX BTCUSDT 合约 15m，仓位 10%，确认生成',
+        confirmGenerate: true,
+        confirmedCanonicalDigest: confirmedDigest,
+        clarificationAnswers: {
+          'semantic.position.sizing': '10%',
+          'executionContext.exchange': 'okx',
+          'executionContext.symbol': 'BTCUSDT',
+          'executionContext.marketType': 'perp',
+          'executionContext.timeframe': '15m',
+        },
+      })
+
+      expect(activeGateSpy).not.toHaveBeenCalled()
+      expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
+      expect(result.status).toBe('DRAFTING')
+      expect(result.clarificationState).toEqual(expect.objectContaining({
+        status: 'NEEDS_CLARIFICATION',
+        items: expect.arrayContaining([
+          expect.objectContaining({
+            reason: 'missing_stop_loss_rule',
+            slotKey: 'risk.protective_exit',
+            fieldPath: 'risk[protective].params',
+          }),
+        ]),
+      }))
+      expect(mockRepo.updateSession).toHaveBeenCalledWith(
+        's-confirm-required-protective-risk',
+        expect.objectContaining({
+          status: 'DRAFTING',
+          semanticState: expect.objectContaining({
+            position: expect.objectContaining({
+              status: 'locked',
+              value: 0.1,
+            }),
+            risk: expect.arrayContaining([
+              expect.objectContaining({
+                key: 'risk.protective_exit',
+                status: 'open',
+                openSlots: expect.arrayContaining([
+                  expect.objectContaining({
+                    slotKey: 'risk.protective_exit',
+                    status: 'open',
+                  }),
+                ]),
+              }),
+            ]),
+          }),
+        }),
+      )
+    } finally {
+      readCanonicalDigestSpy.mockRestore()
+    }
+  })
+
   it('keeps confirmGenerate blocked when legacy clarification blockers remain after semantic slots are closed', async () => {
     const activeGateSpy = jest.spyOn(service as any, 'resolveActiveGateMissingFields').mockReturnValue(['entryRules'])
     const persistedSemanticState = buildLockedMaSemanticState({
+      risk: [lockedStopLossRisk()],
       contextSlots: {
         exchange: {
           slotKey: 'exchange',
@@ -2433,7 +3383,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const result = await service.startSession({
       userId: 'u-1',
-      initialMessage: '在okx交易所合约市场的BTCUSDT 15分钟图上，突破布林带上轨交易，回到中轨卖出，仓位10%',
+      initialMessage: '在okx交易所合约市场的BTCUSDT 15分钟图上，突破布林带上轨交易，回到中轨卖出，仓位10%，亏损5%止损',
       riskRules: completeRiskRules(),
     } as any)
 
@@ -2457,7 +3407,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const result = await service.startSession({
       userId: 'u-1',
-      initialMessage: '在okx交易所合约市场的BTCUSDT 15分钟图上，突破布林带上轨交易后回到中轨卖出，仓位10%',
+      initialMessage: '在okx交易所合约市场的BTCUSDT 15分钟图上，突破布林带上轨交易后回到中轨卖出，仓位10%，亏损5%止损',
       riskRules: completeRiskRules(),
     } as any)
 
@@ -2999,7 +3949,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         logic: {
           entryRules: ['3分钟之内跌百分1买入'],
           exitRules: ['15分钟之内涨百分2卖出'],
-          riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+          riskRules: {
+            exchange: 'okx',
+            marketType: 'perp',
+            positionPct: 10,
+            stopLossPct: 5,
+            stopLossBasis: 'entry_avg_price',
+          },
         },
       }),
     })
@@ -3039,6 +3995,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             exchange: 'okx',
             marketType: 'perp',
             positionPct: 10,
+            stopLossPct: 5,
+            stopLossBasis: 'entry_avg_price',
           },
         },
       }),
@@ -3173,6 +4131,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             exchange: 'okx',
             marketType: 'perp',
             positionPct: 10,
+            stopLossPct: 5,
+            stopLossBasis: 'entry_avg_price',
           },
         }),
       }),
@@ -3180,7 +4140,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const result = await service.startSession({
       userId: 'u1',
-      initialMessage: 'OKX 合约 BTCUSDT 15m，价格触及/突破布林带(20,2)上轨时做空，触及/突破下轨时做多；多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓；单笔仓位 10%。',
+      initialMessage: 'OKX 合约 BTCUSDT 15m，价格触及/突破布林带(20,2)上轨时做空，触及/突破下轨时做多；多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓；单笔仓位 10%，亏损 5% 止损。',
     })
 
     expect(result.status).toBe('CONFIRM_GATE')
@@ -4125,10 +5085,16 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const result = await service.startSession(dto)
 
     expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('请确认策略交易标的')
+    expect(result.assistantPrompt).toContain('请确认单笔仓位百分比')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       status: 'DRAFTING',
       semanticState: expect.objectContaining({
+        position: expect.objectContaining({
+          status: 'open',
+          openSlots: expect.arrayContaining([
+            expect.objectContaining({ slotKey: 'position.sizing' }),
+          ]),
+        }),
         contextSlots: expect.objectContaining({
           exchange: expect.objectContaining({ value: 'okx' }),
           marketType: expect.objectContaining({ value: 'spot' }),
@@ -4231,6 +5197,292 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expect.objectContaining({
         key: 'executionContext.symbol',
         reason: 'missing_symbol',
+      }),
+    ]))
+  })
+
+  it('regression: normalized BTCUSDT semanticPatch keeps the percent-change startSession in DRAFTING without defaulting 10% position or requiring take profit', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '请补充仓位和止损规则。',
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'price.percent_change',
+              phase: 'entry',
+              params: {
+                direction: 'down',
+                valuePct: 1,
+                window: '3m',
+              },
+            },
+            {
+              key: 'price.percent_change',
+              phase: 'exit',
+              params: {
+                direction: 'up',
+                valuePct: 2,
+                window: '15m',
+              },
+            },
+          ],
+          actions: [
+            { key: 'open_long' },
+            { key: 'close_long' },
+          ],
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'spot',
+            timeframe: '3m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-percent-change-regression' })
+
+    const result = await service.startSession({
+      userId: 'u1',
+      initialMessage: '在okx交易所 我想买btc 3分钟之内跌百分1买入 15分钟之内涨百分2卖出',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(result.status).toBe('DRAFTING')
+    expect(createPayload.semanticState.position).toEqual(expect.objectContaining({
+      mode: 'fixed_ratio',
+      value: 0,
+      positionMode: 'long_only',
+      status: 'open',
+      source: 'derived',
+      openSlots: expect.arrayContaining([
+        expect.objectContaining({
+          slotKey: 'position.sizing',
+          status: 'open',
+        }),
+      ]),
+    }))
+    expect(createPayload.semanticState.position).not.toEqual(expect.objectContaining({
+      status: 'locked',
+      value: 0.1,
+    }))
+    expect(createPayload.semanticState.contextSlots).toEqual(expect.objectContaining({
+      exchange: expect.objectContaining({
+        status: 'locked',
+        value: 'okx',
+      }),
+      symbol: expect.objectContaining({
+        status: 'locked',
+        value: 'BTCUSDT',
+      }),
+      marketType: expect.objectContaining({
+        status: 'locked',
+        value: 'spot',
+      }),
+      timeframe: expect.objectContaining({
+        status: 'locked',
+        value: '3m',
+      }),
+    }))
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.percent_change',
+        phase: 'entry',
+        params: expect.objectContaining({
+          direction: 'down',
+          valuePct: -1,
+          window: '3m',
+        }),
+      }),
+      expect.objectContaining({
+        key: 'price.percent_change',
+        phase: 'exit',
+        params: expect.objectContaining({
+          direction: 'up',
+          valuePct: 2,
+          window: '15m',
+        }),
+      }),
+    ]))
+    expect(createPayload.semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.protective_exit',
+        status: 'open',
+        source: 'derived',
+        openSlots: expect.arrayContaining([
+          expect.objectContaining({
+            slotKey: 'risk.protective_exit',
+            status: 'open',
+          }),
+        ]),
+      }),
+    ]))
+    expect(createPayload.clarificationState.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'position.sizing',
+        reason: 'missing_position_pct',
+      }),
+      expect.objectContaining({
+        slotKey: 'risk.protective_exit',
+        reason: 'missing_stop_loss_rule',
+      }),
+    ]))
+    expect(createPayload.clarificationState.items).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        reason: 'missing_take_profit_rule',
+      }),
+    ]))
+  })
+
+  it('regression: semanticPatch trigger/action semantics keep explicit deterministic position sizing', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '请补充止损规则。',
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'price.percent_change',
+              phase: 'entry',
+              params: {
+                direction: 'down',
+                valuePct: 1,
+                window: '3m',
+              },
+            },
+            {
+              key: 'price.percent_change',
+              phase: 'exit',
+              params: {
+                direction: 'up',
+                valuePct: 2,
+                window: '15m',
+              },
+            },
+          ],
+          actions: [
+            { key: 'open_long' },
+            { key: 'close_long' },
+          ],
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'spot',
+            timeframe: '3m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-semantic-explicit-position' })
+
+    await service.startSession({
+      userId: 'u1',
+      initialMessage: '在okx现货 BTCUSDT 3m，3分钟跌1%买入，15分钟涨2%卖出，仓位 10%',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(createPayload.semanticState.position).toEqual(expect.objectContaining({
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    }))
+    expect(createPayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.percent_change',
+        phase: 'entry',
+      }),
+      expect.objectContaining({
+        key: 'price.percent_change',
+        phase: 'exit',
+      }),
+    ]))
+    expect(createPayload.clarificationState.items).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'position.sizing',
+        reason: 'missing_position_pct',
+      }),
+    ]))
+  })
+
+  it('regression: semanticPatch position keeps explicit deterministic stop loss risk', async () => {
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: false,
+        assistantPrompt: '逻辑图已更新。',
+        semanticPatch: {
+          triggers: [
+            {
+              key: 'price.percent_change',
+              phase: 'entry',
+              params: {
+                direction: 'down',
+                valuePct: 1,
+                window: '3m',
+              },
+            },
+            {
+              key: 'price.percent_change',
+              phase: 'exit',
+              params: {
+                direction: 'up',
+                valuePct: 2,
+                window: '15m',
+              },
+            },
+          ],
+          actions: [
+            { key: 'open_long' },
+            { key: 'close_long' },
+          ],
+          position: {
+            mode: 'fixed_ratio',
+            value: 0.1,
+            positionMode: 'long_only',
+          },
+          contextSlots: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            marketType: 'spot',
+            timeframe: '3m',
+          },
+        },
+      }),
+    })
+    mockRepo.createSession.mockResolvedValue({ id: 's-semantic-explicit-risk' })
+
+    await service.startSession({
+      userId: 'u1',
+      initialMessage: '在okx现货 BTCUSDT 3m，3分钟跌1%买入，15分钟涨2%卖出，仓位 10%，亏损 5% 止损',
+    })
+    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
+
+    expect(createPayload.semanticState.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.stop_loss_pct',
+        params: {
+          valuePct: 5,
+          basis: 'entry_avg_price',
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      }),
+    ]))
+    expect(createPayload.semanticState.risk).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.protective_exit',
+      }),
+    ]))
+    expect(createPayload.clarificationState.items).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'risk.protective_exit',
+        reason: 'missing_stop_loss_rule',
       }),
     ]))
   })
@@ -7262,18 +8514,159 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     } as ContinueCodegenSessionDto)
 
     expect(result.status).toBe('CONFIRM_GATE')
-    expect(result.clarificationState).toEqual(expect.objectContaining({
-      status: 'CLEAR',
-    }))
+    expect(result.clarificationState?.items ?? []).toEqual(expect.not.arrayContaining([
+      expect.objectContaining({
+        slotKey: 'position.sizing',
+        reason: 'missing_position_pct',
+      }),
+    ]))
     expect(mockRepo.updateSession).toHaveBeenCalledWith(
       's-position-pct-clarification-answer',
       expect.objectContaining({
         status: 'CONFIRM_GATE',
-        latestSpecDesc: expect.objectContaining({
-          canonicalDigest: expect.stringMatching(/^sha256:/),
+        semanticState: expect.objectContaining({
+          position: expect.objectContaining({
+            value: 0.1,
+            status: 'locked',
+            source: 'user_explicit',
+            openSlots: [],
+          }),
         }),
       }),
     )
+  })
+
+  it('does not re-add persisted position and protective risk blockers after confirmGenerate answers lock them', async () => {
+    const persistedSemanticState = buildLockedMaSemanticState({
+      risk: [
+        {
+          id: 'risk-protective-exit',
+          key: 'risk.protective_exit',
+          params: {},
+          status: 'open',
+          source: 'derived',
+          openSlots: [
+            {
+              slotKey: 'risk.protective_exit',
+              fieldPath: 'risk[protective].params',
+              status: 'open',
+              priority: 'risk',
+              questionHint: '请确认止损类保护规则（例如亏损 5% 止损）。',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0,
+        positionMode: 'long_only',
+        status: 'open',
+        source: 'derived',
+        openSlots: [
+          {
+            slotKey: 'position.sizing',
+            fieldPath: 'position.value',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认单笔仓位百分比（例如 10%）。',
+            affectsExecution: true,
+          },
+        ],
+      },
+    })
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-position-risk-blockers-resolved',
+      userId: 'u1',
+      status: 'CONFIRM_GATE',
+      checklist: null,
+      semanticState: persistedSemanticState,
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'sizing.positionPct',
+            reason: 'missing_position_pct',
+            field: 'riskRules.positionPct',
+            blocking: true,
+            question: '请确认单笔仓位百分比（例如 10%）。',
+            status: 'pending',
+            slotId: buildSemanticSlotId({
+              slotKey: 'position.sizing',
+              fieldPath: 'position.value',
+            }),
+            slotKey: 'position.sizing',
+            fieldPath: 'position.value',
+          },
+          {
+            key: 'semantic.risk.protective_exit',
+            reason: 'missing_stop_loss_rule',
+            field: 'riskRules.stopLossPct',
+            blocking: true,
+            question: '请确认止损类保护规则（例如亏损 5% 止损）。',
+            status: 'pending',
+            slotId: buildSemanticSlotId({
+              slotKey: 'risk.protective_exit',
+              fieldPath: 'risk[protective].params',
+            }),
+            slotKey: 'risk.protective_exit',
+            fieldPath: 'risk[protective].params',
+          },
+        ],
+      },
+      constraintPack: {},
+    })
+    const confirmedDigest = 'sha256:position-risk-blockers-resolved'
+    const readCanonicalDigestSpy = jest
+      .spyOn(service as any, 'readCanonicalDigest')
+      .mockReturnValue(confirmedDigest)
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+
+    try {
+      const result = await service.continueSession('s-position-risk-blockers-resolved', {
+        userId: 'u1',
+        message: '仓位 10%，亏损 5% 止损，确认生成',
+        confirmGenerate: true,
+        confirmedCanonicalDigest: confirmedDigest,
+        clarificationAnswers: {
+          'sizing.positionPct': '10%',
+          'semantic.risk.protective_exit': '5%',
+        },
+      } as ContinueCodegenSessionDto)
+
+      expect(result.status).toBe('GENERATING')
+      expect(result.clarificationState?.items ?? []).toEqual(expect.not.arrayContaining([
+        expect.objectContaining({
+          reason: 'missing_position_pct',
+        }),
+        expect.objectContaining({
+          reason: 'missing_stop_loss_rule',
+        }),
+      ]))
+      expect(mockRepo.tryMarkGenerating).toHaveBeenCalledWith(
+        's-position-risk-blockers-resolved',
+        expect.objectContaining({
+          status: 'GENERATING',
+          semanticState: expect.objectContaining({
+            position: expect.objectContaining({
+              value: 0.1,
+              status: 'locked',
+            }),
+            risk: expect.arrayContaining([
+              expect.objectContaining({
+                key: 'risk.stop_loss_pct',
+                status: 'locked',
+                params: expect.objectContaining({
+                  valuePct: 5,
+                }),
+              }),
+            ]),
+          }),
+        }),
+      )
+    } finally {
+      readCanonicalDigestSpy.mockRestore()
+    }
   })
 
   it('keeps drafting with a structured clarification gate summary when basis blockers remain', async () => {
@@ -7780,7 +9173,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       entryRules: ['价格突破长期均线（50）时买入'],
       exitRules: ['价格跌破短期均线（20）时卖出'],
     })
-    const persistedSemanticState = buildLockedMaSemanticState()
+    const persistedSemanticState = buildLockedMaSemanticState({
+      risk: [lockedStopLossRisk()],
+    })
     const buildFromNormalizedIntentSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromNormalizedIntent')
     const publicationPipelineRunSpy = jest.spyOn(publicationPipeline, 'run').mockResolvedValue(undefined)
     const sessionFixture = buildSemanticEraSessionFixture({
@@ -8429,6 +9824,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     })
     const semanticState = buildLockedBollingerSemanticState({
+      risk: [lockedStopLossRisk()],
       families: ['single-leg', 'state-gated'],
       triggers: [
         {
@@ -8783,6 +10179,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     })
     const confirmedLongOnlySemanticState = buildLockedBollingerSemanticState({
+      risk: [lockedStopLossRisk()],
       triggers: [
         {
           id: 'entry-bollinger-lower',
@@ -8977,6 +10374,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             exchange: 'okx',
             marketType: 'perp',
             positionPct: 10,
+            stopLossPct: 5,
+            stopLossBasis: 'entry_avg_price',
           },
         },
       }),
@@ -8984,7 +10383,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const started = await service.startSession({
       userId: 'u1',
-      initialMessage: 'OKX 合约 BTCUSDT 15m，价格触及/突破布林带(20,2)上轨时做空，触及/突破下轨时做多；多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓；单笔仓位 10%。',
+      initialMessage: 'OKX 合约 BTCUSDT 15m，价格触及/突破布林带(20,2)上轨时做空，触及/突破下轨时做多；多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓；单笔仓位 10%，亏损 5% 止损。',
     })
 
     expect(started.status).toBe('CONFIRM_GATE')
@@ -9627,6 +11026,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       exitRules: ['价格跌破短期均线（20）时卖出'],
     })
     const persistedSemanticState = buildLockedMaSemanticState({
+      risk: [lockedStopLossRisk()],
       triggers: [
         {
           id: 'entry-ma',
