@@ -19,6 +19,7 @@ import { BacktestCompiledSnapshotPreflightService } from './services/backtest-co
 import { BacktestMarketDataService } from './services/backtest-market-data.service'
 import { BacktestSnapshotLoaderService } from './services/backtest-snapshot-loader.service'
 import { BacktestStrategyAdapterService } from './services/backtest-strategy-adapter.service'
+import { BacktestSymbolAvailabilityService } from './services/backtest-symbol-availability.service'
 import { BacktestSymbolSupportService } from './services/backtest-symbol-support.service'
 import { StateEngineService } from './state/state-engine.service'
 
@@ -38,6 +39,7 @@ import { StateEngineService } from './state/state-engine.service'
     BacktestCompiledSnapshotPreflightService,
     BacktestSnapshotLoaderService,
     BacktestStrategyAdapterService,
+    BacktestSymbolAvailabilityService,
     StateEngineService,
     BacktestCapabilitiesRepository,
     BacktestMarketDataRepository,

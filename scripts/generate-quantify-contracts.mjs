@@ -41,6 +41,14 @@ generatedSource = generatedSource.replace(
   'const endpoints = makeApi([',
 )
 generatedSource = generatedSource.replace(
+  'const endpoints = makeApi([',
+  "const AccountStrategyDetailTransportEnvelope = z\n  .object({ data: AccountStrategyDetailResponseDto, message: z.string().optional() })\n  .passthrough()\n\nconst endpoints = makeApi([",
+)
+generatedSource = generatedSource.replaceAll(
+  'response: AccountStrategyDetailResponseDto,',
+  'response: AccountStrategyDetailTransportEnvelope,',
+)
+generatedSource = generatedSource.replace(
   'export const aiQuantifyClient = new Zodios(\'/api/v1\', endpoints)\n\nexport function createApiClient(baseUrl: string, options?: ZodiosOptions) {\n  return new Zodios(baseUrl, endpoints, options)\n}\n',
   'export type QuantifyApi = typeof endpoints\n\nexport const aiQuantifyClient: ZodiosInstance<QuantifyApi> = new Zodios(\'/api/v1\', endpoints)\n\nexport function createApiClient(baseUrl: string, options?: ZodiosOptions): ZodiosInstance<QuantifyApi> {\n  return new Zodios(baseUrl, endpoints, options)\n}\n',
 )

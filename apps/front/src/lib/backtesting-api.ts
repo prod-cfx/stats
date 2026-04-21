@@ -4,7 +4,6 @@ import { getToken } from '@/lib/auth-storage'
 import { ApiError, AuthenticationError } from '@/lib/errors'
 
 export interface BacktestCapabilities {
-  allowedSymbols: string[]
   allowedBaseTimeframes: string[]
 }
 
@@ -14,11 +13,15 @@ export interface FetchBacktestCapabilitiesOptions {
 
 export interface BacktestSymbolSupportCheckInput {
   exchange: string
+  marketType: 'spot' | 'perp'
   symbol: string
+  baseTimeframe: string
 }
 
 export interface BacktestSymbolSupportCheckPayload {
   status: string
+  reasonCode?: string
+  args?: Record<string, unknown>
 }
 
 export type BacktestJobPhase = 'queued' | 'running' | 'succeeded' | 'failed'
@@ -167,17 +170,15 @@ function parseCapabilities(payload: unknown): BacktestCapabilities {
   }
 
   const candidate = payload as Record<string, unknown>
-  const allowedSymbols = parseStringArray(candidate.allowedSymbols, 'allowedSymbols')
   const allowedBaseTimeframes = parseStringArray(candidate.allowedBaseTimeframes, 'allowedBaseTimeframes')
 
-  if (allowedSymbols.length === 0 || allowedBaseTimeframes.length === 0) {
+  if (allowedBaseTimeframes.length === 0) {
     throw new ApiError('Backtest capability unavailable', 'CAPABILITY_UNAVAILABLE', 503, {
-      allowedSymbols,
       allowedBaseTimeframes,
     })
   }
 
-  return { allowedSymbols, allowedBaseTimeframes }
+  return { allowedBaseTimeframes }
 }
 
 function normalizeJobId(jobId: string): string {

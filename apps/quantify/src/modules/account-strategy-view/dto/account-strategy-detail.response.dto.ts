@@ -1,4 +1,5 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger'
+import { RuntimeExecutionStateDto } from '@/modules/strategy-signals/dto/runtime-execution-state.dto'
 import { AccountStrategyListItemDto } from './account-strategy-list-item.dto'
 
 export class AccountStrategyLeverageRangeDto {
@@ -254,6 +255,9 @@ export class AccountStrategyDetailResponseDto extends AccountStrategyListItemDto
 
   @ApiProperty({ type: [AccountStrategyLatestOrderDto] })
   latestOrders!: AccountStrategyLatestOrderDto[]
+
+  @ApiProperty({ type: [RuntimeExecutionStateDto] })
+  runtimeExecutionStates!: RuntimeExecutionStateDto[]
 
   @ApiPropertyOptional({ nullable: true, type: AccountStrategyDeploymentDto })
   deployment?: AccountStrategyDeploymentDto | null

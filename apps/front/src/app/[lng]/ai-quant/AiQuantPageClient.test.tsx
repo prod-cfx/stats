@@ -397,7 +397,6 @@ describe('AiQuantPageClient backtest range integration', () => {
     jest.useFakeTimers()
     jest.setSystemTime(new Date('2026-03-24T12:00:00.000Z'))
     mockFetchBacktestCapabilities.mockResolvedValue({
-      allowedSymbols: ['BTCUSDT'],
       allowedBaseTimeframes: ['15m'],
     })
   })

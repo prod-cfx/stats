@@ -132,15 +132,18 @@ export class BacktestJobResponseDto {
 
 export class BacktestCapabilitiesResponseDto {
   @ApiProperty({ type: [String] })
-  allowedSymbols!: string[]
-
-  @ApiProperty({ type: [String] })
   allowedBaseTimeframes!: string[]
 }
 
 export class BacktestSymbolSupportResponseDto {
-  @ApiProperty({ enum: ['supported', 'refreshed_then_supported', 'not_supported'] })
-  status!: 'supported' | 'refreshed_then_supported' | 'not_supported'
+  @ApiProperty({ enum: ['supported', 'not_supported'] })
+  status!: 'supported' | 'not_supported'
+
+  @ApiPropertyOptional()
+  reasonCode?: string
+
+  @ApiPropertyOptional({ type: 'object', additionalProperties: true })
+  args?: Record<string, unknown>
 }
 
 export class BacktestEquityPointDto {

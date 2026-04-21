@@ -18,6 +18,18 @@ export interface StrategyTimelineEvent {
   note?: string
 }
 
+export interface StrategyRuntimeExecutionState {
+  executionSemanticKey: string
+  status: string
+  failureReason: string | null
+  failureCode: string | null
+  lastAttemptAt: string | null
+  consumedAt: string | null
+  cooldownUntil: string | null
+  publishedSnapshotId: string
+  snapshotHash: string
+}
+
 export interface AiQuantStrategyRecord {
   id: string
   name: string
@@ -30,6 +42,7 @@ export interface AiQuantStrategyRecord {
   metrics: StrategyMetricSnapshot
   equitySeries: StrategyEquityPoint[]
   timeline: StrategyTimelineEvent[]
+  runtimeExecutionStates?: StrategyRuntimeExecutionState[]
   paramSchema: Record<string, unknown> | null
   paramValues: Record<string, unknown> | null
   publishedSnapshotParamValues?: Record<string, unknown> | null
@@ -67,6 +80,7 @@ export interface AiQuantStrategyRecord {
     missingDeploymentExecutionConstraints: boolean
     requiresRepublishForBacktest: boolean
     requiresRepublishForDeploy: boolean
+    invalidBinding?: boolean | null
   } | null
   consistencySummary?: {
     isConsistent: boolean

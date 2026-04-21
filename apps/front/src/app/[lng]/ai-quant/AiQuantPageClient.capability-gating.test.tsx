@@ -375,7 +375,6 @@ describe('AiQuantPageClient capability gating', () => {
     ]))
 
     mockFetchBacktestCapabilities.mockResolvedValue({
-      allowedSymbols: ['BTCUSDT', 'ETHUSDC'],
       allowedBaseTimeframes: ['15m', '1h'],
     })
 
@@ -389,7 +388,7 @@ describe('AiQuantPageClient capability gating', () => {
     expect(runButton?.disabled).toBe(false)
     expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain('回测能力加载失败，请稍后重试。')
     const symbolOptions = Array.from(container.querySelectorAll('[data-testid="symbol-select"] option')).map(option => option.textContent)
-    expect(symbolOptions).toEqual(expect.arrayContaining(['ETHUSDC', 'BTCUSDT']))
+    expect(symbolOptions).toEqual(['ETHUSDC'])
 
     await act(async () => {
       const timeframeSelect = container.querySelector('[data-testid="timeframe-select"]') as HTMLSelectElement
@@ -453,7 +452,6 @@ describe('AiQuantPageClient capability gating', () => {
     ]))
 
     mockFetchBacktestCapabilities.mockResolvedValue({
-      allowedSymbols: ['BTCUSDT', 'ETHUSDT'],
       allowedBaseTimeframes: ['15m', '1h'],
     })
 
@@ -504,7 +502,6 @@ describe('AiQuantPageClient capability gating', () => {
     ]))
 
     mockFetchBacktestCapabilities.mockResolvedValue({
-      allowedSymbols: ['BTCUSDT', 'ETHUSDT'],
       allowedBaseTimeframes: ['15m', '1h'],
     })
 
@@ -521,7 +518,6 @@ describe('AiQuantPageClient capability gating', () => {
 
   it('checks symbol support before creating backtest job', async () => {
     mockFetchBacktestCapabilities.mockResolvedValue({
-      allowedSymbols: ['BTCUSDT'],
       allowedBaseTimeframes: ['15m', '1h'],
     })
 
@@ -539,7 +535,9 @@ describe('AiQuantPageClient capability gating', () => {
 
     expect(mockCheckBacktestSymbolSupport).toHaveBeenCalledWith({
       exchange: 'binance',
+      marketType: 'perp',
       symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
     })
     expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
   })
@@ -643,7 +641,6 @@ describe('AiQuantPageClient capability gating', () => {
       },
     ]))
     mockFetchBacktestCapabilities.mockResolvedValue({
-      allowedSymbols: ['BTCUSDT', 'ETHUSDC'],
       allowedBaseTimeframes: ['15m', '1h'],
     })
     mockCheckBacktestSymbolSupport.mockResolvedValueOnce({ status: 'not_supported' })
@@ -663,7 +660,9 @@ describe('AiQuantPageClient capability gating', () => {
 
     expect(mockCheckBacktestSymbolSupport).toHaveBeenCalledWith({
       exchange: 'okx',
+      marketType: 'perp',
       symbol: 'ETHUSDC',
+      baseTimeframe: '15m',
     })
     expect(mockCreateBacktestJob).not.toHaveBeenCalled()
     expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain('aiQuant.messages.backtestPayloadInvalid')

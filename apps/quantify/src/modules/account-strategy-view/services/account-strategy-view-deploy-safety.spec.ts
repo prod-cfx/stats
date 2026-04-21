@@ -23,7 +23,11 @@ function buildDeployPayloadHash(input: {
 }
 
 describe('accountStrategyViewService.deployStrategy safety', () => {
-  const buildService = (overrides?: Record<string, unknown>) => {
+  const buildService = (options?: {
+    repoOverrides?: Record<string, unknown>
+    runtimeExecutionStateService?: { initializeStatesForDeploy: jest.Mock }
+    snapshotsRepository?: Record<string, unknown>
+  }) => {
     const repo = {
       deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-1', mode: 'TESTNET' }),
       findStrategyForUser: jest.fn().mockResolvedValue(null),
@@ -32,13 +36,46 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
       markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
-      ...(overrides ?? {}),
+      ...(options?.repoOverrides ?? {}),
     }
     const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
     const strategyInstancesService = { updateInstance: jest.fn() }
     const marketDataIngestionService = {
       ensureSymbolsSubscribed: jest.fn().mockResolvedValue(undefined),
     }
+    const snapshotsRepository = options?.snapshotsRepository ?? {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'SOLUSDT',
+          baseTimeframe: '5m',
+          marketType: 'spot',
+          positionPct: 10,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'GTC',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 5,
+          defaultLeverage: 1,
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['GTC'],
+        },
+        strategyInstanceId: 'inst-draft-1',
+        strategyTemplateId: 'template-1',
+        astSnapshot: { decisionPrograms: [{ phase: 'entry' }] },
+      }),
+    }
+
+    const runtimeExecutionStateService = options && Object.prototype.hasOwnProperty.call(options, 'runtimeExecutionStateService')
+      ? options.runtimeExecutionStateService
+      : { initializeStatesForDeploy: jest.fn().mockResolvedValue([]) }
 
     const service = new AccountStrategyViewService(
       repo as any,
@@ -46,6 +83,10 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       strategyInstancesService as any,
       marketDataIngestionService as any,
       undefined as any,
+      undefined,
+      undefined,
+      snapshotsRepository as any,
+      runtimeExecutionStateService as any,
     )
     service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-1' } as any)
 
@@ -65,6 +106,33 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
     } as any)).rejects.toBeInstanceOf(DomainException)
   })
 
+  it('fails closed when runtime execution state initialization service is unavailable', async () => {
+    const { service, repo } = buildService({
+      runtimeExecutionStateService: undefined as any,
+    })
+
+    await expect(service.deployStrategy({
+      userId: 'user-1',
+      name: 'OKX SOL 5m',
+      exchange: 'okx',
+      symbol: 'SOLUSDT',
+      timeframe: '5m',
+      positionPct: 10,
+      publishedSnapshotId: 'snapshot-1',
+      deployRequestId: 'deploy-req-no-runtime-service',
+      exchangeAccountId: 'acc-1',
+    } as any)).rejects.toMatchObject({
+      message: 'account_strategy.deploy_runtime_execution_state_service_unavailable',
+    })
+
+    expect(repo.markDeployRequestSucceeded).not.toHaveBeenCalled()
+    expect(repo.markDeployRequestFailed).toHaveBeenCalledWith(
+      'req-1',
+      'SERVICE_TEMPORARILY_UNAVAILABLE',
+      'account_strategy.deploy_runtime_execution_state_service_unavailable',
+    )
+  })
+
   it('returns existing result for succeeded idempotent request', async () => {
     const dto = {
       userId: 'user-1',
@@ -76,15 +144,17 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       positionPct: 10,
     } as const
     const { service, repo } = buildService({
-      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue({
-        id: 'req-1',
-        deployRequestId: 'same-1',
-        payloadHash: buildDeployPayloadHash({
-          name: dto.name,
+      repoOverrides: {
+        findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue({
+          id: 'req-1',
+          deployRequestId: 'same-1',
+          payloadHash: buildDeployPayloadHash({
+            name: dto.name,
+          }),
+          status: 'SUCCEEDED',
+          strategyInstanceId: 'inst-existing',
         }),
-        status: 'SUCCEEDED',
-        strategyInstanceId: 'inst-existing',
-      }),
+      },
     })
 
     await service.deployStrategy(dto as any)
@@ -95,13 +165,15 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
 
   it('returns deploy result detail when deploy request is already succeeded', async () => {
     const { service } = buildService({
-      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue({
-        id: 'req-1',
-        deployRequestId: 'deploy-req-1',
-        payloadHash: 'hash-1',
-        status: 'SUCCEEDED',
-        strategyInstanceId: 'inst-existing',
-      }),
+      repoOverrides: {
+        findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue({
+          id: 'req-1',
+          deployRequestId: 'deploy-req-1',
+          payloadHash: 'hash-1',
+          status: 'SUCCEEDED',
+          strategyInstanceId: 'inst-existing',
+        }),
+      },
     })
 
     await expect(service.getDeployResult('user-1', 'deploy-req-1')).resolves.toEqual({ id: 'inst-1' })
@@ -110,13 +182,15 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
 
   it('returns null when deploy request is not yet succeeded', async () => {
     const { service } = buildService({
-      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue({
-        id: 'req-1',
-        deployRequestId: 'deploy-req-1',
-        payloadHash: 'hash-1',
-        status: 'PROCESSING',
-        strategyInstanceId: null,
-      }),
+      repoOverrides: {
+        findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue({
+          id: 'req-1',
+          deployRequestId: 'deploy-req-1',
+          payloadHash: 'hash-1',
+          status: 'PROCESSING',
+          strategyInstanceId: null,
+        }),
+      },
     })
 
     await expect(service.getDeployResult('user-1', 'deploy-req-1')).resolves.toBeNull()
@@ -125,13 +199,15 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
 
   it('rejects idempotent conflict when same request id has different payload', async () => {
     const { service } = buildService({
-      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue({
-        id: 'req-1',
-        deployRequestId: 'same-1',
-        payloadHash: 'different-hash',
-        status: 'SUCCEEDED',
-        strategyInstanceId: 'inst-existing',
-      }),
+      repoOverrides: {
+        findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue({
+          id: 'req-1',
+          deployRequestId: 'same-1',
+          payloadHash: 'different-hash',
+          status: 'SUCCEEDED',
+          strategyInstanceId: 'inst-existing',
+        }),
+      },
     })
 
     await expect(service.deployStrategy({
@@ -147,8 +223,9 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
 
   it('maps create-deploy unique conflict (P2002) to idempotency conflict', async () => {
     const { service } = buildService({
-      createDeployRequestProcessing: jest.fn().mockRejectedValue({ code: 'P2002' }),
-      findDeployRequestByUserAndRequestId: jest.fn()
+      repoOverrides: {
+        createDeployRequestProcessing: jest.fn().mockRejectedValue({ code: 'P2002' }),
+        findDeployRequestByUserAndRequestId: jest.fn()
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce({
           id: 'req-1',
@@ -157,6 +234,7 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
           status: 'PROCESSING',
           strategyInstanceId: null,
         }),
+      },
     })
     ;(service as any).resolveDeployPayload = jest.fn().mockResolvedValue({
       exchange: 'okx',
@@ -189,8 +267,10 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
 
   it('rethrows non-unique create-deploy errors instead of turning them into idempotency conflict', async () => {
     const { service } = buildService({
-      createDeployRequestProcessing: jest.fn().mockRejectedValue(new Error('fk constraint failed')),
-      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      repoOverrides: {
+        createDeployRequestProcessing: jest.fn().mockRejectedValue(new Error('fk constraint failed')),
+        findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      },
     })
     ;(service as any).resolveDeployPayload = jest.fn().mockResolvedValue({
       exchange: 'okx',
@@ -227,10 +307,12 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       status: 500,
     })
     const { service } = buildService({
-      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
-      createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-1' }),
-      deployStrategyForUser: jest.fn().mockRejectedValue(originalError),
-      markDeployRequestFailed: jest.fn().mockRejectedValue(new Error('failed marker write failed')),
+      repoOverrides: {
+        findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+        createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-1' }),
+        deployStrategyForUser: jest.fn().mockRejectedValue(originalError),
+        markDeployRequestFailed: jest.fn().mockRejectedValue(new Error('failed marker write failed')),
+      },
     })
     ;(service as any).resolveDeployPayload = jest.fn().mockResolvedValue({
       exchange: 'okx',
@@ -256,5 +338,50 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       name: 'OKX SOL 5m',
       exchangeAccountId: 'acct-1',
     } as any)).rejects.toBe(originalError)
+  })
+
+  it('fails closed when runtime execution state initialization fails after deploy succeeds', async () => {
+    const initializationError = new Error('runtime state init failed')
+    const runtimeExecutionStateService = {
+      initializeStatesForDeploy: jest.fn().mockRejectedValue(initializationError),
+    }
+    const { service, repo } = buildService({
+      runtimeExecutionStateService,
+    })
+    ;(service as any).resolveDeployPayload = jest.fn().mockResolvedValue({
+      exchange: 'okx',
+      symbol: 'SOLUSDT',
+      timeframe: '5m',
+      positionPct: 10,
+      marketType: 'spot',
+      deploymentExecutionConfig: {
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'GTC',
+      },
+      publishedSnapshotId: 'snapshot-1',
+      snapshotHash: 'snapshot-hash-1',
+      sourceStrategyInstanceId: 'inst-draft-1',
+      sourceStrategyTemplateId: 'template-1',
+      snapshot: { id: 'snapshot-1', astSnapshot: { decisionPrograms: [{ phase: 'entry' }] } },
+    })
+
+    await expect(service.deployStrategy({
+      userId: 'user-1',
+      deployRequestId: 'same-5',
+      name: 'OKX SOL 5m',
+      exchangeAccountId: 'acct-1',
+    } as any)).rejects.toBe(initializationError)
+
+    expect(runtimeExecutionStateService.initializeStatesForDeploy).toHaveBeenCalledWith({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snapshot-1',
+      snapshotHash: 'snapshot-hash-1',
+      snapshot: { id: 'snapshot-1', astSnapshot: { decisionPrograms: [{ phase: 'entry' }] } },
+    })
+    expect(repo.markDeployRequestSucceeded).not.toHaveBeenCalled()
+    expect(repo.markDeployRequestFailed).toHaveBeenCalledWith('req-1', 'BAD_REQUEST', 'runtime state init failed')
+    expect(service.getStrategyDetail).not.toHaveBeenCalled()
   })
 })

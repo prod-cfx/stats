@@ -9,7 +9,7 @@ import type { StrategySignalsRuntimeConfig } from '@/modules/strategy-signals/ty
 import type { ExchangeId, MarketType, UnifiedBalance } from '@/modules/trading/core/types'
 import { createHash } from 'node:crypto'
 import { ErrorCode } from '@ai/shared'
-import { HttpStatus, Injectable, Optional } from '@nestjs/common'
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { ConfigService } from '@nestjs/config'
 import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
@@ -25,6 +25,8 @@ import { StrategyInstanceStatsService } from '@/modules/strategy-instances/servi
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { StrategyInstancesService } from '@/modules/strategy-instances/services/strategy-instances.service'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '@/modules/strategy-signals/types/strategy-signals-config.type'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { StrategyRuntimeExecutionStateService } from '@/modules/strategy-signals/services/strategy-runtime-execution-state.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { TradingService } from '@/modules/trading/trading.service'
 import { Prisma } from '@/prisma/prisma.types'
@@ -65,6 +67,7 @@ interface StrategyAccountFallback {
 @Injectable()
 export class AccountStrategyViewService {
   private static readonly BEST_EFFORT_EXTERNAL_TIMEOUT_MS = 1_500
+  private readonly logger = new Logger(AccountStrategyViewService.name)
 
   constructor(
     private readonly repo: AccountStrategyViewRepository,
@@ -75,6 +78,7 @@ export class AccountStrategyViewService {
     @Optional() private readonly configService?: ConfigService,
     @Optional() private readonly tradingService?: TradingService,
     @Optional() private readonly publishedSnapshotsRepository?: PublishedStrategySnapshotsRepository,
+    private readonly runtimeExecutionStateService?: StrategyRuntimeExecutionStateService,
   ) {}
 
   async listStrategies(
@@ -310,6 +314,30 @@ export class AccountStrategyViewService {
       userId,
       source: row,
     })
+    let runtimeExecutionStates: AccountStrategyDetailResponseDto['runtimeExecutionStates'] = []
+    let runtimeExecutionStateInvalid = false
+    try {
+      runtimeExecutionStates = await this.resolveRuntimeExecutionStates({
+        strategyInstanceId,
+        publishedSnapshotId: resolvedSnapshot.publishedSnapshotId,
+        snapshotHash: resolvedSnapshot.snapshotHash,
+        compatibilityMetadata: resolvedSnapshot.compatibilityMetadata,
+      })
+    } catch (error) {
+      if (this.isRuntimeExecutionBindingMismatch(error)) {
+        runtimeExecutionStateInvalid = true
+        resolvedSnapshot.compatibilityMetadata = {
+          ...(resolvedSnapshot.compatibilityMetadata ?? {}),
+          invalidBinding: true,
+        }
+      } else {
+        this.logger.warn(
+          `Failed to load runtime execution states for strategy instance ${strategyInstanceId}: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        )
+      }
+    }
     const snapshotStrategyConfig = resolvedSnapshot.strategyConfig
     const snapshotMarketType = this.readSnapshotMarketType(snapshotStrategyConfig)
     const detailLeverageConstraints = await this.resolveEffectiveLeverageConstraints({
@@ -446,7 +474,11 @@ export class AccountStrategyViewService {
         totalUnrealizedPnl: account ? resolvedUnrealizedPnl : null,
       },
       latestOrders: buildAccountStrategyLatestOrders(timelineSource.trades),
-      deployment: !resolvedSnapshot.publishedSnapshotId || resolvedSnapshot.compatibilityMetadata?.requiresRepublishForDeploy
+      runtimeExecutionStates,
+      deployment: !resolvedSnapshot.publishedSnapshotId
+        || resolvedSnapshot.compatibilityMetadata?.requiresRepublishForDeploy
+        || resolvedSnapshot.compatibilityMetadata?.invalidBinding === true
+        || runtimeExecutionStateInvalid
         ? null
         : {
             exchangeAccountId: sub?.exchangeAccount?.id ?? null,
@@ -483,6 +515,51 @@ export class AccountStrategyViewService {
     }
 
     return detail
+  }
+
+  private async resolveRuntimeExecutionStates(input: {
+    strategyInstanceId: string
+    publishedSnapshotId: string | null
+    snapshotHash: string | null
+    compatibilityMetadata: Record<string, unknown> | null
+  }): Promise<AccountStrategyDetailResponseDto['runtimeExecutionStates']> {
+    if (
+      !input.publishedSnapshotId
+      || !input.snapshotHash
+      || !this.runtimeExecutionStateService
+      || input.compatibilityMetadata?.requiresRepublishForDeploy === true
+      || input.compatibilityMetadata?.invalidBinding === true
+    ) {
+      return []
+    }
+
+    const states = await this.runtimeExecutionStateService.loadStatesForBinding({
+      strategyInstanceId: input.strategyInstanceId,
+      publishedSnapshotId: input.publishedSnapshotId,
+      snapshotHash: input.snapshotHash,
+    })
+
+    return states.map(state => ({
+      executionSemanticKey: state.executionSemanticKey,
+      status: state.status,
+      failureReason: state.failureReason ?? null,
+      failureCode: state.failureCode ?? null,
+      lastAttemptAt: state.lastAttemptAt?.toISOString() ?? null,
+      consumedAt: state.consumedAt?.toISOString() ?? null,
+      cooldownUntil: state.cooldownUntil?.toISOString() ?? null,
+      publishedSnapshotId: state.publishedSnapshotId,
+      snapshotHash: state.snapshotHash,
+    }))
+  }
+
+  private isRuntimeExecutionBindingMismatch(error: unknown): boolean {
+    if (!(error instanceof Error)) {
+      return false
+    }
+
+    return error.message === 'strategy_instance_mismatch'
+      || error.message === 'published_snapshot_mismatch'
+      || error.message === 'snapshot_hash_mismatch'
   }
 
   private async resolveBoundSnapshotDetail(input: {
@@ -741,6 +818,12 @@ export class AccountStrategyViewService {
         strategyInstanceId: deployResult.strategyInstanceId,
         ...riskProfile,
       })
+      await this.requireRuntimeExecutionStateService().initializeStatesForDeploy({
+        strategyInstanceId: deployResult.strategyInstanceId,
+        publishedSnapshotId: resolvedDeploy.publishedSnapshotId,
+        snapshotHash: resolvedDeploy.snapshotHash,
+        snapshot: resolvedDeploy.snapshot,
+      })
       await this.repo.markDeployRequestSucceeded(deployRequest.id, deployResult.strategyInstanceId)
 
       return this.getStrategyDetail(dto.userId, deployResult.strategyInstanceId)
@@ -892,6 +975,17 @@ export class AccountStrategyViewService {
       return (error as { code?: unknown }).code === 'P2002'
     }
     return false
+  }
+
+  private requireRuntimeExecutionStateService(): StrategyRuntimeExecutionStateService {
+    if (!this.runtimeExecutionStateService) {
+      throw new DomainException('account_strategy.deploy_runtime_execution_state_service_unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+      })
+    }
+
+    return this.runtimeExecutionStateService
   }
 
   private assertStrategyVisible<T extends { status?: string | null }>(
@@ -1568,6 +1662,7 @@ export class AccountStrategyViewService {
     snapshotHash: string
     sourceStrategyInstanceId: string | null
     sourceStrategyTemplateId: string | null
+    snapshot: unknown
   }> {
     if (!this.publishedSnapshotsRepository) {
       throw new DomainException('account_strategy.deploy_snapshot_repository_unavailable', {
@@ -1686,6 +1781,7 @@ export class AccountStrategyViewService {
       snapshotHash: snapshot.snapshotHash,
       sourceStrategyInstanceId: snapshot.strategyInstanceId,
       sourceStrategyTemplateId: snapshot.strategyTemplateId,
+      snapshot,
     }
   }
 

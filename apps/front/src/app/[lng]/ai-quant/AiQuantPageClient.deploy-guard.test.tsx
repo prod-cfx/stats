@@ -116,7 +116,6 @@ jest.mock('@/components/ai-quant/backtest-job-client', () => ({
 
 jest.mock('@/components/ai-quant/backtest-capability-client', () => ({
   fetchBacktestCapabilities: jest.fn(async () => ({
-    allowedSymbols: ['BTCUSDT'],
     allowedBaseTimeframes: ['15m'],
   })),
 }))

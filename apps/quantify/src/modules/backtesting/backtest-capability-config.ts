@@ -3,22 +3,20 @@ import type { EnvAccessor } from '@/common/env/env.accessor'
 import { defaultEnvAccessor } from '@/common/env/env.accessor'
 
 export interface BacktestCapabilitiesConfigRecord {
-  allowedSymbols?: unknown
   allowedBaseTimeframes?: unknown
 }
 
 export interface NormalizedBacktestCapabilitiesConfig {
-  allowedSymbols: string[]
   allowedBaseTimeframes: string[]
 }
 
-export const BACKTEST_CAPABILITY_ALLOWED_SYMBOLS_ENV = 'BACKTEST_CAPABILITY_ALLOWED_SYMBOLS'
+export interface ResolvedBacktestCapabilitiesConfig {
+  allowedBaseTimeframes: string[]
+}
+
 export const BACKTEST_CAPABILITY_ALLOWED_BASE_TIMEFRAMES_ENV = 'BACKTEST_CAPABILITY_ALLOWED_BASE_TIMEFRAMES'
-export const DEFAULT_BACKTEST_CAPABILITY_SYMBOLS = ['BTCUSDT'] as const
 export const DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES = MARKET_TIMEFRAMES
 const SUPPORTED_BACKTEST_CAPABILITY_BASE_TIMEFRAME_SET = new Set<string>(MARKET_TIMEFRAMES)
-const LEGACY_DEFAULT_BACKTEST_CAPABILITY_SYMBOLS = ['BTCUSDT'] as const
-const LEGACY_DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES = ['15m', '1h'] as const
 
 function parseConfiguredStringArray(raw: string | undefined): string[] | null {
   const trimmed = raw?.trim()
@@ -81,25 +79,6 @@ function resolveConfiguredBacktestCapabilityTimeframes(raw: string | undefined):
   return valid.length > 0 ? valid : null
 }
 
-export function isLegacyDefaultBacktestCapabilityConfig(
-  config: BacktestCapabilitiesConfigRecord | null | undefined,
-): boolean {
-  if (!config) {
-    return false
-  }
-
-  const allowedSymbols = normalizeConfiguredStringArray(config.allowedSymbols)
-  const allowedBaseTimeframes = normalizeConfiguredBacktestCapabilityTimeframes(config.allowedBaseTimeframes)
-  if (!allowedSymbols || !allowedBaseTimeframes) {
-    return false
-  }
-
-  return allowedSymbols.length === LEGACY_DEFAULT_BACKTEST_CAPABILITY_SYMBOLS.length
-    && allowedSymbols.every((item, index) => item === LEGACY_DEFAULT_BACKTEST_CAPABILITY_SYMBOLS[index])
-    && allowedBaseTimeframes.length === LEGACY_DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES.length
-    && allowedBaseTimeframes.every((item, index) => item === LEGACY_DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES[index])
-}
-
 export function normalizeBacktestCapabilityConfig(
   config: BacktestCapabilitiesConfigRecord | null | undefined,
 ): NormalizedBacktestCapabilitiesConfig | null {
@@ -107,22 +86,20 @@ export function normalizeBacktestCapabilityConfig(
     return null
   }
 
-  const allowedSymbols = normalizeConfiguredStringArray(config.allowedSymbols)
   const allowedBaseTimeframes = normalizeConfiguredBacktestCapabilityTimeframes(config.allowedBaseTimeframes)
 
-  if (!allowedSymbols || !allowedBaseTimeframes) {
+  if (!allowedBaseTimeframes) {
     return null
   }
 
   return {
-    allowedSymbols,
     allowedBaseTimeframes,
   }
 }
 
 export function resolveConfiguredBacktestCapabilityConfig(
   env?: EnvAccessor | NodeJS.ProcessEnv,
-): NormalizedBacktestCapabilitiesConfig {
+): ResolvedBacktestCapabilitiesConfig {
   const read = (key: string): string | undefined => {
     if (!env) {
       return defaultEnvAccessor.raw(key)
@@ -135,15 +112,12 @@ export function resolveConfiguredBacktestCapabilityConfig(
     return env[key]
   }
 
-  const allowedSymbols = parseConfiguredStringArray(read(BACKTEST_CAPABILITY_ALLOWED_SYMBOLS_ENV))
-    ?? [...DEFAULT_BACKTEST_CAPABILITY_SYMBOLS]
   const allowedBaseTimeframes = resolveConfiguredBacktestCapabilityTimeframes(
     read(BACKTEST_CAPABILITY_ALLOWED_BASE_TIMEFRAMES_ENV),
   )
     ?? [...DEFAULT_BACKTEST_CAPABILITY_BASE_TIMEFRAMES]
 
   return {
-    allowedSymbols,
     allowedBaseTimeframes,
   }
 }

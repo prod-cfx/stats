@@ -630,4 +630,197 @@ describe('ai-quant-strategy-api-adapter', () => {
     })
   })
 
+  it('maps runtime execution states into the detail record and preserves empty legacy lists', () => {
+    const populated = mapAccountStrategyDetailToRecord({
+      id: 'inst-runtime-map',
+      name: 'runtime detail',
+      status: 'running',
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      positionPct: 10,
+      isSubscribed: true,
+      metrics: {
+        returnPct: 1,
+        maxDrawdownPct: 2,
+        winRatePct: 3,
+        tradeCount: 4,
+      },
+      updatedAt: '2026-03-20T00:00:00.000Z',
+      totalPnl: 1,
+      todayPnl: 0,
+      equitySeries: [],
+      snapshot: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+        publishedSnapshotId: 'snapshot-runtime-1',
+        snapshotHash: 'snapshot-hash-runtime-1',
+        paramSchema: null,
+        paramValues: null,
+        schemaVersion: null,
+      },
+      timeline: [],
+      runtimeExecutionStates: [{
+        executionSemanticKey: 'on_start.entry.primary',
+        status: 'failed',
+        failureReason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+        failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+        lastAttemptAt: '2026-03-20T10:03:00.000Z',
+        consumedAt: null,
+        cooldownUntil: null,
+        publishedSnapshotId: 'snapshot-runtime-1',
+        snapshotHash: 'snapshot-hash-runtime-1',
+      }],
+      accountOverview: {
+        initialBalance: 10000,
+        totalEquity: 10000,
+        availableBalance: 10000,
+        totalPnl: 0,
+        todayPnl: 0,
+        baseCurrency: 'USDT',
+      },
+      positionOverview: {
+        openPositionsCount: 0,
+        closedPositionsCount: 0,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 0,
+      },
+      latestOrders: [],
+    } as any)
+
+    expect(populated.runtimeExecutionStates).toEqual([{
+      executionSemanticKey: 'on_start.entry.primary',
+      status: 'failed',
+      failureReason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+      failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+      lastAttemptAt: '2026-03-20T10:03:00.000Z',
+      consumedAt: null,
+      cooldownUntil: null,
+      publishedSnapshotId: 'snapshot-runtime-1',
+      snapshotHash: 'snapshot-hash-runtime-1',
+    }])
+
+    const legacy = mapAccountStrategyDetailToRecord({
+      id: 'inst-runtime-empty',
+      name: 'legacy detail',
+      status: 'stopped',
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      positionPct: 10,
+      isSubscribed: true,
+      metrics: {
+        returnPct: 0,
+        maxDrawdownPct: 0,
+        winRatePct: 0,
+        tradeCount: 0,
+      },
+      updatedAt: '2026-03-20T00:00:00.000Z',
+      totalPnl: 0,
+      todayPnl: 0,
+      equitySeries: [],
+      snapshot: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+        publishedSnapshotId: null,
+        snapshotHash: null,
+        paramSchema: null,
+        paramValues: null,
+        schemaVersion: null,
+      },
+      timeline: [],
+      runtimeExecutionStates: [],
+      accountOverview: {
+        initialBalance: 10000,
+        totalEquity: 10000,
+        availableBalance: 10000,
+        totalPnl: 0,
+        todayPnl: 0,
+        baseCurrency: 'USDT',
+      },
+      positionOverview: {
+        openPositionsCount: 0,
+        closedPositionsCount: 0,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 0,
+      },
+      latestOrders: [],
+    } as any)
+
+    expect(legacy.runtimeExecutionStates).toEqual([])
+  })
+
+  it('preserves invalidBinding compatibility metadata for detail rendering', () => {
+    const record = mapAccountStrategyDetailToRecord({
+      id: 'inst-invalid-binding',
+      name: 'invalid binding',
+      status: 'stopped',
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      positionPct: 10,
+      isSubscribed: true,
+      metrics: {
+        returnPct: 0,
+        maxDrawdownPct: 0,
+        winRatePct: 0,
+        tradeCount: 0,
+      },
+      updatedAt: '2026-03-20T00:00:00.000Z',
+      totalPnl: 0,
+      todayPnl: 0,
+      equitySeries: [],
+      snapshot: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+        publishedSnapshotId: 'snapshot-invalid-1',
+        snapshotHash: 'snapshot-invalid-hash-1',
+        paramSchema: null,
+        paramValues: null,
+        schemaVersion: null,
+        compatibilityMetadata: {
+          isLegacySnapshot: false,
+          missingBacktestConfigDefaults: false,
+          missingDeploymentExecutionDefaults: false,
+          missingDeploymentExecutionConstraints: false,
+          requiresRepublishForBacktest: false,
+          requiresRepublishForDeploy: false,
+          invalidBinding: true,
+        },
+      },
+      timeline: [],
+      runtimeExecutionStates: [],
+      accountOverview: {
+        initialBalance: 10000,
+        totalEquity: 10000,
+        availableBalance: 10000,
+        totalPnl: 0,
+        todayPnl: 0,
+        baseCurrency: 'USDT',
+      },
+      positionOverview: {
+        openPositionsCount: 0,
+        closedPositionsCount: 0,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 0,
+      },
+      latestOrders: [],
+    } as any)
+
+    expect(record.compatibilityMetadata).toEqual(expect.objectContaining({
+      invalidBinding: true,
+    }))
+    expect(record.deploymentExecutionBaseline).toBeNull()
+    expect(record.deploymentExecutionCurrent).toBeNull()
+    expect(record.deploymentLeverageRange).toBeNull()
+    expect(record.canEditDeploymentLeverage).toBe(false)
+    expect(record.deploy).toBeUndefined()
+  })
+
 })

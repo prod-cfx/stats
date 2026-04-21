@@ -2,6 +2,7 @@ import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capabi
 import type { BacktestRangeInput } from '@/components/ai-quant/backtest-range'
 import type { BacktestResult } from '@/components/ai-quant/BacktestSummaryCard'
 import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
+import type { DisplayLogicGraph } from '@/components/ai-quant/display-logic-graph'
 import type { StrategyLogicGraph } from '@/components/ai-quant/logic-graph-model'
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
 import type {
@@ -19,7 +20,6 @@ import type {
   UserExchangeAccountStatus,
 } from '@/lib/api'
 import { readCanonicalDigest } from '@/components/ai-quant/canonical-confirmation'
-import type { DisplayLogicGraph } from '@/components/ai-quant/display-logic-graph'
 import { buildDisplayLogicGraphFromCodegenSpec } from '@/components/ai-quant/display-logic-graph'
 import { buildLogicGraphFromCodegenSpec } from '@/components/ai-quant/llm-logic-graph'
 import { syncStrategyParamsFromCodegen } from '@/components/ai-quant/strategy-param-sync'
@@ -242,7 +242,7 @@ function normalizeDisplayLogicGraph(value: unknown): DisplayLogicGraph | null {
     }
 
     const items = block.items.map(normalizeDisplayLogicGraphItem)
-    if (items.some(item => item === null)) {
+    if (items.includes(null)) {
       return null
     }
 
@@ -252,7 +252,7 @@ function normalizeDisplayLogicGraph(value: unknown): DisplayLogicGraph | null {
     }
   })
 
-  if (blocks.some(block => block === null)) {
+  if (blocks.includes(null)) {
     return null
   }
 
@@ -768,10 +768,7 @@ export function buildParamSchemaWithCapabilities(
   }
 
   if (capabilities) {
-    symbolProperty.enum = [
-      currentSymbol,
-      ...capabilities.allowedSymbols.filter(item => item !== currentSymbol),
-    ]
+    symbolProperty.enum = [currentSymbol]
     baseTimeframeProperty.enum = capabilities.allowedBaseTimeframes
   } else {
     symbolProperty.enum = [currentSymbol]

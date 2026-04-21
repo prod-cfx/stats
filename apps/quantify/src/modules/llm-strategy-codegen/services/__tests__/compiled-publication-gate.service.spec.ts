@@ -182,6 +182,138 @@ describe('compiledPublicationGateService', () => {
     }))
   })
 
+  it('persists explicit on_start runtime execution semantics when ast source refs carry on_start markers', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn().mockResolvedValue({ id: 'snapshot-on-start-1' }),
+    }
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never)
+    const ir = createIrFixture()
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    ast.decisionPrograms[0] = {
+      ...ast.decisionPrograms[0]!,
+      sourceRef: 'entry-execution-on_start-210',
+    }
+    const executionEnvelope = {
+      positionMode: 'long_only' as const,
+      marginMode: 'cash' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await gate.publish({
+      sessionId: 'session-on-start-1',
+      strategyTemplateId: 'template-1',
+      strategyInstanceId: 'instance-1',
+      canonicalSnapshot: {
+        version: 2,
+        market: { exchange: 'binance', symbol: 'BTCUSDT', timeframe: '1h' },
+        indicators: [],
+        rules: [],
+      },
+      semanticView: { viewType: 'canonical-semantic-view.v1' },
+      graphSnapshot: {
+        version: 3,
+        status: 'confirmed' as const,
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'binance' as const,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          positionPct: 25,
+          executionTags: [],
+        },
+      },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'on-start' },
+      scriptSummary: { indicators: ['EMA'] },
+      lockedParams: { positionPct: 25 },
+    })
+
+    expect(publishedSnapshotsRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      astSnapshot: expect.objectContaining({
+        runtimeExecutionSemantics: ['on_start.entry.primary'],
+      }),
+    }))
+  })
+
+  it('collapses multiple on_start markers into a single snapshot runtime semantic', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn().mockResolvedValue({ id: 'snapshot-on-start-2' }),
+    }
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never)
+    const ir = createIrFixture()
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    ast.decisionPrograms[0] = {
+      ...ast.decisionPrograms[0]!,
+      sourceRef: 'entry-execution-on_start-210',
+    }
+    ast.decisionPrograms[1] = {
+      ...ast.decisionPrograms[1]!,
+      sourceRef: 'exit-execution-on_start-211',
+    }
+    const executionEnvelope = {
+      positionMode: 'long_only' as const,
+      marginMode: 'cash' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await gate.publish({
+      sessionId: 'session-on-start-2',
+      strategyTemplateId: 'template-1',
+      strategyInstanceId: 'instance-1',
+      canonicalSnapshot: {
+        version: 2,
+        market: { exchange: 'binance', symbol: 'BTCUSDT', timeframe: '1h' },
+        indicators: [],
+        rules: [],
+      },
+      semanticView: { viewType: 'canonical-semantic-view.v1' },
+      graphSnapshot: {
+        version: 3,
+        status: 'confirmed' as const,
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'binance' as const,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          positionPct: 25,
+          executionTags: [],
+        },
+      },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'on-start-collapsed' },
+      scriptSummary: { indicators: ['EMA'] },
+      lockedParams: { positionPct: 25 },
+    })
+
+    expect(publishedSnapshotsRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      astSnapshot: expect.objectContaining({
+        runtimeExecutionSemantics: ['on_start.entry.primary'],
+      }),
+    }))
+  })
+
   it('keeps exchange, marketType, and pct_equity positionPct in paramsSnapshot for non-long-only execution envelopes', async () => {
     const publishedSnapshotsRepo = {
       create: jest.fn().mockResolvedValue({ id: 'snapshot-2' }),

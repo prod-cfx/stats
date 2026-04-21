@@ -3,8 +3,13 @@
 import type { AiQuantStrategyRecord } from '@/components/account/ai-quant-strategy-store'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { mapAccountStrategyDetailToRecord } from '@/components/account/ai-quant-strategy-api-adapter'
 import { AiQuantStrategyDetail } from '@/components/account/AiQuantStrategyDetail'
+import {
+  buildLocalizedBacktestErrorMessage,
+  parseAiQuantErrorMeta,
+} from '@/components/ai-quant/ai-quant-error-stage'
 import { fetchBacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import {
   createBacktestJob,
@@ -80,8 +85,104 @@ function getBacktestErrorMessage(error: unknown): string {
   return '现有策略回测失败，请稍后重试。'
 }
 
+function buildDynamicBacktestAvailabilityMessage(
+  t: (key: string, options?: Record<string, unknown>) => string,
+  code: string | undefined,
+  args?: Record<string, unknown>,
+): string | null {
+  if (!code) return null
+
+  if (
+    code === 'BACKTEST_SNAPSHOT_REQUIRED'
+    || code === 'BACKTEST_SNAPSHOT_SYMBOL_MISSING'
+    || code === 'BACKTEST_SNAPSHOT_MARKET_TYPE_MISSING'
+    || code === 'BACKTEST_SNAPSHOT_TIMEFRAME_MISSING'
+    || code === 'BACKTEST_SYMBOL_UNAVAILABLE'
+    || code === 'BACKTEST_SYMBOL_REFRESH_FAILED'
+    || code === 'BACKTEST_MARKET_DATA_UNAVAILABLE'
+    || code === 'BACKTEST_SERVICE_TEMPORARILY_UNAVAILABLE'
+    || code === 'SERVICE_TEMPORARILY_UNAVAILABLE'
+  ) {
+    return buildLocalizedBacktestErrorMessage(t, 400, {
+      code,
+      stage: 'backtest',
+      args,
+    })
+  }
+
+  return null
+}
+
+function getLocalizedDetailBacktestErrorMessage(args: {
+  error: unknown
+  lng: 'zh' | 'en'
+  t: (key: string, options?: Record<string, unknown>) => string
+}): string {
+  const { error, lng, t } = args
+  if (isBacktestPayloadBuilderError(error)) {
+    switch (error.code) {
+      case 'missing_published_snapshot':
+        return lng === 'en'
+          ? 'This strategy does not have a published snapshot yet, so backtesting cannot start directly.'
+          : '当前策略缺少 published snapshot，无法直接发起回测。'
+      case 'missing_symbol':
+        return lng === 'en'
+          ? 'This strategy is missing a trading symbol, so backtesting cannot start.'
+          : '当前策略缺少交易对，无法发起回测。'
+      case 'timeframe_not_allowed':
+        return lng === 'en'
+          ? 'The strategy timeframe is not available for backtesting.'
+          : '当前策略的周期不在可回测能力范围内。'
+      case 'missing_range':
+        return lng === 'en'
+          ? 'This strategy does not have a valid backtest range.'
+          : '当前策略缺少有效回测区间。'
+      case 'start_after_end':
+        return lng === 'en'
+          ? 'The backtest start time must be earlier than the end time.'
+          : '回测开始时间必须早于结束时间。'
+      case 'range_too_large':
+        return lng === 'en'
+          ? 'The selected backtest range is too large. Please narrow it and try again.'
+          : '回测区间过大，请缩小后重试。'
+      case 'invalid_execution_config':
+      default:
+        return lng === 'en'
+          ? 'The strategy backtest execution configuration is invalid. Please fix the published snapshot settings first.'
+          : '当前策略的回测执行参数无效，请先修正策略快照配置。'
+    }
+  }
+
+  if (error instanceof BacktestPayloadBuilderError) {
+    return getLocalizedDetailBacktestErrorMessage({ error, lng, t })
+  }
+
+  const parsed = error instanceof ApiError && error.details && typeof error.details === 'object'
+    ? {
+        ...parseAiQuantErrorMeta(error),
+        args: error.details as Record<string, unknown>,
+      }
+    : parseAiQuantErrorMeta(error)
+  const localizedDynamicMessage = buildDynamicBacktestAvailabilityMessage(t, parsed.code, parsed.args)
+  if (localizedDynamicMessage) {
+    return localizedDynamicMessage
+  }
+
+  if (error instanceof ApiError && error.message.trim()) {
+    return error.message
+  }
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+
+  return lng === 'en'
+    ? 'Backtesting failed for this strategy. Please try again later.'
+    : '现有策略回测失败，请稍后重试。'
+}
+
 export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientProps) {
   const router = useRouter()
+  const { t } = useTranslation()
   const { session, isLoading } = useAuth()
   const [strategy, setStrategy] = useState<AiQuantStrategyRecord | null>(null)
   const [isDetailLoading, setIsDetailLoading] = useState(true)
@@ -215,9 +316,23 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
         allowPartial: true,
       })
 
-      const support = await checkBacktestSymbolSupport({ exchange, symbol })
+      const support = await checkBacktestSymbolSupport({
+        exchange,
+        marketType,
+        symbol,
+        baseTimeframe,
+      })
       if (support.status === 'not_supported') {
-        throw new ApiError('当前策略交易对暂不支持回测', 'SYMBOL_NOT_SUPPORTED')
+        throw new ApiError(
+          buildLocalizedBacktestErrorMessage(t, 400, {
+            code: support.reasonCode ?? 'BACKTEST_SYMBOL_UNAVAILABLE',
+            stage: 'backtest',
+            args: support.args,
+          }),
+          support.reasonCode ?? 'BACKTEST_SYMBOL_UNAVAILABLE',
+          400,
+          support.args,
+        )
       }
 
       const createdJob = await createBacktestJob(payload)
@@ -251,11 +366,11 @@ export function StrategyDetailPageClient({ lng, id }: StrategyDetailPageClientPr
       })
       router.push(`/${lng}/ai-quant/backtest/${createdJob.id}?${search.toString()}`)
     } catch (error) {
-      setBacktestError(getBacktestErrorMessage(error))
+      setBacktestError(getLocalizedDetailBacktestErrorMessage({ error, lng, t }))
     } finally {
       setIsBacktestRunning(false)
     }
-  }, [isBacktestRunning, lng, router, session, strategy])
+  }, [isBacktestRunning, lng, router, session, strategy, t])
 
   const handleUpdateLeverage = useCallback(
     async (leverage: number) => {

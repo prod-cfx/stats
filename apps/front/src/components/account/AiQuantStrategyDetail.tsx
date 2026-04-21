@@ -74,6 +74,44 @@ function formatExecutionValue(value: string | number | null | undefined, suffix 
   return '--'
 }
 
+function formatDetailTime(ts: string) {
+  const date = new Date(ts)
+  if (Number.isNaN(date.getTime())) return ts
+
+  const y = date.getFullYear()
+  const mm = String(date.getMonth() + 1).padStart(2, '0')
+  const dd = String(date.getDate()).padStart(2, '0')
+  const hh = String(date.getHours()).padStart(2, '0')
+  const min = String(date.getMinutes()).padStart(2, '0')
+  return `${y}-${mm}-${dd} ${hh}:${min}`
+}
+
+function formatRuntimeExecutionStatus(status: string) {
+  switch (status) {
+    case 'ready':
+      return '待执行'
+    case 'consumed':
+      return '已执行'
+    case 'failed':
+      return '失败'
+    case 'cooldown':
+      return '冷却中'
+    default:
+      return status || '--'
+  }
+}
+
+function formatRuntimeExecutionAt(ts: string | null | undefined) {
+  if (!ts) return '--'
+  return formatDetailTime(ts)
+}
+
+function formatRuntimeExecutionFailureReason(reason: string | null | undefined) {
+  if (!reason) return '--'
+  if (reason === 'SNAPSHOT_SCRIPT_NO_SIGNAL') return '未生成可执行信号'
+  return reason
+}
+
 interface AiQuantStrategyDetailProps {
   lng: 'zh' | 'en'
   strategy: AiQuantStrategyRecord | null
@@ -199,6 +237,59 @@ export function AiQuantStrategyDetail({
             {strategy.compatibilityMetadata.requiresRepublishForBacktest ? ' 回测前需要重新发布。' : ''}
             {strategy.compatibilityMetadata.requiresRepublishForDeploy ? ' 重新部署前也需要重新发布。' : ''}
           </p>
+        </section>
+      )}
+
+      {strategy.compatibilityMetadata?.invalidBinding && (
+        <section className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+          <p className="font-semibold text-rose-100">快照绑定已失效</p>
+          <p className="mt-1">
+            当前部署实例的运行时绑定与快照真相不一致，已自动隐藏执行配置与运行时状态。请重新发布并重新部署。
+          </p>
+        </section>
+      )}
+
+      {strategy.runtimeExecutionStates && strategy.runtimeExecutionStates.length > 0 && (
+        <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
+          <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">运行时执行语义状态</h2>
+          <div className="mt-3 space-y-3">
+            {strategy.runtimeExecutionStates.map((state) => (
+              <article
+                key={`${state.publishedSnapshotId}:${state.executionSemanticKey}`}
+                className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-4 py-3"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-[color:var(--cf-text-strong)]">{state.executionSemanticKey}</p>
+                    <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
+                      快照：{state.publishedSnapshotId}
+                    </p>
+                  </div>
+                  <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-xs text-cyan-200">
+                    {formatRuntimeExecutionStatus(state.status)}
+                  </span>
+                </div>
+                <div className="mt-3 grid gap-2 text-sm md:grid-cols-2">
+                  <p className="text-[color:var(--cf-muted)]">
+                    最近尝试：
+                    <span className="ml-1 text-[color:var(--cf-text-strong)]">{formatRuntimeExecutionAt(state.lastAttemptAt)}</span>
+                  </p>
+                  <p className="text-[color:var(--cf-muted)]">
+                    已执行时间：
+                    <span className="ml-1 text-[color:var(--cf-text-strong)]">{formatRuntimeExecutionAt(state.consumedAt)}</span>
+                  </p>
+                  <p className="text-[color:var(--cf-muted)]">
+                    冷却到期：
+                    <span className="ml-1 text-[color:var(--cf-text-strong)]">{formatRuntimeExecutionAt(state.cooldownUntil)}</span>
+                  </p>
+                  <p className="text-[color:var(--cf-muted)]">
+                    失败原因：
+                    <span className="ml-1 text-[color:var(--cf-text-strong)]">{formatRuntimeExecutionFailureReason(state.failureReason)}</span>
+                  </p>
+                </div>
+              </article>
+            ))}
+          </div>
         </section>
       )}
 

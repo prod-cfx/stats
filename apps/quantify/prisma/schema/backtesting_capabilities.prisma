@@ -1,6 +1,5 @@
 model BacktestCapabilityConfig {
   id                    String   @id @default(cuid())
-  allowedSymbols        Json     @map("allowed_symbols")
   allowedBaseTimeframes Json     @map("allowed_base_timeframes")
   isActive              Boolean  @default(true) @map("is_active")
   createdAt             DateTime @default(now()) @map("created_at")

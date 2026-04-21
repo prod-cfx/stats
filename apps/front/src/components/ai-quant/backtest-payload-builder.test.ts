@@ -13,7 +13,6 @@ function createInput(overrides: Partial<BuildBacktestPayloadInput> = {}): BuildB
     symbol: 'BTCUSDT',
     baseTimeframe: '15m',
     capabilities: {
-      allowedSymbols: ['BTCUSDT', 'ETHUSDT'],
       allowedBaseTimeframes: ['15m', '1h'],
     },
     stateTimeframes: ['15m'],
@@ -123,7 +122,6 @@ describe('backtest-payload-builder', () => {
       buildBacktestPayload(createInput({
         baseTimeframe: '3m',
         capabilities: {
-          allowedSymbols: ['BTCUSDT', 'ETHUSDT'],
           allowedBaseTimeframes: ['3m', '15m', '1h'],
         },
         range: {
@@ -185,12 +183,21 @@ describe('backtest-payload-builder', () => {
     const payload = buildBacktestPayload(createInput({
       symbol: 'ETHUSDC',
       capabilities: {
-        allowedSymbols: ['BTCUSDT'],
         allowedBaseTimeframes: ['15m', '1h'],
       },
     }), now)
 
     expect(payload.symbols).toEqual(['ETHUSDC'])
+  })
+
+  it('does not depend on a capability symbol whitelist to accept snapshot truth symbols', () => {
+    expect(() => buildBacktestPayload(createInput({
+      symbol: 'ORDIUSDT',
+      baseTimeframe: '1h',
+      capabilities: {
+        allowedBaseTimeframes: ['1h'],
+      },
+    }), now)).not.toThrow()
   })
 
   it('throws when baseTimeframe is not allowed by capability constraints', () => {

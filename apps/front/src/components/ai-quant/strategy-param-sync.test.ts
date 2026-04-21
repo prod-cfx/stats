@@ -22,7 +22,6 @@ describe('strategy-param-sync', () => {
         backtestRangePreset: '30D',
       },
       capabilities: {
-        allowedSymbols: ['BTCUSDT', 'ETHUSDT', 'ETHUSDC'],
         allowedBaseTimeframes: ['15m', '1h'],
       },
       contextText: '在 OKX 上用 10% 仓位',
@@ -37,7 +36,7 @@ describe('strategy-param-sync', () => {
     expect(result.paramValues.exitPrice).toBe(66890)
     expect(result.paramValues.maxDrawdownPct).toBe(20)
     expect(result.paramValues.backtestRangePreset).toBe('30D')
-    expect((result.paramSchema.properties as Record<string, any>).symbol.enum).toEqual(['BTCUSDT', 'ETHUSDT', 'ETHUSDC'])
+    expect((result.paramSchema.properties as Record<string, any>).symbol.enum).toEqual(['BTCUSDT'])
     expect(result.executionTags).toEqual(expect.arrayContaining([
       'positionPct: 10',
       'entryPrice: 66830',
@@ -68,7 +67,6 @@ describe('strategy-param-sync', () => {
         backtestAllowPartial: true,
       },
       capabilities: {
-        allowedSymbols: ['BTCUSDT'],
         allowedBaseTimeframes: ['15m'],
       },
       contextText: '保持 10% 仓位',
@@ -95,12 +93,11 @@ describe('strategy-param-sync', () => {
         },
       },
       {
-        allowedSymbols: ['BTCUSDT', 'ETHUSDT', 'ETHUSDC'],
         allowedBaseTimeframes: ['15m', '1h'],
       },
     ) as Record<string, any>
 
-    expect(nextSchema.properties.symbol.enum).toEqual(['BTCUSDT', 'ETHUSDT', 'ETHUSDC'])
+    expect(nextSchema.properties.symbol.enum).toEqual(['BTCUSDT'])
     expect(nextSchema.properties.baseTimeframe.enum).toEqual(['15m', '1h'])
     expect(nextSchema.properties.entryPrice.title).toBe('Entry Price')
   })
@@ -116,7 +113,6 @@ describe('strategy-param-sync', () => {
         },
       },
       {
-        allowedSymbols: ['BTCUSDT'],
         allowedBaseTimeframes: ['15m'],
       },
     ) as Record<string, any>
@@ -139,7 +135,6 @@ describe('strategy-param-sync', () => {
         positionPct: 5,
       },
       capabilities: {
-        allowedSymbols: ['BTCUSDT'],
         allowedBaseTimeframes: ['15m'],
       },
       contextText: '保持策略识别出的交易对',
@@ -164,7 +159,6 @@ describe('strategy-param-sync', () => {
         positionPct: 5,
       },
       capabilities: {
-        allowedSymbols: ['BTCUSDT', 'ETHUSDC', 'ETHUSDT'],
         allowedBaseTimeframes: ['15m'],
       },
       contextText: '把 BTCUSDT 改成 ETHUSDC',
@@ -191,7 +185,6 @@ describe('strategy-param-sync', () => {
         positionPct: 5,
       },
       capabilities: {
-        allowedSymbols: ['BTCUSDT'],
         allowedBaseTimeframes: ['15m'],
       },
       contextText: '请按 ETH/USDC 重新生成策略',
@@ -217,7 +210,6 @@ describe('strategy-param-sync', () => {
         positionPct: 5,
       },
       capabilities: {
-        allowedSymbols: ['BTCUSDT'],
         allowedBaseTimeframes: ['15m'],
       },
       contextText: '把 BTCUSDT 改成 ETHUSDC',
@@ -226,14 +218,12 @@ describe('strategy-param-sync', () => {
     const nextSchema = applyCapabilitiesToParamSchema(
       result.paramSchema,
       {
-        allowedSymbols: ['BTCUSDT'],
         allowedBaseTimeframes: ['15m'],
       },
     ) as Record<string, any>
 
     expect(result.paramValues.symbol).toBe('ETHUSDC')
-    expect(nextSchema.properties.symbol.enum).toEqual(expect.arrayContaining(['ETHUSDC']))
-    expect(nextSchema.properties.symbol.enum).toEqual(expect.arrayContaining(['BTCUSDT']))
+    expect(nextSchema.properties.symbol.enum).toEqual(['ETHUSDC'])
   })
 
   it('keeps strategy symbol inferred from context when capabilities do not include ETHUSDC', () => {
@@ -251,7 +241,6 @@ describe('strategy-param-sync', () => {
         positionPct: 5,
       },
       capabilities: {
-        allowedSymbols: ['BTCUSDT'],
         allowedBaseTimeframes: ['15m'],
       },
       contextText: '交易标的改成 ETH/USDC，并继续执行',
@@ -286,7 +275,6 @@ describe('strategy-param-sync', () => {
         positionPct: 5,
       },
       capabilities: {
-        allowedSymbols: ['BTCUSDT'],
         allowedBaseTimeframes: ['15m'],
       },
       contextText: '在 OKX 的 BTCUSDT 永续上运行网格策略',
@@ -351,7 +339,6 @@ describe('strategy-param-sync', () => {
         positionPct: 25,
       },
       capabilities: {
-        allowedSymbols: ['BTCUSDT', 'ETHUSDT'],
         allowedBaseTimeframes: ['15m', '1h'],
       },
       contextText: '在okx交易所，交易对BTCUSDT 15分钟图上，突破布林带上轨做空、突破下轨做多，仓位10%；出场条件为价格回到布林带中轨（MA20）平仓、亏损≥5%强制止损。',
@@ -387,7 +374,6 @@ describe('strategy-param-sync', () => {
         positionPct: 10,
       },
       capabilities: {
-        allowedSymbols: ['BTCUSDT'],
         allowedBaseTimeframes: ['15m'],
       },
       contextText: '策略逻辑已完整。风险规则包括交易所为OKX，仓位10%。',

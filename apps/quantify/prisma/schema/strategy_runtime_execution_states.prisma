@@ -1,0 +1,21 @@
+model StrategyRuntimeExecutionState {
+  id                   String    @id @default(cuid())
+  strategyInstanceId   String    @map("strategy_instance_id")
+  publishedSnapshotId  String    @map("published_snapshot_id")
+  snapshotHash         String    @map("snapshot_hash")
+  executionSemanticKey String    @map("execution_semantic_key")
+  status               String
+  failureReason        String?   @map("failure_reason")
+  failureCode          String?   @map("failure_code")
+  lastAttemptAt        DateTime? @map("last_attempt_at")
+  consumedAt           DateTime? @map("consumed_at")
+  cooldownUntil        DateTime? @map("cooldown_until")
+  createdAt            DateTime  @default(now()) @map("created_at")
+  updatedAt            DateTime  @default(now()) @updatedAt @map("updated_at")
+
+  strategyInstance StrategyInstance @relation(fields: [strategyInstanceId], references: [id], onDelete: Cascade)
+
+  @@unique([strategyInstanceId, publishedSnapshotId, executionSemanticKey], map: "strategy_runtime_execution_state_unique")
+  @@index([strategyInstanceId], map: "strategy_runtime_execution_state_instance_idx")
+  @@map("strategy_runtime_execution_states")
+}

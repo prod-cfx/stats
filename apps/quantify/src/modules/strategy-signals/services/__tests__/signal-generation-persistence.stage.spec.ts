@@ -105,4 +105,48 @@ describe('signalGenerationPersistenceStage', () => {
       }),
     }))
   })
+
+  it('runs the runtime-state consume callback inside the signal creation transaction', async () => {
+    const tradingSignalRepository = {
+      create: jest.fn().mockResolvedValue({ id: 'signal-atomic-1' }),
+    }
+    const generatorRepository = {
+      lockStrategyInstance: jest.fn().mockResolvedValue(undefined),
+      countRecentSignals: jest.fn().mockResolvedValue(0),
+    }
+    const txHost = { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) }
+    const onCreatedInTransaction = jest.fn().mockResolvedValue(undefined)
+    const stage = new SignalGenerationPersistenceStage(
+      generatorRepository as any,
+      tradingSignalRepository as any,
+      { findByStrategyInstanceId: jest.fn(), incrementFailure: jest.fn(), reset: jest.fn() } as any,
+      { emit: jest.fn() } as any,
+      { recordGeneration: jest.fn() } as any,
+      txHost as any,
+    )
+
+    await stage.createSignalWithCooldownAndLock(
+      { id: 'instance-1', llmModel: 'gpt-4o-mini' } as any,
+      { id: 'strategy-1' } as any,
+      { symbol: { id: 'symbol-1', code: 'BTCUSDT' }, timeframe: 'm15' } as any,
+      config,
+      {},
+      new Date('2026-04-10T10:00:00.000Z'),
+      {
+        signalType: 'ENTRY',
+        direction: 'BUY',
+        confidence: 80,
+        entryPrice: 100,
+        stopLoss: 90,
+        takeProfit: 110,
+        reasoning: 'atomic state consume',
+        rawResponse: '{"action":"buy"}',
+      } as any,
+      {},
+      false,
+      onCreatedInTransaction,
+    )
+
+    expect(onCreatedInTransaction).toHaveBeenCalledWith('signal-atomic-1')
+  })
 })

@@ -9,6 +9,10 @@ import { PrismaService } from '@/prisma/prisma.service'
 import { BacktestRunnerService } from '../core/backtest-runner.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestMarketDataService } from '../services/backtest-market-data.service'
+import type { BacktestSymbolAvailabilityResult } from '../services/backtest-symbol-availability.service'
+import { extractSnapshotBoundSymbolAvailabilityInput } from '../services/backtest-snapshot-loader.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { BacktestSymbolAvailabilityService } from '../services/backtest-symbol-availability.service'
 
 export type BacktestJobPhase = 'queued' | 'running' | 'succeeded' | 'failed'
 
@@ -73,10 +77,12 @@ export class BacktestJobsService {
   constructor(
     private readonly runner: BacktestRunnerService,
     private readonly marketDataService: BacktestMarketDataService,
+    private readonly symbolAvailabilityService: BacktestSymbolAvailabilityService,
     private readonly prisma: PrismaService,
   ) {}
 
   async createJob(input: BacktestRunInput, ownerUserId: string): Promise<BacktestJobView> {
+    await this.validateSymbolAvailability(input)
     const id = `btjob-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
     const inputSummary = this.createInputSummary(input)
     try {
@@ -117,6 +123,30 @@ export class BacktestJobsService {
       })
       return this.toFallbackView(fallbackJob)
     }
+  }
+
+  private async validateSymbolAvailability(input: BacktestRunInput): Promise<void> {
+    const availabilityInput = extractSnapshotBoundSymbolAvailabilityInput(input.strategy)
+    if (!availabilityInput) {
+      return
+    }
+
+    const availability = await this.symbolAvailabilityService.check(availabilityInput)
+    if (availability.supported) {
+      return
+    }
+
+    const failure = availability as Extract<BacktestSymbolAvailabilityResult, { supported: false }>
+    const snapshotId = this.readStrategyMetadata(input.strategy, 'snapshotId')
+    throw new DomainException('backtesting.symbol_unavailable', {
+      code: ErrorCode.BAD_REQUEST,
+      status: HttpStatus.BAD_REQUEST,
+      args: {
+        ...(failure.args ?? {}),
+        reasonCode: failure.reasonCode,
+        ...(snapshotId ? { snapshotId } : {}),
+      },
+    })
   }
 
   async getJob(id: string, ownerUserId: string): Promise<BacktestJobView> {

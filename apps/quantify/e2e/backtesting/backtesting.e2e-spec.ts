@@ -25,7 +25,12 @@ describe('backtestingController (e2e)', () => {
   let app: INestApplication
   let moduleFixture: TestingModule
   let runnerMock: { run: jest.Mock }
-  let marketDataMock: { prepareData: jest.Mock; loadBars: jest.Mock; resolveCoverage: jest.Mock }
+  let marketDataMock: {
+    ensureBacktestSymbolAvailable: jest.Mock
+    prepareData: jest.Mock
+    loadBars: jest.Mock
+    resolveCoverage: jest.Mock
+  }
   let callerMock: { resolveCallerUserIdFromAuthorization: jest.Mock }
   let strategyAdapterMock: { build: jest.Mock }
   let snapshotsRepositoryMock: { findByIdForUser: jest.Mock }
@@ -69,6 +74,7 @@ describe('backtestingController (e2e)', () => {
       run: jest.fn().mockResolvedValue(report),
     }
     marketDataMock = {
+      ensureBacktestSymbolAvailable: jest.fn().mockResolvedValue({ supported: true }),
       prepareData: jest.fn().mockResolvedValue(undefined),
       resolveCoverage: jest.fn().mockResolvedValue({
         kind: 'full',
@@ -100,38 +106,7 @@ describe('backtestingController (e2e)', () => {
       }),
     }
     snapshotsRepositoryMock = {
-      findByIdForUser: jest.fn().mockResolvedValue({
-        id: 'snapshot-1',
-        strategyInstanceId: 'instance-1',
-        strategyTemplateId: 'template-1',
-        snapshotHash: 'snapshot-hash',
-        scriptHash: 'script-hash',
-        specHash: compiledSnapshot.compiledManifest.specHash,
-        irHash: compiledSnapshot.compiledManifest.irHash,
-        astDigest: compiledSnapshot.compiledManifest.astDigest,
-        structuralDigest: compiledSnapshot.compiledManifest.structuralDigest,
-        scriptSnapshot: compiledSnapshot.scriptSnapshot,
-        paramsSnapshot: {
-          symbol: 'BTCUSDT',
-          timeframe: '5m',
-          marketType: 'spot',
-        },
-        lockedParams: {
-          exchange: 'okx',
-          positionPct: 25,
-        },
-        executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
-        dataRequirements: { primary: ['5m'] },
-        irSnapshot: compiledSnapshot.ir,
-        astSnapshot: compiledSnapshot.ast,
-        compiledManifest: compiledSnapshot.compiledManifest,
-        executionEnvelope: compiledSnapshot.executionEnvelope,
-        specSnapshot: {
-          market: { exchange: 'okx' },
-          indicators: [],
-          riskRules: [],
-        },
-      }),
+      findByIdForUser: jest.fn().mockResolvedValue(createPublishedSnapshotFixture(compiledSnapshot)),
     }
 
     moduleFixture = await Test.createTestingModule({
@@ -194,7 +169,7 @@ describe('backtestingController (e2e)', () => {
         id: 'demo-strategy',
         protocolVersion: 'v1',
         publishedSnapshotId: 'snapshot-1',
-        params: { fast: 9, slow: 21 },
+        params: { fast: 9, slow: 21, marketType: 'spot' },
       },
       dataRange: { fromTs: 1, toTs: 2 },
       bars: [
@@ -242,7 +217,7 @@ describe('backtestingController (e2e)', () => {
         id: 'demo-strategy',
         protocolVersion: 'v1',
         publishedSnapshotId: 'snapshot-1',
-        params: { fast: 9, slow: 21 },
+        params: { fast: 9, slow: 21, marketType: 'spot' },
       },
       dataRange: { fromTs: 1, toTs: 2 },
       bars: [
@@ -276,38 +251,9 @@ describe('backtestingController (e2e)', () => {
       '"sourceRef":"entry_cross_mutated"',
     )
 
-    snapshotsRepositoryMock.findByIdForUser.mockResolvedValueOnce({
-      id: 'snapshot-1',
-      strategyInstanceId: 'instance-1',
-      strategyTemplateId: 'template-1',
-      snapshotHash: 'snapshot-hash',
-      scriptHash: 'script-hash',
-      specHash: compiledSnapshot.compiledManifest.specHash,
-      irHash: compiledSnapshot.compiledManifest.irHash,
-      astDigest: compiledSnapshot.compiledManifest.astDigest,
-      structuralDigest: compiledSnapshot.compiledManifest.structuralDigest,
-      scriptSnapshot: tamperedScript,
-      paramsSnapshot: {
-        symbol: 'BTCUSDT',
-        timeframe: '5m',
-        marketType: 'spot',
-      },
-      lockedParams: {
-        exchange: 'okx',
-        positionPct: 25,
-      },
-      executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
-      dataRequirements: { primary: ['5m'] },
-      irSnapshot: compiledSnapshot.ir,
-      astSnapshot: compiledSnapshot.ast,
-      compiledManifest: compiledSnapshot.compiledManifest,
-      executionEnvelope: compiledSnapshot.executionEnvelope,
-      specSnapshot: {
-        market: { exchange: 'okx' },
-        indicators: [],
-        riskRules: [],
-      },
-    })
+    snapshotsRepositoryMock.findByIdForUser.mockResolvedValueOnce(
+      createPublishedSnapshotFixture(compiledSnapshot, { scriptSnapshot: tamperedScript }),
+    )
 
     await supertestRequest(app.getHttpServer())
       .post(buildApiUrl('backtesting/run'))
@@ -324,7 +270,7 @@ describe('backtestingController (e2e)', () => {
           id: 'demo-strategy',
           protocolVersion: 'v1',
           publishedSnapshotId: 'snapshot-1',
-          params: { fast: 9, slow: 21 },
+          params: { fast: 9, slow: 21, marketType: 'spot' },
         },
         dataRange: { fromTs: 1, toTs: 2 },
         bars: [
@@ -365,7 +311,7 @@ describe('backtestingController (e2e)', () => {
         id: 'demo-strategy',
         protocolVersion: 'v1',
         publishedSnapshotId: 'snapshot-1',
-        params: { fast: 9, slow: 21 },
+        params: { fast: 9, slow: 21, marketType: 'spot' },
       },
       dataRange: { fromTs: 1, toTs: 2 },
     }
@@ -398,6 +344,89 @@ describe('backtestingController (e2e)', () => {
       .expect(409)
   })
 
+  it('POST /api/v1/backtesting/jobs should reject unsupported snapshot-bound symbols before job creation', async () => {
+    marketDataMock.ensureBacktestSymbolAvailable.mockResolvedValueOnce({
+      supported: false,
+      reasonCode: 'BACKTEST_SYMBOL_UNAVAILABLE',
+      args: {
+        exchange: 'okx',
+        marketType: 'spot',
+        symbol: 'ORDIUSDT',
+        baseTimeframe: '1h',
+      },
+    })
+    snapshotsRepositoryMock.findByIdForUser.mockResolvedValueOnce(
+      createPublishedSnapshotFixture(createCompiledSnapshotFixture(), {
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'ORDIUSDT',
+          marketType: 'spot',
+          baseTimeframe: '1h',
+          stateTimeframes: ['4h'],
+          positionPct: 25,
+          strategyDeclaredLeverageRange: null,
+        },
+        backtestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: false,
+        },
+        dataRequirements: { primary: ['1h'], requiredTimeframes: ['1h', '4h'] },
+      }),
+    )
+
+    await supertestRequest(app.getHttpServer())
+      .post(buildApiUrl('backtesting/jobs'))
+      .set('Authorization', 'Bearer test-token')
+      .send({
+        symbols: ['BTCUSDT'],
+        baseTimeframe: '5m',
+        stateTimeframes: ['1h'],
+        initialCash: 10000,
+        leverage: 2,
+        allowPartial: false,
+        execution: { slippageBps: 5, feeBps: 4, priceSource: 'mid' },
+        strategy: {
+          id: 'demo-strategy',
+          protocolVersion: 'v1',
+          publishedSnapshotId: 'snapshot-1',
+          params: { fast: 9, slow: 21, marketType: 'spot' },
+        },
+        dataRange: { fromTs: 1, toTs: 2 },
+      })
+      .expect(400)
+      .expect((res: Response) => {
+        const errorCode = res.body?.error?.code ?? res.body?.code
+        const errorArgs = res.body?.error?.args ?? res.body?.args
+        const errorMessage = typeof res.body?.message === 'string'
+          ? res.body.message
+          : res.body?.debug?.rawResponse?.message
+
+        expect(errorCode).toBe('BAD_REQUEST')
+        expect(errorArgs).toMatchObject({
+          reasonCode: 'BACKTEST_SYMBOL_UNAVAILABLE',
+          exchange: 'okx',
+          marketType: 'spot',
+          symbol: 'ORDIUSDT',
+          baseTimeframe: '1h',
+          snapshotId: 'snapshot-1',
+        })
+        expect(errorMessage).toBe('backtesting.symbol_unavailable')
+      })
+
+    expect(marketDataMock.ensureBacktestSymbolAvailable).toHaveBeenCalledWith({
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ORDIUSDT',
+      baseTimeframe: '1h',
+    })
+    expect(marketDataMock.prepareData).not.toHaveBeenCalled()
+    expect(runnerMock.run).not.toHaveBeenCalled()
+  })
+
   it('POST /api/v1/backtesting/jobs should fail on partial coverage when allowPartial=false', async () => {
     marketDataMock.resolveCoverage.mockResolvedValueOnce({
       kind: 'partial',
@@ -417,7 +446,7 @@ describe('backtestingController (e2e)', () => {
         id: 'demo-strategy',
         protocolVersion: 'v1',
         publishedSnapshotId: 'snapshot-1',
-        params: { fast: 9, slow: 21 },
+        params: { fast: 9, slow: 21, marketType: 'spot' },
       },
       dataRange: { fromTs: 1, toTs: 2 },
     }
@@ -461,7 +490,7 @@ describe('backtestingController (e2e)', () => {
         id: 'demo-strategy',
         protocolVersion: 'v1',
         publishedSnapshotId: 'snapshot-1',
-        params: { fast: 9, slow: 21 },
+        params: { fast: 9, slow: 21, marketType: 'spot' },
       },
       dataRange: { fromTs: 1, toTs: 2 },
     }
@@ -505,6 +534,77 @@ function createCompiledSnapshotFixture() {
     executionEnvelope,
     scriptSnapshot,
     compiledManifest: projection.compiledManifest,
+  }
+}
+
+function createPublishedSnapshotFixture(
+  compiledSnapshot: ReturnType<typeof createCompiledSnapshotFixture>,
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    id: 'snapshot-1',
+    strategyInstanceId: 'instance-1',
+    strategyTemplateId: 'template-1',
+    snapshotHash: 'snapshot-hash',
+    scriptHash: 'script-hash',
+    specHash: compiledSnapshot.compiledManifest.specHash,
+    irHash: compiledSnapshot.compiledManifest.irHash,
+    astDigest: compiledSnapshot.compiledManifest.astDigest,
+    structuralDigest: compiledSnapshot.compiledManifest.structuralDigest,
+    scriptSnapshot: compiledSnapshot.scriptSnapshot,
+    paramsSnapshot: {
+      symbol: 'BTCUSDT',
+      timeframe: '5m',
+      marketType: 'spot',
+    },
+    strategyConfig: {
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      marketType: 'spot',
+      baseTimeframe: '5m',
+      stateTimeframes: ['1h'],
+      positionPct: 25,
+      strategyDeclaredLeverageRange: null,
+    },
+    backtestConfigDefaults: {
+      initialCash: 10000,
+      leverage: 1,
+      slippageBps: 10,
+      feeBps: 5,
+      priceSource: 'close',
+      allowPartial: false,
+    },
+    deploymentExecutionDefaults: {
+      leverage: 1,
+      priceSource: 'close',
+      orderType: 'market',
+      timeInForce: 'gtc',
+    },
+    deploymentExecutionConstraints: {
+      platformRiskMaxLeverage: 1,
+      strategyDeclaredLeverageRange: null,
+      defaultLeverage: 1,
+      supportedPriceSources: ['close'],
+      supportedOrderTypes: ['market'],
+      supportedTimeInForce: ['gtc'],
+      constraintExplanation: 'strategy/default constraints pending account-capability intersection',
+    },
+    lockedParams: {
+      exchange: 'okx',
+      positionPct: 25,
+    },
+    executionPolicy: { signalTiming: 'BAR_CLOSE', fillTiming: 'NEXT_BAR_OPEN' },
+    dataRequirements: { primary: ['5m'] },
+    irSnapshot: compiledSnapshot.ir,
+    astSnapshot: compiledSnapshot.ast,
+    compiledManifest: compiledSnapshot.compiledManifest,
+    executionEnvelope: compiledSnapshot.executionEnvelope,
+    specSnapshot: {
+      market: { exchange: 'okx' },
+      indicators: [],
+      riskRules: [],
+    },
+    ...overrides,
   }
 }
 

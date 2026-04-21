@@ -464,7 +464,6 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     mockReadPersistedConversations.mockReset()
 
     mockFetchBacktestCapabilities.mockResolvedValue({
-      allowedSymbols: ['BTCUSDT'],
       allowedBaseTimeframes: ['15m'],
     })
     mockGetLlmCodegenSession.mockReset()

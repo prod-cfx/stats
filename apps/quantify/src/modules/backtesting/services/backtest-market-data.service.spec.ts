@@ -261,6 +261,57 @@ describe('backtestMarketDataService', () => {
     ])
   })
 
+  it('treats a symbol as supported only when dynamic historical data is available for the requested timeframe', async () => {
+    const repository = createRepositoryMock()
+    repository.findActiveSymbolByExchangeAndCodes.mockResolvedValue({ id: 's1', code: 'ORDIUSDT:SPOT' })
+    const okxProvider = {
+      name: 'OKX',
+      fetchSymbols: jest.fn(),
+      fetchHistoricalBars: jest.fn().mockResolvedValue([{ time: 1, open: '1', high: '1', low: '1', close: '1' }]),
+    }
+
+    const { service } = createService(repository, { okxProvider })
+    await expect(service.ensureBacktestSymbolAvailable({
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ORDIUSDT',
+      baseTimeframe: '1h',
+    })).resolves.toEqual({ supported: true })
+
+    expect(okxProvider.fetchHistoricalBars).toHaveBeenCalledWith(expect.objectContaining({
+      symbol: 'ORDIUSDT:SPOT',
+      timeframe: '1h',
+      limit: 1,
+    }))
+  })
+
+  it('returns a structured unavailable reason when symbol exists but historical bars are unavailable', async () => {
+    const repository = createRepositoryMock()
+    repository.findActiveSymbolByExchangeAndCodes.mockResolvedValue({ id: 's1', code: 'ORDIUSDT:SPOT' })
+    const okxProvider = {
+      name: 'OKX',
+      fetchSymbols: jest.fn(),
+      fetchHistoricalBars: jest.fn().mockResolvedValue([]),
+    }
+
+    const { service } = createService(repository, { okxProvider })
+    await expect(service.ensureBacktestSymbolAvailable({
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ORDIUSDT',
+      baseTimeframe: '1h',
+    })).resolves.toEqual({
+      supported: false,
+      reasonCode: 'BACKTEST_MARKET_DATA_UNAVAILABLE',
+      args: {
+        exchange: 'okx',
+        symbol: 'ORDIUSDT',
+        marketType: 'spot',
+        baseTimeframe: '1h',
+      },
+    })
+  })
+
   it('prepares exchange-specific symbols and historical bars before backtest coverage lookup', async () => {
     const repository = createRepositoryMock()
     const { service, marketDataService, okxProvider } = createService(repository)

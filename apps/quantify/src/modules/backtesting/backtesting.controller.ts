@@ -14,13 +14,13 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 import { buildBaseResponseSchema } from '@/common/swagger/base-response-schema.helper'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestRunnerService } from './core/backtest-runner.service'
-// eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时类元数据
 import {
   BacktestCapabilitiesResponseDto,
   BacktestJobResponseDto,
   BacktestReportResponseDto,
   BacktestSymbolSupportResponseDto,
 } from './dto/backtest.response.dto'
+// eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时类元数据
 import { CheckBacktestSymbolDto } from './dto/check-backtest-symbol.dto'
 // eslint-disable-next-line ts/consistent-type-imports -- ValidationPipe 需要运行时类元数据
 import { RunBacktestDto } from './dto/run-backtest.dto'
@@ -86,22 +86,25 @@ export class BacktestingController {
     @Headers('x-request-id') requestId: string | undefined,
     @Body() dto: RunBacktestDto,
   ) {
+    let normalizedInput: BacktestRunInput | null = null
     try {
       const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
       const strategy = await this.resolveStrategy(dto, callerUserId)
-      return this.jobsService.createJob({ ...dto, strategy, bars: dto.bars ?? [] } as BacktestRunInput, callerUserId)
+      normalizedInput = this.normalizeSnapshotTruthInput(dto, strategy)
+      return this.jobsService.createJob(normalizedInput, callerUserId)
     } catch (error) {
       if (error instanceof DomainException) {
-        throw error
+        throw this.normalizeStructuredBacktestDomainException(error)
       }
       const message = error instanceof Error ? error.message : String(error)
       this.logger.error(
-        `event=backtesting_create_job_failed requestId=${requestId ?? 'N/A'} symbols=${dto.symbols.join(',')} strategyId=${dto.strategy?.id ?? 'N/A'} reason=${message}`,
+        `event=backtesting_create_job_failed requestId=${requestId ?? 'N/A'} symbols=${(normalizedInput?.symbols ?? dto.symbols).join(',')} strategyId=${normalizedInput?.strategy?.id ?? dto.strategy?.id ?? 'N/A'} reason=${message}`,
       )
       throw new DomainException('backtesting.job_temporarily_unavailable', {
         code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
         status: HttpStatus.SERVICE_UNAVAILABLE,
         args: {
+          reasonCode: 'BACKTEST_SERVICE_TEMPORARILY_UNAVAILABLE',
           symbols: dto.symbols,
           strategyId: dto.strategy?.id,
           reasonMessage: message,
@@ -180,10 +183,15 @@ export class BacktestingController {
   ) {
     await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     try {
-      return await this.symbolSupportService.checkSupport(dto.exchange, dto.symbol)
+      return await this.symbolSupportService.checkSupport({
+        exchange: dto.exchange,
+        marketType: dto.marketType,
+        symbol: dto.symbol,
+        baseTimeframe: dto.baseTimeframe,
+      })
     } catch (error) {
       if (error instanceof DomainException) {
-        throw error
+        throw this.normalizeStructuredBacktestDomainException(error)
       }
       const message = error instanceof Error ? error.message : String(error)
       this.logger.error(
@@ -195,6 +203,7 @@ export class BacktestingController {
         args: {
           exchange: dto.exchange,
           symbol: dto.symbol,
+          reasonCode: 'BACKTEST_SERVICE_TEMPORARILY_UNAVAILABLE',
           reasonMessage: message,
         },
       })
@@ -207,6 +216,7 @@ export class BacktestingController {
       throw new DomainException('backtest.snapshot_required', {
         code: ErrorCode.BAD_REQUEST,
         status: HttpStatus.BAD_REQUEST,
+        args: { reasonCode: 'BACKTEST_SNAPSHOT_REQUIRED' },
       })
     }
 
@@ -216,5 +226,88 @@ export class BacktestingController {
       publishedSnapshotId,
       userId,
     })
+  }
+
+  private normalizeSnapshotTruthInput(
+    dto: RunBacktestDto,
+    strategy: BacktestRunInput['strategy'],
+  ): BacktestRunInput {
+    const params = strategy.params as Record<string, unknown>
+    const strategyStateTimeframes = (strategy as { stateTimeframes?: unknown }).stateTimeframes
+    const symbol = typeof params.symbol === 'string' && params.symbol.trim()
+      ? params.symbol.trim()
+      : dto.symbols[0]
+    const baseTimeframe = typeof params.timeframe === 'string' && params.timeframe.trim()
+      ? params.timeframe.trim() as BacktestRunInput['baseTimeframe']
+      : dto.baseTimeframe
+    const stateTimeframes = Array.isArray(strategyStateTimeframes)
+      ? strategyStateTimeframes as BacktestRunInput['stateTimeframes']
+      : dto.stateTimeframes ?? []
+
+    return {
+      ...dto,
+      symbols: symbol ? [symbol] : dto.symbols,
+      baseTimeframe,
+      stateTimeframes,
+      strategy,
+      bars: dto.bars ?? [],
+    } as BacktestRunInput
+  }
+
+  private normalizeStructuredBacktestDomainException(error: DomainException): DomainException {
+    const response = error.getResponse()
+    const responseArgs =
+      response && typeof response === 'object' && 'args' in response && response.args && typeof response.args === 'object'
+        ? response.args as Record<string, unknown>
+        : undefined
+    const existingArgs = responseArgs ?? error.args
+    if (typeof existingArgs?.reasonCode === 'string' && existingArgs.reasonCode.trim().length > 0) {
+      return error
+    }
+
+    const reasonCode = this.inferStructuredBacktestReasonCode(error.message, existingArgs)
+    if (!reasonCode) {
+      return error
+    }
+
+    return new DomainException(error.message, {
+      code: error.code,
+      status: error.getStatus(),
+      args: {
+        ...(existingArgs ?? {}),
+        reasonCode,
+      },
+    })
+  }
+
+  private inferStructuredBacktestReasonCode(
+    message: string,
+    args?: Record<string, unknown>,
+  ): string | null {
+    switch (message) {
+      case 'backtest.snapshot_required':
+        return 'BACKTEST_SNAPSHOT_REQUIRED'
+      case 'backtest.snapshot_params_missing': {
+        const missingFields = Array.isArray(args?.missingFields)
+          ? args.missingFields.filter((field): field is string => typeof field === 'string')
+          : []
+        if (missingFields.includes('symbol') || missingFields.length === 0) {
+          return 'BACKTEST_SNAPSHOT_SYMBOL_MISSING'
+        }
+        if (missingFields.includes('marketType')) {
+          return 'BACKTEST_SNAPSHOT_MARKET_TYPE_MISSING'
+        }
+        if (missingFields.includes('timeframe')) {
+          return 'BACKTEST_SNAPSHOT_TIMEFRAME_MISSING'
+        }
+        return missingFields.includes('baseTimeframe')
+          ? 'BACKTEST_SNAPSHOT_TIMEFRAME_MISSING'
+          : 'BACKTEST_SNAPSHOT_REQUIRED'
+      }
+      case 'backtesting.symbol_support_temporarily_unavailable':
+        return 'BACKTEST_SYMBOL_REFRESH_FAILED'
+      default:
+        return null
+    }
   }
 }

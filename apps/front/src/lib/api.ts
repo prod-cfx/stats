@@ -228,12 +228,25 @@ export interface AccountAiQuantSnapshotCompatibilityMetadata {
   missingDeploymentExecutionConstraints: boolean
   requiresRepublishForBacktest: boolean
   requiresRepublishForDeploy: boolean
+  invalidBinding?: boolean | null
 }
 
 export interface AccountAiQuantConsistencySummary {
   isConsistent: boolean
   driftReasons: string[]
   consistencyScore?: number | null
+}
+
+export interface AccountAiQuantRuntimeExecutionState {
+  executionSemanticKey: string
+  status: string
+  failureReason: string | null
+  failureCode: string | null
+  lastAttemptAt: string | null
+  consumedAt: string | null
+  cooldownUntil: string | null
+  publishedSnapshotId: string
+  snapshotHash: string
 }
 
 export interface AccountAiQuantStrategyListItem {
@@ -293,6 +306,7 @@ export interface AccountAiQuantStrategyDetail extends AccountAiQuantStrategyList
   equitySeries: AccountAiQuantStrategyEquityPoint[]
   snapshot: AccountAiQuantStrategySnapshot
   timeline: AccountAiQuantStrategyTimelineEvent[]
+  runtimeExecutionStates: AccountAiQuantRuntimeExecutionState[]
   accountOverview: {
     initialBalance: number | null
     totalEquity: number | null

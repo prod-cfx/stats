@@ -67,6 +67,8 @@ interface FormalDeploymentExecutionConstraints {
   constraintExplanation: string
 }
 
+const ON_START_SOURCE_REF_PATTERN = /(^|[_-])(?:execution[_-])?on_start([_-]|$)/i
+
 @Injectable()
 export class CompiledPublicationGateService {
   constructor(
@@ -100,6 +102,7 @@ export class CompiledPublicationGateService {
     const backtestConfigDefaults = this.buildBacktestConfigDefaults(input)
     const deploymentExecutionDefaults = this.buildDeploymentExecutionDefaults(input)
     const deploymentExecutionConstraints = this.buildDeploymentExecutionConstraints(deploymentExecutionDefaults)
+    const astSnapshot = this.buildPublicationAstSnapshot(input.ast)
     const semanticStatus = input.semanticConsistencyReport.status
     const consistencyReport = {
       status:
@@ -119,7 +122,7 @@ export class CompiledPublicationGateService {
       semanticGraph: input.semanticView,
       compiledIr: input.ir as unknown as Record<string, unknown>,
       irSnapshot: input.ir as unknown as Record<string, unknown>,
-      astSnapshot: input.ast as unknown as Record<string, unknown>,
+      astSnapshot,
       compiledManifest: manifest as unknown as Record<string, unknown>,
       consistencyReport,
       userIntentSummary: input.userIntentSummary,
@@ -182,6 +185,32 @@ export class CompiledPublicationGateService {
       },
       publicationGate,
     }
+  }
+
+  private buildPublicationAstSnapshot(ast: StrategyAstV1): Record<string, unknown> {
+    const runtimeExecutionSemantics = this.buildRuntimeExecutionSemantics(ast)
+    return {
+      ...ast,
+      ...(runtimeExecutionSemantics.length > 0 ? { runtimeExecutionSemantics } : {}),
+    } as unknown as Record<string, unknown>
+  }
+
+  private buildRuntimeExecutionSemantics(ast: StrategyAstV1): string[] {
+    const firstMarkedProgram = ast.decisionPrograms.find((program) => {
+      const markerSource = `${program.sourceRef} ${program.id}`
+      return ON_START_SOURCE_REF_PATTERN.test(markerSource)
+    })
+
+    if (!firstMarkedProgram) {
+      return []
+    }
+
+    return [`on_start.${firstMarkedProgram.phase}.${this.resolveSemanticLabel(1)}`]
+  }
+
+  private resolveSemanticLabel(index: number): string {
+    const labels = ['primary', 'secondary', 'tertiary', 'quaternary'] as const
+    return labels[index - 1] ?? `slot_${index}`
   }
 
   private buildStrategyConfig(input: PublishCompiledSnapshotInput): FormalStrategyConfig {

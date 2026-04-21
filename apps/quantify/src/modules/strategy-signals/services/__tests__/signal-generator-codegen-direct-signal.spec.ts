@@ -296,7 +296,97 @@ strategy`,
         reasoning: 'buy signal',
       }),
       expect.anything(),
+      expect.anything(),
       true,
     )
+  })
+
+  it('requires compiled barIndex context to emit an on_start published snapshot signal', async () => {
+    service = new SignalGeneratorService(
+      {} as any,
+      { get: jest.fn().mockReturnValue(config) } as any,
+      { addCronJob: jest.fn(), deleteCronJob: jest.fn() } as any,
+      {} as any,
+      {} as any,
+      { reset: jest.fn(), incrementFailure: jest.fn() } as any,
+      { emit: jest.fn() } as any,
+      { recordGeneration: jest.fn() } as any,
+      {
+        getLatestBarBySymbolId: jest.fn(),
+        getRecentBarsBySymbolId: jest.fn().mockResolvedValue([
+          {
+            open: 100,
+            high: 101,
+            low: 99,
+            close: 100,
+            volume: 10,
+            timestamp: 1_775_000_000_000,
+            isFinal: true,
+          },
+        ]),
+      } as any,
+      { isProd: jest.fn().mockReturnValue(false) } as any,
+      {} as any,
+    )
+
+    const strategy = {
+      id: 'template-on-start-1',
+      name: 'on_start signal',
+      description: 'emit once on start',
+      promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+      script: `const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(ctx): StrategyDecisionV1 {
+    if (ctx.__compiledDecisionState?.barIndex === 1) {
+      return {
+        action: 'OPEN_LONG',
+        size: { mode: 'RATIO', value: 0.1 },
+        confidence: 77,
+        risk: { stopLoss: 90, takeProfit: 110 },
+        reason: 'first bar only',
+      }
+    }
+    return { action: 'NOOP', reason: 'not first bar' }
+  },
+}
+strategy`,
+      defaultParams: {},
+    }
+
+    const withoutBarIndex = await (service as any).generateSignalWithAi(
+      { id: 'instance-1', llmModel: 'gpt-5.4', params: {} },
+      strategy,
+      { code: 'BTCUSDT:SPOT' },
+      '15m',
+      {},
+      config,
+      100,
+      false,
+    )
+
+    expect(withoutBarIndex).toBeNull()
+
+    const withBarIndex = await (service as any).generateSignalWithAi(
+      { id: 'instance-1', llmModel: 'gpt-5.4', params: {} },
+      strategy,
+      { code: 'BTCUSDT:SPOT' },
+      '15m',
+      {},
+      config,
+      100,
+      false,
+      { barIndex: 1, lastTriggeredByProgram: {} },
+    )
+
+    expect(withBarIndex).toMatchObject({
+      signalType: 'ENTRY',
+      direction: 'BUY',
+      confidence: 77,
+      entryPrice: 100,
+      stopLoss: 90,
+      takeProfit: 110,
+      positionSizeRatio: 0.1,
+      reasoning: 'first bar only',
+    })
   })
 })

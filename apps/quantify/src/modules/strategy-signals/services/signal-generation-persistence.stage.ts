@@ -66,7 +66,8 @@ export class SignalGenerationPersistenceStage {
     aiPayload: AiSignalPayload & { rawResponse: string },
     runtimeProvenance: Prisma.JsonObject,
     skipCooldown = false,
-  ) {
+    onCreatedInTransaction?: (signalId: string) => Promise<void>,
+  ): Promise<{ created: boolean; signalId: string | null }> {
     const cooldownSince = new Date(Date.now() - config.cooldownMinutes * 60 * 1000)
 
     const result = await this.txHost.withTransaction(async () => {
@@ -112,6 +113,10 @@ export class SignalGenerationPersistenceStage {
         },
       })
 
+      if (onCreatedInTransaction) {
+        await onCreatedInTransaction(signal.id)
+      }
+
       return { created: true as const, signalId: signal.id }
     })
 
@@ -125,7 +130,7 @@ export class SignalGenerationPersistenceStage {
         success: false,
         reason: 'COOLDOWN',
       })
-      return
+      return result
     }
 
     this.logger.log(
@@ -140,6 +145,8 @@ export class SignalGenerationPersistenceStage {
       StrategySignalEvents.CREATED,
       new TradingSignalCreatedEvent(result.signalId),
     )
+
+    return result
   }
 
   async createMultiLegSignal(

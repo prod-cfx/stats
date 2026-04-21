@@ -54,6 +54,8 @@ import {
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { SignalGeneratorRepository } from '../repositories/signal-generator.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { StrategyRuntimeExecutionStateRepository } from '../repositories/strategy-runtime-execution-state.repository'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { StrategySignalStateRepository } from '../repositories/strategy-signal-state.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { TradingSignalRepository } from '../repositories/trading-signal.repository'
@@ -69,6 +71,8 @@ import { SignalGenerationPersistenceStage } from './signal-generation-persistenc
 import { SignalGenerationSchedulerStage } from './signal-generation-scheduler.stage'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { SignalTelemetryService } from './signal-telemetry.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { StrategyRuntimeExecutionStateService } from './strategy-runtime-execution-state.service'
 
 const DEFAULT_BAR_LIMIT = 100
 const MAX_SCRIPT_TIMEOUT_MS = 5000
@@ -82,6 +86,7 @@ type StrategyInstanceWithTemplate = Prisma.StrategyInstanceGetPayload<{
 type RuntimeStrategySource = {
   strategy: StrategyTemplate
   provenance: Prisma.JsonObject
+  executionSemanticKeys?: string[]
 }
 
 @Injectable()
@@ -114,6 +119,8 @@ export class SignalGeneratorService {
     private readonly env: EnvService,
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
     @Optional() private readonly publishedSnapshotsRepository?: PublishedStrategySnapshotsRepository,
+    @Optional() private readonly runtimeExecutionStateService?: StrategyRuntimeExecutionStateService,
+    @Optional() private readonly runtimeExecutionStateRepository?: StrategyRuntimeExecutionStateRepository,
   ) {
     this.schedulerStage = new SignalGenerationSchedulerStage(
       this.schedulerRegistry,
@@ -375,6 +382,7 @@ export class SignalGeneratorService {
         instance,
         runtimeStrategy,
         runtimeProvenance,
+        runtimeSource.executionSemanticKeys ?? [],
         config,
         options,
       )
@@ -610,8 +618,9 @@ export class SignalGeneratorService {
     aiPayload: AiSignalPayload & { rawResponse: string },
     runtimeProvenance: Prisma.JsonObject,
     skipCooldown = false,
+    onCreatedInTransaction?: (signalId: string) => Promise<void>,
   ) {
-    await this.persistenceStage.createSignalWithCooldownAndLock(
+    return this.persistenceStage.createSignalWithCooldownAndLock(
       instance,
       strategy,
       group,
@@ -621,6 +630,7 @@ export class SignalGeneratorService {
       aiPayload,
       runtimeProvenance,
       skipCooldown,
+      onCreatedInTransaction,
     )
   }
 
@@ -633,6 +643,7 @@ export class SignalGeneratorService {
     config: StrategySignalsRuntimeConfig,
     referencePrice?: number,
     manualTrigger = false,
+    compiledDecisionState?: { barIndex: number; lastTriggeredByProgram: Record<string, number> },
   ): Promise<(AiSignalPayload & { rawResponse: string }) | null> {
     const isStrictCodegen = this.isStrictPublishedCodegenTemplate(strategy)
     let promptData: Record<string, any> = {}
@@ -657,15 +668,18 @@ export class SignalGeneratorService {
           const bars = this.normalizeRuntimeBars(marketBars ?? [], {
             requireFinalLatestBar,
           })
-          const scriptContext = buildStrategyContext({
-            bars,
-            symbol: symbol.code,
-            timeframe,
-            indicators,
-            currentPrice: referencePrice || 0,
-            timestamp: Date.now(),
-            params: this.buildEffectiveParams(strategy, instance),
-          })
+          const scriptContext = {
+            ...buildStrategyContext({
+              bars,
+              symbol: symbol.code,
+              timeframe,
+              indicators,
+              currentPrice: referencePrice || 0,
+              timestamp: Date.now(),
+              params: this.buildEffectiveParams(strategy, instance),
+            }),
+            ...(compiledDecisionState ? { __compiledDecisionState: compiledDecisionState } : {}),
+          }
 
           let result = await engine.execute(compiledScript.executableCode, {
             context: scriptContext,
@@ -996,6 +1010,7 @@ export class SignalGeneratorService {
     instance: StrategyInstanceWithTemplate,
     strategy: StrategyTemplate,
     runtimeProvenance: Prisma.JsonObject,
+    executionSemanticKeys: string[],
     config: StrategySignalsRuntimeConfig,
     options: { skipCooldown?: boolean } = {},
   ) {
@@ -1007,12 +1022,30 @@ export class SignalGeneratorService {
     const params = this.buildEffectiveParams(strategy, instance) ?? {}
     const symbolCode = this.readString(params.symbol)
     const timeframe = this.readRuntimeTimeframe(params.timeframe ?? params.baseTimeframe)
+    if (executionSemanticKeys.length > 0 && !this.runtimeExecutionStateRepository) {
+      this.logger.warn(
+        `Strategy instance ${instance.id} requires runtime execution state repository for published snapshot execution`,
+      )
+      return
+    }
+    const activeRuntimeState = await this.loadPublishedSnapshotRuntimeState(
+      instance,
+      runtimeProvenance,
+      executionSemanticKeys,
+    )
+    if (executionSemanticKeys.length > 0 && !activeRuntimeState) {
+      return
+    }
 
     if (!symbolCode || !timeframe) {
       this.logger.warn(
         `Published snapshot runtime params missing symbol/timeframe for instance ${instance.id}, skipping generation`,
       )
       await this.handleStrategyFailure(instance.id, config)
+      await this.markRuntimeExecutionStateFailed(activeRuntimeState, {
+        failureReason: 'SNAPSHOT_RUNTIME_PARAMS_MISSING',
+        failureCode: 'SNAPSHOT_RUNTIME_PARAMS_MISSING',
+      })
       this.telemetry.recordGeneration({
         strategyId: strategy.id,
         symbolCode: symbolCode ?? 'N/A',
@@ -1026,6 +1059,10 @@ export class SignalGeneratorService {
     if (!symbol) {
       this.logger.warn(`Symbol ${symbolCode} not found for published snapshot runtime on instance ${instance.id}`)
       await this.handleStrategyFailure(instance.id, config)
+      await this.markRuntimeExecutionStateFailed(activeRuntimeState, {
+        failureReason: 'SYMBOL_NOT_FOUND',
+        failureCode: 'SYMBOL_NOT_FOUND',
+      })
       this.telemetry.recordGeneration({
         strategyId: strategy.id,
         symbolCode,
@@ -1047,10 +1084,15 @@ export class SignalGeneratorService {
       config,
       referencePrice,
       options.skipCooldown ?? false,
+      this.buildCompiledDecisionStateForRuntimeExecution(activeRuntimeState),
     )
 
     if (!aiPayload) {
       await this.handleStrategyFailure(instance.id, config)
+      await this.markRuntimeExecutionStateFailed(activeRuntimeState, {
+        failureReason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+        failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+      })
       this.telemetry.recordGeneration({
         strategyId: strategy.id,
         symbolCode,
@@ -1062,7 +1104,7 @@ export class SignalGeneratorService {
 
     await this.resetStrategyFailure(instance.id)
 
-    await this.createSignalWithCooldownAndLock(
+    const createdSignal = await this.createSignalWithCooldownAndLock(
       instance,
       strategy,
       {
@@ -1076,7 +1118,16 @@ export class SignalGeneratorService {
       aiPayload,
       runtimeProvenance,
       options.skipCooldown ?? false,
+      activeRuntimeState && this.runtimeExecutionStateRepository
+        ? async () => {
+            await this.markRuntimeExecutionStateConsumed(activeRuntimeState)
+          }
+        : undefined,
     )
+
+    if (!createdSignal.created) {
+      await this.markRuntimeExecutionStateConsumed(activeRuntimeState)
+    }
   }
 
   private async resolveRuntimeStrategySource(
@@ -1106,6 +1157,12 @@ export class SignalGeneratorService {
     if (!this.publishedSnapshotsRepository) {
       this.logger.warn(
         `Strategy instance ${instance.id} requires published snapshot ${binding.publishedSnapshotId}, but snapshot repository is unavailable`,
+      )
+      return null
+    }
+    if (!this.runtimeExecutionStateService) {
+      this.logger.warn(
+        `Strategy instance ${instance.id} requires runtime execution state service for published snapshot execution`,
       )
       return null
     }
@@ -1143,7 +1200,100 @@ export class SignalGeneratorService {
         sourceStrategyTemplateId: snapshot.strategyTemplateId ?? binding.sourceStrategyTemplateId ?? strategy.id,
         executionContentSource: 'PUBLISHED_SNAPSHOT',
       },
+      executionSemanticKeys: this.runtimeExecutionStateService?.buildExecutionSemanticKeysFromSnapshot(snapshot) ?? [],
     }
+  }
+
+  private async loadPublishedSnapshotRuntimeState(
+    instance: StrategyInstanceWithTemplate,
+    runtimeProvenance: Prisma.JsonObject,
+    executionSemanticKeys: string[],
+  ): Promise<{
+    strategyInstanceId: string
+    publishedSnapshotId: string
+    executionSemanticKey: string
+  } | null> {
+    if (executionSemanticKeys.length === 0) {
+      return null
+    }
+
+    if (!this.runtimeExecutionStateService) {
+      this.logger.warn(
+        `Strategy instance ${instance.id} requires runtime execution state service for published snapshot semantics`,
+      )
+      return null
+    }
+
+    const publishedSnapshotId = this.readString(runtimeProvenance.publishedSnapshotId)
+    const snapshotHash = this.readString(runtimeProvenance.snapshotHash)
+    if (!publishedSnapshotId || !snapshotHash) {
+      this.logger.warn(
+        `Strategy instance ${instance.id} is missing published snapshot binding provenance for runtime execution state`,
+      )
+      return null
+    }
+
+    const executableStates = await this.runtimeExecutionStateService.loadExecutableStates({
+      strategyInstanceId: instance.id,
+      publishedSnapshotId,
+      snapshotHash,
+    })
+    if (!executableStates.length) {
+      return null
+    }
+
+    const readyState = executableStates.find(state => executionSemanticKeys.includes(state.executionSemanticKey))
+    if (!readyState) {
+      return null
+    }
+
+    return {
+      strategyInstanceId: readyState.strategyInstanceId,
+      publishedSnapshotId: readyState.publishedSnapshotId,
+      executionSemanticKey: readyState.executionSemanticKey,
+    }
+  }
+
+  private async markRuntimeExecutionStateConsumed(
+    activeRuntimeState: {
+      strategyInstanceId: string
+      publishedSnapshotId: string
+      executionSemanticKey: string
+    } | null,
+  ): Promise<void> {
+    if (!activeRuntimeState || !this.runtimeExecutionStateRepository) {
+      return
+    }
+
+    await this.runtimeExecutionStateRepository.markConsumed({
+      strategyInstanceId: activeRuntimeState.strategyInstanceId,
+      publishedSnapshotId: activeRuntimeState.publishedSnapshotId,
+      executionSemanticKey: activeRuntimeState.executionSemanticKey,
+    })
+  }
+
+  private async markRuntimeExecutionStateFailed(
+    activeRuntimeState: {
+      strategyInstanceId: string
+      publishedSnapshotId: string
+      executionSemanticKey: string
+    } | null,
+    args: {
+      failureReason: string
+      failureCode: string
+    },
+  ): Promise<void> {
+    if (!activeRuntimeState || !this.runtimeExecutionStateRepository) {
+      return
+    }
+
+    await this.runtimeExecutionStateRepository.markFailed({
+      strategyInstanceId: activeRuntimeState.strategyInstanceId,
+      publishedSnapshotId: activeRuntimeState.publishedSnapshotId,
+      executionSemanticKey: activeRuntimeState.executionSemanticKey,
+      failureReason: args.failureReason,
+      failureCode: args.failureCode,
+    })
   }
 
   private readSnapshotBinding(metadata: unknown): {
@@ -1598,6 +1748,21 @@ export class SignalGeneratorService {
     markPrice: number | undefined,
   ): { currentQty?: number; equity?: number; markPrice?: number } {
     return this.decisionStage.buildDecisionContext(indicators, markPrice)
+  }
+
+  private buildCompiledDecisionStateForRuntimeExecution(
+    activeRuntimeState: { executionSemanticKey: string } | null,
+  ): { barIndex: number; lastTriggeredByProgram: Record<string, number> } | undefined {
+    if (!activeRuntimeState) return undefined
+
+    if (activeRuntimeState.executionSemanticKey.startsWith('on_start.')) {
+      return {
+        barIndex: 1,
+        lastTriggeredByProgram: {},
+      }
+    }
+
+    return undefined
   }
 
   private requiresExplicitDecisionContext(decision: StrategyDecisionV1): boolean {

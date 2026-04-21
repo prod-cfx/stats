@@ -222,6 +222,22 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         maxLeverage: 4,
       }),
     }
+    const runtimeExecutionStateService = {
+      loadStatesForBinding: jest.fn().mockResolvedValue([
+        {
+          strategyInstanceId: 'inst-1',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+          executionSemanticKey: 'on_start.entry.primary',
+          status: 'failed',
+          failureReason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+          failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+          lastAttemptAt: new Date('2026-03-20T10:03:00.000Z'),
+          consumedAt: null,
+          cooldownUntil: null,
+        },
+      ]),
+    }
     const service = new AccountStrategyViewService(
       repo as any,
       statsService as any,
@@ -231,6 +247,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       undefined,
       tradingService as any,
       publishedSnapshotsRepository as any,
+      runtimeExecutionStateService as any,
     )
     const detail = await service.getStrategyDetail('user-1', 'inst-1')
 
@@ -330,6 +347,17 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       defaultLeverage: 3,
       accountMaxLeverage: 4,
     }))
+    expect(detail.runtimeExecutionStates).toEqual([{
+      executionSemanticKey: 'on_start.entry.primary',
+      status: 'failed',
+      failureReason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+      failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+      lastAttemptAt: '2026-03-20T10:03:00.000Z',
+      consumedAt: null,
+      cooldownUntil: null,
+      publishedSnapshotId: 'snapshot-1',
+      snapshotHash: 'snapshot-hash-1',
+    }])
     expect(detail.snapshot.effectiveAllowedLeverageRange).toEqual({ min: 1, max: 4 })
     expect(detail.snapshot.compatibilityMetadata).toEqual({
       isLegacySnapshot: false,
@@ -442,6 +470,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(detail.snapshot.deploymentExecutionCurrent).toBeNull()
     expect(detail.snapshot.deploymentExecutionConstraints).toBeNull()
     expect(detail.snapshot.compatibilityMetadata).toBeNull()
+    expect(detail.runtimeExecutionStates).toEqual([])
     expect(detail.deployment).toBeNull()
     expect(publishedSnapshotsRepository.findByIdForUser).not.toHaveBeenCalled()
   })
@@ -487,6 +516,17 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         trades: [],
       }),
     }
+    const runtimeExecutionStateService = {
+      loadStatesForBinding: jest.fn().mockResolvedValue([
+        {
+          strategyInstanceId: 'inst-legacy-1',
+          publishedSnapshotId: 'snapshot-legacy-1',
+          snapshotHash: 'snapshot-legacy-hash-1',
+          executionSemanticKey: 'on_start.entry.primary',
+          status: 'ready',
+        },
+      ]),
+    }
     const service = new AccountStrategyViewService(
       repo as any,
       { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() } as any,
@@ -503,6 +543,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
           lockedParams: { exchange: 'okx', positionPct: 10 },
         }),
       } as any,
+      runtimeExecutionStateService as any,
     )
 
     const detail = await service.getStrategyDetail('user-1', 'inst-legacy-1')
@@ -521,12 +562,14 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       requiresRepublishForDeploy: true,
     })
     expect(detail.deployment).toBeNull()
+    expect(detail.runtimeExecutionStates).toEqual([])
     expect(detail.snapshot.paramValues).toEqual({
       exchange: 'okx',
       symbol: 'BTCUSDT',
       timeframe: '15m',
       positionPct: 10,
     })
+    expect(runtimeExecutionStateService.loadStatesForBinding).not.toHaveBeenCalled()
   })
 
   it('marks missing bound snapshots as invalid compatibility state and hides deployment truth', async () => {
@@ -577,6 +620,9 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         trades: [],
       }),
     }
+    const runtimeExecutionStateService = {
+      loadStatesForBinding: jest.fn(),
+    }
     const service = new AccountStrategyViewService(
       repo as any,
       { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() } as any,
@@ -588,6 +634,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       {
         findByIdForUser: jest.fn().mockResolvedValue(null),
       } as any,
+      runtimeExecutionStateService as any,
     )
 
     const detail = await service.getStrategyDetail('user-1', 'inst-missing-snapshot-1')
@@ -602,7 +649,211 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       requiresRepublishForDeploy: true,
       invalidBinding: true,
     })
+    expect(detail.runtimeExecutionStates).toEqual([])
     expect(detail.deployment).toBeNull()
+    expect(runtimeExecutionStateService.loadStatesForBinding).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when bound runtime execution states cannot be validated', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-runtime-invalid-1',
+        name: 'Runtime invalid strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-runtime-invalid-1',
+          snapshotHash: 'snapshot-runtime-invalid-hash-1',
+        },
+        params: { exchange: 'okx', symbol: 'BTCUSDT', timeframe: '15m', positionPct: 10 },
+        strategyTemplateId: 'tpl-runtime-invalid-1',
+        strategyTemplate: {
+          defaultParams: {},
+          paramsSchema: null,
+          rulesVersion: 1,
+        },
+        subscriptions: [{
+          userId: 'user-1',
+          status: 'active',
+          customParams: {},
+          subscribedAt: new Date('2026-03-20T10:00:00.000Z'),
+          exchangeAccount: { id: 'acct-1', exchangeId: 'okx', name: '主账户' },
+        }],
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+        deploymentExecutionConfig: {
+          leverage: 2,
+          priceSource: 'mark',
+          orderType: 'market',
+          timeInForce: 'IOC',
+        },
+        executionConfigVersion: 1,
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue(null),
+      findLatestExecutedAccountByUserAndSymbol: jest.fn().mockResolvedValue(null),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: {
+          createdAt: new Date('2026-03-18T10:00:00.000Z'),
+          startedAt: new Date('2026-03-20T10:01:00.000Z'),
+          stoppedAt: null,
+        },
+        subscription: { subscribedAt: new Date('2026-03-20T10:00:00.000Z') },
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const runtimeExecutionStateService = {
+      loadStatesForBinding: jest.fn().mockRejectedValue(new Error('snapshot_hash_mismatch')),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn() } as any,
+      undefined,
+      undefined,
+      undefined,
+      {
+        findByIdForUser: jest.fn().mockResolvedValue({
+          id: 'snapshot-runtime-invalid-1',
+          snapshotHash: 'snapshot-runtime-invalid-hash-1',
+          strategyConfig: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            baseTimeframe: '15m',
+            marketType: 'perp',
+            positionPct: 10,
+          },
+          backtestConfigDefaults: { initialCash: 10000 },
+          deploymentExecutionDefaults: {
+            leverage: 2,
+            priceSource: 'mark',
+            orderType: 'market',
+            timeInForce: 'IOC',
+          },
+          deploymentExecutionConstraints: {
+            platformRiskMaxLeverage: 5,
+            defaultLeverage: 2,
+          },
+          paramsSnapshot: { symbol: 'BTCUSDT', timeframe: '15m' },
+          lockedParams: { exchange: 'okx', positionPct: 10 },
+        }),
+      } as any,
+      runtimeExecutionStateService as any,
+    )
+
+    const detail = await service.getStrategyDetail('user-1', 'inst-runtime-invalid-1')
+
+    expect(detail.runtimeExecutionStates).toEqual([])
+    expect(detail.snapshot.compatibilityMetadata).toEqual(expect.objectContaining({
+      invalidBinding: true,
+    }))
+    expect(detail.deployment).toBeNull()
+    expect(runtimeExecutionStateService.loadStatesForBinding).toHaveBeenCalled()
+  })
+
+  it('preserves deployment truth when runtime execution state loading fails for a transient read error', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-runtime-transient-1',
+        name: 'Runtime transient strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-runtime-transient-1',
+          snapshotHash: 'snapshot-runtime-transient-hash-1',
+        },
+        params: { exchange: 'okx', symbol: 'BTCUSDT', timeframe: '15m', positionPct: 10 },
+        strategyTemplateId: 'tpl-runtime-transient-1',
+        strategyTemplate: {
+          defaultParams: {},
+          paramsSchema: null,
+          rulesVersion: 1,
+        },
+        subscriptions: [{
+          userId: 'user-1',
+          status: 'active',
+          customParams: {},
+          subscribedAt: new Date('2026-03-20T10:00:00.000Z'),
+          exchangeAccount: { id: 'acct-1', exchangeId: 'okx', name: '主账户' },
+        }],
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+        deploymentExecutionConfig: {
+          leverage: 2,
+          priceSource: 'mark',
+          orderType: 'market',
+          timeInForce: 'IOC',
+        },
+        executionConfigVersion: 1,
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue(null),
+      findLatestExecutedAccountByUserAndSymbol: jest.fn().mockResolvedValue(null),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: {
+          createdAt: new Date('2026-03-18T10:00:00.000Z'),
+          startedAt: new Date('2026-03-20T10:01:00.000Z'),
+          stoppedAt: null,
+        },
+        subscription: { subscribedAt: new Date('2026-03-20T10:00:00.000Z') },
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const runtimeExecutionStateService = {
+      loadStatesForBinding: jest.fn().mockRejectedValue(new Error('temporary_runtime_state_read_failure')),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn().mockResolvedValue(undefined) } as any,
+      undefined,
+      undefined,
+      undefined,
+      {
+        findByIdForUser: jest.fn().mockResolvedValue({
+          id: 'snapshot-runtime-transient-1',
+          snapshotHash: 'snapshot-runtime-transient-hash-1',
+          strategyConfig: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            baseTimeframe: '15m',
+            marketType: 'perp',
+            positionPct: 10,
+          },
+          backtestConfigDefaults: { initialCash: 10000 },
+          deploymentExecutionDefaults: {
+            leverage: 2,
+            priceSource: 'mark',
+            orderType: 'market',
+            timeInForce: 'IOC',
+          },
+          deploymentExecutionConstraints: {
+            platformRiskMaxLeverage: 5,
+            defaultLeverage: 2,
+          },
+          paramsSnapshot: { symbol: 'BTCUSDT', timeframe: '15m' },
+          lockedParams: { exchange: 'okx', positionPct: 10 },
+        }),
+      } as any,
+      runtimeExecutionStateService as any,
+    )
+
+    const detail = await service.getStrategyDetail('user-1', 'inst-runtime-transient-1')
+
+    expect(detail.runtimeExecutionStates).toEqual([])
+    expect(detail.snapshot.compatibilityMetadata).not.toEqual(expect.objectContaining({
+      invalidBinding: true,
+    }))
+    expect(detail.deployment).not.toBeNull()
+    expect(runtimeExecutionStateService.loadStatesForBinding).toHaveBeenCalled()
   })
 
   it('rejects detail when strategy is not actively subscribed', async () => {

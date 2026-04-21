@@ -1,6 +1,7 @@
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import { DomainException } from '@/common/exceptions/domain.exception'
 import { BacktestingController } from './backtesting.controller'
 import { BacktestRunnerService } from './core/backtest-runner.service'
 import { BacktestJobsService } from './jobs/backtest-jobs.service'
@@ -155,7 +156,12 @@ describe('backtestingController', () => {
     await c.getJob('Bearer token', 'user-1', 'job-1')
     await c.getJobResult('Bearer token', 'user-1', 'job-1')
     await c.getCapabilities('req-1')
-    await c.checkSymbolSupport('Bearer token', 'user-1', 'req-3', { exchange: 'okx', symbol: 'ETHUSDC' })
+    await c.checkSymbolSupport('Bearer token', 'user-1', 'req-3', {
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ETHUSDC',
+      baseTimeframe: '1h',
+    })
 
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenCalledTimes(5)
     expect(caller.resolveCallerUserIdFromAuthorization).toHaveBeenNthCalledWith(1, 'Bearer token', 'user-1')
@@ -171,12 +177,21 @@ describe('backtestingController', () => {
       userId: 'user-1',
     })
     expect(runner.run).toHaveBeenCalledWith({ ...dto, strategy: adapted })
-    expect(jobs.createJob).toHaveBeenCalledWith({ ...dto, strategy: adapted }, 'user-1')
+    expect(jobs.createJob).toHaveBeenCalledWith(expect.objectContaining({
+      strategy: adapted,
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+    }), 'user-1')
     expect(jobs.getJob).toHaveBeenCalledWith('job-1', 'user-1')
     expect(jobs.getJobResult).toHaveBeenCalledWith('job-1', 'user-1')
     expect(capabilities.getCapabilities).toHaveBeenCalledTimes(1)
     expect(capabilities.getCapabilities).toHaveBeenCalledWith('req-1')
-    expect(symbolSupport.checkSymbolSupport).toHaveBeenCalledWith('okx', 'ETHUSDC')
+    expect(symbolSupport.checkSymbolSupport).toHaveBeenCalledWith({
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ETHUSDC',
+      baseTimeframe: '1h',
+    })
     expect(adapter.build).not.toHaveBeenCalled()
   })
 
@@ -225,6 +240,60 @@ describe('backtestingController', () => {
       publishedSnapshotId: 'snapshot-1',
       userId: 'user-1',
     })
+  })
+
+  it('normalizes create-job inputs to published snapshot truth before delegating to jobs service', async () => {
+    const runner = { run: jest.fn() }
+    const jobs = { createJob: jest.fn().mockResolvedValue({ id: 'job-1', status: 'queued' }), getJob: jest.fn(), getJobResult: jest.fn() }
+    const adapted = {
+      id: 'instance-1',
+      params: {
+        exchange: 'okx',
+        symbol: 'ORDIUSDT',
+        marketType: 'spot',
+        timeframe: '1h',
+      },
+      stateTimeframes: ['4h'],
+      fn: jest.fn(),
+      snapshotId: 'snapshot-1',
+    }
+    const snapshotLoader = { load: jest.fn().mockResolvedValue(adapted) }
+    const caller = { resolveCallerUserIdFromAuthorization: jest.fn().mockResolvedValue('user-1') }
+    const capabilities = { getCapabilities: jest.fn() }
+    const symbolSupport = { checkSymbolSupport: jest.fn() }
+
+    const mod = await Test.createTestingModule({
+      controllers: [BacktestingController],
+      providers: [
+        { provide: BacktestRunnerService, useValue: runner },
+        { provide: BacktestJobsService, useValue: jobs },
+        { provide: BacktestCallerIdentityService, useValue: caller },
+        { provide: BacktestCapabilitiesService, useValue: capabilities },
+        { provide: BacktestSnapshotLoaderService, useValue: snapshotLoader },
+        { provide: BacktestSymbolSupportService, useValue: { checkSupport: symbolSupport.checkSymbolSupport } },
+        { provide: BacktestStrategyAdapterService, useValue: { build: jest.fn() } },
+      ],
+    }).compile()
+
+    const c = mod.get(BacktestingController)
+    await c.createJob('Bearer token', 'user-1', 'req-job-truth', {
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['1h'],
+      initialCash: 10000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: { id: 's1', protocolVersion: 'v1', publishedSnapshotId: 'snapshot-1', params: { marketType: 'spot' } },
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [],
+    } as any)
+
+    expect(jobs.createJob).toHaveBeenCalledWith(expect.objectContaining({
+      symbols: ['ORDIUSDT'],
+      baseTimeframe: '1h',
+      stateTimeframes: ['4h'],
+      strategy: adapted,
+    }), 'user-1')
   })
 
   it('loads published snapshot strategy even when legacy strategy id is omitted', async () => {
@@ -331,10 +400,221 @@ describe('backtestingController', () => {
 
     const c = mod.get(BacktestingController)
 
-    await expect(c.checkSymbolSupport('Bearer token', 'user-1', 'req-4', { exchange: 'okx', symbol: 'BTCUSDT' })).rejects.toMatchObject({
+    await expect(c.checkSymbolSupport('Bearer token', 'user-1', 'req-4', {
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'BTCUSDT',
+      baseTimeframe: '1h',
+    })).rejects.toMatchObject({
       code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
       status: HttpStatus.SERVICE_UNAVAILABLE,
-      args: { exchange: 'okx', symbol: 'BTCUSDT', reasonMessage: 'catalog crashed' },
+      args: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        reasonCode: 'BACKTEST_SERVICE_TEMPORARILY_UNAVAILABLE',
+        reasonMessage: 'catalog crashed',
+      },
+    })
+  })
+
+  it('maps symbol refresh domain errors to structured backtest refresh reason codes', async () => {
+    const runner = { run: jest.fn() }
+    const jobs = { createJob: jest.fn(), getJob: jest.fn(), getJobResult: jest.fn() }
+    const snapshotLoader = { load: jest.fn() }
+    const caller = { resolveCallerUserIdFromAuthorization: jest.fn().mockResolvedValue('user-1') }
+    const capabilities = { getCapabilities: jest.fn() }
+    const symbolSupport = {
+      checkSymbolSupport: jest.fn().mockRejectedValue(
+        new DomainException('backtesting.symbol_support_temporarily_unavailable', {
+          code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+          status: HttpStatus.SERVICE_UNAVAILABLE,
+          args: {
+            exchange: 'okx',
+            symbol: 'ORDIUSDT',
+            reasonMessage: 'provider timeout',
+          },
+        }),
+      ),
+    }
+
+    const mod = await Test.createTestingModule({
+      controllers: [BacktestingController],
+      providers: [
+        { provide: BacktestRunnerService, useValue: runner },
+        { provide: BacktestJobsService, useValue: jobs },
+        { provide: BacktestCallerIdentityService, useValue: caller },
+        { provide: BacktestCapabilitiesService, useValue: capabilities },
+        { provide: BacktestSnapshotLoaderService, useValue: snapshotLoader },
+        { provide: BacktestSymbolSupportService, useValue: { checkSupport: symbolSupport.checkSymbolSupport } },
+        { provide: BacktestStrategyAdapterService, useValue: { build: jest.fn() } },
+      ],
+    }).compile()
+
+    const c = mod.get(BacktestingController)
+
+    await expect(c.checkSymbolSupport('Bearer token', 'user-1', 'req-4b', {
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ORDIUSDT',
+      baseTimeframe: '1h',
+    })).rejects.toMatchObject({
+      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+      status: HttpStatus.SERVICE_UNAVAILABLE,
+      args: {
+        exchange: 'okx',
+        symbol: 'ORDIUSDT',
+        reasonCode: 'BACKTEST_SYMBOL_REFRESH_FAILED',
+        reasonMessage: 'provider timeout',
+      },
+    })
+  })
+
+  it('maps missing published snapshots to a structured backtest snapshot reason code', async () => {
+    const runner = { run: jest.fn() }
+    const jobs = { createJob: jest.fn(), getJob: jest.fn(), getJobResult: jest.fn() }
+    const snapshotLoader = { load: jest.fn() }
+    const caller = { resolveCallerUserIdFromAuthorization: jest.fn().mockResolvedValue('user-1') }
+    const capabilities = { getCapabilities: jest.fn() }
+    const symbolSupport = { checkSymbolSupport: jest.fn() }
+
+    const mod = await Test.createTestingModule({
+      controllers: [BacktestingController],
+      providers: [
+        { provide: BacktestRunnerService, useValue: runner },
+        { provide: BacktestJobsService, useValue: jobs },
+        { provide: BacktestCallerIdentityService, useValue: caller },
+        { provide: BacktestCapabilitiesService, useValue: capabilities },
+        { provide: BacktestSnapshotLoaderService, useValue: snapshotLoader },
+        { provide: BacktestSymbolSupportService, useValue: { checkSupport: symbolSupport.checkSymbolSupport } },
+        { provide: BacktestStrategyAdapterService, useValue: { build: jest.fn() } },
+      ],
+    }).compile()
+
+    const c = mod.get(BacktestingController)
+    const dto: any = {
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: ['15m'],
+      initialCash: 10000,
+      leverage: 1,
+      execution: { slippageBps: 10, feeBps: 5, priceSource: 'close' },
+      strategy: { id: 's1', protocolVersion: 'v1', publishedSnapshotId: '   ', params: {} },
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [],
+    }
+
+    await expect(c.createJob('Bearer token', 'user-1', 'req-job-snapshot', dto)).rejects.toMatchObject({
+      code: ErrorCode.BAD_REQUEST,
+      status: HttpStatus.BAD_REQUEST,
+      args: {
+        reasonCode: 'BACKTEST_SNAPSHOT_REQUIRED',
+      },
+    })
+  })
+
+  it('maps snapshot marketType gaps to a structured backtest market-type-missing reason code', async () => {
+    const runner = { run: jest.fn() }
+    const jobs = { createJob: jest.fn(), getJob: jest.fn(), getJobResult: jest.fn() }
+    const snapshotLoader = {
+      load: jest.fn().mockRejectedValue(new DomainException('backtest.snapshot_params_missing', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: {
+          snapshotId: 'snapshot-1',
+          missingFields: ['marketType'],
+        },
+      })),
+    }
+    const caller = { resolveCallerUserIdFromAuthorization: jest.fn().mockResolvedValue('user-1') }
+    const capabilities = { getCapabilities: jest.fn() }
+    const symbolSupport = { checkSymbolSupport: jest.fn() }
+
+    const mod = await Test.createTestingModule({
+      controllers: [BacktestingController],
+      providers: [
+        { provide: BacktestRunnerService, useValue: runner },
+        { provide: BacktestJobsService, useValue: jobs },
+        { provide: BacktestCallerIdentityService, useValue: caller },
+        { provide: BacktestCapabilitiesService, useValue: capabilities },
+        { provide: BacktestSnapshotLoaderService, useValue: snapshotLoader },
+        { provide: BacktestSymbolSupportService, useValue: { checkSupport: symbolSupport.checkSymbolSupport } },
+        { provide: BacktestStrategyAdapterService, useValue: { build: jest.fn() } },
+      ],
+    }).compile()
+
+    const c = mod.get(BacktestingController)
+    const dto: any = {
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: ['15m'],
+      initialCash: 10000,
+      leverage: 1,
+      execution: { slippageBps: 10, feeBps: 5, priceSource: 'close' },
+      strategy: { id: 's1', protocolVersion: 'v1', publishedSnapshotId: 'snapshot-1', params: {} },
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [],
+    }
+
+    await expect(c.createJob('Bearer token', 'user-1', 'req-job-market-type', dto)).rejects.toMatchObject({
+      code: ErrorCode.BAD_REQUEST,
+      status: HttpStatus.BAD_REQUEST,
+      args: {
+        snapshotId: 'snapshot-1',
+        reasonCode: 'BACKTEST_SNAPSHOT_MARKET_TYPE_MISSING',
+      },
+    })
+  })
+
+  it('maps snapshot timeframe gaps to a structured backtest timeframe-missing reason code', async () => {
+    const runner = { run: jest.fn() }
+    const jobs = { createJob: jest.fn(), getJob: jest.fn(), getJobResult: jest.fn() }
+    const snapshotLoader = {
+      load: jest.fn().mockRejectedValue(new DomainException('backtest.snapshot_params_missing', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: {
+          snapshotId: 'snapshot-1',
+          missingFields: ['timeframe'],
+        },
+      })),
+    }
+    const caller = { resolveCallerUserIdFromAuthorization: jest.fn().mockResolvedValue('user-1') }
+    const capabilities = { getCapabilities: jest.fn() }
+    const symbolSupport = { checkSymbolSupport: jest.fn() }
+
+    const mod = await Test.createTestingModule({
+      controllers: [BacktestingController],
+      providers: [
+        { provide: BacktestRunnerService, useValue: runner },
+        { provide: BacktestJobsService, useValue: jobs },
+        { provide: BacktestCallerIdentityService, useValue: caller },
+        { provide: BacktestCapabilitiesService, useValue: capabilities },
+        { provide: BacktestSnapshotLoaderService, useValue: snapshotLoader },
+        { provide: BacktestSymbolSupportService, useValue: { checkSupport: symbolSupport.checkSymbolSupport } },
+        { provide: BacktestStrategyAdapterService, useValue: { build: jest.fn() } },
+      ],
+    }).compile()
+
+    const c = mod.get(BacktestingController)
+    const dto: any = {
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: ['15m'],
+      initialCash: 10000,
+      leverage: 1,
+      execution: { slippageBps: 10, feeBps: 5, priceSource: 'close' },
+      strategy: { id: 's1', protocolVersion: 'v1', publishedSnapshotId: 'snapshot-1', params: {} },
+      dataRange: { fromTs: 1, toTs: 2 },
+      bars: [],
+    }
+
+    await expect(c.createJob('Bearer token', 'user-1', 'req-job-timeframe', dto)).rejects.toMatchObject({
+      code: ErrorCode.BAD_REQUEST,
+      status: HttpStatus.BAD_REQUEST,
+      args: {
+        snapshotId: 'snapshot-1',
+        reasonCode: 'BACKTEST_SNAPSHOT_TIMEFRAME_MISSING',
+      },
     })
   })
 
