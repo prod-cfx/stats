@@ -141,6 +141,8 @@ export class SemanticSeedExtractorService {
     const stopLoss = this.extractPercent(text, [
       /亏损\s*(\d+(?:\.\d+)?)\s*%/u,
       /亏损\s*百分之?\s*(\d+(?:\.\d+)?)/u,
+      /止损\s*(\d+(?:\.\d+)?)\s*%/u,
+      /止损\s*百分之?\s*(\d+(?:\.\d+)?)/u,
       /(\d+(?:\.\d+)?)\s*%\s*(?:止损|亏损)/u,
       /百分之?\s*(\d+(?:\.\d+)?)\s*(?:止损|亏损)/u,
     ])
@@ -157,6 +159,8 @@ export class SemanticSeedExtractorService {
     const takeProfit = this.extractPercent(text, [
       /盈利\s*(\d+(?:\.\d+)?)\s*%/u,
       /盈利\s*百分之?\s*(\d+(?:\.\d+)?)/u,
+      /止盈\s*(\d+(?:\.\d+)?)\s*%/u,
+      /止盈\s*百分之?\s*(\d+(?:\.\d+)?)/u,
       /(\d+(?:\.\d+)?)\s*%\s*(?:止盈|盈利)/u,
       /百分之?\s*(\d+(?:\.\d+)?)\s*(?:止盈|盈利)/u,
     ])
