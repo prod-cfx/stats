@@ -291,8 +291,17 @@ export class BacktestingController {
         const missingFields = Array.isArray(args?.missingFields)
           ? args.missingFields.filter((field): field is string => typeof field === 'string')
           : []
-        return missingFields.length === 0 || missingFields.includes('symbol')
-          ? 'BACKTEST_SNAPSHOT_SYMBOL_MISSING'
+        if (missingFields.includes('symbol') || missingFields.length === 0) {
+          return 'BACKTEST_SNAPSHOT_SYMBOL_MISSING'
+        }
+        if (missingFields.includes('marketType')) {
+          return 'BACKTEST_SNAPSHOT_MARKET_TYPE_MISSING'
+        }
+        if (missingFields.includes('timeframe')) {
+          return 'BACKTEST_SNAPSHOT_TIMEFRAME_MISSING'
+        }
+        return missingFields.includes('baseTimeframe')
+          ? 'BACKTEST_SNAPSHOT_TIMEFRAME_MISSING'
           : 'BACKTEST_SNAPSHOT_REQUIRED'
       }
       case 'backtesting.symbol_support_temporarily_unavailable':

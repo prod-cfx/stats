@@ -13,9 +13,9 @@ export interface FetchBacktestCapabilitiesOptions {
 
 export interface BacktestSymbolSupportCheckInput {
   exchange: string
-  marketType?: 'spot' | 'perp'
+  marketType: 'spot' | 'perp'
   symbol: string
-  baseTimeframe?: string
+  baseTimeframe: string
 }
 
 export interface BacktestSymbolSupportCheckPayload {

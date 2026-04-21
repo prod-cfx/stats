@@ -76,11 +76,27 @@ describe('aiQuantErrorStage', () => {
   it('renders localized readable backtest messages from structured business codes', () => {
     const t = (key: string, options?: Record<string, unknown>) => {
       const map: Record<string, string> = {
+        'aiQuant.messages.backtestSnapshotMarketTypeMissing':
+          '当前已发布快照缺少市场类型真相，暂时无法回测。请重新发布策略后再试。',
+        'aiQuant.messages.backtestSnapshotTimeframeMissing':
+          '当前已发布快照缺少主周期真相，暂时无法回测。请重新发布策略后再试。',
         'aiQuant.messages.backtestSymbolUnavailable':
           '当前策略标的 {{symbol}} 暂不支持回测，请先确认该标的的历史行情能力是否已接入。',
       }
       return (map[key] ?? key).replace(/\{\{(\w+)\}\}/g, (_m, name) => String(options?.[name] ?? ''))
     }
+
+    expect(buildLocalizedBacktestErrorMessage(t, 400, {
+      code: 'BACKTEST_SNAPSHOT_MARKET_TYPE_MISSING',
+      stage: 'backtest',
+      args: { snapshotId: 'snapshot-1' },
+    })).toBe('当前已发布快照缺少市场类型真相，暂时无法回测。请重新发布策略后再试。')
+
+    expect(buildLocalizedBacktestErrorMessage(t, 400, {
+      code: 'BACKTEST_SNAPSHOT_TIMEFRAME_MISSING',
+      stage: 'backtest',
+      args: { snapshotId: 'snapshot-1' },
+    })).toBe('当前已发布快照缺少主周期真相，暂时无法回测。请重新发布策略后再试。')
 
     expect(buildLocalizedBacktestErrorMessage(t, 400, {
       code: 'BACKTEST_SYMBOL_UNAVAILABLE',

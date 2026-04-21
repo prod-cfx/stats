@@ -95,6 +95,14 @@ export function buildLocalizedBacktestErrorMessage(
       return t('aiQuant.messages.backtestSnapshotSymbolMissing', {
         snapshotId: String(meta.args?.snapshotId ?? ''),
       })
+    case 'BACKTEST_SNAPSHOT_MARKET_TYPE_MISSING':
+      return t('aiQuant.messages.backtestSnapshotMarketTypeMissing', {
+        snapshotId: String(meta.args?.snapshotId ?? ''),
+      })
+    case 'BACKTEST_SNAPSHOT_TIMEFRAME_MISSING':
+      return t('aiQuant.messages.backtestSnapshotTimeframeMissing', {
+        snapshotId: String(meta.args?.snapshotId ?? ''),
+      })
     case 'BACKTEST_SYMBOL_UNAVAILABLE':
       return t('aiQuant.messages.backtestSymbolUnavailable', {
         symbol: String(meta.args?.symbol ?? ''),

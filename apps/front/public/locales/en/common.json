@@ -272,6 +272,8 @@
       "backtestCapabilityLoadFailed": "Failed to load backtest capabilities. Please try again later.",
       "backtestSnapshotRequired": "Backtesting requires a published snapshot. Please publish the current strategy before running a backtest.",
       "backtestSnapshotSymbolMissing": "The published snapshot is missing the symbol truth required for backtesting. Please republish the strategy and try again.",
+      "backtestSnapshotMarketTypeMissing": "The published snapshot is missing the market type truth required for backtesting. Please republish the strategy and try again.",
+      "backtestSnapshotTimeframeMissing": "The published snapshot is missing the base timeframe truth required for backtesting. Please republish the strategy and try again.",
       "backtestSymbolUnavailable": "Backtesting is not available for {{symbol}} yet. Please confirm that historical market data for this symbol has been enabled.",
       "backtestSymbolRefreshFailed": "We could not confirm backtest availability for {{symbol}} right now. Please try again later.",
       "backtestMarketDataUnavailable": "Historical {{baseTimeframe}} market data for {{symbol}} is not available yet, so the backtest cannot run.",
