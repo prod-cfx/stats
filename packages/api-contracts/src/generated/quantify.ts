@@ -1302,11 +1302,8 @@ const TestLlmCodegenEngineDto = z
   .object({
     userId: z.string(),
     message: z.string(),
-    symbols: z.array(z.string()).optional(),
-    timeframes: z.array(z.string()).optional(),
-    entryRules: z.array(z.string()).optional(),
-    exitRules: z.array(z.string()).optional(),
-    riskRules: z.object({}).partial().passthrough().optional(),
+    semanticState: z.object({}).partial().passthrough().optional(),
+    canonicalSpec: z.object({}).partial().passthrough().optional(),
     providerCode: z.string().optional(),
     model: z.string().optional(),
     temperature: z.number().gte(0).lte(2).optional(),
