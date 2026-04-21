@@ -578,7 +578,7 @@ export class SemanticSeedExtractorService {
   }
 
   private extractExchange(text: string): string | null {
-    const match = text.match(/\b(OKX|BINANCE|BYBIT|GATE|HUOBI)\b/iu)
+    const match = text.match(/\b(OKX|BINANCE|HYPERLIQUID)\b/iu)
     if (!match?.[1]) return null
 
     return match[1].toLowerCase()

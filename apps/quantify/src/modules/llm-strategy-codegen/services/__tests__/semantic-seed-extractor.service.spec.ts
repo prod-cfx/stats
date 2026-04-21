@@ -119,6 +119,18 @@ describe('SemanticSeedExtractorService', () => {
     })
   })
 
+  it('does not lock unsupported exchanges into semantic context', () => {
+    const patch = service.extract('BYBIT BTCUSDT 15m；价格上穿 MA50 买入；单笔 10%')
+
+    expect(patch.contextSlots).toEqual(expect.objectContaining({
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+    }))
+    expect(patch.contextSlots).not.toEqual(expect.objectContaining({
+      exchange: 'bybit',
+    }))
+  })
+
   it('extracts Chinese percent sizing and timeframes in deterministic seed fallback wording', () => {
     const patch = service.extract('BTCUSDT 3分钟之内跌百分1买入；15分钟之内涨百分2卖出；单笔用百分10资金')
 
