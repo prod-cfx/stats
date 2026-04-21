@@ -601,6 +601,156 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(summary).not.toContain('出场：3m 内上涨 2% 卖出')
   })
 
+  it('summarizes every confirmed normalized Bollinger leg instead of only the first trigger', () => {
+    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+
+    const summary = (service as any).buildClarificationSummary({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: [
+        'K线收盘后确认突破布林带(20,2)上轨时做空',
+        'K线收盘后确认突破布林带(20,2)下轨时做多',
+      ],
+      exitRules: [
+        '多单在价格回到布林带中轨(MA20)时平仓',
+        '空单在价格跌破布林带中轨(MA20)时平仓',
+      ],
+      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+    }, {
+      families: ['single-leg'],
+      triggers: [
+        {
+          key: 'bollinger.touch_upper',
+          phase: 'entry',
+          sideScope: 'short',
+          params: { indicator: 'bollinger', period: 20, stdDev: 2, confirmationMode: 'close_confirm' },
+          closureStatus: 'closed',
+          unresolvedSlots: [],
+        },
+        {
+          key: 'bollinger.touch_lower',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { indicator: 'bollinger', period: 20, stdDev: 2, confirmationMode: 'close_confirm' },
+          closureStatus: 'closed',
+          unresolvedSlots: [],
+        },
+        {
+          key: 'bollinger.touch_middle',
+          phase: 'exit',
+          sideScope: 'long',
+          params: { indicator: 'bollinger', period: 20, stdDev: 2, confirmationMode: 'close_confirm' },
+          closureStatus: 'closed',
+          unresolvedSlots: [],
+        },
+        {
+          key: 'bollinger.touch_middle',
+          phase: 'exit',
+          sideScope: 'short',
+          params: { indicator: 'bollinger', period: 20, stdDev: 2, confirmationMode: 'close_confirm' },
+          closureStatus: 'closed',
+          unresolvedSlots: [],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_short' },
+      unresolved: [],
+      normalizationNotes: [],
+    })
+
+    expect(summary).toContain('入场：15m K线收盘后确认突破布林带(20,2)上轨时做空；15m K线收盘后确认突破布林带(20,2)下轨时做多')
+    expect(summary).toContain('出场：15m 价格回到布林带中轨(MA20)时平多；15m 价格回到布林带中轨(MA20)时平空')
+  })
+
+  it('preserves generic close wording from exit evidence instead of forcing side-specific labels', () => {
+    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+
+    const summary = (service as any).buildClarificationSummary({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['K线收盘后确认突破布林带(20,2)上轨时做空'],
+      exitRules: [
+        '多单在价格回到布林带中轨(MA20)时平仓',
+        '空单在价格跌破布林带中轨(MA20)时平仓',
+      ],
+      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+    }, {
+      families: ['single-leg'],
+      triggers: [
+        {
+          key: 'bollinger.touch_middle',
+          phase: 'exit',
+          sideScope: 'long',
+          params: { indicator: 'bollinger', period: 20, stdDev: 2, confirmationMode: 'close_confirm' },
+          closureStatus: 'closed',
+          unresolvedSlots: [],
+          evidenceText: '多单在价格回到布林带中轨(MA20)时平仓',
+        },
+        {
+          key: 'bollinger.touch_middle',
+          phase: 'exit',
+          sideScope: 'short',
+          params: { indicator: 'bollinger', period: 20, stdDev: 2, confirmationMode: 'close_confirm' },
+          closureStatus: 'closed',
+          unresolvedSlots: [],
+          evidenceText: '空单在价格跌破布林带中轨(MA20)时平仓',
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_short' },
+      unresolved: [],
+      normalizationNotes: [],
+    })
+
+    expect(summary).toContain('出场：15m 价格回到布林带中轨(MA20)时平仓')
+    expect(summary).not.toContain('平多')
+    expect(summary).not.toContain('平空')
+  })
+
+  it('falls back to all draft rules when any closed normalized trigger cannot be projected', () => {
+    const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
+
+    const summary = (service as any).buildClarificationSummary({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: [
+        '价格突破布林带(20,2)下轨时做多',
+        'RSI 小于等于 30 时做多',
+      ],
+      exitRules: ['价格回到布林带中轨(MA20)时平多'],
+      riskRules: { exchange: 'okx', marketType: 'perp', positionPct: 10 },
+    }, {
+      families: ['single-leg'],
+      triggers: [
+        {
+          key: 'bollinger.touch_lower',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { indicator: 'bollinger', period: 20, stdDev: 2, confirmationMode: 'close_confirm' },
+          closureStatus: 'closed',
+          unresolvedSlots: [],
+        },
+        {
+          key: 'oscillator.rsi_lte',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { value: 30 },
+          closureStatus: 'closed',
+          unresolvedSlots: [],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_only' },
+      unresolved: [],
+      normalizationNotes: [],
+    })
+
+    expect(summary).toContain('入场：15m 价格突破布林带(20,2)下轨时做多；15m RSI 小于等于 30 时做多')
+  })
+
   it('seeds checklist.grid for vague grid prompts even before numeric params are known', () => {
     const service = Object.create(CodegenConversationService.prototype) as CodegenConversationService
 
@@ -8615,6 +8765,113 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('publishes only the confirmed semantic Bollinger side when legacy checklist still has both sides', async () => {
+    const persistedChecklist = completeChecklist({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: [
+        'K线收盘后确认突破布林带(20,2)上轨时做空',
+        'K线收盘后确认突破布林带(20,2)下轨时做多',
+      ],
+      exitRules: [
+        '价格回到布林带中轨(MA20)时平仓',
+      ],
+      riskRules: {
+        exchange: 'okx',
+        marketType: 'perp',
+        positionPct: 10,
+      },
+    })
+    const confirmedLongOnlySemanticState = buildLockedBollingerSemanticState({
+      triggers: [
+        {
+          id: 'entry-bollinger-lower',
+          key: 'bollinger.touch_lower',
+          phase: 'entry',
+          params: {
+            indicator: 'bollinger',
+            period: 20,
+            stdDev: 2,
+            confirmationMode: 'close_confirm',
+          },
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'exit-bollinger-middle',
+          key: 'bollinger.touch_middle',
+          phase: 'exit',
+          params: {
+            indicator: 'bollinger',
+            period: 20,
+            stdDev: 2,
+            confirmationMode: 'close_confirm',
+          },
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+        { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+    })
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-bollinger-confirmed-long-only',
+      userId: 'u1',
+      status: 'CONFIRM_GATE',
+      checklist: persistedChecklist,
+      semanticState: confirmedLongOnlySemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      strategyInstanceId: null,
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+
+    const result = await service.continueSession('s-bollinger-confirmed-long-only', {
+      userId: 'u1',
+      message: 'Confirm code generation',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: buildSemanticOnlyCanonicalDigest(confirmedLongOnlySemanticState),
+    })
+
+    expect(result.status).toBe('GENERATING')
+    await waitForTerminalStatus('s-bollinger-confirmed-long-only')
+
+    const publishedSnapshot = mockRepo.create.mock.calls.at(-1)?.[0]
+    expect(publishedSnapshot?.specSnapshot?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'long',
+        condition: expect.objectContaining({ key: 'bollinger.lower_break' }),
+        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        sideScope: 'long',
+        condition: expect.objectContaining({ key: 'bollinger.middle_revert' }),
+        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+      }),
+    ]))
+    const publishedActionTypes = publishedSnapshot?.specSnapshot?.rules
+      ?.flatMap((rule: { actions?: Array<{ type?: string }> }) => rule.actions ?? [])
+      .map((action: { type?: string }) => action.type) ?? []
+    expect(publishedActionTypes).not.toContain('OPEN_SHORT')
+    expect(publishedActionTypes).not.toContain('CLOSE_SHORT')
+    expect(publishedSnapshot?.compiledIr?.portfolio?.positionMode).toBe('long_only')
+  })
+
   it('publishes price-change strategy after confirmGenerate through the canonical mainline', async () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's-price-change-publish',
@@ -8807,6 +9064,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(updated.status).toBe('CONFIRM_GATE')
     const checklistGateUpdate = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updated.assistantPrompt).toContain('入场：15m K线收盘后确认突破布林带(20,2)上轨时做空；15m K线收盘后确认突破布林带(20,2)下轨时做多')
+    expect(updated.assistantPrompt).toContain('出场：15m 价格回到布林带中轨(MA20)时平仓')
+    expect(updated.assistantPrompt).not.toContain('平多')
+    expect(updated.assistantPrompt).not.toContain('平空')
+    expect(updated.assistantPrompt.match(/上轨时做空/gu)).toHaveLength(1)
     expect(checklistGateUpdate.semanticState).toEqual(expect.objectContaining({
       triggers: expect.arrayContaining([
         expect.objectContaining({ key: 'bollinger.touch_upper', phase: 'entry' }),

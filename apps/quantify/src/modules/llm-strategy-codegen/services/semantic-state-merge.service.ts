@@ -72,7 +72,7 @@ export class SemanticStateMergeService {
       }
     }
 
-    return next
+    return this.coalesceEquivalentTriggers(next)
   }
 
   private findBestTriggerMatchIndex(
@@ -233,6 +233,91 @@ export class SemanticStateMergeService {
     ] as const
 
     return this.haveCompatibleParamValues(left.params, right.params, stableIdentityKeys)
+  }
+
+  private coalesceEquivalentTriggers(
+    triggers: SemanticTriggerState[],
+  ): SemanticTriggerState[] {
+    const next: SemanticTriggerState[] = []
+
+    for (const trigger of triggers) {
+      const matchIndex = next.findIndex(candidate => this.isEquivalentTriggerForCoalescing(candidate, trigger))
+      if (matchIndex < 0) {
+        next.push(trigger)
+        continue
+      }
+
+      next[matchIndex] = this.mergeEquivalentTrigger(next[matchIndex]!, trigger)
+    }
+
+    return next
+  }
+
+  private isEquivalentTriggerForCoalescing(
+    left: SemanticTriggerState,
+    right: SemanticTriggerState,
+  ): boolean {
+    if (left.phase !== right.phase || left.key !== right.key) {
+      return false
+    }
+
+    if (left.sideScope && right.sideScope && left.sideScope !== right.sideScope) {
+      return false
+    }
+
+    return this.haveCompatibleParamValues(
+      this.omitTriggerConfirmationParam(left.params),
+      this.omitTriggerConfirmationParam(right.params),
+    )
+  }
+
+  private mergeEquivalentTrigger(
+    existing: SemanticTriggerState,
+    incoming: SemanticTriggerState,
+  ): SemanticTriggerState {
+    const preferIncoming = this.compareNodeStrength(incoming, existing) > 0
+    const stronger = preferIncoming ? incoming : existing
+    const weaker = preferIncoming ? existing : incoming
+    const confirmationMode = this.resolvePreferredConfirmationMode(
+      stronger.params.confirmationMode,
+      weaker.params.confirmationMode,
+    )
+
+    return {
+      ...weaker,
+      ...stronger,
+      id: stronger.id,
+      sideScope: stronger.sideScope ?? weaker.sideScope,
+      params: {
+        ...weaker.params,
+        ...stronger.params,
+        ...(confirmationMode ? { confirmationMode } : {}),
+      },
+      openSlots: this.mergeOpenSlots(existing.openSlots, incoming.openSlots),
+      evidence: stronger.evidence ?? weaker.evidence,
+    }
+  }
+
+  private omitTriggerConfirmationParam(params: Record<string, unknown>): Record<string, unknown> {
+    const { confirmationMode: _confirmationMode, ...rest } = params
+    return rest
+  }
+
+  private resolvePreferredConfirmationMode(
+    left: unknown,
+    right: unknown,
+  ): string | null {
+    const rank = (value: unknown): number => {
+      if (value === 'close_confirm') return 3
+      if (value === 'touch') return 2
+      if (value === 'ambiguous_touch_or_close_confirm') return 1
+      return 0
+    }
+
+    if (rank(left) >= rank(right)) {
+      return typeof left === 'string' && left ? left : null
+    }
+    return typeof right === 'string' && right ? right : null
   }
 
   private scoreTriggerMatch(left: SemanticTriggerState, right: SemanticTriggerState): number {

@@ -257,6 +257,7 @@ export class StrategyIntentNormalizerService {
           ...(stdDev !== null ? { stdDev } : {}),
         },
         resolutionHints: { confirmation: this.resolveBollingerConfirmationHint(rule) },
+        evidenceText: rule,
       })
     }
 
@@ -271,6 +272,7 @@ export class StrategyIntentNormalizerService {
           ...(stdDev !== null ? { stdDev } : {}),
         },
         resolutionHints: { confirmation: this.resolveBollingerConfirmationHint(rule) },
+        evidenceText: rule,
       })
     }
 
@@ -285,6 +287,7 @@ export class StrategyIntentNormalizerService {
           ...(stdDev !== null ? { stdDev } : {}),
         },
         resolutionHints: { confirmation: this.resolveBollingerConfirmationHint(rule) },
+        evidenceText: rule,
       })
     }
 
@@ -927,8 +930,8 @@ export class StrategyIntentNormalizerService {
   }
 
   private resolveSideScope(rule: string, phase: 'entry' | 'exit'): NormalizedTriggerAtom['sideScope'] | undefined {
-    if (/做空|开空|平空|short/u.test(rule)) return 'short'
-    if (/做多|开多|买入|平多|long/u.test(rule)) return 'long'
+    if (/做空|开空|平空|空单|short/u.test(rule)) return 'short'
+    if (/做多|开多|买入|平多|多单|long/u.test(rule)) return 'long'
     if (phase === 'exit' && /卖出|止盈|平仓|离场|出场/u.test(rule)) {
       return 'long'
     }
@@ -951,7 +954,7 @@ export class StrategyIntentNormalizerService {
   }
 
   private createClosedTrigger(
-    trigger: Omit<NormalizedTriggerAtom, 'closureStatus' | 'unresolvedSlots' | 'evidenceText'>,
+    trigger: Omit<NormalizedTriggerAtom, 'closureStatus' | 'unresolvedSlots'>,
   ): NormalizedTriggerAtom {
     return {
       ...trigger,
