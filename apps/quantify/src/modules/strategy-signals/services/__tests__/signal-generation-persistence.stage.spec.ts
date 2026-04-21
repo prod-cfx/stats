@@ -149,4 +149,56 @@ describe('signalGenerationPersistenceStage', () => {
 
     expect(onCreatedInTransaction).toHaveBeenCalledWith('signal-atomic-1')
   })
+
+  it('records consumed runtime telemetry when cooldown prevents a duplicate published-snapshot signal', async () => {
+    const telemetry = { recordGeneration: jest.fn() }
+    const generatorRepository = {
+      lockStrategyInstance: jest.fn().mockResolvedValue(undefined),
+      countRecentSignals: jest.fn().mockResolvedValue(1),
+    }
+    const txHost = { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) }
+    const stage = new SignalGenerationPersistenceStage(
+      generatorRepository as any,
+      { create: jest.fn() } as any,
+      { findByStrategyInstanceId: jest.fn(), incrementFailure: jest.fn(), reset: jest.fn() } as any,
+      { emit: jest.fn() } as any,
+      telemetry as any,
+      txHost as any,
+    )
+
+    const result = await stage.createSignalWithCooldownAndLock(
+      { id: 'instance-1', llmModel: 'gpt-4o-mini' } as any,
+      { id: 'strategy-1' } as any,
+      { symbol: { id: 'symbol-1', code: 'BTCUSDT' }, timeframe: 'm15' } as any,
+      config,
+      {},
+      new Date('2026-04-10T10:00:00.000Z'),
+      {
+        signalType: 'ENTRY',
+        direction: 'BUY',
+        confidence: 80,
+        entryPrice: 100,
+        stopLoss: 90,
+        takeProfit: 110,
+        reasoning: 'duplicate runtime consume',
+        rawResponse: '{"action":"buy"}',
+      } as any,
+      {},
+      false,
+      undefined,
+      {
+        runtimePhase: 'consumed',
+        cooldownConsumesRuntimeState: true,
+      },
+    )
+
+    expect(result).toEqual({ created: false, signalId: null })
+    expect(telemetry.recordGeneration).toHaveBeenCalledWith({
+      strategyId: 'strategy-1',
+      symbolCode: 'BTCUSDT',
+      success: true,
+      reason: 'COOLDOWN_CONSUMED',
+      runtimePhase: 'consumed',
+    })
+  })
 })

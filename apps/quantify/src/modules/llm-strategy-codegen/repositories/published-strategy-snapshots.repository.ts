@@ -1,5 +1,6 @@
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { PrismaClient, Prisma, PublishedStrategySnapshot } from '@/prisma/prisma.types'
+import type { PublishedStrategyAstSnapshot } from '../types/publication-gate'
 import { createHash } from 'node:crypto'
 // eslint-disable-next-line ts/consistent-type-imports -- repository requires runtime class for DI
 import { TransactionHost } from '@nestjs-cls/transactional'
@@ -14,7 +15,7 @@ export interface CreatePublishedStrategySnapshotInput {
   semanticGraph?: Record<string, unknown> | null
   compiledIr?: Record<string, unknown> | null
   irSnapshot?: Record<string, unknown> | null
-  astSnapshot?: Record<string, unknown> | null
+  astSnapshot?: PublishedStrategyAstSnapshot | null
   compiledManifest?: Record<string, unknown> | null
   consistencyReport: Record<string, unknown>
   userIntentSummary: Record<string, unknown>
@@ -103,6 +104,7 @@ export class PublishedStrategySnapshotsRepository {
     const irHash = readManifestDigest(input.compiledManifest, 'irHash', normalizedIr ? sha256(normalizedIr) : undefined)
     const astDigest = readManifestDigest(input.compiledManifest, 'astDigest', normalizedAst ? sha256(normalizedAst) : undefined)
     const structuralDigest = readManifestDigest(input.compiledManifest, 'structuralDigest', normalizedManifest ? sha256(normalizedManifest) : undefined)
+    const astSnapshotHash = normalizedAst ? sha256(normalizedAst) : ''
     const compiledManifestHash = normalizedManifest ? sha256(normalizedManifest) : ''
     const executionEnvelopeHash = normalizedExecutionEnvelope ? sha256(normalizedExecutionEnvelope) : ''
     const snapshotHash = sha256([
@@ -112,6 +114,7 @@ export class PublishedStrategySnapshotsRepository {
       normalizedCompiledIr ? sha256(normalizedCompiledIr) : '',
       irHash ?? '',
       astDigest ?? '',
+      astSnapshotHash,
       structuralDigest ?? '',
       compiledManifestHash,
       executionEnvelopeHash,

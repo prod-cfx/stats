@@ -21,6 +21,7 @@ export interface StrategyTimelineEvent {
 export interface StrategyRuntimeExecutionState {
   executionSemanticKey: string
   status: string
+  failureFamily: 'binding' | 'activation' | 'execution' | 'persistence' | null
   failureReason: string | null
   failureCode: string | null
   lastAttemptAt: string | null

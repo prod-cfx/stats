@@ -19,9 +19,11 @@ export interface MarkFailedStateInput extends RuntimeExecutionStateKeyInput {
   failureCode?: string | null
 }
 
-export interface MarkCooldownStateInput extends MarkFailedStateInput {
+export interface MarkRetryableFailureStateInput extends MarkFailedStateInput {
   cooldownUntil: Date
 }
+
+export type MarkCooldownStateInput = MarkRetryableFailureStateInput
 
 @Injectable()
 export class StrategyRuntimeExecutionStateRepository {
@@ -85,16 +87,20 @@ export class StrategyRuntimeExecutionStateRepository {
       },
       data: {
         status: 'consumed',
+        failureFamily: null,
         failureReason: null,
         failureCode: null,
+        attemptCount: { increment: 1 },
         lastAttemptAt: new Date(),
+        runningAt: null,
+        terminalAt: new Date(),
         consumedAt: new Date(),
         cooldownUntil: null,
       },
     })
   }
 
-  markFailed(input: MarkFailedStateInput): Promise<StrategyRuntimeExecutionState> {
+  markRunning(input: RuntimeExecutionStateKeyInput): Promise<StrategyRuntimeExecutionState> {
     return this.txHost.tx.strategyRuntimeExecutionState.update({
       where: {
         strategyInstanceId_publishedSnapshotId_executionSemanticKey: {
@@ -104,31 +110,72 @@ export class StrategyRuntimeExecutionStateRepository {
         },
       },
       data: {
-        status: 'failed',
+        status: 'running',
+        failureFamily: null,
+        failureReason: null,
+        failureCode: null,
+        runningAt: new Date(),
+        terminalAt: null,
+        consumedAt: null,
+        cooldownUntil: null,
+      },
+    })
+  }
+
+  markFailed(input: MarkFailedStateInput): Promise<StrategyRuntimeExecutionState> {
+    return this.markTerminalFailure(input)
+  }
+
+  markTerminalFailure(input: MarkFailedStateInput): Promise<StrategyRuntimeExecutionState> {
+    return this.txHost.tx.strategyRuntimeExecutionState.update({
+      where: {
+        strategyInstanceId_publishedSnapshotId_executionSemanticKey: {
+          strategyInstanceId: input.strategyInstanceId,
+          publishedSnapshotId: input.publishedSnapshotId,
+          executionSemanticKey: input.executionSemanticKey,
+        },
+      },
+      data: {
+        status: 'terminal',
+        failureFamily: 'terminal',
         failureReason: input.failureReason ?? null,
         failureCode: input.failureCode ?? null,
+        attemptCount: { increment: 1 },
         lastAttemptAt: new Date(),
+        runningAt: null,
+        terminalAt: new Date(),
+        consumedAt: null,
+        cooldownUntil: null,
+      },
+    })
+  }
+
+  markRetryableFailure(input: MarkRetryableFailureStateInput): Promise<StrategyRuntimeExecutionState> {
+    return this.txHost.tx.strategyRuntimeExecutionState.update({
+      where: {
+        strategyInstanceId_publishedSnapshotId_executionSemanticKey: {
+          strategyInstanceId: input.strategyInstanceId,
+          publishedSnapshotId: input.publishedSnapshotId,
+          executionSemanticKey: input.executionSemanticKey,
+        },
+      },
+      data: {
+        status: 'retryable',
+        failureFamily: 'retryable',
+        failureReason: input.failureReason ?? null,
+        failureCode: input.failureCode ?? null,
+        attemptCount: { increment: 1 },
+        lastAttemptAt: new Date(),
+        runningAt: null,
+        terminalAt: null,
+        consumedAt: null,
+        cooldownUntil: input.cooldownUntil,
       },
     })
   }
 
   markCooldown(input: MarkCooldownStateInput): Promise<StrategyRuntimeExecutionState> {
-    return this.txHost.tx.strategyRuntimeExecutionState.update({
-      where: {
-        strategyInstanceId_publishedSnapshotId_executionSemanticKey: {
-          strategyInstanceId: input.strategyInstanceId,
-          publishedSnapshotId: input.publishedSnapshotId,
-          executionSemanticKey: input.executionSemanticKey,
-        },
-      },
-      data: {
-        status: 'cooldown',
-        failureReason: input.failureReason ?? null,
-        failureCode: input.failureCode ?? null,
-        lastAttemptAt: new Date(),
-        cooldownUntil: input.cooldownUntil,
-      },
-    })
+    return this.markRetryableFailure(input)
   }
 
   private buildCreateData(input: UpsertReadyStateInput) {
@@ -138,6 +185,10 @@ export class StrategyRuntimeExecutionStateRepository {
       snapshotHash: input.snapshotHash,
       executionSemanticKey: input.executionSemanticKey,
       status: 'ready',
+      failureFamily: null,
+      attemptCount: 0,
+      runningAt: null,
+      terminalAt: null,
     }
   }
 

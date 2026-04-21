@@ -350,6 +350,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(detail.runtimeExecutionStates).toEqual([{
       executionSemanticKey: 'on_start.entry.primary',
       status: 'failed',
+      failureFamily: 'execution',
       failureReason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
       failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
       lastAttemptAt: '2026-03-20T10:03:00.000Z',

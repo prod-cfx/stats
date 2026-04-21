@@ -1,3 +1,4 @@
+import type { CreatePublishedStrategySnapshotInput } from './published-strategy-snapshots.repository'
 import { PublishedStrategySnapshotsRepository, __test__ } from './published-strategy-snapshots.repository'
 
 function createTxHost(tx: unknown): ConstructorParameters<typeof PublishedStrategySnapshotsRepository>[0] {
@@ -166,7 +167,22 @@ describe('publishedStrategySnapshotsRepository', () => {
       semanticGraph: { version: 1, nodes: [{ id: 'entry-1' }] },
       compiledIr: { irVersion: 'csi.v1', rules: [{ id: 'rule-1' }] },
       irSnapshot: { irVersion: 'csi.v1' },
-      astSnapshot: { astVersion: 'csa.v1' },
+      astSnapshot: {
+        astVersion: 'csa.v1',
+        runtimeExecutionSemantics: [{
+          semanticKey: 'on_start.entry.primary',
+          trigger: 'on_start',
+          phase: 'entry',
+          consumePolicy: 'once',
+          requiredRuntimeContext: {
+            barIndex: 1,
+            requiresReferenceBar: true,
+            requiresSymbol: true,
+            requiresTimeframe: true,
+          },
+          sourceRefs: ['entry-execution-on_start-210'],
+        }],
+      },
       compiledManifest: {
         irVersion: 'csi.v1',
         astVersion: 'csa.v1',
@@ -233,7 +249,22 @@ describe('publishedStrategySnapshotsRepository', () => {
         compiledIr: { irVersion: 'csi.v1', rules: [{ id: 'rule-1' }] },
         specHash: 'sha256:spec',
         irSnapshot: { irVersion: 'csi.v1' },
-        astSnapshot: { astVersion: 'csa.v1' },
+        astSnapshot: {
+          astVersion: 'csa.v1',
+          runtimeExecutionSemantics: [{
+            semanticKey: 'on_start.entry.primary',
+            trigger: 'on_start',
+            phase: 'entry',
+            consumePolicy: 'once',
+            requiredRuntimeContext: {
+              barIndex: 1,
+              requiresReferenceBar: true,
+              requiresSymbol: true,
+              requiresTimeframe: true,
+            },
+            sourceRefs: ['entry-execution-on_start-210'],
+          }],
+        },
         executionEnvelope: expect.objectContaining({
           positionMode: 'long_only',
           marginMode: 'cash',
@@ -297,7 +328,7 @@ describe('publishedStrategySnapshotsRepository', () => {
     }
     const repo = new PublishedStrategySnapshotsRepository(createTxHost(tx))
 
-    const baseInput = {
+    const baseInput: CreatePublishedStrategySnapshotInput = {
       sessionId: 'session-1',
       strategyInstanceId: 'instance-1',
       strategyTemplateId: 'template-1',
@@ -312,6 +343,22 @@ describe('publishedStrategySnapshotsRepository', () => {
       compiledIr: {
         irVersion: 'csi.v1',
         rules: [{ id: 'rule-1' }],
+      },
+      astSnapshot: {
+        astVersion: 'csa.v1',
+        runtimeExecutionSemantics: [{
+          semanticKey: 'on_start.entry.primary',
+          trigger: 'on_start',
+          phase: 'entry',
+          consumePolicy: 'once',
+          requiredRuntimeContext: {
+            barIndex: 1,
+            requiresReferenceBar: true,
+            requiresSymbol: true,
+            requiresTimeframe: true,
+          },
+          sourceRefs: ['entry-execution-on_start-210'],
+        }],
       },
       consistencyReport: {
         status: 'PASSED',
@@ -360,15 +407,111 @@ describe('publishedStrategySnapshotsRepository', () => {
     await repo.create(baseInput)
     await repo.create({
       ...baseInput,
-      semanticGraph: {
-        version: 1,
-        nodes: [{ id: 'entry-2' }],
+      astSnapshot: {
+        astVersion: 'csa.v1',
+        runtimeExecutionSemantics: [{
+          semanticKey: 'on_start.exit.primary',
+          trigger: 'on_start',
+          phase: 'exit',
+          consumePolicy: 'once',
+          requiredRuntimeContext: {
+            barIndex: 1,
+            requiresReferenceBar: true,
+            requiresSymbol: true,
+            requiresTimeframe: true,
+          },
+          sourceRefs: ['exit-execution-on_start-211'],
+        }],
       },
     })
 
     const firstCall = tx.publishedStrategySnapshot.create.mock.calls[0][0]
     const secondCall = tx.publishedStrategySnapshot.create.mock.calls[1][0]
 
+    expect(firstCall.data.snapshotHash).not.toBe(secondCall.data.snapshotHash)
+  })
+
+  it('includes persisted astSnapshot runtime execution semantics in snapshot hash even when compiled manifest is present', async () => {
+    const tx = {
+      publishedStrategySnapshot: {
+        create: jest.fn().mockImplementation(async ({ data }) => ({
+          id: 'snapshot-manifest-ast',
+          createdAt: new Date('2026-04-21T10:00:00.000Z'),
+          ...data,
+        })),
+      },
+    }
+    const repo = new PublishedStrategySnapshotsRepository(createTxHost(tx))
+
+    const baseInput: CreatePublishedStrategySnapshotInput = {
+      sessionId: 'session-1',
+      scriptSnapshot: 'const strategy = { protocolVersion: "v1" }\nstrategy',
+      specSnapshot: {
+        market: { exchange: 'okx', symbol: 'BTCUSDT', timeframe: '15m' },
+      },
+      compiledIr: {
+        irVersion: 'csi.v1',
+        rules: [{ id: 'rule-1' }],
+      },
+      irSnapshot: { irVersion: 'csi.v1' },
+      astSnapshot: {
+        astVersion: 'csa.v1',
+        runtimeExecutionSemantics: [{
+          semanticKey: 'on_start.entry.primary',
+          trigger: 'on_start',
+          phase: 'entry',
+          consumePolicy: 'once',
+          requiredRuntimeContext: {
+            barIndex: 1,
+            requiresReferenceBar: true,
+            requiresSymbol: true,
+            requiresTimeframe: true,
+          },
+          sourceRefs: ['entry-execution-on_start-210'],
+        }],
+      },
+      compiledManifest: {
+        irVersion: 'csi.v1',
+        astVersion: 'csa.v1',
+        compileVersion: 'compiler.v1',
+        irHash: 'sha256:ir',
+        specHash: 'sha256:spec',
+        astDigest: 'sha256:ast',
+        structuralDigest: 'sha256:struct',
+      },
+      consistencyReport: { status: 'PASSED' },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'mean-reversion' },
+      scriptSummary: { indicators: ['BBANDS'] },
+      lockedParams: { leverage: 3 },
+      snapshotVersion: 3,
+    }
+
+    await repo.create(baseInput)
+    await repo.create({
+      ...baseInput,
+      astSnapshot: {
+        astVersion: 'csa.v1',
+        runtimeExecutionSemantics: [{
+          semanticKey: 'on_start.exit.primary',
+          trigger: 'on_start',
+          phase: 'exit',
+          consumePolicy: 'once',
+          requiredRuntimeContext: {
+            barIndex: 1,
+            requiresReferenceBar: true,
+            requiresSymbol: true,
+            requiresTimeframe: true,
+          },
+          sourceRefs: ['exit-execution-on_start-211'],
+        }],
+      },
+    })
+
+    const firstCall = tx.publishedStrategySnapshot.create.mock.calls[0][0]
+    const secondCall = tx.publishedStrategySnapshot.create.mock.calls[1][0]
+
+    expect(firstCall.data.compiledManifest).toEqual(secondCall.data.compiledManifest)
     expect(firstCall.data.snapshotHash).not.toBe(secondCall.data.snapshotHash)
   })
 

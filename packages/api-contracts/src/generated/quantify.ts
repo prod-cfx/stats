@@ -1,4 +1,4 @@
-import { makeApi, Zodios, type ZodiosInstance, type ZodiosOptions } from '@zodios/core'
+import { makeApi, Zodios, type ZodiosEndpointDefinitions, type ZodiosInstance, type ZodiosOptions } from '@zodios/core'
 import { z } from 'zod'
 
 const SettingResponseDto = z
@@ -554,6 +554,7 @@ const RuntimeExecutionStateDto = z
   .object({
     executionSemanticKey: z.string(),
     status: z.enum(['ready', 'consumed', 'failed', 'cooldown']),
+    failureFamily: z.enum(['binding', 'activation', 'execution', 'persistence']).nullish(),
     failureReason: z.string().nullish(),
     failureCode: z.string().nullish(),
     lastAttemptAt: z.string().datetime({ offset: true }).nullish(),
@@ -1590,7 +1591,7 @@ const AccountStrategyDetailTransportEnvelope = z
   .object({ data: AccountStrategyDetailResponseDto, message: z.string().optional() })
   .passthrough()
 
-const endpoints = makeApi([
+const endpoints: ZodiosEndpointDefinitions = makeApi([
   {
     method: 'get',
     path: '/account/ai-quant/conversations',

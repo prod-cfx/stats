@@ -541,7 +541,8 @@ export class AccountStrategyViewService {
 
     return states.map(state => ({
       executionSemanticKey: state.executionSemanticKey,
-      status: state.status,
+      status: this.mapRuntimeExecutionStateStatusForDetail(state.status),
+      failureFamily: this.mapRuntimeExecutionFailureFamilyForDetail(state.failureCode),
       failureReason: state.failureReason ?? null,
       failureCode: state.failureCode ?? null,
       lastAttemptAt: state.lastAttemptAt?.toISOString() ?? null,
@@ -550,6 +551,41 @@ export class AccountStrategyViewService {
       publishedSnapshotId: state.publishedSnapshotId,
       snapshotHash: state.snapshotHash,
     }))
+  }
+
+  private mapRuntimeExecutionStateStatusForDetail(
+    status: 'ready' | 'running' | 'retryable' | 'terminal' | 'consumed',
+  ): 'ready' | 'consumed' | 'failed' | 'cooldown' {
+    if (status === 'running') return 'ready'
+    if (status === 'retryable') return 'cooldown'
+    if (status === 'terminal') return 'failed'
+    return status
+  }
+
+  private mapRuntimeExecutionFailureFamilyForDetail(
+    failureCode: string | null | undefined,
+  ): 'binding' | 'activation' | 'execution' | 'persistence' | null {
+    if (!failureCode) return null
+
+    if (failureCode === 'SNAPSHOT_RUNTIME_PARAMS_MISSING' || failureCode === 'SYMBOL_NOT_FOUND') {
+      return 'binding'
+    }
+    if (failureCode === 'SNAPSHOT_REFERENCE_BAR_MISSING') {
+      return 'activation'
+    }
+    if (
+      failureCode === 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL'
+      || failureCode === 'SNAPSHOT_SCRIPT_NO_SIGNAL'
+      || failureCode === 'SEMANTIC_EXECUTED_NO_SIGNAL'
+      || failureCode === 'SNAPSHOT_RUNTIME_EXECUTION_UNEXPECTED_ERROR'
+    ) {
+      return 'execution'
+    }
+    if (failureCode === 'SIGNAL_PERSIST_FAILED') {
+      return 'persistence'
+    }
+
+    return null
   }
 
   private isRuntimeExecutionBindingMismatch(error: unknown): boolean {
@@ -1692,6 +1728,24 @@ export class AccountStrategyViewService {
         code: ErrorCode.BAD_REQUEST,
         status: HttpStatus.BAD_REQUEST,
         args: { publishedSnapshotId },
+      })
+    }
+
+    const runtimeExecutionStateService = this.requireRuntimeExecutionStateService()
+    try {
+      const semanticKeys = runtimeExecutionStateService.buildExecutionSemanticKeysFromSnapshot(snapshot)
+      if (!semanticKeys.length) {
+        throw new DeploySnapshotRequiresRepublishException({
+          publishedSnapshotId: snapshot.id,
+        })
+      }
+    } catch (error) {
+      if (error instanceof DomainException || error instanceof DeploySnapshotRequiresRepublishException) {
+        throw error
+      }
+
+      throw new DeploySnapshotRequiresRepublishException({
+        publishedSnapshotId: snapshot.id,
       })
     }
 

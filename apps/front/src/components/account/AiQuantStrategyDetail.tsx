@@ -106,10 +106,33 @@ function formatRuntimeExecutionAt(ts: string | null | undefined) {
   return formatDetailTime(ts)
 }
 
-function formatRuntimeExecutionFailureReason(reason: string | null | undefined) {
-  if (!reason) return '--'
-  if (reason === 'SNAPSHOT_SCRIPT_NO_SIGNAL') return '未生成可执行信号'
-  return reason
+function formatRuntimeExecutionFailureReason(state: {
+  failureFamily?: 'binding' | 'activation' | 'execution' | 'persistence' | null
+  failureReason?: string | null
+  failureCode?: string | null
+}) {
+  if (state.failureFamily === 'binding') {
+    return '部署绑定异常，请重新发布并重新部署'
+  }
+  if (state.failureFamily === 'activation') {
+    if (state.failureCode === 'SNAPSHOT_REFERENCE_BAR_MISSING') {
+      return '当前执行条件未满足（缺少参考K线）'
+    }
+    return '当前执行条件未满足'
+  }
+  if (state.failureFamily === 'persistence') {
+    return '信号已生成但持久化失败'
+  }
+  if (
+    state.failureFamily === 'execution'
+    && (state.failureCode === 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL'
+      || state.failureCode === 'SNAPSHOT_SCRIPT_NO_SIGNAL'
+      || state.failureCode === 'SEMANTIC_EXECUTED_NO_SIGNAL')
+  ) {
+    return '未生成可执行信号'
+  }
+  if (state.failureReason) return state.failureReason
+  return '--'
 }
 
 interface AiQuantStrategyDetailProps {
@@ -283,8 +306,12 @@ export function AiQuantStrategyDetail({
                     <span className="ml-1 text-[color:var(--cf-text-strong)]">{formatRuntimeExecutionAt(state.cooldownUntil)}</span>
                   </p>
                   <p className="text-[color:var(--cf-muted)]">
+                    失败分类：
+                    <span className="ml-1 text-[color:var(--cf-text-strong)]">{state.failureFamily ?? '--'}</span>
+                  </p>
+                  <p className="text-[color:var(--cf-muted)]">
                     失败原因：
-                    <span className="ml-1 text-[color:var(--cf-text-strong)]">{formatRuntimeExecutionFailureReason(state.failureReason)}</span>
+                    <span className="ml-1 text-[color:var(--cf-text-strong)]">{formatRuntimeExecutionFailureReason(state)}</span>
                   </p>
                 </div>
               </article>

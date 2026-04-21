@@ -1,12 +1,16 @@
 import type { StrategyRuntimeExecutionState } from '@/prisma/prisma.types'
 import type {
+  MarkFailedStateInput,
+  MarkRetryableFailureStateInput,
+  RuntimeExecutionStateKeyInput,
   UpsertReadyStateInput,
 } from '../repositories/strategy-runtime-execution-state.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime class metadata
 import { StrategyRuntimeExecutionStateRepository } from '../repositories/strategy-runtime-execution-state.repository'
 import { Injectable } from '@nestjs/common'
 
-export type RuntimeExecutionStateStatus = 'ready' | 'consumed' | 'failed' | 'cooldown'
+export type RuntimeExecutionStateStatus = 'ready' | 'running' | 'retryable' | 'terminal' | 'consumed'
+export type RuntimeExecutionFailureFamily = 'retryable' | 'terminal'
 
 export interface RuntimeStateBinding {
   strategyInstanceId: string
@@ -17,9 +21,13 @@ export interface RuntimeStateBinding {
 export interface RuntimeExecutionStateRecord extends RuntimeStateBinding {
   executionSemanticKey: string
   status: RuntimeExecutionStateStatus
+  failureFamily?: RuntimeExecutionFailureFamily | null
   failureReason?: string | null
   failureCode?: string | null
+  attemptCount: number
   lastAttemptAt?: Date | null
+  runningAt?: Date | null
+  terminalAt?: Date | null
   consumedAt?: Date | null
   cooldownUntil?: Date | null
 }
@@ -31,14 +39,19 @@ export interface InitializeRuntimeExecutionStatesInput extends RuntimeStateBindi
 type RuntimeExecutionStateSource = RuntimeStateBinding & {
   executionSemanticKey: string
   status: string
+  failureFamily?: string | null
   failureReason?: string | null
   failureCode?: string | null
+  attemptCount?: number | null
   lastAttemptAt?: Date | null
+  runningAt?: Date | null
+  terminalAt?: Date | null
   consumedAt?: Date | null
   cooldownUntil?: Date | null
 }
 
-const RUNTIME_EXECUTION_STATE_STATUSES: RuntimeExecutionStateStatus[] = ['ready', 'consumed', 'failed', 'cooldown']
+const RUNTIME_EXECUTION_STATE_STATUSES: RuntimeExecutionStateStatus[] = ['ready', 'running', 'retryable', 'terminal', 'consumed']
+const RUNTIME_EXECUTION_FAILURE_FAMILIES: RuntimeExecutionFailureFamily[] = ['retryable', 'terminal']
 
 @Injectable()
 export class StrategyRuntimeExecutionStateService {
@@ -47,7 +60,7 @@ export class StrategyRuntimeExecutionStateService {
   buildExecutionSemanticKeysFromSnapshot(snapshot: unknown): string[] {
     const explicitKeys = this.readExplicitRuntimeExecutionSemantics(snapshot)
     if (!explicitKeys.length) return []
-    return [explicitKeys[0]!]
+    return explicitKeys
   }
 
   async initializeStatesForDeploy(input: InitializeRuntimeExecutionStatesInput): Promise<string[]> {
@@ -66,11 +79,33 @@ export class StrategyRuntimeExecutionStateService {
     return semanticKeys
   }
 
+  async markRunning(input: RuntimeExecutionStateKeyInput): Promise<RuntimeExecutionStateRecord> {
+    return this.validateTransitionResult(input, await this.repository.markRunning(input))
+  }
+
+  async markRetryableFailure(input: MarkRetryableFailureStateInput): Promise<RuntimeExecutionStateRecord> {
+    return this.validateTransitionResult(input, await this.repository.markRetryableFailure(input))
+  }
+
+  async markTerminalFailure(input: MarkFailedStateInput): Promise<RuntimeExecutionStateRecord> {
+    return this.validateTransitionResult(input, await this.repository.markTerminalFailure(input))
+  }
+
+  async markConsumed(input: RuntimeExecutionStateKeyInput): Promise<RuntimeExecutionStateRecord> {
+    return this.validateTransitionResult(input, await this.repository.markConsumed(input))
+  }
+
   async loadExecutableStates(binding: RuntimeStateBinding): Promise<RuntimeExecutionStateRecord[]> {
     const validatedStates = await this.loadStatesForBinding(binding)
+    const now = Date.now()
 
     return validatedStates
-      .filter(state => state.status === 'ready')
+      .filter((state) => {
+        if (state.status === 'ready') return true
+        if (state.status !== 'retryable') return false
+        if (!state.cooldownUntil) return true
+        return state.cooldownUntil.getTime() <= now
+      })
       .sort((left, right) => left.executionSemanticKey.localeCompare(right.executionSemanticKey))
   }
 
@@ -103,9 +138,13 @@ export class StrategyRuntimeExecutionStateService {
       snapshotHash: state.snapshotHash,
       executionSemanticKey: state.executionSemanticKey,
       status: this.normalizeStatus(state.status),
+      failureFamily: this.normalizeFailureFamily(state.failureFamily),
       failureReason: state.failureReason ?? null,
       failureCode: state.failureCode ?? null,
+      attemptCount: this.normalizeAttemptCount(state.attemptCount),
       lastAttemptAt: state.lastAttemptAt ?? null,
+      runningAt: state.runningAt ?? null,
+      terminalAt: state.terminalAt ?? null,
       consumedAt: state.consumedAt ?? null,
       cooldownUntil: state.cooldownUntil ?? null,
     }
@@ -118,31 +157,53 @@ export class StrategyRuntimeExecutionStateService {
     return this.validateSnapshotBinding(binding, state)
   }
 
-  private readExplicitRuntimeExecutionSemantics(snapshot: unknown): string[] {
-    const root = this.readRecord(snapshot)
-    const astSnapshot = this.readRecord(root?.astSnapshot)
-    return [
-      ...this.readSemanticKeyArray(root?.runtimeExecutionSemantics),
-      ...this.readSemanticKeyArray(astSnapshot?.runtimeExecutionSemantics),
-    ]
+  private validateTransitionResult(
+    key: RuntimeExecutionStateKeyInput,
+    state: RuntimeExecutionStateSource,
+  ): Promise<RuntimeExecutionStateRecord> {
+    return this.validateSnapshotBinding({
+      strategyInstanceId: key.strategyInstanceId,
+      publishedSnapshotId: key.publishedSnapshotId,
+      snapshotHash: state.snapshotHash,
+    }, state)
   }
 
-  private readSemanticKeyArray(value: unknown): string[] {
+  private readExplicitRuntimeExecutionSemantics(snapshot: unknown): string[] {
+    const root = this.readRecord(snapshot)
+    if (root && Object.prototype.hasOwnProperty.call(root, 'runtimeExecutionSemantics')) {
+      throw new Error('misplaced_runtime_execution_semantics')
+    }
+    const astSnapshot = this.readRecord(root?.astSnapshot)
+    return this.readCanonicalSemanticKeyArray(astSnapshot?.runtimeExecutionSemantics)
+  }
+
+  private readCanonicalSemanticKeyArray(value: unknown): string[] {
     if (!Array.isArray(value)) return []
 
     return value.flatMap((item) => {
       if (typeof item === 'string') {
-        const normalized = item.trim()
-        return this.isSupportedSemanticKey(normalized) ? [normalized] : []
+        throw new Error('legacy_runtime_execution_semantics_unsupported')
       }
 
       const record = this.readRecord(item)
-      const key = typeof record?.key === 'string'
-        ? record.key.trim()
-        : typeof record?.executionSemanticKey === 'string'
-          ? record.executionSemanticKey.trim()
-          : ''
-      return this.isSupportedSemanticKey(key) ? [key] : []
+      if (record && (typeof record.key === 'string' || typeof record.executionSemanticKey === 'string')) {
+        throw new Error('legacy_runtime_execution_semantics_unsupported')
+      }
+
+      if (!record) {
+        throw new Error('invalid_runtime_execution_semantics_shape')
+      }
+
+      const key = typeof record?.semanticKey === 'string'
+        ? record.semanticKey.trim()
+        : ''
+      if (!key) {
+        throw new Error('invalid_runtime_execution_semantics_shape')
+      }
+      if (!this.isSupportedSemanticKey(key)) {
+        throw new Error('invalid_runtime_execution_semantic_key')
+      }
+      return [key]
     })
   }
 
@@ -162,6 +223,26 @@ export class StrategyRuntimeExecutionStateService {
     }
 
     throw new Error('invalid_runtime_execution_state_status')
+  }
+
+  private normalizeFailureFamily(failureFamily: string | null | undefined): RuntimeExecutionFailureFamily | null {
+    if (failureFamily == null) {
+      return null
+    }
+
+    if (RUNTIME_EXECUTION_FAILURE_FAMILIES.includes(failureFamily as RuntimeExecutionFailureFamily)) {
+      return failureFamily as RuntimeExecutionFailureFamily
+    }
+
+    throw new Error('invalid_runtime_execution_failure_family')
+  }
+
+  private normalizeAttemptCount(attemptCount: number | null | undefined): number {
+    if (typeof attemptCount !== 'number' || !Number.isInteger(attemptCount) || attemptCount < 0) {
+      throw new Error('invalid_runtime_execution_attempt_count')
+    }
+
+    return attemptCount
   }
 }
 

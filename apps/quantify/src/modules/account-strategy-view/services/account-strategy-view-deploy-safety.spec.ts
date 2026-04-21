@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 
 import { DomainException } from '@/common/exceptions/domain.exception'
-import { DeployIdempotencyConflictException } from '../exceptions'
+import { DeployIdempotencyConflictException, DeploySnapshotRequiresRepublishException } from '../exceptions'
 import { AccountStrategyViewService } from './account-strategy-view.service'
 
 function buildDeployPayloadHash(input: {
@@ -23,9 +23,26 @@ function buildDeployPayloadHash(input: {
 }
 
 describe('accountStrategyViewService.deployStrategy safety', () => {
+  const structuredRuntimeExecutionSemantics = [{
+    semanticKey: 'on_start.entry.primary',
+    trigger: 'on_start',
+    phase: 'entry',
+    consumePolicy: 'once',
+    requiredRuntimeContext: {
+      barIndex: 1,
+      requiresReferenceBar: true,
+      requiresSymbol: true,
+      requiresTimeframe: true,
+    },
+    sourceRefs: ['entry-primary'],
+  }]
+
   const buildService = (options?: {
     repoOverrides?: Record<string, unknown>
-    runtimeExecutionStateService?: { initializeStatesForDeploy: jest.Mock }
+    runtimeExecutionStateService?: {
+      buildExecutionSemanticKeysFromSnapshot?: jest.Mock
+      initializeStatesForDeploy: jest.Mock
+    }
     snapshotsRepository?: Record<string, unknown>
   }) => {
     const repo = {
@@ -69,13 +86,19 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
         },
         strategyInstanceId: 'inst-draft-1',
         strategyTemplateId: 'template-1',
-        astSnapshot: { decisionPrograms: [{ phase: 'entry' }] },
+        astSnapshot: {
+          decisionPrograms: [{ phase: 'entry' }],
+          runtimeExecutionSemantics: structuredRuntimeExecutionSemantics,
+        },
       }),
     }
 
     const runtimeExecutionStateService = options && Object.prototype.hasOwnProperty.call(options, 'runtimeExecutionStateService')
       ? options.runtimeExecutionStateService
-      : { initializeStatesForDeploy: jest.fn().mockResolvedValue([]) }
+      : {
+          buildExecutionSemanticKeysFromSnapshot: jest.fn().mockReturnValue(['on_start.entry.primary']),
+          initializeStatesForDeploy: jest.fn().mockResolvedValue([]),
+        }
 
     const service = new AccountStrategyViewService(
       repo as any,
@@ -125,12 +148,117 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       message: 'account_strategy.deploy_runtime_execution_state_service_unavailable',
     })
 
+    expect(repo.createDeployRequestProcessing).not.toHaveBeenCalled()
     expect(repo.markDeployRequestSucceeded).not.toHaveBeenCalled()
-    expect(repo.markDeployRequestFailed).toHaveBeenCalledWith(
-      'req-1',
-      'SERVICE_TEMPORARILY_UNAVAILABLE',
-      'account_strategy.deploy_runtime_execution_state_service_unavailable',
+    expect(repo.markDeployRequestFailed).not.toHaveBeenCalled()
+  })
+
+  it('requires canonical structured runtime execution truth before deploy can proceed', async () => {
+    const { service, repo } = buildService({
+      snapshotsRepository: {
+        findByIdForUser: jest.fn().mockResolvedValue({
+          id: 'snapshot-legacy-runtime-truth',
+          snapshotHash: 'snapshot-hash-legacy-runtime-truth',
+          strategyConfig: {
+            exchange: 'okx',
+            symbol: 'SOLUSDT',
+            baseTimeframe: '5m',
+            marketType: 'spot',
+            positionPct: 10,
+          },
+          deploymentExecutionDefaults: {
+            leverage: 1,
+            priceSource: 'close',
+            orderType: 'market',
+            timeInForce: 'GTC',
+          },
+          deploymentExecutionConstraints: {
+            platformRiskMaxLeverage: 5,
+            defaultLeverage: 1,
+            supportedPriceSources: ['close'],
+            supportedOrderTypes: ['market'],
+            supportedTimeInForce: ['GTC'],
+          },
+          strategyInstanceId: 'inst-draft-1',
+          strategyTemplateId: 'template-1',
+          astSnapshot: {
+            runtimeExecutionSemantics: ['on_start.entry.primary'],
+          },
+        }),
+      },
+      runtimeExecutionStateService: {
+        buildExecutionSemanticKeysFromSnapshot: jest.fn(() => {
+          throw new Error('legacy_runtime_execution_semantics_unsupported')
+        }),
+        initializeStatesForDeploy: jest.fn().mockResolvedValue([]),
+      },
+    })
+
+    await expect(service.deployStrategy({
+      userId: 'user-1',
+      name: 'legacy runtime truth deploy',
+      publishedSnapshotId: 'snapshot-legacy-runtime-truth',
+      deployRequestId: 'deploy-req-legacy-runtime-truth',
+      exchangeAccountId: 'acc-1',
+    } as any)).rejects.toBeInstanceOf(DeploySnapshotRequiresRepublishException)
+
+    expect(repo.createDeployRequestProcessing).not.toHaveBeenCalled()
+    expect(repo.deployStrategyForUser).not.toHaveBeenCalled()
+  })
+
+  it('requires republish when the published snapshot has no structured runtime execution truth', async () => {
+    const runtimeExecutionStateService = {
+      buildExecutionSemanticKeysFromSnapshot: jest.fn().mockReturnValue([]),
+      initializeStatesForDeploy: jest.fn().mockResolvedValue([]),
+    }
+    const { service, repo } = buildService({
+      snapshotsRepository: {
+        findByIdForUser: jest.fn().mockResolvedValue({
+          id: 'snapshot-missing-runtime-truth',
+          snapshotHash: 'snapshot-hash-missing-runtime-truth',
+          strategyConfig: {
+            exchange: 'okx',
+            symbol: 'SOLUSDT',
+            baseTimeframe: '5m',
+            marketType: 'spot',
+            positionPct: 10,
+          },
+          deploymentExecutionDefaults: {
+            leverage: 1,
+            priceSource: 'close',
+            orderType: 'market',
+            timeInForce: 'GTC',
+          },
+          deploymentExecutionConstraints: {
+            platformRiskMaxLeverage: 5,
+            defaultLeverage: 1,
+            supportedPriceSources: ['close'],
+            supportedOrderTypes: ['market'],
+            supportedTimeInForce: ['GTC'],
+          },
+          strategyInstanceId: 'inst-draft-1',
+          strategyTemplateId: 'template-1',
+          astSnapshot: {
+            decisionPrograms: [{ phase: 'entry' }],
+          },
+        }),
+      },
+      runtimeExecutionStateService,
+    })
+
+    await expect(service.deployStrategy({
+      userId: 'user-1',
+      name: 'missing runtime truth deploy',
+      publishedSnapshotId: 'snapshot-missing-runtime-truth',
+      deployRequestId: 'deploy-req-missing-runtime-truth',
+      exchangeAccountId: 'acc-1',
+    } as any)).rejects.toBeInstanceOf(DeploySnapshotRequiresRepublishException)
+
+    expect(runtimeExecutionStateService.buildExecutionSemanticKeysFromSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'snapshot-missing-runtime-truth' }),
     )
+    expect(repo.createDeployRequestProcessing).not.toHaveBeenCalled()
+    expect(repo.deployStrategyForUser).not.toHaveBeenCalled()
   })
 
   it('returns existing result for succeeded idempotent request', async () => {
@@ -343,6 +471,7 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
   it('fails closed when runtime execution state initialization fails after deploy succeeds', async () => {
     const initializationError = new Error('runtime state init failed')
     const runtimeExecutionStateService = {
+      buildExecutionSemanticKeysFromSnapshot: jest.fn().mockReturnValue(['on_start.entry.primary']),
       initializeStatesForDeploy: jest.fn().mockRejectedValue(initializationError),
     }
     const { service, repo } = buildService({
@@ -364,7 +493,13 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       snapshotHash: 'snapshot-hash-1',
       sourceStrategyInstanceId: 'inst-draft-1',
       sourceStrategyTemplateId: 'template-1',
-      snapshot: { id: 'snapshot-1', astSnapshot: { decisionPrograms: [{ phase: 'entry' }] } },
+      snapshot: {
+        id: 'snapshot-1',
+        astSnapshot: {
+          decisionPrograms: [{ phase: 'entry' }],
+          runtimeExecutionSemantics: structuredRuntimeExecutionSemantics,
+        },
+      },
     })
 
     await expect(service.deployStrategy({
@@ -378,7 +513,13 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       strategyInstanceId: 'inst-1',
       publishedSnapshotId: 'snapshot-1',
       snapshotHash: 'snapshot-hash-1',
-      snapshot: { id: 'snapshot-1', astSnapshot: { decisionPrograms: [{ phase: 'entry' }] } },
+      snapshot: {
+        id: 'snapshot-1',
+        astSnapshot: {
+          decisionPrograms: [{ phase: 'entry' }],
+          runtimeExecutionSemantics: structuredRuntimeExecutionSemantics,
+        },
+      },
     })
     expect(repo.markDeployRequestSucceeded).not.toHaveBeenCalled()
     expect(repo.markDeployRequestFailed).toHaveBeenCalledWith('req-1', 'BAD_REQUEST', 'runtime state init failed')

@@ -7,6 +7,9 @@ export class RuntimeExecutionStateDto {
   @ApiProperty({ enum: ['ready', 'consumed', 'failed', 'cooldown'] })
   status!: 'ready' | 'consumed' | 'failed' | 'cooldown'
 
+  @ApiPropertyOptional({ nullable: true, enum: ['binding', 'activation', 'execution', 'persistence'] })
+  failureFamily!: 'binding' | 'activation' | 'execution' | 'persistence' | null
+
   @ApiPropertyOptional({ nullable: true })
   failureReason!: string | null
 

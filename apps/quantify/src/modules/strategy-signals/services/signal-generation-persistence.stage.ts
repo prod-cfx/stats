@@ -67,6 +67,10 @@ export class SignalGenerationPersistenceStage {
     runtimeProvenance: Prisma.JsonObject,
     skipCooldown = false,
     onCreatedInTransaction?: (signalId: string) => Promise<void>,
+    telemetryMeta?: {
+      runtimePhase?: 'consumed'
+      cooldownConsumesRuntimeState?: boolean
+    },
   ): Promise<{ created: boolean; signalId: string | null }> {
     const cooldownSince = new Date(Date.now() - config.cooldownMinutes * 60 * 1000)
 
@@ -127,8 +131,11 @@ export class SignalGenerationPersistenceStage {
       this.telemetry.recordGeneration({
         strategyId: strategy.id,
         symbolCode: group.symbol.code,
-        success: false,
-        reason: 'COOLDOWN',
+        success: telemetryMeta?.cooldownConsumesRuntimeState === true,
+        reason: telemetryMeta?.cooldownConsumesRuntimeState === true ? 'COOLDOWN_CONSUMED' : 'COOLDOWN',
+        runtimePhase: telemetryMeta?.cooldownConsumesRuntimeState === true
+          ? (telemetryMeta.runtimePhase ?? 'consumed')
+          : undefined,
       })
       return result
     }
@@ -140,6 +147,7 @@ export class SignalGenerationPersistenceStage {
       strategyId: strategy.id,
       symbolCode: group.symbol.code,
       success: true,
+      runtimePhase: telemetryMeta?.runtimePhase,
     })
     this.eventEmitter.emit(
       StrategySignalEvents.CREATED,

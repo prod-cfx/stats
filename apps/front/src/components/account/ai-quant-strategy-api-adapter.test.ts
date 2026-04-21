@@ -665,8 +665,9 @@ describe('ai-quant-strategy-api-adapter', () => {
       runtimeExecutionStates: [{
         executionSemanticKey: 'on_start.entry.primary',
         status: 'failed',
-        failureReason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
-        failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+        failureFamily: 'execution',
+        failureReason: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+        failureCode: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
         lastAttemptAt: '2026-03-20T10:03:00.000Z',
         consumedAt: null,
         cooldownUntil: null,
@@ -693,8 +694,9 @@ describe('ai-quant-strategy-api-adapter', () => {
     expect(populated.runtimeExecutionStates).toEqual([{
       executionSemanticKey: 'on_start.entry.primary',
       status: 'failed',
-      failureReason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
-      failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+      failureFamily: 'execution',
+      failureReason: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+      failureCode: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
       lastAttemptAt: '2026-03-20T10:03:00.000Z',
       consumedAt: null,
       cooldownUntil: null,

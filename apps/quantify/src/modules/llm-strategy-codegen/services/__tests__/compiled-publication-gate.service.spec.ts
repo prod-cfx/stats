@@ -241,7 +241,19 @@ describe('compiledPublicationGateService', () => {
 
     expect(publishedSnapshotsRepo.create).toHaveBeenCalledWith(expect.objectContaining({
       astSnapshot: expect.objectContaining({
-        runtimeExecutionSemantics: ['on_start.entry.primary'],
+        runtimeExecutionSemantics: [{
+          semanticKey: 'on_start.entry.primary',
+          trigger: 'on_start',
+          phase: 'entry',
+          consumePolicy: 'once',
+          requiredRuntimeContext: {
+            barIndex: 1,
+            requiresReferenceBar: true,
+            requiresSymbol: true,
+            requiresTimeframe: true,
+          },
+          sourceRefs: ['entry-execution-on_start-210'],
+        }],
       }),
     }))
   })
@@ -309,7 +321,19 @@ describe('compiledPublicationGateService', () => {
 
     expect(publishedSnapshotsRepo.create).toHaveBeenCalledWith(expect.objectContaining({
       astSnapshot: expect.objectContaining({
-        runtimeExecutionSemantics: ['on_start.entry.primary'],
+        runtimeExecutionSemantics: [{
+          semanticKey: 'on_start.entry.primary',
+          trigger: 'on_start',
+          phase: 'entry',
+          consumePolicy: 'once',
+          requiredRuntimeContext: {
+            barIndex: 1,
+            requiresReferenceBar: true,
+            requiresSymbol: true,
+            requiresTimeframe: true,
+          },
+          sourceRefs: ['entry-execution-on_start-210'],
+        }],
       }),
     }))
   })

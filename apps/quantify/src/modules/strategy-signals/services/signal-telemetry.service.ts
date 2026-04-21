@@ -4,6 +4,7 @@ interface GenerationResultMeta {
   strategyId: string
   symbolCode: string
   success: boolean
+  runtimePhase?: 'binding' | 'activation' | 'execution' | 'consumed'
   reason?: string
 }
 
@@ -19,12 +20,18 @@ export class SignalTelemetryService {
   private readonly logger = new Logger(SignalTelemetryService.name)
 
   recordGeneration(meta: GenerationResultMeta) {
-    const { strategyId, symbolCode, success, reason } = meta
+    const { strategyId, symbolCode, success, reason, runtimePhase } = meta
+    const phaseSuffix = runtimePhase ? ` phase=${runtimePhase}` : ''
     if (success) {
-      this.logger.log(`Signal generation success for strategy=${strategyId} symbol=${symbolCode}`)
+      const reasonSuffix = reason ? ` reason=${reason}` : ''
+      this.logger.log(
+        `Signal generation success for strategy=${strategyId} symbol=${symbolCode}${phaseSuffix}${reasonSuffix}`,
+      )
     }
     else {
-      this.logger.warn(`Signal generation skipped for strategy=${strategyId} symbol=${symbolCode}: ${reason ?? 'unknown reason'}`)
+      this.logger.warn(
+        `Signal generation skipped for strategy=${strategyId} symbol=${symbolCode}${phaseSuffix}: ${reason ?? 'unknown reason'}`,
+      )
     }
   }
 

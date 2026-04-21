@@ -87,6 +87,24 @@ type RuntimeStrategySource = {
   strategy: StrategyTemplate
   provenance: Prisma.JsonObject
   executionSemanticKeys?: string[]
+  executionSemantics?: RuntimeExecutionSemantic[]
+}
+
+type RuntimeExecutionSemantic = {
+  semanticKey: string
+  requiredRuntimeContext?: {
+    barIndex?: number
+    requiresReferenceBar?: boolean
+    requiresSymbol?: boolean
+    requiresTimeframe?: boolean
+  }
+}
+
+type ActiveRuntimeExecutionState = {
+  strategyInstanceId: string
+  publishedSnapshotId: string
+  executionSemanticKey: string
+  semantic?: RuntimeExecutionSemantic | null
 }
 
 @Injectable()
@@ -383,6 +401,7 @@ export class SignalGeneratorService {
         runtimeStrategy,
         runtimeProvenance,
         runtimeSource.executionSemanticKeys ?? [],
+        runtimeSource.executionSemantics ?? [],
         config,
         options,
       )
@@ -619,6 +638,10 @@ export class SignalGeneratorService {
     runtimeProvenance: Prisma.JsonObject,
     skipCooldown = false,
     onCreatedInTransaction?: (signalId: string) => Promise<void>,
+    telemetryMeta?: {
+      runtimePhase?: 'consumed'
+      cooldownConsumesRuntimeState?: boolean
+    },
   ) {
     return this.persistenceStage.createSignalWithCooldownAndLock(
       instance,
@@ -631,6 +654,7 @@ export class SignalGeneratorService {
       runtimeProvenance,
       skipCooldown,
       onCreatedInTransaction,
+      telemetryMeta,
     )
   }
 
@@ -1011,6 +1035,7 @@ export class SignalGeneratorService {
     strategy: StrategyTemplate,
     runtimeProvenance: Prisma.JsonObject,
     executionSemanticKeys: string[],
+    executionSemantics: RuntimeExecutionSemantic[],
     config: StrategySignalsRuntimeConfig,
     options: { skipCooldown?: boolean } = {},
   ) {
@@ -1022,9 +1047,9 @@ export class SignalGeneratorService {
     const params = this.buildEffectiveParams(strategy, instance) ?? {}
     const symbolCode = this.readString(params.symbol)
     const timeframe = this.readRuntimeTimeframe(params.timeframe ?? params.baseTimeframe)
-    if (executionSemanticKeys.length > 0 && !this.runtimeExecutionStateRepository) {
+    if (executionSemanticKeys.length > 0 && !this.runtimeExecutionStateService) {
       this.logger.warn(
-        `Strategy instance ${instance.id} requires runtime execution state repository for published snapshot execution`,
+        `Strategy instance ${instance.id} requires runtime execution state service for published snapshot execution`,
       )
       return
     }
@@ -1032,6 +1057,7 @@ export class SignalGeneratorService {
       instance,
       runtimeProvenance,
       executionSemanticKeys,
+      executionSemantics,
     )
     if (executionSemanticKeys.length > 0 && !activeRuntimeState) {
       return
@@ -1042,7 +1068,7 @@ export class SignalGeneratorService {
         `Published snapshot runtime params missing symbol/timeframe for instance ${instance.id}, skipping generation`,
       )
       await this.handleStrategyFailure(instance.id, config)
-      await this.markRuntimeExecutionStateFailed(activeRuntimeState, {
+      await this.markRuntimeExecutionStateTerminal(activeRuntimeState, {
         failureReason: 'SNAPSHOT_RUNTIME_PARAMS_MISSING',
         failureCode: 'SNAPSHOT_RUNTIME_PARAMS_MISSING',
       })
@@ -1051,6 +1077,7 @@ export class SignalGeneratorService {
         symbolCode: symbolCode ?? 'N/A',
         success: false,
         reason: 'SNAPSHOT_RUNTIME_PARAMS_MISSING',
+        runtimePhase: 'binding',
       })
       return
     }
@@ -1059,7 +1086,7 @@ export class SignalGeneratorService {
     if (!symbol) {
       this.logger.warn(`Symbol ${symbolCode} not found for published snapshot runtime on instance ${instance.id}`)
       await this.handleStrategyFailure(instance.id, config)
-      await this.markRuntimeExecutionStateFailed(activeRuntimeState, {
+      await this.markRuntimeExecutionStateTerminal(activeRuntimeState, {
         failureReason: 'SYMBOL_NOT_FOUND',
         failureCode: 'SYMBOL_NOT_FOUND',
       })
@@ -1068,65 +1095,109 @@ export class SignalGeneratorService {
         symbolCode,
         success: false,
         reason: 'SYMBOL_NOT_FOUND',
+        runtimePhase: 'binding',
       })
       return
     }
 
     const prismaTimeframe = mapTimeframe(timeframe)
     const referenceBar = await this.loadLatestBar(symbol.id, prismaTimeframe)
-    const referencePrice = referenceBar ? Number(referenceBar.close) : undefined
-    const aiPayload = await this.generateSignalWithAi(
-      instance,
-      strategy,
-      symbol,
+    const compiledDecisionState = this.buildCompiledDecisionStateForRuntimeExecution(activeRuntimeState)
+    const activationFailure = this.resolvePublishedSnapshotActivationFailure(activeRuntimeState, {
+      symbolCode,
       timeframe,
-      {},
-      config,
-      referencePrice,
-      options.skipCooldown ?? false,
-      this.buildCompiledDecisionStateForRuntimeExecution(activeRuntimeState),
-    )
-
-    if (!aiPayload) {
-      await this.handleStrategyFailure(instance.id, config)
-      await this.markRuntimeExecutionStateFailed(activeRuntimeState, {
-        failureReason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
-        failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+      referenceBar,
+      compiledDecisionState,
+    })
+    if (activationFailure) {
+      if (activationFailure.failureCode === 'SNAPSHOT_REFERENCE_BAR_MISSING') {
+        this.logger.warn(
+          `Reference bar unavailable for published snapshot runtime on instance ${instance.id} (${symbol.code}/${timeframe})`,
+        )
+      }
+      await this.markRuntimeExecutionStateRetryable(activeRuntimeState, {
+        failureReason: activationFailure.failureReason,
+        failureCode: activationFailure.failureCode,
       })
       this.telemetry.recordGeneration({
         strategyId: strategy.id,
         symbolCode,
         success: false,
-        reason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+        reason: activationFailure.failureReason,
+        runtimePhase: 'activation',
       })
       return
     }
 
-    await this.resetStrategyFailure(instance.id)
-
-    const createdSignal = await this.createSignalWithCooldownAndLock(
-      instance,
-      strategy,
-      {
+    await this.markRuntimeExecutionStateRunning(activeRuntimeState)
+    try {
+      const referencePrice = referenceBar ? Number(referenceBar.close) : undefined
+      const aiPayload = await this.generateSignalWithAi(
+        instance,
+        strategy,
         symbol,
-        timeframe: prismaTimeframe,
-        fields: new Map(),
-      },
-      config,
-      {},
-      referenceBar?.time,
-      aiPayload,
-      runtimeProvenance,
-      options.skipCooldown ?? false,
-      activeRuntimeState && this.runtimeExecutionStateRepository
-        ? async () => {
-            await this.markRuntimeExecutionStateConsumed(activeRuntimeState)
-          }
-        : undefined,
-    )
+        timeframe,
+        {},
+        config,
+        referencePrice,
+        options.skipCooldown ?? false,
+        compiledDecisionState,
+      )
 
-    if (!createdSignal.created) {
-      await this.markRuntimeExecutionStateConsumed(activeRuntimeState)
+      if (!aiPayload) {
+        await this.handleStrategyFailure(instance.id, config)
+        await this.markRuntimeExecutionStateTerminal(activeRuntimeState, {
+          failureReason: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+          failureCode: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+        })
+        this.telemetry.recordGeneration({
+          strategyId: strategy.id,
+          symbolCode,
+          success: false,
+          reason: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+          runtimePhase: 'execution',
+        })
+        return
+      }
+
+      await this.resetStrategyFailure(instance.id)
+
+      const createdSignal = await this.createSignalWithCooldownAndLock(
+        instance,
+        strategy,
+        {
+          symbol,
+          timeframe: prismaTimeframe,
+          fields: new Map(),
+        },
+        config,
+        {},
+        referenceBar?.time,
+        aiPayload,
+        runtimeProvenance,
+        options.skipCooldown ?? false,
+        activeRuntimeState
+          ? async () => {
+              await this.markRuntimeExecutionStateConsumed(activeRuntimeState)
+            }
+          : undefined,
+        activeRuntimeState
+          ? {
+              runtimePhase: 'consumed',
+              cooldownConsumesRuntimeState: true,
+            }
+          : undefined,
+      )
+
+      if (!createdSignal.created) {
+        await this.markRuntimeExecutionStateConsumed(activeRuntimeState)
+      }
+    } catch (error) {
+      await this.markRuntimeExecutionStateTerminal(activeRuntimeState, {
+        failureReason: 'SNAPSHOT_RUNTIME_EXECUTION_UNEXPECTED_ERROR',
+        failureCode: 'SNAPSHOT_RUNTIME_EXECUTION_UNEXPECTED_ERROR',
+      })
+      throw error
     }
   }
 
@@ -1201,6 +1272,7 @@ export class SignalGeneratorService {
         executionContentSource: 'PUBLISHED_SNAPSHOT',
       },
       executionSemanticKeys: this.runtimeExecutionStateService?.buildExecutionSemanticKeysFromSnapshot(snapshot) ?? [],
+      executionSemantics: this.readRuntimeExecutionSemantics(snapshot),
     }
   }
 
@@ -1208,11 +1280,8 @@ export class SignalGeneratorService {
     instance: StrategyInstanceWithTemplate,
     runtimeProvenance: Prisma.JsonObject,
     executionSemanticKeys: string[],
-  ): Promise<{
-    strategyInstanceId: string
-    publishedSnapshotId: string
-    executionSemanticKey: string
-  } | null> {
+    executionSemantics: RuntimeExecutionSemantic[],
+  ): Promise<ActiveRuntimeExecutionState | null> {
     if (executionSemanticKeys.length === 0) {
       return null
     }
@@ -1251,43 +1320,71 @@ export class SignalGeneratorService {
       strategyInstanceId: readyState.strategyInstanceId,
       publishedSnapshotId: readyState.publishedSnapshotId,
       executionSemanticKey: readyState.executionSemanticKey,
+      semantic: executionSemantics.find(semantic => semantic.semanticKey === readyState.executionSemanticKey) ?? null,
     }
   }
 
   private async markRuntimeExecutionStateConsumed(
-    activeRuntimeState: {
-      strategyInstanceId: string
-      publishedSnapshotId: string
-      executionSemanticKey: string
-    } | null,
+    activeRuntimeState: ActiveRuntimeExecutionState | null,
   ): Promise<void> {
-    if (!activeRuntimeState || !this.runtimeExecutionStateRepository) {
+    if (!activeRuntimeState || !this.runtimeExecutionStateService) {
       return
     }
 
-    await this.runtimeExecutionStateRepository.markConsumed({
+    await this.runtimeExecutionStateService.markConsumed({
       strategyInstanceId: activeRuntimeState.strategyInstanceId,
       publishedSnapshotId: activeRuntimeState.publishedSnapshotId,
       executionSemanticKey: activeRuntimeState.executionSemanticKey,
     })
   }
 
-  private async markRuntimeExecutionStateFailed(
-    activeRuntimeState: {
-      strategyInstanceId: string
-      publishedSnapshotId: string
-      executionSemanticKey: string
-    } | null,
+  private async markRuntimeExecutionStateRunning(
+    activeRuntimeState: ActiveRuntimeExecutionState | null,
+  ): Promise<void> {
+    if (!activeRuntimeState || !this.runtimeExecutionStateService) {
+      return
+    }
+
+    await this.runtimeExecutionStateService.markRunning({
+      strategyInstanceId: activeRuntimeState.strategyInstanceId,
+      publishedSnapshotId: activeRuntimeState.publishedSnapshotId,
+      executionSemanticKey: activeRuntimeState.executionSemanticKey,
+    })
+  }
+
+  private async markRuntimeExecutionStateRetryable(
+    activeRuntimeState: ActiveRuntimeExecutionState | null,
     args: {
       failureReason: string
       failureCode: string
     },
   ): Promise<void> {
-    if (!activeRuntimeState || !this.runtimeExecutionStateRepository) {
+    if (!activeRuntimeState || !this.runtimeExecutionStateService) {
       return
     }
 
-    await this.runtimeExecutionStateRepository.markFailed({
+    await this.runtimeExecutionStateService.markRetryableFailure({
+      strategyInstanceId: activeRuntimeState.strategyInstanceId,
+      publishedSnapshotId: activeRuntimeState.publishedSnapshotId,
+      executionSemanticKey: activeRuntimeState.executionSemanticKey,
+      failureReason: args.failureReason,
+      failureCode: args.failureCode,
+      cooldownUntil: new Date(),
+    })
+  }
+
+  private async markRuntimeExecutionStateTerminal(
+    activeRuntimeState: ActiveRuntimeExecutionState | null,
+    args: {
+      failureReason: string
+      failureCode: string
+    },
+  ): Promise<void> {
+    if (!activeRuntimeState || !this.runtimeExecutionStateService) {
+      return
+    }
+
+    await this.runtimeExecutionStateService.markTerminalFailure({
       strategyInstanceId: activeRuntimeState.strategyInstanceId,
       publishedSnapshotId: activeRuntimeState.publishedSnapshotId,
       executionSemanticKey: activeRuntimeState.executionSemanticKey,
@@ -1318,6 +1415,85 @@ export class SignalGeneratorService {
     if (typeof value !== 'string') return null
     const normalized = value.trim()
     return normalized.length > 0 ? normalized : null
+  }
+
+  private readRuntimeExecutionSemantics(snapshot: unknown): RuntimeExecutionSemantic[] {
+    const root = this.asRecord(snapshot)
+    const astSnapshot = this.asRecord(root?.astSnapshot)
+    const semantics = astSnapshot?.runtimeExecutionSemantics
+    if (!Array.isArray(semantics)) {
+      return []
+    }
+
+    return semantics.flatMap((item) => {
+      const record = this.asRecord(item)
+      const semanticKey = this.readString(record?.semanticKey)
+      if (!record || !semanticKey) {
+        return []
+      }
+
+      const requiredRuntimeContext = this.asRecord(record.requiredRuntimeContext)
+      return [{
+        semanticKey,
+        requiredRuntimeContext: {
+          barIndex: this.readNumeric(requiredRuntimeContext?.barIndex),
+          requiresReferenceBar: requiredRuntimeContext?.requiresReferenceBar === true,
+          requiresSymbol: requiredRuntimeContext?.requiresSymbol === true,
+          requiresTimeframe: requiredRuntimeContext?.requiresTimeframe === true,
+        },
+      }]
+    })
+  }
+
+  private resolvePublishedSnapshotActivationFailure(
+    activeRuntimeState: ActiveRuntimeExecutionState | null,
+    context: {
+      symbolCode: string | null
+      timeframe: AppMarketTimeframe | null
+      referenceBar: GatewayBar | null
+      compiledDecisionState?: { barIndex: number; lastTriggeredByProgram: Record<string, number> }
+    },
+  ): {
+    failureReason: string
+    failureCode: string
+  } | null {
+    const requiredRuntimeContext = activeRuntimeState?.semantic?.requiredRuntimeContext
+    if (!requiredRuntimeContext) {
+      return null
+    }
+
+    if (requiredRuntimeContext.requiresSymbol && !context.symbolCode) {
+      return {
+        failureReason: 'SNAPSHOT_RUNTIME_CONTEXT_MISSING',
+        failureCode: 'SNAPSHOT_RUNTIME_CONTEXT_MISSING',
+      }
+    }
+
+    if (requiredRuntimeContext.requiresTimeframe && !context.timeframe) {
+      return {
+        failureReason: 'SNAPSHOT_RUNTIME_CONTEXT_MISSING',
+        failureCode: 'SNAPSHOT_RUNTIME_CONTEXT_MISSING',
+      }
+    }
+
+    if (
+      typeof requiredRuntimeContext.barIndex === 'number'
+      && (!context.compiledDecisionState || context.compiledDecisionState.barIndex !== requiredRuntimeContext.barIndex)
+    ) {
+      return {
+        failureReason: 'SNAPSHOT_RUNTIME_CONTEXT_MISSING',
+        failureCode: 'SNAPSHOT_RUNTIME_CONTEXT_MISSING',
+      }
+    }
+
+    if (requiredRuntimeContext.requiresReferenceBar && !context.referenceBar) {
+      return {
+        failureReason: 'SNAPSHOT_REFERENCE_BAR_MISSING',
+        failureCode: 'SNAPSHOT_REFERENCE_BAR_MISSING',
+      }
+    }
+
+    return null
   }
 
   private readRuntimeTimeframe(value: unknown): AppMarketTimeframe | null {

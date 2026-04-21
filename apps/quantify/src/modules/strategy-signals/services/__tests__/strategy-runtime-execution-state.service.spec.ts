@@ -8,10 +8,14 @@ type RuntimeStateRecord = {
   publishedSnapshotId: string
   snapshotHash: string
   executionSemanticKey: string
-  status: 'ready' | 'consumed' | 'failed' | 'cooldown'
+  status: 'ready' | 'running' | 'retryable' | 'terminal' | 'consumed'
+  failureFamily?: 'retryable' | 'terminal' | null
   failureReason?: string | null
   failureCode?: string | null
+  attemptCount?: number
   lastAttemptAt?: Date | null
+  runningAt?: Date | null
+  terminalAt?: Date | null
   consumedAt?: Date | null
   cooldownUntil?: Date | null
 }
@@ -46,9 +50,33 @@ class InMemoryRuntimeExecutionStateRepository {
       snapshotHash: input.snapshotHash,
       executionSemanticKey: input.executionSemanticKey,
       status: 'ready',
+      failureFamily: null,
       failureReason: null,
       failureCode: null,
+      attemptCount: 0,
       lastAttemptAt: null,
+      runningAt: null,
+      terminalAt: null,
+      consumedAt: null,
+      cooldownUntil: null,
+    }
+    this.records.set(key, next)
+    return next
+  }
+
+  async markRunning(input: Pick<RuntimeStateRecord, 'strategyInstanceId' | 'publishedSnapshotId' | 'executionSemanticKey'>) {
+    const key = this.keyOf(input)
+    const existing = this.records.get(key)
+    if (!existing) throw new Error(`missing_state:${key}`)
+
+    const next: RuntimeStateRecord = {
+      ...existing,
+      status: 'running',
+      failureFamily: null,
+      failureReason: null,
+      failureCode: null,
+      runningAt: new Date('2026-04-20T07:55:00.000Z'),
+      terminalAt: null,
       consumedAt: null,
       cooldownUntil: null,
     }
@@ -64,8 +92,15 @@ class InMemoryRuntimeExecutionStateRepository {
     const next: RuntimeStateRecord = {
       ...existing,
       status: 'consumed',
+      failureFamily: null,
+      failureReason: null,
+      failureCode: null,
+      attemptCount: (existing.attemptCount ?? 0) + 1,
       consumedAt: new Date('2026-04-20T08:00:00.000Z'),
       lastAttemptAt: new Date('2026-04-20T08:00:00.000Z'),
+      runningAt: null,
+      terminalAt: new Date('2026-04-20T08:00:00.000Z'),
+      cooldownUntil: null,
     }
     this.records.set(key, next)
     return next
@@ -81,16 +116,29 @@ class InMemoryRuntimeExecutionStateRepository {
 
     const next: RuntimeStateRecord = {
       ...existing,
-      status: 'failed',
+      status: 'terminal',
+      failureFamily: 'terminal',
       failureReason: input.failureReason ?? null,
       failureCode: input.failureCode ?? null,
+      attemptCount: (existing.attemptCount ?? 0) + 1,
       lastAttemptAt: new Date('2026-04-20T08:05:00.000Z'),
+      runningAt: null,
+      terminalAt: new Date('2026-04-20T08:05:00.000Z'),
+      consumedAt: null,
+      cooldownUntil: null,
     }
     this.records.set(key, next)
     return next
   }
 
-  async markCooldown(
+  async markTerminalFailure(
+    input: Pick<RuntimeStateRecord, 'strategyInstanceId' | 'publishedSnapshotId' | 'executionSemanticKey'>
+    & Pick<RuntimeStateRecord, 'failureReason' | 'failureCode'>,
+  ) {
+    return this.markFailed(input)
+  }
+
+  async markRetryableFailure(
     input: Pick<RuntimeStateRecord, 'strategyInstanceId' | 'publishedSnapshotId' | 'executionSemanticKey'>
     & Pick<RuntimeStateRecord, 'cooldownUntil' | 'failureReason' | 'failureCode'>,
   ) {
@@ -100,14 +148,30 @@ class InMemoryRuntimeExecutionStateRepository {
 
     const next: RuntimeStateRecord = {
       ...existing,
-      status: 'cooldown',
+      status: 'retryable',
+      failureFamily: 'retryable',
       cooldownUntil: input.cooldownUntil ?? new Date('2026-04-20T09:00:00.000Z'),
       failureReason: input.failureReason ?? existing.failureReason ?? null,
       failureCode: input.failureCode ?? existing.failureCode ?? null,
+      attemptCount: (existing.attemptCount ?? 0) + 1,
       lastAttemptAt: new Date('2026-04-20T08:10:00.000Z'),
+      runningAt: null,
+      terminalAt: null,
+      consumedAt: null,
     }
     this.records.set(key, next)
     return next
+  }
+
+  async markCooldown(
+    input: Pick<RuntimeStateRecord, 'strategyInstanceId' | 'publishedSnapshotId' | 'executionSemanticKey'>
+    & Pick<RuntimeStateRecord, 'cooldownUntil' | 'failureReason' | 'failureCode'>,
+  ) {
+    return this.markRetryableFailure(input)
+  }
+
+  async seed(record: RuntimeStateRecord) {
+    this.records.set(this.keyOf(record), record)
   }
 }
 
@@ -115,9 +179,21 @@ function createSnapshot(decisionPrograms: Array<{ id: string, phase: 'entry' | '
   return {
     id: 'snap-1',
     snapshotHash: 'sha256:snap-1',
-    runtimeExecutionSemantics: decisionPrograms.map(program => `on_start.${program.phase}.${program.id}`),
     astSnapshot: {
       decisionPrograms,
+      runtimeExecutionSemantics: decisionPrograms.map(program => ({
+        semanticKey: `on_start.${program.phase}.${program.id}`,
+        trigger: 'on_start' as const,
+        phase: program.phase,
+        consumePolicy: 'once' as const,
+        requiredRuntimeContext: {
+          barIndex: 1,
+          requiresReferenceBar: true,
+          requiresSymbol: true,
+          requiresTimeframe: true,
+        },
+        sourceRefs: [program.id],
+      })),
     },
   }
 }
@@ -180,16 +256,17 @@ describe('strategyRuntimeExecutionStateService', () => {
       snapshotHash: 'sha256:snap-1',
       executionSemanticKey: 'on_start.entry.entry-primary',
       status: 'ready',
+      failureFamily: null,
+      attemptCount: 0,
     })
   })
 
-  it('collapses multiple explicit snapshot semantics into a single executable runtime state', async () => {
+  it('binds every published snapshot runtime semantic from canonical semanticKey objects', async () => {
     const { service, repository } = createService()
     const snapshot = createSnapshot([
       { id: 'entry-primary', phase: 'entry' },
       { id: 'exit-primary', phase: 'exit' },
       { id: 'rebalance-primary', phase: 'rebalance' },
-      { id: 'entry-secondary', phase: 'entry' },
     ])
 
     await service.initializeStatesForDeploy({
@@ -199,17 +276,134 @@ describe('strategyRuntimeExecutionStateService', () => {
       snapshot,
     })
 
+    const states = await repository.findByInstanceAndSnapshot('inst-1', 'snap-1')
+    expect(states).toEqual([
+      expect.objectContaining({
+        executionSemanticKey: 'on_start.entry.entry-primary',
+        status: 'ready',
+      }),
+      expect.objectContaining({
+        executionSemanticKey: 'on_start.exit.exit-primary',
+        status: 'ready',
+      }),
+      expect.objectContaining({
+        executionSemanticKey: 'on_start.rebalance.rebalance-primary',
+        status: 'ready',
+      }),
+    ])
+  })
+
+  it('loads ready and eligible retryable states but excludes running terminal and consumed states', async () => {
+    const { service, repository } = createService()
+    await repository.seed({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      snapshotHash: 'sha256:snap-1',
+      executionSemanticKey: 'on_start.entry.primary',
+      status: 'ready',
+      failureFamily: null,
+      attemptCount: 0,
+      lastAttemptAt: null,
+      runningAt: null,
+      terminalAt: null,
+      consumedAt: null,
+      cooldownUntil: null,
+    })
+    await repository.seed({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      snapshotHash: 'sha256:snap-1',
+      executionSemanticKey: 'on_start.exit.retryable-ready',
+      status: 'retryable',
+      failureFamily: 'retryable',
+      failureReason: 'AI_TIMEOUT',
+      failureCode: 'AI_TIMEOUT',
+      attemptCount: 1,
+      lastAttemptAt: new Date('2026-04-20T08:00:00.000Z'),
+      runningAt: null,
+      terminalAt: null,
+      consumedAt: null,
+      cooldownUntil: new Date('2026-04-20T07:59:00.000Z'),
+    })
+    await repository.seed({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      snapshotHash: 'sha256:snap-1',
+      executionSemanticKey: 'on_start.rebalance.retryable-cooling',
+      status: 'retryable',
+      failureFamily: 'retryable',
+      failureReason: 'AI_TIMEOUT',
+      failureCode: 'AI_TIMEOUT',
+      attemptCount: 1,
+      lastAttemptAt: new Date('2026-04-20T08:00:00.000Z'),
+      runningAt: null,
+      terminalAt: null,
+      consumedAt: null,
+      cooldownUntil: new Date('2099-04-20T08:30:00.000Z'),
+    })
+    await repository.seed({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      snapshotHash: 'sha256:snap-1',
+      executionSemanticKey: 'on_start.entry.running',
+      status: 'running',
+      failureFamily: null,
+      attemptCount: 1,
+      lastAttemptAt: null,
+      runningAt: new Date('2026-04-20T08:05:00.000Z'),
+      terminalAt: null,
+      consumedAt: null,
+      cooldownUntil: null,
+    })
+    await repository.seed({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      snapshotHash: 'sha256:snap-1',
+      executionSemanticKey: 'on_start.entry.terminal',
+      status: 'terminal',
+      failureFamily: 'terminal',
+      failureReason: 'SYMBOL_NOT_FOUND',
+      failureCode: 'SYMBOL_NOT_FOUND',
+      attemptCount: 1,
+      lastAttemptAt: new Date('2026-04-20T08:10:00.000Z'),
+      runningAt: null,
+      terminalAt: new Date('2026-04-20T08:10:00.000Z'),
+      consumedAt: null,
+      cooldownUntil: null,
+    })
+    await repository.seed({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      snapshotHash: 'sha256:snap-1',
+      executionSemanticKey: 'on_start.entry.consumed',
+      status: 'consumed',
+      failureFamily: null,
+      attemptCount: 1,
+      lastAttemptAt: new Date('2026-04-20T08:15:00.000Z'),
+      runningAt: null,
+      terminalAt: new Date('2026-04-20T08:15:00.000Z'),
+      consumedAt: new Date('2026-04-20T08:15:00.000Z'),
+      cooldownUntil: null,
+    })
+
     const executableStates = await service.loadExecutableStates({
       strategyInstanceId: 'inst-1',
       publishedSnapshotId: 'snap-1',
       snapshotHash: 'sha256:snap-1',
     })
 
-    expect(executableStates).toHaveLength(1)
-    expect(executableStates[0]).toMatchObject({
-      executionSemanticKey: 'on_start.entry.entry-primary',
-      status: 'ready',
-    })
+    expect(executableStates).toEqual([
+      expect.objectContaining({
+        executionSemanticKey: 'on_start.entry.primary',
+        status: 'ready',
+      }),
+      expect.objectContaining({
+        executionSemanticKey: 'on_start.exit.retryable-ready',
+        status: 'retryable',
+        failureFamily: 'retryable',
+        attemptCount: 1,
+      }),
+    ])
   })
 
   it('treats snapshot hash mismatch as invalid runtime state', async () => {
@@ -225,6 +419,8 @@ describe('strategyRuntimeExecutionStateService', () => {
       snapshotHash: 'sha256:old',
       executionSemanticKey: 'on_start.entry.primary',
       status: 'ready',
+      failureFamily: null,
+      attemptCount: 0,
     })).rejects.toThrow('snapshot_hash_mismatch')
   })
 
@@ -279,6 +475,104 @@ describe('strategyRuntimeExecutionStateService', () => {
     expect(states[0]).toMatchObject({
       executionSemanticKey: 'on_start.entry.entry-primary',
       status: 'consumed',
+      failureFamily: null,
+      attemptCount: 1,
+    })
+  })
+
+  it('applies running, retryable, terminal, and consumed transitions through the service using the new projection model', async () => {
+    const { service } = createService()
+    const snapshot = createSnapshot([
+      { id: 'entry-primary', phase: 'entry' },
+    ])
+
+    await service.initializeStatesForDeploy({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      snapshotHash: 'sha256:snap-1',
+      snapshot,
+    })
+
+    await expect(service.markRunning({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      executionSemanticKey: 'on_start.entry.entry-primary',
+    })).resolves.toMatchObject({
+      status: 'running',
+      failureFamily: null,
+      attemptCount: 0,
+    })
+
+    await expect(service.markRetryableFailure({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      executionSemanticKey: 'on_start.entry.entry-primary',
+      failureReason: 'AI_TIMEOUT',
+      failureCode: 'AI_TIMEOUT',
+      cooldownUntil: new Date('2026-04-20T08:20:00.000Z'),
+    })).resolves.toMatchObject({
+      status: 'retryable',
+      failureFamily: 'retryable',
+      failureReason: 'AI_TIMEOUT',
+      failureCode: 'AI_TIMEOUT',
+      attemptCount: 1,
+    })
+
+    await expect(service.markTerminalFailure({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      executionSemanticKey: 'on_start.entry.entry-primary',
+      failureReason: 'SYMBOL_NOT_FOUND',
+      failureCode: 'SYMBOL_NOT_FOUND',
+    })).resolves.toMatchObject({
+      status: 'terminal',
+      failureFamily: 'terminal',
+      failureReason: 'SYMBOL_NOT_FOUND',
+      failureCode: 'SYMBOL_NOT_FOUND',
+      attemptCount: 2,
+    })
+
+    await expect(service.markConsumed({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      executionSemanticKey: 'on_start.entry.entry-primary',
+    })).resolves.toMatchObject({
+      status: 'consumed',
+      failureFamily: null,
+      attemptCount: 3,
+    })
+  })
+
+  it('projects running retryable and terminal lifecycle metadata from the repository row', async () => {
+    const { service } = createService()
+
+    await expect(service.validateBoundState({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      snapshotHash: 'sha256:snap-1',
+    }, {
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      snapshotHash: 'sha256:snap-1',
+      executionSemanticKey: 'on_start.entry.primary',
+      status: 'retryable',
+      failureFamily: 'retryable',
+      failureReason: 'AI_TIMEOUT',
+      failureCode: 'AI_TIMEOUT',
+      attemptCount: 2,
+      lastAttemptAt: new Date('2026-04-20T08:10:00.000Z'),
+      runningAt: null,
+      terminalAt: null,
+      consumedAt: null,
+      cooldownUntil: new Date('2026-04-20T08:20:00.000Z'),
+    })).resolves.toMatchObject({
+      executionSemanticKey: 'on_start.entry.primary',
+      status: 'retryable',
+      failureFamily: 'retryable',
+      failureReason: 'AI_TIMEOUT',
+      failureCode: 'AI_TIMEOUT',
+      attemptCount: 2,
+      cooldownUntil: new Date('2026-04-20T08:20:00.000Z'),
     })
   })
 
@@ -290,5 +584,129 @@ describe('strategyRuntimeExecutionStateService', () => {
         decisionPrograms: [{ id: 'entry-primary', phase: 'entry' }],
       },
     })).toEqual([])
+  })
+
+  it('fails closed for legacy runtime semantic snapshot shapes and accepts only canonical semanticKey objects', () => {
+    const { service } = createService()
+
+    expect(() => service.buildExecutionSemanticKeysFromSnapshot({
+      astSnapshot: {
+        runtimeExecutionSemantics: [
+          'on_start.entry.legacy-string',
+        ],
+      },
+    })).toThrow('legacy_runtime_execution_semantics_unsupported')
+
+    expect(() => service.buildExecutionSemanticKeysFromSnapshot({
+      astSnapshot: {
+        runtimeExecutionSemantics: [
+          { key: 'on_start.entry.legacy-key' },
+        ],
+      },
+    })).toThrow('legacy_runtime_execution_semantics_unsupported')
+
+    expect(() => service.buildExecutionSemanticKeysFromSnapshot({
+      astSnapshot: {
+        runtimeExecutionSemantics: [
+          { executionSemanticKey: 'on_start.entry.legacy-alias' },
+        ],
+      },
+    })).toThrow('legacy_runtime_execution_semantics_unsupported')
+
+    expect(service.buildExecutionSemanticKeysFromSnapshot({
+      astSnapshot: {
+        runtimeExecutionSemantics: [{
+          semanticKey: 'on_start.entry.primary',
+          trigger: 'on_start',
+          phase: 'entry',
+          consumePolicy: 'once',
+          requiredRuntimeContext: {
+            barIndex: 1,
+            requiresReferenceBar: true,
+            requiresSymbol: true,
+            requiresTimeframe: true,
+          },
+          sourceRefs: ['entry-primary'],
+        }],
+      },
+    })).toEqual(['on_start.entry.primary'])
+
+    expect(service.buildExecutionSemanticKeysFromSnapshot({
+      astSnapshot: {
+        runtimeExecutionSemantics: [
+          {
+            semanticKey: 'on_start.entry.primary',
+            trigger: 'on_start',
+            phase: 'entry',
+            consumePolicy: 'once',
+            requiredRuntimeContext: {
+              barIndex: 1,
+              requiresReferenceBar: true,
+              requiresSymbol: true,
+              requiresTimeframe: true,
+            },
+            sourceRefs: ['entry-primary'],
+          },
+          {
+            semanticKey: 'on_start.exit.primary',
+            trigger: 'on_start',
+            phase: 'exit',
+            consumePolicy: 'once',
+            requiredRuntimeContext: {
+              barIndex: 1,
+              requiresReferenceBar: true,
+              requiresSymbol: true,
+              requiresTimeframe: true,
+            },
+            sourceRefs: ['exit-primary'],
+          },
+        ],
+      },
+    })).toEqual(['on_start.entry.primary', 'on_start.exit.primary'])
+  })
+
+  it('fails closed when runtime semantics are placed at the root instead of astSnapshot', () => {
+    const { service } = createService()
+
+    expect(() => service.buildExecutionSemanticKeysFromSnapshot({
+      runtimeExecutionSemantics: [{
+        semanticKey: 'on_start.entry.primary',
+        trigger: 'on_start',
+        phase: 'entry',
+        consumePolicy: 'once',
+        requiredRuntimeContext: {
+          barIndex: 1,
+          requiresReferenceBar: true,
+          requiresSymbol: true,
+          requiresTimeframe: true,
+        },
+        sourceRefs: ['entry-primary'],
+      }],
+      astSnapshot: {
+        decisionPrograms: [{ id: 'entry-primary', phase: 'entry' }],
+      },
+    })).toThrow('misplaced_runtime_execution_semantics')
+  })
+
+  it('fails closed when semanticKey is present but unsupported', () => {
+    const { service } = createService()
+
+    expect(() => service.buildExecutionSemanticKeysFromSnapshot({
+      astSnapshot: {
+        runtimeExecutionSemantics: [{
+          semanticKey: 'intrabar.entry.primary',
+          trigger: 'on_start',
+          phase: 'entry',
+          consumePolicy: 'once',
+          requiredRuntimeContext: {
+            barIndex: 1,
+            requiresReferenceBar: true,
+            requiresSymbol: true,
+            requiresTimeframe: true,
+          },
+          sourceRefs: ['entry-primary'],
+        }],
+      },
+    })).toThrow('invalid_runtime_execution_semantic_key')
   })
 })
