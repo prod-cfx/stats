@@ -197,39 +197,45 @@ export class SemanticSeedExtractorService {
       : [segment]
 
     for (const clause of clauses) {
-      if (!/(?:MA|EMA)\s*\d+|均线/u.test(clause)) continue
-      if (this.isTrueMovingAverageCrossClause(clause)?.isCross) continue
-      const referencePeriods = Array.from(clause.matchAll(/(?:MA|EMA)\s*(\d{1,4})/giu))
-        .map(match => Number(match[1]))
-        .filter(value => Number.isFinite(value))
-      if (referencePeriods.length === 0) {
-        const fallbackPeriod = this.extractNumber(clause, [/均线\s*(\d{1,4})/u])
-        if (fallbackPeriod === null) continue
-        referencePeriods.push(fallbackPeriod)
-      }
+      const subClauses = clause.includes('且') || clause.includes('并且') || clause.includes('同时') || clause.includes('并')
+        ? clause.split(/(?:且|并且|同时|并)/u).map(part => part.trim()).filter(Boolean)
+        : [clause]
 
-      const intent = this.resolveTradeIntent(clause)
-      if (!intent) continue
+      for (const subClause of subClauses) {
+        if (!/(?:MA|EMA)\s*\d+|均线/u.test(subClause)) continue
+        if (this.isTrueMovingAverageCrossClause(subClause)?.isCross) continue
+        const referencePeriods = Array.from(subClause.matchAll(/(?:MA|EMA)\s*(\d{1,4})/giu))
+          .map(match => Number(match[1]))
+          .filter(value => Number.isFinite(value))
+        if (referencePeriods.length === 0) {
+          const fallbackPeriod = this.extractNumber(subClause, [/均线\s*(\d{1,4})/u])
+          if (fallbackPeriod === null) continue
+          referencePeriods.push(fallbackPeriod)
+        }
 
-      const confirmationMode = this.extractConfirmationMode(clause)
-      const indicator = /\bEMA\s*\d+/iu.test(clause) ? 'ema' : 'ma'
-      const key = /突破|上穿|站上|高于/u.test(clause)
-        ? 'indicator.above'
-        : (/跌破|下穿|失守|低于/u.test(clause) ? 'indicator.below' : null)
-      if (!key) continue
+        const intent = this.resolveTradeIntent(subClause) ?? this.resolveTradeIntent(clause)
+        if (!intent) continue
 
-      for (const referencePeriod of referencePeriods) {
-        this.pushTrigger(triggers, seen, {
-          key,
-          phase: intent.phase,
-          sideScope: intent.sideScope,
-          params: {
-            indicator,
-            referenceRole: referencePeriod >= 20 ? 'long_term' : 'short_term',
-            'reference.period': referencePeriod,
-            ...(confirmationMode ? { confirmationMode } : {}),
-          },
-        })
+        const confirmationMode = this.extractConfirmationMode(subClause)
+        const indicator = /\bEMA\s*\d+/iu.test(subClause) ? 'ema' : 'ma'
+        const key = /突破|上穿|站上|高于/u.test(subClause)
+          ? 'indicator.above'
+          : (/跌破|下穿|失守|低于/u.test(subClause) ? 'indicator.below' : null)
+        if (!key) continue
+
+        for (const referencePeriod of referencePeriods) {
+          this.pushTrigger(triggers, seen, {
+            key,
+            phase: intent.phase,
+            sideScope: intent.sideScope,
+            params: {
+              indicator,
+              referenceRole: referencePeriod >= 20 ? 'long_term' : 'short_term',
+              'reference.period': referencePeriod,
+              ...(confirmationMode ? { confirmationMode } : {}),
+            },
+          })
+        }
       }
     }
   }
@@ -292,7 +298,7 @@ export class SemanticSeedExtractorService {
       const cross = this.parseMovingAverageCrossClause(clause)
       if (!cross) continue
 
-      const intent = this.resolveTradeIntent(clause)
+      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
       if (!intent) continue
 
       if (cross.direction === 'up') {
@@ -476,8 +482,8 @@ export class SemanticSeedExtractorService {
     }
 
     const isExplicitPairCross = /(?:EMA|MA)\d{1,4}.*?(?:上穿|下穿|crossover|crossunder).*(?:EMA|MA)\d{1,4}/iu.test(normalized)
-    const isGoldenCrossPair = /(?:EMA|MA)\d{1,4}.*?(?:和|\/|与|、)?(?:EMA|MA)\d{1,4}.*?金叉/iu.test(normalized)
-      || /(?:\d{1,4})\s*[\/和与、]\s*(?:\d{1,4})\s*均线.*?金叉/iu.test(normalized)
+    const isGoldenCrossPair = /(?:EMA|MA)\d{1,4}.*?(?:和|\/|与|、)?(?:EMA|MA)\d{1,4}.*?(?:金叉|死叉)/iu.test(normalized)
+      || /(?:\d{1,4})\s*[\/和与、]\s*(?:\d{1,4})\s*均线.*?(?:金叉|死叉)/iu.test(normalized)
 
     if (!isExplicitPairCross && !isGoldenCrossPair) {
       return null

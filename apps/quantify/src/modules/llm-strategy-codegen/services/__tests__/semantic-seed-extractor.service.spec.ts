@@ -218,6 +218,40 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('preserves same-clause MA filters alongside true pair crossover clauses', () => {
+    const patch = service.extract('MA5 上穿 MA20 且价格高于 MA200 做多；单笔 10%。')
+
+    expect(patch).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.cross_over',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            fastPeriod: 5,
+            slowPeriod: 20,
+          }),
+        }),
+        expect.objectContaining({
+          key: 'indicator.above',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            'reference.period': 200,
+          }),
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'open_long' }),
+      ]),
+    }))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'indicator.cross_under' }),
+    ]))
+  })
+
   it('maps short crossover wording to entry and exit by intent rather than direction', () => {
     const entryPatch = service.extract('EMA7 下穿 EMA21 做空；单笔 10%。')
     expect(entryPatch).toEqual(expect.objectContaining({
@@ -384,6 +418,28 @@ describe('SemanticSeedExtractorService', () => {
       ]),
       actions: expect.arrayContaining([
         expect.objectContaining({ key: 'open_long' }),
+      ]),
+    }))
+  })
+
+  it('normalizes MA pair death-cross wording into cross-under atoms', () => {
+    const patch = service.extract('MA5 和 MA20 死叉平多；单笔 10%。')
+
+    expect(patch).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.cross_under',
+          phase: 'exit',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            fastPeriod: 5,
+            slowPeriod: 20,
+          }),
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'close_long' }),
       ]),
     }))
   })
