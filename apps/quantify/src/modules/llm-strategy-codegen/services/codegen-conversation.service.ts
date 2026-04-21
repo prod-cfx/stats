@@ -4005,10 +4005,16 @@ export class CodegenConversationService {
       )
     }
 
-    return this.buildCanonicalSpecFromLogicSnapshot(checklist, normalization)
+    return this.buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly(checklist, normalization)
   }
 
-  private buildCanonicalSpecFromLogicSnapshot(
+  /**
+   * Legacy compatibility path for call sites that have not yet been converted to
+   * SemanticState. The semantic conversation path must pass `semanticState` to
+   * `buildCanonicalSpecForConversation()` and must not rely on this method as an
+   * authority source.
+   */
+  private buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly(
     legacyLogicSnapshot: StrategyLogicSnapshot,
     normalization: NormalizationResult,
   ) {
