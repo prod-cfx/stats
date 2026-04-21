@@ -4,9 +4,9 @@ import type { ConversationState } from './ai-quant-page-conversation'
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
+import { ApiError } from '@/lib/errors'
 import { runAiQuantBacktest } from './ai-quant-page-backtest'
 import { AiQuantPageClient } from './AiQuantPageClient'
-import { ApiError } from '@/lib/errors'
 
 const mockPush = jest.fn()
 const mockCreateBacktestJob = jest.fn()

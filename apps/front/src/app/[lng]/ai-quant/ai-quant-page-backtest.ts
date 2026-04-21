@@ -3,6 +3,10 @@ import type { MutableRefObject } from 'react'
 import type { ConversationState } from './ai-quant-page-conversation'
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import {
+  buildLocalizedBacktestErrorMessage,
+  parseAiQuantErrorMeta,
+} from '@/components/ai-quant/ai-quant-error-stage'
+import {
   createBacktestJob,
   formatBacktestJobFailure,
   getBacktestJob,
@@ -13,10 +17,6 @@ import {
   buildBacktestPayload,
   isBacktestPayloadBuilderError,
 } from '@/components/ai-quant/backtest-payload-builder'
-import {
-  buildLocalizedBacktestErrorMessage,
-  parseAiQuantErrorMeta,
-} from '@/components/ai-quant/ai-quant-error-stage'
 
 import { checkBacktestSymbolSupport } from '@/components/ai-quant/backtest-symbol-support-client'
 import { ApiError } from '@/lib/errors'
