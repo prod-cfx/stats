@@ -734,7 +734,13 @@ export class CodegenConversationService {
       },
     )
     const confirmationViewDigest = this.readCanonicalDigest(confirmationViewSpecDesc)
-    const reducedSemanticState = semanticStateAfterAnswers
+    const reducedSemanticState = this.withRequiredSemanticOpenSlots(
+      semanticStateAfterAnswers,
+      baseChecklist,
+      {
+        preserveLockedPositionSizing: this.hasValidLockedPositionSizing(semanticStateAfterAnswers.position),
+      },
+    )
     const canonicalChecklist = hasPersistedSemanticState
       ? this.projectLegacyChecklistFromSemanticState(reducedSemanticState, baseChecklist)
       : baseChecklist
@@ -952,25 +958,34 @@ export class CodegenConversationService {
     let nextState = currentState
     for (const item of clarificationState?.items ?? []) {
       const rawAnswer = answers[item.key]
+      const isLegacyPositionSizingAnswer = item.key === 'sizing.positionPct' || item.field === 'riskRules.positionPct'
       if (
         typeof rawAnswer !== 'string'
         || !rawAnswer.trim()
         || (!item.key.startsWith('semantic.')
           && !item.key.startsWith('grid.')
-          && !item.key.startsWith('executionContext.'))
+          && !item.key.startsWith('executionContext.')
+          && !isLegacyPositionSizingAnswer)
       ) {
         continue
       }
 
-      const targetSlotKey = item.slotKey
-        ?? (item.key.startsWith('executionContext.')
-          ? item.key.replace(/^executionContext\./u, '')
-          : item.key.replace(/^semantic\./u, ''))
+      const legacyPositionSizingSlot = isLegacyPositionSizingAnswer
+        ? nextState.position?.openSlots?.find(slot => slot.slotKey === 'position.sizing' && slot.status === 'open')
+        : undefined
+      const targetSlotKey = isLegacyPositionSizingAnswer
+        ? 'position.sizing'
+        : item.slotKey
+          ?? (item.key.startsWith('executionContext.')
+            ? item.key.replace(/^executionContext\./u, '')
+            : item.key.replace(/^semantic\./u, ''))
       nextState = this.semanticStateReducer.applyClarificationAnswer({
         currentState: nextState,
         targetSlotKey,
-        targetFieldPath: item.fieldPath,
-        targetSlotId: item.slotId,
+        targetFieldPath: isLegacyPositionSizingAnswer ? legacyPositionSizingSlot?.fieldPath : item.fieldPath,
+        targetSlotId: isLegacyPositionSizingAnswer && legacyPositionSizingSlot
+          ? buildSemanticSlotId(legacyPositionSizingSlot)
+          : item.slotId,
         answer: rawAnswer.trim(),
       })
     }
@@ -982,7 +997,7 @@ export class CodegenConversationService {
     const normalization = this.intentNormalizer.normalize(checklist)
     const executionContext = this.executionContext.resolve(checklist)
 
-    return {
+    const state: SemanticState = {
       version: 1,
       families: [...normalization.normalizedIntent.families],
       triggers: [
@@ -1023,6 +1038,7 @@ export class CodegenConversationService {
             positionMode: normalization.normalizedIntent.position.positionMode,
             status: 'locked',
             source: 'user_explicit',
+            openSlots: [],
           }
         : null,
       contextSlots: {
@@ -1034,6 +1050,300 @@ export class CodegenConversationService {
       normalizationNotes: [...normalization.normalizedIntent.normalizationNotes],
       updatedAt: new Date().toISOString(),
     }
+
+    return this.withRequiredSemanticOpenSlots(state, checklist)
+  }
+
+  private withRequiredSemanticOpenSlots(
+    state: SemanticState,
+    checklist: ChecklistPayload,
+    options?: { preserveLockedPositionSizing?: boolean },
+  ): SemanticState {
+    const stateWithDeterministicContext = this.withDeterministicContextSlots(state, checklist)
+    const stateWithExplicitDeterministicPosition = this.withExplicitDeterministicPositionSizing(
+      stateWithDeterministicContext,
+      checklist,
+    )
+    const stateWithExplicitDeterministicRisk = this.withExplicitDeterministicStopLossRisk(
+      stateWithExplicitDeterministicPosition,
+      checklist,
+    )
+    const hasExecutableSemantics = stateWithExplicitDeterministicRisk.families.length > 0
+      || stateWithExplicitDeterministicRisk.triggers.length > 0
+      || stateWithExplicitDeterministicRisk.actions.length > 0
+
+    if (!hasExecutableSemantics) {
+      return {
+        ...stateWithExplicitDeterministicRisk,
+        position: this.hasExplicitPositionSizing(checklist) ? stateWithExplicitDeterministicRisk.position : null,
+      }
+    }
+
+    const stateWithPositionSizing = this.ensurePositionSizingSlot(stateWithExplicitDeterministicRisk, checklist, options)
+
+    if (!this.hasLockedExecutionContext(stateWithPositionSizing)) {
+      return {
+        ...this.removeSatisfiedProtectiveRiskSlot(stateWithPositionSizing),
+      }
+    }
+
+    return this.ensureProtectiveRiskSlot(stateWithPositionSizing)
+  }
+
+  private withDeterministicContextSlots(state: SemanticState, checklist: ChecklistPayload): SemanticState {
+    const executionContext = this.executionContext.resolve(checklist)
+    const questionHints = {
+      exchange: '请确认交易所（binance / okx / hyperliquid）。',
+      symbol: '请确认策略交易标的（例如 BTCUSDT）。',
+      marketType: '请确认市场类型（现货或合约/perp）。',
+      timeframe: '请确认策略主周期（例如 15m 或 1h）。',
+    } as const
+    const fields = ['exchange', 'symbol', 'marketType', 'timeframe'] as const
+    let changed = false
+    const contextSlots: SemanticState['contextSlots'] = { ...state.contextSlots }
+
+    for (const field of fields) {
+      const value = executionContext.context[field]
+      if (!value || contextSlots[field]?.status === 'locked') {
+        continue
+      }
+      contextSlots[field] = this.buildContextSlotState(field, value, questionHints[field])
+      changed = true
+    }
+
+    return changed
+      ? { ...state, contextSlots }
+      : state
+  }
+
+  private withExplicitDeterministicPositionSizing(
+    state: SemanticState,
+    checklist: ChecklistPayload,
+  ): SemanticState {
+    const positionPct = checklist.riskRules?.positionPct
+    if (typeof positionPct !== 'number' || !Number.isFinite(positionPct) || positionPct <= 0) {
+      return state
+    }
+
+    if (this.hasValidLockedPositionSizing(state.position)) {
+      return {
+        ...state,
+        position: {
+          ...state.position,
+          openSlots: state.position.openSlots ?? [],
+        },
+      }
+    }
+
+    return {
+      ...state,
+      position: {
+        mode: 'fixed_ratio',
+        value: positionPct / 100,
+        positionMode: state.position?.positionMode ?? this.inferPositionModeFromActions(state.actions, checklist),
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    }
+  }
+
+  private withExplicitDeterministicStopLossRisk(
+    state: SemanticState,
+    checklist: ChecklistPayload,
+  ): SemanticState {
+    const stopLossPct = checklist.riskRules?.stopLossPct
+    if (typeof stopLossPct !== 'number' || !Number.isFinite(stopLossPct) || stopLossPct <= 0) {
+      return state
+    }
+
+    if (this.hasStopLossRisk(state.risk)) {
+      return state
+    }
+
+    return {
+      ...state,
+      risk: [
+        ...state.risk.filter(risk => !(risk.key === 'risk.protective_exit' && risk.status === 'open')),
+        {
+          id: `risk-stop-loss-${state.risk.length + 1}`,
+          key: 'risk.stop_loss_pct',
+          params: {
+            valuePct: stopLossPct,
+            basis: checklist.riskRules?.stopLossBasis ?? 'entry_avg_price',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+    }
+  }
+
+  private ensurePositionSizingSlot(
+    state: SemanticState,
+    checklist: ChecklistPayload,
+    options?: { preserveLockedPositionSizing?: boolean },
+  ): SemanticState {
+    if (this.hasExplicitPositionSizing(checklist) || options?.preserveLockedPositionSizing === true) {
+      return state.position
+        ? {
+            ...state,
+            position: {
+              ...state.position,
+              openSlots: this.hasValidLockedPositionSizing(state.position)
+                ? []
+                : (state.position.openSlots ?? []),
+            },
+          }
+        : state
+    }
+
+    return {
+      ...state,
+      position: {
+        mode: 'fixed_ratio',
+        value: 0,
+        positionMode: this.inferPositionModeFromActions(state.actions, checklist),
+        status: 'open',
+        source: 'derived',
+        openSlots: [{
+          slotKey: 'position.sizing',
+          fieldPath: 'position.value',
+          status: 'open',
+          priority: 'risk',
+          questionHint: '请确认单笔仓位百分比（例如 10%）。',
+          affectsExecution: true,
+        }],
+      },
+    }
+  }
+
+  private ensureProtectiveRiskSlot(state: SemanticState): SemanticState {
+    if (this.hasProtectiveRisk(state.risk)) {
+      return this.removeSatisfiedProtectiveRiskSlot(state)
+    }
+
+    if (!this.hasLockedExitSemantics(state)) {
+      return state
+    }
+
+    if (
+      state.risk.some(risk =>
+        risk.key === 'risk.protective_exit'
+        && risk.status === 'open'
+        && risk.openSlots.some(slot => slot.slotKey === 'risk.protective_exit' && slot.status === 'open'),
+      )
+    ) {
+      return state
+    }
+
+    return {
+      ...state,
+      risk: [
+        ...state.risk,
+        {
+          id: 'risk-protective-exit',
+          key: 'risk.protective_exit',
+          params: {},
+          status: 'open',
+          source: 'derived',
+          openSlots: [{
+            slotKey: 'risk.protective_exit',
+            fieldPath: 'risk[protective].params',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认止损类保护规则（例如亏损 5% 止损）。',
+            affectsExecution: true,
+          }],
+        },
+      ],
+    }
+  }
+
+  private hasProtectiveRisk(riskItems: SemanticState['risk']): boolean {
+    return riskItems.some((risk) => {
+      if (risk.status !== 'locked') {
+        return false
+      }
+
+      if (risk.key === 'risk.take_profit_pct') {
+        return false
+      }
+
+      const threshold = risk.params.valuePct
+      if (typeof threshold !== 'number' || !Number.isFinite(threshold) || threshold <= 0) {
+        return false
+      }
+
+      return risk.key === 'risk.stop_loss_pct'
+        || risk.key === 'risk.max_drawdown_pct'
+        || risk.key === 'risk.max_single_loss_pct'
+    })
+  }
+
+  private hasStopLossRisk(riskItems: SemanticState['risk']): boolean {
+    return riskItems.some((risk) => {
+      if (risk.status !== 'locked' || risk.key !== 'risk.stop_loss_pct') {
+        return false
+      }
+
+      const threshold = risk.params.valuePct
+      return typeof threshold === 'number' && Number.isFinite(threshold) && threshold > 0
+    })
+  }
+
+  private inferPositionModeFromActions(
+    actions: SemanticState['actions'],
+    checklist: ChecklistPayload,
+  ): string {
+    if (checklist.riskRules?.marketType === 'spot' || checklist.market?.marketType === 'spot') {
+      return 'long_only'
+    }
+    if (checklist.grid?.sideMode === 'bidirectional') {
+      return 'long_short'
+    }
+    if (checklist.grid?.sideMode === 'long_only' || checklist.grid?.sideMode === 'short_only') {
+      return checklist.grid.sideMode
+    }
+
+    const actionKeys = new Set(actions.map(action => action.key))
+    const hasLong = actionKeys.has('open_long') || actionKeys.has('close_long') || actionKeys.has('reduce_long')
+    const hasShort = actionKeys.has('open_short') || actionKeys.has('close_short') || actionKeys.has('reduce_short')
+    if (hasLong && hasShort) return 'long_short'
+    if (hasShort) return 'short_only'
+    return 'long_only'
+  }
+
+  private hasExplicitPositionSizing(checklist: ChecklistPayload): boolean {
+    return typeof checklist.riskRules?.positionPct === 'number'
+      && Number.isFinite(checklist.riskRules.positionPct)
+      && checklist.riskRules.positionPct > 0
+  }
+
+  private hasLockedExecutionContext(state: SemanticState): boolean {
+    return Object.values(state.contextSlots).every(slot => slot?.status === 'locked')
+  }
+
+  private removeSatisfiedProtectiveRiskSlot(state: SemanticState): SemanticState {
+    if (!this.hasProtectiveRisk(state.risk)) {
+      return state
+    }
+
+    return {
+      ...state,
+      risk: state.risk.filter(risk =>
+        !(risk.key === 'risk.protective_exit' && risk.status === 'open'),
+      ),
+    }
+  }
+
+  private hasLockedExitSemantics(state: SemanticState): boolean {
+    return state.triggers.some(trigger =>
+      trigger.phase === 'exit'
+      && trigger.status === 'locked'
+      && trigger.openSlots.every(slot => slot.status !== 'open'),
+    )
   }
 
   private toSemanticTriggerState(
@@ -1210,6 +1520,25 @@ export class CodegenConversationService {
       )
     }
 
+    if (this.isPositionSizingClarificationItem(item)) {
+      return this.hasValidLockedPositionSizing(semanticState.position)
+    }
+
+    if (this.isProtectiveRiskClarificationItem(item)) {
+      return this.hasProtectiveRisk(semanticState.risk)
+    }
+
+    if (this.isTakeProfitClarificationItem(item)) {
+      return this.hasLockedExitSemantics(semanticState)
+        || semanticState.risk.some(risk =>
+          risk.key === 'risk.take_profit_pct'
+          && risk.status === 'locked'
+          && typeof risk.params.valuePct === 'number'
+          && Number.isFinite(risk.params.valuePct)
+          && risk.params.valuePct > 0,
+        )
+    }
+
     if (item.reason !== 'ambiguous_state_gate') {
       return false
     }
@@ -1219,6 +1548,31 @@ export class CodegenConversationService {
       && trigger.status === 'locked'
       && trigger.openSlots.every(slot => slot.status !== 'open'),
     )
+  }
+
+  private isPositionSizingClarificationItem(item: StrategyClarificationItem): boolean {
+    return item.reason === 'missing_position_pct'
+      || item.field === 'riskRules.positionPct'
+      || item.key === 'riskRules.positionPct'
+      || item.key === 'position.sizing'
+      || item.key === 'sizing.positionPct'
+      || item.slotKey === 'position.sizing'
+  }
+
+  private isProtectiveRiskClarificationItem(item: StrategyClarificationItem): boolean {
+    return item.reason === 'missing_stop_loss_rule'
+      || item.field === 'riskRules.stopLossPct'
+      || item.key === 'riskRules.stopLossPct'
+      || item.key === 'risk.stopLoss.rule'
+      || item.key === 'risk.protective_exit'
+      || item.slotKey === 'risk.protective_exit'
+  }
+
+  private isTakeProfitClarificationItem(item: StrategyClarificationItem): boolean {
+    return item.reason === 'missing_take_profit_rule'
+      || item.field === 'riskRules.takeProfitPct'
+      || item.key === 'riskRules.takeProfitPct'
+      || item.key === 'risk.takeProfit.rule'
   }
 
   private findNextOpenSemanticSlot(state: SemanticState): SemanticSlotState | null {
@@ -1239,6 +1593,11 @@ export class CodegenConversationService {
     const triggerSlot = openTriggerSlots[0] ?? null
     if (triggerSlot) {
       return triggerSlot
+    }
+
+    const positionSlot = state.position?.openSlots?.find(slot => slot.status === 'open')
+    if (positionSlot) {
+      return positionSlot
     }
 
     const riskSlot = state.risk.flatMap(risk => risk.openSlots).find(slot => slot.status === 'open')
@@ -1315,10 +1674,11 @@ export class CodegenConversationService {
     const openRiskSlots = state.risk
       .flatMap(risk => risk.openSlots)
       .filter(slot => slot.status === 'open')
+    const openPositionSlots = state.position?.openSlots?.filter(slot => slot.status === 'open') ?? []
     const openContextSlots = Object.values(state.contextSlots)
       .filter((slot): slot is SemanticSlotState => Boolean(slot) && slot.status === 'open')
 
-    return [...openTriggerSlots, ...openRiskSlots, ...openContextSlots]
+    return [...openTriggerSlots, ...openPositionSlots, ...openRiskSlots, ...openContextSlots]
   }
 
   private buildClarificationFromSemanticState(
@@ -1405,7 +1765,10 @@ export class CodegenConversationService {
     if (input.plan.logic) {
       nextState = this.semanticStateMerge.merge({
         persisted: nextState,
-        derived: this.buildFallbackSemanticState(input.plan.logic),
+        derived: this.withoutSemanticPatchDuplicateAtoms(
+          this.buildFallbackSemanticState(input.plan.logic),
+          semanticPatchState,
+        ),
       })
     }
 
@@ -1416,7 +1779,89 @@ export class CodegenConversationService {
       })
     }
 
-    return nextState
+    const requiredSlotChecklist = this.mergeChecklistSnapshots(
+      input.compatibilityChecklist ?? {},
+      input.plan.logic ?? {},
+    )
+    return this.withRequiredSemanticOpenSlots(nextState, requiredSlotChecklist, {
+      preserveLockedPositionSizing: Boolean(
+        this.hasValidLockedPositionSizing(semanticPatchState?.position)
+        || this.hasValidLockedPositionSizing(input.currentState.position),
+      ),
+    })
+  }
+
+  private withoutSemanticPatchDuplicateAtoms(
+    fallbackState: SemanticState,
+    semanticPatchState: SemanticState | null,
+  ): SemanticState {
+    if (!semanticPatchState) {
+      return fallbackState
+    }
+
+    return {
+      ...fallbackState,
+      triggers: fallbackState.triggers.filter(trigger =>
+        !semanticPatchState.triggers.some(patchTrigger =>
+          this.isSameSemanticTriggerAtom(trigger, patchTrigger),
+        ),
+      ),
+      actions: fallbackState.actions.filter(action =>
+        !semanticPatchState.actions.some(patchAction =>
+          this.isSameSemanticActionAtom(action, patchAction),
+        ),
+      ),
+      risk: fallbackState.risk.filter(risk =>
+        !semanticPatchState.risk.some(patchRisk =>
+          this.isSameSemanticRiskAtom(risk, patchRisk),
+        ),
+      ),
+      position: semanticPatchState.position ? null : fallbackState.position,
+    }
+  }
+
+  private isSameSemanticTriggerAtom(
+    left: SemanticTriggerState,
+    right: SemanticTriggerState,
+  ): boolean {
+    return left.phase === right.phase
+      && left.key === right.key
+      && (!left.sideScope || left.sideScope === right.sideScope)
+      && this.haveCompatibleSemanticParams(left.params, right.params)
+  }
+
+  private isSameSemanticActionAtom(
+    left: SemanticState['actions'][number],
+    right: SemanticState['actions'][number],
+  ): boolean {
+    return left.key === right.key
+      && this.haveCompatibleSemanticParams(left.params ?? {}, right.params ?? {})
+  }
+
+  private isSameSemanticRiskAtom(
+    left: SemanticState['risk'][number],
+    right: SemanticState['risk'][number],
+  ): boolean {
+    return left.key === right.key
+      && this.haveCompatibleSemanticParams(left.params, right.params)
+  }
+
+  private haveCompatibleSemanticParams(
+    left: Record<string, unknown>,
+    right: Record<string, unknown>,
+  ): boolean {
+    return Object.keys(left).every(key =>
+      right[key] !== undefined && left[key] === right[key],
+    )
+  }
+
+  private hasValidLockedPositionSizing(
+    position: SemanticState['position'],
+  ): boolean {
+    return position?.status === 'locked'
+      && position.mode === 'fixed_ratio'
+      && Number.isFinite(position.value)
+      && position.value > 0
   }
 
   private shouldReapplyDeterministicStartSeedChecklist(
@@ -2513,21 +2958,28 @@ export class CodegenConversationService {
           this.projectLegacyChecklistFromSemanticState(args.semanticState, args.checklist),
         )
       : args.checklist
+    const reducedSemanticState = this.withRequiredSemanticOpenSlots(
+      args.semanticState,
+      projectedChecklist,
+      {
+        preserveLockedPositionSizing: this.hasValidLockedPositionSizing(args.semanticState.position),
+      },
+    )
     const clarification = this.resolveClarificationArtifacts(projectedChecklist)
     const semanticClarificationState = this.buildClarificationFromSemanticState(
-      args.semanticState,
+      reducedSemanticState,
       projectedChecklist,
       { preserveLegacyFallback: !args.useSemanticProjection },
     )
 
     if (semanticClarificationState.status === 'NEEDS_CLARIFICATION') {
-      const assistantPrompt = this.buildSemanticClarificationPrompt(args.semanticState)
+      const assistantPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
         || this.clarificationQuestion.build(semanticClarificationState)
         || clarification.clarificationPrompt
         || '请先澄清这条规则，我再继续完善逻辑图。'
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        semanticState: args.semanticState,
+        semanticState: reducedSemanticState,
         clarificationState: semanticClarificationState,
         constraintPack: {
           ...args.constraintPack,
@@ -2545,11 +2997,11 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
 
-    const normalization = this.buildNormalizationFromSemanticState(args.semanticState)
+    const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
     const canonicalSpec = this.buildCanonicalSpecForConversation(
       projectedChecklist,
       normalization,
-      args.useSemanticProjection ? args.semanticState : undefined,
+      args.useSemanticProjection ? reducedSemanticState : undefined,
     )
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
@@ -2569,8 +3021,8 @@ export class CodegenConversationService {
       const assistantPrompt = this.clarificationQuestion.buildFromDecision(decision)
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        semanticState: args.semanticState,
-        clarificationState: clarification.clarificationState,
+        semanticState: reducedSemanticState,
+        clarificationState: semanticClarificationState,
         constraintPack: {
           ...args.constraintPack,
           conversationHistory: historyAfterAnswer,
@@ -2583,7 +3035,7 @@ export class CodegenConversationService {
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt,
-        clarificationState: clarification.clarificationState,
+        clarificationState: semanticClarificationState,
         specDesc,
         canonicalDigest,
       })
@@ -2593,8 +3045,8 @@ export class CodegenConversationService {
     if (normalization.blocked) {
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        semanticState: args.semanticState,
-        clarificationState: clarification.clarificationState,
+        semanticState: reducedSemanticState,
+        clarificationState: semanticClarificationState,
         constraintPack: {
           ...args.constraintPack,
           conversationHistory: historyAfterAnswer,
@@ -2607,7 +3059,7 @@ export class CodegenConversationService {
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt: this.buildNormalizationAssistantPrompt(projectedChecklist, normalization),
-        clarificationState: clarification.clarificationState,
+        clarificationState: semanticClarificationState,
         specDesc,
       })
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
@@ -2616,8 +3068,8 @@ export class CodegenConversationService {
     if (!compileability.canCompile) {
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
-        semanticState: args.semanticState,
-        clarificationState: clarification.clarificationState,
+        semanticState: reducedSemanticState,
+        clarificationState: semanticClarificationState,
         constraintPack: {
           ...args.constraintPack,
           conversationHistory: historyAfterAnswer,
@@ -2629,7 +3081,7 @@ export class CodegenConversationService {
         status: 'DRAFTING',
         missingFields: [],
         assistantPrompt: this.buildCompileabilityAssistantPrompt(compileability),
-        clarificationState: clarification.clarificationState,
+        clarificationState: semanticClarificationState,
       })
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
@@ -2643,8 +3095,8 @@ export class CodegenConversationService {
 
     await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
       status: 'CONFIRM_GATE',
-      semanticState: args.semanticState,
-      clarificationState: clarification.clarificationState,
+      semanticState: reducedSemanticState,
+      clarificationState: semanticClarificationState,
       constraintPack: {
         ...args.constraintPack,
         conversationHistory: historyAfterChecklistGate,
@@ -2657,7 +3109,7 @@ export class CodegenConversationService {
       status: 'CONFIRM_GATE',
       missingFields: [],
       assistantPrompt: checklistGateAssistantPrompt,
-      clarificationState: clarification.clarificationState,
+      clarificationState: semanticClarificationState,
       specDesc,
       canonicalDigest,
     })
@@ -3745,7 +4197,12 @@ export class CodegenConversationService {
       }
     }
 
-    if (state.position?.mode === 'fixed_ratio' && Number.isFinite(state.position.value)) {
+    if (
+      state.position?.status === 'locked'
+      && state.position.mode === 'fixed_ratio'
+      && Number.isFinite(state.position.value)
+      && state.position.value > 0
+    ) {
       riskRules.positionPct = state.position.value <= 1
         ? state.position.value * 100
         : state.position.value
@@ -5693,7 +6150,7 @@ export class CodegenConversationService {
       id: typeof record.id === 'string' && record.id.trim() ? record.id.trim() : `planner-trigger-${index + 1}`,
       key,
       phase,
-      params: this.readPlannerParams(record.params),
+      params: this.normalizePlannerTriggerParams(key, this.readPlannerParams(record.params)),
       ...(record.sideScope === 'long' || record.sideScope === 'short' || record.sideScope === 'both'
         ? { sideScope: record.sideScope }
         : {}),
@@ -5767,6 +6224,7 @@ export class CodegenConversationService {
       positionMode: record.positionMode,
       status: 'locked',
       source: 'user_explicit',
+      openSlots: [],
     }
   }
 
@@ -5821,6 +6279,31 @@ export class CodegenConversationService {
     }
 
     return { ...(value as Record<string, unknown>) }
+  }
+
+  private normalizePlannerTriggerParams(
+    key: string,
+    params: Record<string, unknown>,
+  ): Record<string, unknown> {
+    if (key !== 'price.percent_change' || typeof params.valuePct !== 'number' || !Number.isFinite(params.valuePct)) {
+      return params
+    }
+
+    if (params.direction === 'down' || params.direction === '跌' || params.direction === '下跌') {
+      return {
+        ...params,
+        valuePct: -Math.abs(params.valuePct),
+      }
+    }
+
+    if (params.direction === 'up' || params.direction === '涨' || params.direction === '上涨') {
+      return {
+        ...params,
+        valuePct: Math.abs(params.valuePct),
+      }
+    }
+
+    return params
   }
 
   private mergeChecklistSnapshots(base: ChecklistPayload, patch: ChecklistPayload): ChecklistPayload {

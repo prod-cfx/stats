@@ -190,4 +190,130 @@ describe('SemanticStateProjectionService', () => {
     expect(view.summary).toContain('网格')
     expect(view.nextQuestion).toBe('请确认网格区间下界。')
   })
+
+  it('surfaces an open position sizing slot before context slots', () => {
+    const result = service.buildClarificationView({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-1',
+          key: 'price.percent_change',
+          phase: 'entry',
+          params: { valuePct: -1, basis: 'prev_close' },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [{ id: 'action-1', key: 'open_long', status: 'locked', source: 'user_explicit' }],
+      risk: [],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0,
+        positionMode: 'long_only',
+        status: 'open',
+        source: 'derived',
+        openSlots: [
+          {
+            slotKey: 'position.sizing',
+            fieldPath: 'position.value',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认单笔仓位百分比（例如 10%）。',
+            affectsExecution: true,
+          },
+        ],
+      },
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'open',
+          priority: 'context',
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+        },
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-21T00:00:00.000Z',
+    })
+
+    expect(result.nextQuestion).toBe('请确认单笔仓位百分比（例如 10%）。')
+  })
+
+  it('surfaces an open position sizing slot before an open risk slot', () => {
+    const result = service.buildClarificationView({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-1',
+          key: 'price.percent_change',
+          phase: 'entry',
+          params: { valuePct: -1, basis: 'prev_close' },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [{ id: 'action-1', key: 'open_long', status: 'locked', source: 'user_explicit' }],
+      risk: [
+        {
+          id: 'risk-1',
+          key: 'stop_loss.percent',
+          params: {},
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'risk.stop_loss',
+              fieldPath: 'risk[0].params.stopLossPct',
+              status: 'open',
+              priority: 'risk',
+              questionHint: '请确认止损百分比。',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0,
+        positionMode: 'long_only',
+        status: 'open',
+        source: 'derived',
+        openSlots: [
+          {
+            slotKey: 'position.sizing',
+            fieldPath: 'position.value',
+            status: 'open',
+            priority: 'risk',
+            questionHint: '请确认单笔仓位百分比（例如 10%）。',
+            affectsExecution: true,
+          },
+        ],
+      },
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'open',
+          priority: 'context',
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+        },
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-21T00:00:00.000Z',
+    })
+
+    expect(result.nextQuestion).toBe('请确认单笔仓位百分比（例如 10%）。')
+  })
 })

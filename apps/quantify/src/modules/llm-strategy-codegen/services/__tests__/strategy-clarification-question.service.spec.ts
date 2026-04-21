@@ -1,4 +1,5 @@
 import { buildConversationPlannerSystemPrompt } from '../../prompts/conversation-planner-system.prompt'
+import { resolveSemanticClarificationMetadata } from '../semantic-clarification-metadata'
 import { StrategyClarificationQuestionService } from '../strategy-clarification-question.service'
 
 describe('strategyClarificationQuestionService', () => {
@@ -235,6 +236,17 @@ describe('strategyClarificationQuestionService', () => {
 
     expect(prompt).toContain('网格参数')
     expect(prompt).toContain('请确认网格步长')
+  })
+
+  it('maps required semantic position and protective risk slots to existing clarification fields', () => {
+    expect(resolveSemanticClarificationMetadata('position.sizing')).toEqual({
+      reason: 'missing_position_pct',
+      field: 'riskRules.positionPct',
+    })
+    expect(resolveSemanticClarificationMetadata('risk.protective_exit')).toEqual({
+      reason: 'missing_stop_loss_rule',
+      field: 'riskRules.stopLossPct',
+    })
   })
 
   it('describes atomic semantic forks as executable semantic ambiguity', () => {

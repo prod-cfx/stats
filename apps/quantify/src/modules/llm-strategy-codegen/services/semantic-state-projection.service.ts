@@ -76,6 +76,11 @@ export class SemanticStateProjectionService {
       return firstBlockingTriggerSlot
     }
 
+    const positionSlot = state.position?.openSlots?.find(slot => slot.status === 'open') ?? null
+    if (positionSlot) {
+      return positionSlot
+    }
+
     const riskSlot = state.risk
       .flatMap(risk => risk.openSlots)
       .find(slot => slot.status === 'open')

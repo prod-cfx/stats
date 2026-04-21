@@ -38,7 +38,12 @@ export class SemanticStateReducerService {
         params: { ...risk.params },
         openSlots: risk.openSlots.map(slot => ({ ...slot })),
       })),
-      position: input.currentState.position ? { ...input.currentState.position } : null,
+      position: input.currentState.position
+        ? {
+            ...input.currentState.position,
+            openSlots: input.currentState.position.openSlots?.map(slot => ({ ...slot })),
+          }
+        : null,
       contextSlots: {
         exchange: input.currentState.contextSlots.exchange ? { ...input.currentState.contextSlots.exchange } : null,
         symbol: input.currentState.contextSlots.symbol ? { ...input.currentState.contextSlots.symbol } : null,
@@ -82,6 +87,76 @@ export class SemanticStateReducerService {
       }
 
       trigger.status = trigger.openSlots.every(item => item.status !== 'open') ? 'locked' : 'open'
+      break
+    }
+
+    const positionSlot = nextState.position?.openSlots?.find((item) => {
+      if (input.targetSlotId) {
+        return buildSemanticSlotId(item) === input.targetSlotId
+      }
+
+      return item.slotKey === input.targetSlotKey
+        && (input.targetFieldPath ? item.fieldPath === input.targetFieldPath : true)
+    })
+    if (nextState.position && positionSlot?.slotKey === 'position.sizing' && positionSlot.status === 'open') {
+      const percentValue = this.parsePercentAnswer(answerText)
+      if (percentValue !== null) {
+        const evidence = {
+          text: answerText,
+          messageIndex: input.messageIndex,
+          source: 'user_explicit' as const,
+        }
+
+        nextState.position.value = percentValue / 100
+        nextState.position.status = 'locked'
+        nextState.position.source = 'user_explicit'
+        nextState.position.evidence = evidence
+        positionSlot.value = percentValue
+        positionSlot.status = 'locked'
+        positionSlot.evidence = evidence
+      }
+    }
+
+    for (const risk of nextState.risk) {
+      if (risk.key !== 'risk.protective_exit') continue
+
+      const slot = risk.openSlots.find((item) => {
+        if (input.targetSlotId) {
+          return buildSemanticSlotId(item) === input.targetSlotId
+        }
+
+        return item.slotKey === input.targetSlotKey
+          && (input.targetFieldPath ? item.fieldPath === input.targetFieldPath : true)
+      })
+      if (slot?.slotKey !== 'risk.protective_exit' || slot.status !== 'open') continue
+
+      const percentValue = this.parsePercentAnswer(answerText)
+      if (percentValue === null) {
+        break
+      }
+
+      const evidence = {
+        text: answerText,
+        messageIndex: input.messageIndex,
+        source: 'user_explicit' as const,
+      }
+
+      const riskKey = this.resolveProtectiveRiskAnswerKey(answerText)
+      if (!riskKey) {
+        break
+      }
+
+      risk.key = riskKey
+      risk.params = {
+        valuePct: percentValue,
+        basis: 'entry_avg_price',
+      }
+      risk.status = 'locked'
+      risk.source = 'user_explicit'
+      risk.evidence = evidence
+      slot.value = percentValue
+      slot.status = 'locked'
+      slot.evidence = evidence
       break
     }
 
@@ -244,6 +319,54 @@ export class SemanticStateReducerService {
 
     const value = Number(numericMatch[0])
     return Number.isFinite(value) ? value : null
+  }
+
+  private parsePercentAnswer(answerText: string): number | null {
+    const normalized = answerText.trim()
+    if (!normalized || /(?:不是|并非|不要|别|not)/iu.test(normalized) || /-\s*\d/u.test(normalized)) {
+      return null
+    }
+
+    const percentText = normalized.replace(/％/gu, '%')
+    const percentCandidates = [...percentText.matchAll(/(?:百分之?\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*%)/gu)]
+    if (percentCandidates.length > 1) {
+      return null
+    }
+    if (percentCandidates.length === 1) {
+      const value = Number(percentCandidates[0]?.[1] ?? percentCandidates[0]?.[2])
+      return this.isValidPercentValue(value) ? value : null
+    }
+
+    if (!/^\d+(?:\.\d+)?$/u.test(normalized)) {
+      return null
+    }
+
+    const value = Number(normalized)
+    return this.isValidPercentValue(value) ? value : null
+  }
+
+  private isValidPercentValue(value: number): boolean {
+    return Number.isFinite(value) && value > 0 && value <= 100
+  }
+
+  private resolveProtectiveRiskAnswerKey(answerText: string): 'risk.stop_loss_pct' | 'risk.max_drawdown_pct' | 'risk.max_single_loss_pct' | 'risk.trailing_stop_pct' | null {
+    if (/最大回撤|max\s*drawdown/iu.test(answerText)) {
+      return 'risk.max_drawdown_pct'
+    }
+
+    if (/单笔|单次|每笔|max\s*single/iu.test(answerText) && /亏损|损失|loss/iu.test(answerText)) {
+      return 'risk.max_single_loss_pct'
+    }
+
+    if (/移动止损|trailing/iu.test(answerText)) {
+      return null
+    }
+
+    if (/止损|亏损|损失|stop[\s_-]?loss|loss/iu.test(answerText)) {
+      return 'risk.stop_loss_pct'
+    }
+
+    return null
   }
 
   private parseGridSideModeAnswer(answerText: string): 'long_only' | 'short_only' | 'bidirectional' | null {
