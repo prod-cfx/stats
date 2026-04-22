@@ -448,6 +448,41 @@ export class AccountStrategyViewRepository {
     })
   }
 
+  async activateStrategyInstanceForRuntime(params: {
+    strategyInstanceId: string
+    mode: 'TESTNET' | 'LIVE'
+    userId: string
+  }) {
+    return this.prisma.strategyInstance.update({
+      where: { id: params.strategyInstanceId },
+      data: {
+        status: 'running',
+        mode: params.mode,
+        startedAt: new Date(),
+        updatedBy: params.userId,
+        runtimeBindingStatus: 'READY',
+        runtimeBindingErrorCode: null,
+        runtimeBindingUpdatedAt: new Date(),
+      },
+    })
+  }
+
+  async markStrategyInstanceRuntimeBindingFailed(params: {
+    strategyInstanceId: string
+    errorCode: string
+    userId?: string
+  }) {
+    return this.prisma.strategyInstance.update({
+      where: { id: params.strategyInstanceId },
+      data: {
+        runtimeBindingStatus: 'FAILED',
+        runtimeBindingErrorCode: params.errorCode,
+        runtimeBindingUpdatedAt: new Date(),
+        ...(params.userId ? { updatedBy: params.userId } : {}),
+      },
+    })
+  }
+
   async markDeployRequestFailed(id: string, errorCode: string, errorMessage: string) {
     return this.prisma.deployRequest.update({
       where: { id },
