@@ -81,7 +81,11 @@ import { SemanticStateMergeService } from './semantic-state-merge.service'
 import { buildNormalizedIntentFromSemanticState } from './semantic-state-normalization'
 import { SemanticStateProjectionService } from './semantic-state-projection.service'
 import { SemanticStateReducerService } from './semantic-state-reducer.service'
-import { InferredConfirmationClassifierService } from './inferred-confirmation-classifier.service'
+import {
+  InferredConfirmationClassifierService,
+  type InferredConfirmationDecisionKey,
+  type InferredConfirmationSemanticDefaults,
+} from './inferred-confirmation-classifier.service'
 import { resolveSemanticClarificationMetadata } from './semantic-clarification-metadata'
 
 interface GenerationOptions {
@@ -4738,7 +4742,7 @@ export class CodegenConversationService {
       providerCode: options?.providerCode,
       model: options?.model,
       decisionKeys,
-      checklist,
+      semanticDefaults: this.buildInferredConfirmationSemanticDefaults(checklist),
     })
     let nextLogicSnapshot = checklist
     for (const [key, basis] of Object.entries(classification.overriddenBasisByKey)) {
@@ -4758,6 +4762,41 @@ export class CodegenConversationService {
       confirmedKeys: classification.confirmedKeys,
       overriddenKeys: classification.overriddenKeys,
     }
+  }
+
+  private buildInferredConfirmationSemanticDefaults(
+    checklist: StrategyLogicSnapshot,
+  ): InferredConfirmationSemanticDefaults {
+    const inferredKeys = Array.isArray(checklist.riskRules?._inferredAssumptions)
+      ? checklist.riskRules._inferredAssumptions.filter((key): key is InferredConfirmationDecisionKey =>
+          key === 'risk.stopLossBasis' || key === 'risk.takeProfitBasis',
+        )
+      : []
+
+    return {
+      inferredKeys,
+      stopLossBasis: this.readStrategyRuleBasisKind(checklist.riskRules?.stopLossBasis),
+      takeProfitBasis: this.readStrategyRuleBasisKind(checklist.riskRules?.takeProfitBasis),
+    }
+  }
+
+  private readStrategyRuleBasisKind(value: unknown): StrategyRuleBasis['kind'] | null {
+    return typeof value === 'string' && this.isStrategyRuleBasisKind(value) ? value : null
+  }
+
+  private isStrategyRuleBasisKind(value: string): value is StrategyRuleBasis['kind'] {
+    return (
+      value === 'prev_close'
+      || value === 'entry_avg_price'
+      || value === 'position_pnl'
+      || value === 'peak_equity'
+      || value === 'peak_position_pnl'
+      || value === 'upper_band'
+      || value === 'lower_band'
+      || value === 'middle_band'
+      || value === 'last_high'
+      || value === 'last_low'
+    )
   }
 
 

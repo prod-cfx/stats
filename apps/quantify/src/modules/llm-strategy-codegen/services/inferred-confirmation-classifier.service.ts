@@ -3,7 +3,9 @@ import type { AiService } from '@/modules/ai/ai.service'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 import { Injectable } from '@nestjs/common'
 
-export type InferredConfirmationDecisionKey = 'risk.stopLossBasis' | 'risk.takeProfitBasis'
+const INFERRED_CONFIRMATION_DECISION_KEYS = ['risk.stopLossBasis', 'risk.takeProfitBasis'] as const
+
+export type InferredConfirmationDecisionKey = typeof INFERRED_CONFIRMATION_DECISION_KEYS[number]
 type InferredConfirmationIntent = 'override' | 'reject' | 'confirm' | 'unclear'
 type InferredConfirmationSource = 'rule' | 'llm'
 type InferredConfirmationFallbackIntent = 'confirm' | 'override' | 'unclear'
@@ -51,7 +53,7 @@ const FALLBACK_RESPONSE_SCHEMA: Record<string, unknown> = {
       type: 'array',
       items: {
         type: 'string',
-        enum: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+        enum: [...INFERRED_CONFIRMATION_DECISION_KEYS],
       },
     },
     normalizedBasis: {
@@ -73,7 +75,8 @@ const FALLBACK_RESPONSE_SCHEMA: Record<string, unknown> = {
 }
 
 function isInferredConfirmationDecisionKey(value: unknown): value is InferredConfirmationDecisionKey {
-  return value === 'risk.stopLossBasis' || value === 'risk.takeProfitBasis'
+  return typeof value === 'string'
+    && (INFERRED_CONFIRMATION_DECISION_KEYS as readonly string[]).includes(value)
 }
 
 @Injectable()
