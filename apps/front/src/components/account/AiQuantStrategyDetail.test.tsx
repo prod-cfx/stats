@@ -228,7 +228,7 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('最近尝试')
     expect(container.textContent).toContain('2026-03-20 10:03')
     expect(container.textContent).toContain('失败分类')
-    expect(container.textContent).toContain('execution')
+    expect(container.textContent).toContain('执行')
     expect(container.textContent).toContain('未生成可执行信号')
     expect(container.textContent).toContain('on_start.exit.primary')
     expect(container.textContent).toContain('已执行')
@@ -289,7 +289,9 @@ describe('AiQuantStrategyDetail', () => {
     })
 
     expect(container.textContent).toContain('部署绑定异常，请重新发布并重新部署')
+    expect(container.textContent).toContain('绑定')
     expect(container.textContent).toContain('当前执行条件未满足（缺少参考K线）')
+    expect(container.textContent).toContain('激活')
   })
 
   it('keeps runtime execution state section hidden for legacy or unbound strategies with no states', async () => {

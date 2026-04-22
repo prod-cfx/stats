@@ -135,6 +135,23 @@ function formatRuntimeExecutionFailureReason(state: {
   return '--'
 }
 
+function formatRuntimeExecutionFailureFamily(
+  failureFamily: 'binding' | 'activation' | 'execution' | 'persistence' | null | undefined,
+) {
+  switch (failureFamily) {
+    case 'binding':
+      return '绑定'
+    case 'activation':
+      return '激活'
+    case 'execution':
+      return '执行'
+    case 'persistence':
+      return '持久化'
+    default:
+      return '--'
+  }
+}
+
 interface AiQuantStrategyDetailProps {
   lng: 'zh' | 'en'
   strategy: AiQuantStrategyRecord | null
@@ -307,7 +324,9 @@ export function AiQuantStrategyDetail({
                   </p>
                   <p className="text-[color:var(--cf-muted)]">
                     失败分类：
-                    <span className="ml-1 text-[color:var(--cf-text-strong)]">{state.failureFamily ?? '--'}</span>
+                    <span className="ml-1 text-[color:var(--cf-text-strong)]">
+                      {formatRuntimeExecutionFailureFamily(state.failureFamily)}
+                    </span>
                   </p>
                   <p className="text-[color:var(--cf-muted)]">
                     失败原因：
