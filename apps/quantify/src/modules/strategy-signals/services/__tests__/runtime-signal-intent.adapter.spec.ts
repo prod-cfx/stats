@@ -16,15 +16,15 @@ describe('RuntimeSignalIntentAdapter', () => {
       referencePrice: 4.728,
     })
 
-    expect(result).toEqual(expect.objectContaining({
+    expect(result).toEqual({
       kind: 'signal',
-      signal: expect.objectContaining({
+      signal: {
         direction: 'BUY',
         signalType: 'ENTRY',
         positionSizeRatio: 0.1,
         entryPrice: 4.728,
-      }),
-    }))
+      },
+    })
   })
 
   it('returns noop for NOOP decisions', () => {
@@ -39,7 +39,7 @@ describe('RuntimeSignalIntentAdapter', () => {
     expect(result).toEqual({ kind: 'noop', reason: 'compiled.noop' })
   })
 
-  it('returns missing_required_truth instead of no-signal when execution truth is incomplete', () => {
+  it('returns missing_required_truth when referencePrice is missing', () => {
     const result = adapter.fromDecision({
       action: 'OPEN_LONG',
       size: { mode: 'RATIO', value: 0.1 },
@@ -52,9 +52,9 @@ describe('RuntimeSignalIntentAdapter', () => {
       referencePrice: undefined,
     })
 
-    expect(result).toEqual(expect.objectContaining({
+    expect(result).toEqual({
       kind: 'missing_required_truth',
       reasonCode: 'RUNTIME_SIGNAL_REFERENCE_PRICE_MISSING',
-    }))
+    })
   })
 })
