@@ -4,6 +4,7 @@ import type { PrismaClient, Prisma } from '@/prisma/prisma.types'
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 import { normalizeRequestedCode } from '@/modules/market-data/utils/market-symbol-code.util'
+import { RUNTIME_BINDING_STATUS } from '../types/runtime-binding-status.type'
 
 export interface RuntimeCooldownScope {
   strategyInstanceId: string
@@ -35,7 +36,7 @@ export class SignalGeneratorRepository {
       where: {
         status: 'running',
         mode: { in: ['LIVE', 'TESTNET'] },
-        runtimeBindingStatus: 'READY',
+        runtimeBindingStatus: RUNTIME_BINDING_STATUS.READY,
         strategyTemplate: { status: 'live' },
       },
       orderBy: { id: 'asc' },
