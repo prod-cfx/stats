@@ -1,4 +1,4 @@
-import { makeApi, Zodios, type ZodiosEndpointDefinitions, type ZodiosInstance, type ZodiosOptions } from '@zodios/core'
+import { makeApi, Zodios, type ZodiosInstance, type ZodiosOptions } from '@zodios/core'
 import { z } from 'zod'
 
 const SettingResponseDto = z
@@ -1591,7 +1591,7 @@ const AccountStrategyDetailTransportEnvelope = z
   .object({ data: AccountStrategyDetailResponseDto, message: z.string().optional() })
   .passthrough()
 
-const endpoints: ZodiosEndpointDefinitions = makeApi([
+const endpoints = makeApi([
   {
     method: 'get',
     path: '/account/ai-quant/conversations',
