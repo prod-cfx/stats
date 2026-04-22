@@ -570,10 +570,20 @@ export class InferredConfirmationClassifierService {
     activeKeys: ReadonlySet<InferredConfirmationDecisionKey>,
   ): Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>> {
     const pendingDefaults: Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>> = {}
-    if (activeKeys.has('risk.stopLossBasis') && defaults.stopLossBasis) {
+    const inferredKeys = new Set(defaults.inferredKeys)
+
+    if (
+      activeKeys.has('risk.stopLossBasis')
+      && inferredKeys.has('risk.stopLossBasis')
+      && defaults.stopLossBasis
+    ) {
       pendingDefaults['risk.stopLossBasis'] = defaults.stopLossBasis
     }
-    if (activeKeys.has('risk.takeProfitBasis') && defaults.takeProfitBasis) {
+    if (
+      activeKeys.has('risk.takeProfitBasis')
+      && inferredKeys.has('risk.takeProfitBasis')
+      && defaults.takeProfitBasis
+    ) {
       pendingDefaults['risk.takeProfitBasis'] = defaults.takeProfitBasis
     }
     return pendingDefaults
