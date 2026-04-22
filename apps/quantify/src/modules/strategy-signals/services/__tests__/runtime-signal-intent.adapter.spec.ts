@@ -77,6 +77,30 @@ describe('RuntimeSignalIntentAdapter', () => {
     }))
   })
 
+  it('drops invalid optional numeric signal fields', () => {
+    const result = adapter.fromDecision({
+      action: 'OPEN_LONG',
+      size: { mode: 'RATIO', value: 0.1 },
+      reason: 'compiled.entry',
+      confidence: Infinity,
+      risk: {
+        stopLoss: 0,
+        takeProfit: Number.NaN,
+      },
+    }, {
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ORDIUSDT',
+      timeframe: '1h',
+      referencePrice: 4.728,
+    })
+
+    const signal = expectSignal(result)
+    expect(signal.confidence).toBeUndefined()
+    expect(signal.stopLoss).toBeUndefined()
+    expect(signal.takeProfit).toBeUndefined()
+  })
+
   it('maps CLOSE_LONG decisions to CLOSE_LONG exit signals', () => {
     const result = adapter.fromDecision({
       action: 'CLOSE_LONG',
@@ -128,6 +152,21 @@ describe('RuntimeSignalIntentAdapter', () => {
     expect(result).toEqual({ kind: 'noop', reason: 'compiled.noop' })
   })
 
+  it('returns missing_required_truth when NOOP reason is missing', () => {
+    const result = adapter.fromDecision({ action: 'NOOP' }, {
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ORDIUSDT',
+      timeframe: '1h',
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      kind: 'missing_required_truth',
+      reasonCode: 'RUNTIME_SIGNAL_REASONING_MISSING',
+      fields: expect.arrayContaining(['reason']),
+    }))
+  })
+
   it('returns missing_required_truth when referencePrice is missing', () => {
     const result = adapter.fromDecision({
       action: 'OPEN_LONG',
@@ -139,6 +178,26 @@ describe('RuntimeSignalIntentAdapter', () => {
       symbol: 'ORDIUSDT',
       timeframe: '1h',
       referencePrice: undefined,
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      kind: 'missing_required_truth',
+      reasonCode: 'RUNTIME_SIGNAL_REFERENCE_PRICE_MISSING',
+      fields: expect.arrayContaining(['referencePrice']),
+    }))
+  })
+
+  it('returns missing_required_truth when referencePrice is Infinity', () => {
+    const result = adapter.fromDecision({
+      action: 'OPEN_LONG',
+      size: { mode: 'RATIO', value: 0.1 },
+      reason: 'compiled.entry',
+    }, {
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ORDIUSDT',
+      timeframe: '1h',
+      referencePrice: Infinity,
     })
 
     expect(result).toEqual(expect.objectContaining({
@@ -204,6 +263,46 @@ describe('RuntimeSignalIntentAdapter', () => {
       kind: 'missing_required_truth',
       reasonCode: 'RUNTIME_SIGNAL_ENTRY_SIZE_MODE_UNSUPPORTED',
       fields: expect.arrayContaining(['size.mode']),
+    }))
+  })
+
+  it('returns missing_required_truth when entry size value is 0', () => {
+    const result = adapter.fromDecision({
+      action: 'OPEN_LONG',
+      size: { mode: 'RATIO', value: 0 },
+      reason: 'compiled.entry',
+    }, {
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ORDIUSDT',
+      timeframe: '1h',
+      referencePrice: 4.728,
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      kind: 'missing_required_truth',
+      reasonCode: 'RUNTIME_SIGNAL_ENTRY_SIZE_VALUE_INVALID',
+      fields: expect.arrayContaining(['size.value']),
+    }))
+  })
+
+  it('returns missing_required_truth when entry size value is negative', () => {
+    const result = adapter.fromDecision({
+      action: 'OPEN_LONG',
+      size: { mode: 'RATIO', value: -1 },
+      reason: 'compiled.entry',
+    }, {
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ORDIUSDT',
+      timeframe: '1h',
+      referencePrice: 4.728,
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      kind: 'missing_required_truth',
+      reasonCode: 'RUNTIME_SIGNAL_ENTRY_SIZE_VALUE_INVALID',
+      fields: expect.arrayContaining(['size.value']),
     }))
   })
 

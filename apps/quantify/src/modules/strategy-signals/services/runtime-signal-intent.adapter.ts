@@ -47,7 +47,7 @@ export class RuntimeSignalIntentAdapter {
       }
     }
 
-    if (!ctx.referencePrice || ctx.referencePrice <= 0) {
+    if (!this.isFinitePositiveNumber(ctx.referencePrice)) {
       return this.missingRequiredTruth('RUNTIME_SIGNAL_REFERENCE_PRICE_MISSING', ['referencePrice'])
     }
 
@@ -60,6 +60,10 @@ export class RuntimeSignalIntentAdapter {
         return this.missingRequiredTruth('RUNTIME_SIGNAL_ENTRY_SIZE_MODE_UNSUPPORTED', ['size.mode'])
       }
 
+      if (!this.isFinitePositiveNumber(decision.size.value)) {
+        return this.missingRequiredTruth('RUNTIME_SIGNAL_ENTRY_SIZE_VALUE_INVALID', ['size.value'])
+      }
+
       return {
         kind: 'signal',
         signal: {
@@ -69,9 +73,7 @@ export class RuntimeSignalIntentAdapter {
           reasoning: reason,
           ...(decision.size.mode === 'QUOTE' ? { positionSizeQuote: decision.size.value } : {}),
           ...(decision.size.mode === 'RATIO' ? { positionSizeRatio: decision.size.value } : {}),
-          ...(decision.confidence !== undefined ? { confidence: decision.confidence } : {}),
-          ...(decision.risk?.stopLoss !== undefined ? { stopLoss: decision.risk.stopLoss } : {}),
-          ...(decision.risk?.takeProfit !== undefined ? { takeProfit: decision.risk.takeProfit } : {}),
+          ...this.buildOptionalSignalFields(decision),
         },
       }
     }
@@ -83,9 +85,7 @@ export class RuntimeSignalIntentAdapter {
         signalType: 'EXIT',
         entryPrice: ctx.referencePrice,
         reasoning: reason,
-        ...(decision.confidence !== undefined ? { confidence: decision.confidence } : {}),
-        ...(decision.risk?.stopLoss !== undefined ? { stopLoss: decision.risk.stopLoss } : {}),
-        ...(decision.risk?.takeProfit !== undefined ? { takeProfit: decision.risk.takeProfit } : {}),
+        ...this.buildOptionalSignalFields(decision),
       },
     }
   }
@@ -105,5 +105,33 @@ export class RuntimeSignalIntentAdapter {
 
     const trimmedReason = reason.trim()
     return trimmedReason ? trimmedReason : null
+  }
+
+  private buildOptionalSignalFields(decision: StrategyDecisionV1): {
+    confidence?: number
+    stopLoss?: number
+    takeProfit?: number
+  } {
+    const optionalFields: {
+      confidence?: number
+      stopLoss?: number
+      takeProfit?: number
+    } = {}
+
+    if (this.isFinitePositiveNumber(decision.confidence)) {
+      optionalFields.confidence = decision.confidence
+    }
+    if (this.isFinitePositiveNumber(decision.risk?.stopLoss)) {
+      optionalFields.stopLoss = decision.risk.stopLoss
+    }
+    if (this.isFinitePositiveNumber(decision.risk?.takeProfit)) {
+      optionalFields.takeProfit = decision.risk.takeProfit
+    }
+
+    return optionalFields
+  }
+
+  private isFinitePositiveNumber(value: unknown): value is number {
+    return typeof value === 'number' && Number.isFinite(value) && value > 0
   }
 }
