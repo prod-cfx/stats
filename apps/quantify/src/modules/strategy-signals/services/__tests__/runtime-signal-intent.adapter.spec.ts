@@ -2,6 +2,14 @@ import { RuntimeSignalIntentAdapter } from '../runtime-signal-intent.adapter'
 
 describe('RuntimeSignalIntentAdapter', () => {
   const adapter = new RuntimeSignalIntentAdapter()
+  const expectSignal = (result: ReturnType<RuntimeSignalIntentAdapter['fromDecision']>) => {
+    expect(result.kind).toBe('signal')
+    if (result.kind !== 'signal') {
+      throw new Error(`expected signal result, received ${result.kind}`)
+    }
+
+    return result.signal
+  }
 
   it('maps OPEN_LONG ratio decisions to entry BUY signals', () => {
     const result = adapter.fromDecision({
@@ -16,8 +24,7 @@ describe('RuntimeSignalIntentAdapter', () => {
       referencePrice: 4.728,
     })
 
-    expect(result.kind).toBe('signal')
-    expect(result.signal).toEqual(expect.objectContaining({
+    expect(expectSignal(result)).toEqual(expect.objectContaining({
       direction: 'BUY',
       signalType: 'ENTRY',
       positionSizeRatio: 0.1,
@@ -39,8 +46,7 @@ describe('RuntimeSignalIntentAdapter', () => {
       referencePrice: 4.728,
     })
 
-    expect(result.kind).toBe('signal')
-    expect(result.signal).toEqual(expect.objectContaining({
+    expect(expectSignal(result)).toEqual(expect.objectContaining({
       direction: 'SELL',
       signalType: 'ENTRY',
       positionSizeRatio: 0.2,
@@ -62,8 +68,7 @@ describe('RuntimeSignalIntentAdapter', () => {
       referencePrice: 4.728,
     })
 
-    expect(result.kind).toBe('signal')
-    expect(result.signal).toEqual(expect.objectContaining({
+    expect(expectSignal(result)).toEqual(expect.objectContaining({
       direction: 'BUY',
       signalType: 'ENTRY',
       positionSizeQuote: 100,
@@ -84,8 +89,7 @@ describe('RuntimeSignalIntentAdapter', () => {
       referencePrice: 4.728,
     })
 
-    expect(result.kind).toBe('signal')
-    expect(result.signal).toEqual(expect.objectContaining({
+    expect(expectSignal(result)).toEqual(expect.objectContaining({
       direction: 'CLOSE_LONG',
       signalType: 'EXIT',
       entryPrice: 4.728,
@@ -105,8 +109,7 @@ describe('RuntimeSignalIntentAdapter', () => {
       referencePrice: 4.728,
     })
 
-    expect(result.kind).toBe('signal')
-    expect(result.signal).toEqual(expect.objectContaining({
+    expect(expectSignal(result)).toEqual(expect.objectContaining({
       direction: 'CLOSE_SHORT',
       signalType: 'EXIT',
       entryPrice: 4.728,
@@ -181,6 +184,45 @@ describe('RuntimeSignalIntentAdapter', () => {
       kind: 'missing_required_truth',
       reasonCode: 'RUNTIME_SIGNAL_SIZE_MISSING',
       fields: expect.arrayContaining(['size']),
+    }))
+  })
+
+  it('returns missing_required_truth when entry size mode is QTY', () => {
+    const result = adapter.fromDecision({
+      action: 'OPEN_LONG',
+      size: { mode: 'QTY', value: 1 },
+      reason: 'compiled.entry',
+    }, {
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ORDIUSDT',
+      timeframe: '1h',
+      referencePrice: 4.728,
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      kind: 'missing_required_truth',
+      reasonCode: 'RUNTIME_SIGNAL_ENTRY_SIZE_MODE_UNSUPPORTED',
+      fields: expect.arrayContaining(['size.mode']),
+    }))
+  })
+
+  it('returns missing_required_truth when reason is missing', () => {
+    const result = adapter.fromDecision({
+      action: 'OPEN_LONG',
+      size: { mode: 'RATIO', value: 0.1 },
+    }, {
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ORDIUSDT',
+      timeframe: '1h',
+      referencePrice: 4.728,
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      kind: 'missing_required_truth',
+      reasonCode: 'RUNTIME_SIGNAL_REASONING_MISSING',
+      fields: expect.arrayContaining(['reason']),
     }))
   })
 

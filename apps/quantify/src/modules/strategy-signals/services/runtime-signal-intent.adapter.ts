@@ -1,7 +1,7 @@
 import type { StrategyDecisionV1 } from '@ai/shared'
 
 type RuntimeSignalDirection = 'BUY' | 'SELL' | 'CLOSE_LONG' | 'CLOSE_SHORT'
-type RuntimeSignalType = 'ENTRY' | 'EXIT' | 'ADJUSTMENT' | 'ALERT'
+type RuntimeSignalType = 'ENTRY' | 'EXIT'
 
 export type RuntimeSignalIntentResult =
   | {
@@ -31,15 +31,20 @@ export interface RuntimeDecisionContext {
 
 export class RuntimeSignalIntentAdapter {
   fromDecision(decision: StrategyDecisionV1, ctx: RuntimeDecisionContext): RuntimeSignalIntentResult {
+    if (decision.action === 'ADJUST_POSITION') {
+      return this.missingRequiredTruth('RUNTIME_SIGNAL_ACTION_UNSUPPORTED', ['action'])
+    }
+
+    const reason = this.resolveReason(decision.reason)
+    if (!reason) {
+      return this.missingRequiredTruth('RUNTIME_SIGNAL_REASONING_MISSING', ['reason'])
+    }
+
     if (decision.action === 'NOOP') {
       return {
         kind: 'noop',
-        reason: decision.reason ?? '',
+        reason,
       }
-    }
-
-    if (decision.action === 'ADJUST_POSITION') {
-      return this.missingRequiredTruth('RUNTIME_SIGNAL_ACTION_UNSUPPORTED', ['action'])
     }
 
     if (!ctx.referencePrice || ctx.referencePrice <= 0) {
@@ -51,13 +56,17 @@ export class RuntimeSignalIntentAdapter {
         return this.missingRequiredTruth('RUNTIME_SIGNAL_SIZE_MISSING', ['size'])
       }
 
+      if (decision.size.mode !== 'QUOTE' && decision.size.mode !== 'RATIO') {
+        return this.missingRequiredTruth('RUNTIME_SIGNAL_ENTRY_SIZE_MODE_UNSUPPORTED', ['size.mode'])
+      }
+
       return {
         kind: 'signal',
         signal: {
           direction: decision.action === 'OPEN_LONG' ? 'BUY' : 'SELL',
           signalType: 'ENTRY',
           entryPrice: ctx.referencePrice,
-          reasoning: decision.reason ?? '',
+          reasoning: reason,
           ...(decision.size.mode === 'QUOTE' ? { positionSizeQuote: decision.size.value } : {}),
           ...(decision.size.mode === 'RATIO' ? { positionSizeRatio: decision.size.value } : {}),
           ...(decision.confidence !== undefined ? { confidence: decision.confidence } : {}),
@@ -73,7 +82,7 @@ export class RuntimeSignalIntentAdapter {
         direction: decision.action,
         signalType: 'EXIT',
         entryPrice: ctx.referencePrice,
-        reasoning: decision.reason ?? '',
+        reasoning: reason,
         ...(decision.confidence !== undefined ? { confidence: decision.confidence } : {}),
         ...(decision.risk?.stopLoss !== undefined ? { stopLoss: decision.risk.stopLoss } : {}),
         ...(decision.risk?.takeProfit !== undefined ? { takeProfit: decision.risk.takeProfit } : {}),
@@ -87,5 +96,14 @@ export class RuntimeSignalIntentAdapter {
       reasonCode,
       fields,
     }
+  }
+
+  private resolveReason(reason: StrategyDecisionV1['reason']): string | null {
+    if (typeof reason !== 'string') {
+      return null
+    }
+
+    const trimmedReason = reason.trim()
+    return trimmedReason ? trimmedReason : null
   }
 }
