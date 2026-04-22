@@ -2,8 +2,43 @@ import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 import type { PrismaService } from '@/prisma/prisma.service'
 import type { PrismaClient, User } from '@/prisma/prisma.types'
+import { setTimeout as sleep } from 'node:timers/promises'
+import { ConfigService } from '@nestjs/config'
 import { AccountStrategyCallerIdentityService } from '@/modules/account-strategy-view/services/account-strategy-caller-identity.service'
+import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
+import { SignalExecutorService } from '@/modules/strategy-signals/services/signal-executor.service'
+import { SignalGeneratorService } from '@/modules/strategy-signals/services/signal-generator.service'
+import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '@/modules/strategy-signals/types/strategy-signals-config.type'
+import { TradingService } from '@/modules/trading/trading.service'
 import { createApiClient, createTestingApp } from '../fixtures/fixtures'
+
+const RUNTIME_SIGNAL_CONFIG = {
+  ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
+  enabled: true,
+  batchSize: 10,
+  execution: {
+    ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution,
+    enabled: true,
+    dryRun: false,
+    defaultQuoteAmount: 100,
+    minBalanceThreshold: 10,
+    maxRiskFraction: 0.5,
+  },
+}
+
+const PUBLISHED_RUNTIME_SCRIPT = `const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(): StrategyDecisionV1 {
+    return {
+      action: 'OPEN_LONG',
+      size: { mode: 'RATIO', value: 0.1 },
+      reason: 'compiled.entry',
+    }
+  },
+}
+strategy`
+
+const RUNTIME_SYMBOL_CODE = 'BTCUSDT:SPOT'
 
 describe('account-strategy-view (E2E)', () => {
   let app: INestApplication
@@ -17,6 +52,7 @@ describe('account-strategy-view (E2E)', () => {
   let strategyRunningId: string
   let strategyPausedId: string
   let ownerBinanceAccountId: string
+  let symbolId: string
   let codegenSessionId: string
   let publishedSnapshotId: string
 
@@ -48,9 +84,55 @@ describe('account-strategy-view (E2E)', () => {
     })
   }
 
+  function upsertTestSymbol(
+    prisma: PrismaClient,
+    params: { code: string; baseAsset: string; quoteAsset: string },
+  ) {
+    const common: any = {
+      code: params.code,
+      baseAsset: params.baseAsset,
+      quoteAsset: params.quoteAsset,
+      exchange: 'BINANCE',
+      type: 'CRYPTO',
+      instrumentType: 'SPOT',
+      status: 'ACTIVE',
+      precisionPrice: 2,
+      precisionQuantity: 6,
+    }
+
+    return prisma.symbol.upsert({
+      where: { code: params.code },
+      update: common,
+      create: common,
+    })
+  }
+
+  function seedRuntimeBars(
+    prisma: PrismaClient,
+    params: { symbolId: string; close: number; time: Date },
+  ) {
+    return prisma.marketBar.createMany({
+      data: [{
+        symbolId: params.symbolId,
+        timeframe: mapTimeframe('15m'),
+        time: params.time,
+        open: params.close - 50,
+        high: params.close + 50,
+        low: params.close - 100,
+        close: params.close,
+        volume: 10,
+        quoteVolume: params.close * 10,
+        trades: 5,
+        source: 'E2E',
+        isFinal: true,
+      }],
+      skipDuplicates: true,
+    })
+  }
+
   function createTestStrategyInstance(
     prisma: PrismaClient,
-    params: { templateId: string; name: string; status: string; ownerId: string },
+    params: { templateId: string; name: string; status: 'running' | 'paused'; ownerId: string },
   ) {
     return prisma.strategyInstance.create({
       data: {
@@ -126,8 +208,11 @@ describe('account-strategy-view (E2E)', () => {
     })
     app = testing.app
     _moduleFixture = testing.moduleFixture
+    if (!testing.prisma) {
+      throw new Error('PrismaService unavailable for account-strategy-view e2e')
+    }
     prismaService = testing.prisma
-    prisma = prismaService
+    prisma = testing.prisma
 
     owner = await createTestUser(prisma, 'account-strategy-owner', 'owner')
     subscriber = await createTestUser(prisma, 'account-strategy-subscriber', 'subscriber')
@@ -136,7 +221,7 @@ describe('account-strategy-view (E2E)', () => {
         userId: owner.id,
         exchangeId: 'binance',
         name: 'owner-binance',
-        isTestnet: true,
+        isTestnet: false,
         encryptedConfig: '{"apiKey":"k","apiSecret":"s"}',
       },
     })
@@ -152,6 +237,18 @@ describe('account-strategy-view (E2E)', () => {
       ownerId: owner.id,
     })
     strategyRunningId = running.id
+
+    const symbol = await upsertTestSymbol(prisma, {
+      code: RUNTIME_SYMBOL_CODE,
+      baseAsset: 'BTC',
+      quoteAsset: 'USDT',
+    })
+    symbolId = symbol.id
+    await seedRuntimeBars(prisma, {
+      symbolId: symbol.id,
+      close: 60000,
+      time: new Date('2026-04-21T00:00:00.000Z'),
+    })
 
     const session = await prisma.llmStrategyCodegenSession.create({
       data: {
@@ -170,21 +267,43 @@ describe('account-strategy-view (E2E)', () => {
         snapshotHash: 'snapshot-hash-e2e',
         scriptHash: 'script-hash-e2e',
         specHash: 'spec-hash-e2e',
-        scriptSnapshot: 'export default {}',
+        scriptSnapshot: PUBLISHED_RUNTIME_SCRIPT,
         specSnapshot: {},
+        astSnapshot: {
+          decisionPrograms: [{ id: 'entry-primary', phase: 'entry' }],
+          runtimeExecutionSemantics: [{
+            semanticKey: 'on_start.entry.primary',
+          }],
+        },
         consistencyReport: {},
         userIntentSummary: {},
         strategySummary: {},
         scriptSummary: {},
+        strategyConfig: {
+          exchange: 'binance',
+          symbol: RUNTIME_SYMBOL_CODE,
+          timeframe: '15m',
+          positionPct: 10,
+          marketType: 'spot',
+        },
+        deploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'GTC',
+        },
+        deploymentExecutionConstraints: {
+          defaultLeverage: 1,
+        },
         lockedParams: {
           exchange: 'binance',
-          symbol: 'BTCUSDT',
+          symbol: RUNTIME_SYMBOL_CODE,
           timeframe: '15m',
           positionPct: 10,
         },
         paramsSnapshot: {
           exchange: 'binance',
-          symbol: 'BTCUSDT',
+          symbol: RUNTIME_SYMBOL_CODE,
           timeframe: '15m',
           positionPct: 10,
         },
@@ -203,6 +322,15 @@ describe('account-strategy-view (E2E)', () => {
           sourceStrategyTemplateId: templateId,
         },
       },
+    })
+
+    const configService = app.get(ConfigService)
+    const originalGet = configService.get.bind(configService)
+    jest.spyOn(configService, 'get').mockImplementation((key: string) => {
+      if (key === 'strategySignals') {
+        return RUNTIME_SIGNAL_CONFIG
+      }
+      return originalGet(key)
     })
 
     const paused = await createTestStrategyInstance(prisma, {
@@ -230,6 +358,23 @@ describe('account-strategy-view (E2E)', () => {
   })
 
   afterAll(async () => {
+    await prisma.userSignalExecution.deleteMany({
+      where: {
+        signal: {
+          strategyInstanceId: strategyRunningId,
+        },
+      },
+    })
+    await prisma.tradingSignal.deleteMany({
+      where: {
+        strategyInstanceId: strategyRunningId,
+      },
+    })
+    await prisma.strategyRuntimeExecutionState.deleteMany({
+      where: {
+        strategyInstanceId: strategyRunningId,
+      },
+    })
     await prisma.strategyPnlDaily.deleteMany({
       where: {
         account: {
@@ -276,6 +421,16 @@ describe('account-strategy-view (E2E)', () => {
         id: ownerBinanceAccountId,
       },
     })
+    await prisma.marketBar.deleteMany({
+      where: {
+        symbolId,
+      },
+    })
+    await prisma.symbol.deleteMany({
+      where: {
+        id: symbolId,
+      },
+    })
     await prisma.strategyInstance.deleteMany({
       where: {
         id: {
@@ -299,7 +454,7 @@ describe('account-strategy-view (E2E)', () => {
   })
 
   it('returns list data and maps paused to stopped in account view', async () => {
-    const request = createApiClient(app)
+    const request: any = createApiClient(app)
     const response = await request
       .get(`account/ai-quant/strategies?userId=${owner.id}&page=1&limit=20`)
       .set('authorization', `Bearer ${owner.id}`)
@@ -314,7 +469,7 @@ describe('account-strategy-view (E2E)', () => {
   })
 
   it('returns detail payload with backend pnl metrics', async () => {
-    const request = createApiClient(app)
+    const request: any = createApiClient(app)
     const response = await request
       .get(`account/ai-quant/strategies/${strategyRunningId}?userId=${owner.id}`)
       .set('authorization', `Bearer ${owner.id}`)
@@ -329,7 +484,7 @@ describe('account-strategy-view (E2E)', () => {
   })
 
   it('applies stop action and returns updated detail status', async () => {
-    const request = createApiClient(app)
+    const request: any = createApiClient(app)
     const response = await request
       .post(`account/ai-quant/strategies/${strategyRunningId}/actions`)
       .set('authorization', `Bearer ${owner.id}`)
@@ -344,8 +499,140 @@ describe('account-strategy-view (E2E)', () => {
     expect(payload.status).toBe('stopped')
   })
 
+  it('deploy initializes published snapshot runtime and automatically advances to signal + execution', async () => {
+    const request: any = createApiClient(app)
+    const deployRequestId = `e2e-deploy-runtime-${Date.now()}`
+
+    expect(await prisma.strategyRuntimeExecutionState.count({
+      where: {
+        strategyInstanceId: strategyRunningId,
+        publishedSnapshotId,
+      },
+    })).toBe(0)
+
+    expect(await prisma.tradingSignal.count({
+      where: {
+        strategyInstanceId: strategyRunningId,
+      },
+    })).toBe(0)
+
+    await request
+      .post('account/ai-quant/strategies/deploy')
+      .set('authorization', `Bearer ${owner.id}`)
+      .send({
+        name: 'E2E Deploy Runtime Continuity',
+        deployRequestId,
+        publishedSnapshotId,
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+        strategyInstanceId: strategyRunningId,
+        exchangeAccountId: ownerBinanceAccountId,
+      })
+      .expect(201)
+
+    const runtimeState = await prisma.strategyRuntimeExecutionState.findFirst({
+      where: {
+        strategyInstanceId: strategyRunningId,
+        publishedSnapshotId,
+      },
+    })
+    expect(runtimeState).toBeDefined()
+    expect(runtimeState?.status).toBe('ready')
+    expect(runtimeState?.executionSemanticKey).toBe('on_start.entry.primary')
+
+    const tradingService = app.get(TradingService)
+    const placeOrderSpy = jest.spyOn(tradingService, 'placeOrder').mockResolvedValue({
+      id: 'E2E-DEPLOY-ORDER',
+      clientOrderId: 'E2E-DEPLOY-CLIENT',
+      symbol: 'BTC/USDT',
+      marketType: 'spot',
+      side: 'buy',
+      type: 'market',
+      price: 60000,
+      amount: 0.00166667,
+      filled: 0.00166667,
+      status: 'closed',
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      raw: {},
+    } as any)
+
+    try {
+      const signalGenerator = app.get(SignalGeneratorService)
+      await signalGenerator.generateSignals(RUNTIME_SIGNAL_CONFIG)
+
+      const signal = await waitForExecution(async () => {
+        return prisma.tradingSignal.findFirst({
+          where: {
+            strategyInstanceId: strategyRunningId,
+          },
+          orderBy: { createdAt: 'desc' },
+        })
+      })
+
+      expect(await prisma.tradingSignal.count({
+        where: {
+          strategyInstanceId: strategyRunningId,
+        },
+      })).toBeGreaterThanOrEqual(1)
+      expect((signal.metadata as {
+        runtimeProvenance?: {
+          publishedSnapshotId?: string
+          executionSemanticKey?: string
+        }
+      } | null)?.runtimeProvenance?.publishedSnapshotId).toBe(publishedSnapshotId)
+      expect((signal.metadata as {
+        runtimeProvenance?: {
+          publishedSnapshotId?: string
+          executionSemanticKey?: string
+        }
+      } | null)?.runtimeProvenance?.executionSemanticKey).toBe('on_start.entry.primary')
+
+      let execution = await pollForResult(async () => {
+        return prisma.userSignalExecution.findFirst({
+          where: {
+            userId: owner.id,
+            signal: {
+              strategyInstanceId: strategyRunningId,
+            },
+          },
+          include: {
+            signal: true,
+          },
+          orderBy: { executedAt: 'desc' },
+        })
+      }, 10)
+
+      if (!execution) {
+        const signalExecutor = app.get(SignalExecutorService)
+        await signalExecutor.handleSignalCreated({ signalId: signal.id } as any)
+        execution = await waitForExecution(async () => {
+          return prisma.userSignalExecution.findFirst({
+            where: {
+              userId: owner.id,
+              signal: {
+                strategyInstanceId: strategyRunningId,
+              },
+            },
+            include: {
+              signal: true,
+            },
+            orderBy: { executedAt: 'desc' },
+          })
+        })
+      }
+
+      expect(placeOrderSpy).toHaveBeenCalled()
+      expect(execution.status).toBe('EXECUTED')
+    } finally {
+      placeOrderSpy.mockRestore()
+    }
+  })
+
   it('deploy is idempotent: repeated click with same deployRequestId does not duplicate records', async () => {
-    const request = createApiClient(app)
+    const request: any = createApiClient(app)
     const deployRequestId = `e2e-deploy-idem-${Date.now()}`
     const body = {
       name: 'E2E Deploy Idempotent',
@@ -398,3 +685,23 @@ describe('account-strategy-view (E2E)', () => {
     expect(riskProfileCount).toBe(1)
   })
 })
+
+async function waitForExecution<T>(loader: () => Promise<T | null>, attempts = 30): Promise<T> {
+  const result = await pollForResult(loader, attempts)
+  if (result) {
+    return result
+  }
+
+  throw new Error('Timed out waiting for execution record')
+}
+
+async function pollForResult<T>(loader: () => Promise<T | null>, attempts = 30): Promise<T | null> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const result = await loader()
+    if (result) {
+      return result
+    }
+    await sleep(100)
+  }
+  return null
+}
