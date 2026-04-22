@@ -108,7 +108,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       return session.checklist
     }
     if (session.semanticState) {
-      return (service as any).projectLegacyLogicSnapshotFromSemanticState(session.semanticState, {})
+      return (service as any).buildLegacyLogicSnapshotProjectionForCompatibility(session.semanticState, {})
     }
     return {}
   }
@@ -649,7 +649,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       ? overrides.checklist as Record<string, any>
       : {}
     const normalizedChecklist = (service as any).normalizeLogicSnapshot(rawChecklist)
-    const semanticState = (service as any).mergeLogicSnapshotIntoSemanticState(
+    const semanticState = (service as any).mergeLogicSnapshotIntoSemanticStateForLegacyCompatibility(
       (service as any).createEmptySemanticState(),
       normalizedChecklist,
     )
@@ -2627,7 +2627,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
     }))
     const generatingPayload = mockRepo.tryMarkGenerating.mock.calls.at(-1)?.[1] as Record<string, any>
-    const generatedChecklist = (service as any).projectLegacyLogicSnapshotFromSemanticState(generatingPayload.semanticState, {})
+    const generatedChecklist = (service as any).buildLegacyLogicSnapshotProjectionForCompatibility(generatingPayload.semanticState, {})
     expect(generatedChecklist).toEqual(expect.objectContaining({
       entryRules: expect.arrayContaining(['收盘确认价格突破长期均线（50）时买入']),
       exitRules: expect.arrayContaining(['收盘确认价格跌破短期均线（20）时卖出']),
@@ -3569,7 +3569,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('projects short-side MA semantic triggers back into checklist rules without rewriting them into long actions', () => {
-    const projected = (service as any).projectLegacyLogicSnapshotFromSemanticState({
+    const projected = (service as any).buildLegacyLogicSnapshotProjectionForCompatibility({
       version: 1,
       families: ['single-leg'],
       triggers: [
@@ -3627,8 +3627,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(projected.exitRules).toEqual(['收盘确认价格突破长期均线（50）时平空'])
   })
 
-  it('keeps semantic MA rules when projectLegacyLogicSnapshotFromSemanticState projects over generic checklist placeholders', () => {
-    const projected = (service as any).projectLegacyLogicSnapshotFromSemanticState({
+  it('keeps semantic MA rules when buildLegacyLogicSnapshotProjectionForCompatibility projects over generic checklist placeholders', () => {
+    const projected = (service as any).buildLegacyLogicSnapshotProjectionForCompatibility({
       version: 1,
       families: ['single-leg'],
       triggers: [
@@ -3860,8 +3860,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       ],
       exitRules: ['收盘确认价格跌破短期均线（10）时卖出'],
     }
-    const mergedSemanticState = (service as any).mergeLogicSnapshotIntoSemanticState(currentSemanticState, checklist)
-    const projectedChecklist = (service as any).projectLegacyLogicSnapshotFromSemanticState(mergedSemanticState, checklist)
+    const mergedSemanticState = (service as any).mergeLogicSnapshotIntoSemanticStateForLegacyCompatibility(currentSemanticState, checklist)
+    const projectedChecklist = (service as any).buildLegacyLogicSnapshotProjectionForCompatibility(mergedSemanticState, checklist)
 
     expect(mergedSemanticState.triggers).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -3940,7 +3940,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       position: null,
     })
 
-    const mergedSemanticState = (service as any).mergeLogicSnapshotIntoSemanticState(currentSemanticState, {
+    const mergedSemanticState = (service as any).mergeLogicSnapshotIntoSemanticStateForLegacyCompatibility(currentSemanticState, {
       entryRules: [
         '价格突破长期均线（50）时买入',
         '价格突破短期均线（20）时买入',
@@ -4012,7 +4012,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       position: null,
     })
 
-    const mergedSemanticState = (service as any).mergeLogicSnapshotIntoSemanticState(currentSemanticState, {
+    const mergedSemanticState = (service as any).mergeLogicSnapshotIntoSemanticStateForLegacyCompatibility(currentSemanticState, {
       entryRules: [
         '价格突破长期均线（50）时买入',
         '价格突破短期均线（20）时买入',
@@ -4077,7 +4077,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       },
     })
 
-    const mergedSemanticState = (service as any).mergeLogicSnapshotIntoSemanticState(currentSemanticState, checklist)
+    const mergedSemanticState = (service as any).mergeLogicSnapshotIntoSemanticStateForLegacyCompatibility(currentSemanticState, checklist)
 
     expect(mergedSemanticState.triggers.filter((trigger: any) => trigger.phase === 'gate')).toEqual([
       expect.objectContaining({

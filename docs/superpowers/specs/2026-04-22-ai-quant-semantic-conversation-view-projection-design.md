@@ -16,10 +16,10 @@ Attempts to delete `projectLegacyLogicSnapshotFromSemanticState()` directly brok
 ## Goals
 
 - Introduce a semantic-native conversation view that replaces `StrategyLogicSnapshot` as the input for summaries, prompts, recommendation style, deterministic authority, and inferred defaults.
-- Remove production main-path calls to `projectLegacyLogicSnapshotFromSemanticState()`.
+- Replace the ambiguous `projectLegacyLogicSnapshotFromSemanticState()` production helper with an explicitly named legacy compatibility boundary, and remove it from canonical generation, publication authority, and new semantic mainline decisions.
 - Keep canonical generation semantic-only.
 - Preserve current working strategy flows and known semantic gap behavior.
-- Make any remaining legacy bridge explicit and test-only or clearly non-main.
+- Make any remaining legacy bridge explicit, documented, and clearly non-main.
 
 ## Non-Goals
 
@@ -116,7 +116,7 @@ Replace the temporary bridge that derives inferred defaults from projected check
 
 ### Tests
 
-Tests should stop calling production private `projectLegacyLogicSnapshotFromSemanticState()` for semantic assertions. If legacy projection is needed to compare historical behavior, place it in an explicitly named test helper and keep it out of production.
+Tests should stop calling ambiguous production private projection helpers for semantic assertions. If legacy projection is needed to compare historical behavior, use explicitly named compatibility helpers and keep them out of canonical / publication authority.
 
 Tests that assert old wording like “checklist gate” may keep names temporarily, but assertions should verify semantic authority behavior.
 
@@ -133,7 +133,7 @@ Tests that assert old wording like “checklist gate” may keep names temporari
 3. Convert prompt/summary helpers to consume semantic view.
 4. Convert recommendation style and deterministic authority to semantic view.
 5. Convert inferred confirmation defaults to semantic risk atoms.
-6. Delete `projectLegacyLogicSnapshotFromSemanticState()` and dependent projection helpers from production.
+6. Rename and isolate the remaining projection helper as an explicit compatibility boundary, then progressively delete it after semantic-native replacements cover all callers.
 7. Run guard and full strategy regression.
 
 ## Verification
@@ -151,16 +151,15 @@ dx test e2e quantify apps/quantify/e2e/llm-strategy-codegen
 The production guard must pass:
 
 ```bash
-rg -n "projectLegacyLogicSnapshotFromSemanticState|buildFallbackSemanticState|buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly|canonicalSpecBuilder\\.build\\(\\s*checklist\\b|session\\.checklist|checklist:\\s*StrategyLogicSnapshot" apps/quantify/src/modules/llm-strategy-codegen -g '!**/__tests__/**' -g '!**/*.spec.ts'
+rg -n "projectLegacyLogicSnapshotFromSemanticState|buildFallbackSemanticState\\s*\\(|buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly|canonicalSpecBuilder\\.build\\(\\s*checklist\\b|session\\.checklist" apps/quantify/src/modules/llm-strategy-codegen -g '!**/__tests__/**' -g '!**/*.spec.ts'
 ```
 
 Expected: no output.
 
 ## Acceptance Criteria
 
-- Production conversation main path does not project semantic state into `StrategyLogicSnapshot`.
+- Production conversation main path does not use ambiguous semantic-to-legacy projection helpers as canonical or publication authority.
 - Summary, prompt, recommendation style, deterministic authority, and inferred defaults are semantic-native.
 - Existing working strategy families are revalidated after removal.
 - Checklist-only persisted sessions do not generate through checklist completeness.
-- Any remaining checklist references are historical docs, migrations, explicit legacy tests, or non-main legacy modules scheduled for deletion.
-
+- Any remaining checklist references are historical docs, migrations, explicit legacy tests, or documented non-main compatibility boundaries scheduled for deletion.

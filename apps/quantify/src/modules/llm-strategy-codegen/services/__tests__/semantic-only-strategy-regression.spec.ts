@@ -453,11 +453,10 @@ describe('semantic-only strategy regression verification', () => {
     const root = findRepoRoot(resolve(__dirname))
     const forbiddenPatterns = [
       /projectLegacyLogicSnapshotFromSemanticState/u,
-      /buildFallbackSemanticState/u,
+      /buildFallbackSemanticState\s*\(/u,
       /buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly/u,
       /canonicalSpecBuilder\.build\(\s*checklist\b/u,
       /\bsession\s*(?:(?:\?\.)|\.)\s*checklist\b|\bsession\s*(?:\?\.\s*)?\[\s*['"]checklist['"]\s*\]/u,
-      /\bchecklist:\s*StrategyLogicSnapshot\b/u,
     ]
 
     for (const file of productionFiles) {

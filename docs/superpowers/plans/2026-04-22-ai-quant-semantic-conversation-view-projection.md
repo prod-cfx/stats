@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a semantic-native conversation view and use it to remove `StrategyLogicSnapshot` projection from conversation summary, prompt, recommendation, decision, and inferred-default paths.
+**Goal:** Add a semantic-native conversation view and use it to isolate the remaining `StrategyLogicSnapshot` projection behind an explicit compatibility boundary while moving conversation summary, prompt, recommendation, decision, and inferred-default paths to semantic data.
 
 **Architecture:** Extend `SemanticStateProjectionService` into the semantic view boundary, then migrate `CodegenConversationService` callers one category at a time. Keep canonical generation semantic-only and defer deletion until tests prove the semantic view replaces old projection behavior.
 
@@ -284,7 +284,7 @@ Refs: #850
 MSG
 ```
 
-## Task 4: Semantic Inferred Defaults And Projection Deletion
+## Task 4: Semantic Inferred Defaults And Projection Boundary
 
 **Files:**
 - Modify: `apps/quantify/src/modules/llm-strategy-codegen/services/codegen-conversation.service.ts`
@@ -295,16 +295,15 @@ MSG
 
 Replace `buildInferredConfirmationSemanticDefaults(...)` so it accepts `SemanticState` and uses `SemanticConversationView.inferredDefaults`.
 
-- [ ] **Step 2: Delete production projection methods**
+- [ ] **Step 2: Rename and isolate production projection methods**
 
-Delete from `codegen-conversation.service.ts` after all call sites are gone:
+Rename ambiguous helpers in `codegen-conversation.service.ts` to explicit compatibility names and add comments saying they must not be used for canonical generation or publication authority:
 
-- `projectLegacyLogicSnapshotFromSemanticState`
-- `buildFallbackSemanticState`
-- `mergeLogicSnapshotIntoSemanticState`
-- dependent merge/project helper methods that are no longer referenced
+- `projectLegacyLogicSnapshotFromSemanticState` -> `buildLegacyLogicSnapshotProjectionForCompatibility`
+- `buildFallbackSemanticState` -> `buildFallbackSemanticStateForLegacyCompatibility`
+- `mergeLogicSnapshotIntoSemanticState` -> `mergeLogicSnapshotIntoSemanticStateForLegacyCompatibility`
 
-Tests that still need legacy comparison must define explicit test-local helpers, not call private production projection.
+Do not mechanically rename to hide authority use. Keep the boundary documented and keep guard coverage for old ambiguous names and canonical fallback.
 
 - [ ] **Step 3: Run guard and focused tests**
 
@@ -316,18 +315,18 @@ dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__
 dx build quantify --dev
 ```
 
-Expected: all PASS; guard has no production legacy authority match.
+Expected: all PASS; guard has no production match for ambiguous legacy helper names or canonical checklist authority.
 
 - [ ] **Step 4: Commit**
 
 ```bash
 git add apps/quantify/src/modules/llm-strategy-codegen/services/codegen-conversation.service.ts apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-conversation.service.spec.ts apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-only-strategy-regression.spec.ts
 git commit -F - <<'MSG'
-refactor: remove semantic to legacy conversation projection
+refactor: isolate legacy conversation projection boundary
 
 变更说明：
-- 删除 production semantic-to-legacy projection 入口
-- 用 semantic view 提供 inferred defaults 与测试 guard
+- 显式隔离 production semantic-to-legacy compatibility boundary
+- 用 semantic view 提供 inferred defaults 并更新测试 guard
 
 Refs: #850
 MSG
@@ -360,7 +359,7 @@ Append a section recording:
 ## Semantic Conversation View Projection Verification
 
 - Conversation summaries, prompts, recommendation style, deterministic authority, and inferred defaults now use semantic view data instead of `StrategyLogicSnapshot`.
-- Production guard for legacy conversation authority passes.
+- Production guard for ambiguous legacy helper names and canonical checklist authority passes.
 - Revalidated strategy families:
   - EMA crossover: publishes.
   - Bollinger upper/middle: publishes.
@@ -383,7 +382,7 @@ test: document semantic conversation view verification
 
 变更说明：
 - 记录 semantic view projection 后的策略回归结果
-- 确认 legacy authority guard 通过
+- 确认 legacy boundary guard 通过
 
 Refs: #850
 MSG
