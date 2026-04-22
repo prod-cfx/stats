@@ -236,6 +236,18 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
           consumedAt: null,
           cooldownUntil: null,
         },
+        {
+          strategyInstanceId: 'inst-1',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+          executionSemanticKey: 'on_start.entry.activation',
+          status: 'retryable',
+          failureReason: 'SNAPSHOT_RUNTIME_CONTEXT_MISSING',
+          failureCode: 'SNAPSHOT_RUNTIME_CONTEXT_MISSING',
+          lastAttemptAt: new Date('2026-03-20T10:05:00.000Z'),
+          consumedAt: null,
+          cooldownUntil: new Date('2026-03-20T10:20:00.000Z'),
+        },
       ]),
     }
     const service = new AccountStrategyViewService(
@@ -356,6 +368,17 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       lastAttemptAt: '2026-03-20T10:03:00.000Z',
       consumedAt: null,
       cooldownUntil: null,
+      publishedSnapshotId: 'snapshot-1',
+      snapshotHash: 'snapshot-hash-1',
+    }, {
+      executionSemanticKey: 'on_start.entry.activation',
+      status: 'cooldown',
+      failureFamily: 'activation',
+      failureReason: 'SNAPSHOT_RUNTIME_CONTEXT_MISSING',
+      failureCode: 'SNAPSHOT_RUNTIME_CONTEXT_MISSING',
+      lastAttemptAt: '2026-03-20T10:05:00.000Z',
+      consumedAt: null,
+      cooldownUntil: '2026-03-20T10:20:00.000Z',
       publishedSnapshotId: 'snapshot-1',
       snapshotHash: 'snapshot-hash-1',
     }])

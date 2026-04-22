@@ -570,7 +570,10 @@ export class AccountStrategyViewService {
     if (failureCode === 'SNAPSHOT_RUNTIME_PARAMS_MISSING' || failureCode === 'SYMBOL_NOT_FOUND') {
       return 'binding'
     }
-    if (failureCode === 'SNAPSHOT_REFERENCE_BAR_MISSING') {
+    if (
+      failureCode === 'SNAPSHOT_REFERENCE_BAR_MISSING'
+      || failureCode === 'SNAPSHOT_RUNTIME_CONTEXT_MISSING'
+    ) {
       return 'activation'
     }
     if (
