@@ -3,7 +3,7 @@ import { RuntimeSignalIntentAdapter } from '../runtime-signal-intent.adapter'
 describe('RuntimeSignalIntentAdapter', () => {
   const adapter = new RuntimeSignalIntentAdapter()
 
-  it('returns signal for OPEN_LONG ratio decisions from published runtime', () => {
+  it('maps OPEN_LONG ratio decisions to entry BUY signals', () => {
     const result = adapter.fromDecision({
       action: 'OPEN_LONG',
       size: { mode: 'RATIO', value: 0.1 },
@@ -27,13 +27,12 @@ describe('RuntimeSignalIntentAdapter', () => {
     })
   })
 
-  it('returns noop for NOOP decisions', () => {
+  it('returns noop for NOOP decisions without requiring referencePrice', () => {
     const result = adapter.fromDecision({ action: 'NOOP', reason: 'compiled.noop' }, {
       exchange: 'okx',
       marketType: 'spot',
       symbol: 'ORDIUSDT',
       timeframe: '1h',
-      referencePrice: 4.728,
     })
 
     expect(result).toEqual({ kind: 'noop', reason: 'compiled.noop' })
@@ -50,6 +49,25 @@ describe('RuntimeSignalIntentAdapter', () => {
       symbol: 'ORDIUSDT',
       timeframe: '1h',
       referencePrice: undefined,
+    })
+
+    expect(result).toEqual({
+      kind: 'missing_required_truth',
+      reasonCode: 'RUNTIME_SIGNAL_REFERENCE_PRICE_MISSING',
+    })
+  })
+
+  it('returns missing_required_truth when referencePrice is 0', () => {
+    const result = adapter.fromDecision({
+      action: 'OPEN_LONG',
+      size: { mode: 'RATIO', value: 0.1 },
+      reason: 'compiled.entry',
+    }, {
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ORDIUSDT',
+      timeframe: '1h',
+      referencePrice: 0,
     })
 
     expect(result).toEqual({
