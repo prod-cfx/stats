@@ -19,60 +19,9 @@ export class StrategyExecutionContextService {
     }
 
     const timeframeOptional = !context.timeframe && this.looksTimeframeOptional(checklist)
+    const artifacts = this.buildMissingContextArtifacts(context, { timeframeOptional })
 
-    const ambiguities = [
-      ...(!context.exchange ? [{ kind: 'execution_context_missing', field: 'exchange', reason: 'missing_exchange' }] : []),
-      ...(!context.symbol ? [{ kind: 'execution_context_missing', field: 'symbol', reason: 'missing_symbol' }] : []),
-      ...(!context.marketType ? [{ kind: 'execution_context_missing', field: 'marketType', reason: 'missing_market_type' }] : []),
-      ...(!context.timeframe && !timeframeOptional ? [{ kind: 'execution_context_missing', field: 'timeframe', reason: 'missing_timeframe' }] : []),
-    ] as StrategyExecutionContextResolution['ambiguities']
-
-    const evidence: StrategyExecutionContextResolution['evidence'] = []
-    if (!context.exchange) {
-      evidence.push({
-        key: 'market.exchange',
-        reason: 'runtime_context_missing',
-        priority: 100,
-        question: '请确认交易所（binance / okx / hyperliquid）。',
-      })
-    }
-    if (!context.symbol) {
-      evidence.push({
-        key: 'market.symbol',
-        reason: 'runtime_context_missing',
-        priority: 95,
-        question: '请确认策略交易标的（例如 BTCUSDT）。',
-      })
-    }
-    if (!context.marketType) {
-      evidence.push({
-        key: 'market.marketType',
-        reason: 'runtime_context_missing',
-        priority: 90,
-        question: '请确认市场类型（现货或合约/perp）。',
-      })
-    }
-    if (!context.timeframe && !timeframeOptional) {
-      evidence.push({
-        key: 'market.timeframe',
-        reason: 'runtime_context_missing',
-        priority: 80,
-        question: '请确认策略主周期（例如 15m 或 1h）。',
-      })
-    }
-    if (timeframeOptional) {
-      evidence.push({
-        key: 'timeframe_not_required_for_uniqueness',
-        reason: 'timeframe_optional',
-        priority: 10,
-      })
-    }
-
-    return {
-      context,
-      ambiguities,
-      evidence,
-    }
+    return { context, ...artifacts }
   }
 
   resolveFromSemanticState(state: SemanticState): StrategyExecutionContextResolution {
@@ -83,58 +32,9 @@ export class StrategyExecutionContextService {
       timeframe: this.readSemanticString(state.contextSlots.timeframe),
     }
     const timeframeOptional = !context.timeframe && this.hasSemanticGridTrigger(state)
+    const artifacts = this.buildMissingContextArtifacts(context, { timeframeOptional })
 
-    const ambiguities: StrategyExecutionContextResolution['ambiguities'] = [
-      ...(!context.exchange ? [this.buildExecutionContextMissingAmbiguity('exchange', 'missing_exchange')] : []),
-      ...(!context.symbol ? [this.buildExecutionContextMissingAmbiguity('symbol', 'missing_symbol')] : []),
-      ...(!context.marketType ? [this.buildExecutionContextMissingAmbiguity('marketType', 'missing_market_type')] : []),
-      ...(!context.timeframe && !timeframeOptional
-        ? [this.buildExecutionContextMissingAmbiguity('timeframe', 'missing_timeframe')]
-        : []),
-    ]
-
-    const evidence: StrategyExecutionContextResolution['evidence'] = []
-    if (!context.exchange) {
-      evidence.push({
-        key: 'market.exchange',
-        reason: 'runtime_context_missing',
-        priority: 100,
-        question: '请确认交易所（binance / okx / hyperliquid）。',
-      })
-    }
-    if (!context.symbol) {
-      evidence.push({
-        key: 'market.symbol',
-        reason: 'runtime_context_missing',
-        priority: 95,
-        question: '请确认策略交易标的（例如 BTCUSDT）。',
-      })
-    }
-    if (!context.marketType) {
-      evidence.push({
-        key: 'market.marketType',
-        reason: 'runtime_context_missing',
-        priority: 90,
-        question: '请确认市场类型（现货或合约/perp）。',
-      })
-    }
-    if (!context.timeframe && !timeframeOptional) {
-      evidence.push({
-        key: 'market.timeframe',
-        reason: 'runtime_context_missing',
-        priority: 80,
-        question: '请确认策略主周期（例如 15m 或 1h）。',
-      })
-    }
-    if (timeframeOptional) {
-      evidence.push({
-        key: 'timeframe_not_required_for_uniqueness',
-        reason: 'timeframe_optional',
-        priority: 10,
-      })
-    }
-
-    return { context, ambiguities, evidence }
+    return { context, ...artifacts }
   }
 
   private buildExecutionContextMissingAmbiguity(
@@ -142,6 +42,64 @@ export class StrategyExecutionContextService {
     reason: ExecutionContextMissingReason,
   ): StrategyExecutionContextResolution['ambiguities'][number] {
     return { kind: 'execution_context_missing', field, reason }
+  }
+
+  private buildMissingContextArtifacts(
+    context: StrategyExecutionContext,
+    options: { timeframeOptional: boolean },
+  ): Pick<StrategyExecutionContextResolution, 'ambiguities' | 'evidence'> {
+    const ambiguities: StrategyExecutionContextResolution['ambiguities'] = []
+    const evidence: StrategyExecutionContextResolution['evidence'] = []
+
+    if (!context.exchange) {
+      ambiguities.push(this.buildExecutionContextMissingAmbiguity('exchange', 'missing_exchange'))
+      evidence.push({
+        key: 'market.exchange',
+        reason: 'runtime_context_missing',
+        priority: 100,
+        question: '请确认交易所（binance / okx / hyperliquid）。',
+      })
+    }
+
+    if (!context.symbol) {
+      ambiguities.push(this.buildExecutionContextMissingAmbiguity('symbol', 'missing_symbol'))
+      evidence.push({
+        key: 'market.symbol',
+        reason: 'runtime_context_missing',
+        priority: 95,
+        question: '请确认策略交易标的（例如 BTCUSDT）。',
+      })
+    }
+
+    if (!context.marketType) {
+      ambiguities.push(this.buildExecutionContextMissingAmbiguity('marketType', 'missing_market_type'))
+      evidence.push({
+        key: 'market.marketType',
+        reason: 'runtime_context_missing',
+        priority: 90,
+        question: '请确认市场类型（现货或合约/perp）。',
+      })
+    }
+
+    if (!context.timeframe && !options.timeframeOptional) {
+      ambiguities.push(this.buildExecutionContextMissingAmbiguity('timeframe', 'missing_timeframe'))
+      evidence.push({
+        key: 'market.timeframe',
+        reason: 'runtime_context_missing',
+        priority: 80,
+        question: '请确认策略主周期（例如 15m 或 1h）。',
+      })
+    }
+
+    if (options.timeframeOptional) {
+      evidence.push({
+        key: 'timeframe_not_required_for_uniqueness',
+        reason: 'timeframe_optional',
+        priority: 10,
+      })
+    }
+
+    return { ambiguities, evidence }
   }
 
   private readSemanticString(slot: SemanticSlotState | null): string | null {
