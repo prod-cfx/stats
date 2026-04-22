@@ -150,8 +150,8 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
   }
 
   /**
-   * 启动时对仍处于 PENDING/FAILED 且未过期的信号做一次补偿执行，
-   * 避免依赖进程内事件导致服务重启时信号彻底丢失
+   * 对仍处于可补偿窗口的 signal 做补偿执行，
+   * 既服务于启动恢复，也服务于运行时的定期恢复。
    */
   private async recoverExecutableSignals(config: StrategySignalsRuntimeConfig) {
     const signals = await this.executorRepository.findRecoverableSignals({
@@ -161,7 +161,7 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
 
     if (!signals.length) return
 
-    this.logger.log(`Recovering ${signals.length} executable signals on startup`)
+    this.logger.log(`Recovering ${signals.length} executable signals`)
 
     for (const signal of signals) {
       try {
