@@ -212,9 +212,9 @@ export class CodegenConversationService {
       plan,
     })
     const checklist = this.projectLegacyLogicSnapshotFromSemanticState(initialSemanticState, {})
-    const recommendationStyle = this.inferRecommendationStyleFromContext(
+    const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
       dto.initialMessage,
-      checklist,
+      initialSemanticState,
       undefined,
     )
     const guidePrompt = this.mergeGuidePromptConfig(undefined, dto.guideConfig)
@@ -412,9 +412,9 @@ export class CodegenConversationService {
     const clarificationState = semanticArtifacts.clarificationState
     const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
     const clarificationPrompt = semanticArtifacts.clarificationPrompt
-    const recommendationStyle = this.inferRecommendationStyleFromContext(
+    const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
       dto.message,
-      canonicalLogicSnapshot,
+      reducedSemanticState,
       constraintPack.recommendationStyle,
     )
     const nextConstraintPack = this.withGuidePrompt(constraintPack, guidePrompt, recommendationStyle)
@@ -438,7 +438,6 @@ export class CodegenConversationService {
       : semanticArtifacts.clarificationPrompt
     const deterministicAuthority = this.resolveContinueSessionDeterministicAuthority({
       semanticState: reducedSemanticState,
-      checklist: canonicalLogicSnapshot,
       clarificationState,
       normalization,
       compileability,
@@ -4393,7 +4392,6 @@ export class CodegenConversationService {
 
   private resolveContinueSessionDeterministicAuthority(input: {
     semanticState: SemanticState
-    checklist: StrategyLogicSnapshot
     clarificationState: Pick<StrategyClarificationState, 'status'>
     normalization: NormalizationResult
     compileability: CanonicalCompileabilityReport
@@ -4412,10 +4410,7 @@ export class CodegenConversationService {
       return 'normalization'
     }
 
-    const hasDeterministicStrategySemantics = this.hasDeterministicStrategySemantics(
-      input.semanticState,
-      input.checklist,
-    )
+    const hasDeterministicStrategySemantics = this.hasDeterministicStrategySemantics(input.semanticState)
 
     if (!input.compileability.canCompile) {
       return 'compileability'
@@ -4432,18 +4427,8 @@ export class CodegenConversationService {
 
   private hasDeterministicStrategySemantics(
     semanticState: SemanticState,
-    checklist: StrategyLogicSnapshot,
   ): boolean {
-    const hasLogicRules = (checklist.entryRules?.length ?? 0) > 0
-      || (checklist.exitRules?.length ?? 0) > 0
-    const hasGrid = Boolean(
-      checklist.grid
-      && Object.values(checklist.grid).some(value => value !== undefined && value !== null),
-    )
-    const hasSemanticTriggers = semanticState.triggers.some(trigger => trigger.status !== 'superseded')
-    const hasSemanticActions = semanticState.actions.some(action => action.status !== 'superseded')
-
-    return hasLogicRules || hasGrid || hasSemanticTriggers || hasSemanticActions
+    return this.semanticStateProjection.buildConversationView(semanticState).hasDeterministicSemantics
   }
 
   private mapClarificationReasonToBlockingReason(reason: StrategyClarificationItem['reason']): string {
@@ -6089,12 +6074,24 @@ export class CodegenConversationService {
     return conversationContextHelper.appendConversationHistory(current, userMessage, assistantMessage)
   }
 
-  private inferRecommendationStyleFromContext(
+  private inferRecommendationStyleFromSemanticContext(
     message: string | undefined,
-    checklist: StrategyLogicSnapshot,
+    semanticState: SemanticState,
     currentStyle?: RecommendationStyle,
   ): RecommendationStyle | undefined {
-    return conversationContextHelper.inferRecommendationStyleFromContext(message, checklist, currentStyle)
+    const view = this.semanticStateProjection.buildConversationView(semanticState)
+    const text = `${message ?? ''} ${view.summary}`.trim()
+    if (/均线|金叉|死叉|\bma\b|moving average/i.test(text)) {
+      return 'ma'
+    }
+    if (
+      view.recommendationSignals.hasGridIntent
+      || view.summary.includes('价格相对')
+      || /下跌|上涨|回撤|[跌涨天%]|分钟|小时|\d+\s*[mhd]/i.test(text)
+    ) {
+      return 'drop-rise'
+    }
+    return currentStyle
   }
 
   private buildHelperSignaturesPrompt(): string {
