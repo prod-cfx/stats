@@ -1366,7 +1366,12 @@ export class SignalGeneratorService {
         {},
         referenceBar?.time,
         runtimeSignalOutcome.payload,
-        runtimeProvenance,
+        {
+          ...runtimeProvenance,
+          ...(activeRuntimeState
+            ? { executionSemanticKey: activeRuntimeState.executionSemanticKey }
+            : {}),
+        },
         options.skipCooldown ?? false,
         activeRuntimeState
           ? async () => {

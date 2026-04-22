@@ -91,6 +91,7 @@ describe('signalGenerationPersistenceStage', () => {
         publishedSnapshotId: 'snapshot-1',
         snapshotHash: 'snapshot-hash-1',
         executionContentSource: 'PUBLISHED_SNAPSHOT',
+        executionSemanticKey: 'on_start.entry.primary',
       },
       false,
     )
@@ -101,6 +102,7 @@ describe('signalGenerationPersistenceStage', () => {
         runtimeProvenance: expect.objectContaining({
           publishedSnapshotId: 'snapshot-1',
           snapshotHash: 'snapshot-hash-1',
+          executionSemanticKey: 'on_start.entry.primary',
         }),
       }),
     }))
@@ -202,7 +204,7 @@ describe('signalGenerationPersistenceStage', () => {
     })
   })
 
-  it('does not let runtime cooldown from another instance block the current instance semantic', async () => {
+  it('does not let a different runtime semantic on the same instance and snapshot block the current semantic', async () => {
     const telemetry = { recordGeneration: jest.fn() }
     const tradingSignalRepository = {
       create: jest.fn().mockResolvedValue({ id: 'signal-instance-1' }),
@@ -215,11 +217,14 @@ describe('signalGenerationPersistenceStage', () => {
           && typeof args === 'object'
           && 'runtimeScope' in args
           && (args as {
-            runtimeScope?: { strategyInstanceId?: string, publishedSnapshotId?: string }
+            runtimeScope?: { strategyInstanceId?: string, publishedSnapshotId?: string, executionSemanticKey?: string }
           }).runtimeScope?.strategyInstanceId === 'instance-1'
           && (args as {
-            runtimeScope?: { strategyInstanceId?: string, publishedSnapshotId?: string }
+            runtimeScope?: { strategyInstanceId?: string, publishedSnapshotId?: string, executionSemanticKey?: string }
           }).runtimeScope?.publishedSnapshotId === 'snapshot-1'
+          && (args as {
+            runtimeScope?: { strategyInstanceId?: string, publishedSnapshotId?: string, executionSemanticKey?: string }
+          }).runtimeScope?.executionSemanticKey === 'on_start.entry.secondary'
         ) {
           return 0
         }
@@ -260,6 +265,7 @@ describe('signalGenerationPersistenceStage', () => {
         publishedSnapshotId: 'snapshot-1',
         snapshotHash: 'snapshot-hash-1',
         executionContentSource: 'PUBLISHED_SNAPSHOT',
+        executionSemanticKey: 'on_start.entry.secondary',
       },
       false,
       onCreatedInTransaction,
@@ -276,6 +282,7 @@ describe('signalGenerationPersistenceStage', () => {
       runtimeScope: {
         strategyInstanceId: 'instance-1',
         publishedSnapshotId: 'snapshot-1',
+        executionSemanticKey: 'on_start.entry.secondary',
       },
     }))
     expect(onCreatedInTransaction).toHaveBeenCalledWith('signal-instance-1')

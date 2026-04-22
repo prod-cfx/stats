@@ -269,14 +269,18 @@ export class SignalGenerationPersistenceStage {
     const publishedSnapshotId = typeof runtimeProvenance.publishedSnapshotId === 'string'
       ? runtimeProvenance.publishedSnapshotId.trim()
       : ''
+    const executionSemanticKey = typeof runtimeProvenance.executionSemanticKey === 'string'
+      ? runtimeProvenance.executionSemanticKey.trim()
+      : ''
 
-    if (executionContentSource !== 'PUBLISHED_SNAPSHOT' || !publishedSnapshotId) {
+    if (executionContentSource !== 'PUBLISHED_SNAPSHOT' || !publishedSnapshotId || !executionSemanticKey) {
       return undefined
     }
 
     return {
       strategyInstanceId,
       publishedSnapshotId,
+      executionSemanticKey,
     }
   }
 }

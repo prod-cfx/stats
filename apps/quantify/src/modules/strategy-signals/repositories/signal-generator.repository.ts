@@ -8,6 +8,7 @@ import { normalizeRequestedCode } from '@/modules/market-data/utils/market-symbo
 export interface RuntimeCooldownScope {
   strategyInstanceId: string
   publishedSnapshotId: string
+  executionSemanticKey: string
 }
 
 export interface CountRecentSignalsInput {
@@ -174,6 +175,11 @@ export class SignalGeneratorRepository {
           metadata: {
             path: ['runtimeProvenance', 'publishedSnapshotId'],
             equals: input.runtimeScope.publishedSnapshotId,
+          },
+        }, {
+          metadata: {
+            path: ['runtimeProvenance', 'executionSemanticKey'],
+            equals: input.runtimeScope.executionSemanticKey,
           },
         }],
       }
