@@ -1609,6 +1609,7 @@ export class CodegenConversationService {
       ? persistedClarificationState.items.filter(item =>
           item.blocking
           && item.status === 'pending'
+          && !this.isLegacyLogicCompletenessItem(item)
           && !this.isResolvedBySemanticState(item, semanticState),
         )
       : []

@@ -2605,7 +2605,27 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       status: 'CONFIRM_GATE',
       checklist: null,
       semanticState: persistedSemanticState,
-      clarificationState: { status: 'CLEAR', items: [] },
+      clarificationState: {
+        status: 'NEEDS_CLARIFICATION',
+        items: [
+          {
+            key: 'entry.rules',
+            field: 'entryRules',
+            reason: 'missing_entry_rules',
+            question: '请补充至少一条明确的入场规则。',
+            blocking: true,
+            status: 'pending',
+          },
+          {
+            key: 'exit.rules',
+            field: 'exitRules',
+            reason: 'missing_exit_rules',
+            question: '请补充至少一条明确的出场规则。',
+            blocking: true,
+            status: 'pending',
+          },
+        ],
+      },
       constraintPack: {},
       strategyInstanceId: null,
     })
