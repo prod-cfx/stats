@@ -24,6 +24,7 @@ export type PublishedRuntimeSignalOutcome =
   | { kind: 'signal'; payload: AiSignalPayload & { rawResponse: string } }
   | { kind: 'noop'; reasonCode: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL'; reason: string }
   | { kind: 'missing_required_truth'; reasonCode: string; fields: string[] }
+  | { kind: 'unexpected_error'; reasonCode: string; reason: string }
 
 export class SignalGenerationDecisionStage {
   private readonly runtimeSignalIntentAdapter = new RuntimeSignalIntentAdapter()

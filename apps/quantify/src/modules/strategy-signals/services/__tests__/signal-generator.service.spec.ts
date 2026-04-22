@@ -686,7 +686,89 @@ strategy`,
     expect(runtimeExecutionStateService.markConsumed).not.toHaveBeenCalled()
   })
 
-  it('marks a ready on_start snapshot semantic as terminal after execution runs without a signal', async () => {
+  it('records compile failures as explicit runtime execution failures instead of no-signal', async () => {
+    const publishedSnapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyInstanceId: 'source-instance-1',
+        strategyTemplateId: 'template-1',
+        scriptSnapshot: `const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(): StrategyDecisionV1 {
+    return {
+      action: 'OPEN_LONG',
+      size: { mode: 'RATIO', value: 'bad-size' },
+      reason: 'compiled.entry',
+    }
+  },
+}
+strategy`,
+        astSnapshot: {
+          decisionPrograms: [{ id: 'entry-primary', phase: 'entry' }],
+        },
+        paramsSnapshot: {
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+        },
+      }),
+    }
+    const { runtimeExecutionStateService, service } = createService({
+      publishedSnapshotsRepository,
+      generatorRepository: {
+        findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-1', code: 'BTCUSDT' }),
+      },
+      runtimeExecutionStateService: {
+        buildExecutionSemanticKeysFromSnapshot: jest.fn().mockReturnValue(['on_start.entry.primary']),
+        loadExecutableStates: jest.fn().mockResolvedValue([{
+          strategyInstanceId: 'instance-1',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+          executionSemanticKey: 'on_start.entry.primary',
+          status: 'ready',
+        }]),
+      },
+    })
+
+    jest.spyOn(service as any, 'isStrategyLocked').mockResolvedValue(false)
+    jest.spyOn(service as any, 'loadLatestBar').mockResolvedValue({
+      close: 100,
+      time: new Date('2026-04-20T09:00:00.000Z'),
+      timestamp: Date.now(),
+      isFinal: true,
+    })
+    jest.spyOn(service as any, 'handleStrategyFailure').mockResolvedValue(undefined)
+
+    await (service as any).processStrategyInstance(
+      {
+        id: 'instance-1',
+        llmModel: 'gpt-5.4',
+        params: {},
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+        },
+        strategyTemplate: {
+          id: 'template-1',
+          promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+          script: 'return "template-script"',
+        },
+      },
+      config,
+    )
+
+    expect(runtimeExecutionStateService.markTerminalFailure).toHaveBeenCalledWith({
+      strategyInstanceId: 'instance-1',
+      publishedSnapshotId: 'snapshot-1',
+      executionSemanticKey: 'on_start.entry.primary',
+      failureReason: 'SNAPSHOT_RUNTIME_SCRIPT_COMPILE_FAILED',
+      failureCode: 'SNAPSHOT_RUNTIME_SCRIPT_COMPILE_FAILED',
+    })
+    expect(runtimeExecutionStateService.markConsumed).not.toHaveBeenCalled()
+  })
+
+  it('marks a ready on_start snapshot semantic as terminal after runtime outcome resolves to noop', async () => {
     const publishedSnapshotsRepository = {
       findById: jest.fn().mockResolvedValue({
         id: 'snapshot-1',
@@ -726,7 +808,11 @@ strategy`,
       time: new Date('2026-04-20T09:00:00.000Z'),
       timestamp: Date.now(),
     })
-    jest.spyOn(service as any, 'generateSignalWithAi').mockResolvedValue(null)
+    jest.spyOn(service as any, 'generatePublishedSnapshotRuntimeSignalOutcome').mockResolvedValue({
+      kind: 'noop',
+      reasonCode: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+      reason: 'compiled.noop',
+    })
     jest.spyOn(service as any, 'handleStrategyFailure').mockResolvedValue(undefined)
 
     await (service as any).processStrategyInstance(
@@ -1020,7 +1106,7 @@ strategy`,
     expect(runtimeExecutionStateService.markRetryableFailure).not.toHaveBeenCalled()
   })
 
-  it('marks a running on_start snapshot semantic as terminal when execution throws unexpectedly', async () => {
+  it('marks a running on_start snapshot semantic as terminal when runtime outcome reports an unexpected error', async () => {
     const publishedSnapshotsRepository = {
       findById: jest.fn().mockResolvedValue({
         id: 'snapshot-1',
@@ -1037,7 +1123,6 @@ strategy`,
         },
       }),
     }
-    const boom = new Error('ai crashed')
     const { runtimeExecutionStateService, service } = createService({
       publishedSnapshotsRepository,
       generatorRepository: {
@@ -1061,9 +1146,13 @@ strategy`,
       time: new Date('2026-04-20T09:00:00.000Z'),
       timestamp: Date.now(),
     })
-    jest.spyOn(service as any, 'generatePublishedSnapshotRuntimeSignalOutcome').mockRejectedValue(boom)
+    jest.spyOn(service as any, 'generatePublishedSnapshotRuntimeSignalOutcome').mockResolvedValue({
+      kind: 'unexpected_error',
+      reasonCode: 'SNAPSHOT_RUNTIME_EXECUTION_UNEXPECTED_ERROR',
+      reason: 'ai crashed',
+    })
 
-    await expect((service as any).processStrategyInstance(
+    await (service as any).processStrategyInstance(
       {
         id: 'instance-1',
         llmModel: 'gpt-5.4',
@@ -1080,7 +1169,7 @@ strategy`,
         },
       },
       config,
-    )).rejects.toThrow('ai crashed')
+    )
 
     expect(runtimeExecutionStateService.markRunning).toHaveBeenCalledWith({
       strategyInstanceId: 'instance-1',

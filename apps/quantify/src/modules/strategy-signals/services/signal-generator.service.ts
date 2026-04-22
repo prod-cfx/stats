@@ -666,9 +666,13 @@ export class SignalGeneratorService {
     config: StrategySignalsRuntimeConfig,
     referencePrice?: number,
     compiledDecisionState?: { barIndex: number; lastTriggeredByProgram: Record<string, number> },
-  ): Promise<PublishedRuntimeSignalOutcome | null> {
+  ): Promise<PublishedRuntimeSignalOutcome> {
     if (!strategy.script || !this.isStrictPublishedCodegenTemplate(strategy)) {
-      return null
+      return {
+        kind: 'unexpected_error',
+        reasonCode: 'SNAPSHOT_RUNTIME_STRATEGY_CONFIGURATION_INVALID',
+        reason: 'Published snapshot runtime requires a strict published script',
+      }
     }
 
     try {
@@ -678,7 +682,11 @@ export class SignalGeneratorService {
         this.logger.error(
           `TypeScript check failed for strategy ${strategy.id}: ${compiledScript.error ?? 'Unknown error'}`,
         )
-        return null
+        return {
+          kind: 'unexpected_error',
+          reasonCode: 'SNAPSHOT_RUNTIME_SCRIPT_COMPILE_FAILED',
+          reason: compiledScript.error ?? 'Unknown error',
+        }
       }
 
       const marketBars = await this.loadRecentBars(symbol.id, timeframe, DEFAULT_BAR_LIMIT, {
@@ -729,7 +737,11 @@ export class SignalGeneratorService {
         this.logger.warn(
           `Script execution failed for strategy ${strategy.id}: ${result.error?.message}`,
         )
-        return null
+        return {
+          kind: 'unexpected_error',
+          reasonCode: 'SNAPSHOT_RUNTIME_SCRIPT_EXECUTION_FAILED',
+          reason: result.error?.message ?? 'Unknown error',
+        }
       }
 
       const validation = validateScriptOutput(result.value, { allowEmpty: true })
@@ -738,7 +750,11 @@ export class SignalGeneratorService {
           `Script for strategy ${strategy.id} returned invalid data. ` +
             `Reason: ${validation.error ?? 'Unknown validation error'}.`,
         )
-        return null
+        return {
+          kind: 'unexpected_error',
+          reasonCode: 'SNAPSHOT_RUNTIME_SCRIPT_OUTPUT_INVALID',
+          reason: validation.error ?? 'Unknown validation error',
+        }
       }
 
       const resolved = await resolveStrategyOutput(
@@ -749,10 +765,18 @@ export class SignalGeneratorService {
         this.logger.warn(
           `Script adapter resolution failed for strategy ${strategy.id}: ${resolved.error}.`,
         )
-        return null
+        return {
+          kind: 'unexpected_error',
+          reasonCode: 'SNAPSHOT_RUNTIME_PROTOCOL_RESOLUTION_FAILED',
+          reason: resolved.error,
+        }
       }
       if (!resolved.decision) {
-        return null
+        return {
+          kind: 'unexpected_error',
+          reasonCode: 'SNAPSHOT_RUNTIME_PROTOCOL_DECISION_MISSING',
+          reason: 'Resolved strategy output did not produce a decision',
+        }
       }
 
       const decisionContext = this.buildDecisionContext({}, referencePrice)
@@ -763,7 +787,11 @@ export class SignalGeneratorService {
         this.logger.error(
           `Script for strategy ${strategy.id} returned ADJUST_POSITION without explicit context (currentQty/equity/markPrice). Rejecting decision.`,
         )
-        return null
+        return {
+          kind: 'missing_required_truth',
+          reasonCode: 'SNAPSHOT_RUNTIME_DECISION_CONTEXT_MISSING',
+          fields: ['currentQty', 'equity', 'markPrice'],
+        }
       }
 
       return this.decisionStage.buildPublishedRuntimeSignalOutcomeFromDecision(
@@ -784,7 +812,11 @@ export class SignalGeneratorService {
       this.logger.error(
         `Error executing published snapshot runtime script for strategy ${strategy.id}: ${(error as Error).message}`,
       )
-      return null
+      return {
+        kind: 'unexpected_error',
+        reasonCode: 'SNAPSHOT_RUNTIME_EXECUTION_UNEXPECTED_ERROR',
+        reason: (error as Error).message,
+      }
     }
   }
 
@@ -1272,7 +1304,7 @@ export class SignalGeneratorService {
         compiledDecisionState,
       )
 
-      if (!runtimeSignalOutcome || runtimeSignalOutcome.kind === 'noop') {
+      if (runtimeSignalOutcome.kind === 'noop') {
         await this.handleStrategyFailure(instance.id, config)
         await this.markRuntimeExecutionStateTerminal(activeRuntimeState, {
           failureReason: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
@@ -1289,6 +1321,22 @@ export class SignalGeneratorService {
       }
 
       if (runtimeSignalOutcome.kind === 'missing_required_truth') {
+        await this.handleStrategyFailure(instance.id, config)
+        await this.markRuntimeExecutionStateTerminal(activeRuntimeState, {
+          failureReason: runtimeSignalOutcome.reasonCode,
+          failureCode: runtimeSignalOutcome.reasonCode,
+        })
+        this.telemetry.recordGeneration({
+          strategyId: strategy.id,
+          symbolCode,
+          success: false,
+          reason: runtimeSignalOutcome.reasonCode,
+          runtimePhase: 'execution',
+        })
+        return
+      }
+
+      if (runtimeSignalOutcome.kind === 'unexpected_error') {
         await this.handleStrategyFailure(instance.id, config)
         await this.markRuntimeExecutionStateTerminal(activeRuntimeState, {
           failureReason: runtimeSignalOutcome.reasonCode,
