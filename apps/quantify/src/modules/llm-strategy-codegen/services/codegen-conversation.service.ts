@@ -392,15 +392,15 @@ export class CodegenConversationService {
     )
     const inferredConfirmation = await this.withConfirmedInferredDecisionKeys(
       this.readConstraintPack(session.constraintPack),
-      baseLogicSnapshotAfterAnswers,
+      semanticStateAfterAnswers,
       dto.message,
       {
         providerCode: this.resolveProviderCode(dto.providerCode),
         model: dto.model,
       },
     )
-    const baseLogicSnapshot = inferredConfirmation.checklist
-    const baseSemanticState = semanticStateAfterAnswers
+    const baseSemanticState = inferredConfirmation.semanticState
+    const baseLogicSnapshot = this.projectLegacyLogicSnapshotFromSemanticState(baseSemanticState, {})
     const clarificationStateAfterAnswers = hasStructuredClarificationAnswers
       ? this.resolveSemanticClarificationArtifacts(baseSemanticState).clarificationState
       : this.withClarificationSummary(baseClarificationState, baseLogicSnapshot)
@@ -4626,20 +4626,18 @@ export class CodegenConversationService {
 
   private async withConfirmedInferredDecisionKeys(
     constraintPack: ConstraintPackSnapshot,
-    checklist: StrategyLogicSnapshot,
+    semanticState: SemanticState,
     message: string | undefined,
     options?: { providerCode?: string, model?: string },
   ): Promise<{
-      checklist: StrategyLogicSnapshot
+      semanticState: SemanticState
       constraintPack: ConstraintPackSnapshot
       consumed: boolean
     }> {
-    const clarification = this.resolveClarificationArtifacts(checklist)
+    const clarification = this.resolveSemanticClarificationArtifacts(semanticState)
+    const checklist = this.projectLegacyLogicSnapshotFromSemanticState(semanticState, {})
     const compileability = this.evaluateCanonicalCompileability(
-      this.buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly(
-        checklist,
-        clarification.normalization,
-      ),
+      this.buildCanonicalSpecForConversation(semanticState, clarification.normalization),
     )
     const decision = this.buildStrategyDecision({
       checklist,
@@ -4650,7 +4648,7 @@ export class CodegenConversationService {
 
     if (decision.kind !== 'CONFIRM_INFERRED') {
       return {
-        checklist,
+        semanticState,
         constraintPack,
         consumed: false,
       }
@@ -4658,7 +4656,7 @@ export class CodegenConversationService {
     const assistantPrompt = this.clarificationQuestion.buildFromDecision(decision)
 
     const explicitResponse = await this.consumeExplicitInferredDecisionResponse(
-      checklist,
+      semanticState,
       decision.inferredAssumptions.map(item => item.key),
       message,
       assistantPrompt,
@@ -4672,7 +4670,7 @@ export class CodegenConversationService {
 
     if (explicitResponse.overriddenKeys.length === 0 && confirmedKeys.length === 0) {
       return {
-        checklist,
+        semanticState,
         constraintPack,
         consumed: false,
       }
@@ -4686,7 +4684,7 @@ export class CodegenConversationService {
       : []
 
     return {
-      checklist: explicitResponse.checklist,
+      semanticState: explicitResponse.semanticState,
       constraintPack: {
         ...constraintPack,
         inferredConfirmation: {
@@ -4705,14 +4703,14 @@ export class CodegenConversationService {
   }
 
   private async consumeExplicitInferredDecisionResponse(
-    checklist: StrategyLogicSnapshot,
+    semanticState: SemanticState,
     decisionKeys: string[],
     message: string | undefined,
     assistantPrompt: string | undefined,
     conversationPhase: string | undefined,
     options?: { providerCode?: string, model?: string },
   ): Promise<{
-      checklist: StrategyLogicSnapshot
+      semanticState: SemanticState
       confirmedKeys: string[]
       overriddenKeys: string[]
     }> {
@@ -4723,42 +4721,99 @@ export class CodegenConversationService {
       providerCode: options?.providerCode,
       model: options?.model,
       decisionKeys,
-      semanticDefaults: this.buildInferredConfirmationSemanticDefaults(checklist),
+      semanticDefaults: this.buildInferredConfirmationSemanticDefaults(semanticState),
     })
-    let nextLogicSnapshot = checklist
-    for (const [key, basis] of Object.entries(classification.overriddenBasisByKey)) {
-      nextLogicSnapshot = this.normalizeLogicSnapshot({
-        ...nextLogicSnapshot,
-        riskRules: {
-          ...(nextLogicSnapshot.riskRules ?? {}),
-          ...(key === 'risk.stopLossBasis'
-            ? { stopLossBasis: basis }
-            : { takeProfitBasis: basis }),
-        },
-      })
-    }
+    const nextSemanticState = this.applyInferredRiskBasisOverridesToSemanticState(
+      semanticState,
+      classification.overriddenBasisByKey,
+    )
 
     return {
-      checklist: nextLogicSnapshot,
+      semanticState: nextSemanticState,
       confirmedKeys: classification.confirmedKeys,
       overriddenKeys: classification.overriddenKeys,
     }
   }
 
   private buildInferredConfirmationSemanticDefaults(
-    checklist: StrategyLogicSnapshot,
+    semanticState: SemanticState,
   ): InferredConfirmationSemanticDefaults {
-    const inferredKeys = Array.isArray(checklist.riskRules?._inferredAssumptions)
-      ? checklist.riskRules._inferredAssumptions.filter((key): key is InferredConfirmationDecisionKey =>
+    const projectedChecklist = this.projectLegacyLogicSnapshotFromSemanticState(semanticState, {})
+    const projectedInferredKeys = Array.isArray(projectedChecklist.riskRules?._inferredAssumptions)
+      ? projectedChecklist.riskRules._inferredAssumptions.filter((key): key is InferredConfirmationDecisionKey =>
           key === 'risk.stopLossBasis' || key === 'risk.takeProfitBasis',
         )
       : []
+    const semanticInferredKeys = new Set<InferredConfirmationDecisionKey>(projectedInferredKeys)
+    const stopLossRisk = semanticState.risk.find(item => item.key === 'risk.stop_loss_pct')
+    const takeProfitRisk = semanticState.risk.find(item => item.key === 'risk.take_profit_pct')
+    if (stopLossRisk?.source === 'inferred') {
+      semanticInferredKeys.add('risk.stopLossBasis')
+    }
+    if (takeProfitRisk?.source === 'inferred') {
+      semanticInferredKeys.add('risk.takeProfitBasis')
+    }
+    const stopLossBasis = this.readStrategyRuleBasisKind(stopLossRisk?.params?.basis)
+      ?? this.readStrategyRuleBasisKind(projectedChecklist.riskRules?.stopLossBasis)
+    const takeProfitBasis = this.readStrategyRuleBasisKind(takeProfitRisk?.params?.basis)
+      ?? this.readStrategyRuleBasisKind(projectedChecklist.riskRules?.takeProfitBasis)
 
     return {
-      inferredKeys,
-      stopLossBasis: this.readStrategyRuleBasisKind(checklist.riskRules?.stopLossBasis),
-      takeProfitBasis: this.readStrategyRuleBasisKind(checklist.riskRules?.takeProfitBasis),
+      inferredKeys: Array.from(semanticInferredKeys),
+      stopLossBasis,
+      takeProfitBasis,
     }
+  }
+
+  private applyInferredRiskBasisOverridesToSemanticState(
+    semanticState: SemanticState,
+    overrides: Partial<Record<string, StrategyRuleBasis['kind']>>,
+  ): SemanticState {
+    const nextStopLossBasis = overrides['risk.stopLossBasis']
+    const nextTakeProfitBasis = overrides['risk.takeProfitBasis']
+    if (!nextStopLossBasis && !nextTakeProfitBasis) {
+      return semanticState
+    }
+
+    let changed = false
+    const nextRisk = semanticState.risk.map(item => {
+      if (item.key === 'risk.stop_loss_pct' && nextStopLossBasis) {
+        const currentBasis = this.readStrategyRuleBasisKind(item.params?.basis)
+        if (currentBasis !== nextStopLossBasis) {
+          changed = true
+          return {
+            ...item,
+            params: {
+              ...(item.params ?? {}),
+              basis: nextStopLossBasis,
+            },
+          }
+        }
+      }
+      if (item.key === 'risk.take_profit_pct' && nextTakeProfitBasis) {
+        const currentBasis = this.readStrategyRuleBasisKind(item.params?.basis)
+        if (currentBasis !== nextTakeProfitBasis) {
+          changed = true
+          return {
+            ...item,
+            params: {
+              ...(item.params ?? {}),
+              basis: nextTakeProfitBasis,
+            },
+          }
+        }
+      }
+
+      return item
+    })
+
+    return changed
+      ? {
+          ...semanticState,
+          risk: nextRisk,
+          updatedAt: new Date().toISOString(),
+        }
+      : semanticState
   }
 
   private readStrategyRuleBasisKind(value: unknown): StrategyRuleBasis['kind'] | null {

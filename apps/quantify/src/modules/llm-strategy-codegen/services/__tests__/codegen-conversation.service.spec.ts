@@ -410,6 +410,171 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     updatedAt: '2026-04-15T10:00:00.000Z',
     ...overrides,
   })
+  const buildLockedBidirectionalBollingerSemanticState = (overrides: Record<string, any> = {}) => ({
+    ...buildLockedBollingerSemanticState({
+      triggers: [
+        {
+          id: 'entry-bollinger-upper',
+          key: 'bollinger.touch_upper',
+          phase: 'entry',
+          params: {
+            indicator: 'bollinger',
+            period: 20,
+            stdDev: 2,
+            confirmationMode: 'close_confirm',
+          },
+          sideScope: 'short',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'entry-bollinger-lower',
+          key: 'bollinger.touch_lower',
+          phase: 'entry',
+          params: {
+            indicator: 'bollinger',
+            period: 20,
+            stdDev: 2,
+            confirmationMode: 'close_confirm',
+          },
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'exit-bollinger-middle-short',
+          key: 'bollinger.touch_middle',
+          phase: 'exit',
+          params: {
+            indicator: 'bollinger',
+            period: 20,
+            stdDev: 2,
+            confirmationMode: 'close_confirm',
+          },
+          sideScope: 'short',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'exit-bollinger-middle-long',
+          key: 'bollinger.touch_middle',
+          phase: 'exit',
+          params: {
+            indicator: 'bollinger',
+            period: 20,
+            stdDev: 2,
+            confirmationMode: 'close_confirm',
+          },
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'action-open-short', key: 'open_short', status: 'locked', source: 'user_explicit' },
+        { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+        { id: 'action-close-short', key: 'close_short', status: 'locked', source: 'user_explicit' },
+        { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_short',
+        status: 'locked',
+        source: 'user_explicit',
+      },
+    }),
+    ...overrides,
+  })
+  const buildLockedPriceChangeSemanticState = (overrides: Record<string, any> = {}) => ({
+    version: 1,
+    families: ['single-leg'],
+    triggers: [
+      {
+        id: 'entry-price-change',
+        key: 'price.percent_change',
+        phase: 'entry',
+        params: {
+          valuePct: -1,
+          window: '3m',
+          basis: 'prev_close',
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'exit-price-change',
+        key: 'price.percent_change',
+        phase: 'exit',
+        params: {
+          valuePct: 2,
+          window: '15m',
+          basis: 'prev_close',
+        },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ],
+    actions: [
+      { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+    ],
+    risk: [],
+    position: {
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+    },
+    contextSlots: {
+      exchange: {
+        slotKey: 'exchange',
+        fieldPath: 'contextSlots.exchange',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+        affectsExecution: true,
+        value: 'okx',
+      },
+      symbol: {
+        slotKey: 'symbol',
+        fieldPath: 'contextSlots.symbol',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+        affectsExecution: true,
+        value: 'BTCUSDT',
+      },
+      marketType: {
+        slotKey: 'marketType',
+        fieldPath: 'contextSlots.marketType',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认市场类型（现货或合约/perp）。',
+        affectsExecution: true,
+        value: 'perp',
+      },
+      timeframe: {
+        slotKey: 'timeframe',
+        fieldPath: 'contextSlots.timeframe',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+        affectsExecution: true,
+        value: '3m',
+      },
+    },
+    normalizationNotes: [],
+    updatedAt: '2026-04-15T10:00:00.000Z',
+    ...overrides,
+  })
   const buildPersistedSessionSnapshot = (
     sessionId: string,
     createdSession: Record<string, unknown>,
@@ -471,12 +636,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       : {}
     const semanticState = (service as any).hasPersistedSemanticState(fixture.semanticState)
       ? fixture.semanticState
-      : (Object.keys(normalizedLogicSnapshot).length > 0
-          ? (service as any).mergeLogicSnapshotIntoSemanticState(
-              (service as any).createEmptySemanticState(),
-              normalizedLogicSnapshot,
-            )
-          : null)
+      : null
     const baselineChecklist = semanticState
       ? (service as any).projectLegacyLogicSnapshotFromSemanticState(semanticState, normalizedLogicSnapshot)
       : normalizedLogicSnapshot
@@ -548,6 +708,26 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       ...(semanticState ? { semanticState } : {}),
       latestSpecDesc,
     }
+  }
+  const buildSemanticTestSessionFixture = (overrides: Record<string, any>) => {
+    return buildSemanticEraSessionFixture(overrides)
+  }
+  const buildLegacyChecklistBridgeSessionFixture = (overrides: Record<string, any>) => {
+    if ((service as any).hasPersistedSemanticState(overrides.semanticState)) {
+      return buildSemanticEraSessionFixture(overrides)
+    }
+    const rawChecklist = overrides.checklist && typeof overrides.checklist === 'object' && !Array.isArray(overrides.checklist)
+      ? overrides.checklist as Record<string, any>
+      : {}
+    const normalizedChecklist = (service as any).normalizeLogicSnapshot(rawChecklist)
+    const semanticState = (service as any).mergeLogicSnapshotIntoSemanticState(
+      (service as any).createEmptySemanticState(),
+      normalizedChecklist,
+    )
+    return buildSemanticEraSessionFixture({
+      ...overrides,
+      semanticState,
+    })
   }
   const readCanonicalDigestFromSpecDesc = (specDesc: Record<string, any> | null | undefined): string => {
     const digest = specDesc?.canonicalDigest
@@ -2725,7 +2905,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         },
       },
     })
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-confirm-required-protective-risk',
       userId: 'u1',
       status: 'CONFIRM_GATE',
@@ -3311,7 +3491,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
 
   it('uses server-side semantic summary instead of planner free text when grid clarification closes into checklist gate', async () => {
-    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+    mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-grid-confirmation-copy',
       userId: 'u1',
       status: 'DRAFTING',
@@ -4611,7 +4791,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('applies clarificationAnswers before semantic readiness evaluation', async () => {
-    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+    mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-clarification-answers',
       userId: 'u1',
       status: 'DRAFTING',
@@ -5282,7 +5462,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('applies action uniqueness clarification to the targeted entry rule only', async () => {
-    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+    mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-clarification-action-uniqueness',
       userId: 'u1',
       status: 'DRAFTING',
@@ -5346,7 +5526,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('preserves extra rule conditions when applying entry-side clarification answers', async () => {
-    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+    mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-clarification-extra-condition',
       userId: 'u1',
       status: 'DRAFTING',
@@ -5398,7 +5578,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('persists structured clarification answers even when planner marks the short reply unrelated', async () => {
-    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+    mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-clarification-unrelated-answer',
       userId: 'u1',
       status: 'DRAFTING',
@@ -5467,7 +5647,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('keeps drafting when structured clarification answers resolve the explicit question but normalization remains blocked', async () => {
-    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+    mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-clarification-normalization-blocked',
       userId: 'u1',
       status: 'DRAFTING',
@@ -5529,7 +5709,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
 
   it('keeps drafting when structured clarification answers still leave required fields missing', async () => {
-    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+    mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-clarification-missing-fields',
       userId: 'u1',
       status: 'DRAFTING',
@@ -5589,7 +5769,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('applies missing exit rule clarification answers before checklist confirmation', async () => {
-    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+    mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-missing-exit-rule-answer',
       userId: 'u1',
       status: 'DRAFTING',
@@ -5652,7 +5832,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
 
   it('does not re-confirm inferred risk basis keys that were already consumed in constraint pack', async () => {
-    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+    mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-consumed-inferred-risk-basis',
       userId: 'u1',
       status: 'DRAFTING',
@@ -5689,7 +5869,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('records confirmed inferred risk basis keys when the user explicitly confirms the current inference prompt', async () => {
-    const sessionFixture = markFixtureInferredRiskBasisDefaults(buildSemanticEraSessionFixture({
+    const sessionFixture = markFixtureInferredRiskBasisDefaults(buildLegacyChecklistBridgeSessionFixture({
       id: 's-confirm-inferred-risk-basis',
       userId: 'u1',
       status: 'DRAFTING',
@@ -5728,7 +5908,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('persists confirmed inferred risk basis keys even when planner marks the explicit confirmation reply unrelated and still advances to confirm gate', async () => {
-    const sessionFixture = markFixtureInferredRiskBasisDefaults(buildSemanticEraSessionFixture({
+    const sessionFixture = markFixtureInferredRiskBasisDefaults(buildLegacyChecklistBridgeSessionFixture({
       id: 's-confirm-inferred-risk-basis-unrelated',
       userId: 'u1',
       status: 'DRAFTING',
@@ -5769,7 +5949,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   it.each(['对的继续', '就按这个来', '这些成立，继续'])(
     'records confirmed inferred risk basis keys for safe explicit confirmation variant %s',
     async (message) => {
-      const sessionFixture = markFixtureInferredRiskBasisDefaults(buildSemanticEraSessionFixture({
+      const sessionFixture = markFixtureInferredRiskBasisDefaults(buildLegacyChecklistBridgeSessionFixture({
         id: 's-confirm-inferred-risk-basis-variant',
         userId: 'u1',
         status: 'DRAFTING',
@@ -5809,7 +5989,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   )
 
   it('applies inferred override replies to risk bases in CONFIRM_INFERRED flows', async () => {
-    const sessionFixture = markFixtureInferredRiskBasisDefaults(buildSemanticEraSessionFixture({
+    const sessionFixture = markFixtureInferredRiskBasisDefaults(buildLegacyChecklistBridgeSessionFixture({
       id: 's-mixed-inferred-risk-basis',
       userId: 'u1',
       status: 'DRAFTING',
@@ -5853,7 +6033,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   it.each(['这样可以', '可以了', '就这样', '没问题'])(
     'records confirmed inferred risk basis keys for natural confirmation variant %s',
     async (message) => {
-      const sessionFixture = markFixtureInferredRiskBasisDefaults(buildSemanticEraSessionFixture({
+      const sessionFixture = markFixtureInferredRiskBasisDefaults(buildLegacyChecklistBridgeSessionFixture({
         id: 's-natural-confirm-inferred-risk-basis-variant',
         userId: 'u1',
         status: 'DRAFTING',
@@ -5896,7 +6076,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
 
   it('does not re-enter CONFIRM_INFERRED for keys already marked overridden', async () => {
-    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+    mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-overridden-inferred-risk-basis',
       userId: 'u1',
       status: 'DRAFTING',
@@ -5938,7 +6118,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
   it('confirms the only remaining inferred key for a short default-only reply', async () => {
     const sessionFixture = markFixtureInferredRiskBasisDefaults(
-      buildSemanticEraSessionFixture({
+      buildLegacyChecklistBridgeSessionFixture({
       id: 's-single-inferred-default-confirmation',
       userId: 'u1',
       status: 'DRAFTING',
@@ -5983,7 +6163,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
   it('keeps drafting after basis clarification when stop-loss basis still comes from system default inference', async () => {
     const sessionFixture = markFixtureInferredRiskBasisDefaults(
-      buildSemanticEraSessionFixture({
+      buildLegacyChecklistBridgeSessionFixture({
       id: 's-basis-clarification-answers',
       userId: 'u1',
       status: 'DRAFTING',
@@ -6061,7 +6241,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('applies missing position pct clarification answers before checklist confirmation', async () => {
-    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+    mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-position-pct-clarification-answer',
       userId: 'u1',
       status: 'DRAFTING',
@@ -6172,7 +6352,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         ],
       },
     })
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-position-risk-blockers-resolved',
       userId: 'u1',
       status: 'CONFIRM_GATE',
@@ -6267,7 +6447,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('keeps drafting with a structured clarification gate summary when basis blockers remain', async () => {
-    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+    mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-basis-gate-summary',
       userId: 'u1',
       status: 'DRAFTING',
@@ -6380,7 +6560,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('accepts natural short basis phrasing without requiring the full rule text to be repeated', async () => {
-    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+    mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-basis-natural-short-answer',
       userId: 'u1',
       status: 'DRAFTING',
@@ -6455,7 +6635,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('syncs exit-rule basis answers into risk stop-loss and take-profit basis fields when they describe the same semantics', async () => {
-    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+    mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-exit-basis-sync',
       userId: 'u1',
       status: 'DRAFTING',
@@ -6692,7 +6872,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
     const createdChecklist = readPersistedChecklist(createdSession)
 
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's5',
       userId: 'u1',
       status: 'CONFIRM_GATE',
@@ -6737,7 +6917,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
     const buildFromNormalizedIntentSpy = jest.spyOn(canonicalSpecBuilder, 'buildFromNormalizedIntent')
     const publicationPipelineRunSpy = jest.spyOn(publicationPipeline, 'run').mockResolvedValue(undefined)
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's5-semantic-generate',
       userId: 'u1',
       status: 'CONFIRM_GATE',
@@ -6822,7 +7002,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
     const createdChecklist = readPersistedChecklist(createdSession)
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-golden-ma-publish',
       userId: 'u1',
       status: 'CONFIRM_GATE',
@@ -6894,7 +7074,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
     const createdChecklist = readPersistedChecklist(createdSession)
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-golden-bollinger-publish',
       userId: 'u1',
       status: 'CONFIRM_GATE',
@@ -7027,7 +7207,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       ],
     })
 
-    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+    mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-state-gate-publish',
       userId: 'u1',
       status: 'CONFIRM_GATE',
@@ -7103,11 +7283,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         takeProfitBasis: 'entry_avg_price',
       },
     })
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-bollinger-publish',
       userId: 'u1',
       status: 'CONFIRM_GATE',
       strategyInstanceId: null,
+      semanticState: buildLockedBidirectionalBollingerSemanticState({
+        risk: [lockedStopLossRisk()],
+      }),
       checklist,
       clarificationState: { status: 'CLEAR', items: [] },
       constraintPack: {},
@@ -7254,7 +7437,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         source: 'user_explicit',
       },
     })
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-bollinger-confirmed-long-only',
       userId: 'u1',
       status: 'CONFIRM_GATE',
@@ -7300,7 +7483,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('publishes price-change strategy after confirmGenerate through the canonical mainline', async () => {
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-price-change-publish',
       userId: 'u1',
       status: 'CONFIRM_GATE',
@@ -7391,7 +7574,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
 
   it('returns a real semantic clarification prompt when planner marks an unrelated reply and required slots are still missing', async () => {
-    mockRepo.findById.mockResolvedValue(buildSemanticEraSessionFixture({
+    mockRepo.findById.mockResolvedValue(buildLegacyChecklistBridgeSessionFixture({
       id: 's-unrelated-missing-symbol',
       userId: 'u1',
       status: 'DRAFTING',
@@ -7443,7 +7626,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('returns compileability blockers when semantic state is complete but planner follow-up is unrelated', async () => {
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-unrelated-compileability-blocker',
       userId: 'u1',
       status: 'DRAFTING',
@@ -7530,7 +7713,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('returns zero-signal compileability blockers instead of unrelated guidance when semantic slots are closed', async () => {
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-unrelated-zero-signal-compileability-blocker',
       userId: 'u1',
       status: 'DRAFTING',
@@ -7569,7 +7752,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       .spyOn(CompiledScriptEmitterService.prototype, 'emit')
       .mockReturnValue('broken compiled script')
 
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-runtime-invalid',
       userId: 'u1',
       status: 'CONFIRM_GATE',
@@ -7648,7 +7831,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         },
       })
 
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-compiler-consistency-failed',
       userId: 'u1',
       status: 'CONFIRM_GATE',
@@ -7751,7 +7934,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('publishes through the compiler-first mainline even when legacy model output would violate the signal payload schema', async () => {
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's6',
       userId: 'u1',
       status: 'CONFIRM_GATE',
@@ -7791,7 +7974,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(hasPublished).toBe(true)
   })
   it('generates directly when confirmGenerate is true and checklist is complete even if session is drafting', async () => {
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's7',
       userId: 'u1',
       status: 'DRAFTING',
@@ -7925,7 +8108,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         },
       ],
     })
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's7-semantic-confirm-answer',
       userId: 'u1',
       status: 'DRAFTING',
@@ -7975,7 +8158,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         'semantic.reference.period.entry': 'MA50',
       },
     )
-    const answeredFixture = buildSemanticEraSessionFixture({
+    const answeredFixture = buildLegacyChecklistBridgeSessionFixture({
       ...sessionFixture,
       semanticState: answeredSemanticState,
       clarificationState: {
@@ -8011,7 +8194,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('returns rejected payload instead of throwing 500 when compiler-first publication setup throws', async () => {
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's8',
       userId: 'u1',
       status: 'CONFIRM_GATE',
@@ -8041,7 +8224,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('marks session rejected instead of published when publish step fails after code generation', async () => {
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's8-publish-fail',
       userId: 'u1',
       status: 'CONFIRM_GATE',
@@ -8088,7 +8271,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('persists publicationGate in session payload when compiled publication gate blocks publish', async () => {
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's8-publication-blocked',
       userId: 'u1',
       status: 'CONFIRM_GATE',
@@ -8163,7 +8346,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     setProcessEnvValue('LLM_CODEGEN_STRICT_ENABLED', 'true')
     setProcessEnvValue('LLM_CODEGEN_STRICT_FALLBACK', 'false')
 
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's9',
       userId: 'u1',
       status: 'CONFIRM_GATE',
@@ -8226,10 +8409,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         fallbackDetected: false,
       },
     } as never)
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-consistency',
       userId: 'u1',
       status: 'CONFIRM_GATE',
+      semanticState: buildLockedBidirectionalBollingerSemanticState({
+        risk: [lockedStopLossRisk()],
+      }),
       checklist: {
         symbols: ['BTCUSDT'],
         timeframes: ['15m'],
@@ -8296,10 +8482,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       dataRequirements: {},
     } as never)
 
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-v1',
       userId: 'u1',
       status: 'CONFIRM_GATE',
+      semanticState: buildLockedBollingerSemanticState({
+        risk: [lockedStopLossRisk()],
+      }),
       checklist: {
         symbols: ['BTCUSDT'],
         timeframes: ['15m'],
@@ -8348,7 +8537,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('creates strategy instance on publish and returns it in published snapshot', async () => {
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-new-instance',
       userId: 'u1',
       status: 'CONFIRM_GATE',
@@ -8399,7 +8588,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('propagates requested exchange and perp marketType into published artifacts', async () => {
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-perp-publish',
       userId: 'u1',
       status: 'CONFIRM_GATE',
@@ -8464,7 +8653,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('does not recreate strategy instance when session already bound', async () => {
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-existing-instance',
       userId: 'u1',
       status: 'CONFIRM_GATE',
@@ -8510,7 +8699,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('rejects publish when strategy instance binding fails before snapshot creation', async () => {
-    const sessionFixture = buildSemanticEraSessionFixture({
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-instance-failed',
       userId: 'u1',
       status: 'CONFIRM_GATE',
