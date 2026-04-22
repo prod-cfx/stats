@@ -1089,6 +1089,10 @@ describe('StrategySignals (E2E, DB only)', () => {
       await prisma.strategyInstance.update({
         where: { id: RUNTIME_INSTANCE_ID },
         data: {
+          mode: 'TESTNET',
+          runtimeBindingStatus: 'READY',
+          runtimeBindingErrorCode: null,
+          runtimeBindingUpdatedAt: new Date('2026-04-22T00:00:00.000Z'),
           metadata: {
             bindingSource: 'PUBLISHED_SNAPSHOT',
             publishedSnapshotId: snapshot.id,
