@@ -733,6 +733,20 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('does not extract moving-average triggers from Bollinger middle-band aliases', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 15m，价格触及/突破布林带(20,2)上轨时做空，触及/突破下轨时做多；多单在价格回到布林带中轨(MA20)时平仓，空单在价格跌破布林带中轨(MA20)时平仓；单笔仓位 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'bollinger.touch_upper', phase: 'entry', sideScope: 'short' }),
+      expect.objectContaining({ key: 'bollinger.touch_lower', phase: 'entry', sideScope: 'long' }),
+      expect.objectContaining({ key: 'bollinger.touch_middle', phase: 'exit', sideScope: 'long' }),
+      expect.objectContaining({ key: 'bollinger.touch_middle', phase: 'exit', sideScope: 'short' }),
+    ]))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'indicator.below' }),
+    ]))
+  })
+
   it('extracts fixed-range grid semantics into a semantic patch', () => {
     const patch = service.extract('OKX 合约 BTCUSDT 15m；在 60000-80000 区间执行双向网格，步长 0.5%，单笔 10%。')
 
@@ -774,6 +788,24 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch).not.toHaveProperty('exitRules')
     expect(patch).not.toHaveProperty('riskRules')
     expect(patch).not.toHaveProperty('grid')
+  })
+
+  it('extracts bidirectional grid semantics from range and per-grid spacing wording', () => {
+    const patch = service.extract('在 OKX 交易 BTCUSDT 永续合约，15m 周期，价格区间 60000-80000，采用双向网格，每格间距 0.5%，单笔使用 10% 资金，按入场均价亏损 5% 止损、盈利 10% 止盈')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'grid.range_rebalance',
+        phase: 'entry',
+        sideScope: 'both',
+        params: expect.objectContaining({
+          rangeLower: 60000,
+          rangeUpper: 80000,
+          stepPct: 0.5,
+          sideMode: 'bidirectional',
+        }),
+      }),
+    ]))
   })
 
   it('keeps MA price-vs-reference periods local to each clause', () => {

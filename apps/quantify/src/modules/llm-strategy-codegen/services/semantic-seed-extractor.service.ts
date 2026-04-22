@@ -216,6 +216,7 @@ export class SemanticSeedExtractorService {
         : [clause]
 
       for (const subClause of subClauses) {
+        if (/布林|bollinger|上轨|下轨|中轨/iu.test(subClause)) continue
         if (!/(?:MA|EMA)\s*\d+|均线/u.test(subClause)) continue
         if (this.isTrueMovingAverageCrossClause(subClause)?.isCross) continue
         const referencePeriods = Array.from(subClause.matchAll(/(?:MA|EMA)\s*(\d{1,4})/giu))
@@ -361,7 +362,13 @@ export class SemanticSeedExtractorService {
     if (!/网格/u.test(segment)) return
 
     const range = segment.match(/(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)/u)
-    const stepPct = this.extractPercent(segment, [/步长\s*(\d+(?:\.\d+)?)\s*%/u, /每一格\s*(\d+(?:\.\d+)?)\s*%/u, /每格\s*(\d+(?:\.\d+)?)\s*%/u, /千分之\s*(\d+(?:\.\d+)?)/u])
+    const stepPct = this.extractPercent(segment, [
+      /步长\s*(\d+(?:\.\d+)?)\s*%/u,
+      /间距\s*(\d+(?:\.\d+)?)\s*%/u,
+      /每一格\s*(?:间距|距离)?\s*(\d+(?:\.\d+)?)\s*%/u,
+      /每格\s*(?:间距|距离)?\s*(\d+(?:\.\d+)?)\s*%/u,
+      /千分之\s*(\d+(?:\.\d+)?)/u,
+    ])
 
     if (!range?.[1] || !range[2] || stepPct === null) return
 
