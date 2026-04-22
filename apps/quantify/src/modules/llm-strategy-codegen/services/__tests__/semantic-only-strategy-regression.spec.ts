@@ -1,5 +1,7 @@
 import type { CanonicalRuleV2, CanonicalStrategySpecV2 } from '../../types/canonical-strategy-spec'
 import type { SemanticState } from '../../types/semantic-state'
+import { existsSync, readFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
@@ -91,6 +93,17 @@ describe('semantic-only strategy regression verification', () => {
     for (const artifact of artifacts) {
       expect(JSON.stringify(artifact)).not.toMatch(checklistFieldPattern)
     }
+  }
+
+  function findRepoRoot(startDir: string): string {
+    let current = startDir
+    while (current !== dirname(current)) {
+      if (existsSync(join(current, 'package.json')) && existsSync(join(current, 'apps'))) {
+        return current
+      }
+      current = dirname(current)
+    }
+    throw new Error(`Unable to locate repository root from ${startDir}`)
   }
 
   function ruleConditionKeys(canonicalSpec: CanonicalStrategySpecV2): string[] {
@@ -437,10 +450,7 @@ describe('semantic-only strategy regression verification', () => {
       'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-publication-generation.stage.ts',
       'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-session-publication-pipeline.service.ts',
     ]
-    const fs = require('node:fs') as typeof import('node:fs')
-    const path = require('node:path') as typeof import('node:path')
-    // __dirname is apps/quantify/src/modules/llm-strategy-codegen/services/__tests__ during Jest runs.
-    const root = path.resolve(__dirname, '../../../../../../..')
+    const root = findRepoRoot(resolve(__dirname))
     const forbiddenPatterns = [
       /projectLegacyLogicSnapshotFromSemanticState/u,
       /buildFallbackSemanticState/u,
@@ -451,11 +461,12 @@ describe('semantic-only strategy regression verification', () => {
     ]
 
     for (const file of productionFiles) {
-      const source = fs.readFileSync(path.join(root, file), 'utf8')
+      const source = readFileSync(join(root, file), 'utf8')
       for (const pattern of forbiddenPatterns) {
         const match = source.match(pattern)
         if (match) {
-          throw new Error(`Production legacy authority guard matched ${pattern} in ${file}: ${match[0]}`)
+          const position = typeof match.index === 'number' ? ` at offset ${match.index}` : ''
+          throw new Error(`Production legacy authority guard matched ${pattern} in ${file}${position}: ${match[0]}`)
         }
       }
     }
