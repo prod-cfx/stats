@@ -516,6 +516,8 @@ describe('signalGeneratorService coordinator behavior', () => {
   })
 
   it('marks a ready on_start snapshot semantic as retryable when activation is missing the required reference bar', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-04-20T09:00:00.000Z'))
+
     const publishedSnapshotsRepository = {
       findById: jest.fn().mockResolvedValue({
         id: 'snapshot-1',
@@ -566,38 +568,42 @@ describe('signalGeneratorService coordinator behavior', () => {
     jest.spyOn(service as any, 'isStrategyLocked').mockResolvedValue(false)
     jest.spyOn(service as any, 'loadLatestBar').mockResolvedValue(null)
 
-    await (service as any).processStrategyInstance(
-      {
-        id: 'instance-1',
-        llmModel: 'gpt-5.4',
-        params: { symbol: 'BTCUSDT', timeframe: '15m' },
-        metadata: {
-          bindingSource: 'PUBLISHED_SNAPSHOT',
-          publishedSnapshotId: 'snapshot-1',
-          snapshotHash: 'snapshot-hash-1',
+    try {
+      await (service as any).processStrategyInstance(
+        {
+          id: 'instance-1',
+          llmModel: 'gpt-5.4',
+          params: { symbol: 'BTCUSDT', timeframe: '15m' },
+          metadata: {
+            bindingSource: 'PUBLISHED_SNAPSHOT',
+            publishedSnapshotId: 'snapshot-1',
+            snapshotHash: 'snapshot-hash-1',
+          },
+          strategyTemplate: {
+            id: 'template-1',
+            promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+            script: 'return "template-script"',
+          },
         },
-        strategyTemplate: {
-          id: 'template-1',
-          promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
-          script: 'return "template-script"',
-        },
-      },
-      config,
-    )
+        config,
+      )
 
-    expect(generatorRepository.findSymbolByCode).toHaveBeenCalledWith('BTCUSDT')
-    expect(generateSignalWithAi).not.toHaveBeenCalled()
-    expect(runtimeExecutionStateService.markRunning).not.toHaveBeenCalled()
-    expect(runtimeExecutionStateService.markRetryableFailure).toHaveBeenCalledWith({
-      strategyInstanceId: 'instance-1',
-      publishedSnapshotId: 'snapshot-1',
-      executionSemanticKey: 'on_start.entry.primary',
-      failureReason: 'SNAPSHOT_REFERENCE_BAR_MISSING',
-      failureCode: 'SNAPSHOT_REFERENCE_BAR_MISSING',
-      cooldownUntil: expect.any(Date),
-    })
-    expect(runtimeExecutionStateService.markTerminalFailure).not.toHaveBeenCalled()
-    expect(runtimeExecutionStateService.markConsumed).not.toHaveBeenCalled()
+      expect(generatorRepository.findSymbolByCode).toHaveBeenCalledWith('BTCUSDT')
+      expect(generateSignalWithAi).not.toHaveBeenCalled()
+      expect(runtimeExecutionStateService.markRunning).not.toHaveBeenCalled()
+      expect(runtimeExecutionStateService.markRetryableFailure).toHaveBeenCalledWith({
+        strategyInstanceId: 'instance-1',
+        publishedSnapshotId: 'snapshot-1',
+        executionSemanticKey: 'on_start.entry.primary',
+        failureReason: 'SNAPSHOT_REFERENCE_BAR_MISSING',
+        failureCode: 'SNAPSHOT_REFERENCE_BAR_MISSING',
+        cooldownUntil: new Date('2026-04-20T09:15:00.000Z'),
+      })
+      expect(runtimeExecutionStateService.markTerminalFailure).not.toHaveBeenCalled()
+      expect(runtimeExecutionStateService.markConsumed).not.toHaveBeenCalled()
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('consumes a ready on_start snapshot semantic when cooldown prevents creating a duplicate signal', async () => {

@@ -1115,7 +1115,7 @@ export class SignalGeneratorService {
           `Reference bar unavailable for published snapshot runtime on instance ${instance.id} (${symbol.code}/${timeframe})`,
         )
       }
-      await this.markRuntimeExecutionStateRetryable(activeRuntimeState, {
+      await this.markRuntimeExecutionStateRetryable(activeRuntimeState, config, {
         failureReason: activationFailure.failureReason,
         failureCode: activationFailure.failureCode,
       })
@@ -1354,6 +1354,7 @@ export class SignalGeneratorService {
 
   private async markRuntimeExecutionStateRetryable(
     activeRuntimeState: ActiveRuntimeExecutionState | null,
+    config: Pick<StrategySignalsRuntimeConfig, 'cooldownMinutes'>,
     args: {
       failureReason: string
       failureCode: string
@@ -1369,7 +1370,7 @@ export class SignalGeneratorService {
       executionSemanticKey: activeRuntimeState.executionSemanticKey,
       failureReason: args.failureReason,
       failureCode: args.failureCode,
-      cooldownUntil: new Date(),
+      cooldownUntil: new Date(Date.now() + Math.max(config.cooldownMinutes, 1) * 60 * 1000),
     })
   }
 
