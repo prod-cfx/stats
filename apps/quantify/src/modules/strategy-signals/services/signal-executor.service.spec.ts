@@ -724,6 +724,122 @@ describe('signalExecutorService', () => {
     expect(executorRepository.findActiveSubscriptionNetwork).toHaveBeenCalledWith('user-paper-1', 'inst-paper-1')
   })
 
+  it('uses subscribed exchangeAccountId for strategy instance execution', async () => {
+    const executorRepository = {
+      findStrategyInstanceMode: jest.fn().mockResolvedValue({ mode: 'TESTNET' }),
+      findActiveSubscriptionNetwork: jest.fn().mockResolvedValue({
+        exchangeAccountId: 'exchange-account-spot-1',
+        exchangeAccount: { isTestnet: true },
+      }),
+    }
+    const configService = { get: jest.fn() }
+    const tradingService = { placeOrder: jest.fn() }
+    const accountsService = { applyLedgerDelta: jest.fn() }
+    const positionsService = { recordTrade: jest.fn() }
+    const tradingSignalRepository = { updateStatus: jest.fn() }
+    const executionRepository = {
+      markStage: jest.fn(),
+      markExecuted: jest.fn(),
+      markFailed: jest.fn(),
+      markSkipped: jest.fn(),
+    }
+    const telemetry = { recordExecutionSummary: jest.fn() }
+
+    const schedulerRegistry = createSchedulerRegistry()
+    const service = new SignalExecutorService(
+      executorRepository as any,
+      configService as any,
+      schedulerRegistry as any,
+      tradingService as any,
+      accountsService as any,
+      {} as any,
+      positionsService as any,
+      tradingSignalRepository as any,
+      executionRepository as any,
+      telemetry as any,
+      {} as any,
+    )
+
+    const filledOrder = {
+      id: 'ord-spot-1',
+      symbol: 'ORDI/USDT',
+      marketType: 'spot',
+      side: 'buy',
+      type: 'market',
+      status: 'closed',
+      amount: 10,
+      filled: 10,
+      average: 4.5,
+      createdAt: Date.now(),
+      raw: {},
+    }
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'ready',
+      execution: { id: 'exec-spot-1' },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'ORDI/USDT',
+        side: 'buy',
+        amount: 10,
+        price: 4.5,
+        reduceOnly: false,
+      },
+      reservedQuote: new Prisma.Decimal(45),
+      reserveReference: 'reserve-spot-1',
+    })
+    ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(filledOrder)
+    ;(service as any).releaseReservation = jest.fn()
+    ;(service as any).reconcilePositionAndRecordTrade = jest.fn().mockResolvedValue(undefined)
+    ;(service as any).buildExecutionResultSnapshot = jest.fn().mockReturnValue({})
+    ;(service as any).buildOrderResponseSnapshot = jest.fn().mockReturnValue({})
+    ;(service as any).mapTradeSide = jest.fn().mockReturnValue('buy')
+    ;(service as any).mapPositionSide = jest.fn().mockReturnValue('LONG')
+
+    tradingService.placeOrder.mockResolvedValue(filledOrder)
+
+    const result = await (service as any).processAccount(
+      {
+        id: 'sig-spot-1',
+        strategyInstanceId: 'inst-spot-1',
+        direction: 'BUY',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'SPOT',
+          baseAsset: 'ORDI',
+          quoteAsset: 'USDT',
+        },
+      } as any,
+      { id: 'acct-spot-1', userId: 'user-spot-1' } as any,
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('executed')
+    expect(executorRepository.findActiveSubscriptionNetwork).toHaveBeenCalledWith('user-spot-1', 'inst-spot-1')
+    expect(tradingService.placeOrder).toHaveBeenCalledWith(
+      'user-spot-1',
+      'okx',
+      'spot',
+      expect.objectContaining({
+        symbol: 'ORDI/USDT',
+        marketType: 'spot',
+        side: 'buy',
+      }),
+      'exchange-account-spot-1',
+    )
+    expect(executionRepository.markStage).toHaveBeenCalledWith(
+      'exec-spot-1',
+      'ORDER_SUBMITTED',
+      expect.objectContaining({
+        exchangeAccountId: 'exchange-account-spot-1',
+        orderRequest: expect.objectContaining({
+          exchangeAccountId: 'exchange-account-spot-1',
+        }),
+      }),
+    )
+  })
+
   it('stores runtime provenance on execution records during preparation', async () => {
     const executionRepository = {
       findBySignalAndAccount: jest.fn().mockResolvedValue(null),

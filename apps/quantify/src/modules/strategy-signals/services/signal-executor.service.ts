@@ -352,6 +352,16 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       let effectiveExchangeId = orderParams.exchangeId
       let effectiveOrderParams = orderParams
 
+      if (resolvedSignal.strategyInstanceId) {
+        const subscription = await this.executorRepository.findActiveSubscriptionNetwork(
+          account.userId,
+          resolvedSignal.strategyInstanceId,
+        )
+        if (subscription?.exchangeAccountId) {
+          exchangeAccountId = subscription.exchangeAccountId
+        }
+      }
+
       if (resolvedSignal.llmStrategyInstanceId) {
         const subscription = await this.executorRepository.findActiveLlmSubscription(
           account.userId,
