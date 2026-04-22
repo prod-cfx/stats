@@ -113,10 +113,10 @@ describe('accountStrategyViewService.deployStrategy', () => {
       runtimeExecutionStateService.initializeStatesForDeploy.mock.invocationCallOrder[0],
     )
     expect(runtimeExecutionStateService.initializeStatesForDeploy.mock.invocationCallOrder[0]).toBeLessThan(
-      repo.activateStrategyInstanceForRuntime.mock.invocationCallOrder[0],
-    )
-    expect(repo.activateStrategyInstanceForRuntime.mock.invocationCallOrder[0]).toBeLessThan(
       repo.markDeployRequestSucceeded.mock.invocationCallOrder[0],
+    )
+    expect(repo.markDeployRequestSucceeded.mock.invocationCallOrder[0]).toBeLessThan(
+      repo.activateStrategyInstanceForRuntime.mock.invocationCallOrder[0],
     )
   })
 

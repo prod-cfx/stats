@@ -865,12 +865,12 @@ export class AccountStrategyViewService {
         snapshotHash: resolvedDeploy.snapshotHash,
         snapshot: resolvedDeploy.snapshot,
       })
+      await this.repo.markDeployRequestSucceeded(deployRequest.id, deployResult.strategyInstanceId)
       await this.repo.activateStrategyInstanceForRuntime({
         strategyInstanceId: deployResult.strategyInstanceId,
         mode: deployResult.mode,
         userId: dto.userId,
       })
-      await this.repo.markDeployRequestSucceeded(deployRequest.id, deployResult.strategyInstanceId)
 
       return this.getStrategyDetail(dto.userId, deployResult.strategyInstanceId)
     } catch (error) {
