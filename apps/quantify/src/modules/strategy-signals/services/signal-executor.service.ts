@@ -303,11 +303,14 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       if (!signal?.symbol) return 'skipped'
       const resolvedSignal = signal as NonNullable<typeof signal>
 
+      let strategySubscription: Awaited<ReturnType<SignalExecutorRepository['findActiveSubscriptionNetwork']>> | null = null
+
       if (resolvedSignal.strategyInstanceId) {
         const [instanceModeRow, subscriptionNetwork] = await Promise.all([
           this.executorRepository.findStrategyInstanceMode(resolvedSignal.strategyInstanceId),
           this.executorRepository.findActiveSubscriptionNetwork(account.userId, resolvedSignal.strategyInstanceId),
         ])
+        strategySubscription = subscriptionNetwork
         const mode = instanceModeRow?.mode
         const shouldEnforceNetworkMatch = mode === 'TESTNET' || mode === 'LIVE'
         const expectedIsTestnet = mode === 'TESTNET'
@@ -353,13 +356,15 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
       let effectiveOrderParams = orderParams
 
       if (resolvedSignal.strategyInstanceId) {
-        const subscription = await this.executorRepository.findActiveSubscriptionNetwork(
-          account.userId,
-          resolvedSignal.strategyInstanceId,
-        )
-        if (subscription?.exchangeAccountId) {
-          exchangeAccountId = subscription.exchangeAccountId
+        if (!strategySubscription?.exchangeAccountId) {
+          await this.executionRepository.markSkipped(
+            execution.id,
+            'SUBSCRIPTION_EXCHANGE_ACCOUNT_MISSING',
+          )
+          await this.releaseReservation(account.id, reservedQuote, reserveReference)
+          return 'skipped'
         }
+        exchangeAccountId = strategySubscription.exchangeAccountId
       }
 
       if (resolvedSignal.llmStrategyInstanceId) {
