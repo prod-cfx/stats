@@ -169,13 +169,30 @@ describe('StrategySignals (E2E, DB only)', () => {
 
   function createTestSubscription(
     p: PrismaService,
-    params: { userId: string; strategyInstanceId: string },
+    params: { userId: string; strategyInstanceId: string; exchangeAccountId?: string | null },
   ) {
     return p.userStrategySubscription.create({
       data: {
         userId: params.userId,
         strategyInstanceId: params.strategyInstanceId,
         status: 'active',
+        exchangeAccountId: params.exchangeAccountId ?? null,
+      },
+    })
+  }
+
+  function createTestExchangeAccount(
+    p: PrismaService,
+    params: { id: string; userId: string; exchangeId: 'okx' | 'binance' | 'hyperliquid'; isTestnet?: boolean; name?: string },
+  ) {
+    return p.exchangeAccount.create({
+      data: {
+        id: params.id,
+        userId: params.userId,
+        exchangeId: params.exchangeId,
+        isTestnet: params.isTestnet ?? true,
+        name: params.name ?? `${params.exchangeId}-test-account`,
+        encryptedConfig: 'encrypted-config-placeholder',
       },
     })
   }
@@ -972,6 +989,7 @@ describe('StrategySignals (E2E, DB only)', () => {
     const RUNTIME_TEMPLATE_ID = 'e2e-runtime-template'
     const RUNTIME_INSTANCE_ID = 'e2e-runtime-instance'
     const RUNTIME_ACCOUNT_ID = 'e2e-runtime-account'
+    const RUNTIME_EXCHANGE_ACCOUNT_ID = 'e2e-runtime-exchange-account'
     const RUNTIME_SYMBOL_ID = 'e2e-runtime-symbol'
     const RUNTIME_SYMBOL_CODE = 'E2E-RUNTIME-BTCUSDT:SPOT'
     const RUNTIME_SESSION_ID = 'e2e-runtime-session'
@@ -1007,9 +1025,18 @@ describe('StrategySignals (E2E, DB only)', () => {
         strategyName: 'E2E Runtime Strategy',
       })
 
+      await createTestExchangeAccount(prisma, {
+        id: RUNTIME_EXCHANGE_ACCOUNT_ID,
+        userId: RUNTIME_USER_ID,
+        exchangeId: 'okx',
+        isTestnet: true,
+        name: 'E2E Runtime OKX Testnet',
+      })
+
       await createTestSubscription(prisma, {
         userId: RUNTIME_USER_ID,
         strategyInstanceId: RUNTIME_INSTANCE_ID,
+        exchangeAccountId: RUNTIME_EXCHANGE_ACCOUNT_ID,
       })
 
       await createTestSymbol(prisma, {
@@ -1138,6 +1165,9 @@ describe('StrategySignals (E2E, DB only)', () => {
           userId: RUNTIME_USER_ID,
           strategyInstanceId: RUNTIME_INSTANCE_ID,
         },
+      })
+      await prisma.exchangeAccount.deleteMany({
+        where: { id: RUNTIME_EXCHANGE_ACCOUNT_ID },
       })
       await prisma.userStrategyAccount.deleteMany({
         where: { id: RUNTIME_ACCOUNT_ID },
