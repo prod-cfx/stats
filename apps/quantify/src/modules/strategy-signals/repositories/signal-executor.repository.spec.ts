@@ -21,6 +21,9 @@ describe('signalExecutorRepository.findRecoverableSignals', () => {
       where: expect.objectContaining({
         status: 'PENDING',
         createdAt: { lte: readyBefore },
+        executions: {
+          none: {},
+        },
       }),
       orderBy: { createdAt: 'asc' },
       take: 50,

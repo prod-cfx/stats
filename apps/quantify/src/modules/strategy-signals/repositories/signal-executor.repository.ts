@@ -19,6 +19,9 @@ export class SignalExecutorRepository {
           { expiresAt: { gt: now } },
         ],
         createdAt: { lte: input.readyBefore },
+        executions: {
+          none: {},
+        },
       },
       orderBy: { createdAt: 'asc' },
       take: input.limit,
