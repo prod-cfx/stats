@@ -1,6 +1,6 @@
 import type { PositionSide, SignalDirection, SignalStatus, TradeSide } from '@ai/shared'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
-import type { OnModuleInit } from '@nestjs/common'
+import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import type { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
 import type { ExecutionStage } from '@/modules/trading/core/execution-stage'
@@ -19,6 +19,9 @@ import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 ConfigService
 import { ConfigService } from '@nestjs/config'
 import { OnEvent } from '@nestjs/event-emitter'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 SchedulerRegistry
+import { SchedulerRegistry } from '@nestjs/schedule'
+import { CronJob } from 'cron'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AccountsService } from '@/modules/accounts/accounts.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -63,14 +66,17 @@ const RECOVERY_BATCH_SIZE = 50
 const EXECUTION_RECOVERY_GRACE_MS = 5_000
 const ORDER_RECONCILE_RETRY_MS = 300
 const ORDER_RECONCILE_RETRY_COUNT = 3
+const EXECUTION_RECOVERY_CRON_JOB = 'strategy-signals.execute-recovery'
 
 @Injectable()
-export class SignalExecutorService implements OnModuleInit {
+export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SignalExecutorService.name)
+  private recoveryCronJob?: CronJob
 
   constructor(
     private readonly executorRepository: SignalExecutorRepository,
     private readonly configService: ConfigService,
+    private readonly schedulerRegistry: SchedulerRegistry,
     private readonly tradingService: TradingService,
     private readonly accountsService: AccountsService,
     private readonly strategyInstancesService: StrategyInstancesService,
@@ -85,6 +91,8 @@ export class SignalExecutorService implements OnModuleInit {
     const config = this.getConfig()
     if (!config.execution.enabled) return
 
+    this.registerRecoveryCronJob(config)
+
     try {
       await this.recoverExecutableSignals(config)
     }
@@ -94,6 +102,14 @@ export class SignalExecutorService implements OnModuleInit {
         (error as Error).stack,
       )
     }
+  }
+
+  onModuleDestroy() {
+    if (!this.recoveryCronJob) return
+
+    this.recoveryCronJob.stop()
+    this.schedulerRegistry.deleteCronJob(EXECUTION_RECOVERY_CRON_JOB)
+    this.recoveryCronJob = undefined
   }
 
   @OnEvent(StrategySignalEvents.CREATED, { async: true })
@@ -111,6 +127,26 @@ export class SignalExecutorService implements OnModuleInit {
 
   private getConfig(): StrategySignalsRuntimeConfig {
     return this.configService.get<StrategySignalsRuntimeConfig>('strategySignals') ?? DEFAULT_STRATEGY_SIGNALS_CONFIG
+  }
+
+  private registerRecoveryCronJob(config: StrategySignalsRuntimeConfig) {
+    if (this.recoveryCronJob) {
+      this.recoveryCronJob.stop()
+      this.schedulerRegistry.deleteCronJob(EXECUTION_RECOVERY_CRON_JOB)
+    }
+
+    this.recoveryCronJob = new CronJob(config.cronExpression, async () => {
+      try {
+        await this.recoverExecutableSignals(this.getConfig())
+      } catch (error) {
+        const detail = error instanceof Error ? (error.stack ?? error.message) : String(error)
+        this.logger.error(`Signal execution recovery cron tick failed: ${detail}`)
+      }
+    })
+
+    this.schedulerRegistry.addCronJob(EXECUTION_RECOVERY_CRON_JOB, this.recoveryCronJob)
+    this.recoveryCronJob.start()
+    this.logger.log(`Signal execution recovery scheduled with cron ${config.cronExpression}`)
   }
 
   /**

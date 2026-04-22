@@ -3,12 +3,17 @@ import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '../types/strategy-signals-confi
 import { SignalExecutorService } from './signal-executor.service'
 
 describe('signalExecutorService', () => {
+  function createSchedulerRegistry() {
+    return { addCronJob: jest.fn(), deleteCronJob: jest.fn() }
+  }
+
   function createService() {
     const configService = { get: jest.fn() }
+    const schedulerRegistry = createSchedulerRegistry()
     const tradingService = { placeOrder: jest.fn() }
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
-    const tradingSignalRepository = { updateStatus: jest.fn() }
+    const tradingSignalRepository = { updateStatus: jest.fn(), findById: jest.fn().mockResolvedValue(null) }
     const executionRepository = {
       markStage: jest.fn(),
       markExecuted: jest.fn(),
@@ -24,6 +29,7 @@ describe('signalExecutorService', () => {
     return new SignalExecutorService(
       executorRepository as any,
       configService as any,
+      schedulerRegistry as any,
       tradingService as any,
       accountsService as any,
       {} as any,
@@ -120,6 +126,8 @@ describe('signalExecutorService', () => {
     expect(executeSignalForSubscribedUsers).toHaveBeenCalledTimes(2)
     expect(executeSignalForSubscribedUsers).toHaveBeenNthCalledWith(1, 'signal-1', config)
     expect(executeSignalForSubscribedUsers).toHaveBeenNthCalledWith(2, 'signal-2', config)
+    expect((service as any).schedulerRegistry.addCronJob).toHaveBeenCalled()
+    service.onModuleDestroy()
   })
 
   it('skips recovery on startup when execution is disabled', async () => {
@@ -136,6 +144,38 @@ describe('signalExecutorService', () => {
     await service.onModuleInit()
 
     expect((service as any).executorRepository.findRecoverableSignals).not.toHaveBeenCalled()
+    expect((service as any).schedulerRegistry.addCronJob).not.toHaveBeenCalled()
+  })
+
+  it('replays the extracted recovery logic from the scheduled cron handler', async () => {
+    const service = createService()
+    const config = {
+      ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
+      cronExpression: '* * * * * *',
+      execution: {
+        ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution,
+        enabled: true,
+      },
+    }
+    ;(service as any).configService.get.mockReturnValue(config)
+    const recoverExecutableSignals = jest
+      .spyOn(service as any, 'recoverExecutableSignals')
+      .mockResolvedValue(undefined)
+    const futureCronConfig = {
+      ...config,
+      cronExpression: '0 0 1 1 * *',
+    }
+    ;(service as any).configService.get.mockReturnValue(futureCronConfig)
+
+    await service.onModuleInit()
+
+    const cronJob = (service as any).schedulerRegistry.addCronJob.mock.calls[0]?.[1]
+    expect(cronJob).toBeDefined()
+
+    await cronJob.fireOnTick()
+
+    expect(recoverExecutableSignals).toHaveBeenCalledTimes(2)
+    service.onModuleDestroy()
   })
 
   it('keeps hyperliquid spot entries executable once rounded notional meets the minimum', () => {
@@ -199,6 +239,7 @@ describe('signalExecutorService', () => {
     const service = new SignalExecutorService(
       prisma as any,
       configService as any,
+      createSchedulerRegistry() as any,
       tradingService as any,
       accountsService as any,
       {} as any,
@@ -281,6 +322,7 @@ describe('signalExecutorService', () => {
     const service = new SignalExecutorService(
       prisma as any,
       configService as any,
+      createSchedulerRegistry() as any,
       tradingService as any,
       accountsService as any,
       {} as any,
@@ -366,6 +408,7 @@ describe('signalExecutorService', () => {
     const service = new SignalExecutorService(
       prisma as any,
       configService as any,
+      createSchedulerRegistry() as any,
       tradingService as any,
       accountsService as any,
       {} as any,
@@ -451,6 +494,7 @@ describe('signalExecutorService', () => {
     const service = new SignalExecutorService(
       prisma as any,
       configService as any,
+      createSchedulerRegistry() as any,
       tradingService as any,
       accountsService as any,
       {} as any,
@@ -538,9 +582,11 @@ describe('signalExecutorService', () => {
     }
     const telemetry = { recordExecutionSummary: jest.fn() }
 
+    const schedulerRegistry = createSchedulerRegistry()
     const service = new SignalExecutorService(
       executorRepository as any,
       configService as any,
+      schedulerRegistry as any,
       tradingService as any,
       accountsService as any,
       {} as any,
@@ -641,9 +687,11 @@ describe('signalExecutorService', () => {
     }
     const telemetry = { recordExecutionSummary: jest.fn() }
 
+    const schedulerRegistry = createSchedulerRegistry()
     const service = new SignalExecutorService(
       executorRepository as any,
       configService as any,
+      schedulerRegistry as any,
       tradingService as any,
       accountsService as any,
       {} as any,
@@ -685,6 +733,7 @@ describe('signalExecutorService', () => {
     const service = new SignalExecutorService(
       {} as any,
       { get: jest.fn() } as any,
+      createSchedulerRegistry() as any,
       {} as any,
       accountsService as any,
       {} as any,
@@ -755,6 +804,7 @@ describe('signalExecutorService', () => {
     const service = new SignalExecutorService(
       {} as any,
       { get: jest.fn() } as any,
+      createSchedulerRegistry() as any,
       tradingService as any,
       { applyLedgerDelta: jest.fn() } as any,
       {} as any,
