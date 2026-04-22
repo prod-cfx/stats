@@ -60,6 +60,7 @@ interface OrderParams {
 }
 
 const RECOVERY_BATCH_SIZE = 50
+const EXECUTION_RECOVERY_GRACE_MS = 5_000
 const ORDER_RECONCILE_RETRY_MS = 300
 const ORDER_RECONCILE_RETRY_COUNT = 3
 
@@ -85,11 +86,11 @@ export class SignalExecutorService implements OnModuleInit {
     if (!config.execution.enabled) return
 
     try {
-      await this.recoverPendingSignals(config)
+      await this.recoverExecutableSignals(config)
     }
     catch (error) {
       this.logger.error(
-        `Failed to recover pending/failed signals on startup: ${(error as Error).message}`,
+        `Failed to recover executable signals on startup: ${(error as Error).message}`,
         (error as Error).stack,
       )
     }
@@ -116,12 +117,15 @@ export class SignalExecutorService implements OnModuleInit {
    * 启动时对仍处于 PENDING/FAILED 且未过期的信号做一次补偿执行，
    * 避免依赖进程内事件导致服务重启时信号彻底丢失
    */
-  private async recoverPendingSignals(config: StrategySignalsRuntimeConfig) {
-    const signals = await this.executorRepository.findPendingOrFailedSignals(RECOVERY_BATCH_SIZE)
+  private async recoverExecutableSignals(config: StrategySignalsRuntimeConfig) {
+    const signals = await this.executorRepository.findRecoverableSignals({
+      limit: RECOVERY_BATCH_SIZE,
+      readyBefore: new Date(Date.now() - EXECUTION_RECOVERY_GRACE_MS),
+    })
 
     if (!signals.length) return
 
-    this.logger.log(`Recovering ${signals.length} pending/failed signals on startup`)
+    this.logger.log(`Recovering ${signals.length} executable signals on startup`)
 
     for (const signal of signals) {
       try {

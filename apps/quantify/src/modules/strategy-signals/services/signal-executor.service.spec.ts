@@ -16,7 +16,9 @@ describe('signalExecutorService', () => {
       markSkipped: jest.fn(),
     }
     const telemetry = { recordExecutionSummary: jest.fn() }
-    const executorRepository = {}
+    const executorRepository = {
+      findRecoverableSignals: jest.fn().mockResolvedValue([]),
+    }
     const txHost = { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) }
 
     return new SignalExecutorService(
@@ -87,6 +89,53 @@ describe('signalExecutorService', () => {
 
     expect(withTransaction).toHaveBeenCalled()
     expect(executeSignalForSubscribedUsers).toHaveBeenCalledWith('signal-1', config)
+  })
+
+  it('recovers only aged executable signals on startup when execution is enabled', async () => {
+    const service = createService()
+    const config = {
+      ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
+      execution: {
+        ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution,
+        enabled: true,
+      },
+    }
+    ;(service as any).configService.get.mockReturnValue(config)
+    ;(service as any).executorRepository.findRecoverableSignals.mockResolvedValue([
+      { id: 'signal-1' },
+      { id: 'signal-2' },
+    ])
+    const executeSignalForSubscribedUsers = jest
+      .spyOn(service as any, 'executeSignalForSubscribedUsers')
+      .mockResolvedValue(undefined)
+
+    await service.onModuleInit()
+
+    expect((service as any).executorRepository.findRecoverableSignals).toHaveBeenCalledWith(
+      expect.objectContaining({
+        limit: 50,
+        readyBefore: expect.any(Date),
+      }),
+    )
+    expect(executeSignalForSubscribedUsers).toHaveBeenCalledTimes(2)
+    expect(executeSignalForSubscribedUsers).toHaveBeenNthCalledWith(1, 'signal-1', config)
+    expect(executeSignalForSubscribedUsers).toHaveBeenNthCalledWith(2, 'signal-2', config)
+  })
+
+  it('skips recovery on startup when execution is disabled', async () => {
+    const service = createService()
+    const config = {
+      ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
+      execution: {
+        ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution,
+        enabled: false,
+      },
+    }
+    ;(service as any).configService.get.mockReturnValue(config)
+
+    await service.onModuleInit()
+
+    expect((service as any).executorRepository.findRecoverableSignals).not.toHaveBeenCalled()
   })
 
   it('keeps hyperliquid spot entries executable once rounded notional meets the minimum', () => {

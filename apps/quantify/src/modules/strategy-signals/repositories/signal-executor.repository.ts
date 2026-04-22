@@ -9,7 +9,7 @@ import { Injectable } from '@nestjs/common'
 export class SignalExecutorRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
-  findPendingOrFailedSignals(limit: number) {
+  findRecoverableSignals(input: { limit: number; readyBefore: Date }) {
     const now = new Date()
     return this.txHost.tx.tradingSignal.findMany({
       where: {
@@ -18,9 +18,16 @@ export class SignalExecutorRepository {
           { expiresAt: null },
           { expiresAt: { gt: now } },
         ],
+        createdAt: { lte: input.readyBefore },
+        NOT: {
+          metadata: {
+            path: ['reason'],
+            equals: 'NO_SUBSCRIBERS',
+          },
+        },
       },
       orderBy: { createdAt: 'asc' },
-      take: limit,
+      take: input.limit,
     })
   }
 
