@@ -101,8 +101,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const canonicalSpec = (service as any).buildCanonicalSpecForConversation(semanticState, normalization)
     return canonicalDigestService.hash(canonicalSpec)
   }
-  const readPersistedChecklist = (
-    session: { checklist?: Record<string, unknown>; semanticState?: Record<string, unknown> },
+  const readLegacyChecklistProjectionForTest = (
+    session: { checklist?: Record<string, unknown> | null; semanticState?: Record<string, unknown> },
   ): Record<string, unknown> => {
     if (session.checklist) {
       return session.checklist
@@ -574,7 +574,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     id: sessionId,
     userId: 'u1',
     status: 'DRAFTING',
-    checklist: {},
+    checklist: null,
     semanticState: null,
     clarificationState: null,
     constraintPack: {},
@@ -3495,7 +3495,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any> | undefined
-    const createdChecklist = createdSession ? readPersistedChecklist(createdSession) : {}
+    const createdChecklist = createdSession ? readLegacyChecklistProjectionForTest(createdSession) : {}
 
     expect(started.status).toBe('CONFIRM_GATE')
     expect(started.assistantPrompt).not.toContain('存在暂不支持的规则片段')
@@ -6793,7 +6793,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(started.status).toBe('CONFIRM_GATE')
     expect(started.canonicalDigest).toMatch(/^sha256:/)
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
-    const createdChecklist = readPersistedChecklist(createdSession)
+    const createdChecklist = readLegacyChecklistProjectionForTest(createdSession)
 
     const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's5',
@@ -6924,7 +6924,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
-    const createdChecklist = readPersistedChecklist(createdSession)
+    const createdChecklist = readLegacyChecklistProjectionForTest(createdSession)
     const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-golden-ma-publish',
       userId: 'u1',
@@ -6996,7 +6996,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     const createdSession = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
-    const createdChecklist = readPersistedChecklist(createdSession)
+    const createdChecklist = readLegacyChecklistProjectionForTest(createdSession)
     const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-golden-bollinger-publish',
       userId: 'u1',
