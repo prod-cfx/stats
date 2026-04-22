@@ -102,7 +102,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const normalization = semanticState
       ? (service as any).buildNormalizationFromSemanticState(semanticState)
       : clarification.normalization
-    const canonicalSpec = (service as any).buildCanonicalSpecForConversation(checklist, normalization, semanticState)
+    const canonicalSpec = semanticState
+      ? (service as any).buildCanonicalSpecForConversation(semanticState, normalization)
+      : (service as any).buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly(
+          checklist,
+          normalization,
+        )
     return canonicalDigestService.hash(canonicalSpec)
   }
   const readPersistedChecklist = (
@@ -467,20 +472,27 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const semanticState = (service as any).hasPersistedSemanticState(fixture.semanticState)
       ? fixture.semanticState
       : (Object.keys(normalizedLogicSnapshot).length > 0
-          ? (service as any).buildFallbackSemanticState(normalizedLogicSnapshot)
+          ? (service as any).mergeLogicSnapshotIntoSemanticState(
+              (service as any).createEmptySemanticState(),
+              normalizedLogicSnapshot,
+            )
           : null)
     const baselineChecklist = semanticState
       ? (service as any).projectLegacyLogicSnapshotFromSemanticState(semanticState, normalizedLogicSnapshot)
       : normalizedLogicSnapshot
+    const clarificationArtifacts = semanticState
+      ? (service as any).resolveSemanticClarificationArtifacts(semanticState)
+      : (service as any).resolveClarificationArtifacts(baselineChecklist)
     const normalization = semanticState
       ? (service as any).buildNormalizationFromSemanticState(semanticState)
-      : (service as any).resolveClarificationArtifacts(baselineChecklist).normalization
-    const canonicalSpec = (service as any).buildCanonicalSpecForConversation(
-      baselineChecklist,
-      normalization,
-      semanticState ?? undefined,
-    )
-    const executionContext = (service as any).resolveClarificationArtifacts(baselineChecklist).executionContext.context
+      : clarificationArtifacts.normalization
+    const canonicalSpec = semanticState
+      ? (service as any).buildCanonicalSpecForConversation(semanticState, normalization)
+      : (service as any).buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly(
+          baselineChecklist,
+          normalization,
+        )
+    const executionContext = clarificationArtifacts.executionContext.context
     const latestSpecDesc = specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext,
@@ -547,8 +559,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   const readFixtureCanonicalDigest = (fixture: Record<string, any>): string =>
     readCanonicalDigestFromSpecDesc(fixture.latestSpecDesc)
   const buildSemanticOnlyCanonicalDigest = (semanticState: Record<string, any>): string => {
-    const projectedChecklist = (service as any).projectLegacyLogicSnapshotFromSemanticState(semanticState, {})
-    return buildConfirmedCanonicalDigest(projectedChecklist, semanticState)
+    const normalization = (service as any).buildNormalizationFromSemanticState(semanticState)
+    const canonicalSpec = (service as any).buildCanonicalSpecForConversation(semanticState, normalization)
+    return canonicalDigestService.hash(canonicalSpec)
   }
   const markFixtureInferredRiskBasisDefaults = (
     fixture: Record<string, any>,
@@ -1061,7 +1074,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   it('tests engine generation from a provided canonicalSpec without checklist fallback', async () => {
     const semanticState = buildLockedMaSemanticState()
     const normalization = (service as any).buildNormalizationFromSemanticState(semanticState)
-    const canonicalSpec = (service as any).buildCanonicalSpecForConversation({}, normalization, semanticState)
+    const canonicalSpec = (service as any).buildCanonicalSpecForConversation(semanticState, normalization)
     mockAi.chat.mockResolvedValueOnce({
       content: 'return { direction: "BUY", signalType: "ENTRY", confidence: 75, entryPrice: 62000, stopLoss: 61000, takeProfit: 64000, reasoning: "canonical", positionSizeRatio: 0.1 }',
     })
@@ -1110,7 +1123,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   it('rejects canonicalSpec rules without canonical condition or actions', async () => {
     const semanticState = buildLockedMaSemanticState()
     const normalization = (service as any).buildNormalizationFromSemanticState(semanticState)
-    const canonicalSpec = (service as any).buildCanonicalSpecForConversation({}, normalization, semanticState)
+    const canonicalSpec = (service as any).buildCanonicalSpecForConversation(semanticState, normalization)
 
     await expect(service.testEngine({
       userId: 'u1',
@@ -1136,7 +1149,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   it('rejects canonicalSpec rules with unusable condition or action shapes', async () => {
     const semanticState = buildLockedMaSemanticState()
     const normalization = (service as any).buildNormalizationFromSemanticState(semanticState)
-    const canonicalSpec = (service as any).buildCanonicalSpecForConversation({}, normalization, semanticState)
+    const canonicalSpec = (service as any).buildCanonicalSpecForConversation(semanticState, normalization)
 
     await expect(service.testEngine({
       userId: 'u1',
@@ -1816,7 +1829,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
 
     expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('缺少唯一交易所')
     expect(result.assistantPrompt).toContain('请确认交易所')
     expect(result.assistantPrompt).not.toContain('请确认止损规则')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
@@ -2315,98 +2327,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
   })
 
-
-  it('still accepts legacy semanticUpdates output with old nested planner keys during the semanticPatch transition', async () => {
-    mockAi.chat.mockResolvedValueOnce({
-      content: JSON.stringify({
-        related: true,
-        logicReady: true,
-        assistantPrompt: '逻辑图已更新。请确认逻辑图。',
-        semanticUpdates: {
-          triggerUpdates: [
-            {
-              key: 'indicator.above',
-              phase: 'entry',
-              params: {
-                indicator: 'ma',
-                referenceRole: 'long_term',
-                'reference.period': 50,
-                confirmationMode: 'close_confirm',
-              },
-            },
-            {
-              key: 'indicator.below',
-              phase: 'exit',
-              params: {
-                indicator: 'ma',
-                referenceRole: 'short_term',
-                'reference.period': 10,
-                confirmationMode: 'close_confirm',
-              },
-            },
-          ],
-          actionUpdates: [
-            { key: 'open_long' },
-            { key: 'close_long' },
-          ],
-          riskUpdates: [
-            { key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
-            { key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' } },
-          ],
-          positionUpdate: {
-            mode: 'fixed_ratio',
-            value: 0.1,
-            positionMode: 'long_only',
-          },
-          contextUpdates: {
-            exchange: 'okx',
-            symbol: 'BTCUSDT',
-            marketType: 'spot',
-            timeframe: '15m',
-          },
-        },
-      }),
-    })
-    mockRepo.createSession.mockResolvedValue({ id: 's-semantic-updates-legacy' })
-
-    const result = await service.startSession({
-      userId: 'u1',
-      initialMessage: '帮我做一个 MA50 上破买入、MA10 下破卖出的 OKX 现货 BTCUSDT 15m 策略',
-    })
-
-    const createPayload = mockRepo.createSession.mock.calls.at(-1)?.[0] as Record<string, any>
-    expect(result.status).toBe('CONFIRM_GATE')
-    expect(result.canonicalDigest).toMatch(/^sha256:/)
-    expect(createPayload).not.toHaveProperty('checklist')
-    expect(createPayload.semanticState).toEqual(expect.objectContaining({
-      triggers: expect.arrayContaining([
-        expect.objectContaining({
-          key: 'indicator.above',
-          phase: 'entry',
-          params: expect.objectContaining({
-            indicator: 'ma',
-            'reference.period': 50,
-            confirmationMode: 'close_confirm',
-          }),
-        }),
-        expect.objectContaining({
-          key: 'indicator.below',
-          phase: 'exit',
-          params: expect.objectContaining({
-            indicator: 'ma',
-            'reference.period': 10,
-            confirmationMode: 'close_confirm',
-          }),
-        }),
-      ]),
-      contextSlots: expect.objectContaining({
-        exchange: expect.objectContaining({ value: 'okx' }),
-        symbol: expect.objectContaining({ value: 'BTCUSDT' }),
-        marketType: expect.objectContaining({ value: 'spot' }),
-        timeframe: expect.objectContaining({ value: '15m' }),
-      }),
-    }))
-  })
 
   it('continues from semanticState when persisted checklist payload is absent', async () => {
     const persistedSemanticState = buildLockedMaSemanticState({
@@ -3013,7 +2933,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(activeGateSpy).not.toHaveBeenCalled()
     expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
     expect(result.status).toBe('DRAFTING')
-    expect(result.assistantPrompt).toContain('现货')
+    expect(result.assistantPrompt).toContain('请先澄清这条规则')
     expect(result.clarificationState).toEqual(expect.objectContaining({
       status: 'NEEDS_CLARIFICATION',
       items: expect.arrayContaining([
@@ -3044,79 +2964,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
 
-  it('writes grid clarification answers back into checklist.grid on the fallback checklist path', () => {
-    const nextChecklist = (service as any).applyClarificationAnswers(
-      {
-        grid: {
-          upper: 80000,
-          stepPct: 0.5,
-          sideMode: 'bidirectional',
-        },
-      },
-      {
-        status: 'NEEDS_CLARIFICATION',
-        items: [
-          {
-            key: 'grid.range.lower',
-            reason: 'grid_params_missing',
-            field: 'grid.lower',
-            blocking: true,
-            question: '请确认网格区间下界。',
-            status: 'pending',
-          },
-        ],
-      },
-      {
-        'grid.range.lower': '60000',
-      },
-    )
-
-    expect(nextChecklist).toEqual(expect.objectContaining({
-      grid: {
-        lower: 60000,
-        upper: 80000,
-        stepPct: 0.5,
-        sideMode: 'bidirectional',
-      },
-    }))
-  })
-
-  it('writes legacy grid.lower answers back into checklist.grid on the fallback checklist path', () => {
-    const nextChecklist = (service as any).applyClarificationAnswers(
-      {
-        grid: {
-          upper: 80000,
-          stepPct: 0.5,
-          sideMode: 'bidirectional',
-        },
-      },
-      {
-        status: 'NEEDS_CLARIFICATION',
-        items: [
-          {
-            key: 'grid.lower',
-            reason: 'grid_params_missing',
-            field: 'grid.lower',
-            blocking: true,
-            question: '请确认网格区间下界。',
-            status: 'pending',
-          },
-        ],
-      },
-      {
-        'grid.lower': '60000',
-      },
-    )
-
-    expect(nextChecklist).toEqual(expect.objectContaining({
-      grid: {
-        lower: 60000,
-        upper: 80000,
-        stepPct: 0.5,
-        sideMode: 'bidirectional',
-      },
-    }))
-  })
 
   it('applies legacy grid.lower answers into the semantic snapshot path', () => {
     const nextSemanticState = (service as any).applySemanticClarificationAnswers(
@@ -3238,78 +3085,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           slotKey: 'grid.range.upper',
         }),
       ],
-    }))
-  })
-
-  it('accepts canonical grid sideMode clarification answers on the fallback checklist path', () => {
-    const nextChecklist = (service as any).applyClarificationAnswers(
-      {
-        grid: {
-          lower: 60000,
-          upper: 80000,
-          stepPct: 0.5,
-        },
-      },
-      {
-        status: 'NEEDS_CLARIFICATION',
-        items: [
-          {
-            key: 'grid.sideMode',
-            reason: 'missing_side_scope',
-            field: 'grid.sideMode',
-            blocking: true,
-            question: '请确认网格方向（双向 / 只做多 / 只做空）。',
-            status: 'pending',
-            allowedAnswers: ['bidirectional', 'long_only', 'short_only'],
-          },
-        ],
-      },
-      {
-        'grid.sideMode': 'bidirectional',
-      },
-    )
-
-    expect(nextChecklist).toEqual(expect.objectContaining({
-      grid: {
-        lower: 60000,
-        upper: 80000,
-        stepPct: 0.5,
-        sideMode: 'bidirectional',
-      },
-    }))
-  })
-
-  it('accepts natural short-grid sideMode clarification answers on the fallback checklist path', () => {
-    const nextChecklist = (service as any).applyClarificationAnswers(
-      {
-        grid: {
-          lower: 60000,
-          upper: 80000,
-          stepPct: 0.5,
-        },
-      },
-      {
-        status: 'NEEDS_CLARIFICATION',
-        items: [
-          {
-            key: 'grid.sideMode',
-            reason: 'grid_params_missing',
-            field: 'grid.sideMode',
-            blocking: true,
-            question: '请确认网格方向（双向 / 只做多 / 只做空）。',
-            status: 'pending',
-          },
-        ],
-      },
-      {
-        'grid.sideMode': '空头网格',
-      },
-    )
-
-    expect(nextChecklist).toEqual(expect.objectContaining({
-      grid: expect.objectContaining({
-        sideMode: 'short_only',
-      }),
     }))
   })
 
@@ -4770,62 +4545,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       missingDeploymentExecutionConstraints: true,
       requiresRepublishForBacktest: true,
       requiresRepublishForDeploy: true,
-    })
-  })
-
-  it('keeps legacy clarification items without field/blocking via backward-compatible normalization', async () => {
-    mockRepo.findById.mockResolvedValue({
-      id: 's-invalid-clarification',
-      userId: 'u1',
-      status: 'DRAFTING',
-      checklist: {},
-      constraintPack: {},
-      latestDraftCode: null,
-      latestSpecDesc: null,
-      strategyInstanceId: null,
-      clarificationState: {
-        status: 'NEEDS_CLARIFICATION',
-        items: [
-          {
-            key: 'entry.side.1',
-            reason: 'missing_side_scope',
-            question: '突破上轨时是只做空，还是也允许做多？',
-            allowedAnswers: ['long', 'short'],
-            status: 'pending',
-          },
-          {
-            key: 'riskRules.earlyStop.action',
-            reason: 'ambiguous_risk_effect',
-            question: '轨外连续3根K线时，应执行减仓还是直接平仓？',
-            status: 'pending',
-          },
-        ],
-      },
-      rejectReason: null,
-    })
-
-    const result = await service.getSession('s-invalid-clarification', 'u1')
-
-    expect(result.clarificationState).toEqual({
-      status: 'NEEDS_CLARIFICATION',
-      items: [
-        expect.objectContaining({
-          key: 'entry.side.1',
-          reason: 'missing_side_scope',
-          field: 'positionMode',
-          blocking: true,
-          allowedAnswers: ['long', 'short'],
-          status: 'pending',
-        }),
-        expect.objectContaining({
-          key: 'riskRules.earlyStop.action',
-          reason: 'ambiguous_risk_effect',
-          field: 'riskRules.earlyStop.action',
-          blocking: true,
-          allowedAnswers: ['reduce', 'close'],
-          status: 'pending',
-        }),
-      ],
     })
   })
 
@@ -8112,27 +7831,27 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
   })
 
   it('does not block confirmGenerate with the legacy entry and exit completion prompt when the semantic snapshot is complete and the canonical spec can compile', async () => {
-    const semanticCompleteChecklist = completeChecklist({
-      symbols: ['BTCUSDT'],
-      timeframes: ['15m'],
-      entryRules: ['收盘确认价格突破长期均线（50）时买入'],
-      exitRules: ['收盘确认价格跌破短期均线（20）时卖出'],
-      riskRules: {
-        exchange: 'okx',
-        marketType: 'spot',
-        positionPct: 10,
-        stopLossPct: 5,
-        stopLossBasis: 'entry_avg_price',
-        takeProfitPct: 10,
-        takeProfitBasis: 'entry_avg_price',
-      },
+    const persistedSemanticState = buildLockedMaSemanticState({
+      risk: [
+        lockedStopLossRisk(),
+        {
+          id: 'risk-take-profit',
+          key: 'risk.take_profit_pct',
+          params: {
+            valuePct: 10,
+            basis: 'entry_avg_price',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
     })
-    const persistedSemanticState = (service as any).buildFallbackSemanticState(semanticCompleteChecklist)
     mockRepo.findById.mockResolvedValue({
       id: 's7-semantic-complete',
       userId: 'u1',
       status: 'CONFIRM_GATE',
-      checklist: semanticCompleteChecklist,
+      checklist: null,
       semanticState: persistedSemanticState,
       clarificationState: { status: 'CLEAR', items: [] },
       constraintPack: {},
@@ -8140,7 +7859,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const missingFieldsSpy = jest
       .spyOn(CodegenConversationService.prototype as any, 'resolveLogicSnapshotMissingFields')
       .mockReturnValue(['entryRules', 'exitRules'])
-    const confirmedCanonicalDigest = buildConfirmedCanonicalDigest(semanticCompleteChecklist, persistedSemanticState)
+    const confirmedCanonicalDigest = buildSemanticOnlyCanonicalDigest(persistedSemanticState)
     const readCanonicalDigestSpy = jest
       .spyOn(CodegenConversationService.prototype as any, 'readCanonicalDigest')
       .mockReturnValue(confirmedCanonicalDigest)

@@ -14,6 +14,7 @@ import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
 import type { StrategyAmbiguity } from '../types/strategy-ambiguity'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyBlockingReason, StrategyInferredAssumption } from '../types/strategy-decision'
+import type { StrategyExecutionContextResolution } from '../types/strategy-execution-context'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
 import { buildSemanticSlotId, type SemanticSlotState, type SemanticState, type SemanticTriggerState } from '../types/semantic-state'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
@@ -222,23 +223,15 @@ export class CodegenConversationService {
       ...createDefaultConstraintPack(guidePrompt),
       recommendationStyle,
     }
-    const clarification = this.resolveClarificationArtifacts(checklist)
-    const clarificationState = this.buildClarificationFromSemanticState(
-      initialSemanticState,
-      checklist,
-      { preserveLegacyFallback: false },
-    )
-    const normalization = this.buildNormalizationFromSemanticState(initialSemanticState)
-    const initialCanonicalSpec = this.buildCanonicalSpecForConversation(
-      checklist,
-      normalization,
-      initialSemanticState,
-    )
+    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(initialSemanticState)
+    const clarificationState = semanticArtifacts.clarificationState
+    const normalization = semanticArtifacts.normalization
+    const initialCanonicalSpec = this.buildCanonicalSpecForConversation(initialSemanticState, normalization)
     const compileability = this.evaluateCanonicalCompileability(initialCanonicalSpec)
     const decision = this.buildStrategyDecision({
       checklist,
-      clarification,
-      effectiveBlockingReasons: this.buildEffectiveBlockingReasonsFromClarificationState(clarificationState),
+      clarification: semanticArtifacts,
+      effectiveBlockingReasons: semanticArtifacts.blockingReasons,
       compileability,
       constraintPack: initialConstraintPack,
     })
@@ -248,20 +241,9 @@ export class CodegenConversationService {
       compileability,
       decisionKind: decision.kind,
     })
-    const nextInitialSemanticSlot = this.findNextOpenSemanticSlot(initialSemanticState)
-    const semanticClarificationPrompt = nextInitialSemanticSlot
-      && (
-        nextInitialSemanticSlot.priority === 'core'
-        || nextInitialSemanticSlot.priority === 'risk'
-        || nextInitialSemanticSlot.priority === 'behavior'
-      )
-      ? this.buildSemanticClarificationPrompt(initialSemanticState)
-      : null
     const clarificationPrompt = decision.kind === 'CONFIRM_INFERRED'
       ? this.clarificationQuestion.buildFromDecision(decision)
-      : (semanticClarificationPrompt
-          || clarification.clarificationPrompt
-          || this.clarificationQuestion.build(clarificationState))
+      : semanticArtifacts.clarificationPrompt
     const confirmationAssistantPrompt = initialStatus === 'CONFIRM_GATE'
       ? this.buildLogicGateAssistantPrompt(checklist, normalization.normalizedIntent)
       : null
@@ -282,7 +264,7 @@ export class CodegenConversationService {
     const initialSpecDesc = bootstrap.shouldEnterConfirmationGate && initialCanonicalSpec
       ? this.specDescBuilder.buildFromCanonicalSpec(initialCanonicalSpec, '', {
           normalizedIntent: normalization?.normalizedIntent ?? null,
-          executionContext: clarification.executionContext.context,
+          executionContext: semanticArtifacts.executionContext.context,
         })
       : null
     const initialCanonicalDigest = this.readCanonicalDigest(initialSpecDesc)
@@ -420,7 +402,7 @@ export class CodegenConversationService {
     const baseLogicSnapshot = inferredConfirmation.checklist
     const baseSemanticState = semanticStateAfterAnswers
     const clarificationStateAfterAnswers = hasStructuredClarificationAnswers
-      ? this.resolveClarificationArtifacts(baseLogicSnapshot).clarificationState
+      ? this.resolveSemanticClarificationArtifacts(baseSemanticState).clarificationState
       : this.withClarificationSummary(baseClarificationState, baseLogicSnapshot)
     const preMergedSemanticState = this.mergeSemanticPatchIntoState(
       baseSemanticState,
@@ -439,44 +421,34 @@ export class CodegenConversationService {
     })
     const reducedSemanticState = plannedSemanticState
     const canonicalLogicSnapshot = this.projectLegacyLogicSnapshotFromSemanticState(reducedSemanticState, {})
-    const clarification = this.resolveClarificationArtifacts(canonicalLogicSnapshot)
-    const clarificationState = this.buildClarificationFromSemanticState(
-      reducedSemanticState,
-      canonicalLogicSnapshot,
-      { preserveLegacyFallback: false },
-    )
+    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
+    const clarificationState = semanticArtifacts.clarificationState
     const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
-    const clarificationPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
-      || this.clarificationQuestion.build(clarificationState)
-      || clarification.clarificationPrompt
+    const clarificationPrompt = semanticArtifacts.clarificationPrompt
     const recommendationStyle = this.inferRecommendationStyleFromContext(
       dto.message,
       canonicalLogicSnapshot,
       constraintPack.recommendationStyle,
     )
     const nextConstraintPack = this.withGuidePrompt(constraintPack, guidePrompt, recommendationStyle)
-    const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
-    const canonicalSpec = this.buildCanonicalSpecForConversation(
-      canonicalLogicSnapshot,
-      normalization,
-      reducedSemanticState,
-    )
+    const normalization = semanticArtifacts.normalization
+    const canonicalSpec = this.buildCanonicalSpecForConversation(reducedSemanticState, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
-      executionContext: clarification.executionContext.context,
+      executionContext: semanticArtifacts.executionContext.context,
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
     const decision = this.buildStrategyDecision({
       checklist: canonicalLogicSnapshot,
-      clarification,
-      effectiveBlockingReasons: this.buildEffectiveBlockingReasonsFromClarificationState(clarificationState),
+      clarification: semanticArtifacts,
+      effectiveBlockingReasons: semanticArtifacts.blockingReasons,
       compileability,
       constraintPack: nextConstraintPack,
     })
     const decisionPrompt = decision.kind === 'CONFIRM_INFERRED'
       ? this.clarificationQuestion.buildFromDecision(decision)
-      : clarification.clarificationPrompt
+      : semanticArtifacts.clarificationPrompt
     const deterministicAuthority = this.resolveContinueSessionDeterministicAuthority({
       semanticState: reducedSemanticState,
       checklist: canonicalLogicSnapshot,
@@ -657,9 +629,10 @@ export class CodegenConversationService {
     sessionUserId: string,
   ): Promise<CodegenSessionResponseDto> {
     const baseClarificationState = this.readClarificationState(session.clarificationState)
+    const persistedSemanticState = this.readSemanticState(session.semanticState)
     const persistedLogicSnapshot = this.restoreInferredAssumptionsFromLatestSpecDesc(
       session.latestSpecDesc,
-      this.readStrategyLogicSnapshot(session.checklist),
+      this.projectLegacyLogicSnapshotFromSemanticState(persistedSemanticState, {}),
     )
     const inferredSemanticClarificationAnswers = this.inferFreeformSemanticClarificationAnswers(
       baseClarificationState,
@@ -669,10 +642,8 @@ export class CodegenConversationService {
     const effectiveClarificationAnswers = Object.keys(inferredSemanticClarificationAnswers).length > 0
       ? inferredSemanticClarificationAnswers
       : dto.clarificationAnswers
-    const hasPersistedSemanticState = this.hasPersistedSemanticState(session.semanticState)
-    const currentSemanticState = this.readSemanticState(session.semanticState)
     const semanticStateAfterAnswers = this.applySemanticClarificationAnswers(
-      currentSemanticState,
+      persistedSemanticState,
       baseClarificationState,
       effectiveClarificationAnswers,
     )
@@ -685,19 +656,14 @@ export class CodegenConversationService {
       baseClarificationState,
       effectiveClarificationAnswers,
     )
-    const confirmationViewNormalization = hasPersistedSemanticState
-      ? this.buildNormalizationFromSemanticState(semanticStateAfterAnswers)
-      : this.resolveClarificationArtifacts(baseLogicSnapshot).normalization
+    const confirmationViewArtifacts = this.resolveSemanticClarificationArtifacts(semanticStateAfterAnswers)
+    const confirmationViewNormalization = confirmationViewArtifacts.normalization
     const confirmationViewSpecDesc = this.specDescBuilder.buildFromCanonicalSpec(
-      this.buildCanonicalSpecForConversation(
-        baseLogicSnapshot,
-        confirmationViewNormalization,
-        hasPersistedSemanticState ? semanticStateAfterAnswers : undefined,
-      ),
+      this.buildCanonicalSpecForConversation(semanticStateAfterAnswers, confirmationViewNormalization),
       '',
       {
         normalizedIntent: confirmationViewNormalization.normalizedIntent,
-        executionContext: this.resolveClarificationArtifacts(baseLogicSnapshot).executionContext.context,
+        executionContext: confirmationViewArtifacts.executionContext.context,
       },
     )
     const confirmationViewDigest = this.readCanonicalDigest(confirmationViewSpecDesc)
@@ -708,16 +674,10 @@ export class CodegenConversationService {
         preserveLockedPositionSizing: this.hasValidLockedPositionSizing(semanticStateAfterAnswers.position),
       },
     )
-    const canonicalLogicSnapshot = hasPersistedSemanticState
-      ? this.projectLegacyLogicSnapshotFromSemanticState(reducedSemanticState, baseLogicSnapshot)
-      : baseLogicSnapshot
-    const clarification = this.resolveClarificationArtifacts(canonicalLogicSnapshot)
+    const canonicalLogicSnapshot = this.projectLegacyLogicSnapshotFromSemanticState(reducedSemanticState, baseLogicSnapshot)
+    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
     const clarificationState = this.mergePersistedBlockingClarificationItems(
-      this.buildClarificationFromSemanticState(
-        reducedSemanticState,
-        canonicalLogicSnapshot,
-        { preserveLegacyFallback: !hasPersistedSemanticState },
-      ),
+      semanticArtifacts.clarificationState,
       baseClarificationState,
       reducedSemanticState,
     )
@@ -741,23 +701,17 @@ export class CodegenConversationService {
     const hasBlockingClarificationItems =
       clarificationState.status === 'NEEDS_CLARIFICATION'
       && clarificationState.items.some(item => item.blocking && item.status === 'pending')
-    const clarificationPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
-      || this.clarificationQuestion.build(clarificationState)
-      || clarification.clarificationPrompt
+    const clarificationPrompt = semanticArtifacts.clarificationPrompt
     const constraintPack = this.readConstraintPack(session.constraintPack)
     const historyAfterConfirm = this.appendConversationHistory(
       constraintPack.conversationHistory ?? [],
       dto.message,
     )
-    const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
-    const canonicalSpec = this.buildCanonicalSpecForConversation(
-      canonicalLogicSnapshot,
-      normalization,
-      hasPersistedSemanticState ? reducedSemanticState : undefined,
-    )
+    const normalization = semanticArtifacts.normalization
+    const canonicalSpec = this.buildCanonicalSpecForConversation(reducedSemanticState, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
-      executionContext: clarification.executionContext.context,
+      executionContext: semanticArtifacts.executionContext.context,
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
@@ -2773,7 +2727,7 @@ export class CodegenConversationService {
         preserveLockedPositionSizing: this.hasValidLockedPositionSizing(args.semanticState.position),
       },
     )
-    const clarification = this.resolveClarificationArtifacts(projectedLogicSnapshot)
+    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
     const semanticClarificationState = this.buildClarificationFromSemanticState(
       reducedSemanticState,
       projectedLogicSnapshot,
@@ -2783,7 +2737,7 @@ export class CodegenConversationService {
     if (semanticClarificationState.status === 'NEEDS_CLARIFICATION') {
       const assistantPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
         || this.clarificationQuestion.build(semanticClarificationState)
-        || clarification.clarificationPrompt
+        || semanticArtifacts.clarificationPrompt
         || '请先澄清这条规则，我再继续完善逻辑图。'
       await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
@@ -2805,21 +2759,19 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
 
-    const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
-    const canonicalSpec = this.buildCanonicalSpecForConversation(
-      projectedLogicSnapshot,
-      normalization,
-      args.useSemanticProjection ? reducedSemanticState : undefined,
-    )
+    const normalization = semanticArtifacts.normalization
+    const canonicalSpec = args.useSemanticProjection
+      ? this.buildCanonicalSpecForConversation(reducedSemanticState, normalization)
+      : this.buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly(projectedLogicSnapshot, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
-      executionContext: clarification.executionContext.context,
+      executionContext: semanticArtifacts.executionContext.context,
     })
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
     const decision = this.buildStrategyDecision({
       checklist: projectedLogicSnapshot,
-      clarification,
+      clarification: semanticArtifacts,
       effectiveBlockingReasons: this.buildEffectiveBlockingReasonsFromClarificationState(semanticClarificationState),
       compileability,
       constraintPack: args.constraintPack,
@@ -3753,7 +3705,7 @@ export class CodegenConversationService {
       }
       const semanticState = dto.semanticState as unknown as SemanticState
       const normalization = this.buildNormalizationFromSemanticState(semanticState)
-      return this.buildCanonicalSpecForConversation({}, normalization, semanticState)
+      return this.buildCanonicalSpecForConversation(semanticState, normalization)
     }
 
     if (dto.canonicalSpec) {
@@ -3998,18 +3950,13 @@ export class CodegenConversationService {
   }
 
   private buildCanonicalSpecForConversation(
-    checklist: StrategyLogicSnapshot,
-    normalization: NormalizationResult,
-    semanticState?: SemanticState,
+    semanticState: SemanticState,
+    normalization: NormalizationResult = this.buildNormalizationFromSemanticState(semanticState),
   ) {
-    if (semanticState) {
-      return this.canonicalSpecBuilder.buildFromNormalizedIntent(
-        this.buildSemanticCanonicalContext(semanticState),
-        normalization.normalizedIntent,
-      )
-    }
-
-    return this.buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly(checklist, normalization)
+    return this.canonicalSpecBuilder.buildFromNormalizedIntent(
+      this.buildSemanticCanonicalContext(semanticState),
+      normalization.normalizedIntent,
+    )
   }
 
   /**
@@ -4438,7 +4385,10 @@ export class CodegenConversationService {
 
   private buildStrategyDecision(input: {
     checklist: StrategyLogicSnapshot
-    clarification: ReturnType<CodegenConversationService['resolveClarificationArtifacts']>
+    clarification: {
+      clarificationState: StrategyClarificationStateWithSummary
+      blockingReasons: StrategyBlockingReason[]
+    }
     effectiveBlockingReasons?: StrategyBlockingReason[]
     compileability: CanonicalCompileabilityReport | null
     constraintPack: ConstraintPackSnapshot
@@ -4646,6 +4596,34 @@ export class CodegenConversationService {
     }
   }
 
+  private resolveSemanticClarificationArtifacts(semanticState: SemanticState): {
+    clarificationState: StrategyClarificationStateWithSummary
+    normalization: NormalizationResult
+    executionContext: StrategyExecutionContextResolution
+    blockingReasons: StrategyBlockingReason[]
+    clarificationPrompt: string | null
+  } {
+    const projectedLogicSnapshot = this.projectLegacyLogicSnapshotFromSemanticState(semanticState, {})
+    const clarificationState = this.buildClarificationFromSemanticState(
+      semanticState,
+      projectedLogicSnapshot,
+      { preserveLegacyFallback: false },
+    )
+    const normalization = this.buildNormalizationFromSemanticState(semanticState)
+    const executionContext = this.executionContext.resolveFromSemanticState(semanticState)
+    const blockingReasons = this.buildEffectiveBlockingReasonsFromClarificationState(clarificationState)
+    const clarificationPrompt = this.buildSemanticClarificationPrompt(semanticState)
+      || this.clarificationQuestion.build(clarificationState)
+
+    return {
+      clarificationState,
+      normalization,
+      executionContext,
+      blockingReasons,
+      clarificationPrompt,
+    }
+  }
+
   private async withConfirmedInferredDecisionKeys(
     constraintPack: ConstraintPackSnapshot,
     checklist: StrategyLogicSnapshot,
@@ -4658,7 +4636,10 @@ export class CodegenConversationService {
     }> {
     const clarification = this.resolveClarificationArtifacts(checklist)
     const compileability = this.evaluateCanonicalCompileability(
-      this.buildCanonicalSpecForConversation(checklist, clarification.normalization),
+      this.buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly(
+        checklist,
+        clarification.normalization,
+      ),
     )
     const decision = this.buildStrategyDecision({
       checklist,
