@@ -4,9 +4,8 @@ import type { PrismaService } from '@/prisma/prisma.service'
 import type { PrismaClient, User } from '@/prisma/prisma.types'
 import { setTimeout as sleep } from 'node:timers/promises'
 import { ConfigService } from '@nestjs/config'
-import { AccountStrategyCallerIdentityService } from '@/modules/account-strategy-view/services/account-strategy-caller-identity.service'
 import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
-import { SignalExecutorService } from '@/modules/strategy-signals/services/signal-executor.service'
+import { AccountStrategyCallerIdentityService } from '@/modules/account-strategy-view/services/account-strategy-caller-identity.service'
 import { SignalGeneratorService } from '@/modules/strategy-signals/services/signal-generator.service'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '@/modules/strategy-signals/types/strategy-signals-config.type'
 import { TradingService } from '@/modules/trading/trading.service'
@@ -43,7 +42,6 @@ const RUNTIME_SYMBOL_CODE = 'BTCUSDT:SPOT'
 describe('account-strategy-view (E2E)', () => {
   let app: INestApplication
   let _moduleFixture: TestingModule
-  let prismaService: PrismaService
   let prisma: PrismaService
 
   let owner: User
@@ -211,7 +209,6 @@ describe('account-strategy-view (E2E)', () => {
     if (!testing.prisma) {
       throw new Error('PrismaService unavailable for account-strategy-view e2e')
     }
-    prismaService = testing.prisma
     prisma = testing.prisma
 
     owner = await createTestUser(prisma, 'account-strategy-owner', 'owner')
@@ -590,7 +587,7 @@ describe('account-strategy-view (E2E)', () => {
         }
       } | null)?.runtimeProvenance?.executionSemanticKey).toBe('on_start.entry.primary')
 
-      let execution = await pollForResult(async () => {
+      const execution = await waitForExecution(async () => {
         return prisma.userSignalExecution.findFirst({
           where: {
             userId: owner.id,
@@ -603,26 +600,7 @@ describe('account-strategy-view (E2E)', () => {
           },
           orderBy: { executedAt: 'desc' },
         })
-      }, 10)
-
-      if (!execution) {
-        const signalExecutor = app.get(SignalExecutorService)
-        await signalExecutor.handleSignalCreated({ signalId: signal.id } as any)
-        execution = await waitForExecution(async () => {
-          return prisma.userSignalExecution.findFirst({
-            where: {
-              userId: owner.id,
-              signal: {
-                strategyInstanceId: strategyRunningId,
-              },
-            },
-            include: {
-              signal: true,
-            },
-            orderBy: { executedAt: 'desc' },
-          })
-        })
-      }
+      })
 
       expect(placeOrderSpy).toHaveBeenCalled()
       expect(execution.status).toBe('EXECUTED')

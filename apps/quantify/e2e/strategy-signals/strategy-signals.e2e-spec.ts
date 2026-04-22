@@ -1206,7 +1206,7 @@ describe('StrategySignals (E2E, DB only)', () => {
           }
         } | null)?.runtimeProvenance?.executionSemanticKey).toBe('on_start.entry.primary')
 
-        let execution = await pollForResult(async () => {
+        const execution = await waitForExecution(async () => {
           return prisma.userSignalExecution.findFirst({
             where: {
               userId: RUNTIME_USER_ID,
@@ -1219,26 +1219,7 @@ describe('StrategySignals (E2E, DB only)', () => {
             },
             orderBy: { executedAt: 'desc' },
           })
-        }, 10)
-
-        if (!execution) {
-          const signalExecutor = moduleFixture.get(SignalExecutorService)
-          await signalExecutor.handleSignalCreated({ signalId: signal.id } as any)
-          execution = await waitForExecution(async () => {
-            return prisma.userSignalExecution.findFirst({
-              where: {
-                userId: RUNTIME_USER_ID,
-                signal: {
-                  strategyInstanceId: RUNTIME_INSTANCE_ID,
-                },
-              },
-              include: {
-                signal: true,
-              },
-              orderBy: { executedAt: 'desc' },
-            })
-          })
-        }
+        })
 
         const runtimeState = await prisma.strategyRuntimeExecutionState.findFirstOrThrow({
           where: {
