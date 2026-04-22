@@ -285,17 +285,18 @@ export class CodegenPublicationGenerationStage {
     const semanticSymbol = this.readSemanticContextValue(args.semanticState.contextSlots.symbol)
     const semanticMarketType = this.readSemanticContextValue(args.semanticState.contextSlots.marketType)
     const semanticTimeframe = this.readSemanticContextValue(args.semanticState.contextSlots.timeframe)
+    const symbol = semanticSymbol ?? args.canonicalSpec.market.symbol
+    const timeframe = args.canonicalSpec.dataRequirements.requiredTimeframes[0]
+      ?? args.canonicalSpec.market.defaultTimeframe
+      ?? semanticTimeframe
+
+    if (!symbol || !timeframe) {
+      throw new Error('codegen.publication_context_missing')
+    }
 
     return {
-      symbol: normalizePublishedSymbol(
-        semanticSymbol
-          ?? args.canonicalSpec.market.symbol
-          ?? 'BTCUSDT',
-      ),
-      timeframe: args.canonicalSpec.dataRequirements.requiredTimeframes[0]
-        ?? args.canonicalSpec.market.defaultTimeframe
-        ?? semanticTimeframe
-        ?? '5m',
+      symbol: normalizePublishedSymbol(symbol),
+      timeframe,
       marketType: semanticMarketType === 'spot' || semanticMarketType === 'perp'
         ? semanticMarketType
         : args.canonicalSpec.market.marketType,

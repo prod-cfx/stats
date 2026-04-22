@@ -924,6 +924,40 @@ describe('codegenPublicationGenerationStage', () => {
     })).toBe('BTCUSDT')
   })
 
+  it('rejects publication generation when semantic and canonical context omit symbol or timeframe', async () => {
+    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const stage = new CodegenPublicationGenerationStage(
+      canonicalSpecBuilder,
+      new SpecDescBuilderService(),
+      strategySummaryBuilder,
+      { evaluate: jest.fn() } as any,
+      { compile: jest.fn() } as any,
+      { compile: jest.fn() } as any,
+      { emit: jest.fn() } as any,
+      { build: jest.fn() } as any,
+      { parse: jest.fn() } as any,
+    )
+    const semanticState = buildLockedMaSemanticState()
+    semanticState.contextSlots.symbol = null
+    semanticState.contextSlots.timeframe = null
+
+    const canonicalSpec = canonicalSpecBuilder.buildFromNormalizedIntent(
+      {
+        market: { marketType: 'spot' },
+      },
+      buildNormalizedIntentFromSemanticState(semanticState),
+    )
+    canonicalSpec.market.symbol = null
+    canonicalSpec.market.defaultTimeframe = null
+    canonicalSpec.dataRequirements.requiredTimeframes = []
+
+    await expect(stage.generate({
+      semanticState,
+      canonicalSpecOverride: canonicalSpec,
+    })).rejects.toThrow('codegen.publication_context_missing')
+  })
+
   it('reuses the confirmed canonical selection and labels fallback semanticSource as rule-derived', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
