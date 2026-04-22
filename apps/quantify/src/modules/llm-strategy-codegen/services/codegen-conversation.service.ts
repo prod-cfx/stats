@@ -2790,7 +2790,7 @@ export class CodegenConversationService {
         id: args.session.id,
         status: 'DRAFTING',
         missingFields: [],
-        assistantPrompt: this.buildNormalizationAssistantPrompt(projectedLogicSnapshot, normalization),
+        assistantPrompt: this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization),
         clarificationState: semanticClarificationState,
         specDesc,
       })
@@ -2818,7 +2818,7 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
 
-    const logicGateAssistantPrompt = this.buildLogicGateAssistantPrompt(projectedLogicSnapshot, normalization.normalizedIntent)
+    const logicGateAssistantPrompt = this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState, normalization.normalizedIntent)
     const historyAfterLogicGate = this.appendConversationHistory(
       args.constraintPack.conversationHistory ?? [],
       args.message,

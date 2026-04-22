@@ -3468,7 +3468,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     } as ContinueCodegenSessionDto)
 
     expect(result.status).toBe('CONFIRM_GATE')
-    expect(result.assistantPrompt).toContain('区间网格')
+    expect(result.assistantPrompt).toContain('我整理出的策略逻辑如下：')
+    expect(result.assistantPrompt).toContain('入场：区间网格')
     expect(result.assistantPrompt).not.toContain('仅做多')
     expect(result.assistantPrompt).toContain('请确认是否按这个逻辑生成脚本')
   })
