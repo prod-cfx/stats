@@ -7,9 +7,10 @@ import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
 import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant-conversations.repository'
-import type { ChecklistPayload, ChecklistRuleBasis, ChecklistRuleDraft } from '../types/checklist-compat'
+import type { StrategyLogicSnapshot, StrategyRuleBasis, StrategyRuleDraft } from '../types/strategy-logic-snapshot'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
+import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
 import type { StrategyAmbiguity } from '../types/strategy-ambiguity'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyBlockingReason, StrategyInferredAssumption } from '../types/strategy-decision'
@@ -42,7 +43,7 @@ import {
 } from '../types/strategy-clarification'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
-import { buildChecklistRuleDrafts, resolveChecklistDefaultTimeframe } from './checklist-compat'
+import { buildStrategyRuleDrafts, resolveStrategyDefaultTimeframe } from './rule-draft-projection'
 import {
   CodegenConversationContextHelper,
   MAX_PLANNER_HISTORY_LINES,
@@ -63,6 +64,7 @@ import { isEquivalentMarketScopeValue } from './market-scope-equivalence'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { RuntimeGuardrailService } from './runtime-guardrail.service'
+import { SemanticSeedExtractorService } from './semantic-seed-extractor.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { SpecDescBuilderService } from './spec-desc-builder.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -114,7 +116,7 @@ interface StructuredClarificationContinuationArgs {
     status: LlmCodegenSessionStatus
     latestSpecDesc?: Prisma.JsonValue | null
   }
-  checklist: ChecklistPayload
+  checklist: StrategyLogicSnapshot
   semanticState: SemanticState
   useSemanticProjection: boolean
   clarificationState: StrategyClarificationState
@@ -150,26 +152,6 @@ function normalizePublishedSymbol(raw: string): string {
   return raw.trim().toUpperCase().replace(/:(SPOT|PERP)$/u, '')
 }
 
-function normalizeDirectionalPercentRule(
-  fragment: string,
-  phase: 'entry' | 'exit',
-): string {
-  const timeframeMatch = fragment.match(/(\d{1,4})\s*(min|分钟|小时|[mhd天])/iu)
-  const value = timeframeMatch?.[1]
-  const unit = timeframeMatch?.[2]?.toLowerCase() ?? ''
-  const timeframe = value
-    ? (unit === 'm' || unit === 'min' || unit === '分钟'
-        ? `${value}m`
-        : (unit === 'h' || unit === '小时' ? `${value}h` : `${value}d`))
-    : null
-  const percentMatch = fragment.match(/(\d+(?:\.\d+)?)\s*%|百分之?\s*(\d+(?:\.\d+)?)/u)
-  const percent = percentMatch?.[1] ?? percentMatch?.[2] ?? '0'
-  const direction = phase === 'entry' ? '下跌' : '上涨'
-  const action = phase === 'entry' ? '买入' : '卖出'
-  const prefix = timeframe ? `${timeframe} 内` : ''
-
-  return `${prefix}${direction} ${percent}% ${action}`.trim()
-}
 
 @Injectable()
 export class CodegenConversationService {
@@ -197,6 +179,7 @@ export class CodegenConversationService {
     private readonly semanticStateReducer: SemanticStateReducerService = new SemanticStateReducerService(),
     private readonly semanticStateProjection: SemanticStateProjectionService = new SemanticStateProjectionService(),
     private readonly semanticStateMerge: SemanticStateMergeService = new SemanticStateMergeService(),
+    private readonly semanticSeedExtractor: SemanticSeedExtractorService = new SemanticSeedExtractorService(),
   ) {
     this.inferredConfirmationClassifier = new InferredConfirmationClassifierService(this.aiService)
   }
@@ -212,32 +195,19 @@ export class CodegenConversationService {
         status: HttpStatus.UNAUTHORIZED,
       })
     }
-    const seedChecklist = this.inferChecklistFromMessage(dto.initialMessage)
-    const seedSemanticState = this.createEmptySemanticState()
+    const seedSemanticState = this.mergeSemanticPatchIntoState(
+      this.createEmptySemanticState(),
+      this.extractSemanticPatchFromMessage(dto.initialMessage),
+    )
     const plan = await this.planConversationByLlm(dto.initialMessage ?? '', seedSemanticState, {
       providerCode: this.resolveProviderCode(undefined),
       model: undefined,
-    }, [], seedChecklist)
-    const startSeedChecklist = this.withTargetedStartSessionSeedContext(
-      seedChecklist,
-      dto.initialMessage,
-      plan.logic,
-    )
+    }, [])
     let initialSemanticState = this.applyConversationPlanToSemanticState({
       currentState: seedSemanticState,
-      compatibilityChecklist: startSeedChecklist,
       plan,
     })
-    if (this.shouldReapplyDeterministicStartSeedChecklist(startSeedChecklist)) {
-      initialSemanticState = this.semanticStateMerge.merge({
-        persisted: initialSemanticState,
-        derived: this.buildFallbackSemanticState(startSeedChecklist),
-      })
-    }
-    const checklist = this.mergeChecklistSnapshots(
-      this.projectLegacyChecklistFromSemanticState(initialSemanticState, startSeedChecklist),
-      plan.logic ?? {},
-    )
+    const checklist = this.projectLegacyLogicSnapshotFromSemanticState(initialSemanticState, {})
     const recommendationStyle = this.inferRecommendationStyleFromContext(
       dto.initialMessage,
       checklist,
@@ -289,7 +259,7 @@ export class CodegenConversationService {
           || clarification.clarificationPrompt
           || this.clarificationQuestion.build(clarificationState))
     const confirmationAssistantPrompt = initialStatus === 'CONFIRM_GATE'
-      ? this.buildChecklistGateAssistantPrompt(checklist, normalization.normalizedIntent)
+      ? this.buildLogicGateAssistantPrompt(checklist, normalization.normalizedIntent)
       : null
     const bootstrap = buildStartSessionBootstrap({
       initialMessage: dto.initialMessage,
@@ -420,63 +390,56 @@ export class CodegenConversationService {
       (session as { semanticState?: Prisma.JsonValue | null }).semanticState,
     )
     const currentSemanticState = this.readSemanticState((session as { semanticState?: Prisma.JsonValue | null }).semanticState)
-    const persistedChecklist = this.restoreInferredAssumptionsFromLatestSpecDesc(
-      session.latestSpecDesc,
-      this.readChecklistPayload((session as { checklist?: Prisma.JsonValue | null }).checklist),
-    )
     const semanticStateAfterAnswers = this.applySemanticClarificationAnswers(
       currentSemanticState,
       baseClarificationState,
       effectiveClarificationAnswers,
     )
-    const semanticBaseChecklistAfterAnswers = this.projectLegacyChecklistFromSemanticState(
+    const semanticBaseLogicSnapshotAfterAnswers = this.projectLegacyLogicSnapshotFromSemanticState(
       semanticStateAfterAnswers,
-      persistedChecklist,
+      {},
     )
-    const baseChecklistAfterAnswers = this.applyClarificationAnswers(
-      semanticBaseChecklistAfterAnswers,
+    const baseLogicSnapshotAfterAnswers = this.applyClarificationAnswers(
+      semanticBaseLogicSnapshotAfterAnswers,
       baseClarificationState,
       effectiveClarificationAnswers,
     )
     const inferredConfirmation = await this.withConfirmedInferredDecisionKeys(
       this.readConstraintPack(session.constraintPack),
-      baseChecklistAfterAnswers,
+      baseLogicSnapshotAfterAnswers,
       dto.message,
       {
         providerCode: this.resolveProviderCode(dto.providerCode),
         model: dto.model,
       },
     )
-    const baseChecklist = inferredConfirmation.checklist
+    const baseLogicSnapshot = inferredConfirmation.checklist
     const baseSemanticState = semanticStateAfterAnswers
     const clarificationStateAfterAnswers = hasStructuredClarificationAnswers
-      ? this.resolveClarificationArtifacts(baseChecklist).clarificationState
-      : this.withClarificationSummary(baseClarificationState, baseChecklist)
-    const preMergedSemanticState = baseSemanticState
-    const preMergedChecklist = this.projectLegacyChecklistFromSemanticState(preMergedSemanticState, baseChecklist)
+      ? this.resolveClarificationArtifacts(baseLogicSnapshot).clarificationState
+      : this.withClarificationSummary(baseClarificationState, baseLogicSnapshot)
+    const preMergedSemanticState = this.mergeSemanticPatchIntoState(
+      baseSemanticState,
+      this.extractSemanticPatchFromMessage(dto.message),
+    )
+    const preMergedLogicSnapshot = this.projectLegacyLogicSnapshotFromSemanticState(preMergedSemanticState, {})
     const constraintPack = inferredConfirmation.constraintPack
     const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, dto.guideConfig)
     const plan = await this.planConversationByLlm(dto.message, preMergedSemanticState, {
       providerCode: this.resolveProviderCode(dto.providerCode),
       model: dto.model,
-    }, constraintPack.conversationHistory ?? [], baseChecklist)
-    const plannerCompatibilityChecklist = hasPersistedSemanticState
-      ? this.inferChecklistFromMessage(dto.message)
-      : preMergedChecklist
-    const reducedSemanticState = this.applyConversationPlanToSemanticState({
+    }, constraintPack.conversationHistory ?? [])
+    const plannedSemanticState = this.applyConversationPlanToSemanticState({
       currentState: preMergedSemanticState,
-      compatibilityChecklist: plannerCompatibilityChecklist,
       plan,
     })
-    const canonicalChecklist = this.mergeChecklistSnapshots(
-      this.projectLegacyChecklistFromSemanticState(reducedSemanticState, preMergedChecklist),
-      plan.logic ?? {},
-    )
-    const clarification = this.resolveClarificationArtifacts(canonicalChecklist)
+    const reducedSemanticState = plannedSemanticState
+    const canonicalLogicSnapshot = this.projectLegacyLogicSnapshotFromSemanticState(reducedSemanticState, {})
+    const clarification = this.resolveClarificationArtifacts(canonicalLogicSnapshot)
     const clarificationState = this.buildClarificationFromSemanticState(
       reducedSemanticState,
-      canonicalChecklist,
-      { preserveLegacyFallback: !hasPersistedSemanticState },
+      canonicalLogicSnapshot,
+      { preserveLegacyFallback: false },
     )
     const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
     const clarificationPrompt = this.buildSemanticClarificationPrompt(reducedSemanticState)
@@ -484,15 +447,15 @@ export class CodegenConversationService {
       || clarification.clarificationPrompt
     const recommendationStyle = this.inferRecommendationStyleFromContext(
       dto.message,
-      canonicalChecklist,
+      canonicalLogicSnapshot,
       constraintPack.recommendationStyle,
     )
     const nextConstraintPack = this.withGuidePrompt(constraintPack, guidePrompt, recommendationStyle)
     const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
     const canonicalSpec = this.buildCanonicalSpecForConversation(
-      canonicalChecklist,
+      canonicalLogicSnapshot,
       normalization,
-      hasPersistedSemanticState ? reducedSemanticState : undefined,
+      reducedSemanticState,
     )
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
@@ -501,7 +464,7 @@ export class CodegenConversationService {
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
     const decision = this.buildStrategyDecision({
-      checklist: canonicalChecklist,
+      checklist: canonicalLogicSnapshot,
       clarification,
       effectiveBlockingReasons: this.buildEffectiveBlockingReasonsFromClarificationState(clarificationState),
       compileability,
@@ -512,7 +475,7 @@ export class CodegenConversationService {
       : clarification.clarificationPrompt
     const deterministicAuthority = this.resolveContinueSessionDeterministicAuthority({
       semanticState: reducedSemanticState,
-      checklist: canonicalChecklist,
+      checklist: canonicalLogicSnapshot,
       clarificationState,
       normalization,
       compileability,
@@ -527,10 +490,10 @@ export class CodegenConversationService {
         : deterministicAuthority === 'decision'
           ? (decisionPrompt || '请先确认当前推断，我再继续整理逻辑图。')
           : deterministicAuthority === 'normalization'
-            ? this.buildNormalizationAssistantPrompt(canonicalChecklist, normalization)
+            ? this.buildNormalizationAssistantPrompt(canonicalLogicSnapshot, normalization)
             : deterministicAuthority === 'compileability'
               ? this.buildCompileabilityAssistantPrompt(compileability)
-              : this.buildChecklistGateAssistantPrompt(canonicalChecklist, normalization.normalizedIntent)
+              : this.buildLogicGateAssistantPrompt(canonicalLogicSnapshot, normalization.normalizedIntent)
       const targetStatus = deterministicAuthority === 'confirm_gate' ? 'CONFIRM_GATE' : 'DRAFTING'
       const shouldPersistDecisionSpecDesc = deterministicAuthority === 'decision' && hasStructuredClarificationAnswers
       const shouldPersistDeterministicOutcome = plan.related
@@ -612,7 +575,7 @@ export class CodegenConversationService {
       if (hasStructuredClarificationAnswers) {
         return this.continueWithStructuredClarificationAnswers({
           session,
-          checklist: baseChecklist,
+          checklist: baseLogicSnapshot,
           semanticState: baseSemanticState,
           useSemanticProjection: hasPersistedSemanticState,
           clarificationState: clarificationStateAfterAnswers,
@@ -690,9 +653,9 @@ export class CodegenConversationService {
     sessionUserId: string,
   ): Promise<CodegenSessionResponseDto> {
     const baseClarificationState = this.readClarificationState(session.clarificationState)
-    const persistedChecklist = this.restoreInferredAssumptionsFromLatestSpecDesc(
+    const persistedLogicSnapshot = this.restoreInferredAssumptionsFromLatestSpecDesc(
       session.latestSpecDesc,
-      this.readChecklistPayload(session.checklist),
+      this.readStrategyLogicSnapshot(session.checklist),
     )
     const inferredSemanticClarificationAnswers = this.inferFreeformSemanticClarificationAnswers(
       baseClarificationState,
@@ -709,46 +672,46 @@ export class CodegenConversationService {
       baseClarificationState,
       effectiveClarificationAnswers,
     )
-    const confirmationBaseChecklist = this.projectLegacyChecklistFromSemanticState(
+    const confirmationBaseLogicSnapshot = this.projectLegacyLogicSnapshotFromSemanticState(
       semanticStateAfterAnswers,
-      persistedChecklist,
+      persistedLogicSnapshot,
     )
-    const baseChecklist = this.applyClarificationAnswers(
-      confirmationBaseChecklist,
+    const baseLogicSnapshot = this.applyClarificationAnswers(
+      confirmationBaseLogicSnapshot,
       baseClarificationState,
       effectiveClarificationAnswers,
     )
     const confirmationViewNormalization = hasPersistedSemanticState
       ? this.buildNormalizationFromSemanticState(semanticStateAfterAnswers)
-      : this.resolveClarificationArtifacts(baseChecklist).normalization
+      : this.resolveClarificationArtifacts(baseLogicSnapshot).normalization
     const confirmationViewSpecDesc = this.specDescBuilder.buildFromCanonicalSpec(
       this.buildCanonicalSpecForConversation(
-        baseChecklist,
+        baseLogicSnapshot,
         confirmationViewNormalization,
         hasPersistedSemanticState ? semanticStateAfterAnswers : undefined,
       ),
       '',
       {
         normalizedIntent: confirmationViewNormalization.normalizedIntent,
-        executionContext: this.resolveClarificationArtifacts(baseChecklist).executionContext.context,
+        executionContext: this.resolveClarificationArtifacts(baseLogicSnapshot).executionContext.context,
       },
     )
     const confirmationViewDigest = this.readCanonicalDigest(confirmationViewSpecDesc)
     const reducedSemanticState = this.withRequiredSemanticOpenSlots(
       semanticStateAfterAnswers,
-      baseChecklist,
+      baseLogicSnapshot,
       {
         preserveLockedPositionSizing: this.hasValidLockedPositionSizing(semanticStateAfterAnswers.position),
       },
     )
-    const canonicalChecklist = hasPersistedSemanticState
-      ? this.projectLegacyChecklistFromSemanticState(reducedSemanticState, baseChecklist)
-      : baseChecklist
-    const clarification = this.resolveClarificationArtifacts(canonicalChecklist)
+    const canonicalLogicSnapshot = hasPersistedSemanticState
+      ? this.projectLegacyLogicSnapshotFromSemanticState(reducedSemanticState, baseLogicSnapshot)
+      : baseLogicSnapshot
+    const clarification = this.resolveClarificationArtifacts(canonicalLogicSnapshot)
     const clarificationState = this.mergePersistedBlockingClarificationItems(
       this.buildClarificationFromSemanticState(
         reducedSemanticState,
-        canonicalChecklist,
+        canonicalLogicSnapshot,
         { preserveLegacyFallback: !hasPersistedSemanticState },
       ),
       baseClarificationState,
@@ -784,7 +747,7 @@ export class CodegenConversationService {
     )
     const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
     const canonicalSpec = this.buildCanonicalSpecForConversation(
-      canonicalChecklist,
+      canonicalLogicSnapshot,
       normalization,
       hasPersistedSemanticState ? reducedSemanticState : undefined,
     )
@@ -847,14 +810,14 @@ export class CodegenConversationService {
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
-        assistantPrompt: this.buildNormalizationAssistantPrompt(canonicalChecklist, normalization),
+        assistantPrompt: this.buildNormalizationAssistantPrompt(canonicalLogicSnapshot, normalization),
         clarificationState,
         specDesc,
       })
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
-    const hasUnresolvedGenericCompileabilityGap = this.hasUnresolvedGenericCompileabilityGap(canonicalChecklist)
+    const hasUnresolvedGenericCompileabilityGap = this.hasUnresolvedGenericCompileabilityGap(canonicalLogicSnapshot)
     if (!compileability.canCompile && (!semanticReadyForGenerate || hasUnresolvedGenericCompileabilityGap)) {
       await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
         status: 'DRAFTING',
@@ -905,9 +868,8 @@ export class CodegenConversationService {
     void this.publicationPipeline.run({
       sessionId: session.id,
       userId: sessionUserId,
-      checklist: hasPersistedSemanticState ? {} : canonicalChecklist,
-      semanticState: hasPersistedSemanticState ? reducedSemanticState : undefined,
-      canonicalSpecOverride: hasPersistedSemanticState ? canonicalSpec : undefined,
+      semanticState: reducedSemanticState,
+      canonicalSpecOverride: canonicalSpec,
       message: dto.message,
       model: dto.model,
       existingStrategyInstanceId: session.strategyInstanceId ?? null,
@@ -993,7 +955,7 @@ export class CodegenConversationService {
     return nextState
   }
 
-  private buildFallbackSemanticState(checklist: ChecklistPayload): SemanticState {
+  private buildFallbackSemanticState(checklist: StrategyLogicSnapshot): SemanticState {
     const normalization = this.intentNormalizer.normalize(checklist)
     const executionContext = this.executionContext.resolve(checklist)
 
@@ -1056,7 +1018,7 @@ export class CodegenConversationService {
 
   private withRequiredSemanticOpenSlots(
     state: SemanticState,
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     options?: { preserveLockedPositionSizing?: boolean },
   ): SemanticState {
     const stateWithDeterministicContext = this.withDeterministicContextSlots(state, checklist)
@@ -1090,7 +1052,7 @@ export class CodegenConversationService {
     return this.ensureProtectiveRiskSlot(stateWithPositionSizing)
   }
 
-  private withDeterministicContextSlots(state: SemanticState, checklist: ChecklistPayload): SemanticState {
+  private withDeterministicContextSlots(state: SemanticState, checklist: StrategyLogicSnapshot): SemanticState {
     const executionContext = this.executionContext.resolve(checklist)
     const questionHints = {
       exchange: '请确认交易所（binance / okx / hyperliquid）。',
@@ -1118,7 +1080,7 @@ export class CodegenConversationService {
 
   private withExplicitDeterministicPositionSizing(
     state: SemanticState,
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
   ): SemanticState {
     const positionPct = checklist.riskRules?.positionPct
     if (typeof positionPct !== 'number' || !Number.isFinite(positionPct) || positionPct <= 0) {
@@ -1150,7 +1112,7 @@ export class CodegenConversationService {
 
   private withExplicitDeterministicStopLossRisk(
     state: SemanticState,
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
   ): SemanticState {
     const stopLossPct = checklist.riskRules?.stopLossPct
     if (typeof stopLossPct !== 'number' || !Number.isFinite(stopLossPct) || stopLossPct <= 0) {
@@ -1182,7 +1144,7 @@ export class CodegenConversationService {
 
   private ensurePositionSizingSlot(
     state: SemanticState,
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     options?: { preserveLockedPositionSizing?: boolean },
   ): SemanticState {
     if (this.hasExplicitPositionSizing(checklist) || options?.preserveLockedPositionSizing === true) {
@@ -1295,7 +1257,7 @@ export class CodegenConversationService {
 
   private inferPositionModeFromActions(
     actions: SemanticState['actions'],
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
   ): string {
     if (checklist.riskRules?.marketType === 'spot' || checklist.market?.marketType === 'spot') {
       return 'long_only'
@@ -1315,7 +1277,7 @@ export class CodegenConversationService {
     return 'long_only'
   }
 
-  private hasExplicitPositionSizing(checklist: ChecklistPayload): boolean {
+  private hasExplicitPositionSizing(checklist: StrategyLogicSnapshot): boolean {
     return typeof checklist.riskRules?.positionPct === 'number'
       && Number.isFinite(checklist.riskRules.positionPct)
       && checklist.riskRules.positionPct > 0
@@ -1409,14 +1371,14 @@ export class CodegenConversationService {
     }
   }
 
-  private readChecklistPayload(
+  private readStrategyLogicSnapshot(
     payload: Prisma.JsonValue | null | undefined,
-  ): ChecklistPayload {
+  ): StrategyLogicSnapshot {
     if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
       return {}
     }
 
-    return this.normalizeChecklist(payload as Record<string, unknown>)
+    return this.normalizeLogicSnapshot(payload as Record<string, unknown>)
   }
 
   private mergeSemanticClarificationState(
@@ -1683,16 +1645,16 @@ export class CodegenConversationService {
 
   private buildClarificationFromSemanticState(
     semanticState: SemanticState,
-    fallbackChecklist: ChecklistPayload,
+    fallbackLogicSnapshot: StrategyLogicSnapshot,
     options?: { preserveLegacyFallback?: boolean },
   ): StrategyClarificationStateWithSummary {
-    const rawFallbackState = this.resolveClarificationArtifacts(fallbackChecklist).clarificationState
+    const rawFallbackState = this.resolveClarificationArtifacts(fallbackLogicSnapshot).clarificationState
     const fallbackState = options?.preserveLegacyFallback === true
       ? rawFallbackState
       : {
           ...rawFallbackState,
-          items: rawFallbackState.items.filter(item => !this.isLegacyChecklistCompletenessItem(item)),
-          status: rawFallbackState.items.some(item => !this.isLegacyChecklistCompletenessItem(item))
+          items: rawFallbackState.items.filter(item => !this.isLegacyLogicCompletenessItem(item)),
+          status: rawFallbackState.items.some(item => !this.isLegacyLogicCompletenessItem(item))
             ? rawFallbackState.status
             : 'CLEAR',
         }
@@ -1736,7 +1698,7 @@ export class CodegenConversationService {
     }
   }
 
-  private isLegacyChecklistCompletenessItem(item: StrategyClarificationItem): boolean {
+  private isLegacyLogicCompletenessItem(item: StrategyClarificationItem): boolean {
     return item.reason === 'missing_entry_rules'
       || item.reason === 'missing_exit_rules'
       || item.reason === 'missing_stop_loss_rule'
@@ -1749,28 +1711,10 @@ export class CodegenConversationService {
 
   private applyConversationPlanToSemanticState(input: {
     currentState: SemanticState
-    compatibilityChecklist?: ChecklistPayload
     plan: ConversationPlan
   }): SemanticState {
     let nextState = input.currentState
     const semanticPatchState = this.buildSemanticStateFromPlannerPatch(input.plan.semanticPatch)
-
-    if (!semanticPatchState && input.compatibilityChecklist && Object.keys(input.compatibilityChecklist).length > 0) {
-      nextState = this.semanticStateMerge.merge({
-        persisted: nextState,
-        derived: this.buildFallbackSemanticState(input.compatibilityChecklist),
-      })
-    }
-
-    if (input.plan.logic) {
-      nextState = this.semanticStateMerge.merge({
-        persisted: nextState,
-        derived: this.withoutSemanticPatchDuplicateAtoms(
-          this.buildFallbackSemanticState(input.plan.logic),
-          semanticPatchState,
-        ),
-      })
-    }
 
     if (semanticPatchState) {
       nextState = this.semanticStateMerge.merge({
@@ -1779,11 +1723,7 @@ export class CodegenConversationService {
       })
     }
 
-    const requiredSlotChecklist = this.mergeChecklistSnapshots(
-      input.compatibilityChecklist ?? {},
-      input.plan.logic ?? {},
-    )
-    return this.withRequiredSemanticOpenSlots(nextState, requiredSlotChecklist, {
+    return this.withRequiredSemanticOpenSlots(nextState, {}, {
       preserveLockedPositionSizing: Boolean(
         this.hasValidLockedPositionSizing(semanticPatchState?.position)
         || this.hasValidLockedPositionSizing(input.currentState.position),
@@ -1791,68 +1731,19 @@ export class CodegenConversationService {
     })
   }
 
-  private withoutSemanticPatchDuplicateAtoms(
-    fallbackState: SemanticState,
-    semanticPatchState: SemanticState | null,
+  private mergeSemanticPatchIntoState(
+    currentState: SemanticState,
+    semanticPatch?: CodegenSemanticPatch,
   ): SemanticState {
+    const semanticPatchState = this.buildSemanticStateFromPlannerPatch(semanticPatch)
     if (!semanticPatchState) {
-      return fallbackState
+      return currentState
     }
 
-    return {
-      ...fallbackState,
-      triggers: fallbackState.triggers.filter(trigger =>
-        !semanticPatchState.triggers.some(patchTrigger =>
-          this.isSameSemanticTriggerAtom(trigger, patchTrigger),
-        ),
-      ),
-      actions: fallbackState.actions.filter(action =>
-        !semanticPatchState.actions.some(patchAction =>
-          this.isSameSemanticActionAtom(action, patchAction),
-        ),
-      ),
-      risk: fallbackState.risk.filter(risk =>
-        !semanticPatchState.risk.some(patchRisk =>
-          this.isSameSemanticRiskAtom(risk, patchRisk),
-        ),
-      ),
-      position: semanticPatchState.position ? null : fallbackState.position,
-    }
-  }
-
-  private isSameSemanticTriggerAtom(
-    left: SemanticTriggerState,
-    right: SemanticTriggerState,
-  ): boolean {
-    return left.phase === right.phase
-      && left.key === right.key
-      && (!left.sideScope || left.sideScope === right.sideScope)
-      && this.haveCompatibleSemanticParams(left.params, right.params)
-  }
-
-  private isSameSemanticActionAtom(
-    left: SemanticState['actions'][number],
-    right: SemanticState['actions'][number],
-  ): boolean {
-    return left.key === right.key
-      && this.haveCompatibleSemanticParams(left.params ?? {}, right.params ?? {})
-  }
-
-  private isSameSemanticRiskAtom(
-    left: SemanticState['risk'][number],
-    right: SemanticState['risk'][number],
-  ): boolean {
-    return left.key === right.key
-      && this.haveCompatibleSemanticParams(left.params, right.params)
-  }
-
-  private haveCompatibleSemanticParams(
-    left: Record<string, unknown>,
-    right: Record<string, unknown>,
-  ): boolean {
-    return Object.keys(left).every(key =>
-      right[key] !== undefined && left[key] === right[key],
-    )
+    return this.semanticStateMerge.merge({
+      persisted: currentState,
+      derived: semanticPatchState,
+    })
   }
 
   private hasValidLockedPositionSizing(
@@ -1864,94 +1755,7 @@ export class CodegenConversationService {
       && position.value > 0
   }
 
-  private shouldReapplyDeterministicStartSeedChecklist(
-    checklist: ChecklistPayload,
-  ): boolean {
-    if (Object.keys(checklist).length === 0) {
-      return false
-    }
 
-    const seedSemanticState = this.buildFallbackSemanticState(checklist)
-    return this.hasCompleteBidirectionalGridSeed(seedSemanticState)
-      || this.hasCompleteSymmetricBollingerSeed(seedSemanticState)
-  }
-
-  private hasCompleteBidirectionalGridSeed(state: SemanticState): boolean {
-    return state.triggers.some(trigger => (
-      trigger.key === 'grid.range_rebalance'
-      && trigger.phase === 'entry'
-      && trigger.status === 'locked'
-      && trigger.sideScope === 'both'
-      && typeof trigger.params.rangeLower === 'number'
-      && typeof trigger.params.rangeUpper === 'number'
-      && typeof trigger.params.stepPct === 'number'
-      && trigger.params.sideMode === 'bidirectional'
-    ))
-  }
-
-  private hasCompleteSymmetricBollingerSeed(state: SemanticState): boolean {
-    const hasUpperShortEntry = state.triggers.some(trigger => (
-      trigger.key === 'bollinger.touch_upper'
-      && trigger.phase === 'entry'
-      && trigger.status === 'locked'
-      && trigger.sideScope === 'short'
-    ))
-    const hasLowerLongEntry = state.triggers.some(trigger => (
-      trigger.key === 'bollinger.touch_lower'
-      && trigger.phase === 'entry'
-      && trigger.status === 'locked'
-      && trigger.sideScope === 'long'
-    ))
-    const hasMiddleExit = state.triggers.some(trigger => (
-      trigger.key === 'bollinger.touch_middle'
-      && trigger.phase === 'exit'
-      && trigger.status === 'locked'
-    ))
-
-    return hasUpperShortEntry
-      && hasLowerLongEntry
-      && hasMiddleExit
-      && state.position?.positionMode === 'long_short'
-  }
-
-  private withTargetedStartSessionSeedContext(
-    checklist: ChecklistPayload,
-    message: string | undefined,
-    plannerLogic?: ChecklistPayload,
-  ): ChecklistPayload {
-    if ((checklist.symbols?.length ?? 0) > 0 || (plannerLogic?.symbols?.length ?? 0) > 0) {
-      return checklist
-    }
-
-    const inferredSymbol = this.inferBareAssetUsdtSymbol(message)
-    if (!inferredSymbol) {
-      return checklist
-    }
-
-    return this.normalizeChecklist({
-      ...checklist,
-      symbols: [inferredSymbol],
-    })
-  }
-
-  private inferBareAssetUsdtSymbol(message?: string): string | null {
-    if (!message) {
-      return null
-    }
-
-    const upper = message.toUpperCase()
-    if (/\b[A-Z]{2,12}(?:USDT|USDC|USD)\b/u.test(upper)) {
-      return null
-    }
-
-    const matched = upper.match(/(?:想买|买入|买|卖出|卖|做多|做空|交易)\s*([A-Z]{2,10})\b/u)
-    const asset = matched?.[1]?.trim()
-    if (!asset || ['OKX', 'BINANCE', 'SWAP', 'SPOT', 'PERP', 'USDT', 'USD'].includes(asset)) {
-      return null
-    }
-
-    return `${asset}USDT`
-  }
 
   private createEmptySemanticState(): SemanticState {
     return {
@@ -1972,25 +1776,25 @@ export class CodegenConversationService {
     }
   }
 
-  private projectLegacyChecklistFromSemanticState(
+  private projectLegacyLogicSnapshotFromSemanticState(
     state: SemanticState,
-    fallbackChecklist: ChecklistPayload,
-  ): ChecklistPayload {
-    const semanticChecklist = this.buildLegacyChecklistFromSemanticState(state, {
-      ...fallbackChecklist,
-      riskRules: fallbackChecklist.riskRules ? { ...fallbackChecklist.riskRules } : undefined,
-      stateGates: fallbackChecklist.stateGates ? { ...fallbackChecklist.stateGates } : undefined,
+    fallbackLogicSnapshot: StrategyLogicSnapshot,
+  ): StrategyLogicSnapshot {
+    const semanticLogicSnapshot = this.buildLegacyLogicSnapshotFromSemanticState(state, {
+      ...fallbackLogicSnapshot,
+      riskRules: fallbackLogicSnapshot.riskRules ? { ...fallbackLogicSnapshot.riskRules } : undefined,
+      stateGates: fallbackLogicSnapshot.stateGates ? { ...fallbackLogicSnapshot.stateGates } : undefined,
     })
 
-    return this.normalizeChecklist({
-      ...fallbackChecklist,
-      ...semanticChecklist,
-      entryRules: this.mergeProjectedRuleArrays(fallbackChecklist.entryRules, semanticChecklist.entryRules, 'entry'),
-      exitRules: this.mergeProjectedRuleArrays(fallbackChecklist.exitRules, semanticChecklist.exitRules, 'exit'),
-      riskRules: semanticChecklist.riskRules ?? fallbackChecklist.riskRules,
-      stateGates: semanticChecklist.stateGates ?? fallbackChecklist.stateGates,
-      entryRuleDrafts: semanticChecklist.entryRuleDrafts ?? fallbackChecklist.entryRuleDrafts,
-      exitRuleDrafts: semanticChecklist.exitRuleDrafts ?? fallbackChecklist.exitRuleDrafts,
+    return this.normalizeLogicSnapshot({
+      ...fallbackLogicSnapshot,
+      ...semanticLogicSnapshot,
+      entryRules: this.mergeProjectedRuleArrays(fallbackLogicSnapshot.entryRules, semanticLogicSnapshot.entryRules, 'entry'),
+      exitRules: this.mergeProjectedRuleArrays(fallbackLogicSnapshot.exitRules, semanticLogicSnapshot.exitRules, 'exit'),
+      riskRules: semanticLogicSnapshot.riskRules ?? fallbackLogicSnapshot.riskRules,
+      stateGates: semanticLogicSnapshot.stateGates ?? fallbackLogicSnapshot.stateGates,
+      entryRuleDrafts: semanticLogicSnapshot.entryRuleDrafts ?? fallbackLogicSnapshot.entryRuleDrafts,
+      exitRuleDrafts: semanticLogicSnapshot.exitRuleDrafts ?? fallbackLogicSnapshot.exitRuleDrafts,
     })
   }
 
@@ -2006,10 +1810,10 @@ export class CodegenConversationService {
       return projectedRules
     }
 
-    const hasProjectedSpecificRule = projectedRules.some(rule => !this.isGenericChecklistPlaceholderRule(rule, phase))
+    const hasProjectedSpecificRule = projectedRules.some(rule => !this.isGenericLogicPlaceholderRule(rule, phase))
     const preservedFallbackRules = fallbackRules.filter(rule => (
       !this.isSemanticProjectableRule(rule)
-      && !(hasProjectedSpecificRule && this.isGenericChecklistPlaceholderRule(rule, phase))
+      && !(hasProjectedSpecificRule && this.isGenericLogicPlaceholderRule(rule, phase))
     ))
     const merged = [...preservedFallbackRules]
     for (const projectedRule of projectedRules) {
@@ -2107,8 +1911,8 @@ export class CodegenConversationService {
 
   private restoreInferredAssumptionsFromLatestSpecDesc(
     specDescPayload: Prisma.JsonValue | null | undefined,
-    checklist: ChecklistPayload,
-  ): ChecklistPayload {
+    checklist: StrategyLogicSnapshot,
+  ): StrategyLogicSnapshot {
     if (!specDescPayload || typeof specDescPayload !== 'object' || Array.isArray(specDescPayload)) {
       return checklist
     }
@@ -2158,7 +1962,7 @@ export class CodegenConversationService {
       return checklist
     }
 
-    return this.normalizeChecklist({
+    return this.normalizeLogicSnapshot({
       ...checklist,
       riskRules: {
         ...(checklist.riskRules ?? {}),
@@ -2317,16 +2121,16 @@ export class CodegenConversationService {
   }
 
   private applyClarificationAnswers(
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     clarificationState: StrategyClarificationState | null,
     answers?: Record<string, string>,
-  ): ChecklistPayload {
+  ): StrategyLogicSnapshot {
     if (!answers || Object.keys(answers).length === 0) {
       return checklist
     }
 
     const expandedAnswers = this.expandClarificationAnswers(checklist, clarificationState, answers)
-    let nextChecklist = this.normalizeChecklist({
+    let nextLogicSnapshot = this.normalizeLogicSnapshot({
       ...checklist,
       riskRules: checklist.riskRules ? { ...checklist.riskRules } : undefined,
     })
@@ -2337,20 +2141,20 @@ export class CodegenConversationService {
         continue
       }
 
-      nextChecklist = this.applyClarificationAnswer(nextChecklist, item, rawAnswer.trim())
+      nextLogicSnapshot = this.applyClarificationAnswer(nextLogicSnapshot, item, rawAnswer.trim())
     }
 
-    nextChecklist = this.clearInferredAssumptionsResolvedByClarificationAnswers(
-      nextChecklist,
+    nextLogicSnapshot = this.clearInferredAssumptionsResolvedByClarificationAnswers(
+      nextLogicSnapshot,
       clarificationState,
       expandedAnswers,
     )
 
-    return this.normalizeChecklist(nextChecklist)
+    return this.normalizeLogicSnapshot(nextLogicSnapshot)
   }
 
   private expandClarificationAnswers(
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     clarificationState: StrategyClarificationState | null,
     answers: Record<string, string>,
   ): Record<string, string> {
@@ -2384,7 +2188,7 @@ export class CodegenConversationService {
   }
 
   private shouldBroadcastExitBasisAnswer(
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     exitBasisItems: StrategyClarificationItem[],
   ): boolean {
     const ruleIndexes = exitBasisItems
@@ -2401,10 +2205,10 @@ export class CodegenConversationService {
   }
 
   private clearInferredAssumptionsResolvedByClarificationAnswers(
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     clarificationState: StrategyClarificationState | null,
     answers: Record<string, string>,
-  ): ChecklistPayload {
+  ): StrategyLogicSnapshot {
     const currentAssumptions = Array.isArray(checklist.riskRules?._inferredAssumptions)
       ? checklist.riskRules._inferredAssumptions.filter((item): item is string => typeof item === 'string')
       : []
@@ -2460,10 +2264,10 @@ export class CodegenConversationService {
   }
 
   private applyClarificationAnswer(
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     item: StrategyClarificationItem,
     answer: string,
-  ): ChecklistPayload {
+  ): StrategyLogicSnapshot {
     const normalizedAnswer = answer.trim()
     if (!normalizedAnswer) return checklist
 
@@ -2476,14 +2280,14 @@ export class CodegenConversationService {
     }
 
     if (item.key === 'entry.rules' || item.field === 'entryRules') {
-      return this.normalizeChecklist({
+      return this.normalizeLogicSnapshot({
         ...checklist,
         entryRules: [...(checklist.entryRules ?? []), normalizedAnswer],
       })
     }
 
     if (item.key === 'exit.rules' || item.field === 'exitRules') {
-      return this.normalizeChecklist({
+      return this.normalizeLogicSnapshot({
         ...checklist,
         exitRules: [...(checklist.exitRules ?? []), normalizedAnswer],
       })
@@ -2491,7 +2295,7 @@ export class CodegenConversationService {
 
     if (item.key === 'risk.stopLoss.rule' || item.field === 'riskRules.stopLossPct') {
       const parsedPct = this.normalizePositionPctClarificationAnswer(normalizedAnswer)
-      return this.normalizeChecklist({
+      return this.normalizeLogicSnapshot({
         ...checklist,
         riskRules: {
           ...(checklist.riskRules ?? {}),
@@ -2503,7 +2307,7 @@ export class CodegenConversationService {
 
     if (item.key === 'risk.takeProfit.rule' || item.field === 'riskRules.takeProfitPct') {
       const parsedPct = this.normalizePositionPctClarificationAnswer(normalizedAnswer)
-      return this.normalizeChecklist({
+      return this.normalizeLogicSnapshot({
         ...checklist,
         riskRules: {
           ...(checklist.riskRules ?? {}),
@@ -2515,7 +2319,7 @@ export class CodegenConversationService {
 
     if (item.key === 'market.symbol' || item.field === 'symbol') {
       const symbol = normalizePublishedSymbol(normalizedAnswer)
-      return this.normalizeChecklist({
+      return this.normalizeLogicSnapshot({
         ...checklist,
         symbols: symbol ? [symbol] : checklist.symbols,
         riskRules: this.clearMarketScopeConflicts(checklist.riskRules, 'symbol'),
@@ -2524,7 +2328,7 @@ export class CodegenConversationService {
 
     if (item.key === 'market.timeframe' || item.field === 'timeframe') {
       const timeframe = normalizedAnswer
-      return this.normalizeChecklist({
+      return this.normalizeLogicSnapshot({
         ...checklist,
         timeframes: timeframe ? [timeframe] : checklist.timeframes,
         riskRules: this.clearMarketScopeConflicts(checklist.riskRules, 'timeframe'),
@@ -2534,7 +2338,7 @@ export class CodegenConversationService {
     if (item.key === 'market.exchange' || item.field === 'exchange') {
       const exchange = this.normalizeExchangeClarificationAnswer(normalizedAnswer)
       if (!exchange) return checklist
-      return this.normalizeChecklist({
+      return this.normalizeLogicSnapshot({
         ...checklist,
         riskRules: {
           ...this.clearMarketScopeConflicts(checklist.riskRules, 'exchange'),
@@ -2546,7 +2350,7 @@ export class CodegenConversationService {
     if (item.key === 'market.marketType' || item.field === 'marketType') {
       const marketType = this.normalizeMarketTypeClarificationAnswer(normalizedAnswer)
       if (!marketType) return checklist
-      return this.normalizeChecklist({
+      return this.normalizeLogicSnapshot({
         ...checklist,
         riskRules: {
           ...this.clearMarketScopeConflicts(checklist.riskRules, 'marketType'),
@@ -2558,7 +2362,7 @@ export class CodegenConversationService {
     if (item.key === 'sizing.positionPct' || item.field === 'riskRules.positionPct') {
       const positionPct = this.normalizePositionPctClarificationAnswer(normalizedAnswer)
       if (positionPct === null) return checklist
-      return this.normalizeChecklist({
+      return this.normalizeLogicSnapshot({
         ...checklist,
         riskRules: {
           ...(checklist.riskRules ?? {}),
@@ -2578,7 +2382,7 @@ export class CodegenConversationService {
       if (item.field === 'entryRules.basis') {
         const ruleIndex = this.readClarificationRuleIndex(item)
         if (ruleIndex === null) return checklist
-        return this.normalizeChecklist({
+        return this.normalizeLogicSnapshot({
           ...checklist,
           entryRuleBases: {
             ...(checklist.entryRuleBases ?? {}),
@@ -2596,7 +2400,7 @@ export class CodegenConversationService {
           ...(/止损|亏损/u.test(ruleText) ? { stopLossBasis: basis } : {}),
           ...(/止盈|盈利|收益率/u.test(ruleText) ? { takeProfitBasis: basis } : {}),
         }
-        return this.normalizeChecklist({
+        return this.normalizeLogicSnapshot({
           ...checklist,
           exitRuleBases: {
             ...(checklist.exitRuleBases ?? {}),
@@ -2611,7 +2415,7 @@ export class CodegenConversationService {
           ...(checklist.riskRules ?? {}),
           stopLossBasis: basis,
         }
-        return this.normalizeChecklist({
+        return this.normalizeLogicSnapshot({
           ...checklist,
           riskRules: this.pruneResolvedRiskInferredAssumptions(nextRiskRules, nextRiskRules),
         })
@@ -2622,14 +2426,14 @@ export class CodegenConversationService {
           ...(checklist.riskRules ?? {}),
           takeProfitBasis: basis,
         }
-        return this.normalizeChecklist({
+        return this.normalizeLogicSnapshot({
           ...checklist,
           riskRules: this.pruneResolvedRiskInferredAssumptions(nextRiskRules, nextRiskRules),
         })
       }
 
       if (item.field === 'riskRules.maxDrawdownBasis') {
-        return this.normalizeChecklist({
+        return this.normalizeLogicSnapshot({
           ...checklist,
           riskRules: {
             ...(checklist.riskRules ?? {}),
@@ -2642,7 +2446,7 @@ export class CodegenConversationService {
     if (item.key === 'riskRules.earlyStop.action' || item.field === 'riskRules.earlyStop.action') {
       const action = this.normalizeEarlyStopClarificationAnswer(normalizedAnswer)
       if (!action) return checklist
-      return this.normalizeChecklist({
+      return this.normalizeLogicSnapshot({
         ...checklist,
         riskRules: {
           ...(checklist.riskRules ?? {}),
@@ -2657,20 +2461,20 @@ export class CodegenConversationService {
   }
 
   private applySemanticSlotClarification(
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     item: StrategyClarificationItem,
     answer: string,
-  ): ChecklistPayload {
+  ): StrategyLogicSnapshot {
     const key = item.key.toLowerCase()
     const targetPhase = this.readSemanticClarificationPhase(item)
 
     if (key.startsWith('grid.')) {
-      const nextGrid = this.applyGridChecklistClarification(checklist.grid, item, answer)
+      const nextGrid = this.applyGridLogicClarification(checklist.grid, item, answer)
       if (!nextGrid) {
         return checklist
       }
 
-      return this.normalizeChecklist({
+      return this.normalizeLogicSnapshot({
         ...checklist,
         grid: nextGrid,
       })
@@ -2697,7 +2501,7 @@ export class CodegenConversationService {
         )
       })
 
-      return this.normalizeChecklist(targetPhase === 'entry'
+      return this.normalizeLogicSnapshot(targetPhase === 'entry'
         ? { ...checklist, entryRules: nextRules }
         : { ...checklist, exitRules: nextRules })
     }
@@ -2723,7 +2527,7 @@ export class CodegenConversationService {
           : `盘中${stripped}`
       })
 
-      return this.normalizeChecklist(targetPhase === 'entry'
+      return this.normalizeLogicSnapshot(targetPhase === 'entry'
         ? { ...checklist, entryRules: nextRules }
         : { ...checklist, exitRules: nextRules })
     }
@@ -2731,39 +2535,39 @@ export class CodegenConversationService {
     return checklist
   }
 
-  private applyGridChecklistClarification(
-    currentGrid: ChecklistPayload['grid'] | undefined,
+  private applyGridLogicClarification(
+    currentGrid: StrategyLogicSnapshot['grid'] | undefined,
     item: StrategyClarificationItem,
     answer: string,
-  ): ChecklistPayload['grid'] | null {
-    const nextGrid: NonNullable<ChecklistPayload['grid']> = {
+  ): StrategyLogicSnapshot['grid'] | null {
+    const nextGrid: NonNullable<StrategyLogicSnapshot['grid']> = {
       ...(currentGrid ?? {}),
     }
     const key = item.key.toLowerCase()
 
     if (key === 'grid.range.lower' || key === 'grid.lower') {
-      const value = this.parseGridChecklistNumericAnswer('grid.range.lower', answer)
+      const value = this.parseGridLogicNumericAnswer('grid.range.lower', answer)
       if (value === null) return null
       nextGrid.lower = value
       return nextGrid
     }
 
     if (key === 'grid.range.upper' || key === 'grid.upper') {
-      const value = this.parseGridChecklistNumericAnswer('grid.range.upper', answer)
+      const value = this.parseGridLogicNumericAnswer('grid.range.upper', answer)
       if (value === null) return null
       nextGrid.upper = value
       return nextGrid
     }
 
     if (key === 'grid.steppct') {
-      const value = this.parseGridChecklistNumericAnswer('grid.stepPct', answer)
+      const value = this.parseGridLogicNumericAnswer('grid.stepPct', answer)
       if (value === null) return null
       nextGrid.stepPct = value
       return nextGrid
     }
 
     if (key === 'grid.sidemode') {
-      const sideMode = this.normalizeGridChecklistSideMode(answer)
+      const sideMode = this.normalizeGridLogicSideMode(answer)
       if (!sideMode) return null
       nextGrid.sideMode = sideMode
       return nextGrid
@@ -2772,7 +2576,7 @@ export class CodegenConversationService {
     return null
   }
 
-  private parseGridChecklistNumericAnswer(
+  private parseGridLogicNumericAnswer(
     slotKey: 'grid.range.lower' | 'grid.range.upper' | 'grid.stepPct',
     answer: string,
   ): number | null {
@@ -2797,9 +2601,9 @@ export class CodegenConversationService {
     return Number.isFinite(value) ? value : null
   }
 
-  private normalizeGridChecklistSideMode(
+  private normalizeGridLogicSideMode(
     answer: string,
-  ): NonNullable<ChecklistPayload['grid']>['sideMode'] | null {
+  ): NonNullable<StrategyLogicSnapshot['grid']>['sideMode'] | null {
     const normalized = answer.trim().toLowerCase()
     if (!normalized) {
       return null
@@ -2819,10 +2623,10 @@ export class CodegenConversationService {
   }
 
   private applyEntryRuleDirectionClarification(
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     item: StrategyClarificationItem,
     answer: string,
-  ): ChecklistPayload {
+  ): StrategyLogicSnapshot {
     const direction = this.normalizeDirectionClarificationAnswer(answer)
     const ruleIndex = this.readClarificationRuleIndex(item)
     if (!direction || ruleIndex === null || !checklist.entryRules || checklist.entryRules.length === 0) {
@@ -2842,17 +2646,17 @@ export class CodegenConversationService {
       return `${normalized}，${actionText}`
     })
 
-    return this.normalizeChecklist({
+    return this.normalizeLogicSnapshot({
       ...checklist,
       entryRules,
     })
   }
 
   private applyTriggerConfirmationClarification(
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     item: StrategyClarificationItem,
     answer: string,
-  ): ChecklistPayload {
+  ): StrategyLogicSnapshot {
     const confirmation = this.normalizeTriggerConfirmationClarificationAnswer(answer)
     const ruleIndex = this.readClarificationRuleIndex(item)
     if (!confirmation || ruleIndex === null) {
@@ -2886,7 +2690,7 @@ export class CodegenConversationService {
         : `收盘确认${stripped}`
     })
 
-    return this.normalizeChecklist(item.ruleId?.startsWith('exit-')
+    return this.normalizeLogicSnapshot(item.ruleId?.startsWith('exit-')
       ? {
           ...checklist,
           exitRules: nextRules,
@@ -2922,7 +2726,7 @@ export class CodegenConversationService {
   }
 
   private clearMarketScopeConflicts(
-    riskRules: ChecklistPayload['riskRules'],
+    riskRules: StrategyLogicSnapshot['riskRules'],
     field: 'exchange' | 'marketType' | 'symbol' | 'timeframe',
   ): Record<string, unknown> {
     const next = { ...(riskRules ?? {}) }
@@ -2952,23 +2756,23 @@ export class CodegenConversationService {
       args.constraintPack.conversationHistory ?? [],
       args.message,
     )
-    const projectedChecklist = args.useSemanticProjection
+    const projectedLogicSnapshot = args.useSemanticProjection
       ? this.restoreInferredAssumptionsFromLatestSpecDesc(
           args.session.latestSpecDesc,
-          this.projectLegacyChecklistFromSemanticState(args.semanticState, args.checklist),
+          this.projectLegacyLogicSnapshotFromSemanticState(args.semanticState, args.checklist),
         )
       : args.checklist
     const reducedSemanticState = this.withRequiredSemanticOpenSlots(
       args.semanticState,
-      projectedChecklist,
+      projectedLogicSnapshot,
       {
         preserveLockedPositionSizing: this.hasValidLockedPositionSizing(args.semanticState.position),
       },
     )
-    const clarification = this.resolveClarificationArtifacts(projectedChecklist)
+    const clarification = this.resolveClarificationArtifacts(projectedLogicSnapshot)
     const semanticClarificationState = this.buildClarificationFromSemanticState(
       reducedSemanticState,
-      projectedChecklist,
+      projectedLogicSnapshot,
       { preserveLegacyFallback: !args.useSemanticProjection },
     )
 
@@ -2999,7 +2803,7 @@ export class CodegenConversationService {
 
     const normalization = this.buildNormalizationFromSemanticState(reducedSemanticState)
     const canonicalSpec = this.buildCanonicalSpecForConversation(
-      projectedChecklist,
+      projectedLogicSnapshot,
       normalization,
       args.useSemanticProjection ? reducedSemanticState : undefined,
     )
@@ -3010,7 +2814,7 @@ export class CodegenConversationService {
     const canonicalDigest = this.readCanonicalDigest(specDesc)
     const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
     const decision = this.buildStrategyDecision({
-      checklist: projectedChecklist,
+      checklist: projectedLogicSnapshot,
       clarification,
       effectiveBlockingReasons: this.buildEffectiveBlockingReasonsFromClarificationState(semanticClarificationState),
       compileability,
@@ -3058,7 +2862,7 @@ export class CodegenConversationService {
         id: args.session.id,
         status: 'DRAFTING',
         missingFields: [],
-        assistantPrompt: this.buildNormalizationAssistantPrompt(projectedChecklist, normalization),
+        assistantPrompt: this.buildNormalizationAssistantPrompt(projectedLogicSnapshot, normalization),
         clarificationState: semanticClarificationState,
         specDesc,
       })
@@ -3086,11 +2890,11 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
 
-    const checklistGateAssistantPrompt = this.buildChecklistGateAssistantPrompt(projectedChecklist, normalization.normalizedIntent)
-    const historyAfterChecklistGate = this.appendConversationHistory(
+    const logicGateAssistantPrompt = this.buildLogicGateAssistantPrompt(projectedLogicSnapshot, normalization.normalizedIntent)
+    const historyAfterLogicGate = this.appendConversationHistory(
       args.constraintPack.conversationHistory ?? [],
       args.message,
-      checklistGateAssistantPrompt,
+      logicGateAssistantPrompt,
     )
 
     await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
@@ -3099,7 +2903,7 @@ export class CodegenConversationService {
       clarificationState: semanticClarificationState,
       constraintPack: {
         ...args.constraintPack,
-        conversationHistory: historyAfterChecklistGate,
+        conversationHistory: historyAfterLogicGate,
       },
       latestSpecDesc: specDesc,
     }))
@@ -3108,7 +2912,7 @@ export class CodegenConversationService {
       id: args.session.id,
       status: 'CONFIRM_GATE',
       missingFields: [],
-      assistantPrompt: checklistGateAssistantPrompt,
+      assistantPrompt: logicGateAssistantPrompt,
       clarificationState: semanticClarificationState,
       specDesc,
       canonicalDigest,
@@ -3265,7 +3069,7 @@ export class CodegenConversationService {
     return null
   }
 
-  private normalizeBasisClarificationAnswer(answer: string): ChecklistRuleBasis['kind'] | null {
+  private normalizeBasisClarificationAnswer(answer: string): StrategyRuleBasis['kind'] | null {
     const normalized = answer.trim().toLowerCase()
     if (!normalized) return null
 
@@ -3476,7 +3280,7 @@ export class CodegenConversationService {
 
   private withClarificationSummary(
     clarificationState: StrategyClarificationState | null | undefined,
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
   ): StrategyClarificationStateWithSummary | null {
     if (!clarificationState) return null
     if (clarificationState.status !== 'NEEDS_CLARIFICATION') {
@@ -3492,14 +3296,14 @@ export class CodegenConversationService {
     }
   }
 
-  private detectClarificationState(checklist: ChecklistPayload): StrategyClarificationStateWithSummary {
+  private detectClarificationState(checklist: StrategyLogicSnapshot): StrategyClarificationStateWithSummary {
     return this.withClarificationSummary(
       this.clarificationRules.detect(checklist),
       checklist,
     ) as StrategyClarificationStateWithSummary
   }
 
-  private resolveClarificationArtifacts(checklist: ChecklistPayload): {
+  private resolveClarificationArtifacts(checklist: StrategyLogicSnapshot): {
     normalization: NormalizationResult
     executionContext: ReturnType<StrategyExecutionContextService['resolve']>
     atomicResolution: ReturnType<StrategyIntentResolutionService['resolve']>
@@ -3633,10 +3437,10 @@ export class CodegenConversationService {
   }
 
   private buildClarificationSummary(
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     normalizedIntent?: StrategyNormalizedIntent | null,
   ): string | null {
-    const drafts = buildChecklistRuleDrafts(checklist)
+    const drafts = buildStrategyRuleDrafts(checklist)
     const executionContext = this.resolveExecutionContextForSummary(checklist)
     const positionPct = typeof checklist.riskRules?.positionPct === 'number'
       ? `${checklist.riskRules.positionPct}% 仓位`
@@ -3649,12 +3453,12 @@ export class CodegenConversationService {
       }
       return `${timeframe} ${trimmed}`.trim()
     }
-    const formatDraft = (draft: ChecklistRuleDraft | undefined): string => {
+    const formatDraft = (draft: StrategyRuleDraft | undefined): string => {
       if (!draft) return ''
       const normalizedText = draft.text.replace(/^\d+[mhd]\s+/u, '').trim()
       return formatRuleSummaryText(normalizedText, draft.timeframe)
     }
-    const formatDrafts = (items: ChecklistRuleDraft[]): string => {
+    const formatDrafts = (items: StrategyRuleDraft[]): string => {
       const summaries = items
         .map(item => formatDraft(item))
         .filter(Boolean)
@@ -3683,8 +3487,8 @@ export class CodegenConversationService {
     return segments.length > 0 ? segments.join('；') : null
   }
 
-  private buildChecklistGateAssistantPrompt(
-    checklist: ChecklistPayload,
+  private buildLogicGateAssistantPrompt(
+    checklist: StrategyLogicSnapshot,
     normalizedIntent?: StrategyNormalizedIntent | null,
   ): string {
     const summary = this.buildClarificationSummary(checklist, normalizedIntent)
@@ -3695,7 +3499,7 @@ export class CodegenConversationService {
     return '逻辑图已更新。请确认逻辑图，确认后我再生成策略代码。'
   }
 
-  private buildGridSummarySegment(grid: ChecklistPayload['grid']): string {
+  private buildGridSummarySegment(grid: StrategyLogicSnapshot['grid']): string {
     if (!grid) return ''
 
     const range = typeof grid.lower === 'number' && typeof grid.upper === 'number'
@@ -3713,7 +3517,7 @@ export class CodegenConversationService {
     return parts.length > 0 ? `网格：${parts.join('，')}` : ''
   }
 
-  private resolveExecutionContextForSummary(checklist: ChecklistPayload): {
+  private resolveExecutionContextForSummary(checklist: StrategyLogicSnapshot): {
     exchange: string
     marketType: string
     symbol: string
@@ -3728,7 +3532,7 @@ export class CodegenConversationService {
           ? checklist.riskRules.marketType.trim().toLowerCase()
           : '')
     const rawSymbol = checklist.symbols?.[0]?.trim() ?? ''
-    const rawTimeframe = resolveChecklistDefaultTimeframe(checklist) ?? ''
+    const rawTimeframe = resolveStrategyDefaultTimeframe(checklist) ?? ''
 
     const resolvedContext = typeof this.executionContext?.resolve === 'function'
       ? this.executionContext.resolve(checklist).context
@@ -3789,7 +3593,7 @@ export class CodegenConversationService {
   }
 
   private buildNormalizationAssistantPrompt(
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     normalization: NormalizationResult,
   ): string {
     const summary = this.buildClarificationSummary(checklist, normalization.normalizedIntent)
@@ -3897,24 +3701,10 @@ export class CodegenConversationService {
   }
 
   async testEngine(dto: TestLlmCodegenEngineDto): Promise<LlmCodegenEngineTestResponseDto> {
-    const checklist = this.extractChecklist(dto)
-    const missing: string[] = []
-    if (!Array.isArray(checklist.entryRules) || checklist.entryRules.length === 0) {
-      missing.push('entryRules')
-    }
-    if (!Array.isArray(checklist.exitRules) || checklist.exitRules.length === 0) {
-      missing.push('exitRules')
-    }
-    if (missing.length > 0) {
-      throw new DomainException('codegen.missing_required_fields', {
-        code: ErrorCode.BAD_REQUEST,
-        status: HttpStatus.BAD_REQUEST,
-        args: { missingFields: missing },
-      })
-    }
+    const constraintPayload = this.resolveTestEngineConstraintPayload(dto)
 
     const providerCode = this.resolveProviderCode(dto.providerCode)
-    const scriptCode = await this.generateScript(checklist, dto.message, {
+    const scriptCode = await this.generateScript(constraintPayload, dto.message, {
       providerCode,
       model: dto.model,
       temperature: dto.temperature,
@@ -3946,19 +3736,203 @@ export class CodegenConversationService {
     }
   }
 
-  private extractChecklist(
-    input: TestLlmCodegenEngineDto,
-  ): ChecklistPayload {
-    return {
-      symbols: input.symbols,
-      timeframes: input.timeframes,
-      entryRules: input.entryRules,
-      exitRules: input.exitRules,
-      riskRules: input.riskRules,
+  private resolveTestEngineConstraintPayload(
+    dto: TestLlmCodegenEngineDto,
+  ): CanonicalStrategySpec | Record<string, unknown> {
+    if (dto.semanticState) {
+      if (!this.isValidSemanticStateInput(dto.semanticState)) {
+        throw new DomainException('codegen.invalid_semantic_input', {
+          code: ErrorCode.BAD_REQUEST,
+          status: HttpStatus.BAD_REQUEST,
+          args: { field: 'semanticState' },
+        })
+      }
+      const semanticState = dto.semanticState as unknown as SemanticState
+      const normalization = this.buildNormalizationFromSemanticState(semanticState)
+      return this.buildCanonicalSpecForConversation({}, normalization, semanticState)
     }
+
+    if (dto.canonicalSpec) {
+      if (!this.isCanonicalSpecV2Input(dto.canonicalSpec)) {
+        throw new DomainException('codegen.invalid_semantic_input', {
+          code: ErrorCode.BAD_REQUEST,
+          status: HttpStatus.BAD_REQUEST,
+          args: { field: 'canonicalSpec' },
+        })
+      }
+      return dto.canonicalSpec
+    }
+
+    throw new DomainException('codegen.missing_required_fields', {
+      code: ErrorCode.BAD_REQUEST,
+      status: HttpStatus.BAD_REQUEST,
+      args: { missingFields: ['semanticState'] },
+    })
   }
 
-  private resolveChecklistMissingFields(checklist: ChecklistPayload): string[] {
+  private isValidSemanticStateInput(payload: Record<string, unknown>): boolean {
+    const contextSlots = payload.contextSlots as Record<string, unknown> | undefined
+    return this.hasPersistedSemanticState(payload as unknown as Prisma.JsonValue)
+      && Array.isArray(payload.families)
+      && Array.isArray(payload.normalizationNotes)
+      && typeof payload.updatedAt === 'string'
+      && Boolean(contextSlots)
+      && typeof contextSlots === 'object'
+      && !Array.isArray(contextSlots)
+      && typeof contextSlots.exchange !== 'undefined'
+      && typeof contextSlots.symbol !== 'undefined'
+      && typeof contextSlots.marketType !== 'undefined'
+      && typeof contextSlots.timeframe !== 'undefined'
+      && (payload.triggers as unknown[]).every(item => this.isSemanticTriggerInput(item))
+      && (payload.actions as unknown[]).every(item => this.isSemanticActionInput(item))
+      && (payload.risk as unknown[]).every(item => this.isSemanticRiskInput(item))
+      && (
+        payload.position === null
+        || (
+          Boolean(payload.position)
+          && typeof payload.position === 'object'
+          && !Array.isArray(payload.position)
+          && (
+            typeof (payload.position as Record<string, unknown>).openSlots === 'undefined'
+            || (
+              Array.isArray((payload.position as Record<string, unknown>).openSlots)
+              && ((payload.position as Record<string, unknown>).openSlots as unknown[]).every(slot => this.isSemanticSlotInput(slot))
+            )
+          )
+        )
+      )
+  }
+
+  private hasSemanticOpenSlots(item: unknown): boolean {
+    return Boolean(item)
+      && typeof item === 'object'
+      && !Array.isArray(item)
+      && Array.isArray((item as Record<string, unknown>).openSlots)
+      && ((item as Record<string, unknown>).openSlots as unknown[]).every(slot => this.isSemanticSlotInput(slot))
+  }
+
+  private isSemanticSlotInput(slot: unknown): boolean {
+    return Boolean(slot)
+      && typeof slot === 'object'
+      && !Array.isArray(slot)
+      && typeof (slot as Record<string, unknown>).slotKey === 'string'
+      && typeof (slot as Record<string, unknown>).fieldPath === 'string'
+      && typeof (slot as Record<string, unknown>).status === 'string'
+      && typeof (slot as Record<string, unknown>).priority === 'string'
+      && typeof (slot as Record<string, unknown>).questionHint === 'string'
+      && typeof (slot as Record<string, unknown>).affectsExecution === 'boolean'
+  }
+
+  private isSemanticTriggerInput(item: unknown): boolean {
+    return this.hasSemanticOpenSlots(item)
+      && typeof (item as Record<string, unknown>).key === 'string'
+      && typeof (item as Record<string, unknown>).phase === 'string'
+      && Boolean((item as Record<string, unknown>).params)
+      && typeof (item as Record<string, unknown>).params === 'object'
+      && !Array.isArray((item as Record<string, unknown>).params)
+  }
+
+  private isSemanticActionInput(item: unknown): boolean {
+    return Boolean(item)
+      && typeof item === 'object'
+      && !Array.isArray(item)
+      && typeof (item as Record<string, unknown>).key === 'string'
+      && (
+        typeof (item as Record<string, unknown>).params === 'undefined'
+        || (
+          Boolean((item as Record<string, unknown>).params)
+          && typeof (item as Record<string, unknown>).params === 'object'
+          && !Array.isArray((item as Record<string, unknown>).params)
+        )
+      )
+  }
+
+  private isSemanticRiskInput(item: unknown): boolean {
+    return this.hasSemanticOpenSlots(item)
+      && typeof (item as Record<string, unknown>).key === 'string'
+      && Boolean((item as Record<string, unknown>).params)
+      && typeof (item as Record<string, unknown>).params === 'object'
+      && !Array.isArray((item as Record<string, unknown>).params)
+  }
+
+  private isCanonicalSpecV2Input(payload: Record<string, unknown>): boolean {
+    const market = payload.market as Record<string, unknown> | undefined
+    const dataRequirements = payload.dataRequirements as Record<string, unknown> | undefined
+    return payload.version === 2
+      && Boolean(market)
+      && typeof market === 'object'
+      && !Array.isArray(market)
+      && typeof market.symbol === 'string'
+      && typeof market.marketType === 'string'
+      && Array.isArray(payload.indicators)
+      && (payload.sizing === null || (Boolean(payload.sizing) && typeof payload.sizing === 'object' && !Array.isArray(payload.sizing)))
+      && Boolean(payload.executionPolicy)
+      && typeof payload.executionPolicy === 'object'
+      && !Array.isArray(payload.executionPolicy)
+      && Boolean(dataRequirements)
+      && typeof dataRequirements === 'object'
+      && !Array.isArray(dataRequirements)
+      && Array.isArray(dataRequirements.requiredTimeframes)
+      && Array.isArray(payload.rules)
+      && payload.rules.length > 0
+      && payload.rules.every(rule => this.isCanonicalSpecV2RuleInput(rule))
+  }
+
+  private isCanonicalSpecV2RuleInput(rule: unknown): boolean {
+    return Boolean(rule)
+      && typeof rule === 'object'
+      && !Array.isArray(rule)
+      && typeof (rule as Record<string, unknown>).phase === 'string'
+      && ['entry', 'exit', 'risk', 'rebalance'].includes((rule as Record<string, unknown>).phase as string)
+      && Boolean((rule as Record<string, unknown>).condition)
+      && typeof (rule as Record<string, unknown>).condition === 'object'
+      && !Array.isArray((rule as Record<string, unknown>).condition)
+      && typeof ((rule as Record<string, unknown>).condition as Record<string, unknown>).kind === 'string'
+      && this.isCanonicalConditionInput((rule as Record<string, unknown>).condition)
+      && Array.isArray((rule as Record<string, unknown>).actions)
+      && ((rule as Record<string, unknown>).actions as unknown[]).length > 0
+      && ((rule as Record<string, unknown>).actions as unknown[]).every(action => this.isCanonicalActionInput(action))
+  }
+
+  private isCanonicalConditionInput(condition: unknown): boolean {
+    if (!condition || typeof condition !== 'object' || Array.isArray(condition)) return false
+    const kind = (condition as Record<string, unknown>).kind
+    if (kind === 'atom') {
+      return typeof (condition as Record<string, unknown>).key === 'string'
+        && ((condition as Record<string, unknown>).key as string).trim().length > 0
+    }
+    if (kind === 'AND' || kind === 'OR') {
+      const children = (condition as Record<string, unknown>).children
+      return Array.isArray(children)
+        && children.length > 0
+        && children.every(child => this.isCanonicalConditionInput(child))
+    }
+    if (kind === 'NOT') {
+      const children = (condition as Record<string, unknown>).children
+      return Array.isArray(children)
+        && children.length === 1
+        && this.isCanonicalConditionInput(children[0])
+    }
+    return false
+  }
+
+  private isCanonicalActionInput(action: unknown): boolean {
+    if (!action || typeof action !== 'object' || Array.isArray(action)) return false
+    const type = (action as Record<string, unknown>).type
+    return typeof type === 'string'
+      && [
+        'OPEN_LONG',
+        'OPEN_SHORT',
+        'CLOSE_LONG',
+        'CLOSE_SHORT',
+        'REDUCE_LONG',
+        'REDUCE_SHORT',
+        'FORCE_EXIT',
+        'BLOCK_NEW_ENTRY',
+      ].includes(type)
+  }
+
+  private resolveLogicSnapshotMissingFields(checklist: StrategyLogicSnapshot): string[] {
     const missing: string[] = []
     if (!Array.isArray(checklist.entryRules) || checklist.entryRules.length === 0) {
       missing.push('entryRules')
@@ -3970,11 +3944,11 @@ export class CodegenConversationService {
   }
 
   private resolveActiveGateMissingFields(
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     semanticReady: boolean,
     compileability: CanonicalCompileabilityReport,
   ): string[] {
-    const missingFields = this.resolveChecklistMissingFields(checklist)
+    const missingFields = this.resolveLogicSnapshotMissingFields(checklist)
     if (semanticReady && compileability.canCompile) {
       return []
     }
@@ -4020,24 +3994,33 @@ export class CodegenConversationService {
   }
 
   private buildCanonicalSpecForConversation(
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     normalization: NormalizationResult,
     semanticState?: SemanticState,
   ) {
-    const checklistSpec = this.canonicalSpecBuilder.build(checklist)
-    if (normalization.blocked) {
-      return checklistSpec
-    }
-
     if (semanticState) {
-      const normalizedSpec = this.canonicalSpecBuilder.buildFromNormalizedIntent(
+      return this.canonicalSpecBuilder.buildFromNormalizedIntent(
         this.buildSemanticCanonicalContext(semanticState),
         normalization.normalizedIntent,
       )
-      const normalizedCompileability = this.evaluateCanonicalCompileability(normalizedSpec)
-      return normalizedCompileability.canCompile && this.isCanonicalSpecPublishable(normalizedSpec)
-        ? normalizedSpec
-        : checklistSpec
+    }
+
+    return this.buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly(checklist, normalization)
+  }
+
+  /**
+   * Legacy compatibility path for call sites that have not yet been converted to
+   * SemanticState. The semantic conversation path must pass `semanticState` to
+   * `buildCanonicalSpecForConversation()` and must not rely on this method as an
+   * authority source.
+   */
+  private buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly(
+    legacyLogicSnapshot: StrategyLogicSnapshot,
+    normalization: NormalizationResult,
+  ) {
+    const legacySpec = this.canonicalSpecBuilder.build(legacyLogicSnapshot)
+    if (normalization.blocked) {
+      return legacySpec
     }
 
     const hasSemanticOnlyTriggers = normalization.normalizedIntent.triggers.some(trigger =>
@@ -4046,11 +4029,11 @@ export class CodegenConversationService {
     const needsSemanticCompilerPath = hasSemanticOnlyTriggers || Boolean(normalization.normalizedIntent.grid)
     if (needsSemanticCompilerPath) {
       const normalizedSpec = this.canonicalSpecBuilder.buildFromNormalizedIntent(
-        checklist,
+        legacyLogicSnapshot,
         normalization.normalizedIntent,
       )
       const normalizedCompileability = this.evaluateCanonicalCompileability(normalizedSpec)
-      return normalizedCompileability.canCompile ? normalizedSpec : checklistSpec
+      return normalizedCompileability.canCompile ? normalizedSpec : legacySpec
     }
 
     const needsNormalizedFallback = normalization.normalizedIntent.triggers.some(trigger =>
@@ -4059,42 +4042,20 @@ export class CodegenConversationService {
       || trigger.key === 'execution.on_start',
     )
     if (!needsNormalizedFallback) {
-      return checklistSpec
+      return legacySpec
     }
 
-    const checklistCompileability = this.evaluateCanonicalCompileability(checklistSpec)
-    if (checklistCompileability.canCompile) {
-      return checklistSpec
+    const legacyCompileability = this.evaluateCanonicalCompileability(legacySpec)
+    if (legacyCompileability.canCompile) {
+      return legacySpec
     }
 
     const normalizedSpec = this.canonicalSpecBuilder.buildFromNormalizedIntent(
-      checklist,
+      legacyLogicSnapshot,
       normalization.normalizedIntent,
     )
     const normalizedCompileability = this.evaluateCanonicalCompileability(normalizedSpec)
-    return normalizedCompileability.canCompile ? normalizedSpec : checklistSpec
-  }
-
-  private isCanonicalSpecPublishable(spec: ReturnType<CanonicalSpecBuilderService['build']>): boolean {
-    if (spec.version !== 2) {
-      return false
-    }
-
-    return spec.rules.every(rule => this.isConditionPublishable(rule.condition))
-  }
-
-  private isConditionPublishable(condition: { kind: string; key?: string; children?: unknown[] }): boolean {
-    if (condition.kind === 'AND' || condition.kind === 'OR' || condition.kind === 'NOT') {
-      return (condition.children ?? []).every(child =>
-        this.isConditionPublishable(child as Parameters<CodegenConversationService['isConditionPublishable']>[0]),
-      )
-    }
-
-    if (condition.kind !== 'atom') {
-      return false
-    }
-
-    return condition.key !== 'indicator.above' && condition.key !== 'indicator.below'
+    return normalizedCompileability.canCompile ? normalizedSpec : legacySpec
   }
 
   private buildSemanticCanonicalContext(semanticState: SemanticState): {
@@ -4134,41 +4095,41 @@ export class CodegenConversationService {
     return slot.value.trim()
   }
 
-  private buildLegacyChecklistFromSemanticState(
+  private buildLegacyLogicSnapshotFromSemanticState(
     state: SemanticState,
-    fallbackChecklist: ChecklistPayload = {},
-  ): ChecklistPayload {
+    fallbackLogicSnapshot: StrategyLogicSnapshot = {},
+  ): StrategyLogicSnapshot {
     const projectedGrid = this.buildLegacyGrid(state.triggers)
-    const nextChecklist: ChecklistPayload = {
-      ...fallbackChecklist,
-      riskRules: fallbackChecklist.riskRules ? { ...fallbackChecklist.riskRules } : undefined,
-      stateGates: fallbackChecklist.stateGates ? { ...fallbackChecklist.stateGates } : undefined,
-      market: fallbackChecklist.market ? { ...fallbackChecklist.market } : undefined,
-      grid: fallbackChecklist.grid ? { ...fallbackChecklist.grid } : undefined,
+    const nextLogicSnapshot: StrategyLogicSnapshot = {
+      ...fallbackLogicSnapshot,
+      riskRules: fallbackLogicSnapshot.riskRules ? { ...fallbackLogicSnapshot.riskRules } : undefined,
+      stateGates: fallbackLogicSnapshot.stateGates ? { ...fallbackLogicSnapshot.stateGates } : undefined,
+      market: fallbackLogicSnapshot.market ? { ...fallbackLogicSnapshot.market } : undefined,
+      grid: fallbackLogicSnapshot.grid ? { ...fallbackLogicSnapshot.grid } : undefined,
     }
 
     const entryRules = this.buildProjectedRulesForPhase(state, 'entry')
     const exitRules = this.buildProjectedRulesForPhase(state, 'exit')
 
     if (entryRules.length > 0) {
-      nextChecklist.entryRules = entryRules
-      nextChecklist.entryRuleDrafts = undefined
+      nextLogicSnapshot.entryRules = entryRules
+      nextLogicSnapshot.entryRuleDrafts = undefined
     }
     if (exitRules.length > 0) {
-      nextChecklist.exitRules = exitRules
-      nextChecklist.exitRuleDrafts = undefined
+      nextLogicSnapshot.exitRules = exitRules
+      nextLogicSnapshot.exitRuleDrafts = undefined
     }
 
     const projectedStateGates = this.buildProjectedStateGates(state)
     if (Object.keys(projectedStateGates).length > 0) {
-      nextChecklist.stateGates = {
-        ...(nextChecklist.stateGates ?? {}),
+      nextLogicSnapshot.stateGates = {
+        ...(nextLogicSnapshot.stateGates ?? {}),
         ...projectedStateGates,
       }
     }
 
     const riskRules = {
-      ...(nextChecklist.riskRules ?? {}),
+      ...(nextLogicSnapshot.riskRules ?? {}),
     } as Record<string, unknown>
 
     for (const risk of state.risk) {
@@ -4216,27 +4177,27 @@ export class CodegenConversationService {
     if (exchange) riskRules.exchange = exchange
     if (marketType) riskRules.marketType = marketType
     if (Object.keys(riskRules).length > 0) {
-      nextChecklist.riskRules = riskRules
+      nextLogicSnapshot.riskRules = riskRules
     }
     if (symbol) {
-      nextChecklist.symbols = [symbol]
+      nextLogicSnapshot.symbols = [symbol]
     }
     if (timeframe) {
-      nextChecklist.timeframes = [timeframe]
+      nextLogicSnapshot.timeframes = [timeframe]
     }
     if (projectedGrid) {
-      nextChecklist.grid = {
-        ...(nextChecklist.grid ?? {}),
+      nextLogicSnapshot.grid = {
+        ...(nextLogicSnapshot.grid ?? {}),
         ...projectedGrid,
       }
     }
 
-    return nextChecklist
+    return nextLogicSnapshot
   }
 
   private buildLegacyGrid(
     triggers: SemanticTriggerState[],
-  ): ChecklistPayload['grid'] | undefined {
+  ): StrategyLogicSnapshot['grid'] | undefined {
     const activeGrid = triggers.find(trigger =>
       trigger.key === 'grid.range_rebalance'
       && trigger.status !== 'superseded'
@@ -4277,20 +4238,20 @@ export class CodegenConversationService {
     }
   }
 
-  private buildProjectedStateGates(state: SemanticState): NonNullable<ChecklistPayload['stateGates']> {
-    const nextStateGates: NonNullable<ChecklistPayload['stateGates']> = {}
+  private buildProjectedStateGates(state: SemanticState): NonNullable<StrategyLogicSnapshot['stateGates']> {
+    const nextStateGates: NonNullable<StrategyLogicSnapshot['stateGates']> = {}
 
     for (const trigger of state.triggers) {
       if (trigger.phase !== 'gate') continue
 
       if (trigger.key === 'market.regime' && typeof trigger.params.value === 'string') {
-        nextStateGates.marketRegime = trigger.params.value as NonNullable<ChecklistPayload['stateGates']>['marketRegime']
+        nextStateGates.marketRegime = trigger.params.value as NonNullable<StrategyLogicSnapshot['stateGates']>['marketRegime']
       }
       if (trigger.key === 'trend.direction' && typeof trigger.params.value === 'string') {
-        nextStateGates.trendDirection = trigger.params.value as NonNullable<ChecklistPayload['stateGates']>['trendDirection']
+        nextStateGates.trendDirection = trigger.params.value as NonNullable<StrategyLogicSnapshot['stateGates']>['trendDirection']
       }
       if (trigger.key === 'volatility.state' && typeof trigger.params.value === 'string') {
-        nextStateGates.volatilityState = trigger.params.value as NonNullable<ChecklistPayload['stateGates']>['volatilityState']
+        nextStateGates.volatilityState = trigger.params.value as NonNullable<StrategyLogicSnapshot['stateGates']>['volatilityState']
       }
     }
 
@@ -4457,9 +4418,9 @@ export class CodegenConversationService {
     return Number.isInteger(value) ? String(value) : String(value)
   }
 
-  private mergeChecklistIntoSemanticState(
+  private mergeLogicSnapshotIntoSemanticState(
     currentState: SemanticState,
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
   ): SemanticState {
     return this.semanticStateMerge.merge({
       persisted: currentState,
@@ -4472,7 +4433,7 @@ export class CodegenConversationService {
   }
 
   private buildStrategyDecision(input: {
-    checklist: ChecklistPayload
+    checklist: StrategyLogicSnapshot
     clarification: ReturnType<CodegenConversationService['resolveClarificationArtifacts']>
     effectiveBlockingReasons?: StrategyBlockingReason[]
     compileability: CanonicalCompileabilityReport | null
@@ -4537,7 +4498,7 @@ export class CodegenConversationService {
 
   private resolveContinueSessionDeterministicAuthority(input: {
     semanticState: SemanticState
-    checklist: ChecklistPayload
+    checklist: StrategyLogicSnapshot
     clarificationState: Pick<StrategyClarificationState, 'status'>
     normalization: NormalizationResult
     compileability: CanonicalCompileabilityReport
@@ -4576,9 +4537,9 @@ export class CodegenConversationService {
 
   private hasDeterministicStrategySemantics(
     semanticState: SemanticState,
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
   ): boolean {
-    const hasChecklistRules = (checklist.entryRules?.length ?? 0) > 0
+    const hasLogicRules = (checklist.entryRules?.length ?? 0) > 0
       || (checklist.exitRules?.length ?? 0) > 0
     const hasGrid = Boolean(
       checklist.grid
@@ -4587,7 +4548,7 @@ export class CodegenConversationService {
     const hasSemanticTriggers = semanticState.triggers.some(trigger => trigger.status !== 'superseded')
     const hasSemanticActions = semanticState.actions.some(action => action.status !== 'superseded')
 
-    return hasChecklistRules || hasGrid || hasSemanticTriggers || hasSemanticActions
+    return hasLogicRules || hasGrid || hasSemanticTriggers || hasSemanticActions
   }
 
   private mapClarificationReasonToBlockingReason(reason: StrategyClarificationItem['reason']): string {
@@ -4622,7 +4583,7 @@ export class CodegenConversationService {
   }
 
   private collectInferredAssumptions(
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     constraintPack: ConstraintPackSnapshot = createDefaultConstraintPack(),
   ): StrategyInferredAssumption[] {
     const combinedText = [...(checklist.entryRules ?? []), ...(checklist.exitRules ?? [])].join(' ')
@@ -4683,11 +4644,11 @@ export class CodegenConversationService {
 
   private async withConfirmedInferredDecisionKeys(
     constraintPack: ConstraintPackSnapshot,
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     message: string | undefined,
     options?: { providerCode?: string, model?: string },
   ): Promise<{
-      checklist: ChecklistPayload
+      checklist: StrategyLogicSnapshot
       constraintPack: ConstraintPackSnapshot
       consumed: boolean
     }> {
@@ -4759,14 +4720,14 @@ export class CodegenConversationService {
   }
 
   private async consumeExplicitInferredDecisionResponse(
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     decisionKeys: string[],
     message: string | undefined,
     assistantPrompt: string | undefined,
     conversationPhase: string | undefined,
     options?: { providerCode?: string, model?: string },
   ): Promise<{
-      checklist: ChecklistPayload
+      checklist: StrategyLogicSnapshot
       confirmedKeys: string[]
       overriddenKeys: string[]
     }> {
@@ -4779,12 +4740,12 @@ export class CodegenConversationService {
       decisionKeys,
       checklist,
     })
-    let nextChecklist = checklist
+    let nextLogicSnapshot = checklist
     for (const [key, basis] of Object.entries(classification.overriddenBasisByKey)) {
-      nextChecklist = this.normalizeChecklist({
-        ...nextChecklist,
+      nextLogicSnapshot = this.normalizeLogicSnapshot({
+        ...nextLogicSnapshot,
         riskRules: {
-          ...(nextChecklist.riskRules ?? {}),
+          ...(nextLogicSnapshot.riskRules ?? {}),
           ...(key === 'risk.stopLossBasis'
             ? { stopLossBasis: basis }
             : { takeProfitBasis: basis }),
@@ -4793,377 +4754,14 @@ export class CodegenConversationService {
     }
 
     return {
-      checklist: nextChecklist,
+      checklist: nextLogicSnapshot,
       confirmedKeys: classification.confirmedKeys,
       overriddenKeys: classification.overriddenKeys,
     }
   }
 
-  private inferChecklistFromMessage(message?: string): ChecklistPayload {
-    if (!message || !message.trim()) {
-      return {}
-    }
-    const text = message.trim()
-    const upper = text.toUpperCase()
 
-    const symbolMatches = upper.match(/\b[A-Z]{2,12}(?:USDT|USDC|USD)\b/g) ?? []
-    const symbols = Array.from(new Set(symbolMatches))
 
-    const timeframeMatches = Array.from(text.matchAll(/(\d{1,4})\s*(min|分钟|小时|[mhd天])/gi))
-    const timeframes = Array.from(new Set(timeframeMatches.map(([, value, unit]) => {
-      const normalizedUnit = unit.toLowerCase()
-      if (normalizedUnit === 'm' || normalizedUnit === 'min' || normalizedUnit === '分钟') return `${value}m`
-      if (normalizedUnit === 'h' || normalizedUnit === '小时') return `${value}h`
-      return `${value}d`
-    })))
-
-    const entryRules: string[] = []
-    const exitRules: string[] = []
-    const entryRuleBases: Record<string, ChecklistRuleBasis['kind']> = {}
-    const exitRuleBases: Record<string, ChecklistRuleBasis['kind']> = {}
-
-    const percentToken = '\\d+(?:\\.\\d+)?\\s*%|百分之?\\s*\\d+(?:\\.\\d+)?'
-    const directionalFragments = text
-      .split(/[，。；;\n]/u)
-      .flatMap(fragment => fragment.split(/(?<=买入|卖出|开仓|平仓|入场|出场|离场)/u))
-      .map(fragment => fragment.trim())
-      .filter(Boolean)
-
-    const buyDropFragment = directionalFragments.find(fragment =>
-      /(?:跌|下跌|回撤).{0,20}?(?:买入|开仓|入场)/u.test(fragment),
-    )
-    const sellRiseFragment = directionalFragments.find(fragment =>
-      /(?:涨|上涨|反弹).{0,20}?(?:卖出|平仓|离场|出场)/u.test(fragment),
-    )
-    if (buyDropFragment && new RegExp(percentToken, 'u').test(buyDropFragment)) {
-      entryRules.push(normalizeDirectionalPercentRule(buyDropFragment, 'entry'))
-      entryRuleBases['entry-1'] = 'prev_close'
-    }
-
-    if (sellRiseFragment && new RegExp(percentToken, 'u').test(sellRiseFragment)) {
-      exitRules.push(normalizeDirectionalPercentRule(sellRiseFragment, 'exit'))
-      exitRuleBases['exit-1'] = 'prev_close'
-    }
-
-    if (entryRules.length === 0) {
-      const entryMovingAverageBreakout = this.inferMovingAverageBreakoutRuleFromFragments(
-        directionalFragments,
-        'entry',
-      )
-      if (entryMovingAverageBreakout) {
-        entryRules.push(entryMovingAverageBreakout)
-      }
-    }
-
-    if (exitRules.length === 0) {
-      const exitMovingAverageBreakout = this.inferMovingAverageBreakoutRuleFromFragments(
-        directionalFragments,
-        'exit',
-      )
-      if (exitMovingAverageBreakout) {
-        exitRules.push(exitMovingAverageBreakout)
-      }
-    }
-
-    if (entryRules.length === 0) {
-      const immediateExecutionRule = this.inferImmediateExecutionRule(directionalFragments, 'entry')
-      if (immediateExecutionRule) {
-        entryRules.push(immediateExecutionRule)
-      }
-    }
-
-    if (exitRules.length === 0) {
-      const immediateExecutionRule = this.inferImmediateExecutionRule(directionalFragments, 'exit')
-      if (immediateExecutionRule) {
-        exitRules.push(immediateExecutionRule)
-      }
-    }
-
-    if (entryRules.length === 0) {
-      const hasBollinger = /布林|bollinger/i.test(text)
-      const hasUpperBand = /上轨|upper/i.test(text)
-      const hasLowerBand = /下轨|lower/i.test(text)
-      const hasTouchCue = /触及|触碰|碰到|touch/iu.test(text)
-      const hasCloseConfirmCue = /收盘确认|收盘后确认|收盘|收于|收在|close/iu.test(text)
-      const bollingerParamsMatch = text.match(/布林带\s*[（(]\s*(\d{1,3})\s*[,，]\s*(\d+(?:\.\d+)?)\s*[)）]/u)
-      const bollingerLabel = bollingerParamsMatch?.[1] && bollingerParamsMatch[2]
-        ? `布林带(${bollingerParamsMatch[1]},${bollingerParamsMatch[2]})`
-        : '布林带'
-      const upperBandDirection = this.detectDirectionInTriggerFragment(
-        text,
-        /(?:布林|bollinger).{0,12}(?:上轨|upper)|(?:上轨|upper).{0,12}(?:布林|bollinger)|(?:突破|站上|收盘).{0,8}(?:上轨|upper)/i,
-      )
-      const lowerBandDirection = this.detectDirectionInTriggerFragment(
-        text,
-        /(?:布林|bollinger).{0,12}(?:下轨|lower)|(?:下轨|lower).{0,12}(?:布林|bollinger)|(?:突破|跌破|收盘).{0,8}(?:下轨|lower)/i,
-      )
-      const pushEntryRule = (rule: string) => {
-        if (!entryRules.includes(rule)) {
-          entryRules.push(rule)
-        }
-      }
-      if (hasBollinger && hasUpperBand && upperBandDirection === 'short' && hasTouchCue && hasCloseConfirmCue) {
-        pushEntryRule(`触及${bollingerLabel}上轨后收盘确认做空`)
-      }
-      if (hasBollinger && hasUpperBand && upperBandDirection === 'long' && hasTouchCue && hasCloseConfirmCue) {
-        pushEntryRule(`触及${bollingerLabel}上轨后收盘确认做多`)
-      }
-      if (hasBollinger && hasLowerBand && lowerBandDirection === 'long' && hasTouchCue && hasCloseConfirmCue) {
-        pushEntryRule(`触及${bollingerLabel}下轨后收盘确认做多`)
-      }
-      if (hasBollinger && hasLowerBand && lowerBandDirection === 'short' && hasTouchCue && hasCloseConfirmCue) {
-        pushEntryRule(`触及${bollingerLabel}下轨后收盘确认做空`)
-      }
-      if (hasBollinger && hasUpperBand && upperBandDirection === 'short' && hasTouchCue) {
-        pushEntryRule(`触及${bollingerLabel}上轨时做空`)
-      }
-      if (hasBollinger && hasUpperBand && upperBandDirection === 'long' && hasTouchCue) {
-        pushEntryRule(`触及${bollingerLabel}上轨时做多`)
-      }
-      if (hasBollinger && hasLowerBand && lowerBandDirection === 'long' && hasTouchCue) {
-        pushEntryRule(`触及${bollingerLabel}下轨时做多`)
-      }
-      if (hasBollinger && hasLowerBand && lowerBandDirection === 'short' && hasTouchCue) {
-        pushEntryRule(`触及${bollingerLabel}下轨时做空`)
-      }
-      if (hasBollinger && hasUpperBand && upperBandDirection === 'short' && /突破|交易|开仓|入场|站上|收盘/.test(text)) {
-        pushEntryRule(`K线收盘后确认突破${bollingerLabel}上轨时做空`)
-      }
-      if (hasBollinger && hasUpperBand && upperBandDirection === 'long' && /突破|交易|开仓|入场|站上|收盘/.test(text)) {
-        pushEntryRule(`K线收盘后确认突破${bollingerLabel}上轨时做多`)
-      }
-      if (hasBollinger && hasUpperBand && !upperBandDirection && /突破|交易|开仓|入场|站上|收盘/.test(text)) {
-        pushEntryRule(`突破${bollingerLabel}上轨交易`)
-      }
-      if (hasBollinger && hasLowerBand && lowerBandDirection === 'long' && /突破|跌破|交易|开仓|入场|收盘/.test(text)) {
-        pushEntryRule(`K线收盘后确认突破${bollingerLabel}下轨时做多`)
-      }
-      if (hasBollinger && hasLowerBand && lowerBandDirection === 'short' && /突破|跌破|交易|开仓|入场|收盘/.test(text)) {
-        pushEntryRule(`K线收盘后确认突破${bollingerLabel}下轨时做空`)
-      }
-      if (hasBollinger && hasLowerBand && !lowerBandDirection && /突破|跌破|交易|开仓|入场|收盘/.test(text)) {
-        pushEntryRule(`跌破${bollingerLabel}下轨交易`)
-      }
-      if (entryRules.length === 0 && /金叉|上穿.{0,8}均线|均线.{0,8}上穿|\bma\b|moving average/i.test(text)) {
-        entryRules.push('短均线上穿长均线（金叉）入场')
-      } else if (entryRules.length === 0 && /(?:突破|站上|收盘价?.{0,8}高于).{0,16}(?:阻力|前高|关键位)|阻力位/.test(text)) {
-        entryRules.push('价格收盘确认突破关键阻力位入场')
-      } else if (entryRules.length === 0 && /买入|开仓|入场/.test(text)) {
-        entryRules.push('满足入场条件后开仓')
-      }
-    }
-    if (exitRules.length === 0) {
-      const middleBandPeriod = text.match(/中轨\s*\(?(?:MA|ma)\s*(\d{1,3})\)?/u)?.[1]
-        ?? text.match(/布林带\s*[（(]\s*(\d{1,3})\s*[,，]\s*(\d+(?:\.\d+)?)\s*[)）]/u)?.[1]
-      const middleBandAction = /平空/u.test(text)
-        ? '平空'
-        : (/平多|卖出/u.test(text) ? '平多' : '平仓')
-      if (/布林|bollinger/iu.test(text) && /中轨|middle|ma20|均线20/i.test(text) && /平仓|平多|平空|离场|出场|卖出/u.test(text)) {
-        exitRules.push(`价格回到布林带中轨(MA${middleBandPeriod ?? '20'})时${middleBandAction}`)
-      } else if (/死叉|下穿.{0,8}均线|均线.{0,8}下穿|\bma\b|moving average/i.test(text)) {
-        exitRules.push('短均线下穿长均线（死叉）出场')
-      } else if (/跌破.{0,16}(?:支撑|前低|关键位)|支撑位/.test(text)) {
-        exitRules.push('价格跌破关键支撑位出场')
-      } else if (/止盈|止损|回撤/.test(text)) {
-        exitRules.push('触发止盈/止损阈值出场')
-      } else if (/平仓|离场|出场|卖出/.test(text)) {
-        exitRules.push('满足出场条件后平仓')
-      }
-    }
-
-    const riskRules: Record<string, unknown> = {}
-    const grid: NonNullable<ChecklistPayload['grid']> = {}
-    if (/\bokx\b/i.test(text)) {
-      riskRules.exchange = 'okx'
-    } else if (/hyperliquid/i.test(text)) {
-      riskRules.exchange = 'hyperliquid'
-    } else if (/binance/i.test(text)) {
-      riskRules.exchange = 'binance'
-    }
-
-    if (/永续|perp|swap|合约/i.test(text)) {
-      riskRules.marketType = 'perp'
-    } else if (/现货|spot/i.test(text)) {
-      riskRules.marketType = 'spot'
-    }
-
-    const positionMatch = text.match(/仓位\s*(\d+(?:\.\d+)?)\s*%/u)
-      ?? text.match(/单笔(?:使用|投入)?\s*(\d+(?:\.\d+)?)\s*%\s*资金/u)
-      ?? text.match(/(?:仓位|单笔(?:用|使用)?|使用)\s*(?:百分之?\s*)?(\d+(?:\.\d+)?)(?:\s*%|资金|仓位|$)/u)
-      ?? text.match(/(?:仓位|单笔(?:用|使用)?).{0,8}?(\d+(?:\.\d+)?)\s*%/u)
-    if (positionMatch?.[1]) {
-      riskRules.positionPct = Number(positionMatch[1])
-    }
-    const stopLossInfo = this.extractRiskRuleInfo(text, 'stopLoss')
-    if (typeof stopLossInfo.pct === 'number') {
-      riskRules.stopLossPct = stopLossInfo.pct
-    }
-    const takeProfitInfo = this.extractRiskRuleInfo(text, 'takeProfit')
-    if (typeof takeProfitInfo.pct === 'number') {
-      riskRules.takeProfitPct = takeProfitInfo.pct
-    }
-    const stopLossClause = stopLossInfo.clause
-    const takeProfitClause = takeProfitInfo.clause
-    const stopLossBasis = this.resolveRiskBasis(stopLossClause, typeof riskRules.stopLossBasis === 'string'
-      ? riskRules.stopLossBasis as ChecklistRuleBasis['kind']
-      : null)
-    if (stopLossBasis && typeof riskRules.stopLossPct === 'number') {
-      riskRules.stopLossBasis = stopLossBasis
-    }
-    const takeProfitBasis = this.resolveRiskBasis(takeProfitClause, typeof riskRules.takeProfitBasis === 'string'
-      ? riskRules.takeProfitBasis as ChecklistRuleBasis['kind']
-      : null)
-    if (takeProfitBasis && typeof riskRules.takeProfitPct === 'number') {
-      riskRules.takeProfitBasis = takeProfitBasis
-    }
-    const drawdownMatch = text.match(/最大回撤\s*(?:百分之?\s*)?(\d+(?:\.\d+)?)(?:\s*%|$)/)
-    if (drawdownMatch?.[1]) {
-      riskRules.maxDrawdownPct = Number(drawdownMatch[1])
-    }
-    const earlyStopMatch = text.match(/((?:价格)?连续\s*3\s*根K线[^。；;\n]{0,40}?轨外[^。；;\n]{0,40}?(?:提前止损|减仓|全平|平仓))/i)
-    if (earlyStopMatch?.[1]) {
-      riskRules.earlyStop = earlyStopMatch[1].trim()
-    }
-    if (/网格|grid/iu.test(text)) {
-      const rangeMatch = text.match(/(\d+(?:\.\d+)?)\s*[-~到至]\s*(\d+(?:\.\d+)?)/u)
-      if (rangeMatch?.[1] && rangeMatch[2]) {
-        grid.lower = Number(rangeMatch[1])
-        grid.upper = Number(rangeMatch[2])
-      }
-
-      const percentMatch = text.match(/(?:步长|每一格(?:间距)?|每格(?:间距)?)\s*(\d+(?:\.\d+)?)\s*%/u)
-      const perMilleMatch = text.match(/千分之\s*(\d+(?:\.\d+)?)/u)
-      if (percentMatch?.[1]) {
-        grid.stepPct = Number(percentMatch[1])
-      } else if (perMilleMatch?.[1]) {
-        grid.stepPct = Number(perMilleMatch[1]) / 10
-      }
-
-      if (/双向|低买高卖|来回|往返|自动买卖|自动交易/u.test(text)) {
-        grid.sideMode = 'bidirectional'
-      } else if (/做空网格|空头网格|做空|空头/u.test(text)) {
-        grid.sideMode = 'short_only'
-      } else if (/做多网格|多头网格|做多|多头/u.test(text)) {
-        grid.sideMode = 'long_only'
-      } else if (/只做多|仅做多/u.test(text)) {
-        grid.sideMode = 'long_only'
-      } else if (/只做空|仅做空/u.test(text)) {
-        grid.sideMode = 'short_only'
-      }
-
-      if (!grid.sideMode) {
-        grid.sideMode = 'bidirectional'
-      }
-
-      if (/突破.{0,8}停/u.test(text)) {
-        grid.breakoutAction = 'pause'
-      } else if (/突破/u.test(text)) {
-        grid.breakoutAction = 'continue'
-      }
-    }
-
-    const inferredMarket = {
-      ...(riskRules.exchange === 'okx' || riskRules.exchange === 'binance' || riskRules.exchange === 'hyperliquid'
-        ? { exchange: riskRules.exchange as ChecklistPayload['market']['exchange'] }
-        : {}),
-      ...(riskRules.marketType === 'spot' || riskRules.marketType === 'perp'
-        ? { marketType: riskRules.marketType as ChecklistPayload['market']['marketType'] }
-        : {}),
-      ...(timeframes[0] ? { defaultTimeframe: timeframes[0] } : {}),
-    }
-
-    const drafts = buildChecklistRuleDrafts({
-      symbols: symbols.length > 0 ? symbols : undefined,
-      timeframes: timeframes.length > 0 ? timeframes : undefined,
-      entryRules: entryRules.length > 0 ? entryRules : undefined,
-      exitRules: exitRules.length > 0 ? exitRules : undefined,
-      entryRuleBases: Object.keys(entryRuleBases).length > 0 ? entryRuleBases : undefined,
-      exitRuleBases: Object.keys(exitRuleBases).length > 0 ? exitRuleBases : undefined,
-      riskRules: Object.keys(riskRules).length > 0 ? riskRules : undefined,
-      grid: Object.keys(grid).length > 0 ? grid : undefined,
-      market: Object.keys(inferredMarket).length > 0 ? inferredMarket : undefined,
-    })
-
-    return {
-      symbols: symbols.length > 0 ? symbols : undefined,
-      timeframes: timeframes.length > 0 ? timeframes : undefined,
-      entryRules: entryRules.length > 0 ? entryRules : undefined,
-      exitRules: exitRules.length > 0 ? exitRules : undefined,
-      entryRuleBases: Object.keys(entryRuleBases).length > 0 ? entryRuleBases : undefined,
-      exitRuleBases: Object.keys(exitRuleBases).length > 0 ? exitRuleBases : undefined,
-      entryRuleDrafts: drafts.entry,
-      exitRuleDrafts: drafts.exit,
-      riskRules: Object.keys(riskRules).length > 0 ? riskRules : undefined,
-      grid: Object.keys(grid).length > 0 ? grid : undefined,
-      market: Object.keys(inferredMarket).length > 0 ? inferredMarket : { defaultTimeframe: timeframes[0] ?? null },
-    }
-  }
-
-  private inferImmediateExecutionRule(
-    fragments: string[],
-    phase: 'entry' | 'exit',
-  ): string | null {
-    for (const fragment of fragments) {
-      const hasTemporalExecutionCue = /立即|立刻|马上|启动时|开始时|一开始|开局/u.test(fragment)
-      const hasDirectMarketCue = /直接/u.test(fragment) && /市价|当前价/u.test(fragment)
-      const hasExecutionCue = hasTemporalExecutionCue || hasDirectMarketCue
-      if (!hasExecutionCue) {
-        continue
-      }
-
-      if (phase === 'entry') {
-        if (/买入|开仓|做多/u.test(fragment)) {
-          return '立即开始时市价买入一次'
-        }
-        if (/做空|卖出开空|开空/u.test(fragment)) {
-          return '立即开始时市价做空一次'
-        }
-        continue
-      }
-
-      if (/平空/u.test(fragment)) {
-        return '立即开始时市价平空一次'
-      }
-      if (/卖出|平仓|平多/u.test(fragment)) {
-        return '立即开始时市价卖出一次'
-      }
-    }
-    return null
-  }
-
-  private inferMovingAverageBreakoutRuleFromFragments(
-    fragments: string[],
-    phase: 'entry' | 'exit',
-  ): string | null {
-    const actionPattern = phase === 'entry'
-      ? /买入|开仓|入场/u
-      : /卖出|平仓|离场|出场/u
-
-    for (const fragment of fragments) {
-      if (!actionPattern.test(fragment)) {
-        continue
-      }
-      if (!/均线|ema|sma|ma/iu.test(fragment)) {
-        continue
-      }
-
-      const referenceRole = /长期|长线|长周期|long[\s-]?term/iu.test(fragment)
-        ? '长期均线'
-        : (/短期|短线|短周期|short[\s-]?term/iu.test(fragment) ? '短期均线' : null)
-      if (!referenceRole) {
-        continue
-      }
-
-      if (/突破|上穿|站上|上方|高于/u.test(fragment)) {
-        return `价格突破${referenceRole}时${phase === 'entry' ? '买入' : '卖出'}`
-      }
-      if (/跌破|下穿|失守|下方|低于/u.test(fragment)) {
-        return `价格跌破${referenceRole}时${phase === 'entry' ? '买入' : '卖出'}`
-      }
-    }
-
-    return null
-  }
 
   private detectDirectionInTriggerFragment(
     text: string,
@@ -5206,7 +4804,7 @@ export class CodegenConversationService {
     return normalized
   }
 
-  private normalizeChecklist(payload: ChecklistPayload | Record<string, unknown>): ChecklistPayload {
+  private normalizeLogicSnapshot(payload: StrategyLogicSnapshot | Record<string, unknown>): StrategyLogicSnapshot {
     const normalizeStringArray = (value: unknown): string[] | undefined => {
       if (!Array.isArray(value)) return undefined
       const normalized = value
@@ -5229,7 +4827,7 @@ export class CodegenConversationService {
 
     const normalizeBasisMap = (
       value: unknown,
-    ): Record<string, ChecklistRuleBasis['kind']> | undefined => {
+    ): Record<string, StrategyRuleBasis['kind']> | undefined => {
       if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return undefined
       }
@@ -5237,13 +4835,13 @@ export class CodegenConversationService {
       const normalized = Object.fromEntries(
         Object.entries(value as Record<string, unknown>)
           .filter(([, item]) => typeof item === 'string' && item.trim().length > 0)
-          .map(([key, item]) => [key, (item as string).trim() as ChecklistRuleBasis['kind']]),
-      ) as Record<string, ChecklistRuleBasis['kind']>
+          .map(([key, item]) => [key, (item as string).trim() as StrategyRuleBasis['kind']]),
+      ) as Record<string, StrategyRuleBasis['kind']>
 
       return Object.keys(normalized).length > 0 ? normalized : undefined
     }
 
-    const normalizeDrafts = (value: unknown, phase: ChecklistRuleDraft['phase']): ChecklistRuleDraft[] | undefined => {
+    const normalizeDrafts = (value: unknown, phase: StrategyRuleDraft['phase']): StrategyRuleDraft[] | undefined => {
       if (!Array.isArray(value)) return undefined
       const drafts = value
         .filter((item): item is Record<string, unknown> => Boolean(item) && typeof item === 'object' && !Array.isArray(item))
@@ -5254,7 +4852,7 @@ export class CodegenConversationService {
             ? item.timeframe.trim()
             : null
           const basis = typeof item.basis === 'string' && item.basis.trim().length > 0
-            ? item.basis.trim() as ChecklistRuleBasis['kind']
+            ? item.basis.trim() as StrategyRuleBasis['kind']
             : null
           return {
             id: typeof item.id === 'string' && item.id.trim().length > 0 ? item.id.trim() : `${phase}-${index + 1}`,
@@ -5262,23 +4860,23 @@ export class CodegenConversationService {
             text,
             timeframe,
             ...(basis ? { basis } : {}),
-          } satisfies ChecklistRuleDraft
+          } satisfies StrategyRuleDraft
         })
-        .filter((item): item is ChecklistRuleDraft => item !== null)
+        .filter((item): item is StrategyRuleDraft => item !== null)
 
       return drafts.length > 0 ? drafts : undefined
     }
 
-    const normalizeMarket = (value: unknown): ChecklistPayload['market'] | undefined => {
+    const normalizeMarket = (value: unknown): StrategyLogicSnapshot['market'] | undefined => {
       if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return undefined
       }
       const raw = value as Record<string, unknown>
       const exchange = typeof raw.exchange === 'string' && ['binance', 'okx', 'hyperliquid'].includes(raw.exchange.trim().toLowerCase())
-        ? raw.exchange.trim().toLowerCase() as NonNullable<ChecklistPayload['market']>['exchange']
+        ? raw.exchange.trim().toLowerCase() as NonNullable<StrategyLogicSnapshot['market']>['exchange']
         : undefined
       const marketType = typeof raw.marketType === 'string' && ['spot', 'perp'].includes(raw.marketType.trim().toLowerCase())
-        ? raw.marketType.trim().toLowerCase() as NonNullable<ChecklistPayload['market']>['marketType']
+        ? raw.marketType.trim().toLowerCase() as NonNullable<StrategyLogicSnapshot['market']>['marketType']
         : undefined
       const defaultTimeframe = typeof raw.defaultTimeframe === 'string' && raw.defaultTimeframe.trim().length > 0
         ? raw.defaultTimeframe.trim()
@@ -5295,19 +4893,19 @@ export class CodegenConversationService {
       }
     }
 
-    const normalizeStateGates = (value: unknown): ChecklistPayload['stateGates'] | undefined => {
+    const normalizeStateGates = (value: unknown): StrategyLogicSnapshot['stateGates'] | undefined => {
       if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return undefined
       }
       const raw = value as Record<string, unknown>
       const marketRegime = typeof raw.marketRegime === 'string' && raw.marketRegime.trim().length > 0
-        ? raw.marketRegime.trim() as NonNullable<ChecklistPayload['stateGates']>['marketRegime']
+        ? raw.marketRegime.trim() as NonNullable<StrategyLogicSnapshot['stateGates']>['marketRegime']
         : undefined
       const trendDirection = typeof raw.trendDirection === 'string' && raw.trendDirection.trim().length > 0
-        ? raw.trendDirection.trim() as NonNullable<ChecklistPayload['stateGates']>['trendDirection']
+        ? raw.trendDirection.trim() as NonNullable<StrategyLogicSnapshot['stateGates']>['trendDirection']
         : undefined
       const volatilityState = typeof raw.volatilityState === 'string' && raw.volatilityState.trim().length > 0
-        ? raw.volatilityState.trim() as NonNullable<ChecklistPayload['stateGates']>['volatilityState']
+        ? raw.volatilityState.trim() as NonNullable<StrategyLogicSnapshot['stateGates']>['volatilityState']
         : undefined
 
       if (!marketRegime && !trendDirection && !volatilityState) {
@@ -5321,7 +4919,7 @@ export class CodegenConversationService {
       }
     }
 
-    const normalizeGrid = (value: unknown): ChecklistPayload['grid'] | undefined => {
+    const normalizeGrid = (value: unknown): StrategyLogicSnapshot['grid'] | undefined => {
       if (!value || typeof value !== 'object' || Array.isArray(value)) {
         return undefined
       }
@@ -5356,7 +4954,7 @@ export class CodegenConversationService {
       }
     }
 
-    const normalized: ChecklistPayload = {
+    const normalized: StrategyLogicSnapshot = {
       symbols: normalizeStringArray(payload.symbols),
       timeframes: normalizeStringArray(payload.timeframes),
       entryRules: normalizeStringArray(payload.entryRules),
@@ -5371,15 +4969,15 @@ export class CodegenConversationService {
       market: normalizeMarket(payload.market),
       grid: normalizeGrid(payload.grid),
     }
-    const drafts = buildChecklistRuleDrafts(normalized)
+    const drafts = buildStrategyRuleDrafts(normalized)
 
     return {
       ...normalized,
       entryRuleDrafts: drafts.entry.length > 0 ? drafts.entry : undefined,
       exitRuleDrafts: drafts.exit.length > 0 ? drafts.exit : undefined,
       riskRuleDrafts: drafts.risk.length > 0 ? drafts.risk : undefined,
-      market: normalized.market ?? (resolveChecklistDefaultTimeframe(normalized)
-        ? { defaultTimeframe: resolveChecklistDefaultTimeframe(normalized) }
+      market: normalized.market ?? (resolveStrategyDefaultTimeframe(normalized)
+        ? { defaultTimeframe: resolveStrategyDefaultTimeframe(normalized) }
         : undefined),
     }
   }
@@ -5476,14 +5074,14 @@ export class CodegenConversationService {
     }
   }
 
-  private isNamedBasis(value: unknown): value is ChecklistRuleBasis['kind'] {
+  private isNamedBasis(value: unknown): value is StrategyRuleBasis['kind'] {
     return typeof value === 'string' && value.trim().length > 0
   }
 
   private resolveRiskBasis(
     ruleText: string | null | undefined,
-    explicitBasis: ChecklistRuleBasis['kind'] | null,
-  ): ChecklistRuleBasis['kind'] | null {
+    explicitBasis: StrategyRuleBasis['kind'] | null,
+  ): StrategyRuleBasis['kind'] | null {
     if (explicitBasis) return explicitBasis
     if (!ruleText?.trim()) return null
     return resolveDefaultRiskBasis(ruleText, null)
@@ -5586,7 +5184,7 @@ export class CodegenConversationService {
   }
 
   private describeRiskSummary(
-    basis: ChecklistRuleBasis['kind'] | null,
+    basis: StrategyRuleBasis['kind'] | null,
     label: '止损' | '止盈',
     pct: number,
   ): string {
@@ -5609,7 +5207,7 @@ export class CodegenConversationService {
     return `${label}：价格相对${basisLabel}${direction} ${pct}% ${action}`
   }
 
-  private describeRiskBasisLabel(basis: ChecklistRuleBasis['kind'] | null): string {
+  private describeRiskBasisLabel(basis: StrategyRuleBasis['kind'] | null): string {
     switch (basis) {
       case 'prev_close':
         return '上一根K线收盘价'
@@ -5650,7 +5248,7 @@ export class CodegenConversationService {
   }
 
   private async generateScript(
-    checklist: ChecklistPayload,
+    constraintPayload: CanonicalStrategySpec | Record<string, unknown>,
     userMessage: string,
     options?: GenerationOptions,
   ): Promise<string> {
@@ -5662,7 +5260,7 @@ export class CodegenConversationService {
       },
       {
         role: 'user',
-        content: `需求: ${userMessage}\n约束: ${JSON.stringify(checklist)}`,
+        content: `需求: ${userMessage}\n约束: ${JSON.stringify(constraintPayload)}`,
       },
     ]
 
@@ -5868,7 +5466,6 @@ export class CodegenConversationService {
     currentSemanticState: SemanticState,
     options?: { providerCode?: string, model?: string },
     history: string[] = [],
-    compatibilityChecklist: ChecklistPayload = {},
   ): Promise<ConversationPlan> {
     const text = message.trim()
     if (!text) {
@@ -5895,7 +5492,6 @@ export class CodegenConversationService {
             content: JSON.stringify({
               message: text,
               currentSemanticState,
-              compatibilityChecklist,
               history: history.slice(-MAX_PLANNER_HISTORY_LINES),
             }),
           },
@@ -5904,11 +5500,13 @@ export class CodegenConversationService {
 
       const content = result.content?.trim() ?? ''
       if (!content) {
+        const semanticPatch = this.extractSemanticPatchFromMessage(text)
         this.logPlannerFallback('empty_content')
         return {
           related: true,
           logicReady: false,
           assistantPrompt: '我先理解到你的交易想法了。请补充入场和出场触发条件，我再整理成逻辑图。',
+          ...(semanticPatch ? { semanticPatch } : {}),
         } satisfies ConversationPlan
       }
 
@@ -5929,24 +5527,20 @@ export class CodegenConversationService {
               ? '我已整理出策略逻辑，请确认逻辑图。'
               : '我先继续完善策略逻辑，请补充一个关键条件。')
         const semanticPatch = this.normalizeSemanticPatch(parsed.semanticPatch ?? parsed.semanticUpdates)
-        const logic = this.mergeChecklistSnapshots(
-          this.buildPlannerLogicFromSemanticUpdates(compatibilityChecklist, semanticPatch),
-          this.normalizeChecklist((parsed.logic ?? {}) as Record<string, unknown>),
-        )
         return {
           related,
           logicReady,
           assistantPrompt,
-          logic,
           ...(semanticPatch ? { semanticPatch } : {}),
         } satisfies ConversationPlan
       } catch {
+        const semanticPatch = this.extractSemanticPatchFromMessage(text)
         this.logPlannerFallback('invalid_json', { contentLength: content.length })
         return {
           related: true,
           logicReady: false,
           assistantPrompt: '我先继续完善策略逻辑，请补充入场和出场条件。',
-          logic: this.inferChecklistFromMessage(text),
+          ...(semanticPatch ? { semanticPatch } : {}),
         } satisfies ConversationPlan
       }
     }
@@ -5957,12 +5551,13 @@ export class CodegenConversationService {
       const messageText = error instanceof Error ? error.message : String(error)
       const nonRetryableModelError = /model\s+not\s+exist|model.*not.*found/i.test(messageText)
       if (nonRetryableModelError) {
+        const semanticPatch = this.extractSemanticPatchFromMessage(text)
         this.logPlannerFallback('model_not_found', { error: this.summarizePlannerError(error) })
         return {
           related: true,
           logicReady: false,
           assistantPrompt: '我先继续完善策略逻辑，请补充入场和出场条件。',
-          logic: this.inferChecklistFromMessage(text),
+          ...(semanticPatch ? { semanticPatch } : {}),
         }
       }
       this.logPlannerFallback('transport_failure_retrying', {
@@ -5971,6 +5566,7 @@ export class CodegenConversationService {
       try {
         return await classifyOnce()
       } catch (retryError) {
+        const semanticPatch = this.extractSemanticPatchFromMessage(text)
         this.logPlannerFallback('transport_failure_retry_exhausted', {
           error: this.summarizePlannerError(retryError),
         })
@@ -5978,29 +5574,23 @@ export class CodegenConversationService {
           related: true,
           logicReady: false,
           assistantPrompt: '我先继续完善策略逻辑，请补充入场和出场条件。',
-          logic: this.inferChecklistFromMessage(text),
+          ...(semanticPatch ? { semanticPatch } : {}),
         }
       }
     }
   }
 
-  private buildPlannerLogicFromSemanticUpdates(
-    currentLogic: ChecklistPayload,
-    semanticPatch: unknown,
-  ): ChecklistPayload {
-    const semanticState = this.buildSemanticStateFromPlannerPatch(semanticPatch)
-    if (!semanticState) {
-      return {}
-    }
-
-    return this.projectLegacyChecklistFromSemanticState(semanticState, currentLogic)
+  private extractSemanticPatchFromMessage(message?: string): CodegenSemanticPatch | undefined {
+    const patch = this.semanticSeedExtractor.extract(message)
+    return patch.contextSlots || patch.triggers || patch.actions || patch.risk || patch.position
+      ? patch
+      : undefined
   }
 
   private readPlannerPayload(value: unknown): {
     related?: unknown
     logicReady?: unknown
     assistantPrompt?: unknown
-    logic?: unknown
     semanticPatch?: unknown
     semanticUpdates?: unknown
   } {
@@ -6012,7 +5602,6 @@ export class CodegenConversationService {
       related?: unknown
       logicReady?: unknown
       assistantPrompt?: unknown
-      logic?: unknown
       semanticPatch?: unknown
       semanticUpdates?: unknown
     }
@@ -6024,7 +5613,6 @@ export class CodegenConversationService {
       related?: unknown
       logicReady?: unknown
       assistantPrompt?: unknown
-      logic?: unknown
       semanticPatch?: unknown
       semanticUpdates?: unknown
     },
@@ -6043,9 +5631,6 @@ export class CodegenConversationService {
     }
     if (parsed.assistantPrompt === undefined || typeof parsed.assistantPrompt !== 'string') {
       reasons.push('assistantPrompt')
-    }
-    if (parsed.logic !== undefined && (!parsed.logic || typeof parsed.logic !== 'object' || Array.isArray(parsed.logic))) {
-      reasons.push('logic')
     }
     if (
       parsed.semanticPatch !== undefined
@@ -6306,7 +5891,7 @@ export class CodegenConversationService {
     return params
   }
 
-  private mergeChecklistSnapshots(base: ChecklistPayload, patch: ChecklistPayload): ChecklistPayload {
+  private mergeStrategyLogicSnapshotInputs(base: StrategyLogicSnapshot, patch: StrategyLogicSnapshot): StrategyLogicSnapshot {
     const mergedEntryRuleBases = {
       ...(base.entryRuleBases ?? {}),
       ...(patch.entryRuleBases ?? {}),
@@ -6354,7 +5939,7 @@ export class CodegenConversationService {
         return Object.keys(mergedGrid).length > 0 ? mergedGrid : undefined
       })(),
     }
-    return this.normalizeChecklist(merged)
+    return this.normalizeLogicSnapshot(merged)
   }
 
   private mergeRuleArrays(
@@ -6366,9 +5951,9 @@ export class CodegenConversationService {
       return baseRules
     }
 
-    const patchHasSpecificRule = patchRules.some(rule => !this.isGenericChecklistPlaceholderRule(rule, phase))
+    const patchHasSpecificRule = patchRules.some(rule => !this.isGenericLogicPlaceholderRule(rule, phase))
     const merged = patchHasSpecificRule
-      ? [...(baseRules ?? []).filter(rule => !this.isGenericChecklistPlaceholderRule(rule, phase))]
+      ? [...(baseRules ?? []).filter(rule => !this.isGenericLogicPlaceholderRule(rule, phase))]
       : [...(baseRules ?? [])]
 
     const signatureGroups = new Map<string, string[]>()
@@ -6376,8 +5961,8 @@ export class CodegenConversationService {
 
     for (const patchRule of patchRules) {
       if (
-        this.isGenericChecklistPlaceholderRule(patchRule, phase)
-        && merged.some(rule => !this.isGenericChecklistPlaceholderRule(rule, phase))
+        this.isGenericLogicPlaceholderRule(patchRule, phase)
+        && merged.some(rule => !this.isGenericLogicPlaceholderRule(rule, phase))
       ) {
         continue
       }
@@ -6432,7 +6017,7 @@ export class CodegenConversationService {
     return merged.length > 0 ? merged : undefined
   }
 
-  private isGenericChecklistPlaceholderRule(
+  private isGenericLogicPlaceholderRule(
     rule: string,
     phase: 'entry' | 'exit',
   ): boolean {
@@ -6448,13 +6033,13 @@ export class CodegenConversationService {
         || text === '触发止盈/止损阈值出场'
   }
 
-  private hasUnresolvedGenericCompileabilityGap(checklist: ChecklistPayload): boolean {
+  private hasUnresolvedGenericCompileabilityGap(checklist: StrategyLogicSnapshot): boolean {
     const entryRules = checklist.entryRules ?? []
     const exitRules = checklist.exitRules ?? []
-    const entryHasGenericOnly = entryRules.some(rule => this.isGenericChecklistPlaceholderRule(rule, 'entry'))
-      && !entryRules.some(rule => !this.isGenericChecklistPlaceholderRule(rule, 'entry'))
-    const exitHasGenericOnly = exitRules.some(rule => this.isGenericChecklistPlaceholderRule(rule, 'exit'))
-      && !exitRules.some(rule => !this.isGenericChecklistPlaceholderRule(rule, 'exit'))
+    const entryHasGenericOnly = entryRules.some(rule => this.isGenericLogicPlaceholderRule(rule, 'entry'))
+      && !entryRules.some(rule => !this.isGenericLogicPlaceholderRule(rule, 'entry'))
+    const exitHasGenericOnly = exitRules.some(rule => this.isGenericLogicPlaceholderRule(rule, 'exit'))
+      && !exitRules.some(rule => !this.isGenericLogicPlaceholderRule(rule, 'exit'))
 
     return entryHasGenericOnly || exitHasGenericOnly
   }
@@ -6521,7 +6106,7 @@ export class CodegenConversationService {
     return null
   }
 
-  private collectMarketScopeConflicts(base: ChecklistPayload, patch: ChecklistPayload): Array<{
+  private collectMarketScopeConflicts(base: StrategyLogicSnapshot, patch: StrategyLogicSnapshot): Array<{
     field: 'exchange' | 'marketType' | 'symbol' | 'timeframe'
     previous: string
     next: string
@@ -6579,7 +6164,7 @@ export class CodegenConversationService {
 
   private inferRecommendationStyleFromContext(
     message: string | undefined,
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     currentStyle?: RecommendationStyle,
   ): RecommendationStyle | undefined {
     return conversationContextHelper.inferRecommendationStyleFromContext(message, checklist, currentStyle)

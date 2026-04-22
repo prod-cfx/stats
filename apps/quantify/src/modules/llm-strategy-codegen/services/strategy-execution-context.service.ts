@@ -1,17 +1,17 @@
-import type { ChecklistPayload } from '../types/checklist-compat'
+import type { StrategyLogicSnapshot } from '../types/strategy-logic-snapshot'
 import type { StrategyExecutionContext, StrategyExecutionContextResolution } from '../types/strategy-execution-context'
 import { Injectable } from '@nestjs/common'
-import { resolveChecklistDefaultTimeframe } from './checklist-compat'
+import { resolveStrategyDefaultTimeframe } from './rule-draft-projection'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 
 @Injectable()
 export class StrategyExecutionContextService {
-  resolve(checklist: ChecklistPayload): StrategyExecutionContextResolution {
+  resolve(checklist: StrategyLogicSnapshot): StrategyExecutionContextResolution {
     const context: StrategyExecutionContext = {
       exchange: this.readExchange(checklist),
       symbol: this.readPrimaryValue(checklist.symbols),
       marketType: this.readMarketType(checklist),
-      timeframe: resolveChecklistDefaultTimeframe(checklist),
+      timeframe: resolveStrategyDefaultTimeframe(checklist),
     }
 
     const timeframeOptional = !context.timeframe && this.looksTimeframeOptional(checklist)
@@ -78,7 +78,7 @@ export class StrategyExecutionContextService {
     return canonicalizeStrategySymbolInput(raw)
   }
 
-  private readExchange(checklist: ChecklistPayload): StrategyExecutionContext['exchange'] {
+  private readExchange(checklist: StrategyLogicSnapshot): StrategyExecutionContext['exchange'] {
     const raw = typeof checklist.market?.exchange === 'string'
       ? checklist.market.exchange
       : checklist.riskRules?.exchange
@@ -92,7 +92,7 @@ export class StrategyExecutionContextService {
     return null
   }
 
-  private readMarketType(checklist: ChecklistPayload): StrategyExecutionContext['marketType'] {
+  private readMarketType(checklist: StrategyLogicSnapshot): StrategyExecutionContext['marketType'] {
     const raw = typeof checklist.market?.marketType === 'string'
       ? checklist.market.marketType
       : checklist.riskRules?.marketType
@@ -106,7 +106,7 @@ export class StrategyExecutionContextService {
     return null
   }
 
-  private looksTimeframeOptional(checklist: ChecklistPayload): boolean {
+  private looksTimeframeOptional(checklist: StrategyLogicSnapshot): boolean {
     const texts = [
       ...(checklist.entryRules ?? []),
       ...(checklist.exitRules ?? []),

@@ -1,4 +1,4 @@
-export interface ChecklistRuleBasis {
+export interface StrategyRuleBasis {
   kind:
     | 'prev_close'
     | 'entry_avg_price'
@@ -12,25 +12,25 @@ export interface ChecklistRuleBasis {
     | 'last_low'
 }
 
-export interface ChecklistRuleDraft {
+export interface StrategyRuleDraft {
   id: string
   phase: 'entry' | 'exit' | 'risk'
   text: string
   timeframe: string | null
-  basis?: ChecklistRuleBasis['kind'] | null
+  basis?: StrategyRuleBasis['kind'] | null
 }
 
-export interface ChecklistPayload {
+export interface StrategyLogicSnapshot {
   symbols?: string[]
   timeframes?: string[]
   entryRules?: string[]
   exitRules?: string[]
   riskRules?: Record<string, unknown>
-  entryRuleBases?: Record<string, ChecklistRuleBasis['kind']>
-  exitRuleBases?: Record<string, ChecklistRuleBasis['kind']>
-  entryRuleDrafts?: ChecklistRuleDraft[]
-  exitRuleDrafts?: ChecklistRuleDraft[]
-  riskRuleDrafts?: ChecklistRuleDraft[]
+  entryRuleBases?: Record<string, StrategyRuleBasis['kind']>
+  exitRuleBases?: Record<string, StrategyRuleBasis['kind']>
+  entryRuleDrafts?: StrategyRuleDraft[]
+  exitRuleDrafts?: StrategyRuleDraft[]
+  riskRuleDrafts?: StrategyRuleDraft[]
   market?: {
     exchange?: 'binance' | 'okx' | 'hyperliquid'
     marketType?: 'spot' | 'perp'

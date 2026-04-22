@@ -1,7 +1,7 @@
-import type { ChecklistPayload, ChecklistRuleBasis } from '../types/checklist-compat'
+import type { StrategyLogicSnapshot, StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { SemanticStrategyGraph } from '../types/semantic-strategy-graph'
 import { Injectable } from '@nestjs/common'
-import { buildChecklistRuleDrafts, resolveChecklistDefaultTimeframe, resolveRulePhaseDefaultTimeframe } from './checklist-compat'
+import { buildStrategyRuleDrafts, resolveStrategyDefaultTimeframe, resolveRulePhaseDefaultTimeframe } from './rule-draft-projection'
 
 export interface SemanticGraphBuildResult {
   graph: SemanticStrategyGraph | null
@@ -11,8 +11,8 @@ export interface SemanticGraphBuildResult {
 
 @Injectable()
 export class SemanticGraphBuilderService {
-  build(checklist: ChecklistPayload): SemanticGraphBuildResult {
-    const drafts = buildChecklistRuleDrafts(checklist)
+  build(checklist: StrategyLogicSnapshot): SemanticGraphBuildResult {
+    const drafts = buildStrategyRuleDrafts(checklist)
     const entryRules = this.normalizeRules(checklist.entryRules)
     const exitRules = this.normalizeRules(checklist.exitRules)
     const riskText = this.stringifyRiskRules(checklist.riskRules)
@@ -119,11 +119,11 @@ export class SemanticGraphBuilderService {
   }
 
   private resolvePrimaryTimeframe(
-    checklist: ChecklistPayload,
-    drafts: ReturnType<typeof buildChecklistRuleDrafts>,
+    checklist: StrategyLogicSnapshot,
+    drafts: ReturnType<typeof buildStrategyRuleDrafts>,
     hints: string[],
   ): string {
-    const defaultTimeframe = resolveChecklistDefaultTimeframe(checklist)
+    const defaultTimeframe = resolveStrategyDefaultTimeframe(checklist)
     if (defaultTimeframe) {
       return defaultTimeframe
     }
@@ -174,8 +174,8 @@ export class SemanticGraphBuilderService {
 
   private appendDropBuyNodes(
     entryRules: string[],
-    entryDrafts: ChecklistPayload['entryRuleDrafts'] | undefined,
-    entryRuleBases: ChecklistPayload['entryRuleBases'],
+    entryDrafts: StrategyLogicSnapshot['entryRuleDrafts'] | undefined,
+    entryRuleBases: StrategyLogicSnapshot['entryRuleBases'],
     fallbackTimeframe: string,
     nodes: Array<SemanticStrategyGraph['nodes'][number]>,
     entryNodeIds: string[],
@@ -216,8 +216,8 @@ export class SemanticGraphBuilderService {
 
   private appendRiseSellNodes(
     exitRules: string[],
-    exitDrafts: ChecklistPayload['exitRuleDrafts'] | undefined,
-    exitRuleBases: ChecklistPayload['exitRuleBases'],
+    exitDrafts: StrategyLogicSnapshot['exitRuleDrafts'] | undefined,
+    exitRuleBases: StrategyLogicSnapshot['exitRuleBases'],
     fallbackTimeframe: string,
     nodes: Array<SemanticStrategyGraph['nodes'][number]>,
   ): boolean {
@@ -254,8 +254,8 @@ export class SemanticGraphBuilderService {
 
   private appendPositionPnlNodes(
     exitRules: string[],
-    exitDrafts: ChecklistPayload['exitRuleDrafts'] | undefined,
-    exitRuleBases: ChecklistPayload['exitRuleBases'],
+    exitDrafts: StrategyLogicSnapshot['exitRuleDrafts'] | undefined,
+    exitRuleBases: StrategyLogicSnapshot['exitRuleBases'],
     fallbackTimeframe: string,
     nodes: Array<SemanticStrategyGraph['nodes'][number]>,
   ): boolean {
@@ -289,9 +289,9 @@ export class SemanticGraphBuilderService {
   }
 
   private readBasis(
-    bases: ChecklistPayload['entryRuleBases'] | ChecklistPayload['exitRuleBases'] | undefined,
+    bases: StrategyLogicSnapshot['entryRuleBases'] | StrategyLogicSnapshot['exitRuleBases'] | undefined,
     key: string,
-  ): ChecklistRuleBasis['kind'] | null {
+  ): StrategyRuleBasis['kind'] | null {
     const value = bases?.[key]
     return typeof value === 'string' && value.trim().length > 0 ? value : null
   }
@@ -299,8 +299,8 @@ export class SemanticGraphBuilderService {
   private appendGridNodes(
     entryRules: string[],
     exitRules: string[],
-    entryDrafts: ChecklistPayload['entryRuleDrafts'] | undefined,
-    exitDrafts: ChecklistPayload['exitRuleDrafts'] | undefined,
+    entryDrafts: StrategyLogicSnapshot['entryRuleDrafts'] | undefined,
+    exitDrafts: StrategyLogicSnapshot['exitRuleDrafts'] | undefined,
     entryDefaultTimeframe: string,
     exitDefaultTimeframe: string,
     nodes: Array<SemanticStrategyGraph['nodes'][number]>,

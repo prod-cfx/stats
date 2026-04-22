@@ -1,9 +1,9 @@
-import type { ChecklistPayload, ChecklistRuleBasis, ChecklistRuleDraft } from '../types/checklist-compat'
+import type { StrategyLogicSnapshot, StrategyRuleBasis, StrategyRuleDraft } from '../types/strategy-logic-snapshot'
 
-export interface ChecklistRuleDraftCollection {
-  entry: ChecklistRuleDraft[]
-  exit: ChecklistRuleDraft[]
-  risk: ChecklistRuleDraft[]
+export interface StrategyRuleDraftCollection {
+  entry: StrategyRuleDraft[]
+  exit: StrategyRuleDraft[]
+  risk: StrategyRuleDraft[]
 }
 
 function normalizeTimeframe(raw: string | null | undefined): string | null {
@@ -13,15 +13,15 @@ function normalizeTimeframe(raw: string | null | undefined): string | null {
 }
 
 function normalizeDraft(
-  draft: ChecklistRuleDraft,
+  draft: StrategyRuleDraft,
   fallback: {
     id: string
-    phase: ChecklistRuleDraft['phase']
+    phase: StrategyRuleDraft['phase']
     text: string
     timeframe: string | null
-    basis: ChecklistRuleBasis['kind'] | null
+    basis: StrategyRuleBasis['kind'] | null
   },
-): ChecklistRuleDraft {
+): StrategyRuleDraft {
   const text = typeof draft.text === 'string' && draft.text.trim().length > 0
     ? draft.text.trim()
     : fallback.text
@@ -51,7 +51,7 @@ export function extractRuleTimeframe(text: string): string | null {
   return `${value}d`
 }
 
-export function resolveChecklistDefaultTimeframe(checklist: ChecklistPayload): string | null {
+export function resolveStrategyDefaultTimeframe(checklist: StrategyLogicSnapshot): string | null {
   return normalizeTimeframe(checklist.market?.defaultTimeframe)
     ?? normalizeTimeframe(checklist.entryRuleDrafts?.[0]?.timeframe)
     ?? (Array.isArray(checklist.entryRules)
@@ -61,8 +61,8 @@ export function resolveChecklistDefaultTimeframe(checklist: ChecklistPayload): s
     ?? normalizeTimeframe(checklist.exitRuleDrafts?.[0]?.timeframe)
 }
 
-export function buildChecklistRuleDrafts(checklist: ChecklistPayload): ChecklistRuleDraftCollection {
-  const defaultTimeframe = resolveChecklistDefaultTimeframe(checklist)
+export function buildStrategyRuleDrafts(checklist: StrategyLogicSnapshot): StrategyRuleDraftCollection {
+  const defaultTimeframe = resolveStrategyDefaultTimeframe(checklist)
   const timeframes = (checklist.timeframes ?? [])
     .map(item => normalizeTimeframe(item))
     .filter((item): item is string => item !== null)
@@ -70,10 +70,10 @@ export function buildChecklistRuleDrafts(checklist: ChecklistPayload): Checklist
   const buildDrafts = (input: {
     phase: 'entry' | 'exit' | 'risk'
     rules?: string[]
-    drafts?: ChecklistRuleDraft[]
-    bases?: Record<string, ChecklistRuleBasis['kind']>
+    drafts?: StrategyRuleDraft[]
+    bases?: Record<string, StrategyRuleBasis['kind']>
     fallbackTimeframe: (index: number) => string | null
-  }): ChecklistRuleDraft[] => {
+  }): StrategyRuleDraft[] => {
     const rules = (input.rules ?? [])
       .map(rule => rule.trim())
       .filter(Boolean)
@@ -125,7 +125,7 @@ export function buildChecklistRuleDrafts(checklist: ChecklistPayload): Checklist
 }
 
 export function resolveRulePhaseDefaultTimeframe(
-  drafts: ChecklistRuleDraft[],
+  drafts: StrategyRuleDraft[],
   fallbackTimeframe: string | null,
 ): string | null {
   for (const draft of drafts) {
@@ -138,7 +138,7 @@ export function resolveRulePhaseDefaultTimeframe(
 }
 
 export function resolveRequiredRuleTimeframes(
-  drafts: ChecklistRuleDraftCollection,
+  drafts: StrategyRuleDraftCollection,
   fallbackTimeframe: string | null,
 ): string[] {
   const ordered = new Set<string>()

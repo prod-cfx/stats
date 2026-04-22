@@ -1,4 +1,5 @@
 import type { INestApplication } from '@nestjs/common'
+import type { Response } from 'supertest'
 import { ValidationPipe } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
 import { EventEmitterModule } from '@nestjs/event-emitter'
@@ -45,24 +46,88 @@ const PLANNER_READY_JSON = JSON.stringify({
   related: true,
   logicReady: true,
   assistantPrompt: '逻辑已完整，请确认后生成代码。',
-  logic: {
-    entryRules: ['价格突破阻力位入场'],
-    exitRules: ['跌破支撑位出场'],
-    symbols: ['BTCUSDT'],
-    timeframes: ['1h'],
-    riskRules: {
+  semanticPatch: {
+    families: ['single-leg'],
+    triggers: [
+      {
+        key: 'price.percent_change',
+        phase: 'entry',
+        params: { valuePct: -1, window: '3m', basis: 'prev_close' },
+      },
+      {
+        key: 'price.percent_change',
+        phase: 'exit',
+        params: { valuePct: 2, window: '15m', basis: 'prev_close' },
+      },
+    ],
+    actions: [{ key: 'open_long' }, { key: 'close_long' }],
+    risk: [
+      { key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
+      { key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' } },
+    ],
+    position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_only' },
+    contextSlots: {
       exchange: 'okx',
       marketType: 'spot',
-      positionPct: 10,
-      stopLossPct: 5,
-      stopLossBasis: 'entry_avg_price',
-      takeProfitPct: 10,
-      takeProfitBasis: 'entry_avg_price',
+      symbol: 'BTCUSDT',
+      timeframe: '1h',
     },
   },
 })
 
 const VALID_STRATEGY_SCRIPT = 'return { direction: "BUY", signalType: "ENTRY", confidence: 75, entryPrice: 62000, stopLoss: 61000, takeProfit: 64000, reasoning: "breakout", positionSizeRatio: 0.1 }'
+const ENGINE_TEST_CANONICAL_SPEC = {
+  version: 2,
+  market: {
+    exchange: 'okx',
+    symbol: 'BTCUSDT',
+    marketType: 'perp',
+    defaultTimeframe: '1h',
+  },
+  indicators: [
+    { kind: 'rsi', params: { period: 14 } },
+    { kind: 'atr', params: { period: 14 } },
+  ],
+  sizing: {
+    mode: 'RATIO',
+    value: 0.1,
+  },
+  executionPolicy: {
+    signalTiming: 'BAR_CLOSE',
+    fillTiming: 'NEXT_BAR_OPEN',
+  },
+  dataRequirements: {
+    requiredTimeframes: ['1h'],
+  },
+  rules: [
+    {
+      id: 'entry-rsi',
+      phase: 'entry',
+      sideScope: 'long',
+      priority: 100,
+      condition: {
+        kind: 'atom',
+        key: 'rsi.value',
+        semanticScope: 'market',
+        op: 'LTE',
+        value: 30,
+      },
+      actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.1 } }],
+    },
+    {
+      id: 'exit-atr',
+      phase: 'exit',
+      sideScope: 'long',
+      priority: 90,
+      condition: {
+        kind: 'atom',
+        key: 'atr.trailing_stop',
+        semanticScope: 'position',
+      },
+      actions: [{ type: 'CLOSE_LONG' }],
+    },
+  ],
+}
 
 describe('llm strategy codegen (E2E)', () => {
   let app: INestApplication
@@ -139,20 +204,7 @@ describe('llm strategy codegen (E2E)', () => {
 
     const startRes = await supertestRequest(server).post(buildApiUrl('llm-strategy-codegen/sessions')).send({
       userId: 'u-e2e-1',
-      initialMessage: '价格突破阻力位入场，跌破支撑位出场',
-      symbols: ['BTCUSDT'],
-      timeframes: ['1h'],
-      entryRules: ['价格突破阻力位入场'],
-      exitRules: ['跌破支撑位出场'],
-      riskRules: {
-        exchange: 'okx',
-        marketType: 'spot',
-        positionPct: 10,
-        stopLossPct: 5,
-        stopLossBasis: 'entry_avg_price',
-        takeProfitPct: 10,
-        takeProfitBasis: 'entry_avg_price',
-      },
+      initialMessage: '3分钟跌1%买入，15分钟涨2%卖出',
     }).set(withBearer('u-e2e-1')).expect(201)
 
     const startPayload = startRes.body.data ?? startRes.body
@@ -197,11 +249,7 @@ describe('llm strategy codegen (E2E)', () => {
       .send({
         userId: 'u-e2e-4',
         message: '请测试引擎生成策略脚本',
-        symbols: ['BTCUSDT'],
-        timeframes: ['1h'],
-        entryRules: ['rsi < 30'],
-        exitRules: ['atr stop'],
-        riskRules: { maxPositionPct: 0.1 },
+        canonicalSpec: ENGINE_TEST_CANONICAL_SPEC,
         providerCode: 'uniapi',
         model: 'gpt-4.1-mini',
         temperature: 0.1,
@@ -222,7 +270,7 @@ describe('llm strategy codegen (E2E)', () => {
     }))
   })
 
-  it('rejects engine test when required checklist fields are missing', async () => {
+  it('rejects engine test when semantic input is missing', async () => {
     const server = app.getHttpServer()
     await supertestRequest(server).post(buildApiUrl('llm-strategy-codegen/engine/test'))
       .set('x-engine-test-token', TEST_ENGINE_SECRET)
@@ -231,6 +279,30 @@ describe('llm strategy codegen (E2E)', () => {
         userId: 'u-e2e-5',
         message: '测试',
       }).expect(400)
+      .expect((res: Response) => {
+        const errorArgs = res.body?.error?.args ?? res.body?.args
+        expect(errorArgs).toMatchObject({ missingFields: ['semanticState'] })
+      })
+  })
+
+  it('rejects engine test when only legacy checklist body is sent', async () => {
+    const server = app.getHttpServer()
+    await supertestRequest(server).post(buildApiUrl('llm-strategy-codegen/engine/test'))
+      .set('x-engine-test-token', TEST_ENGINE_SECRET)
+      .set('x-user-id', 'u-e2e-legacy')
+      .send({
+        userId: 'u-e2e-legacy',
+        message: '测试',
+        symbols: ['BTCUSDT'],
+        timeframes: ['1h'],
+        entryRules: ['rsi < 30'],
+        exitRules: ['atr stop'],
+        riskRules: { maxPositionPct: 0.1 },
+      }).expect(400)
+      .expect((res: Response) => {
+        const errorArgs = res.body?.error?.args ?? res.body?.args
+        expect(errorArgs).toMatchObject({ missingFields: ['semanticState'] })
+      })
   })
 
   it('rejects engine test when caller identity header is missing', async () => {
@@ -240,11 +312,7 @@ describe('llm strategy codegen (E2E)', () => {
       .send({
         userId: 'u-e2e-6',
         message: '测试',
-        symbols: ['BTCUSDT'],
-        timeframes: ['1h'],
-        entryRules: ['rsi < 30'],
-        exitRules: ['atr stop'],
-        riskRules: { maxPositionPct: 0.1 },
+        canonicalSpec: ENGINE_TEST_CANONICAL_SPEC,
       }).expect(401)
   })
 
@@ -256,11 +324,7 @@ describe('llm strategy codegen (E2E)', () => {
       .send({
         userId: 'u-e2e-8',
         message: '测试',
-        symbols: ['BTCUSDT'],
-        timeframes: ['1h'],
-        entryRules: ['rsi < 30'],
-        exitRules: ['atr stop'],
-        riskRules: { maxPositionPct: 0.1 },
+        canonicalSpec: ENGINE_TEST_CANONICAL_SPEC,
       }).expect(403)
   })
 })

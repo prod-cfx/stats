@@ -35,7 +35,7 @@ export class SemanticGraphValidatorService {
       if (input.diagnostics.length > 0) {
         errors.push({
           code: 'codegen.semantic_graph_incomplete',
-          message: `unmapped checklist fields: ${input.diagnostics.join(',')}`,
+          message: `unmapped logic fields: ${input.diagnostics.join(',')}`,
         })
       }
       return {
@@ -76,7 +76,7 @@ export class SemanticGraphValidatorService {
     if (input.diagnostics.length > 0) {
       errors.push({
         code: 'codegen.semantic_graph_incomplete',
-        message: `unmapped checklist fields: ${input.diagnostics.join(',')}`,
+        message: `unmapped logic fields: ${input.diagnostics.join(',')}`,
       })
     }
 

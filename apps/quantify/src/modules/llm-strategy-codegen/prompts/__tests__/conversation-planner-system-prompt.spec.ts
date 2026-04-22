@@ -10,7 +10,7 @@ describe('conversationPlannerSystemPrompt', () => {
     expect(prompt).not.toContain('entryRules')
     expect(prompt).not.toContain('exitRules')
     expect(prompt).not.toContain('riskRules')
-    expect(prompt).not.toContain('ChecklistPayload')
+    expect(prompt).not.toContain('StrategyLogicSnapshot')
   })
 
   it('forbids planner prompt from rewriting locked semantics', () => {

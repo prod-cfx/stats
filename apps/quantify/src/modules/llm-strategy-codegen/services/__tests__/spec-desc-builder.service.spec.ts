@@ -8,20 +8,20 @@ describe('specDescBuilderService', () => {
   const digestService = new CanonicalSpecV2DigestService()
 
   it('builds rule-based specDesc summary', () => {
-    const checklist = {
+    const canonicalSpec = canonicalSpecBuilder.build({
       symbols: ['BTCUSDT'],
       timeframes: ['15m'],
       entryRules: ['突破布林带上轨做空', '突破布林带下轨做多'],
       exitRules: ['价格回到布林带中轨平仓'],
       riskRules: { earlyStop: '价格连续3根K线在轨外时提前全平' },
-    }
-    const specDesc = service.build(
-      checklist,
+    })
+    const specDesc = service.buildFromCanonicalSpec(
+      canonicalSpec,
       'const upper = 1; const lower = 2; return upper > lower',
     )
 
     const confirmation = specDesc.confirmation as { required?: unknown, digest?: unknown }
-    const expectedDigest = digestService.hash(canonicalSpecBuilder.build(checklist))
+    const expectedDigest = digestService.hash(canonicalSpec)
 
     expect(specDesc.viewType).toBe('canonical-semantic-view.v1')
     expect(specDesc.version).toBe(2)

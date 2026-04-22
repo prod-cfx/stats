@@ -24,6 +24,7 @@ import { CompiledScriptParserService } from './services/compiled-script-parser.s
 import { RecommendationIndexService } from './services/recommendation-index.service'
 import { RuntimeGuardrailService } from './services/runtime-guardrail.service'
 import { ScriptProfileExtractorService } from './services/script-profile-extractor.service'
+import { SemanticSeedExtractorService } from './services/semantic-seed-extractor.service'
 import { SemanticStateProjectionService } from './services/semantic-state-projection.service'
 import { SemanticStateMergeService } from './services/semantic-state-merge.service'
 import { SemanticStateReducerService } from './services/semantic-state-reducer.service'
@@ -50,6 +51,7 @@ import { StrategySummaryObservationService } from './services/strategy-summary-o
     PublishedStrategySnapshotsRepository,
     StaticGuardrailService,
     RuntimeGuardrailService,
+    SemanticSeedExtractorService,
     SemanticStateMergeService,
     SemanticStateReducerService,
     SemanticStateProjectionService,

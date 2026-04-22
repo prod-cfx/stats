@@ -1,4 +1,4 @@
-import type { ChecklistPayload } from '../types/checklist-compat'
+import type { StrategyLogicSnapshot } from '../types/strategy-logic-snapshot'
 import type {
   NormalizedActionAtom,
   NormalizedGridIntent,
@@ -18,7 +18,7 @@ interface NormalizeResult {
 
 @Injectable()
 export class StrategyIntentNormalizerService {
-  normalize(checklist: ChecklistPayload): NormalizeResult {
+  normalize(checklist: StrategyLogicSnapshot): NormalizeResult {
     const entryNormalization = this.normalizeRuleAtoms(checklist.entryRules, checklist.entryRuleBases, 'entry')
     const exitNormalization = this.normalizeRuleAtoms(checklist.exitRules, checklist.exitRuleBases, 'exit')
     const stateHints = this.normalizeStateHints(checklist)
@@ -193,7 +193,7 @@ export class StrategyIntentNormalizerService {
     })
   }
 
-  private normalizeStateHints(checklist: ChecklistPayload): StrategyNormalizedIntent['stateHints'] {
+  private normalizeStateHints(checklist: StrategyLogicSnapshot): StrategyNormalizedIntent['stateHints'] {
     const stateGates = checklist.stateGates
     if (!stateGates) return []
 
@@ -573,7 +573,7 @@ export class StrategyIntentNormalizerService {
     return null
   }
 
-  private normalizeGrid(checklist: ChecklistPayload): NormalizedGridIntent | null {
+  private normalizeGrid(checklist: StrategyLogicSnapshot): NormalizedGridIntent | null {
     const explicitGrid = checklist.grid
     if (
       explicitGrid
@@ -623,7 +623,7 @@ export class StrategyIntentNormalizerService {
   }
 
   private buildGridTriggerAtoms(
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     grid: NormalizedGridIntent | null,
   ): NormalizedTriggerAtom[] {
     const combinedText = [...(checklist.entryRules ?? []), ...(checklist.exitRules ?? [])].join(' ')

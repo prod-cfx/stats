@@ -194,8 +194,8 @@ export function buildCodegenReplyContent(args: {
   publishedReply: string
   graphGeneratedMessage: string
   graphReviseMessage: string
-  checklistContinuedMessage: string
-  checklistUpdatedMessage: string
+  logicContinuedMessage: string
+  logicUpdatedMessage: string
   stillGeneratingPrefix: string
   rejectedPrefix: string
   rejectedWithoutReason: string
@@ -206,8 +206,8 @@ export function buildCodegenReplyContent(args: {
     publishedReply,
     graphGeneratedMessage,
     graphReviseMessage,
-    checklistContinuedMessage,
-    checklistUpdatedMessage,
+    logicContinuedMessage,
+    logicUpdatedMessage,
     stillGeneratingPrefix,
     rejectedPrefix,
     rejectedWithoutReason,
@@ -233,7 +233,7 @@ export function buildCodegenReplyContent(args: {
     return publishedReply
   }
   if (response.status === 'CONFIRM_GATE') {
-    return confirmGenerate ? checklistContinuedMessage : checklistUpdatedMessage
+    return confirmGenerate ? logicContinuedMessage : logicUpdatedMessage
   }
   if (isCodegenProcessingStatus(response.status)) {
     return `${stillGeneratingPrefix}（${response.status}）`
@@ -538,11 +538,11 @@ export function applyCodegenResponseToConversationState(args: {
     publishedReply,
     graphGeneratedMessage: t('aiQuant.messages.graphGenerated'),
     graphReviseMessage: t('aiQuant.messages.graphRevise'),
-    checklistContinuedMessage: t('aiQuant.messages.checklistContinued', {
+    logicContinuedMessage: t('aiQuant.messages.checklistContinued', {
       defaultValue:
         'Continued generation based on current logic graph. Please review the latest result.',
     }),
-    checklistUpdatedMessage: t('aiQuant.messages.checklistUpdated', {
+    logicUpdatedMessage: t('aiQuant.messages.checklistUpdated', {
       defaultValue:
         'Logic graph updated. Please confirm it before I generate strategy code.',
     }),

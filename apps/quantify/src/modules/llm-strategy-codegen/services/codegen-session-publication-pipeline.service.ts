@@ -1,4 +1,3 @@
-import type { ChecklistPayload } from '../types/checklist-compat'
 import type { CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec-v2'
 import type { SemanticState } from '../types/semantic-state'
 import type { CodegenPublicationGenerationInput } from './codegen-publication-generation.stage'
@@ -79,8 +78,7 @@ export class CodegenSessionPublicationPipelineService {
   async run(args: {
     sessionId: string
     userId: string
-    checklist: ChecklistPayload
-    semanticState?: SemanticState
+    semanticState: SemanticState
     canonicalSpecOverride?: CanonicalStrategySpecV2
     message: string
     model?: string
@@ -88,10 +86,8 @@ export class CodegenSessionPublicationPipelineService {
   }): Promise<void> {
     try {
       const generationInput: CodegenPublicationGenerationInput = {
-        checklist: args.checklist,
         semanticState: args.semanticState,
         canonicalSpecOverride: args.canonicalSpecOverride,
-        message: args.message,
       }
       const artifacts = await this.generationStage.generate(generationInput)
       let strategyInstanceId = args.existingStrategyInstanceId
@@ -258,8 +254,8 @@ export class CodegenSessionPublicationPipelineService {
   async runConfirmedPublicationPipeline(args: {
     sessionId: string
     userId: string
-    checklist: ChecklistPayload
-    semanticState?: SemanticState
+    semanticState: SemanticState
+    canonicalSpecOverride?: CanonicalStrategySpecV2
     message: string
     model?: string
     existingStrategyInstanceId?: string | null

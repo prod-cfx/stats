@@ -1,4 +1,4 @@
-import type { ChecklistPayload, ChecklistRuleBasis } from '../types/checklist-compat'
+import type { StrategyLogicSnapshot, StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { AiService } from '@/modules/ai/ai.service'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 import { Injectable } from '@nestjs/common'
@@ -15,7 +15,7 @@ export interface InferredConfirmationClassifierInput {
   providerCode?: string | null
   model?: string | null
   decisionKeys: readonly string[]
-  checklist: ChecklistPayload
+  checklist: StrategyLogicSnapshot
 }
 
 export interface InferredConfirmationClassification {
@@ -23,7 +23,7 @@ export interface InferredConfirmationClassification {
   source: InferredConfirmationSource
   confirmedKeys: string[]
   overriddenKeys: string[]
-  overriddenBasisByKey: Partial<Record<string, ChecklistRuleBasis['kind']>>
+  overriddenBasisByKey: Partial<Record<string, StrategyRuleBasis['kind']>>
 }
 
 interface InferredConfirmationFallbackResponse {
@@ -91,7 +91,7 @@ export class InferredConfirmationClassifierService {
 
     const confirmedKeys = new Set<string>()
     const overriddenKeys = new Set<string>()
-    const overriddenBasisByKey: Partial<Record<string, ChecklistRuleBasis['kind']>> = {}
+    const overriddenBasisByKey: Partial<Record<string, StrategyRuleBasis['kind']>> = {}
     let sawReject = false
     let sawConfirm = false
 
@@ -207,7 +207,7 @@ export class InferredConfirmationClassifierService {
       if (!basis || overriddenKeysFromFallback.length === 0) {
         return this.buildUnclearResult('llm')
       }
-      const overriddenBasis = overriddenKeysFromFallback.reduce<Partial<Record<string, ChecklistRuleBasis['kind']>>>(
+      const overriddenBasis = overriddenKeysFromFallback.reduce<Partial<Record<string, StrategyRuleBasis['kind']>>>(
         (acc, key) => {
           acc[key] = basis
           return acc
@@ -373,7 +373,7 @@ export class InferredConfirmationClassifierService {
     return compact.length > 16
   }
 
-  private normalizeBasisClarificationAnswer(answer: string): ChecklistRuleBasis['kind'] | null {
+  private normalizeBasisClarificationAnswer(answer: string): StrategyRuleBasis['kind'] | null {
     const normalized = answer.trim().toLowerCase()
     if (!normalized) return null
 
@@ -434,7 +434,7 @@ export class InferredConfirmationClassifierService {
     pendingKeyDefaults: Partial<Record<InferredConfirmationDecisionKey, string>>
     providerCode?: string
     model?: string
-  }): Promise<{ intent: InferredConfirmationFallbackIntent; targetKeys: InferredConfirmationDecisionKey[]; normalizedBasis?: ChecklistRuleBasis['kind'] }> {
+  }): Promise<{ intent: InferredConfirmationFallbackIntent; targetKeys: InferredConfirmationDecisionKey[]; normalizedBasis?: StrategyRuleBasis['kind'] }> {
     if (!this.aiService) {
       return {
         intent: 'unclear',
@@ -560,7 +560,7 @@ export class InferredConfirmationClassifierService {
   }
 
   private buildPendingKeyDefaults(
-    checklist: ChecklistPayload,
+    checklist: StrategyLogicSnapshot,
     activeKeys: ReadonlySet<InferredConfirmationDecisionKey>,
   ): Partial<Record<InferredConfirmationDecisionKey, string>> {
     const defaults: Partial<Record<InferredConfirmationDecisionKey, string>> = {}

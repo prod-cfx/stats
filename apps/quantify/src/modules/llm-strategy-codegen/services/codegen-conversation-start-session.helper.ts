@@ -1,4 +1,3 @@
-import type { ChecklistPayload } from '../types/checklist-compat'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { StrategyClarificationState } from '../types/strategy-clarification'
@@ -9,7 +8,6 @@ export interface ConversationPlan {
   related: boolean
   logicReady: boolean
   assistantPrompt: string
-  logic?: ChecklistPayload
   semanticPatch?: CodegenSemanticPatch
 }
 

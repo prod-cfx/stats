@@ -2,16 +2,7 @@ import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
 import type { StrategyExecutionContext } from '../types/strategy-execution-context'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
 import { Injectable } from '@nestjs/common'
-import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
 import { CanonicalSpecV2DigestService } from './canonical-spec-v2-digest.service'
-
-interface SpecDescChecklistSnapshot {
-  symbols?: unknown
-  timeframes?: unknown
-  entryRules?: unknown
-  exitRules?: unknown
-  riskRules?: unknown
-}
 
 interface SpecDescBuildExtras {
   normalizedIntent?: StrategyNormalizedIntent | null
@@ -21,18 +12,8 @@ interface SpecDescBuildExtras {
 @Injectable()
 export class SpecDescBuilderService {
   constructor(
-    private readonly canonicalSpecBuilder: CanonicalSpecBuilderService = new CanonicalSpecBuilderService(),
     private readonly digest: CanonicalSpecV2DigestService = new CanonicalSpecV2DigestService(),
   ) {}
-
-  build(
-    checklist: SpecDescChecklistSnapshot,
-    scriptCode: string,
-    extras?: SpecDescBuildExtras,
-  ): Record<string, unknown> {
-    const canonicalSpec = this.canonicalSpecBuilder.build(checklist)
-    return this.buildFromCanonicalSpec(canonicalSpec, scriptCode, extras)
-  }
 
   buildFromCanonicalSpec(
     canonicalSpec: CanonicalStrategySpec,
