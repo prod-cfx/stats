@@ -48,7 +48,7 @@ Append this test inside the existing `describe('semantic-only strategy regressio
     ]
     const fs = require('node:fs') as typeof import('node:fs')
     const path = require('node:path') as typeof import('node:path')
-    const root = path.resolve(__dirname, '../../../../../../../../..')
+    const root = path.resolve(__dirname, '../../../../../../..')
     const forbiddenPatterns = [
       /projectLegacyLogicSnapshotFromSemanticState/u,
       /buildFallbackSemanticState/u,
