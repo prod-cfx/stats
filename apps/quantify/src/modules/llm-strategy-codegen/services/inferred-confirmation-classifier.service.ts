@@ -1,9 +1,11 @@
-import type { StrategyLogicSnapshot, StrategyRuleBasis } from '../types/strategy-logic-snapshot'
+import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { AiService } from '@/modules/ai/ai.service'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 import { Injectable } from '@nestjs/common'
 
-type InferredConfirmationDecisionKey = 'risk.stopLossBasis' | 'risk.takeProfitBasis'
+const INFERRED_CONFIRMATION_DECISION_KEYS = ['risk.stopLossBasis', 'risk.takeProfitBasis'] as const
+
+export type InferredConfirmationDecisionKey = typeof INFERRED_CONFIRMATION_DECISION_KEYS[number]
 type InferredConfirmationIntent = 'override' | 'reject' | 'confirm' | 'unclear'
 type InferredConfirmationSource = 'rule' | 'llm'
 type InferredConfirmationFallbackIntent = 'confirm' | 'override' | 'unclear'
@@ -15,15 +17,21 @@ export interface InferredConfirmationClassifierInput {
   providerCode?: string | null
   model?: string | null
   decisionKeys: readonly string[]
-  checklist: StrategyLogicSnapshot
+  semanticDefaults: InferredConfirmationSemanticDefaults
+}
+
+export interface InferredConfirmationSemanticDefaults {
+  stopLossBasis?: StrategyRuleBasis['kind'] | null
+  takeProfitBasis?: StrategyRuleBasis['kind'] | null
+  inferredKeys?: readonly unknown[] | null
 }
 
 export interface InferredConfirmationClassification {
   intent: InferredConfirmationIntent
   source: InferredConfirmationSource
-  confirmedKeys: string[]
-  overriddenKeys: string[]
-  overriddenBasisByKey: Partial<Record<string, StrategyRuleBasis['kind']>>
+  confirmedKeys: InferredConfirmationDecisionKey[]
+  overriddenKeys: InferredConfirmationDecisionKey[]
+  overriddenBasisByKey: Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>>
 }
 
 interface InferredConfirmationFallbackResponse {
@@ -45,7 +53,7 @@ const FALLBACK_RESPONSE_SCHEMA: Record<string, unknown> = {
       type: 'array',
       items: {
         type: 'string',
-        enum: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+        enum: [...INFERRED_CONFIRMATION_DECISION_KEYS],
       },
     },
     normalizedBasis: {
@@ -66,6 +74,11 @@ const FALLBACK_RESPONSE_SCHEMA: Record<string, unknown> = {
   },
 }
 
+function isInferredConfirmationDecisionKey(value: unknown): value is InferredConfirmationDecisionKey {
+  return typeof value === 'string'
+    && (INFERRED_CONFIRMATION_DECISION_KEYS as readonly string[]).includes(value)
+}
+
 @Injectable()
 export class InferredConfirmationClassifierService {
   constructor(private readonly aiService?: Pick<AiService, 'chat'>) {}
@@ -78,9 +91,8 @@ export class InferredConfirmationClassifierService {
       return this.buildUnclearResult()
     }
 
-    const activeKeys = new Set(
-      input.decisionKeys.filter((key): key is InferredConfirmationDecisionKey =>
-        key === 'risk.stopLossBasis' || key === 'risk.takeProfitBasis',
+    const activeKeys = new Set<InferredConfirmationDecisionKey>(
+      input.decisionKeys.filter((key): key is InferredConfirmationDecisionKey => isInferredConfirmationDecisionKey(key),
       ),
     )
     if (activeKeys.size === 0) {
@@ -89,9 +101,9 @@ export class InferredConfirmationClassifierService {
     const assistantPrompt = input.assistantPrompt?.trim() ?? ''
     const isConfirmInferredPhase = input.conversationPhase === 'CONFIRM_INFERRED'
 
-    const confirmedKeys = new Set<string>()
-    const overriddenKeys = new Set<string>()
-    const overriddenBasisByKey: Partial<Record<string, StrategyRuleBasis['kind']>> = {}
+    const confirmedKeys = new Set<InferredConfirmationDecisionKey>()
+    const overriddenKeys = new Set<InferredConfirmationDecisionKey>()
+    const overriddenBasisByKey: Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>> = {}
     let sawReject = false
     let sawConfirm = false
 
@@ -124,13 +136,14 @@ export class InferredConfirmationClassifierService {
       }
     }
 
-    const finalConfirmedKeys = Array.from(confirmedKeys).filter(key => !overriddenKeys.has(key))
-    const finalOverriddenKeys = Array.from(overriddenKeys)
+    const finalConfirmedKeys: InferredConfirmationDecisionKey[] = Array.from(confirmedKeys)
+      .filter(key => !overriddenKeys.has(key))
+    const finalOverriddenKeys: InferredConfirmationDecisionKey[] = Array.from(overriddenKeys)
 
     if (finalOverriddenKeys.length === 0) {
       const defaultOverrideKeys = this.detectDefaultOverrideKeys(message, activeKeys)
       if (defaultOverrideKeys.length > 0) {
-        const defaultOverrideKeySet = new Set<string>(defaultOverrideKeys)
+        const defaultOverrideKeySet = new Set<InferredConfirmationDecisionKey>(defaultOverrideKeys)
         return {
           intent: 'override',
           source: 'rule',
@@ -184,7 +197,7 @@ export class InferredConfirmationClassifierService {
       message,
       assistantPrompt,
       activeKeys: Array.from(activeKeys),
-      pendingKeyDefaults: this.buildPendingKeyDefaults(input.checklist, activeKeys),
+      pendingKeyDefaults: this.buildPendingKeyDefaults(input.semanticDefaults, activeKeys),
       providerCode: input.providerCode?.trim() || undefined,
       model: input.model?.trim() || undefined,
     })
@@ -207,7 +220,7 @@ export class InferredConfirmationClassifierService {
       if (!basis || overriddenKeysFromFallback.length === 0) {
         return this.buildUnclearResult('llm')
       }
-      const overriddenBasis = overriddenKeysFromFallback.reduce<Partial<Record<string, StrategyRuleBasis['kind']>>>(
+      const overriddenBasis = overriddenKeysFromFallback.reduce<Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>>>(
         (acc, key) => {
           acc[key] = basis
           return acc
@@ -431,7 +444,7 @@ export class InferredConfirmationClassifierService {
     message: string
     assistantPrompt: string
     activeKeys: InferredConfirmationDecisionKey[]
-    pendingKeyDefaults: Partial<Record<InferredConfirmationDecisionKey, string>>
+    pendingKeyDefaults: Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>>
     providerCode?: string
     model?: string
   }): Promise<{ intent: InferredConfirmationFallbackIntent; targetKeys: InferredConfirmationDecisionKey[]; normalizedBasis?: StrategyRuleBasis['kind'] }> {
@@ -486,9 +499,7 @@ export class InferredConfirmationClassifierService {
         return { intent: 'unclear', targetKeys: [] }
       }
       const targetKeys = Array.isArray(parsed.targetKeys)
-        ? parsed.targetKeys.filter((key): key is InferredConfirmationDecisionKey =>
-            key === 'risk.stopLossBasis' || key === 'risk.takeProfitBasis',
-          )
+        ? parsed.targetKeys.filter(isInferredConfirmationDecisionKey)
         : []
       if (parsed.intent === 'override') {
         const normalizedBasis = typeof parsed.normalizedBasis === 'string'
@@ -560,16 +571,30 @@ export class InferredConfirmationClassifierService {
   }
 
   private buildPendingKeyDefaults(
-    checklist: StrategyLogicSnapshot,
+    defaults: InferredConfirmationSemanticDefaults,
     activeKeys: ReadonlySet<InferredConfirmationDecisionKey>,
-  ): Partial<Record<InferredConfirmationDecisionKey, string>> {
-    const defaults: Partial<Record<InferredConfirmationDecisionKey, string>> = {}
-    if (activeKeys.has('risk.stopLossBasis') && typeof checklist.riskRules?.stopLossBasis === 'string') {
-      defaults['risk.stopLossBasis'] = checklist.riskRules.stopLossBasis
+  ): Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>> {
+    const pendingDefaults: Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>> = {}
+    const inferredKeys = new Set<InferredConfirmationDecisionKey>(
+      Array.isArray(defaults.inferredKeys)
+        ? defaults.inferredKeys.filter(isInferredConfirmationDecisionKey)
+        : [],
+    )
+
+    if (
+      activeKeys.has('risk.stopLossBasis')
+      && inferredKeys.has('risk.stopLossBasis')
+      && defaults.stopLossBasis
+    ) {
+      pendingDefaults['risk.stopLossBasis'] = defaults.stopLossBasis
     }
-    if (activeKeys.has('risk.takeProfitBasis') && typeof checklist.riskRules?.takeProfitBasis === 'string') {
-      defaults['risk.takeProfitBasis'] = checklist.riskRules.takeProfitBasis
+    if (
+      activeKeys.has('risk.takeProfitBasis')
+      && inferredKeys.has('risk.takeProfitBasis')
+      && defaults.takeProfitBasis
+    ) {
+      pendingDefaults['risk.takeProfitBasis'] = defaults.takeProfitBasis
     }
-    return defaults
+    return pendingDefaults
   }
 }

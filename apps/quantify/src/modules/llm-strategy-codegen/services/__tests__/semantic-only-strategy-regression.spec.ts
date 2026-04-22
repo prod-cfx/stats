@@ -1,5 +1,7 @@
 import type { CanonicalRuleV2, CanonicalStrategySpecV2 } from '../../types/canonical-strategy-spec'
 import type { SemanticState } from '../../types/semantic-state'
+import { existsSync, readFileSync } from 'node:fs'
+import { dirname, join, resolve } from 'node:path'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
@@ -87,10 +89,49 @@ describe('semantic-only strategy regression verification', () => {
     return semanticState
   }
 
+  function withLockedMarketContext(
+    semanticState: SemanticState,
+    context: { exchange?: 'binance' | 'okx' | 'hyperliquid', symbol?: string, marketType?: 'spot' | 'perp', timeframe?: string } = {},
+  ): SemanticState {
+    const slot = (
+      field: keyof SemanticState['contextSlots'],
+      value: string,
+    ) => ({
+      slotKey: field,
+      fieldPath: `contextSlots.${field}`,
+      value,
+      status: 'locked' as const,
+      priority: 'context' as const,
+      questionHint: '',
+      affectsExecution: true,
+    })
+
+    return {
+      ...semanticState,
+      contextSlots: {
+        exchange: slot('exchange', context.exchange ?? 'okx'),
+        symbol: slot('symbol', context.symbol ?? 'BTCUSDT'),
+        marketType: slot('marketType', context.marketType ?? 'perp'),
+        timeframe: slot('timeframe', context.timeframe ?? '15m'),
+      },
+    }
+  }
+
   function expectSemanticArtifactsAreChecklistFree(...artifacts: unknown[]): void {
     for (const artifact of artifacts) {
       expect(JSON.stringify(artifact)).not.toMatch(checklistFieldPattern)
     }
+  }
+
+  function findRepoRoot(startDir: string): string {
+    let current = startDir
+    while (current !== dirname(current)) {
+      if (existsSync(join(current, 'package.json')) && existsSync(join(current, 'apps'))) {
+        return current
+      }
+      current = dirname(current)
+    }
+    throw new Error(`Unable to locate repository root from ${startDir}`)
   }
 
   function ruleConditionKeys(canonicalSpec: CanonicalStrategySpecV2): string[] {
@@ -197,7 +238,7 @@ describe('semantic-only strategy regression verification', () => {
     timeframes?: string[]
   } {
     const read = (slot: SemanticState['contextSlots'][keyof SemanticState['contextSlots']]) =>
-      typeof slot?.value === 'string' && slot.value.trim() ? slot.value.trim() : null
+      slot?.status === 'locked' && typeof slot.value === 'string' && slot.value.trim() ? slot.value.trim() : null
     const exchange = read(semanticState.contextSlots.exchange)
     const symbol = read(semanticState.contextSlots.symbol)
     const marketType = read(semanticState.contextSlots.marketType)
@@ -228,7 +269,7 @@ describe('semantic-only strategy regression verification', () => {
   it('publishes the EMA crossover case through semantic seed and normalized canonical generation', async () => {
     const result = await generateAndPublish(
       'ema-cross-publish',
-      buildSemanticStateFromMessage('EMA7 上穿 EMA21 做多；EMA7 下穿 EMA21 平多；单笔 10%。'),
+      withLockedMarketContext(buildSemanticStateFromMessage('EMA7 上穿 EMA21 做多；EMA7 下穿 EMA21 平多；单笔 10%。')),
     )
 
     expect(ruleConditionKeys(result.canonicalSpec)).toEqual(expect.arrayContaining([
@@ -266,7 +307,7 @@ describe('semantic-only strategy regression verification', () => {
   it('publishes two-sided Bollinger semantics from seed extraction', async () => {
     const result = await generateAndPublish(
       'bollinger-two-sided-publish',
-      buildSemanticStateFromMessage('K线收盘后确认突破布林带(20,2)上轨时做空，突破下轨时做多；价格回到布林带中轨时平仓；单笔 10%，亏损 5% 止损。'),
+      withLockedMarketContext(buildSemanticStateFromMessage('K线收盘后确认突破布林带(20,2)上轨时做空，突破下轨时做多；价格回到布林带中轨时平仓；单笔 10%，亏损 5% 止损。')),
     )
 
     expect(ruleConditionKeys(result.canonicalSpec)).toEqual(expect.arrayContaining([
@@ -285,7 +326,7 @@ describe('semantic-only strategy regression verification', () => {
   })
 
   it('publishes only the confirmed one-sided Bollinger semantic state', async () => {
-    const semanticState = buildSemanticStateFromMessage('K线收盘后确认突破布林带(20,2)上轨时做空，突破下轨时做多；价格回到布林带中轨时平仓；单笔 10%，亏损 5% 止损。')
+    const semanticState = withLockedMarketContext(buildSemanticStateFromMessage('K线收盘后确认突破布林带(20,2)上轨时做空，突破下轨时做多；价格回到布林带中轨时平仓；单笔 10%，亏损 5% 止损。'))
     const longOnlyState: SemanticState = {
       ...semanticState,
       triggers: semanticState.triggers.filter(trigger =>
@@ -427,5 +468,34 @@ describe('semantic-only strategy regression verification', () => {
       'OPEN_LONG',
       'FORCE_EXIT',
     ]))
+  })
+
+  it('keeps production conversation main path free of legacy checklist authority', () => {
+    const productionFiles = [
+      'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-conversation.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/inferred-confirmation-classifier.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-execution-context.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-publication-generation.stage.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-session-publication-pipeline.service.ts',
+    ]
+    const root = findRepoRoot(resolve(__dirname))
+    const forbiddenPatterns = [
+      /projectLegacyLogicSnapshotFromSemanticState/u,
+      /buildFallbackSemanticState\s*\(/u,
+      /buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly/u,
+      /canonicalSpecBuilder\.build\(\s*checklist\b/u,
+      /\bsession\s*(?:(?:\?\.)|\.)\s*checklist\b|\bsession\s*(?:\?\.\s*)?\[\s*['"]checklist['"]\s*\]/u,
+    ]
+
+    for (const file of productionFiles) {
+      const source = readFileSync(join(root, file), 'utf8')
+      for (const pattern of forbiddenPatterns) {
+        const match = source.match(pattern)
+        if (match) {
+          const position = typeof match.index === 'number' ? ` at offset ${match.index}` : ''
+          throw new Error(`Production legacy authority guard matched ${pattern} in ${file}${position}: ${match[0]}`)
+        }
+      }
+    }
   })
 })

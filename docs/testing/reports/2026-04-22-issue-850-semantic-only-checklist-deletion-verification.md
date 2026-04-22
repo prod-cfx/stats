@@ -56,3 +56,56 @@ These remaining names are an unresolved cleanup gap. They are not treated as a s
 ## Boundary Confirmation
 
 This work did not intentionally change atom keys, `SemanticState` meaning, reducer semantics, digest semantics, or publication persistence. Where old checklist fallback previously masked missing semantic compiler support, the tests now expose the gap instead of silently publishing through checklist.
+
+## Final Semantic Conversation View Verification
+
+The final cleanup did not hard-delete every semantic-to-legacy projection call. Direct deletion was attempted and rejected because the projection still carries compatibility responsibilities for legacy-shaped clarification and summary helpers. Instead, the remaining projection was renamed and documented as an explicit compatibility boundary:
+
+- `buildLegacyLogicSnapshotProjectionForCompatibility()`
+- `buildFallbackSemanticStateForLegacyCompatibility()`
+- `mergeLogicSnapshotIntoSemanticStateForLegacyCompatibility()`
+
+These helpers are not canonical generation or publication authority. Canonical generation, engine testing, publication generation, and the main semantic regression cases use `SemanticState`, normalized intent, and `CanonicalSpecV2`.
+
+Semantic conversation view projection was added so summary, prompts, recommendation-style decisions, deterministic authority, and inferred defaults can move away from legacy rule snapshots without breaking the current mainline. The view is derived from locked semantic atoms and excludes open or superseded atoms from deterministic signals.
+
+Semantic context readers were also hardened so canonical context, publication params, and execution-context clarification only treat locked semantic context slots as authoritative. Open or superseded context slot values are ignored even when they carry a string value.
+
+Verified strategy outcomes after the final boundary isolation:
+
+- Publishes: EMA crossover.
+- Publishes: Bollinger upper-short and middle-exit.
+- Publishes: two-sided Bollinger.
+- Publishes: one-side confirmed Bollinger.
+- Publishes: bidirectional grid with explicit range and step.
+- Publishes: percent-change entry and position-basis exit.
+- Publishes: on-start market entry with stop loss.
+- Explicit gap remains: MA price-vs-reference rejects as a semantic compiler gap.
+- Explicit gap remains: fixed-range grid wording without explicit range/step is not extracted as grid semantics.
+- Clarification remains semantic: incomplete MA semantics stays in semantic clarification.
+
+Final verification commands:
+
+- `dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-only-strategy-regression.spec.ts`
+  - Passed: 11 tests.
+- `dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-state-projection.service.spec.ts`
+  - Passed: 19 tests.
+- `dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-conversation.service.spec.ts`
+  - Passed: 137 tests.
+- `dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-execution-context.service.spec.ts`
+  - Passed: 14 tests.
+- `dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-publication-generation.stage.spec.ts`
+  - Passed: 14 tests.
+- `dx build quantify --dev`
+  - Passed.
+- `dx test e2e quantify apps/quantify/e2e/llm-strategy-codegen`
+  - Passed: 6 tests.
+  - Existing environment warnings were observed: `NODE_ENV` unset, ts-jest deprecation, Jest forceExit.
+
+Final guard:
+
+```bash
+rg -n "projectLegacyLogicSnapshotFromSemanticState|buildFallbackSemanticState\s*\(|buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly|canonicalSpecBuilder\.build\(\s*checklist\b|session\.checklist" apps/quantify/src/modules/llm-strategy-codegen -g '!**/__tests__/**' -g '!**/*.spec.ts'
+```
+
+Result: no output.

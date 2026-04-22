@@ -882,6 +882,140 @@ describe('codegenPublicationGenerationStage', () => {
     }))
   })
 
+  it('ignores non-locked semantic context values when reading publication context', () => {
+    const stage = new CodegenPublicationGenerationStage(
+      new CanonicalSpecBuilderService(),
+      new SpecDescBuilderService(),
+      new StrategySummaryBuilderService(new ScriptProfileExtractorService()),
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    )
+
+    expect((stage as any).readSemanticContextValue({
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: 'BTCUSDT',
+      status: 'open',
+      priority: 'context',
+      questionHint: '',
+      affectsExecution: true,
+    })).toBeNull()
+    expect((stage as any).readSemanticContextValue({
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: 'BTCUSDT',
+      status: 'superseded',
+      priority: 'context',
+      questionHint: '',
+      affectsExecution: true,
+    })).toBeNull()
+    expect((stage as any).readSemanticContextValue({
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: 'BTCUSDT',
+      status: 'locked',
+      priority: 'context',
+      questionHint: '',
+      affectsExecution: true,
+    })).toBe('BTCUSDT')
+  })
+
+  it('rejects publication generation when semantic and canonical context omit symbol or timeframe', async () => {
+    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const stage = new CodegenPublicationGenerationStage(
+      canonicalSpecBuilder,
+      new SpecDescBuilderService(),
+      strategySummaryBuilder,
+      { evaluate: jest.fn() } as any,
+      { compile: jest.fn() } as any,
+      { compile: jest.fn() } as any,
+      { emit: jest.fn() } as any,
+      { build: jest.fn() } as any,
+      { parse: jest.fn() } as any,
+    )
+    const semanticState = buildLockedMaSemanticState()
+    semanticState.contextSlots.symbol = null
+    semanticState.contextSlots.timeframe = null
+
+    const canonicalSpec = canonicalSpecBuilder.buildFromNormalizedIntent(
+      {
+        market: { marketType: 'spot' },
+      },
+      buildNormalizedIntentFromSemanticState(semanticState),
+    )
+    canonicalSpec.market.symbol = null
+    canonicalSpec.market.defaultTimeframe = null
+    canonicalSpec.dataRequirements.requiredTimeframes = []
+
+    await expect(stage.generate({
+      semanticState,
+      canonicalSpecOverride: canonicalSpec,
+    })).rejects.toThrow('codegen.publication_context_missing')
+  })
+
+  it('does not promote canonical market values into locked params without locked semantic context', async () => {
+    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
+    const stage = new CodegenPublicationGenerationStage(
+      canonicalSpecBuilder,
+      new SpecDescBuilderService(),
+      strategySummaryBuilder,
+      { evaluate: jest.fn().mockReturnValue({
+        status: 'PASSED',
+        specProfile: { indicators: [], actions: [], ruleMappings: [], rules: [], sizing: null, requiredParams: [], fallbackDetected: false },
+        scriptProfile: { indicators: [], actions: [], ruleMappings: [], rules: [], sizing: null, requiredParams: [], fallbackDetected: false },
+        checks: [],
+        summary: { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
+      }) } as any,
+      { compile: jest.fn().mockReturnValue({ ir: { source: { graphDigest: 'sha256:canonical-market' } }, graphSnapshot: {} }) } as any,
+      { compile: jest.fn().mockReturnValue({ id: 'compiled-ast' }) } as any,
+      { emit: jest.fn().mockReturnValue('strategy') } as any,
+      { build: jest.fn().mockReturnValue({}) } as any,
+      { parse: jest.fn().mockReturnValue({}) } as any,
+    )
+    const semanticState = buildLockedMaSemanticState()
+    semanticState.contextSlots = {
+      exchange: null,
+      symbol: null,
+      marketType: null,
+      timeframe: null,
+    }
+    const canonicalSpec = canonicalSpecBuilder.buildFromNormalizedIntent(
+      {
+        market: {
+          exchange: 'okx',
+          marketType: 'perp',
+          defaultTimeframe: '15m',
+        },
+        symbols: ['BTCUSDT'],
+        timeframes: ['15m'],
+      },
+      buildNormalizedIntentFromSemanticState(semanticState),
+    )
+
+    const artifacts = await stage.generate({
+      semanticState,
+      canonicalSpecOverride: canonicalSpec,
+    })
+
+    expect(artifacts.publishParams).toEqual({
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      marketType: 'perp',
+    })
+    expect(artifacts.lockedParams).not.toEqual(expect.objectContaining({
+      symbol: expect.any(String),
+      timeframe: expect.any(String),
+      exchange: expect.any(String),
+      marketType: expect.any(String),
+    }))
+  })
+
   it('reuses the confirmed canonical selection and labels fallback semanticSource as rule-derived', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
