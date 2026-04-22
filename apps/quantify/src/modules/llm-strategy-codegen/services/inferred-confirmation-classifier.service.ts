@@ -29,9 +29,9 @@ export interface InferredConfirmationSemanticDefaults {
 export interface InferredConfirmationClassification {
   intent: InferredConfirmationIntent
   source: InferredConfirmationSource
-  confirmedKeys: string[]
-  overriddenKeys: string[]
-  overriddenBasisByKey: Partial<Record<string, StrategyRuleBasis['kind']>>
+  confirmedKeys: InferredConfirmationDecisionKey[]
+  overriddenKeys: InferredConfirmationDecisionKey[]
+  overriddenBasisByKey: Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>>
 }
 
 interface InferredConfirmationFallbackResponse {
@@ -91,7 +91,7 @@ export class InferredConfirmationClassifierService {
       return this.buildUnclearResult()
     }
 
-    const activeKeys = new Set(
+    const activeKeys = new Set<InferredConfirmationDecisionKey>(
       input.decisionKeys.filter((key): key is InferredConfirmationDecisionKey => isInferredConfirmationDecisionKey(key),
       ),
     )
@@ -101,9 +101,9 @@ export class InferredConfirmationClassifierService {
     const assistantPrompt = input.assistantPrompt?.trim() ?? ''
     const isConfirmInferredPhase = input.conversationPhase === 'CONFIRM_INFERRED'
 
-    const confirmedKeys = new Set<string>()
-    const overriddenKeys = new Set<string>()
-    const overriddenBasisByKey: Partial<Record<string, StrategyRuleBasis['kind']>> = {}
+    const confirmedKeys = new Set<InferredConfirmationDecisionKey>()
+    const overriddenKeys = new Set<InferredConfirmationDecisionKey>()
+    const overriddenBasisByKey: Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>> = {}
     let sawReject = false
     let sawConfirm = false
 
@@ -136,13 +136,14 @@ export class InferredConfirmationClassifierService {
       }
     }
 
-    const finalConfirmedKeys = Array.from(confirmedKeys).filter(key => !overriddenKeys.has(key))
-    const finalOverriddenKeys = Array.from(overriddenKeys)
+    const finalConfirmedKeys: InferredConfirmationDecisionKey[] = Array.from(confirmedKeys)
+      .filter(key => !overriddenKeys.has(key))
+    const finalOverriddenKeys: InferredConfirmationDecisionKey[] = Array.from(overriddenKeys)
 
     if (finalOverriddenKeys.length === 0) {
       const defaultOverrideKeys = this.detectDefaultOverrideKeys(message, activeKeys)
       if (defaultOverrideKeys.length > 0) {
-        const defaultOverrideKeySet = new Set<string>(defaultOverrideKeys)
+        const defaultOverrideKeySet = new Set<InferredConfirmationDecisionKey>(defaultOverrideKeys)
         return {
           intent: 'override',
           source: 'rule',
@@ -219,7 +220,7 @@ export class InferredConfirmationClassifierService {
       if (!basis || overriddenKeysFromFallback.length === 0) {
         return this.buildUnclearResult('llm')
       }
-      const overriddenBasis = overriddenKeysFromFallback.reduce<Partial<Record<string, StrategyRuleBasis['kind']>>>(
+      const overriddenBasis = overriddenKeysFromFallback.reduce<Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>>>(
         (acc, key) => {
           acc[key] = basis
           return acc
@@ -574,7 +575,7 @@ export class InferredConfirmationClassifierService {
     activeKeys: ReadonlySet<InferredConfirmationDecisionKey>,
   ): Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>> {
     const pendingDefaults: Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>> = {}
-    const inferredKeys = new Set(
+    const inferredKeys = new Set<InferredConfirmationDecisionKey>(
       Array.isArray(defaults.inferredKeys)
         ? defaults.inferredKeys.filter(isInferredConfirmationDecisionKey)
         : [],
