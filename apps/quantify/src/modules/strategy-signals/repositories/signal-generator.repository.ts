@@ -35,6 +35,7 @@ export class SignalGeneratorRepository {
       where: {
         status: 'running',
         mode: { in: ['LIVE', 'TESTNET'] },
+        runtimeBindingStatus: 'READY',
         strategyTemplate: { status: 'live' },
       },
       orderBy: { id: 'asc' },
