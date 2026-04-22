@@ -2706,6 +2706,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(missingFieldsSpy).not.toHaveBeenCalled()
     expect(result.status).toBe('DRAFTING')
     expect(result.missingFields).toEqual([])
+    expect(result.assistantPrompt).toContain('我当前理解的策略是：')
     expect(result.assistantPrompt).not.toContain('请先补全入场和出场规则，再确认生成代码。')
   })
 
