@@ -1,4 +1,7 @@
 import type { StrategySignalsRuntimeConfig } from '../../types/strategy-signals-config.type'
+import type { CanonicalStrategyIrV1 } from '@/modules/llm-strategy-codegen/types/canonical-strategy-ir'
+import { CanonicalStrategyAstCompilerService } from '@/modules/llm-strategy-codegen/services/canonical-strategy-ast-compiler.service'
+import { CompiledScriptEmitterService } from '@/modules/llm-strategy-codegen/services/compiled-script-emitter.service'
 import { SignalGeneratorService } from '../signal-generator.service'
 
 describe('signalGeneratorService coordinator behavior', () => {
@@ -276,7 +279,7 @@ describe('signalGeneratorService coordinator behavior', () => {
         },
       }),
     }
-    const { service, generatorRepository, runtimeExecutionStateService, runtimeExecutionStateRepository } = createService({
+    const { service, generatorRepository, runtimeExecutionStateService } = createService({
       publishedSnapshotsRepository,
       generatorRepository: {
         findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-1', code: 'BTCUSDT' }),
@@ -768,6 +771,92 @@ strategy`,
     expect(runtimeExecutionStateService.markConsumed).not.toHaveBeenCalled()
   })
 
+  it('executes compiler.v1 published snapshot scripts without routing them through TypeScript recompilation', async () => {
+    const publishedSnapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyInstanceId: 'source-instance-1',
+        strategyTemplateId: 'template-1',
+        scriptSnapshot: createCompiledNoopScriptFixture(),
+        astSnapshot: {
+          decisionPrograms: [{ id: 'entry-primary', phase: 'entry' }],
+        },
+        paramsSnapshot: {
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+        },
+      }),
+    }
+    const { runtimeExecutionStateService, service } = createService({
+      publishedSnapshotsRepository,
+      generatorRepository: {
+        findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-1', code: 'BTCUSDT' }),
+      },
+      runtimeExecutionStateService: {
+        buildExecutionSemanticKeysFromSnapshot: jest.fn().mockReturnValue(['on_start.entry.primary']),
+        loadExecutableStates: jest.fn().mockResolvedValue([{
+          strategyInstanceId: 'instance-1',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+          executionSemanticKey: 'on_start.entry.primary',
+          status: 'ready',
+        }]),
+      },
+    })
+
+    jest.spyOn(service as any, 'isStrategyLocked').mockResolvedValue(false)
+    jest.spyOn(service as any, 'loadLatestBar').mockResolvedValue({
+      close: 100,
+      time: new Date('2026-04-20T09:00:00.000Z'),
+      timestamp: Date.now(),
+      isFinal: true,
+    })
+    jest.spyOn(service as any, 'loadRecentBars').mockResolvedValue([{
+      open: 99,
+      high: 101,
+      low: 98,
+      close: 100,
+      volume: 10,
+      timestamp: 1_775_000_000_000,
+      isFinal: true,
+    }])
+    jest.spyOn(service as any, 'handleStrategyFailure').mockResolvedValue(undefined)
+
+    await (service as any).processStrategyInstance(
+      {
+        id: 'instance-1',
+        llmModel: 'gpt-5.4',
+        params: {},
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+        },
+        strategyTemplate: {
+          id: 'template-1',
+          promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+          script: 'return "template-script"',
+        },
+      },
+      config,
+    )
+
+    expect(runtimeExecutionStateService.markTerminalFailure).toHaveBeenCalledWith({
+      strategyInstanceId: 'instance-1',
+      publishedSnapshotId: 'snapshot-1',
+      executionSemanticKey: 'on_start.entry.primary',
+      failureReason: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+      failureCode: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+    })
+    expect(runtimeExecutionStateService.markTerminalFailure).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        failureReason: 'SNAPSHOT_RUNTIME_SCRIPT_COMPILE_FAILED',
+        failureCode: 'SNAPSHOT_RUNTIME_SCRIPT_COMPILE_FAILED',
+      }),
+    )
+  })
+
   it('marks a ready on_start snapshot semantic as terminal after runtime outcome resolves to noop', async () => {
     const publishedSnapshotsRepository = {
       findById: jest.fn().mockResolvedValue({
@@ -1243,3 +1332,67 @@ strategy`,
     expect(runtimeExecutionStateService.markRetryableFailure).not.toHaveBeenCalled()
   })
 })
+
+function createCompiledNoopScriptFixture(): string {
+  const compiler = new CanonicalStrategyAstCompilerService()
+  const emitter = new CompiledScriptEmitterService()
+  const ir: CanonicalStrategyIrV1 = {
+    irVersion: 'csi.v1',
+    source: {
+      graphVersion: 18,
+      graphDigest: `sha256:${'7'.repeat(64)}`,
+      specHash: `sha256:${'8'.repeat(64)}`,
+    },
+    market: {
+      venue: 'okx',
+      instrumentType: 'spot',
+      symbol: 'BTCUSDT',
+      timeframes: ['15m'],
+      priceFeed: 'close',
+    },
+    portfolio: {
+      positionMode: 'long_only',
+      sizing: { mode: 'pct_equity', value: 10 },
+      maxConcurrentPositions: 1,
+      allowPyramiding: false,
+      maxPyramidingLayers: 1,
+    },
+    dataRequirements: {
+      warmupBars: 2,
+      maxLookback: 2,
+      requiredTimeframes: ['15m'],
+    },
+    signalCatalog: {
+      series: [
+        { id: 'close_15m', kind: 'PRICE', timeframe: '15m', field: 'close' },
+      ],
+      levelSets: [],
+      predicates: [],
+    },
+    ruleBlocks: [],
+    orderPrograms: [],
+    riskPolicy: {
+      guards: [],
+    },
+    executionPolicy: {
+      signalEvaluation: 'bar_close',
+      fillPolicy: 'next_bar_open',
+      timeframeAlignment: 'strict',
+      orderTypeDefault: 'market',
+      timeInForce: 'gtc',
+      allowPartialFill: false,
+    },
+  }
+
+  return emitter.emit({
+    ast: compiler.compile(ir),
+    executionEnvelope: {
+      positionMode: 'long_only',
+      marginMode: 'cash',
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict',
+    },
+  })
+}
