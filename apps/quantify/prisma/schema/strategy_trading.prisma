@@ -283,6 +283,7 @@ model StrategyInstance {
   @@index([strategyTemplateId, status], map: "idx_strategy_instance_template_status")
   @@index([status], map: "idx_strategy_instance_status")
   @@index([mode], map: "idx_strategy_instance_mode")
+  @@index([status, mode, runtimeBindingStatus], map: "idx_strategy_instance_runtime_ready_scan")
   @@index([createdAt], map: "idx_strategy_instance_created_at")
   @@map("strategy_instances")
 }
