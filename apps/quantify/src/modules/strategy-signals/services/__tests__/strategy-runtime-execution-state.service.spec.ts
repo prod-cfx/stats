@@ -22,6 +22,13 @@ type RuntimeStateRecord = {
 
 class InMemoryRuntimeExecutionStateRepository {
   private readonly records = new Map<string, RuntimeStateRecord>()
+  readonly recoverCalls: Array<{
+    strategyInstanceId: string
+    publishedSnapshotId: string
+    leaseExpiresBefore: Date
+    failureReason?: string | null
+    failureCode?: string | null
+  }> = []
 
   private keyOf(input: Pick<RuntimeStateRecord, 'strategyInstanceId' | 'publishedSnapshotId' | 'executionSemanticKey'>) {
     return `${input.strategyInstanceId}::${input.publishedSnapshotId}::${input.executionSemanticKey}`
@@ -170,6 +177,47 @@ class InMemoryRuntimeExecutionStateRepository {
     return this.markRetryableFailure(input)
   }
 
+  async recoverStaleRunningStates(input: {
+    strategyInstanceId: string
+    publishedSnapshotId: string
+    leaseExpiresBefore: Date
+    failureReason?: string | null
+    failureCode?: string | null
+  }) {
+    this.recoverCalls.push(input)
+
+    let recoveredCount = 0
+    for (const [key, existing] of this.records.entries()) {
+      if (
+        existing.strategyInstanceId !== input.strategyInstanceId
+        || existing.publishedSnapshotId !== input.publishedSnapshotId
+        || existing.status !== 'running'
+        || !existing.runningAt
+        || existing.runningAt.getTime() > input.leaseExpiresBefore.getTime()
+      ) {
+        continue
+      }
+
+      const next: RuntimeStateRecord = {
+        ...existing,
+        status: 'retryable',
+        failureFamily: 'retryable',
+        failureReason: input.failureReason ?? null,
+        failureCode: input.failureCode ?? null,
+        attemptCount: (existing.attemptCount ?? 0) + 1,
+        lastAttemptAt: new Date('2026-04-20T08:20:00.000Z'),
+        runningAt: null,
+        terminalAt: null,
+        consumedAt: null,
+        cooldownUntil: null,
+      }
+      this.records.set(key, next)
+      recoveredCount += 1
+    }
+
+    return recoveredCount
+  }
+
   async seed(record: RuntimeStateRecord) {
     this.records.set(this.keyOf(record), record)
   }
@@ -294,6 +342,7 @@ describe('strategyRuntimeExecutionStateService', () => {
   })
 
   it('loads ready and eligible retryable states but excludes running terminal and consumed states', async () => {
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(new Date('2026-04-20T08:10:00.000Z').getTime())
     const { service, repository } = createService()
     await repository.seed({
       strategyInstanceId: 'inst-1',
@@ -350,7 +399,7 @@ describe('strategyRuntimeExecutionStateService', () => {
       failureFamily: null,
       attemptCount: 1,
       lastAttemptAt: null,
-      runningAt: new Date('2026-04-20T08:05:00.000Z'),
+      runningAt: new Date('2026-04-20T08:08:00.000Z'),
       terminalAt: null,
       consumedAt: null,
       cooldownUntil: null,
@@ -404,6 +453,61 @@ describe('strategyRuntimeExecutionStateService', () => {
         attemptCount: 1,
       }),
     ])
+
+    nowSpy.mockRestore()
+  })
+
+  it('recovers stale running states before returning executable states', async () => {
+    const now = new Date('2026-04-20T08:30:00.000Z')
+    const nowSpy = jest.spyOn(Date, 'now').mockReturnValue(now.getTime())
+    const { service, repository } = createService()
+
+    await repository.seed({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      snapshotHash: 'sha256:snap-1',
+      executionSemanticKey: 'on_start.entry.stale-running',
+      status: 'running',
+      failureFamily: null,
+      failureReason: null,
+      failureCode: null,
+      attemptCount: 1,
+      lastAttemptAt: new Date('2026-04-20T08:00:00.000Z'),
+      runningAt: new Date('2026-04-20T07:00:00.000Z'),
+      terminalAt: null,
+      consumedAt: null,
+      cooldownUntil: null,
+    })
+
+    const executableStates = await service.loadExecutableStates({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      snapshotHash: 'sha256:snap-1',
+    })
+
+    expect(repository.recoverCalls).toEqual([
+      expect.objectContaining({
+        strategyInstanceId: 'inst-1',
+        publishedSnapshotId: 'snap-1',
+        leaseExpiresBefore: expect.any(Date),
+        failureReason: 'RUNTIME_RUNNING_LEASE_EXPIRED',
+        failureCode: 'RUNTIME_RUNNING_LEASE_EXPIRED',
+      }),
+    ])
+    expect(executableStates).toEqual([
+      expect.objectContaining({
+        executionSemanticKey: 'on_start.entry.stale-running',
+        status: 'retryable',
+        failureFamily: 'retryable',
+        failureReason: 'RUNTIME_RUNNING_LEASE_EXPIRED',
+        failureCode: 'RUNTIME_RUNNING_LEASE_EXPIRED',
+        attemptCount: 2,
+        runningAt: null,
+        cooldownUntil: null,
+      }),
+    ])
+
+    nowSpy.mockRestore()
   })
 
   it('treats snapshot hash mismatch as invalid runtime state', async () => {

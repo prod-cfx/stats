@@ -84,8 +84,6 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
     expect(tx.strategyInstance.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'strategy-instance-1' },
       data: expect.objectContaining({
-        status: 'running',
-        mode: 'TESTNET',
         deploymentExecutionConfig: {
           leverage: 4,
           priceSource: 'mark',
@@ -93,6 +91,9 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
           timeInForce: 'IOC',
         },
         executionConfigVersion: 1,
+        runtimeBindingStatus: 'PENDING',
+        runtimeBindingErrorCode: null,
+        runtimeBindingUpdatedAt: expect.any(Date),
         params: expect.objectContaining({
           marketType: 'spot',
           deploymentExecutionConfig: {
@@ -112,6 +113,10 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
         }),
       }),
     }))
+    const updatePayload = tx.strategyInstance.update.mock.calls[0]?.[0]?.data
+    expect(updatePayload.status).toBeUndefined()
+    expect(updatePayload.mode).toBeUndefined()
+    expect(updatePayload.startedAt).toBeUndefined()
     expect(tx.userStrategySubscription.create).toHaveBeenCalled()
     expect(tx.userStrategyAccount.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
@@ -186,6 +191,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
     expect(tx.strategyInstance.update).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
         name: 'AI策略',
+        runtimeBindingStatus: 'PENDING',
       }),
     }))
     expect(tx.userStrategyAccount.create).toHaveBeenCalledWith(expect.objectContaining({
@@ -259,6 +265,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
     expect(tx.strategyInstance.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: 'strategy-instance-snapshot' },
       data: expect.objectContaining({
+        runtimeBindingStatus: 'PENDING',
         metadata: expect.objectContaining({
           bindingSource: 'PUBLISHED_SNAPSHOT',
           publishedSnapshotId: 'snapshot-created',

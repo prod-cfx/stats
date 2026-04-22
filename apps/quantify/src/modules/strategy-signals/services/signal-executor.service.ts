@@ -1,6 +1,6 @@
 import type { PositionSide, SignalDirection, SignalStatus, TradeSide } from '@ai/shared'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
-import type { OnModuleInit } from '@nestjs/common'
+import type { OnModuleDestroy, OnModuleInit } from '@nestjs/common'
 import type { TradingSignalCreatedEvent } from '../events/strategy-signal.events'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
 import type { ExecutionStage } from '@/modules/trading/core/execution-stage'
@@ -19,6 +19,9 @@ import { Injectable, Logger } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 ConfigService
 import { ConfigService } from '@nestjs/config'
 import { OnEvent } from '@nestjs/event-emitter'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 SchedulerRegistry
+import { SchedulerRegistry } from '@nestjs/schedule'
+import { CronJob } from 'cron'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AccountsService } from '@/modules/accounts/accounts.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -60,16 +63,20 @@ interface OrderParams {
 }
 
 const RECOVERY_BATCH_SIZE = 50
+const EXECUTION_RECOVERY_GRACE_MS = 5_000
 const ORDER_RECONCILE_RETRY_MS = 300
 const ORDER_RECONCILE_RETRY_COUNT = 3
+const EXECUTION_RECOVERY_CRON_JOB = 'strategy-signals.execute-recovery'
 
 @Injectable()
-export class SignalExecutorService implements OnModuleInit {
+export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(SignalExecutorService.name)
+  private recoveryCronJob?: CronJob
 
   constructor(
     private readonly executorRepository: SignalExecutorRepository,
     private readonly configService: ConfigService,
+    private readonly schedulerRegistry: SchedulerRegistry,
     private readonly tradingService: TradingService,
     private readonly accountsService: AccountsService,
     private readonly strategyInstancesService: StrategyInstancesService,
@@ -84,15 +91,25 @@ export class SignalExecutorService implements OnModuleInit {
     const config = this.getConfig()
     if (!config.execution.enabled) return
 
+    this.registerRecoveryCronJob(config)
+
     try {
-      await this.recoverPendingSignals(config)
+      await this.recoverExecutableSignals(config)
     }
     catch (error) {
       this.logger.error(
-        `Failed to recover pending/failed signals on startup: ${(error as Error).message}`,
+        `Failed to recover executable signals on startup: ${(error as Error).message}`,
         (error as Error).stack,
       )
     }
+  }
+
+  onModuleDestroy() {
+    if (!this.recoveryCronJob) return
+
+    this.recoveryCronJob.stop()
+    this.schedulerRegistry.deleteCronJob(EXECUTION_RECOVERY_CRON_JOB)
+    this.recoveryCronJob = undefined
   }
 
   @OnEvent(StrategySignalEvents.CREATED, { async: true })
@@ -112,16 +129,39 @@ export class SignalExecutorService implements OnModuleInit {
     return this.configService.get<StrategySignalsRuntimeConfig>('strategySignals') ?? DEFAULT_STRATEGY_SIGNALS_CONFIG
   }
 
+  private registerRecoveryCronJob(config: StrategySignalsRuntimeConfig) {
+    if (this.recoveryCronJob) {
+      this.recoveryCronJob.stop()
+      this.schedulerRegistry.deleteCronJob(EXECUTION_RECOVERY_CRON_JOB)
+    }
+
+    this.recoveryCronJob = new CronJob(config.cronExpression, async () => {
+      try {
+        await this.recoverExecutableSignals(this.getConfig())
+      } catch (error) {
+        const detail = error instanceof Error ? (error.stack ?? error.message) : String(error)
+        this.logger.error(`Signal execution recovery cron tick failed: ${detail}`)
+      }
+    })
+
+    this.schedulerRegistry.addCronJob(EXECUTION_RECOVERY_CRON_JOB, this.recoveryCronJob)
+    this.recoveryCronJob.start()
+    this.logger.log(`Signal execution recovery scheduled with cron ${config.cronExpression}`)
+  }
+
   /**
-   * 启动时对仍处于 PENDING/FAILED 且未过期的信号做一次补偿执行，
-   * 避免依赖进程内事件导致服务重启时信号彻底丢失
+   * 对仍处于可补偿窗口的 signal 做补偿执行，
+   * 既服务于启动恢复，也服务于运行时的定期恢复。
    */
-  private async recoverPendingSignals(config: StrategySignalsRuntimeConfig) {
-    const signals = await this.executorRepository.findPendingOrFailedSignals(RECOVERY_BATCH_SIZE)
+  private async recoverExecutableSignals(config: StrategySignalsRuntimeConfig) {
+    const signals = await this.executorRepository.findRecoverableSignals({
+      limit: RECOVERY_BATCH_SIZE,
+      readyBefore: new Date(Date.now() - EXECUTION_RECOVERY_GRACE_MS),
+    })
 
     if (!signals.length) return
 
-    this.logger.log(`Recovering ${signals.length} pending/failed signals on startup`)
+    this.logger.log(`Recovering ${signals.length} executable signals`)
 
     for (const signal of signals) {
       try {
@@ -263,11 +303,14 @@ export class SignalExecutorService implements OnModuleInit {
       if (!signal?.symbol) return 'skipped'
       const resolvedSignal = signal as NonNullable<typeof signal>
 
+      let strategySubscription: Awaited<ReturnType<SignalExecutorRepository['findActiveSubscriptionNetwork']>> | null = null
+
       if (resolvedSignal.strategyInstanceId) {
         const [instanceModeRow, subscriptionNetwork] = await Promise.all([
           this.executorRepository.findStrategyInstanceMode(resolvedSignal.strategyInstanceId),
           this.executorRepository.findActiveSubscriptionNetwork(account.userId, resolvedSignal.strategyInstanceId),
         ])
+        strategySubscription = subscriptionNetwork
         const mode = instanceModeRow?.mode
         const shouldEnforceNetworkMatch = mode === 'TESTNET' || mode === 'LIVE'
         const expectedIsTestnet = mode === 'TESTNET'
@@ -311,6 +354,18 @@ export class SignalExecutorService implements OnModuleInit {
       let exchangeAccountId: string | undefined
       let effectiveExchangeId = orderParams.exchangeId
       let effectiveOrderParams = orderParams
+
+      if (resolvedSignal.strategyInstanceId) {
+        if (!strategySubscription?.exchangeAccountId) {
+          await this.executionRepository.markSkipped(
+            execution.id,
+            'SUBSCRIPTION_EXCHANGE_ACCOUNT_MISSING',
+          )
+          await this.releaseReservation(account.id, reservedQuote, reserveReference)
+          return 'skipped'
+        }
+        exchangeAccountId = strategySubscription.exchangeAccountId
+      }
 
       if (resolvedSignal.llmStrategyInstanceId) {
         const subscription = await this.executorRepository.findActiveLlmSubscription(

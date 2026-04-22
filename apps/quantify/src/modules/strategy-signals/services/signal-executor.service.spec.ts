@@ -3,12 +3,17 @@ import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '../types/strategy-signals-confi
 import { SignalExecutorService } from './signal-executor.service'
 
 describe('signalExecutorService', () => {
+  function createSchedulerRegistry() {
+    return { addCronJob: jest.fn(), deleteCronJob: jest.fn() }
+  }
+
   function createService() {
     const configService = { get: jest.fn() }
+    const schedulerRegistry = createSchedulerRegistry()
     const tradingService = { placeOrder: jest.fn() }
     const accountsService = { applyLedgerDelta: jest.fn() }
     const positionsService = { recordTrade: jest.fn() }
-    const tradingSignalRepository = { updateStatus: jest.fn() }
+    const tradingSignalRepository = { updateStatus: jest.fn(), findById: jest.fn().mockResolvedValue(null) }
     const executionRepository = {
       markStage: jest.fn(),
       markExecuted: jest.fn(),
@@ -16,12 +21,15 @@ describe('signalExecutorService', () => {
       markSkipped: jest.fn(),
     }
     const telemetry = { recordExecutionSummary: jest.fn() }
-    const executorRepository = {}
+    const executorRepository = {
+      findRecoverableSignals: jest.fn().mockResolvedValue([]),
+    }
     const txHost = { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) }
 
     return new SignalExecutorService(
       executorRepository as any,
       configService as any,
+      schedulerRegistry as any,
       tradingService as any,
       accountsService as any,
       {} as any,
@@ -89,6 +97,87 @@ describe('signalExecutorService', () => {
     expect(executeSignalForSubscribedUsers).toHaveBeenCalledWith('signal-1', config)
   })
 
+  it('recovers only aged executable signals on startup when execution is enabled', async () => {
+    const service = createService()
+    const config = {
+      ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
+      execution: {
+        ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution,
+        enabled: true,
+      },
+    }
+    ;(service as any).configService.get.mockReturnValue(config)
+    ;(service as any).executorRepository.findRecoverableSignals.mockResolvedValue([
+      { id: 'signal-1' },
+      { id: 'signal-2' },
+    ])
+    const executeSignalForSubscribedUsers = jest
+      .spyOn(service as any, 'executeSignalForSubscribedUsers')
+      .mockResolvedValue(undefined)
+
+    await service.onModuleInit()
+
+    expect((service as any).executorRepository.findRecoverableSignals).toHaveBeenCalledWith(
+      expect.objectContaining({
+        limit: 50,
+        readyBefore: expect.any(Date),
+      }),
+    )
+    expect(executeSignalForSubscribedUsers).toHaveBeenCalledTimes(2)
+    expect(executeSignalForSubscribedUsers).toHaveBeenNthCalledWith(1, 'signal-1', config)
+    expect(executeSignalForSubscribedUsers).toHaveBeenNthCalledWith(2, 'signal-2', config)
+    expect((service as any).schedulerRegistry.addCronJob).toHaveBeenCalled()
+    service.onModuleDestroy()
+  })
+
+  it('skips recovery on startup when execution is disabled', async () => {
+    const service = createService()
+    const config = {
+      ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
+      execution: {
+        ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution,
+        enabled: false,
+      },
+    }
+    ;(service as any).configService.get.mockReturnValue(config)
+
+    await service.onModuleInit()
+
+    expect((service as any).executorRepository.findRecoverableSignals).not.toHaveBeenCalled()
+    expect((service as any).schedulerRegistry.addCronJob).not.toHaveBeenCalled()
+  })
+
+  it('replays the extracted recovery logic from the scheduled cron handler', async () => {
+    const service = createService()
+    const config = {
+      ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
+      cronExpression: '* * * * * *',
+      execution: {
+        ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution,
+        enabled: true,
+      },
+    }
+    ;(service as any).configService.get.mockReturnValue(config)
+    const recoverExecutableSignals = jest
+      .spyOn(service as any, 'recoverExecutableSignals')
+      .mockResolvedValue(undefined)
+    const futureCronConfig = {
+      ...config,
+      cronExpression: '0 0 1 1 * *',
+    }
+    ;(service as any).configService.get.mockReturnValue(futureCronConfig)
+
+    await service.onModuleInit()
+
+    const cronJob = (service as any).schedulerRegistry.addCronJob.mock.calls[0]?.[1]
+    expect(cronJob).toBeDefined()
+
+    await cronJob.fireOnTick()
+
+    expect(recoverExecutableSignals).toHaveBeenCalledTimes(2)
+    service.onModuleDestroy()
+  })
+
   it('keeps hyperliquid spot entries executable once rounded notional meets the minimum', () => {
     const service = createService()
 
@@ -150,6 +239,7 @@ describe('signalExecutorService', () => {
     const service = new SignalExecutorService(
       prisma as any,
       configService as any,
+      createSchedulerRegistry() as any,
       tradingService as any,
       accountsService as any,
       {} as any,
@@ -232,6 +322,7 @@ describe('signalExecutorService', () => {
     const service = new SignalExecutorService(
       prisma as any,
       configService as any,
+      createSchedulerRegistry() as any,
       tradingService as any,
       accountsService as any,
       {} as any,
@@ -317,6 +408,7 @@ describe('signalExecutorService', () => {
     const service = new SignalExecutorService(
       prisma as any,
       configService as any,
+      createSchedulerRegistry() as any,
       tradingService as any,
       accountsService as any,
       {} as any,
@@ -402,6 +494,7 @@ describe('signalExecutorService', () => {
     const service = new SignalExecutorService(
       prisma as any,
       configService as any,
+      createSchedulerRegistry() as any,
       tradingService as any,
       accountsService as any,
       {} as any,
@@ -489,9 +582,11 @@ describe('signalExecutorService', () => {
     }
     const telemetry = { recordExecutionSummary: jest.fn() }
 
+    const schedulerRegistry = createSchedulerRegistry()
     const service = new SignalExecutorService(
       executorRepository as any,
       configService as any,
+      schedulerRegistry as any,
       tradingService as any,
       accountsService as any,
       {} as any,
@@ -592,9 +687,11 @@ describe('signalExecutorService', () => {
     }
     const telemetry = { recordExecutionSummary: jest.fn() }
 
+    const schedulerRegistry = createSchedulerRegistry()
     const service = new SignalExecutorService(
       executorRepository as any,
       configService as any,
+      schedulerRegistry as any,
       tradingService as any,
       accountsService as any,
       {} as any,
@@ -627,6 +724,206 @@ describe('signalExecutorService', () => {
     expect(executorRepository.findActiveSubscriptionNetwork).toHaveBeenCalledWith('user-paper-1', 'inst-paper-1')
   })
 
+  it('uses subscribed exchangeAccountId for strategy instance execution', async () => {
+    const executorRepository = {
+      findStrategyInstanceMode: jest.fn().mockResolvedValue({ mode: 'TESTNET' }),
+      findActiveSubscriptionNetwork: jest.fn().mockResolvedValue({
+        exchangeAccountId: 'exchange-account-spot-1',
+        exchangeAccount: { isTestnet: true },
+      }),
+    }
+    const configService = { get: jest.fn() }
+    const tradingService = { placeOrder: jest.fn() }
+    const accountsService = { applyLedgerDelta: jest.fn() }
+    const positionsService = { recordTrade: jest.fn() }
+    const tradingSignalRepository = { updateStatus: jest.fn() }
+    const executionRepository = {
+      markStage: jest.fn(),
+      markExecuted: jest.fn(),
+      markFailed: jest.fn(),
+      markSkipped: jest.fn(),
+    }
+    const telemetry = { recordExecutionSummary: jest.fn() }
+
+    const schedulerRegistry = createSchedulerRegistry()
+    const service = new SignalExecutorService(
+      executorRepository as any,
+      configService as any,
+      schedulerRegistry as any,
+      tradingService as any,
+      accountsService as any,
+      {} as any,
+      positionsService as any,
+      tradingSignalRepository as any,
+      executionRepository as any,
+      telemetry as any,
+      {} as any,
+    )
+
+    const filledOrder = {
+      id: 'ord-spot-1',
+      symbol: 'ORDI/USDT',
+      marketType: 'spot',
+      side: 'buy',
+      type: 'market',
+      status: 'closed',
+      amount: 10,
+      filled: 10,
+      average: 4.5,
+      createdAt: Date.now(),
+      raw: {},
+    }
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'ready',
+      execution: { id: 'exec-spot-1' },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'ORDI/USDT',
+        side: 'buy',
+        amount: 10,
+        price: 4.5,
+        reduceOnly: false,
+      },
+      reservedQuote: new Prisma.Decimal(45),
+      reserveReference: 'reserve-spot-1',
+    })
+    ;(service as any).resolveFinalOrderState = jest.fn().mockResolvedValue(filledOrder)
+    ;(service as any).releaseReservation = jest.fn()
+    ;(service as any).reconcilePositionAndRecordTrade = jest.fn().mockResolvedValue(undefined)
+    ;(service as any).buildExecutionResultSnapshot = jest.fn().mockReturnValue({})
+    ;(service as any).buildOrderResponseSnapshot = jest.fn().mockReturnValue({})
+    ;(service as any).mapTradeSide = jest.fn().mockReturnValue('buy')
+    ;(service as any).mapPositionSide = jest.fn().mockReturnValue('LONG')
+
+    tradingService.placeOrder.mockResolvedValue(filledOrder)
+
+    const result = await (service as any).processAccount(
+      {
+        id: 'sig-spot-1',
+        strategyInstanceId: 'inst-spot-1',
+        direction: 'BUY',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'SPOT',
+          baseAsset: 'ORDI',
+          quoteAsset: 'USDT',
+        },
+      } as any,
+      { id: 'acct-spot-1', userId: 'user-spot-1' } as any,
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('executed')
+    expect(executorRepository.findActiveSubscriptionNetwork).toHaveBeenCalledWith('user-spot-1', 'inst-spot-1')
+    expect(tradingService.placeOrder).toHaveBeenCalledWith(
+      'user-spot-1',
+      'okx',
+      'spot',
+      expect.objectContaining({
+        symbol: 'ORDI/USDT',
+        marketType: 'spot',
+        side: 'buy',
+      }),
+      'exchange-account-spot-1',
+    )
+    expect(executionRepository.markStage).toHaveBeenCalledWith(
+      'exec-spot-1',
+      'ORDER_SUBMITTED',
+      expect.objectContaining({
+        exchangeAccountId: 'exchange-account-spot-1',
+        orderRequest: expect.objectContaining({
+          exchangeAccountId: 'exchange-account-spot-1',
+        }),
+      }),
+    )
+  })
+
+  it('skips strategy instance execution when the active subscription lacks an exchange account binding', async () => {
+    const executorRepository = {
+      findStrategyInstanceMode: jest.fn().mockResolvedValue({ mode: 'TESTNET' }),
+      findActiveSubscriptionNetwork: jest.fn().mockResolvedValue({
+        exchangeAccountId: null,
+        exchangeAccount: { isTestnet: true },
+      }),
+    }
+    const configService = { get: jest.fn() }
+    const tradingService = { placeOrder: jest.fn() }
+    const accountsService = { applyLedgerDelta: jest.fn() }
+    const positionsService = { recordTrade: jest.fn() }
+    const tradingSignalRepository = { updateStatus: jest.fn() }
+    const executionRepository = {
+      markStage: jest.fn(),
+      markExecuted: jest.fn(),
+      markFailed: jest.fn(),
+      markSkipped: jest.fn(),
+    }
+    const telemetry = { recordExecutionSummary: jest.fn() }
+
+    const schedulerRegistry = createSchedulerRegistry()
+    const service = new SignalExecutorService(
+      executorRepository as any,
+      configService as any,
+      schedulerRegistry as any,
+      tradingService as any,
+      accountsService as any,
+      {} as any,
+      positionsService as any,
+      tradingSignalRepository as any,
+      executionRepository as any,
+      telemetry as any,
+      {} as any,
+    )
+
+    ;(service as any).prepareExecution = jest.fn().mockResolvedValue({
+      type: 'ready',
+      execution: { id: 'exec-missing-acct-1' },
+      orderParams: {
+        exchangeId: 'okx',
+        marketType: 'spot',
+        symbol: 'ORDI/USDT',
+        side: 'buy',
+        amount: 10,
+        price: 4.5,
+        reduceOnly: false,
+      },
+      reservedQuote: new Prisma.Decimal(45),
+      reserveReference: 'reserve-missing-acct-1',
+    })
+    ;(service as any).releaseReservation = jest.fn()
+    ;(service as any).mapTradeSide = jest.fn().mockReturnValue('buy')
+    ;(service as any).mapPositionSide = jest.fn().mockReturnValue('LONG')
+
+    const result = await (service as any).processAccount(
+      {
+        id: 'sig-missing-acct-1',
+        strategyInstanceId: 'inst-missing-acct-1',
+        direction: 'BUY',
+        symbol: {
+          exchange: 'OKX',
+          instrumentType: 'SPOT',
+          baseAsset: 'ORDI',
+          quoteAsset: 'USDT',
+        },
+      } as any,
+      { id: 'acct-missing-acct-1', userId: 'user-missing-acct-1' } as any,
+      { ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, dryRun: false } } as any,
+    )
+
+    expect(result).toBe('skipped')
+    expect(executionRepository.markSkipped).toHaveBeenCalledWith(
+      'exec-missing-acct-1',
+      'SUBSCRIPTION_EXCHANGE_ACCOUNT_MISSING',
+    )
+    expect(tradingService.placeOrder).not.toHaveBeenCalled()
+    expect((service as any).releaseReservation).toHaveBeenCalledWith(
+      'acct-missing-acct-1',
+      expect.any(Prisma.Decimal),
+      'reserve-missing-acct-1',
+    )
+  })
+
   it('stores runtime provenance on execution records during preparation', async () => {
     const executionRepository = {
       findBySignalAndAccount: jest.fn().mockResolvedValue(null),
@@ -636,6 +933,7 @@ describe('signalExecutorService', () => {
     const service = new SignalExecutorService(
       {} as any,
       { get: jest.fn() } as any,
+      createSchedulerRegistry() as any,
       {} as any,
       accountsService as any,
       {} as any,
@@ -706,6 +1004,7 @@ describe('signalExecutorService', () => {
     const service = new SignalExecutorService(
       {} as any,
       { get: jest.fn() } as any,
+      createSchedulerRegistry() as any,
       tradingService as any,
       { applyLedgerDelta: jest.fn() } as any,
       {} as any,

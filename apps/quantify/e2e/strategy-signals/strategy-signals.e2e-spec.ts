@@ -2,11 +2,42 @@ import type { INestApplication } from '@nestjs/common'
 import type { TestingModule } from '@nestjs/testing'
 import type { PrismaService } from '../../src/prisma/prisma.service'
 import type { TestingAppContext } from '../fixtures/fixtures'
+import { setTimeout as sleep } from 'node:timers/promises'
 import { ExecutionStatus, SignalDirection, SignalSourceType, SignalStatus, SignalType } from '@ai/shared'
+import { ConfigService } from '@nestjs/config'
+import { mapTimeframe } from '@/common/utils/prisma-enum-mappers'
 import { SignalExecutorService } from '@/modules/strategy-signals/services/signal-executor.service'
+import { SignalGeneratorService } from '@/modules/strategy-signals/services/signal-generator.service'
+import { StrategyRuntimeExecutionStateService } from '@/modules/strategy-signals/services/strategy-runtime-execution-state.service'
 import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '@/modules/strategy-signals/types/strategy-signals-config.type'
 import { TradingService } from '@/modules/trading/trading.service'
 import { createTestingApp } from '../fixtures/fixtures'
+
+const RUNTIME_SIGNAL_CONFIG = {
+  ...DEFAULT_STRATEGY_SIGNALS_CONFIG,
+  enabled: true,
+  batchSize: 10,
+  execution: {
+    ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution,
+    enabled: true,
+    dryRun: false,
+    defaultQuoteAmount: 100,
+    minBalanceThreshold: 10,
+    maxRiskFraction: 0.5,
+  },
+}
+
+const PUBLISHED_RUNTIME_SCRIPT = `const strategy: StrategyAdapterV1 = {
+  protocolVersion: 'v1',
+  onBar(): StrategyDecisionV1 {
+    return {
+      action: 'OPEN_LONG',
+      size: { mode: 'RATIO', value: 0.1 },
+      reason: 'compiled.entry',
+    }
+  },
+}
+strategy`
 
 describe('StrategySignals (E2E, DB only)', () => {
   let app: INestApplication
@@ -56,7 +87,7 @@ describe('StrategySignals (E2E, DB only)', () => {
 
   function createTestStrategyTemplate(
     p: PrismaService,
-    params: { id: string; name: string; description: string },
+    params: { id: string; name: string; description: string; status?: 'draft' | 'live' },
   ) {
     return p.strategyTemplate.create({
       data: {
@@ -68,14 +99,14 @@ describe('StrategySignals (E2E, DB only)', () => {
         promptTemplate: '测试策略信号 Prompt',
         paramsSchema: { type: 'object' },
         requiredFields: [],
-        status: 'draft',
+        status: params.status ?? 'draft',
       },
     })
   }
 
   function createTestSymbol(
     p: PrismaService,
-    params: { id: string; code: string; baseAsset: string; quoteAsset: string; instrumentType?: string },
+    params: { id: string; code: string; baseAsset: string; quoteAsset: string; instrumentType?: 'SPOT' | 'PERPETUAL' },
   ) {
     return p.symbol.create({
       data: {
@@ -95,10 +126,10 @@ describe('StrategySignals (E2E, DB only)', () => {
 
   function upsertTestSymbol(
     p: PrismaService,
-    params: { id: string; code: string; baseAsset: string; quoteAsset: string; instrumentType?: string },
+    params: { id: string; code: string; baseAsset: string; quoteAsset: string; instrumentType?: 'SPOT' | 'PERPETUAL' },
   ) {
     const instrumentType = params.instrumentType ?? 'SPOT'
-    const common = {
+    const common: any = {
       code: params.code,
       baseAsset: params.baseAsset,
       quoteAsset: params.quoteAsset,
@@ -113,6 +144,79 @@ describe('StrategySignals (E2E, DB only)', () => {
       where: { code: params.code },
       update: common,
       create: { id: params.id, ...common },
+    })
+  }
+
+  function createTestStrategyInstance(
+    p: PrismaService,
+    params: { id: string; templateId: string; name: string; status: 'running'; ownerId: string; mode?: 'LIVE' | 'TESTNET' },
+  ) {
+    return p.strategyInstance.create({
+      data: {
+        id: params.id,
+        strategyTemplateId: params.templateId,
+        name: params.name,
+        description: `${params.name} runtime instance`,
+        llmModel: 'gpt-4',
+        status: params.status,
+        mode: params.mode ?? 'LIVE',
+        startedAt: new Date('2026-04-22T00:00:00.000Z'),
+        createdBy: params.ownerId,
+        updatedBy: params.ownerId,
+      },
+    })
+  }
+
+  function createTestSubscription(
+    p: PrismaService,
+    params: { userId: string; strategyInstanceId: string; exchangeAccountId?: string | null },
+  ) {
+    return p.userStrategySubscription.create({
+      data: {
+        userId: params.userId,
+        strategyInstanceId: params.strategyInstanceId,
+        status: 'active',
+        exchangeAccountId: params.exchangeAccountId ?? null,
+      },
+    })
+  }
+
+  function createTestExchangeAccount(
+    p: PrismaService,
+    params: { id: string; userId: string; exchangeId: 'okx' | 'binance' | 'hyperliquid'; isTestnet?: boolean; name?: string },
+  ) {
+    return p.exchangeAccount.create({
+      data: {
+        id: params.id,
+        userId: params.userId,
+        exchangeId: params.exchangeId,
+        isTestnet: params.isTestnet ?? true,
+        name: params.name ?? `${params.exchangeId}-test-account`,
+        encryptedConfig: 'encrypted-config-placeholder',
+      },
+    })
+  }
+
+  function seedRuntimeBar(
+    p: PrismaService,
+    params: { symbolId: string; close: number; time: Date },
+  ) {
+    return p.marketBar.createMany({
+      data: [{
+        symbolId: params.symbolId,
+        timeframe: mapTimeframe('15m'),
+        time: params.time,
+        open: params.close - 50,
+        high: params.close + 50,
+        low: params.close - 100,
+        close: params.close,
+        volume: 10,
+        quoteVolume: params.close * 10,
+        trades: 5,
+        source: 'E2E',
+        isFinal: true,
+      }],
+      skipDuplicates: true,
     })
   }
 
@@ -217,7 +321,19 @@ describe('StrategySignals (E2E, DB only)', () => {
     const context: TestingAppContext = await createTestingApp()
     app = context.app
     moduleFixture = context.moduleFixture
+    if (!context.prisma) {
+      throw new Error('PrismaService unavailable for strategy-signals e2e')
+    }
     prisma = context.prisma
+
+    const configService = app.get(ConfigService)
+    const originalGet = configService.get.bind(configService)
+    jest.spyOn(configService, 'get').mockImplementation((key: string) => {
+      if (key === 'strategySignals') {
+        return RUNTIME_SIGNAL_CONFIG
+      }
+      return originalGet(key)
+    })
 
     // 准备用户
     await upsertTestUser(prisma, {
@@ -301,7 +417,7 @@ describe('StrategySignals (E2E, DB only)', () => {
     expect(signal.id).toBeDefined()
     expect(signal.strategyId).toBe(TEST_STRATEGY_TEMPLATE_ID)
     expect(signal.symbolId).toBe(TEST_SYMBOL_ID)
-    expect(signal.strategy.name).toBe('E2E-Signal-Template')
+    expect(signal.strategy?.name).toBe('E2E-Signal-Template')
     expect(signal.symbol.code).toBe('E2E-BTCUSDT')
     expect(signal.direction).toBe(SignalDirection.BUY)
     expect(signal.signalType).toBe(SignalType.ENTRY)
@@ -867,4 +983,317 @@ describe('StrategySignals (E2E, DB only)', () => {
       expect(metadata.exchangeAccountId).toBeNull()
     })
   })
+
+  describe('Published Snapshot Runtime Continuity (TC-SIGNAL-009)', () => {
+    const RUNTIME_USER_ID = 'e2e-runtime-user'
+    const RUNTIME_TEMPLATE_ID = 'e2e-runtime-template'
+    const RUNTIME_INSTANCE_ID = 'e2e-runtime-instance'
+    const RUNTIME_ACCOUNT_ID = 'e2e-runtime-account'
+    const RUNTIME_EXCHANGE_ACCOUNT_ID = 'e2e-runtime-exchange-account'
+    const RUNTIME_SYMBOL_ID = 'e2e-runtime-symbol'
+    const RUNTIME_SYMBOL_CODE = 'E2E-RUNTIME-BTCUSDT:SPOT'
+    const RUNTIME_SESSION_ID = 'e2e-runtime-session'
+    const RUNTIME_SNAPSHOT_ID = 'e2e-runtime-snapshot'
+    const RUNTIME_SNAPSHOT_HASH = 'e2e-runtime-snapshot-hash'
+
+    beforeAll(async () => {
+      await upsertTestUser(prisma, {
+        id: RUNTIME_USER_ID,
+        email: 'e2e-runtime-user@test.com',
+        nickname: 'E2E Runtime User',
+      })
+
+      await createTestStrategyTemplate(prisma, {
+        id: RUNTIME_TEMPLATE_ID,
+        name: 'E2E-Runtime-Template',
+        description: 'Published snapshot runtime continuity',
+        status: 'live',
+      })
+
+      await createTestStrategyInstance(prisma, {
+        id: RUNTIME_INSTANCE_ID,
+        templateId: RUNTIME_TEMPLATE_ID,
+        name: 'E2E-Runtime-Instance',
+        status: 'running',
+        ownerId: RUNTIME_USER_ID,
+      })
+
+      await upsertTestUserStrategyAccount(prisma, {
+        id: RUNTIME_ACCOUNT_ID,
+        userId: RUNTIME_USER_ID,
+        strategyId: RUNTIME_TEMPLATE_ID,
+        strategyName: 'E2E Runtime Strategy',
+      })
+
+      await createTestExchangeAccount(prisma, {
+        id: RUNTIME_EXCHANGE_ACCOUNT_ID,
+        userId: RUNTIME_USER_ID,
+        exchangeId: 'okx',
+        isTestnet: true,
+        name: 'E2E Runtime OKX Testnet',
+      })
+
+      await createTestSubscription(prisma, {
+        userId: RUNTIME_USER_ID,
+        strategyInstanceId: RUNTIME_INSTANCE_ID,
+        exchangeAccountId: RUNTIME_EXCHANGE_ACCOUNT_ID,
+      })
+
+      await createTestSymbol(prisma, {
+        id: RUNTIME_SYMBOL_ID,
+        code: RUNTIME_SYMBOL_CODE,
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+      })
+
+      await seedRuntimeBar(prisma, {
+        symbolId: RUNTIME_SYMBOL_ID,
+        close: 60000,
+        time: new Date('2026-04-22T00:00:00.000Z'),
+      })
+
+      await prisma.llmStrategyCodegenSession.create({
+        data: {
+          id: RUNTIME_SESSION_ID,
+          userId: RUNTIME_USER_ID,
+          strategyInstanceId: RUNTIME_INSTANCE_ID,
+          status: 'PUBLISHED',
+        },
+      })
+
+      const snapshot = await prisma.publishedStrategySnapshot.create({
+        data: {
+          id: RUNTIME_SNAPSHOT_ID,
+          sessionId: RUNTIME_SESSION_ID,
+          strategyTemplateId: RUNTIME_TEMPLATE_ID,
+          strategyInstanceId: RUNTIME_INSTANCE_ID,
+          snapshotHash: RUNTIME_SNAPSHOT_HASH,
+          scriptHash: 'e2e-runtime-script-hash',
+          specHash: 'e2e-runtime-spec-hash',
+          scriptSnapshot: PUBLISHED_RUNTIME_SCRIPT,
+          specSnapshot: {},
+          astSnapshot: {
+            decisionPrograms: [{ id: 'entry-primary', phase: 'entry' }],
+            runtimeExecutionSemantics: [{
+              semanticKey: 'on_start.entry.primary',
+            }],
+          },
+          consistencyReport: {},
+          userIntentSummary: {},
+          strategySummary: {},
+          scriptSummary: {},
+          strategyConfig: {
+            exchange: 'binance',
+            symbol: RUNTIME_SYMBOL_CODE,
+            timeframe: '15m',
+            positionPct: 10,
+            marketType: 'spot',
+          },
+          deploymentExecutionDefaults: {
+            leverage: 1,
+            priceSource: 'close',
+            orderType: 'market',
+            timeInForce: 'GTC',
+          },
+          deploymentExecutionConstraints: {
+            defaultLeverage: 1,
+          },
+          lockedParams: {
+            exchange: 'binance',
+            symbol: RUNTIME_SYMBOL_CODE,
+            timeframe: '15m',
+            positionPct: 10,
+          },
+          paramsSnapshot: {
+            exchange: 'binance',
+            symbol: RUNTIME_SYMBOL_CODE,
+            timeframe: '15m',
+            positionPct: 10,
+          },
+        },
+      })
+
+      await prisma.strategyInstance.update({
+        where: { id: RUNTIME_INSTANCE_ID },
+        data: {
+          mode: 'TESTNET',
+          runtimeBindingStatus: 'READY',
+          runtimeBindingErrorCode: null,
+          runtimeBindingUpdatedAt: new Date('2026-04-22T00:00:00.000Z'),
+          metadata: {
+            bindingSource: 'PUBLISHED_SNAPSHOT',
+            publishedSnapshotId: snapshot.id,
+            snapshotHash: snapshot.snapshotHash,
+            sourceStrategyInstanceId: RUNTIME_INSTANCE_ID,
+            sourceStrategyTemplateId: RUNTIME_TEMPLATE_ID,
+          },
+        },
+      })
+
+      const runtimeExecutionStateService = app.get(StrategyRuntimeExecutionStateService)
+      await runtimeExecutionStateService.initializeStatesForDeploy({
+        strategyInstanceId: RUNTIME_INSTANCE_ID,
+        publishedSnapshotId: snapshot.id,
+        snapshotHash: snapshot.snapshotHash,
+        snapshot,
+      })
+    })
+
+    afterAll(async () => {
+      await prisma.userSignalExecution.deleteMany({
+        where: {
+          signal: {
+            strategyInstanceId: RUNTIME_INSTANCE_ID,
+          },
+        },
+      })
+      await prisma.tradingSignal.deleteMany({
+        where: {
+          strategyInstanceId: RUNTIME_INSTANCE_ID,
+        },
+      })
+      await prisma.strategyRuntimeExecutionState.deleteMany({
+        where: {
+          strategyInstanceId: RUNTIME_INSTANCE_ID,
+        },
+      })
+      await prisma.marketBar.deleteMany({
+        where: { symbolId: RUNTIME_SYMBOL_ID },
+      })
+      await prisma.userStrategySubscription.deleteMany({
+        where: {
+          userId: RUNTIME_USER_ID,
+          strategyInstanceId: RUNTIME_INSTANCE_ID,
+        },
+      })
+      await prisma.exchangeAccount.deleteMany({
+        where: { id: RUNTIME_EXCHANGE_ACCOUNT_ID },
+      })
+      await prisma.userStrategyAccount.deleteMany({
+        where: { id: RUNTIME_ACCOUNT_ID },
+      })
+      await prisma.publishedStrategySnapshot.deleteMany({
+        where: { id: RUNTIME_SNAPSHOT_ID },
+      })
+      await prisma.llmStrategyCodegenSession.deleteMany({
+        where: { id: RUNTIME_SESSION_ID },
+      })
+      await prisma.strategyInstance.deleteMany({
+        where: { id: RUNTIME_INSTANCE_ID },
+      })
+      await prisma.symbol.deleteMany({
+        where: { id: RUNTIME_SYMBOL_ID },
+      })
+      await prisma.strategyTemplate.deleteMany({
+        where: { id: RUNTIME_TEMPLATE_ID },
+      })
+      await prisma.user.deleteMany({
+        where: { id: RUNTIME_USER_ID },
+      })
+    })
+
+    it('[TC-SIGNAL-009] should create a runtime signal and, after direct generation, automatically advance it into execution', async () => {
+      const tradingService = moduleFixture.get(TradingService)
+      const placeOrderSpy = jest.spyOn(tradingService, 'placeOrder').mockResolvedValue({
+        id: 'TC-009-ORDER',
+        clientOrderId: 'TC-009-CLIENT',
+        symbol: 'BTC/USDT',
+        marketType: 'spot',
+        side: 'buy',
+        type: 'market',
+        price: 60000,
+        amount: 0.00166667,
+        filled: 0.00166667,
+        status: 'closed',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        raw: {},
+      } as any)
+
+      try {
+        const signalGenerator = app.get(SignalGeneratorService)
+        await signalGenerator.generateSignals(RUNTIME_SIGNAL_CONFIG)
+
+        const signal = await waitForExecution(async () => {
+          return prisma.tradingSignal.findFirst({
+            where: {
+              strategyInstanceId: RUNTIME_INSTANCE_ID,
+            },
+            orderBy: { createdAt: 'desc' },
+          })
+        })
+
+        expect((signal.metadata as {
+          runtimeProvenance?: {
+            publishedSnapshotId?: string
+            executionSemanticKey?: string
+          }
+        } | null)?.runtimeProvenance?.publishedSnapshotId).toBe(RUNTIME_SNAPSHOT_ID)
+        expect((signal.metadata as {
+          runtimeProvenance?: {
+            publishedSnapshotId?: string
+            executionSemanticKey?: string
+          }
+        } | null)?.runtimeProvenance?.executionSemanticKey).toBe('on_start.entry.primary')
+
+        const execution = await waitForExecution(async () => {
+          return prisma.userSignalExecution.findFirst({
+            where: {
+              userId: RUNTIME_USER_ID,
+              signal: {
+                strategyInstanceId: RUNTIME_INSTANCE_ID,
+              },
+            },
+            include: {
+              signal: true,
+            },
+            orderBy: { executedAt: 'desc' },
+          })
+        })
+
+        const runtimeState = await prisma.strategyRuntimeExecutionState.findFirstOrThrow({
+          where: {
+            strategyInstanceId: RUNTIME_INSTANCE_ID,
+            publishedSnapshotId: RUNTIME_SNAPSHOT_ID,
+          },
+        })
+        const executedSignal = execution.signal as {
+          status: string
+          metadata?: {
+            runtimeProvenance?: {
+              publishedSnapshotId?: string
+              executionSemanticKey?: string
+            }
+          }
+        }
+
+        expect(placeOrderSpy).toHaveBeenCalled()
+        expect(execution.status).toBe(ExecutionStatus.EXECUTED)
+        expect(executedSignal.status).toBe(SignalStatus.EXECUTED)
+        expect(runtimeState.status).toBe('consumed')
+      } finally {
+        placeOrderSpy.mockRestore()
+      }
+    })
+  })
 })
+
+async function waitForExecution<T>(loader: () => Promise<T | null>, attempts = 30): Promise<T> {
+  const result = await pollForResult(loader, attempts)
+  if (result) {
+    return result
+  }
+
+  throw new Error('Timed out waiting for execution record')
+}
+
+async function pollForResult<T>(loader: () => Promise<T | null>, attempts = 30): Promise<T | null> {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const result = await loader()
+    if (result) {
+      return result
+    }
+    await sleep(100)
+  }
+  return null
+}

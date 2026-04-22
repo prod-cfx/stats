@@ -9,18 +9,22 @@ import { Injectable } from '@nestjs/common'
 export class SignalExecutorRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
 
-  findPendingOrFailedSignals(limit: number) {
+  findRecoverableSignals(input: { limit: number; readyBefore: Date }) {
     const now = new Date()
     return this.txHost.tx.tradingSignal.findMany({
       where: {
-        status: { in: ['PENDING', 'FAILED'] satisfies SignalStatus[] },
+        status: 'PENDING' satisfies SignalStatus,
         OR: [
           { expiresAt: null },
           { expiresAt: { gt: now } },
         ],
+        createdAt: { lte: input.readyBefore },
+        executions: {
+          none: {},
+        },
       },
       orderBy: { createdAt: 'asc' },
-      take: limit,
+      take: input.limit,
     })
   }
 

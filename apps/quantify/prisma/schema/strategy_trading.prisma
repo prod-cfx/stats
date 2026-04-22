@@ -259,6 +259,9 @@ model StrategyInstance {
   executionConfigVersion    Int                    @default(1) @map("execution_config_version")
   status                    StrategyInstanceStatus @default(draft)
   mode                      StrategyInstanceMode   @default(PAPER)
+  runtimeBindingStatus      String?                @map("runtime_binding_status")
+  runtimeBindingErrorCode   String?                @map("runtime_binding_error_code")
+  runtimeBindingUpdatedAt   DateTime?              @map("runtime_binding_updated_at")
   startedAt                 DateTime?              @map("started_at")
   stoppedAt                 DateTime?              @map("stopped_at")
   createdBy                 String?                @map("created_by")
@@ -280,6 +283,7 @@ model StrategyInstance {
   @@index([strategyTemplateId, status], map: "idx_strategy_instance_template_status")
   @@index([status], map: "idx_strategy_instance_status")
   @@index([mode], map: "idx_strategy_instance_mode")
+  @@index([status, mode, runtimeBindingStatus], map: "idx_strategy_instance_runtime_ready_scan")
   @@index([createdAt], map: "idx_strategy_instance_created_at")
   @@map("strategy_instances")
 }

@@ -212,9 +212,51 @@ compiled decision
 
 ---
 
-## 6. 目标状态与分层边界
+## 6. 最新实现路线修正
 
-### 6.1 四层边界
+在按上述方案推进后，Task 5 的无兜底 E2E 暴露出一个更深层、且优先级更高的系统问题：
+
+1. **deploy 完成前，实例已经对 runtime scheduler 可见**
+2. **signal 创建后，execution 自动接力缺少运行时持续补偿**
+
+因此，本设计的最新落地顺序应修正为：
+
+### 第一阶段：deploy -> runtime readiness barrier
+
+目标不是再解释策略，而是修正“什么时候一个实例才允许被 runtime 消费”：
+
+- 给 `strategy_instances` 增加显式 runtime binding readiness 状态
+- deploy repository 只做 binding preparation，不再直接把实例切成 `running`
+- deploy service 在 risk profile / runtime states / deploy success 全部完成后再显式激活实例
+- scheduler 只扫描 `READY` 的实例
+
+### 第二阶段：execution 持续补偿
+
+保持现有 event-driven execution 方向不变，只补运行时持续补偿：
+
+- 保留 `StrategySignalEvents.CREATED` 快路径
+- 将 `recoverPendingSignals()` 从“启动时一次”升级为“运行时持续”的 recovery 慢路径
+
+### 第三阶段：重新验证无兜底自动链路
+
+只有在第一、二阶段完成后，Task 5 的无兜底 E2E 才能真正证明：
+
+```text
+deploy -> runtime auto trigger -> strategy_signals -> user_signal_executions -> execution
+```
+
+### 这次修复明确不做的事
+
+- 不重新编译或重猜用户意图
+- 不往策略快照里混入回测参数
+- 不通过默认值补齐让链路“假跑通”
+- 不先重构 broker adapter / 整个 execution 领域模型
+
+---
+
+## 7. 目标状态与分层边界
+
+### 7.1 四层边界
 
 #### 第 1 层：策略真相层
 定义“这是什么策略”
@@ -250,15 +292,24 @@ compiled decision
 - broker order
 - positions
 
-### 6.2 本次修复只动第 4 层
+### 7.2 本次修复的层次重点
 
-当前 staging 已证明：
+当前 staging 与本地 E2E 已共同证明：
 
 - 第 1 层能完成 publish
 - 第 2 层能完成 backtest
-- 第 3 层能完成 deploy
+- 第 3 层在“绑定成功”层面能完成 deploy
 
-所以本次修复只聚焦第 4 层，不回推修改前 3 层的设计边界。
+但第 3 层与第 4 层之间的**交接协议**仍有问题：
+
+- deploy 过早暴露 `running`
+- runtime 在实例尚未完全 ready 时抢跑
+- signal 创建后的 execution 自动接力没有持续补偿
+
+所以本次修复虽然不改变前 1～2 层的真相定义，但会同时修正：
+
+- 第 3 层的 readiness barrier
+- 第 4 层的 execution continuity
 
 ---
 

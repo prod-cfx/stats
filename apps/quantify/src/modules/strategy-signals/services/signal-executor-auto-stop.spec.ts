@@ -3,6 +3,7 @@ import { SignalExecutorService } from './signal-executor.service'
 
 describe('signalExecutorService auto stop', () => {
   it('auto-stops strategy instance after 3 consecutive failures', async () => {
+    const schedulerRegistry = { addCronJob: jest.fn(), deleteCronJob: jest.fn() }
     const executorRepository = {
       findSubscribedAccounts: jest.fn().mockResolvedValue([{ id: 'acct-1', userId: 'user-1' }]),
       incrementStrategyExecutionFailure: jest.fn().mockResolvedValue({
@@ -30,6 +31,7 @@ describe('signalExecutorService auto stop', () => {
     const service = new SignalExecutorService(
       executorRepository as any,
       { get: jest.fn().mockReturnValue({ ...DEFAULT_STRATEGY_SIGNALS_CONFIG, execution: { ...DEFAULT_STRATEGY_SIGNALS_CONFIG.execution, enabled: true } }) } as any,
+      schedulerRegistry as any,
       { placeOrder: jest.fn() } as any,
       { applyLedgerDelta: jest.fn() } as any,
       strategyInstancesService as any,

@@ -10,6 +10,8 @@ describe('accountStrategyViewService.deployStrategy transaction boundary', () =>
       markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
       markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
       findByIdForUser: jest.fn().mockResolvedValue(null),

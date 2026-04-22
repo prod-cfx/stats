@@ -8,6 +8,7 @@ import { PAGINATION_CONSTANTS } from '@/common/constants/pagination.constants'
 import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { ExchangeAccountNotFoundException } from '@/modules/exchange-accounts/exceptions'
+import { RUNTIME_BINDING_STATUS } from '@/modules/strategy-signals/types/runtime-binding-status.type'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires runtime value import
 import { PrismaService } from '@/prisma/prisma.service'
 import { Prisma } from '@/prisma/prisma.types'
@@ -197,9 +198,9 @@ export class AccountStrategyViewRepository {
             params: mergedParams,
             deploymentExecutionConfig: input.deploymentExecutionConfig as Prisma.InputJsonValue | undefined,
             executionConfigVersion: input.executionConfigVersion ?? 1,
-            status: 'running',
-            mode: resolvedMode,
-            startedAt: new Date(),
+            runtimeBindingStatus: RUNTIME_BINDING_STATUS.PENDING,
+            runtimeBindingErrorCode: null,
+            runtimeBindingUpdatedAt: new Date(),
             updatedBy: input.userId,
             metadata: {
               ...existingMetadata,
@@ -444,6 +445,41 @@ export class AccountStrategyViewRepository {
         strategyInstanceId,
         errorCode: null,
         errorMessage: null,
+      },
+    })
+  }
+
+  async activateStrategyInstanceForRuntime(params: {
+    strategyInstanceId: string
+    mode: 'TESTNET' | 'LIVE'
+    userId: string
+  }) {
+    return this.prisma.strategyInstance.update({
+      where: { id: params.strategyInstanceId },
+      data: {
+        status: 'running',
+        mode: params.mode,
+        startedAt: new Date(),
+        updatedBy: params.userId,
+        runtimeBindingStatus: RUNTIME_BINDING_STATUS.READY,
+        runtimeBindingErrorCode: null,
+        runtimeBindingUpdatedAt: new Date(),
+      },
+    })
+  }
+
+  async markStrategyInstanceRuntimeBindingFailed(params: {
+    strategyInstanceId: string
+    errorCode: string
+    userId?: string
+  }) {
+    return this.prisma.strategyInstance.update({
+      where: { id: params.strategyInstanceId },
+      data: {
+        runtimeBindingStatus: RUNTIME_BINDING_STATUS.FAILED,
+        runtimeBindingErrorCode: params.errorCode,
+        runtimeBindingUpdatedAt: new Date(),
+        ...(params.userId ? { updatedBy: params.userId } : {}),
       },
     })
   }

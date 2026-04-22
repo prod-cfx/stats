@@ -52,6 +52,8 @@ type RuntimeExecutionStateSource = RuntimeStateBinding & {
 
 const RUNTIME_EXECUTION_STATE_STATUSES: RuntimeExecutionStateStatus[] = ['ready', 'running', 'retryable', 'terminal', 'consumed']
 const RUNTIME_EXECUTION_FAILURE_FAMILIES: RuntimeExecutionFailureFamily[] = ['retryable', 'terminal']
+const RUNTIME_RUNNING_STATE_LEASE_MS = 5 * 60 * 1000
+const RUNTIME_RUNNING_LEASE_EXPIRED_CODE = 'RUNTIME_RUNNING_LEASE_EXPIRED'
 
 @Injectable()
 export class StrategyRuntimeExecutionStateService {
@@ -96,6 +98,14 @@ export class StrategyRuntimeExecutionStateService {
   }
 
   async loadExecutableStates(binding: RuntimeStateBinding): Promise<RuntimeExecutionStateRecord[]> {
+    await this.repository.recoverStaleRunningStates({
+      strategyInstanceId: binding.strategyInstanceId,
+      publishedSnapshotId: binding.publishedSnapshotId,
+      leaseExpiresBefore: new Date(Date.now() - RUNTIME_RUNNING_STATE_LEASE_MS),
+      failureReason: RUNTIME_RUNNING_LEASE_EXPIRED_CODE,
+      failureCode: RUNTIME_RUNNING_LEASE_EXPIRED_CODE,
+    })
+
     const validatedStates = await this.loadStatesForBinding(binding)
     const now = Date.now()
 

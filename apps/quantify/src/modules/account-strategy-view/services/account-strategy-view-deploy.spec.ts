@@ -33,6 +33,8 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
       markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const runtimeExecutionStateService = {
       buildExecutionSemanticKeysFromSnapshot: jest.fn().mockReturnValue(['on_start.entry.primary']),
@@ -102,11 +104,19 @@ describe('accountStrategyViewService.deployStrategy', () => {
       snapshotHash: 'snapshot-hash-1',
       snapshot: expect.objectContaining({ id: 'snapshot-1' }),
     })
+    expect(repo.activateStrategyInstanceForRuntime).toHaveBeenCalledWith({
+      strategyInstanceId: 'inst-okx-1',
+      mode: 'TESTNET',
+      userId: 'user-1',
+    })
     expect(repo.deployStrategyForUser.mock.invocationCallOrder[0]).toBeLessThan(
       runtimeExecutionStateService.initializeStatesForDeploy.mock.invocationCallOrder[0],
     )
     expect(runtimeExecutionStateService.initializeStatesForDeploy.mock.invocationCallOrder[0]).toBeLessThan(
       repo.markDeployRequestSucceeded.mock.invocationCallOrder[0],
+    )
+    expect(repo.markDeployRequestSucceeded.mock.invocationCallOrder[0]).toBeLessThan(
+      repo.activateStrategyInstanceForRuntime.mock.invocationCallOrder[0],
     )
   })
 
@@ -119,6 +129,8 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
       markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
       findByIdForUser: jest.fn().mockResolvedValue({
@@ -204,6 +216,87 @@ describe('accountStrategyViewService.deployStrategy', () => {
     expect(service.getStrategyDetail).toHaveBeenCalledWith('user-1', 'inst-okx-1')
   })
 
+  it('does not rewrite a completed deploy as failed when detail hydration throws after activation', async () => {
+    const repo = {
+      deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-okx-1', mode: 'TESTNET' }),
+      findStrategyForUser: jest.fn().mockResolvedValue(null),
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-1' }),
+      markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
+      markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
+      upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
+    }
+    const snapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'SOLUSDT',
+          baseTimeframe: '5m',
+          marketType: 'spot',
+          positionPct: 10,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'GTC',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 5,
+          defaultLeverage: 1,
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['GTC'],
+        },
+        strategyInstanceId: 'inst-draft-1',
+        strategyTemplateId: 'template-1',
+        astSnapshot: {
+          decisionPrograms: [{ phase: 'entry' }],
+          runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
+        },
+      }),
+    }
+    const runtimeExecutionStateService = createRuntimeExecutionStateService()
+
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn(), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn().mockResolvedValue(undefined) } as any,
+      undefined,
+      undefined,
+      undefined,
+      snapshotsRepository as any,
+      runtimeExecutionStateService as any,
+    )
+    service.getStrategyDetail = jest.fn().mockRejectedValue(new Error('detail hydration failed'))
+
+    await expect(service.deployStrategy({
+      userId: 'user-1',
+      name: 'OKX SOL 5m',
+      exchange: 'okx',
+      symbol: 'SOLUSDT',
+      timeframe: '5m',
+      positionPct: 10,
+      publishedSnapshotId: 'snapshot-1',
+      deployRequestId: 'deploy-req-1',
+      exchangeAccountId: 'acc-1',
+    } as any)).rejects.toThrow('detail hydration failed')
+
+    expect(repo.markDeployRequestSucceeded).toHaveBeenCalledWith('req-1', 'inst-okx-1')
+    expect(repo.activateStrategyInstanceForRuntime).toHaveBeenCalledWith({
+      strategyInstanceId: 'inst-okx-1',
+      mode: 'TESTNET',
+      userId: 'user-1',
+    })
+    expect(repo.markDeployRequestFailed).not.toHaveBeenCalled()
+    expect(repo.markStrategyInstanceRuntimeBindingFailed).not.toHaveBeenCalled()
+  })
+
   it('resolves deploy params from publishedSnapshotId and ignores UI overrides', async () => {
     const repo = {
       deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-okx-1', mode: 'TESTNET' }),
@@ -213,6 +306,8 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
       markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
       findByIdForUser: jest.fn().mockResolvedValue({
@@ -306,6 +401,8 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
       markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
       findByIdForUser: jest.fn().mockResolvedValue({
@@ -371,6 +468,8 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
       markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
       findByIdForUser: jest.fn().mockResolvedValue({
@@ -434,6 +533,8 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
       markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
       findByIdForUser: jest.fn().mockResolvedValue({
@@ -526,6 +627,8 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
       markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
       findByIdForUser: jest.fn().mockResolvedValue({
@@ -658,6 +761,8 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
       markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
       findByIdForUser: jest.fn().mockResolvedValue(null),
@@ -695,6 +800,8 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
       markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
       findByIdForUser: jest.fn().mockResolvedValue({
@@ -790,6 +897,8 @@ describe('accountStrategyViewService.deployStrategy', () => {
       markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
       markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
     }
     const snapshotsRepository = {
       findByIdForUser: jest.fn().mockResolvedValue({

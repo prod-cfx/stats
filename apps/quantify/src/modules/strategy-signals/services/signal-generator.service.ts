@@ -1,7 +1,10 @@
 import type {
   AiSignalPayload,
   MarketTimeframe as AppMarketTimeframe,
-  StrategyDecisionV1, SignalSourceType, SignalStatus 
+  SignalSourceType,
+  SignalStatus,
+  StrategyAdapterV1,
+  StrategyDecisionV1,
 } from '@ai/shared'
 import type {
   MultiLegStrategyContext,
@@ -9,8 +12,8 @@ import type {
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { CronJob } from 'cron'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
-import type {IndicatorGroup, IndicatorSnapshot} from './signal-generation-candidate.stage';
-import type {GeneratedSignalPayload} from './signal-generation-decision.stage';
+import type { IndicatorGroup, IndicatorSnapshot } from './signal-generation-candidate.stage'
+import type { GeneratedSignalPayload, PublishedRuntimeSignalOutcome } from './signal-generation-decision.stage'
 import type { PrismaMarketTimeframe } from '@/common/utils/prisma-enum-mappers'
 import type { GatewayBar } from '@/modules/market-data/services/market-data-read.gateway'
 import type {
@@ -22,27 +25,34 @@ import type { Prisma, PrismaClient, StrategyInstance, StrategyTemplate, Symbol }
 import { fillPromptTemplate, parseAiSignalResponse, ErrorCode } from '@ai/shared'
 import { createScriptEngine, validateScriptOutput } from '@ai/shared/node'
 import {
+  buildCompiledManifest,
+  evaluateExprPool,
+  evaluateGuards,
+  runDecisionPrograms,
+  runOrderPrograms,
+} from '@ai/shared/script-engine/compiled-runtime'
+import {
   buildMultiLegStrategyContext,
   buildStrategyContext,
 } from '@ai/shared/script-engine/helpers/context-builder'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 TransactionHost
 import { TransactionHost } from '@nestjs-cls/transactional'
-import { HttpStatus, Injectable, Logger } from '@nestjs/common'
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 ConfigService
 import { ConfigService } from '@nestjs/config'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 EventEmitter2
 import { EventEmitter2 } from '@nestjs/event-emitter'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用 SchedulerRegistry
 import { SchedulerRegistry } from '@nestjs/schedule'
-import { Optional } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { EnvService } from '@/common/services/env.service'
-// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
-import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
 import { mapTimeframe, reverseMapTimeframe } from '@/common/utils/prisma-enum-mappers'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AiService } from '@/modules/ai/ai.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
+import { CompiledScriptParserService } from '@/modules/llm-strategy-codegen/services/compiled-script-parser.service'
 import { normalizeGatewayBars } from '@/modules/market-data/services/market-data-bar.mapper'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
@@ -83,14 +93,14 @@ type StrategyInstanceWithTemplate = Prisma.StrategyInstanceGetPayload<{
   }
 }>
 
-type RuntimeStrategySource = {
+interface RuntimeStrategySource {
   strategy: StrategyTemplate
   provenance: Prisma.JsonObject
   executionSemanticKeys?: string[]
   executionSemantics?: RuntimeExecutionSemantic[]
 }
 
-type RuntimeExecutionSemantic = {
+interface RuntimeExecutionSemantic {
   semanticKey: string
   requiredRuntimeContext?: {
     barIndex?: number
@@ -100,11 +110,16 @@ type RuntimeExecutionSemantic = {
   }
 }
 
-type ActiveRuntimeExecutionState = {
+interface ActiveRuntimeExecutionState {
   strategyInstanceId: string
   publishedSnapshotId: string
   executionSemanticKey: string
   semantic?: RuntimeExecutionSemantic | null
+}
+
+interface CompiledRuntimeAdapterResult {
+  adapter: StrategyAdapterV1 | null
+  parseError?: string
 }
 
 @Injectable()
@@ -118,6 +133,7 @@ export class SignalGeneratorService {
   private readonly candidateStage: SignalGenerationCandidateStage
   private readonly decisionStage: SignalGenerationDecisionStage
   private readonly persistenceStage: SignalGenerationPersistenceStage
+  private readonly compiledScriptParser = new CompiledScriptParserService()
   /**
    * 记录每个策略实例在 candidateGroups 中的轮询位置，
    * 避免多个实例共享同一模板的指针导致各自只覆盖一部分标的。
@@ -658,6 +674,248 @@ export class SignalGeneratorService {
     )
   }
 
+  private isCompilerV1CompiledScript(scriptCode: string): boolean {
+    return scriptCode.startsWith('/* @generated by compiler.v1 */')
+  }
+
+  private buildCompiledRuntimeAdapter(scriptCode: string): CompiledRuntimeAdapterResult {
+    try {
+      const projection = this.compiledScriptParser.parse(scriptCode)
+      const exprPool = projection.exprPool as Parameters<typeof evaluateExprPool>[1]
+      const executionModel = projection.executionModel as unknown as Parameters<typeof evaluateExprPool>[3]
+      const guards = projection.guards as Parameters<typeof evaluateGuards>[1]
+      const decisionPrograms = projection.decisionPrograms as Parameters<typeof runDecisionPrograms>[1]
+      const orderPrograms = projection.orderPrograms as Parameters<typeof runOrderPrograms>[1]
+
+      return {
+        adapter: {
+          protocolVersion: 'v1',
+          onBar(ctx) {
+            const exprValues = evaluateExprPool(
+              ctx,
+              exprPool,
+              projection.topology.exprOrder,
+              executionModel,
+            )
+            const guardState = evaluateGuards(
+              ctx,
+              guards,
+              exprValues,
+              projection.topology.guardOrder,
+            )
+            const decision = runDecisionPrograms(
+              ctx,
+              decisionPrograms,
+              exprValues,
+              guardState,
+              projection.topology.decisionOrder,
+            )
+            const orderState = runOrderPrograms(
+              ctx,
+              orderPrograms,
+              exprValues,
+              guardState,
+              projection.topology.orderProgramOrder,
+              executionModel,
+            )
+
+            return buildCompiledManifest(
+              decision,
+              orderState,
+              guardState,
+              projection.compiledManifest,
+            )
+          },
+        },
+      }
+    } catch (error) {
+      return {
+        adapter: null,
+        parseError: error instanceof Error ? error.message : String(error),
+      }
+    }
+  }
+
+  private async generatePublishedSnapshotRuntimeSignalOutcome(
+    instance: StrategyInstanceWithTemplate,
+    strategy: StrategyTemplate,
+    symbol: Symbol,
+    timeframe: AppMarketTimeframe,
+    config: StrategySignalsRuntimeConfig,
+    referencePrice?: number,
+    compiledDecisionState?: { barIndex: number; lastTriggeredByProgram: Record<string, number> },
+  ): Promise<PublishedRuntimeSignalOutcome> {
+    if (!strategy.script || !this.isStrictPublishedCodegenTemplate(strategy)) {
+      return {
+        kind: 'unexpected_error',
+        reasonCode: 'SNAPSHOT_RUNTIME_STRATEGY_CONFIGURATION_INVALID',
+        reason: 'Published snapshot runtime requires a strict published script',
+      }
+    }
+
+    try {
+      const engine = createScriptEngine()
+
+      const marketBars = await this.loadRecentBars(symbol.id, timeframe, DEFAULT_BAR_LIMIT, {
+        requireFinalLatestBar: true,
+      })
+      const bars = this.normalizeRuntimeBars(marketBars ?? [], {
+        requireFinalLatestBar: true,
+      })
+      const scriptContext = {
+        ...buildStrategyContext({
+          bars,
+          symbol: symbol.code,
+          timeframe,
+          indicators: {},
+          currentPrice: referencePrice || 0,
+          timestamp: Date.now(),
+          params: this.buildEffectiveParams(strategy, instance),
+        }),
+        ...(compiledDecisionState ? { __compiledDecisionState: compiledDecisionState } : {}),
+      }
+
+      const compiledAdapter = this.buildCompiledRuntimeAdapter(strategy.script)
+      let scriptValue: unknown
+      if (compiledAdapter.adapter) {
+        scriptValue = await compiledAdapter.adapter.onBar(scriptContext as never)
+      } else if (this.isCompilerV1CompiledScript(strategy.script)) {
+        this.logger.error(
+          `Compiled snapshot parser failed for strategy ${strategy.id}: ${compiledAdapter.parseError ?? 'Unknown error'}`,
+        )
+        return {
+          kind: 'unexpected_error',
+          reasonCode: 'SNAPSHOT_RUNTIME_COMPILED_SCRIPT_INVALID',
+          reason: compiledAdapter.parseError ?? 'Unknown error',
+        }
+      } else {
+        const compiledScript = compileStrategyScriptForVm(strategy.script)
+        if (!compiledScript.ok) {
+          this.logger.error(
+            `TypeScript check failed for strategy ${strategy.id}: ${compiledScript.error ?? 'Unknown error'}`,
+          )
+          return {
+            kind: 'unexpected_error',
+            reasonCode: 'SNAPSHOT_RUNTIME_SCRIPT_COMPILE_FAILED',
+            reason: compiledScript.error ?? 'Unknown error',
+          }
+        }
+
+        let result = await engine.execute(compiledScript.executableCode, {
+          context: scriptContext,
+          timeout: MAX_SCRIPT_TIMEOUT_MS,
+          allowAsync: false,
+        })
+
+        if (!result.success && result.error?.message) {
+          const errorMsg = result.error.message
+          const needsAsync =
+            errorMsg.includes('Illegal return statement') ||
+            errorMsg.includes('await is only valid in async functions') ||
+            errorMsg.includes('Unexpected reserved word')
+
+          if (needsAsync) {
+            this.logger.warn(
+              `Strategy ${strategy.id} script needs async context (${errorMsg}), retrying with allowAsync`,
+            )
+            result = await engine.execute(compiledScript.executableCode, {
+              context: scriptContext,
+              timeout: MAX_SCRIPT_TIMEOUT_MS,
+              allowAsync: true,
+            })
+          }
+        }
+
+        if (!result.success) {
+          this.logger.warn(
+            `Script execution failed for strategy ${strategy.id}: ${result.error?.message}`,
+          )
+          return {
+            kind: 'unexpected_error',
+            reasonCode: 'SNAPSHOT_RUNTIME_SCRIPT_EXECUTION_FAILED',
+            reason: result.error?.message ?? 'Unknown error',
+          }
+        }
+
+        scriptValue = result.value
+      }
+
+      const validation = validateScriptOutput(scriptValue, { allowEmpty: true })
+      if (!validation.valid || !validation.value) {
+        this.logger.warn(
+          `Script for strategy ${strategy.id} returned invalid data. ` +
+            `Reason: ${validation.error ?? 'Unknown validation error'}.`,
+        )
+        return {
+          kind: 'unexpected_error',
+          reasonCode: 'SNAPSHOT_RUNTIME_SCRIPT_OUTPUT_INVALID',
+          reason: validation.error ?? 'Unknown validation error',
+        }
+      }
+
+      const resolved = await resolveStrategyOutput(
+        validation.value as Record<string, unknown>,
+        scriptContext as unknown as Record<string, unknown>,
+      )
+      if (resolved.error) {
+        this.logger.warn(
+          `Script adapter resolution failed for strategy ${strategy.id}: ${resolved.error}.`,
+        )
+        return {
+          kind: 'unexpected_error',
+          reasonCode: 'SNAPSHOT_RUNTIME_PROTOCOL_RESOLUTION_FAILED',
+          reason: resolved.error,
+        }
+      }
+      if (!resolved.decision) {
+        return {
+          kind: 'unexpected_error',
+          reasonCode: 'SNAPSHOT_RUNTIME_PROTOCOL_DECISION_MISSING',
+          reason: 'Resolved strategy output did not produce a decision',
+        }
+      }
+
+      const decisionContext = this.buildDecisionContext({}, referencePrice)
+      if (
+        this.requiresExplicitDecisionContext(resolved.decision) &&
+        !this.hasExplicitDecisionContext(decisionContext)
+      ) {
+        this.logger.error(
+          `Script for strategy ${strategy.id} returned ADJUST_POSITION without explicit context (currentQty/equity/markPrice). Rejecting decision.`,
+        )
+        return {
+          kind: 'missing_required_truth',
+          reasonCode: 'SNAPSHOT_RUNTIME_DECISION_CONTEXT_MISSING',
+          fields: ['currentQty', 'equity', 'markPrice'],
+        }
+      }
+
+      return this.decisionStage.buildPublishedRuntimeSignalOutcomeFromDecision(
+        resolved.decision,
+        {
+          exchange: ((symbol as unknown as { exchange?: string }).exchange ?? 'unknown'),
+          marketType:
+            ((symbol as unknown as { marketType?: string }).marketType === 'perp')
+              ? 'perp'
+              : 'spot',
+          symbol: symbol.code,
+          timeframe,
+          referencePrice,
+        },
+        config,
+      )
+    } catch (error) {
+      this.logger.error(
+        `Error executing published snapshot runtime script for strategy ${strategy.id}: ${(error as Error).message}`,
+      )
+      return {
+        kind: 'unexpected_error',
+        reasonCode: 'SNAPSHOT_RUNTIME_EXECUTION_UNEXPECTED_ERROR',
+        reason: (error as Error).message,
+      }
+    }
+  }
+
   private async generateSignalWithAi(
     instance: StrategyInstanceWithTemplate,
     strategy: StrategyTemplate,
@@ -674,125 +932,147 @@ export class SignalGeneratorService {
 
     if (strategy.script) {
       try {
-        const engine = createScriptEngine()
-        const compiledScript = compileStrategyScriptForVm(strategy.script)
-        if (!compiledScript.ok) {
+        const requireFinalLatestBar = isStrictCodegen
+        const marketBars = await this.loadRecentBars(symbol.id, timeframe, DEFAULT_BAR_LIMIT, {
+          requireFinalLatestBar,
+        })
+        const bars = this.normalizeRuntimeBars(marketBars ?? [], {
+          requireFinalLatestBar,
+        })
+        const scriptContext = {
+          ...buildStrategyContext({
+            bars,
+            symbol: symbol.code,
+            timeframe,
+            indicators,
+            currentPrice: referencePrice || 0,
+            timestamp: Date.now(),
+            params: this.buildEffectiveParams(strategy, instance),
+          }),
+          ...(compiledDecisionState ? { __compiledDecisionState: compiledDecisionState } : {}),
+        }
+
+        const compiledAdapter = this.buildCompiledRuntimeAdapter(strategy.script)
+        let scriptValue: unknown
+
+        if (compiledAdapter.adapter) {
+          scriptValue = await compiledAdapter.adapter.onBar(scriptContext as never)
+        } else if (this.isCompilerV1CompiledScript(strategy.script)) {
           this.logger.error(
-            `TypeScript check failed for strategy ${strategy.id}: ${compiledScript.error ?? 'Unknown error'}`,
+            `Compiled snapshot parser failed for strategy ${strategy.id}: ${compiledAdapter.parseError ?? 'Unknown error'}`,
           )
           if (isStrictCodegen) {
             return null
           }
           promptData = indicators
+          scriptValue = null
         } else {
-          const requireFinalLatestBar = isStrictCodegen
-          const marketBars = await this.loadRecentBars(symbol.id, timeframe, DEFAULT_BAR_LIMIT, {
-            requireFinalLatestBar,
-          })
-          const bars = this.normalizeRuntimeBars(marketBars ?? [], {
-            requireFinalLatestBar,
-          })
-          const scriptContext = {
-            ...buildStrategyContext({
-              bars,
-              symbol: symbol.code,
-              timeframe,
-              indicators,
-              currentPrice: referencePrice || 0,
-              timestamp: Date.now(),
-              params: this.buildEffectiveParams(strategy, instance),
-            }),
-            ...(compiledDecisionState ? { __compiledDecisionState: compiledDecisionState } : {}),
-          }
-
-          let result = await engine.execute(compiledScript.executableCode, {
-            context: scriptContext,
-            timeout: MAX_SCRIPT_TIMEOUT_MS,
-            allowAsync: false,
-          })
-
-          if (!result.success && result.error?.message) {
-            const errorMsg = result.error.message
-            const needsAsync =
-              errorMsg.includes('Illegal return statement') ||
-              errorMsg.includes('await is only valid in async functions') ||
-              errorMsg.includes('Unexpected reserved word')
-
-            if (needsAsync) {
-              this.logger.warn(
-                `Strategy ${strategy.id} script needs async context (${errorMsg}), retrying with allowAsync`,
-              )
-              result = await engine.execute(compiledScript.executableCode, {
-                context: scriptContext,
-                timeout: MAX_SCRIPT_TIMEOUT_MS,
-                allowAsync: true,
-              })
-            }
-          }
-
-          if (result.success) {
-            const validation = validateScriptOutput(result.value, { allowEmpty: true })
-
-            if (!validation.valid || !validation.value) {
-              this.logger.warn(
-                `Script for strategy ${strategy.id} returned invalid data. ` +
-                  `Reason: ${validation.error ?? 'Unknown validation error'}. ` +
-                  `Using indicators as fallback.`,
-              )
-              if (isStrictCodegen) {
-                return null
-              }
-              promptData = indicators
-            } else {
-              const resolved = await resolveStrategyOutput(
-                validation.value as Record<string, unknown>,
-                scriptContext as unknown as Record<string, unknown>,
-              )
-              if (resolved.error) {
-                this.logger.warn(
-                  `Script adapter resolution failed for strategy ${strategy.id}: ${resolved.error}. Using indicators as fallback.`,
-                )
-                if (isStrictCodegen) {
-                  return null
-                }
-                promptData = indicators
-              } else if (resolved.decision) {
-                const decisionContext = this.buildDecisionContext(indicators, referencePrice)
-                if (
-                  this.requiresExplicitDecisionContext(resolved.decision) &&
-                  !this.hasExplicitDecisionContext(decisionContext)
-                ) {
-                  this.logger.error(
-                    `Script for strategy ${strategy.id} returned ADJUST_POSITION without explicit context (currentQty/equity/markPrice). Rejecting decision.`,
-                  )
-                  return null
-                }
-                promptData = isStrictCodegen
-                  ? this.buildStrictPublishedPromptDataFromDecision(
-                      resolved.decision,
-                      referencePrice || 0,
-                      decisionContext,
-                    )
-                  : (strategyDecisionToSignalPayload(
-                      resolved.decision,
-                      referencePrice || 0,
-                      decisionContext,
-                    ) as Record<string, any>)
-              } else {
-                promptData = (resolved.passthrough ?? validation.value) as Record<string, any>
-              }
-              this.logger.debug(
-                `Script executed successfully for strategy ${strategy.id}, data: ${JSON.stringify(promptData)}`,
-              )
-            }
-          } else {
-            this.logger.warn(
-              `Script execution failed for strategy ${strategy.id}: ${result.error?.message}`,
+          const engine = createScriptEngine()
+          const compiledScript = compileStrategyScriptForVm(strategy.script)
+          if (!compiledScript.ok) {
+            this.logger.error(
+              `TypeScript check failed for strategy ${strategy.id}: ${compiledScript.error ?? 'Unknown error'}`,
             )
             if (isStrictCodegen) {
               return null
             }
             promptData = indicators
+            scriptValue = null
+          } else {
+            let result = await engine.execute(compiledScript.executableCode, {
+              context: scriptContext,
+              timeout: MAX_SCRIPT_TIMEOUT_MS,
+              allowAsync: false,
+            })
+
+            if (!result.success && result.error?.message) {
+              const errorMsg = result.error.message
+              const needsAsync =
+                errorMsg.includes('Illegal return statement') ||
+                errorMsg.includes('await is only valid in async functions') ||
+                errorMsg.includes('Unexpected reserved word')
+
+              if (needsAsync) {
+                this.logger.warn(
+                  `Strategy ${strategy.id} script needs async context (${errorMsg}), retrying with allowAsync`,
+                )
+                result = await engine.execute(compiledScript.executableCode, {
+                  context: scriptContext,
+                  timeout: MAX_SCRIPT_TIMEOUT_MS,
+                  allowAsync: true,
+                })
+              }
+            }
+
+            if (!result.success) {
+              this.logger.warn(
+                `Script execution failed for strategy ${strategy.id}: ${result.error?.message}`,
+              )
+              if (isStrictCodegen) {
+                return null
+              }
+              promptData = indicators
+              scriptValue = null
+            } else {
+              scriptValue = result.value
+            }
+          }
+        }
+
+        if (scriptValue !== null) {
+          const validation = validateScriptOutput(scriptValue, { allowEmpty: true })
+
+          if (!validation.valid || !validation.value) {
+            this.logger.warn(
+              `Script for strategy ${strategy.id} returned invalid data. ` +
+                `Reason: ${validation.error ?? 'Unknown validation error'}. ` +
+                `Using indicators as fallback.`,
+            )
+            if (isStrictCodegen) {
+              return null
+            }
+            promptData = indicators
+          } else {
+            const resolved = await resolveStrategyOutput(
+              validation.value as Record<string, unknown>,
+              scriptContext as unknown as Record<string, unknown>,
+            )
+            if (resolved.error) {
+              this.logger.warn(
+                `Script adapter resolution failed for strategy ${strategy.id}: ${resolved.error}. Using indicators as fallback.`,
+              )
+              if (isStrictCodegen) {
+                return null
+              }
+              promptData = indicators
+            } else if (resolved.decision) {
+              const decisionContext = this.buildDecisionContext(indicators, referencePrice)
+              if (
+                this.requiresExplicitDecisionContext(resolved.decision) &&
+                !this.hasExplicitDecisionContext(decisionContext)
+              ) {
+                this.logger.error(
+                  `Script for strategy ${strategy.id} returned ADJUST_POSITION without explicit context (currentQty/equity/markPrice). Rejecting decision.`,
+                )
+                return null
+              }
+              promptData = isStrictCodegen
+                ? this.buildStrictPublishedPromptDataFromDecision(
+                    resolved.decision,
+                    referencePrice || 0,
+                    decisionContext,
+                  )
+                : (strategyDecisionToSignalPayload(
+                    resolved.decision,
+                    referencePrice || 0,
+                    decisionContext,
+                  ) as Record<string, any>)
+            } else {
+              promptData = (resolved.passthrough ?? validation.value) as Record<string, any>
+            }
+            this.logger.debug(
+              `Script executed successfully for strategy ${strategy.id}, data: ${JSON.stringify(promptData)}`,
+            )
           }
         }
       } catch (error) {
@@ -1132,19 +1412,17 @@ export class SignalGeneratorService {
     await this.markRuntimeExecutionStateRunning(activeRuntimeState)
     try {
       const referencePrice = referenceBar ? Number(referenceBar.close) : undefined
-      const aiPayload = await this.generateSignalWithAi(
+      const runtimeSignalOutcome = await this.generatePublishedSnapshotRuntimeSignalOutcome(
         instance,
         strategy,
         symbol,
         timeframe,
-        {},
         config,
         referencePrice,
-        options.skipCooldown ?? false,
         compiledDecisionState,
       )
 
-      if (!aiPayload) {
+      if (runtimeSignalOutcome.kind === 'noop') {
         await this.handleStrategyFailure(instance.id, config)
         await this.markRuntimeExecutionStateTerminal(activeRuntimeState, {
           failureReason: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
@@ -1155,6 +1433,38 @@ export class SignalGeneratorService {
           symbolCode,
           success: false,
           reason: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+          runtimePhase: 'execution',
+        })
+        return
+      }
+
+      if (runtimeSignalOutcome.kind === 'missing_required_truth') {
+        await this.handleStrategyFailure(instance.id, config)
+        await this.markRuntimeExecutionStateTerminal(activeRuntimeState, {
+          failureReason: runtimeSignalOutcome.reasonCode,
+          failureCode: runtimeSignalOutcome.reasonCode,
+        })
+        this.telemetry.recordGeneration({
+          strategyId: strategy.id,
+          symbolCode,
+          success: false,
+          reason: runtimeSignalOutcome.reasonCode,
+          runtimePhase: 'execution',
+        })
+        return
+      }
+
+      if (runtimeSignalOutcome.kind === 'unexpected_error') {
+        await this.handleStrategyFailure(instance.id, config)
+        await this.markRuntimeExecutionStateTerminal(activeRuntimeState, {
+          failureReason: runtimeSignalOutcome.reasonCode,
+          failureCode: runtimeSignalOutcome.reasonCode,
+        })
+        this.telemetry.recordGeneration({
+          strategyId: strategy.id,
+          symbolCode,
+          success: false,
+          reason: runtimeSignalOutcome.reasonCode,
           runtimePhase: 'execution',
         })
         return
@@ -1173,8 +1483,13 @@ export class SignalGeneratorService {
         config,
         {},
         referenceBar?.time,
-        aiPayload,
-        runtimeProvenance,
+        runtimeSignalOutcome.payload,
+        {
+          ...runtimeProvenance,
+          ...(activeRuntimeState
+            ? { executionSemanticKey: activeRuntimeState.executionSemanticKey }
+            : {}),
+        },
         options.skipCooldown ?? false,
         activeRuntimeState
           ? async () => {

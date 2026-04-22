@@ -11,6 +11,7 @@ import { buildStrategyContext } from '@ai/shared/script-engine/helpers/context-b
 import { resolveStrategyOutput, strategyDecisionToSignalPayload } from '@/modules/strategy-runtime/strategy-protocol.util'
 import { compileStrategyScriptForVm } from '@/modules/strategy-runtime/strategy-script-compiler.util'
 import { ScriptDebugUtil } from '../utils/script-debug.util'
+import { RuntimeSignalIntentAdapter } from './runtime-signal-intent.adapter'
 
 const DEFAULT_RAW_RESPONSE_LIMIT = 4000
 const MAX_SCRIPT_TIMEOUT_MS = 5000
@@ -19,7 +20,15 @@ export type GeneratedSignalPayload =
   | { type: 'signal'; payload: AiSignalPayload & { rawResponse: string } }
   | { type: 'none'; reason: string }
 
+export type PublishedRuntimeSignalOutcome =
+  | { kind: 'signal'; payload: AiSignalPayload & { rawResponse: string } }
+  | { kind: 'noop'; reasonCode: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL'; reason: string }
+  | { kind: 'missing_required_truth'; reasonCode: string; fields: string[] }
+  | { kind: 'unexpected_error'; reasonCode: string; reason: string }
+
 export class SignalGenerationDecisionStage {
+  private readonly runtimeSignalIntentAdapter = new RuntimeSignalIntentAdapter()
+
   constructor(
     private readonly aiService: AiService,
     private readonly logger: Logger,
@@ -364,6 +373,39 @@ export class SignalGenerationDecisionStage {
     }
 
     return strictPromptData
+  }
+
+  buildPublishedRuntimeSignalOutcomeFromDecision(
+    decision: StrategyDecisionV1,
+    ctx: {
+      exchange: string
+      marketType: 'spot' | 'perp'
+      symbol: string
+      timeframe: string
+      referencePrice?: number
+    },
+    config: StrategySignalsRuntimeConfig,
+  ): PublishedRuntimeSignalOutcome {
+    const adapted = this.runtimeSignalIntentAdapter.fromDecision(decision, ctx)
+    if (adapted.kind === 'signal') {
+      return {
+        kind: 'signal',
+        payload: {
+          ...adapted.signal,
+          rawResponse: this.truncateRawResponse(JSON.stringify(decision), config),
+        },
+      }
+    }
+
+    if (adapted.kind === 'noop') {
+      return {
+        kind: 'noop',
+        reasonCode: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+        reason: adapted.reason,
+      }
+    }
+
+    return adapted
   }
 
   buildManualFallbackSignal(

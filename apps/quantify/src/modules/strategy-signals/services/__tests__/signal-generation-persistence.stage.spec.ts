@@ -91,6 +91,7 @@ describe('signalGenerationPersistenceStage', () => {
         publishedSnapshotId: 'snapshot-1',
         snapshotHash: 'snapshot-hash-1',
         executionContentSource: 'PUBLISHED_SNAPSHOT',
+        executionSemanticKey: 'on_start.entry.primary',
       },
       false,
     )
@@ -101,6 +102,7 @@ describe('signalGenerationPersistenceStage', () => {
         runtimeProvenance: expect.objectContaining({
           publishedSnapshotId: 'snapshot-1',
           snapshotHash: 'snapshot-hash-1',
+          executionSemanticKey: 'on_start.entry.primary',
         }),
       }),
     }))
@@ -198,6 +200,96 @@ describe('signalGenerationPersistenceStage', () => {
       symbolCode: 'BTCUSDT',
       success: true,
       reason: 'COOLDOWN_CONSUMED',
+      runtimePhase: 'consumed',
+    })
+  })
+
+  it('does not let a different runtime semantic on the same instance and snapshot block the current semantic', async () => {
+    const telemetry = { recordGeneration: jest.fn() }
+    const tradingSignalRepository = {
+      create: jest.fn().mockResolvedValue({ id: 'signal-instance-1' }),
+    }
+    const generatorRepository = {
+      lockStrategyInstance: jest.fn().mockResolvedValue(undefined),
+      countRecentSignals: jest.fn().mockImplementation(async (args: unknown) => {
+        if (
+          args
+          && typeof args === 'object'
+          && 'runtimeScope' in args
+          && (args as {
+            runtimeScope?: { strategyInstanceId?: string, publishedSnapshotId?: string, executionSemanticKey?: string }
+          }).runtimeScope?.strategyInstanceId === 'instance-1'
+          && (args as {
+            runtimeScope?: { strategyInstanceId?: string, publishedSnapshotId?: string, executionSemanticKey?: string }
+          }).runtimeScope?.publishedSnapshotId === 'snapshot-1'
+          && (args as {
+            runtimeScope?: { strategyInstanceId?: string, publishedSnapshotId?: string, executionSemanticKey?: string }
+          }).runtimeScope?.executionSemanticKey === 'on_start.entry.secondary'
+        ) {
+          return 0
+        }
+
+        return 1
+      }),
+    }
+    const txHost = { withTransaction: jest.fn(async (fn: () => Promise<unknown>) => fn()) }
+    const onCreatedInTransaction = jest.fn().mockResolvedValue(undefined)
+    const stage = new SignalGenerationPersistenceStage(
+      generatorRepository as any,
+      tradingSignalRepository as any,
+      { findByStrategyInstanceId: jest.fn(), incrementFailure: jest.fn(), reset: jest.fn() } as any,
+      { emit: jest.fn() } as any,
+      telemetry as any,
+      txHost as any,
+    )
+
+    const result = await stage.createSignalWithCooldownAndLock(
+      { id: 'instance-1', llmModel: 'gpt-4o-mini' } as any,
+      { id: 'strategy-1' } as any,
+      { symbol: { id: 'symbol-1', code: 'BTCUSDT' }, timeframe: 'm15' } as any,
+      config,
+      {},
+      new Date('2026-04-10T10:00:00.000Z'),
+      {
+        signalType: 'ENTRY',
+        direction: 'BUY',
+        confidence: 80,
+        entryPrice: 100,
+        stopLoss: 90,
+        takeProfit: 110,
+        reasoning: 'instance scoped runtime cooldown',
+        rawResponse: '{"action":"buy"}',
+      } as any,
+      {
+        bindingSource: 'PUBLISHED_SNAPSHOT',
+        publishedSnapshotId: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        executionContentSource: 'PUBLISHED_SNAPSHOT',
+        executionSemanticKey: 'on_start.entry.secondary',
+      },
+      false,
+      onCreatedInTransaction,
+      {
+        runtimePhase: 'consumed',
+        cooldownConsumesRuntimeState: true,
+      },
+    )
+
+    expect(result).toEqual({ created: true, signalId: 'signal-instance-1' })
+    expect(generatorRepository.countRecentSignals).toHaveBeenCalledWith(expect.objectContaining({
+      strategyId: 'strategy-1',
+      symbolId: 'symbol-1',
+      runtimeScope: {
+        strategyInstanceId: 'instance-1',
+        publishedSnapshotId: 'snapshot-1',
+        executionSemanticKey: 'on_start.entry.secondary',
+      },
+    }))
+    expect(onCreatedInTransaction).toHaveBeenCalledWith('signal-instance-1')
+    expect(telemetry.recordGeneration).toHaveBeenCalledWith({
+      strategyId: 'strategy-1',
+      symbolCode: 'BTCUSDT',
+      success: true,
       runtimePhase: 'consumed',
     })
   })
