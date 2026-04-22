@@ -2,7 +2,7 @@ import type { AiSignalPayload, SignalSourceType, SignalStatus } from '@ai/shared
 import type { TransactionHost } from '@nestjs-cls/transactional'
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { EventEmitter2 } from '@nestjs/event-emitter'
-import type { SignalGeneratorRepository } from '../repositories/signal-generator.repository'
+import type { RuntimeCooldownScope, SignalGeneratorRepository } from '../repositories/signal-generator.repository'
 import type { StrategySignalStateRepository } from '../repositories/strategy-signal-state.repository'
 import type { TradingSignalRepository } from '../repositories/trading-signal.repository'
 import type { StrategySignalsRuntimeConfig } from '../types/strategy-signals-config.type'
@@ -78,11 +78,12 @@ export class SignalGenerationPersistenceStage {
       await this.generatorRepository.lockStrategyInstance(instance.id)
 
       if (!skipCooldown) {
-        const existingCount = await this.generatorRepository.countRecentSignals(
-          strategy.id,
-          group.symbol.id,
-          cooldownSince,
-        )
+        const existingCount = await this.generatorRepository.countRecentSignals({
+          strategyId: strategy.id,
+          symbolId: group.symbol.id,
+          since: cooldownSince,
+          runtimeScope: this.resolveRuntimeCooldownScope(instance.id, runtimeProvenance),
+        })
 
         if (existingCount > 0) {
           return { created: false as const, signalId: null as string | null }
@@ -177,12 +178,12 @@ export class SignalGenerationPersistenceStage {
       await this.generatorRepository.lockStrategyInstance(instance.id)
 
       if (!skipCooldown) {
-        const recentSignal = await this.generatorRepository.findRecentSignalForCooldown(
-          strategy.id,
-          primarySymbol.id,
-          instance.id,
+        const recentSignal = await this.generatorRepository.findRecentSignalForCooldown({
+          strategyId: strategy.id,
+          symbolId: primarySymbol.id,
+          instanceId: instance.id,
           cooldownSince,
-        )
+        })
 
         if (recentSignal) {
           return { created: false as const, signalId: null, reason: 'COOLDOWN' }
@@ -256,5 +257,26 @@ export class SignalGenerationPersistenceStage {
       return result
     }
     return String(value)
+  }
+
+  private resolveRuntimeCooldownScope(
+    strategyInstanceId: string,
+    runtimeProvenance: Prisma.JsonObject,
+  ): RuntimeCooldownScope | undefined {
+    const executionContentSource = typeof runtimeProvenance.executionContentSource === 'string'
+      ? runtimeProvenance.executionContentSource
+      : null
+    const publishedSnapshotId = typeof runtimeProvenance.publishedSnapshotId === 'string'
+      ? runtimeProvenance.publishedSnapshotId.trim()
+      : ''
+
+    if (executionContentSource !== 'PUBLISHED_SNAPSHOT' || !publishedSnapshotId) {
+      return undefined
+    }
+
+    return {
+      strategyInstanceId,
+      publishedSnapshotId,
+    }
   }
 }

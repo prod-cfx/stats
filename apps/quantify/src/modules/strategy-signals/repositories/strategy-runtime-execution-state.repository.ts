@@ -25,6 +25,14 @@ export interface MarkRetryableFailureStateInput extends MarkFailedStateInput {
 
 export type MarkCooldownStateInput = MarkRetryableFailureStateInput
 
+export interface RecoverStaleRunningStatesInput {
+  strategyInstanceId: string
+  publishedSnapshotId: string
+  leaseExpiresBefore: Date
+  failureReason?: string | null
+  failureCode?: string | null
+}
+
 @Injectable()
 export class StrategyRuntimeExecutionStateRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
@@ -39,6 +47,35 @@ export class StrategyRuntimeExecutionStateRepository {
         { executionSemanticKey: 'asc' },
       ],
     })
+  }
+
+  async recoverStaleRunningStates(input: RecoverStaleRunningStatesInput): Promise<number> {
+    const recoveryTimestamp = new Date()
+    const result = await this.txHost.tx.strategyRuntimeExecutionState.updateMany({
+      where: {
+        strategyInstanceId: input.strategyInstanceId,
+        publishedSnapshotId: input.publishedSnapshotId,
+        status: 'running',
+        runningAt: {
+          not: null,
+          lte: input.leaseExpiresBefore,
+        },
+      },
+      data: {
+        status: 'retryable',
+        failureFamily: 'retryable',
+        failureReason: input.failureReason ?? null,
+        failureCode: input.failureCode ?? null,
+        attemptCount: { increment: 1 },
+        lastAttemptAt: recoveryTimestamp,
+        runningAt: null,
+        terminalAt: null,
+        consumedAt: null,
+        cooldownUntil: null,
+      },
+    })
+
+    return result.count
   }
 
   async upsertReadyState(input: UpsertReadyStateInput): Promise<StrategyRuntimeExecutionState> {

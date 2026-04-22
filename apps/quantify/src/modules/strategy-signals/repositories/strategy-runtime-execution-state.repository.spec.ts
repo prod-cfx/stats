@@ -374,4 +374,47 @@ describe('strategyRuntimeExecutionStateRepository', () => {
       }),
     })
   })
+
+  it('recovers stale running states into retryable states with an explicit lease expiry reason', async () => {
+    const leaseExpiresBefore = new Date('2026-04-20T10:00:00.000Z')
+    const tx = {
+      strategyRuntimeExecutionState: {
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
+    }
+    const repo = new StrategyRuntimeExecutionStateRepository(createTxHost(tx))
+
+    const recoveredCount = await repo.recoverStaleRunningStates({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snap-1',
+      leaseExpiresBefore,
+      failureReason: 'RUNTIME_RUNNING_LEASE_EXPIRED',
+      failureCode: 'RUNTIME_RUNNING_LEASE_EXPIRED',
+    })
+
+    expect(tx.strategyRuntimeExecutionState.updateMany).toHaveBeenCalledWith({
+      where: {
+        strategyInstanceId: 'inst-1',
+        publishedSnapshotId: 'snap-1',
+        status: 'running',
+        runningAt: {
+          not: null,
+          lte: leaseExpiresBefore,
+        },
+      },
+      data: expect.objectContaining({
+        status: 'retryable',
+        failureFamily: 'retryable',
+        failureReason: 'RUNTIME_RUNNING_LEASE_EXPIRED',
+        failureCode: 'RUNTIME_RUNNING_LEASE_EXPIRED',
+        attemptCount: { increment: 1 },
+        lastAttemptAt: expect.any(Date),
+        runningAt: null,
+        terminalAt: null,
+        consumedAt: null,
+        cooldownUntil: null,
+      }),
+    })
+    expect(recoveredCount).toBe(1)
+  })
 })

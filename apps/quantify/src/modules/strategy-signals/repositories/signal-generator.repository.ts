@@ -5,6 +5,26 @@ import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 import { normalizeRequestedCode } from '@/modules/market-data/utils/market-symbol-code.util'
 
+export interface RuntimeCooldownScope {
+  strategyInstanceId: string
+  publishedSnapshotId: string
+}
+
+export interface CountRecentSignalsInput {
+  strategyId: string
+  symbolId: string
+  since: Date
+  runtimeScope?: RuntimeCooldownScope
+}
+
+export interface FindRecentSignalForCooldownInput {
+  strategyId: string
+  symbolId: string
+  instanceId: string
+  cooldownSince: Date
+  runtimeScope?: RuntimeCooldownScope
+}
+
 @Injectable()
 export class SignalGeneratorRepository {
   constructor(private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>) {}
@@ -113,25 +133,61 @@ export class SignalGeneratorRepository {
     })
   }
 
-  findRecentSignalForCooldown(strategyId: string, symbolId: string, instanceId: string, cooldownSince: Date) {
+  findRecentSignalForCooldown(input: FindRecentSignalForCooldownInput) {
     return this.txHost.tx.tradingSignal.findFirst({
-      where: {
-        strategyId,
-        symbolId,
-        createdAt: { gte: cooldownSince },
-        OR: [{ strategyInstanceId: instanceId }, { strategyInstanceId: null }],
-      },
+      where: this.buildCooldownWhere({
+        strategyId: input.strategyId,
+        symbolId: input.symbolId,
+        since: input.cooldownSince,
+        instanceId: input.instanceId,
+        runtimeScope: input.runtimeScope,
+      }),
       orderBy: { createdAt: 'desc' },
     })
   }
 
-  countRecentSignals(strategyId: string, symbolId: string, since: Date) {
+  countRecentSignals(input: CountRecentSignalsInput) {
     return this.txHost.tx.tradingSignal.count({
-      where: {
-        strategyId,
-        symbolId,
-        createdAt: { gte: since },
-      },
+      where: this.buildCooldownWhere({
+        strategyId: input.strategyId,
+        symbolId: input.symbolId,
+        since: input.since,
+        runtimeScope: input.runtimeScope,
+      }),
     })
+  }
+
+  private buildCooldownWhere(input: {
+    strategyId: string
+    symbolId: string
+    since: Date
+    instanceId?: string
+    runtimeScope?: RuntimeCooldownScope
+  }): Prisma.TradingSignalWhereInput {
+    if (input.runtimeScope) {
+      return {
+        strategyId: input.strategyId,
+        symbolId: input.symbolId,
+        createdAt: { gte: input.since },
+        strategyInstanceId: input.runtimeScope.strategyInstanceId,
+        AND: [{
+          metadata: {
+            path: ['runtimeProvenance', 'publishedSnapshotId'],
+            equals: input.runtimeScope.publishedSnapshotId,
+          },
+        }],
+      }
+    }
+
+    return {
+      strategyId: input.strategyId,
+      symbolId: input.symbolId,
+      createdAt: { gte: input.since },
+      ...(input.instanceId
+        ? {
+            OR: [{ strategyInstanceId: input.instanceId }, { strategyInstanceId: null }],
+          }
+        : {}),
+    }
   }
 }
