@@ -16,15 +16,13 @@ describe('RuntimeSignalIntentAdapter', () => {
       referencePrice: 4.728,
     })
 
-    expect(result).toEqual({
-      kind: 'signal',
-      signal: {
-        direction: 'BUY',
-        signalType: 'ENTRY',
-        positionSizeRatio: 0.1,
-        entryPrice: 4.728,
-      },
-    })
+    expect(result.kind).toBe('signal')
+    expect(result.signal).toEqual(expect.objectContaining({
+      direction: 'BUY',
+      signalType: 'ENTRY',
+      positionSizeRatio: 0.1,
+      entryPrice: 4.728,
+    }))
   })
 
   it('returns noop for NOOP decisions without requiring referencePrice', () => {
@@ -51,10 +49,11 @@ describe('RuntimeSignalIntentAdapter', () => {
       referencePrice: undefined,
     })
 
-    expect(result).toEqual({
+    expect(result).toEqual(expect.objectContaining({
       kind: 'missing_required_truth',
       reasonCode: 'RUNTIME_SIGNAL_REFERENCE_PRICE_MISSING',
-    })
+      fields: expect.arrayContaining(['referencePrice']),
+    }))
   })
 
   it('returns missing_required_truth when referencePrice is 0', () => {
@@ -70,9 +69,29 @@ describe('RuntimeSignalIntentAdapter', () => {
       referencePrice: 0,
     })
 
-    expect(result).toEqual({
+    expect(result).toEqual(expect.objectContaining({
       kind: 'missing_required_truth',
       reasonCode: 'RUNTIME_SIGNAL_REFERENCE_PRICE_MISSING',
+      fields: expect.arrayContaining(['referencePrice']),
+    }))
+  })
+
+  it('returns missing_required_truth when size is missing', () => {
+    const result = adapter.fromDecision({
+      action: 'OPEN_LONG',
+      reason: 'compiled.entry',
+    }, {
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ORDIUSDT',
+      timeframe: '1h',
+      referencePrice: 4.728,
     })
+
+    expect(result).toEqual(expect.objectContaining({
+      kind: 'missing_required_truth',
+      reasonCode: 'RUNTIME_SIGNAL_SIZE_MISSING',
+      fields: expect.arrayContaining(['size']),
+    }))
   })
 })
