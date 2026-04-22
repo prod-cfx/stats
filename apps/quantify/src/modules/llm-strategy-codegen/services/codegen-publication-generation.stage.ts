@@ -222,27 +222,18 @@ export class CodegenPublicationGenerationStage {
 
     if (symbol) {
       locked.symbol = normalizePublishedSymbol(symbol)
-    } else if (args.canonicalSpec.market.symbol) {
-      locked.symbol = normalizePublishedSymbol(args.canonicalSpec.market.symbol)
     }
 
-    const resolvedTimeframe = args.canonicalSpec.dataRequirements.requiredTimeframes[0]
-      ?? args.canonicalSpec.market.defaultTimeframe
-      ?? timeframe
-    if (resolvedTimeframe) {
-      locked.timeframe = resolvedTimeframe
+    if (timeframe) {
+      locked.timeframe = timeframe
     }
 
     if (exchange) {
       locked.exchange = exchange
-    } else if (args.canonicalSpec.market.exchange) {
-      locked.exchange = args.canonicalSpec.market.exchange
     }
 
     if (marketType === 'spot' || marketType === 'perp') {
       locked.marketType = marketType
-    } else {
-      locked.marketType = args.canonicalSpec.market.marketType
     }
 
     if (args.normalizedIntent.position?.mode === 'fixed_ratio' && Number.isFinite(args.normalizedIntent.position.value)) {
