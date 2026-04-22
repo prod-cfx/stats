@@ -3301,6 +3301,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
     }))
     expect(result.assistantPrompt).toContain('请确认是否按这个逻辑生成脚本')
+    expect(result.assistantPrompt).toContain('价格相对前收盘')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       semanticState: expect.objectContaining({
         version: 1,
@@ -3384,6 +3385,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ]))
     expect(result.status).toBe('CONFIRM_GATE')
     expect(result.assistantPrompt).toContain('请确认是否按这个逻辑生成脚本')
+    expect(result.assistantPrompt).toContain('布林带')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       semanticState: expect.objectContaining({
         triggers: expect.arrayContaining([

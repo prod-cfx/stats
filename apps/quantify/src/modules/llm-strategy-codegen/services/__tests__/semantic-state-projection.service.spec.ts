@@ -1,3 +1,4 @@
+import type { SemanticRiskState, SemanticTriggerState } from '../../types/semantic-state'
 import { SemanticStateProjectionService } from '../semantic-state-projection.service'
 
 describe('SemanticStateProjectionService', () => {
@@ -774,7 +775,7 @@ describe('SemanticStateProjectionService', () => {
 
   it('keeps conversation summary stable for the same locked atoms with different order', () => {
     const makeState = (reverseTriggerOrder = false, reverseRiskOrder = false): ReturnType<typeof service.buildConversationView> => {
-      const triggers = [
+      const triggers: SemanticTriggerState[] = [
         {
           id: 'trigger-exit',
           key: 'execution.on_start',
@@ -799,7 +800,7 @@ describe('SemanticStateProjectionService', () => {
         },
       ]
 
-      const risks = [
+      const risks: SemanticRiskState[] = [
         {
           id: 'risk-stop',
           key: 'risk.stop_loss_pct',

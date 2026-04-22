@@ -244,7 +244,7 @@ export class CodegenConversationService {
       ? this.clarificationQuestion.buildFromDecision(decision)
       : semanticArtifacts.clarificationPrompt
     const confirmationAssistantPrompt = initialStatus === 'CONFIRM_GATE'
-      ? this.buildSemanticLogicGateAssistantPrompt(initialSemanticState, normalization.normalizedIntent)
+      ? this.buildSemanticLogicGateAssistantPrompt(initialSemanticState)
       : null
     const bootstrap = buildStartSessionBootstrap({
       initialMessage: dto.initialMessage,
@@ -456,7 +456,7 @@ export class CodegenConversationService {
             ? this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization)
             : deterministicAuthority === 'compileability'
               ? this.buildCompileabilityAssistantPrompt(compileability)
-              : this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState, normalization.normalizedIntent)
+              : this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState)
       const targetStatus = deterministicAuthority === 'confirm_gate' ? 'CONFIRM_GATE' : 'DRAFTING'
       const shouldPersistDecisionSpecDesc = deterministicAuthority === 'decision' && hasStructuredClarificationAnswers
       const shouldPersistDeterministicOutcome = plan.related
@@ -2818,7 +2818,7 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
     }
 
-    const logicGateAssistantPrompt = this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState, normalization.normalizedIntent)
+    const logicGateAssistantPrompt = this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState)
     const historyAfterLogicGate = this.appendConversationHistory(
       args.constraintPack.conversationHistory ?? [],
       args.message,
@@ -3414,9 +3414,7 @@ export class CodegenConversationService {
 
   private buildSemanticLogicGateAssistantPrompt(
     semanticState: SemanticState,
-    normalizedIntent: StrategyNormalizedIntent,
   ): string {
-    void normalizedIntent
     const summary = this.buildSemanticClarificationSummary(semanticState)
     return `我整理出的策略逻辑如下：${summary}。请确认是否按这个逻辑生成脚本。`
   }
