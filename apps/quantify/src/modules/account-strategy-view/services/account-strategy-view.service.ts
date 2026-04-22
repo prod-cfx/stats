@@ -24,9 +24,9 @@ import { MarketDataReadGateway } from '@/modules/market-data/services/market-dat
 import { StrategyInstanceStatsService } from '@/modules/strategy-instances/services/strategy-instance-stats.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { StrategyInstancesService } from '@/modules/strategy-instances/services/strategy-instances.service'
-import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '@/modules/strategy-signals/types/strategy-signals-config.type'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { StrategyRuntimeExecutionStateService } from '@/modules/strategy-signals/services/strategy-runtime-execution-state.service'
+import { DEFAULT_STRATEGY_SIGNALS_CONFIG } from '@/modules/strategy-signals/types/strategy-signals-config.type'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { TradingService } from '@/modules/trading/trading.service'
 import { Prisma } from '@/prisma/prisma.types'
@@ -826,6 +826,7 @@ export class AccountStrategyViewService {
       : null
 
     let strategyInstanceIdForBinding: string | null = null
+    let deployedStrategyInstanceId: string | null = null
     try {
       await this.marketDataIngestionService.ensureSymbolsSubscribed([resolvedDeploy.symbol])
 
@@ -853,6 +854,7 @@ export class AccountStrategyViewService {
         executionConfigVersion: 1,
       })
       strategyInstanceIdForBinding = deployResult.strategyInstanceId
+      deployedStrategyInstanceId = deployResult.strategyInstanceId
 
       const riskProfile = this.buildRiskProfileSnapshot(dto)
       await this.repo.upsertRiskProfile({
@@ -871,8 +873,6 @@ export class AccountStrategyViewService {
         mode: deployResult.mode,
         userId: dto.userId,
       })
-
-      return this.getStrategyDetail(dto.userId, deployResult.strategyInstanceId)
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       const code = error instanceof DomainException ? error.code : ErrorCode.BAD_REQUEST
@@ -896,6 +896,8 @@ export class AccountStrategyViewService {
       }
       throw error
     }
+
+    return this.getStrategyDetail(dto.userId, deployedStrategyInstanceId!)
   }
 
   async getDeployResult(userId: string, deployRequestId: string): Promise<AccountStrategyDetailResponseDto | null> {
