@@ -882,6 +882,48 @@ describe('codegenPublicationGenerationStage', () => {
     }))
   })
 
+  it('ignores non-locked semantic context values when reading publication context', () => {
+    const stage = new CodegenPublicationGenerationStage(
+      new CanonicalSpecBuilderService(),
+      new SpecDescBuilderService(),
+      new StrategySummaryBuilderService(new ScriptProfileExtractorService()),
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    )
+
+    expect((stage as any).readSemanticContextValue({
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: 'BTCUSDT',
+      status: 'open',
+      priority: 'context',
+      questionHint: '',
+      affectsExecution: true,
+    })).toBeNull()
+    expect((stage as any).readSemanticContextValue({
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: 'BTCUSDT',
+      status: 'superseded',
+      priority: 'context',
+      questionHint: '',
+      affectsExecution: true,
+    })).toBeNull()
+    expect((stage as any).readSemanticContextValue({
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: 'BTCUSDT',
+      status: 'locked',
+      priority: 'context',
+      questionHint: '',
+      affectsExecution: true,
+    })).toBe('BTCUSDT')
+  })
+
   it('reuses the confirmed canonical selection and labels fallback semanticSource as rule-derived', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())

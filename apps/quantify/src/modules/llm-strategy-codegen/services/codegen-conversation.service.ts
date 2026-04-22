@@ -3990,7 +3990,7 @@ export class CodegenConversationService {
   }
 
   private readSemanticContextValue(slot: SemanticSlotState | null): string | null {
-    if (!slot || typeof slot.value !== 'string' || slot.value.trim().length === 0) {
+    if (slot?.status !== 'locked' || typeof slot.value !== 'string' || slot.value.trim().length === 0) {
       return null
     }
 
@@ -4675,31 +4675,7 @@ export class CodegenConversationService {
   private buildInferredConfirmationSemanticDefaults(
     semanticState: SemanticState,
   ): InferredConfirmationSemanticDefaults {
-    const projectedChecklist = this.buildLegacyLogicSnapshotProjectionForCompatibility(semanticState, {})
-    const projectedInferredKeys = Array.isArray(projectedChecklist.riskRules?._inferredAssumptions)
-      ? projectedChecklist.riskRules._inferredAssumptions.filter((key): key is InferredConfirmationDecisionKey =>
-          key === 'risk.stopLossBasis' || key === 'risk.takeProfitBasis',
-        )
-      : []
-    const semanticInferredKeys = new Set<InferredConfirmationDecisionKey>(projectedInferredKeys)
-    const stopLossRisk = semanticState.risk.find(item => item.key === 'risk.stop_loss_pct')
-    const takeProfitRisk = semanticState.risk.find(item => item.key === 'risk.take_profit_pct')
-    if (stopLossRisk?.source === 'inferred') {
-      semanticInferredKeys.add('risk.stopLossBasis')
-    }
-    if (takeProfitRisk?.source === 'inferred') {
-      semanticInferredKeys.add('risk.takeProfitBasis')
-    }
-    const stopLossBasis = this.readStrategyRuleBasisKind(stopLossRisk?.params?.basis)
-      ?? this.readStrategyRuleBasisKind(projectedChecklist.riskRules?.stopLossBasis)
-    const takeProfitBasis = this.readStrategyRuleBasisKind(takeProfitRisk?.params?.basis)
-      ?? this.readStrategyRuleBasisKind(projectedChecklist.riskRules?.takeProfitBasis)
-
-    return {
-      inferredKeys: Array.from(semanticInferredKeys),
-      stopLossBasis,
-      takeProfitBasis,
-    }
+    return this.semanticStateProjection.buildConversationView(semanticState).inferredDefaults
   }
 
   private applyInferredRiskBasisOverridesToSemanticState(

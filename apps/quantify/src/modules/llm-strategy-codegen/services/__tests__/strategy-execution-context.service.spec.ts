@@ -353,6 +353,39 @@ describe('StrategyExecutionContextService semantic state', () => {
     ]))
   })
 
+  it('ignores open semantic context slots even when they carry values', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: [],
+      triggers: [],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: slot('exchange', 'contextSlots.exchange', 'okx', 'open'),
+        symbol: slot('symbol', 'contextSlots.symbol', 'BTCUSDT', 'open'),
+        marketType: slot('marketType', 'contextSlots.marketType', 'perp', 'open'),
+        timeframe: slot('timeframe', 'contextSlots.timeframe', '15m', 'open'),
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    }
+
+    const result = service.resolveFromSemanticState(state)
+    expect(result.context).toEqual({
+      exchange: null,
+      symbol: null,
+      marketType: null,
+      timeframe: null,
+    })
+    expect(result.ambiguities).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: 'exchange' }),
+      expect.objectContaining({ field: 'symbol' }),
+      expect.objectContaining({ field: 'marketType' }),
+      expect.objectContaining({ field: 'timeframe' }),
+    ]))
+  })
+
   it('canonicalizes semantic slot symbol values', () => {
     const state: SemanticState = {
       version: 1,

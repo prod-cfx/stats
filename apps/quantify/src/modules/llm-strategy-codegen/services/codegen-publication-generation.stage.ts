@@ -342,7 +342,7 @@ export class CodegenPublicationGenerationStage {
   }
 
   private readSemanticContextValue(slot: SemanticState['contextSlots'][keyof SemanticState['contextSlots']]): string | null {
-    if (!slot || typeof slot.value !== 'string' || slot.value.trim().length === 0) {
+    if (slot?.status !== 'locked' || typeof slot.value !== 'string' || slot.value.trim().length === 0) {
       return null
     }
     return slot.value.trim()

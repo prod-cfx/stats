@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common'
+import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { SemanticSlotState, SemanticState } from '../types/semantic-state'
 
 export interface SemanticConversationView {
@@ -21,8 +22,8 @@ export interface SemanticConversationView {
   }
   inferredDefaults: {
     inferredKeys: Array<'risk.stopLossBasis' | 'risk.takeProfitBasis'>
-    stopLossBasis: string | null
-    takeProfitBasis: string | null
+    stopLossBasis: StrategyRuleBasis['kind'] | null
+    takeProfitBasis: StrategyRuleBasis['kind'] | null
   }
 }
 
@@ -388,13 +389,13 @@ export class SemanticStateProjectionService {
 
   private buildInferredDefaults(riskItems: SemanticState['risk']): {
     inferredKeys: Array<'risk.stopLossBasis' | 'risk.takeProfitBasis'>
-    stopLossBasis: string | null
-    takeProfitBasis: string | null
+    stopLossBasis: StrategyRuleBasis['kind'] | null
+    takeProfitBasis: StrategyRuleBasis['kind'] | null
   } {
     const inferred: {
       inferredKeys: Array<'risk.stopLossBasis' | 'risk.takeProfitBasis'>
-      stopLossBasis: string | null
-      takeProfitBasis: string | null
+      stopLossBasis: StrategyRuleBasis['kind'] | null
+      takeProfitBasis: StrategyRuleBasis['kind'] | null
     } = {
       inferredKeys: [],
       stopLossBasis: null,
@@ -402,22 +403,41 @@ export class SemanticStateProjectionService {
     }
 
     for (const risk of riskItems) {
-      if (typeof risk.params.basis !== 'string' || risk.params.basisSource !== 'system_default') {
+      const basis = this.readStrategyRuleBasisKind(risk.params.basis)
+      if (!basis || risk.params.basisSource !== 'system_default') {
         continue
       }
 
       if (risk.key === 'risk.stop_loss_pct' && !inferred.inferredKeys.includes('risk.stopLossBasis')) {
         inferred.inferredKeys.push('risk.stopLossBasis')
-        inferred.stopLossBasis = risk.params.basis
+        inferred.stopLossBasis = basis
       }
 
       if (risk.key === 'risk.take_profit_pct' && !inferred.inferredKeys.includes('risk.takeProfitBasis')) {
         inferred.inferredKeys.push('risk.takeProfitBasis')
-        inferred.takeProfitBasis = risk.params.basis
+        inferred.takeProfitBasis = basis
       }
     }
 
     return inferred
+  }
+
+  private readStrategyRuleBasisKind(value: unknown): StrategyRuleBasis['kind'] | null {
+    if (
+      value === 'prev_close'
+      || value === 'entry_avg_price'
+      || value === 'position_pnl'
+      || value === 'peak_equity'
+      || value === 'peak_position_pnl'
+      || value === 'upper_band'
+      || value === 'lower_band'
+      || value === 'middle_band'
+      || value === 'last_high'
+      || value === 'last_low'
+    ) {
+      return value
+    }
+    return null
   }
 
   private findNextOpenSlot(state: SemanticState): SemanticSlotState | null {

@@ -103,7 +103,7 @@ export class StrategyExecutionContextService {
   }
 
   private readSemanticString(slot: SemanticSlotState | null): string | null {
-    const value = slot?.status !== 'superseded' && typeof slot?.value === 'string' ? slot.value.trim() : ''
+    const value = slot?.status === 'locked' && typeof slot?.value === 'string' ? slot.value.trim() : ''
     return value ? value : null
   }
 
