@@ -1,7 +1,7 @@
 # AI Quant Runtime Signal Deploy Execution 修复方案
 
 日期：2026-04-22  
-状态：Draft for review  
+状态：Draft for review（目标态设计，非当前实现现状）  
 范围：Issue 856 / publishedSnapshot -> deploy -> runtime signal -> execution -> OKX testnet
 
 ---
@@ -134,7 +134,9 @@ deploy/runtime 使用的输入只能来自：
 
 ### 4.2 Runtime 直接消费 compiled decision
 
-一旦 publishedSnapshot 对应的 compiled runtime 已经算出合法 `StrategyDecisionV1`，runtime 应直接进入 signal 创建，不再额外使用另一套“AI-like payload 完整性校验”去重新定义这是不是 signal。
+> 说明：本节描述的是目标实现方向。当前代码仍存在 strict signal payload 否决路径，本设计的目的正是替换该路径，而不是宣称现状已经完成。
+
+一旦 publishedSnapshot 对应的 compiled runtime 已经算出合法 `StrategyDecisionV1`，runtime 的目标态应直接进入 signal 创建，不再额外使用另一套“AI-like payload 完整性校验”去重新定义这是不是 signal。
 
 ### 4.3 缺字段先真理化，不补默认值
 
@@ -180,6 +182,8 @@ strategy_signals -> user_signal_executions -> OKX testnet order
 > **方案 B：runtime decision adapter**
 
 ### 方案定义
+
+> 说明：以下链路是本次建议落地的目标结构；当前实现尚未完成迁移。
 
 新增或重构一层清晰的 runtime 决策出口：
 
