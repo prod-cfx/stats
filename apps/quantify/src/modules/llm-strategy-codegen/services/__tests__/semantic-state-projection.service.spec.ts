@@ -527,4 +527,364 @@ describe('SemanticStateProjectionService', () => {
 
     expect(view.summary).toContain('价格相对前收盘')
   })
+
+  it('does not mark deterministic semantics when only open/incomplete atoms exist', () => {
+    const view = service.buildConversationView({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-ma',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'long_term',
+            'reference.period': 50,
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'confirmationMode.entry',
+              fieldPath: 'triggers[0].params.confirmationMode',
+              status: 'open',
+              priority: 'core',
+              questionHint: '确认方式',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      actions: [
+        {
+          id: 'action-open',
+          key: 'open_long',
+          status: 'open',
+          source: 'user_explicit',
+        },
+      ],
+      risk: [
+        {
+          id: 'risk-open',
+          key: 'risk.stop_loss_pct',
+          params: {
+            valuePct: 5,
+            basis: 'entry_avg_price',
+            basisSource: 'system_default',
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0,
+        positionMode: 'long_only',
+        status: 'open',
+        source: 'user_explicit',
+      },
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-21T00:00:00.000Z',
+    })
+
+    expect(view.hasDeterministicSemantics).toBe(false)
+    expect(view.summary).toBe('已识别部分条件，但仍未完整。')
+    expect(view.triggerSummary).toBe('')
+    expect(view.riskSummary).toBe('')
+    expect(view.positionSummary).toBe('')
+    expect(view.recommendationSignals).toEqual({
+      hasShortIntent: false,
+      hasLongIntent: false,
+      hasBidirectionalIntent: false,
+      hasGridIntent: false,
+    })
+  })
+
+  it('buildClarificationView still surfaces open next question', () => {
+    const clarification = service.buildClarificationView({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-ma',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'long_term',
+            'reference.period': 50,
+          },
+          status: 'open',
+          source: 'user_explicit',
+          openSlots: [
+            {
+              slotKey: 'confirmationMode.entry',
+              fieldPath: 'triggers[0].params.confirmationMode',
+              status: 'open',
+              priority: 'core',
+              questionHint: '突破请确认后续动作',
+              affectsExecution: true,
+            },
+          ],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    })
+
+    expect(clarification.nextQuestion).toBe('突破请确认后续动作')
+  })
+
+  it('excludes superseded locked semantic atoms from deterministic summary and signals', () => {
+    const view = service.buildConversationView({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'trigger-legacy',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'long_term',
+            'reference.period': 50,
+          },
+          sideScope: 'long',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'trigger-active',
+          key: 'price.percent_change',
+          phase: 'exit',
+          params: {
+            valuePct: -2,
+            basis: 'prev_close',
+          },
+          sideScope: 'short',
+          status: 'locked',
+          source: 'user_explicit',
+          supersedes: ['trigger-legacy'],
+          openSlots: [],
+        },
+      ],
+      actions: [],
+      risk: [
+        {
+          id: 'risk-legacy',
+          key: 'risk.stop_loss_pct',
+          params: {
+            valuePct: 1,
+            basis: 'entry_avg_price',
+            basisSource: 'system_default',
+          },
+          status: 'locked',
+          source: 'derived',
+          openSlots: [],
+        },
+        {
+          id: 'risk-active',
+          key: 'risk.stop_loss_pct',
+          params: {
+            valuePct: 2.5,
+            basis: 'entry_avg_price',
+            basisSource: 'system_default',
+          },
+          status: 'locked',
+          source: 'derived',
+          supersedes: ['risk-legacy'],
+          openSlots: [],
+        },
+      ],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    })
+
+    expect(view.triggerSummary).not.toContain('MA50')
+    expect(view.summary).toContain('价格相对前收盘下跌2%')
+    expect(view.riskSummary).toContain('2.5%')
+    expect(view.riskSummary).not.toContain('1%')
+    expect(view.recommendationSignals.hasLongIntent).toBe(false)
+    expect(view.recommendationSignals.hasShortIntent).toBe(true)
+    expect(view.recommendationSignals.hasBidirectionalIntent).toBe(false)
+  })
+
+  it('ignores user_explicit risk basis for inferred defaults', () => {
+    const view = service.buildConversationView({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [],
+      actions: [],
+      risk: [
+        {
+          id: 'risk-user-explicit',
+          key: 'risk.stop_loss_pct',
+          params: {
+            valuePct: 5,
+            basis: 'position_pnl',
+            basisSource: 'user_explicit',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    })
+
+    expect(view.inferredDefaults).toEqual({
+      inferredKeys: [],
+      stopLossBasis: null,
+      takeProfitBasis: null,
+    })
+  })
+
+  it('keeps conversation summary stable for the same locked atoms with different order', () => {
+    const makeState = (reverseTriggerOrder = false, reverseRiskOrder = false): ReturnType<typeof service.buildConversationView> => {
+      const triggers = [
+        {
+          id: 'trigger-exit',
+          key: 'execution.on_start',
+          phase: 'exit',
+          params: {},
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'trigger-entry',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'long_term',
+            'reference.period': 20,
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ]
+
+      const risks = [
+        {
+          id: 'risk-stop',
+          key: 'risk.stop_loss_pct',
+          params: {
+            valuePct: 3,
+            basis: 'entry_avg_price',
+            basisSource: 'system_default',
+          },
+          status: 'locked',
+          source: 'derived',
+          openSlots: [],
+        },
+        {
+          id: 'risk-take',
+          key: 'risk.take_profit_pct',
+          params: {
+            valuePct: 2,
+            basis: 'entry_avg_price',
+            basisSource: 'system_default',
+          },
+          status: 'locked',
+          source: 'derived',
+          openSlots: [],
+        },
+      ]
+
+      return service.buildConversationView({
+        version: 1,
+        families: ['single-leg'],
+        triggers: reverseTriggerOrder ? [...triggers].reverse() : triggers,
+        actions: [],
+        risk: reverseRiskOrder ? [...risks].reverse() : risks,
+        position: {
+          mode: 'fixed_ratio',
+          value: 0.1,
+          positionMode: 'long_only',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        contextSlots: {
+          exchange: null,
+          symbol: null,
+          marketType: null,
+          timeframe: null,
+        },
+        normalizationNotes: [],
+        updatedAt: '2026-04-22T00:00:00.000Z',
+      })
+    }
+
+    const viewA = makeState()
+    const viewB = makeState(true, true)
+
+    expect(viewA.summary).toBe(viewB.summary)
+    expect(viewA.triggerSummary).toBe(viewB.triggerSummary)
+    expect(viewA.riskSummary).toBe(viewB.riskSummary)
+    expect(viewA.positionSummary).toBe(viewB.positionSummary)
+  })
+
+  it('formats floating-point position ratios safely', () => {
+    const view = service.buildConversationView({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [],
+      actions: [],
+      risk: [],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.30000000000000004,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    })
+
+    expect(view.positionSummary).toBe('仓位：30%')
+  })
 })

@@ -29,13 +29,26 @@ export interface SemanticConversationView {
 @Injectable()
 export class SemanticStateProjectionService {
   buildConversationView(state: SemanticState): SemanticConversationView {
-    const triggerSummary = this.buildTriggerSummary(state.triggers, false)
-    const riskSummary = this.buildRiskSummary(state.risk)
+    const deterministicTriggers = this.filterDeterministicTriggers(state.triggers)
+    const deterministicRisk = this.filterDeterministicRisk(state.risk)
+    const deterministicActions = this.filterDeterministicActions(state.actions)
+    const deterministicSignals = this.buildRecommendationSignals({
+      actions: deterministicActions,
+      triggers: deterministicTriggers,
+      families: state.families,
+    })
+    const triggerSummary = this.buildTriggerSummary(deterministicTriggers, false)
+    const riskSummary = this.buildRiskSummary(deterministicRisk)
     const positionSummary = this.buildPositionSummary(state.position)
     const executionContext = this.buildExecutionContext(state.contextSlots)
-    const recommendationSignals = this.buildRecommendationSignals(state)
-    const inferredDefaults = this.buildInferredDefaults(state.risk)
-    const hasDeterministicSemantics = this.hasDeterministicSemantics(state, recommendationSignals)
+    const inferredDefaults = this.buildInferredDefaults(deterministicRisk)
+    const hasDeterministicSemantics = this.hasDeterministicSemantics({
+      triggers: deterministicTriggers,
+      actions: deterministicActions,
+      risk: deterministicRisk,
+      position: state.position,
+      hasGridIntent: deterministicSignals.hasGridIntent,
+    })
     const summaryItems = [triggerSummary, riskSummary, positionSummary]
       .filter(item => item.length > 0)
 
@@ -46,7 +59,12 @@ export class SemanticStateProjectionService {
       positionSummary,
       executionContext,
       hasDeterministicSemantics,
-      recommendationSignals,
+      recommendationSignals: {
+        hasShortIntent: deterministicSignals.hasShortIntent,
+        hasLongIntent: deterministicSignals.hasLongIntent,
+        hasBidirectionalIntent: deterministicSignals.hasBidirectionalIntent,
+        hasGridIntent: deterministicSignals.hasGridIntent,
+      },
       inferredDefaults,
     }
   }
@@ -94,10 +112,11 @@ export class SemanticStateProjectionService {
 
   private buildTriggerSummary(triggers: SemanticState['triggers'], includeSuperseded: boolean): string {
     const sourceTriggers = includeSuperseded
-      ? triggers
-      : triggers.filter(trigger => trigger.status !== 'superseded')
+      ? [...triggers]
+      : triggers.filter(trigger => trigger.status === 'locked')
 
     return sourceTriggers
+      .sort((left, right) => this.compareTriggers(left, right))
       .map((trigger) => {
         if (trigger.key === 'grid.range_rebalance') {
           const lower = trigger.params.rangeLower
@@ -106,7 +125,7 @@ export class SemanticStateProjectionService {
           return [
             '入场：区间网格',
             typeof lower === 'number' && typeof upper === 'number' ? `${lower}-${upper}` : '区间待补充',
-            typeof stepPct === 'number' ? `步长 ${stepPct}%` : '步长待补充',
+            typeof stepPct === 'number' ? `步长 ${this.formatPercent(stepPct)}%` : '步长待补充',
           ].join(' ')
         }
 
@@ -122,7 +141,7 @@ export class SemanticStateProjectionService {
             ? '开仓均价'
             : '前收盘'
           const direction = typeof trigger.params.valuePct === 'number' && trigger.params.valuePct > 0 ? '上涨' : '下跌'
-          const pctText = typeof trigger.params.valuePct === 'number' ? `${Math.abs(trigger.params.valuePct)}%` : '阈值待补充'
+          const pctText = typeof trigger.params.valuePct === 'number' ? `${this.formatPercent(Math.abs(trigger.params.valuePct))}%` : '阈值待补充'
           return `${trigger.phase === 'entry' ? '入场' : '出场'}：价格相对${basisLabel}${direction}${pctText}`
         }
 
@@ -156,7 +175,8 @@ export class SemanticStateProjectionService {
 
   private buildRiskSummary(riskItems: SemanticState['risk']): string {
     return riskItems
-      .filter(risk => risk.status !== 'superseded')
+      .filter(risk => risk.status === 'locked')
+      .sort((left, right) => this.compareRiskAtoms(left, right))
       .map((risk) => {
         const valuePct = risk.params.valuePct
         if (typeof valuePct !== 'number' || !Number.isFinite(valuePct) || valuePct <= 0) {
@@ -165,20 +185,20 @@ export class SemanticStateProjectionService {
 
         if (risk.key === 'risk.stop_loss_pct') {
           const basis = this.describeRiskBasis(risk.params.basis)
-          return `止损：价格相对${basis}下跌${valuePct}% 强制平仓`
+          return `止损：价格相对${basis}下跌${this.formatPercent(valuePct)}% 强制平仓`
         }
 
         if (risk.key === 'risk.take_profit_pct') {
           const basis = this.describeRiskBasis(risk.params.basis)
-          return `止盈：价格相对${basis}上涨${valuePct}% 平仓`
+          return `止盈：价格相对${basis}上涨${this.formatPercent(valuePct)}% 平仓`
         }
 
         if (risk.key === 'risk.max_drawdown_pct') {
-          return `回撤：下跌${valuePct}% 平仓`
+          return `回撤：下跌${this.formatPercent(valuePct)}% 平仓`
         }
 
         if (risk.key === 'risk.max_single_loss_pct') {
-          return `单笔止损：下跌${valuePct}%`
+          return `单笔止损：下跌${this.formatPercent(valuePct)}%`
         }
 
         return ''
@@ -217,7 +237,7 @@ export class SemanticStateProjectionService {
     }
 
     const ratio = position.mode === 'fixed_ratio'
-      ? `${position.value <= 1 ? position.value * 100 : position.value}`
+      ? this.formatRatio(position.value)
       : String(position.value)
     return `仓位：${ratio}%`
   }
@@ -230,41 +250,40 @@ export class SemanticStateProjectionService {
       && position.value > 0
   }
 
-  private buildRecommendationSignals(state: SemanticState): {
+  private buildRecommendationSignals(input: {
+    actions: SemanticState['actions']
+    triggers: SemanticState['triggers']
+    families: SemanticState['families']
+  }): {
     hasShortIntent: boolean
     hasLongIntent: boolean
     hasBidirectionalIntent: boolean
     hasGridIntent: boolean
   } {
-    const hasGridIntent = state.families.includes('grid.range_rebalance')
-      || state.families.some(family => family.includes('grid'))
-      || state.triggers.some(trigger =>
-        trigger.status !== 'superseded'
-        && trigger.key.includes('grid')
-      )
+    const hasGridFamily = input.families.includes('grid.range_rebalance')
+      || input.families.some(family => family.includes('grid'))
+    const hasGridTrigger = input.triggers.some(trigger =>
+      trigger.key.includes('grid')
+    )
+    const hasGridIntent = hasGridTrigger
+      || (hasGridFamily && (input.actions.length > 0 || input.triggers.length > 0))
 
-    const hasLongIntentFromActions = state.actions
-      .filter(action => action.status !== 'superseded')
+    const hasLongIntentFromActions = input.actions
       .some(action => action.key === 'open_long' || action.key === 'close_long' || action.key === 'reduce_long')
 
-    const hasShortIntentFromActions = state.actions
-      .filter(action => action.status !== 'superseded')
+    const hasShortIntentFromActions = input.actions
       .some(action => action.key === 'open_short' || action.key === 'close_short' || action.key === 'reduce_short')
 
-    const hasLongIntentFromTrigger = state.triggers
-      .filter(trigger => trigger.status !== 'superseded')
+    const hasLongIntentFromTrigger = input.triggers
       .some(trigger => trigger.sideScope === 'long')
 
-    const hasShortIntentFromTrigger = state.triggers
-      .filter(trigger => trigger.status !== 'superseded')
+    const hasShortIntentFromTrigger = input.triggers
       .some(trigger => trigger.sideScope === 'short')
 
-    const hasBidirectionalFromSideScope = state.triggers
-      .filter(trigger => trigger.status !== 'superseded')
+    const hasBidirectionalFromSideScope = input.triggers
       .some(trigger => trigger.sideScope === 'both')
 
-    const hasBidirectionalGridSideMode = state.triggers
-      .filter(trigger => trigger.status !== 'superseded')
+    const hasBidirectionalGridSideMode = input.triggers
       .some(trigger => trigger.key === 'grid.range_rebalance' && trigger.params.sideMode === 'bidirectional')
 
     const hasLongIntent = hasLongIntentFromActions || hasLongIntentFromTrigger
@@ -279,6 +298,92 @@ export class SemanticStateProjectionService {
       hasBidirectionalIntent,
       hasGridIntent,
     }
+  }
+
+  private hasDeterministicSemantics(
+    input: {
+      triggers: SemanticState['triggers']
+      actions: SemanticState['actions']
+      risk: SemanticState['risk']
+      position: SemanticState['position']
+      hasGridIntent: boolean
+    },
+  ): boolean {
+    return input.triggers.length > 0
+      || input.actions.length > 0
+      || input.risk.length > 0
+      || this.hasValidLockedPosition(input.position)
+      || input.hasGridIntent
+  }
+
+  private compareTriggers(left: SemanticState['triggers'][number], right: SemanticState['triggers'][number]): number {
+    const phaseOrder: Record<'entry' | 'exit' | 'risk' | 'gate', number> = {
+      entry: 0,
+      exit: 1,
+      risk: 2,
+      gate: 3,
+    }
+    if (left.phase !== right.phase) {
+      return phaseOrder[left.phase] - phaseOrder[right.phase]
+    }
+
+    if (left.key !== right.key) {
+      return left.key.localeCompare(right.key)
+    }
+
+    return left.id.localeCompare(right.id)
+  }
+
+  private compareRiskAtoms(
+    left: SemanticState['risk'][number],
+    right: SemanticState['risk'][number],
+  ): number {
+    if (left.key !== right.key) {
+      return left.key.localeCompare(right.key)
+    }
+
+    return left.id.localeCompare(right.id)
+  }
+
+  private filterDeterministicAtoms<T extends {
+    id: string
+    status: 'open' | 'locked' | 'superseded'
+    supersedes?: string[]
+  }>(atoms: T[]): T[] {
+    const supersededIds = new Set(
+      atoms
+        .flatMap(atom => atom.supersedes ?? [])
+        .filter(supersededId => typeof supersededId === 'string'),
+    )
+
+    return atoms
+      .filter(atom => atom.status === 'locked')
+      .filter(atom => !supersededIds.has(atom.id))
+      .sort((left, right) => this.compareDeterministicAtoms(left, right))
+  }
+
+  private filterDeterministicRisk(riskItems: SemanticState['risk']): SemanticState['risk'] {
+    return this.filterDeterministicAtoms(riskItems)
+  }
+
+  private filterDeterministicTriggers(triggers: SemanticState['triggers']): SemanticState['triggers'] {
+    return this.filterDeterministicAtoms(triggers)
+      .sort((left, right) => this.compareTriggers(left, right))
+  }
+
+  private filterDeterministicActions(actions: SemanticState['actions']): SemanticState['actions'] {
+    return this.filterDeterministicAtoms(actions)
+      .sort((left, right) => this.compareActionAtoms(left, right))
+  }
+
+  private formatPercent(value: number): string {
+    const normalized = Number.parseFloat(Number(value).toFixed(6))
+    return `${normalized}`
+  }
+
+  private formatRatio(value: number): string {
+    const percent = value <= 1 ? value * 100 : value
+    return this.formatPercent(percent)
   }
 
   private buildInferredDefaults(riskItems: SemanticState['risk']): {
@@ -297,10 +402,6 @@ export class SemanticStateProjectionService {
     }
 
     for (const risk of riskItems) {
-      if (risk.status === 'superseded') {
-        continue
-      }
-
       if (typeof risk.params.basis !== 'string' || risk.params.basisSource !== 'system_default') {
         continue
       }
@@ -317,19 +418,6 @@ export class SemanticStateProjectionService {
     }
 
     return inferred
-  }
-
-  private hasDeterministicSemantics(
-    state: SemanticState,
-    recommendationSignals: ReturnType<SemanticStateProjectionService['buildRecommendationSignals']>,
-  ): boolean {
-    const hasLockedDeterministicAtom = state.triggers.some(trigger => trigger.status !== 'superseded')
-      || state.actions.some(action => action.status !== 'superseded')
-      || state.risk.some(risk => risk.status !== 'superseded')
-      || this.hasValidLockedPosition(state.position)
-      || recommendationSignals.hasGridIntent
-
-    return hasLockedDeterministicAtom
   }
 
   private findNextOpenSlot(state: SemanticState): SemanticSlotState | null {
@@ -365,5 +453,28 @@ export class SemanticStateProjectionService {
     }
 
     return Object.values(state.contextSlots).find(slot => slot?.status === 'open') ?? null
+  }
+
+  private compareActionAtoms(left: SemanticState['actions'][number], right: SemanticState['actions'][number]): number {
+    if (left.key !== right.key) {
+      return left.key.localeCompare(right.key)
+    }
+
+    return left.id.localeCompare(right.id)
+  }
+
+  private compareDeterministicAtoms(
+    left: {
+      id: string
+      status: 'open' | 'locked' | 'superseded'
+      supersedes?: string[]
+    },
+    right: {
+      id: string
+      status: 'open' | 'locked' | 'superseded'
+      supersedes?: string[]
+    },
+  ): number {
+    return left.id.localeCompare(right.id)
   }
 }
