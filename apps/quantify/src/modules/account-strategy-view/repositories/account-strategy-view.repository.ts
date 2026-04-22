@@ -197,9 +197,9 @@ export class AccountStrategyViewRepository {
             params: mergedParams,
             deploymentExecutionConfig: input.deploymentExecutionConfig as Prisma.InputJsonValue | undefined,
             executionConfigVersion: input.executionConfigVersion ?? 1,
-            status: 'running',
-            mode: resolvedMode,
-            startedAt: new Date(),
+            runtimeBindingStatus: 'PENDING',
+            runtimeBindingErrorCode: null,
+            runtimeBindingUpdatedAt: new Date(),
             updatedBy: input.userId,
             metadata: {
               ...existingMetadata,
