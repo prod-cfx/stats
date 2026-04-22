@@ -496,7 +496,7 @@ describe('account-strategy-view (E2E)', () => {
     expect(payload.status).toBe('stopped')
   })
 
-  it('deploy initializes published snapshot runtime and automatically advances to signal + execution', async () => {
+  it('deploy initializes published snapshot runtime and, after direct generation, automatically advances execution', async () => {
     const request: any = createApiClient(app)
     const deployRequestId = `e2e-deploy-runtime-${Date.now()}`
 

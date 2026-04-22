@@ -1162,7 +1162,7 @@ describe('StrategySignals (E2E, DB only)', () => {
       })
     })
 
-    it('[TC-SIGNAL-009] should create a runtime signal and automatically advance it into execution via the signal-created event', async () => {
+    it('[TC-SIGNAL-009] should create a runtime signal and, after direct generation, automatically advance it into execution', async () => {
       const tradingService = moduleFixture.get(TradingService)
       const placeOrderSpy = jest.spyOn(tradingService, 'placeOrder').mockResolvedValue({
         id: 'TC-009-ORDER',
