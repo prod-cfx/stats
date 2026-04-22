@@ -123,7 +123,6 @@ interface StructuredClarificationContinuationArgs {
   }
   checklist: StrategyLogicSnapshot
   semanticState: SemanticState
-  useSemanticProjection: boolean
   clarificationState: StrategyClarificationState
   constraintPack: ReturnType<CodegenConversationService['readConstraintPack']>
   message: string
@@ -372,21 +371,9 @@ export class CodegenConversationService {
     const hasStructuredClarificationAnswers = Boolean(
       effectiveClarificationAnswers && Object.keys(effectiveClarificationAnswers).length > 0,
     )
-    const hasPersistedSemanticState = this.hasPersistedSemanticState(
-      (session as { semanticState?: Prisma.JsonValue | null }).semanticState,
-    )
     const currentSemanticState = this.readSemanticState((session as { semanticState?: Prisma.JsonValue | null }).semanticState)
     const semanticStateAfterAnswers = this.applySemanticClarificationAnswers(
       currentSemanticState,
-      baseClarificationState,
-      effectiveClarificationAnswers,
-    )
-    const semanticBaseLogicSnapshotAfterAnswers = this.projectLegacyLogicSnapshotFromSemanticState(
-      semanticStateAfterAnswers,
-      {},
-    )
-    const baseLogicSnapshotAfterAnswers = this.applyClarificationAnswers(
-      semanticBaseLogicSnapshotAfterAnswers,
       baseClarificationState,
       effectiveClarificationAnswers,
     )
@@ -553,7 +540,6 @@ export class CodegenConversationService {
           session,
           checklist: baseLogicSnapshot,
           semanticState: baseSemanticState,
-          useSemanticProjection: hasPersistedSemanticState,
           clarificationState: clarificationStateAfterAnswers,
           constraintPack,
           message: dto.message,
@@ -2714,12 +2700,10 @@ export class CodegenConversationService {
       args.constraintPack.conversationHistory ?? [],
       args.message,
     )
-    const projectedLogicSnapshot = args.useSemanticProjection
-      ? this.restoreInferredAssumptionsFromLatestSpecDesc(
-          args.session.latestSpecDesc,
-          this.projectLegacyLogicSnapshotFromSemanticState(args.semanticState, args.checklist),
-        )
-      : args.checklist
+    const projectedLogicSnapshot = this.restoreInferredAssumptionsFromLatestSpecDesc(
+      args.session.latestSpecDesc,
+      this.projectLegacyLogicSnapshotFromSemanticState(args.semanticState, args.checklist),
+    )
     const reducedSemanticState = this.withRequiredSemanticOpenSlots(
       args.semanticState,
       projectedLogicSnapshot,
@@ -2731,7 +2715,7 @@ export class CodegenConversationService {
     const semanticClarificationState = this.buildClarificationFromSemanticState(
       reducedSemanticState,
       projectedLogicSnapshot,
-      { preserveLegacyFallback: !args.useSemanticProjection },
+      { preserveLegacyFallback: false },
     )
 
     if (semanticClarificationState.status === 'NEEDS_CLARIFICATION') {
@@ -2760,9 +2744,7 @@ export class CodegenConversationService {
     }
 
     const normalization = semanticArtifacts.normalization
-    const canonicalSpec = args.useSemanticProjection
-      ? this.buildCanonicalSpecForConversation(reducedSemanticState, normalization)
-      : this.buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly(projectedLogicSnapshot, normalization)
+    const canonicalSpec = this.buildCanonicalSpecForConversation(reducedSemanticState, normalization)
     const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: semanticArtifacts.executionContext.context,
@@ -4767,7 +4749,7 @@ export class CodegenConversationService {
 
   private applyInferredRiskBasisOverridesToSemanticState(
     semanticState: SemanticState,
-    overrides: Partial<Record<string, StrategyRuleBasis['kind']>>,
+    overrides: Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>>,
   ): SemanticState {
     const nextStopLossBasis = overrides['risk.stopLossBasis']
     const nextTakeProfitBasis = overrides['risk.takeProfitBasis']

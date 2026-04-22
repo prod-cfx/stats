@@ -7936,6 +7936,37 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     }))
   })
 
+  it('does not generate from checklist-only persisted sessions without semanticState', async () => {
+    const checklistOnlySession = buildPersistedSessionSnapshot('s7-checklist-only', {}, {
+      userId: 'u1',
+      status: 'CONFIRM_GATE',
+      checklist: completeChecklist({
+        entryRules: ['突破关键阻力位后入场'],
+        exitRules: ['跌破最近支撑位出场'],
+      }),
+      semanticState: null,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestSpecDesc: null,
+    })
+    const emptySemanticDigest = buildSemanticOnlyCanonicalDigest((service as any).createEmptySemanticState())
+    mockRepo.findById.mockResolvedValue(checklistOnlySession)
+
+    const result = await service.continueSession('s7-checklist-only', {
+      userId: 'u1',
+      message: '确认，直接生成代码',
+      confirmGenerate: true,
+      confirmedCanonicalDigest: emptySemanticDigest,
+    })
+
+    expect(result.status).toBe('DRAFTING')
+    expect(mockRepo.tryMarkGenerating).not.toHaveBeenCalled()
+    expect(mockRepo.updateSession).not.toHaveBeenCalledWith(
+      's7-checklist-only',
+      expect.objectContaining({ status: 'GENERATING' }),
+    )
+  })
+
   it('does not block confirmGenerate with the legacy entry and exit completion prompt when the semantic snapshot is complete and the canonical spec can compile', async () => {
     const persistedSemanticState = buildLockedMaSemanticState({
       risk: [
