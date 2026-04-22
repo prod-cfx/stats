@@ -439,20 +439,24 @@ describe('semantic-only strategy regression verification', () => {
     ]
     const fs = require('node:fs') as typeof import('node:fs')
     const path = require('node:path') as typeof import('node:path')
+    // __dirname is apps/quantify/src/modules/llm-strategy-codegen/services/__tests__ during Jest runs.
     const root = path.resolve(__dirname, '../../../../../../..')
     const forbiddenPatterns = [
       /projectLegacyLogicSnapshotFromSemanticState/u,
       /buildFallbackSemanticState/u,
       /buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly/u,
-      /canonicalSpecBuilder\.build\(checklist\)/u,
-      /session\.checklist/u,
+      /canonicalSpecBuilder\.build\(\s*checklist\b/u,
+      /\bsession\.checklist\b/u,
       /\bchecklist:\s*StrategyLogicSnapshot\b/u,
     ]
 
     for (const file of productionFiles) {
       const source = fs.readFileSync(path.join(root, file), 'utf8')
       for (const pattern of forbiddenPatterns) {
-        expect(source).not.toMatch(pattern)
+        const match = source.match(pattern)
+        if (match) {
+          throw new Error(`Production legacy authority guard matched ${pattern} in ${file}: ${match[0]}`)
+        }
       }
     }
   })
