@@ -428,4 +428,32 @@ describe('semantic-only strategy regression verification', () => {
       'FORCE_EXIT',
     ]))
   })
+
+  it('keeps production conversation main path free of legacy checklist authority', () => {
+    const productionFiles = [
+      'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-conversation.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/inferred-confirmation-classifier.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/strategy-execution-context.service.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-publication-generation.stage.ts',
+      'apps/quantify/src/modules/llm-strategy-codegen/services/codegen-session-publication-pipeline.service.ts',
+    ]
+    const fs = require('node:fs') as typeof import('node:fs')
+    const path = require('node:path') as typeof import('node:path')
+    const root = path.resolve(__dirname, '../../../../../../..')
+    const forbiddenPatterns = [
+      /projectLegacyLogicSnapshotFromSemanticState/u,
+      /buildFallbackSemanticState/u,
+      /buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly/u,
+      /canonicalSpecBuilder\.build\(checklist\)/u,
+      /session\.checklist/u,
+      /\bchecklist:\s*StrategyLogicSnapshot\b/u,
+    ]
+
+    for (const file of productionFiles) {
+      const source = fs.readFileSync(path.join(root, file), 'utf8')
+      for (const pattern of forbiddenPatterns) {
+        expect(source).not.toMatch(pattern)
+      }
+    }
+  })
 })
