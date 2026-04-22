@@ -13,18 +13,12 @@ export class SignalExecutorRepository {
     const now = new Date()
     return this.txHost.tx.tradingSignal.findMany({
       where: {
-        status: { in: ['PENDING', 'FAILED'] satisfies SignalStatus[] },
+        status: 'PENDING' satisfies SignalStatus,
         OR: [
           { expiresAt: null },
           { expiresAt: { gt: now } },
         ],
         createdAt: { lte: input.readyBefore },
-        NOT: {
-          metadata: {
-            path: ['reason'],
-            equals: 'NO_SUBSCRIBERS',
-          },
-        },
       },
       orderBy: { createdAt: 'asc' },
       take: input.limit,

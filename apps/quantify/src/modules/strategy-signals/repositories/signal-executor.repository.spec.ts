@@ -1,7 +1,7 @@
 import { SignalExecutorRepository } from './signal-executor.repository'
 
 describe('signalExecutorRepository.findRecoverableSignals', () => {
-  it('limits recovery to aged, unexpired pending/failed signals and excludes NO_SUBSCRIBERS failures', async () => {
+  it('limits recovery to aged, unexpired pending signals only', async () => {
     const findMany = jest.fn().mockResolvedValue([])
     const repo = new SignalExecutorRepository({
       tx: {
@@ -19,14 +19,8 @@ describe('signalExecutorRepository.findRecoverableSignals', () => {
 
     expect(findMany).toHaveBeenCalledWith({
       where: expect.objectContaining({
-        status: { in: ['PENDING', 'FAILED'] },
+        status: 'PENDING',
         createdAt: { lte: readyBefore },
-        NOT: {
-          metadata: {
-            path: ['reason'],
-            equals: 'NO_SUBSCRIBERS',
-          },
-        },
       }),
       orderBy: { createdAt: 'asc' },
       take: 50,
