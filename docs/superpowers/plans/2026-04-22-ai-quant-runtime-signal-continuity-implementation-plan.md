@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make deploy-time runtime execution consume published snapshot truth directly, create real `strategy_signals`, and continue into execution / OKX testnet paths without depending on backtest request parameters.
+**Goal:** Make deploy-time runtime execution consume published snapshot truth directly, but only after deploy binding is truly ready, then create real `strategy_signals` and continue into execution / OKX testnet paths without depending on backtest request parameters.
 
-**Architecture:** Add a focused runtime decision adapter that converts `StrategyDecisionV1` into a runtime signal intent with explicit result kinds (`signal` / `noop` / `missing_required_truth`). Route deploy-time runtime through that adapter instead of the current strict payload gate, and tighten runtime state / cooldown semantics so instance-bound `on_start` execution cannot be lost or consumed by unrelated instances.
+**Architecture:** Keep the published snapshot as the only execution truth. First, add a deploy→runtime readiness barrier so reused `strategyInstance` rows are not visible to the scheduler until binding, risk profile, runtime states, and deploy success are complete. Second, keep the runtime decision adapter and explicit outcome model, then add execution recovery as a separate slow path so event loss does not strand valid signals.
 
 **Tech Stack:** NestJS 11, TypeScript 5.9, Prisma, Jest, quantify E2E, Nx/dx, AI Quant runtime under `apps/quantify`.
 
@@ -30,6 +30,24 @@ If a field is missing, expose the missing truth explicitly. Do not silently defa
   - Converts runtime `StrategyDecisionV1` into `RuntimeSignalIntentResult` with explicit `signal` / `noop` / `missing_required_truth` outcomes.
 - Create: `apps/quantify/src/modules/strategy-signals/services/__tests__/runtime-signal-intent.adapter.spec.ts`
   - Unit tests for signal/noop/missing-truth classification.
+- Modify: `apps/quantify/prisma/schema/strategy_trading.prisma`
+  - Add explicit runtime binding readiness fields to `StrategyInstance`.
+- Create: `apps/quantify/prisma/schema/migrations/<timestamp>_add_strategy_instance_runtime_binding_status/migration.sql`
+  - Persist `runtime_binding_status`, `runtime_binding_error_code`, and `runtime_binding_updated_at`.
+- Modify: `apps/quantify/src/modules/account-strategy-view/repositories/account-strategy-view.repository.ts`
+  - Split deploy binding preparation from final runtime activation.
+- Modify: `apps/quantify/src/modules/account-strategy-view/services/account-strategy-view.service.ts`
+  - Finalize deploy in two phases: prepare binding first, activate runtime only after downstream state is ready.
+- Modify: `apps/quantify/src/modules/account-strategy-view/repositories/account-strategy-view.repository.spec.ts`
+  - Lock repository behavior to `PENDING` readiness, not premature `running`.
+- Modify: `apps/quantify/src/modules/account-strategy-view/services/account-strategy-view-deploy.spec.ts`
+  - Lock activation ordering (`READY + running` only after post-deploy preparation).
+- Modify: `apps/quantify/src/modules/account-strategy-view/services/account-strategy-view-deploy-transaction-boundary.spec.ts`
+  - Ensure failed post-deploy preparation leaves `FAILED`, not half-running state.
+- Modify: `apps/quantify/src/modules/strategy-signals/repositories/signal-generator.repository.ts`
+  - Scheduler must only scan `READY` instances and keep runtime cooldown checks scoped correctly.
+- Modify: `apps/quantify/src/modules/strategy-signals/repositories/signal-generator.repository.spec.ts`
+  - Lock scheduler visibility to `runtimeBindingStatus = READY`.
 - Modify: `apps/quantify/src/modules/strategy-signals/services/signal-generator.service.ts`
   - Replace strict payload no-signal path for published snapshot runtime with the adapter.
 - Modify: `apps/quantify/src/modules/strategy-signals/services/signal-generation-decision.stage.ts`
@@ -54,10 +72,16 @@ If a field is missing, expose the missing truth explicitly. Do not silently defa
   - Add repository-level recovery transition coverage.
 - Modify: `apps/quantify/src/modules/strategy-signals/services/signal-generation-persistence.stage.spec.ts`
   - Add instance-scoped cooldown consumption assertions.
+- Modify: `apps/quantify/src/modules/strategy-signals/services/signal-executor.service.ts`
+  - Extract recoverable execution logic first, then add a runtime recovery slow path in a separate commit.
+- Modify: `apps/quantify/src/modules/strategy-signals/repositories/signal-executor.repository.ts`
+  - Clarify which signals are recoverable by execution recovery.
+- Modify: `apps/quantify/src/modules/strategy-signals/services/signal-executor.service.spec.ts`
+  - Add recovery selection and execution replay coverage.
 - Modify: `apps/quantify/e2e/account-strategy-view/account-strategy-view.e2e-spec.ts`
-  - Extend deploy-flow E2E to assert deploy-bound runtime creates signal/execution records.
+  - Final no-fallback deploy-flow E2E: deploy-bound runtime must auto-create signal and auto-advance into execution.
 - Modify: `apps/quantify/e2e/strategy-signals/strategy-signals.e2e-spec.ts`
-  - Add end-to-end runtime-created signal execution assertions.
+  - Final no-fallback runtime-created signal execution assertions.
 
 ## Task 1: Add a Dedicated Runtime Signal Intent Adapter Spec
 
