@@ -1,4 +1,5 @@
 import type { StrategyLogicSnapshot } from '../types/strategy-logic-snapshot'
+import type { SemanticSlotState, SemanticState } from '../types/semantic-state'
 import type { StrategyExecutionContext, StrategyExecutionContextResolution } from '../types/strategy-execution-context'
 import { Injectable } from '@nestjs/common'
 import { resolveStrategyDefaultTimeframe } from './rule-draft-projection'
@@ -69,6 +70,97 @@ export class StrategyExecutionContextService {
       ambiguities,
       evidence,
     }
+  }
+
+  resolveFromSemanticState(state: SemanticState): StrategyExecutionContextResolution {
+    const context: StrategyExecutionContext = {
+      exchange: this.readSemanticExchange(state.contextSlots.exchange),
+      symbol: this.readSemanticSymbol(state.contextSlots.symbol),
+      marketType: this.readSemanticMarketType(state.contextSlots.marketType),
+      timeframe: this.readSemanticString(state.contextSlots.timeframe),
+    }
+    const timeframeOptional = !context.timeframe && this.hasSemanticGridTrigger(state)
+
+    const ambiguities = [
+      ...(!context.exchange
+        ? [{ kind: 'execution_context_missing' as const, field: 'exchange' as const, reason: 'missing_exchange' as const }]
+        : []),
+      ...(!context.symbol
+        ? [{ kind: 'execution_context_missing' as const, field: 'symbol' as const, reason: 'missing_symbol' as const }]
+        : []),
+      ...(!context.marketType
+        ? [{ kind: 'execution_context_missing' as const, field: 'marketType' as const, reason: 'missing_market_type' as const }]
+        : []),
+      ...(!context.timeframe && !timeframeOptional
+        ? [{ kind: 'execution_context_missing' as const, field: 'timeframe' as const, reason: 'missing_timeframe' as const }]
+        : []),
+    ] as StrategyExecutionContextResolution['ambiguities']
+
+    const evidence: StrategyExecutionContextResolution['evidence'] = []
+    if (!context.exchange) {
+      evidence.push({
+        key: 'market.exchange',
+        reason: 'runtime_context_missing',
+        priority: 100,
+        question: '请确认交易所（binance / okx / hyperliquid）。',
+      })
+    }
+    if (!context.symbol) {
+      evidence.push({
+        key: 'market.symbol',
+        reason: 'runtime_context_missing',
+        priority: 95,
+        question: '请确认策略交易标的（例如 BTCUSDT）。',
+      })
+    }
+    if (!context.marketType) {
+      evidence.push({
+        key: 'market.marketType',
+        reason: 'runtime_context_missing',
+        priority: 90,
+        question: '请确认市场类型（现货或合约/perp）。',
+      })
+    }
+    if (!context.timeframe && !timeframeOptional) {
+      evidence.push({
+        key: 'market.timeframe',
+        reason: 'runtime_context_missing',
+        priority: 80,
+        question: '请确认策略主周期（例如 15m 或 1h）。',
+      })
+    }
+    if (timeframeOptional) {
+      evidence.push({
+        key: 'timeframe_not_required_for_uniqueness',
+        reason: 'timeframe_optional',
+        priority: 10,
+      })
+    }
+
+    return { context, ambiguities, evidence }
+  }
+
+  private readSemanticString(slot: SemanticSlotState | null): string | null {
+    return typeof slot?.value === 'string' && slot.value.trim() ? slot.value.trim() : null
+  }
+
+  private readSemanticSymbol(slot: SemanticSlotState | null): string | null {
+    const value = this.readSemanticString(slot)
+    return value ? canonicalizeStrategySymbolInput(value) : null
+  }
+
+  private readSemanticExchange(slot: SemanticSlotState | null): StrategyExecutionContext['exchange'] {
+    const normalized = this.readSemanticString(slot)?.toLowerCase()
+    return normalized === 'okx' || normalized === 'binance' || normalized === 'hyperliquid' ? normalized : null
+  }
+
+  private readSemanticMarketType(slot: SemanticSlotState | null): StrategyExecutionContext['marketType'] {
+    const normalized = this.readSemanticString(slot)?.toLowerCase()
+    return normalized === 'spot' || normalized === 'perp' ? normalized : null
+  }
+
+  private hasSemanticGridTrigger(state: SemanticState): boolean {
+    return state.triggers.some(trigger => trigger.status !== 'superseded' && trigger.key === 'grid.range_rebalance')
   }
 
   private readPrimaryValue(values: string[] | undefined): string | null {

@@ -1,3 +1,4 @@
+import type { SemanticState } from '../../types/semantic-state'
 import { StrategyExecutionContextService } from '../strategy-execution-context.service'
 
 describe('strategyExecutionContextService', () => {
@@ -189,5 +190,51 @@ describe('strategyExecutionContextService', () => {
     expect(result.evidence).toEqual(
       expect.arrayContaining([expect.objectContaining({ key: 'timeframe_not_required_for_uniqueness' })]),
     )
+  })
+})
+
+describe('StrategyExecutionContextService semantic state', () => {
+  const service = new StrategyExecutionContextService()
+
+  function slot(slotKey: string, fieldPath: string, value: string) {
+    return {
+      slotKey,
+      fieldPath,
+      value,
+      status: 'locked' as const,
+      priority: 'context' as const,
+      questionHint: '',
+      affectsExecution: true,
+    }
+  }
+
+  it('resolves exchange symbol market type and timeframe from semantic context slots', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: [],
+      triggers: [],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: slot('market.exchange', 'context.exchange', 'okx'),
+        symbol: slot('market.symbol', 'context.symbol', 'BTCUSDT'),
+        marketType: slot('market.marketType', 'context.marketType', 'perp'),
+        timeframe: slot('market.timeframe', 'context.timeframe', '15m'),
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    }
+
+    expect(service.resolveFromSemanticState(state)).toEqual({
+      context: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'perp',
+        timeframe: '15m',
+      },
+      ambiguities: [],
+      evidence: [],
+    })
   })
 })
