@@ -3,7 +3,7 @@ import type { AiService } from '@/modules/ai/ai.service'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 import { Injectable } from '@nestjs/common'
 
-type InferredConfirmationDecisionKey = 'risk.stopLossBasis' | 'risk.takeProfitBasis'
+export type InferredConfirmationDecisionKey = 'risk.stopLossBasis' | 'risk.takeProfitBasis'
 type InferredConfirmationIntent = 'override' | 'reject' | 'confirm' | 'unclear'
 type InferredConfirmationSource = 'rule' | 'llm'
 type InferredConfirmationFallbackIntent = 'confirm' | 'override' | 'unclear'
@@ -21,7 +21,7 @@ export interface InferredConfirmationClassifierInput {
 export interface InferredConfirmationSemanticDefaults {
   stopLossBasis?: StrategyRuleBasis['kind'] | null
   takeProfitBasis?: StrategyRuleBasis['kind'] | null
-  inferredKeys: readonly string[]
+  inferredKeys: readonly InferredConfirmationDecisionKey[]
 }
 
 export interface InferredConfirmationClassification {
@@ -570,7 +570,13 @@ export class InferredConfirmationClassifierService {
     activeKeys: ReadonlySet<InferredConfirmationDecisionKey>,
   ): Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>> {
     const pendingDefaults: Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>> = {}
-    const inferredKeys = new Set(defaults.inferredKeys)
+    const inferredKeys = new Set(
+      Array.isArray(defaults.inferredKeys)
+        ? defaults.inferredKeys.filter((key): key is InferredConfirmationDecisionKey =>
+          key === 'risk.stopLossBasis' || key === 'risk.takeProfitBasis',
+        )
+        : [],
+    )
 
     if (
       activeKeys.has('risk.stopLossBasis')
