@@ -1315,16 +1315,6 @@ export class CodegenConversationService {
     }
   }
 
-  private readStrategyLogicSnapshot(
-    payload: Prisma.JsonValue | null | undefined,
-  ): StrategyLogicSnapshot {
-    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
-      return {}
-    }
-
-    return this.normalizeLogicSnapshot(payload as Record<string, unknown>)
-  }
-
   private mergeSemanticClarificationState(
     semanticState: SemanticState,
     fallbackState: StrategyClarificationStateWithSummary,
@@ -3234,13 +3224,6 @@ export class CodegenConversationService {
     }
   }
 
-  private detectClarificationState(checklist: StrategyLogicSnapshot): StrategyClarificationStateWithSummary {
-    return this.withClarificationSummary(
-      this.clarificationRules.detect(checklist),
-      checklist,
-    ) as StrategyClarificationStateWithSummary
-  }
-
   private resolveClarificationArtifacts(checklist: StrategyLogicSnapshot): {
     normalization: NormalizationResult
     executionContext: ReturnType<StrategyExecutionContextService['resolve']>
@@ -3947,50 +3930,6 @@ export class CodegenConversationService {
    * `buildCanonicalSpecForConversation()` and must not rely on this method as an
    * authority source.
    */
-  private buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly(
-    legacyLogicSnapshot: StrategyLogicSnapshot,
-    normalization: NormalizationResult,
-  ) {
-    const legacySpec = this.canonicalSpecBuilder.build(legacyLogicSnapshot)
-    if (normalization.blocked) {
-      return legacySpec
-    }
-
-    const hasSemanticOnlyTriggers = normalization.normalizedIntent.triggers.some(trigger =>
-      trigger.phase === 'gate',
-    )
-    const needsSemanticCompilerPath = hasSemanticOnlyTriggers || Boolean(normalization.normalizedIntent.grid)
-    if (needsSemanticCompilerPath) {
-      const normalizedSpec = this.canonicalSpecBuilder.buildFromNormalizedIntent(
-        legacyLogicSnapshot,
-        normalization.normalizedIntent,
-      )
-      const normalizedCompileability = this.evaluateCanonicalCompileability(normalizedSpec)
-      return normalizedCompileability.canCompile ? normalizedSpec : legacySpec
-    }
-
-    const needsNormalizedFallback = normalization.normalizedIntent.triggers.some(trigger =>
-      trigger.key === 'indicator.above'
-      || trigger.key === 'indicator.below'
-      || trigger.key === 'execution.on_start',
-    )
-    if (!needsNormalizedFallback) {
-      return legacySpec
-    }
-
-    const legacyCompileability = this.evaluateCanonicalCompileability(legacySpec)
-    if (legacyCompileability.canCompile) {
-      return legacySpec
-    }
-
-    const normalizedSpec = this.canonicalSpecBuilder.buildFromNormalizedIntent(
-      legacyLogicSnapshot,
-      normalization.normalizedIntent,
-    )
-    const normalizedCompileability = this.evaluateCanonicalCompileability(normalizedSpec)
-    return normalizedCompileability.canCompile ? normalizedSpec : legacySpec
-  }
-
   private buildSemanticCanonicalContext(semanticState: SemanticState): {
     market: {
       exchange?: 'binance' | 'okx' | 'hyperliquid'
@@ -4819,37 +4758,6 @@ export class CodegenConversationService {
 
 
 
-
-  private detectDirectionInTriggerFragment(
-    text: string,
-    triggerPattern: RegExp,
-  ): 'long' | 'short' | null {
-    const match = triggerPattern.exec(text)
-    if (!match) return null
-
-    const PRE_WINDOW = 6
-    const POST_WINDOW = 10
-    const CLAUSE_SPLITTER = /然后|并且|回到|中轨|止盈|止损|平仓|离场|出场/u
-    const start = match.index
-    const end = start + match[0].length
-
-    const left = Math.max(0, start - PRE_WINDOW)
-    const right = Math.min(text.length, end + POST_WINDOW)
-    const triggerEndInWindow = end - left
-
-    const windowFragment = text.slice(left, right)
-    const afterTrigger = windowFragment.slice(triggerEndInWindow)
-    const splitMatch = CLAUSE_SPLITTER.exec(afterTrigger)
-    const fragment = splitMatch
-      ? windowFragment.slice(0, triggerEndInWindow + splitMatch.index)
-      : windowFragment
-    const hasLongDirection = /做多|多单|开多|long|买入/i.test(fragment)
-    const hasShortDirection = /做空|空单|开空|short|卖出/i.test(fragment)
-
-    if (hasLongDirection === hasShortDirection) return null
-    return hasLongDirection ? 'long' : 'short'
-  }
-
   private resolveProviderCode(rawProviderCode?: string): string {
     if (!rawProviderCode) {
       return DEFAULT_PROVIDER_CODE
@@ -5142,13 +5050,6 @@ export class CodegenConversationService {
     if (explicitBasis) return explicitBasis
     if (!ruleText?.trim()) return null
     return resolveDefaultRiskBasis(ruleText, null)
-  }
-
-  private extractRiskRuleClause(
-    text: string,
-    kind: 'stopLoss' | 'takeProfit',
-  ): string | null {
-    return this.extractRiskRuleInfo(text, kind).clause
   }
 
   private extractRiskRuleInfo(
@@ -5946,57 +5847,6 @@ export class CodegenConversationService {
     }
 
     return params
-  }
-
-  private mergeStrategyLogicSnapshotInputs(base: StrategyLogicSnapshot, patch: StrategyLogicSnapshot): StrategyLogicSnapshot {
-    const mergedEntryRuleBases = {
-      ...(base.entryRuleBases ?? {}),
-      ...(patch.entryRuleBases ?? {}),
-    }
-    const mergedExitRuleBases = {
-      ...(base.exitRuleBases ?? {}),
-      ...(patch.exitRuleBases ?? {}),
-    }
-    const mergedRiskRules = (() => {
-      const baseRiskRules = base.riskRules ?? {}
-      const patchRiskRules = patch.riskRules ?? {}
-      const marketScopeConflicts = this.collectMarketScopeConflicts(base, patch)
-      const merged = this.pruneResolvedRiskInferredAssumptions({
-        ...baseRiskRules,
-        ...patchRiskRules,
-        ...(marketScopeConflicts.length > 0 ? { _marketScopeConflicts: marketScopeConflicts } : {}),
-      }, patchRiskRules)
-      return Object.keys(merged).length > 0 ? merged : undefined
-    })()
-
-    const merged = {
-      symbols: patch.symbols && patch.symbols.length > 0 ? patch.symbols : base.symbols,
-      timeframes: patch.timeframes && patch.timeframes.length > 0 ? patch.timeframes : base.timeframes,
-      entryRules: this.mergeRuleArrays(base.entryRules, patch.entryRules, 'entry'),
-      exitRules: this.mergeRuleArrays(base.exitRules, patch.exitRules, 'exit'),
-      stateGates: (() => {
-        const mergedStateGates = {
-          ...(base.stateGates ?? {}),
-          ...(patch.stateGates ?? {}),
-        }
-        return Object.keys(mergedStateGates).length > 0 ? mergedStateGates : undefined
-      })(),
-      riskRules: mergedRiskRules,
-      entryRuleBases: Object.keys(mergedEntryRuleBases).length > 0 ? mergedEntryRuleBases : undefined,
-      exitRuleBases: Object.keys(mergedExitRuleBases).length > 0 ? mergedExitRuleBases : undefined,
-      entryRuleDrafts: patch.entryRuleDrafts && patch.entryRuleDrafts.length > 0 ? patch.entryRuleDrafts : base.entryRuleDrafts,
-      exitRuleDrafts: patch.exitRuleDrafts && patch.exitRuleDrafts.length > 0 ? patch.exitRuleDrafts : base.exitRuleDrafts,
-      riskRuleDrafts: patch.riskRuleDrafts && patch.riskRuleDrafts.length > 0 ? patch.riskRuleDrafts : base.riskRuleDrafts,
-      market: patch.market ?? base.market,
-      grid: (() => {
-        const mergedGrid = {
-          ...(base.grid ?? {}),
-          ...(patch.grid ?? {}),
-        }
-        return Object.keys(mergedGrid).length > 0 ? mergedGrid : undefined
-      })(),
-    }
-    return this.normalizeLogicSnapshot(merged)
   }
 
   private mergeRuleArrays(
