@@ -10,14 +10,6 @@ describe('InferredConfirmationClassifierService', () => {
     aiService.chat.mockReset()
   })
 
-  const buildChecklist = (riskRules: Record<string, unknown> = {}) => ({
-    riskRules: {
-      stopLossBasis: 'entry_avg_price',
-      takeProfitBasis: 'entry_avg_price',
-      ...riskRules,
-    },
-  })
-
   it.each([
     '这样可以',
     '可以了',
@@ -29,7 +21,11 @@ describe('InferredConfirmationClassifierService', () => {
       assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
       conversationPhase: 'CONFIRM_INFERRED',
       decisionKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
-      checklist: buildChecklist(),
+      semanticDefaults: {
+        inferredKeys: [],
+        stopLossBasis: null,
+        takeProfitBasis: null,
+      },
     })
 
     expect(result.intent).toBe('confirm')
@@ -51,7 +47,11 @@ describe('InferredConfirmationClassifierService', () => {
       assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
       conversationPhase: 'CONFIRM_INFERRED',
       decisionKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
-      checklist: buildChecklist(),
+      semanticDefaults: {
+        inferredKeys: [],
+        stopLossBasis: null,
+        takeProfitBasis: null,
+      },
     })
 
     expect(result.intent).toBe('reject')
@@ -69,7 +69,11 @@ describe('InferredConfirmationClassifierService', () => {
       assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
       conversationPhase: 'CONFIRM_INFERRED',
       decisionKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
-      checklist: buildChecklist(),
+      semanticDefaults: {
+        inferredKeys: [],
+        stopLossBasis: null,
+        takeProfitBasis: null,
+      },
     })
 
     expect(result.intent).toBe('override')
@@ -90,7 +94,11 @@ describe('InferredConfirmationClassifierService', () => {
       assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
       conversationPhase: 'CONFIRM_INFERRED',
       decisionKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
-      checklist: buildChecklist(),
+      semanticDefaults: {
+        inferredKeys: [],
+        stopLossBasis: null,
+        takeProfitBasis: null,
+      },
     })
 
     expect(result.intent).toBe('override')
@@ -111,7 +119,11 @@ describe('InferredConfirmationClassifierService', () => {
       assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
       conversationPhase: 'CONFIRM_INFERRED',
       decisionKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
-      checklist: buildChecklist(),
+      semanticDefaults: {
+        inferredKeys: [],
+        stopLossBasis: null,
+        takeProfitBasis: null,
+      },
     })
 
     expect(result.intent).toBe('confirm')
@@ -126,7 +138,11 @@ describe('InferredConfirmationClassifierService', () => {
       assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
       conversationPhase: 'CONFIRM_INFERRED',
       decisionKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
-      checklist: buildChecklist(),
+      semanticDefaults: {
+        inferredKeys: [],
+        stopLossBasis: null,
+        takeProfitBasis: null,
+      },
     })
 
     expect(result.intent).toBe('confirm')
@@ -140,7 +156,11 @@ describe('InferredConfirmationClassifierService', () => {
       assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
       conversationPhase: 'CONFIRM_INFERRED',
       decisionKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
-      checklist: buildChecklist(),
+      semanticDefaults: {
+        inferredKeys: [],
+        stopLossBasis: null,
+        takeProfitBasis: null,
+      },
     })
 
     expect(result.intent).toBe('override')
@@ -158,7 +178,11 @@ describe('InferredConfirmationClassifierService', () => {
       assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
       conversationPhase: 'CONFIRM_INFERRED',
       decisionKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
-      checklist: buildChecklist(),
+      semanticDefaults: {
+        inferredKeys: [],
+        stopLossBasis: null,
+        takeProfitBasis: null,
+      },
     })
 
     expect(result.intent).toBe('override')
@@ -180,7 +204,11 @@ describe('InferredConfirmationClassifierService', () => {
       assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
       conversationPhase: 'CONFIRM_INFERRED',
       decisionKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
-      checklist: buildChecklist(),
+      semanticDefaults: {
+        inferredKeys: [],
+        stopLossBasis: null,
+        takeProfitBasis: null,
+      },
     })
 
     expect(result.intent).toBe('confirm')
@@ -192,8 +220,7 @@ describe('InferredConfirmationClassifierService', () => {
     expect(fallbackUserMessage).toContain('assistantPrompt: 逻辑已整理完毕，请确认逻辑图。')
     expect(fallbackUserMessage).toContain('userReply: 嗯')
     expect(fallbackUserMessage).toContain('pendingKeys: risk.stopLossBasis, risk.takeProfitBasis')
-    expect(fallbackUserMessage).toContain('"risk.stopLossBasis":"entry_avg_price"')
-    expect(fallbackUserMessage).toContain('"risk.takeProfitBasis":"entry_avg_price"')
+    expect(fallbackUserMessage).toContain('pendingKeyDefaults: {}')
     expect(fallbackUserMessage).not.toContain('riskRules')
   })
 
@@ -207,7 +234,11 @@ describe('InferredConfirmationClassifierService', () => {
       assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
       conversationPhase: 'CONFIRM_INFERRED',
       decisionKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
-      checklist: buildChecklist(),
+      semanticDefaults: {
+        inferredKeys: [],
+        stopLossBasis: null,
+        takeProfitBasis: null,
+      },
     })
 
     expect(result.intent).toBe('unclear')
@@ -230,7 +261,11 @@ describe('InferredConfirmationClassifierService', () => {
       assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
       conversationPhase: 'CONFIRM_INFERRED',
       decisionKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
-      checklist: buildChecklist(),
+      semanticDefaults: {
+        inferredKeys: [],
+        stopLossBasis: null,
+        takeProfitBasis: null,
+      },
     })
 
     expect(result.intent).toBe('unclear')
@@ -254,7 +289,11 @@ describe('InferredConfirmationClassifierService', () => {
       assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
       conversationPhase: 'CONFIRM_INFERRED',
       decisionKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
-      checklist: buildChecklist(),
+      semanticDefaults: {
+        inferredKeys: [],
+        stopLossBasis: null,
+        takeProfitBasis: null,
+      },
     })
 
     expect(result.intent).toBe('override')
@@ -271,7 +310,11 @@ describe('InferredConfirmationClassifierService', () => {
       assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
       conversationPhase: 'CONFIRM_INFERRED',
       decisionKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
-      checklist: buildChecklist(),
+      semanticDefaults: {
+        inferredKeys: [],
+        stopLossBasis: null,
+        takeProfitBasis: null,
+      },
     })
 
     expect(result.intent).toBe('confirm')
@@ -285,7 +328,11 @@ describe('InferredConfirmationClassifierService', () => {
       assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
       conversationPhase: 'CONFIRM_INFERRED',
       decisionKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
-      checklist: buildChecklist(),
+      semanticDefaults: {
+        inferredKeys: [],
+        stopLossBasis: null,
+        takeProfitBasis: null,
+      },
     })
 
     expect(result.intent).toBe('unclear')

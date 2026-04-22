@@ -1,4 +1,4 @@
-import type { StrategyLogicSnapshot, StrategyRuleBasis } from '../types/strategy-logic-snapshot'
+import type { StrategyRuleBasis } from '../types/strategy-logic-snapshot'
 import type { AiService } from '@/modules/ai/ai.service'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 import { Injectable } from '@nestjs/common'
@@ -15,7 +15,13 @@ export interface InferredConfirmationClassifierInput {
   providerCode?: string | null
   model?: string | null
   decisionKeys: readonly string[]
-  checklist: StrategyLogicSnapshot
+  semanticDefaults: InferredConfirmationSemanticDefaults
+}
+
+export interface InferredConfirmationSemanticDefaults {
+  stopLossBasis?: StrategyRuleBasis['kind'] | null
+  takeProfitBasis?: StrategyRuleBasis['kind'] | null
+  inferredKeys: readonly string[]
 }
 
 export interface InferredConfirmationClassification {
@@ -184,7 +190,7 @@ export class InferredConfirmationClassifierService {
       message,
       assistantPrompt,
       activeKeys: Array.from(activeKeys),
-      pendingKeyDefaults: this.buildPendingKeyDefaults(input.checklist, activeKeys),
+      pendingKeyDefaults: this.buildPendingKeyDefaults(input.semanticDefaults, activeKeys),
       providerCode: input.providerCode?.trim() || undefined,
       model: input.model?.trim() || undefined,
     })
@@ -431,7 +437,7 @@ export class InferredConfirmationClassifierService {
     message: string
     assistantPrompt: string
     activeKeys: InferredConfirmationDecisionKey[]
-    pendingKeyDefaults: Partial<Record<InferredConfirmationDecisionKey, string>>
+    pendingKeyDefaults: Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>>
     providerCode?: string
     model?: string
   }): Promise<{ intent: InferredConfirmationFallbackIntent; targetKeys: InferredConfirmationDecisionKey[]; normalizedBasis?: StrategyRuleBasis['kind'] }> {
@@ -560,16 +566,16 @@ export class InferredConfirmationClassifierService {
   }
 
   private buildPendingKeyDefaults(
-    checklist: StrategyLogicSnapshot,
+    defaults: InferredConfirmationSemanticDefaults,
     activeKeys: ReadonlySet<InferredConfirmationDecisionKey>,
-  ): Partial<Record<InferredConfirmationDecisionKey, string>> {
-    const defaults: Partial<Record<InferredConfirmationDecisionKey, string>> = {}
-    if (activeKeys.has('risk.stopLossBasis') && typeof checklist.riskRules?.stopLossBasis === 'string') {
-      defaults['risk.stopLossBasis'] = checklist.riskRules.stopLossBasis
+  ): Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>> {
+    const pendingDefaults: Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>> = {}
+    if (activeKeys.has('risk.stopLossBasis') && defaults.stopLossBasis) {
+      pendingDefaults['risk.stopLossBasis'] = defaults.stopLossBasis
     }
-    if (activeKeys.has('risk.takeProfitBasis') && typeof checklist.riskRules?.takeProfitBasis === 'string') {
-      defaults['risk.takeProfitBasis'] = checklist.riskRules.takeProfitBasis
+    if (activeKeys.has('risk.takeProfitBasis') && defaults.takeProfitBasis) {
+      pendingDefaults['risk.takeProfitBasis'] = defaults.takeProfitBasis
     }
-    return defaults
+    return pendingDefaults
   }
 }
