@@ -95,19 +95,10 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     new CompiledPublicationGateService(mockRepo as unknown as PublishedStrategySnapshotsRepository),
   )
   const buildConfirmedCanonicalDigest = (
-    checklist: Record<string, unknown> = {},
-    semanticState?: Record<string, unknown>,
+    semanticState: Record<string, unknown>,
   ): string => {
-    const clarification = (service as any).resolveClarificationArtifacts(checklist)
-    const normalization = semanticState
-      ? (service as any).buildNormalizationFromSemanticState(semanticState)
-      : clarification.normalization
-    const canonicalSpec = semanticState
-      ? (service as any).buildCanonicalSpecForConversation(semanticState, normalization)
-      : (service as any).buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly(
-          checklist,
-          normalization,
-        )
+    const normalization = (service as any).buildNormalizationFromSemanticState(semanticState)
+    const canonicalSpec = (service as any).buildCanonicalSpecForConversation(semanticState, normalization)
     return canonicalDigestService.hash(canonicalSpec)
   }
   const readPersistedChecklist = (
@@ -2608,8 +2599,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         },
       },
     })
-    const projectedChecklist = (service as any).projectLegacyLogicSnapshotFromSemanticState(persistedSemanticState, {})
-
     mockRepo.findById.mockResolvedValue({
       id: 's-semantic-first-confirm',
       userId: 'u1',
@@ -2625,7 +2614,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(projectedChecklist, persistedSemanticState),
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(persistedSemanticState),
     })
 
     expect(result.status).toBe('GENERATING')
@@ -2763,8 +2752,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         },
       },
     })
-    const projectedChecklist = (service as any).projectLegacyLogicSnapshotFromSemanticState(persistedSemanticState, {})
-
     mockRepo.findById.mockResolvedValue({
       id: 's-confirm-semantic-no-checklist-gate',
       userId: 'u1',
@@ -2780,7 +2767,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(projectedChecklist, persistedSemanticState),
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(persistedSemanticState),
     })
 
     expect(activeGateSpy).not.toHaveBeenCalled()
@@ -3016,8 +3003,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         },
       },
     })
-    const projectedChecklist = (service as any).projectLegacyLogicSnapshotFromSemanticState(persistedSemanticState, {})
-
     mockRepo.findById.mockResolvedValue({
       id: 's-confirm-semantic-legacy-blocker',
       userId: 'u1',
@@ -3045,7 +3030,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       userId: 'u1',
       message: '确认逻辑图',
       confirmGenerate: true,
-      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(projectedChecklist, persistedSemanticState),
+      confirmedCanonicalDigest: buildConfirmedCanonicalDigest(persistedSemanticState),
     })
 
     expect(activeGateSpy).not.toHaveBeenCalled()
