@@ -37,6 +37,14 @@ generatedSource = generatedSource.replace(
   "import { makeApi, Zodios, type ZodiosInstance, type ZodiosOptions } from '@zodios/core'\n",
 )
 generatedSource = generatedSource.replace(
+  'const endpoints: ZodiosEndpointDefinitions = makeApi([',
+  'const endpoints = makeApi([',
+)
+generatedSource = generatedSource.replace(
+  "import { makeApi, Zodios, type ZodiosEndpointDefinitions, type ZodiosInstance, type ZodiosOptions } from '@zodios/core'\n",
+  "import { makeApi, Zodios, type ZodiosInstance, type ZodiosOptions } from '@zodios/core'\n",
+)
+generatedSource = generatedSource.replace(
   'const endpoints = makeApi([',
   'const endpoints = makeApi([',
 )

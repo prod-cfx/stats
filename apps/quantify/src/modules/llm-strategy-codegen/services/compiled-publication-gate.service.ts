@@ -1,7 +1,12 @@
 import type { StrategyAstV1 } from '../types/canonical-strategy-ast'
 import type { CanonicalStrategyIrV1 } from '../types/canonical-strategy-ir'
 import type { CompiledScriptExecutionEnvelope } from '../types/compiled-script-projection'
-import type { PublicationGateCheck, PublicationGateReport } from '../types/publication-gate'
+import type {
+  PublicationGateCheck,
+  PublicationGateReport,
+  PublishedRuntimeExecutionSemantic,
+  PublishedStrategyAstSnapshot,
+} from '../types/publication-gate'
 import type { StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyLogicGraphSnapshot } from '../types/strategy-logic-graph-snapshot'
 import { Injectable } from '@nestjs/common'
@@ -187,15 +192,15 @@ export class CompiledPublicationGateService {
     }
   }
 
-  private buildPublicationAstSnapshot(ast: StrategyAstV1): Record<string, unknown> {
+  private buildPublicationAstSnapshot(ast: StrategyAstV1): PublishedStrategyAstSnapshot {
     const runtimeExecutionSemantics = this.buildRuntimeExecutionSemantics(ast)
     return {
       ...ast,
       ...(runtimeExecutionSemantics.length > 0 ? { runtimeExecutionSemantics } : {}),
-    } as unknown as Record<string, unknown>
+    }
   }
 
-  private buildRuntimeExecutionSemantics(ast: StrategyAstV1): string[] {
+  private buildRuntimeExecutionSemantics(ast: StrategyAstV1): PublishedRuntimeExecutionSemantic[] {
     const firstMarkedProgram = ast.decisionPrograms.find((program) => {
       const markerSource = `${program.sourceRef} ${program.id}`
       return ON_START_SOURCE_REF_PATTERN.test(markerSource)
@@ -205,7 +210,19 @@ export class CompiledPublicationGateService {
       return []
     }
 
-    return [`on_start.${firstMarkedProgram.phase}.${this.resolveSemanticLabel(1)}`]
+    return [{
+      semanticKey: `on_start.${firstMarkedProgram.phase}.${this.resolveSemanticLabel(1)}`,
+      trigger: 'on_start',
+      phase: firstMarkedProgram.phase,
+      consumePolicy: 'once',
+      requiredRuntimeContext: {
+        barIndex: 1,
+        requiresReferenceBar: true,
+        requiresSymbol: true,
+        requiresTimeframe: true,
+      },
+      sourceRefs: [firstMarkedProgram.sourceRef],
+    }]
   }
 
   private resolveSemanticLabel(index: number): string {

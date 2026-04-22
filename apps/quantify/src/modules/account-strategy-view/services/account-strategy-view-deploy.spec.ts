@@ -2,8 +2,25 @@ import { AccountStrategyViewService } from './account-strategy-view.service'
 
 function createRuntimeExecutionStateService() {
   return {
+    buildExecutionSemanticKeysFromSnapshot: jest.fn().mockReturnValue(['on_start.entry.primary']),
     initializeStatesForDeploy: jest.fn().mockResolvedValue([]),
   }
+}
+
+function createStructuredRuntimeExecutionSemantics() {
+  return [{
+    semanticKey: 'on_start.entry.primary',
+    trigger: 'on_start',
+    phase: 'entry',
+    consumePolicy: 'once',
+    requiredRuntimeContext: {
+      barIndex: 1,
+      requiresReferenceBar: true,
+      requiresSymbol: true,
+      requiresTimeframe: true,
+    },
+    sourceRefs: ['entry-primary'],
+  }]
 }
 
 describe('accountStrategyViewService.deployStrategy', () => {
@@ -18,6 +35,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
     }
     const runtimeExecutionStateService = {
+      buildExecutionSemanticKeysFromSnapshot: jest.fn().mockReturnValue(['on_start.entry.primary']),
       initializeStatesForDeploy: jest.fn().mockResolvedValue(['on_start.entry.primary']),
     }
     const snapshotsRepository = {
@@ -48,6 +66,7 @@ describe('accountStrategyViewService.deployStrategy', () => {
         strategyTemplateId: 'template-1',
         astSnapshot: {
           decisionPrograms: [{ phase: 'entry' }],
+          runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
         },
       }),
     }
@@ -134,6 +153,9 @@ describe('accountStrategyViewService.deployStrategy', () => {
         lockedParams: {
           exchange: 'okx',
           positionPct: 10,
+        },
+        astSnapshot: {
+          runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
         },
       }),
     }
@@ -226,6 +248,9 @@ describe('accountStrategyViewService.deployStrategy', () => {
           exchange: 'okx',
           positionPct: 10,
         },
+        astSnapshot: {
+          runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
+        },
       }),
     }
     const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
@@ -308,6 +333,9 @@ describe('accountStrategyViewService.deployStrategy', () => {
         },
         strategyInstanceId: null,
         strategyTemplateId: 'template-1',
+        astSnapshot: {
+          runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
+        },
       }),
     }
     const service = new AccountStrategyViewService(
@@ -369,6 +397,9 @@ describe('accountStrategyViewService.deployStrategy', () => {
         },
         strategyInstanceId: 'inst-draft-1',
         strategyTemplateId: 'template-1',
+        astSnapshot: {
+          runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
+        },
       }),
     }
     const service = new AccountStrategyViewService(
@@ -437,6 +468,9 @@ describe('accountStrategyViewService.deployStrategy', () => {
         lockedParams: {
           exchange: 'okx',
           positionPct: 10,
+        },
+        astSnapshot: {
+          runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
         },
       }),
     }
@@ -526,6 +560,9 @@ describe('accountStrategyViewService.deployStrategy', () => {
         lockedParams: {
           exchange: 'okx',
           positionPct: 10,
+        },
+        astSnapshot: {
+          runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
         },
       }),
     }
@@ -687,6 +724,9 @@ describe('accountStrategyViewService.deployStrategy', () => {
         },
         strategyInstanceId: 'inst-draft-1',
         strategyTemplateId: 'template-1',
+        astSnapshot: {
+          runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
+        },
       }),
     }
     const tradingService = {
@@ -759,6 +799,9 @@ describe('accountStrategyViewService.deployStrategy', () => {
         lockedParams: { exchange: 'okx', positionPct: 12 },
         strategyInstanceId: 'inst-draft-1',
         strategyTemplateId: 'template-1',
+        astSnapshot: {
+          runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
+        },
       }),
     }
     const service = new AccountStrategyViewService(

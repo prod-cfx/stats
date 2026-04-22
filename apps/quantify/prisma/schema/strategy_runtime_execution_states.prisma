@@ -5,9 +5,13 @@ model StrategyRuntimeExecutionState {
   snapshotHash         String    @map("snapshot_hash")
   executionSemanticKey String    @map("execution_semantic_key")
   status               String
+  failureFamily        String?   @map("failure_family")
   failureReason        String?   @map("failure_reason")
   failureCode          String?   @map("failure_code")
+  attemptCount         Int       @default(0) @map("attempt_count")
   lastAttemptAt        DateTime? @map("last_attempt_at")
+  runningAt            DateTime? @map("running_at")
+  terminalAt           DateTime? @map("terminal_at")
   consumedAt           DateTime? @map("consumed_at")
   cooldownUntil        DateTime? @map("cooldown_until")
   createdAt            DateTime  @default(now()) @map("created_at")

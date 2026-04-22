@@ -554,6 +554,7 @@ const RuntimeExecutionStateDto = z
   .object({
     executionSemanticKey: z.string(),
     status: z.enum(['ready', 'consumed', 'failed', 'cooldown']),
+    failureFamily: z.enum(['binding', 'activation', 'execution', 'persistence']).nullish(),
     failureReason: z.string().nullish(),
     failureCode: z.string().nullish(),
     lastAttemptAt: z.string().datetime({ offset: true }).nullish(),

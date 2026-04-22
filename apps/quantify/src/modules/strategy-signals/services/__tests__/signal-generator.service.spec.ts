@@ -38,6 +38,10 @@ describe('signalGeneratorService coordinator behavior', () => {
     const runtimeExecutionStateService = {
       buildExecutionSemanticKeysFromSnapshot: jest.fn().mockReturnValue([]),
       loadExecutableStates: jest.fn().mockResolvedValue([]),
+      markRunning: jest.fn().mockResolvedValue(undefined),
+      markRetryableFailure: jest.fn().mockResolvedValue(undefined),
+      markTerminalFailure: jest.fn().mockResolvedValue(undefined),
+      markConsumed: jest.fn().mockResolvedValue(undefined),
       ...overrides.runtimeExecutionStateService,
     }
     const runtimeExecutionStateRepository = {
@@ -248,10 +252,11 @@ describe('signalGeneratorService coordinator behavior', () => {
       }),
       false,
       undefined,
+      undefined,
     )
   })
 
-  it('marks a ready on_start snapshot semantic as consumed after a published snapshot signal is created', async () => {
+  it('marks a ready on_start snapshot semantic as running then consumed after a published snapshot signal is created', async () => {
     const publishedSnapshotsRepository = {
       findById: jest.fn().mockResolvedValue({
         id: 'snapshot-1',
@@ -344,15 +349,21 @@ describe('signalGeneratorService coordinator behavior', () => {
       snapshotHash: 'snapshot-hash-1',
     })
     expect(generatorRepository.findSymbolByCode).toHaveBeenCalledWith('BTCUSDT')
-    expect(runtimeExecutionStateRepository.markConsumed).toHaveBeenCalledWith({
+    expect(runtimeExecutionStateService.markRunning).toHaveBeenCalledWith({
       strategyInstanceId: 'instance-1',
       publishedSnapshotId: 'snapshot-1',
       executionSemanticKey: 'on_start.entry.primary',
     })
-    expect(runtimeExecutionStateRepository.markFailed).not.toHaveBeenCalled()
+    expect(runtimeExecutionStateService.markConsumed).toHaveBeenCalledWith({
+      strategyInstanceId: 'instance-1',
+      publishedSnapshotId: 'snapshot-1',
+      executionSemanticKey: 'on_start.entry.primary',
+    })
+    expect(runtimeExecutionStateService.markTerminalFailure).not.toHaveBeenCalled()
+    expect(runtimeExecutionStateService.markRetryableFailure).not.toHaveBeenCalled()
   })
 
-  it('marks a ready on_start snapshot semantic as failed when no signal is generated', async () => {
+  it('marks a ready on_start snapshot semantic as terminal after execution runs without a signal', async () => {
     const publishedSnapshotsRepository = {
       findById: jest.fn().mockResolvedValue({
         id: 'snapshot-1',
@@ -369,7 +380,7 @@ describe('signalGeneratorService coordinator behavior', () => {
         },
       }),
     }
-    const { runtimeExecutionStateRepository, runtimeExecutionStateService, service } = createService({
+    const { runtimeExecutionStateService, service } = createService({
       publishedSnapshotsRepository,
       generatorRepository: {
         findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-1', code: 'BTCUSDT' }),
@@ -419,17 +430,23 @@ describe('signalGeneratorService coordinator behavior', () => {
       publishedSnapshotId: 'snapshot-1',
       snapshotHash: 'snapshot-hash-1',
     })
-    expect(runtimeExecutionStateRepository.markFailed).toHaveBeenCalledWith({
+    expect(runtimeExecutionStateService.markRunning).toHaveBeenCalledWith({
       strategyInstanceId: 'instance-1',
       publishedSnapshotId: 'snapshot-1',
       executionSemanticKey: 'on_start.entry.primary',
-      failureReason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
-      failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
     })
-    expect(runtimeExecutionStateRepository.markConsumed).not.toHaveBeenCalled()
+    expect(runtimeExecutionStateService.markTerminalFailure).toHaveBeenCalledWith({
+      strategyInstanceId: 'instance-1',
+      publishedSnapshotId: 'snapshot-1',
+      executionSemanticKey: 'on_start.entry.primary',
+      failureReason: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+      failureCode: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+    })
+    expect(runtimeExecutionStateService.markConsumed).not.toHaveBeenCalled()
+    expect(runtimeExecutionStateService.markRetryableFailure).not.toHaveBeenCalled()
   })
 
-  it('marks a ready on_start snapshot semantic as failed when the bound symbol cannot be loaded', async () => {
+  it('marks a ready on_start snapshot semantic as terminal when the bound symbol cannot be loaded', async () => {
     const publishedSnapshotsRepository = {
       findById: jest.fn().mockResolvedValue({
         id: 'snapshot-1',
@@ -446,7 +463,7 @@ describe('signalGeneratorService coordinator behavior', () => {
         },
       }),
     }
-    const { generatorRepository, runtimeExecutionStateRepository, runtimeExecutionStateService, service } = createService({
+    const { generatorRepository, runtimeExecutionStateService, service } = createService({
       publishedSnapshotsRepository,
       generatorRepository: {
         findSymbolByCode: jest.fn().mockResolvedValue(null),
@@ -486,14 +503,107 @@ describe('signalGeneratorService coordinator behavior', () => {
     )
 
     expect(generatorRepository.findSymbolByCode).toHaveBeenCalledWith('BTCUSDT')
-    expect(runtimeExecutionStateRepository.markFailed).toHaveBeenCalledWith({
+    expect(runtimeExecutionStateService.markRunning).not.toHaveBeenCalled()
+    expect(runtimeExecutionStateService.markTerminalFailure).toHaveBeenCalledWith({
       strategyInstanceId: 'instance-1',
       publishedSnapshotId: 'snapshot-1',
       executionSemanticKey: 'on_start.entry.primary',
       failureReason: 'SYMBOL_NOT_FOUND',
       failureCode: 'SYMBOL_NOT_FOUND',
     })
-    expect(runtimeExecutionStateRepository.markConsumed).not.toHaveBeenCalled()
+    expect(runtimeExecutionStateService.markConsumed).not.toHaveBeenCalled()
+    expect(runtimeExecutionStateService.markRetryableFailure).not.toHaveBeenCalled()
+  })
+
+  it('marks a ready on_start snapshot semantic as retryable when activation is missing the required reference bar', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-04-20T09:00:00.000Z'))
+
+    const publishedSnapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyInstanceId: 'source-instance-1',
+        strategyTemplateId: 'template-1',
+        scriptSnapshot: 'return "snapshot-script"',
+        astSnapshot: {
+          decisionPrograms: [{ id: 'entry-primary', phase: 'entry' }],
+          runtimeExecutionSemantics: [{
+            semanticKey: 'on_start.entry.primary',
+            trigger: 'on_start',
+            phase: 'entry',
+            consumePolicy: 'once',
+            requiredRuntimeContext: {
+              barIndex: 1,
+              requiresReferenceBar: true,
+              requiresSymbol: true,
+              requiresTimeframe: true,
+            },
+            sourceRefs: ['entry-primary'],
+          }],
+        },
+        paramsSnapshot: {
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+        },
+      }),
+    }
+    const { generatorRepository, runtimeExecutionStateService, service } = createService({
+      publishedSnapshotsRepository,
+      generatorRepository: {
+        findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-1', code: 'BTCUSDT' }),
+      },
+      runtimeExecutionStateService: {
+        buildExecutionSemanticKeysFromSnapshot: jest.fn().mockReturnValue(['on_start.entry.primary']),
+        loadExecutableStates: jest.fn().mockResolvedValue([{
+          strategyInstanceId: 'instance-1',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+          executionSemanticKey: 'on_start.entry.primary',
+          status: 'ready',
+        }]),
+      },
+    })
+
+    const generateSignalWithAi = jest.spyOn(service as any, 'generateSignalWithAi')
+    jest.spyOn(service as any, 'isStrategyLocked').mockResolvedValue(false)
+    jest.spyOn(service as any, 'loadLatestBar').mockResolvedValue(null)
+
+    try {
+      await (service as any).processStrategyInstance(
+        {
+          id: 'instance-1',
+          llmModel: 'gpt-5.4',
+          params: { symbol: 'BTCUSDT', timeframe: '15m' },
+          metadata: {
+            bindingSource: 'PUBLISHED_SNAPSHOT',
+            publishedSnapshotId: 'snapshot-1',
+            snapshotHash: 'snapshot-hash-1',
+          },
+          strategyTemplate: {
+            id: 'template-1',
+            promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+            script: 'return "template-script"',
+          },
+        },
+        config,
+      )
+
+      expect(generatorRepository.findSymbolByCode).toHaveBeenCalledWith('BTCUSDT')
+      expect(generateSignalWithAi).not.toHaveBeenCalled()
+      expect(runtimeExecutionStateService.markRunning).not.toHaveBeenCalled()
+      expect(runtimeExecutionStateService.markRetryableFailure).toHaveBeenCalledWith({
+        strategyInstanceId: 'instance-1',
+        publishedSnapshotId: 'snapshot-1',
+        executionSemanticKey: 'on_start.entry.primary',
+        failureReason: 'SNAPSHOT_REFERENCE_BAR_MISSING',
+        failureCode: 'SNAPSHOT_REFERENCE_BAR_MISSING',
+        cooldownUntil: new Date('2026-04-20T09:15:00.000Z'),
+      })
+      expect(runtimeExecutionStateService.markTerminalFailure).not.toHaveBeenCalled()
+      expect(runtimeExecutionStateService.markConsumed).not.toHaveBeenCalled()
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   it('consumes a ready on_start snapshot semantic when cooldown prevents creating a duplicate signal', async () => {
@@ -513,7 +623,7 @@ describe('signalGeneratorService coordinator behavior', () => {
         },
       }),
     }
-    const { runtimeExecutionStateRepository, runtimeExecutionStateService, service } = createService({
+    const { runtimeExecutionStateService, service } = createService({
       publishedSnapshotsRepository,
       generatorRepository: {
         findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-1', code: 'BTCUSDT' }),
@@ -570,12 +680,94 @@ describe('signalGeneratorService coordinator behavior', () => {
       config,
     )
 
-    expect(runtimeExecutionStateRepository.markConsumed).toHaveBeenCalledWith({
+    expect(runtimeExecutionStateService.markRunning).toHaveBeenCalledWith({
       strategyInstanceId: 'instance-1',
       publishedSnapshotId: 'snapshot-1',
       executionSemanticKey: 'on_start.entry.primary',
     })
-    expect(runtimeExecutionStateRepository.markFailed).not.toHaveBeenCalled()
+    expect(runtimeExecutionStateService.markConsumed).toHaveBeenCalledWith({
+      strategyInstanceId: 'instance-1',
+      publishedSnapshotId: 'snapshot-1',
+      executionSemanticKey: 'on_start.entry.primary',
+    })
+    expect(runtimeExecutionStateService.markTerminalFailure).not.toHaveBeenCalled()
+    expect(runtimeExecutionStateService.markRetryableFailure).not.toHaveBeenCalled()
+  })
+
+  it('marks a running on_start snapshot semantic as terminal when execution throws unexpectedly', async () => {
+    const publishedSnapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyInstanceId: 'source-instance-1',
+        strategyTemplateId: 'template-1',
+        scriptSnapshot: 'return "snapshot-script"',
+        astSnapshot: {
+          decisionPrograms: [{ id: 'entry-primary', phase: 'entry' }],
+        },
+        paramsSnapshot: {
+          symbol: 'BTCUSDT',
+          timeframe: '15m',
+        },
+      }),
+    }
+    const boom = new Error('ai crashed')
+    const { runtimeExecutionStateService, service } = createService({
+      publishedSnapshotsRepository,
+      generatorRepository: {
+        findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-1', code: 'BTCUSDT' }),
+      },
+      runtimeExecutionStateService: {
+        buildExecutionSemanticKeysFromSnapshot: jest.fn().mockReturnValue(['on_start.entry.primary']),
+        loadExecutableStates: jest.fn().mockResolvedValue([{
+          strategyInstanceId: 'instance-1',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+          executionSemanticKey: 'on_start.entry.primary',
+          status: 'ready',
+        }]),
+      },
+    })
+
+    jest.spyOn(service as any, 'isStrategyLocked').mockResolvedValue(false)
+    jest.spyOn(service as any, 'loadLatestBar').mockResolvedValue({
+      close: 100,
+      time: new Date('2026-04-20T09:00:00.000Z'),
+      timestamp: Date.now(),
+    })
+    jest.spyOn(service as any, 'generateSignalWithAi').mockRejectedValue(boom)
+
+    await expect((service as any).processStrategyInstance(
+      {
+        id: 'instance-1',
+        llmModel: 'gpt-5.4',
+        params: {},
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-1',
+          snapshotHash: 'snapshot-hash-1',
+        },
+        strategyTemplate: {
+          id: 'template-1',
+          promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+          script: 'return "template-script"',
+        },
+      },
+      config,
+    )).rejects.toThrow('ai crashed')
+
+    expect(runtimeExecutionStateService.markRunning).toHaveBeenCalledWith({
+      strategyInstanceId: 'instance-1',
+      publishedSnapshotId: 'snapshot-1',
+      executionSemanticKey: 'on_start.entry.primary',
+    })
+    expect(runtimeExecutionStateService.markTerminalFailure).toHaveBeenCalledWith({
+      strategyInstanceId: 'instance-1',
+      publishedSnapshotId: 'snapshot-1',
+      executionSemanticKey: 'on_start.entry.primary',
+      failureReason: 'SNAPSHOT_RUNTIME_EXECUTION_UNEXPECTED_ERROR',
+      failureCode: 'SNAPSHOT_RUNTIME_EXECUTION_UNEXPECTED_ERROR',
+    })
   })
 
   it('does not rerun a published snapshot when no ready on_start semantic remains', async () => {
@@ -595,7 +787,7 @@ describe('signalGeneratorService coordinator behavior', () => {
         },
       }),
     }
-    const { runtimeExecutionStateRepository, runtimeExecutionStateService, service } = createService({
+    const { runtimeExecutionStateService, service } = createService({
       publishedSnapshotsRepository,
       runtimeExecutionStateService: {
         buildExecutionSemanticKeysFromSnapshot: jest.fn().mockReturnValue(['on_start.entry.primary']),
@@ -631,7 +823,8 @@ describe('signalGeneratorService coordinator behavior', () => {
       snapshotHash: 'snapshot-hash-1',
     })
     expect(generateSignalWithAi).not.toHaveBeenCalled()
-    expect(runtimeExecutionStateRepository.markConsumed).not.toHaveBeenCalled()
-    expect(runtimeExecutionStateRepository.markFailed).not.toHaveBeenCalled()
+    expect(runtimeExecutionStateService.markConsumed).not.toHaveBeenCalled()
+    expect(runtimeExecutionStateService.markTerminalFailure).not.toHaveBeenCalled()
+    expect(runtimeExecutionStateService.markRetryableFailure).not.toHaveBeenCalled()
   })
 })

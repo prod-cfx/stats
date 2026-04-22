@@ -142,6 +142,7 @@ function normalizeRuntimeExecutionStates(
   return states.map(state => ({
     executionSemanticKey: state.executionSemanticKey,
     status: state.status,
+    failureFamily: state.failureFamily ?? null,
     failureReason: state.failureReason ?? null,
     failureCode: state.failureCode ?? null,
     lastAttemptAt: state.lastAttemptAt ?? null,

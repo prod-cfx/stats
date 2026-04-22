@@ -79,6 +79,7 @@ describe('quantify contract generated responses', () => {
     const source = readFileSync(generatedPath, 'utf8')
 
     expect(source).toContain('data: AccountStrategyDetailResponseDto')
+    expect(source).toContain("failureFamily: z.enum(['binding', 'activation', 'execution', 'persistence']).nullish()")
     expect(source).toContain('message: z.string().optional()')
     expect(source).toContain('.passthrough()')
 

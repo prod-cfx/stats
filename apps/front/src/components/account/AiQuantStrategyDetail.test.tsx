@@ -195,8 +195,9 @@ describe('AiQuantStrategyDetail', () => {
               {
                 executionSemanticKey: 'on_start.entry.primary',
                 status: 'failed',
-                failureReason: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
-                failureCode: 'SNAPSHOT_SCRIPT_NO_SIGNAL',
+                failureFamily: 'execution',
+                failureReason: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+                failureCode: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
                 lastAttemptAt: '2026-03-20 10:03',
                 consumedAt: null,
                 cooldownUntil: null,
@@ -206,6 +207,7 @@ describe('AiQuantStrategyDetail', () => {
               {
                 executionSemanticKey: 'on_start.exit.primary',
                 status: 'consumed',
+                failureFamily: null,
                 failureReason: null,
                 failureCode: null,
                 lastAttemptAt: '2026-03-20 10:08',
@@ -225,11 +227,71 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('失败')
     expect(container.textContent).toContain('最近尝试')
     expect(container.textContent).toContain('2026-03-20 10:03')
+    expect(container.textContent).toContain('失败分类')
+    expect(container.textContent).toContain('执行')
     expect(container.textContent).toContain('未生成可执行信号')
     expect(container.textContent).toContain('on_start.exit.primary')
     expect(container.textContent).toContain('已执行')
     expect(container.textContent).toContain('已执行时间')
     expect(container.textContent).toContain('2026-03-20 10:08')
+  })
+
+  it('renders binding and activation runtime failures with precise user-facing labels', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={{
+            id: 'inst-runtime-2',
+            name: 'Runtime state strategy',
+            status: 'running',
+            exchange: 'okx',
+            symbol: 'BTC-USDT-SWAP',
+            timeframe: '15m',
+            positionPct: 10,
+            initialCapital: 10000,
+            metrics: { returnPct: 12, maxDrawdownPct: 6, winRatePct: 51, tradeCount: 22 },
+            equitySeries: [],
+            timeline: [],
+            paramSchema: null,
+            paramValues: null,
+            schemaVersion: null,
+            supportsDynamicParams: false,
+            runtimeExecutionStates: [
+              {
+                executionSemanticKey: 'on_start.entry.binding',
+                status: 'failed',
+                failureFamily: 'binding',
+                failureReason: 'SYMBOL_NOT_FOUND',
+                failureCode: 'SYMBOL_NOT_FOUND',
+                lastAttemptAt: null,
+                consumedAt: null,
+                cooldownUntil: null,
+                publishedSnapshotId: 'snapshot-1',
+                snapshotHash: 'hash-1',
+              },
+              {
+                executionSemanticKey: 'on_start.entry.activation',
+                status: 'cooldown',
+                failureFamily: 'activation',
+                failureReason: 'SNAPSHOT_REFERENCE_BAR_MISSING',
+                failureCode: 'SNAPSHOT_REFERENCE_BAR_MISSING',
+                lastAttemptAt: null,
+                consumedAt: null,
+                cooldownUntil: null,
+                publishedSnapshotId: 'snapshot-1',
+                snapshotHash: 'hash-1',
+              },
+            ],
+          }}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('部署绑定异常，请重新发布并重新部署')
+    expect(container.textContent).toContain('绑定')
+    expect(container.textContent).toContain('当前执行条件未满足（缺少参考K线）')
+    expect(container.textContent).toContain('激活')
   })
 
   it('keeps runtime execution state section hidden for legacy or unbound strategies with no states', async () => {
