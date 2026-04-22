@@ -244,7 +244,7 @@ export class CodegenConversationService {
       ? this.clarificationQuestion.buildFromDecision(decision)
       : semanticArtifacts.clarificationPrompt
     const confirmationAssistantPrompt = initialStatus === 'CONFIRM_GATE'
-      ? this.buildLogicGateAssistantPrompt(checklist, normalization.normalizedIntent)
+      ? this.buildSemanticLogicGateAssistantPrompt(initialSemanticState, normalization.normalizedIntent)
       : null
     const bootstrap = buildStartSessionBootstrap({
       initialMessage: dto.initialMessage,
@@ -257,7 +257,7 @@ export class CodegenConversationService {
       compileability,
       normalizationBlocked: normalization?.blocked === true,
       normalizationAssistantPrompt: normalization?.blocked
-        ? this.buildNormalizationAssistantPrompt(checklist, normalization)
+        ? this.buildSemanticNormalizationAssistantPrompt(initialSemanticState, normalization)
         : undefined,
     }, report => this.buildCompileabilityAssistantPrompt(report))
     const initialSpecDesc = bootstrap.shouldEnterConfirmationGate && initialCanonicalSpec
@@ -453,10 +453,10 @@ export class CodegenConversationService {
         : deterministicAuthority === 'decision'
           ? (decisionPrompt || '请先确认当前推断，我再继续整理逻辑图。')
           : deterministicAuthority === 'normalization'
-            ? this.buildNormalizationAssistantPrompt(canonicalLogicSnapshot, normalization)
+            ? this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization)
             : deterministicAuthority === 'compileability'
               ? this.buildCompileabilityAssistantPrompt(compileability)
-              : this.buildLogicGateAssistantPrompt(canonicalLogicSnapshot, normalization.normalizedIntent)
+              : this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState, normalization.normalizedIntent)
       const targetStatus = deterministicAuthority === 'confirm_gate' ? 'CONFIRM_GATE' : 'DRAFTING'
       const shouldPersistDecisionSpecDesc = deterministicAuthority === 'decision' && hasStructuredClarificationAnswers
       const shouldPersistDeterministicOutcome = plan.related
@@ -754,7 +754,7 @@ export class CodegenConversationService {
         id: session.id,
         status: 'DRAFTING',
         missingFields: [],
-        assistantPrompt: this.buildNormalizationAssistantPrompt(canonicalLogicSnapshot, normalization),
+        assistantPrompt: this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization),
         clarificationState,
         specDesc,
       })
@@ -3406,6 +3406,28 @@ export class CodegenConversationService {
     ].filter(Boolean)
 
     return segments.length > 0 ? segments.join('；') : null
+  }
+
+  private buildSemanticClarificationSummary(semanticState: SemanticState): string {
+    return this.semanticStateProjection.buildConversationView(semanticState).summary
+  }
+
+  private buildSemanticLogicGateAssistantPrompt(
+    semanticState: SemanticState,
+    normalizedIntent: StrategyNormalizedIntent,
+  ): string {
+    void normalizedIntent
+    const summary = this.buildSemanticClarificationSummary(semanticState)
+    return `我整理出的策略逻辑如下：${summary}。请确认是否按这个逻辑生成脚本。`
+  }
+
+  private buildSemanticNormalizationAssistantPrompt(
+    semanticState: SemanticState,
+    normalization: NormalizationResult,
+  ): string {
+    const summary = this.buildSemanticClarificationSummary(semanticState)
+    const blocker = normalization.blockerReason ? `当前还缺少：${normalization.blockerReason}` : '当前语义仍未完整。'
+    return `我当前理解的策略是：${summary}\n${blocker}`
   }
 
   private buildLogicGateAssistantPrompt(

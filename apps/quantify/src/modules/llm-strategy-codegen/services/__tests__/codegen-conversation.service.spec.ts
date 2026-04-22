@@ -3299,7 +3299,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         digest: result.canonicalDigest,
       }),
     }))
-    expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
+    expect(result.assistantPrompt).toContain('请确认是否按这个逻辑生成脚本')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       semanticState: expect.objectContaining({
         version: 1,
@@ -3382,7 +3382,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       expect.objectContaining({ reason: 'missing_exit_rules' }),
     ]))
     expect(result.status).toBe('CONFIRM_GATE')
-    expect(result.assistantPrompt).toContain('确认逻辑图')
+    expect(result.assistantPrompt).toContain('请确认是否按这个逻辑生成脚本')
     expect(mockRepo.createSession).toHaveBeenCalledWith(expect.objectContaining({
       semanticState: expect.objectContaining({
         triggers: expect.arrayContaining([
@@ -3468,9 +3468,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     } as ContinueCodegenSessionDto)
 
     expect(result.status).toBe('CONFIRM_GATE')
-    expect(result.assistantPrompt).toContain('双向网格')
+    expect(result.assistantPrompt).toContain('区间网格')
     expect(result.assistantPrompt).not.toContain('仅做多')
-    expect(result.assistantPrompt).toContain('请确认是否按此逻辑生成')
+    expect(result.assistantPrompt).toContain('请确认是否按这个逻辑生成脚本')
   })
 
   it('keeps MA golden case stable across conversation artifacts', async () => {
@@ -6431,7 +6431,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     } as ContinueCodegenSessionDto)
 
     expect(result.status).toBe('CONFIRM_GATE')
-    expect(result.assistantPrompt).toContain('确认逻辑图')
+    expect(result.assistantPrompt).toContain('请确认是否按这个逻辑生成脚本')
     expect((result as any).clarificationGate).toEqual(expect.objectContaining({
       blocked: false,
       summary: null,
