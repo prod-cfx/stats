@@ -628,89 +628,27 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       {},
       overrides,
     ) as Record<string, any>
-    const rawChecklist = fixture.checklist && typeof fixture.checklist === 'object' && !Array.isArray(fixture.checklist)
-      ? fixture.checklist as Record<string, any>
-      : {}
-    const normalizedLogicSnapshot = fixture.checklist && typeof fixture.checklist === 'object' && !Array.isArray(fixture.checklist)
-      ? (service as any).normalizeLogicSnapshot(fixture.checklist)
-      : {}
     const semanticState = (service as any).hasPersistedSemanticState(fixture.semanticState)
       ? fixture.semanticState
       : null
-    const baselineChecklist = semanticState
-      ? (service as any).projectLegacyLogicSnapshotFromSemanticState(semanticState, normalizedLogicSnapshot)
-      : normalizedLogicSnapshot
-    const clarificationArtifacts = semanticState
-      ? (service as any).resolveSemanticClarificationArtifacts(semanticState)
-      : (service as any).resolveClarificationArtifacts(baselineChecklist)
-    const normalization = semanticState
-      ? (service as any).buildNormalizationFromSemanticState(semanticState)
-      : clarificationArtifacts.normalization
-    const canonicalSpec = semanticState
-      ? (service as any).buildCanonicalSpecForConversation(semanticState, normalization)
-      : (service as any).buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly(
-          baselineChecklist,
-          normalization,
-        )
+    if (!semanticState) {
+      throw new Error('buildSemanticEraSessionFixture requires explicit semanticState')
+    }
+
+    const clarificationArtifacts = (service as any).resolveSemanticClarificationArtifacts(semanticState)
+    const normalization = (service as any).buildNormalizationFromSemanticState(semanticState)
+    const canonicalSpec = (service as any).buildCanonicalSpecForConversation(semanticState, normalization)
     const executionContext = clarificationArtifacts.executionContext.context
     const latestSpecDesc = specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
       normalizedIntent: normalization.normalizedIntent,
       executionContext,
     })
-    const inferredAssumptions = new Set<string>(
-      Array.isArray(rawChecklist.riskRules?._inferredAssumptions)
-        ? rawChecklist.riskRules._inferredAssumptions.filter((item): item is string => typeof item === 'string')
-        : [],
-    )
-    if (
-      typeof rawChecklist.riskRules?.stopLossPct === 'number'
-      && rawChecklist.riskRules?.stopLossBasis == null
-      && normalizedLogicSnapshot.riskRules?.stopLossBasis === 'entry_avg_price'
-    ) {
-      inferredAssumptions.add('risk.stopLossBasis')
-    }
-    if (
-      typeof rawChecklist.riskRules?.takeProfitPct === 'number'
-      && rawChecklist.riskRules?.takeProfitBasis == null
-      && normalizedLogicSnapshot.riskRules?.takeProfitBasis === 'entry_avg_price'
-    ) {
-      inferredAssumptions.add('risk.takeProfitBasis')
-    }
-    if (Array.isArray((latestSpecDesc as any).normalizedIntent?.risk) && inferredAssumptions.size > 0) {
-      ;(latestSpecDesc as any).normalizedIntent.risk = (latestSpecDesc as any).normalizedIntent.risk.map((risk: Record<string, any>) => {
-        if (risk?.key === 'risk.stop_loss_pct' && inferredAssumptions.has('risk.stopLossBasis')) {
-          return {
-            ...risk,
-            source: 'system_default',
-            params: {
-              ...(risk.params ?? {}),
-              basisSource: 'system_default',
-            },
-          }
-        }
-        if (risk?.key === 'risk.take_profit_pct' && inferredAssumptions.has('risk.takeProfitBasis')) {
-          return {
-            ...risk,
-            source: 'system_default',
-            params: {
-              ...(risk.params ?? {}),
-              basisSource: 'system_default',
-            },
-          }
-        }
-
-        return risk
-      })
-    }
 
     return {
       ...fixture,
-      ...(semanticState ? { semanticState } : {}),
+      semanticState,
       latestSpecDesc,
     }
-  }
-  const buildSemanticTestSessionFixture = (overrides: Record<string, any>) => {
-    return buildSemanticEraSessionFixture(overrides)
   }
   const buildLegacyChecklistBridgeSessionFixture = (overrides: Record<string, any>) => {
     if ((service as any).hasPersistedSemanticState(overrides.semanticState)) {
