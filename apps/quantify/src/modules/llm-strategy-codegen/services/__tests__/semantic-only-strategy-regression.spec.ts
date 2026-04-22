@@ -456,7 +456,7 @@ describe('semantic-only strategy regression verification', () => {
       /buildFallbackSemanticState/u,
       /buildCanonicalSpecFromLegacyLogicSnapshotForNonSemanticCompatibilityOnly/u,
       /canonicalSpecBuilder\.build\(\s*checklist\b/u,
-      /\bsession\.checklist\b/u,
+      /\bsession\s*(?:(?:\?\.)|\.)\s*checklist\b|\bsession\s*(?:\?\.\s*)?\[\s*['"]checklist['"]\s*\]/u,
       /\bchecklist:\s*StrategyLogicSnapshot\b/u,
     ]
 
