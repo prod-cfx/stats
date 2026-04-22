@@ -53,6 +53,8 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
       markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
       markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
       upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
       ...(options?.repoOverrides ?? {}),
     }
     const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
@@ -521,8 +523,14 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
         },
       },
     })
+    expect(repo.activateStrategyInstanceForRuntime).not.toHaveBeenCalled()
     expect(repo.markDeployRequestSucceeded).not.toHaveBeenCalled()
     expect(repo.markDeployRequestFailed).toHaveBeenCalledWith('req-1', 'BAD_REQUEST', 'runtime state init failed')
+    expect(repo.markStrategyInstanceRuntimeBindingFailed).toHaveBeenCalledWith({
+      strategyInstanceId: 'inst-1',
+      errorCode: 'BAD_REQUEST',
+      userId: 'user-1',
+    })
     expect(service.getStrategyDetail).not.toHaveBeenCalled()
   })
 })

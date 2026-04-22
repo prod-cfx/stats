@@ -825,6 +825,7 @@ export class AccountStrategyViewService {
         })
       : null
 
+    let strategyInstanceIdForBinding: string | null = null
     try {
       await this.marketDataIngestionService.ensureSymbolsSubscribed([resolvedDeploy.symbol])
 
@@ -851,6 +852,7 @@ export class AccountStrategyViewService {
         deploymentExecutionConfig: resolvedDeploy.deploymentExecutionConfig,
         executionConfigVersion: 1,
       })
+      strategyInstanceIdForBinding = deployResult.strategyInstanceId
 
       const riskProfile = this.buildRiskProfileSnapshot(dto)
       await this.repo.upsertRiskProfile({
@@ -863,6 +865,11 @@ export class AccountStrategyViewService {
         snapshotHash: resolvedDeploy.snapshotHash,
         snapshot: resolvedDeploy.snapshot,
       })
+      await this.repo.activateStrategyInstanceForRuntime({
+        strategyInstanceId: deployResult.strategyInstanceId,
+        mode: deployResult.mode,
+        userId: dto.userId,
+      })
       await this.repo.markDeployRequestSucceeded(deployRequest.id, deployResult.strategyInstanceId)
 
       return this.getStrategyDetail(dto.userId, deployResult.strategyInstanceId)
@@ -874,6 +881,18 @@ export class AccountStrategyViewService {
       } catch {
         // Best effort only: preserve the original deploy failure when the
         // failure marker cannot be persisted.
+      }
+      if (strategyInstanceIdForBinding) {
+        try {
+          await this.repo.markStrategyInstanceRuntimeBindingFailed({
+            strategyInstanceId: strategyInstanceIdForBinding,
+            errorCode: String(code),
+            userId: dto.userId,
+          })
+        } catch {
+          // Best effort only: preserve the original deploy failure when the
+          // runtime binding failure marker cannot be persisted.
+        }
       }
       throw error
     }
