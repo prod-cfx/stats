@@ -18,6 +18,20 @@ describe('InferredConfirmationClassifierService', () => {
     ...overrides,
   })
 
+  const getFallbackPendingKeyDefaults = (message: string): Record<string, string> => {
+    const line = message.split('\n').find((item) => item.startsWith('pendingKeyDefaults: '))
+    if (!line) {
+      return {}
+    }
+    const raw = line.replace('pendingKeyDefaults: ', '')
+    try {
+      return JSON.parse(raw) as Record<string, string>
+    }
+    catch {
+      return {}
+    }
+  }
+
   it.each([
     '这样可以',
     '可以了',
@@ -189,11 +203,14 @@ describe('InferredConfirmationClassifierService', () => {
     expect(result.overriddenKeys).toEqual([])
     expect(aiService.chat).toHaveBeenCalledTimes(1)
     const fallbackUserMessage = aiService.chat.mock.calls[0]?.[0].messages.find((item: { role: string; content: string }) => item.role === 'user')?.content ?? ''
+    const pendingKeyDefaults = getFallbackPendingKeyDefaults(fallbackUserMessage)
     expect(fallbackUserMessage).toContain('assistantPrompt: 逻辑已整理完毕，请确认逻辑图。')
     expect(fallbackUserMessage).toContain('userReply: 嗯')
     expect(fallbackUserMessage).toContain('pendingKeys: risk.stopLossBasis, risk.takeProfitBasis')
-    expect(fallbackUserMessage).toContain('\"risk.stopLossBasis\":\"entry_avg_price\"')
-    expect(fallbackUserMessage).toContain('\"risk.takeProfitBasis\":\"entry_avg_price\"')
+    expect(pendingKeyDefaults).toEqual({
+      'risk.stopLossBasis': 'entry_avg_price',
+      'risk.takeProfitBasis': 'entry_avg_price',
+    })
     expect(fallbackUserMessage).not.toContain('riskRules')
   })
 
@@ -222,11 +239,13 @@ describe('InferredConfirmationClassifierService', () => {
     expect(result.overriddenKeys).toEqual([])
     expect(aiService.chat).toHaveBeenCalledTimes(1)
     const fallbackUserMessage = aiService.chat.mock.calls[0]?.[0].messages.find((item: { role: string; content: string }) => item.role === 'user')?.content ?? ''
+    const pendingKeyDefaults = getFallbackPendingKeyDefaults(fallbackUserMessage)
     expect(fallbackUserMessage).toContain('assistantPrompt: 逻辑已整理完毕，请确认逻辑图。')
     expect(fallbackUserMessage).toContain('userReply: 嗯')
     expect(fallbackUserMessage).toContain('pendingKeys: risk.stopLossBasis, risk.takeProfitBasis')
-    expect(fallbackUserMessage).toContain('\"risk.stopLossBasis\":\"entry_avg_price\"')
-    expect(fallbackUserMessage).not.toContain('\"risk.takeProfitBasis\":\"entry_avg_price\"')
+    expect(pendingKeyDefaults).toEqual({
+      'risk.stopLossBasis': 'entry_avg_price',
+    })
   })
 
   it('passes empty pending defaults when inferredKeys is empty', async () => {
@@ -251,8 +270,38 @@ describe('InferredConfirmationClassifierService', () => {
     expect(result.overriddenKeys).toEqual([])
     expect(aiService.chat).toHaveBeenCalledTimes(1)
     const fallbackUserMessage = aiService.chat.mock.calls[0]?.[0].messages.find((item: { role: string; content: string }) => item.role === 'user')?.content ?? ''
-    expect(fallbackUserMessage).toContain('pendingKeyDefaults: {}')
-    expect(fallbackUserMessage).not.toContain('\"entry_avg_price\"')
+    const pendingKeyDefaults = getFallbackPendingKeyDefaults(fallbackUserMessage)
+    expect(pendingKeyDefaults).toEqual({})
+  })
+
+  it('handles malformed inferredKeys without throwing and sends empty pending defaults', async () => {
+    aiService.chat.mockResolvedValue({
+      content: JSON.stringify({
+        intent: 'confirm',
+        targetKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+      }),
+    })
+
+    const result = await service.classifyInferredDecisionReply({
+      message: '嗯',
+      assistantPrompt: '逻辑已整理完毕，请确认逻辑图。',
+      conversationPhase: 'CONFIRM_INFERRED',
+      decisionKeys: ['risk.stopLossBasis', 'risk.takeProfitBasis'],
+      semanticDefaults: {
+        inferredKeys: 'bad' as never,
+        stopLossBasis: 'entry_avg_price',
+        takeProfitBasis: 'entry_avg_price',
+      },
+    })
+
+    expect(result.intent).toBe('confirm')
+    expect(result.source).toBe('llm')
+    expect(result.confirmedKeys).toEqual(['risk.stopLossBasis', 'risk.takeProfitBasis'])
+    expect(result.overriddenKeys).toEqual([])
+    expect(aiService.chat).toHaveBeenCalledTimes(1)
+    const fallbackUserMessage = aiService.chat.mock.calls[0]?.[0].messages.find((item: { role: string; content: string }) => item.role === 'user')?.content ?? ''
+    const pendingKeyDefaults = getFallbackPendingKeyDefaults(fallbackUserMessage)
+    expect(pendingKeyDefaults).toEqual({})
   })
 
   it('returns unclear when llm fallback output is invalid', async () => {

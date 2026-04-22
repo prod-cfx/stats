@@ -21,7 +21,7 @@ export interface InferredConfirmationClassifierInput {
 export interface InferredConfirmationSemanticDefaults {
   stopLossBasis?: StrategyRuleBasis['kind'] | null
   takeProfitBasis?: StrategyRuleBasis['kind'] | null
-  inferredKeys: readonly InferredConfirmationDecisionKey[]
+  inferredKeys?: readonly unknown[] | null
 }
 
 export interface InferredConfirmationClassification {
@@ -72,6 +72,10 @@ const FALLBACK_RESPONSE_SCHEMA: Record<string, unknown> = {
   },
 }
 
+function isInferredConfirmationDecisionKey(value: unknown): value is InferredConfirmationDecisionKey {
+  return value === 'risk.stopLossBasis' || value === 'risk.takeProfitBasis'
+}
+
 @Injectable()
 export class InferredConfirmationClassifierService {
   constructor(private readonly aiService?: Pick<AiService, 'chat'>) {}
@@ -85,8 +89,7 @@ export class InferredConfirmationClassifierService {
     }
 
     const activeKeys = new Set(
-      input.decisionKeys.filter((key): key is InferredConfirmationDecisionKey =>
-        key === 'risk.stopLossBasis' || key === 'risk.takeProfitBasis',
+      input.decisionKeys.filter((key): key is InferredConfirmationDecisionKey => isInferredConfirmationDecisionKey(key),
       ),
     )
     if (activeKeys.size === 0) {
@@ -492,9 +495,7 @@ export class InferredConfirmationClassifierService {
         return { intent: 'unclear', targetKeys: [] }
       }
       const targetKeys = Array.isArray(parsed.targetKeys)
-        ? parsed.targetKeys.filter((key): key is InferredConfirmationDecisionKey =>
-            key === 'risk.stopLossBasis' || key === 'risk.takeProfitBasis',
-          )
+        ? parsed.targetKeys.filter(isInferredConfirmationDecisionKey)
         : []
       if (parsed.intent === 'override') {
         const normalizedBasis = typeof parsed.normalizedBasis === 'string'
@@ -572,9 +573,7 @@ export class InferredConfirmationClassifierService {
     const pendingDefaults: Partial<Record<InferredConfirmationDecisionKey, StrategyRuleBasis['kind']>> = {}
     const inferredKeys = new Set(
       Array.isArray(defaults.inferredKeys)
-        ? defaults.inferredKeys.filter((key): key is InferredConfirmationDecisionKey =>
-          key === 'risk.stopLossBasis' || key === 'risk.takeProfitBasis',
-        )
+        ? defaults.inferredKeys.filter(isInferredConfirmationDecisionKey)
         : [],
     )
 
