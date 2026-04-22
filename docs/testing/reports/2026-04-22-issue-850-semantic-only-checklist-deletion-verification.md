@@ -89,13 +89,13 @@ Final verification commands:
 - `dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-only-strategy-regression.spec.ts`
   - Passed: 11 tests.
 - `dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-state-projection.service.spec.ts`
-  - Passed: 16 tests.
+  - Passed: 19 tests.
 - `dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-conversation.service.spec.ts`
   - Passed: 137 tests.
 - `dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-execution-context.service.spec.ts`
   - Passed: 14 tests.
 - `dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-publication-generation.stage.spec.ts`
-  - Passed: 12 tests.
+  - Passed: 14 tests.
 - `dx build quantify --dev`
   - Passed.
 - `dx test e2e quantify apps/quantify/e2e/llm-strategy-codegen`
