@@ -316,4 +316,215 @@ describe('SemanticStateProjectionService', () => {
 
     expect(result.nextQuestion).toBe('请确认单笔仓位百分比（例如 10%）。')
   })
+
+  it('builds deterministic MA conversation view with execution context and inferred stop-loss basis', () => {
+    const view = service.buildConversationView({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-ma',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: {
+            indicator: 'ma',
+            referenceRole: 'long_term',
+            'reference.period': 50,
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [
+        {
+          id: 'open-long',
+          key: 'open_long',
+          status: 'locked',
+          source: 'user_explicit',
+        },
+      ],
+      risk: [
+        {
+          id: 'sl',
+          key: 'risk.stop_loss_pct',
+          params: {
+            valuePct: 5,
+            basis: 'entry_avg_price',
+            basisSource: 'system_default',
+          },
+          status: 'locked',
+          source: 'derived',
+          openSlots: [],
+        },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_only',
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          value: 'okx',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '',
+          affectsExecution: true,
+        },
+        symbol: {
+          slotKey: 'symbol',
+          fieldPath: 'contextSlots.symbol',
+          value: 'BTCUSDT',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '',
+          affectsExecution: true,
+        },
+        marketType: {
+          slotKey: 'marketType',
+          fieldPath: 'contextSlots.marketType',
+          value: 'spot',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '',
+          affectsExecution: true,
+        },
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          value: '15m',
+          status: 'locked',
+          priority: 'context',
+          questionHint: '',
+          affectsExecution: true,
+        },
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    })
+
+    expect(view.summary).toContain('MA50')
+    expect(view.hasDeterministicSemantics).toBe(true)
+    expect(view.executionContext).toEqual({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      marketType: 'spot',
+      timeframe: '15m',
+    })
+    expect(view.recommendationSignals.hasLongIntent).toBe(true)
+    expect(view.inferredDefaults).toEqual({
+      inferredKeys: ['risk.stopLossBasis'],
+      stopLossBasis: 'entry_avg_price',
+      takeProfitBasis: null,
+    })
+  })
+
+  it('builds grid recommendation signal from grid triggers and family', () => {
+    const view = service.buildConversationView({
+      version: 1,
+      families: ['grid.range_rebalance'],
+      triggers: [
+        {
+          id: 'grid',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: {
+            rangeLower: 100,
+            rangeUpper: 110,
+            stepPct: 1,
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    })
+
+    expect(view.recommendationSignals.hasGridIntent).toBe(true)
+  })
+
+  it('builds short recommendation signal from short side scope', () => {
+    const view = service.buildConversationView({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'bollinger-short',
+          key: 'bollinger.touch_upper',
+          phase: 'entry',
+          params: {
+            period: 20,
+            stdDev: 2,
+          },
+          sideScope: 'short',
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    })
+
+    expect(view.recommendationSignals.hasShortIntent).toBe(true)
+  })
+
+  it('builds percent-change conversation view with basis wording', () => {
+    const view = service.buildConversationView({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'percent',
+          key: 'price.percent_change',
+          phase: 'entry',
+          params: {
+            valuePct: -2,
+            basis: 'prev_close',
+          },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: null,
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    })
+
+    expect(view.summary).toContain('价格相对前收盘')
+  })
 })
