@@ -22,6 +22,7 @@ describe('RuntimeSignalIntentAdapter', () => {
       signalType: 'ENTRY',
       positionSizeRatio: 0.1,
       entryPrice: 4.728,
+      reasoning: 'compiled.entry',
     }))
   })
 
@@ -32,7 +33,7 @@ describe('RuntimeSignalIntentAdapter', () => {
       reason: 'compiled.short-entry',
     }, {
       exchange: 'okx',
-      marketType: 'swap',
+      marketType: 'perp',
       symbol: 'ORDIUSDT',
       timeframe: '1h',
       referencePrice: 4.728,
@@ -44,6 +45,30 @@ describe('RuntimeSignalIntentAdapter', () => {
       signalType: 'ENTRY',
       positionSizeRatio: 0.2,
       entryPrice: 4.728,
+      reasoning: 'compiled.short-entry',
+    }))
+  })
+
+  it('maps OPEN_LONG quote decisions to entry BUY signals with positionSizeQuote', () => {
+    const result = adapter.fromDecision({
+      action: 'OPEN_LONG',
+      size: { mode: 'QUOTE', value: 100 },
+      reason: 'compiled.quote-entry',
+    }, {
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ORDIUSDT',
+      timeframe: '1h',
+      referencePrice: 4.728,
+    })
+
+    expect(result.kind).toBe('signal')
+    expect(result.signal).toEqual(expect.objectContaining({
+      direction: 'BUY',
+      signalType: 'ENTRY',
+      positionSizeQuote: 100,
+      entryPrice: 4.728,
+      reasoning: 'compiled.quote-entry',
     }))
   })
 
@@ -53,7 +78,7 @@ describe('RuntimeSignalIntentAdapter', () => {
       reason: 'compiled.long-exit',
     }, {
       exchange: 'okx',
-      marketType: 'swap',
+      marketType: 'perp',
       symbol: 'ORDIUSDT',
       timeframe: '1h',
       referencePrice: 4.728,
@@ -64,6 +89,7 @@ describe('RuntimeSignalIntentAdapter', () => {
       direction: 'CLOSE_LONG',
       signalType: 'EXIT',
       entryPrice: 4.728,
+      reasoning: 'compiled.long-exit',
     }))
   })
 
@@ -73,7 +99,7 @@ describe('RuntimeSignalIntentAdapter', () => {
       reason: 'compiled.short-exit',
     }, {
       exchange: 'okx',
-      marketType: 'swap',
+      marketType: 'perp',
       symbol: 'ORDIUSDT',
       timeframe: '1h',
       referencePrice: 4.728,
@@ -84,6 +110,7 @@ describe('RuntimeSignalIntentAdapter', () => {
       direction: 'CLOSE_SHORT',
       signalType: 'EXIT',
       entryPrice: 4.728,
+      reasoning: 'compiled.short-exit',
     }))
   })
 
@@ -159,7 +186,8 @@ describe('RuntimeSignalIntentAdapter', () => {
 
   it('returns missing_required_truth when action is unsupported', () => {
     const result = adapter.fromDecision({
-      action: 'REBALANCE',
+      action: 'ADJUST_POSITION',
+      size: { mode: 'QTY', value: 1 },
       reason: 'compiled.unsupported',
     }, {
       exchange: 'okx',
