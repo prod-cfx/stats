@@ -5,6 +5,9 @@ import { Injectable } from '@nestjs/common'
 import { resolveStrategyDefaultTimeframe } from './rule-draft-projection'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 
+type ExecutionContextField = StrategyExecutionContextResolution['ambiguities'][number]['field']
+type ExecutionContextMissingReason = StrategyExecutionContextResolution['ambiguities'][number]['reason']
+
 @Injectable()
 export class StrategyExecutionContextService {
   resolve(checklist: StrategyLogicSnapshot): StrategyExecutionContextResolution {
@@ -81,20 +84,14 @@ export class StrategyExecutionContextService {
     }
     const timeframeOptional = !context.timeframe && this.hasSemanticGridTrigger(state)
 
-    const ambiguities = [
-      ...(!context.exchange
-        ? [{ kind: 'execution_context_missing' as const, field: 'exchange' as const, reason: 'missing_exchange' as const }]
-        : []),
-      ...(!context.symbol
-        ? [{ kind: 'execution_context_missing' as const, field: 'symbol' as const, reason: 'missing_symbol' as const }]
-        : []),
-      ...(!context.marketType
-        ? [{ kind: 'execution_context_missing' as const, field: 'marketType' as const, reason: 'missing_market_type' as const }]
-        : []),
+    const ambiguities: StrategyExecutionContextResolution['ambiguities'] = [
+      ...(!context.exchange ? [this.buildExecutionContextMissingAmbiguity('exchange', 'missing_exchange')] : []),
+      ...(!context.symbol ? [this.buildExecutionContextMissingAmbiguity('symbol', 'missing_symbol')] : []),
+      ...(!context.marketType ? [this.buildExecutionContextMissingAmbiguity('marketType', 'missing_market_type')] : []),
       ...(!context.timeframe && !timeframeOptional
-        ? [{ kind: 'execution_context_missing' as const, field: 'timeframe' as const, reason: 'missing_timeframe' as const }]
+        ? [this.buildExecutionContextMissingAmbiguity('timeframe', 'missing_timeframe')]
         : []),
-    ] as StrategyExecutionContextResolution['ambiguities']
+    ]
 
     const evidence: StrategyExecutionContextResolution['evidence'] = []
     if (!context.exchange) {
@@ -140,8 +137,16 @@ export class StrategyExecutionContextService {
     return { context, ambiguities, evidence }
   }
 
+  private buildExecutionContextMissingAmbiguity(
+    field: ExecutionContextField,
+    reason: ExecutionContextMissingReason,
+  ): StrategyExecutionContextResolution['ambiguities'][number] {
+    return { kind: 'execution_context_missing', field, reason }
+  }
+
   private readSemanticString(slot: SemanticSlotState | null): string | null {
-    return typeof slot?.value === 'string' && slot.value.trim() ? slot.value.trim() : null
+    const value = slot?.status !== 'superseded' && typeof slot?.value === 'string' ? slot.value.trim() : ''
+    return value ? value : null
   }
 
   private readSemanticSymbol(slot: SemanticSlotState | null): string | null {

@@ -196,12 +196,12 @@ describe('strategyExecutionContextService', () => {
 describe('StrategyExecutionContextService semantic state', () => {
   const service = new StrategyExecutionContextService()
 
-  function slot(slotKey: string, fieldPath: string, value: string) {
+  function slot(slotKey: string, fieldPath: string, value: string, status: 'open' | 'locked' | 'superseded' = 'locked') {
     return {
       slotKey,
       fieldPath,
       value,
-      status: 'locked' as const,
+      status,
       priority: 'context' as const,
       questionHint: '',
       affectsExecution: true,
@@ -236,5 +236,141 @@ describe('StrategyExecutionContextService semantic state', () => {
       ambiguities: [],
       evidence: [],
     })
+  })
+
+  it('does not emit timeframe ambiguity when active grid range_rebalance trigger exists', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: [],
+      triggers: [
+        {
+          id: 'grid.trigger',
+          key: 'grid.range_rebalance',
+          phase: 'entry',
+          params: {},
+          status: 'locked',
+          source: 'inferred',
+          openSlots: [],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: slot('market.exchange', 'context.exchange', 'okx'),
+        symbol: slot('market.symbol', 'context.symbol', 'BTCUSDT'),
+        marketType: slot('market.marketType', 'context.marketType', 'perp'),
+        timeframe: slot('market.timeframe', 'context.timeframe', ''),
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    }
+
+    const result = service.resolveFromSemanticState(state)
+    expect(result.context.timeframe).toBeNull()
+    expect(result.ambiguities).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ field: 'timeframe' })]),
+    )
+    expect(result.evidence).toEqual(
+      expect.arrayContaining([expect.objectContaining({ key: 'timeframe_not_required_for_uniqueness' })]),
+    )
+  })
+
+  it('treats invalid exchange or marketType values as missing', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: [],
+      triggers: [],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: slot('market.exchange', 'context.exchange', 'kucoin'),
+        symbol: slot('market.symbol', 'context.symbol', 'BTCUSDT'),
+        marketType: slot('market.marketType', 'context.marketType', 'unknown'),
+        timeframe: slot('market.timeframe', 'context.timeframe', '15m'),
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    }
+
+    const result = service.resolveFromSemanticState(state)
+    expect(result.context).toEqual({
+      exchange: null,
+      symbol: 'BTCUSDT',
+      marketType: null,
+      timeframe: '15m',
+    })
+    expect(result.ambiguities).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'execution_context_missing',
+        field: 'exchange',
+        reason: 'missing_exchange',
+      }),
+      expect.objectContaining({
+        kind: 'execution_context_missing',
+        field: 'marketType',
+        reason: 'missing_market_type',
+      }),
+    ]))
+    expect(result.evidence).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'market.exchange' }),
+      expect.objectContaining({ key: 'market.marketType' }),
+    ]))
+  })
+
+  it('ignores superseded semantic context slots', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: [],
+      triggers: [],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: slot('market.exchange', 'context.exchange', 'okx', 'superseded'),
+        symbol: slot('market.symbol', 'context.symbol', 'BTCUSDT'),
+        marketType: slot('market.marketType', 'context.marketType', 'perp'),
+        timeframe: slot('market.timeframe', 'context.timeframe', '15m'),
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    }
+
+    const result = service.resolveFromSemanticState(state)
+    expect(result.context).toEqual({
+      exchange: null,
+      symbol: 'BTCUSDT',
+      marketType: 'perp',
+      timeframe: '15m',
+    })
+    expect(result.ambiguities).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        kind: 'execution_context_missing',
+        field: 'exchange',
+        reason: 'missing_exchange',
+      }),
+    ]))
+  })
+
+  it('canonicalizes semantic slot symbol values', () => {
+    const state: SemanticState = {
+      version: 1,
+      families: [],
+      triggers: [],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: slot('market.exchange', 'context.exchange', 'okx'),
+        symbol: slot('market.symbol', 'context.symbol', 'BTC/USDT'),
+        marketType: slot('market.marketType', 'context.marketType', 'perp'),
+        timeframe: slot('market.timeframe', 'context.timeframe', '15m'),
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    }
+
+    expect(service.resolveFromSemanticState(state).context.symbol).toBe('BTCUSDT')
   })
 })
