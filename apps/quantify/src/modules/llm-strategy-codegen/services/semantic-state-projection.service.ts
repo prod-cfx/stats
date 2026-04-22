@@ -108,7 +108,8 @@ export class SemanticStateProjectionService {
       return null
     }
 
-    return typeof slot.value === 'string' ? slot.value : null
+    const value = typeof slot.value === 'string' ? slot.value.trim() : ''
+    return value ? value : null
   }
 
   private buildTriggerSummary(triggers: SemanticState['triggers'], includeSuperseded: boolean): string {
@@ -158,14 +159,15 @@ export class SemanticStateProjectionService {
           (trigger.key === 'bollinger.touch_upper' || trigger.key === 'bollinger.touch_lower' || trigger.key === 'bollinger.touch_middle')
           && trigger.params.period !== undefined
         ) {
-          const period = typeof trigger.params.period === 'number' ? trigger.params.period : 0
+          const period = typeof trigger.params.period === 'number' ? trigger.params.period : null
           const band = trigger.key === 'bollinger.touch_upper'
             ? '上轨'
             : trigger.key === 'bollinger.touch_lower'
               ? '下轨'
               : '中轨'
           const direction = trigger.sideScope === 'short' ? '做空' : '做多'
-          return `触及 MA${period} 的布林带${band}时${direction}`
+          const periodText = period === null ? '周期待补充' : `MA${period}`
+          return `触及 ${periodText} 的布林带${band}时${direction}`
         }
 
         return trigger.key
@@ -444,7 +446,7 @@ export class SemanticStateProjectionService {
     const triggerPhaseOrder: Array<'entry' | 'exit' | 'risk' | 'gate'> = ['entry', 'exit', 'risk', 'gate']
     const openTriggerSlots = triggerPhaseOrder.flatMap(phase =>
       state.triggers
-        .filter(trigger => trigger.phase === phase)
+        .filter(trigger => trigger.phase === phase && trigger.status !== 'superseded')
         .flatMap(trigger => trigger.openSlots)
         .filter(slot => slot.status === 'open'),
     )

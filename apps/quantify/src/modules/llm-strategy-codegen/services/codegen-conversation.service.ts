@@ -1070,6 +1070,7 @@ export class CodegenConversationService {
     if (this.hasStopLossRisk(state.risk)) {
       return state
     }
+    const stopLossBasis = checklist.riskRules?.stopLossBasis ?? 'entry_avg_price'
 
     return {
       ...state,
@@ -1080,7 +1081,8 @@ export class CodegenConversationService {
           key: 'risk.stop_loss_pct',
           params: {
             valuePct: stopLossPct,
-            basis: checklist.riskRules?.stopLossBasis ?? 'entry_avg_price',
+            basis: stopLossBasis,
+            ...(checklist.riskRules?.stopLossBasis == null ? { basisSource: 'system_default' } : {}),
           },
           status: 'locked',
           source: 'user_explicit',
@@ -1479,7 +1481,7 @@ export class CodegenConversationService {
     const triggerPhaseOrder: Array<'entry' | 'exit' | 'risk' | 'gate'> = ['entry', 'exit', 'risk', 'gate']
     const openTriggerSlots = triggerPhaseOrder.flatMap(phase =>
       state.triggers
-        .filter(trigger => trigger.phase === phase)
+        .filter(trigger => trigger.phase === phase && trigger.status !== 'superseded')
         .flatMap(trigger => trigger.openSlots)
         .filter(slot => slot.status === 'open'),
     )

@@ -4466,7 +4466,9 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
       expect.objectContaining({
         key: 'risk.stop_loss_pct',
-        params: expect.objectContaining({ valuePct: 5 }),
+        params: expect.objectContaining({
+          valuePct: 5,
+        }),
         status: 'locked',
       }),
     ]))

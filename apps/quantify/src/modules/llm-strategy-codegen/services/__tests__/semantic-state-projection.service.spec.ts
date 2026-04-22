@@ -735,6 +735,100 @@ describe('SemanticStateProjectionService', () => {
     expect(view.recommendationSignals.hasBidirectionalIntent).toBe(false)
   })
 
+  it('ignores superseded trigger open slots when selecting next clarification question', () => {
+    const result = service.buildClarificationView({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'old-open',
+          key: 'indicator.above',
+          phase: 'entry',
+          params: { indicator: 'ma' },
+          status: 'superseded',
+          source: 'user_explicit',
+          openSlots: [{
+            slotKey: 'old.slot',
+            fieldPath: 'triggers[0].params.old',
+            status: 'open',
+            priority: 'core',
+            questionHint: '不应该再问这个旧问题',
+            affectsExecution: true,
+          }],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          status: 'open',
+          priority: 'context',
+          questionHint: '请确认交易所。',
+          affectsExecution: true,
+        },
+        symbol: null,
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    })
+
+    expect(result.nextQuestion).toBe('请确认交易所。')
+  })
+
+  it('does not fabricate MA0 for bollinger triggers without numeric period', () => {
+    const view = service.buildConversationView({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'bollinger-missing-period',
+          key: 'bollinger.touch_middle',
+          phase: 'exit',
+          params: { indicator: 'bollinger', period: 'unknown' },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    })
+
+    expect(view.summary).toContain('周期待补充')
+    expect(view.summary).not.toContain('MA0')
+  })
+
+  it('trims locked execution context values and treats blank values as missing', () => {
+    const view = service.buildConversationView({
+      version: 1,
+      families: [],
+      triggers: [],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: {
+        exchange: { slotKey: 'exchange', fieldPath: 'contextSlots.exchange', value: ' okx ', status: 'locked', priority: 'context', questionHint: '', affectsExecution: true },
+        symbol: { slotKey: 'symbol', fieldPath: 'contextSlots.symbol', value: '   ', status: 'locked', priority: 'context', questionHint: '', affectsExecution: true },
+        marketType: null,
+        timeframe: null,
+      },
+      normalizationNotes: [],
+      updatedAt: '2026-04-22T00:00:00.000Z',
+    })
+
+    expect(view.executionContext.exchange).toBe('okx')
+    expect(view.executionContext.symbol).toBeNull()
+  })
+
   it('ignores user_explicit risk basis for inferred defaults', () => {
     const view = service.buildConversationView({
       version: 1,
