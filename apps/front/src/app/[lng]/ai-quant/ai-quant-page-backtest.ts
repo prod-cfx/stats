@@ -327,10 +327,7 @@ export async function runAiQuantBacktest(args: {
       },
       ...(serverConversationId ? { conversationId: serverConversationId } : {}),
       range: resolveBacktestRangeInput(activeConversation.paramValues),
-      // Top-level allowPartial controls whether the backtest job may clamp the
-      // requested range to the available market-data coverage. It is not the
-      // same semantic as the snapshot execution-policy allowPartialFill flag.
-      allowPartial: true,
+      allowPartial: executionConfig.allowPartial,
     })
   } catch (error) {
     releaseMutex()

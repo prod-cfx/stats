@@ -266,6 +266,66 @@ describe('ai-quant-page-conversation', () => {
     }))
   })
 
+  it('restores lastBacktestRef when snapshot and allowPartial=false execution config still match', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'conv-1',
+      conversationTitle: 'remote',
+      status: 'PUBLISHED',
+      conversationMessages: [],
+      publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotParamValues: null,
+      publishedSnapshotStrategyConfig: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: false,
+      },
+      lastBacktestRef: {
+        jobId: 'btjob-allow-partial-false',
+        publishedSnapshotId: 'snapshot-1',
+        config: {
+          range: {
+            preset: '30D',
+          },
+          execution: {
+            initialCash: 10000,
+            leverage: 1,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: false,
+          },
+        },
+        summary: {
+          maxDrawdownPct: 7,
+          totalReturnPct: 11,
+          winRatePct: 58,
+          tradeCount: 4,
+          marketType: 'spot',
+        },
+        completedAt: '2026-04-23T00:04:00.000Z',
+      },
+    } as Parameters<typeof createConversationFromServerConversation>[0], (key: string) => key)
+
+    expect(conversation.backtestResult).toEqual(expect.objectContaining({
+      id: 'btjob-allow-partial-false',
+      maxDrawdownPct: 7,
+      totalReturnPct: 11,
+      winRatePct: 58,
+      tradeCount: 4,
+      marketType: 'spot',
+    }))
+  })
+
   it('restores backtest summary using normalized snapshot id and snapshot-owned symbol truth', () => {
     const conversation = createConversationFromServerConversation({
       id: 'conv-1',

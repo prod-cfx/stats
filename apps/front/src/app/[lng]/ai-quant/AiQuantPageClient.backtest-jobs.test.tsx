@@ -1358,7 +1358,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
           feeBps: 4,
           priceSource: 'mid',
         }),
-        allowPartial: true,
+        allowPartial: false,
       }),
     )
     expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain(
@@ -1493,7 +1493,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
           feeBps: 6,
           priceSource: 'mid',
         }),
-        allowPartial: true,
+        allowPartial: false,
       }),
     )
     expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain(
