@@ -194,6 +194,12 @@ export class RunBacktestDto implements RunBacktestDtoShape {
   @IsBoolean()
   allowPartial?: boolean
 
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  conversationId?: string
+
   @ApiProperty({ type: BacktestExecutionConfigDto })
   @ValidateNested()
   @Type(() => BacktestExecutionConfigDto)

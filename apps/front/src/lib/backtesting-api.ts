@@ -43,6 +43,7 @@ export interface CreateBacktestJobPayload {
     publishedSnapshotId?: string
     params?: Record<string, unknown>
   }
+  conversationId?: string
   dataRange: {
     fromTs: number
     toTs: number

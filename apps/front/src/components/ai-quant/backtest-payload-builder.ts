@@ -37,6 +37,7 @@ export interface BuildBacktestPayloadInput {
     id: string
     publishedSnapshotId: string
   }
+  conversationId?: string
   range: BacktestRangeInput
   allowPartial?: boolean
 }
@@ -101,6 +102,7 @@ export function buildBacktestPayload(
       publishedSnapshotId,
       params: { marketType: input.marketType },
     },
+    ...(input.conversationId?.trim() ? { conversationId: input.conversationId.trim() } : {}),
     dataRange: {
       fromTs: resolvedFromTs,
       toTs: resolvedToTs,
