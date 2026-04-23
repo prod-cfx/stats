@@ -97,21 +97,29 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
     messages,
     onRunBacktest,
     canRunBacktest,
-    onParamChange,
+    paramValues,
+    onConfirmBacktestParams,
   }: {
     messages: Array<{ id: string; role: string; content: string }>
     onRunBacktest: () => void
     canRunBacktest?: boolean
-    onParamChange?: (key: string, value: unknown) => void
+    paramValues?: Record<string, unknown>
+    onConfirmBacktestParams?: (nextValues: Record<string, unknown>) => void
   }) => (
     <div>
       <button data-testid="run-backtest" disabled={!canRunBacktest} onClick={onRunBacktest}>
         run
       </button>
-      <button data-testid="set-range-7d" onClick={() => onParamChange?.('backtestRangePreset', '7D')}>
+      <button
+        data-testid="set-range-7d"
+        onClick={() => onConfirmBacktestParams?.({ ...(paramValues ?? {}), backtestRangePreset: '7D' })}
+      >
         set-range-7d
       </button>
-      <button data-testid="set-initial-cash-20000" onClick={() => onParamChange?.('backtestInitialCash', 20000)}>
+      <button
+        data-testid="set-initial-cash-20000"
+        onClick={() => onConfirmBacktestParams?.({ ...(paramValues ?? {}), backtestInitialCash: 20000 })}
+      >
         set-initial-cash-20000
       </button>
       <div data-testid="messages">{messages.map(msg => msg.content).join('|')}</div>
@@ -177,6 +185,7 @@ jest.mock('@/lib/api', () => ({
   getLlmCodegenSession: jest.fn(),
   listAiQuantConversations: jest.fn(async () => []),
   startLlmCodegenSession: jest.fn(),
+  updateAiQuantConversationBacktestDraft: jest.fn(async () => undefined),
 }))
 
 function defaultPayload() {
@@ -907,6 +916,19 @@ describe('AiQuantPageClient backtest jobs integration', () => {
           priceSource: 'close',
           allowPartial: true,
         },
+        backtestDraftConfig: {
+          range: {
+            preset: '30D',
+          },
+          execution: {
+            initialCash: 10000,
+            leverage: 1,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: true,
+          },
+        },
         lastBacktestRef: {
           jobId: 'btjob-1',
           publishedSnapshotId: 'snapshot-1',
@@ -983,6 +1005,19 @@ describe('AiQuantPageClient backtest jobs integration', () => {
           feeBps: 4,
           priceSource: 'mid',
           allowPartial: false,
+        },
+        backtestDraftConfig: {
+          range: {
+            preset: '30D',
+          },
+          execution: {
+            initialCash: 25000,
+            leverage: 1,
+            slippageBps: 12,
+            feeBps: 4,
+            priceSource: 'mid',
+            allowPartial: false,
+          },
         },
         lastBacktestRef: {
           jobId: 'btjob-1',
@@ -1093,6 +1128,19 @@ describe('AiQuantPageClient backtest jobs integration', () => {
           priceSource: 'close',
           allowPartial: true,
         },
+        backtestDraftConfig: {
+          range: {
+            preset: '30D',
+          },
+          execution: {
+            initialCash: 20000,
+            leverage: 1,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: true,
+          },
+        },
         lastBacktestRef: {
           jobId: 'btjob-1',
           publishedSnapshotId: 'snapshot-1',
@@ -1101,7 +1149,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
               preset: '30D',
             },
             execution: {
-              initialCash: 20000,
+              initialCash: 10000,
               leverage: 1,
               slippageBps: 10,
               feeBps: 5,

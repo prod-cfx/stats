@@ -154,6 +154,7 @@ model AiQuantConversation {
   userId           String    @map("user_id")
   codegenSessionId String    @unique @map("codegen_session_id")
   title            String
+  backtestDraftConfig Json?  @map("backtest_draft_config")
   lastBacktestRef  Json?     @map("last_backtest_ref")
   archivedAt       DateTime? @map("archived_at")
   createdAt        DateTime  @default(now()) @map("created_at")

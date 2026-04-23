@@ -9,24 +9,26 @@ export interface AiQuantConversationMessageSnapshot {
   content: string
 }
 
+export interface AiQuantConversationBacktestDraftConfigRecord {
+  range: {
+    preset: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
+    startAt?: string
+    endAt?: string
+  }
+  execution: {
+    initialCash: number
+    leverage: number | null
+    slippageBps: number
+    feeBps: number
+    priceSource: 'open' | 'close' | 'mid'
+    allowPartial: boolean
+  }
+}
+
 export interface AiQuantConversationLastBacktestRefRecord {
   jobId: string
   publishedSnapshotId: string
-  config: {
-    range: {
-      preset: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
-      startAt?: string
-      endAt?: string
-    }
-    execution: {
-      initialCash: number
-      leverage: number | null
-      slippageBps: number
-      feeBps: number
-      priceSource: 'open' | 'close' | 'mid'
-      allowPartial: boolean
-    }
-  }
+  config: AiQuantConversationBacktestDraftConfigRecord
   summary: {
     maxDrawdownPct: number
     totalReturnPct: number
@@ -47,6 +49,7 @@ export interface AiQuantConversationSnapshotRecord {
   archivedAt: Date | null
   createdAt: Date
   updatedAt: Date
+  backtestDraftConfig: AiQuantConversationBacktestDraftConfigRecord | null
   lastBacktestRef: AiQuantConversationLastBacktestRefRecord | null
   messages: AiQuantConversationMessageSnapshot[]
 }
@@ -107,6 +110,7 @@ export class AiQuantConversationsRepository {
         archivedAt: true,
         createdAt: true,
         updatedAt: true,
+        backtestDraftConfig: true,
         lastBacktestRef: true,
         messages: {
           orderBy: { sortOrder: 'asc' },
@@ -155,6 +159,7 @@ export class AiQuantConversationsRepository {
         archivedAt: true,
         createdAt: true,
         updatedAt: true,
+        backtestDraftConfig: true,
         lastBacktestRef: true,
         messages: {
           orderBy: { sortOrder: 'asc' },
@@ -188,6 +193,23 @@ export class AiQuantConversationsRepository {
     })
   }
 
+  async updateBacktestDraftConfig(input: {
+    conversationId: string
+    userId: string
+    backtestDraftConfig: AiQuantConversationBacktestDraftConfigRecord
+  }): Promise<void> {
+    await this.txHost.tx.aiQuantConversation.updateMany({
+      where: {
+        id: input.conversationId,
+        userId: input.userId,
+        archivedAt: null,
+      },
+      data: {
+        backtestDraftConfig: input.backtestDraftConfig as unknown as Prisma.InputJsonValue,
+      },
+    })
+  }
+
   async archiveByIdAndUser(id: string, userId: string): Promise<void> {
     await this.txHost.tx.aiQuantConversation.updateMany({
       where: { id, userId, archivedAt: null },
@@ -206,6 +228,7 @@ export class AiQuantConversationsRepository {
         archivedAt: true,
         createdAt: true,
         updatedAt: true,
+        backtestDraftConfig: true,
         lastBacktestRef: true,
         messages: {
           orderBy: { sortOrder: 'asc' },
@@ -228,11 +251,13 @@ export class AiQuantConversationsRepository {
     archivedAt: Date | null
     createdAt: Date
     updatedAt: Date
+    backtestDraftConfig: Prisma.JsonValue | null
     lastBacktestRef: Prisma.JsonValue | null
     messages: Array<{ role: 'user' | 'assistant'; content: string }>
   }): AiQuantConversationSnapshotRecord {
     return {
       ...conversation,
+      backtestDraftConfig: this.parseBacktestDraftConfig(conversation.backtestDraftConfig),
       lastBacktestRef: this.parseLastBacktestRef(conversation.lastBacktestRef),
       messages: conversation.messages.map(message => ({
         role: message.role,
@@ -250,7 +275,7 @@ export class AiQuantConversationsRepository {
 
     const jobId = this.readNonEmptyString(value.jobId)
     const publishedSnapshotId = this.readNonEmptyString(value.publishedSnapshotId)
-    const config = this.parseLastBacktestConfig(value.config)
+    const config = this.parseBacktestDraftConfig(value.config)
     const summary = this.parseLastBacktestSummary(value.summary)
     const completedAt = this.parseDate(value.completedAt)
 
@@ -267,9 +292,9 @@ export class AiQuantConversationsRepository {
     }
   }
 
-  private parseLastBacktestConfig(
+  private parseBacktestDraftConfig(
     value: Prisma.JsonValue | null | undefined,
-  ): AiQuantConversationLastBacktestRefRecord['config'] | null {
+  ): AiQuantConversationBacktestDraftConfigRecord | null {
     if (!this.isJsonObject(value)) {
       return null
     }
@@ -286,7 +311,7 @@ export class AiQuantConversationsRepository {
 
   private parseLastBacktestRange(
     value: Prisma.JsonValue | null | undefined,
-  ): AiQuantConversationLastBacktestRefRecord['config']['range'] | null {
+  ): AiQuantConversationBacktestDraftConfigRecord['range'] | null {
     if (!this.isJsonObject(value)) {
       return null
     }
@@ -321,7 +346,7 @@ export class AiQuantConversationsRepository {
 
   private parseLastBacktestExecution(
     value: Prisma.JsonValue | null | undefined,
-  ): AiQuantConversationLastBacktestRefRecord['config']['execution'] | null {
+  ): AiQuantConversationBacktestDraftConfigRecord['execution'] | null {
     if (!this.isJsonObject(value)) {
       return null
     }

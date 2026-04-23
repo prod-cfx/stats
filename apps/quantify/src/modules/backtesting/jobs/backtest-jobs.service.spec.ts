@@ -134,6 +134,7 @@ function createAvailabilityMock(
 function createConversationsMock() {
   return {
     existsActiveConversationForUser: jest.fn().mockResolvedValue(true),
+    updateBacktestDraftConfig: jest.fn().mockResolvedValue(undefined),
     updateLastBacktestRef: jest.fn().mockResolvedValue(undefined),
   }
 }
@@ -799,6 +800,60 @@ describe('backtestJobsService', () => {
     expect(payload.lastBacktestRef).not.toHaveProperty('markers')
     expect(payload.lastBacktestRef).not.toHaveProperty('bySymbol')
     expect(payload.lastBacktestRef).not.toHaveProperty('result')
+  })
+
+  it('persists the exact backtest draft config used by a snapshot-bound run before waiting for result writeback', async () => {
+    const runner = {
+      run: jest.fn().mockResolvedValue({
+        summary: {
+          netProfit: 120,
+          netProfitPct: 12,
+          maxDrawdownPct: 8,
+          winRate: 0.6,
+          profitFactor: 1.8,
+          totalTrades: 5,
+        },
+        equityCurve: [],
+        trades: [],
+        markers: [],
+        bySymbol: [],
+      }),
+    }
+    const conversations = createConversationsMock()
+    const { service } = createService({ runner, conversations })
+    const input = createInput()
+    Object.assign(input.strategy as Record<string, unknown>, {
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+      snapshotId: 'snapshot-1',
+    })
+    Object.assign(input as unknown as Record<string, unknown>, {
+      requestedRangeInput: {
+        preset: '7D',
+      },
+    })
+    input.allowPartial = false
+    input.leverage = null
+    input.conversationId = 'conv-1'
+
+    await service.createJob(input, OWNER_USER_ID)
+
+    expect(conversations.updateBacktestDraftConfig).toHaveBeenCalledWith({
+      conversationId: 'conv-1',
+      userId: OWNER_USER_ID,
+      backtestDraftConfig: {
+        range: {
+          preset: '7D',
+        },
+        execution: {
+          initialCash: 10000,
+          leverage: null,
+          slippageBps: 5,
+          feeBps: 4,
+          priceSource: 'mid',
+          allowPartial: false,
+        },
+      },
+    })
   })
 
   it('does not write lastBacktestRef for successful runs that are not explicitly snapshot-bound', async () => {

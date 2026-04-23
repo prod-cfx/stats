@@ -1,8 +1,11 @@
+import type { BacktestSymbolAvailabilityResult } from '../services/backtest-symbol-availability.service'
 import type { BacktestReport, BacktestRunInput } from '../types/backtesting.types'
+import type { AiQuantConversationBacktestDraftConfigRecord } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
 import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { Injectable, HttpStatus, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { AiQuantConversationsRepository } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
@@ -10,18 +13,17 @@ import { PrismaService } from '@/prisma/prisma.service'
 import { BacktestRunnerService } from '../core/backtest-runner.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestMarketDataService } from '../services/backtest-market-data.service'
-import type { BacktestSymbolAvailabilityResult } from '../services/backtest-symbol-availability.service'
 import { extractSnapshotBoundSymbolAvailabilityInput } from '../services/backtest-snapshot-loader.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestSymbolAvailabilityService } from '../services/backtest-symbol-availability.service'
 
-type LastBacktestRangeConfig = {
+interface LastBacktestRangeConfig {
   preset: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
   startAt?: string
   endAt?: string
 }
 
-type LastBacktestExecutionConfig = {
+interface LastBacktestExecutionConfig {
   initialCash: number
   leverage: number | null
   slippageBps: number
@@ -102,6 +104,11 @@ export class BacktestJobsService {
     await this.validateSymbolAvailability(input)
     const conversationId = this.readConversationId(input)
     await this.validateConversationOwnership(conversationId, ownerUserId)
+    await this.writeBacktestDraftConfigIfEligible({
+      input,
+      ownerUserId,
+      conversationId,
+    })
     const id = `btjob-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
     const inputSummary = this.createInputSummary(input)
     try {
@@ -472,6 +479,23 @@ export class BacktestJobsService {
     )
   }
 
+  private async writeBacktestDraftConfigIfEligible(params: {
+    input: BacktestRunInput
+    ownerUserId: string
+    conversationId: string | null
+  }): Promise<void> {
+    const { input, ownerUserId, conversationId } = params
+    if (input.strategy.bindingSource !== 'PUBLISHED_SNAPSHOT_STRICT' || !conversationId) {
+      return
+    }
+
+    await this.conversationsRepo.updateBacktestDraftConfig({
+      conversationId,
+      userId: ownerUserId,
+      backtestDraftConfig: this.buildBacktestDraftConfig(input),
+    })
+  }
+
   private async writeLastBacktestRefIfEligible(params: {
     id: string
     input: BacktestRunInput
@@ -528,6 +552,12 @@ export class BacktestJobsService {
     range: LastBacktestRangeConfig
     execution: LastBacktestExecutionConfig
   } {
+    return this.buildBacktestDraftConfig(input)
+  }
+
+  private buildBacktestDraftConfig(
+    input: BacktestRunInput,
+  ): AiQuantConversationBacktestDraftConfigRecord {
     return {
       range: this.buildLastBacktestRangeConfig(input),
       execution: {

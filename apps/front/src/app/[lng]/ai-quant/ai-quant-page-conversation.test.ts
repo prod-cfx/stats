@@ -235,6 +235,19 @@ describe('ai-quant-page-conversation', () => {
         priceSource: 'close',
         allowPartial: true,
       },
+      backtestDraftConfig: {
+        range: {
+          preset: '30D',
+        },
+        execution: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: true,
+        },
+      },
       lastBacktestRef: {
         jobId: 'btjob-1',
         publishedSnapshotId: 'snapshot-1',
@@ -303,6 +316,19 @@ describe('ai-quant-page-conversation', () => {
         priceSource: 'close',
         allowPartial: false,
       },
+      backtestDraftConfig: {
+        range: {
+          preset: '30D',
+        },
+        execution: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: false,
+        },
+      },
       lastBacktestRef: {
         jobId: 'btjob-allow-partial-false',
         publishedSnapshotId: 'snapshot-1',
@@ -362,6 +388,19 @@ describe('ai-quant-page-conversation', () => {
         feeBps: 5,
         priceSource: 'close',
         allowPartial: true,
+      },
+      backtestDraftConfig: {
+        range: {
+          preset: '30D',
+        },
+        execution: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: true,
+        },
       },
       lastBacktestRef: {
         jobId: 'btjob-2',
@@ -425,6 +464,19 @@ describe('ai-quant-page-conversation', () => {
         priceSource: 'close',
         allowPartial: true,
       },
+      backtestDraftConfig: {
+        range: {
+          preset: '30D',
+        },
+        execution: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: true,
+        },
+      },
       lastBacktestRef: {
         jobId: 'btjob-1',
         publishedSnapshotId: 'snapshot-1',
@@ -476,6 +528,19 @@ describe('ai-quant-page-conversation', () => {
         feeBps: 5,
         priceSource: 'close',
         allowPartial: true,
+      },
+      backtestDraftConfig: {
+        range: {
+          preset: '30D',
+        },
+        execution: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: true,
+        },
       },
       lastBacktestRef: {
         jobId: 'btjob-range-drift',
@@ -529,6 +594,19 @@ describe('ai-quant-page-conversation', () => {
         priceSource: 'close',
         allowPartial: true,
       },
+      backtestDraftConfig: {
+        range: {
+          preset: '30D',
+        },
+        execution: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: true,
+        },
+      },
       lastBacktestRef: {
         jobId: 'btjob-execution-drift',
         publishedSnapshotId: 'snapshot-1',
@@ -552,6 +630,153 @@ describe('ai-quant-page-conversation', () => {
           tradeCount: 5,
         },
         completedAt: '2026-04-23T00:04:00.000Z',
+      },
+    } as Parameters<typeof createConversationFromServerConversation>[0], (key: string) => key)
+
+    expect(conversation.backtestResult).toBeNull()
+  })
+
+  it('restores backtest summary using explicit backtestDraftConfig without relying on implicit range defaults', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'conv-draft-1',
+      conversationTitle: 'remote',
+      status: 'PUBLISHED',
+      conversationMessages: [],
+      publishedSnapshotId: 'snapshot-7d',
+      publishedSnapshotParamValues: {
+        exchange: 'okx',
+        symbol: 'DOGEUSDT',
+        marketType: 'spot',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+      publishedSnapshotStrategyConfig: {
+        exchange: 'okx',
+        symbol: 'DOGEUSDT',
+        marketType: 'spot',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: false,
+      },
+      backtestDraftConfig: {
+        range: {
+          preset: '7D',
+        },
+        execution: {
+          initialCash: 10000,
+          leverage: null,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: false,
+        },
+      },
+      lastBacktestRef: {
+        jobId: 'btjob-7d',
+        publishedSnapshotId: 'snapshot-7d',
+        config: {
+          range: {
+            preset: '7D',
+          },
+          execution: {
+            initialCash: 10000,
+            leverage: null,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: false,
+          },
+        },
+        summary: {
+          maxDrawdownPct: 0.02,
+          totalReturnPct: 0.03,
+          winRatePct: 100,
+          tradeCount: 1,
+          marketType: 'spot',
+        },
+        completedAt: '2026-04-23T10:40:43.354Z',
+      },
+    } as Parameters<typeof createConversationFromServerConversation>[0], (key: string) => key)
+
+    expect(conversation.backtestResult).toEqual(expect.objectContaining({
+      id: 'btjob-7d',
+      symbol: 'DOGEUSDT',
+      maxDrawdownPct: 0.02,
+      totalReturnPct: 0.03,
+      winRatePct: 100,
+      tradeCount: 1,
+      marketType: 'spot',
+    }))
+    expect(conversation.paramValues).toEqual(expect.objectContaining({
+      backtestRangePreset: '7D',
+      backtestInitialCash: 10000,
+      backtestSlippageBps: 10,
+      backtestFeeBps: 5,
+      backtestPriceSource: 'close',
+      backtestAllowPartial: false,
+    }))
+  })
+
+  it('does not restore lastBacktestRef when explicit backtestDraftConfig is missing', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'conv-draft-missing',
+      conversationTitle: 'remote',
+      status: 'PUBLISHED',
+      conversationMessages: [],
+      publishedSnapshotId: 'snapshot-7d',
+      publishedSnapshotParamValues: {
+        exchange: 'okx',
+        symbol: 'DOGEUSDT',
+        marketType: 'spot',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+      publishedSnapshotStrategyConfig: {
+        exchange: 'okx',
+        symbol: 'DOGEUSDT',
+        marketType: 'spot',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: false,
+      },
+      lastBacktestRef: {
+        jobId: 'btjob-7d',
+        publishedSnapshotId: 'snapshot-7d',
+        config: {
+          range: {
+            preset: '7D',
+          },
+          execution: {
+            initialCash: 10000,
+            leverage: null,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: false,
+          },
+        },
+        summary: {
+          maxDrawdownPct: 0.02,
+          totalReturnPct: 0.03,
+          winRatePct: 100,
+          tradeCount: 1,
+          marketType: 'spot',
+        },
+        completedAt: '2026-04-23T10:40:43.354Z',
       },
     } as Parameters<typeof createConversationFromServerConversation>[0], (key: string) => key)
 

@@ -52,4 +52,44 @@ describe('accountAiQuantConversationsController', () => {
 
     expect(service.deleteAiQuantConversation).toHaveBeenCalledWith('user-1', 'Bearer token-1', 'conv-1')
   })
+
+  it('forwards AI Quant backtest draft updates through the proxy service', async () => {
+    const service = {
+      updateAiQuantConversationBacktestDraft: jest.fn().mockResolvedValue(undefined),
+    }
+    const controller = new AccountAiQuantConversationsController(service as never)
+
+    await controller.updateBacktestDraft('user-1', 'Bearer token-1', 'conv-1', {
+      backtestDraftConfig: {
+        range: { preset: '7D' },
+        execution: {
+          initialCash: 10000,
+          leverage: null,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: false,
+        },
+      },
+    } as never)
+
+    expect(service.updateAiQuantConversationBacktestDraft).toHaveBeenCalledWith(
+      'user-1',
+      'Bearer token-1',
+      'conv-1',
+      {
+        backtestDraftConfig: {
+          range: { preset: '7D' },
+          execution: {
+            initialCash: 10000,
+            leverage: null,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: false,
+          },
+        },
+      },
+    )
+  })
 })

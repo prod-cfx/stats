@@ -22,6 +22,7 @@ import { checkBacktestSymbolSupport } from '@/components/ai-quant/backtest-symbo
 import { ApiError } from '@/lib/errors'
 import {
   buildBacktestSummaryResult,
+  buildBacktestDraftConfigFromValues,
   hasLatestPublishedCode,
   isDeployableBacktestResult,
   isOpenOnlyBacktestResult,
@@ -254,6 +255,7 @@ export async function runAiQuantBacktest(args: {
   let payload: ReturnType<typeof buildBacktestPayload>
   let backtestExchange: ConversationState['params']['exchange'] | null = null
   let backtestMarketType: 'spot' | 'perp' | null = null
+  let backtestDraftConfig: ReturnType<typeof buildBacktestDraftConfigFromValues> = null
   const serverConversationId =
     typeof activeConversation.serverConversationId === 'string'
       && activeConversation.serverConversationId.trim()
@@ -329,6 +331,7 @@ export async function runAiQuantBacktest(args: {
       range: resolveBacktestRangeInput(activeConversation.paramValues),
       allowPartial: executionConfig.allowPartial,
     })
+    backtestDraftConfig = buildBacktestDraftConfigFromValues(activeConversation.paramValues)
   } catch (error) {
     releaseMutex()
     const message = (() => {
@@ -413,6 +416,7 @@ export async function runAiQuantBacktest(args: {
   setConversationBacktestExecutionState(conversationId, 'submitting')
   updateConversationById(conversationId, curr => ({
     ...curr,
+    backtestDraftConfig: backtestDraftConfig ?? curr.backtestDraftConfig,
     backtestResult: null,
     messages: [
       ...curr.messages,
@@ -555,6 +559,7 @@ export async function runAiQuantBacktest(args: {
     setConversationBacktestExecutionState(conversationId, 'succeeded')
     updateConversationById(conversationId, curr => ({
       ...curr,
+      backtestDraftConfig: backtestDraftConfig ?? curr.backtestDraftConfig,
       backtestResult: result,
       messages: curr.messages.map(message =>
         message.id === backtestMessageId

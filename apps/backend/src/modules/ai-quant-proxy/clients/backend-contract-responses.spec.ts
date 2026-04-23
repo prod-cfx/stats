@@ -95,6 +95,7 @@ describe('backend contract generated AI Quant codegen responses', () => {
     const configSnippet = source.slice(configStart, configStart + 700)
     const summarySnippet = source.slice(summaryStart, summaryStart + 500)
 
+    expect(responseSnippet).toContain('backtestDraftConfig: AiQuantConversationLastBacktestConfigResponseDto.nullish()')
     expect(responseSnippet).toContain('lastBacktestRef: AiQuantConversationLastBacktestRefResponseDto.nullish()')
     expect(refSnippet).toContain('publishedSnapshotId: z.string()')
     expect(refSnippet).toContain('config: AiQuantConversationLastBacktestConfigResponseDto')

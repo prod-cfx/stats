@@ -31,7 +31,7 @@ class AiQuantConversationLastBacktestSummaryResponseDto {
   marketType?: 'spot' | 'perp'
 }
 
-class AiQuantConversationLastBacktestRangeResponseDto {
+export class AiQuantConversationBacktestRangeResponseDto {
   @ApiProperty({ enum: ['7D', '30D', '90D', '1Y', 'CUSTOM'] })
   preset!: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
 
@@ -42,7 +42,7 @@ class AiQuantConversationLastBacktestRangeResponseDto {
   endAt?: string
 }
 
-class AiQuantConversationLastBacktestExecutionResponseDto {
+export class AiQuantConversationBacktestExecutionResponseDto {
   @ApiProperty()
   initialCash!: number
 
@@ -62,12 +62,12 @@ class AiQuantConversationLastBacktestExecutionResponseDto {
   allowPartial!: boolean
 }
 
-class AiQuantConversationLastBacktestConfigResponseDto {
-  @ApiProperty({ type: AiQuantConversationLastBacktestRangeResponseDto })
-  range!: AiQuantConversationLastBacktestRangeResponseDto
+export class AiQuantConversationBacktestConfigResponseDto {
+  @ApiProperty({ type: AiQuantConversationBacktestRangeResponseDto })
+  range!: AiQuantConversationBacktestRangeResponseDto
 
-  @ApiProperty({ type: AiQuantConversationLastBacktestExecutionResponseDto })
-  execution!: AiQuantConversationLastBacktestExecutionResponseDto
+  @ApiProperty({ type: AiQuantConversationBacktestExecutionResponseDto })
+  execution!: AiQuantConversationBacktestExecutionResponseDto
 }
 
 class AiQuantConversationLastBacktestRefResponseDto {
@@ -77,8 +77,8 @@ class AiQuantConversationLastBacktestRefResponseDto {
   @ApiProperty()
   publishedSnapshotId!: string
 
-  @ApiProperty({ type: AiQuantConversationLastBacktestConfigResponseDto })
-  config!: AiQuantConversationLastBacktestConfigResponseDto
+  @ApiProperty({ type: AiQuantConversationBacktestConfigResponseDto })
+  config!: AiQuantConversationBacktestConfigResponseDto
 
   @ApiProperty({ type: AiQuantConversationLastBacktestSummaryResponseDto })
   summary!: AiQuantConversationLastBacktestSummaryResponseDto
@@ -111,6 +111,9 @@ export class AiQuantConversationResponseDto {
 
   @ApiPropertyOptional({ description: 'Conversation updated timestamp' })
   updatedAt?: string
+
+  @ApiPropertyOptional({ description: 'Current explicit backtest draft configuration', type: AiQuantConversationBacktestConfigResponseDto, nullable: true })
+  backtestDraftConfig?: AiQuantConversationBacktestConfigResponseDto | null
 
   @ApiPropertyOptional({ description: 'Most recent recoverable backtest reference', type: AiQuantConversationLastBacktestRefResponseDto, nullable: true })
   lastBacktestRef?: AiQuantConversationLastBacktestRefResponseDto | null

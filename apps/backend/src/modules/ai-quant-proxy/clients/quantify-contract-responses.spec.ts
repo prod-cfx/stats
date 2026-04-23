@@ -216,6 +216,7 @@ describe('quantify contract generated responses', () => {
     const configSnippet = source.slice(configStart, configStart + 700)
     const summarySnippet = source.slice(summaryStart, summaryStart + 500)
 
+    expect(responseSnippet).toContain('backtestDraftConfig: AiQuantConversationLastBacktestConfigDto.nullish()')
     expect(responseSnippet).toContain('lastBacktestRef: AiQuantConversationLastBacktestRefDto.nullish()')
     expect(refSnippet).toContain('publishedSnapshotId: z.string()')
     expect(refSnippet).toContain('config: AiQuantConversationLastBacktestConfigDto')

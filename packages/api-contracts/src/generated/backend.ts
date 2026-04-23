@@ -210,6 +210,7 @@ const AiQuantConversationResponseDto = z
     status: z.string().optional(),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
+    backtestDraftConfig: AiQuantConversationLastBacktestConfigResponseDto.nullish(),
     lastBacktestRef: AiQuantConversationLastBacktestRefResponseDto.nullish(),
     canonicalDigest: z.string().optional(),
     specDesc: z.object({}).partial().passthrough().optional(),

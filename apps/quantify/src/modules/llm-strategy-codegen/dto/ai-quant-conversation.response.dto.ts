@@ -33,7 +33,7 @@ class AiQuantConversationLastBacktestSummaryDto {
   marketType?: 'spot' | 'perp'
 }
 
-class AiQuantConversationLastBacktestRangeDto {
+export class AiQuantConversationBacktestRangeDto {
   @ApiProperty({ enum: ['7D', '30D', '90D', '1Y', 'CUSTOM'] })
   preset!: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
 
@@ -44,7 +44,7 @@ class AiQuantConversationLastBacktestRangeDto {
   endAt?: string
 }
 
-class AiQuantConversationLastBacktestExecutionDto {
+export class AiQuantConversationBacktestExecutionDto {
   @ApiProperty()
   initialCash!: number
 
@@ -64,12 +64,12 @@ class AiQuantConversationLastBacktestExecutionDto {
   allowPartial!: boolean
 }
 
-class AiQuantConversationLastBacktestConfigDto {
-  @ApiProperty({ type: AiQuantConversationLastBacktestRangeDto })
-  range!: AiQuantConversationLastBacktestRangeDto
+export class AiQuantConversationBacktestConfigDto {
+  @ApiProperty({ type: AiQuantConversationBacktestRangeDto })
+  range!: AiQuantConversationBacktestRangeDto
 
-  @ApiProperty({ type: AiQuantConversationLastBacktestExecutionDto })
-  execution!: AiQuantConversationLastBacktestExecutionDto
+  @ApiProperty({ type: AiQuantConversationBacktestExecutionDto })
+  execution!: AiQuantConversationBacktestExecutionDto
 }
 
 class AiQuantConversationLastBacktestRefDto {
@@ -79,8 +79,8 @@ class AiQuantConversationLastBacktestRefDto {
   @ApiProperty()
   publishedSnapshotId!: string
 
-  @ApiProperty({ type: AiQuantConversationLastBacktestConfigDto })
-  config!: AiQuantConversationLastBacktestConfigDto
+  @ApiProperty({ type: AiQuantConversationBacktestConfigDto })
+  config!: AiQuantConversationBacktestConfigDto
 
   @ApiProperty({ type: AiQuantConversationLastBacktestSummaryDto })
   summary!: AiQuantConversationLastBacktestSummaryDto
@@ -113,6 +113,9 @@ export class AiQuantConversationResponseDto {
 
   @ApiPropertyOptional({ description: '更新时间' })
   updatedAt?: string
+
+  @ApiPropertyOptional({ description: '当前显式保存的回测草稿配置', type: AiQuantConversationBacktestConfigDto, nullable: true })
+  backtestDraftConfig?: AiQuantConversationBacktestConfigDto | null
 
   @ApiPropertyOptional({ description: '最近一次可恢复的回测引用', type: AiQuantConversationLastBacktestRefDto, nullable: true })
   lastBacktestRef?: AiQuantConversationLastBacktestRefDto | null

@@ -7,6 +7,7 @@ import type { StrategyLogicGraph } from '@/components/ai-quant/logic-graph-model
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
 import type {
   AccountAiQuantBacktestConfigDefaults,
+  AiQuantBacktestDraftConfig,
   AccountAiQuantDeploymentExecutionConfig,
   AccountAiQuantDeploymentExecutionConstraints,
   AiQuantConversationLastBacktestRef,
@@ -141,6 +142,7 @@ export interface ConversationState {
   publishedSnapshotDeploymentExecutionDefaults: AccountAiQuantDeploymentExecutionConfig | null
   publishedSnapshotDeploymentExecutionConstraints: AccountAiQuantDeploymentExecutionConstraints | null
   publishedSnapshotCompatibilityMetadata: AccountAiQuantSnapshotCompatibilityMetadata | null
+  backtestDraftConfig: AiQuantBacktestDraftConfig | null
   publishedScriptCode: string | null
   publishedScriptGraphVersion: number | null
   latestSignalMessage: string | null
@@ -735,6 +737,29 @@ function mergeSnapshotBoundParamValues(input: {
   }
 }
 
+export function applyBacktestDraftConfigToValues(input: {
+  currentValues: Record<string, unknown>
+  backtestDraftConfig: AiQuantBacktestDraftConfig | null
+}): Record<string, unknown> {
+  const { currentValues, backtestDraftConfig } = input
+  if (!backtestDraftConfig) {
+    return currentValues
+  }
+
+  return {
+    ...currentValues,
+    backtestRangePreset: backtestDraftConfig.range.preset,
+    backtestStart: backtestDraftConfig.range.startAt,
+    backtestEnd: backtestDraftConfig.range.endAt,
+    backtestInitialCash: backtestDraftConfig.execution.initialCash,
+    backtestLeverage: backtestDraftConfig.execution.leverage,
+    backtestSlippageBps: backtestDraftConfig.execution.slippageBps,
+    backtestFeeBps: backtestDraftConfig.execution.feeBps,
+    backtestPriceSource: backtestDraftConfig.execution.priceSource,
+    backtestAllowPartial: backtestDraftConfig.execution.allowPartial,
+  }
+}
+
 function normalizeNumber(value: unknown, fallback: number): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (typeof value === 'string' && value.trim()) {
@@ -849,7 +874,7 @@ function normalizeLastBacktestRef(
     return null
   }
 
-  const config = normalizeLastBacktestConfig(candidate.config)
+  const config = normalizeBacktestDraftConfig(candidate.config)
   if (!config) {
     return null
   }
@@ -873,9 +898,9 @@ function normalizeLastBacktestRef(
   }
 }
 
-function normalizeLastBacktestConfig(
+export function normalizeBacktestDraftConfig(
   value: unknown,
-): AiQuantConversationLastBacktestRef['config'] | null {
+): AiQuantBacktestDraftConfig | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null
   }
@@ -893,7 +918,7 @@ function normalizeLastBacktestConfig(
 
 function normalizeLastBacktestRangeConfig(
   value: unknown,
-): AiQuantConversationLastBacktestRef['config']['range'] | null {
+): AiQuantBacktestDraftConfig['range'] | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null
   }
@@ -940,7 +965,7 @@ function normalizeLastBacktestRangeConfig(
 
 function normalizeLastBacktestExecutionConfig(
   value: unknown,
-): AiQuantConversationLastBacktestRef['config']['execution'] | null {
+): AiQuantBacktestDraftConfig['execution'] | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return null
   }
@@ -983,24 +1008,11 @@ function normalizeLastBacktestExecutionConfig(
   }
 }
 
-function buildComparableBacktestConfig(
+export function buildBacktestDraftConfigFromValues(
   values: Record<string, unknown>,
-  defaults?: AccountAiQuantBacktestConfigDefaults | null,
-): AiQuantConversationLastBacktestRef['config'] | null {
+): AiQuantBacktestDraftConfig | null {
   const range = resolveBacktestRangeInput(values)
-  const execution = resolveBacktestExecutionConfig({
-    ...(defaults
-      ? {
-          backtestInitialCash: defaults.initialCash,
-          ...(typeof defaults.leverage === 'number' ? { backtestLeverage: defaults.leverage } : {}),
-          backtestSlippageBps: defaults.slippageBps,
-          backtestFeeBps: defaults.feeBps,
-          ...(typeof defaults.priceSource === 'string' ? { backtestPriceSource: defaults.priceSource } : {}),
-          ...(typeof defaults.allowPartial === 'boolean' ? { backtestAllowPartial: defaults.allowPartial } : {}),
-        }
-      : {}),
-    ...values,
-  })
+  const execution = resolveBacktestExecutionConfig(values)
   if (
     execution.priceSource !== 'open'
     && execution.priceSource !== 'close'
@@ -1030,8 +1042,8 @@ function buildComparableBacktestConfig(
 }
 
 function doesBacktestConfigMatch(
-  current: AiQuantConversationLastBacktestRef['config'],
-  stored: AiQuantConversationLastBacktestRef['config'],
+  current: AiQuantBacktestDraftConfig,
+  stored: AiQuantBacktestDraftConfig,
 ): boolean {
   if (current.range.preset !== stored.range.preset) {
     return false
@@ -1055,7 +1067,7 @@ function doesBacktestConfigMatch(
 function restoreBacktestResultFromLastBacktestRef(input: {
   conversationPublishedSnapshotId: string | null
   lastBacktestRef: AiQuantConversationLastBacktestRef | null
-  currentBacktestConfig: AiQuantConversationLastBacktestRef['config'] | null
+  currentBacktestConfig: AiQuantBacktestDraftConfig | null
   symbol: string
 }): BacktestResult | null {
   const { conversationPublishedSnapshotId, lastBacktestRef, currentBacktestConfig, symbol } = input
@@ -1128,6 +1140,7 @@ function clearPublicationArtifacts(conversation: ConversationState): Conversatio
     publishedSnapshotDeploymentExecutionDefaults: null,
     publishedSnapshotDeploymentExecutionConstraints: null,
     publishedSnapshotCompatibilityMetadata: null,
+    backtestDraftConfig: null,
     publishedScriptCode: null,
     publishedScriptGraphVersion: null,
     backtestResult: null,
@@ -1496,6 +1509,7 @@ export function createConversation(translate: (key: string) => string, now = Dat
     publishedSnapshotDeploymentExecutionDefaults: null,
     publishedSnapshotDeploymentExecutionConstraints: null,
     publishedSnapshotCompatibilityMetadata: null,
+    backtestDraftConfig: null,
     publishedScriptCode: null,
     publishedScriptGraphVersion: null,
     latestSignalMessage: null,
@@ -1653,7 +1667,11 @@ export function createConversationFromServerConversation(
     snapshotParamValues,
     snapshotBacktestConfigDefaults,
   })
-  const nextParamValues = mergedSnapshotParamValues.paramValues
+  const backtestDraftConfig = normalizeBacktestDraftConfig(response.backtestDraftConfig)
+  const nextParamValues = applyBacktestDraftConfigToValues({
+    currentValues: mergedSnapshotParamValues.paramValues,
+    backtestDraftConfig,
+  })
   const nextParams = normalizeParamsFromValues(nextParamValues, seed.params)
   const publishedSnapshotId = normalizePublishedSnapshotId(response.publishedSnapshotId)
   const effectivePublishedBacktestInputs = resolveEffectivePublishedBacktestInputs({
@@ -1668,7 +1686,7 @@ export function createConversationFromServerConversation(
   const restoredBacktestResult = restoreBacktestResultFromLastBacktestRef({
     conversationPublishedSnapshotId: publishedSnapshotId,
     lastBacktestRef,
-    currentBacktestConfig: buildComparableBacktestConfig(nextParamValues, snapshotBacktestConfigDefaults),
+    currentBacktestConfig: backtestDraftConfig,
     symbol: restoredBacktestSymbol,
   })
   const graphVersion =
@@ -1754,6 +1772,7 @@ export function createConversationFromServerConversation(
     publishedSnapshotDeploymentExecutionDefaults: snapshotDeploymentExecutionDefaults,
     publishedSnapshotDeploymentExecutionConstraints: snapshotDeploymentExecutionConstraints,
     publishedSnapshotCompatibilityMetadata: snapshotCompatibilityMetadata,
+    backtestDraftConfig,
     publishedScriptCode: response.scriptCode ?? null,
     publishedScriptGraphVersion:
       response.scriptCode && logicGraph?.status === 'confirmed'
@@ -1822,6 +1841,7 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
   const publishedSnapshotCompatibilityMetadata = normalizeSnapshotCompatibilityMetadata(
     item.publishedSnapshotCompatibilityMetadata,
   )
+  const backtestDraftConfig = normalizeBacktestDraftConfig(item.backtestDraftConfig)
   const publishedSnapshotParamValues = normalizePublishedSnapshotParamValues(item.publishedSnapshotParamValues)
   const baseParams =
     item.params && typeof item.params === 'object' && !Array.isArray(item.params)
@@ -1831,11 +1851,14 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
     item.paramValues && typeof item.paramValues === 'object' && !Array.isArray(item.paramValues)
       ? item.paramValues
       : {}
-  const nextParamValues = {
+  const nextParamValues = applyBacktestDraftConfigToValues({
+    currentValues: {
     ...DEFAULT_PARAM_VALUES,
     ...baseParams,
     ...storedValues,
-  }
+    },
+    backtestDraftConfig,
+  })
   const normalizedBacktestExecutionConfig = normalizeHydratedBacktestExecutionConfig({
     paramValues: nextParamValues,
     explicit: item.backtestExecutionConfigExplicit === true,
@@ -1895,6 +1918,7 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
     publishedSnapshotDeploymentExecutionDefaults,
     publishedSnapshotDeploymentExecutionConstraints,
     publishedSnapshotCompatibilityMetadata,
+    backtestDraftConfig,
     publishedScriptCode: resolveHydratedPublishedScriptCode(item),
     publishedScriptGraphVersion: (() => {
       if (typeof item.publishedScriptGraphVersion === 'number') {

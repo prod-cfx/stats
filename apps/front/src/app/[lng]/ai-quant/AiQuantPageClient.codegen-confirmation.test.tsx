@@ -245,6 +245,7 @@ jest.mock('@/lib/api', () => ({
   fetchUserExchangeAccountStatuses: jest.fn(async () => []),
   getLlmCodegenSession: (...args: unknown[]) => mockGetLlmCodegenSession(...args),
   startLlmCodegenSession: (...args: unknown[]) => mockStartLlmCodegenSession(...args),
+  updateAiQuantConversationBacktestDraft: jest.fn(async () => undefined),
 }))
 
 function seedDraftConversation(

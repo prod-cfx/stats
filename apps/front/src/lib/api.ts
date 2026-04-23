@@ -15,6 +15,7 @@ export {
   performAccountAiQuantStrategyAction,
   startLlmCodegenSession,
   updateAccountAiQuantStrategyLeverage,
+  updateAiQuantConversationBacktestDraft,
 } from './api-ai-quant-domain'
 export {
   fetchProfile,
@@ -231,6 +232,26 @@ export interface AccountAiQuantSnapshotCompatibilityMetadata {
   invalidBinding?: boolean | null
 }
 
+export interface AiQuantBacktestRangeConfig {
+  preset: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
+  startAt?: string
+  endAt?: string
+}
+
+export interface AiQuantBacktestExecutionConfig {
+  initialCash: number
+  leverage: number | null
+  slippageBps: number
+  feeBps: number
+  priceSource: 'open' | 'close' | 'mid'
+  allowPartial: boolean
+}
+
+export interface AiQuantBacktestDraftConfig {
+  range: AiQuantBacktestRangeConfig
+  execution: AiQuantBacktestExecutionConfig
+}
+
 export interface AccountAiQuantConsistencySummary {
   isConsistent: boolean
   driftReasons: string[]
@@ -412,21 +433,7 @@ export interface LlmCodegenSessionResponse {
 export interface AiQuantConversationLastBacktestRef {
   jobId: string
   publishedSnapshotId: string
-  config: {
-    range: {
-      preset: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
-      startAt?: string
-      endAt?: string
-    }
-    execution: {
-      initialCash: number
-      leverage: number | null
-      slippageBps: number
-      feeBps: number
-      priceSource: 'open' | 'close' | 'mid'
-      allowPartial: boolean
-    }
-  }
+  config: AiQuantBacktestDraftConfig
   summary: {
     maxDrawdownPct: number
     totalReturnPct: number
@@ -450,6 +457,7 @@ export interface AiQuantConversationResponse {
   status?: string
   createdAt?: string
   updatedAt?: string
+  backtestDraftConfig?: AiQuantBacktestDraftConfig | null
   scriptCode?: string | null
   publishedSnapshotId?: string | null
   publishedSnapshotParamValues?: Record<string, unknown> | null
