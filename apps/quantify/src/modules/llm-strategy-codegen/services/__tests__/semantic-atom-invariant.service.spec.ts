@@ -81,6 +81,28 @@ describe('SemanticAtomInvariantService', () => {
     }
   }
 
+  function buildBothSideExitSemanticState(): SemanticState {
+    const state = buildSemanticState()
+    return {
+      ...state,
+      triggers: state.triggers.map(trigger =>
+        trigger.key === 'price.percent_change'
+          ? { ...trigger, sideScope: 'both' as const }
+          : trigger,
+      ),
+      actions: [
+        { id: 'open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+        { id: 'open-short', key: 'open_short', status: 'locked', source: 'user_explicit' },
+        { id: 'close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+        { id: 'close-short', key: 'close_short', status: 'locked', source: 'user_explicit' },
+      ],
+      position: {
+        ...state.position!,
+        positionMode: 'long_short',
+      },
+    }
+  }
+
   function compile(state: SemanticState) {
     const builder = new CanonicalSpecBuilderService()
     const canonicalSpec = builder.buildFromNormalizedIntent(
@@ -221,6 +243,37 @@ describe('SemanticAtomInvariantService', () => {
         }
         return expr
       }),
+    }
+  }
+
+  function removeCloseShort(input: ReturnType<typeof compile>): ReturnType<typeof compile> {
+    const { canonicalSpec, ir, ast } = input
+    const nextCanonicalSpec: CanonicalStrategySpec = canonicalSpec.version === 2
+      ? {
+          ...canonicalSpec,
+          rules: canonicalSpec.rules.map(rule => ({
+            ...rule,
+            actions: rule.actions.filter(action => action.type !== 'CLOSE_SHORT'),
+          })),
+        }
+      : canonicalSpec
+
+    return {
+      canonicalSpec: nextCanonicalSpec,
+      ir: {
+        ...ir,
+        ruleBlocks: ir.ruleBlocks.map(rule => ({
+          ...rule,
+          actions: rule.actions.filter(action => action.kind !== 'CLOSE_SHORT'),
+        })),
+      },
+      ast: {
+        ...ast,
+        decisionPrograms: ast.decisionPrograms.map(program => ({
+          ...program,
+          actions: program.actions.filter(action => action.kind !== 'CLOSE_SHORT'),
+        })),
+      },
     }
   }
 
@@ -550,5 +603,26 @@ describe('SemanticAtomInvariantService', () => {
         level: 'critical',
       }),
     ])
+  })
+
+  it('fails when a both-side percent-change trigger loses the short-side close action', () => {
+    const state = buildBothSideExitSemanticState()
+    const { canonicalSpec, ir, ast } = removeCloseShort(compile(state))
+
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+
+    expect(checks).toHaveLength(2)
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_atom.price_percent_change',
+        status: 'passed',
+        level: 'critical',
+      }),
+      expect.objectContaining({
+        key: 'semantic_atom.price_percent_change',
+        status: 'failed',
+        level: 'critical',
+      }),
+    ]))
   })
 })

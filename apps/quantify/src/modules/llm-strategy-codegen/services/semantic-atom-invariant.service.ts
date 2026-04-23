@@ -57,17 +57,19 @@ export class SemanticAtomInvariantService {
     const triggersByBucket = new Map<string, SemanticTriggerState[]>()
 
     for (const trigger of triggers) {
-      const action = this.expectedAction(trigger)
-      const key = this.bucketKey(trigger.phase, action)
-      const bucket = triggersByBucket.get(key) ?? []
-      bucket.push(trigger)
-      triggersByBucket.set(key, bucket)
+      for (const action of this.expectedActions(trigger)) {
+        const key = this.bucketKey(trigger.phase, action)
+        const bucket = triggersByBucket.get(key) ?? []
+        bucket.push(trigger)
+        triggersByBucket.set(key, bucket)
+      }
     }
 
     return triggers.flatMap((trigger) => {
-      const action = this.expectedAction(trigger)
-      const bucket = triggersByBucket.get(this.bucketKey(trigger.phase, action)) ?? [trigger]
-      return this.validatePricePercentChangeTrigger(trigger, bucket, input)
+      return this.expectedActions(trigger).map((action) => {
+        const bucket = triggersByBucket.get(this.bucketKey(trigger.phase, action)) ?? [trigger]
+        return this.validatePricePercentChangeTrigger(trigger, action, bucket, input)
+      })
     })
   }
 
@@ -82,6 +84,7 @@ export class SemanticAtomInvariantService {
 
   private validatePricePercentChangeTrigger(
     trigger: SemanticTriggerState,
+    expectedAction: PositionAction,
     bucketTriggers: SemanticTriggerState[],
     input: {
       canonicalSpec: CanonicalStrategySpec
@@ -89,9 +92,8 @@ export class SemanticAtomInvariantService {
       ast: StrategyAstV1
     },
   ): StrategyConsistencyCheck {
-    const expectedAction = this.expectedAction(trigger)
-    const expected = this.buildExpectedSnapshot(trigger)
-    const expectedBucket = bucketTriggers.map(bucketTrigger => this.buildExpectedSnapshot(bucketTrigger))
+    const expected = this.buildExpectedSnapshot(trigger, expectedAction)
+    const expectedBucket = bucketTriggers.map(bucketTrigger => this.buildExpectedSnapshot(bucketTrigger, expectedAction))
     const canonical = this.buildLayerSnapshot(
       this.findCanonicalPredicates(input.canonicalSpec, trigger.phase, expectedAction),
       expected,
@@ -134,7 +136,7 @@ export class SemanticAtomInvariantService {
     }
   }
 
-  private buildExpectedSnapshot(trigger: SemanticTriggerState): ExpectedSnapshot {
+  private buildExpectedSnapshot(trigger: SemanticTriggerState, action: PositionAction): ExpectedSnapshot {
     const direction = this.resolveDirection(trigger)
     const valuePct = this.readPositiveNumber(trigger.params.valuePct)
     const constValue = direction === 'down'
@@ -143,7 +145,7 @@ export class SemanticAtomInvariantService {
 
     return {
       triggerId: trigger.id,
-      action: this.expectedAction(trigger),
+      action,
       predicateKind: direction === 'down' ? 'LTE' : 'GTE',
       constValue,
       timeframe: this.readString(trigger.params.window),
@@ -405,11 +407,15 @@ export class SemanticAtomInvariantService {
     return this.readNumber(trigger.params.valuePct) < 0 ? 'down' : 'up'
   }
 
-  private expectedAction(trigger: SemanticTriggerState): PositionAction {
+  private expectedActions(trigger: SemanticTriggerState): PositionAction[] {
     if (trigger.phase === 'entry') {
-      return trigger.sideScope === 'short' ? 'OPEN_SHORT' : 'OPEN_LONG'
+      if (trigger.sideScope === 'short') return ['OPEN_SHORT']
+      if (trigger.sideScope === 'both') return ['OPEN_LONG', 'OPEN_SHORT']
+      return ['OPEN_LONG']
     }
-    return trigger.sideScope === 'short' ? 'CLOSE_SHORT' : 'CLOSE_LONG'
+    if (trigger.sideScope === 'short') return ['CLOSE_SHORT']
+    if (trigger.sideScope === 'both') return ['CLOSE_LONG', 'CLOSE_SHORT']
+    return ['CLOSE_LONG']
   }
 
   private bucketKey(phase: SemanticTriggerState['phase'], action: PositionAction): string {
