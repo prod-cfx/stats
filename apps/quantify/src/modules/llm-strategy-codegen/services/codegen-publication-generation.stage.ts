@@ -1,6 +1,6 @@
 import type { CanonicalStrategySpecV2 } from '../types/canonical-strategy-spec-v2'
 import type { SemanticState } from '../types/semantic-state'
-import type { StrategyConsistencyReport } from '../types/strategy-consistency-report'
+import type { StrategyConsistencyCheck, StrategyConsistencyReport } from '../types/strategy-consistency-report'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
 import type { StrategySummary } from '../types/strategy-summary'
 import type { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
@@ -13,6 +13,7 @@ import type { SpecDescBuilderService } from './spec-desc-builder.service'
 import type { StrategyConsistencyService } from './strategy-consistency.service'
 import type { StrategySummaryBuilderService } from './strategy-summary-builder.service'
 import type { StrategySummaryObservationReport } from './strategy-summary-observation.service'
+import { SemanticAtomInvariantService } from './semantic-atom-invariant.service'
 import { buildNormalizedIntentFromSemanticState } from './semantic-state-normalization'
 import { StrategySummaryObservationService } from './strategy-summary-observation.service'
 
@@ -23,6 +24,16 @@ export interface CompiledScriptValidationResult {
   staticPassed: boolean
   runtimePassed: boolean
   outputPassed: boolean
+}
+
+export interface SemanticAtomInvariantReport {
+  status: 'PASSED' | 'FAILED'
+  checks: StrategyConsistencyCheck[]
+  summary: {
+    criticalFailed: number
+    warningFailed: number
+    unprovable: number
+  }
 }
 
 function normalizePublishedSymbol(raw: string): string {
@@ -38,6 +49,7 @@ export interface CodegenPublicationArtifacts {
   ast: ReturnType<CanonicalStrategyAstCompilerService['compile']>
   compiledScript: string
   validation: CompiledScriptValidationResult
+  semanticAtomInvariant: SemanticAtomInvariantReport
   semanticConsistency: StrategyConsistencyReport
   userIntentSummary: StrategySummary
   strategySummary: StrategySummary
@@ -69,6 +81,7 @@ export class CodegenPublicationGenerationStage {
     private readonly compiledScriptExecutionEnvelope: CompiledScriptExecutionEnvelopeService,
     private readonly compiledScriptParser: CompiledScriptParserService,
     private readonly strategySummaryObservation: StrategySummaryObservationService = new StrategySummaryObservationService(),
+    private readonly semanticAtomInvariant: SemanticAtomInvariantService = new SemanticAtomInvariantService(),
   ) {}
 
   async generate(input: CodegenPublicationGenerationInput): Promise<CodegenPublicationArtifacts> {
@@ -100,6 +113,20 @@ export class CodegenPublicationGenerationStage {
     })
     const executionEnvelope = this.compiledScriptExecutionEnvelope.build(canonicalSpec)
     const ast = this.canonicalStrategyAstCompiler.compile(compiled.ir)
+    const semanticAtomInvariant = this.buildSemanticAtomInvariantReport(this.semanticAtomInvariant.validate({
+      semanticState: input.semanticState,
+      canonicalSpec,
+      ir: compiled.ir,
+      ast,
+    }))
+    const criticalFailedAtomChecks = semanticAtomInvariant.checks.filter(check =>
+      check.level === 'critical' && check.status === 'failed',
+    )
+
+    if (criticalFailedAtomChecks.length > 0) {
+      throw new Error(`codegen.semantic_atom_drift: ${criticalFailedAtomChecks.map(check => check.message).join('; ')}`)
+    }
+
     let compiledScript = this.compiledScriptEmitter.emit({
       ast,
       executionEnvelope,
@@ -136,6 +163,7 @@ export class CodegenPublicationGenerationStage {
       summaryObservation,
       lockedParams,
       consistencyReport: semanticConsistency,
+      semanticAtomInvariant,
     } satisfies Record<string, unknown>
 
     return {
@@ -147,6 +175,7 @@ export class CodegenPublicationGenerationStage {
       ast,
       compiledScript,
       validation,
+      semanticAtomInvariant,
       semanticConsistency,
       userIntentSummary,
       strategySummary,
@@ -155,6 +184,30 @@ export class CodegenPublicationGenerationStage {
       normalizedIntent: normalization.normalizedIntent,
       lockedParams,
       publishParams,
+    }
+  }
+
+  private buildSemanticAtomInvariantReport(checks: StrategyConsistencyCheck[]): SemanticAtomInvariantReport {
+    const summary = checks.reduce(
+      (acc, check) => {
+        if (check.level === 'critical' && check.status === 'failed') {
+          acc.criticalFailed += 1
+        }
+        if (check.level === 'warning' && check.status === 'failed') {
+          acc.warningFailed += 1
+        }
+        if (check.status === 'unprovable') {
+          acc.unprovable += 1
+        }
+        return acc
+      },
+      { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
+    )
+
+    return {
+      status: summary.criticalFailed > 0 ? 'FAILED' : 'PASSED',
+      checks,
+      summary,
     }
   }
 
