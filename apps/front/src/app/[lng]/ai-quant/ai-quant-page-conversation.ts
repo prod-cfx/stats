@@ -1449,11 +1449,20 @@ export function createConversationFromServerConversation(
   })
   const nextParamValues = mergedSnapshotParamValues.paramValues
   const nextParams = normalizeParamsFromValues(nextParamValues, seed.params)
+  const publishedSnapshotId = normalizePublishedSnapshotId(response.publishedSnapshotId)
+  const effectivePublishedBacktestInputs = resolveEffectivePublishedBacktestInputs({
+    publishedSnapshotId,
+    publishedSnapshotStrategyConfig: snapshotStrategyConfig,
+  })
+  const restoredBacktestSymbol = effectivePublishedBacktestInputs?.symbol
+    ?? (typeof snapshotStrategyConfig?.symbol === 'string' && snapshotStrategyConfig.symbol.trim()
+      ? snapshotStrategyConfig.symbol.trim()
+      : nextParams.symbol)
   const lastBacktestRef = normalizeLastBacktestRef(response.lastBacktestRef)
   const restoredBacktestResult = restoreBacktestResultFromLastBacktestRef({
-    conversationPublishedSnapshotId: response.publishedSnapshotId ?? null,
+    conversationPublishedSnapshotId: publishedSnapshotId,
     lastBacktestRef,
-    symbol: nextParams.symbol,
+    symbol: restoredBacktestSymbol,
   })
   const graphVersion =
     typeof response.semanticGraph?.version === 'number' && Number.isFinite(response.semanticGraph.version)
@@ -1531,7 +1540,7 @@ export function createConversationFromServerConversation(
         : (response.canonicalDigest ?? null),
     llmCodegenSessionId: response.activeCodegenSessionId ?? null,
     publishedStrategyInstanceId: response.strategyInstanceId ?? null,
-    publishedSnapshotId: response.publishedSnapshotId ?? null,
+    publishedSnapshotId,
     publishedSnapshotParamValues: snapshotParamValues,
     publishedSnapshotStrategyConfig: snapshotStrategyConfig,
     publishedSnapshotBacktestConfigDefaults: snapshotBacktestConfigDefaults,

@@ -244,6 +244,47 @@ describe('ai-quant-page-conversation', () => {
     }))
   })
 
+  it('restores backtest summary using normalized snapshot id and snapshot-owned symbol truth', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'conv-1',
+      conversationTitle: 'remote',
+      status: 'PUBLISHED',
+      conversationMessages: [],
+      publishedSnapshotId: ' snapshot-1 ',
+      publishedSnapshotParamValues: null,
+      publishedSnapshotStrategyConfig: {
+        exchange: 'binance',
+        symbol: 'ETHUSDT',
+        marketType: 'spot',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      lastBacktestRef: {
+        jobId: 'btjob-2',
+        publishedSnapshotId: 'snapshot-1',
+        summary: {
+          maxDrawdownPct: 6,
+          totalReturnPct: 18,
+          winRatePct: 62,
+          tradeCount: 7,
+          marketType: 'spot',
+        },
+        completedAt: '2026-04-23T00:05:00.000Z',
+      },
+    } as Parameters<typeof createConversationFromServerConversation>[0], (key: string) => key)
+
+    expect(conversation.publishedSnapshotId).toBe('snapshot-1')
+    expect(conversation.backtestResult).toEqual(expect.objectContaining({
+      id: 'btjob-2',
+      symbol: 'ETHUSDT',
+      maxDrawdownPct: 6,
+      totalReturnPct: 18,
+      winRatePct: 62,
+      tradeCount: 7,
+      marketType: 'spot',
+    }))
+  })
+
   it('does not restore lastBacktestRef when publishedSnapshotId has drifted', () => {
     const conversation = createConversationFromServerConversation({
       id: 'conv-1',
