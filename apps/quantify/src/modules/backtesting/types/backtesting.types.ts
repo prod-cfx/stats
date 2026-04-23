@@ -184,10 +184,19 @@ export interface BacktestReport {
   pendingSignals?: Array<{ symbol: string; ts: number; deltaQty: number; reason?: string; reasonSource: BacktestReasonSource }>
 }
 
+export type BacktestRequestedRangePreset = '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
+
+export interface BacktestRequestedRangeInput {
+  preset: BacktestRequestedRangePreset
+  startAt?: string
+  endAt?: string
+}
+
 export interface BacktestRunInput {
   symbols: string[]
   baseTimeframe: Timeframe
   stateTimeframes: Timeframe[]
+  conversationId?: string
   allowPartial?: boolean
   initialCash: number
   leverage?: number | null
@@ -215,6 +224,7 @@ export interface BacktestRunInput {
     specSnapshot?: Record<string, unknown>
     fn: StrategyFn
   }
+  requestedRangeInput?: BacktestRequestedRangeInput
   dataRange: { fromTs: number; toTs: number }
   bars: Bar[]
 }

@@ -18,9 +18,9 @@ import {
 } from '@/components/ai-quant/canonical-confirmation'
 import { ConversationSidebar } from '@/components/ai-quant/ConversationSidebar'
 import { DeployDialog } from '@/components/ai-quant/DeployDialog'
+import { DisplayLogicGraphPreview } from '@/components/ai-quant/DisplayLogicGraphPreview'
 import { GuestAiQuantLanding } from '@/components/ai-quant/GuestAiQuantLanding'
 import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-storage'
-import { DisplayLogicGraphPreview } from '@/components/ai-quant/DisplayLogicGraphPreview'
 import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
 import { SemanticGraphCard } from '@/components/ai-quant/SemanticGraphCard'
@@ -33,7 +33,12 @@ import {
 import { applyCapabilitiesToParamSchema } from '@/components/ai-quant/strategy-param-sync'
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
 import { useAuth } from '@/hooks/use-auth'
-import { deleteAiQuantConversation, fetchUserExchangeAccountStatuses, listAiQuantConversations } from '@/lib/api'
+import {
+  deleteAiQuantConversation,
+  fetchUserExchangeAccountStatuses,
+  listAiQuantConversations,
+  updateAiQuantConversationBacktestDraft,
+} from '@/lib/api'
 import { ApiError } from '@/lib/errors'
 import { runAiQuantBacktest } from './ai-quant-page-backtest'
 import {
@@ -43,8 +48,11 @@ import {
 } from './ai-quant-page-codegen'
 import {
   BACKTEST_EXECUTION_PARAM_KEY_SET,
+  BACKTEST_RANGE_PARAM_KEY_SET,
+  applyBacktestDraftConfigToValues,
   CONVERSATIONS_STORAGE_KEY,
   buildApiConfigHref,
+  buildBacktestDraftConfigFromValues,
   buildBacktestSummaryResult,
   buildParamSchemaWithCapabilities,
   createConversation,
@@ -546,6 +554,35 @@ export function AiQuantPageClient({
     }))
   }
 
+  function persistConversationBacktestDraft(
+    conversationId: string,
+    nextValues: Record<string, unknown>,
+  ) {
+    const targetConversation = conversations.find(conv => conv.id === conversationId)
+    const serverConversationId = targetConversation?.serverConversationId
+    const backtestDraftConfig = buildBacktestDraftConfigFromValues(nextValues)
+
+    if (!backtestDraftConfig) {
+      return
+    }
+
+    if (serverOwnedConversations && serverConversationId) {
+      void updateAiQuantConversationBacktestDraft(serverConversationId, backtestDraftConfig).catch(() => {})
+    }
+  }
+
+  function invalidateActiveConversationBacktestRecovery() {
+    if (!activeConversation) {
+      return
+    }
+    const conversationId = activeConversation.id
+    backtestRunTokenRef.current.set(
+      conversationId,
+      (backtestRunTokenRef.current.get(conversationId) ?? 0) + 1,
+    )
+    backtestRunMutexRef.current.delete(conversationId)
+  }
+
   function appendSemanticGraphGuardMessage(conversationId: string) {
     updateConversationById(conversationId, curr => ({
       ...curr,
@@ -602,7 +639,7 @@ export function AiQuantPageClient({
     return true
   }
 
-  const requestBackendGraphGeneration = async (args: {
+  async function requestBackendGraphGeneration(args: {
     conversationId: string
     message: string
     params: QuantParams
@@ -611,7 +648,7 @@ export function AiQuantPageClient({
     confirmGenerate?: boolean
     confirmedCanonicalDigest?: string
     clarificationAnswers?: Record<string, string>
-  }) => {
+  }) {
     await requestAiQuantCodegen({
       ...args,
       backtestCapabilities,
@@ -734,6 +771,36 @@ export function AiQuantPageClient({
       clarificationAnswers: {
         [itemKey]: value,
       },
+    })
+  }
+
+  const onParamChange = (key: string, value: unknown) => {
+    const shouldInvalidateBacktest =
+      BACKTEST_RANGE_PARAM_KEY_SET.has(key) || BACKTEST_EXECUTION_PARAM_KEY_SET.has(key)
+    if (shouldInvalidateBacktest) {
+      invalidateActiveConversationBacktestRecovery()
+    }
+    updateActiveConversation(curr => {
+      const nextValues = { ...curr.paramValues, [key]: value }
+      const nextConversation = {
+        ...curr,
+        paramValues: nextValues,
+        params: normalizeParamsFromValues(nextValues, curr.params),
+        backtestDraftConfig:
+          shouldInvalidateBacktest
+            ? buildBacktestDraftConfigFromValues(nextValues)
+            : curr.backtestDraftConfig,
+        backtestResult: shouldInvalidateBacktest ? null : curr.backtestResult,
+        backtestExecutionState: shouldInvalidateBacktest ? 'idle' : curr.backtestExecutionState,
+        backtestExecutionConfigExplicit:
+          BACKTEST_EXECUTION_PARAM_KEY_SET.has(key)
+            ? hasExplicitBacktestExecutionOverrides(nextValues)
+            : curr.backtestExecutionConfigExplicit,
+        updatedAt: Date.now(),
+      }
+      return shouldInvalidatePublicationForParamChange(key)
+        ? invalidateConversationPublication(nextConversation, { markGraphDraft: true })
+        : nextConversation
     })
   }
 
@@ -1066,24 +1133,36 @@ export function AiQuantPageClient({
             publicationGate={activeConversation.publicationGate}
             compactMode={compactMode}
             onClarificationAnswer={onClarificationAnswer}
-            onParamChange={(key, value) =>
+            onParamChange={onParamChange}
+            onConfirmBacktestParams={(nextDraftValues) => {
+              invalidateActiveConversationBacktestRecovery()
               updateActiveConversation(curr => {
-                const nextValues = { ...curr.paramValues, [key]: value }
-                const nextConversation = {
+                const requestedValues = { ...curr.paramValues, ...nextDraftValues }
+                const normalizedDraftConfig = buildBacktestDraftConfigFromValues(requestedValues)
+                const nextValues = normalizedDraftConfig
+                  ? applyBacktestDraftConfigToValues({
+                      currentValues: requestedValues,
+                      backtestDraftConfig: normalizedDraftConfig,
+                    })
+                  : requestedValues
+                return {
                   ...curr,
                   paramValues: nextValues,
                   params: normalizeParamsFromValues(nextValues, curr.params),
+                  backtestDraftConfig: normalizedDraftConfig,
+                  backtestResult: null,
+                  backtestExecutionState: 'idle',
                   backtestExecutionConfigExplicit:
-                    BACKTEST_EXECUTION_PARAM_KEY_SET.has(key)
-                      ? hasExplicitBacktestExecutionOverrides(nextValues)
-                      : curr.backtestExecutionConfigExplicit,
+                    hasExplicitBacktestExecutionOverrides(nextValues),
                   updatedAt: Date.now(),
                 }
-                return shouldInvalidatePublicationForParamChange(key)
-                  ? invalidateConversationPublication(nextConversation, { markGraphDraft: true })
-                  : nextConversation
               })
-            }
+              persistConversationBacktestDraft(activeConversation.id, {
+                ...activeConversation.paramValues,
+                ...nextDraftValues,
+                backtestAllowPartial: true,
+              })
+            }}
             onSend={onSend}
             onRunBacktest={onRunBacktest}
             canRunBacktest={canRunBacktest}

@@ -1753,6 +1753,160 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
   })
 
+  it('includes lastBacktestRef when it matches the current published snapshot', async () => {
+    mockConversationsRepo.listByUser.mockResolvedValue([
+      {
+        id: 'conv-1',
+        userId: 'user-1',
+        codegenSessionId: 'session-1',
+        title: 'conv',
+        archivedAt: null,
+        createdAt: new Date('2026-04-23T00:00:00.000Z'),
+        updatedAt: new Date('2026-04-23T00:05:00.000Z'),
+        lastBacktestRef: {
+          jobId: 'btjob-1',
+          publishedSnapshotId: 'snapshot-1',
+          config: {
+            range: {
+              preset: '30D',
+            },
+            execution: {
+              initialCash: 10000,
+              leverage: 1,
+              slippageBps: 10,
+              feeBps: 5,
+              priceSource: 'close',
+              allowPartial: true,
+            },
+          },
+          summary: {
+            maxDrawdownPct: 8,
+            totalReturnPct: 12,
+            winRatePct: 60,
+            tradeCount: 5,
+            marketType: 'spot',
+          },
+          completedAt: new Date('2026-04-23T00:04:00.000Z'),
+        },
+        messages: [],
+      },
+    ])
+    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue(['session-1'])
+    mockRepo.listByUser.mockResolvedValue([])
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-1',
+      userId: 'user-1',
+      status: 'PUBLISHED',
+      checklist: {},
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: { conversationHistory: ['U: 原始 session 消息'] },
+      latestDraftCode: 'export default function strategy() { return true }',
+      latestSpecDesc: null,
+      rejectReason: null,
+      createdAt: new Date('2026-04-23T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-23T00:05:00.000Z'),
+      strategyInstanceId: 'instance-1',
+    })
+    mockRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-1',
+      consistencyReport: { status: 'PASSED' },
+    })
+
+    const result = await service.listConversations('user-1')
+
+    expect(result[0]).toMatchObject({
+      id: 'conv-1',
+      lastBacktestRef: {
+        jobId: 'btjob-1',
+        publishedSnapshotId: 'snapshot-1',
+        config: {
+          range: {
+            preset: '30D',
+          },
+          execution: {
+            initialCash: 10000,
+            leverage: 1,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: true,
+          },
+        },
+        summary: expect.objectContaining({
+          maxDrawdownPct: 8,
+          totalReturnPct: 12,
+          winRatePct: 60,
+          tradeCount: 5,
+        }),
+        completedAt: '2026-04-23T00:04:00.000Z',
+      },
+    })
+  })
+
+  it('hides lastBacktestRef when it no longer matches the current published snapshot', async () => {
+    mockConversationsRepo.listByUser.mockResolvedValue([
+      {
+        id: 'conv-1',
+        userId: 'user-1',
+        codegenSessionId: 'session-1',
+        title: 'conv',
+        archivedAt: null,
+        createdAt: new Date('2026-04-23T00:00:00.000Z'),
+        updatedAt: new Date('2026-04-23T00:05:00.000Z'),
+        lastBacktestRef: {
+          jobId: 'btjob-1',
+          publishedSnapshotId: 'snapshot-1',
+          config: {
+            range: {
+              preset: '30D',
+            },
+            execution: {
+              initialCash: 10000,
+              leverage: 1,
+              slippageBps: 10,
+              feeBps: 5,
+              priceSource: 'close',
+              allowPartial: true,
+            },
+          },
+          summary: {
+            maxDrawdownPct: 8,
+            totalReturnPct: 12,
+            winRatePct: 60,
+            tradeCount: 5,
+            marketType: 'spot',
+          },
+          completedAt: new Date('2026-04-23T00:04:00.000Z'),
+        },
+        messages: [],
+      },
+    ])
+    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue(['session-1'])
+    mockRepo.listByUser.mockResolvedValue([])
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-1',
+      userId: 'user-1',
+      status: 'PUBLISHED',
+      checklist: {},
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: { conversationHistory: ['U: 原始 session 消息'] },
+      latestDraftCode: 'export default function strategy() { return true }',
+      latestSpecDesc: null,
+      rejectReason: null,
+      createdAt: new Date('2026-04-23T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-23T00:05:00.000Z'),
+      strategyInstanceId: 'instance-1',
+    })
+    mockRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-2',
+      consistencyReport: { status: 'PASSED' },
+    })
+
+    const result = await service.listConversations('user-1')
+
+    expect(result[0]?.lastBacktestRef).toBeNull()
+  })
+
   it('keeps published snapshot params faithful to snapshot sources without injecting default execution values', () => {
     const result = (
       service as unknown as {

@@ -2,6 +2,7 @@ import type { BacktestRunInput } from '../types/backtesting.types'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { AiQuantConversationsRepository } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
 import { BacktestJobsService } from './backtest-jobs.service'
 
 const OWNER_USER_ID = 'user-1'
@@ -30,7 +31,7 @@ function createInput(): BacktestRunInput {
 }
 
 async function flushMicrotasks() {
-  for (let i = 0; i < 6; i += 1) {
+  for (let i = 0; i < 12; i += 1) {
     await Promise.resolve()
   }
 }
@@ -130,26 +131,66 @@ function createAvailabilityMock(
   }
 }
 
+function createConversationsMock() {
+  return {
+    existsActiveConversationForUser: jest.fn().mockResolvedValue(true),
+    updateBacktestDraftConfig: jest.fn().mockResolvedValue(undefined),
+    updateLastBacktestRef: jest.fn().mockResolvedValue(undefined),
+  }
+}
+
+function createConversationRepository(overrides?: {
+  findMany?: jest.Mock
+  findUnique?: jest.Mock
+  findUniqueOrThrow?: jest.Mock
+}) {
+  const txHost = {
+    tx: {
+      aiQuantConversation: {
+        findMany: overrides?.findMany ?? jest.fn(),
+        findUnique: overrides?.findUnique ?? jest.fn(),
+        findUniqueOrThrow: overrides?.findUniqueOrThrow ?? jest.fn(),
+        updateMany: jest.fn(),
+        upsert: jest.fn(),
+      },
+      aiQuantConversationMessage: {
+        deleteMany: jest.fn(),
+        createMany: jest.fn(),
+      },
+    },
+    withTransaction: jest.fn(),
+  }
+
+  return {
+    txHost,
+    repository: new AiQuantConversationsRepository(txHost as never),
+  }
+}
+
 function createService(args?: {
   runner?: { run: jest.Mock }
   marketData?: ReturnType<typeof createMarketDataMock>
   availability?: ReturnType<typeof createAvailabilityMock>
+  conversations?: ReturnType<typeof createConversationsMock>
   prisma?: ReturnType<typeof createPrismaMock>
 }) {
   const runner = args?.runner ?? { run: jest.fn().mockImplementation(() => new Promise(() => {})) }
   const marketData = args?.marketData ?? createMarketDataMock()
   const availability = args?.availability ?? createAvailabilityMock()
+  const conversations = args?.conversations ?? createConversationsMock()
   const prisma = args?.prisma ?? createPrismaMock()
 
   return {
     runner,
     marketData,
     availability,
+    conversations,
     prisma,
     service: new BacktestJobsService(
       runner as never,
       marketData as never,
       availability as never,
+      conversations as never,
       prisma as never,
     ),
   }
@@ -172,6 +213,43 @@ describe('backtestJobsService', () => {
     )
     expect(availability.check).not.toHaveBeenCalled()
     expect(created.status).toBe('queued')
+  })
+
+  it('creates a job when conversationId belongs to the owner user', async () => {
+    const conversations = createConversationsMock()
+    const { service, prisma } = createService({ conversations })
+    const input = createInput()
+    input.conversationId = 'conv-1'
+
+    const created = await service.createJob(input, OWNER_USER_ID)
+
+    expect(conversations.existsActiveConversationForUser).toHaveBeenCalledWith('conv-1', OWNER_USER_ID)
+    expect(prisma.backtestJob.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          conversationId: 'conv-1',
+        }),
+      }),
+    )
+    expect(created.status).toBe('queued')
+  })
+
+  it('rejects create-job when conversationId does not belong to the owner user', async () => {
+    const conversations = createConversationsMock()
+    conversations.existsActiveConversationForUser.mockResolvedValue(false)
+    const { service, prisma } = createService({ conversations })
+    const input = createInput()
+    input.conversationId = 'conv-other-user'
+
+    await expect(service.createJob(input, OWNER_USER_ID)).rejects.toMatchObject({
+      message: 'backtest.invalid_conversation_id',
+      code: ErrorCode.BAD_REQUEST,
+      status: HttpStatus.BAD_REQUEST,
+      args: {
+        conversationId: 'conv-other-user',
+      },
+    })
+    expect(prisma.backtestJob.create).not.toHaveBeenCalled()
   })
 
   it('persists snapshot tracing fields when strategy was loaded from a published snapshot', async () => {
@@ -228,6 +306,7 @@ describe('backtestJobsService', () => {
       runner as never,
       marketData as never,
       availability as never,
+      createConversationsMock() as never,
       prisma as never,
     )
     const input = createInput()
@@ -276,6 +355,7 @@ describe('backtestJobsService', () => {
       runner as never,
       marketData as never,
       availability as never,
+      createConversationsMock() as never,
       prisma as never,
     )
     const input = createInput()
@@ -486,7 +566,13 @@ describe('backtestJobsService', () => {
         }),
       },
     }
-    const service = new BacktestJobsService(runner as never, marketData as never, availability as never, prisma as never)
+    const service = new BacktestJobsService(
+      runner as never,
+      marketData as never,
+      availability as never,
+      createConversationsMock() as never,
+      prisma as never,
+    )
 
     await expect(service.getJob('job-invalid', OWNER_USER_ID)).rejects.toThrow(
       'backtest.job_invalid_status',
@@ -516,7 +602,13 @@ describe('backtestJobsService', () => {
         }),
       },
     }
-    const service = new BacktestJobsService(runner as never, marketData as never, availability as never, prisma as never)
+    const service = new BacktestJobsService(
+      runner as never,
+      marketData as never,
+      availability as never,
+      createConversationsMock() as never,
+      prisma as never,
+    )
 
     await expect(service.getJobResult('job-invalid-result', OWNER_USER_ID)).rejects.toThrow(
       'backtest.job_invalid_status',
@@ -633,6 +725,325 @@ describe('backtestJobsService', () => {
     expect(prisma.backtestJob.deleteMany).not.toHaveBeenCalled()
   })
 
+  it('writes a lightweight lastBacktestRef to the owning conversation after a successful snapshot-bound backtest', async () => {
+    const runner = {
+      run: jest.fn().mockResolvedValue({
+        summary: {
+          netProfit: 120,
+          netProfitPct: 12,
+          maxDrawdownPct: 8,
+          winRate: 0.6,
+          profitFactor: 1.8,
+          totalTrades: 5,
+        },
+        equityCurve: [],
+        trades: [],
+        markers: [],
+        bySymbol: [],
+      }),
+    }
+    const conversations = createConversationsMock()
+    const { service } = createService({ runner, conversations })
+    const input = createInput()
+    Object.assign(input.strategy as Record<string, unknown>, {
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+      snapshotId: 'snapshot-1',
+    })
+    Object.assign(input as unknown as Record<string, unknown>, {
+      requestedRangeInput: {
+        preset: 'CUSTOM',
+        startAt: '2026-03-01T00:00:00.000Z',
+        endAt: '2026-03-24T00:00:00.000Z',
+      },
+    })
+    input.allowPartial = false
+    input.conversationId = 'conv-1'
+
+    const created = await service.createJob(input, OWNER_USER_ID)
+    await flushMicrotasks()
+
+    expect(conversations.updateLastBacktestRef).toHaveBeenCalledTimes(1)
+    const payload = conversations.updateLastBacktestRef.mock.calls[0][0]
+    expect(payload).toEqual({
+      conversationId: 'conv-1',
+      userId: OWNER_USER_ID,
+      lastBacktestRef: {
+        jobId: created.id,
+        publishedSnapshotId: 'snapshot-1',
+        config: {
+          range: {
+            preset: 'CUSTOM',
+            startAt: '2026-03-01T00:00:00.000Z',
+            endAt: '2026-03-24T00:00:00.000Z',
+          },
+          execution: {
+            initialCash: 10000,
+            leverage: 2,
+            slippageBps: 5,
+            feeBps: 4,
+            priceSource: 'mid',
+            allowPartial: false,
+          },
+        },
+        summary: {
+          maxDrawdownPct: 8,
+          totalReturnPct: 12,
+          winRatePct: 60,
+          tradeCount: 5,
+          marketType: 'spot',
+        },
+        completedAt: expect.any(Date),
+      },
+    })
+    expect(payload.lastBacktestRef).not.toHaveProperty('equityCurve')
+    expect(payload.lastBacktestRef).not.toHaveProperty('trades')
+    expect(payload.lastBacktestRef).not.toHaveProperty('markers')
+    expect(payload.lastBacktestRef).not.toHaveProperty('bySymbol')
+    expect(payload.lastBacktestRef).not.toHaveProperty('result')
+  })
+
+  it('persists the exact backtest draft config used by a snapshot-bound run before waiting for result writeback', async () => {
+    const runner = {
+      run: jest.fn().mockResolvedValue({
+        summary: {
+          netProfit: 120,
+          netProfitPct: 12,
+          maxDrawdownPct: 8,
+          winRate: 0.6,
+          profitFactor: 1.8,
+          totalTrades: 5,
+        },
+        equityCurve: [],
+        trades: [],
+        markers: [],
+        bySymbol: [],
+      }),
+    }
+    const conversations = createConversationsMock()
+    const { service } = createService({ runner, conversations })
+    const input = createInput()
+    Object.assign(input.strategy as Record<string, unknown>, {
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+      snapshotId: 'snapshot-1',
+    })
+    Object.assign(input as unknown as Record<string, unknown>, {
+      requestedRangeInput: {
+        preset: '7D',
+      },
+    })
+    input.allowPartial = false
+    input.leverage = null
+    input.conversationId = 'conv-1'
+
+    await service.createJob(input, OWNER_USER_ID)
+
+    expect(conversations.updateBacktestDraftConfig).toHaveBeenCalledWith({
+      conversationId: 'conv-1',
+      userId: OWNER_USER_ID,
+      backtestDraftConfig: {
+        range: {
+          preset: '7D',
+        },
+        execution: {
+          initialCash: 10000,
+          leverage: null,
+          slippageBps: 5,
+          feeBps: 4,
+          priceSource: 'mid',
+          allowPartial: false,
+        },
+      },
+    })
+  })
+
+  it('does not write lastBacktestRef for successful runs that are not explicitly snapshot-bound', async () => {
+    const runner = {
+      run: jest.fn().mockResolvedValue({
+        summary: {
+          netProfit: 120,
+          netProfitPct: 12,
+          maxDrawdownPct: 8,
+          winRate: 0.6,
+          profitFactor: 1.8,
+          totalTrades: 5,
+        },
+        equityCurve: [],
+        trades: [],
+        markers: [],
+        bySymbol: [],
+      }),
+    }
+    const conversations = createConversationsMock()
+    const { service } = createService({ runner, conversations })
+    const input = createInput()
+    Object.assign(input.strategy as Record<string, unknown>, {
+      snapshotId: 'snapshot-1',
+    })
+    input.conversationId = 'conv-1'
+
+    await service.createJob(input, OWNER_USER_ID)
+    await flushMicrotasks()
+
+    expect(conversations.updateLastBacktestRef).not.toHaveBeenCalled()
+  })
+
+  it('does not write lastBacktestRef when the backtest fails', async () => {
+    const runner = {
+      run: jest.fn().mockRejectedValue(new Error('boom')),
+    }
+    const conversations = createConversationsMock()
+    const { service } = createService({ runner, conversations })
+    const input = createInput()
+    Object.assign(input.strategy as Record<string, unknown>, {
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+      snapshotId: 'snapshot-1',
+    })
+    input.conversationId = 'conv-1'
+
+    await service.createJob(input, OWNER_USER_ID)
+    await flushMicrotasks()
+
+    expect(conversations.updateLastBacktestRef).not.toHaveBeenCalled()
+  })
+
+  it('keeps a persisted job succeeded when conversation lastBacktestRef writeback fails', async () => {
+    const result = {
+      summary: {
+        netProfit: 120,
+        netProfitPct: 12,
+        maxDrawdownPct: 8,
+        winRate: 0.6,
+        profitFactor: 1.8,
+        totalTrades: 5,
+      },
+      equityCurve: [],
+      trades: [],
+      markers: [],
+      bySymbol: [],
+    }
+    const runner = {
+      run: jest.fn().mockResolvedValue(result),
+    }
+    const conversations = createConversationsMock()
+    conversations.updateLastBacktestRef.mockRejectedValue(new Error('writeback failed'))
+    const { service } = createService({ runner, conversations })
+    const input = createInput()
+    Object.assign(input.strategy as Record<string, unknown>, {
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+      snapshotId: 'snapshot-1',
+    })
+    input.conversationId = 'conv-1'
+
+    const created = await service.createJob(input, OWNER_USER_ID)
+    await flushMicrotasks()
+
+    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toEqual(
+      expect.objectContaining({
+        id: created.id,
+        status: 'succeeded',
+        resultSummary: expect.objectContaining(result.summary),
+      }),
+    )
+    await expect(service.getJobResult(created.id, OWNER_USER_ID)).resolves.toEqual(result)
+    expect(conversations.updateLastBacktestRef).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not write lastBacktestRef after a successful snapshot-bound fallback job', async () => {
+    const result = {
+      summary: {
+        netProfit: 120,
+        netProfitPct: 12,
+        maxDrawdownPct: 8,
+        winRate: 0.6,
+        profitFactor: 1.8,
+        totalTrades: 5,
+      },
+      equityCurve: [],
+      trades: [],
+      markers: [],
+      bySymbol: [],
+    }
+    const runner = {
+      run: jest.fn().mockResolvedValue(result),
+    }
+    const conversations = createConversationsMock()
+    const prisma = createPrismaMock()
+    prisma.backtestJob.create.mockRejectedValueOnce(Object.assign(
+      new Error('The table `public.backtest_jobs` does not exist in the current database.'),
+      { code: 'P2021' },
+    ))
+    const { service } = createService({ runner, conversations, prisma })
+    const input = createInput()
+    Object.assign(input.strategy as Record<string, unknown>, {
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+      snapshotId: 'snapshot-1',
+    })
+    input.conversationId = 'conv-1'
+
+    const created = await service.createJob(input, OWNER_USER_ID)
+    await flushMicrotasks()
+
+    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toEqual(
+      expect.objectContaining({
+        id: created.id,
+        status: 'succeeded',
+        resultSummary: expect.objectContaining(result.summary),
+      }),
+    )
+    await expect(service.getJobResult(created.id, OWNER_USER_ID)).resolves.toEqual(result)
+    expect(conversations.updateLastBacktestRef).not.toHaveBeenCalled()
+  })
+
+  it('keeps a fallback job succeeded without attempting lastBacktestRef writeback', async () => {
+    const result = {
+      summary: {
+        netProfit: 120,
+        netProfitPct: 12,
+        maxDrawdownPct: 8,
+        winRate: 0.6,
+        profitFactor: 1.8,
+        totalTrades: 5,
+      },
+      equityCurve: [],
+      trades: [],
+      markers: [],
+      bySymbol: [],
+    }
+    const runner = {
+      run: jest.fn().mockResolvedValue(result),
+    }
+    const conversations = createConversationsMock()
+    const prisma = createPrismaMock()
+    prisma.backtestJob.create.mockRejectedValueOnce(Object.assign(
+      new Error('The table `public.backtest_jobs` does not exist in the current database.'),
+      { code: 'P2021' },
+    ))
+    const { service } = createService({ runner, conversations, prisma })
+    const warnSpy = jest.spyOn((service as any).logger, 'warn')
+    const input = createInput()
+    Object.assign(input.strategy as Record<string, unknown>, {
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+      snapshotId: 'snapshot-1',
+    })
+    input.conversationId = 'conv-1'
+
+    const created = await service.createJob(input, OWNER_USER_ID)
+    await flushMicrotasks()
+
+    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toEqual(
+      expect.objectContaining({
+        id: created.id,
+        status: 'succeeded',
+        resultSummary: expect.objectContaining(result.summary),
+      }),
+    )
+    await expect(service.getJobResult(created.id, OWNER_USER_ID)).resolves.toEqual(result)
+    expect(conversations.updateLastBacktestRef).not.toHaveBeenCalled()
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('event=backtest_job_persistence_unavailable'),
+    )
+  })
+
   it('throws not found when prisma cannot find the job', async () => {
     const { service, marketData, prisma, availability } = createService()
 
@@ -657,7 +1068,13 @@ describe('backtestJobsService', () => {
       new Error('The table `public.backtest_jobs` does not exist in the current database.'),
       { code: 'P2021' },
     ))
-    const service = new BacktestJobsService(runner as never, marketData as never, availability as never, prisma as never)
+    const service = new BacktestJobsService(
+      runner as never,
+      marketData as never,
+      availability as never,
+      createConversationsMock() as never,
+      prisma as never,
+    )
 
     const created = await service.createJob(createInput(), OWNER_USER_ID)
     await flushMicrotasks()
@@ -676,5 +1093,232 @@ describe('backtestJobsService', () => {
     )
     expect(prisma.backtestJob.create).toHaveBeenCalledTimes(1)
     expect(prisma.backtestJob.update).not.toHaveBeenCalled()
+  })
+})
+
+describe('aiQuantConversationsRepository lastBacktestRef parsing', () => {
+  it('returns true only for active conversations owned by the given user', async () => {
+    const findMany = jest.fn().mockResolvedValue([{ id: 'conv-1' }])
+    const { repository } = createConversationRepository({ findMany })
+
+    await expect(repository.existsActiveConversationForUser('conv-1', OWNER_USER_ID)).resolves.toBe(true)
+    expect(findMany).toHaveBeenCalledWith({
+      where: {
+        id: 'conv-1',
+        userId: OWNER_USER_ID,
+        archivedAt: null,
+      },
+      select: { id: true },
+      take: 1,
+    })
+  })
+
+  it('returns false when the conversation is missing, archived, or owned by another user', async () => {
+    const findMany = jest.fn().mockResolvedValue([])
+    const { repository } = createConversationRepository({ findMany })
+
+    await expect(repository.existsActiveConversationForUser('conv-missing', OWNER_USER_ID)).resolves.toBe(false)
+  })
+
+  it('parses a valid JSON lastBacktestRef into a typed record with a Date', async () => {
+    const completedAt = '2026-04-23T05:00:00.000Z'
+    const { repository } = createConversationRepository({
+      findMany: jest.fn().mockResolvedValue([
+        {
+          id: 'conv-1',
+          userId: OWNER_USER_ID,
+          codegenSessionId: 'session-1',
+          title: 'Conversation',
+          archivedAt: null,
+          createdAt: new Date('2026-04-20T00:00:00.000Z'),
+          updatedAt: new Date('2026-04-21T00:00:00.000Z'),
+          lastBacktestRef: {
+            jobId: 'job-1',
+            publishedSnapshotId: 'snapshot-1',
+            config: {
+              range: {
+                preset: 'CUSTOM',
+                startAt: '2026-03-01T00:00:00.000Z',
+                endAt: '2026-03-24T00:00:00.000Z',
+              },
+              execution: {
+                initialCash: 10000,
+                leverage: 2,
+                slippageBps: 5,
+                feeBps: 4,
+                priceSource: 'mid',
+                allowPartial: false,
+              },
+            },
+            summary: {
+              maxDrawdownPct: 8,
+              totalReturnPct: 12,
+              winRatePct: 60,
+              tradeCount: 5,
+              openTradeCount: 1,
+              openPnl: 12.34,
+              marketType: 'spot',
+            },
+            completedAt,
+          },
+          messages: [],
+        },
+      ]),
+    })
+
+    const conversations = await repository.listByUser(OWNER_USER_ID)
+
+    expect(conversations).toHaveLength(1)
+    expect(conversations[0].lastBacktestRef).toEqual({
+      jobId: 'job-1',
+      publishedSnapshotId: 'snapshot-1',
+      config: {
+        range: {
+          preset: 'CUSTOM',
+          startAt: '2026-03-01T00:00:00.000Z',
+          endAt: '2026-03-24T00:00:00.000Z',
+        },
+        execution: {
+          initialCash: 10000,
+          leverage: 2,
+          slippageBps: 5,
+          feeBps: 4,
+          priceSource: 'mid',
+          allowPartial: false,
+        },
+      },
+      summary: {
+        maxDrawdownPct: 8,
+        totalReturnPct: 12,
+        winRatePct: 60,
+        tradeCount: 5,
+        openTradeCount: 1,
+        openPnl: 12.34,
+        marketType: 'spot',
+      },
+      completedAt: new Date(completedAt),
+    })
+    expect(conversations[0].lastBacktestRef?.completedAt).toBeInstanceOf(Date)
+  })
+
+  it('treats explicit JSON null optional fields as absent', async () => {
+    const completedAt = '2026-04-23T05:00:00.000Z'
+    const { repository } = createConversationRepository({
+      findMany: jest.fn().mockResolvedValue([
+        {
+          id: 'conv-1',
+          userId: OWNER_USER_ID,
+          codegenSessionId: 'session-1',
+          title: 'Conversation',
+          archivedAt: null,
+          createdAt: new Date('2026-04-20T00:00:00.000Z'),
+          updatedAt: new Date('2026-04-21T00:00:00.000Z'),
+          lastBacktestRef: {
+            jobId: 'job-1',
+            publishedSnapshotId: 'snapshot-1',
+            config: {
+              range: {
+                preset: 'CUSTOM',
+                startAt: '2026-03-01T00:00:00.000Z',
+                endAt: '2026-03-24T00:00:00.000Z',
+              },
+              execution: {
+                initialCash: 10000,
+                leverage: 2,
+                slippageBps: 5,
+                feeBps: 4,
+                priceSource: 'mid',
+                allowPartial: false,
+              },
+            },
+            summary: {
+              maxDrawdownPct: 8,
+              totalReturnPct: 12,
+              winRatePct: 60,
+              tradeCount: 5,
+              openTradeCount: null,
+              openPnl: null,
+              marketType: null,
+            },
+            completedAt,
+          },
+          messages: [],
+        },
+      ]),
+    })
+
+    const conversations = await repository.listByUser(OWNER_USER_ID)
+
+    expect(conversations[0].lastBacktestRef).toEqual({
+      jobId: 'job-1',
+      publishedSnapshotId: 'snapshot-1',
+      config: {
+        range: {
+          preset: 'CUSTOM',
+          startAt: '2026-03-01T00:00:00.000Z',
+          endAt: '2026-03-24T00:00:00.000Z',
+        },
+        execution: {
+          initialCash: 10000,
+          leverage: 2,
+          slippageBps: 5,
+          feeBps: 4,
+          priceSource: 'mid',
+          allowPartial: false,
+        },
+      },
+      summary: {
+        maxDrawdownPct: 8,
+        totalReturnPct: 12,
+        winRatePct: 60,
+        tradeCount: 5,
+      },
+      completedAt: new Date(completedAt),
+    })
+  })
+
+  it('returns null for malformed JSON lastBacktestRef payloads', async () => {
+    const { repository } = createConversationRepository({
+      findUnique: jest.fn().mockResolvedValue({
+        id: 'conv-1',
+        userId: OWNER_USER_ID,
+        codegenSessionId: 'session-1',
+        title: 'Conversation',
+        archivedAt: null,
+        createdAt: new Date('2026-04-20T00:00:00.000Z'),
+        updatedAt: new Date('2026-04-21T00:00:00.000Z'),
+        lastBacktestRef: {
+          jobId: 'job-1',
+          publishedSnapshotId: 'snapshot-1',
+          config: {
+            range: {
+              preset: 'CUSTOM',
+              startAt: '2026-03-01T00:00:00.000Z',
+              endAt: '2026-03-24T00:00:00.000Z',
+            },
+            execution: {
+              initialCash: 10000,
+              leverage: 2,
+              slippageBps: 5,
+              feeBps: 4,
+              priceSource: 'INVALID',
+              allowPartial: false,
+            },
+          },
+          summary: {
+            maxDrawdownPct: 'bad',
+            totalReturnPct: 12,
+            winRatePct: 60,
+            tradeCount: 5,
+          },
+          completedAt: 'not-a-date',
+        },
+        messages: [],
+      }),
+    })
+
+    const conversation = await repository.findByCodegenSessionId('session-1')
+
+    expect(conversation?.lastBacktestRef).toBeNull()
   })
 })
