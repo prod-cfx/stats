@@ -1094,7 +1094,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
           feeBps: 4,
           priceSource: 'mid',
         }),
-        allowPartial: false,
+        allowPartial: true,
       }),
     )
     expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain(
@@ -1530,7 +1530,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
           feeBps: 4,
           priceSource: 'mid',
         }),
-        allowPartial: false,
+        allowPartial: true,
       }),
     )
     expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain(
@@ -1665,7 +1665,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
           feeBps: 6,
           priceSource: 'mid',
         }),
-        allowPartial: false,
+        allowPartial: true,
       }),
     )
     expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain(
@@ -1800,7 +1800,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     )
   })
 
-  it('fails fast when allowPartial is present but invalid', async () => {
+  it('treats invalid allowPartial as enabled auto-crop and still submits the backtest', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
     seeded[0].paramValues = {
       ...seeded[0].paramValues,
@@ -1824,13 +1824,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       await Promise.resolve()
     })
 
-    expect(mockCreateBacktestJob).not.toHaveBeenCalled()
-    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain(
-      'aiQuant.messages.backtestPayloadInvalid',
-    )
-    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain(
-      'invalid_allow_partial',
-    )
+    expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
   })
 
   it('keeps exact default execution values when the conversation marked them as explicit', async () => {

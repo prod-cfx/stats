@@ -352,22 +352,10 @@ function resolveBacktestExecutionPriceSource(
 }
 
 function resolveBacktestAllowPartial(
-  value: unknown,
-  fallback: boolean,
+  _value: unknown,
+  _fallback: boolean,
 ): { value: boolean, valid: boolean } {
-  if (value === undefined || value === null) {
-    return { value: fallback, valid: false }
-  }
-  if (typeof value === 'boolean') {
-    return { value, valid: true }
-  }
-  if (value === 'true') {
-    return { value: true, valid: true }
-  }
-  if (value === 'false') {
-    return { value: false, valid: true }
-  }
-  return { value: fallback, valid: false }
+  return { value: true, valid: true }
 }
 
 export function resolveBacktestExecutionConfig(
@@ -714,7 +702,7 @@ function mergeSnapshotBoundParamValues(input: {
           backtestSlippageBps: snapshotBacktestConfigDefaults.slippageBps,
           backtestFeeBps: snapshotBacktestConfigDefaults.feeBps,
           backtestPriceSource: snapshotBacktestConfigDefaults.priceSource,
-          backtestAllowPartial: snapshotBacktestConfigDefaults.allowPartial,
+          backtestAllowPartial: true,
         }
       : null
 
@@ -756,7 +744,7 @@ export function applyBacktestDraftConfigToValues(input: {
     backtestSlippageBps: backtestDraftConfig.execution.slippageBps,
     backtestFeeBps: backtestDraftConfig.execution.feeBps,
     backtestPriceSource: backtestDraftConfig.execution.priceSource,
-    backtestAllowPartial: backtestDraftConfig.execution.allowPartial,
+    backtestAllowPartial: true,
   }
 }
 
@@ -1004,7 +992,7 @@ function normalizeLastBacktestExecutionConfig(
     slippageBps,
     feeBps,
     priceSource,
-    allowPartial,
+    allowPartial: true,
   }
 }
 
@@ -1036,7 +1024,7 @@ export function buildBacktestDraftConfigFromValues(
       slippageBps: execution.slippageBps,
       feeBps: execution.feeBps,
       priceSource: execution.priceSource,
-      allowPartial: execution.allowPartial,
+      allowPartial: true,
     },
   }
 }

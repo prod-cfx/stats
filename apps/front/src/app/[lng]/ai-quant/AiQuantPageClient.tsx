@@ -49,6 +49,7 @@ import {
 import {
   BACKTEST_EXECUTION_PARAM_KEY_SET,
   BACKTEST_RANGE_PARAM_KEY_SET,
+  applyBacktestDraftConfigToValues,
   CONVERSATIONS_STORAGE_KEY,
   buildApiConfigHref,
   buildBacktestDraftConfigFromValues,
@@ -1136,12 +1137,19 @@ export function AiQuantPageClient({
             onConfirmBacktestParams={(nextDraftValues) => {
               invalidateActiveConversationBacktestRecovery()
               updateActiveConversation(curr => {
-                const nextValues = { ...curr.paramValues, ...nextDraftValues }
+                const requestedValues = { ...curr.paramValues, ...nextDraftValues }
+                const normalizedDraftConfig = buildBacktestDraftConfigFromValues(requestedValues)
+                const nextValues = normalizedDraftConfig
+                  ? applyBacktestDraftConfigToValues({
+                      currentValues: requestedValues,
+                      backtestDraftConfig: normalizedDraftConfig,
+                    })
+                  : requestedValues
                 return {
                   ...curr,
                   paramValues: nextValues,
                   params: normalizeParamsFromValues(nextValues, curr.params),
-                  backtestDraftConfig: buildBacktestDraftConfigFromValues(nextValues),
+                  backtestDraftConfig: normalizedDraftConfig,
                   backtestResult: null,
                   backtestExecutionState: 'idle',
                   backtestExecutionConfigExplicit:
@@ -1152,6 +1160,7 @@ export function AiQuantPageClient({
               persistConversationBacktestDraft(activeConversation.id, {
                 ...activeConversation.paramValues,
                 ...nextDraftValues,
+                backtestAllowPartial: true,
               })
             }}
             onSend={onSend}
