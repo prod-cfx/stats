@@ -243,34 +243,40 @@ export class BacktestJobsService {
       })
 
       if (this.shouldWriteLastBacktestRef(input, job.conversationId, resolvedSummary.snapshotId)) {
-        await this.conversationsRepo.updateLastBacktestRef({
-          conversationId: job.conversationId,
-          userId: job.ownerUserId,
-          lastBacktestRef: {
-            jobId: id,
-            publishedSnapshotId: resolvedSummary.snapshotId,
-            summary: {
-              maxDrawdownPct: Number(result.summary.maxDrawdownPct.toFixed(2)),
-              totalReturnPct: Number(result.summary.netProfitPct.toFixed(2)),
-              winRatePct: Number(
-                (
-                  result.summary.winRate <= 1
-                    ? result.summary.winRate * 100
-                    : result.summary.winRate
-                ).toFixed(2),
-              ),
-              tradeCount: result.summary.totalTrades,
-              ...(typeof result.summary.totalOpenTrades === 'number'
-                ? { openTradeCount: result.summary.totalOpenTrades }
-                : {}),
-              ...(typeof result.summary.openPnl === 'number'
-                ? { openPnl: Number(result.summary.openPnl.toFixed(2)) }
-                : {}),
-              marketType: resolvedSummary.marketType,
+        try {
+          await this.conversationsRepo.updateLastBacktestRef({
+            conversationId: job.conversationId,
+            userId: job.ownerUserId,
+            lastBacktestRef: {
+              jobId: id,
+              publishedSnapshotId: resolvedSummary.snapshotId,
+              summary: {
+                maxDrawdownPct: Number(result.summary.maxDrawdownPct.toFixed(2)),
+                totalReturnPct: Number(result.summary.netProfitPct.toFixed(2)),
+                winRatePct: Number(
+                  (
+                    result.summary.winRate <= 1
+                      ? result.summary.winRate * 100
+                      : result.summary.winRate
+                  ).toFixed(2),
+                ),
+                tradeCount: result.summary.totalTrades,
+                ...(typeof result.summary.totalOpenTrades === 'number'
+                  ? { openTradeCount: result.summary.totalOpenTrades }
+                  : {}),
+                ...(typeof result.summary.openPnl === 'number'
+                  ? { openPnl: Number(result.summary.openPnl.toFixed(2)) }
+                  : {}),
+                marketType: resolvedSummary.marketType,
+              },
+              completedAt,
             },
-            completedAt,
-          },
-        })
+          })
+        } catch (error) {
+          this.logger.warn(
+            `event=backtest_last_backtest_ref_write_failed jobId=${id} conversationId=${job.conversationId} reason=${this.describeError(error)}`,
+          )
+        }
       }
     } catch (error) {
       await this.prisma.backtestJob.update({

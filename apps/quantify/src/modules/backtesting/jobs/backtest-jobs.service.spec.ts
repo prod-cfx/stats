@@ -796,6 +796,49 @@ describe('backtestJobsService', () => {
     expect(conversations.updateLastBacktestRef).not.toHaveBeenCalled()
   })
 
+  it('keeps a persisted job succeeded when conversation lastBacktestRef writeback fails', async () => {
+    const result = {
+      summary: {
+        netProfit: 120,
+        netProfitPct: 12,
+        maxDrawdownPct: 8,
+        winRate: 0.6,
+        profitFactor: 1.8,
+        totalTrades: 5,
+      },
+      equityCurve: [],
+      trades: [],
+      markers: [],
+      bySymbol: [],
+    }
+    const runner = {
+      run: jest.fn().mockResolvedValue(result),
+    }
+    const conversations = {
+      updateLastBacktestRef: jest.fn().mockRejectedValue(new Error('writeback failed')),
+    }
+    const { service } = createService({ runner, conversations })
+    const input = createInput()
+    Object.assign(input.strategy as Record<string, unknown>, {
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+      snapshotId: 'snapshot-1',
+    })
+    input.conversationId = 'conv-1'
+
+    const created = await service.createJob(input, OWNER_USER_ID)
+    await flushMicrotasks()
+
+    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toEqual(
+      expect.objectContaining({
+        id: created.id,
+        status: 'succeeded',
+        resultSummary: expect.objectContaining(result.summary),
+      }),
+    )
+    await expect(service.getJobResult(created.id, OWNER_USER_ID)).resolves.toEqual(result)
+    expect(conversations.updateLastBacktestRef).toHaveBeenCalledTimes(1)
+  })
+
   it('throws not found when prisma cannot find the job', async () => {
     const { service, marketData, prisma, availability } = createService()
 
