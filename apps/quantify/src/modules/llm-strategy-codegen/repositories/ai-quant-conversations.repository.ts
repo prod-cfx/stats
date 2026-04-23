@@ -204,11 +204,122 @@ export class AiQuantConversationsRepository {
   }): AiQuantConversationSnapshotRecord {
     return {
       ...conversation,
-      lastBacktestRef: conversation.lastBacktestRef as unknown as AiQuantConversationLastBacktestRefRecord | null,
+      lastBacktestRef: this.parseLastBacktestRef(conversation.lastBacktestRef),
       messages: conversation.messages.map(message => ({
         role: message.role,
         content: message.content,
       })),
     }
+  }
+
+  private parseLastBacktestRef(
+    value: Prisma.JsonValue | null,
+  ): AiQuantConversationLastBacktestRefRecord | null {
+    if (!this.isJsonObject(value)) {
+      return null
+    }
+
+    const jobId = this.readNonEmptyString(value.jobId)
+    const publishedSnapshotId = this.readNonEmptyString(value.publishedSnapshotId)
+    const summary = this.parseLastBacktestSummary(value.summary)
+    const completedAt = this.parseDate(value.completedAt)
+
+    if (!jobId || !publishedSnapshotId || !summary || !completedAt) {
+      return null
+    }
+
+    return {
+      jobId,
+      publishedSnapshotId,
+      summary,
+      completedAt,
+    }
+  }
+
+  private parseLastBacktestSummary(
+    value: Prisma.JsonValue | null | undefined,
+  ): AiQuantConversationLastBacktestRefRecord['summary'] | null {
+    if (!this.isJsonObject(value)) {
+      return null
+    }
+
+    const maxDrawdownPct = this.readFiniteNumber(value.maxDrawdownPct)
+    const totalReturnPct = this.readFiniteNumber(value.totalReturnPct)
+    const winRatePct = this.readFiniteNumber(value.winRatePct)
+    const tradeCount = this.readFiniteNumber(value.tradeCount)
+
+    if (
+      maxDrawdownPct === null
+      || totalReturnPct === null
+      || winRatePct === null
+      || tradeCount === null
+    ) {
+      return null
+    }
+
+    const openTradeCount = this.readOptionalFiniteNumber(value.openTradeCount)
+    const openPnl = this.readOptionalFiniteNumber(value.openPnl)
+    const marketType = this.parseMarketType(value.marketType)
+
+    if (
+      (value.openTradeCount !== undefined && openTradeCount === null)
+      || (value.openPnl !== undefined && openPnl === null)
+      || (value.marketType !== undefined && marketType === null)
+    ) {
+      return null
+    }
+
+    return {
+      maxDrawdownPct,
+      totalReturnPct,
+      winRatePct,
+      tradeCount,
+      ...(openTradeCount !== undefined ? { openTradeCount } : {}),
+      ...(openPnl !== undefined ? { openPnl } : {}),
+      ...(marketType ? { marketType } : {}),
+    }
+  }
+
+  private parseMarketType(
+    value: Prisma.JsonValue | null | undefined,
+  ): 'spot' | 'perp' | null | undefined {
+    if (value === undefined) {
+      return undefined
+    }
+    return value === 'spot' || value === 'perp' ? value : null
+  }
+
+  private parseDate(value: Prisma.JsonValue | null | undefined): Date | null {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return value
+    }
+    if (typeof value !== 'string' || !value.trim()) {
+      return null
+    }
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? null : date
+  }
+
+  private readOptionalFiniteNumber(value: Prisma.JsonValue | null | undefined): number | null | undefined {
+    if (value === undefined) {
+      return undefined
+    }
+    return this.readFiniteNumber(value)
+  }
+
+  private readFiniteNumber(value: Prisma.JsonValue | null | undefined): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+
+  private readNonEmptyString(value: Prisma.JsonValue | null | undefined): string | null {
+    if (typeof value !== 'string') {
+      return null
+    }
+    const normalized = value.trim()
+    return normalized.length > 0 ? normalized : null
+  }
+
+  private isJsonObject(value: Prisma.JsonValue | null | undefined): value is Prisma.JsonObject {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
   }
 }

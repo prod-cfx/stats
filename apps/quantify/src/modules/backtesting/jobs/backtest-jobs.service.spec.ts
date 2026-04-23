@@ -2,6 +2,7 @@ import type { BacktestRunInput } from '../types/backtesting.types'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { AiQuantConversationsRepository } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
 import { BacktestJobsService } from './backtest-jobs.service'
 
 const OWNER_USER_ID = 'user-1'
@@ -133,6 +134,34 @@ function createAvailabilityMock(
 function createConversationsMock() {
   return {
     updateLastBacktestRef: jest.fn().mockResolvedValue(undefined),
+  }
+}
+
+function createConversationRepository(overrides?: {
+  findMany?: jest.Mock
+  findUnique?: jest.Mock
+  findUniqueOrThrow?: jest.Mock
+}) {
+  const txHost = {
+    tx: {
+      aiQuantConversation: {
+        findMany: overrides?.findMany ?? jest.fn(),
+        findUnique: overrides?.findUnique ?? jest.fn(),
+        findUniqueOrThrow: overrides?.findUniqueOrThrow ?? jest.fn(),
+        updateMany: jest.fn(),
+        upsert: jest.fn(),
+      },
+      aiQuantConversationMessage: {
+        deleteMany: jest.fn(),
+        createMany: jest.fn(),
+      },
+    },
+    withTransaction: jest.fn(),
+  }
+
+  return {
+    txHost,
+    repository: new AiQuantConversationsRepository(txHost as never),
   }
 }
 
@@ -775,5 +804,88 @@ describe('backtestJobsService', () => {
     )
     expect(prisma.backtestJob.create).toHaveBeenCalledTimes(1)
     expect(prisma.backtestJob.update).not.toHaveBeenCalled()
+  })
+})
+
+describe('aiQuantConversationsRepository lastBacktestRef parsing', () => {
+  it('parses a valid JSON lastBacktestRef into a typed record with a Date', async () => {
+    const completedAt = '2026-04-23T05:00:00.000Z'
+    const { repository } = createConversationRepository({
+      findMany: jest.fn().mockResolvedValue([
+        {
+          id: 'conv-1',
+          userId: OWNER_USER_ID,
+          codegenSessionId: 'session-1',
+          title: 'Conversation',
+          archivedAt: null,
+          createdAt: new Date('2026-04-20T00:00:00.000Z'),
+          updatedAt: new Date('2026-04-21T00:00:00.000Z'),
+          lastBacktestRef: {
+            jobId: 'job-1',
+            publishedSnapshotId: 'snapshot-1',
+            summary: {
+              maxDrawdownPct: 8,
+              totalReturnPct: 12,
+              winRatePct: 60,
+              tradeCount: 5,
+              openTradeCount: 1,
+              openPnl: 12.34,
+              marketType: 'spot',
+            },
+            completedAt,
+          },
+          messages: [],
+        },
+      ]),
+    })
+
+    const conversations = await repository.listByUser(OWNER_USER_ID)
+
+    expect(conversations).toHaveLength(1)
+    expect(conversations[0].lastBacktestRef).toEqual({
+      jobId: 'job-1',
+      publishedSnapshotId: 'snapshot-1',
+      summary: {
+        maxDrawdownPct: 8,
+        totalReturnPct: 12,
+        winRatePct: 60,
+        tradeCount: 5,
+        openTradeCount: 1,
+        openPnl: 12.34,
+        marketType: 'spot',
+      },
+      completedAt: new Date(completedAt),
+    })
+    expect(conversations[0].lastBacktestRef?.completedAt).toBeInstanceOf(Date)
+  })
+
+  it('returns null for malformed JSON lastBacktestRef payloads', async () => {
+    const { repository } = createConversationRepository({
+      findUnique: jest.fn().mockResolvedValue({
+        id: 'conv-1',
+        userId: OWNER_USER_ID,
+        codegenSessionId: 'session-1',
+        title: 'Conversation',
+        archivedAt: null,
+        createdAt: new Date('2026-04-20T00:00:00.000Z'),
+        updatedAt: new Date('2026-04-21T00:00:00.000Z'),
+        lastBacktestRef: {
+          jobId: 'job-1',
+          publishedSnapshotId: 'snapshot-1',
+          summary: {
+            maxDrawdownPct: 'bad',
+            totalReturnPct: 12,
+            winRatePct: 60,
+            tradeCount: 5,
+          },
+          completedAt: 'not-a-date',
+        },
+        messages: [],
+      }),
+    })
+
+    const conversation = await repository.findByCodegenSessionId('session-1')
+
+    expect(conversation?.lastBacktestRef).toBeNull()
   })
 })
