@@ -71,7 +71,7 @@ export class SemanticAtomInvariantService {
     return triggers.flatMap((trigger) => {
       return this.expectedActions(trigger).map((action) => {
         const bucket = triggersByBucket.get(this.bucketKey(trigger.phase, action)) ?? [trigger]
-        return this.validatePricePercentChangeTrigger(trigger, action, bucket, input)
+        return this.validatePricePercentChangeTrigger(trigger, action, bucket, input, this.readLockedContextTimeframe(input.semanticState))
       })
     })
   }
@@ -94,9 +94,10 @@ export class SemanticAtomInvariantService {
       ir: CanonicalStrategyIrV1
       ast: StrategyAstV1
     },
+    contextTimeframe: string | null,
   ): StrategyConsistencyCheck {
-    const expected = this.buildExpectedSnapshot(trigger, expectedAction)
-    const expectedBucket = bucketTriggers.map(bucketTrigger => this.buildExpectedSnapshot(bucketTrigger, expectedAction))
+    const expected = this.buildExpectedSnapshot(trigger, expectedAction, contextTimeframe)
+    const expectedBucket = bucketTriggers.map(bucketTrigger => this.buildExpectedSnapshot(bucketTrigger, expectedAction, contextTimeframe))
     const canonical = this.buildLayerSnapshot(
       this.findCanonicalPredicates(input.canonicalSpec, trigger.phase, expectedAction),
       expected,
@@ -139,7 +140,11 @@ export class SemanticAtomInvariantService {
     }
   }
 
-  private buildExpectedSnapshot(trigger: SemanticTriggerState, action: PositionAction): ExpectedSnapshot {
+  private buildExpectedSnapshot(
+    trigger: SemanticTriggerState,
+    action: PositionAction,
+    contextTimeframe: string | null,
+  ): ExpectedSnapshot {
     const direction = this.resolveDirection(trigger)
     const valuePct = this.readPositiveNumber(trigger.params.valuePct)
     const constValue = direction === 'down'
@@ -151,7 +156,7 @@ export class SemanticAtomInvariantService {
       action,
       predicateKind: direction === 'down' ? 'LTE' : 'GTE',
       constValue,
-      timeframe: this.readString(trigger.params.window),
+      timeframe: this.readString(trigger.params.window) ?? contextTimeframe,
       lookbackBars: this.readPositiveInteger(trigger.params.lookbackBars) ?? 1,
     }
   }
@@ -461,5 +466,11 @@ export class SemanticAtomInvariantService {
 
   private readString(value: unknown): string | null {
     return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
+  }
+
+  private readLockedContextTimeframe(semanticState: SemanticState): string | null {
+    const timeframe = semanticState.contextSlots.timeframe
+    if (!timeframe || timeframe.status !== 'locked') return null
+    return this.readString(timeframe.value)
   }
 }

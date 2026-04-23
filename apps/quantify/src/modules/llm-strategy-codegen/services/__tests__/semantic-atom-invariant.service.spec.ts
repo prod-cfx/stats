@@ -81,6 +81,25 @@ describe('SemanticAtomInvariantService', () => {
     }
   }
 
+  function buildSemanticStateWithoutTriggerWindow(): SemanticState {
+    const state = buildSemanticState()
+    return {
+      ...state,
+      triggers: state.triggers.map(trigger =>
+        trigger.key === 'price.percent_change'
+          ? {
+              ...trigger,
+              params: {
+                direction: 'up',
+                valuePct: 1,
+                basis: 'prev_close',
+              },
+            }
+          : trigger,
+      ),
+    }
+  }
+
   function buildBothSideExitSemanticState(): SemanticState {
     const state = buildSemanticState()
     return {
@@ -495,6 +514,36 @@ describe('SemanticAtomInvariantService', () => {
 
   it('fails when canonicalSpec uses the wrong timeframe even if direction and threshold match', () => {
     const state = buildSemanticState()
+    const { canonicalSpec, ir, ast } = compile(state)
+
+    const checks = service.validate({ semanticState: state, canonicalSpec: driftCanonicalTimeframe(canonicalSpec), ir, ast })
+
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_atom.price_percent_change',
+        status: 'failed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
+  it('uses locked semantic context timeframe when the trigger omits window', () => {
+    const state = buildSemanticStateWithoutTriggerWindow()
+    const { canonicalSpec, ir, ast } = compile(state)
+
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_atom.price_percent_change',
+        status: 'passed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
+  it('fails timeframe drift when trigger omits window but semantic context is locked', () => {
+    const state = buildSemanticStateWithoutTriggerWindow()
     const { canonicalSpec, ir, ast } = compile(state)
 
     const checks = service.validate({ semanticState: state, canonicalSpec: driftCanonicalTimeframe(canonicalSpec), ir, ast })
