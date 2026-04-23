@@ -409,7 +409,10 @@ export class CanonicalSpecV2IrCompilerService {
             timeframe,
           })
         }
-        const thresholdRef = this.ensureConstSeries(context, this.readNumber([atom.value], 0))
+        const thresholdRef = this.ensureConstSeries(
+          context,
+          this.normalizePositionPnlPctThreshold(this.readNumber([atom.value], 0)),
+        )
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_${atom.key.replace(/\./g, '_')}`,
@@ -513,7 +516,10 @@ export class CanonicalSpecV2IrCompilerService {
             kind: 'POSITION_PNL_PCT',
           })
         }
-        const thresholdRef = this.ensureConstSeries(context, this.readNumber([atom.value], 0))
+        const thresholdRef = this.ensureConstSeries(
+          context,
+          this.normalizePositionPnlPctThreshold(this.readNumber([atom.value], 0)),
+        )
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_${atom.key.replace(/\./g, '_')}`,
@@ -574,7 +580,10 @@ export class CanonicalSpecV2IrCompilerService {
             kind: 'POSITION_PNL_PCT',
           })
         }
-        const thresholdRef = this.ensureConstSeries(context, this.readNumber([atom.value], 0))
+        const thresholdRef = this.ensureConstSeries(
+          context,
+          this.normalizePositionPnlPctThreshold(this.readNumber([atom.value], 0)),
+        )
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_position_loss_pct`,
@@ -1152,5 +1161,10 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     return fallback
+  }
+
+  private normalizePositionPnlPctThreshold(value: number): number {
+    if (!Number.isFinite(value)) return value
+    return Math.abs(value) <= 1 ? value * 100 : value
   }
 }

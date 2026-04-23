@@ -1,4 +1,24 @@
+import type { CanonicalStrategyIrV1, PredicateDef, SeriesDef } from '../../types/canonical-strategy-ir'
+import type { CanonicalStrategySpecV2 } from '../../types/canonical-strategy-spec-v2'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
+
+function findSeries(
+  series: CanonicalStrategyIrV1['signalCatalog']['series'],
+  matcher: (item: SeriesDef) => boolean,
+): SeriesDef {
+  const found = series.find(matcher)
+  expect(found).toBeDefined()
+  return found as SeriesDef
+}
+
+function findPredicate(
+  predicates: CanonicalStrategyIrV1['signalCatalog']['predicates'],
+  matcher: (item: PredicateDef) => boolean,
+): PredicateDef {
+  const found = predicates.find(matcher)
+  expect(found).toBeDefined()
+  return found as PredicateDef
+}
 
 describe('canonicalSpecV2IrCompilerService', () => {
   it('compiles canonical spec v2 into deterministic graphSnapshot and IR without reading UI state', () => {
@@ -132,8 +152,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
   it('compiles multi-timeframe canonical specs into ordered IR market timeframes', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 
-    const result = compiler.compile({
-      canonicalSpec: {
+    const canonicalSpec = {
         version: 2,
         market: {
           exchange: 'okx',
@@ -182,7 +201,10 @@ describe('canonicalSpecV2IrCompilerService', () => {
             actions: [{ type: 'CLOSE_LONG' }],
           },
         ],
-      } as any,
+      } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
       fallback: {
         exchange: 'okx',
         symbol: 'BTCUSDT',
@@ -194,11 +216,250 @@ describe('canonicalSpecV2IrCompilerService', () => {
     expect(result.ir.market.timeframes).toEqual(['3m', '15m'])
   })
 
+  it('normalizes position_gain_pct thresholds to runtime percent units', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const canonicalSpec = {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '1h',
+        },
+        indicators: [],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['1h'],
+        },
+        rules: [
+          {
+            id: 'entry-position-gain',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 100,
+            condition: {
+              kind: 'atom',
+              key: 'position_gain_pct',
+              semanticScope: 'position',
+              op: 'GTE',
+              value: 0.1,
+              params: { timeframe: '1h', basis: 'entry_avg_price' },
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+    })
+
+    const pnlSeries = findSeries(result.ir.signalCatalog.series, series =>
+      series.kind === 'POSITION_PNL_PCT' && series.timeframe === '1h')
+    const thresholdSeries = findSeries(result.ir.signalCatalog.series, series =>
+      series.kind === 'CONST' && series.value === 10)
+    const predicate = findPredicate(result.ir.signalCatalog.predicates, item =>
+      item.kind === 'GTE' && item.args.includes(pnlSeries.id) && item.args.includes(thresholdSeries.id))
+
+    expect(pnlSeries).toEqual(expect.objectContaining({ kind: 'POSITION_PNL_PCT', timeframe: '1h' }))
+    expect(thresholdSeries).toEqual(expect.objectContaining({ kind: 'CONST', value: 10 }))
+    expect(predicate.args).toEqual([pnlSeries.id, thresholdSeries.id])
+  })
+
+  it('normalizes risk.take_profit_pct thresholds to runtime percent units', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const canonicalSpec = {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '1h',
+        },
+        indicators: [],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['1h'],
+        },
+        rules: [
+          {
+            id: 'entry-take-profit',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 100,
+            condition: {
+              kind: 'atom',
+              key: 'risk.take_profit_pct',
+              semanticScope: 'position',
+              op: 'GTE',
+              value: 0.1,
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+    })
+
+    const pnlSeries = findSeries(result.ir.signalCatalog.series, series => series.kind === 'POSITION_PNL_PCT')
+    const thresholdSeries = findSeries(result.ir.signalCatalog.series, series =>
+      series.kind === 'CONST' && series.value === 10)
+    const predicate = findPredicate(result.ir.signalCatalog.predicates, item =>
+      item.kind === 'GTE' && item.args.includes(pnlSeries.id) && item.args.includes(thresholdSeries.id))
+
+    expect(pnlSeries).toEqual(expect.objectContaining({ kind: 'POSITION_PNL_PCT' }))
+    expect(thresholdSeries).toEqual(expect.objectContaining({ kind: 'CONST', value: 10 }))
+    expect(predicate.args).toEqual([pnlSeries.id, thresholdSeries.id])
+  })
+
+  it('normalizes position_loss_pct thresholds to runtime percent units', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const canonicalSpec = {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '1h',
+        },
+        indicators: [],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['1h'],
+        },
+        rules: [
+          {
+            id: 'entry-stop-loss',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 100,
+            condition: {
+              kind: 'atom',
+              key: 'position_loss_pct',
+              semanticScope: 'position',
+              op: 'GTE',
+              value: 0.05,
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+    })
+
+    const pnlSeries = findSeries(result.ir.signalCatalog.series, series => series.kind === 'POSITION_PNL_PCT')
+    const thresholdSeries = findSeries(result.ir.signalCatalog.series, series =>
+      series.kind === 'CONST' && series.value === 5)
+    const predicate = findPredicate(result.ir.signalCatalog.predicates, item =>
+      item.kind === 'GTE' && item.args.includes(pnlSeries.id) && item.args.includes(thresholdSeries.id))
+
+    expect(pnlSeries).toEqual(expect.objectContaining({ kind: 'POSITION_PNL_PCT' }))
+    expect(thresholdSeries).toEqual(expect.objectContaining({ kind: 'CONST', value: 5 }))
+    expect(predicate.args).toEqual([pnlSeries.id, thresholdSeries.id])
+  })
+
+  it('keeps price.change_pct thresholds in ratio units', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const canonicalSpec = {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          timeframe: '1h',
+        },
+        indicators: [],
+        sizing: { mode: 'RATIO', value: 0.1 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['1h'],
+        },
+        rules: [
+          {
+            id: 'entry-price-change',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 100,
+            condition: {
+              kind: 'atom',
+              key: 'price.change_pct',
+              semanticScope: 'market',
+              op: 'GTE',
+              value: 0.01,
+              params: { timeframe: '1h', lookbackBars: 1 },
+            },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '1h',
+        positionPct: 10,
+      },
+    })
+
+    const priceChangeSeries = findSeries(result.ir.signalCatalog.series, series =>
+      series.kind === 'PRICE_CHANGE_PCT' && series.timeframe === '1h')
+    const thresholdSeries = findSeries(result.ir.signalCatalog.series, series =>
+      series.kind === 'CONST' && series.value === 0.01)
+    const predicate = findPredicate(result.ir.signalCatalog.predicates, item =>
+      item.kind === 'GTE' && item.args.includes(priceChangeSeries.id) && item.args.includes(thresholdSeries.id))
+
+    expect(priceChangeSeries).toEqual(expect.objectContaining({ kind: 'PRICE_CHANGE_PCT', timeframe: '1h' }))
+    expect(thresholdSeries).toEqual(expect.objectContaining({ kind: 'CONST', value: 0.01 }))
+    expect(predicate.args).toEqual([priceChangeSeries.id, thresholdSeries.id])
+  })
+
   it('compiles generic execution-on-start entry rules into deterministic runtime predicates', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 
-    const result = compiler.compile({
-      canonicalSpec: {
+    const canonicalSpec = {
         version: 2,
         market: {
           exchange: 'okx',
@@ -244,7 +505,10 @@ describe('canonicalSpecV2IrCompilerService', () => {
             actions: [{ type: 'CLOSE_LONG' }],
           },
         ],
-      } as any,
+      } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
       fallback: {
         exchange: 'okx',
         symbol: 'ORDIUSDT',
@@ -774,8 +1038,7 @@ describe('canonicalSpecV2IrCompilerService', () => {
   it('compiles state-gated canonical rules into deterministic IR predicates', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 
-    const result = compiler.compile({
-      canonicalSpec: {
+    const canonicalSpec = {
         version: 2,
         market: {
           exchange: 'okx',
@@ -828,7 +1091,10 @@ describe('canonicalSpecV2IrCompilerService', () => {
             },
           },
         ],
-      } as any,
+      } satisfies CanonicalStrategySpecV2
+
+    const result = compiler.compile({
+      canonicalSpec,
       fallback: {
         exchange: 'okx',
         symbol: 'BTCUSDT',
