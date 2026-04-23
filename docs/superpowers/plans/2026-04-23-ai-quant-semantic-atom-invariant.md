@@ -97,7 +97,7 @@ Append this test near the existing percent-change extraction tests:
 Run:
 
 ```bash
-dx test unit quantify --testPathPattern=semantic-seed-extractor.service.spec.ts --runInBand
+dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-seed-extractor.service.spec.ts
 ```
 
 Expected: the new test fails because the percent-change trigger is extracted as `valuePct: -1` or lacks `direction: 'up'`.
@@ -206,7 +206,7 @@ Add this method next to `hasExplicitPriceChangeDirection`:
 Run:
 
 ```bash
-dx test unit quantify --testPathPattern=semantic-seed-extractor.service.spec.ts --runInBand
+dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-seed-extractor.service.spec.ts
 ```
 
 Expected: all tests in `semantic-seed-extractor.service.spec.ts` pass, including the new ORDIUSDT case.
@@ -358,7 +358,7 @@ describe('SemanticAtomInvariantService', () => {
 Run:
 
 ```bash
-dx test unit quantify --testPathPattern=semantic-atom-invariant.service.spec.ts --runInBand
+dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-atom-invariant.service.spec.ts
 ```
 
 Expected: FAIL with module not found for `semantic-atom-invariant.service`.
@@ -506,7 +506,7 @@ export class SemanticAtomInvariantService {
 Run:
 
 ```bash
-dx test unit quantify --testPathPattern=semantic-atom-invariant.service.spec.ts --runInBand
+dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-atom-invariant.service.spec.ts
 ```
 
 Expected: PASS.
@@ -597,7 +597,7 @@ Append this test to `codegen-publication-generation.stage.spec.ts`:
 Run:
 
 ```bash
-dx test unit quantify --testPathPattern=codegen-publication-generation.stage.spec.ts --runInBand
+dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-publication-generation.stage.spec.ts
 ```
 
 Expected: the new test fails because no semantic atom invariant gate runs yet.
@@ -657,7 +657,7 @@ In the `sessionSpecDesc` object, add:
 Run:
 
 ```bash
-dx test unit quantify --testPathPattern=codegen-publication-generation.stage.spec.ts --runInBand
+dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-publication-generation.stage.spec.ts
 ```
 
 Expected: PASS, including existing Bollinger, MA, and grid tests.
@@ -760,7 +760,7 @@ Append this test:
 Run:
 
 ```bash
-dx test unit quantify --testPathPattern=codegen-publication-generation.stage.spec.ts --runInBand
+dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-publication-generation.stage.spec.ts
 ```
 
 Expected: PASS.
@@ -786,9 +786,9 @@ MSG
 Run:
 
 ```bash
-dx test unit quantify --testPathPattern=semantic-seed-extractor.service.spec.ts --runInBand
-dx test unit quantify --testPathPattern=semantic-atom-invariant.service.spec.ts --runInBand
-dx test unit quantify --testPathPattern=codegen-publication-generation.stage.spec.ts --runInBand
+dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-seed-extractor.service.spec.ts
+dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/semantic-atom-invariant.service.spec.ts
+dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/codegen-publication-generation.stage.spec.ts
 ```
 
 Expected: all three commands PASS.
@@ -798,8 +798,8 @@ Expected: all three commands PASS.
 Run:
 
 ```bash
-dx test unit quantify --testPathPattern=strategy-consistency.service.spec.ts --runInBand
-dx test unit quantify --testPathPattern=canonical-spec-v2-ir-compiler.service.spec.ts --runInBand
+dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/strategy-consistency.service.spec.ts
+dx test unit quantify apps/quantify/src/modules/llm-strategy-codegen/services/__tests__/canonical-spec-v2-ir-compiler.service.spec.ts
 ```
 
 Expected: both commands PASS. These cover already-working Bollinger, MA, grid, and compiled artifact projection behavior.
