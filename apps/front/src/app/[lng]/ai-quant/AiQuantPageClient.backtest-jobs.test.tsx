@@ -943,6 +943,130 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('deployable')
   })
 
+  it('allows rerunning backtest immediately after server-owned recovery by backfilling snapshot execution defaults', async () => {
+    const listAiQuantConversations = jest.requireMock('@/lib/api')
+      .listAiQuantConversations as jest.Mock
+    localStorage.clear()
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'conv-1',
+        conversationTitle: 'server conv',
+        conversationMessages: [],
+        status: 'PUBLISHED',
+        scriptCode: 'return { ok: true }',
+        publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotParamValues: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
+        publishedSnapshotStrategyConfig: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
+        specDesc: {
+          market: {
+            symbols: ['BTCUSDT'],
+            timeframes: ['15m'],
+          },
+          rules: [],
+        },
+        publishedSnapshotBacktestConfigDefaults: {
+          initialCash: 25000,
+          leverage: 1,
+          slippageBps: 12,
+          feeBps: 4,
+          priceSource: 'mid',
+          allowPartial: false,
+        },
+        lastBacktestRef: {
+          jobId: 'btjob-1',
+          publishedSnapshotId: 'snapshot-1',
+          config: {
+            range: {
+              preset: '30D',
+            },
+            execution: {
+              initialCash: 25000,
+              leverage: 1,
+              slippageBps: 12,
+              feeBps: 4,
+              priceSource: 'mid',
+              allowPartial: false,
+            },
+          },
+          summary: {
+            maxDrawdownPct: 8,
+            totalReturnPct: 12,
+            winRatePct: 60,
+            tradeCount: 5,
+            marketType: 'spot',
+          },
+          completedAt: '2026-04-23T00:04:00.000Z',
+        },
+      },
+    ])
+
+    mockBuildBacktestPayload.mockImplementation((input: any) => {
+      if (
+        !Number.isFinite(input.initialCash) ||
+        !Number.isFinite(input.leverage) ||
+        !Number.isFinite(input.execution?.slippageBps) ||
+        !Number.isFinite(input.execution?.feeBps) ||
+        (input.execution?.priceSource !== 'open' &&
+          input.execution?.priceSource !== 'close' &&
+          input.execution?.priceSource !== 'mid')
+      ) {
+        const error = new Error('invalid_execution_config')
+        ;(error as Error & { __builderError: boolean; code: string }).__builderError = true
+        ;(error as Error & { __builderError: boolean; code: string }).code =
+          'invalid_execution_config'
+        throw error
+      }
+      return {
+        ...defaultPayload(),
+        initialCash: input.initialCash,
+        leverage: input.leverage,
+        execution: { ...input.execution },
+        allowPartial: input.allowPartial,
+      }
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient serverOwnedConversations />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialCash: 25000,
+        leverage: 1,
+        execution: expect.objectContaining({
+          slippageBps: 12,
+          feeBps: 4,
+          priceSource: 'mid',
+        }),
+        allowPartial: false,
+      }),
+    )
+    expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain(
+      'invalid_execution_config',
+    )
+  })
+
   it('does not restore server-owned lastBacktestRef when execution config changed under the same snapshot', async () => {
     const listAiQuantConversations = jest.requireMock('@/lib/api')
       .listAiQuantConversations as jest.Mock

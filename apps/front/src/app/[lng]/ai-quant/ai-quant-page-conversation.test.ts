@@ -213,7 +213,13 @@ describe('ai-quant-page-conversation', () => {
       status: 'PUBLISHED',
       conversationMessages: [],
       publishedSnapshotId: 'snapshot-1',
-      publishedSnapshotParamValues: null,
+      publishedSnapshotParamValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
       publishedSnapshotStrategyConfig: {
         exchange: 'binance',
         symbol: 'BTCUSDT',
@@ -263,6 +269,14 @@ describe('ai-quant-page-conversation', () => {
       winRatePct: 60,
       tradeCount: 5,
       marketType: 'spot',
+    }))
+    expect(conversation.paramValues).toEqual(expect.objectContaining({
+      backtestInitialCash: 10000,
+      backtestLeverage: 1,
+      backtestSlippageBps: 10,
+      backtestFeeBps: 5,
+      backtestPriceSource: 'close',
+      backtestAllowPartial: true,
     }))
   })
 

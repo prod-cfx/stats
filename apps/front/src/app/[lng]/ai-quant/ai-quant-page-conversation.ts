@@ -696,12 +696,27 @@ export function resolveEffectivePublishedBacktestInputs(input: {
 function mergeSnapshotBoundParamValues(input: {
   currentValues: Record<string, unknown>
   snapshotParamValues: Record<string, unknown> | null
+  snapshotBacktestConfigDefaults?: AccountAiQuantBacktestConfigDefaults | null
 }): {
   paramValues: Record<string, unknown>
   explicit: boolean
 } {
-  const { currentValues, snapshotParamValues } = input
-  if (!snapshotParamValues) {
+  const { currentValues, snapshotParamValues, snapshotBacktestConfigDefaults } = input
+  const snapshotBacktestExecutionParamValues =
+    snapshotBacktestConfigDefaults
+      ? {
+          backtestInitialCash: snapshotBacktestConfigDefaults.initialCash,
+          ...(typeof snapshotBacktestConfigDefaults.leverage === 'number'
+            ? { backtestLeverage: snapshotBacktestConfigDefaults.leverage }
+            : {}),
+          backtestSlippageBps: snapshotBacktestConfigDefaults.slippageBps,
+          backtestFeeBps: snapshotBacktestConfigDefaults.feeBps,
+          backtestPriceSource: snapshotBacktestConfigDefaults.priceSource,
+          backtestAllowPartial: snapshotBacktestConfigDefaults.allowPartial,
+        }
+      : null
+
+  if (!snapshotParamValues && !snapshotBacktestExecutionParamValues) {
     return {
       paramValues: currentValues,
       explicit: hasExplicitBacktestExecutionOverrides(currentValues),
@@ -710,7 +725,8 @@ function mergeSnapshotBoundParamValues(input: {
 
   const nextValues = {
     ...currentValues,
-    ...snapshotParamValues,
+    ...(snapshotBacktestExecutionParamValues ?? {}),
+    ...(snapshotParamValues ?? {}),
   }
 
   return {
@@ -1635,6 +1651,7 @@ export function createConversationFromServerConversation(
   const mergedSnapshotParamValues = mergeSnapshotBoundParamValues({
     currentValues: syncResult?.paramValues ?? seed.paramValues,
     snapshotParamValues,
+    snapshotBacktestConfigDefaults,
   })
   const nextParamValues = mergedSnapshotParamValues.paramValues
   const nextParams = normalizeParamsFromValues(nextParamValues, seed.params)
