@@ -275,6 +275,11 @@ describe('canonicalSpecV2IrCompilerService', () => {
     expect(pnlSeries).toEqual(expect.objectContaining({ kind: 'POSITION_PNL_PCT', timeframe: '1h' }))
     expect(thresholdSeries).toEqual(expect.objectContaining({ kind: 'CONST', value: 10 }))
     expect(predicate.args).toEqual([pnlSeries.id, thresholdSeries.id])
+    expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        operator: 'GTE(POSITION_PNL_PCT,10)',
+      }),
+    ]))
   })
 
   it('normalizes risk.take_profit_pct thresholds to runtime percent units', () => {
@@ -334,6 +339,11 @@ describe('canonicalSpecV2IrCompilerService', () => {
     expect(pnlSeries).toEqual(expect.objectContaining({ kind: 'POSITION_PNL_PCT' }))
     expect(thresholdSeries).toEqual(expect.objectContaining({ kind: 'CONST', value: 10 }))
     expect(predicate.args).toEqual([pnlSeries.id, thresholdSeries.id])
+    expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        operator: 'GTE(POSITION_PNL_PCT,10)',
+      }),
+    ]))
   })
 
   it('normalizes position_loss_pct thresholds to runtime percent units', () => {
@@ -393,6 +403,11 @@ describe('canonicalSpecV2IrCompilerService', () => {
     expect(pnlSeries).toEqual(expect.objectContaining({ kind: 'POSITION_PNL_PCT' }))
     expect(thresholdSeries).toEqual(expect.objectContaining({ kind: 'CONST', value: 5 }))
     expect(predicate.args).toEqual([pnlSeries.id, thresholdSeries.id])
+    expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        operator: 'GTE(POSITION_LOSS_PCT,5)',
+      }),
+    ]))
   })
 
   it('keeps price.change_pct thresholds in ratio units', () => {

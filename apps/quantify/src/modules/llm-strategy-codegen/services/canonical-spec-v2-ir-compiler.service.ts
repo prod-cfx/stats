@@ -1072,10 +1072,10 @@ export class CanonicalSpecV2IrCompilerService {
         return `GTE(POSITION_BARS_HELD,${this.readNumber([condition.value], 0)})`
 
       case 'risk.take_profit_pct':
-        return `GTE(POSITION_PNL_PCT,${this.readNumber([condition.value], 0)})`
+        return `GTE(POSITION_PNL_PCT,${this.normalizePositionPnlPctThreshold(this.readNumber([condition.value], 0))})`
 
       case 'position_gain_pct':
-        return `GTE(POSITION_PNL_PCT,${this.readNumber([condition.value], 0)})`
+        return `GTE(POSITION_PNL_PCT,${this.normalizePositionPnlPctThreshold(this.readNumber([condition.value], 0))})`
 
       case 'bollinger.upper_break':
         return `CROSS_OVER(CLOSE,UPPER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
@@ -1092,7 +1092,7 @@ export class CanonicalSpecV2IrCompilerService {
       }
 
       case 'position_loss_pct':
-        return `GTE(POSITION_LOSS_PCT,${this.readNumber([condition.value], 0)})`
+        return `GTE(POSITION_LOSS_PCT,${this.normalizePositionPnlPctThreshold(this.readNumber([condition.value], 0))})`
 
       default:
         return condition.key
