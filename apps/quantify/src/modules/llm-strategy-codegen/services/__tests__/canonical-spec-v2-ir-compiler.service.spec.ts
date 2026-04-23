@@ -396,16 +396,16 @@ describe('canonicalSpecV2IrCompilerService', () => {
 
     const pnlSeries = findSeries(result.ir.signalCatalog.series, series => series.kind === 'POSITION_PNL_PCT')
     const thresholdSeries = findSeries(result.ir.signalCatalog.series, series =>
-      series.kind === 'CONST' && series.value === 5)
+      series.kind === 'CONST' && series.value === -5)
     const predicate = findPredicate(result.ir.signalCatalog.predicates, item =>
-      item.kind === 'GTE' && item.args.includes(pnlSeries.id) && item.args.includes(thresholdSeries.id))
+      item.kind === 'LTE' && item.args.includes(pnlSeries.id) && item.args.includes(thresholdSeries.id))
 
     expect(pnlSeries).toEqual(expect.objectContaining({ kind: 'POSITION_PNL_PCT' }))
-    expect(thresholdSeries).toEqual(expect.objectContaining({ kind: 'CONST', value: 5 }))
+    expect(thresholdSeries).toEqual(expect.objectContaining({ kind: 'CONST', value: -5 }))
     expect(predicate.args).toEqual([pnlSeries.id, thresholdSeries.id])
     expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
       expect.objectContaining({
-        operator: 'GTE(POSITION_LOSS_PCT,5)',
+        operator: 'LTE(POSITION_PNL_PCT,-5)',
       }),
     ]))
   })

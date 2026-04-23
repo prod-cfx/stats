@@ -580,14 +580,17 @@ export class CanonicalSpecV2IrCompilerService {
             kind: 'POSITION_PNL_PCT',
           })
         }
+        const threshold = -Math.abs(
+          this.normalizePositionPnlPctThreshold(this.readNumber([atom.value], 0)),
+        )
         const thresholdRef = this.ensureConstSeries(
           context,
-          this.normalizePositionPnlPctThreshold(this.readNumber([atom.value], 0)),
+          threshold,
         )
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_position_loss_pct`,
-          this.resolveComparisonKind(atom.op),
+          'LTE',
           [lossRef, thresholdRef],
         )
       }
@@ -1092,7 +1095,7 @@ export class CanonicalSpecV2IrCompilerService {
       }
 
       case 'position_loss_pct':
-        return `GTE(POSITION_LOSS_PCT,${this.normalizePositionPnlPctThreshold(this.readNumber([condition.value], 0))})`
+        return `LTE(POSITION_PNL_PCT,${-Math.abs(this.normalizePositionPnlPctThreshold(this.readNumber([condition.value], 0)))})`
 
       default:
         return condition.key
