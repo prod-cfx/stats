@@ -944,6 +944,62 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('keeps previous-close rise exit separate from stop-loss drop in the same strategy description', () => {
+    const patch = service.extract(
+      '在 OKX 现货 ORDIUSDT 上，主周期 1h，使用 10% 固定仓位只做多；入场动作为立即开始时市价买入；出场规则为价格相对前收盘上涨 1% 时卖出，另有相对入场均价下跌 5% 止损卖出、相对入场均价上涨 10% 止盈卖出。',
+    )
+
+    expect(patch.contextSlots).toEqual(expect.objectContaining({
+      exchange: 'okx',
+      marketType: 'spot',
+      symbol: 'ORDIUSDT',
+      timeframe: '1h',
+    }))
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'execution.on_start',
+        phase: 'entry',
+        sideScope: 'long',
+      }),
+      expect.objectContaining({
+        key: 'price.percent_change',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          basis: 'prev_close',
+          direction: 'up',
+          valuePct: 1,
+          window: '1h',
+        }),
+      }),
+    ]))
+    expect(patch.risk).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'risk.stop_loss_pct',
+        params: expect.objectContaining({
+          valuePct: 5,
+          basis: 'entry_avg_price',
+        }),
+      }),
+      expect.objectContaining({
+        key: 'risk.take_profit_pct',
+        params: expect.objectContaining({
+          valuePct: 10,
+          basis: 'entry_avg_price',
+        }),
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+    expect(patch.position).toEqual({
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+    })
+  })
+
   it('does not inject Bollinger period/stdDev when the band text omits them', () => {
     const patch = service.extract('OKX 合约 BTCUSDT 15m；突破布林带上轨做空；单笔 10%。')
 
