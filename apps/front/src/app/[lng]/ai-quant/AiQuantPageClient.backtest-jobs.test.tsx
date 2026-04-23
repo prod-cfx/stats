@@ -586,6 +586,26 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     )
   })
 
+  it('passes the active conversation id to the backtest payload builder when submitting a job', async () => {
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-1',
+      }),
+    )
+  })
+
   it('passes published snapshot state timeframes to the backtest payload builder', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
     seeded[0].publishedSnapshotBacktestConfigDefaults = {
