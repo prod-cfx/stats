@@ -76,7 +76,7 @@ export class SemanticSeedExtractorService {
       this.pushBollingerTriggers(segment, triggers, seen)
       this.pushGridTrigger(segment, triggers, seen)
       this.pushExecutionTrigger(segment, triggers, seen)
-      this.pushPercentChangeTrigger(segment, triggers, seen)
+      this.pushPercentChangeTrigger(segment, triggers, seen, text)
     }
 
     return triggers
@@ -187,6 +187,7 @@ export class SemanticSeedExtractorService {
       /单笔\s*(?:使用|用|投入)?\s*百分之?\s*(\d+(?:\.\d+)?)\s*(?:资金|仓位)?/u,
       /仓位\s*(\d+(?:\.\d+)?)\s*%/u,
       /仓位\s*百分之?\s*(\d+(?:\.\d+)?)/u,
+      /(\d+(?:\.\d+)?)\s*%\s*(?:固定)?\s*仓位/u,
       /(\d+(?:\.\d+)?)\s*%\s*仓位/u,
       /(\d+(?:\.\d+)?)\s*%\s*资金/u,
       /百分之?\s*(\d+(?:\.\d+)?)\s*(?:仓位|资金)/u,
@@ -408,18 +409,24 @@ export class SemanticSeedExtractorService {
     })
   }
 
-  private pushPercentChangeTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+  private pushPercentChangeTrigger(
+    segment: string,
+    triggers: SeedTrigger[],
+    seen: Set<string>,
+    contextText: string = segment,
+  ): void {
     const clauses = this.splitPercentChangeClauses(segment)
-    if (clauses.length > 1) {
+    if (clauses.length > 0 && (clauses.length > 1 || clauses[0] !== segment)) {
       for (const clause of clauses) {
-        this.pushPercentChangeTrigger(clause, triggers, seen)
+        this.pushPercentChangeTrigger(clause, triggers, seen, contextText)
       }
       return
     }
 
     if (!/%|百分/u.test(segment)) return
     if (!this.hasExplicitPriceChangeContext(segment)) return
-    if (!this.hasExplicitPriceChangeDirection(segment)) return
+    const direction = this.resolvePercentDirection(segment)
+    if (!direction) return
 
     const intent = this.resolveTradeIntent(segment)
     if (!intent) return
@@ -427,16 +434,16 @@ export class SemanticSeedExtractorService {
     const valuePct = this.extractPercent(segment, [/(\d+(?:\.\d+)?)\s*%/u, /百分之?\s*(\d+(?:\.\d+)?)/u])
     if (valuePct === null) return
 
-    const direction = /下跌|跌|回落|回调/u.test(segment) ? -Math.abs(valuePct) : Math.abs(valuePct)
     const basis = this.resolvePercentBasis(segment)
-    const window = this.extractFirstTimeframe(segment)
+    const window = this.extractFirstTimeframe(segment) ?? this.extractFirstTimeframe(contextText)
 
     this.pushTrigger(triggers, seen, {
       key: 'price.percent_change',
       phase: intent.phase,
       sideScope: intent.sideScope,
       params: {
-        valuePct: direction,
+        direction,
+        valuePct: direction === 'down' ? -Math.abs(valuePct) : Math.abs(valuePct),
         basis,
         ...(window ? { window } : {}),
       },
@@ -444,11 +451,26 @@ export class SemanticSeedExtractorService {
   }
 
   private splitPercentChangeClauses(segment: string): string[] {
+    const rawClauses = segment
+      .split(/[，,、；;。]|(?:另有|另外|同时|并且|以及)/u)
+      .map(clause => clause.trim())
+
+    const clauses = rawClauses
+      .filter(Boolean)
+      .filter(clause => /%|百分/u.test(clause))
+      .filter(clause => /(上涨|下跌|涨|跌|回落|回调|反弹)/u.test(clause))
+      .filter(clause => /(买入|卖出|入场|出场|离场|开仓|平仓|平多|平空|做多|做空|开多|开空)/u.test(clause))
+      .filter(clause => !/(止损|止盈|亏损|盈利)/u.test(clause))
+
+    if (rawClauses.filter(Boolean).length > 1) {
+      return clauses
+    }
+
     const clausePattern = /\d{1,2}\s*(?:m|h|d|分钟|分|小时|时|天|日)[^；;。,，]*?(?:上涨|下跌|涨|跌)[^；;。,，]*?(?:\d+(?:\.\d+)?\s*%|百分之?\s*\d+(?:\.\d+)?)[^；;。,，]*?(?:买入|卖出|入场|出场|离场|开仓|平仓|平多|平空|做多|做空|开多|开空)/giu
     const matches = Array.from(segment.matchAll(clausePattern))
       .map(match => match[0].trim())
       .filter(Boolean)
-    return matches.length > 1 ? matches : [segment]
+    return matches.length > 0 ? matches : [segment]
   }
 
   private pushTrigger(triggers: SeedTrigger[], seen: Set<string>, trigger: SeedTrigger): void {
@@ -568,6 +590,16 @@ export class SemanticSeedExtractorService {
 
   private hasExplicitPriceChangeDirection(segment: string): boolean {
     return /(上涨|下跌|涨|跌|回落|回调|反弹)/u.test(segment)
+  }
+
+  private resolvePercentDirection(segment: string): 'up' | 'down' | null {
+    if (/(下跌|跌|回落|回调)/u.test(segment)) {
+      return 'down'
+    }
+    if (/(上涨|涨|反弹)/u.test(segment)) {
+      return 'up'
+    }
+    return null
   }
 
   private extractBollingerBandParams(segment: string): { period?: number; stdDev?: number } | null {
