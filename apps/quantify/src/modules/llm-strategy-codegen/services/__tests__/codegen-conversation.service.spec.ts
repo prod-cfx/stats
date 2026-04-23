@@ -1753,6 +1753,53 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
   })
 
+  it('includes lastBacktestRef when listing AI Quant conversations', async () => {
+    mockConversationsRepo.listByUser.mockResolvedValue([
+      {
+        id: 'conv-1',
+        userId: 'user-1',
+        codegenSessionId: 'session-1',
+        title: 'conv',
+        archivedAt: null,
+        createdAt: new Date('2026-04-23T00:00:00.000Z'),
+        updatedAt: new Date('2026-04-23T00:05:00.000Z'),
+        lastBacktestRef: {
+          jobId: 'btjob-1',
+          publishedSnapshotId: 'snapshot-1',
+          summary: {
+            maxDrawdownPct: 8,
+            totalReturnPct: 12,
+            winRatePct: 60,
+            tradeCount: 5,
+            marketType: 'spot',
+          },
+          completedAt: new Date('2026-04-23T00:04:00.000Z'),
+        },
+        messages: [],
+      },
+    ])
+    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue(['session-1'])
+    mockRepo.listByUser.mockResolvedValue([])
+    mockRepo.findById.mockResolvedValue(null)
+
+    const result = await service.listConversations('user-1')
+
+    expect(result[0]).toMatchObject({
+      id: 'conv-1',
+      lastBacktestRef: {
+        jobId: 'btjob-1',
+        publishedSnapshotId: 'snapshot-1',
+        summary: expect.objectContaining({
+          maxDrawdownPct: 8,
+          totalReturnPct: 12,
+          winRatePct: 60,
+          tradeCount: 5,
+        }),
+        completedAt: '2026-04-23T00:04:00.000Z',
+      },
+    })
+  })
+
   it('keeps published snapshot params faithful to snapshot sources without injecting default execution values', () => {
     const result = (
       service as unknown as {

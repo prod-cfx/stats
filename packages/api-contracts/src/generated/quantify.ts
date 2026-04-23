@@ -97,6 +97,7 @@ const RunBacktestDto = z
     initialCash: z.number(),
     leverage: z.number().optional(),
     allowPartial: z.boolean().optional(),
+    conversationId: z.string().optional(),
     execution: BacktestExecutionConfigDto,
     strategy: BacktestStrategyInputDto,
     dataRange: BacktestDataRangeDto,
@@ -1145,6 +1146,25 @@ const LlmStrategyInstancePublicResponseDto = z
 const AiQuantConversationMessageDto = z
   .object({ role: z.enum(['user', 'assistant']), content: z.string() })
   .passthrough()
+const AiQuantConversationLastBacktestSummaryDto = z
+  .object({
+    maxDrawdownPct: z.number(),
+    totalReturnPct: z.number(),
+    winRatePct: z.number(),
+    tradeCount: z.number(),
+    openTradeCount: z.number().optional(),
+    openPnl: z.number().optional(),
+    marketType: z.enum(['spot', 'perp']).optional(),
+  })
+  .passthrough()
+const AiQuantConversationLastBacktestRefDto = z
+  .object({
+    jobId: z.string(),
+    publishedSnapshotId: z.string(),
+    summary: AiQuantConversationLastBacktestSummaryDto,
+    completedAt: z.string(),
+  })
+  .passthrough()
 const AiQuantConversationResponseDto = z
   .object({
     id: z.string(),
@@ -1154,6 +1174,7 @@ const AiQuantConversationResponseDto = z
     status: z.string().optional(),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
+    lastBacktestRef: AiQuantConversationLastBacktestRefDto.nullish(),
     canonicalDigest: z.string().optional(),
     specDesc: z.object({}).partial().passthrough().optional(),
     semanticGraph: z.object({}).partial().passthrough().optional(),
@@ -1556,6 +1577,8 @@ export const schemas = {
   LlmStrategyRunResponseDto,
   LlmStrategyInstancePublicResponseDto,
   AiQuantConversationMessageDto,
+  AiQuantConversationLastBacktestSummaryDto,
+  AiQuantConversationLastBacktestRefDto,
   AiQuantConversationResponseDto,
   CodegenGuideConfigDto,
   StartCodegenSessionDto,

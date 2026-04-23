@@ -1993,6 +1993,14 @@ export class CodegenConversationService {
       status: snapshot?.status as LlmCodegenSessionStatus | undefined,
       createdAt: conversation.createdAt.toISOString(),
       updatedAt: conversation.updatedAt.toISOString(),
+      lastBacktestRef: conversation.lastBacktestRef
+        ? {
+            jobId: conversation.lastBacktestRef.jobId,
+            publishedSnapshotId: conversation.lastBacktestRef.publishedSnapshotId,
+            summary: conversation.lastBacktestRef.summary,
+            completedAt: conversation.lastBacktestRef.completedAt.toISOString(),
+          }
+        : null,
       canonicalDigest: snapshot?.canonicalDigest ?? null,
       specDesc: snapshot?.specDesc ?? null,
       semanticGraph: snapshot?.semanticGraph ?? null,

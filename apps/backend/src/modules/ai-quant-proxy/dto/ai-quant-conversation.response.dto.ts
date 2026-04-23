@@ -8,6 +8,43 @@ class AiQuantConversationMessageResponseDto {
   content!: string
 }
 
+class AiQuantConversationLastBacktestSummaryResponseDto {
+  @ApiProperty()
+  maxDrawdownPct!: number
+
+  @ApiProperty()
+  totalReturnPct!: number
+
+  @ApiProperty()
+  winRatePct!: number
+
+  @ApiProperty()
+  tradeCount!: number
+
+  @ApiPropertyOptional()
+  openTradeCount?: number
+
+  @ApiPropertyOptional()
+  openPnl?: number
+
+  @ApiPropertyOptional({ enum: ['spot', 'perp'] })
+  marketType?: 'spot' | 'perp'
+}
+
+class AiQuantConversationLastBacktestRefResponseDto {
+  @ApiProperty()
+  jobId!: string
+
+  @ApiProperty()
+  publishedSnapshotId!: string
+
+  @ApiProperty({ type: AiQuantConversationLastBacktestSummaryResponseDto })
+  summary!: AiQuantConversationLastBacktestSummaryResponseDto
+
+  @ApiProperty()
+  completedAt!: string
+}
+
 export class AiQuantConversationResponseDto {
   @ApiProperty({ description: 'Conversation id' })
   id!: string
@@ -32,6 +69,9 @@ export class AiQuantConversationResponseDto {
 
   @ApiPropertyOptional({ description: 'Conversation updated timestamp' })
   updatedAt?: string
+
+  @ApiPropertyOptional({ description: 'Most recent recoverable backtest reference', type: AiQuantConversationLastBacktestRefResponseDto, nullable: true })
+  lastBacktestRef?: AiQuantConversationLastBacktestRefResponseDto | null
 
   @ApiPropertyOptional({ description: 'Pending canonical digest awaiting confirmation' })
   canonicalDigest?: string | null

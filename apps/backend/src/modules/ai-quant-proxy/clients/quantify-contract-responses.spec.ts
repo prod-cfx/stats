@@ -198,4 +198,20 @@ describe('quantify contract generated responses', () => {
       expect(continueSnippet).not.toContain(`${removedField}:`)
     }
   })
+
+  it('includes lastBacktestRef in generated AI Quant conversation response contracts', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+    const responseStart = source.indexOf('const AiQuantConversationResponseDto = z')
+    const refStart = source.indexOf('const AiQuantConversationLastBacktestRefDto = z')
+
+    expect(responseStart).toBeGreaterThanOrEqual(0)
+    expect(refStart).toBeGreaterThanOrEqual(0)
+
+    const responseSnippet = source.slice(responseStart, responseStart + 1200)
+    const refSnippet = source.slice(refStart, refStart + 400)
+
+    expect(responseSnippet).toContain('lastBacktestRef: AiQuantConversationLastBacktestRefDto.nullish()')
+    expect(refSnippet).toContain('publishedSnapshotId: z.string()')
+    expect(refSnippet).toContain('completedAt: z.string()')
+  })
 })

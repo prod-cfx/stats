@@ -10,6 +10,43 @@ class AiQuantConversationMessageDto {
   content!: string
 }
 
+class AiQuantConversationLastBacktestSummaryDto {
+  @ApiProperty()
+  maxDrawdownPct!: number
+
+  @ApiProperty()
+  totalReturnPct!: number
+
+  @ApiProperty()
+  winRatePct!: number
+
+  @ApiProperty()
+  tradeCount!: number
+
+  @ApiPropertyOptional()
+  openTradeCount?: number
+
+  @ApiPropertyOptional()
+  openPnl?: number
+
+  @ApiPropertyOptional({ enum: ['spot', 'perp'] })
+  marketType?: 'spot' | 'perp'
+}
+
+class AiQuantConversationLastBacktestRefDto {
+  @ApiProperty()
+  jobId!: string
+
+  @ApiProperty()
+  publishedSnapshotId!: string
+
+  @ApiProperty({ type: AiQuantConversationLastBacktestSummaryDto })
+  summary!: AiQuantConversationLastBacktestSummaryDto
+
+  @ApiProperty()
+  completedAt!: string
+}
+
 export class AiQuantConversationResponseDto {
   @ApiProperty({ description: '会话 ID' })
   id!: string
@@ -34,6 +71,9 @@ export class AiQuantConversationResponseDto {
 
   @ApiPropertyOptional({ description: '更新时间' })
   updatedAt?: string
+
+  @ApiPropertyOptional({ description: '最近一次可恢复的回测引用', type: AiQuantConversationLastBacktestRefDto, nullable: true })
+  lastBacktestRef?: AiQuantConversationLastBacktestRefDto | null
 
   @ApiPropertyOptional({ description: '当前待确认 canonical spec digest' })
   canonicalDigest?: string | null

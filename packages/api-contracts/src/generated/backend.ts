@@ -158,6 +158,25 @@ const CreateAccountExchangeAccountDto = z
 const AiQuantConversationMessageResponseDto = z
   .object({ role: z.enum(['user', 'assistant']), content: z.string() })
   .passthrough()
+const AiQuantConversationLastBacktestSummaryResponseDto = z
+  .object({
+    maxDrawdownPct: z.number(),
+    totalReturnPct: z.number(),
+    winRatePct: z.number(),
+    tradeCount: z.number(),
+    openTradeCount: z.number().optional(),
+    openPnl: z.number().optional(),
+    marketType: z.enum(['spot', 'perp']).optional(),
+  })
+  .passthrough()
+const AiQuantConversationLastBacktestRefResponseDto = z
+  .object({
+    jobId: z.string(),
+    publishedSnapshotId: z.string(),
+    summary: AiQuantConversationLastBacktestSummaryResponseDto,
+    completedAt: z.string(),
+  })
+  .passthrough()
 const AiQuantConversationResponseDto = z
   .object({
     id: z.string(),
@@ -167,6 +186,7 @@ const AiQuantConversationResponseDto = z
     status: z.string().optional(),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
+    lastBacktestRef: AiQuantConversationLastBacktestRefResponseDto.nullish(),
     canonicalDigest: z.string().optional(),
     specDesc: z.object({}).partial().passthrough().optional(),
     semanticGraph: z.object({}).partial().passthrough().optional(),
@@ -1234,6 +1254,8 @@ export const schemas = {
   AccountExchangeAccountResponseDto,
   CreateAccountExchangeAccountDto,
   AiQuantConversationMessageResponseDto,
+  AiQuantConversationLastBacktestSummaryResponseDto,
+  AiQuantConversationLastBacktestRefResponseDto,
   AiQuantConversationResponseDto,
   BasePaginationResponseDto,
   AccountAiQuantStrategyListItemResponseDto,
