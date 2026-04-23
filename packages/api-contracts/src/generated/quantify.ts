@@ -61,6 +61,13 @@ const BacktestStrategyInputDto = z
   })
   .passthrough()
 const BacktestDataRangeDto = z.object({ fromTs: z.number(), toTs: z.number() }).passthrough()
+const BacktestRequestedRangeInputDto = z
+  .object({
+    preset: z.enum(['7D', '30D', '90D', '1Y', 'CUSTOM']),
+    startAt: z.string().optional(),
+    endAt: z.string().optional(),
+  })
+  .passthrough()
 const BacktestBarDto = z
   .object({
     symbol: z.string(),
@@ -101,6 +108,7 @@ const RunBacktestDto = z
     execution: BacktestExecutionConfigDto,
     strategy: BacktestStrategyInputDto,
     dataRange: BacktestDataRangeDto,
+    requestedRangeInput: BacktestRequestedRangeInputDto.optional(),
     bars: z.array(BacktestBarDto).optional(),
   })
   .passthrough()
@@ -1146,6 +1154,29 @@ const LlmStrategyInstancePublicResponseDto = z
 const AiQuantConversationMessageDto = z
   .object({ role: z.enum(['user', 'assistant']), content: z.string() })
   .passthrough()
+const AiQuantConversationLastBacktestRangeDto = z
+  .object({
+    preset: z.enum(['7D', '30D', '90D', '1Y', 'CUSTOM']),
+    startAt: z.string().optional(),
+    endAt: z.string().optional(),
+  })
+  .passthrough()
+const AiQuantConversationLastBacktestExecutionDto = z
+  .object({
+    initialCash: z.number(),
+    leverage: z.number().nullish(),
+    slippageBps: z.number(),
+    feeBps: z.number(),
+    priceSource: z.enum(['open', 'close', 'mid']),
+    allowPartial: z.boolean(),
+  })
+  .passthrough()
+const AiQuantConversationLastBacktestConfigDto = z
+  .object({
+    range: AiQuantConversationLastBacktestRangeDto,
+    execution: AiQuantConversationLastBacktestExecutionDto,
+  })
+  .passthrough()
 const AiQuantConversationLastBacktestSummaryDto = z
   .object({
     maxDrawdownPct: z.number(),
@@ -1161,6 +1192,7 @@ const AiQuantConversationLastBacktestRefDto = z
   .object({
     jobId: z.string(),
     publishedSnapshotId: z.string(),
+    config: AiQuantConversationLastBacktestConfigDto,
     summary: AiQuantConversationLastBacktestSummaryDto,
     completedAt: z.string(),
   })
@@ -1488,6 +1520,7 @@ export const schemas = {
   BacktestExecutionConfigDto,
   BacktestStrategyInputDto,
   BacktestDataRangeDto,
+  BacktestRequestedRangeInputDto,
   BacktestBarDto,
   RunBacktestDto,
   BacktestJobSummaryDto,
@@ -1577,6 +1610,9 @@ export const schemas = {
   LlmStrategyRunResponseDto,
   LlmStrategyInstancePublicResponseDto,
   AiQuantConversationMessageDto,
+  AiQuantConversationLastBacktestRangeDto,
+  AiQuantConversationLastBacktestExecutionDto,
+  AiQuantConversationLastBacktestConfigDto,
   AiQuantConversationLastBacktestSummaryDto,
   AiQuantConversationLastBacktestRefDto,
   AiQuantConversationResponseDto,

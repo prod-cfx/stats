@@ -15,6 +15,21 @@ import { extractSnapshotBoundSymbolAvailabilityInput } from '../services/backtes
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestSymbolAvailabilityService } from '../services/backtest-symbol-availability.service'
 
+type LastBacktestRangeConfig = {
+  preset: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
+  startAt?: string
+  endAt?: string
+}
+
+type LastBacktestExecutionConfig = {
+  initialCash: number
+  leverage: number | null
+  slippageBps: number
+  feeBps: number
+  priceSource: 'open' | 'close' | 'mid'
+  allowPartial: boolean
+}
+
 export type BacktestJobPhase = 'queued' | 'running' | 'succeeded' | 'failed'
 
 const VALID_BACKTEST_JOB_PHASES = new Set<BacktestJobPhase>([
@@ -250,6 +265,7 @@ export class BacktestJobsService {
             lastBacktestRef: {
               jobId: id,
               publishedSnapshotId: resolvedSummary.snapshotId,
+              config: this.buildLastBacktestConfig(input),
               summary: {
                 maxDrawdownPct: Number(result.summary.maxDrawdownPct.toFixed(2)),
                 totalReturnPct: Number(result.summary.netProfitPct.toFixed(2)),
@@ -456,6 +472,46 @@ export class BacktestJobsService {
       && typeof snapshotId === 'string'
       && snapshotId.length > 0
     )
+  }
+
+  private buildLastBacktestConfig(input: BacktestRunInput): {
+    range: LastBacktestRangeConfig
+    execution: LastBacktestExecutionConfig
+  } {
+    return {
+      range: this.buildLastBacktestRangeConfig(input),
+      execution: {
+        initialCash: input.initialCash,
+        leverage: typeof input.leverage === 'number' && Number.isFinite(input.leverage) ? input.leverage : null,
+        slippageBps: input.execution.slippageBps,
+        feeBps: input.execution.feeBps,
+        priceSource: input.execution.priceSource,
+        allowPartial: input.allowPartial === true,
+      },
+    }
+  }
+
+  private buildLastBacktestRangeConfig(input: BacktestRunInput): LastBacktestRangeConfig {
+    const requestedRangeInput = input.requestedRangeInput
+    if (requestedRangeInput) {
+      const base = {
+        preset: requestedRangeInput.preset,
+      } as LastBacktestRangeConfig
+      if (requestedRangeInput.preset === 'CUSTOM') {
+        return {
+          ...base,
+          ...(typeof requestedRangeInput.startAt === 'string' ? { startAt: requestedRangeInput.startAt } : {}),
+          ...(typeof requestedRangeInput.endAt === 'string' ? { endAt: requestedRangeInput.endAt } : {}),
+        }
+      }
+      return base
+    }
+
+    return {
+      preset: 'CUSTOM',
+      startAt: new Date(input.dataRange.fromTs).toISOString(),
+      endAt: new Date(input.dataRange.toTs).toISOString(),
+    }
   }
 
   private normalizePersistedStatus(status: string, id: string): BacktestJobPhase {

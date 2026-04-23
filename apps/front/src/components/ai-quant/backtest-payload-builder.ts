@@ -107,6 +107,14 @@ export function buildBacktestPayload(
       fromTs: resolvedFromTs,
       toTs: resolvedToTs,
     },
+    requestedRangeInput:
+      input.range.preset === 'CUSTOM'
+        ? {
+            preset: 'CUSTOM',
+            startAt: input.range.startAt,
+            endAt: input.range.endAt,
+          }
+        : { preset: input.range.preset },
   }
   if (input.marketType === 'perp') {
     payload.leverage = leverage as number

@@ -31,12 +31,54 @@ class AiQuantConversationLastBacktestSummaryResponseDto {
   marketType?: 'spot' | 'perp'
 }
 
+class AiQuantConversationLastBacktestRangeResponseDto {
+  @ApiProperty({ enum: ['7D', '30D', '90D', '1Y', 'CUSTOM'] })
+  preset!: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
+
+  @ApiPropertyOptional()
+  startAt?: string
+
+  @ApiPropertyOptional()
+  endAt?: string
+}
+
+class AiQuantConversationLastBacktestExecutionResponseDto {
+  @ApiProperty()
+  initialCash!: number
+
+  @ApiPropertyOptional({ nullable: true })
+  leverage!: number | null
+
+  @ApiProperty()
+  slippageBps!: number
+
+  @ApiProperty()
+  feeBps!: number
+
+  @ApiProperty({ enum: ['open', 'close', 'mid'] })
+  priceSource!: 'open' | 'close' | 'mid'
+
+  @ApiProperty()
+  allowPartial!: boolean
+}
+
+class AiQuantConversationLastBacktestConfigResponseDto {
+  @ApiProperty({ type: AiQuantConversationLastBacktestRangeResponseDto })
+  range!: AiQuantConversationLastBacktestRangeResponseDto
+
+  @ApiProperty({ type: AiQuantConversationLastBacktestExecutionResponseDto })
+  execution!: AiQuantConversationLastBacktestExecutionResponseDto
+}
+
 class AiQuantConversationLastBacktestRefResponseDto {
   @ApiProperty()
   jobId!: string
 
   @ApiProperty()
   publishedSnapshotId!: string
+
+  @ApiProperty({ type: AiQuantConversationLastBacktestConfigResponseDto })
+  config!: AiQuantConversationLastBacktestConfigResponseDto
 
   @ApiProperty({ type: AiQuantConversationLastBacktestSummaryResponseDto })
   summary!: AiQuantConversationLastBacktestSummaryResponseDto

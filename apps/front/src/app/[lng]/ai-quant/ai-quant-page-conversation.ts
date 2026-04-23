@@ -833,9 +833,15 @@ function normalizeLastBacktestRef(
     return null
   }
 
+  const config = normalizeLastBacktestConfig(candidate.config)
+  if (!config) {
+    return null
+  }
+
   return {
     jobId: candidate.jobId.trim(),
     publishedSnapshotId: candidate.publishedSnapshotId.trim(),
+    config,
     summary: {
       maxDrawdownPct: summary.maxDrawdownPct,
       totalReturnPct: summary.totalReturnPct,
@@ -851,16 +857,199 @@ function normalizeLastBacktestRef(
   }
 }
 
+function normalizeLastBacktestConfig(
+  value: unknown,
+): AiQuantConversationLastBacktestRef['config'] | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+
+  const candidate = value as Record<string, unknown>
+  const range = normalizeLastBacktestRangeConfig(candidate.range)
+  const execution = normalizeLastBacktestExecutionConfig(candidate.execution)
+
+  if (!range || !execution) {
+    return null
+  }
+
+  return { range, execution }
+}
+
+function normalizeLastBacktestRangeConfig(
+  value: unknown,
+): AiQuantConversationLastBacktestRef['config']['range'] | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+
+  const candidate = value as Record<string, unknown>
+  const preset =
+    typeof candidate.preset === 'string'
+      ? candidate.preset.trim().toUpperCase()
+      : ''
+
+  if (
+    preset !== '7D'
+    && preset !== '30D'
+    && preset !== '90D'
+    && preset !== '1Y'
+    && preset !== 'CUSTOM'
+  ) {
+    return null
+  }
+
+  if (preset !== 'CUSTOM') {
+    return { preset }
+  }
+
+  const startAt =
+    typeof candidate.startAt === 'string' && candidate.startAt.trim()
+      ? candidate.startAt.trim()
+      : ''
+  const endAt =
+    typeof candidate.endAt === 'string' && candidate.endAt.trim()
+      ? candidate.endAt.trim()
+      : ''
+
+  if (!startAt || !endAt) {
+    return null
+  }
+
+  return {
+    preset,
+    startAt,
+    endAt,
+  }
+}
+
+function normalizeLastBacktestExecutionConfig(
+  value: unknown,
+): AiQuantConversationLastBacktestRef['config']['execution'] | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+
+  const candidate = value as Record<string, unknown>
+  const initialCash = parseBacktestExecutionNumber(candidate.initialCash, 0)
+  const leverage = parseBacktestExecutionNumber(candidate.leverage, 0)
+  const slippageBps = parseBacktestExecutionNumber(candidate.slippageBps, 0)
+  const feeBps = parseBacktestExecutionNumber(candidate.feeBps, 0)
+  const priceSource =
+    typeof candidate.priceSource === 'string'
+      ? candidate.priceSource.trim()
+      : ''
+  const allowPartial =
+    typeof candidate.allowPartial === 'boolean'
+      ? candidate.allowPartial
+      : candidate.allowPartial === 'true'
+        ? true
+        : candidate.allowPartial === 'false'
+          ? false
+          : null
+
+  if (
+    !Number.isFinite(initialCash)
+    || !Number.isFinite(slippageBps)
+    || !Number.isFinite(feeBps)
+    || (priceSource !== 'open' && priceSource !== 'close' && priceSource !== 'mid')
+    || allowPartial === null
+  ) {
+    return null
+  }
+
+  return {
+    initialCash,
+    leverage: Number.isFinite(leverage) && leverage > 0 ? leverage : null,
+    slippageBps,
+    feeBps,
+    priceSource,
+    allowPartial,
+  }
+}
+
+function buildComparableBacktestConfig(
+  values: Record<string, unknown>,
+  defaults?: AccountAiQuantBacktestConfigDefaults | null,
+): AiQuantConversationLastBacktestRef['config'] | null {
+  const range = resolveBacktestRangeInput(values)
+  const execution = resolveBacktestExecutionConfig({
+    ...(defaults
+      ? {
+          backtestInitialCash: defaults.initialCash,
+          ...(typeof defaults.leverage === 'number' ? { backtestLeverage: defaults.leverage } : {}),
+          backtestSlippageBps: defaults.slippageBps,
+          backtestFeeBps: defaults.feeBps,
+          ...(typeof defaults.priceSource === 'string' ? { backtestPriceSource: defaults.priceSource } : {}),
+          ...(typeof defaults.allowPartial === 'boolean' ? { backtestAllowPartial: defaults.allowPartial } : {}),
+        }
+      : {}),
+    ...values,
+  })
+  if (
+    execution.priceSource !== 'open'
+    && execution.priceSource !== 'close'
+    && execution.priceSource !== 'mid'
+  ) {
+    return null
+  }
+
+  return {
+    range:
+      range.preset === 'CUSTOM'
+        ? {
+            preset: 'CUSTOM',
+            startAt: range.startAt ?? '',
+            endAt: range.endAt ?? '',
+          }
+        : { preset: range.preset },
+    execution: {
+      initialCash: execution.initialCash,
+      leverage: execution.leverage,
+      slippageBps: execution.slippageBps,
+      feeBps: execution.feeBps,
+      priceSource: execution.priceSource,
+      allowPartial: execution.allowPartial,
+    },
+  }
+}
+
+function doesBacktestConfigMatch(
+  current: AiQuantConversationLastBacktestRef['config'],
+  stored: AiQuantConversationLastBacktestRef['config'],
+): boolean {
+  if (current.range.preset !== stored.range.preset) {
+    return false
+  }
+  if (current.range.preset === 'CUSTOM') {
+    if (current.range.startAt !== stored.range.startAt || current.range.endAt !== stored.range.endAt) {
+      return false
+    }
+  }
+
+  return (
+    current.execution.initialCash === stored.execution.initialCash
+    && current.execution.leverage === stored.execution.leverage
+    && current.execution.slippageBps === stored.execution.slippageBps
+    && current.execution.feeBps === stored.execution.feeBps
+    && current.execution.priceSource === stored.execution.priceSource
+    && current.execution.allowPartial === stored.execution.allowPartial
+  )
+}
+
 function restoreBacktestResultFromLastBacktestRef(input: {
   conversationPublishedSnapshotId: string | null
   lastBacktestRef: AiQuantConversationLastBacktestRef | null
+  currentBacktestConfig: AiQuantConversationLastBacktestRef['config'] | null
   symbol: string
 }): BacktestResult | null {
-  const { conversationPublishedSnapshotId, lastBacktestRef, symbol } = input
-  if (!lastBacktestRef || !conversationPublishedSnapshotId) {
+  const { conversationPublishedSnapshotId, lastBacktestRef, currentBacktestConfig, symbol } = input
+  if (!lastBacktestRef || !conversationPublishedSnapshotId || !currentBacktestConfig) {
     return null
   }
   if (conversationPublishedSnapshotId !== lastBacktestRef.publishedSnapshotId) {
+    return null
+  }
+  if (!doesBacktestConfigMatch(currentBacktestConfig, lastBacktestRef.config)) {
     return null
   }
 
@@ -1462,6 +1651,7 @@ export function createConversationFromServerConversation(
   const restoredBacktestResult = restoreBacktestResultFromLastBacktestRef({
     conversationPublishedSnapshotId: publishedSnapshotId,
     lastBacktestRef,
+    currentBacktestConfig: buildComparableBacktestConfig(nextParamValues, snapshotBacktestConfigDefaults),
     symbol: restoredBacktestSymbol,
   })
   const graphVersion =

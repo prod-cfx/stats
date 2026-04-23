@@ -1990,6 +1990,7 @@ export class CodegenConversationService {
       ? {
           jobId: conversation.lastBacktestRef.jobId,
           publishedSnapshotId: conversation.lastBacktestRef.publishedSnapshotId,
+          config: conversation.lastBacktestRef.config,
           summary: conversation.lastBacktestRef.summary,
           completedAt: conversation.lastBacktestRef.completedAt.toISOString(),
         }

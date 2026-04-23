@@ -158,6 +158,29 @@ const CreateAccountExchangeAccountDto = z
 const AiQuantConversationMessageResponseDto = z
   .object({ role: z.enum(['user', 'assistant']), content: z.string() })
   .passthrough()
+const AiQuantConversationLastBacktestRangeResponseDto = z
+  .object({
+    preset: z.enum(['7D', '30D', '90D', '1Y', 'CUSTOM']),
+    startAt: z.string().optional(),
+    endAt: z.string().optional(),
+  })
+  .passthrough()
+const AiQuantConversationLastBacktestExecutionResponseDto = z
+  .object({
+    initialCash: z.number(),
+    leverage: z.number().nullish(),
+    slippageBps: z.number(),
+    feeBps: z.number(),
+    priceSource: z.enum(['open', 'close', 'mid']),
+    allowPartial: z.boolean(),
+  })
+  .passthrough()
+const AiQuantConversationLastBacktestConfigResponseDto = z
+  .object({
+    range: AiQuantConversationLastBacktestRangeResponseDto,
+    execution: AiQuantConversationLastBacktestExecutionResponseDto,
+  })
+  .passthrough()
 const AiQuantConversationLastBacktestSummaryResponseDto = z
   .object({
     maxDrawdownPct: z.number(),
@@ -173,6 +196,7 @@ const AiQuantConversationLastBacktestRefResponseDto = z
   .object({
     jobId: z.string(),
     publishedSnapshotId: z.string(),
+    config: AiQuantConversationLastBacktestConfigResponseDto,
     summary: AiQuantConversationLastBacktestSummaryResponseDto,
     completedAt: z.string(),
   })
@@ -1254,6 +1278,9 @@ export const schemas = {
   AccountExchangeAccountResponseDto,
   CreateAccountExchangeAccountDto,
   AiQuantConversationMessageResponseDto,
+  AiQuantConversationLastBacktestRangeResponseDto,
+  AiQuantConversationLastBacktestExecutionResponseDto,
+  AiQuantConversationLastBacktestConfigResponseDto,
   AiQuantConversationLastBacktestSummaryResponseDto,
   AiQuantConversationLastBacktestRefResponseDto,
   AiQuantConversationResponseDto,

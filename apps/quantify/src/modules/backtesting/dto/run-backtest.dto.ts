@@ -129,6 +129,22 @@ export class BacktestDataRangeDto {
   toTs!: number
 }
 
+export class BacktestRequestedRangeInputDto {
+  @ApiProperty({ enum: ['7D', '30D', '90D', '1Y', 'CUSTOM'] })
+  @IsIn(['7D', '30D', '90D', '1Y', 'CUSTOM'])
+  preset!: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  startAt?: string
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  endAt?: string
+}
+
 export class BacktestStrategyInputDto {
   @ApiPropertyOptional()
   @IsOptional()
@@ -214,6 +230,12 @@ export class RunBacktestDto implements RunBacktestDtoShape {
   @ValidateNested()
   @Type(() => BacktestDataRangeDto)
   dataRange!: BacktestDataRangeDto
+
+  @ApiPropertyOptional({ type: BacktestRequestedRangeInputDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => BacktestRequestedRangeInputDto)
+  requestedRangeInput?: BacktestRunInput['requestedRangeInput']
 
   @ApiPropertyOptional({ type: [BacktestBarDto] })
   @IsOptional()

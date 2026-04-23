@@ -1766,6 +1766,19 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         lastBacktestRef: {
           jobId: 'btjob-1',
           publishedSnapshotId: 'snapshot-1',
+          config: {
+            range: {
+              preset: '30D',
+            },
+            execution: {
+              initialCash: 10000,
+              leverage: 1,
+              slippageBps: 10,
+              feeBps: 5,
+              priceSource: 'close',
+              allowPartial: true,
+            },
+          },
           summary: {
             maxDrawdownPct: 8,
             totalReturnPct: 12,
@@ -1806,6 +1819,19 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       lastBacktestRef: {
         jobId: 'btjob-1',
         publishedSnapshotId: 'snapshot-1',
+        config: {
+          range: {
+            preset: '30D',
+          },
+          execution: {
+            initialCash: 10000,
+            leverage: 1,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: true,
+          },
+        },
         summary: expect.objectContaining({
           maxDrawdownPct: 8,
           totalReturnPct: 12,
@@ -1830,6 +1856,19 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         lastBacktestRef: {
           jobId: 'btjob-1',
           publishedSnapshotId: 'snapshot-1',
+          config: {
+            range: {
+              preset: '30D',
+            },
+            execution: {
+              initialCash: 10000,
+              leverage: 1,
+              slippageBps: 10,
+              feeBps: 5,
+              priceSource: 'close',
+              allowPartial: true,
+            },
+          },
           summary: {
             maxDrawdownPct: 8,
             totalReturnPct: 12,

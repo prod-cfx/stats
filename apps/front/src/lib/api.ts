@@ -412,6 +412,21 @@ export interface LlmCodegenSessionResponse {
 export interface AiQuantConversationLastBacktestRef {
   jobId: string
   publishedSnapshotId: string
+  config: {
+    range: {
+      preset: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
+      startAt?: string
+      endAt?: string
+    }
+    execution: {
+      initialCash: number
+      leverage: number | null
+      slippageBps: number
+      feeBps: number
+      priceSource: 'open' | 'close' | 'mid'
+      allowPartial: boolean
+    }
+  }
   summary: {
     maxDrawdownPct: number
     totalReturnPct: number

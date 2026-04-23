@@ -43,6 +43,7 @@ import {
 } from './ai-quant-page-codegen'
 import {
   BACKTEST_EXECUTION_PARAM_KEY_SET,
+  BACKTEST_RANGE_PARAM_KEY_SET,
   CONVERSATIONS_STORAGE_KEY,
   buildApiConfigHref,
   buildBacktestSummaryResult,
@@ -544,6 +545,18 @@ export function AiQuantPageClient({
       backtestExecutionState: state,
       updatedAt: Date.now(),
     }))
+  }
+
+  function invalidateActiveConversationBacktestRecovery() {
+    if (!activeConversation) {
+      return
+    }
+    const conversationId = activeConversation.id
+    backtestRunTokenRef.current.set(
+      conversationId,
+      (backtestRunTokenRef.current.get(conversationId) ?? 0) + 1,
+    )
+    backtestRunMutexRef.current.delete(conversationId)
   }
 
   function appendSemanticGraphGuardMessage(conversationId: string) {
@@ -1066,13 +1079,20 @@ export function AiQuantPageClient({
             publicationGate={activeConversation.publicationGate}
             compactMode={compactMode}
             onClarificationAnswer={onClarificationAnswer}
-            onParamChange={(key, value) =>
+            onParamChange={(key, value) => {
+              const shouldInvalidateBacktest =
+                BACKTEST_RANGE_PARAM_KEY_SET.has(key) || BACKTEST_EXECUTION_PARAM_KEY_SET.has(key)
+              if (shouldInvalidateBacktest) {
+                invalidateActiveConversationBacktestRecovery()
+              }
               updateActiveConversation(curr => {
                 const nextValues = { ...curr.paramValues, [key]: value }
                 const nextConversation = {
                   ...curr,
                   paramValues: nextValues,
                   params: normalizeParamsFromValues(nextValues, curr.params),
+                  backtestResult: shouldInvalidateBacktest ? null : curr.backtestResult,
+                  backtestExecutionState: shouldInvalidateBacktest ? 'idle' : curr.backtestExecutionState,
                   backtestExecutionConfigExplicit:
                     BACKTEST_EXECUTION_PARAM_KEY_SET.has(key)
                       ? hasExplicitBacktestExecutionOverrides(nextValues)
@@ -1083,7 +1103,7 @@ export function AiQuantPageClient({
                   ? invalidateConversationPublication(nextConversation, { markGraphDraft: true })
                   : nextConversation
               })
-            }
+            }}
             onSend={onSend}
             onRunBacktest={onRunBacktest}
             canRunBacktest={canRunBacktest}

@@ -712,6 +712,13 @@ describe('backtestJobsService', () => {
       bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
       snapshotId: 'snapshot-1',
     })
+    Object.assign(input as unknown as Record<string, unknown>, {
+      requestedRangeInput: {
+        preset: 'CUSTOM',
+        startAt: '2026-03-01T00:00:00.000Z',
+        endAt: '2026-03-24T00:00:00.000Z',
+      },
+    })
     input.conversationId = 'conv-1'
 
     const created = await service.createJob(input, OWNER_USER_ID)
@@ -725,6 +732,21 @@ describe('backtestJobsService', () => {
       lastBacktestRef: {
         jobId: created.id,
         publishedSnapshotId: 'snapshot-1',
+        config: {
+          range: {
+            preset: 'CUSTOM',
+            startAt: '2026-03-01T00:00:00.000Z',
+            endAt: '2026-03-24T00:00:00.000Z',
+          },
+          execution: {
+            initialCash: 10000,
+            leverage: 2,
+            slippageBps: 5,
+            feeBps: 4,
+            priceSource: 'mid',
+            allowPartial: false,
+          },
+        },
         summary: {
           maxDrawdownPct: 8,
           totalReturnPct: 12,
@@ -907,6 +929,21 @@ describe('aiQuantConversationsRepository lastBacktestRef parsing', () => {
           lastBacktestRef: {
             jobId: 'job-1',
             publishedSnapshotId: 'snapshot-1',
+            config: {
+              range: {
+                preset: 'CUSTOM',
+                startAt: '2026-03-01T00:00:00.000Z',
+                endAt: '2026-03-24T00:00:00.000Z',
+              },
+              execution: {
+                initialCash: 10000,
+                leverage: 2,
+                slippageBps: 5,
+                feeBps: 4,
+                priceSource: 'mid',
+                allowPartial: false,
+              },
+            },
             summary: {
               maxDrawdownPct: 8,
               totalReturnPct: 12,
@@ -929,6 +966,21 @@ describe('aiQuantConversationsRepository lastBacktestRef parsing', () => {
     expect(conversations[0].lastBacktestRef).toEqual({
       jobId: 'job-1',
       publishedSnapshotId: 'snapshot-1',
+      config: {
+        range: {
+          preset: 'CUSTOM',
+          startAt: '2026-03-01T00:00:00.000Z',
+          endAt: '2026-03-24T00:00:00.000Z',
+        },
+        execution: {
+          initialCash: 10000,
+          leverage: 2,
+          slippageBps: 5,
+          feeBps: 4,
+          priceSource: 'mid',
+          allowPartial: false,
+        },
+      },
       summary: {
         maxDrawdownPct: 8,
         totalReturnPct: 12,
@@ -958,6 +1010,21 @@ describe('aiQuantConversationsRepository lastBacktestRef parsing', () => {
           lastBacktestRef: {
             jobId: 'job-1',
             publishedSnapshotId: 'snapshot-1',
+            config: {
+              range: {
+                preset: 'CUSTOM',
+                startAt: '2026-03-01T00:00:00.000Z',
+                endAt: '2026-03-24T00:00:00.000Z',
+              },
+              execution: {
+                initialCash: 10000,
+                leverage: 2,
+                slippageBps: 5,
+                feeBps: 4,
+                priceSource: 'mid',
+                allowPartial: false,
+              },
+            },
             summary: {
               maxDrawdownPct: 8,
               totalReturnPct: 12,
@@ -979,6 +1046,21 @@ describe('aiQuantConversationsRepository lastBacktestRef parsing', () => {
     expect(conversations[0].lastBacktestRef).toEqual({
       jobId: 'job-1',
       publishedSnapshotId: 'snapshot-1',
+      config: {
+        range: {
+          preset: 'CUSTOM',
+          startAt: '2026-03-01T00:00:00.000Z',
+          endAt: '2026-03-24T00:00:00.000Z',
+        },
+        execution: {
+          initialCash: 10000,
+          leverage: 2,
+          slippageBps: 5,
+          feeBps: 4,
+          priceSource: 'mid',
+          allowPartial: false,
+        },
+      },
       summary: {
         maxDrawdownPct: 8,
         totalReturnPct: 12,
@@ -1002,6 +1084,21 @@ describe('aiQuantConversationsRepository lastBacktestRef parsing', () => {
         lastBacktestRef: {
           jobId: 'job-1',
           publishedSnapshotId: 'snapshot-1',
+          config: {
+            range: {
+              preset: 'CUSTOM',
+              startAt: '2026-03-01T00:00:00.000Z',
+              endAt: '2026-03-24T00:00:00.000Z',
+            },
+            execution: {
+              initialCash: 10000,
+              leverage: 2,
+              slippageBps: 5,
+              feeBps: 4,
+              priceSource: 'INVALID',
+              allowPartial: false,
+            },
+          },
           summary: {
             maxDrawdownPct: 'bad',
             totalReturnPct: 12,

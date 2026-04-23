@@ -221,9 +221,30 @@ describe('ai-quant-page-conversation', () => {
         baseTimeframe: '15m',
         positionPct: 10,
       },
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: true,
+      },
       lastBacktestRef: {
         jobId: 'btjob-1',
         publishedSnapshotId: 'snapshot-1',
+        config: {
+          range: {
+            preset: '30D',
+          },
+          execution: {
+            initialCash: 10000,
+            leverage: 1,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: true,
+          },
+        },
         summary: {
           maxDrawdownPct: 8,
           totalReturnPct: 12,
@@ -260,9 +281,30 @@ describe('ai-quant-page-conversation', () => {
         baseTimeframe: '15m',
         positionPct: 10,
       },
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: true,
+      },
       lastBacktestRef: {
         jobId: 'btjob-2',
         publishedSnapshotId: 'snapshot-1',
+        config: {
+          range: {
+            preset: '30D',
+          },
+          execution: {
+            initialCash: 10000,
+            leverage: 1,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: true,
+          },
+        },
         summary: {
           maxDrawdownPct: 6,
           totalReturnPct: 18,
@@ -301,9 +343,134 @@ describe('ai-quant-page-conversation', () => {
         baseTimeframe: '15m',
         positionPct: 10,
       },
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: true,
+      },
       lastBacktestRef: {
         jobId: 'btjob-1',
         publishedSnapshotId: 'snapshot-1',
+        config: {
+          range: {
+            preset: '30D',
+          },
+          execution: {
+            initialCash: 10000,
+            leverage: 1,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: true,
+          },
+        },
+        summary: {
+          maxDrawdownPct: 8,
+          totalReturnPct: 12,
+          winRatePct: 60,
+          tradeCount: 5,
+        },
+        completedAt: '2026-04-23T00:04:00.000Z',
+      },
+    } as Parameters<typeof createConversationFromServerConversation>[0], (key: string) => key)
+
+    expect(conversation.backtestResult).toBeNull()
+  })
+
+  it('does not restore lastBacktestRef when raw backtest range input has drifted under the same snapshot', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'conv-1',
+      conversationTitle: 'remote',
+      status: 'PUBLISHED',
+      conversationMessages: [],
+      publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotParamValues: null,
+      publishedSnapshotStrategyConfig: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: true,
+      },
+      lastBacktestRef: {
+        jobId: 'btjob-range-drift',
+        publishedSnapshotId: 'snapshot-1',
+        config: {
+          range: {
+            preset: '7D',
+          },
+          execution: {
+            initialCash: 10000,
+            leverage: 1,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: true,
+          },
+        },
+        summary: {
+          maxDrawdownPct: 8,
+          totalReturnPct: 12,
+          winRatePct: 60,
+          tradeCount: 5,
+        },
+        completedAt: '2026-04-23T00:04:00.000Z',
+      },
+    } as Parameters<typeof createConversationFromServerConversation>[0], (key: string) => key)
+
+    expect(conversation.backtestResult).toBeNull()
+  })
+
+  it('does not restore lastBacktestRef when execution config has drifted under the same snapshot', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'conv-1',
+      conversationTitle: 'remote',
+      status: 'PUBLISHED',
+      conversationMessages: [],
+      publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotParamValues: null,
+      publishedSnapshotStrategyConfig: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: true,
+      },
+      lastBacktestRef: {
+        jobId: 'btjob-execution-drift',
+        publishedSnapshotId: 'snapshot-1',
+        config: {
+          range: {
+            preset: '30D',
+          },
+          execution: {
+            initialCash: 20000,
+            leverage: 1,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: true,
+          },
+        },
         summary: {
           maxDrawdownPct: 8,
           totalReturnPct: 12,

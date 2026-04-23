@@ -12,6 +12,21 @@ export interface AiQuantConversationMessageSnapshot {
 export interface AiQuantConversationLastBacktestRefRecord {
   jobId: string
   publishedSnapshotId: string
+  config: {
+    range: {
+      preset: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
+      startAt?: string
+      endAt?: string
+    }
+    execution: {
+      initialCash: number
+      leverage: number | null
+      slippageBps: number
+      feeBps: number
+      priceSource: 'open' | 'close' | 'mid'
+      allowPartial: boolean
+    }
+  }
   summary: {
     maxDrawdownPct: number
     totalReturnPct: number
@@ -221,18 +236,106 @@ export class AiQuantConversationsRepository {
 
     const jobId = this.readNonEmptyString(value.jobId)
     const publishedSnapshotId = this.readNonEmptyString(value.publishedSnapshotId)
+    const config = this.parseLastBacktestConfig(value.config)
     const summary = this.parseLastBacktestSummary(value.summary)
     const completedAt = this.parseDate(value.completedAt)
 
-    if (!jobId || !publishedSnapshotId || !summary || !completedAt) {
+    if (!jobId || !publishedSnapshotId || !config || !summary || !completedAt) {
       return null
     }
 
     return {
       jobId,
       publishedSnapshotId,
+      config,
       summary,
       completedAt,
+    }
+  }
+
+  private parseLastBacktestConfig(
+    value: Prisma.JsonValue | null | undefined,
+  ): AiQuantConversationLastBacktestRefRecord['config'] | null {
+    if (!this.isJsonObject(value)) {
+      return null
+    }
+
+    const range = this.parseLastBacktestRange(value.range)
+    const execution = this.parseLastBacktestExecution(value.execution)
+
+    if (!range || !execution) {
+      return null
+    }
+
+    return { range, execution }
+  }
+
+  private parseLastBacktestRange(
+    value: Prisma.JsonValue | null | undefined,
+  ): AiQuantConversationLastBacktestRefRecord['config']['range'] | null {
+    if (!this.isJsonObject(value)) {
+      return null
+    }
+
+    const preset = value.preset
+    if (
+      preset !== '7D'
+      && preset !== '30D'
+      && preset !== '90D'
+      && preset !== '1Y'
+      && preset !== 'CUSTOM'
+    ) {
+      return null
+    }
+
+    if (preset !== 'CUSTOM') {
+      return { preset }
+    }
+
+    const startAt = this.readNonEmptyString(value.startAt)
+    const endAt = this.readNonEmptyString(value.endAt)
+    if (!startAt || !endAt) {
+      return null
+    }
+
+    return {
+      preset,
+      startAt,
+      endAt,
+    }
+  }
+
+  private parseLastBacktestExecution(
+    value: Prisma.JsonValue | null | undefined,
+  ): AiQuantConversationLastBacktestRefRecord['config']['execution'] | null {
+    if (!this.isJsonObject(value)) {
+      return null
+    }
+
+    const initialCash = this.readFiniteNumber(value.initialCash)
+    const leverage = this.readNullableFiniteNumber(value.leverage)
+    const slippageBps = this.readFiniteNumber(value.slippageBps)
+    const feeBps = this.readFiniteNumber(value.feeBps)
+    const priceSource = value.priceSource
+    const allowPartial = value.allowPartial
+
+    if (
+      initialCash === null
+      || slippageBps === null
+      || feeBps === null
+      || (priceSource !== 'open' && priceSource !== 'close' && priceSource !== 'mid')
+      || typeof allowPartial !== 'boolean'
+    ) {
+      return null
+    }
+
+    return {
+      initialCash,
+      leverage,
+      slippageBps,
+      feeBps,
+      priceSource,
+      allowPartial,
     }
   }
 
@@ -303,6 +406,13 @@ export class AiQuantConversationsRepository {
   private readOptionalFiniteNumber(value: Prisma.JsonValue | null | undefined): number | null | undefined {
     if (value === undefined || value === null) {
       return undefined
+    }
+    return this.readFiniteNumber(value)
+  }
+
+  private readNullableFiniteNumber(value: Prisma.JsonValue | null | undefined): number | null {
+    if (value === undefined || value === null) {
+      return null
     }
     return this.readFiniteNumber(value)
   }

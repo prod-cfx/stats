@@ -48,6 +48,11 @@ export interface CreateBacktestJobPayload {
     fromTs: number
     toTs: number
   }
+  requestedRangeInput?: {
+    preset: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
+    startAt?: string
+    endAt?: string
+  }
   allowPartial?: boolean
   bars?: unknown[]
 }

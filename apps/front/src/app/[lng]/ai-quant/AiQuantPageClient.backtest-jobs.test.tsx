@@ -97,14 +97,22 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
     messages,
     onRunBacktest,
     canRunBacktest,
+    onParamChange,
   }: {
     messages: Array<{ id: string; role: string; content: string }>
     onRunBacktest: () => void
     canRunBacktest?: boolean
+    onParamChange?: (key: string, value: unknown) => void
   }) => (
     <div>
       <button data-testid="run-backtest" disabled={!canRunBacktest} onClick={onRunBacktest}>
         run
+      </button>
+      <button data-testid="set-range-7d" onClick={() => onParamChange?.('backtestRangePreset', '7D')}>
+        set-range-7d
+      </button>
+      <button data-testid="set-initial-cash-20000" onClick={() => onParamChange?.('backtestInitialCash', 20000)}>
+        set-initial-cash-20000
       </button>
       <div data-testid="messages">{messages.map(msg => msg.content).join('|')}</div>
     </div>
@@ -891,9 +899,30 @@ describe('AiQuantPageClient backtest jobs integration', () => {
           baseTimeframe: '15m',
           positionPct: 10,
         },
+        publishedSnapshotBacktestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: true,
+        },
         lastBacktestRef: {
           jobId: 'btjob-1',
           publishedSnapshotId: 'snapshot-1',
+          config: {
+            range: {
+              preset: '30D',
+            },
+            execution: {
+              initialCash: 10000,
+              leverage: 1,
+              slippageBps: 10,
+              feeBps: 5,
+              priceSource: 'close',
+              allowPartial: true,
+            },
+          },
           summary: {
             maxDrawdownPct: 8,
             totalReturnPct: 12,
@@ -912,6 +941,185 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
     expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('btjob-1')
     expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('deployable')
+  })
+
+  it('does not restore server-owned lastBacktestRef when execution config changed under the same snapshot', async () => {
+    const listAiQuantConversations = jest.requireMock('@/lib/api')
+      .listAiQuantConversations as jest.Mock
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'conv-1',
+        conversationTitle: 'server conv',
+        conversationMessages: [],
+        status: 'PUBLISHED',
+        publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotParamValues: null,
+        publishedSnapshotStrategyConfig: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
+        publishedSnapshotBacktestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: true,
+        },
+        lastBacktestRef: {
+          jobId: 'btjob-1',
+          publishedSnapshotId: 'snapshot-1',
+          config: {
+            range: {
+              preset: '30D',
+            },
+            execution: {
+              initialCash: 20000,
+              leverage: 1,
+              slippageBps: 10,
+              feeBps: 5,
+              priceSource: 'close',
+              allowPartial: true,
+            },
+          },
+          summary: {
+            maxDrawdownPct: 8,
+            totalReturnPct: 12,
+            winRatePct: 60,
+            tradeCount: 5,
+            marketType: 'spot',
+          },
+          completedAt: '2026-04-23T00:04:00.000Z',
+        },
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient serverOwnedConversations />)
+    })
+
+    expect(container.querySelector('[data-testid="backtest-summary"]')).toBeNull()
+  })
+
+  it.each([
+    ['backtest range', 'set-range-7d'],
+    ['backtest execution', 'set-initial-cash-20000'],
+  ])('clears current backtestResult immediately when %s changes', async (_label, testId) => {
+    localStorage.setItem(
+      'ai_quant_conversations_v1',
+      JSON.stringify([
+        {
+          id: 'conv-1',
+          title: 'conv',
+          messages: [
+            { id: 'welcome', role: 'assistant', content: '```typescript\nreturn { ok: true }\n```' },
+          ],
+          params: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            baseTimeframe: '15m',
+            buyWindowMin: 3,
+            buyDropPct: 1,
+            sellWindowMin: 15,
+            sellRisePct: 2,
+            positionPct: 10,
+          },
+          paramSchema: null,
+          paramValues: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            baseTimeframe: '15m',
+            buyWindowMin: 3,
+            buyDropPct: 1,
+            sellWindowMin: 15,
+            sellRisePct: 2,
+            positionPct: 10,
+            backtestRangePreset: '30D',
+            backtestInitialCash: 10000,
+            backtestLeverage: 1,
+            backtestSlippageBps: 10,
+            backtestFeeBps: 5,
+            backtestPriceSource: 'close',
+            backtestAllowPartial: true,
+          },
+          backtestResult: {
+            id: 'btjob-existing',
+            symbol: 'BTCUSDT',
+            startAt: '2026-03-01T00:00:00.000Z',
+            endAt: '2026-03-24T00:00:00.000Z',
+            maxDrawdownPct: 8,
+            totalReturnPct: 12,
+            winRatePct: 60,
+            tradeCount: 5,
+            marketType: 'spot',
+          },
+          logicGraph: {
+            version: 1,
+            status: 'confirmed',
+            trigger: [],
+            actions: [],
+            risk: [],
+            meta: {
+              exchange: 'binance',
+              symbol: 'BTCUSDT',
+              timeframe: '15m',
+              positionPct: 10,
+            },
+          },
+          llmCodegenSessionId: null,
+          publishedStrategyInstanceId: null,
+          publishedSnapshotId: 'snapshot-1',
+          publishedSnapshotParamValues: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            marketType: 'spot',
+            baseTimeframe: '15m',
+            positionPct: 10,
+          },
+          publishedSnapshotStrategyConfig: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            marketType: 'spot',
+            baseTimeframe: '15m',
+            positionPct: 10,
+          },
+          publishedSnapshotBacktestConfigDefaults: {
+            initialCash: 10000,
+            leverage: 1,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: true,
+          },
+          publishedSnapshotDeploymentExecutionDefaults: null,
+          publishedSnapshotDeploymentExecutionConstraints: null,
+          publishedSnapshotCompatibilityMetadata: null,
+          publishedScriptCode: 'return { ok: true }',
+          publishedScriptGraphVersion: 1,
+          latestSignalMessage: null,
+          backtestExecutionConfigExplicit: true,
+          backtestExecutionState: 'succeeded',
+          updatedAt: Date.now(),
+        },
+      ]),
+    )
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('btjob-existing')
+
+    await act(async () => {
+      container.querySelector(`[data-testid="${testId}"]`)?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="backtest-summary"]')).toBeNull()
   })
 
   it('running state disables backtest button', async () => {
