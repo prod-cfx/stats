@@ -262,9 +262,9 @@ export class AiQuantConversationsRepository {
     const marketType = this.parseMarketType(value.marketType)
 
     if (
-      (value.openTradeCount !== undefined && openTradeCount === null)
-      || (value.openPnl !== undefined && openPnl === null)
-      || (value.marketType !== undefined && marketType === null)
+      (value.openTradeCount !== undefined && value.openTradeCount !== null && openTradeCount === null)
+      || (value.openPnl !== undefined && value.openPnl !== null && openPnl === null)
+      || (value.marketType !== undefined && value.marketType !== null && marketType === null)
     ) {
       return null
     }
@@ -283,7 +283,7 @@ export class AiQuantConversationsRepository {
   private parseMarketType(
     value: Prisma.JsonValue | null | undefined,
   ): 'spot' | 'perp' | null | undefined {
-    if (value === undefined) {
+    if (value === undefined || value === null) {
       return undefined
     }
     return value === 'spot' || value === 'perp' ? value : null
@@ -301,7 +301,7 @@ export class AiQuantConversationsRepository {
   }
 
   private readOptionalFiniteNumber(value: Prisma.JsonValue | null | undefined): number | null | undefined {
-    if (value === undefined) {
+    if (value === undefined || value === null) {
       return undefined
     }
     return this.readFiniteNumber(value)

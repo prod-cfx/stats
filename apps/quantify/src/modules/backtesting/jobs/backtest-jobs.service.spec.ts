@@ -712,26 +712,67 @@ describe('backtestJobsService', () => {
       bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
       snapshotId: 'snapshot-1',
     })
-    ;(input as BacktestRunInput & { conversationId?: string }).conversationId = 'conv-1'
+    input.conversationId = 'conv-1'
 
     const created = await service.createJob(input, OWNER_USER_ID)
     await flushMicrotasks()
 
-    expect(conversations.updateLastBacktestRef).toHaveBeenCalledWith({
+    expect(conversations.updateLastBacktestRef).toHaveBeenCalledTimes(1)
+    const payload = conversations.updateLastBacktestRef.mock.calls[0][0]
+    expect(payload).toEqual({
       conversationId: 'conv-1',
       userId: OWNER_USER_ID,
       lastBacktestRef: {
         jobId: created.id,
         publishedSnapshotId: 'snapshot-1',
-        summary: expect.objectContaining({
+        summary: {
           maxDrawdownPct: 8,
           totalReturnPct: 12,
           winRatePct: 60,
           tradeCount: 5,
-        }),
+          marketType: 'spot',
+        },
         completedAt: expect.any(Date),
       },
     })
+    expect(payload.lastBacktestRef).not.toHaveProperty('equityCurve')
+    expect(payload.lastBacktestRef).not.toHaveProperty('trades')
+    expect(payload.lastBacktestRef).not.toHaveProperty('markers')
+    expect(payload.lastBacktestRef).not.toHaveProperty('bySymbol')
+    expect(payload.lastBacktestRef).not.toHaveProperty('result')
+  })
+
+  it('does not write lastBacktestRef for successful runs that are not explicitly snapshot-bound', async () => {
+    const runner = {
+      run: jest.fn().mockResolvedValue({
+        summary: {
+          netProfit: 120,
+          netProfitPct: 12,
+          maxDrawdownPct: 8,
+          winRate: 0.6,
+          profitFactor: 1.8,
+          totalTrades: 5,
+        },
+        equityCurve: [],
+        trades: [],
+        markers: [],
+        bySymbol: [],
+      }),
+    }
+    const conversations = {
+      updateLastBacktestRef: jest.fn().mockResolvedValue(undefined),
+    }
+    const { service } = createService({ runner, conversations })
+    const input = createInput()
+    Object.assign(input.strategy as Record<string, unknown>, {
+      snapshotId: 'snapshot-1',
+    })
+    input.conversationId = 'conv-1'
+
+    await service.createJob(input, OWNER_USER_ID)
+    await flushMicrotasks()
+
+    expect(conversations.updateLastBacktestRef).not.toHaveBeenCalled()
   })
 
   it('does not write lastBacktestRef when the backtest fails', async () => {
@@ -747,7 +788,7 @@ describe('backtestJobsService', () => {
       bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
       snapshotId: 'snapshot-1',
     })
-    ;(input as BacktestRunInput & { conversationId?: string }).conversationId = 'conv-1'
+    input.conversationId = 'conv-1'
 
     await service.createJob(input, OWNER_USER_ID)
     await flushMicrotasks()
@@ -857,6 +898,52 @@ describe('aiQuantConversationsRepository lastBacktestRef parsing', () => {
       completedAt: new Date(completedAt),
     })
     expect(conversations[0].lastBacktestRef?.completedAt).toBeInstanceOf(Date)
+  })
+
+  it('treats explicit JSON null optional fields as absent', async () => {
+    const completedAt = '2026-04-23T05:00:00.000Z'
+    const { repository } = createConversationRepository({
+      findMany: jest.fn().mockResolvedValue([
+        {
+          id: 'conv-1',
+          userId: OWNER_USER_ID,
+          codegenSessionId: 'session-1',
+          title: 'Conversation',
+          archivedAt: null,
+          createdAt: new Date('2026-04-20T00:00:00.000Z'),
+          updatedAt: new Date('2026-04-21T00:00:00.000Z'),
+          lastBacktestRef: {
+            jobId: 'job-1',
+            publishedSnapshotId: 'snapshot-1',
+            summary: {
+              maxDrawdownPct: 8,
+              totalReturnPct: 12,
+              winRatePct: 60,
+              tradeCount: 5,
+              openTradeCount: null,
+              openPnl: null,
+              marketType: null,
+            },
+            completedAt,
+          },
+          messages: [],
+        },
+      ]),
+    })
+
+    const conversations = await repository.listByUser(OWNER_USER_ID)
+
+    expect(conversations[0].lastBacktestRef).toEqual({
+      jobId: 'job-1',
+      publishedSnapshotId: 'snapshot-1',
+      summary: {
+        maxDrawdownPct: 8,
+        totalReturnPct: 12,
+        winRatePct: 60,
+        tradeCount: 5,
+      },
+      completedAt: new Date(completedAt),
+    })
   })
 
   it('returns null for malformed JSON lastBacktestRef payloads', async () => {

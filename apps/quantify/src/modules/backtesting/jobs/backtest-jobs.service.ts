@@ -242,7 +242,7 @@ export class BacktestJobsService {
         },
       })
 
-      if (job.conversationId && resolvedSummary.snapshotId) {
+      if (this.shouldWriteLastBacktestRef(input, job.conversationId, resolvedSummary.snapshotId)) {
         await this.conversationsRepo.updateLastBacktestRef({
           conversationId: job.conversationId,
           userId: job.ownerUserId,
@@ -434,8 +434,22 @@ export class BacktestJobsService {
   }
 
   private readConversationId(input: BacktestRunInput): string | null {
-    const candidate = (input as BacktestRunInput & { conversationId?: unknown }).conversationId
+    const candidate = input.conversationId
     return typeof candidate === 'string' && candidate.trim().length > 0 ? candidate.trim() : null
+  }
+
+  private shouldWriteLastBacktestRef(
+    input: BacktestRunInput,
+    conversationId: string | null | undefined,
+    snapshotId: string | undefined,
+  ): conversationId is string {
+    return (
+      input.strategy.bindingSource === 'PUBLISHED_SNAPSHOT_STRICT'
+      && typeof conversationId === 'string'
+      && conversationId.length > 0
+      && typeof snapshotId === 'string'
+      && snapshotId.length > 0
+    )
   }
 
   private normalizePersistedStatus(status: string, id: string): BacktestJobPhase {

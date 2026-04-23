@@ -188,6 +188,7 @@ export interface BacktestRunInput {
   symbols: string[]
   baseTimeframe: Timeframe
   stateTimeframes: Timeframe[]
+  conversationId?: string
   allowPartial?: boolean
   initialCash: number
   leverage?: number | null
