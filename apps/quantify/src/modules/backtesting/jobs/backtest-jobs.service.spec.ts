@@ -893,6 +893,126 @@ describe('backtestJobsService', () => {
     expect(conversations.updateLastBacktestRef).toHaveBeenCalledTimes(1)
   })
 
+  it('attempts to write a lightweight lastBacktestRef after a successful snapshot-bound fallback job', async () => {
+    const result = {
+      summary: {
+        netProfit: 120,
+        netProfitPct: 12,
+        maxDrawdownPct: 8,
+        winRate: 0.6,
+        profitFactor: 1.8,
+        totalTrades: 5,
+      },
+      equityCurve: [],
+      trades: [],
+      markers: [],
+      bySymbol: [],
+    }
+    const runner = {
+      run: jest.fn().mockResolvedValue(result),
+    }
+    const conversations = createConversationsMock()
+    const prisma = createPrismaMock()
+    prisma.backtestJob.create.mockRejectedValueOnce(Object.assign(
+      new Error('The table `public.backtest_jobs` does not exist in the current database.'),
+      { code: 'P2021' },
+    ))
+    const { service } = createService({ runner, conversations, prisma })
+    const input = createInput()
+    Object.assign(input.strategy as Record<string, unknown>, {
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+      snapshotId: 'snapshot-1',
+    })
+    input.conversationId = 'conv-1'
+
+    const created = await service.createJob(input, OWNER_USER_ID)
+    await flushMicrotasks()
+
+    expect(conversations.updateLastBacktestRef).toHaveBeenCalledTimes(1)
+    expect(conversations.updateLastBacktestRef).toHaveBeenCalledWith({
+      conversationId: 'conv-1',
+      userId: OWNER_USER_ID,
+      lastBacktestRef: {
+        jobId: created.id,
+        publishedSnapshotId: 'snapshot-1',
+        config: {
+          range: {
+            preset: 'CUSTOM',
+            startAt: '1970-01-01T00:00:00.001Z',
+            endAt: '1970-01-01T00:00:00.002Z',
+          },
+          execution: {
+            initialCash: 10000,
+            leverage: 2,
+            slippageBps: 5,
+            feeBps: 4,
+            priceSource: 'mid',
+            allowPartial: false,
+          },
+        },
+        summary: {
+          maxDrawdownPct: 8,
+          totalReturnPct: 12,
+          winRatePct: 60,
+          tradeCount: 5,
+          marketType: 'spot',
+        },
+        completedAt: expect.any(Date),
+      },
+    })
+  })
+
+  it('keeps a fallback job succeeded when conversation lastBacktestRef writeback fails', async () => {
+    const result = {
+      summary: {
+        netProfit: 120,
+        netProfitPct: 12,
+        maxDrawdownPct: 8,
+        winRate: 0.6,
+        profitFactor: 1.8,
+        totalTrades: 5,
+      },
+      equityCurve: [],
+      trades: [],
+      markers: [],
+      bySymbol: [],
+    }
+    const runner = {
+      run: jest.fn().mockResolvedValue(result),
+    }
+    const conversations = createConversationsMock()
+    conversations.updateLastBacktestRef.mockRejectedValue(new Error('writeback failed'))
+    const prisma = createPrismaMock()
+    prisma.backtestJob.create.mockRejectedValueOnce(Object.assign(
+      new Error('The table `public.backtest_jobs` does not exist in the current database.'),
+      { code: 'P2021' },
+    ))
+    const { service } = createService({ runner, conversations, prisma })
+    const warnSpy = jest.spyOn((service as any).logger, 'warn')
+    const input = createInput()
+    Object.assign(input.strategy as Record<string, unknown>, {
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+      snapshotId: 'snapshot-1',
+    })
+    input.conversationId = 'conv-1'
+
+    const created = await service.createJob(input, OWNER_USER_ID)
+    await flushMicrotasks()
+
+    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toEqual(
+      expect.objectContaining({
+        id: created.id,
+        status: 'succeeded',
+        resultSummary: expect.objectContaining(result.summary),
+      }),
+    )
+    await expect(service.getJobResult(created.id, OWNER_USER_ID)).resolves.toEqual(result)
+    expect(conversations.updateLastBacktestRef).toHaveBeenCalledTimes(1)
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining('event=backtest_last_backtest_ref_write_failed'),
+    )
+  })
+
   it('throws not found when prisma cannot find the job', async () => {
     const { service, marketData, prisma, availability } = createService()
 

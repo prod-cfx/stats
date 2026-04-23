@@ -281,43 +281,16 @@ export class BacktestJobsService {
         },
       })
 
-      if (this.shouldWriteLastBacktestRef(input, job.conversationId, resolvedSummary.snapshotId)) {
-        try {
-          await this.conversationsRepo.updateLastBacktestRef({
-            conversationId: job.conversationId,
-            userId: job.ownerUserId,
-            lastBacktestRef: {
-              jobId: id,
-              publishedSnapshotId: resolvedSummary.snapshotId,
-              config: this.buildLastBacktestConfig(input),
-              summary: {
-                maxDrawdownPct: Number(result.summary.maxDrawdownPct.toFixed(2)),
-                totalReturnPct: Number(result.summary.netProfitPct.toFixed(2)),
-                winRatePct: Number(
-                  (
-                    result.summary.winRate <= 1
-                      ? result.summary.winRate * 100
-                      : result.summary.winRate
-                  ).toFixed(2),
-                ),
-                tradeCount: result.summary.totalTrades,
-                ...(typeof result.summary.totalOpenTrades === 'number'
-                  ? { openTradeCount: result.summary.totalOpenTrades }
-                  : {}),
-                ...(typeof result.summary.openPnl === 'number'
-                  ? { openPnl: Number(result.summary.openPnl.toFixed(2)) }
-                  : {}),
-                marketType: resolvedSummary.marketType,
-              },
-              completedAt,
-            },
-          })
-        } catch (error) {
-          this.logger.warn(
-            `event=backtest_last_backtest_ref_write_failed jobId=${id} conversationId=${job.conversationId} reason=${this.describeError(error)}`,
-          )
-        }
-      }
+      await this.writeLastBacktestRefIfEligible({
+        id,
+        input,
+        ownerUserId: job.ownerUserId,
+        conversationId: job.conversationId,
+        snapshotId: resolvedSummary.snapshotId,
+        marketType: resolvedSummary.marketType,
+        result,
+        completedAt,
+      })
     } catch (error) {
       await this.prisma.backtestJob.update({
         where: { id },
@@ -340,11 +313,23 @@ export class BacktestJobsService {
 
     try {
       const { resolvedSummary, result } = await this.runBacktestJob(input, initialSummary)
+      const completedAt = new Date()
       job.status = 'succeeded'
       job.inputSummary = resolvedSummary
       job.result = result
       job.error = undefined
-      job.finishedAt = new Date().toISOString()
+      job.finishedAt = completedAt.toISOString()
+
+      await this.writeLastBacktestRefIfEligible({
+        id,
+        input,
+        ownerUserId: job.ownerUserId,
+        conversationId: this.readConversationId(input),
+        snapshotId: resolvedSummary.snapshotId,
+        marketType: resolvedSummary.marketType,
+        result,
+        completedAt,
+      })
     } catch (error) {
       job.status = 'failed'
       job.error = error instanceof Error ? error.message : String(error)
@@ -496,6 +481,58 @@ export class BacktestJobsService {
       && typeof snapshotId === 'string'
       && snapshotId.length > 0
     )
+  }
+
+  private async writeLastBacktestRefIfEligible(params: {
+    id: string
+    input: BacktestRunInput
+    ownerUserId: string
+    conversationId: string | null | undefined
+    snapshotId: string | undefined
+    marketType: 'spot' | 'perp'
+    result: BacktestReport
+    completedAt: Date
+  }): Promise<void> {
+    const { id, input, ownerUserId, conversationId, snapshotId, marketType, result, completedAt } = params
+    if (!this.shouldWriteLastBacktestRef(input, conversationId, snapshotId)) {
+      return
+    }
+
+    try {
+      await this.conversationsRepo.updateLastBacktestRef({
+        conversationId,
+        userId: ownerUserId,
+        lastBacktestRef: {
+          jobId: id,
+          publishedSnapshotId: snapshotId,
+          config: this.buildLastBacktestConfig(input),
+          summary: {
+            maxDrawdownPct: Number(result.summary.maxDrawdownPct.toFixed(2)),
+            totalReturnPct: Number(result.summary.netProfitPct.toFixed(2)),
+            winRatePct: Number(
+              (
+                result.summary.winRate <= 1
+                  ? result.summary.winRate * 100
+                  : result.summary.winRate
+              ).toFixed(2),
+            ),
+            tradeCount: result.summary.totalTrades,
+            ...(typeof result.summary.totalOpenTrades === 'number'
+              ? { openTradeCount: result.summary.totalOpenTrades }
+              : {}),
+            ...(typeof result.summary.openPnl === 'number'
+              ? { openPnl: Number(result.summary.openPnl.toFixed(2)) }
+              : {}),
+            marketType,
+          },
+          completedAt,
+        },
+      })
+    } catch (error) {
+      this.logger.warn(
+        `event=backtest_last_backtest_ref_write_failed jobId=${id} conversationId=${conversationId} reason=${this.describeError(error)}`,
+      )
+    }
   }
 
   private buildLastBacktestConfig(input: BacktestRunInput): {
