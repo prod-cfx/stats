@@ -39,4 +39,17 @@ describe('graphOperatorParserService', () => {
 
     expect(() => parser.parse('CUSTOM_ALPHA(CLOSE,7)')).toThrow('codegen.graph_operator_invalid')
   })
+
+  it('parses signed numeric literals', () => {
+    const parser = new GraphOperatorParserService()
+
+    expect(parser.parse('LTE(POSITION_PNL_PCT,-5)')).toEqual({
+      kind: 'CALL',
+      name: 'LTE',
+      args: [
+        { kind: 'IDENT', name: 'POSITION_PNL_PCT' },
+        { kind: 'NUMBER', value: -5 },
+      ],
+    })
+  })
 })
