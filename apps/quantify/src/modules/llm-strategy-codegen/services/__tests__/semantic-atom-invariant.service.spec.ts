@@ -145,6 +145,31 @@ describe('SemanticAtomInvariantService', () => {
     }
   }
 
+  function driftCanonicalTimeframe(canonicalSpec: CanonicalStrategySpec): CanonicalStrategySpec {
+    if (canonicalSpec.version !== 2) {
+      return canonicalSpec
+    }
+
+    return {
+      ...canonicalSpec,
+      rules: canonicalSpec.rules.map(rule =>
+        rule.phase === 'exit' && rule.actions.some(action => action.type === 'CLOSE_LONG')
+          ? {
+              ...rule,
+              condition: {
+                kind: 'atom' as const,
+                key: 'price.change_pct',
+                semanticScope: 'market' as const,
+                op: 'GTE' as const,
+                value: 0.01,
+                params: { timeframe: '4h', lookbackBars: 1, basis: 'prev_close' },
+              },
+            }
+          : rule,
+      ),
+    }
+  }
+
   function driftIr(ir: CanonicalStrategyIrV1): CanonicalStrategyIrV1 {
     const exitRule = ir.ruleBlocks.find(rule =>
       rule.phase === 'exit'
@@ -170,6 +195,32 @@ describe('SemanticAtomInvariantService', () => {
             : item,
         ),
       },
+    }
+  }
+
+  function driftIrLookback(ir: CanonicalStrategyIrV1): CanonicalStrategyIrV1 {
+    return {
+      ...ir,
+      signalCatalog: {
+        ...ir.signalCatalog,
+        series: ir.signalCatalog.series.map(series =>
+          series.kind === 'PRICE_CHANGE_PCT'
+            ? { ...series, params: { ...(series.params ?? {}), lookbackBars: 2 } }
+            : series,
+        ),
+      },
+    }
+  }
+
+  function driftAstTimeframe(ast: StrategyAstV1): StrategyAstV1 {
+    return {
+      ...ast,
+      exprPool: ast.exprPool.map((expr): ExprNode => {
+        if (expr.nodeType === 'series' && expr.payload.kind === 'PRICE_CHANGE_PCT') {
+          return { ...expr, payload: { ...(expr.payload as SeriesDef), timeframe: '4h' } }
+        }
+        return expr
+      }),
     }
   }
 
@@ -376,6 +427,51 @@ describe('SemanticAtomInvariantService', () => {
     const { canonicalSpec, ir, ast } = compile(state)
 
     const checks = service.validate({ semanticState: state, canonicalSpec, ir: driftIr(ir), ast })
+
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_atom.price_percent_change',
+        status: 'failed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
+  it('fails when canonicalSpec uses the wrong timeframe even if direction and threshold match', () => {
+    const state = buildSemanticState()
+    const { canonicalSpec, ir, ast } = compile(state)
+
+    const checks = service.validate({ semanticState: state, canonicalSpec: driftCanonicalTimeframe(canonicalSpec), ir, ast })
+
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_atom.price_percent_change',
+        status: 'failed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
+  it('fails when IR uses the wrong lookback even if direction and threshold match', () => {
+    const state = buildSemanticState()
+    const { canonicalSpec, ir, ast } = compile(state)
+
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir: driftIrLookback(ir), ast })
+
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_atom.price_percent_change',
+        status: 'failed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
+  it('fails when AST uses the wrong timeframe even if direction and threshold match', () => {
+    const state = buildSemanticState()
+    const { canonicalSpec, ir, ast } = compile(state)
+
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast: driftAstTimeframe(ast) })
 
     expect(checks).toEqual(expect.arrayContaining([
       expect.objectContaining({

@@ -14,6 +14,8 @@ interface PriceChangeSnapshot {
   predicateKind: PredicateKind
   constValue: number | null
   hasPriceChangeSeries: boolean
+  timeframe: string | null
+  lookbackBars: number | null
 }
 
 interface LayerSnapshot {
@@ -29,6 +31,8 @@ interface ExpectedSnapshot {
   action: PositionAction
   predicateKind: PredicateKind
   constValue: number
+  timeframe: string | null
+  lookbackBars: number
 }
 
 @Injectable()
@@ -115,6 +119,8 @@ export class SemanticAtomInvariantService {
         action: expectedAction,
         predicateKind: expected.predicateKind,
         constValue: expected.constValue,
+        timeframe: expected.timeframe,
+        lookbackBars: expected.lookbackBars,
         basis: trigger.params.basis ?? 'prev_close',
       },
       actual: {
@@ -140,6 +146,8 @@ export class SemanticAtomInvariantService {
       action: this.expectedAction(trigger),
       predicateKind: direction === 'down' ? 'LTE' : 'GTE',
       constValue,
+      timeframe: this.readString(trigger.params.window),
+      lookbackBars: this.readPositiveInteger(trigger.params.lookbackBars) ?? 1,
     }
   }
 
@@ -163,6 +171,8 @@ export class SemanticAtomInvariantService {
         predicateKind: item.predicateKind,
         constValue: item.constValue,
         hasPriceChangeSeries: true,
+        timeframe: item.timeframe,
+        lookbackBars: item.lookbackBars,
       })),
       expected: matchedExpected,
       conflicts,
@@ -172,11 +182,13 @@ export class SemanticAtomInvariantService {
 
   private matchesExpected(
     candidate: PriceChangeSnapshot,
-    expected: Pick<ExpectedSnapshot, 'predicateKind' | 'constValue'>,
+    expected: Pick<ExpectedSnapshot, 'predicateKind' | 'constValue' | 'timeframe' | 'lookbackBars'>,
   ): boolean {
     return candidate.predicateKind === expected.predicateKind
       && candidate.constValue === expected.constValue
       && candidate.hasPriceChangeSeries
+      && (expected.timeframe === null || candidate.timeframe === expected.timeframe)
+      && candidate.lookbackBars === expected.lookbackBars
   }
 
   private findCanonicalPredicates(
@@ -198,6 +210,8 @@ export class SemanticAtomInvariantService {
           predicateKind: this.canonicalPredicateKind(atom.op),
           constValue: this.readNumber(atom.value),
           hasPriceChangeSeries: true,
+          timeframe: this.readString(atom.params?.timeframe),
+          lookbackBars: this.readPositiveInteger(atom.params?.lookbackBars) ?? 1,
         }))
       }
       return []
@@ -252,11 +266,14 @@ export class SemanticAtomInvariantService {
     }
 
     const constSeries = seriesArgs.find(series => series.kind === 'CONST')
+    const priceChangeSeries = seriesArgs.find(series => series.kind === 'PRICE_CHANGE_PCT')
     return [{
       id: predicate.id,
       predicateKind: predicate.kind,
       constValue: typeof constSeries?.value === 'number' ? constSeries.value : null,
       hasPriceChangeSeries,
+      timeframe: priceChangeSeries?.timeframe ?? null,
+      lookbackBars: this.readPositiveInteger(priceChangeSeries?.params?.lookbackBars) ?? 1,
     }, ...nested]
   }
 
@@ -314,6 +331,10 @@ export class SemanticAtomInvariantService {
       predicateKind: predicateExpr.payload.kind,
       constValue,
       hasPriceChangeSeries: true,
+      timeframe: this.isSeriesPayload(priceChangeExpr.payload) ? priceChangeExpr.payload.timeframe ?? null : null,
+      lookbackBars: this.isSeriesPayload(priceChangeExpr.payload)
+        ? this.readPositiveInteger(priceChangeExpr.payload.params?.lookbackBars) ?? 1
+        : 1,
     }, ...nested]
   }
 
@@ -385,5 +406,13 @@ export class SemanticAtomInvariantService {
 
   private readNumber(value: unknown): number {
     return typeof value === 'number' && Number.isFinite(value) ? value : 0
+  }
+
+  private readPositiveInteger(value: unknown): number | null {
+    return typeof value === 'number' && Number.isInteger(value) && value > 0 ? value : null
+  }
+
+  private readString(value: unknown): string | null {
+    return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
   }
 }
