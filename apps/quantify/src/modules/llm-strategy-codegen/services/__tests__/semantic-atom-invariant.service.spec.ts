@@ -1,4 +1,6 @@
 import type { StrategyAstV1 } from '../../types/canonical-strategy-ast'
+import type { CanonicalStrategyIrV1 } from '../../types/canonical-strategy-ir'
+import type { CanonicalStrategySpec } from '../../types/canonical-strategy-spec'
 import type { SemanticState } from '../../types/semantic-state'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
@@ -98,6 +100,118 @@ describe('SemanticAtomInvariantService', () => {
     }
   }
 
+  function driftCanonicalSpec(canonicalSpec: CanonicalStrategySpec): CanonicalStrategySpec {
+    if (canonicalSpec.version !== 2) {
+      return canonicalSpec
+    }
+
+    return {
+      ...canonicalSpec,
+      rules: canonicalSpec.rules.map(rule =>
+        rule.phase === 'exit' && rule.actions.some(action => action.type === 'CLOSE_LONG')
+          ? {
+              ...rule,
+              condition: {
+                kind: 'atom' as const,
+                key: 'price.change_pct',
+                semanticScope: 'market' as const,
+                op: 'LTE' as const,
+                value: -0.01,
+                params: { timeframe: '1h', lookbackBars: 1, basis: 'prev_close' },
+              },
+            }
+          : rule,
+      ),
+    }
+  }
+
+  function driftIr(ir: CanonicalStrategyIrV1): CanonicalStrategyIrV1 {
+    const exitRule = ir.ruleBlocks.find(rule =>
+      rule.phase === 'exit'
+      && rule.actions.some(action => action.kind === 'CLOSE_LONG')
+    )
+    const predicate = ir.signalCatalog.predicates.find(item => item.id === exitRule?.when)
+    const constId = predicate?.args.find(arg =>
+      ir.signalCatalog.series.some(series => series.id === arg && series.kind === 'CONST')
+    )
+
+    return {
+      ...ir,
+      signalCatalog: {
+        ...ir.signalCatalog,
+        series: ir.signalCatalog.series.map(series =>
+          series.id === constId
+            ? { ...series, value: -0.01 }
+            : series,
+        ),
+        predicates: ir.signalCatalog.predicates.map(item =>
+          item.id === predicate?.id
+            ? { ...item, kind: 'LTE' as const }
+            : item,
+        ),
+      },
+    }
+  }
+
+  function addConflictingAstPriceChangePredicate(ast: StrategyAstV1): StrategyAstV1 {
+    const exitProgram = ast.decisionPrograms.find(program =>
+      program.phase === 'exit'
+      && program.actions.some(action => action.kind === 'CLOSE_LONG')
+    )
+    const predicate = ast.exprPool.find(expr => expr.id === exitProgram?.when)
+    const priceChangeExpr = ast.exprPool.find(expr =>
+      predicate?.deps.includes(expr.id)
+      && expr.nodeType === 'series'
+      && expr.payload.kind === 'PRICE_CHANGE_PCT'
+    )
+    const constExpr = ast.exprPool.find(expr =>
+      predicate?.deps.includes(expr.id)
+      && expr.nodeType === 'series'
+      && expr.payload.kind === 'CONST'
+    )
+
+    if (!exitProgram || !priceChangeExpr || !constExpr) {
+      throw new Error('expected compiled exit price-change AST shape')
+    }
+
+    const conflictConst = {
+      ...constExpr,
+      id: 'expr_test_const_negative_0_01',
+      sourceRef: 'const_-0_01',
+      payload: { ...constExpr.payload, id: 'const_-0_01', value: -0.01 },
+      deps: [],
+    }
+    const conflictPredicate = {
+      id: 'expr_test_exit_price_change_conflict',
+      sourceRef: 'exit-price-change-conflict',
+      nodeType: 'predicate' as const,
+      payload: {
+        id: 'exit-price-change-conflict',
+        kind: 'LTE' as const,
+        args: [priceChangeExpr.sourceRef, conflictConst.sourceRef],
+      },
+      deps: [priceChangeExpr.id, conflictConst.id],
+    }
+
+    return {
+      ...ast,
+      exprPool: [
+        ...ast.exprPool,
+        conflictConst,
+        conflictPredicate,
+      ],
+      decisionPrograms: [
+        ...ast.decisionPrograms,
+        {
+          ...exitProgram,
+          id: 'decision_test_exit_price_change_conflict',
+          sourceRef: 'exit-price-change-conflict',
+          when: conflictPredicate.id,
+        },
+      ],
+    }
+  }
+
   it('passes when previous-close rise close-long compiles to GTE 0.01', () => {
     const state = buildSemanticState()
     const { canonicalSpec, ir, ast } = compile(state)
@@ -119,6 +233,52 @@ describe('SemanticAtomInvariantService', () => {
     const driftedAst = driftPriceChangePredicate(ast)
 
     const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast: driftedAst })
+
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_atom.price_percent_change',
+        status: 'failed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
+  it('fails when canonicalSpec drifts even if AST still matches', () => {
+    const state = buildSemanticState()
+    const { canonicalSpec, ir, ast } = compile(state)
+
+    const checks = service.validate({ semanticState: state, canonicalSpec: driftCanonicalSpec(canonicalSpec), ir, ast })
+
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_atom.price_percent_change',
+        status: 'failed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
+  it('fails when IR drifts even if AST still matches', () => {
+    const state = buildSemanticState()
+    const { canonicalSpec, ir, ast } = compile(state)
+
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir: driftIr(ir), ast })
+
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_atom.price_percent_change',
+        status: 'failed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
+  it('fails when AST has an extra conflicting same phase and action price-change predicate', () => {
+    const state = buildSemanticState()
+    const { canonicalSpec, ir, ast } = compile(state)
+    const conflictingAst = addConflictingAstPriceChangePredicate(ast)
+
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast: conflictingAst })
 
     expect(checks).toEqual(expect.arrayContaining([
       expect.objectContaining({
