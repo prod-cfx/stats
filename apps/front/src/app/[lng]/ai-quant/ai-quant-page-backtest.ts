@@ -320,7 +320,7 @@ export async function runAiQuantBacktest(args: {
           '',
         publishedSnapshotId: activeConversation.publishedSnapshotId ?? '',
       },
-      conversationId,
+      conversationId: activeConversation.serverConversationId ?? conversationId,
       range: resolveBacktestRangeInput(activeConversation.paramValues),
       // Top-level allowPartial controls whether the backtest job may clamp the
       // requested range to the available market-data coverage. It is not the

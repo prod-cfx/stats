@@ -1582,6 +1582,53 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     )
   })
 
+  it('uses serverConversationId in the backtest payload when a local conversation has been persisted', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    const activeConversation = {
+      ...seeded[0],
+      serverConversationId: 'server-conv-1',
+      publishedScriptGraphVersion: 1,
+      publishedScriptCode: 'return { ok: true }',
+    } as ConversationState
+
+    mockCreateBacktestJob.mockResolvedValueOnce({
+      id: 'job-1',
+      status: 'succeeded',
+      createdAt: '2026-03-24T12:00:01.000Z',
+    })
+
+    let currentConversation = activeConversation
+
+    await runAiQuantBacktest({
+      activeConversation,
+      activeConversationIdRef: { current: activeConversation.id },
+      backtestCapabilities: {
+        allowedBaseTimeframes: ['15m'],
+      },
+      backtestCapabilityState: 'ready',
+      backtestRunMutexRef: { current: new Set<string>() },
+      backtestRunTokenRef: { current: new Map<string, number>() },
+      graphConfirmed: true,
+      isMountedRef: { current: true },
+      setConversationBacktestExecutionState: jest.fn(),
+      t: (key: string) => key,
+      updateConversationById: (_conversationId, updater) => {
+        currentConversation = updater(currentConversation)
+      },
+    })
+
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'server-conv-1',
+      }),
+    )
+    expect(mockBuildBacktestPayload).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-1',
+      }),
+    )
+  })
+
   it('uses the published snapshot exchange for symbol support checks', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
     const activeConversation = {

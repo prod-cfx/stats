@@ -1753,7 +1753,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
   })
 
-  it('includes lastBacktestRef when listing AI Quant conversations', async () => {
+  it('includes lastBacktestRef when it matches the current published snapshot', async () => {
     mockConversationsRepo.listByUser.mockResolvedValue([
       {
         id: 'conv-1',
@@ -1780,7 +1780,24 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ])
     mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue(['session-1'])
     mockRepo.listByUser.mockResolvedValue([])
-    mockRepo.findById.mockResolvedValue(null)
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-1',
+      userId: 'user-1',
+      status: 'PUBLISHED',
+      checklist: {},
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: { conversationHistory: ['U: 原始 session 消息'] },
+      latestDraftCode: 'export default function strategy() { return true }',
+      latestSpecDesc: null,
+      rejectReason: null,
+      createdAt: new Date('2026-04-23T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-23T00:05:00.000Z'),
+      strategyInstanceId: 'instance-1',
+    })
+    mockRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-1',
+      consistencyReport: { status: 'PASSED' },
+    })
 
     const result = await service.listConversations('user-1')
 
@@ -1798,6 +1815,57 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         completedAt: '2026-04-23T00:04:00.000Z',
       },
     })
+  })
+
+  it('hides lastBacktestRef when it no longer matches the current published snapshot', async () => {
+    mockConversationsRepo.listByUser.mockResolvedValue([
+      {
+        id: 'conv-1',
+        userId: 'user-1',
+        codegenSessionId: 'session-1',
+        title: 'conv',
+        archivedAt: null,
+        createdAt: new Date('2026-04-23T00:00:00.000Z'),
+        updatedAt: new Date('2026-04-23T00:05:00.000Z'),
+        lastBacktestRef: {
+          jobId: 'btjob-1',
+          publishedSnapshotId: 'snapshot-1',
+          summary: {
+            maxDrawdownPct: 8,
+            totalReturnPct: 12,
+            winRatePct: 60,
+            tradeCount: 5,
+            marketType: 'spot',
+          },
+          completedAt: new Date('2026-04-23T00:04:00.000Z'),
+        },
+        messages: [],
+      },
+    ])
+    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue(['session-1'])
+    mockRepo.listByUser.mockResolvedValue([])
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-1',
+      userId: 'user-1',
+      status: 'PUBLISHED',
+      checklist: {},
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: { conversationHistory: ['U: 原始 session 消息'] },
+      latestDraftCode: 'export default function strategy() { return true }',
+      latestSpecDesc: null,
+      rejectReason: null,
+      createdAt: new Date('2026-04-23T00:00:00.000Z'),
+      updatedAt: new Date('2026-04-23T00:05:00.000Z'),
+      strategyInstanceId: 'instance-1',
+    })
+    mockRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-2',
+      consistencyReport: { status: 'PASSED' },
+    })
+
+    const result = await service.listConversations('user-1')
+
+    expect(result[0]?.lastBacktestRef).toBeNull()
   })
 
   it('keeps published snapshot params faithful to snapshot sources without injecting default execution values', () => {

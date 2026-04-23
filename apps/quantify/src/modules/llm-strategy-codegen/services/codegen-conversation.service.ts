@@ -1985,6 +1985,16 @@ export class CodegenConversationService {
   ): Promise<AiQuantConversationResponseDto> {
     const session = await this.sessionsRepo.findById(conversation.codegenSessionId)
     const snapshot = session ? await this.toSessionSnapshotResponse(session) : null
+    const lastBacktestRef = conversation.lastBacktestRef
+      && snapshot?.publishedSnapshotId === conversation.lastBacktestRef.publishedSnapshotId
+      ? {
+          jobId: conversation.lastBacktestRef.jobId,
+          publishedSnapshotId: conversation.lastBacktestRef.publishedSnapshotId,
+          summary: conversation.lastBacktestRef.summary,
+          completedAt: conversation.lastBacktestRef.completedAt.toISOString(),
+        }
+      : null
+
     return {
       id: conversation.id,
       activeCodegenSessionId: session && !this.stateMachine.isTerminalStatus(session.status) ? session.id : null,
@@ -1993,14 +2003,7 @@ export class CodegenConversationService {
       status: snapshot?.status as LlmCodegenSessionStatus | undefined,
       createdAt: conversation.createdAt.toISOString(),
       updatedAt: conversation.updatedAt.toISOString(),
-      lastBacktestRef: conversation.lastBacktestRef
-        ? {
-            jobId: conversation.lastBacktestRef.jobId,
-            publishedSnapshotId: conversation.lastBacktestRef.publishedSnapshotId,
-            summary: conversation.lastBacktestRef.summary,
-            completedAt: conversation.lastBacktestRef.completedAt.toISOString(),
-          }
-        : null,
+      lastBacktestRef,
       canonicalDigest: snapshot?.canonicalDigest ?? null,
       specDesc: snapshot?.specDesc ?? null,
       semanticGraph: snapshot?.semanticGraph ?? null,
