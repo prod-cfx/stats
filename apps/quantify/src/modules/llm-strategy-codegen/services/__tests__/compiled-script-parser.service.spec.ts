@@ -56,15 +56,21 @@ describe('compiledScriptParserService', () => {
         sourceRef: 'exit_short_middle_middle_revert',
         nodeType: 'predicate',
         payload: expect.objectContaining({
+          kind: 'OR',
+        }),
+      }),
+      expect.objectContaining({
+        sourceRef: 'exit_short_middle_middle_under',
+        nodeType: 'predicate',
+        payload: expect.objectContaining({
           kind: 'CROSS_UNDER',
         }),
       }),
-    ]))
-    expect(parsed.exprPool).not.toEqual(expect.arrayContaining([
       expect.objectContaining({
-        sourceRef: 'exit_short_middle_middle_revert',
+        sourceRef: 'exit_short_middle_middle_over',
+        nodeType: 'predicate',
         payload: expect.objectContaining({
-          kind: 'OR',
+          kind: 'CROSS_OVER',
         }),
       }),
     ]))
@@ -74,6 +80,7 @@ describe('compiledScriptParserService', () => {
         actions: [expect.objectContaining({ kind: 'CLOSE_SHORT' })],
       }),
     ]))
+    expect(parsed.decisionPrograms.filter(program => program.sourceRef === 'exit-short-middle')).toHaveLength(1)
   })
 })
 

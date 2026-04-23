@@ -409,7 +409,10 @@ export class CanonicalSpecV2IrCompilerService {
             timeframe,
           })
         }
-        const thresholdRef = this.ensureConstSeries(context, this.readNumber([atom.value], 0))
+        const thresholdRef = this.ensureConstSeries(
+          context,
+          this.normalizePositionPnlPctThreshold(this.readNumber([atom.value], 0)),
+        )
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_${atom.key.replace(/\./g, '_')}`,
@@ -513,7 +516,10 @@ export class CanonicalSpecV2IrCompilerService {
             kind: 'POSITION_PNL_PCT',
           })
         }
-        const thresholdRef = this.ensureConstSeries(context, this.readNumber([atom.value], 0))
+        const thresholdRef = this.ensureConstSeries(
+          context,
+          this.normalizePositionPnlPctThreshold(this.readNumber([atom.value], 0)),
+        )
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_${atom.key.replace(/\./g, '_')}`,
@@ -574,11 +580,17 @@ export class CanonicalSpecV2IrCompilerService {
             kind: 'POSITION_PNL_PCT',
           })
         }
-        const thresholdRef = this.ensureConstSeries(context, this.readNumber([atom.value], 0))
+        const threshold = -Math.abs(
+          this.normalizePositionPnlPctThreshold(this.readNumber([atom.value], 0)),
+        )
+        const thresholdRef = this.ensureConstSeries(
+          context,
+          threshold,
+        )
         return this.upsertPredicate(
           context.predicateMap,
           `${seed}_position_loss_pct`,
-          this.resolveComparisonKind(atom.op),
+          'LTE',
           [lossRef, thresholdRef],
         )
       }
@@ -1063,10 +1075,10 @@ export class CanonicalSpecV2IrCompilerService {
         return `GTE(POSITION_BARS_HELD,${this.readNumber([condition.value], 0)})`
 
       case 'risk.take_profit_pct':
-        return `GTE(POSITION_PNL_PCT,${this.readNumber([condition.value], 0)})`
+        return `GTE(POSITION_PNL_PCT,${this.normalizePositionPnlPctThreshold(this.readNumber([condition.value], 0))})`
 
       case 'position_gain_pct':
-        return `GTE(POSITION_PNL_PCT,${this.readNumber([condition.value], 0)})`
+        return `GTE(POSITION_PNL_PCT,${this.normalizePositionPnlPctThreshold(this.readNumber([condition.value], 0))})`
 
       case 'bollinger.upper_break':
         return `CROSS_OVER(CLOSE,UPPER_BAND(CLOSE,${config.bollinger.period},${config.bollinger.stdDev}))`
@@ -1083,7 +1095,7 @@ export class CanonicalSpecV2IrCompilerService {
       }
 
       case 'position_loss_pct':
-        return `GTE(POSITION_LOSS_PCT,${this.readNumber([condition.value], 0)})`
+        return `LTE(POSITION_PNL_PCT,${-Math.abs(this.normalizePositionPnlPctThreshold(this.readNumber([condition.value], 0)))})`
 
       default:
         return condition.key
@@ -1152,5 +1164,10 @@ export class CanonicalSpecV2IrCompilerService {
     }
 
     return fallback
+  }
+
+  private normalizePositionPnlPctThreshold(value: number): number {
+    if (!Number.isFinite(value)) return value
+    return Math.abs(value) <= 1 ? value * 100 : value
   }
 }

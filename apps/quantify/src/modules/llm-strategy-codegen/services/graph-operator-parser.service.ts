@@ -143,7 +143,7 @@ export class GraphOperatorParserService {
         continue
       }
 
-      const numberMatch = source.slice(cursor).match(/^\d+(?:\.\d+)?/u)
+      const numberMatch = source.slice(cursor).match(/^-?\d+(?:\.\d+)?/u)
       if (numberMatch) {
         tokens.push({ type: 'NUMBER', value: numberMatch[0] })
         cursor += numberMatch[0].length

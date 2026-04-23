@@ -4,7 +4,10 @@ import { Injectable } from '@nestjs/common'
 
 @Injectable()
 export class CompiledScriptExecutionEnvelopeService {
-  build(spec: CanonicalStrategySpecV2): CompiledScriptExecutionEnvelope {
+  build(
+    spec: CanonicalStrategySpecV2,
+    semanticPositionMode?: CompiledScriptExecutionEnvelope['positionMode'],
+  ): CompiledScriptExecutionEnvelope {
     if (spec.version !== 2) {
       throw new Error('canonical_spec_v2_required')
     }
@@ -19,11 +22,11 @@ export class CompiledScriptExecutionEnvelopeService {
     )))
 
     return {
-      positionMode: hasLongExposure && hasShortExposure
+      positionMode: semanticPositionMode ?? (hasLongExposure && hasShortExposure
         ? 'long_short'
         : hasShortExposure
             ? 'short_only'
-            : 'long_only',
+            : 'long_only'),
       marginMode: spec.market.marketType === 'perp' ? 'isolated' : 'cash',
       tickSize: 0.01,
       pricePrecision: 2,

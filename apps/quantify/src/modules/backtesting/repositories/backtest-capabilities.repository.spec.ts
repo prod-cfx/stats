@@ -2,7 +2,7 @@ import { BacktestCapabilitiesRepository } from './backtest-capabilities.reposito
 
 describe('backtestCapabilitiesRepository.findActiveConfig', () => {
   it('returns the latest active config by updatedAt desc when data exists', async () => {
-    const findFirst = jest.fn().mockResolvedValue({ id: 'cfg-latest' })
+    const findFirst = jest.fn().mockResolvedValue({ allowedBaseTimeframes: ['1h'] })
     const txHostMock = {
       tx: {
         backtestCapabilityConfig: { findFirst },
@@ -14,10 +14,13 @@ describe('backtestCapabilitiesRepository.findActiveConfig', () => {
     const result = await repo.findActiveConfig()
 
     expect(findFirst).toHaveBeenCalledWith({
+      select: {
+        allowedBaseTimeframes: true,
+      },
       where: { isActive: true },
       orderBy: { updatedAt: 'desc' },
     })
-    expect(result).toEqual({ id: 'cfg-latest' })
+    expect(result).toEqual({ allowedBaseTimeframes: ['1h'] })
   })
 
   it('returns null when no active config exists', async () => {

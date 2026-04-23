@@ -536,7 +536,7 @@ describe('codegenPublicationGenerationStage', () => {
         }),
       }),
     ]))
-    expect(executionEnvelopeBuild).toHaveBeenCalledWith(artifacts.canonicalSpec)
+    expect(executionEnvelopeBuild).toHaveBeenCalledWith(artifacts.canonicalSpec, 'long_only')
   })
 
   it('rejects publication generation when a previous-close rise atom drifts before script publication', async () => {

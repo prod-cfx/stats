@@ -3,6 +3,7 @@ import type { EnvAccessor } from '@/common/env/env.accessor'
 import { defaultEnvAccessor } from '@/common/env/env.accessor'
 
 export interface BacktestCapabilitiesConfigRecord {
+  allowedSymbols?: unknown
   allowedBaseTimeframes?: unknown
 }
 
@@ -95,6 +96,23 @@ export function normalizeBacktestCapabilityConfig(
   return {
     allowedBaseTimeframes,
   }
+}
+
+export function isLegacyDefaultBacktestCapabilityConfig(
+  config: BacktestCapabilitiesConfigRecord | null | undefined,
+): boolean {
+  if (!config) {
+    return false
+  }
+
+  const allowedSymbols = normalizeConfiguredStringArray(config.allowedSymbols)
+  const allowedBaseTimeframes = normalizeConfiguredStringArray(config.allowedBaseTimeframes)
+
+  return allowedSymbols?.length === 1
+    && allowedSymbols[0] === 'BTCUSDT'
+    && allowedBaseTimeframes?.length === 2
+    && allowedBaseTimeframes[0] === '15m'
+    && allowedBaseTimeframes[1] === '1h'
 }
 
 export function resolveConfiguredBacktestCapabilityConfig(

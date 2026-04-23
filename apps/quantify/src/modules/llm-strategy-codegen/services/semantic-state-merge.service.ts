@@ -257,6 +257,14 @@ export class SemanticStateMergeService {
     left: SemanticTriggerState,
     right: SemanticTriggerState,
   ): boolean {
+    if (
+      left.id !== right.id
+      && left.source === 'user_explicit'
+      && right.source === 'user_explicit'
+    ) {
+      return false
+    }
+
     if (left.phase !== right.phase || left.key !== right.key) {
       return false
     }
