@@ -2,6 +2,7 @@
 import 'reflect-metadata'
 import { plainToInstance } from 'class-transformer'
 import { validate } from 'class-validator'
+import { DECORATORS } from '@nestjs/swagger/dist/constants'
 import { RunBacktestDto } from './run-backtest.dto'
 /* eslint-enable perfectionist/sort-imports */
 
@@ -161,8 +162,17 @@ describe('runBacktestDto', () => {
 
     const dto = plainToInstance(RunBacktestDto, payload)
     const errors = await validate(dto)
+    const apiMetadata = Reflect.getMetadata(
+      DECORATORS.API_MODEL_PROPERTIES,
+      RunBacktestDto.prototype,
+      'conversationId',
+    )
 
     expect(errors).toHaveLength(0)
+    expect(dto.conversationId).toBe('conv-1')
+    expect(apiMetadata).toEqual(expect.objectContaining({
+      required: false,
+    }))
   })
 
   it('accepts spot payload without leverage', async () => {
