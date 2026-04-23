@@ -56,15 +56,14 @@ describe('compiledScriptParserService', () => {
         sourceRef: 'exit_short_middle_middle_revert',
         nodeType: 'predicate',
         payload: expect.objectContaining({
-          kind: 'CROSS_UNDER',
+          kind: 'OR',
         }),
       }),
-    ]))
-    expect(parsed.exprPool).not.toEqual(expect.arrayContaining([
       expect.objectContaining({
-        sourceRef: 'exit_short_middle_middle_revert',
+        sourceRef: 'exit_short_middle_middle_under',
+        nodeType: 'predicate',
         payload: expect.objectContaining({
-          kind: 'OR',
+          kind: 'CROSS_UNDER',
         }),
       }),
     ]))

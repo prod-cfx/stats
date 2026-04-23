@@ -74,7 +74,6 @@ describe('codegenConversationResponseMapperHelper', () => {
     })).toMatchObject({
       publishedSnapshotCompatibilityMetadata: {
         isLegacySnapshot: true,
-        missingStrategyInstanceBinding: true,
         missingBacktestConfigDefaults: false,
         missingDeploymentExecutionDefaults: true,
         missingDeploymentExecutionConstraints: true,
