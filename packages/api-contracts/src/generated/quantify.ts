@@ -1,4 +1,4 @@
-import { makeApi, Zodios, type ZodiosInstance, type ZodiosOptions } from '@zodios/core'
+import { makeApi, Zodios, type ZodiosOptions } from '@zodios/core'
 import { z } from 'zod'
 
 const SettingResponseDto = z
@@ -3941,10 +3941,8 @@ const endpoints = makeApi([
   },
 ])
 
-export type QuantifyApi = typeof endpoints
+export const aiQuantifyClient = new Zodios('/api/v1', endpoints)
 
-export const aiQuantifyClient: ZodiosInstance<QuantifyApi> = new Zodios('/api/v1', endpoints)
-
-export function createApiClient(baseUrl: string, options?: ZodiosOptions): ZodiosInstance<QuantifyApi> {
+export function createApiClient(baseUrl: string, options?: ZodiosOptions) {
   return new Zodios(baseUrl, endpoints, options)
 }
