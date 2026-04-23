@@ -100,10 +100,11 @@ export class BacktestJobsService {
 
   async createJob(input: BacktestRunInput, ownerUserId: string): Promise<BacktestJobView> {
     await this.validateSymbolAvailability(input)
+    const conversationId = this.readConversationId(input)
+    await this.validateConversationOwnership(conversationId, ownerUserId)
     const id = `btjob-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
     const inputSummary = this.createInputSummary(input)
     try {
-      const conversationId = this.readConversationId(input)
       const job = await this.prisma.backtestJob.create({
         data: {
           id,
@@ -142,6 +143,29 @@ export class BacktestJobsService {
       })
       return this.toFallbackView(fallbackJob)
     }
+  }
+
+  private async validateConversationOwnership(
+    conversationId: string | null,
+    ownerUserId: string,
+  ): Promise<void> {
+    if (!conversationId) {
+      return
+    }
+
+    const isOwnedConversation = await this.conversationsRepo.existsActiveConversationForUser(
+      conversationId,
+      ownerUserId,
+    )
+    if (isOwnedConversation) {
+      return
+    }
+
+    throw new DomainException('backtest.invalid_conversation_id', {
+      code: ErrorCode.BAD_REQUEST,
+      status: HttpStatus.BAD_REQUEST,
+      args: { conversationId },
+    })
   }
 
   private async validateSymbolAvailability(input: BacktestRunInput): Promise<void> {

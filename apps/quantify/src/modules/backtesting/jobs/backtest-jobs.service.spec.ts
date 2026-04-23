@@ -133,6 +133,7 @@ function createAvailabilityMock(
 
 function createConversationsMock() {
   return {
+    existsActiveConversationForUser: jest.fn().mockResolvedValue(true),
     updateLastBacktestRef: jest.fn().mockResolvedValue(undefined),
   }
 }
@@ -211,6 +212,43 @@ describe('backtestJobsService', () => {
     )
     expect(availability.check).not.toHaveBeenCalled()
     expect(created.status).toBe('queued')
+  })
+
+  it('creates a job when conversationId belongs to the owner user', async () => {
+    const conversations = createConversationsMock()
+    const { service, prisma } = createService({ conversations })
+    const input = createInput()
+    input.conversationId = 'conv-1'
+
+    const created = await service.createJob(input, OWNER_USER_ID)
+
+    expect(conversations.existsActiveConversationForUser).toHaveBeenCalledWith('conv-1', OWNER_USER_ID)
+    expect(prisma.backtestJob.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          conversationId: 'conv-1',
+        }),
+      }),
+    )
+    expect(created.status).toBe('queued')
+  })
+
+  it('rejects create-job when conversationId does not belong to the owner user', async () => {
+    const conversations = createConversationsMock()
+    conversations.existsActiveConversationForUser.mockResolvedValue(false)
+    const { service, prisma } = createService({ conversations })
+    const input = createInput()
+    input.conversationId = 'conv-other-user'
+
+    await expect(service.createJob(input, OWNER_USER_ID)).rejects.toMatchObject({
+      message: 'backtest.invalid_conversation_id',
+      code: ErrorCode.BAD_REQUEST,
+      status: HttpStatus.BAD_REQUEST,
+      args: {
+        conversationId: 'conv-other-user',
+      },
+    })
+    expect(prisma.backtestJob.create).not.toHaveBeenCalled()
   })
 
   it('persists snapshot tracing fields when strategy was loaded from a published snapshot', async () => {
@@ -703,9 +741,7 @@ describe('backtestJobsService', () => {
         bySymbol: [],
       }),
     }
-    const conversations = {
-      updateLastBacktestRef: jest.fn().mockResolvedValue(undefined),
-    }
+    const conversations = createConversationsMock()
     const { service } = createService({ runner, conversations })
     const input = createInput()
     Object.assign(input.strategy as Record<string, unknown>, {
@@ -781,9 +817,7 @@ describe('backtestJobsService', () => {
         bySymbol: [],
       }),
     }
-    const conversations = {
-      updateLastBacktestRef: jest.fn().mockResolvedValue(undefined),
-    }
+    const conversations = createConversationsMock()
     const { service } = createService({ runner, conversations })
     const input = createInput()
     Object.assign(input.strategy as Record<string, unknown>, {
@@ -801,9 +835,7 @@ describe('backtestJobsService', () => {
     const runner = {
       run: jest.fn().mockRejectedValue(new Error('boom')),
     }
-    const conversations = {
-      updateLastBacktestRef: jest.fn().mockResolvedValue(undefined),
-    }
+    const conversations = createConversationsMock()
     const { service } = createService({ runner, conversations })
     const input = createInput()
     Object.assign(input.strategy as Record<string, unknown>, {
@@ -836,9 +868,8 @@ describe('backtestJobsService', () => {
     const runner = {
       run: jest.fn().mockResolvedValue(result),
     }
-    const conversations = {
-      updateLastBacktestRef: jest.fn().mockRejectedValue(new Error('writeback failed')),
-    }
+    const conversations = createConversationsMock()
+    conversations.updateLastBacktestRef.mockRejectedValue(new Error('writeback failed'))
     const { service } = createService({ runner, conversations })
     const input = createInput()
     Object.assign(input.strategy as Record<string, unknown>, {
@@ -914,6 +945,29 @@ describe('backtestJobsService', () => {
 })
 
 describe('aiQuantConversationsRepository lastBacktestRef parsing', () => {
+  it('returns true only for active conversations owned by the given user', async () => {
+    const findMany = jest.fn().mockResolvedValue([{ id: 'conv-1' }])
+    const { repository } = createConversationRepository({ findMany })
+
+    await expect(repository.existsActiveConversationForUser('conv-1', OWNER_USER_ID)).resolves.toBe(true)
+    expect(findMany).toHaveBeenCalledWith({
+      where: {
+        id: 'conv-1',
+        userId: OWNER_USER_ID,
+        archivedAt: null,
+      },
+      select: { id: true },
+      take: 1,
+    })
+  })
+
+  it('returns false when the conversation is missing, archived, or owned by another user', async () => {
+    const findMany = jest.fn().mockResolvedValue([])
+    const { repository } = createConversationRepository({ findMany })
+
+    await expect(repository.existsActiveConversationForUser('conv-missing', OWNER_USER_ID)).resolves.toBe(false)
+  })
+
   it('parses a valid JSON lastBacktestRef into a typed record with a Date', async () => {
     const completedAt = '2026-04-23T05:00:00.000Z'
     const { repository } = createConversationRepository({

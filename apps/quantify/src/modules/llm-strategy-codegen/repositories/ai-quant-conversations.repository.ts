@@ -130,6 +130,20 @@ export class AiQuantConversationsRepository {
     return rows.map(row => row.codegenSessionId)
   }
 
+  async existsActiveConversationForUser(conversationId: string, userId: string): Promise<boolean> {
+    const rows = await this.txHost.tx.aiQuantConversation.findMany({
+      where: {
+        id: conversationId,
+        userId,
+        archivedAt: null,
+      },
+      select: { id: true },
+      take: 1,
+    })
+
+    return rows.length > 0
+  }
+
   async findByCodegenSessionId(codegenSessionId: string): Promise<AiQuantConversationSnapshotRecord | null> {
     const conversation = await this.txHost.tx.aiQuantConversation.findUnique({
       where: { codegenSessionId },
