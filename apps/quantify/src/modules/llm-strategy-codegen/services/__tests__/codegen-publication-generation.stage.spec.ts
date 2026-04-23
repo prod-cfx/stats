@@ -1,5 +1,7 @@
 import type { SemanticState } from '../../types/semantic-state'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
+import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
+import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CanonicalSpecV2DigestService } from '../canonical-spec-v2-digest.service'
 import { CodegenPublicationGenerationStage } from '../codegen-publication-generation.stage'
 import { buildNormalizedIntentFromSemanticState } from '../semantic-state-normalization'
@@ -286,6 +288,85 @@ describe('codegenPublicationGenerationStage', () => {
     updatedAt: '2026-04-15T10:00:00.000Z',
   })
 
+  const buildPreviousCloseRiseSemanticState = (): SemanticState => ({
+    version: 1,
+    families: ['single-leg'],
+    triggers: [
+      {
+        id: 'entry-on-start',
+        key: 'execution.on_start',
+        phase: 'entry',
+        sideScope: 'long',
+        params: { timing: 'on_start', orderType: 'market', occurrence: 'once' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'exit-rise-prev-close',
+        key: 'price.percent_change',
+        phase: 'exit',
+        sideScope: 'long',
+        params: { direction: 'up', valuePct: 1, basis: 'prev_close', window: '1h' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ],
+    actions: [
+      { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
+      { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
+    ],
+    risk: [],
+    position: {
+      mode: 'fixed_ratio',
+      value: 0.1,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+    },
+    contextSlots: {
+      exchange: {
+        slotKey: 'exchange',
+        fieldPath: 'contextSlots.exchange',
+        value: 'okx',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认交易所。',
+        affectsExecution: true,
+      },
+      symbol: {
+        slotKey: 'symbol',
+        fieldPath: 'contextSlots.symbol',
+        value: 'ORDIUSDT',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认交易标的。',
+        affectsExecution: true,
+      },
+      marketType: {
+        slotKey: 'marketType',
+        fieldPath: 'contextSlots.marketType',
+        value: 'spot',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认市场类型。',
+        affectsExecution: true,
+      },
+      timeframe: {
+        slotKey: 'timeframe',
+        fieldPath: 'contextSlots.timeframe',
+        value: '1h',
+        status: 'locked',
+        priority: 'context',
+        questionHint: '请确认周期。',
+        affectsExecution: true,
+      },
+    },
+    normalizationNotes: [],
+    updatedAt: '2026-04-23T00:00:00.000Z',
+  })
+
   it('keeps clarified bollinger middle-band summaries aligned through generation', async () => {
     const canonicalSpecBuilder = new CanonicalSpecBuilderService()
     const strategySummaryBuilder = new StrategySummaryBuilderService(new ScriptProfileExtractorService())
@@ -410,6 +491,8 @@ describe('codegenPublicationGenerationStage', () => {
     expect(buildSpy).not.toHaveBeenCalled()
     expect(artifacts.sessionSpecDesc.canonicalSpec).toEqual(artifacts.canonicalSpec)
     expect(artifacts.sessionSpecDesc.normalizedIntent).toEqual(expectedNormalizedIntent)
+    expect(artifacts.semanticAtomInvariant.status).toBe('PASSED')
+    expect(artifacts.sessionSpecDesc.semanticAtomInvariant).toEqual(artifacts.semanticAtomInvariant)
     expect(JSON.stringify(artifacts.sessionSpecDesc)).not.toContain('entryRules')
     expect(JSON.stringify(artifacts.sessionSpecDesc)).not.toContain('exitRules')
     expect(JSON.stringify(artifacts.sessionSpecDesc)).not.toContain('riskRules')
@@ -433,6 +516,63 @@ describe('codegenPublicationGenerationStage', () => {
       }),
     ]))
     expect(executionEnvelopeBuild).toHaveBeenCalledWith(artifacts.canonicalSpec)
+  })
+
+  it('rejects publication generation when a previous-close rise atom drifts before script publication', async () => {
+    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const semanticState = buildPreviousCloseRiseSemanticState()
+    const canonicalSpecOverride = canonicalSpecBuilder.buildFromNormalizedIntent(
+      {
+        market: {
+          exchange: 'okx',
+          marketType: 'spot',
+          defaultTimeframe: '1h',
+        },
+        symbols: ['ORDIUSDT'],
+        timeframes: ['1h'],
+      },
+      buildNormalizedIntentFromSemanticState(semanticState),
+    )
+    canonicalSpecOverride.rules = canonicalSpecOverride.rules.map(rule =>
+      rule.phase === 'exit' && rule.actions.some(action => action.type === 'CLOSE_LONG')
+        ? {
+            ...rule,
+            condition: {
+              kind: 'atom',
+              key: 'price.change_pct',
+              semanticScope: 'market',
+              op: 'LTE',
+              value: -0.01,
+              params: { timeframe: '1h', lookbackBars: 1, basis: 'prev_close' },
+            },
+          }
+        : rule,
+    )
+    const emit = jest.fn()
+
+    const stage = new CodegenPublicationGenerationStage(
+      canonicalSpecBuilder,
+      new SpecDescBuilderService(),
+      new StrategySummaryBuilderService(new ScriptProfileExtractorService()),
+      { evaluate: jest.fn().mockReturnValue({
+        status: 'PASSED',
+        specProfile: { indicators: [], actions: [], ruleMappings: [], rules: [], sizing: null, requiredParams: [], fallbackDetected: false },
+        scriptProfile: { indicators: [], actions: [], ruleMappings: [], rules: [], sizing: null, requiredParams: [], fallbackDetected: false },
+        checks: [],
+        summary: { criticalFailed: 0, warningFailed: 0, unprovable: 0 },
+      }) } as any,
+      new CanonicalSpecV2IrCompilerService(),
+      new CanonicalStrategyAstCompilerService(),
+      { emit } as any,
+      { build: jest.fn().mockReturnValue({}) } as any,
+      { parse: jest.fn() } as any,
+    )
+
+    await expect(stage.generate({
+      semanticState,
+      canonicalSpecOverride,
+    })).rejects.toThrow(/codegen\.semantic_atom_drift/)
+    expect(emit).not.toHaveBeenCalled()
   })
 
   it('builds strategy summary from specProfile rather than legacy canonical-spec text heuristics', async () => {
