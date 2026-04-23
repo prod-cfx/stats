@@ -1,7 +1,7 @@
 import type { StrategyAstV1 } from '../../types/canonical-strategy-ast'
 import type { CanonicalStrategyIrV1 } from '../../types/canonical-strategy-ir'
 import type { CanonicalStrategySpec } from '../../types/canonical-strategy-spec'
-import type { SemanticState } from '../../types/semantic-state'
+import type { SemanticState, SemanticTriggerState } from '../../types/semantic-state'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
 import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compiler.service'
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
@@ -58,6 +58,26 @@ describe('SemanticAtomInvariantService', () => {
       },
       normalizationNotes: [],
       updatedAt: '2026-04-23T00:00:00.000Z',
+    }
+  }
+
+  function buildSemanticStateWithSecondExitTrigger(): SemanticState {
+    const state = buildSemanticState()
+    const secondTrigger: SemanticTriggerState = {
+      id: 'exit-rise-prev-close-2',
+      key: 'price.percent_change',
+      phase: 'exit',
+      sideScope: 'long',
+      params: { direction: 'up', valuePct: 2, basis: 'prev_close', window: '1h' },
+      status: 'locked',
+      source: 'user_explicit',
+      evidence: { text: '价格相对前收盘上涨 2% 时卖出', source: 'user_explicit' },
+      openSlots: [],
+    }
+
+    return {
+      ...state,
+      triggers: [...state.triggers, secondTrigger],
     }
   }
 
@@ -212,6 +232,99 @@ describe('SemanticAtomInvariantService', () => {
     }
   }
 
+  function wrapExitPriceChangeInAnd(input: ReturnType<typeof compile>): ReturnType<typeof compile> {
+    const { canonicalSpec, ir, ast } = input
+    if (canonicalSpec.version !== 2) {
+      return input
+    }
+
+    const exitRule = ir.ruleBlocks.find(rule =>
+      rule.phase === 'exit'
+      && rule.actions.some(action => action.kind === 'CLOSE_LONG')
+    )
+    const entryRule = ir.ruleBlocks.find(rule =>
+      rule.phase === 'entry'
+      && rule.actions.some(action => action.kind === 'OPEN_LONG')
+    )
+    const exitProgram = ast.decisionPrograms.find(program =>
+      program.phase === 'exit'
+      && program.actions.some(action => action.kind === 'CLOSE_LONG')
+    )
+    const entryProgram = ast.decisionPrograms.find(program =>
+      program.phase === 'entry'
+      && program.actions.some(action => action.kind === 'OPEN_LONG')
+    )
+    const exitPredicate = ast.exprPool.find(expr => expr.id === exitProgram?.when)
+    const entryPredicate = ast.exprPool.find(expr => expr.id === entryProgram?.when)
+
+    if (!exitRule || !entryRule || !exitProgram || !entryProgram || !exitPredicate || !entryPredicate) {
+      throw new Error('expected compiled entry and exit predicate shape')
+    }
+
+    const wrappedCanonicalSpec: CanonicalStrategySpec = {
+      ...canonicalSpec,
+      rules: canonicalSpec.rules.map(rule =>
+        rule.phase === 'exit' && rule.actions.some(action => action.type === 'CLOSE_LONG')
+          ? {
+              ...rule,
+              condition: {
+                kind: 'AND' as const,
+                children: [
+                  rule.condition,
+                  {
+                    kind: 'atom' as const,
+                    key: 'execution.on_start',
+                    semanticScope: 'market' as const,
+                  },
+                ],
+              },
+            }
+          : rule,
+      ),
+    }
+    const wrappedIr: CanonicalStrategyIrV1 = {
+      ...ir,
+      signalCatalog: {
+        ...ir.signalCatalog,
+        predicates: [
+          ...ir.signalCatalog.predicates,
+          {
+            id: 'exit_price_change_and_gate',
+            kind: 'AND',
+            args: [exitRule.when, entryRule.when],
+          },
+        ],
+      },
+      ruleBlocks: ir.ruleBlocks.map(rule =>
+        rule.id === exitRule.id
+          ? { ...rule, when: 'exit_price_change_and_gate' }
+          : rule,
+      ),
+    }
+    const andExpr = {
+      id: 'expr_test_exit_price_change_and_gate',
+      sourceRef: 'exit_price_change_and_gate',
+      nodeType: 'predicate' as const,
+      payload: {
+        id: 'exit_price_change_and_gate',
+        kind: 'AND' as const,
+        args: [exitPredicate.sourceRef, entryPredicate.sourceRef],
+      },
+      deps: [exitPredicate.id, entryPredicate.id],
+    }
+    const wrappedAst: StrategyAstV1 = {
+      ...ast,
+      exprPool: [...ast.exprPool, andExpr],
+      decisionPrograms: ast.decisionPrograms.map(program =>
+        program.id === exitProgram.id
+          ? { ...program, when: andExpr.id }
+          : program,
+      ),
+    }
+
+    return { canonicalSpec: wrappedCanonicalSpec, ir: wrappedIr, ast: wrappedAst }
+  }
+
   it('passes when previous-close rise close-long compiles to GTE 0.01', () => {
     const state = buildSemanticState()
     const { canonicalSpec, ir, ast } = compile(state)
@@ -287,5 +400,41 @@ describe('SemanticAtomInvariantService', () => {
         level: 'critical',
       }),
     ]))
+  })
+
+  it('passes when price percent change is nested under AND gate predicates', () => {
+    const state = buildSemanticState()
+    const { canonicalSpec, ir, ast } = wrapExitPriceChangeInAnd(compile(state))
+
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_atom.price_percent_change',
+        status: 'passed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
+  it('passes two explicit same phase and action percent-change triggers with different thresholds', () => {
+    const state = buildSemanticStateWithSecondExitTrigger()
+    const { canonicalSpec, ir, ast } = compile(state)
+
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+
+    expect(checks).toHaveLength(2)
+    expect(checks).toEqual([
+      expect.objectContaining({
+        key: 'semantic_atom.price_percent_change',
+        status: 'passed',
+        level: 'critical',
+      }),
+      expect.objectContaining({
+        key: 'semantic_atom.price_percent_change',
+        status: 'passed',
+        level: 'critical',
+      }),
+    ])
   })
 })

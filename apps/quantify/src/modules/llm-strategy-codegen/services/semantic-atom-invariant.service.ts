@@ -18,9 +18,17 @@ interface PriceChangeSnapshot {
 
 interface LayerSnapshot {
   passed: boolean
+  expectedBucket: PriceChangeSnapshot[]
   expected: PriceChangeSnapshot[]
   conflicts: PriceChangeSnapshot[]
   candidates: PriceChangeSnapshot[]
+}
+
+interface ExpectedSnapshot {
+  triggerId: string
+  action: PositionAction
+  predicateKind: PredicateKind
+  constValue: number
 }
 
 @Injectable()
@@ -40,9 +48,23 @@ export class SemanticAtomInvariantService {
     ir: CanonicalStrategyIrV1
     ast: StrategyAstV1
   }): StrategyConsistencyCheck[] {
-    return input.semanticState.triggers
+    const triggers = input.semanticState.triggers
       .filter(trigger => this.isBlockingPricePercentChangeTrigger(trigger))
-      .map(trigger => this.validatePricePercentChangeTrigger(trigger, input))
+    const triggersByBucket = new Map<string, SemanticTriggerState[]>()
+
+    for (const trigger of triggers) {
+      const action = this.expectedAction(trigger)
+      const key = this.bucketKey(trigger.phase, action)
+      const bucket = triggersByBucket.get(key) ?? []
+      bucket.push(trigger)
+      triggersByBucket.set(key, bucket)
+    }
+
+    return triggers.flatMap((trigger) => {
+      const action = this.expectedAction(trigger)
+      const bucket = triggersByBucket.get(this.bucketKey(trigger.phase, action)) ?? [trigger]
+      return this.validatePricePercentChangeTrigger(trigger, bucket, input)
+    })
   }
 
   private isBlockingPricePercentChangeTrigger(trigger: SemanticTriggerState): boolean {
@@ -56,33 +78,30 @@ export class SemanticAtomInvariantService {
 
   private validatePricePercentChangeTrigger(
     trigger: SemanticTriggerState,
+    bucketTriggers: SemanticTriggerState[],
     input: {
       canonicalSpec: CanonicalStrategySpec
       ir: CanonicalStrategyIrV1
       ast: StrategyAstV1
     },
   ): StrategyConsistencyCheck {
-    const direction = this.resolveDirection(trigger)
-    const valuePct = this.readPositiveNumber(trigger.params.valuePct)
     const expectedAction = this.expectedAction(trigger)
-    const expectedPredicateKind: PredicateKind = direction === 'down' ? 'LTE' : 'GTE'
-    const expectedConstValue = direction === 'down'
-      ? -Number((valuePct / 100).toFixed(4))
-      : Number((valuePct / 100).toFixed(4))
+    const expected = this.buildExpectedSnapshot(trigger)
+    const expectedBucket = bucketTriggers.map(bucketTrigger => this.buildExpectedSnapshot(bucketTrigger))
     const canonical = this.buildLayerSnapshot(
       this.findCanonicalPredicates(input.canonicalSpec, trigger.phase, expectedAction),
-      expectedPredicateKind,
-      expectedConstValue,
+      expected,
+      expectedBucket,
     )
     const ir = this.buildLayerSnapshot(
       this.findIrPredicates(input.ir, trigger.phase, expectedAction),
-      expectedPredicateKind,
-      expectedConstValue,
+      expected,
+      expectedBucket,
     )
     const ast = this.buildLayerSnapshot(
       this.findAstPredicates(input.ast, trigger.phase, expectedAction),
-      expectedPredicateKind,
-      expectedConstValue,
+      expected,
+      expectedBucket,
     )
     const passed = canonical.passed && ir.passed && ast.passed
 
@@ -94,8 +113,8 @@ export class SemanticAtomInvariantService {
         triggerId: trigger.id,
         phase: trigger.phase,
         action: expectedAction,
-        predicateKind: expectedPredicateKind,
-        constValue: expectedConstValue,
+        predicateKind: expected.predicateKind,
+        constValue: expected.constValue,
         basis: trigger.params.basis ?? 'prev_close',
       },
       actual: {
@@ -105,29 +124,47 @@ export class SemanticAtomInvariantService {
       },
       message: passed
         ? 'price.percent_change semantic atom matches canonicalSpec, IR, and AST.'
-        : `price.percent_change semantic atom drift: expected ${expectedPredicateKind} ${expectedConstValue} in canonicalSpec, IR, and AST without conflicts.`,
+        : `price.percent_change semantic atom drift: expected ${expected.predicateKind} ${expected.constValue} in canonicalSpec, IR, and AST without undeclared conflicts.`,
+    }
+  }
+
+  private buildExpectedSnapshot(trigger: SemanticTriggerState): ExpectedSnapshot {
+    const direction = this.resolveDirection(trigger)
+    const valuePct = this.readPositiveNumber(trigger.params.valuePct)
+    const constValue = direction === 'down'
+      ? -Number((valuePct / 100).toFixed(4))
+      : Number((valuePct / 100).toFixed(4))
+
+    return {
+      triggerId: trigger.id,
+      action: this.expectedAction(trigger),
+      predicateKind: direction === 'down' ? 'LTE' : 'GTE',
+      constValue,
     }
   }
 
   private buildLayerSnapshot(
     candidates: PriceChangeSnapshot[],
-    expectedPredicateKind: PredicateKind,
-    expectedConstValue: number,
+    expected: ExpectedSnapshot,
+    expectedBucket: ExpectedSnapshot[],
   ): LayerSnapshot {
-    const expected = candidates.filter(candidate => this.matchesExpected(
+    const matchedExpected = candidates.filter(candidate => this.matchesExpected(
       candidate,
-      expectedPredicateKind,
-      expectedConstValue,
+      expected,
     ))
-    const conflicts = candidates.filter(candidate => !this.matchesExpected(
-      candidate,
-      expectedPredicateKind,
-      expectedConstValue,
-    ))
+    const conflicts = candidates.filter(candidate =>
+      !expectedBucket.some(expectedCandidate => this.matchesExpected(candidate, expectedCandidate)),
+    )
 
     return {
-      passed: expected.length > 0 && conflicts.length === 0,
-      expected,
+      passed: matchedExpected.length > 0 && conflicts.length === 0,
+      expectedBucket: expectedBucket.map(item => ({
+        id: item.triggerId,
+        predicateKind: item.predicateKind,
+        constValue: item.constValue,
+        hasPriceChangeSeries: true,
+      })),
+      expected: matchedExpected,
       conflicts,
       candidates,
     }
@@ -135,11 +172,10 @@ export class SemanticAtomInvariantService {
 
   private matchesExpected(
     candidate: PriceChangeSnapshot,
-    expectedPredicateKind: PredicateKind,
-    expectedConstValue: number,
+    expected: Pick<ExpectedSnapshot, 'predicateKind' | 'constValue'>,
   ): boolean {
-    return candidate.predicateKind === expectedPredicateKind
-      && candidate.constValue === expectedConstValue
+    return candidate.predicateKind === expected.predicateKind
+      && candidate.constValue === expected.constValue
       && candidate.hasPriceChangeSeries
   }
 
@@ -184,33 +220,44 @@ export class SemanticAtomInvariantService {
         rule.phase === phase
         && rule.actions.some(ruleAction => ruleAction.kind === action),
       )
-      .map(rule => predicateById.get(rule.when))
-      .filter((predicate): predicate is PredicateDef => predicate !== undefined)
-      .map(predicate => this.describeIrPredicate(predicate, seriesById))
-      .filter((snapshot): snapshot is PriceChangeSnapshot => snapshot !== null)
+      .flatMap(rule => this.collectIrPriceChangePredicates(rule.when, predicateById, seriesById, new Set()))
   }
 
-  private describeIrPredicate(
-    predicate: PredicateDef,
+  private collectIrPriceChangePredicates(
+    predicateId: string,
+    predicateById: Map<string, PredicateDef>,
     seriesById: Map<string, SeriesDef>,
-  ): PriceChangeSnapshot | null {
+    seen: Set<string>,
+  ): PriceChangeSnapshot[] {
+    if (seen.has(predicateId)) {
+      return []
+    }
+    seen.add(predicateId)
+
+    const predicate = predicateById.get(predicateId)
+    if (!predicate) {
+      return []
+    }
+
     const seriesArgs = predicate.args
       .map(arg => seriesById.get(arg))
       .filter((series): series is SeriesDef => series !== undefined)
     const hasPriceChangeSeries = seriesArgs.some(series => series.kind === 'PRICE_CHANGE_PCT')
+    const nested = predicate.args.flatMap(arg =>
+      this.collectIrPriceChangePredicates(arg, predicateById, seriesById, seen),
+    )
+
     if (!hasPriceChangeSeries) {
-      return null
+      return nested
     }
 
     const constSeries = seriesArgs.find(series => series.kind === 'CONST')
-    const constValue = typeof constSeries?.value === 'number' ? constSeries.value : null
-
-    return {
+    return [{
       id: predicate.id,
       predicateKind: predicate.kind,
-      constValue,
+      constValue: typeof constSeries?.value === 'number' ? constSeries.value : null,
       hasPriceChangeSeries,
-    }
+    }, ...nested]
   }
 
   private findAstPredicates(
@@ -227,15 +274,23 @@ export class SemanticAtomInvariantService {
         program.phase === phase
         && program.actions.some(programAction => programAction.kind === action),
       )
-      .map(program => this.describeProgramPredicate(program.when, ast))
-      .filter((snapshot): snapshot is PriceChangeSnapshot => snapshot !== null)
+      .flatMap(program => this.collectAstPriceChangePredicates(program.when, ast, new Set()))
   }
 
-  private describeProgramPredicate(predicateExprId: string, ast: StrategyAstV1): PriceChangeSnapshot | null {
+  private collectAstPriceChangePredicates(
+    predicateExprId: string,
+    ast: StrategyAstV1,
+    seen: Set<string>,
+  ): PriceChangeSnapshot[] {
+    if (seen.has(predicateExprId)) {
+      return []
+    }
+    seen.add(predicateExprId)
+
     const exprById = new Map(ast.exprPool.map(expr => [expr.id, expr]))
     const predicateExpr = exprById.get(predicateExprId)
     if (!predicateExpr || predicateExpr.nodeType !== 'predicate' || !this.isPredicatePayload(predicateExpr.payload)) {
-      return null
+      return []
     }
 
     const depExprs = predicateExpr.deps
@@ -243,19 +298,23 @@ export class SemanticAtomInvariantService {
       .filter((expr): expr is ExprNode => expr !== undefined)
     const constExpr = depExprs.find(expr => this.isSeriesKind(expr, 'CONST'))
     const priceChangeExpr = depExprs.find(expr => this.isSeriesKind(expr, 'PRICE_CHANGE_PCT'))
+    const nested = depExprs
+      .filter(expr => expr.nodeType === 'predicate')
+      .flatMap(expr => this.collectAstPriceChangePredicates(expr.id, ast, seen))
+
     if (!priceChangeExpr) {
-      return null
+      return nested
     }
     const constValue = constExpr && this.isSeriesPayload(constExpr.payload) && typeof constExpr.payload.value === 'number'
       ? constExpr.payload.value
       : null
 
-    return {
+    return [{
       id: predicateExpr.sourceRef,
       predicateKind: predicateExpr.payload.kind,
       constValue,
       hasPriceChangeSeries: true,
-    }
+    }, ...nested]
   }
 
   private collectPriceChangeAtoms(condition: CanonicalConditionNode): CanonicalConditionAtom[] {
@@ -292,6 +351,10 @@ export class SemanticAtomInvariantService {
       return trigger.sideScope === 'short' ? 'OPEN_SHORT' : 'OPEN_LONG'
     }
     return trigger.sideScope === 'short' ? 'CLOSE_SHORT' : 'CLOSE_LONG'
+  }
+
+  private bucketKey(phase: SemanticTriggerState['phase'], action: PositionAction): string {
+    return `${phase}:${action}`
   }
 
   private isSeriesKind(expr: ExprNode, kind: SeriesDef['kind']): boolean {
