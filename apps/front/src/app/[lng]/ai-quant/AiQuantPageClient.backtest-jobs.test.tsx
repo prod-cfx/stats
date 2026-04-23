@@ -167,6 +167,7 @@ jest.mock('@/lib/api', () => ({
   continueLlmCodegenSession: jest.fn(),
   fetchUserExchangeAccountStatuses: jest.fn(async () => []),
   getLlmCodegenSession: jest.fn(),
+  listAiQuantConversations: jest.fn(async () => []),
   startLlmCodegenSession: jest.fn(),
 }))
 
@@ -870,6 +871,47 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(summary?.textContent).toContain('job-1')
     expect(summary?.textContent).toContain('|9.6|12.5|61|18')
     expect(mockGetBacktestJobResult).toHaveBeenCalledWith('job-1')
+  })
+
+  it('restores the latest backtest summary from server-owned conversations after reload when snapshot ids still match', async () => {
+    const listAiQuantConversations = jest.requireMock('@/lib/api')
+      .listAiQuantConversations as jest.Mock
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'conv-1',
+        conversationTitle: 'server conv',
+        conversationMessages: [],
+        status: 'PUBLISHED',
+        publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotParamValues: null,
+        publishedSnapshotStrategyConfig: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
+        lastBacktestRef: {
+          jobId: 'btjob-1',
+          publishedSnapshotId: 'snapshot-1',
+          summary: {
+            maxDrawdownPct: 8,
+            totalReturnPct: 12,
+            winRatePct: 60,
+            tradeCount: 5,
+            marketType: 'spot',
+          },
+          completedAt: '2026-04-23T00:04:00.000Z',
+        },
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient serverOwnedConversations />)
+    })
+
+    expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('btjob-1')
+    expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('deployable')
   })
 
   it('running state disables backtest button', async () => {
