@@ -961,6 +961,9 @@ describe('SemanticSeedExtractorService', () => {
         phase: 'entry',
         sideScope: 'long',
       }),
+    ]))
+    const priceChangeTriggers = patch.triggers?.filter(trigger => trigger.key === 'price.percent_change') ?? []
+    expect(priceChangeTriggers).toEqual([
       expect.objectContaining({
         key: 'price.percent_change',
         phase: 'exit',
@@ -972,7 +975,7 @@ describe('SemanticSeedExtractorService', () => {
           window: '1h',
         }),
       }),
-    ]))
+    ])
     expect(patch.risk).toEqual(expect.arrayContaining([
       expect.objectContaining({
         key: 'risk.stop_loss_pct',
