@@ -283,7 +283,10 @@ describe('SemanticAtomInvariantService', () => {
     }
   }
 
-  function wrapExitPriceChangeInAnd(input: ReturnType<typeof compile>): ReturnType<typeof compile> {
+  function wrapExitPriceChangeInBoolean(
+    input: ReturnType<typeof compile>,
+    join: 'AND' | 'OR' = 'AND',
+  ): ReturnType<typeof compile> {
     const { canonicalSpec, ir, ast } = input
     if (canonicalSpec.version !== 2) {
       return input
@@ -319,7 +322,7 @@ describe('SemanticAtomInvariantService', () => {
           ? {
               ...rule,
               condition: {
-                kind: 'AND' as const,
+                kind: join,
                 children: [
                   rule.condition,
                   {
@@ -341,7 +344,7 @@ describe('SemanticAtomInvariantService', () => {
           ...ir.signalCatalog.predicates,
           {
             id: 'exit_price_change_and_gate',
-            kind: 'AND',
+            kind: join,
             args: [exitRule.when, entryRule.when],
           },
         ],
@@ -358,7 +361,7 @@ describe('SemanticAtomInvariantService', () => {
       nodeType: 'predicate' as const,
       payload: {
         id: 'exit_price_change_and_gate',
-        kind: 'AND' as const,
+        kind: join,
         args: [exitPredicate.sourceRef, entryPredicate.sourceRef],
       },
       deps: [exitPredicate.id, entryPredicate.id],
@@ -500,7 +503,7 @@ describe('SemanticAtomInvariantService', () => {
 
   it('passes when price percent change is nested under AND gate predicates', () => {
     const state = buildSemanticState()
-    const { canonicalSpec, ir, ast } = wrapExitPriceChangeInAnd(compile(state))
+    const { canonicalSpec, ir, ast } = wrapExitPriceChangeInBoolean(compile(state), 'AND')
 
     const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
 
@@ -508,6 +511,21 @@ describe('SemanticAtomInvariantService', () => {
       expect.objectContaining({
         key: 'semantic_atom.price_percent_change',
         status: 'passed',
+        level: 'critical',
+      }),
+    ]))
+  })
+
+  it('fails when price percent change is weakened under OR gate predicates', () => {
+    const state = buildSemanticState()
+    const { canonicalSpec, ir, ast } = wrapExitPriceChangeInBoolean(compile(state), 'OR')
+
+    const checks = service.validate({ semanticState: state, canonicalSpec, ir, ast })
+
+    expect(checks).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'semantic_atom.price_percent_change',
+        status: 'failed',
         level: 'critical',
       }),
     ]))

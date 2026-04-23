@@ -205,17 +205,43 @@ export class SemanticAtomInvariantService {
         rule.phase === phase
         && rule.actions.some(ruleAction => ruleAction.type === action)
       ) {
-        return this.collectPriceChangeAtoms(rule.condition).map(atom => ({
-          id: rule.id,
-          predicateKind: this.canonicalPredicateKind(atom.op),
-          constValue: this.readNumber(atom.value),
-          hasPriceChangeSeries: true,
-          timeframe: this.readString(atom.params?.timeframe),
-          lookbackBars: this.readPositiveInteger(atom.params?.lookbackBars) ?? 1,
-        }))
+        return this.collectCanonicalPriceChangePredicates(rule.condition, rule.id)
       }
       return []
     })
+  }
+
+  private collectCanonicalPriceChangePredicates(
+    condition: CanonicalConditionNode,
+    ruleId: string,
+  ): PriceChangeSnapshot[] {
+    if (condition.kind === 'atom') {
+      if (condition.key !== 'price.change_pct') return []
+      return [{
+        id: ruleId,
+        predicateKind: this.canonicalPredicateKind(condition.op),
+        constValue: this.readNumber(condition.value),
+        hasPriceChangeSeries: true,
+        timeframe: this.readString(condition.params?.timeframe),
+        lookbackBars: this.readPositiveInteger(condition.params?.lookbackBars) ?? 1,
+      }]
+    }
+
+    const nested = condition.children.flatMap(child =>
+      this.collectCanonicalPriceChangePredicates(child, ruleId),
+    )
+    if (condition.kind === 'AND' || nested.length === 0) {
+      return nested
+    }
+
+    return [{
+      id: `${ruleId}:${condition.kind}`,
+      predicateKind: condition.kind,
+      constValue: null,
+      hasPriceChangeSeries: true,
+      timeframe: null,
+      lookbackBars: null,
+    }, ...nested]
   }
 
   private findIrPredicates(
@@ -262,6 +288,16 @@ export class SemanticAtomInvariantService {
     )
 
     if (!hasPriceChangeSeries) {
+      if (nested.length > 0 && predicate.kind !== 'AND') {
+        return [{
+          id: predicate.id,
+          predicateKind: predicate.kind,
+          constValue: null,
+          hasPriceChangeSeries: true,
+          timeframe: null,
+          lookbackBars: null,
+        }, ...nested]
+      }
       return nested
     }
 
@@ -320,6 +356,16 @@ export class SemanticAtomInvariantService {
       .flatMap(expr => this.collectAstPriceChangePredicates(expr.id, ast, seen))
 
     if (!priceChangeExpr) {
+      if (nested.length > 0 && predicateExpr.payload.kind !== 'AND') {
+        return [{
+          id: predicateExpr.sourceRef,
+          predicateKind: predicateExpr.payload.kind,
+          constValue: null,
+          hasPriceChangeSeries: true,
+          timeframe: null,
+          lookbackBars: null,
+        }, ...nested]
+      }
       return nested
     }
     const constValue = constExpr && this.isSeriesPayload(constExpr.payload) && typeof constExpr.payload.value === 'number'
@@ -336,14 +382,6 @@ export class SemanticAtomInvariantService {
         ? this.readPositiveInteger(priceChangeExpr.payload.params?.lookbackBars) ?? 1
         : 1,
     }, ...nested]
-  }
-
-  private collectPriceChangeAtoms(condition: CanonicalConditionNode): CanonicalConditionAtom[] {
-    if (condition.kind === 'atom') {
-      return condition.key === 'price.change_pct' ? [condition] : []
-    }
-
-    return condition.children.flatMap(child => this.collectPriceChangeAtoms(child))
   }
 
   private canonicalPredicateKind(op: CanonicalConditionAtom['op']): PredicateKind {
