@@ -409,6 +409,21 @@ export interface LlmCodegenSessionResponse {
   publishedSnapshotCompatibilityMetadata?: AccountAiQuantSnapshotCompatibilityMetadata | null
 }
 
+export interface AiQuantConversationLastBacktestRef {
+  jobId: string
+  publishedSnapshotId: string
+  summary: {
+    maxDrawdownPct: number
+    totalReturnPct: number
+    winRatePct: number
+    tradeCount: number
+    openTradeCount?: number
+    openPnl?: number
+    marketType?: 'spot' | 'perp'
+  }
+  completedAt: string
+}
+
 export interface AiQuantConversationResponse {
   id: string
   conversationTitle?: string
@@ -437,6 +452,7 @@ export interface AiQuantConversationResponse {
   publishedSnapshotDeploymentExecutionDefaults?: AccountAiQuantDeploymentExecutionConfig | null
   publishedSnapshotDeploymentExecutionConstraints?: AccountAiQuantDeploymentExecutionConstraints | null
   publishedSnapshotCompatibilityMetadata?: AccountAiQuantSnapshotCompatibilityMetadata | null
+  lastBacktestRef?: AiQuantConversationLastBacktestRef | null
 }
 
 export interface LlmClarificationGateItem {

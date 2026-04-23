@@ -9,6 +9,7 @@ import type {
   AccountAiQuantBacktestConfigDefaults,
   AccountAiQuantDeploymentExecutionConfig,
   AccountAiQuantDeploymentExecutionConstraints,
+  AiQuantConversationLastBacktestRef,
   AccountAiQuantLeverageRange,
   AccountAiQuantPublishedStrategyConfig,
   AccountAiQuantSnapshotCompatibilityMetadata,
@@ -801,6 +802,85 @@ export function normalizePublishedSnapshotId(snapshotId: unknown): string | null
   return normalized.length > 0 ? normalized : null
 }
 
+function normalizeLastBacktestRef(
+  value: unknown,
+): AiQuantConversationLastBacktestRef | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return null
+  }
+  const candidate = value as Record<string, unknown>
+  if (
+    typeof candidate.jobId !== 'string'
+    || !candidate.jobId.trim()
+    || typeof candidate.publishedSnapshotId !== 'string'
+    || !candidate.publishedSnapshotId.trim()
+    || typeof candidate.completedAt !== 'string'
+    || !candidate.completedAt.trim()
+    || !candidate.summary
+    || typeof candidate.summary !== 'object'
+    || Array.isArray(candidate.summary)
+  ) {
+    return null
+  }
+
+  const summary = candidate.summary as Record<string, unknown>
+  if (
+    typeof summary.maxDrawdownPct !== 'number'
+    || typeof summary.totalReturnPct !== 'number'
+    || typeof summary.winRatePct !== 'number'
+    || typeof summary.tradeCount !== 'number'
+  ) {
+    return null
+  }
+
+  return {
+    jobId: candidate.jobId.trim(),
+    publishedSnapshotId: candidate.publishedSnapshotId.trim(),
+    summary: {
+      maxDrawdownPct: summary.maxDrawdownPct,
+      totalReturnPct: summary.totalReturnPct,
+      winRatePct: summary.winRatePct,
+      tradeCount: summary.tradeCount,
+      ...(typeof summary.openTradeCount === 'number' ? { openTradeCount: summary.openTradeCount } : {}),
+      ...(typeof summary.openPnl === 'number' ? { openPnl: summary.openPnl } : {}),
+      ...(summary.marketType === 'spot' || summary.marketType === 'perp'
+        ? { marketType: summary.marketType }
+        : {}),
+    },
+    completedAt: candidate.completedAt.trim(),
+  }
+}
+
+function restoreBacktestResultFromLastBacktestRef(input: {
+  conversationPublishedSnapshotId: string | null
+  lastBacktestRef: AiQuantConversationLastBacktestRef | null
+  symbol: string
+}): BacktestResult | null {
+  const { conversationPublishedSnapshotId, lastBacktestRef, symbol } = input
+  if (!lastBacktestRef || !conversationPublishedSnapshotId) {
+    return null
+  }
+  if (conversationPublishedSnapshotId !== lastBacktestRef.publishedSnapshotId) {
+    return null
+  }
+
+  return {
+    id: lastBacktestRef.jobId,
+    symbol,
+    maxDrawdownPct: lastBacktestRef.summary.maxDrawdownPct,
+    totalReturnPct: lastBacktestRef.summary.totalReturnPct,
+    winRatePct: lastBacktestRef.summary.winRatePct,
+    tradeCount: lastBacktestRef.summary.tradeCount,
+    ...(typeof lastBacktestRef.summary.openTradeCount === 'number'
+      ? { openTradeCount: lastBacktestRef.summary.openTradeCount }
+      : {}),
+    ...(typeof lastBacktestRef.summary.openPnl === 'number'
+      ? { openPnl: lastBacktestRef.summary.openPnl }
+      : {}),
+    ...(lastBacktestRef.summary.marketType ? { marketType: lastBacktestRef.summary.marketType } : {}),
+  }
+}
+
 function normalizeCodegenSessionId(sessionId: unknown): string | null {
   if (typeof sessionId !== 'string') {
     return null
@@ -1369,6 +1449,12 @@ export function createConversationFromServerConversation(
   })
   const nextParamValues = mergedSnapshotParamValues.paramValues
   const nextParams = normalizeParamsFromValues(nextParamValues, seed.params)
+  const lastBacktestRef = normalizeLastBacktestRef(response.lastBacktestRef)
+  const restoredBacktestResult = restoreBacktestResultFromLastBacktestRef({
+    conversationPublishedSnapshotId: response.publishedSnapshotId ?? null,
+    lastBacktestRef,
+    symbol: nextParams.symbol,
+  })
   const graphVersion =
     typeof response.semanticGraph?.version === 'number' && Number.isFinite(response.semanticGraph.version)
       ? response.semanticGraph.version
@@ -1457,6 +1543,7 @@ export function createConversationFromServerConversation(
       response.scriptCode && logicGraph?.status === 'confirmed'
         ? logicGraph.version
         : null,
+    backtestResult: restoredBacktestResult,
     backtestExecutionConfigExplicit: mergedSnapshotParamValues.explicit,
     updatedAt,
   }

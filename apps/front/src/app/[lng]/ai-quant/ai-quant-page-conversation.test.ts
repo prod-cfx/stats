@@ -205,6 +205,76 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.logicGraph?.status).toBe('confirmed')
   })
 
+  it('restores backtest summary from lastBacktestRef when publishedSnapshotId matches', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'conv-1',
+      conversationTitle: 'remote',
+      status: 'PUBLISHED',
+      conversationMessages: [],
+      publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotParamValues: null,
+      publishedSnapshotStrategyConfig: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      lastBacktestRef: {
+        jobId: 'btjob-1',
+        publishedSnapshotId: 'snapshot-1',
+        summary: {
+          maxDrawdownPct: 8,
+          totalReturnPct: 12,
+          winRatePct: 60,
+          tradeCount: 5,
+          marketType: 'spot',
+        },
+        completedAt: '2026-04-23T00:04:00.000Z',
+      },
+    } as Parameters<typeof createConversationFromServerConversation>[0], (key: string) => key)
+
+    expect(conversation.backtestResult).toEqual(expect.objectContaining({
+      id: 'btjob-1',
+      maxDrawdownPct: 8,
+      totalReturnPct: 12,
+      winRatePct: 60,
+      tradeCount: 5,
+      marketType: 'spot',
+    }))
+  })
+
+  it('does not restore lastBacktestRef when publishedSnapshotId has drifted', () => {
+    const conversation = createConversationFromServerConversation({
+      id: 'conv-1',
+      conversationTitle: 'remote',
+      status: 'PUBLISHED',
+      conversationMessages: [],
+      publishedSnapshotId: 'snapshot-2',
+      publishedSnapshotParamValues: null,
+      publishedSnapshotStrategyConfig: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      lastBacktestRef: {
+        jobId: 'btjob-1',
+        publishedSnapshotId: 'snapshot-1',
+        summary: {
+          maxDrawdownPct: 8,
+          totalReturnPct: 12,
+          winRatePct: 60,
+          tradeCount: 5,
+        },
+        completedAt: '2026-04-23T00:04:00.000Z',
+      },
+    } as Parameters<typeof createConversationFromServerConversation>[0], (key: string) => key)
+
+    expect(conversation.backtestResult).toBeNull()
+  })
+
   it('resets transient backtest state and clears legacy implicit execution config during hydration', () => {
     const conversation = hydrateConversation({
       id: 'conv-1',
