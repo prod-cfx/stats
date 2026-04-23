@@ -52,6 +52,9 @@ export class SemanticAtomInvariantService {
     ir: CanonicalStrategyIrV1
     ast: StrategyAstV1
   }): StrategyConsistencyCheck[] {
+    // First-stage blocking scope: explicit trigger-level price percent changes.
+    // Risk percent rules (stop loss / take profit / trailing stop) remain covered
+    // by canonical risk guards and the existing strategy consistency checks.
     const triggers = input.semanticState.triggers
       .filter(trigger => this.isBlockingPricePercentChangeTrigger(trigger))
     const triggersByBucket = new Map<string, SemanticTriggerState[]>()
