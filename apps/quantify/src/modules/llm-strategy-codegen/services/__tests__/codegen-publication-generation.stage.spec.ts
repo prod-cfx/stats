@@ -4,9 +4,13 @@ import { CanonicalSpecV2IrCompilerService } from '../canonical-spec-v2-ir-compil
 import { CanonicalStrategyAstCompilerService } from '../canonical-strategy-ast-compiler.service'
 import { CanonicalSpecV2DigestService } from '../canonical-spec-v2-digest.service'
 import { CodegenPublicationGenerationStage } from '../codegen-publication-generation.stage'
+import { CompiledScriptEmitterService } from '../compiled-script-emitter.service'
+import { CompiledScriptExecutionEnvelopeService } from '../compiled-script-execution-envelope.service'
+import { CompiledScriptParserService } from '../compiled-script-parser.service'
 import { buildNormalizedIntentFromSemanticState } from '../semantic-state-normalization'
 import { SpecDescBuilderService } from '../spec-desc-builder.service'
 import { ScriptProfileExtractorService } from '../script-profile-extractor.service'
+import { StrategyConsistencyService } from '../strategy-consistency.service'
 import { StrategySummaryBuilderService } from '../strategy-summary-builder.service'
 import { bollingerGoldenCase, maGoldenCase } from './fixtures/semantic-state-golden-cases'
 
@@ -317,7 +321,24 @@ describe('codegenPublicationGenerationStage', () => {
       { id: 'action-open-long', key: 'open_long', status: 'locked', source: 'user_explicit' },
       { id: 'action-close-long', key: 'close_long', status: 'locked', source: 'user_explicit' },
     ],
-    risk: [],
+    risk: [
+      {
+        id: 'risk-stop-loss',
+        key: 'risk.stop_loss_pct',
+        params: { valuePct: 5, basis: 'entry_avg_price' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+      {
+        id: 'risk-take-profit',
+        key: 'risk.take_profit_pct',
+        params: { valuePct: 10, basis: 'entry_avg_price' },
+        status: 'locked',
+        source: 'user_explicit',
+        openSlots: [],
+      },
+    ],
     position: {
       mode: 'fixed_ratio',
       value: 0.1,
@@ -573,6 +594,81 @@ describe('codegenPublicationGenerationStage', () => {
       canonicalSpecOverride,
     })).rejects.toThrow(/codegen\.semantic_atom_drift/)
     expect(emit).not.toHaveBeenCalled()
+  })
+
+  it('keeps the ORDIUSDT previous-close rise exit atom stable through real publication generation', async () => {
+    const canonicalSpecBuilder = new CanonicalSpecBuilderService()
+    const specDescBuilder = new SpecDescBuilderService()
+    const scriptProfileExtractor = new ScriptProfileExtractorService()
+    const strategySummaryBuilder = new StrategySummaryBuilderService(scriptProfileExtractor)
+    const strategyConsistencyService = new StrategyConsistencyService(scriptProfileExtractor)
+    const compiledScriptParser = new CompiledScriptParserService()
+    const stage = new CodegenPublicationGenerationStage(
+      canonicalSpecBuilder,
+      specDescBuilder,
+      strategySummaryBuilder,
+      strategyConsistencyService,
+      new CanonicalSpecV2IrCompilerService(),
+      new CanonicalStrategyAstCompilerService(),
+      new CompiledScriptEmitterService(),
+      new CompiledScriptExecutionEnvelopeService(),
+      compiledScriptParser,
+    )
+
+    const artifacts = await stage.generate({
+      semanticState: buildPreviousCloseRiseSemanticState(),
+    })
+
+    const exitDecision = artifacts.ast.decisionPrograms.find(program =>
+      program.phase === 'exit'
+      && program.actions.some(action => action.kind === 'CLOSE_LONG'),
+    )
+    const exitPredicate = artifacts.ast.exprPool.find(expr => expr.id === exitDecision?.when)
+    const priceChangeExpr = artifacts.ast.exprPool.find(expr =>
+      exitPredicate?.deps.includes(expr.id)
+      && expr.nodeType === 'series'
+      && expr.payload.kind === 'PRICE_CHANGE_PCT',
+    )
+    const constExpr = artifacts.ast.exprPool.find(expr =>
+      exitPredicate?.deps.includes(expr.id)
+      && expr.nodeType === 'series'
+      && expr.payload.kind === 'CONST',
+    )
+
+    expect(artifacts.semanticAtomInvariant.status).toBe('PASSED')
+    expect(exitDecision).toEqual(expect.objectContaining({
+      phase: 'exit',
+      actions: [expect.objectContaining({ kind: 'CLOSE_LONG' })],
+    }))
+    expect(exitPredicate).toEqual(expect.objectContaining({
+      nodeType: 'predicate',
+      payload: expect.objectContaining({
+        kind: 'GTE',
+      }),
+    }))
+    expect(constExpr).toEqual(expect.objectContaining({
+      nodeType: 'series',
+      payload: expect.objectContaining({
+        kind: 'CONST',
+        value: 0.01,
+      }),
+    }))
+    expect(priceChangeExpr).toEqual(expect.objectContaining({
+      nodeType: 'series',
+      payload: expect.objectContaining({
+        kind: 'PRICE_CHANGE_PCT',
+        timeframe: '1h',
+      }),
+    }))
+    expect(exitPredicate?.deps).toEqual(expect.arrayContaining([
+      priceChangeExpr?.id,
+      constExpr?.id,
+    ]))
+    expect(artifacts.publishParams).toEqual({
+      symbol: 'ORDIUSDT',
+      timeframe: '1h',
+      marketType: 'spot',
+    })
   })
 
   it('builds strategy summary from specProfile rather than legacy canonical-spec text heuristics', async () => {
