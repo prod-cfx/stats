@@ -66,6 +66,13 @@ describe('compiledScriptParserService', () => {
           kind: 'CROSS_UNDER',
         }),
       }),
+      expect.objectContaining({
+        sourceRef: 'exit_short_middle_middle_over',
+        nodeType: 'predicate',
+        payload: expect.objectContaining({
+          kind: 'CROSS_OVER',
+        }),
+      }),
     ]))
     expect(parsed.decisionPrograms).toEqual(expect.arrayContaining([
       expect.objectContaining({
