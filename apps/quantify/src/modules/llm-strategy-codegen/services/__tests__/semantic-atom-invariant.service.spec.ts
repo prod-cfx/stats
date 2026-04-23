@@ -1,5 +1,5 @@
-import type { StrategyAstV1 } from '../../types/canonical-strategy-ast'
-import type { CanonicalStrategyIrV1 } from '../../types/canonical-strategy-ir'
+import type { ExprNode, StrategyAstV1 } from '../../types/canonical-strategy-ast'
+import type { CanonicalStrategyIrV1, PredicateDef, SeriesDef } from '../../types/canonical-strategy-ir'
 import type { CanonicalStrategySpec } from '../../types/canonical-strategy-spec'
 import type { SemanticState, SemanticTriggerState } from '../../types/semantic-state'
 import { CanonicalSpecBuilderService } from '../canonical-spec-builder.service'
@@ -108,12 +108,12 @@ describe('SemanticAtomInvariantService', () => {
 
     return {
       ...ast,
-      exprPool: ast.exprPool.map((expr) => {
+      exprPool: ast.exprPool.map((expr): ExprNode => {
         if (expr.id === predicate?.id && expr.nodeType === 'predicate') {
-          return { ...expr, payload: { ...expr.payload, kind: 'LTE' as const } }
+          return { ...expr, payload: { ...(expr.payload as PredicateDef), kind: 'LTE' as const } }
         }
         if (predicate?.deps.includes(expr.id) && expr.nodeType === 'series' && expr.payload.kind === 'CONST') {
-          return { ...expr, payload: { ...expr.payload, value: -0.01 } }
+          return { ...expr, payload: { ...(expr.payload as SeriesDef), value: -0.01 } }
         }
         return expr
       }),
