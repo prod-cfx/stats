@@ -111,7 +111,10 @@ export class CodegenPublicationGenerationStage {
         publishParams,
       }),
     })
-    const executionEnvelope = this.compiledScriptExecutionEnvelope.build(canonicalSpec)
+    const executionEnvelope = this.compiledScriptExecutionEnvelope.build(
+      canonicalSpec,
+      normalization.normalizedIntent.position.positionMode,
+    )
     const ast = this.canonicalStrategyAstCompiler.compile(compiled.ir)
     const semanticAtomInvariant = this.buildSemanticAtomInvariantReport(this.semanticAtomInvariant.validate({
       semanticState: input.semanticState,
