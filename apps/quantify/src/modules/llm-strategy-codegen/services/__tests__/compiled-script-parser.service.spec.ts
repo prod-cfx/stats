@@ -80,6 +80,7 @@ describe('compiledScriptParserService', () => {
         actions: [expect.objectContaining({ kind: 'CLOSE_SHORT' })],
       }),
     ]))
+    expect(parsed.decisionPrograms.filter(program => program.sourceRef === 'exit-short-middle')).toHaveLength(1)
   })
 })
 
