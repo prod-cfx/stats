@@ -893,7 +893,7 @@ describe('backtestJobsService', () => {
     expect(conversations.updateLastBacktestRef).toHaveBeenCalledTimes(1)
   })
 
-  it('attempts to write a lightweight lastBacktestRef after a successful snapshot-bound fallback job', async () => {
+  it('does not write lastBacktestRef after a successful snapshot-bound fallback job', async () => {
     const result = {
       summary: {
         netProfit: 120,
@@ -928,41 +928,18 @@ describe('backtestJobsService', () => {
     const created = await service.createJob(input, OWNER_USER_ID)
     await flushMicrotasks()
 
-    expect(conversations.updateLastBacktestRef).toHaveBeenCalledTimes(1)
-    expect(conversations.updateLastBacktestRef).toHaveBeenCalledWith({
-      conversationId: 'conv-1',
-      userId: OWNER_USER_ID,
-      lastBacktestRef: {
-        jobId: created.id,
-        publishedSnapshotId: 'snapshot-1',
-        config: {
-          range: {
-            preset: 'CUSTOM',
-            startAt: '1970-01-01T00:00:00.001Z',
-            endAt: '1970-01-01T00:00:00.002Z',
-          },
-          execution: {
-            initialCash: 10000,
-            leverage: 2,
-            slippageBps: 5,
-            feeBps: 4,
-            priceSource: 'mid',
-            allowPartial: false,
-          },
-        },
-        summary: {
-          maxDrawdownPct: 8,
-          totalReturnPct: 12,
-          winRatePct: 60,
-          tradeCount: 5,
-          marketType: 'spot',
-        },
-        completedAt: expect.any(Date),
-      },
-    })
+    await expect(service.getJob(created.id, OWNER_USER_ID)).resolves.toEqual(
+      expect.objectContaining({
+        id: created.id,
+        status: 'succeeded',
+        resultSummary: expect.objectContaining(result.summary),
+      }),
+    )
+    await expect(service.getJobResult(created.id, OWNER_USER_ID)).resolves.toEqual(result)
+    expect(conversations.updateLastBacktestRef).not.toHaveBeenCalled()
   })
 
-  it('keeps a fallback job succeeded when conversation lastBacktestRef writeback fails', async () => {
+  it('keeps a fallback job succeeded without attempting lastBacktestRef writeback', async () => {
     const result = {
       summary: {
         netProfit: 120,
@@ -981,7 +958,6 @@ describe('backtestJobsService', () => {
       run: jest.fn().mockResolvedValue(result),
     }
     const conversations = createConversationsMock()
-    conversations.updateLastBacktestRef.mockRejectedValue(new Error('writeback failed'))
     const prisma = createPrismaMock()
     prisma.backtestJob.create.mockRejectedValueOnce(Object.assign(
       new Error('The table `public.backtest_jobs` does not exist in the current database.'),
@@ -1007,9 +983,9 @@ describe('backtestJobsService', () => {
       }),
     )
     await expect(service.getJobResult(created.id, OWNER_USER_ID)).resolves.toEqual(result)
-    expect(conversations.updateLastBacktestRef).toHaveBeenCalledTimes(1)
+    expect(conversations.updateLastBacktestRef).not.toHaveBeenCalled()
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining('event=backtest_last_backtest_ref_write_failed'),
+      expect.stringContaining('event=backtest_job_persistence_unavailable'),
     )
   })
 

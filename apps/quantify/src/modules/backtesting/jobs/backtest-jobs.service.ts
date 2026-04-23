@@ -319,17 +319,6 @@ export class BacktestJobsService {
       job.result = result
       job.error = undefined
       job.finishedAt = completedAt.toISOString()
-
-      await this.writeLastBacktestRefIfEligible({
-        id,
-        input,
-        ownerUserId: job.ownerUserId,
-        conversationId: this.readConversationId(input),
-        snapshotId: resolvedSummary.snapshotId,
-        marketType: resolvedSummary.marketType,
-        result,
-        completedAt,
-      })
     } catch (error) {
       job.status = 'failed'
       job.error = error instanceof Error ? error.message : String(error)
