@@ -30,7 +30,7 @@ function createInput(): BacktestRunInput {
 }
 
 async function flushMicrotasks() {
-  for (let i = 0; i < 6; i += 1) {
+  for (let i = 0; i < 12; i += 1) {
     await Promise.resolve()
   }
 }
@@ -130,26 +130,36 @@ function createAvailabilityMock(
   }
 }
 
+function createConversationsMock() {
+  return {
+    updateLastBacktestRef: jest.fn().mockResolvedValue(undefined),
+  }
+}
+
 function createService(args?: {
   runner?: { run: jest.Mock }
   marketData?: ReturnType<typeof createMarketDataMock>
   availability?: ReturnType<typeof createAvailabilityMock>
+  conversations?: ReturnType<typeof createConversationsMock>
   prisma?: ReturnType<typeof createPrismaMock>
 }) {
   const runner = args?.runner ?? { run: jest.fn().mockImplementation(() => new Promise(() => {})) }
   const marketData = args?.marketData ?? createMarketDataMock()
   const availability = args?.availability ?? createAvailabilityMock()
+  const conversations = args?.conversations ?? createConversationsMock()
   const prisma = args?.prisma ?? createPrismaMock()
 
   return {
     runner,
     marketData,
     availability,
+    conversations,
     prisma,
     service: new BacktestJobsService(
       runner as never,
       marketData as never,
       availability as never,
+      conversations as never,
       prisma as never,
     ),
   }
@@ -228,6 +238,7 @@ describe('backtestJobsService', () => {
       runner as never,
       marketData as never,
       availability as never,
+      createConversationsMock() as never,
       prisma as never,
     )
     const input = createInput()
@@ -276,6 +287,7 @@ describe('backtestJobsService', () => {
       runner as never,
       marketData as never,
       availability as never,
+      createConversationsMock() as never,
       prisma as never,
     )
     const input = createInput()
@@ -486,7 +498,13 @@ describe('backtestJobsService', () => {
         }),
       },
     }
-    const service = new BacktestJobsService(runner as never, marketData as never, availability as never, prisma as never)
+    const service = new BacktestJobsService(
+      runner as never,
+      marketData as never,
+      availability as never,
+      createConversationsMock() as never,
+      prisma as never,
+    )
 
     await expect(service.getJob('job-invalid', OWNER_USER_ID)).rejects.toThrow(
       'backtest.job_invalid_status',
@@ -516,7 +534,13 @@ describe('backtestJobsService', () => {
         }),
       },
     }
-    const service = new BacktestJobsService(runner as never, marketData as never, availability as never, prisma as never)
+    const service = new BacktestJobsService(
+      runner as never,
+      marketData as never,
+      availability as never,
+      createConversationsMock() as never,
+      prisma as never,
+    )
 
     await expect(service.getJobResult('job-invalid-result', OWNER_USER_ID)).rejects.toThrow(
       'backtest.job_invalid_status',
@@ -633,6 +657,75 @@ describe('backtestJobsService', () => {
     expect(prisma.backtestJob.deleteMany).not.toHaveBeenCalled()
   })
 
+  it('writes a lightweight lastBacktestRef to the owning conversation after a successful snapshot-bound backtest', async () => {
+    const runner = {
+      run: jest.fn().mockResolvedValue({
+        summary: {
+          netProfit: 120,
+          netProfitPct: 12,
+          maxDrawdownPct: 8,
+          winRate: 0.6,
+          profitFactor: 1.8,
+          totalTrades: 5,
+        },
+        equityCurve: [],
+        trades: [],
+        markers: [],
+        bySymbol: [],
+      }),
+    }
+    const conversations = {
+      updateLastBacktestRef: jest.fn().mockResolvedValue(undefined),
+    }
+    const { service } = createService({ runner, conversations })
+    const input = createInput()
+    Object.assign(input.strategy as Record<string, unknown>, {
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+      snapshotId: 'snapshot-1',
+    })
+    ;(input as BacktestRunInput & { conversationId?: string }).conversationId = 'conv-1'
+
+    const created = await service.createJob(input, OWNER_USER_ID)
+    await flushMicrotasks()
+
+    expect(conversations.updateLastBacktestRef).toHaveBeenCalledWith({
+      conversationId: 'conv-1',
+      userId: OWNER_USER_ID,
+      lastBacktestRef: {
+        jobId: created.id,
+        publishedSnapshotId: 'snapshot-1',
+        summary: expect.objectContaining({
+          maxDrawdownPct: 8,
+          totalReturnPct: 12,
+          winRatePct: 60,
+          tradeCount: 5,
+        }),
+        completedAt: expect.any(Date),
+      },
+    })
+  })
+
+  it('does not write lastBacktestRef when the backtest fails', async () => {
+    const runner = {
+      run: jest.fn().mockRejectedValue(new Error('boom')),
+    }
+    const conversations = {
+      updateLastBacktestRef: jest.fn().mockResolvedValue(undefined),
+    }
+    const { service } = createService({ runner, conversations })
+    const input = createInput()
+    Object.assign(input.strategy as Record<string, unknown>, {
+      bindingSource: 'PUBLISHED_SNAPSHOT_STRICT',
+      snapshotId: 'snapshot-1',
+    })
+    ;(input as BacktestRunInput & { conversationId?: string }).conversationId = 'conv-1'
+
+    await service.createJob(input, OWNER_USER_ID)
+    await flushMicrotasks()
+
+    expect(conversations.updateLastBacktestRef).not.toHaveBeenCalled()
+  })
+
   it('throws not found when prisma cannot find the job', async () => {
     const { service, marketData, prisma, availability } = createService()
 
@@ -657,7 +750,13 @@ describe('backtestJobsService', () => {
       new Error('The table `public.backtest_jobs` does not exist in the current database.'),
       { code: 'P2021' },
     ))
-    const service = new BacktestJobsService(runner as never, marketData as never, availability as never, prisma as never)
+    const service = new BacktestJobsService(
+      runner as never,
+      marketData as never,
+      availability as never,
+      createConversationsMock() as never,
+      prisma as never,
+    )
 
     const created = await service.createJob(createInput(), OWNER_USER_ID)
     await flushMicrotasks()

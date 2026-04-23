@@ -1,20 +1,24 @@
 model BacktestJob {
-  id           String    @id
-  ownerUserId  String    @map("owner_user_id")
-  status       String
-  snapshotId   String?   @map("snapshot_id")
-  snapshotHash String?   @map("snapshot_hash")
-  scriptHash   String?   @map("script_hash")
-  specHash     String?   @map("spec_hash")
-  inputSummary Json      @map("input_summary")
-  result       Json?     @map("result")
-  error        String?
-  createdAt    DateTime  @default(now()) @map("created_at")
-  startedAt    DateTime? @map("started_at")
-  finishedAt   DateTime? @map("finished_at")
+  id             String    @id
+  ownerUserId    String    @map("owner_user_id")
+  conversationId String?   @map("conversation_id")
+  status         String
+  snapshotId     String?   @map("snapshot_id")
+  snapshotHash   String?   @map("snapshot_hash")
+  scriptHash     String?   @map("script_hash")
+  specHash       String?   @map("spec_hash")
+  inputSummary   Json      @map("input_summary")
+  result         Json?     @map("result")
+  error          String?
+  createdAt      DateTime  @default(now()) @map("created_at")
+  startedAt      DateTime? @map("started_at")
+  finishedAt     DateTime? @map("finished_at")
+
+  conversation AiQuantConversation? @relation(fields: [conversationId], references: [id], onDelete: SetNull)
 
   @@index([ownerUserId, createdAt], map: "idx_backtest_jobs_owner_created_at")
   @@index([ownerUserId, status], map: "idx_backtest_jobs_owner_status")
   @@index([snapshotId], map: "idx_backtest_jobs_snapshot_id")
+  @@index([conversationId, createdAt], map: "idx_backtest_jobs_conversation_created_at")
   @@map("backtest_jobs")
 }

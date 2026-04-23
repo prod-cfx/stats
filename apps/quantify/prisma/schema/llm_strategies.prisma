@@ -154,12 +154,14 @@ model AiQuantConversation {
   userId           String    @map("user_id")
   codegenSessionId String    @unique @map("codegen_session_id")
   title            String
+  lastBacktestRef  Json?     @map("last_backtest_ref")
   archivedAt       DateTime? @map("archived_at")
   createdAt        DateTime  @default(now()) @map("created_at")
   updatedAt        DateTime  @default(now()) @updatedAt @map("updated_at")
 
   codegenSession LlmStrategyCodegenSession    @relation(fields: [codegenSessionId], references: [id], onDelete: Cascade)
   messages       AiQuantConversationMessage[]
+  backtestJobs   BacktestJob[]
 
   @@index([userId, updatedAt], map: "idx_ai_quant_conversations_user_updated_at")
   @@index([userId, archivedAt, updatedAt], map: "idx_ai_quant_conversations_user_archived_updated_at")

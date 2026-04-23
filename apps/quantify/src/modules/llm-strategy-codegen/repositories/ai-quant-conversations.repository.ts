@@ -1,5 +1,5 @@
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
-import type { PrismaClient } from '@/prisma/prisma.types'
+import type { Prisma, PrismaClient } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
@@ -7,6 +7,21 @@ import { Injectable } from '@nestjs/common'
 export interface AiQuantConversationMessageSnapshot {
   role: 'user' | 'assistant'
   content: string
+}
+
+export interface AiQuantConversationLastBacktestRefRecord {
+  jobId: string
+  publishedSnapshotId: string
+  summary: {
+    maxDrawdownPct: number
+    totalReturnPct: number
+    winRatePct: number
+    tradeCount: number
+    openTradeCount?: number
+    openPnl?: number
+    marketType?: 'spot' | 'perp'
+  }
+  completedAt: Date
 }
 
 export interface AiQuantConversationSnapshotRecord {
@@ -17,6 +32,7 @@ export interface AiQuantConversationSnapshotRecord {
   archivedAt: Date | null
   createdAt: Date
   updatedAt: Date
+  lastBacktestRef: AiQuantConversationLastBacktestRefRecord | null
   messages: AiQuantConversationMessageSnapshot[]
 }
 
@@ -76,6 +92,7 @@ export class AiQuantConversationsRepository {
         archivedAt: true,
         createdAt: true,
         updatedAt: true,
+        lastBacktestRef: true,
         messages: {
           orderBy: { sortOrder: 'asc' },
           select: {
@@ -86,13 +103,7 @@ export class AiQuantConversationsRepository {
       },
     })
 
-    return conversations.map(conversation => ({
-      ...conversation,
-      messages: conversation.messages.map(message => ({
-        role: message.role,
-        content: message.content,
-      })),
-    }))
+    return conversations.map(conversation => this.mapSnapshotRecord(conversation))
   }
 
   async listKnownSessionIdsByUser(userId: string): Promise<string[]> {
@@ -115,6 +126,7 @@ export class AiQuantConversationsRepository {
         archivedAt: true,
         createdAt: true,
         updatedAt: true,
+        lastBacktestRef: true,
         messages: {
           orderBy: { sortOrder: 'asc' },
           select: {
@@ -127,13 +139,24 @@ export class AiQuantConversationsRepository {
 
     if (!conversation) return null
 
-    return {
-      ...conversation,
-      messages: conversation.messages.map(message => ({
-        role: message.role,
-        content: message.content,
-      })),
-    }
+    return this.mapSnapshotRecord(conversation)
+  }
+
+  async updateLastBacktestRef(input: {
+    conversationId: string
+    userId: string
+    lastBacktestRef: AiQuantConversationLastBacktestRefRecord
+  }): Promise<void> {
+    await this.txHost.tx.aiQuantConversation.updateMany({
+      where: {
+        id: input.conversationId,
+        userId: input.userId,
+        archivedAt: null,
+      },
+      data: {
+        lastBacktestRef: input.lastBacktestRef as unknown as Prisma.InputJsonValue,
+      },
+    })
   }
 
   async archiveByIdAndUser(id: string, userId: string): Promise<void> {
@@ -154,6 +177,7 @@ export class AiQuantConversationsRepository {
         archivedAt: true,
         createdAt: true,
         updatedAt: true,
+        lastBacktestRef: true,
         messages: {
           orderBy: { sortOrder: 'asc' },
           select: {
@@ -164,8 +188,23 @@ export class AiQuantConversationsRepository {
       },
     })
 
+    return this.mapSnapshotRecord(conversation)
+  }
+
+  private mapSnapshotRecord(conversation: {
+    id: string
+    userId: string
+    codegenSessionId: string
+    title: string
+    archivedAt: Date | null
+    createdAt: Date
+    updatedAt: Date
+    lastBacktestRef: Prisma.JsonValue | null
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  }): AiQuantConversationSnapshotRecord {
     return {
       ...conversation,
+      lastBacktestRef: conversation.lastBacktestRef as unknown as AiQuantConversationLastBacktestRefRecord | null,
       messages: conversation.messages.map(message => ({
         role: message.role,
         content: message.content,

@@ -3,6 +3,7 @@ import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { Injectable, HttpStatus, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+import { AiQuantConversationsRepository } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -78,6 +79,7 @@ export class BacktestJobsService {
     private readonly runner: BacktestRunnerService,
     private readonly marketDataService: BacktestMarketDataService,
     private readonly symbolAvailabilityService: BacktestSymbolAvailabilityService,
+    private readonly conversationsRepo: AiQuantConversationsRepository,
     private readonly prisma: PrismaService,
   ) {}
 
@@ -86,10 +88,12 @@ export class BacktestJobsService {
     const id = `btjob-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
     const inputSummary = this.createInputSummary(input)
     try {
+      const conversationId = this.readConversationId(input)
       const job = await this.prisma.backtestJob.create({
         data: {
           id,
           ownerUserId,
+          conversationId,
           status: 'queued',
           snapshotId: inputSummary.snapshotId ?? null,
           snapshotHash: inputSummary.snapshotHash ?? null,
@@ -226,6 +230,7 @@ export class BacktestJobsService {
 
     try {
       const { resolvedSummary, result } = await this.runBacktestJob(input, initialSummary)
+      const completedAt = new Date()
       await this.prisma.backtestJob.update({
         where: { id },
         data: {
@@ -233,9 +238,40 @@ export class BacktestJobsService {
           inputSummary: resolvedSummary as Prisma.InputJsonValue,
           result: result as unknown as Prisma.InputJsonValue,
           error: null,
-          finishedAt: new Date(),
+          finishedAt: completedAt,
         },
       })
+
+      if (job.conversationId && resolvedSummary.snapshotId) {
+        await this.conversationsRepo.updateLastBacktestRef({
+          conversationId: job.conversationId,
+          userId: job.ownerUserId,
+          lastBacktestRef: {
+            jobId: id,
+            publishedSnapshotId: resolvedSummary.snapshotId,
+            summary: {
+              maxDrawdownPct: Number(result.summary.maxDrawdownPct.toFixed(2)),
+              totalReturnPct: Number(result.summary.netProfitPct.toFixed(2)),
+              winRatePct: Number(
+                (
+                  result.summary.winRate <= 1
+                    ? result.summary.winRate * 100
+                    : result.summary.winRate
+                ).toFixed(2),
+              ),
+              tradeCount: result.summary.totalTrades,
+              ...(typeof result.summary.totalOpenTrades === 'number'
+                ? { openTradeCount: result.summary.totalOpenTrades }
+                : {}),
+              ...(typeof result.summary.openPnl === 'number'
+                ? { openPnl: Number(result.summary.openPnl.toFixed(2)) }
+                : {}),
+              marketType: resolvedSummary.marketType,
+            },
+            completedAt,
+          },
+        })
+      }
     } catch (error) {
       await this.prisma.backtestJob.update({
         where: { id },
@@ -395,6 +431,11 @@ export class BacktestJobsService {
   private readStrategyMarketType(strategy: BacktestRunInput['strategy']): 'spot' | 'perp' {
     const value = strategy.params?.marketType
     return value === 'perp' ? 'perp' : 'spot'
+  }
+
+  private readConversationId(input: BacktestRunInput): string | null {
+    const candidate = (input as BacktestRunInput & { conversationId?: unknown }).conversationId
+    return typeof candidate === 'string' && candidate.trim().length > 0 ? candidate.trim() : null
   }
 
   private normalizePersistedStatus(status: string, id: string): BacktestJobPhase {
