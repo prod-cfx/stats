@@ -107,4 +107,19 @@ describe('backend contract generated AI Quant codegen responses', () => {
     expect(summarySnippet).toContain('winRatePct: z.number()')
     expect(summarySnippet).toContain('tradeCount: z.number()')
   })
+
+  it('keeps backtesting createJob typed with request body and non-void response', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+    const start = source.indexOf("alias: 'BacktestingProxyController_createJob'")
+
+    expect(start).toBeGreaterThanOrEqual(0)
+
+    const nextAlias = source.indexOf("\n  {\n    method:", start + 1)
+    const snippet = source.slice(start, nextAlias === -1 ? undefined : nextAlias)
+
+    expect(snippet).toContain("name: 'body'")
+    expect(snippet).not.toContain('response: z.void()')
+    expect(snippet).toContain('response: z')
+    expect(snippet).toContain('data: BacktestingCreateJobResponseDto')
+  })
 })

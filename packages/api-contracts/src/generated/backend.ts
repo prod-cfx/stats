@@ -322,6 +322,129 @@ const BacktestingSymbolSupportResponseDto = z
     args: z.object({}).partial().passthrough().optional(),
   })
   .passthrough()
+const BacktestingCreateJobExecutionDto = z
+  .object({
+    slippageBps: z.number(),
+    feeBps: z.number(),
+    priceSource: z.enum(['open', 'close', 'mid']),
+  })
+  .passthrough()
+const BacktestingCreateJobStrategyDto = z
+  .object({
+    id: z.string().optional(),
+    protocolVersion: z.literal('v1'),
+    publishedSnapshotId: z.string().optional(),
+    params: z.object({}).partial().passthrough().optional(),
+  })
+  .passthrough()
+const BacktestingCreateJobRangeDto = z
+  .object({ fromTs: z.number(), toTs: z.number() })
+  .passthrough()
+const BacktestingCreateJobRequestedRangeInputDto = z
+  .object({
+    preset: z.enum(['7D', '30D', '90D', '1Y', 'CUSTOM']),
+    startAt: z.string().optional(),
+    endAt: z.string().optional(),
+  })
+  .passthrough()
+const BacktestingCreateJobBarDto = z
+  .object({
+    symbol: z.string(),
+    timeframe: z.enum(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w']),
+    openTime: z.number(),
+    closeTime: z.number(),
+    open: z.number(),
+    high: z.number(),
+    low: z.number(),
+    close: z.number(),
+    volume: z.number(),
+  })
+  .passthrough()
+const BacktestingCreateJobRequestDto = z
+  .object({
+    symbols: z.array(z.string()),
+    baseTimeframe: z.enum([
+      '1m',
+      '3m',
+      '5m',
+      '15m',
+      '30m',
+      '1h',
+      '4h',
+      '6h',
+      '8h',
+      '12h',
+      '1d',
+      '1w',
+    ]),
+    stateTimeframes: z.array(
+      z.enum(['1m', '3m', '5m', '15m', '30m', '1h', '4h', '6h', '8h', '12h', '1d', '1w']),
+    ),
+    initialCash: z.number(),
+    leverage: z.number().optional(),
+    allowPartial: z.boolean().optional(),
+    conversationId: z.string().optional(),
+    execution: BacktestingCreateJobExecutionDto,
+    strategy: BacktestingCreateJobStrategyDto,
+    dataRange: BacktestingCreateJobRangeDto,
+    requestedRangeInput: BacktestingCreateJobRequestedRangeInputDto.optional(),
+    bars: z.array(BacktestingCreateJobBarDto).optional(),
+  })
+  .passthrough()
+const BacktestingCreateJobErrorDetailsDto = z
+  .object({
+    code: z.string().optional(),
+    message: z.string(),
+    args: z.object({}).partial().passthrough().optional(),
+  })
+  .passthrough()
+const BacktestingCreateJobInputSummaryDto = z
+  .object({
+    symbols: z.array(z.string()),
+    baseTimeframe: z.string(),
+    stateTimeframes: z.array(z.string()),
+    initialCash: z.number(),
+    leverage: z.number().nullish(),
+    marketType: z.enum(['spot', 'perp']),
+    dataRange: BacktestingCreateJobRangeDto,
+    requestedRange: BacktestingCreateJobRangeDto,
+    appliedRange: BacktestingCreateJobRangeDto.optional(),
+    allowPartial: z.boolean(),
+    isPartial: z.boolean(),
+    strategyId: z.string(),
+    strategyInstanceId: z.string().optional(),
+    strategyTemplateId: z.string().optional(),
+    snapshotId: z.string().optional(),
+    snapshotHash: z.string().optional(),
+    scriptHash: z.string().optional(),
+    specHash: z.string().optional(),
+  })
+  .passthrough()
+const BacktestingCreateJobSummaryDto = z
+  .object({
+    netProfit: z.number(),
+    netProfitPct: z.number(),
+    maxDrawdownPct: z.number(),
+    winRate: z.number(),
+    profitFactor: z.number().nullable(),
+    totalTrades: z.number(),
+    totalOpenTrades: z.number().optional(),
+    openPnl: z.number().optional(),
+  })
+  .passthrough()
+const BacktestingCreateJobResponseDto = z
+  .object({
+    id: z.string(),
+    status: z.enum(['queued', 'running', 'succeeded', 'failed']),
+    createdAt: z.string(),
+    startedAt: z.string().optional(),
+    finishedAt: z.string().optional(),
+    error: z.string().optional(),
+    errorDetails: BacktestingCreateJobErrorDetailsDto.optional(),
+    inputSummary: BacktestingCreateJobInputSummaryDto,
+    resultSummary: BacktestingCreateJobSummaryDto.optional(),
+  })
+  .passthrough()
 const LlmCodegenStartRequestDto = z
   .object({ initialMessage: z.string(), guideConfig: z.object({}).partial().passthrough() })
   .partial()
@@ -1292,6 +1415,16 @@ export const schemas = {
   AccountAiQuantUpdateExecutionLeverageRequestDto,
   BacktestingSymbolSupportRequestDto,
   BacktestingSymbolSupportResponseDto,
+  BacktestingCreateJobExecutionDto,
+  BacktestingCreateJobStrategyDto,
+  BacktestingCreateJobRangeDto,
+  BacktestingCreateJobRequestedRangeInputDto,
+  BacktestingCreateJobBarDto,
+  BacktestingCreateJobRequestDto,
+  BacktestingCreateJobErrorDetailsDto,
+  BacktestingCreateJobInputSummaryDto,
+  BacktestingCreateJobSummaryDto,
+  BacktestingCreateJobResponseDto,
   LlmCodegenStartRequestDto,
   CodegenConversationMessageResponseDto,
   CodegenSessionResponseDto,
@@ -3292,6 +3425,11 @@ const endpoints = makeApi([
     requestFormat: 'json',
     parameters: [
       {
+        name: 'body',
+        type: 'Body',
+        schema: BacktestingCreateJobRequestDto,
+      },
+      {
         name: 'authorization',
         type: 'Header',
         schema: z.string(),
@@ -3299,10 +3437,12 @@ const endpoints = makeApi([
       {
         name: 'x-request-id',
         type: 'Header',
-        schema: z.string(),
+        schema: z.string().optional(),
       },
     ],
-    response: z.void(),
+    response: z
+      .object({ data: BacktestingCreateJobResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'get',
