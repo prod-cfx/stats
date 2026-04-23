@@ -1597,6 +1597,10 @@ export function shouldResetIrrecoverableHydratedConversation(
 }
 
 export function hydrateConversation(item: Partial<ConversationState>): ConversationState {
+  const serverConversationId =
+    typeof item.serverConversationId === 'string' && item.serverConversationId.trim()
+      ? item.serverConversationId.trim()
+      : null
   const publishedSnapshotId = normalizePublishedSnapshotId(item.publishedSnapshotId)
   const publishedSnapshotStrategyConfig = normalizePublishedStrategyConfig(item.publishedSnapshotStrategyConfig)
   const publishedSnapshotBacktestConfigDefaults = normalizeBacktestConfigDefaults(
@@ -1642,6 +1646,7 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
 
   return normalizeHydratedConversationState({
     id: item.id ?? `conv-${Date.now()}`,
+    serverConversationId,
     schemaVersion: AI_QUANT_PERSISTED_SCHEMA_VERSION,
     title: item.title ?? '',
     messages: Array.isArray(item.messages) ? item.messages : [],

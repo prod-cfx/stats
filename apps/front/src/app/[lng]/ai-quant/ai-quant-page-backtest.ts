@@ -254,6 +254,11 @@ export async function runAiQuantBacktest(args: {
   let payload: ReturnType<typeof buildBacktestPayload>
   let backtestExchange: ConversationState['params']['exchange'] | null = null
   let backtestMarketType: 'spot' | 'perp' | null = null
+  const serverConversationId =
+    typeof activeConversation.serverConversationId === 'string'
+      && activeConversation.serverConversationId.trim()
+      ? activeConversation.serverConversationId.trim()
+      : null
   try {
     const publishedMarketType = resolvePublishedBacktestMarketType({
       publishedSnapshotId: activeConversation.publishedSnapshotId,
@@ -320,7 +325,7 @@ export async function runAiQuantBacktest(args: {
           '',
         publishedSnapshotId: activeConversation.publishedSnapshotId ?? '',
       },
-      conversationId: activeConversation.serverConversationId ?? conversationId,
+      ...(serverConversationId ? { conversationId: serverConversationId } : {}),
       range: resolveBacktestRangeInput(activeConversation.paramValues),
       // Top-level allowPartial controls whether the backtest job may clamp the
       // requested range to the available market-data coverage. It is not the

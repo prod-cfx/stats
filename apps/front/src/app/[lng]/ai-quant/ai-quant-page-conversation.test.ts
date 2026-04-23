@@ -9,6 +9,7 @@ import {
   hydrateConversations,
   invalidateConversationPublication,
   isDeployableBacktestResult,
+  readPersistedConversations,
   requiresRepublishForPublishedSnapshot,
   resolveEffectivePublishedBacktestInputs,
   resolveBacktestExecutionConfig,
@@ -886,6 +887,7 @@ describe('ai-quant-page-conversation', () => {
     const serialized = serializePersistedConversations([
       {
         id: 'conv-persisted-published',
+        serverConversationId: 'server-conv-persisted',
         title: 'persisted',
         messages: [],
         params: {
@@ -965,6 +967,72 @@ describe('ai-quant-page-conversation', () => {
       backtestPriceSource: 'close',
       backtestAllowPartial: true,
     })
+  })
+
+  it('restores serverConversationId when a persisted local conversation is hydrated from storage', () => {
+    const raw = serializePersistedConversations([
+      {
+        id: 'conv-persisted-local',
+        serverConversationId: 'server-conv-1',
+        title: 'persisted',
+        messages: [],
+        params: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+        paramSchema: null,
+        paramValues: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+        backtestResult: null,
+        logicGraph: null,
+        displayLogicGraph: null,
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: null,
+        llmCodegenSessionId: null,
+        publishedStrategyInstanceId: null,
+        publishedSnapshotId: null,
+        publishedSnapshotParamValues: null,
+        publishedSnapshotStrategyConfig: null,
+        publishedSnapshotBacktestConfigDefaults: null,
+        publishedSnapshotDeploymentExecutionDefaults: null,
+        publishedSnapshotDeploymentExecutionConstraints: null,
+        publishedSnapshotCompatibilityMetadata: null,
+        publishedScriptCode: null,
+        publishedScriptGraphVersion: null,
+        latestSignalMessage: null,
+        backtestExecutionConfigExplicit: false,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+        schemaVersion: AI_QUANT_PERSISTED_SCHEMA_VERSION,
+      },
+    ], 'deploy-2026-04-11')
+
+    const restored = readPersistedConversations({
+      raw,
+      translate: (key: string) => key,
+      version: 'deploy-2026-04-11',
+    })
+
+    expect(restored.conversations[0]?.id).toBe('conv-persisted-local')
+    expect(restored.conversations[0]?.serverConversationId).toBe('server-conv-1')
   })
 
   it('does not require republish when only backtest range changes', () => {

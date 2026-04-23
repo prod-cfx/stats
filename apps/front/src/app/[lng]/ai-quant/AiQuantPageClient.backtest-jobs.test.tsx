@@ -587,7 +587,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     )
   })
 
-  it('passes the active conversation id to the backtest payload builder when submitting a job', async () => {
+  it('does not pass a local conversation id to the backtest payload builder when no serverConversationId exists', async () => {
     await act(async () => {
       root?.render(<AiQuantPageClient />)
       await Promise.resolve()
@@ -601,8 +601,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     })
 
     expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
-      expect.objectContaining({
-        conversationId: 'conv-1',
+      expect.not.objectContaining({
+        conversationId: expect.anything(),
       }),
     )
   })
@@ -1620,6 +1620,53 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
       expect.objectContaining({
         conversationId: 'server-conv-1',
+      }),
+    )
+    expect(mockBuildBacktestPayload).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-1',
+      }),
+    )
+  })
+
+  it('omits conversationId from the backtest payload when the local conversation has no serverConversationId', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    const activeConversation = {
+      ...seeded[0],
+      serverConversationId: null,
+      publishedScriptGraphVersion: 1,
+      publishedScriptCode: 'return { ok: true }',
+    } as ConversationState
+
+    mockCreateBacktestJob.mockResolvedValueOnce({
+      id: 'job-1',
+      status: 'succeeded',
+      createdAt: '2026-03-24T12:00:01.000Z',
+    })
+
+    let currentConversation = activeConversation
+
+    await runAiQuantBacktest({
+      activeConversation,
+      activeConversationIdRef: { current: activeConversation.id },
+      backtestCapabilities: {
+        allowedBaseTimeframes: ['15m'],
+      },
+      backtestCapabilityState: 'ready',
+      backtestRunMutexRef: { current: new Set<string>() },
+      backtestRunTokenRef: { current: new Map<string, number>() },
+      graphConfirmed: true,
+      isMountedRef: { current: true },
+      setConversationBacktestExecutionState: jest.fn(),
+      t: (key: string) => key,
+      updateConversationById: (_conversationId, updater) => {
+        currentConversation = updater(currentConversation)
+      },
+    })
+
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        conversationId: expect.anything(),
       }),
     )
     expect(mockBuildBacktestPayload).not.toHaveBeenCalledWith(
