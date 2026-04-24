@@ -366,7 +366,7 @@ export interface ExchangeConfigListQuery {
 
 export async function fetchExchangeConfigs(
   query: ExchangeConfigListQuery = {},
-): Promise<_PaginationResult<ExchangeConfigResponse>> {
+): Promise<PaginationResult<ExchangeConfigResponse>> {
   return withAuthErrorHandling(async () => {
     const page = query.page ?? 1
     const limit = query.limit ?? 20
