@@ -151,6 +151,7 @@ export function buildAccountStrategyLatestOrders(
 
   return trades
     .filter(trade => trade.executedAt instanceof Date && typeof trade.symbol === 'string' && typeof trade.side === 'string')
+    .sort((a, b) => b.executedAt.getTime() - a.executedAt.getTime())
     .slice(0, 10)
     .map((trade) => {
       const orderId = trade.orderId ?? null
