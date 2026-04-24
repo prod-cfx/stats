@@ -96,13 +96,16 @@ function HeroSection({ ctaHref, lng }: { ctaHref: string, lng: 'zh' | 'en' }) {
           <Sparkles className="h-3 w-3" />
           {t('aiQuant.homepage.hero.eyebrow')}
         </div>
-        <h1 className="mt-10 !text-[2.35rem] !leading-[1.08] !font-black !tracking-normal text-balance text-slate-950 antialiased dark:text-white sm:!text-6xl md:mt-11 md:!text-7xl lg:!text-[4.2rem] lg:!leading-[1.05] xl:!text-[4.55rem]">
+        <div aria-hidden="true" className="h-10 shrink-0 md:h-11" />
+        <h1 className="!m-0 !text-[2.35rem] !leading-[1.08] !font-black !tracking-normal text-balance text-slate-950 antialiased dark:text-white sm:!text-6xl md:!text-7xl lg:!text-[4.2rem] lg:!leading-[1.05] xl:!text-[4.55rem]">
           <GradientTitle title={title} lng={lng} />
         </h1>
-        <p className={`mx-auto mt-9 max-w-3xl !text-[15px] !leading-[1.8] md:mt-10 md:!text-[17px] md:!leading-[1.7] ${mutedText}`}>
+        <div aria-hidden="true" className="h-9 shrink-0 md:h-10" />
+        <p className={`!m-0 mx-auto max-w-3xl !text-[15px] !leading-[1.8] md:!text-[17px] md:!leading-[1.7] ${mutedText}`}>
           {t('aiQuant.homepage.hero.description')}
         </p>
-        <div className="mt-12 md:mt-14">
+        <div aria-hidden="true" className="h-[52px] shrink-0 md:h-14" />
+        <div>
           <PrimaryCta href={ctaHref} label={t('aiQuant.homepage.heroCta')} />
         </div>
       </motion.div>
