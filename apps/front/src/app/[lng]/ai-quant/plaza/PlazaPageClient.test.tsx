@@ -151,6 +151,22 @@ describe('AiQuantPlazaPageClient', () => {
     expect(mockPush).toHaveBeenCalledWith('/zh/auth/login?redirect=%2Fzh%2Fai-quant%2Fplaza')
   })
 
+  it('stores plaza-edit intent before login and redirects back to plaza', async () => {
+    mockSession = null
+
+    await act(async () => {
+      root.render(<AiQuantPlazaPageClient />)
+    })
+    await flushPromises()
+
+    await act(async () => {
+      plazaProps?.onEditStrategy('ma-cross')
+    })
+
+    expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-edit', templateId: 'ma-cross' })
+    expect(mockPush).toHaveBeenCalledWith('/zh/auth/login?redirect=%2Fzh%2Fai-quant%2Fplaza')
+  })
+
   it('runs an authenticated plaza template and navigates to strategy detail', async () => {
     mockRunStrategyPlazaTemplate.mockResolvedValue({ id: 'strategy-1' })
 

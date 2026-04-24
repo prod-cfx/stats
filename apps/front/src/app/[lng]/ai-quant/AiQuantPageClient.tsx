@@ -850,6 +850,10 @@ export function AiQuantPageClient({
       return
     }
 
+    if (intent.type === 'plaza-run' || intent.type === 'plaza-edit') {
+      return
+    }
+
     const preset = findPresetById(intent.strategyId)
     if (!preset) {
       updateActiveConversation(curr => ({

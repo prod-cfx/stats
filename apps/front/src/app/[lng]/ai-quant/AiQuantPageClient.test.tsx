@@ -489,6 +489,23 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(parsed.conversations[0]?.paramValues?.backtestInitialCash).toBe(25000)
   })
 
+  it('clears plaza intents without resuming legacy preset actions', async () => {
+    localStorage.setItem('ai_quant_return_intent_v1', JSON.stringify({
+      type: 'plaza-run',
+      templateId: 'ma-cross',
+      ts: Date.now(),
+    }))
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(localStorage.getItem('ai_quant_return_intent_v1')).toBeNull()
+    expect(container.textContent).not.toContain('aiQuant.messages.intentMiss')
+  })
+
   it('passes symbol/startAt/endAt query params when opening backtest full screen', async () => {
     await act(async () => {
       root?.render(<AiQuantPageClient />)
