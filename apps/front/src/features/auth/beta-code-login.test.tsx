@@ -107,7 +107,7 @@ describe('beta code login flow', () => {
     expect(loginWithEmailCodeMock).toHaveBeenCalledWith('user@example.com', '123456', ' beta-42 ')
   })
 
-  it('blocks Telegram login intent when beta code is missing', async () => {
+  it('allows Telegram login intent when beta code is missing', async () => {
     await act(async () => {
       root?.render(<TelegramLoginButtons lng="zh" intent="login" betaCode="   " />)
     })
@@ -129,8 +129,18 @@ describe('beta code login flow', () => {
     const apiMock = jest.requireMock('./api') as {
       getTelegramWebAuthorizeUrlRequest: jest.Mock
     }
-    expect(apiMock.getTelegramWebAuthorizeUrlRequest).not.toHaveBeenCalled()
-    expect(createTelegramDesktopIntentMock).not.toHaveBeenCalled()
-    expect(container.textContent).toContain('auth.betaCodeRequired')
+    expect(apiMock.getTelegramWebAuthorizeUrlRequest).toHaveBeenCalledWith({
+      intent: 'login',
+      lng: 'zh',
+      redirect: undefined,
+    })
+    expect(createTelegramDesktopIntentMock).toHaveBeenCalledWith({
+      intent: 'login',
+      lng: 'zh',
+      redirect: undefined,
+    })
+    expect(window.sessionStorage.getItem('auth:telegram:betaCode')).toBeNull()
+    expect(window.sessionStorage.getItem('auth:telegram:desktop:intent-1:betaCode')).toBeNull()
+    expect(container.textContent).not.toContain('auth.betaCodeRequired')
   })
 })

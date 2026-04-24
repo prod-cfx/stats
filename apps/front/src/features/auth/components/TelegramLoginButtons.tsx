@@ -66,13 +66,7 @@ export function TelegramLoginButtons({ lng, intent = 'login', redirect, betaCode
 
   const buttonClassName = 'flex h-11 items-center justify-center gap-2 rounded-full border border-violet-500/30 bg-transparent px-4 text-sm font-semibold text-black transition hover:bg-violet-500/5 disabled:opacity-50 dark:text-white'
   const showBotDomainHint = Boolean(statusMessage && /bot domain invalid/i.test(statusMessage))
-  const requireBetaCode = () => {
-    if (intent !== 'login' || betaCode?.trim()) {
-      return false
-    }
-    setStatusMessage(t('auth.betaCodeRequired'))
-    return true
-  }
+  const loginBetaCode = intent === 'login' ? betaCode?.trim() : undefined
 
   return (
     <div className="space-y-3">
@@ -84,12 +78,9 @@ export function TelegramLoginButtons({ lng, intent = 'login', redirect, betaCode
             try {
               setWebBusy(true)
               setStatusMessage(null)
-              if (requireBetaCode()) {
-                return
-              }
               const result = await getTelegramWebAuthorizeUrlRequest({ intent, lng, redirect })
-              if (intent === 'login' && typeof window !== 'undefined' && betaCode) {
-                window.sessionStorage.setItem(TELEGRAM_WEB_BETA_CODE_KEY, betaCode)
+              if (loginBetaCode && typeof window !== 'undefined') {
+                window.sessionStorage.setItem(TELEGRAM_WEB_BETA_CODE_KEY, loginBetaCode)
               }
               window.location.href = result.authorizeUrl
             } catch (error) {
@@ -111,16 +102,13 @@ export function TelegramLoginButtons({ lng, intent = 'login', redirect, betaCode
               try {
                 setDesktopBusy(true)
                 setStatusMessage(null)
-                if (requireBetaCode()) {
-                  return
-                }
                 const result = await createTelegramDesktopIntent({
                   intent,
                   lng,
                   redirect,
                 })
-                if (intent === 'login' && typeof window !== 'undefined' && betaCode) {
-                  window.sessionStorage.setItem(getTelegramDesktopBetaCodeKey(result.intentId), betaCode)
+                if (loginBetaCode && typeof window !== 'undefined') {
+                  window.sessionStorage.setItem(getTelegramDesktopBetaCodeKey(result.intentId), loginBetaCode)
                 }
                 const launchLink = result.deepLink?.trim() || result.webLink?.trim()
                 if (!launchLink) {

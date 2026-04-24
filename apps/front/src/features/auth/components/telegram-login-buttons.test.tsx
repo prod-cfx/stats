@@ -93,7 +93,7 @@ describe('TelegramLoginButtons desktop flow', () => {
       lng: 'zh',
       redirect: undefined,
     })
-    expect(window.sessionStorage.getItem('auth:telegram:desktop:intent-1:betaCode')).toBe(' beta-42 ')
+    expect(window.sessionStorage.getItem('auth:telegram:desktop:intent-1:betaCode')).toBe('beta-42')
     expect(timeoutSpy).not.toHaveBeenCalled()
   })
 })
