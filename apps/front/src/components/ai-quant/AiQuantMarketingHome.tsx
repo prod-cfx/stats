@@ -97,7 +97,7 @@ function HeroSection({ ctaHref, lng }: { ctaHref: string, lng: 'zh' | 'en' }) {
           {t('aiQuant.homepage.hero.eyebrow')}
         </div>
         <div aria-hidden="true" className="h-10 shrink-0 md:h-11" />
-        <h1 className="!m-0 !text-[2.35rem] !leading-[1.08] !font-black !tracking-normal text-balance text-slate-950 antialiased dark:text-white sm:!text-6xl md:!text-7xl lg:!text-[4.2rem] lg:!leading-[1.05] xl:!text-[4.55rem]">
+        <h1 className="!m-0 !text-[2.2rem] !leading-[1.08] !font-black !tracking-normal text-balance text-slate-950 antialiased dark:text-white sm:!text-[3.45rem] md:!text-[3.75rem] lg:!text-[3.95rem] lg:!leading-[1.05] xl:!text-[4.2rem]">
           <GradientTitle title={title} lng={lng} />
         </h1>
         <div aria-hidden="true" className="h-9 shrink-0 md:h-10" />
@@ -119,21 +119,31 @@ function HeroGradientWash() {
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
       <motion.div
-        animate={shouldReduceMotion ? { opacity: 0.62, scale: 1 } : { opacity: [0.46, 0.72, 0.46], scale: [0.96, 1.08, 0.96], x: [-18, 14, -18], y: [8, -10, 8] }}
+        animate={shouldReduceMotion ? { opacity: 0.72, scale: 1, x: 0 } : { opacity: [0.54, 0.78, 0.58, 0.72, 0.54], scale: [1, 1.05, 0.98, 1.03, 1], x: [-42, 22, -10, 34, -42], y: [12, -18, 8, -10, 12] }}
+        transition={shouldReduceMotion ? undefined : { duration: 16, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute inset-[-18%] bg-[radial-gradient(circle_at_27%_38%,rgba(37,99,235,0.48),transparent_28%),radial-gradient(circle_at_52%_44%,rgba(79,70,229,0.34),transparent_26%),radial-gradient(circle_at_73%_58%,rgba(168,85,247,0.34),transparent_28%),radial-gradient(circle_at_82%_66%,rgba(217,70,239,0.26),transparent_23%)] blur-[76px] dark:bg-[radial-gradient(circle_at_27%_38%,rgba(29,78,216,0.44),transparent_29%),radial-gradient(circle_at_52%_44%,rgba(79,70,229,0.34),transparent_27%),radial-gradient(circle_at_73%_58%,rgba(124,58,237,0.32),transparent_28%),radial-gradient(circle_at_82%_66%,rgba(192,38,211,0.28),transparent_24%)]"
+      />
+      <motion.div
+        animate={shouldReduceMotion ? { opacity: 0.42, x: 0 } : { opacity: [0.22, 0.52, 0.32, 0.46, 0.22], x: [-60, 42, -20, 28, -60] }}
+        transition={shouldReduceMotion ? undefined : { duration: 9.5, repeat: Infinity, ease: 'easeInOut', delay: 0.35 }}
+        className="absolute top-[54%] left-[30%] h-28 w-[58rem] -rotate-6 bg-[linear-gradient(90deg,transparent_0%,rgba(59,130,246,0.2)_42%,rgba(217,70,239,0.24)_68%,transparent_100%)] blur-[30px] dark:bg-[linear-gradient(90deg,transparent_0%,rgba(59,130,246,0.22)_42%,rgba(217,70,239,0.26)_68%,transparent_100%)]"
+      />
+      <motion.div
+        animate={shouldReduceMotion ? { opacity: 0.62, scale: 1 } : { opacity: [0.42, 0.68, 0.42], scale: [0.96, 1.08, 0.96], x: [-18, 14, -18], y: [8, -10, 8] }}
         transition={shouldReduceMotion ? undefined : { duration: 13, repeat: Infinity, ease: 'easeInOut' }}
-        className="absolute top-[-12%] left-[22%] h-[34rem] w-[34rem] rounded-full bg-blue-300/30 blur-[130px] dark:bg-[#1d58ff]/28"
+        className="absolute top-[-12%] left-[18%] h-[34rem] w-[34rem] rounded-full bg-blue-300/26 blur-[130px] dark:bg-[#1d58ff]/24"
       />
       <motion.div
-        animate={shouldReduceMotion ? { opacity: 0.5, scale: 1 } : { opacity: [0.34, 0.64, 0.34], scale: [1.04, 0.95, 1.04], x: [18, -12, 18], y: [-6, 12, -6] }}
+        animate={shouldReduceMotion ? { opacity: 0.52, scale: 1 } : { opacity: [0.36, 0.66, 0.36], scale: [1.04, 0.95, 1.04], x: [18, -12, 18], y: [-6, 12, -6] }}
         transition={shouldReduceMotion ? undefined : { duration: 15, repeat: Infinity, ease: 'easeInOut', delay: 1.1 }}
-        className="absolute top-[16%] right-[18%] h-[32rem] w-[32rem] rounded-full bg-violet-300/28 blur-[140px] dark:bg-[#7b2dff]/24"
+        className="absolute top-[12%] right-[14%] h-[34rem] w-[34rem] rounded-full bg-violet-300/26 blur-[142px] dark:bg-[#7b2dff]/26"
       />
       <motion.div
-        animate={shouldReduceMotion ? { opacity: 0.42, scale: 1 } : { opacity: [0.26, 0.52, 0.26], scale: [0.98, 1.1, 0.98], y: [10, -8, 10] }}
+        animate={shouldReduceMotion ? { opacity: 0.42, scale: 1 } : { opacity: [0.24, 0.5, 0.24], scale: [0.98, 1.1, 0.98], y: [10, -8, 10] }}
         transition={shouldReduceMotion ? undefined : { duration: 11.5, repeat: Infinity, ease: 'easeInOut', delay: 0.4 }}
         className="absolute top-[34%] left-1/2 h-[25rem] w-[25rem] -translate-x-1/2 rounded-full bg-primary/20 blur-[115px] dark:bg-primary/18"
       />
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(248,250,252,0.18)_38%,rgba(246,248,252,0.78)_100%)] dark:bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(2,3,5,0.04)_40%,rgba(2,3,5,0.7)_100%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(248,250,252,0.12)_38%,rgba(246,248,252,0.74)_100%)] dark:bg-[radial-gradient(ellipse_at_center,rgba(2,3,5,0.02)_0%,rgba(2,3,5,0.1)_45%,rgba(2,3,5,0.72)_100%)]" />
     </div>
   )
 }
