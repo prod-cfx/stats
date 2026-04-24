@@ -245,14 +245,14 @@ function WorkflowSection() {
   const shouldReduceMotion = useReducedMotion()
 
   return (
-    <section id="workflow" className={sectionShell}>
-      <div className="mx-auto max-w-7xl">
+    <section id="workflow" className="relative border-t border-slate-200/70 bg-white/45 px-6 py-24 dark:border-white/[0.06] dark:bg-[#080d14]/92 md:px-8 md:py-28 lg:py-30">
+      <div className="mx-auto max-w-[76rem]">
         <div className="text-center">
-          <h2 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white md:text-3xl">
+          <h2 className="!m-0 !text-[1.75rem] !leading-[1.22] font-black tracking-normal text-slate-950 dark:text-white md:!text-[2rem]">
             {t('aiQuant.homepage.workflow.title')}
           </h2>
         </div>
-        <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-16 grid gap-6 sm:grid-cols-2 md:mt-18 lg:grid-cols-4 lg:gap-7">
           {workflowKeys.map((key, index) => (
             <motion.div
               key={key}
@@ -263,13 +263,13 @@ function WorkflowSection() {
               viewport={{ once: true, margin: '-80px' }}
               transition={shouldReduceMotion ? undefined : { ...revealTransition, delay: index * 0.06 }}
               whileHover={shouldReduceMotion ? undefined : { y: -4 }}
-              className={`rounded-xl p-7 ${panelClass}`}
+              className={`min-h-[174px] rounded-xl p-8 md:p-9 ${panelClass}`}
             >
-              <div className="text-xs font-black text-primary">0{index + 1}</div>
-              <h3 className="mt-7 text-lg font-bold text-slate-950 dark:text-white">
+              <div className="text-[13px] leading-none font-black text-primary">0{index + 1}</div>
+              <h3 className="mt-7 text-[17px] leading-snug font-bold text-slate-950 dark:text-white md:text-[19px]">
                 {t(`aiQuant.homepage.workflow.items.${key}.title`)}
               </h3>
-              <p className={`mt-4 text-sm leading-relaxed ${mutedText}`}>
+              <p className={`mt-4 text-[14.5px] leading-[1.78] md:text-[15px] ${mutedText}`}>
                 {t(`aiQuant.homepage.workflow.items.${key}.desc`)}
               </p>
             </motion.div>
