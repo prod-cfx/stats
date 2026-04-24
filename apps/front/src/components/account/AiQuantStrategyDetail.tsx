@@ -238,7 +238,10 @@ export function AiQuantStrategyDetail({
     }).map((_, index) => strategy.deploymentLeverageRange!.min + index)
   }, [strategy?.deploymentLeverageRange])
 
-  const canRunBacktest = !!strategy?.publishedSnapshotId && !isBacktestRunning
+  const canRunBacktest = !!strategy?.publishedSnapshotId
+    && !strategy.compatibilityMetadata?.requiresRepublishForBacktest
+    && !strategy.compatibilityMetadata?.invalidBinding
+    && !isBacktestRunning
 
   if (!strategy) {
     return (

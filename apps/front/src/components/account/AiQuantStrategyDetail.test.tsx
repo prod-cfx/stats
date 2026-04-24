@@ -187,6 +187,7 @@ describe('AiQuantStrategyDetail', () => {
           },
           canEditDeploymentLeverage: true,
         }}
+        onRunBacktest={() => {}}
         onUpdateLeverage={() => {}}
       />,
       )
@@ -199,6 +200,9 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('允许杠杆范围')
     expect(container.textContent).toContain('1x - 5x')
     expect(container.textContent).toContain('leverage drift')
+    const backtestButton = Array.from(container.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('运行回测')) as HTMLButtonElement | undefined
+    expect(backtestButton?.disabled).toBe(true)
     expect(Array.from(container.querySelectorAll('button')).some(button => button.textContent?.includes('更新杠杆'))).toBe(true)
   })
 
@@ -450,6 +454,8 @@ describe('AiQuantStrategyDetail', () => {
             paramValues: null,
             schemaVersion: null,
             supportsDynamicParams: false,
+            publishedSnapshotId: 'snapshot-invalid-binding',
+            snapshotHash: 'hash-invalid-binding',
             runtimeExecutionStates: [],
             compatibilityMetadata: {
               isLegacySnapshot: false,
@@ -461,11 +467,15 @@ describe('AiQuantStrategyDetail', () => {
               invalidBinding: true,
             },
           }}
+          onRunBacktest={() => {}}
         />,
       )
     })
 
     expect(container.textContent).toContain('快照绑定已失效')
     expect(container.textContent).toContain('请重新发布并重新部署')
+    const backtestButton = Array.from(container.querySelectorAll('button'))
+      .find(button => button.textContent?.includes('运行回测')) as HTMLButtonElement | undefined
+    expect(backtestButton?.disabled).toBe(true)
   })
 })
