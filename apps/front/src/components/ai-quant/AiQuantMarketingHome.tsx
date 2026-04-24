@@ -185,28 +185,30 @@ function PrimaryCta({ href, className = '', label }: { href: string, className?:
 
 function WorkflowSection() {
   const { t } = useTranslation()
+  const shouldReduceMotion = useReducedMotion()
 
   return (
     <section id="workflow" className={sectionShell}>
       <div className="mx-auto max-w-7xl">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl font-bold tracking-tight text-slate-950 dark:text-white md:text-5xl">
+        <div className="text-center">
+          <h2 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white md:text-3xl">
             {t('aiQuant.homepage.workflow.title')}
           </h2>
         </div>
-        <div className="grid gap-6 md:grid-cols-4">
+        <div className="mt-14 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {workflowKeys.map((key, index) => (
             <motion.div
               key={key}
               initial="hidden"
               whileInView="visible"
               variants={revealUp}
-              viewport={{ once: true }}
+              viewport={{ once: true, margin: '-80px' }}
               transition={{ ...revealTransition, delay: index * 0.1 }}
-              className="group relative rounded-2xl border border-slate-200/80 bg-white/75 p-8 transition-all hover:border-slate-300 hover:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:hover:border-white/10 dark:hover:bg-white/[0.04]"
+              whileHover={shouldReduceMotion ? undefined : { y: -4 }}
+              className={`rounded-xl p-7 ${panelClass}`}
             >
-              <div className="mb-8 text-xs font-black text-primary/40 group-hover:text-primary transition-colors">0{index + 1}</div>
-              <h3 className="text-xl font-bold text-slate-950 dark:text-white">
+              <div className="text-xs font-black text-primary">0{index + 1}</div>
+              <h3 className="mt-7 text-lg font-bold text-slate-950 dark:text-white">
                 {t(`aiQuant.homepage.workflow.items.${key}.title`)}
               </h3>
               <p className={`mt-4 text-sm leading-relaxed ${mutedText}`}>
@@ -389,25 +391,36 @@ function PlazaVisual() {
 
 function AdvantageSection() {
   const { t } = useTranslation()
+  const shouldReduceMotion = useReducedMotion()
+
   return (
-    <section className={sectionShell}>
-      <div className="mx-auto max-w-7xl">
-        <div className="text-center mb-20">
-          <h2 className="text-3xl font-bold tracking-tight text-slate-950 dark:text-white md:text-5xl">
+    <section className={alternateSectionShell}>
+      <div className="mx-auto max-w-5xl">
+        <div className="text-center">
+          <h2 className="text-2xl font-black tracking-tight text-slate-950 dark:text-white md:text-3xl">
             {t('aiQuant.homepage.advantages.title')}
           </h2>
         </div>
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="mt-14 grid gap-5 md:grid-cols-2">
           {advantageKeys.map((key, index) => (
-            <div key={key} className="group relative rounded-2xl border border-slate-200/80 bg-white/75 p-10 transition-all hover:border-slate-300 hover:bg-white dark:border-white/5 dark:bg-white/[0.02] dark:hover:border-white/10 dark:hover:bg-white/[0.04]">
-              <div className="text-5xl font-black text-slate-950/[0.04] absolute top-6 right-8 group-hover:text-primary/10 transition-colors dark:text-white/[0.02] dark:group-hover:text-primary/5">0{index + 1}</div>
-              <h3 className="text-2xl font-bold text-slate-950 mb-4 dark:text-white">
+            <motion.div
+              key={key}
+              initial="hidden"
+              whileInView="visible"
+              variants={revealUp}
+              viewport={{ once: true, margin: '-80px' }}
+              transition={{ ...revealTransition, delay: index * 0.1 }}
+              whileHover={shouldReduceMotion ? undefined : { y: -4 }}
+              className={`relative overflow-hidden rounded-xl p-8 ${panelClass}`}
+            >
+              <div className="pointer-events-none absolute top-4 right-6 text-7xl font-black leading-none text-slate-950/[0.045] dark:text-white/[0.035]">0{index + 1}</div>
+              <h3 className="relative text-xl font-bold text-slate-950 dark:text-white">
                 {t(`aiQuant.homepage.advantages.items.${key}.title`)}
               </h3>
-              <p className={`text-base leading-relaxed ${mutedText}`}>
+              <p className={`relative mt-4 text-base leading-relaxed ${mutedText}`}>
                 {t(`aiQuant.homepage.advantages.items.${key}.desc`)}
               </p>
-            </div>
+            </motion.div>
           ))}
         </div>
       </div>
