@@ -38,6 +38,7 @@ describe('issue #622 page-level RSC boundaries', () => {
       'app/[lng]/long-short-ratio/page.tsx',
       'app/[lng]/prediction-market/page.tsx',
       'app/[lng]/liquidation-map/page.tsx',
+      'app/[lng]/page.tsx',
     ] as const
 
     for (const file of translationOnlyPages) {
@@ -51,7 +52,7 @@ describe('issue #622 page-level RSC boundaries', () => {
 
   it('moves client-only hooks out of the remaining page entrypoints', () => {
     const pageToClientBoundary = [
-      ['app/[lng]/page.tsx', 'MarketPageClient'],
+      ['app/[lng]/market/page.tsx', 'MarketPageClient'],
       ['app/[lng]/account/page.tsx', 'AccountPageClient'],
       ['app/[lng]/auth/login/page.tsx', 'LoginPageClient'],
       ['app/[lng]/auth/telegram/callback/page.tsx', 'TelegramCallbackPageClient'],

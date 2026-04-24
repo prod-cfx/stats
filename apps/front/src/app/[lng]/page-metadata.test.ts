@@ -8,6 +8,10 @@ jest.mock('@/components/layout/Navbar', () => ({
   Navbar: () => null,
 }))
 
+jest.mock('@/components/ai-quant/AiQuantMarketingHome', () => ({
+  AiQuantMarketingHome: () => null,
+}))
+
 jest.mock('@/components/ui/Typography', () => ({
   BodyText: ({ children }: { children: unknown }) => children,
   PageTitle: ({ children }: { children: unknown }) => children,
@@ -73,6 +77,22 @@ interface PageExpectation {
 const defaultOgImage = 'https://coinflux.ai/images/hero-chart.png'
 
 const pageExpectations: PageExpectation[] = [
+  {
+    name: 'home',
+    loadModule: async () => import('./page'),
+    zh: {
+      title: 'AI量化策略生成与自动化交易 | Coinflux',
+      description: '用 AI 生成可回测的量化策略，并完成回测验证与一键部署。',
+      locale: 'zh_CN',
+      url: 'https://coinflux.ai/zh/',
+    },
+    en: {
+      title: 'AI Quant Strategy Generation & Automated Trading | Coinflux',
+      description: 'Generate backtestable quant strategies with AI, then validate and deploy in one flow.',
+      locale: 'en_US',
+      url: 'https://coinflux.ai/en/',
+    },
+  },
   {
     name: 'ai-quant',
     loadModule: async () => import('./ai-quant/page'),

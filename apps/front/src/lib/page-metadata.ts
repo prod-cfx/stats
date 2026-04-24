@@ -3,6 +3,7 @@ import type { AppLocale } from '@/lib/i18n/server'
 import { getRequestLocale } from '@/lib/i18n/server'
 
 type PageMetadataKey =
+  | 'home'
   | 'ai-quant'
   | 'trade'
   | 'whale-tracking/discover'
@@ -28,6 +29,17 @@ const SITE_URL = 'https://coinflux.ai'
 const DEFAULT_OG_IMAGE = `${SITE_URL}/images/hero-chart.png`
 
 const PAGE_METADATA_DEFINITIONS: Record<PageMetadataKey, PageMetadataDefinition> = {
+  home: {
+    pathname: '/',
+    zh: {
+      title: 'AI量化策略生成与自动化交易',
+      description: '用 AI 生成可回测的量化策略，并完成回测验证与一键部署。',
+    },
+    en: {
+      title: 'AI Quant Strategy Generation & Automated Trading',
+      description: 'Generate backtestable quant strategies with AI, then validate and deploy in one flow.',
+    },
+  },
   'ai-quant': {
     pathname: '/ai-quant',
     zh: {

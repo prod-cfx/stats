@@ -32,6 +32,7 @@
     "analysis": "Analysis",
     "settings": "Settings",
     "home": "Market",
+    "marketData": "Market Data",
     "data": "Data",
     "liquidation_map": "Liquidation Map",
     "long_short_ratio": "Long/Short Ratio",
@@ -211,6 +212,125 @@
       "sellAmount": "{{percent}}% Position",
       "riskPosition": "Position Size {{percent}}%",
       "riskDrawdown": "Max Drawdown Threshold {{percent}}%"
+    },
+    "homepage": {
+      "cta": "Experience AI Quant",
+      "hero": {
+        "eyebrow": "AI Quant Strategy Builder",
+        "title": "Generate backtestable quant strategies with AI",
+        "description": "Start with a trading idea. AI generates strategy logic, then connects backtesting, risk checks, and exchange deployment."
+      },
+      "visual": {
+        "workspace": "AI Quant Workspace",
+        "status": "Ready for backtest",
+        "aiGenerated": "AI generated",
+        "parsedStrategy": "AI parsed strategy",
+        "assistant": "Tell me your trading idea. I will generate strategy logic and prepare a backtest.",
+        "userPrompt": "Buy BTC when it drops 1% in 3 minutes, sell after a 2% rebound, use 10% capital.",
+        "logicTitle": "AI-generated strategy logic",
+        "rule1": "Price drops 1% within 3 minutes",
+        "rule2": "Buy with 10% capital",
+        "rule3": "Sell after a 2% rebound and prepare backtest",
+        "inputPlaceholder": "Ask AI to refine the strategy...",
+        "deployAction": "Deploy strategy",
+        "sidebar": {
+          "btcPullback": "BTC pullback",
+          "ethBreakout": "ETH breakout",
+          "gridTemplate": "Grid template"
+        },
+        "metrics": {
+          "return": "Return",
+          "maxDrawdown": "Max DD",
+          "winRate": "Win rate",
+          "trades": "Trades"
+        },
+        "deployRows": {
+          "snapshot": "Strategy snapshot",
+          "backtestGate": "Backtest gate",
+          "exchangeApi": "Exchange API",
+          "confirmed": "Confirmed",
+          "passed": "Passed",
+          "ready": "Ready"
+        },
+        "plaza": {
+          "trend": "Trend Following",
+          "grid": "Grid Strategy",
+          "reversion": "Mean Reversion",
+          "breakout": "Breakout",
+          "template": "AI ready template"
+        }
+      },
+      "workflow": {
+        "eyebrow": "AI Quant Workflow",
+        "title": "A complete strategy loop from AI chat to one-click deployment",
+        "items": {
+          "chat": {
+            "title": "AI Chat",
+            "desc": "Describe your trading idea in natural language."
+          },
+          "strategy": {
+            "title": "Strategy",
+            "desc": "AI generates confirmable strategy logic."
+          },
+          "backtest": {
+            "title": "Backtest",
+            "desc": "Validate performance with historical data."
+          },
+          "deploy": {
+            "title": "Deploy",
+            "desc": "Connect execution after the strategy passes checks."
+          }
+        }
+      },
+      "features": {
+        "conversation": {
+          "eyebrow": "AI Strategy Creation",
+          "title": "Generate a strategy draft through conversation",
+          "description": "AI extracts entry, exit, position sizing, and risk conditions from natural language, then turns them into confirmable strategy logic."
+        },
+        "backtest": {
+          "eyebrow": "Backtesting",
+          "title": "Review historical performance before deployment",
+          "description": "Return, max drawdown, win rate, and trade count are presented together so users can decide whether to optimize or deploy."
+        },
+        "deploy": {
+          "eyebrow": "Deployment",
+          "title": "Confirm deployment after the backtest passes",
+          "description": "Strategy snapshots, backtest results, and exchange API status are checked together before automated execution begins."
+        },
+        "plaza": {
+          "eyebrow": "Strategy Plaza",
+          "title": "Start faster from curated strategy templates",
+          "description": "Choose common strategy templates, run backtests, or continue optimizing conditions through AI chat."
+        }
+      },
+      "advantages": {
+        "eyebrow": "Why Coinflux AI Quant",
+        "title": "A complete AI quant path for first-time strategy builders",
+        "items": {
+          "barrier": {
+            "title": "AI lowers the creation barrier",
+            "desc": "Start with trading language instead of code, scripts, and complex parameter tables."
+          },
+          "logic": {
+            "title": "Strategy logic is confirmable",
+            "desc": "AI-generated logic is shown structurally before backtesting to reduce misunderstanding."
+          },
+          "validation": {
+            "title": "Backtests support decisions",
+            "desc": "Historical results make performance and optimization direction easier to evaluate."
+          },
+          "closedLoop": {
+            "title": "Deployment closes the loop",
+            "desc": "Strategy generation, validation, and exchange deployment stay in one product path."
+          }
+        }
+      },
+      "final": {
+        "eyebrow": "Start with AI",
+        "title": "Turn a trading idea into a backtestable quant strategy",
+        "description": "Experience the complete flow from AI strategy generation to backtesting and automated deployment."
+      }
     },
     "guestLanding": {
       "title": "AI Quant Strategy Generation",
