@@ -69,8 +69,8 @@ function normalizeFeeAmount(value: unknown): number | null {
 
 function buildExecutionFeeByOrderId(
   executions: TimelineSignalExecution[],
-): Map<string, { fee: number | null; feeCurrency: string | null }> {
-  const feeByOrderId = new Map<string, { fee: number | null; feeCurrency: string | null }>()
+): Map<string, { fee: number | null; feeCurrency: string | null; createdAtMs: number }> {
+  const feeByOrderId = new Map<string, { fee: number | null; feeCurrency: string | null; createdAtMs: number }>()
 
   for (const execution of executions) {
     const orderId = typeof execution.tradeId === 'string' && execution.tradeId.trim()
@@ -87,10 +87,14 @@ function buildExecutionFeeByOrderId(
     const executionFeeCurrency = typeof execution.feeCurrency === 'string' && execution.feeCurrency.trim()
       ? execution.feeCurrency.trim()
       : null
+    const createdAtMs = execution.createdAt.getTime()
+    const existing = feeByOrderId.get(orderId)
+    if (existing && existing.createdAtMs >= createdAtMs) continue
 
     feeByOrderId.set(orderId, {
       fee: rawFee ?? executionFee,
       feeCurrency: rawFeeCurrency ?? executionFeeCurrency,
+      createdAtMs,
     })
   }
 

@@ -167,6 +167,21 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
               },
             },
           },
+        }, {
+          createdAt: new Date('2026-03-20T10:59:00.000Z'),
+          status: 'SUCCESS',
+          errorMessage: null,
+          tradeId: 'ord-1',
+          fee: 9,
+          feeCurrency: 'USDT',
+          metadata: {
+            orderResponse: {
+              raw: {
+                fee: '-9',
+                feeCcy: 'USDT',
+              },
+            },
+          },
         }],
         trades: [{
           executedAt: new Date('2026-03-20T11:01:00.000Z'),
