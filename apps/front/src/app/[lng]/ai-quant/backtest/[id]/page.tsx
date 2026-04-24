@@ -11,6 +11,36 @@ interface CoverageRange {
   toTs: number
 }
 
+interface BacktestInputSummaryView {
+  [key: string]: unknown
+  actualBars?: unknown
+  allowPartial?: unknown
+  appliedRange?: unknown
+  barCount?: unknown
+  bars?: unknown
+  baseTimeframe?: unknown
+  dataRange?: unknown
+  exchange?: unknown
+  expectedBarCount?: unknown
+  expectedBars?: unknown
+  feeBps?: unknown
+  initialCash?: unknown
+  isPartial?: unknown
+  leverage?: unknown
+  marketType?: unknown
+  priceSource?: unknown
+  requestedRange?: unknown
+  slippageBps?: unknown
+  symbols?: unknown
+  timeframe?: unknown
+}
+
+function toBacktestInputSummaryView(value: unknown): BacktestInputSummaryView | null {
+  return typeof value === 'object' && value !== null
+    ? value as BacktestInputSummaryView
+    : null
+}
+
 function isCoverageRange(value: unknown): value is CoverageRange {
   return typeof value === 'object'
     && value !== null
@@ -34,14 +64,9 @@ function resolvePartialCoverageNotice(inputSummary: unknown): {
   requestedRange: string
   appliedRange: string
 } | null {
-  if (typeof inputSummary !== 'object' || inputSummary === null) {
+  const candidate = toBacktestInputSummaryView(inputSummary)
+  if (!candidate) {
     return null
-  }
-
-  const candidate = inputSummary as {
-    isPartial?: unknown
-    requestedRange?: unknown
-    appliedRange?: unknown
   }
 
   if (candidate.isPartial !== true) {
@@ -59,22 +84,22 @@ function resolvePartialCoverageNotice(inputSummary: unknown): {
 }
 
 function resolveBacktestMarketType(inputSummary: unknown): 'spot' | 'perp' {
-  if (typeof inputSummary !== 'object' || inputSummary === null) {
+  const summary = toBacktestInputSummaryView(inputSummary)
+  if (!summary) {
     return 'spot'
   }
 
-  const marketType = (inputSummary as { marketType?: unknown }).marketType
-  return normalizeBacktestMarketType(marketType)
+  return normalizeBacktestMarketType(summary.marketType)
 }
 
 function resolveBacktestSymbol(inputSummary: unknown, fallback: string): string {
-  if (typeof inputSummary !== 'object' || inputSummary === null) {
+  const summary = toBacktestInputSummaryView(inputSummary)
+  if (!summary) {
     return fallback
   }
 
-  const symbols = (inputSummary as { symbols?: unknown }).symbols
-  return Array.isArray(symbols) && typeof symbols[0] === 'string' && symbols[0].trim()
-    ? symbols[0]
+  return Array.isArray(summary.symbols) && typeof summary.symbols[0] === 'string' && summary.symbols[0].trim()
+    ? summary.symbols[0]
     : fallback
 }
 
@@ -83,12 +108,8 @@ function resolveBacktestRangeDisplay(
   fallbackStartAt: string | null,
   fallbackEndAt: string | null,
 ): string {
-  if (typeof inputSummary === 'object' && inputSummary !== null) {
-    const candidate = inputSummary as {
-      appliedRange?: unknown
-      requestedRange?: unknown
-      dataRange?: unknown
-    }
+  const candidate = toBacktestInputSummaryView(inputSummary)
+  if (candidate) {
     const preferredRange =
       isCoverageRange(candidate.appliedRange)
         ? candidate.appliedRange
@@ -140,11 +161,11 @@ function readBooleanField(source: Record<string, unknown>, keys: string[]): bool
 }
 
 function resolveBacktestReportContext(inputSummary: unknown, symbol: string, marketType: 'spot' | 'perp'): BacktestReportContext | null {
-  if (typeof inputSummary !== 'object' || inputSummary === null) {
+  const source = toBacktestInputSummaryView(inputSummary)
+  if (!source) {
     return null
   }
 
-  const source = inputSummary as Record<string, unknown>
   const requestedRange = isCoverageRange(source.requestedRange)
     ? formatCoverageRange(source.requestedRange)
     : undefined
