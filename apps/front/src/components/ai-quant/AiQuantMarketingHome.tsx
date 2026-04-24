@@ -266,11 +266,11 @@ function WorkflowSection() {
               className={`min-h-[190px] rounded-xl p-8 md:min-h-[196px] md:p-9 ${panelClass}`}
             >
               <div className="text-[13px] leading-none font-black text-primary">0{index + 1}</div>
-              <div aria-hidden="true" className="h-5 shrink-0 md:h-6" />
+              <div aria-hidden="true" className="h-4 shrink-0 md:h-5" />
               <h3 className="!m-0 !text-[17px] !leading-snug font-bold text-slate-950 dark:text-white md:!text-[19px]">
                 {t(`aiQuant.homepage.workflow.items.${key}.title`)}
               </h3>
-              <div aria-hidden="true" className="h-4 shrink-0 md:h-[18px]" />
+              <div aria-hidden="true" className="h-3 shrink-0 md:h-[14px]" />
               <p className={`!m-0 !text-[14.5px] !leading-[1.78] md:!text-[15px] ${mutedText}`}>
                 {t(`aiQuant.homepage.workflow.items.${key}.desc`)}
               </p>
