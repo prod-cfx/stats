@@ -290,7 +290,7 @@ function seedConfirmedConversation(now = Date.now()) {
           backtestSlippageBps: 10,
           backtestFeeBps: 5,
           backtestPriceSource: 'close',
-          backtestAllowPartial: true,
+          backtestAllowPartial: false,
         },
         backtestResult: null,
         logicGraph: {
@@ -333,7 +333,7 @@ function seedConfirmedConversation(now = Date.now()) {
           slippageBps: 10,
           feeBps: 5,
           priceSource: 'close',
-          allowPartial: true,
+          allowPartial: false,
         },
         publishedSnapshotCompatibilityMetadata: {
           isLegacySnapshot: false,
@@ -572,7 +572,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     )
   })
 
-  it('passes allowPartial to the backtest payload builder when submitting a job', async () => {
+  it('does not force partial coverage when the user has not enabled partial backtests', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
     seeded[0].paramValues = {
       ...seeded[0].paramValues,
@@ -581,7 +581,38 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       backtestSlippageBps: 10,
       backtestFeeBps: 5,
       backtestPriceSource: 'close',
+      backtestAllowPartial: false,
+    }
+    localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(seeded))
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allowPartial: false,
+      }),
+    )
+  })
+
+  it('passes explicit partial coverage opt-in to the backtest payload builder', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    seeded[0].paramValues = {
+      ...seeded[0].paramValues,
       backtestAllowPartial: true,
+    }
+    seeded[0].publishedSnapshotBacktestConfigDefaults = {
+      ...seeded[0].publishedSnapshotBacktestConfigDefaults,
+      allowPartial: true,
     }
     localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(seeded))
 
@@ -1094,7 +1125,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
           feeBps: 4,
           priceSource: 'mid',
         }),
-        allowPartial: true,
+        allowPartial: false,
       }),
     )
     expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain(
@@ -1530,7 +1561,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
           feeBps: 4,
           priceSource: 'mid',
         }),
-        allowPartial: true,
+        allowPartial: false,
       }),
     )
     expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain(
@@ -1598,7 +1629,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
   it('uses AI-Quant page execution params instead of snapshot defaults for published snapshot backtests', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
-    seeded[0].backtestExecutionConfigExplicit = false
+    seeded[0].backtestExecutionConfigExplicit = true
     seeded[0].paramValues = {
       ...seeded[0].paramValues,
       backtestInitialCash: 32000,
@@ -1665,7 +1696,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
           feeBps: 6,
           priceSource: 'mid',
         }),
-        allowPartial: true,
+        allowPartial: false,
       }),
     )
     expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain(
@@ -1800,7 +1831,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     )
   })
 
-  it('treats invalid allowPartial as enabled auto-crop and still submits the backtest', async () => {
+  it('rejects invalid allowPartial instead of silently enabling partial backtests', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
     seeded[0].paramValues = {
       ...seeded[0].paramValues,
@@ -1824,7 +1855,8 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       await Promise.resolve()
     })
 
-    expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
+    expect(mockCreateBacktestJob).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').toContain('invalid_allow_partial')
   })
 
   it('keeps exact default execution values when the conversation marked them as explicit', async () => {

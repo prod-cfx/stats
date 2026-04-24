@@ -1164,7 +1164,6 @@ export function AiQuantPageClient({
               persistConversationBacktestDraft(activeConversation.id, {
                 ...activeConversation.paramValues,
                 ...nextDraftValues,
-                backtestAllowPartial: true,
               })
             }}
             onSend={onSend}
