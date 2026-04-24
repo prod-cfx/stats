@@ -48,6 +48,7 @@ jest.mock('react-i18next', () => ({
         'aiQuant.useTestnet': 'Use testnet / paper trading',
         'aiQuant.validation.requiredBinanceCredentials': 'Binance API key and secret are required.',
         'aiQuant.validation.requiredHyperliquidCredentials': 'Hyperliquid wallet address and agent private key are required.',
+        'aiQuant.validation.requiredOkxDemoCredentials': 'Please save an OKX demo trading API key before returning to Strategy Plaza.',
         'aiQuant.validation.requiredOkxCredentials': 'OKX API key, secret, and passphrase are required.',
         'aiQuant.walletAddress': 'Wallet Address',
         'aiQuant.agentPrivateKey': 'Agent Private Key',
@@ -272,6 +273,34 @@ describe('ExchangeApiSection', () => {
     expect(redirectSpy).toHaveBeenCalledWith('/zh/ai-quant/plaza')
     expect(mockUpsertUserExchangeAccount).toHaveBeenCalledTimes(1)
     expect(mockFetchUserExchangeAccountStatuses).toHaveBeenCalledTimes(1)
+  })
+
+  it('defaults OKX recovery binding to testnet demo mode', async () => {
+    window.history.replaceState({}, '', '/zh/account?tab=ai-quant&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api')
+    await renderSection()
+
+    const okxCard = findExchangeCard('OKX API')
+    const checkbox = Array.from(okxCard.querySelectorAll('input')).find(node => node.type === 'checkbox') as HTMLInputElement
+
+    expect(checkbox.checked).toBe(true)
+  })
+
+  it('does not return to plaza when OKX recovery binding is saved as non-demo', async () => {
+    window.history.replaceState({}, '', '/zh/account?tab=ai-quant&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api')
+    const redirectSpy = jest.spyOn(accountExchangeNavigation, 'redirectTo').mockImplementation(() => undefined)
+    await renderSection()
+
+    const okxCard = await fillOkxCredentials()
+    await setCheckbox(Array.from(okxCard.querySelectorAll('input')).find(node => node.type === 'checkbox') as HTMLInputElement, false)
+
+    await act(async () => {
+      clickButton(okxCard, 'Save API Config')
+    })
+    await flushPromises()
+
+    expect(mockUpsertUserExchangeAccount).not.toHaveBeenCalled()
+    expect(redirectSpy).not.toHaveBeenCalled()
+    expect(okxCard.textContent).toContain('Please save an OKX demo trading API key before returning to Strategy Plaza.')
   })
 
   it('does not redirect when OKX save fails', async () => {
