@@ -3,6 +3,7 @@
 import { motion, type Transition, useReducedMotion } from 'framer-motion'
 import { ArrowRight, BarChart3, LineChart, Play, ShieldCheck, Sparkles, Star, Zap } from 'lucide-react'
 import Link from 'next/link'
+import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
 
 type FeatureKey = 'conversation' | 'backtest' | 'deploy' | 'plaza'
@@ -350,22 +351,28 @@ function ConversationStrategyVisual() {
 function BacktestResultVisual() {
   const { t } = useTranslation()
   const shouldReduceMotion = useReducedMotion()
+  const equityCurveId = useId()
   const bars = [
-    { id: 'm1', height: 34 },
-    { id: 'm2', height: 54 },
-    { id: 'm3', height: 42 },
-    { id: 'm4', height: 72 },
-    { id: 'm5', height: 58 },
-    { id: 'm6', height: 78 },
-    { id: 'm7', height: 64 },
-    { id: 'm8', height: 90 },
-    { id: 'm9', height: 82 },
+    { label: 'W1', height: 34, positive: true },
+    { label: 'W2', height: 46, positive: true },
+    { label: 'W3', height: 28, positive: false },
+    { label: 'W4', height: 58, positive: true },
+    { label: 'W5', height: 66, positive: true },
+    { label: 'W6', height: 38, positive: false },
+    { label: 'W7', height: 72, positive: true },
+    { label: 'D1', height: 52, positive: true },
+    { label: 'D2', height: 81, positive: true },
+    { label: 'D3', height: 44, positive: false },
+    { label: 'D4', height: 76, positive: true },
+    { label: 'D5', height: 88, positive: true },
+    { label: 'D6', height: 62, positive: true },
+    { label: 'D7', height: 94, positive: true },
   ]
 
   return (
     <div className={`mx-auto w-full max-w-[560px] overflow-hidden rounded-[1.75rem] p-5 sm:p-6 ${panelClass}`}>
       <div className="mb-5 flex items-center justify-between">
-        <div className="text-xs font-black tracking-[0.22em] text-slate-500 uppercase dark:text-white/48">
+        <div className="text-xs font-black tracking-[0.22em] text-slate-500 uppercase dark:text-white/[0.48]">
           {t('aiQuant.backtestResult')}
         </div>
         <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
@@ -373,41 +380,58 @@ function BacktestResultVisual() {
         </div>
       </div>
 
-      <div className="relative h-56 overflow-hidden rounded-[1.35rem] border border-slate-200/80 bg-slate-50/80 p-4 dark:border-white/[0.06] dark:bg-black/20">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(15,23,42,0.055)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.05)_1px,transparent_1px)] bg-[size:42px_42px] dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.035)_1px,transparent_1px)]" />
-        <div className="relative z-10 flex h-full items-end gap-2.5 pt-8">
-          {bars.map((bar, index) => (
-            <motion.div
-              key={bar.id}
-              initial={shouldReduceMotion ? false : { height: 0 }}
-              whileInView={shouldReduceMotion ? undefined : { height: `${bar.height}%` }}
-              animate={shouldReduceMotion ? { height: `${bar.height}%` } : undefined}
-              viewport={{ once: true, margin: '-60px' }}
-              transition={shouldReduceMotion ? undefined : { duration: 0.55, ease: 'easeOut', delay: index * 0.035 }}
-              className="min-h-4 flex-1 rounded-t-md border-t border-primary/50 bg-gradient-to-t from-primary/22 to-primary/70 shadow-[0_0_22px_rgba(100,108,255,0.12)]"
-            />
-          ))}
+      <div className="relative h-56 overflow-hidden rounded-[1.35rem] border border-slate-200/80 bg-slate-50/90 p-4 pb-3 dark:border-white/[0.06] dark:bg-black/[0.24]">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(15,23,42,0.045)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.05)_1px,transparent_1px)] bg-[size:34px_34px] dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.035)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.032)_1px,transparent_1px)]" />
+        <div className="relative z-10 flex h-full flex-col">
+          <div className="relative min-h-0 flex-1">
+            <div className="absolute inset-x-0 top-1/2 h-px bg-slate-300/60 dark:bg-white/[0.08]" />
+            <div className="flex h-full items-end gap-1.5 px-1 pt-5 sm:gap-2">
+              {bars.map((bar, index) => (
+                <motion.div
+                  key={bar.label}
+                  initial={shouldReduceMotion ? false : { height: 0 }}
+                  whileInView={shouldReduceMotion ? undefined : { height: `${bar.height}%` }}
+                  animate={shouldReduceMotion ? { height: `${bar.height}%` } : undefined}
+                  viewport={{ once: true, margin: '-60px' }}
+                  transition={shouldReduceMotion ? undefined : { duration: 0.5, ease: 'easeOut', delay: index * 0.025 }}
+                  className={`min-h-3 flex-1 rounded-t-[5px] border-t ${
+                    bar.positive
+                      ? 'border-emerald-300/70 bg-gradient-to-t from-emerald-400/24 to-emerald-400/72 shadow-[0_0_18px_rgba(16,185,129,0.12)] dark:from-emerald-400/18 dark:to-emerald-300/62'
+                      : 'border-rose-300/55 bg-gradient-to-t from-rose-400/16 to-rose-400/42 dark:from-rose-400/12 dark:to-rose-300/34'
+                  }`}
+                />
+              ))}
+            </div>
+            <svg className="pointer-events-none absolute inset-x-1 top-4 z-20 h-[72%] w-[calc(100%-0.5rem)] overflow-visible" viewBox="0 0 420 128" fill="none" aria-hidden="true">
+              <motion.path
+                d="M4 98 C24 88 42 90 64 74 C89 55 112 78 132 58 C154 36 178 58 198 42 C224 20 246 52 268 34 C292 15 314 31 334 21 C360 9 383 19 416 7"
+                initial={shouldReduceMotion ? false : { pathLength: 0, opacity: 0 }}
+                whileInView={shouldReduceMotion ? undefined : { pathLength: 1, opacity: 1 }}
+                animate={shouldReduceMotion ? { pathLength: 1, opacity: 1 } : undefined}
+                viewport={{ once: true, margin: '-60px' }}
+                transition={shouldReduceMotion ? undefined : { duration: 1.2, ease: 'easeInOut', delay: 0.16 }}
+                stroke={`url(#${equityCurveId})`}
+                strokeWidth="4"
+                strokeLinecap="round"
+              />
+              <defs>
+                <linearGradient id={equityCurveId} x1="4" y1="98" x2="416" y2="7" gradientUnits="userSpaceOnUse">
+                  <stop stopColor="#2563eb" />
+                  <stop offset="0.5" stopColor="#38bdf8" />
+                  <stop offset="1" stopColor="#646cff" />
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+          <div className="mt-2 grid grid-cols-[repeat(14,minmax(0,1fr))] gap-1 border-t border-slate-200/70 pt-2 dark:border-white/[0.07]">
+            {bars.map((bar, index) => (
+              <span key={bar.label} className="text-center text-[9px] font-bold text-slate-400 dark:text-white/[0.32]">
+                <span className="hidden sm:inline">{bar.label}</span>
+                <span className="sm:hidden">{index % 2 === 0 ? bar.label : ''}</span>
+              </span>
+            ))}
+          </div>
         </div>
-        <svg className="pointer-events-none absolute inset-x-4 top-7 z-20 h-[58%] w-[calc(100%-2rem)] overflow-visible" viewBox="0 0 420 130" fill="none" aria-hidden="true">
-          <motion.path
-            d="M4 104 C44 92 62 56 98 64 C134 72 140 34 176 42 C214 50 226 20 262 28 C308 38 316 12 356 20 C382 25 398 15 416 9"
-            initial={shouldReduceMotion ? false : { pathLength: 0, opacity: 0 }}
-            whileInView={shouldReduceMotion ? undefined : { pathLength: 1, opacity: 1 }}
-            animate={shouldReduceMotion ? { pathLength: 1, opacity: 1 } : undefined}
-            viewport={{ once: true, margin: '-60px' }}
-            transition={shouldReduceMotion ? undefined : { duration: 1.25, ease: 'easeInOut', delay: 0.18 }}
-            stroke="url(#equityCurve)"
-            strokeWidth="5"
-            strokeLinecap="round"
-          />
-          <defs>
-            <linearGradient id="equityCurve" x1="4" y1="104" x2="416" y2="9" gradientUnits="userSpaceOnUse">
-              <stop stopColor="#22c55e" />
-              <stop offset="0.5" stopColor="#38bdf8" />
-              <stop offset="1" stopColor="#646cff" />
-            </linearGradient>
-          </defs>
-        </svg>
       </div>
 
       <div className="mt-5 grid grid-cols-2 gap-3">
