@@ -111,6 +111,7 @@ jest.mock('@/lib/api', () => ({
   fetchUserExchangeAccountStatuses: jest.fn(),
   getLlmCodegenSession: (...args: unknown[]) => mockGetLlmCodegenSession(...args),
   startLlmCodegenSession: jest.fn(),
+  updateAiQuantConversationBacktestDraft: jest.fn(async () => undefined),
 }))
 
 describe('AiQuantPageClient codegen P1 guards', () => {

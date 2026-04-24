@@ -1,18 +1,36 @@
+import type { BacktestSymbolAvailabilityResult } from '../services/backtest-symbol-availability.service'
 import type { BacktestReport, BacktestRunInput } from '../types/backtesting.types'
+import type { AiQuantConversationBacktestDraftConfigRecord } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
 import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { Injectable, HttpStatus, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { AiQuantConversationsRepository } from '@/modules/llm-strategy-codegen/repositories/ai-quant-conversations.repository'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { PrismaService } from '@/prisma/prisma.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestRunnerService } from '../core/backtest-runner.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestMarketDataService } from '../services/backtest-market-data.service'
-import type { BacktestSymbolAvailabilityResult } from '../services/backtest-symbol-availability.service'
 import { extractSnapshotBoundSymbolAvailabilityInput } from '../services/backtest-snapshot-loader.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestSymbolAvailabilityService } from '../services/backtest-symbol-availability.service'
+
+interface LastBacktestRangeConfig {
+  preset: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
+  startAt?: string
+  endAt?: string
+}
+
+interface LastBacktestExecutionConfig {
+  initialCash: number
+  leverage: number | null
+  slippageBps: number
+  feeBps: number
+  priceSource: 'open' | 'close' | 'mid'
+  allowPartial: boolean
+}
 
 export type BacktestJobPhase = 'queued' | 'running' | 'succeeded' | 'failed'
 
@@ -78,11 +96,19 @@ export class BacktestJobsService {
     private readonly runner: BacktestRunnerService,
     private readonly marketDataService: BacktestMarketDataService,
     private readonly symbolAvailabilityService: BacktestSymbolAvailabilityService,
+    private readonly conversationsRepo: AiQuantConversationsRepository,
     private readonly prisma: PrismaService,
   ) {}
 
   async createJob(input: BacktestRunInput, ownerUserId: string): Promise<BacktestJobView> {
     await this.validateSymbolAvailability(input)
+    const conversationId = this.readConversationId(input)
+    await this.validateConversationOwnership(conversationId, ownerUserId)
+    await this.writeBacktestDraftConfigIfEligible({
+      input,
+      ownerUserId,
+      conversationId,
+    })
     const id = `btjob-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
     const inputSummary = this.createInputSummary(input)
     try {
@@ -90,6 +116,7 @@ export class BacktestJobsService {
         data: {
           id,
           ownerUserId,
+          conversationId,
           status: 'queued',
           snapshotId: inputSummary.snapshotId ?? null,
           snapshotHash: inputSummary.snapshotHash ?? null,
@@ -123,6 +150,29 @@ export class BacktestJobsService {
       })
       return this.toFallbackView(fallbackJob)
     }
+  }
+
+  private async validateConversationOwnership(
+    conversationId: string | null,
+    ownerUserId: string,
+  ): Promise<void> {
+    if (!conversationId) {
+      return
+    }
+
+    const isOwnedConversation = await this.conversationsRepo.existsActiveConversationForUser(
+      conversationId,
+      ownerUserId,
+    )
+    if (isOwnedConversation) {
+      return
+    }
+
+    throw new DomainException('backtest.invalid_conversation_id', {
+      code: ErrorCode.BAD_REQUEST,
+      status: HttpStatus.BAD_REQUEST,
+      args: { conversationId },
+    })
   }
 
   private async validateSymbolAvailability(input: BacktestRunInput): Promise<void> {
@@ -226,6 +276,7 @@ export class BacktestJobsService {
 
     try {
       const { resolvedSummary, result } = await this.runBacktestJob(input, initialSummary)
+      const completedAt = new Date()
       await this.prisma.backtestJob.update({
         where: { id },
         data: {
@@ -233,8 +284,19 @@ export class BacktestJobsService {
           inputSummary: resolvedSummary as Prisma.InputJsonValue,
           result: result as unknown as Prisma.InputJsonValue,
           error: null,
-          finishedAt: new Date(),
+          finishedAt: completedAt,
         },
+      })
+
+      await this.writeLastBacktestRefIfEligible({
+        id,
+        input,
+        ownerUserId: job.ownerUserId,
+        conversationId: job.conversationId,
+        snapshotId: resolvedSummary.snapshotId,
+        marketType: resolvedSummary.marketType,
+        result,
+        completedAt,
       })
     } catch (error) {
       await this.prisma.backtestJob.update({
@@ -258,11 +320,12 @@ export class BacktestJobsService {
 
     try {
       const { resolvedSummary, result } = await this.runBacktestJob(input, initialSummary)
+      const completedAt = new Date()
       job.status = 'succeeded'
       job.inputSummary = resolvedSummary
       job.result = result
       job.error = undefined
-      job.finishedAt = new Date().toISOString()
+      job.finishedAt = completedAt.toISOString()
     } catch (error) {
       job.status = 'failed'
       job.error = error instanceof Error ? error.message : String(error)
@@ -395,6 +458,140 @@ export class BacktestJobsService {
   private readStrategyMarketType(strategy: BacktestRunInput['strategy']): 'spot' | 'perp' {
     const value = strategy.params?.marketType
     return value === 'perp' ? 'perp' : 'spot'
+  }
+
+  private readConversationId(input: BacktestRunInput): string | null {
+    const candidate = input.conversationId
+    return typeof candidate === 'string' && candidate.trim().length > 0 ? candidate.trim() : null
+  }
+
+  private shouldWriteLastBacktestRef(
+    input: BacktestRunInput,
+    conversationId: string | null | undefined,
+    snapshotId: string | undefined,
+  ): conversationId is string {
+    return (
+      input.strategy.bindingSource === 'PUBLISHED_SNAPSHOT_STRICT'
+      && typeof conversationId === 'string'
+      && conversationId.length > 0
+      && typeof snapshotId === 'string'
+      && snapshotId.length > 0
+    )
+  }
+
+  private async writeBacktestDraftConfigIfEligible(params: {
+    input: BacktestRunInput
+    ownerUserId: string
+    conversationId: string | null
+  }): Promise<void> {
+    const { input, ownerUserId, conversationId } = params
+    if (input.strategy.bindingSource !== 'PUBLISHED_SNAPSHOT_STRICT' || !conversationId) {
+      return
+    }
+
+    await this.conversationsRepo.updateBacktestDraftConfig({
+      conversationId,
+      userId: ownerUserId,
+      backtestDraftConfig: this.buildBacktestDraftConfig(input),
+    })
+  }
+
+  private async writeLastBacktestRefIfEligible(params: {
+    id: string
+    input: BacktestRunInput
+    ownerUserId: string
+    conversationId: string | null | undefined
+    snapshotId: string | undefined
+    marketType: 'spot' | 'perp'
+    result: BacktestReport
+    completedAt: Date
+  }): Promise<void> {
+    const { id, input, ownerUserId, conversationId, snapshotId, marketType, result, completedAt } = params
+    if (!this.shouldWriteLastBacktestRef(input, conversationId, snapshotId)) {
+      return
+    }
+
+    try {
+      await this.conversationsRepo.updateLastBacktestRef({
+        conversationId,
+        userId: ownerUserId,
+        lastBacktestRef: {
+          jobId: id,
+          publishedSnapshotId: snapshotId,
+          config: this.buildLastBacktestConfig(input),
+          summary: {
+            maxDrawdownPct: Number(result.summary.maxDrawdownPct.toFixed(2)),
+            totalReturnPct: Number(result.summary.netProfitPct.toFixed(2)),
+            winRatePct: Number(
+              (
+                result.summary.winRate <= 1
+                  ? result.summary.winRate * 100
+                  : result.summary.winRate
+              ).toFixed(2),
+            ),
+            tradeCount: result.summary.totalTrades,
+            ...(typeof result.summary.totalOpenTrades === 'number'
+              ? { openTradeCount: result.summary.totalOpenTrades }
+              : {}),
+            ...(typeof result.summary.openPnl === 'number'
+              ? { openPnl: Number(result.summary.openPnl.toFixed(2)) }
+              : {}),
+            marketType,
+          },
+          completedAt,
+        },
+      })
+    } catch (error) {
+      this.logger.warn(
+        `event=backtest_last_backtest_ref_write_failed jobId=${id} conversationId=${conversationId} reason=${this.describeError(error)}`,
+      )
+    }
+  }
+
+  private buildLastBacktestConfig(input: BacktestRunInput): {
+    range: LastBacktestRangeConfig
+    execution: LastBacktestExecutionConfig
+  } {
+    return this.buildBacktestDraftConfig(input)
+  }
+
+  private buildBacktestDraftConfig(
+    input: BacktestRunInput,
+  ): AiQuantConversationBacktestDraftConfigRecord {
+    return {
+      range: this.buildLastBacktestRangeConfig(input),
+      execution: {
+        initialCash: input.initialCash,
+        leverage: typeof input.leverage === 'number' && Number.isFinite(input.leverage) ? input.leverage : null,
+        slippageBps: input.execution.slippageBps,
+        feeBps: input.execution.feeBps,
+        priceSource: input.execution.priceSource,
+        allowPartial: input.allowPartial === true,
+      },
+    }
+  }
+
+  private buildLastBacktestRangeConfig(input: BacktestRunInput): LastBacktestRangeConfig {
+    const requestedRangeInput = input.requestedRangeInput
+    if (requestedRangeInput) {
+      const base = {
+        preset: requestedRangeInput.preset,
+      } as LastBacktestRangeConfig
+      if (requestedRangeInput.preset === 'CUSTOM') {
+        return {
+          ...base,
+          ...(typeof requestedRangeInput.startAt === 'string' ? { startAt: requestedRangeInput.startAt } : {}),
+          ...(typeof requestedRangeInput.endAt === 'string' ? { endAt: requestedRangeInput.endAt } : {}),
+        }
+      }
+      return base
+    }
+
+    return {
+      preset: 'CUSTOM',
+      startAt: new Date(input.dataRange.fromTs).toISOString(),
+      endAt: new Date(input.dataRange.toTs).toISOString(),
+    }
   }
 
   private normalizePersistedStatus(status: string, id: string): BacktestJobPhase {

@@ -26,7 +26,16 @@ describe('accountAiQuantConversationsController', () => {
 
   it('lists AI Quant conversations for the resolved caller identity', async () => {
     const service = {
-      listConversations: jest.fn().mockResolvedValue([{ id: 'conv-1', activeCodegenSessionId: 'session-1' }]),
+      listConversations: jest.fn().mockResolvedValue([{
+        id: 'conv-1',
+        activeCodegenSessionId: 'session-1',
+        lastBacktestRef: {
+          jobId: 'btjob-1',
+          publishedSnapshotId: 'snapshot-1',
+          summary: { maxDrawdownPct: 8, totalReturnPct: 12, winRatePct: 60, tradeCount: 5 },
+          completedAt: '2026-04-23T00:04:00.000Z',
+        },
+      }]),
     }
     const moduleRef = await Test.createTestingModule({
       controllers: [AccountAiQuantConversationsController],
@@ -53,7 +62,16 @@ describe('accountAiQuantConversationsController', () => {
       'caller-u1',
     )
 
-    expect(result).toEqual([{ id: 'conv-1', activeCodegenSessionId: 'session-1' }])
+    expect(result).toEqual([{
+      id: 'conv-1',
+      activeCodegenSessionId: 'session-1',
+      lastBacktestRef: {
+        jobId: 'btjob-1',
+        publishedSnapshotId: 'snapshot-1',
+        summary: { maxDrawdownPct: 8, totalReturnPct: 12, winRatePct: 60, tradeCount: 5 },
+        completedAt: '2026-04-23T00:04:00.000Z',
+      },
+    }])
     expect(service.listConversations).toHaveBeenCalledWith('caller-u1')
   })
 

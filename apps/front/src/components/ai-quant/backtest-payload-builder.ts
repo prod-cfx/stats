@@ -37,6 +37,7 @@ export interface BuildBacktestPayloadInput {
     id: string
     publishedSnapshotId: string
   }
+  conversationId?: string
   range: BacktestRangeInput
   allowPartial?: boolean
 }
@@ -101,10 +102,19 @@ export function buildBacktestPayload(
       publishedSnapshotId,
       params: { marketType: input.marketType },
     },
+    ...(input.conversationId?.trim() ? { conversationId: input.conversationId.trim() } : {}),
     dataRange: {
       fromTs: resolvedFromTs,
       toTs: resolvedToTs,
     },
+    requestedRangeInput:
+      input.range.preset === 'CUSTOM'
+        ? {
+            preset: 'CUSTOM',
+            startAt: input.range.startAt,
+            endAt: input.range.endAt,
+          }
+        : { preset: input.range.preset },
   }
   if (input.marketType === 'perp') {
     payload.leverage = leverage as number

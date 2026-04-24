@@ -8,6 +8,85 @@ class AiQuantConversationMessageResponseDto {
   content!: string
 }
 
+class AiQuantConversationLastBacktestSummaryResponseDto {
+  @ApiProperty()
+  maxDrawdownPct!: number
+
+  @ApiProperty()
+  totalReturnPct!: number
+
+  @ApiProperty()
+  winRatePct!: number
+
+  @ApiProperty()
+  tradeCount!: number
+
+  @ApiPropertyOptional()
+  openTradeCount?: number
+
+  @ApiPropertyOptional()
+  openPnl?: number
+
+  @ApiPropertyOptional({ enum: ['spot', 'perp'] })
+  marketType?: 'spot' | 'perp'
+}
+
+export class AiQuantConversationBacktestRangeResponseDto {
+  @ApiProperty({ enum: ['7D', '30D', '90D', '1Y', 'CUSTOM'] })
+  preset!: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
+
+  @ApiPropertyOptional()
+  startAt?: string
+
+  @ApiPropertyOptional()
+  endAt?: string
+}
+
+export class AiQuantConversationBacktestExecutionResponseDto {
+  @ApiProperty()
+  initialCash!: number
+
+  @ApiPropertyOptional({ nullable: true })
+  leverage!: number | null
+
+  @ApiProperty()
+  slippageBps!: number
+
+  @ApiProperty()
+  feeBps!: number
+
+  @ApiProperty({ enum: ['open', 'close', 'mid'] })
+  priceSource!: 'open' | 'close' | 'mid'
+
+  @ApiProperty()
+  allowPartial!: boolean
+}
+
+export class AiQuantConversationBacktestConfigResponseDto {
+  @ApiProperty({ type: AiQuantConversationBacktestRangeResponseDto })
+  range!: AiQuantConversationBacktestRangeResponseDto
+
+  @ApiProperty({ type: AiQuantConversationBacktestExecutionResponseDto })
+  execution!: AiQuantConversationBacktestExecutionResponseDto
+}
+
+class AiQuantConversationLastBacktestRefResponseDto {
+  @ApiProperty()
+  jobId!: string
+
+  @ApiProperty()
+  publishedSnapshotId!: string
+
+  @ApiProperty({ type: AiQuantConversationBacktestConfigResponseDto })
+  config!: AiQuantConversationBacktestConfigResponseDto
+
+  @ApiProperty({ type: AiQuantConversationLastBacktestSummaryResponseDto })
+  summary!: AiQuantConversationLastBacktestSummaryResponseDto
+
+  @ApiProperty()
+  completedAt!: string
+}
+
 export class AiQuantConversationResponseDto {
   @ApiProperty({ description: 'Conversation id' })
   id!: string
@@ -32,6 +111,12 @@ export class AiQuantConversationResponseDto {
 
   @ApiPropertyOptional({ description: 'Conversation updated timestamp' })
   updatedAt?: string
+
+  @ApiPropertyOptional({ description: 'Current explicit backtest draft configuration', type: AiQuantConversationBacktestConfigResponseDto, nullable: true })
+  backtestDraftConfig?: AiQuantConversationBacktestConfigResponseDto | null
+
+  @ApiPropertyOptional({ description: 'Most recent recoverable backtest reference', type: AiQuantConversationLastBacktestRefResponseDto, nullable: true })
+  lastBacktestRef?: AiQuantConversationLastBacktestRefResponseDto | null
 
   @ApiPropertyOptional({ description: 'Pending canonical digest awaiting confirmation' })
   canonicalDigest?: string | null

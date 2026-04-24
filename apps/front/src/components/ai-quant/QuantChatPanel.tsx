@@ -26,7 +26,8 @@ interface QuantChatPanelProps {
   publicationGate?: LlmPublicationGate | null
   compactMode?: boolean // Kept for compatibility but ignored in new design
   onClarificationAnswer?: (itemKey: string, value: string) => void
-  onParamChange: (key: string, value: unknown) => void
+  onParamChange?: (key: string, value: unknown) => void
+  onConfirmBacktestParams: (nextValues: DynamicParamValues) => void
   onSend: (input: string) => void
   onRunBacktest: () => void
   canRunBacktest?: boolean
@@ -251,7 +252,7 @@ export function QuantChatPanel({
   clarificationGate: _clarificationGate,
   publicationGate,
   onClarificationAnswer: _onClarificationAnswer,
-  onParamChange,
+  onConfirmBacktestParams,
   onSend,
   onRunBacktest,
   canRunBacktest = true,
@@ -325,13 +326,7 @@ export function QuantChatPanel({
       setSubmittedBacktestSettings(true)
       return
     }
-    for (const key of BACKTEST_DRAFT_KEYS) {
-      const nextValue = backtestDraftValues[key]
-      const currentValue = paramValues[key]
-      if (JSON.stringify(nextValue ?? null) !== JSON.stringify(currentValue ?? null)) {
-        onParamChange(key, nextValue)
-      }
-    }
+    onConfirmBacktestParams(backtestDraftValues)
     setSubmittedBacktestSettings(false)
     setTouchedBacktestFields({})
     setShowSettings(false)

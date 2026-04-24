@@ -1,5 +1,8 @@
 import type { ConstraintPackSnapshot } from '../constants/constraint-pack'
-import type { AiQuantConversationResponseDto } from '../dto/ai-quant-conversation.response.dto'
+import type {
+  AiQuantConversationBacktestConfigDto,
+  AiQuantConversationResponseDto,
+} from '../dto/ai-quant-conversation.response.dto'
 import type { CodegenGuideConfigDto } from '../dto/codegen-guide-config.dto'
 import type { CodegenSessionResponseDto } from '../dto/codegen-session.response.dto'
 import type { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.dto'
@@ -323,6 +326,18 @@ export class CodegenConversationService {
 
   async deleteConversation(conversationId: string, userId: string): Promise<void> {
     await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
+  }
+
+  async updateConversationBacktestDraft(
+    conversationId: string,
+    userId: string,
+    backtestDraftConfig: AiQuantConversationBacktestConfigDto,
+  ): Promise<void> {
+    await this.conversationsRepo.updateBacktestDraftConfig({
+      conversationId,
+      userId,
+      backtestDraftConfig,
+    })
   }
 
   async continueSession(
@@ -1985,6 +2000,17 @@ export class CodegenConversationService {
   ): Promise<AiQuantConversationResponseDto> {
     const session = await this.sessionsRepo.findById(conversation.codegenSessionId)
     const snapshot = session ? await this.toSessionSnapshotResponse(session) : null
+    const lastBacktestRef = conversation.lastBacktestRef
+      && snapshot?.publishedSnapshotId === conversation.lastBacktestRef.publishedSnapshotId
+      ? {
+          jobId: conversation.lastBacktestRef.jobId,
+          publishedSnapshotId: conversation.lastBacktestRef.publishedSnapshotId,
+          config: conversation.lastBacktestRef.config,
+          summary: conversation.lastBacktestRef.summary,
+          completedAt: conversation.lastBacktestRef.completedAt.toISOString(),
+        }
+      : null
+
     return {
       id: conversation.id,
       activeCodegenSessionId: session && !this.stateMachine.isTerminalStatus(session.status) ? session.id : null,
@@ -1993,6 +2019,8 @@ export class CodegenConversationService {
       status: snapshot?.status as LlmCodegenSessionStatus | undefined,
       createdAt: conversation.createdAt.toISOString(),
       updatedAt: conversation.updatedAt.toISOString(),
+      backtestDraftConfig: conversation.backtestDraftConfig,
+      lastBacktestRef,
       canonicalDigest: snapshot?.canonicalDigest ?? null,
       specDesc: snapshot?.specDesc ?? null,
       semanticGraph: snapshot?.semanticGraph ?? null,

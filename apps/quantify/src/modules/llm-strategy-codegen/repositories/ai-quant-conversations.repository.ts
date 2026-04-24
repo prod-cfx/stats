@@ -1,5 +1,5 @@
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
-import type { PrismaClient } from '@/prisma/prisma.types'
+import type { Prisma, PrismaClient } from '@/prisma/prisma.types'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
@@ -7,6 +7,38 @@ import { Injectable } from '@nestjs/common'
 export interface AiQuantConversationMessageSnapshot {
   role: 'user' | 'assistant'
   content: string
+}
+
+export interface AiQuantConversationBacktestDraftConfigRecord {
+  range: {
+    preset: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
+    startAt?: string
+    endAt?: string
+  }
+  execution: {
+    initialCash: number
+    leverage: number | null
+    slippageBps: number
+    feeBps: number
+    priceSource: 'open' | 'close' | 'mid'
+    allowPartial: boolean
+  }
+}
+
+export interface AiQuantConversationLastBacktestRefRecord {
+  jobId: string
+  publishedSnapshotId: string
+  config: AiQuantConversationBacktestDraftConfigRecord
+  summary: {
+    maxDrawdownPct: number
+    totalReturnPct: number
+    winRatePct: number
+    tradeCount: number
+    openTradeCount?: number
+    openPnl?: number
+    marketType?: 'spot' | 'perp'
+  }
+  completedAt: Date
 }
 
 export interface AiQuantConversationSnapshotRecord {
@@ -17,6 +49,8 @@ export interface AiQuantConversationSnapshotRecord {
   archivedAt: Date | null
   createdAt: Date
   updatedAt: Date
+  backtestDraftConfig: AiQuantConversationBacktestDraftConfigRecord | null
+  lastBacktestRef: AiQuantConversationLastBacktestRefRecord | null
   messages: AiQuantConversationMessageSnapshot[]
 }
 
@@ -76,6 +110,8 @@ export class AiQuantConversationsRepository {
         archivedAt: true,
         createdAt: true,
         updatedAt: true,
+        backtestDraftConfig: true,
+        lastBacktestRef: true,
         messages: {
           orderBy: { sortOrder: 'asc' },
           select: {
@@ -86,13 +122,7 @@ export class AiQuantConversationsRepository {
       },
     })
 
-    return conversations.map(conversation => ({
-      ...conversation,
-      messages: conversation.messages.map(message => ({
-        role: message.role,
-        content: message.content,
-      })),
-    }))
+    return conversations.map(conversation => this.mapSnapshotRecord(conversation))
   }
 
   async listKnownSessionIdsByUser(userId: string): Promise<string[]> {
@@ -102,6 +132,20 @@ export class AiQuantConversationsRepository {
     })
 
     return rows.map(row => row.codegenSessionId)
+  }
+
+  async existsActiveConversationForUser(conversationId: string, userId: string): Promise<boolean> {
+    const rows = await this.txHost.tx.aiQuantConversation.findMany({
+      where: {
+        id: conversationId,
+        userId,
+        archivedAt: null,
+      },
+      select: { id: true },
+      take: 1,
+    })
+
+    return rows.length > 0
   }
 
   async findByCodegenSessionId(codegenSessionId: string): Promise<AiQuantConversationSnapshotRecord | null> {
@@ -115,6 +159,8 @@ export class AiQuantConversationsRepository {
         archivedAt: true,
         createdAt: true,
         updatedAt: true,
+        backtestDraftConfig: true,
+        lastBacktestRef: true,
         messages: {
           orderBy: { sortOrder: 'asc' },
           select: {
@@ -127,13 +173,41 @@ export class AiQuantConversationsRepository {
 
     if (!conversation) return null
 
-    return {
-      ...conversation,
-      messages: conversation.messages.map(message => ({
-        role: message.role,
-        content: message.content,
-      })),
-    }
+    return this.mapSnapshotRecord(conversation)
+  }
+
+  async updateLastBacktestRef(input: {
+    conversationId: string
+    userId: string
+    lastBacktestRef: AiQuantConversationLastBacktestRefRecord
+  }): Promise<void> {
+    await this.txHost.tx.aiQuantConversation.updateMany({
+      where: {
+        id: input.conversationId,
+        userId: input.userId,
+        archivedAt: null,
+      },
+      data: {
+        lastBacktestRef: input.lastBacktestRef as unknown as Prisma.InputJsonValue,
+      },
+    })
+  }
+
+  async updateBacktestDraftConfig(input: {
+    conversationId: string
+    userId: string
+    backtestDraftConfig: AiQuantConversationBacktestDraftConfigRecord
+  }): Promise<void> {
+    await this.txHost.tx.aiQuantConversation.updateMany({
+      where: {
+        id: input.conversationId,
+        userId: input.userId,
+        archivedAt: null,
+      },
+      data: {
+        backtestDraftConfig: input.backtestDraftConfig as unknown as Prisma.InputJsonValue,
+      },
+    })
   }
 
   async archiveByIdAndUser(id: string, userId: string): Promise<void> {
@@ -154,6 +228,8 @@ export class AiQuantConversationsRepository {
         archivedAt: true,
         createdAt: true,
         updatedAt: true,
+        backtestDraftConfig: true,
+        lastBacktestRef: true,
         messages: {
           orderBy: { sortOrder: 'asc' },
           select: {
@@ -164,12 +240,235 @@ export class AiQuantConversationsRepository {
       },
     })
 
+    return this.mapSnapshotRecord(conversation)
+  }
+
+  private mapSnapshotRecord(conversation: {
+    id: string
+    userId: string
+    codegenSessionId: string
+    title: string
+    archivedAt: Date | null
+    createdAt: Date
+    updatedAt: Date
+    backtestDraftConfig: Prisma.JsonValue | null
+    lastBacktestRef: Prisma.JsonValue | null
+    messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  }): AiQuantConversationSnapshotRecord {
     return {
       ...conversation,
+      backtestDraftConfig: this.parseBacktestDraftConfig(conversation.backtestDraftConfig),
+      lastBacktestRef: this.parseLastBacktestRef(conversation.lastBacktestRef),
       messages: conversation.messages.map(message => ({
         role: message.role,
         content: message.content,
       })),
     }
+  }
+
+  private parseLastBacktestRef(
+    value: Prisma.JsonValue | null,
+  ): AiQuantConversationLastBacktestRefRecord | null {
+    if (!this.isJsonObject(value)) {
+      return null
+    }
+
+    const jobId = this.readNonEmptyString(value.jobId)
+    const publishedSnapshotId = this.readNonEmptyString(value.publishedSnapshotId)
+    const config = this.parseBacktestDraftConfig(value.config)
+    const summary = this.parseLastBacktestSummary(value.summary)
+    const completedAt = this.parseDate(value.completedAt)
+
+    if (!jobId || !publishedSnapshotId || !config || !summary || !completedAt) {
+      return null
+    }
+
+    return {
+      jobId,
+      publishedSnapshotId,
+      config,
+      summary,
+      completedAt,
+    }
+  }
+
+  private parseBacktestDraftConfig(
+    value: Prisma.JsonValue | null | undefined,
+  ): AiQuantConversationBacktestDraftConfigRecord | null {
+    if (!this.isJsonObject(value)) {
+      return null
+    }
+
+    const range = this.parseLastBacktestRange(value.range)
+    const execution = this.parseLastBacktestExecution(value.execution)
+
+    if (!range || !execution) {
+      return null
+    }
+
+    return { range, execution }
+  }
+
+  private parseLastBacktestRange(
+    value: Prisma.JsonValue | null | undefined,
+  ): AiQuantConversationBacktestDraftConfigRecord['range'] | null {
+    if (!this.isJsonObject(value)) {
+      return null
+    }
+
+    const preset = value.preset
+    if (
+      preset !== '7D'
+      && preset !== '30D'
+      && preset !== '90D'
+      && preset !== '1Y'
+      && preset !== 'CUSTOM'
+    ) {
+      return null
+    }
+
+    if (preset !== 'CUSTOM') {
+      return { preset }
+    }
+
+    const startAt = this.readNonEmptyString(value.startAt)
+    const endAt = this.readNonEmptyString(value.endAt)
+    if (!startAt || !endAt) {
+      return null
+    }
+
+    return {
+      preset,
+      startAt,
+      endAt,
+    }
+  }
+
+  private parseLastBacktestExecution(
+    value: Prisma.JsonValue | null | undefined,
+  ): AiQuantConversationBacktestDraftConfigRecord['execution'] | null {
+    if (!this.isJsonObject(value)) {
+      return null
+    }
+
+    const initialCash = this.readFiniteNumber(value.initialCash)
+    const leverage = this.readNullableFiniteNumber(value.leverage)
+    const slippageBps = this.readFiniteNumber(value.slippageBps)
+    const feeBps = this.readFiniteNumber(value.feeBps)
+    const priceSource = value.priceSource
+    const allowPartial = value.allowPartial
+
+    if (
+      initialCash === null
+      || slippageBps === null
+      || feeBps === null
+      || (priceSource !== 'open' && priceSource !== 'close' && priceSource !== 'mid')
+      || typeof allowPartial !== 'boolean'
+    ) {
+      return null
+    }
+
+    return {
+      initialCash,
+      leverage,
+      slippageBps,
+      feeBps,
+      priceSource,
+      allowPartial,
+    }
+  }
+
+  private parseLastBacktestSummary(
+    value: Prisma.JsonValue | null | undefined,
+  ): AiQuantConversationLastBacktestRefRecord['summary'] | null {
+    if (!this.isJsonObject(value)) {
+      return null
+    }
+
+    const maxDrawdownPct = this.readFiniteNumber(value.maxDrawdownPct)
+    const totalReturnPct = this.readFiniteNumber(value.totalReturnPct)
+    const winRatePct = this.readFiniteNumber(value.winRatePct)
+    const tradeCount = this.readFiniteNumber(value.tradeCount)
+
+    if (
+      maxDrawdownPct === null
+      || totalReturnPct === null
+      || winRatePct === null
+      || tradeCount === null
+    ) {
+      return null
+    }
+
+    const openTradeCount = this.readOptionalFiniteNumber(value.openTradeCount)
+    const openPnl = this.readOptionalFiniteNumber(value.openPnl)
+    const marketType = this.parseMarketType(value.marketType)
+
+    if (
+      (value.openTradeCount !== undefined && value.openTradeCount !== null && openTradeCount === null)
+      || (value.openPnl !== undefined && value.openPnl !== null && openPnl === null)
+      || (value.marketType !== undefined && value.marketType !== null && marketType === null)
+    ) {
+      return null
+    }
+
+    return {
+      maxDrawdownPct,
+      totalReturnPct,
+      winRatePct,
+      tradeCount,
+      ...(openTradeCount !== undefined ? { openTradeCount } : {}),
+      ...(openPnl !== undefined ? { openPnl } : {}),
+      ...(marketType ? { marketType } : {}),
+    }
+  }
+
+  private parseMarketType(
+    value: Prisma.JsonValue | null | undefined,
+  ): 'spot' | 'perp' | null | undefined {
+    if (value === undefined || value === null) {
+      return undefined
+    }
+    return value === 'spot' || value === 'perp' ? value : null
+  }
+
+  private parseDate(value: Prisma.JsonValue | null | undefined): Date | null {
+    if (value instanceof Date && !Number.isNaN(value.getTime())) {
+      return value
+    }
+    if (typeof value !== 'string' || !value.trim()) {
+      return null
+    }
+    const date = new Date(value)
+    return Number.isNaN(date.getTime()) ? null : date
+  }
+
+  private readOptionalFiniteNumber(value: Prisma.JsonValue | null | undefined): number | null | undefined {
+    if (value === undefined || value === null) {
+      return undefined
+    }
+    return this.readFiniteNumber(value)
+  }
+
+  private readNullableFiniteNumber(value: Prisma.JsonValue | null | undefined): number | null {
+    if (value === undefined || value === null) {
+      return null
+    }
+    return this.readFiniteNumber(value)
+  }
+
+  private readFiniteNumber(value: Prisma.JsonValue | null | undefined): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+
+  private readNonEmptyString(value: Prisma.JsonValue | null | undefined): string | null {
+    if (typeof value !== 'string') {
+      return null
+    }
+    const normalized = value.trim()
+    return normalized.length > 0 ? normalized : null
+  }
+
+  private isJsonObject(value: Prisma.JsonValue | null | undefined): value is Prisma.JsonObject {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
   }
 }

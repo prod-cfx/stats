@@ -1,6 +1,7 @@
 /* eslint-disable ts/consistent-type-imports -- NestJS 装饰器需要运行时导入以保留类型元数据 */
-import { Controller, Delete, Get, Headers, Param } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Headers, Param, Patch } from '@nestjs/common'
 import { ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
+import { AiQuantConversationBacktestDraftConfigRequestDto } from '../dto/ai-quant-conversation-backtest-draft-config.request.dto'
 import { AiQuantConversationResponseDto } from '../dto/ai-quant-conversation.response.dto'
 import { CallerIdentityService } from '../services/caller-identity.service'
 import { CodegenConversationService } from '../services/codegen-conversation.service'
@@ -33,5 +34,17 @@ export class AccountAiQuantConversationsController {
   ): Promise<void> {
     const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
     return this.service.deleteConversation(id, callerUserId)
+  }
+
+  @Patch(':id/backtest-draft')
+  @ApiOperation({ summary: '更新当前用户会话的回测草稿配置' })
+  async updateBacktestDraft(
+    @Headers('authorization') authorization: string | undefined,
+    @Headers('x-user-id') forwardedUserId: string | undefined,
+    @Param('id') id: string,
+    @Body() body: AiQuantConversationBacktestDraftConfigRequestDto,
+  ): Promise<void> {
+    const callerUserId = await this.callerIdentityService.resolveCallerUserIdFromAuthorization(authorization, forwardedUserId)
+    return this.service.updateConversationBacktestDraft(id, callerUserId, body.backtestDraftConfig)
   }
 }
