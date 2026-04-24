@@ -100,6 +100,12 @@ describe('QuantChatPanel range settings', () => {
           onParamChange={onParamChange}
           onSend={() => {}}
           onRunBacktest={() => {}}
+          onConfirmBacktestParams={(nextValues) => {
+            Object.entries(nextValues).forEach(([key, value]) => {
+              onParamChange(key, value)
+            })
+            setParamValues(nextValues)
+          }}
         />,
       )
     })
@@ -139,6 +145,11 @@ describe('QuantChatPanel range settings', () => {
           }}
           onSend={() => {}}
           onRunBacktest={() => {}}
+          onConfirmBacktestParams={(nextValues) => {
+            Object.entries(nextValues).forEach(([key, value]) => {
+              onParamChange(key, value)
+            })
+          }}
         />
       )
     }
@@ -214,6 +225,11 @@ describe('QuantChatPanel range settings', () => {
           onParamChange={() => {}}
           onSend={() => {}}
           onRunBacktest={() => {}}
+          onConfirmBacktestParams={(nextValues) => {
+            Object.entries(nextValues).forEach(([key, value]) => {
+              onParamChange(key, value)
+            })
+          }}
         />,
       )
     })
@@ -277,6 +293,7 @@ describe('QuantChatPanel range settings', () => {
           onParamChange={() => {}}
           onSend={() => {}}
           onRunBacktest={() => {}}
+          onConfirmBacktestParams={() => {}}
         />,
       )
     })
@@ -310,6 +327,7 @@ describe('QuantChatPanel range settings', () => {
           onParamChange={() => {}}
           onSend={() => {}}
           onRunBacktest={() => {}}
+          onConfirmBacktestParams={() => {}}
         />,
       )
     })
@@ -345,6 +363,7 @@ describe('QuantChatPanel range settings', () => {
           onParamChange={() => {}}
           onSend={() => {}}
           onRunBacktest={() => {}}
+          onConfirmBacktestParams={() => {}}
         />,
       )
     })
@@ -374,6 +393,7 @@ describe('QuantChatPanel range settings', () => {
           onParamChange={() => {}}
           onSend={() => {}}
           onRunBacktest={() => {}}
+          onConfirmBacktestParams={() => {}}
         />,
       )
     })
@@ -426,6 +446,7 @@ describe('QuantChatPanel range settings', () => {
           onParamChange={() => {}}
           onSend={() => {}}
           onRunBacktest={() => {}}
+          onConfirmBacktestParams={() => {}}
         />,
       )
     })
@@ -464,6 +485,11 @@ describe('QuantChatPanel range settings', () => {
           onParamChange={onParamChange}
           onSend={() => {}}
           onRunBacktest={() => {}}
+          onConfirmBacktestParams={(nextValues) => {
+            Object.entries(nextValues).forEach(([key, value]) => {
+              onParamChange(key, value)
+            })
+          }}
         />,
       )
     })
@@ -515,6 +541,7 @@ describe('QuantChatPanel range settings', () => {
           onParamChange={onParamChange}
           onSend={() => {}}
           onRunBacktest={() => {}}
+          onConfirmBacktestParams={() => {}}
         />,
       )
     })
@@ -552,6 +579,7 @@ describe('QuantChatPanel range settings', () => {
           onParamChange={() => {}}
           onSend={onSend}
           onRunBacktest={() => {}}
+          onConfirmBacktestParams={() => {}}
         />,
       )
     })
@@ -614,6 +642,7 @@ describe('QuantChatPanel range settings', () => {
           onParamChange={() => {}}
           onSend={() => {}}
           onRunBacktest={() => {}}
+          onConfirmBacktestParams={() => {}}
         />,
       )
     })
@@ -647,6 +676,7 @@ describe('QuantChatPanel range settings', () => {
           onParamChange={() => {}}
           onSend={() => {}}
           onRunBacktest={() => {}}
+          onConfirmBacktestParams={() => {}}
         />,
       )
     })
@@ -685,6 +715,7 @@ describe('QuantChatPanel range settings', () => {
           onParamChange={() => {}}
           onSend={() => {}}
           onRunBacktest={() => {}}
+          onConfirmBacktestParams={() => {}}
         />,
       )
     })
@@ -746,6 +777,7 @@ describe('QuantChatPanel range settings', () => {
           onParamChange={() => {}}
           onSend={() => {}}
           onRunBacktest={() => {}}
+          onConfirmBacktestParams={() => {}}
         />,
       )
     })
