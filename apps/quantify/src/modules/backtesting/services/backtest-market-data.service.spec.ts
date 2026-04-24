@@ -358,7 +358,7 @@ describe('backtestMarketDataService', () => {
     expect(okxProvider.fetchHistoricalBars).toHaveBeenCalledWith(expect.objectContaining({
       symbol: 'ETHUSDC:SPOT',
       timeframe: '15m',
-      limit: 500,
+      limit: 100,
     }))
     expect(marketDataService.saveBarFromProvider).toHaveBeenCalledWith(expect.objectContaining({
       symbol: 'ETHUSDC:SPOT',
@@ -450,15 +450,75 @@ describe('backtestMarketDataService', () => {
       symbol: 'DOGEUSDT:SPOT',
       timeframe: '3m',
       end: new Date(2_000_000),
-      limit: 500,
+      limit: 100,
     }))
     expect(okxProvider.fetchHistoricalBars).toHaveBeenNthCalledWith(2, expect.objectContaining({
       symbol: 'DOGEUSDT:SPOT',
       timeframe: '3m',
       end: new Date(1_800_000),
-      limit: 500,
+      limit: 100,
     }))
     expect(marketDataService.saveBarFromProvider).toHaveBeenCalledTimes(4)
+  })
+
+  it('continues OKX backfill by observed page size until long preset ranges reach the requested start', async () => {
+    const repository = createRepositoryMock()
+    const { service, marketDataService, okxProvider } = createService(repository)
+    okxProvider.fetchSymbols.mockResolvedValue([
+      {
+        symbol: 'DOGEUSDT',
+        exchange: 'OKX',
+        baseAsset: 'DOGE',
+        quoteAsset: 'USDT',
+        instrumentType: 'SPOT',
+        status: 'ACTIVE',
+        filters: [],
+      },
+    ])
+    const timeframeMs = 60_000
+    const pageSize = 100
+    const toTs = 1_000 * timeframeMs
+    const fromTs = timeframeMs
+    okxProvider.fetchHistoricalBars.mockImplementation(async ({ end }: { end?: Date }) => {
+      const cursor = end?.getTime() ?? toTs
+      const newestIndex = Math.floor(cursor / timeframeMs)
+      return Array.from({ length: pageSize }, (_, index) => {
+        const timestamp = (newestIndex - index) * timeframeMs
+        return {
+          symbol: 'DOGEUSDT:SPOT',
+          timeframe: '1m',
+          open: '1',
+          high: '1',
+          low: '1',
+          close: '1',
+          volume: '10',
+          timestamp,
+          source: 'OKX_REST',
+          isFinal: true,
+        }
+      }).sort((a, b) => a.timestamp - b.timestamp)
+    })
+
+    await service.prepareData({
+      symbols: ['DOGEUSDT'],
+      baseTimeframe: '1m',
+      stateTimeframes: [],
+      dataRange: { fromTs, toTs },
+      strategy: {
+        id: 's-okx-long-preset',
+        params: { exchange: 'okx', marketType: 'spot' },
+        fn: () => ({ type: 'NOOP' }),
+      },
+    })
+
+    expect(okxProvider.fetchHistoricalBars.mock.calls.length).toBeGreaterThanOrEqual(10)
+    expect(okxProvider.fetchHistoricalBars).toHaveBeenLastCalledWith(expect.objectContaining({
+      end: new Date(10 * timeframeMs),
+      limit: 100,
+    }))
+    expect(marketDataService.saveBarFromProvider).toHaveBeenCalledWith(expect.objectContaining({
+      timestamp: fromTs,
+    }))
   })
 
   it('prefers perp backfill symbol when strategy params explicitly request perp market type', async () => {

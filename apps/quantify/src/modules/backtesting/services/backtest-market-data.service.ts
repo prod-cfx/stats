@@ -44,6 +44,7 @@ export interface BacktestRangeCoverage {
 @Injectable()
 export class BacktestMarketDataService {
   private static readonly DEFAULT_BACKFILL_BATCH_SIZE = 500
+  private static readonly OKX_BACKFILL_BATCH_SIZE = 100
   private readonly logger = new Logger(BacktestMarketDataService.name)
 
   constructor(
@@ -454,7 +455,7 @@ export class BacktestMarketDataService {
   ): Promise<void> {
     const timeframeMs = getMarketTimeframeMs(timeframe)
     const maxIterations = Math.ceil(
-      Math.max(range.toTs - range.fromTs, timeframeMs) / (timeframeMs * BacktestMarketDataService.DEFAULT_BACKFILL_BATCH_SIZE),
+      Math.max(range.toTs - range.fromTs, timeframeMs) / (timeframeMs * BacktestMarketDataService.OKX_BACKFILL_BATCH_SIZE),
     ) + 2
     let cursorMs = range.toTs
 
@@ -463,7 +464,7 @@ export class BacktestMarketDataService {
         symbol,
         timeframe: timeframe as MarketTimeframe,
         end: new Date(cursorMs),
-        limit: BacktestMarketDataService.DEFAULT_BACKFILL_BATCH_SIZE,
+        limit: BacktestMarketDataService.OKX_BACKFILL_BATCH_SIZE,
       })
 
       if (bars.length === 0) break

@@ -16,6 +16,7 @@ import { BacktestMarketDataService } from '../services/backtest-market-data.serv
 import { extractSnapshotBoundSymbolAvailabilityInput } from '../services/backtest-snapshot-loader.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { BacktestSymbolAvailabilityService } from '../services/backtest-symbol-availability.service'
+import { getMarketTimeframeMs } from '@/modules/market-data/utils/market-timeframe.util'
 
 interface LastBacktestRangeConfig {
   preset: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
@@ -40,6 +41,15 @@ const VALID_BACKTEST_JOB_PHASES = new Set<BacktestJobPhase>([
   'succeeded',
   'failed',
 ])
+
+const PRESET_RANGE_DAYS: Record<Exclude<LastBacktestRangeConfig['preset'], 'CUSTOM'>, number> = {
+  '7D': 7,
+  '30D': 30,
+  '90D': 90,
+  '1Y': 365,
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000
 
 interface BacktestJobRecord {
   id: string
@@ -101,16 +111,17 @@ export class BacktestJobsService {
   ) {}
 
   async createJob(input: BacktestRunInput, ownerUserId: string): Promise<BacktestJobView> {
-    await this.validateSymbolAvailability(input)
-    const conversationId = this.readConversationId(input)
+    const resolvedInput = this.resolveRequestedPresetRange(input)
+    await this.validateSymbolAvailability(resolvedInput)
+    const conversationId = this.readConversationId(resolvedInput)
     await this.validateConversationOwnership(conversationId, ownerUserId)
     await this.writeBacktestDraftConfigIfEligible({
-      input,
+      input: resolvedInput,
       ownerUserId,
       conversationId,
     })
     const id = `btjob-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
-    const inputSummary = this.createInputSummary(input)
+    const inputSummary = this.createInputSummary(resolvedInput)
     try {
       const job = await this.prisma.backtestJob.create({
         data: {
@@ -126,7 +137,7 @@ export class BacktestJobsService {
         },
       })
       queueMicrotask(() => {
-        void this.executePersistedJob(id, input, inputSummary)
+        void this.executePersistedJob(id, resolvedInput, inputSummary)
       })
       return this.toView(job)
     } catch (error) {
@@ -146,9 +157,31 @@ export class BacktestJobsService {
       }
       this.fallbackJobs.set(id, fallbackJob)
       queueMicrotask(() => {
-        void this.executeFallbackJob(id, input, inputSummary)
+        void this.executeFallbackJob(id, resolvedInput, inputSummary)
       })
       return this.toFallbackView(fallbackJob)
+    }
+  }
+
+  private resolveRequestedPresetRange(input: BacktestRunInput): BacktestRunInput {
+    const requestedRangeInput = input.requestedRangeInput
+    if (!requestedRangeInput || requestedRangeInput.preset === 'CUSTOM') {
+      return input
+    }
+
+    const presetDays = PRESET_RANGE_DAYS[requestedRangeInput.preset]
+    const timeframeMs = getMarketTimeframeMs(input.baseTimeframe)
+    const currentBoundary = Math.floor(Date.now() / timeframeMs) * timeframeMs
+    const toTs = currentBoundary - timeframeMs
+    const fromTs = toTs - presetDays * DAY_MS
+
+    if (!Number.isFinite(fromTs) || !Number.isFinite(toTs) || fromTs >= toTs) {
+      return input
+    }
+
+    return {
+      ...input,
+      dataRange: { fromTs, toTs },
     }
   }
 
