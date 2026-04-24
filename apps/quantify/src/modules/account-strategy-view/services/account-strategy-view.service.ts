@@ -1,6 +1,10 @@
 import type { AccountStrategyActionDto } from '../dto/account-strategy-action.dto'
 import type { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
-import type { AccountStrategyDetailResponseDto, AccountStrategyTimelineEventDto } from '../dto/account-strategy-detail.response.dto'
+import type {
+  AccountStrategyDetailResponseDto,
+  AccountStrategyRuleSummaryDto,
+  AccountStrategyTimelineEventDto,
+} from '../dto/account-strategy-detail.response.dto'
 import type { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
 import type { AccountStrategyListQueryDto } from '../dto/account-strategy-list-query.dto'
 import type { AccountStrategyUpdateExecutionLeverageDto } from '../dto/account-strategy-update-execution-leverage.dto'
@@ -55,7 +59,7 @@ interface FormalSnapshotDetail {
   deploymentExecutionDefaults: Record<string, unknown> | null
   deploymentExecutionConstraints: Record<string, unknown> | null
   compatibilityMetadata: Record<string, unknown> | null
-  ruleSummary: Record<string, unknown> | null
+  ruleSummary: AccountStrategyRuleSummaryDto | null
 }
 
 interface StrategyAccountFallback {
@@ -725,7 +729,7 @@ export class AccountStrategyViewService {
     }
   }
 
-  private buildPublishedSnapshotRuleSummary(snapshot: unknown): Record<string, unknown> | null {
+  private buildPublishedSnapshotRuleSummary(snapshot: unknown): AccountStrategyRuleSummaryDto | null {
     const root = this.readRecord(snapshot)
     const specSnapshot = this.readRecord(root?.specSnapshot)
     const rules = Array.isArray(specSnapshot?.rules) ? specSnapshot.rules : []

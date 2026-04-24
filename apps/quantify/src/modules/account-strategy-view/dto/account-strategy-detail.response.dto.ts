@@ -169,6 +169,34 @@ export class AccountStrategyLatestOrderDto {
   orderId!: string | null
 }
 
+export class AccountStrategyRuleSummaryItemDto {
+  @ApiPropertyOptional({ nullable: true })
+  id!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  phase!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  conditionKey!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  operator!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  value!: number | null
+
+  @ApiProperty({ type: [String] })
+  actions!: string[]
+}
+
+export class AccountStrategyRuleSummaryDto {
+  @ApiProperty({ type: [AccountStrategyRuleSummaryItemDto] })
+  rules!: AccountStrategyRuleSummaryItemDto[]
+
+  @ApiPropertyOptional({ nullable: true, type: 'object', additionalProperties: true })
+  executionPolicy!: Record<string, unknown> | null
+}
+
 export class AccountStrategySnapshotDto {
   @ApiPropertyOptional({ nullable: true })
   publishedSnapshotId!: string | null
@@ -218,8 +246,8 @@ export class AccountStrategySnapshotDto {
   @ApiPropertyOptional({ nullable: true, type: AccountStrategyConsistencySummaryDto })
   consistencySummary!: AccountStrategyConsistencySummaryDto | null
 
-  @ApiPropertyOptional({ nullable: true, type: 'object', additionalProperties: true })
-  ruleSummary!: Record<string, unknown> | null
+  @ApiPropertyOptional({ nullable: true, type: AccountStrategyRuleSummaryDto })
+  ruleSummary!: AccountStrategyRuleSummaryDto | null
 
   @ApiPropertyOptional({ nullable: true })
   executionConfigVersion!: number | null
