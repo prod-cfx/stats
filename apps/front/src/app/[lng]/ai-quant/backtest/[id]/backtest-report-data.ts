@@ -510,13 +510,13 @@ function resolveTradeReason(args: {
   legacyReason?: string
   lng: 'en' | 'zh'
 }): string | undefined {
-  if (typeof args.display === 'string' && args.display.trim()) {
-    return args.display.trim()
-  }
-
   const normalizedCode = normalizeReasonCode(args.code)
   if (normalizedCode) {
     return formatReasonCode(normalizedCode, args.lng)
+  }
+
+  if (typeof args.display === 'string' && args.display.trim()) {
+    return args.display.trim()
   }
 
   return sanitizeLegacyReason(args.legacyReason, args.lng)
@@ -539,9 +539,29 @@ function formatReasonCode(code: string, lng: 'en' | 'zh'): string {
       en: 'Take-profit condition triggered',
       zh: '达到止盈条件',
     },
+    TAKE_PROFIT_PCT: {
+      en: 'Take-profit condition triggered',
+      zh: '达到止盈条件',
+    },
     STOP_LOSS: {
       en: 'Stop loss condition triggered',
       zh: '达到止损条件',
+    },
+    STOP_LOSS_PCT: {
+      en: 'Stop loss condition triggered',
+      zh: '达到止损条件',
+    },
+    TRAILING_STOP: {
+      en: 'Trailing stop condition triggered',
+      zh: '达到移动止损条件',
+    },
+    TRAILING_STOP_PCT: {
+      en: 'Trailing stop condition triggered',
+      zh: '达到移动止损条件',
+    },
+    FORCE_EXIT: {
+      en: 'Forced exit condition triggered',
+      zh: '达到强制平仓条件',
     },
     STRATEGY_CONDITION: {
       en: 'Strategy logic condition triggered',

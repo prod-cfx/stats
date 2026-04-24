@@ -419,7 +419,49 @@ describe('backtest-report-data live mapping', () => {
             reasonOpen: 'compiled.decision_99_unknown-internal-name',
             reasonClose: 'compiled.decision_99_unknown-internal-name',
             reasonOpenCode: 'ENTRY_ON_START',
+            reasonCloseCode: 'TAKE_PROFIT',
             reasonCloseDisplay: '用户可读止盈',
+          },
+        ],
+      },
+      {
+        lng: 'en',
+        context: {
+          marketType: 'spot',
+        },
+      },
+    )
+
+    expect(data).not.toBeNull()
+    expect(data?.trades[0]).toEqual(expect.objectContaining({
+      reasonOpen: 'Entered once when the strategy started',
+      reasonClose: 'Take-profit condition triggered',
+    }))
+  })
+
+  it('maps canonical guard reason codes before using free-text display', () => {
+    const data = createBacktestReportDataFromLive(
+      'btjob-guard-code',
+      {
+        maxDrawdownPct: 0.5,
+        totalReturnPct: -1,
+        winRatePct: 0,
+        tradeCount: 1,
+      },
+      {
+        equityCurve: [
+          { ts: Date.parse('2026-04-20T00:00:00.000Z'), equity: 10000 },
+          { ts: Date.parse('2026-04-21T00:00:00.000Z'), equity: 9900 },
+        ],
+        trades: [
+          {
+            id: 'trade-guard',
+            side: 'LONG',
+            exitTs: Date.parse('2026-04-21T00:00:00.000Z'),
+            exitPrice: 1.23,
+            returnPct: -1,
+            reasonCloseCode: 'STOP_LOSS_PCT',
+            reasonCloseDisplay: '自由文本止损',
           },
         ],
       },
@@ -432,10 +474,7 @@ describe('backtest-report-data live mapping', () => {
     )
 
     expect(data).not.toBeNull()
-    expect(data?.trades[0]).toEqual(expect.objectContaining({
-      reasonOpen: '策略启动后首次入场',
-      reasonClose: '用户可读止盈',
-    }))
+    expect(data?.trades[0].reasonClose).toBe('达到止损条件')
   })
 
   it('marks reports with no closed trades as low confidence', () => {
