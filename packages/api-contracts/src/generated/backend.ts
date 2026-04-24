@@ -339,6 +339,7 @@ const LlmCodegenContinueRequestDto = z
   })
   .passthrough()
 const Function = z.object({}).partial().passthrough()
+const StrategyPlazaRunRequestDto = z.object({ runRequestId: z.string() }).passthrough()
 const AdminLoginDto = z.object({ username: z.string(), password: z.string() }).passthrough()
 const AdminProfileDto = z
   .object({
@@ -1248,6 +1249,7 @@ export const schemas = {
   CodegenSessionResponseDto,
   LlmCodegenContinueRequestDto,
   Function,
+  StrategyPlazaRunRequestDto,
   AdminLoginDto,
   AdminProfileDto,
   AdminAuthResponseDto,
@@ -4124,6 +4126,70 @@ const endpoints = makeApi([
       },
     ],
     response: z.array(PredictionMarketCardDto),
+  },
+  {
+    method: 'get',
+    path: '/strategy-plaza/templates',
+    alias: 'StrategyPlazaProxyController_list',
+    requestFormat: 'json',
+    response: z.void(),
+  },
+  {
+    method: 'get',
+    path: '/strategy-plaza/templates/:id',
+    alias: 'StrategyPlazaProxyController_detail',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'post',
+    path: '/strategy-plaza/templates/:id/edit-session',
+    alias: 'StrategyPlazaProxyController_editSession',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'post',
+    path: '/strategy-plaza/templates/:id/run',
+    alias: 'StrategyPlazaProxyController_run',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: z.object({ runRequestId: z.string() }).passthrough(),
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
   },
   {
     method: 'get',
