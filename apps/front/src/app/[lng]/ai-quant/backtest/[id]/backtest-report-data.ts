@@ -542,8 +542,9 @@ function buildReportConfidence(
 ): BacktestReportData['confidence'] {
   const isZh = lng === 'zh'
   const isPartial = context?.dataCoverage?.isPartial === true
+  const hasNoClosedTrades = trades.length === 0
   const lowSample = trades.length > 0 && trades.length < 5
-  const level: 'high' | 'medium' | 'low' = isPartial ? 'low' : lowSample ? 'medium' : 'high'
+  const level: 'high' | 'medium' | 'low' = isPartial || hasNoClosedTrades ? 'low' : lowSample ? 'medium' : 'high'
   const dataCoverageValue = isPartial
     ? (isZh ? '部分覆盖' : 'Partial coverage')
     : (isZh ? '完整覆盖' : 'Full coverage')
@@ -556,9 +557,12 @@ function buildReportConfidence(
   return {
     level,
     title: isZh ? '报告可信度' : 'Report Confidence',
-    summary: isZh
-      ? `本次报告数据${isPartial ? '存在缺口' : '覆盖完整'}，样本量${lowSample ? '偏少，需要结合更长周期验证' : '可用于观察策略表现'}。`
-      : `This report has ${isPartial ? 'partial' : 'full'} data coverage and ${lowSample ? 'limited sample size' : 'enough closed trades for review'}.`,
+    summary: buildConfidenceSummary({
+      isZh,
+      isPartial,
+      hasNoClosedTrades,
+      lowSample,
+    }),
     items: [
       { label: isZh ? '数据覆盖' : 'Data Coverage', value: dataCoverageValue },
       { label: isZh ? '样本量' : 'Sample Size', value: sampleValue },
@@ -609,6 +613,25 @@ function buildStrategyFit(
       : 'Explains whether the recorded entries and exits match the strategy execution logic.',
     items,
   }
+}
+
+function buildConfidenceSummary(args: {
+  isZh: boolean
+  isPartial: boolean
+  hasNoClosedTrades: boolean
+  lowSample: boolean
+}): string {
+  if (args.isZh) {
+    if (args.hasNoClosedTrades) {
+      return `本次报告数据${args.isPartial ? '存在缺口' : '覆盖完整'}，但没有闭合交易，不能形成可靠交易结论。`
+    }
+    return `本次报告数据${args.isPartial ? '存在缺口' : '覆盖完整'}，样本量${args.lowSample ? '偏少，需要结合更长周期验证' : '可用于观察策略表现'}。`
+  }
+
+  if (args.hasNoClosedTrades) {
+    return `This report has ${args.isPartial ? 'partial' : 'full'} data coverage, but no closed trades were recorded, so it cannot support a reliable trading conclusion.`
+  }
+  return `This report has ${args.isPartial ? 'partial' : 'full'} data coverage and ${args.lowSample ? 'limited sample size' : 'enough closed trades for review'}.`
 }
 
 function buildMarketCapabilityNotes(

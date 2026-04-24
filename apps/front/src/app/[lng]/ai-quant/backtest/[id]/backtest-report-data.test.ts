@@ -394,4 +394,42 @@ describe('backtest-report-data live mapping', () => {
     ]))
     expect(data?.trades[0].reasonClose).toBe('Stop loss condition triggered')
   })
+
+  it('marks reports with no closed trades as low confidence', () => {
+    const data = createBacktestReportDataFromLive(
+      'btjob-no-trades',
+      {
+        maxDrawdownPct: 0,
+        totalReturnPct: 0,
+        winRatePct: 0,
+        tradeCount: 0,
+      },
+      {
+        equityCurve: [
+          { ts: Date.parse('2026-04-20T00:00:00.000Z'), equity: 10000 },
+          { ts: Date.parse('2026-04-21T00:00:00.000Z'), equity: 10000 },
+        ],
+        trades: [],
+      },
+      {
+        lng: 'zh',
+        context: {
+          marketType: 'spot',
+          dataCoverage: {
+            isPartial: false,
+            barCount: 25,
+          },
+        },
+      },
+    )
+
+    expect(data).not.toBeNull()
+    expect(data?.confidence).toEqual(expect.objectContaining({
+      level: 'low',
+      summary: '本次报告数据覆盖完整，但没有闭合交易，不能形成可靠交易结论。',
+    }))
+    expect(data?.confidence.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: '样本量', value: '暂无闭合交易' }),
+    ]))
+  })
 })
