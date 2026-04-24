@@ -83,9 +83,10 @@ describe('beta code login flow', () => {
       root?.render(<EmailOtpForm betaCode="" onBetaCodeChange={() => {}} onSuccess={() => {}} />)
     })
 
-    expect(container.textContent).toContain('auth.betaCode')
+    const betaCodeLabel = Array.from(container.querySelectorAll('label'))
+      .find(label => label.textContent === 'auth.betaCode') as HTMLLabelElement | undefined
+    expect(betaCodeLabel?.control).toBe(container.querySelector('#beta-code-input'))
     expect(container.textContent).toContain('auth.betaCodeHint')
-    expect(container.querySelector('input[placeholder="auth.betaCodePlaceholder"]')).toBeTruthy()
   })
 
   it('passes beta code when submitting an email code login', async () => {

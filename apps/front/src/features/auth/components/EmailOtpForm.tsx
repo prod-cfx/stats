@@ -203,8 +203,9 @@ export function EmailOtpForm({ betaCode, onBetaCodeChange, onSuccess }: EmailOtp
       </div>
 
       <div className="space-y-2">
-        <label className="text-sm text-[color:var(--cf-muted)]">{t('auth.betaCode')}</label>
+        <label htmlFor="beta-code-input" className="text-sm text-[color:var(--cf-muted)]">{t('auth.betaCode')}</label>
         <input
+          id="beta-code-input"
           type="text"
           value={betaCode}
           onChange={event => onBetaCodeChange(event.target.value)}
