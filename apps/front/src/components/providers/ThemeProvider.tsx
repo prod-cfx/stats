@@ -32,11 +32,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       if (fromDom === 'light' || fromDom === 'dark') return fromDom
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored === 'light' || stored === 'dark') return stored
-      const preferred =
-        window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-          ? 'dark'
-          : 'light'
-      return preferred
+      return 'dark'
     } catch {
       return 'dark'
     }

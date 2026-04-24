@@ -246,7 +246,7 @@
           "gridTemplate": "网格策略模板"
         },
         "metrics": {
-          "return": "收益",
+          "return": "回报率",
           "maxDrawdown": "最大回撤",
           "winRate": "胜率",
           "trades": "成交次数"
