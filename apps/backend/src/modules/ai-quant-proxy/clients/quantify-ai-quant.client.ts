@@ -153,20 +153,20 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async listStrategyPlazaTemplates() {
-    return this.get('/strategy-plaza/templates')
+  async listStrategyPlazaTemplates<T = unknown>() {
+    return this.get<T>('/strategy-plaza/templates')
   }
 
-  async getStrategyPlazaTemplateDetail(templateId: string) {
-    return this.get(`/strategy-plaza/templates/${encodeURIComponent(templateId)}`)
+  async getStrategyPlazaTemplateDetail<T = unknown>(templateId: string) {
+    return this.get<T>(`/strategy-plaza/templates/${encodeURIComponent(templateId)}`)
   }
 
-  async runStrategyPlazaTemplate(
+  async runStrategyPlazaTemplate<T = unknown>(
     templateId: string,
     body: Record<string, unknown>,
     options: QuantifyRequestOptions & { userId: string },
-  ) {
-    return this.post(
+  ): Promise<T> {
+    return this.post<T>(
       `/strategy-plaza/templates/${encodeURIComponent(templateId)}/run`,
       { runRequestId: body.runRequestId },
       {
@@ -176,11 +176,11 @@ export class QuantifyAiQuantClient {
     )
   }
 
-  async startStrategyPlazaEditSession(
+  async startStrategyPlazaEditSession<T = unknown>(
     templateId: string,
     options: QuantifyRequestOptions & { userId: string },
-  ) {
-    return this.post(
+  ): Promise<T> {
+    return this.post<T>(
       `/strategy-plaza/templates/${encodeURIComponent(templateId)}/edit-session`,
       undefined,
       {

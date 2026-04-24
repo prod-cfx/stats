@@ -1,9 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger'
-import { IsNotEmpty, IsString } from 'class-validator'
+import { IsNotEmpty, IsString, MinLength } from 'class-validator'
 
 export class StrategyPlazaRunRequestDto {
-  @ApiProperty()
+  @ApiProperty({ minLength: 8 })
   @IsString()
   @IsNotEmpty()
+  @MinLength(8)
   runRequestId!: string
 }

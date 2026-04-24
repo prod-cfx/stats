@@ -158,14 +158,14 @@ const CreateAccountExchangeAccountDto = z
 const AiQuantConversationMessageResponseDto = z
   .object({ role: z.enum(['user', 'assistant']), content: z.string() })
   .passthrough()
-const AiQuantConversationLastBacktestRangeResponseDto = z
+const AiQuantConversationBacktestRangeResponseDto = z
   .object({
     preset: z.enum(['7D', '30D', '90D', '1Y', 'CUSTOM']),
     startAt: z.string().optional(),
     endAt: z.string().optional(),
   })
   .passthrough()
-const AiQuantConversationLastBacktestExecutionResponseDto = z
+const AiQuantConversationBacktestExecutionResponseDto = z
   .object({
     initialCash: z.number(),
     leverage: z.number().nullish(),
@@ -175,10 +175,10 @@ const AiQuantConversationLastBacktestExecutionResponseDto = z
     allowPartial: z.boolean(),
   })
   .passthrough()
-const AiQuantConversationLastBacktestConfigResponseDto = z
+const AiQuantConversationBacktestConfigResponseDto = z
   .object({
-    range: AiQuantConversationLastBacktestRangeResponseDto,
-    execution: AiQuantConversationLastBacktestExecutionResponseDto,
+    range: AiQuantConversationBacktestRangeResponseDto,
+    execution: AiQuantConversationBacktestExecutionResponseDto,
   })
   .passthrough()
 const AiQuantConversationLastBacktestSummaryResponseDto = z
@@ -196,7 +196,7 @@ const AiQuantConversationLastBacktestRefResponseDto = z
   .object({
     jobId: z.string(),
     publishedSnapshotId: z.string(),
-    config: AiQuantConversationLastBacktestConfigResponseDto,
+    config: AiQuantConversationBacktestConfigResponseDto,
     summary: AiQuantConversationLastBacktestSummaryResponseDto,
     completedAt: z.string(),
   })
@@ -210,7 +210,7 @@ const AiQuantConversationResponseDto = z
     status: z.string().optional(),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
-    backtestDraftConfig: AiQuantConversationLastBacktestConfigResponseDto.nullish(),
+    backtestDraftConfig: AiQuantConversationBacktestConfigResponseDto.nullish(),
     lastBacktestRef: AiQuantConversationLastBacktestRefResponseDto.nullish(),
     canonicalDigest: z.string().optional(),
     specDesc: z.object({}).partial().passthrough().optional(),
@@ -229,6 +229,9 @@ const AiQuantConversationResponseDto = z
     strategyInstanceId: z.string().optional(),
     rejectReason: z.string().optional(),
   })
+  .passthrough()
+const AiQuantConversationBacktestDraftConfigRequestDto = z
+  .object({ backtestDraftConfig: AiQuantConversationBacktestConfigResponseDto })
   .passthrough()
 const BasePaginationResponseDto = z
   .object({
@@ -507,7 +510,39 @@ const LlmCodegenContinueRequestDto = z
   })
   .passthrough()
 const Function = z.object({}).partial().passthrough()
-const StrategyPlazaRunRequestDto = z.object({ runRequestId: z.string() }).passthrough()
+const StrategyPlazaDisplayMetricsResponseDto = z
+  .object({
+    label: z.literal('official_sample_backtest'),
+    returnPct: z.number().nullish(),
+    winRatePct: z.number().nullish(),
+    maxDrawdownPct: z.number().nullish(),
+  })
+  .passthrough()
+const StrategyPlazaTemplateResponseDto = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string(),
+    logicDescription: z.string(),
+    tags: z.array(z.string()),
+    riskLevel: z.enum(['low', 'medium', 'high']),
+    scenario: z.string(),
+    exchange: z.literal('okx'),
+    environment: z.literal('demo'),
+    marketType: z.enum(['spot', 'perp']),
+    symbol: z.string(),
+    timeframe: z.string(),
+    positionPct: z.number(),
+    leverage: z.number().nullish(),
+    status: z.enum(['live', 'hidden']),
+    displayOrder: z.number(),
+    displayMetrics: StrategyPlazaDisplayMetricsResponseDto,
+  })
+  .passthrough()
+const StrategyPlazaRunRequestDto = z.object({ runRequestId: z.string().min(8) }).passthrough()
+const StrategyPlazaEditSessionResponseDto = z
+  .object({ sessionId: z.string(), templateId: z.string(), initialMessage: z.string() })
+  .passthrough()
 const AdminLoginDto = z.object({ username: z.string(), password: z.string() }).passthrough()
 const AdminProfileDto = z
   .object({
@@ -1403,12 +1438,13 @@ export const schemas = {
   AccountExchangeAccountResponseDto,
   CreateAccountExchangeAccountDto,
   AiQuantConversationMessageResponseDto,
-  AiQuantConversationLastBacktestRangeResponseDto,
-  AiQuantConversationLastBacktestExecutionResponseDto,
-  AiQuantConversationLastBacktestConfigResponseDto,
+  AiQuantConversationBacktestRangeResponseDto,
+  AiQuantConversationBacktestExecutionResponseDto,
+  AiQuantConversationBacktestConfigResponseDto,
   AiQuantConversationLastBacktestSummaryResponseDto,
   AiQuantConversationLastBacktestRefResponseDto,
   AiQuantConversationResponseDto,
+  AiQuantConversationBacktestDraftConfigRequestDto,
   BasePaginationResponseDto,
   AccountAiQuantStrategyListItemResponseDto,
   AccountAiQuantStrategyDetailResponseDto,
@@ -1432,7 +1468,10 @@ export const schemas = {
   CodegenSessionResponseDto,
   LlmCodegenContinueRequestDto,
   Function,
+  StrategyPlazaDisplayMetricsResponseDto,
+  StrategyPlazaTemplateResponseDto,
   StrategyPlazaRunRequestDto,
+  StrategyPlazaEditSessionResponseDto,
   AdminLoginDto,
   AdminProfileDto,
   AdminAuthResponseDto,
@@ -1538,6 +1577,30 @@ const endpoints = makeApi([
     alias: 'AccountAiQuantConversationsController_remove',
     requestFormat: 'json',
     parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'patch',
+    path: '/account/ai-quant/conversations/:id/backtest-draft',
+    alias: 'AccountAiQuantConversationsController_updateBacktestDraft',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: AiQuantConversationBacktestDraftConfigRequestDto,
+      },
       {
         name: 'authorization',
         type: 'Header',
@@ -4322,7 +4385,9 @@ const endpoints = makeApi([
     path: '/strategy-plaza/templates',
     alias: 'StrategyPlazaProxyController_list',
     requestFormat: 'json',
-    response: z.void(),
+    response: z
+      .object({ data: z.array(StrategyPlazaTemplateResponseDto), message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'get',
@@ -4336,7 +4401,9 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: z
+      .object({ data: StrategyPlazaTemplateResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'post',
@@ -4355,7 +4422,9 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: z
+      .object({ data: StrategyPlazaEditSessionResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'post',
@@ -4366,7 +4435,7 @@ const endpoints = makeApi([
       {
         name: 'body',
         type: 'Body',
-        schema: z.object({ runRequestId: z.string() }).passthrough(),
+        schema: z.object({ runRequestId: z.string().min(8) }).passthrough(),
       },
       {
         name: 'authorization',
@@ -4379,7 +4448,9 @@ const endpoints = makeApi([
         schema: z.string(),
       },
     ],
-    response: z.void(),
+    response: z
+      .object({ data: AccountAiQuantStrategyDetailResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'get',

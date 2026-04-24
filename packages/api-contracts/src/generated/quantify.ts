@@ -1086,14 +1086,14 @@ const ExchangeAccountResponseDto = z
 const AiQuantConversationMessageDto = z
   .object({ role: z.enum(['user', 'assistant']), content: z.string() })
   .passthrough()
-const AiQuantConversationLastBacktestRangeDto = z
+const AiQuantConversationBacktestRangeDto = z
   .object({
     preset: z.enum(['7D', '30D', '90D', '1Y', 'CUSTOM']),
     startAt: z.string().optional(),
     endAt: z.string().optional(),
   })
   .passthrough()
-const AiQuantConversationLastBacktestExecutionDto = z
+const AiQuantConversationBacktestExecutionDto = z
   .object({
     initialCash: z.number(),
     leverage: z.number().nullish(),
@@ -1103,10 +1103,10 @@ const AiQuantConversationLastBacktestExecutionDto = z
     allowPartial: z.boolean(),
   })
   .passthrough()
-const AiQuantConversationLastBacktestConfigDto = z
+const AiQuantConversationBacktestConfigDto = z
   .object({
-    range: AiQuantConversationLastBacktestRangeDto,
-    execution: AiQuantConversationLastBacktestExecutionDto,
+    range: AiQuantConversationBacktestRangeDto,
+    execution: AiQuantConversationBacktestExecutionDto,
   })
   .passthrough()
 const AiQuantConversationLastBacktestSummaryDto = z
@@ -1124,7 +1124,7 @@ const AiQuantConversationLastBacktestRefDto = z
   .object({
     jobId: z.string(),
     publishedSnapshotId: z.string(),
-    config: AiQuantConversationLastBacktestConfigDto,
+    config: AiQuantConversationBacktestConfigDto,
     summary: AiQuantConversationLastBacktestSummaryDto,
     completedAt: z.string(),
   })
@@ -1138,7 +1138,7 @@ const AiQuantConversationResponseDto = z
     status: z.string().optional(),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
-    backtestDraftConfig: AiQuantConversationLastBacktestConfigDto.nullish(),
+    backtestDraftConfig: AiQuantConversationBacktestConfigDto.nullish(),
     lastBacktestRef: AiQuantConversationLastBacktestRefDto.nullish(),
     canonicalDigest: z.string().optional(),
     specDesc: z.object({}).partial().passthrough().optional(),
@@ -1157,6 +1157,9 @@ const AiQuantConversationResponseDto = z
     strategyInstanceId: z.string().optional(),
     rejectReason: z.string().optional(),
   })
+  .passthrough()
+const AiQuantConversationBacktestDraftConfigRequestDto = z
+  .object({ backtestDraftConfig: AiQuantConversationBacktestConfigDto })
   .passthrough()
 const CodegenGuideConfigDto = z
   .object({
@@ -1641,12 +1644,13 @@ export const schemas = {
   CreateExchangeAccountDto,
   ExchangeAccountResponseDto,
   AiQuantConversationMessageDto,
-  AiQuantConversationLastBacktestRangeDto,
-  AiQuantConversationLastBacktestExecutionDto,
-  AiQuantConversationLastBacktestConfigDto,
+  AiQuantConversationBacktestRangeDto,
+  AiQuantConversationBacktestExecutionDto,
+  AiQuantConversationBacktestConfigDto,
   AiQuantConversationLastBacktestSummaryDto,
   AiQuantConversationLastBacktestRefDto,
   AiQuantConversationResponseDto,
+  AiQuantConversationBacktestDraftConfigRequestDto,
   CodegenGuideConfigDto,
   StartCodegenSessionDto,
   CodegenConversationMessageDto,
@@ -1710,6 +1714,35 @@ const endpoints = makeApi([
     alias: 'AccountAiQuantConversationsController_remove',
     requestFormat: 'json',
     parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'patch',
+    path: '/account/ai-quant/conversations/:id/backtest-draft',
+    alias: 'AccountAiQuantConversationsController_updateBacktestDraft',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: AiQuantConversationBacktestDraftConfigRequestDto,
+      },
       {
         name: 'authorization',
         type: 'Header',
