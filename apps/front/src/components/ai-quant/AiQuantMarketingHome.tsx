@@ -1,6 +1,6 @@
 'use client'
 
-import { motion, type Transition } from 'framer-motion'
+import { motion, type Transition, useReducedMotion } from 'framer-motion'
 import { ArrowRight, BarChart3, LineChart, Play, ShieldCheck, Sparkles, Zap } from 'lucide-react'
 import Link from 'next/link'
 import { useTranslation } from 'react-i18next'
@@ -47,25 +47,27 @@ export function AiQuantMarketingHome({ lng }: { lng: 'zh' | 'en' }) {
 }
 
 function ThemeAmbientBackground() {
+  const shouldReduceMotion = useReducedMotion()
+
   return (
     <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
       <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(15,23,42,0.035)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.03)_1px,transparent_1px)] bg-[size:48px_48px] dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.018)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.018)_1px,transparent_1px)]" />
       <motion.div
         aria-hidden="true"
-        animate={{ opacity: [0.5, 0.82, 0.5], scale: [0.96, 1.06, 0.96] }}
-        transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut' }}
+        animate={shouldReduceMotion ? { opacity: 0.66, scale: 1 } : { opacity: [0.5, 0.82, 0.5], scale: [0.96, 1.06, 0.96] }}
+        transition={shouldReduceMotion ? undefined : { duration: 10, repeat: Infinity, ease: 'easeInOut' }}
         className="absolute -top-48 left-1/2 h-[38rem] w-[38rem] -translate-x-1/2 rounded-full bg-blue-300/24 blur-[140px] dark:bg-blue-500/14"
       />
       <motion.div
         aria-hidden="true"
-        animate={{ opacity: [0.34, 0.62, 0.34], scale: [1, 1.12, 1] }}
-        transition={{ duration: 13, repeat: Infinity, ease: 'easeInOut', delay: 1.2 }}
+        animate={shouldReduceMotion ? { opacity: 0.48, scale: 1 } : { opacity: [0.34, 0.62, 0.34], scale: [1, 1.12, 1] }}
+        transition={shouldReduceMotion ? undefined : { duration: 13, repeat: Infinity, ease: 'easeInOut', delay: 1.2 }}
         className="absolute top-1/4 -left-52 h-[34rem] w-[34rem] rounded-full bg-violet-300/22 blur-[130px] dark:bg-violet-500/12"
       />
       <motion.div
         aria-hidden="true"
-        animate={{ opacity: [0.28, 0.5, 0.28], scale: [1.04, 0.95, 1.04] }}
-        transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut', delay: 0.6 }}
+        animate={shouldReduceMotion ? { opacity: 0.38, scale: 1 } : { opacity: [0.28, 0.5, 0.28], scale: [1.04, 0.95, 1.04] }}
+        transition={shouldReduceMotion ? undefined : { duration: 12, repeat: Infinity, ease: 'easeInOut', delay: 0.6 }}
         className="absolute -right-48 bottom-0 h-[32rem] w-[32rem] rounded-full bg-cyan-300/18 blur-[130px] dark:bg-cyan-500/10"
       />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.78),transparent_46%)] dark:bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.055),transparent_50%)]" />
@@ -121,7 +123,7 @@ function GradientTitle({ title, lng }: { title: string, lng: 'zh' | 'en' }) {
         <span key={`${part}-${index}`}>
           {part}
           {index < parts.length - 1 && (
-            <span className="bg-gradient-to-r from-[#60a5fa] via-primary to-[#c084fc] bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-[#3e69ff] via-[#6d57ff] to-[#8a5bff] bg-clip-text text-transparent dark:from-[#60a5fa] dark:via-primary dark:to-[#c084fc]">
               {target}
             </span>
           )}
@@ -141,26 +143,28 @@ function HeroLines() {
 }
 
 function HeroParticles() {
+  const shouldReduceMotion = useReducedMotion()
+
   return (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0">
       <motion.div
-        animate={{ opacity: [0.2, 0.75, 0.2], y: [0, -10, 0] }}
-        transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
+        animate={shouldReduceMotion ? { opacity: 0.5, y: 0 } : { opacity: [0.2, 0.75, 0.2], y: [0, -10, 0] }}
+        transition={shouldReduceMotion ? undefined : { duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
         className="absolute top-[26%] left-[18%] h-1.5 w-1.5 rounded-full bg-blue-400 shadow-[0_0_18px_rgba(96,165,250,0.75)]"
       />
       <motion.div
-        animate={{ opacity: [0.15, 0.65, 0.15], y: [0, 12, 0] }}
-        transition={{ duration: 6.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+        animate={shouldReduceMotion ? { opacity: 0.44, y: 0 } : { opacity: [0.15, 0.65, 0.15], y: [0, 12, 0] }}
+        transition={shouldReduceMotion ? undefined : { duration: 6.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
         className="absolute top-[34%] right-[20%] h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_20px_rgba(167,139,250,0.7)]"
       />
       <motion.div
-        animate={{ opacity: [0.18, 0.58, 0.18], y: [0, -8, 0] }}
-        transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut', delay: 1.1 }}
+        animate={shouldReduceMotion ? { opacity: 0.38, y: 0 } : { opacity: [0.18, 0.58, 0.18], y: [0, -8, 0] }}
+        transition={shouldReduceMotion ? undefined : { duration: 6, repeat: Infinity, ease: 'easeInOut', delay: 1.1 }}
         className="absolute bottom-[25%] left-[25%] h-1 w-1 rounded-full bg-cyan-300 shadow-[0_0_16px_rgba(103,232,249,0.7)]"
       />
       <motion.div
-        animate={{ opacity: [0.12, 0.5, 0.12], y: [0, 9, 0] }}
-        transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut', delay: 1.6 }}
+        animate={shouldReduceMotion ? { opacity: 0.32, y: 0 } : { opacity: [0.12, 0.5, 0.12], y: [0, 9, 0] }}
+        transition={shouldReduceMotion ? undefined : { duration: 7, repeat: Infinity, ease: 'easeInOut', delay: 1.6 }}
         className="absolute right-[28%] bottom-[19%] h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_18px_rgba(100,108,255,0.72)]"
       />
     </div>
