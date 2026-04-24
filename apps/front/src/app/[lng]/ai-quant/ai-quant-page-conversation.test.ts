@@ -720,7 +720,7 @@ describe('ai-quant-page-conversation', () => {
       backtestSlippageBps: 10,
       backtestFeeBps: 5,
       backtestPriceSource: 'close',
-      backtestAllowPartial: true,
+      backtestAllowPartial: false,
     }))
   })
 

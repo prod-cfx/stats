@@ -366,6 +366,101 @@ describe('backtestMarketDataService', () => {
     }))
   })
 
+  it('backfills OKX historical bars backward until the requested range start is covered', async () => {
+    const repository = createRepositoryMock()
+    const { service, marketDataService, okxProvider } = createService(repository)
+    okxProvider.fetchSymbols.mockResolvedValue([
+      {
+        symbol: 'DOGEUSDT',
+        exchange: 'OKX',
+        baseAsset: 'DOGE',
+        quoteAsset: 'USDT',
+        instrumentType: 'SPOT',
+        status: 'ACTIVE',
+        filters: [],
+      },
+    ])
+    okxProvider.fetchHistoricalBars
+      .mockResolvedValueOnce([
+        {
+          symbol: 'DOGEUSDT:SPOT',
+          timeframe: '3m',
+          open: '1',
+          high: '1',
+          low: '1',
+          close: '1',
+          volume: '10',
+          timestamp: 1_800_000,
+          source: 'OKX_REST',
+          isFinal: true,
+        },
+        {
+          symbol: 'DOGEUSDT:SPOT',
+          timeframe: '3m',
+          open: '1',
+          high: '1',
+          low: '1',
+          close: '1',
+          volume: '10',
+          timestamp: 2_000_000,
+          source: 'OKX_REST',
+          isFinal: true,
+        },
+      ])
+      .mockResolvedValueOnce([
+        {
+          symbol: 'DOGEUSDT:SPOT',
+          timeframe: '3m',
+          open: '1',
+          high: '1',
+          low: '1',
+          close: '1',
+          volume: '10',
+          timestamp: 1_000_000,
+          source: 'OKX_REST',
+          isFinal: true,
+        },
+        {
+          symbol: 'DOGEUSDT:SPOT',
+          timeframe: '3m',
+          open: '1',
+          high: '1',
+          low: '1',
+          close: '1',
+          volume: '10',
+          timestamp: 1_200_000,
+          source: 'OKX_REST',
+          isFinal: true,
+        },
+      ])
+
+    await service.prepareData({
+      symbols: ['DOGEUSDT'],
+      baseTimeframe: '3m',
+      stateTimeframes: [],
+      dataRange: { fromTs: 1_000_000, toTs: 2_000_000 },
+      strategy: {
+        id: 's-okx-spot',
+        params: { exchange: 'okx', marketType: 'spot' },
+        fn: () => ({ type: 'NOOP' }),
+      },
+    })
+
+    expect(okxProvider.fetchHistoricalBars).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      symbol: 'DOGEUSDT:SPOT',
+      timeframe: '3m',
+      end: new Date(2_000_000),
+      limit: 500,
+    }))
+    expect(okxProvider.fetchHistoricalBars).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      symbol: 'DOGEUSDT:SPOT',
+      timeframe: '3m',
+      end: new Date(1_800_000),
+      limit: 500,
+    }))
+    expect(marketDataService.saveBarFromProvider).toHaveBeenCalledTimes(4)
+  })
+
   it('prefers perp backfill symbol when strategy params explicitly request perp market type', async () => {
     const repository = createRepositoryMock()
     const { service, okxProvider } = createService(repository)

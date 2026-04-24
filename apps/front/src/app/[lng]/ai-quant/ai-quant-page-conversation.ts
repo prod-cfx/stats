@@ -310,7 +310,7 @@ export const DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES = {
   backtestSlippageBps: 10,
   backtestFeeBps: 5,
   backtestPriceSource: 'close',
-  backtestAllowPartial: true,
+  backtestAllowPartial: false,
 } as const
 
 export function hasExplicitBacktestExecutionOverrides(values: Record<string, unknown>): boolean {
@@ -352,10 +352,26 @@ function resolveBacktestExecutionPriceSource(
 }
 
 function resolveBacktestAllowPartial(
-  _value: unknown,
-  _fallback: boolean,
+  value: unknown,
+  fallback: boolean,
 ): { value: boolean, valid: boolean } {
-  return { value: true, valid: true }
+  if (typeof value === 'boolean') {
+    return { value, valid: true }
+  }
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase()
+    if (normalized === 'true') {
+      return { value: true, valid: true }
+    }
+    if (normalized === 'false') {
+      return { value: false, valid: true }
+    }
+    return { value: fallback, valid: false }
+  }
+  if (value === undefined || value === null) {
+    return { value: fallback, valid: true }
+  }
+  return { value: fallback, valid: false }
 }
 
 export function resolveBacktestExecutionConfig(
@@ -702,7 +718,7 @@ function mergeSnapshotBoundParamValues(input: {
           backtestSlippageBps: snapshotBacktestConfigDefaults.slippageBps,
           backtestFeeBps: snapshotBacktestConfigDefaults.feeBps,
           backtestPriceSource: snapshotBacktestConfigDefaults.priceSource,
-          backtestAllowPartial: true,
+          backtestAllowPartial: snapshotBacktestConfigDefaults.allowPartial,
         }
       : null
 
@@ -744,7 +760,7 @@ export function applyBacktestDraftConfigToValues(input: {
     backtestSlippageBps: backtestDraftConfig.execution.slippageBps,
     backtestFeeBps: backtestDraftConfig.execution.feeBps,
     backtestPriceSource: backtestDraftConfig.execution.priceSource,
-    backtestAllowPartial: true,
+    backtestAllowPartial: backtestDraftConfig.execution.allowPartial,
   }
 }
 
@@ -992,7 +1008,7 @@ function normalizeLastBacktestExecutionConfig(
     slippageBps,
     feeBps,
     priceSource,
-    allowPartial: true,
+    allowPartial,
   }
 }
 
@@ -1024,7 +1040,7 @@ export function buildBacktestDraftConfigFromValues(
       slippageBps: execution.slippageBps,
       feeBps: execution.feeBps,
       priceSource: execution.priceSource,
-      allowPartial: true,
+      allowPartial: execution.allowPartial,
     },
   }
 }
@@ -1348,25 +1364,39 @@ export function shouldInvalidatePublicationForParamChange(key: string): boolean 
   return !NON_STRATEGY_PARAM_KEYS.has(key) && !BACKTEST_EXECUTION_PARAM_KEY_SET.has(key)
 }
 
-function stripBacktestExecutionParamValues(
+function hasLegacyImplicitBacktestExecutionConfig(
+  values: Record<string, unknown>,
+): boolean {
+  return BACKTEST_EXECUTION_PARAM_KEYS.every((key) => {
+    if (key === 'backtestAllowPartial') {
+      return values[key] === DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES[key] || values[key] === true
+    }
+    return values[key] === DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES[key]
+  })
+}
+
+function isImplicitBacktestExecutionParamValue(
+  key: (typeof BACKTEST_EXECUTION_PARAM_KEYS)[number],
+  value: unknown,
+): boolean {
+  return key === 'backtestAllowPartial'
+    ? value === DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES[key] || value === true
+    : value === DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES[key]
+}
+
+function stripImplicitBacktestExecutionParamValues(
   values: Record<string, unknown>,
 ): Record<string, unknown> {
   const nextValues = { ...values }
   BACKTEST_EXECUTION_PARAM_KEYS.forEach((key) => {
-    delete nextValues[key]
+    if (isImplicitBacktestExecutionParamValue(key, nextValues[key])) {
+      delete nextValues[key]
+    }
   })
   return nextValues
 }
 
-function hasLegacyImplicitBacktestExecutionConfig(
-  values: Record<string, unknown>,
-): boolean {
-  return BACKTEST_EXECUTION_PARAM_KEYS.every(
-    key => values[key] === DEFAULT_BACKTEST_EXECUTION_PARAM_VALUES[key],
-  )
-}
-
-function stripImplicitBacktestExecutionParamValues(
+function stripCurrentDefaultBacktestExecutionParamValues(
   values: Record<string, unknown>,
 ): Record<string, unknown> {
   const nextValues = { ...values }
@@ -1376,6 +1406,15 @@ function stripImplicitBacktestExecutionParamValues(
     }
   })
   return nextValues
+}
+
+function normalizeImplicitBacktestExecutionParamValues(
+  values: Record<string, unknown>,
+): Record<string, unknown> {
+  const shouldStripLegacy = hasLegacyImplicitBacktestExecutionConfig(values)
+  return shouldStripLegacy
+    ? stripImplicitBacktestExecutionParamValues(values)
+    : stripCurrentDefaultBacktestExecutionParamValues(values)
 }
 
 function normalizeHydratedBacktestExecutionConfig(input: {
@@ -1389,7 +1428,7 @@ function normalizeHydratedBacktestExecutionConfig(input: {
 } {
   if (input.publishedSnapshotId && !input.publishedSnapshotParamValues) {
     return {
-      paramValues: stripImplicitBacktestExecutionParamValues(input.paramValues),
+      paramValues: normalizeImplicitBacktestExecutionParamValues(input.paramValues),
       explicit: false,
     }
   }
@@ -1407,7 +1446,7 @@ function normalizeHydratedBacktestExecutionConfig(input: {
   }
 
   return {
-    paramValues: stripBacktestExecutionParamValues(input.paramValues),
+    paramValues: normalizeImplicitBacktestExecutionParamValues(input.paramValues),
     explicit: false,
   }
 }
