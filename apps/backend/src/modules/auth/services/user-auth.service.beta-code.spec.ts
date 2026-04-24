@@ -199,6 +199,28 @@ describe('UserAuthService beta code creation flows', () => {
     })
   })
 
+  it('keeps Telegram desktop intent when new-user beta code consumption fails', async () => {
+    const { service, repository, betaCodeService, cacheService } = await createContext()
+    cacheService.get.mockResolvedValue({
+      status: 'confirmed',
+      intent: 'login',
+      lng: 'zh',
+      redirect: '/zh/account',
+      createdAt: Date.now(),
+      telegramId: '654321',
+    })
+    repository.findUserCredential.mockResolvedValue(null)
+    repository.createUser.mockResolvedValue(createUser({ id: 'user-new-desktop', email: 'tg_654321@telegram.local' }))
+    betaCodeService.consumeForNewUser.mockRejectedValue(new Error('invalid beta code'))
+
+    await expect(service.telegramDesktopExchange({
+      intentId: 'intent-1',
+      betaCode: 'BADCODE',
+    })).rejects.toThrow('invalid beta code')
+
+    expect(cacheService.del).not.toHaveBeenCalled()
+  })
+
   it('does not consume beta code when Telegram desktop exchange finds an existing credential', async () => {
     const { service, repository, betaCodeService, cacheService } = await createContext()
     const user = createUser({ id: 'user-existing-desktop', email: 'desktop-tg@example.com' })

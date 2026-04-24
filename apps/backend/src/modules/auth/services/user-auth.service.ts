@@ -343,7 +343,7 @@ export class UserAuthService {
   }
 
   async telegramDesktopExchange(dto: TelegramDesktopExchangeRequestDto): Promise<AuthResponseDto> {
-    const payload = await this.consumeTelegramDesktopIntent(dto.intentId, 'login')
+    const payload = await this.readTelegramDesktopIntent(dto.intentId, 'login')
     const telegramId = payload.telegramId!
     const credentialValue = this.buildTelegramCredentialValue(telegramId)
 
@@ -352,11 +352,15 @@ export class UserAuthService {
     if (credential?.user) {
       const roles = await this.getUserRoles(credential.user.id)
       if (roles.length > 0) {
-        return this.buildAuthResponse(credential.user, roles)
+        const response = await this.buildAuthResponse(credential.user, roles)
+        await this.deleteTelegramDesktopIntent(dto.intentId)
+        return response
       }
       await this.ensureDefaultRoleAssignment(credential.user.id)
       const latestRoles = await this.getUserRoles(credential.user.id)
-      return this.buildAuthResponse(credential.user, latestRoles)
+      const response = await this.buildAuthResponse(credential.user, latestRoles)
+      await this.deleteTelegramDesktopIntent(dto.intentId)
+      return response
     }
 
     const placeholderEmail = this.buildTelegramPlaceholderEmail(telegramId)
@@ -372,11 +376,13 @@ export class UserAuthService {
     })
 
     const roles = await this.getUserRoles(user.id)
-    return this.buildAuthResponse(user, roles)
+    const response = await this.buildAuthResponse(user, roles)
+    await this.deleteTelegramDesktopIntent(dto.intentId)
+    return response
   }
 
   async bindTelegramByDesktopIntent(userId: string, dto: TelegramDesktopExchangeRequestDto): Promise<AuthResponseDto> {
-    const payload = await this.consumeTelegramDesktopIntent(dto.intentId, 'bind')
+    const payload = await this.readTelegramDesktopIntent(dto.intentId, 'bind')
     const credentialValue = this.buildTelegramCredentialValue(payload.telegramId!)
 
     const existing = await this.userAuthRepository.findUserCredential(credentialValue)
@@ -398,7 +404,9 @@ export class UserAuthService {
 
     const user = await this.userAuthRepository.findUserByIdOrThrow(userId)
     const roles = await this.getUserRoles(userId)
-    return this.buildAuthResponse(user, roles)
+    const response = await this.buildAuthResponse(user, roles)
+    await this.deleteTelegramDesktopIntent(dto.intentId)
+    return response
   }
 
   async handleTelegramBotWebhook(dto: TelegramBotWebhookRequestDto, secretToken?: string): Promise<void> {
@@ -775,7 +783,7 @@ export class UserAuthService {
     }
   }
 
-  private async consumeTelegramDesktopIntent(
+  private async readTelegramDesktopIntent(
     intentId: string,
     expectedIntent: 'login' | 'bind',
   ): Promise<TelegramDesktopIntentPayload> {
@@ -799,8 +807,11 @@ export class UserAuthService {
         status: HttpStatus.UNAUTHORIZED,
       })
     }
-    await this.cacheService.del(cacheKey)
     return payload
+  }
+
+  private async deleteTelegramDesktopIntent(intentId: string): Promise<void> {
+    await this.cacheService.del(this.telegramDesktopIntentCacheKey(intentId))
   }
 
   private async sendTelegramMessage(chatId: number, text: string): Promise<void> {
