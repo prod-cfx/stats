@@ -199,11 +199,12 @@ function WorkflowSection() {
           {workflowKeys.map((key, index) => (
             <motion.div
               key={key}
-              initial="hidden"
-              whileInView="visible"
+              initial={shouldReduceMotion ? false : 'hidden'}
+              whileInView={shouldReduceMotion ? undefined : 'visible'}
+              animate={shouldReduceMotion ? { opacity: 1, y: 0 } : undefined}
               variants={revealUp}
               viewport={{ once: true, margin: '-80px' }}
-              transition={{ ...revealTransition, delay: index * 0.1 }}
+              transition={shouldReduceMotion ? undefined : { ...revealTransition, delay: index * 0.06 }}
               whileHover={shouldReduceMotion ? undefined : { y: -4 }}
               className={`rounded-xl p-7 ${panelClass}`}
             >
@@ -405,11 +406,12 @@ function AdvantageSection() {
           {advantageKeys.map((key, index) => (
             <motion.div
               key={key}
-              initial="hidden"
-              whileInView="visible"
+              initial={shouldReduceMotion ? false : 'hidden'}
+              whileInView={shouldReduceMotion ? undefined : 'visible'}
+              animate={shouldReduceMotion ? { opacity: 1, y: 0 } : undefined}
               variants={revealUp}
               viewport={{ once: true, margin: '-80px' }}
-              transition={{ ...revealTransition, delay: index * 0.1 }}
+              transition={shouldReduceMotion ? undefined : { ...revealTransition, delay: index * 0.06 }}
               whileHover={shouldReduceMotion ? undefined : { y: -4 }}
               className={`relative overflow-hidden rounded-xl p-8 ${panelClass}`}
             >
