@@ -337,6 +337,39 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
     expect(text).not.toContain('相对开仓均价盈利达到 2%')
   })
 
+  it('uses neutral take-profit text when the basis is unknown', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        rules: [
+          {
+            id: 'risk-take-profit-unknown-basis',
+            phase: 'risk',
+            condition: {
+              key: 'risk.take_profit_pct',
+              value: 0.02,
+              params: {
+                basis: 'future_basis',
+              },
+            },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+      },
+      fallbackMeta: {
+        exchange: 'okx',
+        symbol: 'DOGEUSDT',
+        timeframe: '3m',
+        positionPct: 10,
+      },
+    })
+
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(text).toContain('风控: 盈利达到 2% -> 平仓')
+    expect(text).not.toContain('相对开仓均价')
+    expect(text).not.toContain('future_basis')
+  })
+
   it('renders the first exit path as AND_AT_THEN instead of OR_THEN', () => {
     const graph = buildDisplayLogicGraphFromCodegenSpec({
       specDesc: {
