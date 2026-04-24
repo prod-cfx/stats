@@ -6,8 +6,27 @@ import { createHash } from 'node:crypto'
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
 import { StrategyPlazaOfficialSnapshotUnavailableException } from '../exceptions'
+import {
+  buildOfficialTemplateBacktestConfigDefaults,
+  buildOfficialTemplateDataRequirements,
+  buildOfficialTemplateDeploymentExecutionConstraints,
+  buildOfficialTemplateDeploymentExecutionDefaults,
+  buildOfficialTemplateParamsSnapshot,
+  buildOfficialTemplateStrategyConfig,
+} from '../utils/official-strategy-plaza-snapshot-content'
 
 const LLM_MODEL = 'official-strategy-plaza'
+
+type TemplateRuntimeContent = Pick<
+  Prisma.PublishedStrategySnapshotCreateInput,
+  | 'paramsSnapshot'
+  | 'strategyConfig'
+  | 'backtestConfigDefaults'
+  | 'deploymentExecutionDefaults'
+  | 'deploymentExecutionConstraints'
+  | 'dataRequirements'
+  | 'lockedParams'
+>
 
 function sha256(value: string): string {
   return createHash('sha256').update(value).digest('hex')
@@ -35,6 +54,7 @@ export class StrategyPlazaOfficialSnapshotRepository {
     const sessionId = this.buildSessionId(input.userId, input.template.id, sourceSnapshot)
     const existing = await this.findExistingUserSnapshot(input.userId, sessionId, sourceSnapshot)
     if (existing) {
+      await this.updateSnapshotTemplateRuntimeContent(existing.id, input.template)
       await this.bindStrategyInstanceToSnapshot(existing.strategyInstanceId, input.template, sourceSnapshot, existing)
       return { id: existing.id }
     }
@@ -60,7 +80,7 @@ export class StrategyPlazaOfficialSnapshotRepository {
       update: {
         description: input.template.description,
         script: sourceSnapshot.scriptSnapshot,
-        defaultParams: this.resolveParamsSnapshot(input.template, sourceSnapshot) as Prisma.InputJsonValue,
+        defaultParams: buildOfficialTemplateParamsSnapshot(input.template) as Prisma.InputJsonValue,
         rulesJson: sourceSnapshot.specSnapshot as Prisma.InputJsonValue,
         updatedBy: input.userId,
         metadata: this.buildOfficialMetadata(input.template, sourceSnapshot) as Prisma.InputJsonValue,
@@ -77,12 +97,12 @@ export class StrategyPlazaOfficialSnapshotRepository {
         execution: {
           timeframe: input.template.runConfig.timeframe,
         } as Prisma.InputJsonValue,
-        dataRequirements: this.resolveDataRequirements(input.template, sourceSnapshot) as Prisma.InputJsonValue,
+        dataRequirements: buildOfficialTemplateDataRequirements(input.template) as Prisma.InputJsonValue,
         llmModel: LLM_MODEL,
         promptTemplate: 'OFFICIAL_STRATEGY_PLAZA_TEMPLATE',
         script: sourceSnapshot.scriptSnapshot,
         paramsSchema: {} as Prisma.InputJsonValue,
-        defaultParams: this.resolveParamsSnapshot(input.template, sourceSnapshot) as Prisma.InputJsonValue,
+        defaultParams: buildOfficialTemplateParamsSnapshot(input.template) as Prisma.InputJsonValue,
         rulesJson: sourceSnapshot.specSnapshot as Prisma.InputJsonValue,
         requiredFields: [],
         status: 'live',
@@ -102,7 +122,7 @@ export class StrategyPlazaOfficialSnapshotRepository {
         },
       },
       update: {
-        params: this.resolveParamsSnapshot(input.template, sourceSnapshot) as Prisma.InputJsonValue,
+        params: buildOfficialTemplateParamsSnapshot(input.template) as Prisma.InputJsonValue,
         updatedBy: input.userId,
         metadata: this.buildOfficialMetadata(input.template, sourceSnapshot) as Prisma.InputJsonValue,
       },
@@ -111,7 +131,7 @@ export class StrategyPlazaOfficialSnapshotRepository {
         name: this.buildStrategyInstanceName(input.template),
         description: input.template.description,
         llmModel: LLM_MODEL,
-        params: this.resolveParamsSnapshot(input.template, sourceSnapshot) as Prisma.InputJsonValue,
+        params: buildOfficialTemplateParamsSnapshot(input.template) as Prisma.InputJsonValue,
         status: 'draft',
         mode: 'PAPER',
         createdBy: input.userId,
@@ -132,13 +152,14 @@ export class StrategyPlazaOfficialSnapshotRepository {
       update: {
         strategyInstanceId: strategyInstance.id,
         strategyTemplateId: strategyTemplate.id,
+        ...this.copySnapshotContent(sourceSnapshot, input.template),
       },
       create: {
         id: copiedSnapshotId,
         session: { connect: { id: sessionId } },
         strategyTemplateId: strategyTemplate.id,
         strategyInstanceId: strategyInstance.id,
-        ...this.copySnapshotContent(sourceSnapshot),
+        ...this.copySnapshotContent(sourceSnapshot, input.template),
       },
       select: { id: true, snapshotHash: true },
     })
@@ -146,6 +167,16 @@ export class StrategyPlazaOfficialSnapshotRepository {
     await this.bindStrategyInstanceToSnapshot(strategyInstance.id, input.template, sourceSnapshot, snapshot)
 
     return { id: snapshot.id }
+  }
+
+  private async updateSnapshotTemplateRuntimeContent(
+    snapshotId: string,
+    template: OfficialStrategyPlazaTemplate,
+  ): Promise<void> {
+    await this.txHost.tx.publishedStrategySnapshot.update({
+      where: { id: snapshotId },
+      data: this.buildTemplateRuntimeContent(template),
+    })
   }
 
   private async findExistingUserSnapshot(
@@ -227,33 +258,21 @@ export class StrategyPlazaOfficialSnapshotRepository {
     }
   }
 
-  private buildParamsSnapshot(template: OfficialStrategyPlazaTemplate): Record<string, unknown> {
+  private buildTemplateRuntimeContent(template: OfficialStrategyPlazaTemplate): TemplateRuntimeContent {
     return {
-      exchange: template.runConfig.exchange,
-      marketType: template.runConfig.marketType,
-      symbol: template.runConfig.symbol,
-      timeframe: template.runConfig.timeframe,
-      positionPct: template.runConfig.positionPct,
-      leverage: template.runConfig.leverage,
+      paramsSnapshot: buildOfficialTemplateParamsSnapshot(template) as Prisma.InputJsonValue,
+      strategyConfig: buildOfficialTemplateStrategyConfig(template) as Prisma.InputJsonValue,
+      backtestConfigDefaults: buildOfficialTemplateBacktestConfigDefaults(template) as Prisma.InputJsonValue,
+      deploymentExecutionDefaults: buildOfficialTemplateDeploymentExecutionDefaults(template) as Prisma.InputJsonValue,
+      deploymentExecutionConstraints: buildOfficialTemplateDeploymentExecutionConstraints(template) as Prisma.InputJsonValue,
+      dataRequirements: buildOfficialTemplateDataRequirements(template) as Prisma.InputJsonValue,
+      lockedParams: buildOfficialTemplateParamsSnapshot(template) as Prisma.InputJsonValue,
     }
-  }
-
-  private resolveParamsSnapshot(
-    template: OfficialStrategyPlazaTemplate,
-    sourceSnapshot: PublishedStrategySnapshot,
-  ): Record<string, unknown> {
-    return this.readRecord(sourceSnapshot.paramsSnapshot) ?? this.buildParamsSnapshot(template)
-  }
-
-  private resolveDataRequirements(
-    template: OfficialStrategyPlazaTemplate,
-    sourceSnapshot: PublishedStrategySnapshot,
-  ): Record<string, unknown> {
-    return this.readRecord(sourceSnapshot.dataRequirements) ?? { primary: [template.runConfig.timeframe] }
   }
 
   private copySnapshotContent(
     sourceSnapshot: PublishedStrategySnapshot,
+    template: OfficialStrategyPlazaTemplate,
   ): Omit<Prisma.PublishedStrategySnapshotCreateInput, 'session' | 'strategyTemplateId' | 'strategyInstanceId'> {
     return {
       snapshotHash: sourceSnapshot.snapshotHash,
@@ -270,25 +289,13 @@ export class StrategyPlazaOfficialSnapshotRepository {
       astSnapshot: sourceSnapshot.astSnapshot as Prisma.InputJsonValue | null | undefined,
       compiledManifest: sourceSnapshot.compiledManifest as Prisma.InputJsonValue | null | undefined,
       consistencyReport: sourceSnapshot.consistencyReport as Prisma.InputJsonValue,
-      paramsSnapshot: sourceSnapshot.paramsSnapshot as Prisma.InputJsonValue | null | undefined,
-      strategyConfig: sourceSnapshot.strategyConfig as Prisma.InputJsonValue | null | undefined,
-      backtestConfigDefaults: sourceSnapshot.backtestConfigDefaults as Prisma.InputJsonValue | null | undefined,
-      deploymentExecutionDefaults: sourceSnapshot.deploymentExecutionDefaults as Prisma.InputJsonValue | null | undefined,
-      deploymentExecutionConstraints: sourceSnapshot.deploymentExecutionConstraints as Prisma.InputJsonValue | null | undefined,
+      ...this.buildTemplateRuntimeContent(template),
       executionEnvelope: sourceSnapshot.executionEnvelope as Prisma.InputJsonValue | null | undefined,
       executionPolicy: sourceSnapshot.executionPolicy as Prisma.InputJsonValue | null | undefined,
-      dataRequirements: sourceSnapshot.dataRequirements as Prisma.InputJsonValue | null | undefined,
       userIntentSummary: sourceSnapshot.userIntentSummary as Prisma.InputJsonValue,
       strategySummary: sourceSnapshot.strategySummary as Prisma.InputJsonValue,
       scriptSummary: sourceSnapshot.scriptSummary as Prisma.InputJsonValue,
-      lockedParams: sourceSnapshot.lockedParams as Prisma.InputJsonValue,
       snapshotVersion: sourceSnapshot.snapshotVersion,
     }
-  }
-
-  private readRecord(value: unknown): Record<string, unknown> | null {
-    return value && typeof value === 'object' && !Array.isArray(value)
-      ? value as Record<string, unknown>
-      : null
   }
 }

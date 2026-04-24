@@ -82,6 +82,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         findFirst: jest.fn().mockResolvedValue(overrides?.existingSnapshot ?? null),
         create: jest.fn().mockResolvedValue({ id: 'user-snapshot-1', snapshotHash: sourceSnapshot.snapshotHash }),
         upsert: jest.fn().mockResolvedValue({ id: 'user-snapshot-1', snapshotHash: sourceSnapshot.snapshotHash }),
+        update: jest.fn().mockResolvedValue({ id: 'user-snapshot-1', snapshotHash: sourceSnapshot.snapshotHash }),
       },
       llmStrategyCodegenSession: {
         upsert: jest.fn().mockResolvedValue({ id: 'strategy-plaza-session-1' }),
@@ -109,6 +110,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
     })
     expect(tx.publishedStrategySnapshot.create).not.toHaveBeenCalled()
     expect(tx.publishedStrategySnapshot.upsert).not.toHaveBeenCalled()
+    expect(tx.publishedStrategySnapshot.update).not.toHaveBeenCalled()
     expect(tx.strategyInstance.upsert).not.toHaveBeenCalled()
   })
 
@@ -138,6 +140,32 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
     })
     expect(tx.publishedStrategySnapshot.create).not.toHaveBeenCalled()
     expect(tx.publishedStrategySnapshot.upsert).not.toHaveBeenCalled()
+    expect(tx.publishedStrategySnapshot.update).toHaveBeenCalledWith({
+      where: { id: 'user-snapshot-1' },
+      data: expect.objectContaining({
+        paramsSnapshot: {
+          exchange: 'okx',
+          marketType: 'perp',
+          symbol: 'BTC-USDT-SWAP',
+          timeframe: '15m',
+          positionPct: 10,
+          leverage: 2,
+        },
+        strategyConfig: expect.objectContaining({
+          exchange: 'okx',
+          marketType: 'perp',
+          symbol: 'BTC-USDT-SWAP',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        }),
+        deploymentExecutionDefaults: {
+          leverage: 2,
+          priceSource: 'mark',
+          orderType: 'market',
+          timeInForce: 'ioc',
+        },
+      }),
+    })
     expect(tx.strategyInstance.update).toHaveBeenCalledWith({
       where: { id: 'strategy-instance-1' },
       data: {
@@ -222,7 +250,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
     })
   })
 
-  it('copies executable artifacts and config from the official source snapshot', async () => {
+  it('copies executable artifacts from the official source and runtime config from the plaza template', async () => {
     const tx = buildTx()
     const repo = new StrategyPlazaOfficialSnapshotRepository(createTxHost(tx))
 
@@ -252,6 +280,51 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         }),
       }),
     }))
+    expect(tx.strategyTemplate.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({
+        defaultParams: {
+          exchange: 'okx',
+          marketType: 'perp',
+          symbol: 'BTC-USDT-SWAP',
+          timeframe: '15m',
+          positionPct: 10,
+          leverage: 2,
+        },
+        dataRequirements: { primary: ['15m'] },
+      }),
+      update: expect.objectContaining({
+        defaultParams: {
+          exchange: 'okx',
+          marketType: 'perp',
+          symbol: 'BTC-USDT-SWAP',
+          timeframe: '15m',
+          positionPct: 10,
+          leverage: 2,
+        },
+      }),
+    }))
+    expect(tx.strategyInstance.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({
+        params: {
+          exchange: 'okx',
+          marketType: 'perp',
+          symbol: 'BTC-USDT-SWAP',
+          timeframe: '15m',
+          positionPct: 10,
+          leverage: 2,
+        },
+      }),
+      update: expect.objectContaining({
+        params: {
+          exchange: 'okx',
+          marketType: 'perp',
+          symbol: 'BTC-USDT-SWAP',
+          timeframe: '15m',
+          positionPct: 10,
+          leverage: 2,
+        },
+      }),
+    }))
     expect(tx.publishedStrategySnapshot.upsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({
         id: expect.stringMatching(/^plaza_[0-9a-f]{32}$/u),
@@ -272,19 +345,70 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         astSnapshot: sourceSnapshot.astSnapshot,
         compiledManifest: sourceSnapshot.compiledManifest,
         consistencyReport: sourceSnapshot.consistencyReport,
-        paramsSnapshot: sourceSnapshot.paramsSnapshot,
-        strategyConfig: sourceSnapshot.strategyConfig,
-        backtestConfigDefaults: sourceSnapshot.backtestConfigDefaults,
-        deploymentExecutionDefaults: sourceSnapshot.deploymentExecutionDefaults,
-        deploymentExecutionConstraints: sourceSnapshot.deploymentExecutionConstraints,
+        paramsSnapshot: {
+          exchange: 'okx',
+          marketType: 'perp',
+          symbol: 'BTC-USDT-SWAP',
+          timeframe: '15m',
+          positionPct: 10,
+          leverage: 2,
+        },
+        strategyConfig: {
+          exchange: 'okx',
+          marketType: 'perp',
+          symbol: 'BTC-USDT-SWAP',
+          baseTimeframe: '15m',
+          timeframe: '15m',
+          positionPct: 10,
+          strategyDeclaredLeverageRange: { min: 1, max: 2 },
+        },
+        backtestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 2,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'mark',
+          allowPartial: false,
+        },
+        deploymentExecutionDefaults: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 2,
+          strategyDeclaredLeverageRange: { min: 1, max: 2 },
+          defaultLeverage: 2,
+          supportedPriceSources: ['mark'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['ioc'],
+          constraintExplanation: 'official strategy plaza template runtime constraints',
+        },
         executionEnvelope: sourceSnapshot.executionEnvelope,
         executionPolicy: sourceSnapshot.executionPolicy,
-        dataRequirements: sourceSnapshot.dataRequirements,
+        dataRequirements: { primary: ['15m'] },
         userIntentSummary: sourceSnapshot.userIntentSummary,
         strategySummary: sourceSnapshot.strategySummary,
         scriptSummary: sourceSnapshot.scriptSummary,
-        lockedParams: sourceSnapshot.lockedParams,
+        lockedParams: {
+          exchange: 'okx',
+          marketType: 'perp',
+          symbol: 'BTC-USDT-SWAP',
+          timeframe: '15m',
+          positionPct: 10,
+          leverage: 2,
+        },
         snapshotVersion: sourceSnapshot.snapshotVersion,
+      }),
+      update: expect.objectContaining({
+        paramsSnapshot: expect.objectContaining({
+          symbol: 'BTC-USDT-SWAP',
+          timeframe: '15m',
+        }),
+        strategyConfig: expect.objectContaining({
+          symbol: 'BTC-USDT-SWAP',
+          baseTimeframe: '15m',
+        }),
+        deploymentExecutionDefaults: expect.objectContaining({
+          leverage: 2,
+          priceSource: 'mark',
+        }),
       }),
       select: { id: true, snapshotHash: true },
     }))
