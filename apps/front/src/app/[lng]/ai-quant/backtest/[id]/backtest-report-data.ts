@@ -18,8 +18,10 @@ export interface TradeRecord {
   direction: 'long' | 'short'
   entryTime: string
   entryPrice: number | null
+  entryPriceDisplay: string
   exitTime: string
   exitPrice: number
+  exitPriceDisplay: string
   profitPct: number
   isProfit: boolean
   reasonOpen?: string
@@ -46,6 +48,50 @@ export interface BacktestReportData {
   maxDrawdownAnalysis: RiskItem[]
   volatilitySharpe: RiskItem[]
   insights: string[]
+  confidence: {
+    level: 'high' | 'medium' | 'low'
+    title: string
+    summary: string
+    items: RiskItem[]
+  }
+  strategyFit: {
+    title: string
+    summary: string
+    items: RiskItem[]
+  }
+  marketCapabilityNotes: string[]
+}
+
+export interface BacktestReportContext {
+  exchange?: string
+  marketType?: string
+  symbol?: string
+  timeframe?: string
+  requestedRange?: string
+  appliedRange?: string
+  dataCoverage?: {
+    isPartial?: boolean
+    barCount?: number
+    expectedBarCount?: number
+  }
+  execution?: {
+    initialCash?: number
+    leverage?: number
+    allowPartial?: boolean
+    feeBps?: number
+    slippageBps?: number
+    priceSource?: string
+  }
+  derivativeRisk?: {
+    fundingIncluded?: boolean
+    liquidationChecked?: boolean
+    marginMode?: string
+  }
+}
+
+export interface CreateBacktestReportOptions {
+  lng?: 'en' | 'zh' | string
+  context?: BacktestReportContext | null
 }
 
 export interface LiveBacktestReportInput {
@@ -89,6 +135,7 @@ export function createBacktestReportDataFromLive(
   id: string,
   metrics: BacktestReportMetrics,
   report: LiveBacktestReportInput,
+  options: CreateBacktestReportOptions = {},
 ): BacktestReportData | null {
   if (!Array.isArray(report.equityCurve) || !Array.isArray(report.trades)) {
     return null
@@ -96,7 +143,8 @@ export function createBacktestReportDataFromLive(
 
   const normalizedEquity = normalizeEquityCurve(report.equityCurve)
   const equitySeries = mapLiveEquitySeries(normalizedEquity)
-  const trades = mapLiveTrades(report.trades)
+  const lng = options.lng === 'zh' ? 'zh' : 'en'
+  const trades = mapLiveTrades(report.trades, lng)
   const openPositions = mapLiveOpenPositions(report.openPositions)
   const openPnl = calculateRawOpenPositionsUnrealizedPnl(report.openPositions) ?? metrics.openPnl ?? 0
   if (!isDetailedReportConsistent(metrics, normalizedEquity, trades, openPositions, openPnl)) {
@@ -139,17 +187,21 @@ export function createBacktestReportDataFromLive(
         value: performanceStats.sortinoRatio === null ? '--' : performanceStats.sortinoRatio.toFixed(2),
       },
     ],
-    insights: [
-      metrics.totalReturnPct >= 0
-        ? `Backtest #${id} closed with ${metrics.totalReturnPct.toFixed(2)}% realized return across ${trades.length} closed trades.`
-        : `Backtest #${id} closed with ${metrics.totalReturnPct.toFixed(2)}% realized return and needs parameter review.`,
-      `Realized win rate from live trades was ${realizedWinRate.toFixed(2)}%, with maximum drawdown ${drawdown.maxDrawdownPct.toFixed(2)}%.`,
-      bestTrade && worstTrade
-        ? `Best closed trade returned ${formatSignedPct(bestTrade.profitPct)} while the weakest closed trade returned ${formatSignedPct(worstTrade.profitPct)}. ${drawdown.summary}`
-        : openPositions.length > 0
-          ? `${openPositions.length} open position${openPositions.length > 1 ? 's were' : ' was'} still active at the end of the backtest, with ${formatSignedPnl(openPnl)} unrealized P&L.`
-          : 'No closed trades were recorded in the live backtest report.',
-    ],
+    insights: buildReportInsights({
+      id,
+      lng,
+      metrics,
+      trades,
+      openPositions,
+      openPnl,
+      realizedWinRate,
+      drawdown,
+      bestTrade,
+      worstTrade,
+    }),
+    confidence: buildReportConfidence(lng, metrics, trades, options.context),
+    strategyFit: buildStrategyFit(lng, trades, options.context),
+    marketCapabilityNotes: buildMarketCapabilityNotes(lng, options.context),
   }
 }
 
@@ -217,7 +269,10 @@ function mapLiveEquitySeries(equityCurve: NormalizedEquityPoint[]): EquityPoint[
   })
 }
 
-function mapLiveTrades(trades: LiveBacktestReportInput['trades']): TradeRecord[] {
+function mapLiveTrades(
+  trades: LiveBacktestReportInput['trades'],
+  lng: 'en' | 'zh',
+): TradeRecord[] {
   if (!Array.isArray(trades) || trades.length === 0) {
     return []
   }
@@ -231,13 +286,15 @@ function mapLiveTrades(trades: LiveBacktestReportInput['trades']): TradeRecord[]
         id: trade.id,
         direction: trade.side === 'LONG' ? 'long' : 'short',
         entryTime: formatDateTime(trade.entryTs),
-        entryPrice: Number.isFinite(trade.entryPrice) ? Number(trade.entryPrice!.toFixed(2)) : null,
+        entryPrice: Number.isFinite(trade.entryPrice) ? normalizePrice(trade.entryPrice!) : null,
+        entryPriceDisplay: Number.isFinite(trade.entryPrice) ? formatPrice(trade.entryPrice!) : '--',
         exitTime: formatDateTime(trade.exitTs),
-        exitPrice: Number(trade.exitPrice.toFixed(2)),
+        exitPrice: normalizePrice(trade.exitPrice),
+        exitPriceDisplay: formatPrice(trade.exitPrice),
         profitPct,
         isProfit: profitPct >= 0,
-        reasonOpen: sanitizeReason(trade.reasonOpen),
-        reasonClose: sanitizeReason(trade.reasonClose),
+        reasonOpen: sanitizeReason(trade.reasonOpen, lng),
+        reasonClose: sanitizeReason(trade.reasonClose, lng),
       }
     })
 }
@@ -433,8 +490,185 @@ function formatDateTime(ts: number | undefined): string {
   return Number.isNaN(date.getTime()) ? '-' : date.toISOString().slice(0, 16).replace('T', ' ')
 }
 
-function sanitizeReason(value: string | undefined): string | undefined {
-  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+function sanitizeReason(value: string | undefined, lng: 'en' | 'zh' = 'en'): string | undefined {
+  if (typeof value !== 'string' || !value.trim()) {
+    return undefined
+  }
+
+  const normalized = value.trim()
+  const lower = normalized.toLowerCase()
+  if (lower.includes('execution-on_start') || lower.includes('on_start')) {
+    return lng === 'zh' ? '策略启动后首次入场' : 'Entered once when the strategy started'
+  }
+  if (lower.includes('take-profit')) {
+    return lng === 'zh' ? '达到止盈条件' : 'Take-profit condition triggered'
+  }
+  if (lower.includes('stop-loss')) {
+    return lng === 'zh' ? '达到止损条件' : 'Stop loss condition triggered'
+  }
+  if (lower.startsWith('compiled.')) {
+    return lng === 'zh' ? '策略逻辑条件触发' : 'Strategy logic condition triggered'
+  }
+  return normalized
+}
+
+function normalizePrice(value: number): number {
+  return value
+}
+
+function formatPrice(value: number): string {
+  const abs = Math.abs(value)
+  if (abs === 0) {
+    return '0.00'
+  }
+  if (abs < 1) {
+    return value.toFixed(6)
+  }
+  if (abs < 100) {
+    return value.toFixed(4).replace(/\.?0+$/, '')
+  }
+  return value.toFixed(2)
+}
+
+function isDerivativeMarket(marketType: string | undefined): boolean {
+  return ['perp', 'perpetual', 'futures', 'future', 'swap', 'delivery'].includes(String(marketType ?? '').toLowerCase())
+}
+
+function buildReportConfidence(
+  lng: 'en' | 'zh',
+  metrics: BacktestReportMetrics,
+  trades: TradeRecord[],
+  context?: BacktestReportContext | null,
+): BacktestReportData['confidence'] {
+  const isZh = lng === 'zh'
+  const isPartial = context?.dataCoverage?.isPartial === true
+  const lowSample = trades.length > 0 && trades.length < 5
+  const level: 'high' | 'medium' | 'low' = isPartial ? 'low' : lowSample ? 'medium' : 'high'
+  const dataCoverageValue = isPartial
+    ? (isZh ? '部分覆盖' : 'Partial coverage')
+    : (isZh ? '完整覆盖' : 'Full coverage')
+  const sampleValue = trades.length === 0
+    ? (isZh ? '暂无闭合交易' : 'No closed trades')
+    : lowSample
+      ? (isZh ? `${trades.length} 笔闭合交易，统计意义有限` : `${trades.length} closed trade${trades.length > 1 ? 's' : ''}; limited statistical confidence`)
+      : (isZh ? `${trades.length} 笔闭合交易` : `${trades.length} closed trades`)
+
+  return {
+    level,
+    title: isZh ? '报告可信度' : 'Report Confidence',
+    summary: isZh
+      ? `本次报告数据${isPartial ? '存在缺口' : '覆盖完整'}，样本量${lowSample ? '偏少，需要结合更长周期验证' : '可用于观察策略表现'}。`
+      : `This report has ${isPartial ? 'partial' : 'full'} data coverage and ${lowSample ? 'limited sample size' : 'enough closed trades for review'}.`,
+    items: [
+      { label: isZh ? '数据覆盖' : 'Data Coverage', value: dataCoverageValue },
+      { label: isZh ? '样本量' : 'Sample Size', value: sampleValue },
+      {
+        label: isZh ? '最大回撤' : 'Max Drawdown',
+        value: `${metrics.maxDrawdownPct.toFixed(2)}%`,
+      },
+      ...(typeof context?.dataCoverage?.barCount === 'number'
+        ? [{ label: isZh ? 'K线数量' : 'Bars', value: `${context.dataCoverage.barCount}` }]
+        : []),
+    ],
+  }
+}
+
+function buildStrategyFit(
+  lng: 'en' | 'zh',
+  trades: TradeRecord[],
+  context?: BacktestReportContext | null,
+): BacktestReportData['strategyFit'] {
+  const isZh = lng === 'zh'
+  const firstTrade = trades[0]
+  const longCount = trades.filter(trade => trade.direction === 'long').length
+  const shortCount = trades.filter(trade => trade.direction === 'short').length
+  const items: RiskItem[] = [
+    {
+      label: isZh ? '入场解释' : 'Entry Explanation',
+      value: firstTrade?.reasonOpen ?? (isZh ? '本次回测未产生可解释入场' : 'No readable entry reason was recorded'),
+    },
+    {
+      label: isZh ? '平仓解释' : 'Exit Explanation',
+      value: firstTrade?.reasonClose ?? (isZh ? '本次回测未产生可解释平仓' : 'No readable exit reason was recorded'),
+    },
+  ]
+
+  if (isDerivativeMarket(context?.marketType)) {
+    items.push({
+      label: isZh ? '多空拆分' : 'Long / Short Split',
+      value: isZh
+        ? `${longCount} 笔多单 / ${shortCount} 笔空单已平仓`
+        : `${longCount} long / ${shortCount} short closed trades`,
+    })
+  }
+
+  return {
+    title: isZh ? '策略执行匹配' : 'Strategy Execution Fit',
+    summary: isZh
+      ? '根据回测成交记录解释本次开仓、平仓是否符合策略逻辑。'
+      : 'Explains whether the recorded entries and exits match the strategy execution logic.',
+    items,
+  }
+}
+
+function buildMarketCapabilityNotes(
+  lng: 'en' | 'zh',
+  context?: BacktestReportContext | null,
+): string[] {
+  const isZh = lng === 'zh'
+  if (isDerivativeMarket(context?.marketType)) {
+    return [
+      isZh
+        ? '合约报告关注杠杆、保证金、资金费率、强平风险和多空拆分。'
+        : 'Derivative report focuses on leverage, margin, funding, liquidation risk, and long/short split.',
+      context?.derivativeRisk?.fundingIncluded || context?.derivativeRisk?.liquidationChecked
+        ? (isZh ? '本次回测已提供部分合约风险字段。' : 'This backtest provided some derivative risk fields.')
+        : (isZh ? '当前回测模型未提供资金费率和强平检查数据。' : 'Funding and liquidation data were not provided by this backtest model.'),
+    ]
+  }
+
+  return [
+    isZh
+      ? '现货报告关注持仓、成本、未实现盈亏和资金占用，不展示强平风险。'
+      : 'Spot report focuses on holdings, cost basis, unrealized P&L, and capital usage; liquidation risk is not shown.',
+  ]
+}
+
+function buildReportInsights(args: {
+  id: string
+  lng: 'en' | 'zh'
+  metrics: BacktestReportMetrics
+  trades: TradeRecord[]
+  openPositions: OpenPositionRecord[]
+  openPnl: number
+  realizedWinRate: number
+  drawdown: DrawdownSnapshot
+  bestTrade: TradeRecord | null
+  worstTrade: TradeRecord | null
+}): string[] {
+  if (args.lng === 'zh') {
+    return [
+      `本次回测基于 ${args.trades.length} 笔闭合交易，已实现收益率为 ${args.metrics.totalReturnPct.toFixed(2)}%。`,
+      `闭合交易胜率为 ${args.realizedWinRate.toFixed(2)}%，最大回撤为 ${args.drawdown.maxDrawdownPct.toFixed(2)}%。`,
+      args.bestTrade && args.worstTrade
+        ? `最佳单笔收益为 ${formatSignedPct(args.bestTrade.profitPct)}，最弱单笔收益为 ${formatSignedPct(args.worstTrade.profitPct)}。`
+        : args.openPositions.length > 0
+          ? `回测结束时仍有 ${args.openPositions.length} 笔持仓，浮动盈亏为 ${formatSignedPnl(args.openPnl)}。`
+          : '本次回测没有闭合交易，不能用胜率判断策略质量。',
+    ]
+  }
+
+  return [
+    args.metrics.totalReturnPct >= 0
+      ? `Backtest #${args.id} closed with ${args.metrics.totalReturnPct.toFixed(2)}% realized return across ${args.trades.length} closed trades.`
+      : `Backtest #${args.id} closed with ${args.metrics.totalReturnPct.toFixed(2)}% realized return and needs parameter review.`,
+    `Realized win rate from live trades was ${args.realizedWinRate.toFixed(2)}%, with maximum drawdown ${args.drawdown.maxDrawdownPct.toFixed(2)}%.`,
+    args.bestTrade && args.worstTrade
+      ? `Best closed trade returned ${formatSignedPct(args.bestTrade.profitPct)} while the weakest closed trade returned ${formatSignedPct(args.worstTrade.profitPct)}. ${args.drawdown.summary}`
+      : args.openPositions.length > 0
+        ? `${args.openPositions.length} open position${args.openPositions.length > 1 ? 's were' : ' was'} still active at the end of the backtest, with ${formatSignedPnl(args.openPnl)} unrealized P&L.`
+        : 'No closed trades were recorded in the live backtest report.',
+  ]
 }
 
 function formatDrawdownPct(value: number): string {

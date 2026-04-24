@@ -56,8 +56,10 @@ describe('backtest-report-data live mapping', () => {
         direction: 'long',
         entryTime: '2026-03-01 08:00',
         entryPrice: 100.5,
+        entryPriceDisplay: '100.50',
         exitTime: '2026-03-02 12:00',
         exitPrice: 102.5,
+        exitPriceDisplay: '102.50',
         profitPct: 5.12,
         isProfit: true,
         reasonOpen: '价格 <= 入场价',
@@ -68,8 +70,10 @@ describe('backtest-report-data live mapping', () => {
         direction: 'short',
         entryTime: '2026-03-02 08:00',
         entryPrice: 99.2,
+        entryPriceDisplay: '99.2',
         exitTime: '2026-03-03 12:00',
         exitPrice: 95.8,
+        exitPriceDisplay: '95.8',
         profitPct: -3.2,
         isProfit: false,
         reasonOpen: '价格 >= 开空阈值',
@@ -257,5 +261,137 @@ describe('backtest-report-data live mapping', () => {
         isProfit: true,
       },
     ])
+  })
+
+  it('builds localized decision context without exchange-specific assumptions', () => {
+    const data = createBacktestReportDataFromLive(
+      'btjob-doge',
+      {
+        maxDrawdownPct: 0.18,
+        totalReturnPct: 0.19,
+        winRatePct: 100,
+        tradeCount: 1,
+      },
+      {
+        equityCurve: [
+          { ts: Date.parse('2026-04-17T00:00:00.000Z'), equity: 10000 },
+          { ts: Date.parse('2026-04-24T00:00:00.000Z'), equity: 10019 },
+        ],
+        trades: [
+          {
+            id: 'trade-doge',
+            side: 'LONG',
+            entryTs: Date.parse('2026-04-18T06:31:00.000Z'),
+            entryPrice: 0.09803794,
+            exitTs: Date.parse('2026-04-18T11:31:00.000Z'),
+            exitPrice: 0.10000989,
+            returnPct: 2.0114,
+            reasonOpen: 'compiled.decision_01_entry-execution-on_start-210',
+            reasonClose: 'compiled.decision_03_risk-take-profit',
+          },
+        ],
+      },
+      {
+        lng: 'zh',
+        context: {
+          exchange: 'binance',
+          marketType: 'spot',
+          symbol: 'DOGEUSDT',
+          timeframe: '3m',
+          requestedRange: '2026-04-17 00:00 UTC ~ 2026-04-24 00:00 UTC',
+          appliedRange: '2026-04-17 00:00 UTC ~ 2026-04-24 00:00 UTC',
+          dataCoverage: {
+            isPartial: false,
+            barCount: 3361,
+          },
+          execution: {
+            initialCash: 10000,
+            leverage: 1,
+            allowPartial: false,
+          },
+        },
+      },
+    )
+
+    expect(data).not.toBeNull()
+    expect(data?.trades[0]).toEqual(expect.objectContaining({
+      entryPrice: 0.09803794,
+      entryPriceDisplay: '0.098038',
+      exitPrice: 0.10000989,
+      exitPriceDisplay: '0.100010',
+      reasonOpen: '策略启动后首次入场',
+      reasonClose: '达到止盈条件',
+    }))
+    expect(data?.confidence.level).toBe('medium')
+    expect(data?.confidence.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: '数据覆盖', value: '完整覆盖' }),
+      expect.objectContaining({ label: '样本量', value: '1 笔闭合交易，统计意义有限' }),
+    ]))
+    expect(data?.strategyFit.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: '入场解释', value: '策略启动后首次入场' }),
+      expect.objectContaining({ label: '平仓解释', value: '达到止盈条件' }),
+    ]))
+    expect(data?.marketCapabilityNotes).toEqual(expect.arrayContaining([
+      '现货报告关注持仓、成本、未实现盈亏和资金占用，不展示强平风险。',
+    ]))
+    expect(data?.insights.join('\n')).toContain('本次回测基于 1 笔闭合交易')
+    expect(data?.insights.join('\n')).not.toContain('Backtest #')
+  })
+
+  it('adds derivative capability notes without coupling the report to OKX', () => {
+    const data = createBacktestReportDataFromLive(
+      'btjob-perp',
+      {
+        maxDrawdownPct: 5,
+        totalReturnPct: 3,
+        winRatePct: 50,
+        tradeCount: 2,
+      },
+      {
+        equityCurve: [
+          { ts: Date.parse('2026-04-20T00:00:00.000Z'), equity: 10000 },
+          { ts: Date.parse('2026-04-21T00:00:00.000Z'), equity: 10300 },
+        ],
+        trades: [
+          {
+            id: 'long-1',
+            side: 'LONG',
+            exitTs: Date.parse('2026-04-21T00:00:00.000Z'),
+            exitPrice: 88888.12,
+            returnPct: 3,
+            reasonClose: 'compiled.decision_02_exit-risk-stop-loss',
+          },
+          {
+            id: 'short-1',
+            side: 'SHORT',
+            exitTs: Date.parse('2026-04-21T01:00:00.000Z'),
+            exitPrice: 88111.12,
+            returnPct: -1,
+          },
+        ],
+      },
+      {
+        lng: 'en',
+        context: {
+          exchange: 'binance',
+          marketType: 'perp',
+          symbol: 'BTCUSDT',
+          execution: {
+            leverage: 5,
+            allowPartial: false,
+          },
+        },
+      },
+    )
+
+    expect(data).not.toBeNull()
+    expect(data?.marketCapabilityNotes).toEqual(expect.arrayContaining([
+      'Derivative report focuses on leverage, margin, funding, liquidation risk, and long/short split.',
+      'Funding and liquidation data were not provided by this backtest model.',
+    ]))
+    expect(data?.strategyFit.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: 'Long / Short Split', value: '1 long / 1 short closed trades' }),
+    ]))
+    expect(data?.trades[0].reasonClose).toBe('Stop loss condition triggered')
   })
 })

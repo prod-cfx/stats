@@ -2,6 +2,7 @@
 
 import type {
   BacktestReportMetrics,
+  BacktestReportContext,
   LiveBacktestReportInput,
   OpenPositionRecord,
   RiskItem,
@@ -27,6 +28,7 @@ interface BacktestReportProps {
   rangeDisplay: string
   metrics: BacktestReportMetrics | null
   report?: LiveBacktestReportInput | null
+  reportContext?: BacktestReportContext | null
   partialCoverageNotice?: {
     requestedRange: string
     appliedRange: string
@@ -73,12 +75,10 @@ function mapDetailedReport(result: BacktestJobResult): LiveBacktestReportInput |
 function StrategyConclusionCard({
   status,
   summary,
-  onDeploy,
   lng,
 }: {
   status: 'good' | 'warning' | 'danger'
   summary: string
-  onDeploy: () => void
   lng: string
 }) {
   const statusConfig = {
@@ -127,10 +127,10 @@ function StrategyConclusionCard({
 
       <button
         type="button"
-        onClick={onDeploy}
-        className={`relative z-10 rounded-xl px-8 py-3 text-sm font-bold text-white transition-opacity hover:opacity-90 ${config.btnClass}`}
+        disabled
+        className={`relative z-10 cursor-not-allowed rounded-xl px-8 py-3 text-sm font-bold text-white opacity-80 ${config.btnClass}`}
       >
-        {lng === 'en' ? 'One-Click Deploy' : '一键部署'}
+        {lng === 'en' ? 'Review Before Deploy' : '上线前继续验证'}
       </button>
     </div>
   )
@@ -184,7 +184,7 @@ function AiAnalysisPanel({ lng, insights }: { lng: string; insights: string[] })
         <div className="flex items-center gap-2">
           <span className="text-xl">✨</span>
           <h3 className="text-base font-medium text-[color:var(--cf-text-strong)]">
-            {lng === 'en' ? 'AI Insights' : 'AI 深度洞察'}
+            {lng === 'en' ? 'Report Interpretation' : '报告解读'}
           </h3>
         </div>
         <button
@@ -204,6 +204,42 @@ function AiAnalysisPanel({ lng, insights }: { lng: string; insights: string[] })
           ))}
         </ul>
       )}
+    </div>
+  )
+}
+
+function DecisionSummarySection({
+  confidence,
+  strategyFit,
+  marketCapabilityNotes,
+}: {
+  confidence: {
+    title: string
+    summary: string
+    items: RiskItem[]
+  }
+  strategyFit: {
+    title: string
+    summary: string
+    items: RiskItem[]
+  }
+  marketCapabilityNotes: string[]
+}) {
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <RiskCard title={confidence.title} data={confidence.items} />
+      <RiskCard title={strategyFit.title} data={strategyFit.items} />
+      <div className="flex h-full flex-col rounded-[16px] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-6 backdrop-blur-sm">
+        <h3 className="mb-4 text-base font-medium text-[color:var(--cf-text-strong)]">
+          {confidence.title === '报告可信度' ? '市场风险能力' : 'Market Risk Coverage'}
+        </h3>
+        <p className="mb-4 text-sm text-[color:var(--cf-muted)]">{confidence.summary}</p>
+        <ul className="space-y-3 text-sm text-[color:var(--cf-text)]">
+          {marketCapabilityNotes.map(note => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      </div>
     </div>
   )
 }
@@ -322,9 +358,9 @@ function TradeDetailsSection({
                     {presentation.tradeDirectionLabel(trade.direction)}
                   </td>
                   <td className="py-3 text-[color:var(--cf-text)]">
-                    {trade.entryPrice === null ? '--' : `$${trade.entryPrice.toFixed(2)}`}
+                    {trade.entryPrice === null ? '--' : `$${trade.entryPriceDisplay}`}
                   </td>
-                  <td className="py-3 text-[color:var(--cf-text)]">${trade.exitPrice.toFixed(2)}</td>
+                  <td className="py-3 text-[color:var(--cf-text)]">${trade.exitPriceDisplay}</td>
                   <td
                     className={`py-3 text-right font-medium ${trade.isProfit ? 'text-[color:var(--cf-primary)]' : 'text-[#FF4D4F]'}`}
                   >
@@ -433,6 +469,7 @@ export function BacktestReportClient({
   rangeDisplay,
   metrics,
   report = null,
+  reportContext = null,
   partialCoverageNotice = null,
 }: BacktestReportProps) {
   const [detailedReport, setDetailedReport] = useState<LiveBacktestReportInput | null>(report)
@@ -494,8 +531,11 @@ export function BacktestReportClient({
     if (!metrics || !detailedReport) {
       return null
     }
-    return createBacktestReportDataFromLive(id, metrics, detailedReport)
-  }, [detailedReport, id, metrics])
+    return createBacktestReportDataFromLive(id, metrics, detailedReport, {
+      lng,
+      context: reportContext,
+    })
+  }, [detailedReport, id, lng, metrics, reportContext])
   const hasReportData = metrics !== null && reportData !== null
   const normalizedMarketType = normalizeBacktestMarketType(marketType)
   const presentation = useMemo(
@@ -508,8 +548,6 @@ export function BacktestReportClient({
       }),
     [lng, metrics, normalizedMarketType, symbol],
   )
-
-  const handleDeploy = () => {}
 
   // Determine strategy status based on metrics
   let status: 'good' | 'warning' | 'danger' = 'warning'
@@ -566,7 +604,7 @@ export function BacktestReportClient({
       )}
 
       {/* 1. 策略结论区 */}
-      <StrategyConclusionCard status={status} summary={summary} onDeploy={handleDeploy} lng={lng} />
+      <StrategyConclusionCard status={status} summary={summary} lng={lng} />
 
       {/* 2. 核心指标卡 */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
@@ -582,6 +620,12 @@ export function BacktestReportClient({
 
       {hasReportData && reportData ? (
         <>
+          <DecisionSummarySection
+            confidence={reportData.confidence}
+            strategyFit={reportData.strategyFit}
+            marketCapabilityNotes={reportData.marketCapabilityNotes}
+          />
+
           {/* 3. 净值曲线图 */}
           <LazyBacktestEquityChart lng={lng} data={reportData.equitySeries} />
 
