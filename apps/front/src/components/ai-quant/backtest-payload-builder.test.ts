@@ -146,6 +146,29 @@ describe('backtest-payload-builder', () => {
     })
   })
 
+  it('includes conversationId when creating a snapshot-bound backtest payload', () => {
+    const payload = buildBacktestPayload({
+      marketType: 'spot',
+      symbol: 'BTCUSDT',
+      baseTimeframe: '15m',
+      capabilities: { allowedBaseTimeframes: ['15m'] },
+      stateTimeframes: ['15m'],
+      initialCash: 10000,
+      leverage: null,
+      execution: { slippageBps: 5, feeBps: 2, priceSource: 'close' },
+      strategy: {
+        id: 'snapshot-1',
+        publishedSnapshotId: 'snapshot-1',
+      },
+      conversationId: 'conv-1',
+      range: { preset: '30D' },
+    }, new Date('2026-04-23T00:00:00.000Z'))
+
+    expect(payload).toEqual(expect.objectContaining({
+      conversationId: 'conv-1',
+    }))
+  })
+
   it('does not include legacy bars payload field', () => {
     const payload = buildBacktestPayload(createInput(), now)
 

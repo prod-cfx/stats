@@ -77,4 +77,50 @@ describe('backend contract generated AI Quant codegen responses', () => {
       expect(continueSnippet).not.toContain(`${removedField}:`)
     }
   })
+
+  it('includes lastBacktestRef in backend AI Quant conversation response contracts', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+    const responseStart = source.indexOf('const AiQuantConversationResponseDto = z')
+    const refStart = source.indexOf('const AiQuantConversationLastBacktestRefResponseDto = z')
+    const configStart = source.indexOf('const AiQuantConversationLastBacktestConfigResponseDto = z')
+    const summaryStart = source.indexOf('const AiQuantConversationLastBacktestSummaryResponseDto = z')
+
+    expect(responseStart).toBeGreaterThanOrEqual(0)
+    expect(refStart).toBeGreaterThanOrEqual(0)
+    expect(configStart).toBeGreaterThanOrEqual(0)
+    expect(summaryStart).toBeGreaterThanOrEqual(0)
+
+    const responseSnippet = source.slice(responseStart, responseStart + 1200)
+    const refSnippet = source.slice(refStart, refStart + 500)
+    const configSnippet = source.slice(configStart, configStart + 700)
+    const summarySnippet = source.slice(summaryStart, summaryStart + 500)
+
+    expect(responseSnippet).toContain('backtestDraftConfig: AiQuantConversationLastBacktestConfigResponseDto.nullish()')
+    expect(responseSnippet).toContain('lastBacktestRef: AiQuantConversationLastBacktestRefResponseDto.nullish()')
+    expect(refSnippet).toContain('publishedSnapshotId: z.string()')
+    expect(refSnippet).toContain('config: AiQuantConversationLastBacktestConfigResponseDto')
+    expect(configSnippet).toContain('range: AiQuantConversationLastBacktestRangeResponseDto')
+    expect(configSnippet).toContain('execution: AiQuantConversationLastBacktestExecutionResponseDto')
+    expect(refSnippet).toContain('summary: AiQuantConversationLastBacktestSummaryResponseDto')
+    expect(refSnippet).toContain('completedAt: z.string()')
+    expect(summarySnippet).toContain('maxDrawdownPct: z.number()')
+    expect(summarySnippet).toContain('totalReturnPct: z.number()')
+    expect(summarySnippet).toContain('winRatePct: z.number()')
+    expect(summarySnippet).toContain('tradeCount: z.number()')
+  })
+
+  it('keeps backtesting createJob typed with request body and non-void response', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+    const start = source.indexOf("alias: 'BacktestingProxyController_createJob'")
+
+    expect(start).toBeGreaterThanOrEqual(0)
+
+    const nextAlias = source.indexOf("\n  {\n    method:", start + 1)
+    const snippet = source.slice(start, nextAlias === -1 ? undefined : nextAlias)
+
+    expect(snippet).toContain("name: 'body'")
+    expect(snippet).not.toContain('response: z.void()')
+    expect(snippet).toContain('response: z')
+    expect(snippet).toContain('data: BacktestingCreateJobResponseDto')
+  })
 })

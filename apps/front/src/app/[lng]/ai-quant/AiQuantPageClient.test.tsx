@@ -79,40 +79,42 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
   QuantChatPanel: ({
     messages,
     paramValues,
-    onParamChange,
+    onConfirmBacktestParams,
     onRunBacktest,
   }: {
     messages: Array<{ id: string, role: string, content: string }>
     paramValues: Record<string, unknown>
-    onParamChange: (key: string, value: unknown) => void
+    onConfirmBacktestParams: (nextValues: Record<string, unknown>) => void
     onRunBacktest: () => void
   }) => (
     <div>
       <button
         data-testid="set-invalid-range"
         onClick={() =>
-          [
-            onParamChange('backtestRangePreset', 'CUSTOM'),
-            onParamChange('backtestStart', '2026-02-01T00:00:00.000Z'),
-            onParamChange('backtestEnd', '2026-01-01T00:00:00.000Z'),
-          ]}
+          onConfirmBacktestParams({
+            ...paramValues,
+            backtestRangePreset: 'CUSTOM',
+            backtestStart: '2026-02-01T00:00:00.000Z',
+            backtestEnd: '2026-01-01T00:00:00.000Z',
+          })}
       >
         invalid
       </button>
       <button
         data-testid="set-valid-preset"
         onClick={() =>
-          [
-            onParamChange('backtestRangePreset', '7D'),
-            onParamChange('backtestStart', ''),
-            onParamChange('backtestEnd', ''),
-          ]}
+          onConfirmBacktestParams({
+            ...paramValues,
+            backtestRangePreset: '7D',
+            backtestStart: '',
+            backtestEnd: '',
+          })}
       >
         valid
       </button>
       <button
         data-testid="set-backtest-execution"
-        onClick={() => onParamChange('backtestInitialCash', 25000)}
+        onClick={() => onConfirmBacktestParams({ ...paramValues, backtestInitialCash: 25000 })}
       >
         execution
       </button>
@@ -170,6 +172,7 @@ jest.mock('@/lib/api', () => ({
   getLlmCodegenSession: jest.fn(),
   listLlmCodegenSessions: jest.fn(async () => []),
   startLlmCodegenSession: jest.fn(),
+  updateAiQuantConversationBacktestDraft: jest.fn(async () => undefined),
 }))
 
 function seedConfirmedConversation(now = Date.now()) {

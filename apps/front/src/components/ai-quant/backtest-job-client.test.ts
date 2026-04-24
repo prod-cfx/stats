@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { ApiError, AuthenticationError } from '@/lib/errors'
 import {
   BACKTEST_REQUEST_TIMEOUT_MS,
@@ -36,6 +38,8 @@ const { client: mockClient } = jest.requireMock('@/lib/api-client') as {
 }
 
 describe('backtest-job-client', () => {
+  const apiSourcePath = resolve(__dirname, '../../lib/backtesting-api.ts')
+
   beforeEach(() => {
     mockGetToken.mockReset()
     mockGetToken.mockReturnValue('header.payload.signature')
@@ -77,7 +81,7 @@ describe('backtest-job-client', () => {
       payload,
       expect.objectContaining({
         headers: expect.objectContaining({
-          Authorization: 'Bearer header.payload.signature',
+          authorization: 'Bearer header.payload.signature',
           'x-request-id': expect.stringContaining('front-backtest:create-job:'),
         }),
         signal: expect.anything(),
@@ -88,6 +92,14 @@ describe('backtest-job-client', () => {
       status: 'queued',
       createdAt: '2026-03-25T00:00:00.000Z',
     })
+  })
+
+  it('createBacktestJob uses the typed contract client without any-cast', () => {
+    const source = readFileSync(apiSourcePath, 'utf8')
+
+    expect(source).toContain('schemas.BacktestingCreateJobRequestDto.parse(payload)')
+    expect(source).toContain('client.BacktestingProxyController_createJob(request, {')
+    expect(source).not.toContain('(client as any).BacktestingProxyController_createJob(payload, {')
   })
 
   it('getBacktestJob parses queued/running/succeeded/failed', async () => {

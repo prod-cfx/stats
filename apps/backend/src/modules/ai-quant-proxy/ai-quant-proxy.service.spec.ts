@@ -9,6 +9,7 @@ describe('aiQuantProxyService', () => {
     const quantifyClient = {
       listAccountStrategies: jest.fn(),
       get: jest.fn(),
+      patch: jest.fn(),
       delete: jest.fn(),
       deleteAccountStrategy: jest.fn(),
       listStrategyPlazaTemplates: jest.fn(),
@@ -277,9 +278,27 @@ describe('aiQuantProxyService', () => {
 
   it('proxies AI Quant conversation list with authorization header', async () => {
     const { service, quantifyClient } = createService()
-    quantifyClient.get.mockResolvedValue([{ id: 'conv-1', activeCodegenSessionId: 'session-1' }])
+    quantifyClient.get.mockResolvedValue([{
+      id: 'conv-1',
+      activeCodegenSessionId: 'session-1',
+      lastBacktestRef: {
+        jobId: 'btjob-1',
+        publishedSnapshotId: 'snapshot-1',
+        summary: { maxDrawdownPct: 8, totalReturnPct: 12, winRatePct: 60, tradeCount: 5 },
+        completedAt: '2026-04-23T00:04:00.000Z',
+      },
+    }])
 
-    await service.listAiQuantConversations('user-1', 'Bearer token-1')
+    await expect(service.listAiQuantConversations('user-1', 'Bearer token-1')).resolves.toEqual([{
+      id: 'conv-1',
+      activeCodegenSessionId: 'session-1',
+      lastBacktestRef: {
+        jobId: 'btjob-1',
+        publishedSnapshotId: 'snapshot-1',
+        summary: { maxDrawdownPct: 8, totalReturnPct: 12, winRatePct: 60, tradeCount: 5 },
+        completedAt: '2026-04-23T00:04:00.000Z',
+      },
+    }])
 
     expect(quantifyClient.get).toHaveBeenCalledWith(
       '/account/ai-quant/conversations',
@@ -376,6 +395,51 @@ describe('aiQuantProxyService', () => {
         upstreamCode: 'UPSTREAM_INVALID_RESPONSE',
       }),
     })
+  })
+
+  it('proxies AI Quant backtest draft updates with authorization header', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.patch.mockResolvedValue(undefined)
+
+    await expect(service.updateAiQuantConversationBacktestDraft(
+      'user-1',
+      'Bearer token-1',
+      'conv-1',
+      {
+        backtestDraftConfig: {
+          range: { preset: '7D' },
+          execution: {
+            initialCash: 10000,
+            leverage: null,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: false,
+          },
+        },
+      },
+    )).resolves.toBeUndefined()
+
+    expect(quantifyClient.patch).toHaveBeenCalledWith(
+      '/account/ai-quant/conversations/conv-1/backtest-draft',
+      {
+        backtestDraftConfig: {
+          range: { preset: '7D' },
+          execution: {
+            initialCash: 10000,
+            leverage: null,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: false,
+          },
+        },
+      },
+      {
+        timeoutMs: codegenTimeoutMs,
+        headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
+      },
+    )
   })
 
   it('maps quantify client errors into domain exceptions', async () => {

@@ -184,14 +184,17 @@ jest.mock('@/components/ai-quant/LogicGraphPreview', () => ({
     onConfirm,
     onRevise,
     confirmDisabled,
+    publishedSnapshotId,
   }: {
     graph: { status: string }
     onConfirm: () => void
     onRevise: () => void
     confirmDisabled?: boolean
+    publishedSnapshotId?: string | null
   }) => (
     <div data-testid="legacy-graph-preview">
       <div data-testid="graph-status">{graph.status}</div>
+      <div data-testid="legacy-snapshot-id">{publishedSnapshotId ?? ''}</div>
       <button data-testid="confirm-graph" disabled={Boolean(confirmDisabled)} onClick={onConfirm}>
         confirm
       </button>
@@ -209,16 +212,19 @@ jest.mock('@/components/ai-quant/DisplayLogicGraphPreview', () => ({
     onRevise,
     confirmDisabled,
     confirmed,
+    publishedSnapshotId,
   }: {
     graph: { blocks: Array<{ type: string }> }
     onConfirm: () => void
     onRevise: () => void
     confirmDisabled?: boolean
     confirmed?: boolean
+    publishedSnapshotId?: string | null
   }) => (
     <div data-testid="display-graph-preview">
       <div data-testid="display-graph-block-count">{graph.blocks.length}</div>
       <div data-testid="display-graph-status">{confirmed ? 'confirmed' : 'draft'}</div>
+      <div data-testid="display-snapshot-id">{publishedSnapshotId ?? ''}</div>
       <button data-testid="display-confirm-graph" disabled={Boolean(confirmDisabled)} onClick={onConfirm}>
         confirm
       </button>
@@ -245,6 +251,7 @@ jest.mock('@/lib/api', () => ({
   fetchUserExchangeAccountStatuses: jest.fn(async () => []),
   getLlmCodegenSession: (...args: unknown[]) => mockGetLlmCodegenSession(...args),
   startLlmCodegenSession: (...args: unknown[]) => mockStartLlmCodegenSession(...args),
+  updateAiQuantConversationBacktestDraft: jest.fn(async () => undefined),
 }))
 
 function seedDraftConversation(
@@ -537,6 +544,90 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     })
 
     expect(container.querySelector('[data-testid="display-graph-status"]')?.textContent).toBe('confirmed')
+  })
+
+  it('does not show a stale published snapshot id for a newer confirmed graph version', async () => {
+    localStorage.clear()
+    seedStoredConversations([
+      {
+        id: 'conv-stale-snapshot',
+        title: 'conv',
+        messages: [{ id: 'welcome', role: 'assistant', content: 'hello' }],
+        params: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+        paramSchema: null,
+        paramValues: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+        backtestResult: null,
+        logicGraph: {
+          version: 2,
+          status: 'confirmed',
+          trigger: [],
+          actions: [],
+          risk: [],
+          meta: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+            positionPct: 10,
+          },
+        },
+        displayLogicGraph: {
+          blocks: [
+            {
+              type: 'EXECUTE',
+              items: [
+                {
+                  kind: 'execute',
+                  id: 'execute-symbol',
+                  key: 'symbol',
+                  text: '标的: BTCUSDT',
+                },
+              ],
+            },
+          ],
+        },
+        semanticGraph: validSemanticGraph,
+        validationReport: { ok: true, errors: [] },
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: 'sha256:canonical-1',
+        llmCodegenSessionId: 'session-1',
+        publishedStrategyInstanceId: 'strategy-stale',
+        publishedSnapshotId: 'snapshot-stale',
+        publishedScriptCode: 'return { stale: true }',
+        publishedScriptGraphVersion: 1,
+        latestSignalMessage: null,
+        backtestExecutionState: 'idle',
+        updatedAt: Date.now(),
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await waitForAssertion(() => {
+      expect(container.querySelector('[data-testid="display-graph-status"]')?.textContent).toBe('confirmed')
+      expect(container.querySelector('[data-testid="display-snapshot-id"]')?.textContent).toBe('')
+    })
   })
 
   it('shows generating copy immediately after graph confirmation and enables backtest after codegen is published', async () => {

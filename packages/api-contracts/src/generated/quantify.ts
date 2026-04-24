@@ -1,4 +1,4 @@
-import { makeApi, Zodios, type ZodiosInstance, type ZodiosOptions } from '@zodios/core'
+import { makeApi, Zodios, type ZodiosOptions } from '@zodios/core'
 import { z } from 'zod'
 
 const SettingResponseDto = z
@@ -61,6 +61,13 @@ const BacktestStrategyInputDto = z
   })
   .passthrough()
 const BacktestDataRangeDto = z.object({ fromTs: z.number(), toTs: z.number() }).passthrough()
+const BacktestRequestedRangeInputDto = z
+  .object({
+    preset: z.enum(['7D', '30D', '90D', '1Y', 'CUSTOM']),
+    startAt: z.string().optional(),
+    endAt: z.string().optional(),
+  })
+  .passthrough()
 const BacktestBarDto = z
   .object({
     symbol: z.string(),
@@ -97,9 +104,11 @@ const RunBacktestDto = z
     initialCash: z.number(),
     leverage: z.number().optional(),
     allowPartial: z.boolean().optional(),
+    conversationId: z.string().optional(),
     execution: BacktestExecutionConfigDto,
     strategy: BacktestStrategyInputDto,
     dataRange: BacktestDataRangeDto,
+    requestedRangeInput: BacktestRequestedRangeInputDto.optional(),
     bars: z.array(BacktestBarDto).optional(),
   })
   .passthrough()
@@ -1077,6 +1086,49 @@ const ExchangeAccountResponseDto = z
 const AiQuantConversationMessageDto = z
   .object({ role: z.enum(['user', 'assistant']), content: z.string() })
   .passthrough()
+const AiQuantConversationLastBacktestRangeDto = z
+  .object({
+    preset: z.enum(['7D', '30D', '90D', '1Y', 'CUSTOM']),
+    startAt: z.string().optional(),
+    endAt: z.string().optional(),
+  })
+  .passthrough()
+const AiQuantConversationLastBacktestExecutionDto = z
+  .object({
+    initialCash: z.number(),
+    leverage: z.number().nullish(),
+    slippageBps: z.number(),
+    feeBps: z.number(),
+    priceSource: z.enum(['open', 'close', 'mid']),
+    allowPartial: z.boolean(),
+  })
+  .passthrough()
+const AiQuantConversationLastBacktestConfigDto = z
+  .object({
+    range: AiQuantConversationLastBacktestRangeDto,
+    execution: AiQuantConversationLastBacktestExecutionDto,
+  })
+  .passthrough()
+const AiQuantConversationLastBacktestSummaryDto = z
+  .object({
+    maxDrawdownPct: z.number(),
+    totalReturnPct: z.number(),
+    winRatePct: z.number(),
+    tradeCount: z.number(),
+    openTradeCount: z.number().optional(),
+    openPnl: z.number().optional(),
+    marketType: z.enum(['spot', 'perp']).optional(),
+  })
+  .passthrough()
+const AiQuantConversationLastBacktestRefDto = z
+  .object({
+    jobId: z.string(),
+    publishedSnapshotId: z.string(),
+    config: AiQuantConversationLastBacktestConfigDto,
+    summary: AiQuantConversationLastBacktestSummaryDto,
+    completedAt: z.string(),
+  })
+  .passthrough()
 const AiQuantConversationResponseDto = z
   .object({
     id: z.string(),
@@ -1086,6 +1138,8 @@ const AiQuantConversationResponseDto = z
     status: z.string().optional(),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
+    backtestDraftConfig: AiQuantConversationLastBacktestConfigDto.nullish(),
+    lastBacktestRef: AiQuantConversationLastBacktestRefDto.nullish(),
     canonicalDigest: z.string().optional(),
     specDesc: z.object({}).partial().passthrough().optional(),
     semanticGraph: z.object({}).partial().passthrough().optional(),
@@ -1500,6 +1554,7 @@ export const schemas = {
   BacktestExecutionConfigDto,
   BacktestStrategyInputDto,
   BacktestDataRangeDto,
+  BacktestRequestedRangeInputDto,
   BacktestBarDto,
   RunBacktestDto,
   BacktestJobSummaryDto,
@@ -1586,6 +1641,11 @@ export const schemas = {
   CreateExchangeAccountDto,
   ExchangeAccountResponseDto,
   AiQuantConversationMessageDto,
+  AiQuantConversationLastBacktestRangeDto,
+  AiQuantConversationLastBacktestExecutionDto,
+  AiQuantConversationLastBacktestConfigDto,
+  AiQuantConversationLastBacktestSummaryDto,
+  AiQuantConversationLastBacktestRefDto,
   AiQuantConversationResponseDto,
   CodegenGuideConfigDto,
   StartCodegenSessionDto,
@@ -4036,10 +4096,8 @@ const endpoints = makeApi([
   },
 ])
 
-export type QuantifyApi = typeof endpoints
+export const aiQuantifyClient = new Zodios('/api/v1', endpoints)
 
-export const aiQuantifyClient: ZodiosInstance<QuantifyApi> = new Zodios('/api/v1', endpoints)
-
-export function createApiClient(baseUrl: string, options?: ZodiosOptions): ZodiosInstance<QuantifyApi> {
+export function createApiClient(baseUrl: string, options?: ZodiosOptions) {
   return new Zodios(baseUrl, endpoints, options)
 }

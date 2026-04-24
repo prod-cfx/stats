@@ -4,6 +4,7 @@ import type {
   AccountAiQuantStrategyDetail,
   AccountAiQuantStrategyListItem,
   AccountAiQuantUpdateLeveragePayload,
+  AiQuantBacktestDraftConfig,
   AiQuantConversationResponse,
   ContinueLlmCodegenSessionPayload,
   LlmCodegenSessionResponse,
@@ -394,6 +395,35 @@ export async function deleteAiQuantConversation(conversationId: string): Promise
   }
   if (!response.ok) {
     const message = parseApiErrorMessage(response.status, json, '删除 AI Quant 会话失败')
+    throw new ApiError(message, 'AI_QUANT_CONVERSATION_ERROR', response.status, json)
+  }
+}
+
+export async function updateAiQuantConversationBacktestDraft(
+  conversationId: string,
+  backtestDraftConfig: AiQuantBacktestDraftConfig,
+): Promise<void> {
+  validateId(conversationId, 'AI Quant conversation ID')
+  const authHeaders = requireAuthHeaders()
+  const response = await fetch(
+    `${API_BASE_URL}/account/ai-quant/conversations/${encodeURIComponent(conversationId)}/backtest-draft`,
+    {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        ...authHeaders,
+      },
+      body: JSON.stringify({ backtestDraftConfig }),
+    },
+  )
+  let json: unknown = null
+  try {
+    json = await response.json()
+  } catch {
+    json = null
+  }
+  if (!response.ok) {
+    const message = parseApiErrorMessage(response.status, json, '更新 AI Quant 回测配置失败')
     throw new ApiError(message, 'AI_QUANT_CONVERSATION_ERROR', response.status, json)
   }
 }
