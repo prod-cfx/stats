@@ -1010,6 +1010,79 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.paramValues.backtestAllowPartial).toBeUndefined()
   })
 
+  it('hydrates snapshot backtest defaults over legacy implicit local execution values', () => {
+    const conversation = hydrateConversation({
+      id: 'conv-published-snapshot-defaults',
+      title: 'published',
+      messages: [],
+      params: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+      },
+      paramSchema: null,
+      paramValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        buyWindowMin: 3,
+        buyDropPct: 1,
+        sellWindowMin: 15,
+        sellRisePct: 2,
+        positionPct: 10,
+        backtestInitialCash: 10000,
+        backtestLeverage: 1,
+        backtestSlippageBps: 10,
+        backtestFeeBps: 5,
+        backtestPriceSource: 'close',
+        backtestAllowPartial: true,
+      },
+      backtestResult: null,
+      logicGraph: null,
+      semanticGraph: null,
+      validationReport: null,
+      llmCodegenSessionId: null,
+      publishedStrategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotParamValues: {
+        exchange: 'binance',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      publishedSnapshotBacktestConfigDefaults: {
+        initialCash: 25000,
+        leverage: null,
+        slippageBps: 12,
+        feeBps: 4,
+        priceSource: 'mid',
+        allowPartial: false,
+      },
+      publishedScriptCode: 'return { ok: true }',
+      publishedScriptGraphVersion: 1,
+      latestSignalMessage: null,
+      backtestExecutionConfigExplicit: false,
+      backtestExecutionState: 'idle',
+      updatedAt: 1,
+    })
+
+    expect(conversation.backtestExecutionConfigExplicit).toBe(false)
+    expect(conversation.paramValues).toEqual(expect.objectContaining({
+      backtestInitialCash: 25000,
+      backtestLeverage: null,
+      backtestSlippageBps: 12,
+      backtestFeeBps: 4,
+      backtestPriceSource: 'mid',
+      backtestAllowPartial: false,
+    }))
+  })
+
   it('invalidates published artifacts and optionally marks the logic graph as draft', () => {
     const next = invalidateConversationPublication(
       {
@@ -1414,6 +1487,14 @@ describe('ai-quant-page-conversation', () => {
           backtestPriceSource: 'close',
           backtestAllowPartial: true,
         },
+        publishedSnapshotBacktestConfigDefaults: {
+          initialCash: 25000,
+          leverage: null,
+          slippageBps: 12,
+          feeBps: 4,
+          priceSource: 'mid',
+          allowPartial: false,
+        },
         publishedScriptCode: 'return { ok: true }',
         publishedScriptGraphVersion: 1,
         latestSignalMessage: null,
@@ -1433,6 +1514,14 @@ describe('ai-quant-page-conversation', () => {
       backtestPriceSource: 'close',
       backtestAllowPartial: true,
     })
+    expect(envelope.conversations[0].paramValues).toEqual(expect.objectContaining({
+      backtestInitialCash: 25000,
+      backtestLeverage: null,
+      backtestSlippageBps: 12,
+      backtestFeeBps: 4,
+      backtestPriceSource: 'mid',
+      backtestAllowPartial: false,
+    }))
   })
 
   it('restores serverConversationId when a persisted local conversation is hydrated from storage', () => {

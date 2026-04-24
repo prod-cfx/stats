@@ -489,6 +489,7 @@ function normalizeBacktestConfigDefaults(
     || !Number.isFinite(slippageBps)
     || !Number.isFinite(feeBps)
     || !priceSource
+    || allowPartial === null
   ) {
     return null
   }
@@ -500,6 +501,19 @@ function normalizeBacktestConfigDefaults(
     priceSource,
     allowPartial,
     ...(stateTimeframes ? { stateTimeframes } : {}),
+  }
+}
+
+function buildSnapshotBacktestExecutionParamValues(
+  snapshotBacktestConfigDefaults: AccountAiQuantBacktestConfigDefaults,
+): Record<string, unknown> {
+  return {
+    backtestInitialCash: snapshotBacktestConfigDefaults.initialCash,
+    backtestLeverage: snapshotBacktestConfigDefaults.leverage,
+    backtestSlippageBps: snapshotBacktestConfigDefaults.slippageBps,
+    backtestFeeBps: snapshotBacktestConfigDefaults.feeBps,
+    backtestPriceSource: snapshotBacktestConfigDefaults.priceSource,
+    backtestAllowPartial: snapshotBacktestConfigDefaults.allowPartial,
   }
 }
 
@@ -710,16 +724,7 @@ function mergeSnapshotBoundParamValues(input: {
   const { currentValues, snapshotParamValues, snapshotBacktestConfigDefaults } = input
   const snapshotBacktestExecutionParamValues =
     snapshotBacktestConfigDefaults
-      ? {
-          backtestInitialCash: snapshotBacktestConfigDefaults.initialCash,
-          ...(typeof snapshotBacktestConfigDefaults.leverage === 'number'
-            ? { backtestLeverage: snapshotBacktestConfigDefaults.leverage }
-            : {}),
-          backtestSlippageBps: snapshotBacktestConfigDefaults.slippageBps,
-          backtestFeeBps: snapshotBacktestConfigDefaults.feeBps,
-          backtestPriceSource: snapshotBacktestConfigDefaults.priceSource,
-          backtestAllowPartial: snapshotBacktestConfigDefaults.allowPartial,
-        }
+      ? buildSnapshotBacktestExecutionParamValues(snapshotBacktestConfigDefaults)
       : null
 
   if (!snapshotParamValues && !snapshotBacktestExecutionParamValues) {
@@ -1422,10 +1427,25 @@ function normalizeHydratedBacktestExecutionConfig(input: {
   explicit: boolean
   publishedSnapshotId: string | null
   publishedSnapshotParamValues: Record<string, unknown> | null
+  publishedSnapshotBacktestConfigDefaults: AccountAiQuantBacktestConfigDefaults | null
 }): {
   paramValues: Record<string, unknown>
   explicit: boolean
 } {
+  if (
+    input.publishedSnapshotId
+    && !input.explicit
+    && input.publishedSnapshotBacktestConfigDefaults
+  ) {
+    return {
+      paramValues: {
+        ...normalizeImplicitBacktestExecutionParamValues(input.paramValues),
+        ...buildSnapshotBacktestExecutionParamValues(input.publishedSnapshotBacktestConfigDefaults),
+      },
+      explicit: false,
+    }
+  }
+
   if (input.publishedSnapshotId && !input.publishedSnapshotParamValues) {
     return {
       paramValues: normalizeImplicitBacktestExecutionParamValues(input.paramValues),
@@ -1891,6 +1911,7 @@ export function hydrateConversation(item: Partial<ConversationState>): Conversat
     explicit: item.backtestExecutionConfigExplicit === true,
     publishedSnapshotId,
     publishedSnapshotParamValues,
+    publishedSnapshotBacktestConfigDefaults,
   })
   const fallbackParams =
     item.params && typeof item.params === 'object' && !Array.isArray(item.params)
@@ -2018,11 +2039,21 @@ export function serializePersistedConversations(
   const envelope: PersistedConversationEnvelope = {
     version: normalizeConversationStorageVersion(version),
     conversations: conversations.map((conversation) => {
-      if (
-        conversation.backtestExecutionConfigExplicit
-        || (typeof conversation.publishedSnapshotId === 'string' && conversation.publishedSnapshotId.trim().length > 0)
-      ) {
+      if (conversation.backtestExecutionConfigExplicit) {
         return conversation
+      }
+      if (
+        typeof conversation.publishedSnapshotId === 'string'
+        && conversation.publishedSnapshotId.trim().length > 0
+        && conversation.publishedSnapshotBacktestConfigDefaults
+      ) {
+        return {
+          ...conversation,
+          paramValues: {
+            ...normalizeImplicitBacktestExecutionParamValues(conversation.paramValues),
+            ...buildSnapshotBacktestExecutionParamValues(conversation.publishedSnapshotBacktestConfigDefaults),
+          },
+        }
       }
       return {
         ...conversation,

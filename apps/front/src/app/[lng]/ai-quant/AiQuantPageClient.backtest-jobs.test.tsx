@@ -1629,7 +1629,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
   it('uses AI-Quant page execution params instead of snapshot defaults for published snapshot backtests', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
-    seeded[0].backtestExecutionConfigExplicit = false
+    seeded[0].backtestExecutionConfigExplicit = true
     seeded[0].paramValues = {
       ...seeded[0].paramValues,
       backtestInitialCash: 32000,
