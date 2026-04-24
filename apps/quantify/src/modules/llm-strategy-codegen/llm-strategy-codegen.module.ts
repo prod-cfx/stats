@@ -84,6 +84,6 @@ import { StrategySummaryObservationService } from './services/strategy-summary-o
     CodegenSessionPublicationPipelineService,
     CodegenConversationService,
   ],
-  exports: [CodegenConversationService],
+  exports: [CallerIdentityService, CodegenConversationService],
 })
 export class LlmStrategyCodegenModule {}

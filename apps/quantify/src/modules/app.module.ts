@@ -39,6 +39,7 @@ import { PositionsModule } from './positions/positions.module'
 import { SettingsModule } from './settings/settings.module'
 import { StrategyInstancesModule } from './strategy-instances/strategy-instances.module'
 import { StrategySignalsModule } from './strategy-signals/strategy-signals.module'
+import { StrategyPlazaModule } from './strategy-plaza/strategy-plaza.module'
 import { StrategySubscriptionsModule } from './strategy-subscriptions/strategy-subscriptions.module'
 import { StrategyTemplatesModule } from './strategy-templates/strategy-templates.module'
 import { TradingModule } from './trading/trading.module'
@@ -115,6 +116,7 @@ const infrastructureImports = isMessageBusRuntimeEnabled()
     TradingModule,
     StrategySignalsModule,
     StrategyTemplatesModule,
+    StrategyPlazaModule,
     LlmStrategiesModule,
     LlmStrategyCodegenModule,
     StrategyInstancesModule,
