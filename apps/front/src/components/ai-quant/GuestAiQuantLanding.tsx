@@ -1,8 +1,9 @@
 'use client'
 
+import type {ElementType} from 'react';
 import type { QuantReturnIntentInput } from './intent-storage'
 import { Activity, ArrowUp, BarChart3, Edit3, Play, Shield, Sparkles, TrendingUp, Zap } from 'lucide-react'
-import { useState, type ElementType } from 'react'
+import { useState  } from 'react'
 import { useTranslation } from 'react-i18next'
 import { STRATEGY_PRESETS } from './strategy-presets'
 

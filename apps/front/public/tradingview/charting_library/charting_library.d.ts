@@ -8,7 +8,7 @@
 declare const LINESTYLE_DASHED = 2;
 declare const LINESTYLE_DOTTED = 1;
 declare const LINESTYLE_SOLID = 0;
-/* eslint-disable jsdoc/require-jsdoc */
+ 
 declare const dateFormatFunctions: {
 	readonly "qq 'yy": (date: Date, local: boolean) => string;
 	readonly "qq yyyy": (date: Date, local: boolean) => string;
@@ -29,7 +29,7 @@ declare const dateFormatFunctions: {
 	readonly "MM/dd/yy": (date: Date, local: boolean) => string;
 	readonly "MM/dd/yyyy": (date: Date, local: boolean) => string;
 };
-/* eslint-enable jsdoc/require-jsdoc */
+ 
 declare enum ColorType {
 	Solid = "solid",
 	Gradient = "gradient"
@@ -641,7 +641,7 @@ export declare function version(): string;
  * @example
  * type TagName = Nominal<string, 'TagName'>;
  */
-export declare type Nominal<T, Name extends string> = T & { /* eslint-disable-next-line jsdoc/require-jsdoc */
+export declare type Nominal<T, Name extends string> = T & {  
 	[Symbol.species]: Name;
 };
 /**
@@ -872,7 +872,7 @@ export interface AccountManagerInfo {
 	 * @param activePageActions - array of `ActionMetaInfo` items for the current page
 	 * @returns `Promise` that is resolved with an array of `ActionMetaInfo`
 	 */
-	contextMenuActions?(contextMenuEvent: MouseEvent | TouchEvent, activePageActions: ActionMetaInfo[]): Promise<ActionMetaInfo[]>;
+	contextMenuActions?: (contextMenuEvent: MouseEvent | TouchEvent, activePageActions: ActionMetaInfo[]) => Promise<ActionMetaInfo[]>;
 }
 /** A description of an additional Account Manager tab. */
 export interface AccountManagerPage {
@@ -932,7 +932,7 @@ export interface AccountManagerTable {
 	 * There is a predefined field `isTotalRow` which can be used to mark a row that should be at the bottom of the table.
 	 * @param paginationLastId - Last pagination id
 	 */
-	getData(paginationLastId?: string | number): Promise<{}[]>;
+	getData: (paginationLastId?: string | number) => Promise<{}[]>;
 }
 /** Boolean options for the account manager table */
 export interface AccountManagerTableFlags {
@@ -1812,7 +1812,7 @@ export interface Bar {
 	volume?: number;
 }
 export interface BarState {
-	isLast(): boolean;
+	isLast: () => boolean;
 }
 export interface BarStylePreferences {
 	/** Up bar color */
@@ -4691,7 +4691,7 @@ export interface ChartingLibraryWidgetOptions {
 	 * library_path: "charting_library/",
 	 * ```
 	 *
-	 * * If you would like to host the library on a separate origin to the page containing the chart then please view the following guide: [Hosting the library on a separate origin](https://www.tradingview.com/charting-library-docs/latest/getting_started/Hosting-Library-Cross-Origin).
+	 * If you would like to host the library on a separate origin to the page containing the chart then please view the following guide: [Hosting the library on a separate origin](https://www.tradingview.com/charting-library-docs/latest/getting_started/Hosting-Library-Cross-Origin).
 	 */
 	library_path?: string;
 	/**
@@ -5061,8 +5061,8 @@ export interface ChartingLibraryWidgetOptions {
 	/**
 	 * Customization of the loading spinner. Value is an object with the following possible keys:
 	 *
-	 * * `backgroundColor`
-	 * * `foregroundColor`
+	 * `backgroundColor`
+	 * `foregroundColor`
 	 *
 	 * Example:
 	 *
@@ -6069,14 +6069,14 @@ export interface CustomFields {
 /**  */
 export interface CustomFormatter {
 	/** Formats date and time */
-	format(date: Date): string;
+	format: (date: Date) => string;
 	/** Converts date and time to local time zone. */
-	formatLocal(date: Date): string;
+	formatLocal: (date: Date) => string;
 	/**
 	 * Returns a value in a format known by the UI.
 	 * Required when using `dateFormatter`, it has to return a date in the following format: `YYYY-MM-DD`.
 	 */
-	parse(value: string): string;
+	parse: (value: string) => string;
 }
 /**
  * Formatters used to adjust the displayed format of the date and time values.
@@ -9969,26 +9969,26 @@ export interface IAction extends IMenuItem, IDestroyable {
 	/**
 	 * A method which will be called when an action should be executed (e.g. when a user clicks on the item)
 	 */
-	execute(): void;
+	execute: () => void;
 	/**
 	 * @returns Returns a state object of the action.
 	 */
-	getState(): Readonly<ActionState>;
+	getState: () => Readonly<ActionState>;
 	/**
 	 * @returns A subscription for an event when an action is updated.
 	 */
-	onUpdate(): ISubscription<OnActionUpdateHandler>;
+	onUpdate: () => ISubscription<OnActionUpdateHandler>;
 }
 export interface IBoxedValue<T> extends IBoxedValueReadOnly<T> {
 	/**
 	 * Set boxed value
 	 * @param  {T} value - value to be set
 	 */
-	setValue(value: T): void;
+	setValue: (value: T) => void;
 }
 export interface IBoxedValueReadOnly<T> {
 	/** Value */
-	value(): T;
+	value: () => T;
 }
 export interface IBrokerAccountInfo {
 	/**
@@ -9998,11 +9998,11 @@ export interface IBrokerAccountInfo {
 	 * Note that if `accountsMetainfo` returns an array containing more than one element, you should implement the {@link setCurrentAccount} method.
 	 * Refer to [Multiple accounts](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/account-manager/multiple-accounts) for more information.
 	 */
-	accountsMetainfo(): Promise<AccountMetainfo[]>;
+	accountsMetainfo: () => Promise<AccountMetainfo[]>;
 	/**
 	 * The library calls `currentAccount` to get the current account's ID.
 	 */
-	currentAccount(): AccountId;
+	currentAccount: () => AccountId;
 	/**
 	 * The library calls `setCurrentAccount` when users switch accounts using the drop-down menu in the [Account Manager](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/account-manager/).
 	 * This method provides your backend server with the ID of the selected account.
@@ -10011,7 +10011,7 @@ export interface IBrokerAccountInfo {
 	 * Refer to [Multiple accounts](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/account-manager/multiple-accounts) for more information.
 	 * @param  {AccountId} id - The ID of the selected account.
 	 */
-	setCurrentAccount?(id: AccountId): void;
+	setCurrentAccount?: (id: AccountId) => void;
 }
 export interface IBrokerCommon {
 	/**
@@ -10024,7 +10024,7 @@ export interface IBrokerCommon {
 	 * @returns A promise that resolves to an array of {@link ActionMetaInfo}, which may be empty. In that case, the *Trade* button will
 	 * be removed from the context menu.
 	 */
-	chartContextMenuActions(context: TradeContext, options?: DefaultContextMenuActionsParams): Promise<ActionMetaInfo[]>;
+	chartContextMenuActions: (context: TradeContext, options?: DefaultContextMenuActionsParams) => Promise<ActionMetaInfo[]>;
 	/**
 	 * The library calls `isTradable` to check if a symbol can be traded.
 	 * If the method returns `false`, users will see the *Non-tradable symbol* message in the UI when creating orders.
@@ -10032,7 +10032,7 @@ export interface IBrokerCommon {
 	 * To do this, return an `IsTradableResult` object.
 	 * @param  {string} symbol - The symbol identifier.
 	 */
-	isTradable(symbol: string): Promise<boolean | IsTradableResult>;
+	isTradable: (symbol: string) => Promise<boolean | IsTradableResult>;
 	/**
 	 * Defines a connection status for the Broker API.
 	 * If any other value than `1` ("Connected") is returned, the [Account Manager](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/account-manager/) will display an endless spinner instead of users' trading data.
@@ -10041,11 +10041,11 @@ export interface IBrokerCommon {
 	 * If the method is not implemented or returns a value other than `1`,
 	 * the following error will appear in the console: *Method connectionStatus is not properly implemented*.
 	 */
-	connectionStatus(): ConnectionStatus;
+	connectionStatus: () => ConnectionStatus;
 	/**
 	 * The library calls `orders` to request data on the user's active orders. This data is displayed on the _Orders and Positions_ pages of the [Account Manager](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/account-manager/#orders-and-positions).
 	 */
-	orders(): Promise<Order[]>;
+	orders: () => Promise<Order[]>;
 	/**
 	 * The library calls `ordersHistory` to retrieve past orders for display on the _History_ page of the [Account Manager](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/account-manager/).
 	 * This method is required because the {@link BrokerConfigFlags.supportOrdersHistory} flag is enabled by default.
@@ -10054,73 +10054,73 @@ export interface IBrokerCommon {
 	 *
 	 * Note that returned orders must have a final status: `rejected`, `filled`, or `cancelled`.
 	 */
-	ordersHistory?(): Promise<Order[]>;
+	ordersHistory?: () => Promise<Order[]>;
 	/**
 	 * Called by Trading Platform to request [positions](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/trading-concepts/positions).
 	 * Required if the {@link BrokerConfigFlags.supportPositions} flag is set to `true`.
 	 */
-	positions?(): Promise<Position[]>;
+	positions?: () => Promise<Position[]>;
 	/**
 	 * Called by Trading Platform to request [individual positions](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/trading-concepts/positions).
 	 * Required if the {@link BrokerConfigFlags.supportPositionNetting} flag is set to `true`.
 	 */
-	individualPositions?(): Promise<IndividualPosition[]>;
+	individualPositions?: () => Promise<IndividualPosition[]>;
 	/**
 	 * The library calls `executions` to request executions for the specified symbol.
 	 * If you want executions to be displayed on the chart, set the {@link BrokerConfigFlags.supportExecutions} to `true`.
 	 * @param  {string} symbol - The symbol identifier.
 	 */
-	executions(symbol: string): Promise<Execution[]>;
+	executions: (symbol: string) => Promise<Execution[]>;
 	/**
 	 * The library calls `symbolInfo` to request symbol information for the [Order Ticket](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/order-ticket) and [Depth of Market widget](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/depth-of-market).
 	 * @param  {string} symbol - The symbol identifier.
 	 */
-	symbolInfo(symbol: string): Promise<InstrumentInfo>;
+	symbolInfo: (symbol: string) => Promise<InstrumentInfo>;
 	/**
 	 * The library calls `accountManagerInfo` to get information required for building the [Account Manager](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/account-manager/).
 	 */
-	accountManagerInfo(): AccountManagerInfo;
+	accountManagerInfo: () => AccountManagerInfo;
 	/**
 	 * Provide a custom price formatter for the specified symbol.
 	 * @param  {string} symbol - symbol identifier
 	 * @param  {boolean} alignToMinMove - align formatted number to the minimum movement amount of the symbol
 	 */
-	formatter?(symbol: string, alignToMinMove: boolean): Promise<INumberFormatter>;
+	formatter?: (symbol: string, alignToMinMove: boolean) => Promise<INumberFormatter>;
 	/**
 	 * Provide a custom spread formatter for the specified symbol.
 	 * @param  {string} symbol - symbol identifier
 	 */
-	spreadFormatter?(symbol: string): Promise<INumberFormatter>;
+	spreadFormatter?: (symbol: string) => Promise<INumberFormatter>;
 	/**
 	 * Provide a custom quantity formatter for the specified symbol.
 	 * @param  {string} symbol - symbol identifier
 	 */
-	quantityFormatter?(symbol: string): Promise<INumberFormatter>;
+	quantityFormatter?: (symbol: string) => Promise<INumberFormatter>;
 	/**
 	 * Implement this method if you want to [add custom fields](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/order-ticket#add-custom-fields) to the standard Order Ticket.
 	 *
 	 * Use the `symbol` parameter to return customization options for a particular symbol.
 	 * @param  {string} symbol - symbol identifier
 	 */
-	getOrderDialogOptions?(symbol: string): Promise<OrderDialogOptions | undefined>;
+	getOrderDialogOptions?: (symbol: string) => Promise<OrderDialogOptions | undefined>;
 	/**
 	 * Implement this method if you want to customize the position dialog.
 	 *
 	 * Use the `symbol` parameter to return customization options for a particular symbol.
 	 * @param  {string} symbol - symbol identifier
 	 */
-	getPositionDialogOptions?(symbol: string): Promise<PositionDialogOptions | undefined>;
+	getPositionDialogOptions?: (symbol: string) => Promise<PositionDialogOptions | undefined>;
 	/**
 	 * Implement this method if you want to have custom options available for different symbols.
 	 * @param  {string} symbol - symbol identifier
 	 */
-	getSymbolSpecificTradingOptions?(symbol: string): Promise<SymbolSpecificTradingOptions | undefined>;
+	getSymbolSpecificTradingOptions?: (symbol: string) => Promise<SymbolSpecificTradingOptions | undefined>;
 }
 export interface IBrokerConnectionAdapterFactory {
 	/** Creates a Delegate object */
-	createDelegate<T extends Function>(): IDelegate<T>;
+	createDelegate: <T extends Function>() => IDelegate<T>;
 	/** Creates a WatchedValue object */
-	createWatchedValue<T>(value?: T): IWatchedValue<T>;
+	createWatchedValue: <T>(value?: T) => IWatchedValue<T>;
 	/**
 	 * Creates a price formatter.
 	 * @param priceScale - Defines the number of decimal places. It is `10^number-of-decimal-places`. If a price is displayed as `1.01`, `pricescale` is `100`; If it is displayed as `1.005`, `pricescale` is `1000`.
@@ -10129,7 +10129,7 @@ export interface IBrokerConnectionAdapterFactory {
 	 * @param minMove2 - For common prices, is `0` or it can be skipped.
 	 * @param variableMinTick - For common prices, is `string` (for example, `0.01 10 0.02 25 0.05`) or it can be skipped. For more information, refer to [Variable tick size](https://www.tradingview.com/charting-library-docs/latest/connecting_data/Symbology#variable-tick-size).
 	 */
-	createPriceFormatter(priceScale?: number, minMove?: number, fractional?: boolean, minMove2?: number, variableMinTick?: string): IPriceFormatter;
+	createPriceFormatter: (priceScale?: number, minMove?: number, fractional?: boolean, minMove2?: number, variableMinTick?: string) => IPriceFormatter;
 }
 /**
  * The Trading Host is an API for interaction between the Broker API and the library code related to trading.
@@ -10144,147 +10144,147 @@ export interface IBrokerConnectionAdapterHost {
 	 * @param {ConnectionStatus} status - new connection status to propagate internally to the host
 	 * @param {DisconnectionInfo} [info] - additional information to provide when entering a disconnected status
 	 */
-	connectionStatusUpdate(status: ConnectionStatus, info?: DisconnectionInfo): void;
+	connectionStatusUpdate: (status: ConnectionStatus, info?: DisconnectionInfo) => void;
 	/**
 	 * Generates and returns the default value formatter for the symbol
 	 * @param  {string} symbol - symbol identifier
 	 * @param  {boolean} alignToMinMove - whether the formatted number should be aligned to minimum movement for the symbol
 	 */
-	defaultFormatter(symbol: string, alignToMinMove: boolean): Promise<INumberFormatter>;
+	defaultFormatter: (symbol: string, alignToMinMove: boolean) => Promise<INumberFormatter>;
 	/**
 	 * Generates and returns a number formatter with the desired decimal places
 	 * @param  {number} [decimalPlaces] - decimal places
 	 */
-	numericFormatter(decimalPlaces: number): Promise<INumberFormatter>;
+	numericFormatter: (decimalPlaces: number) => Promise<INumberFormatter>;
 	/**
 	 * Generates and returns a quantity formatter with the desired decimal places
 	 * @param  {number} [decimalPlaces] - decimal places
 	 */
-	quantityFormatter(decimalPlaces?: number): Promise<INumberFormatter>;
+	quantityFormatter: (decimalPlaces?: number) => Promise<INumberFormatter>;
 	/**
 	 * Provides default buy/sell, show properties actions to be returned as a default by {@link IBrokerCommon.chartContextMenuActions}.
 	 * @param  {TradeContext} context - trade context
 	 * @param  {DefaultContextMenuActionsParams} [params] - optional parameters
 	 */
-	defaultContextMenuActions(context: TradeContext, params?: DefaultContextMenuActionsParams): Promise<ActionMetaInfo[]>;
+	defaultContextMenuActions: (context: TradeContext, params?: DefaultContextMenuActionsParams) => Promise<ActionMetaInfo[]>;
 	/**
 	 * Provides default dropdown list of actions. You can use default actions in {@link IBrokerConnectionAdapterHost.setButtonDropdownActions}
 	 * @param  {Partial<DefaultDropdownActionsParams>} [options] - options for the dropdown menu actions
 	 */
-	defaultDropdownMenuActions(options?: Partial<DefaultDropdownActionsParams>): ActionMetaInfo[];
+	defaultDropdownMenuActions: (options?: Partial<DefaultDropdownActionsParams>) => ActionMetaInfo[];
 	/** Returns whether the buy/sell buttons are visible or not. */
-	sellBuyButtonsVisibility(): IWatchedValue<boolean> | null;
+	sellBuyButtonsVisibility: () => IWatchedValue<boolean> | null;
 	/** Returns whether DOM Panel is visible or not. */
-	domPanelVisibility(): IWatchedValue<boolean> | null;
+	domPanelVisibility: () => IWatchedValue<boolean> | null;
 	/** Returns whether the order panel is visible or not. */
-	orderPanelVisibility(): IWatchedValue<boolean> | null;
+	orderPanelVisibility: () => IWatchedValue<boolean> | null;
 	/** Returns if orders can be sent to the broker without showing the order ticket. */
-	silentOrdersPlacement(): IWatchedValue<boolean>;
+	silentOrdersPlacement: () => IWatchedValue<boolean>;
 	/**
 	 * Patch changes into the current broker configuration
 	 * @param  {Partial<BrokerConfigFlags>} config - partial configuration changes to apply
 	 */
-	patchConfig(config: Partial<BrokerConfigFlags>): void;
+	patchConfig: (config: Partial<BrokerConfigFlags>) => void;
 	/**
 	 * Set expiration durations
 	 * @param  {OrderDurationMetaInfo[]} durations - Expiration options for orders
 	 */
-	setDurations(durations: OrderDurationMetaInfo[]): void;
+	setDurations: (durations: OrderDurationMetaInfo[]) => void;
 	/**
 	 * Call this method to notify the chart that it needs to update information after an order is added or changed.
 	 * @param  {Order} order - order which was added or changed
 	 */
-	orderUpdate(order: Order): void;
+	orderUpdate: (order: Order) => void;
 	/**
 	 * Call this method to clear the current cache for orders and notify the chart that it needs to request orders again.
 	 * Use this method only in cases such as ID mismatches.
 	 * For more details, see [Order and position IDs mismatch](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/common-issues#order-and-position-ids-mismatch).
 	 */
-	ordersFullUpdate(): void;
+	ordersFullUpdate: () => void;
 	/**
 	 * Call this method when an order is not changed, but the fields that you added to the order object to display in the Account Manager have changed.
 	 * It should be used only if you want to display custom fields in the Account Manager.
 	 * @param  {string} id - order id
 	 * @param  {Partial<Order>} orderChanges - changes made to the order object
 	 */
-	orderPartialUpdate(id: string, orderChanges: Partial<Order>): void;
+	orderPartialUpdate: (id: string, orderChanges: Partial<Order>) => void;
 	/**
 	 * Call this method when a position is added or changed.
 	 * @param  {Position} position - position which was added or changed
 	 * @param  {boolean} [isHistoryUpdate] - whether the change is a history update
 	 */
-	positionUpdate(position: Position, isHistoryUpdate?: boolean): void;
+	positionUpdate: (position: Position, isHistoryUpdate?: boolean) => void;
 	/**
 	 * Call this method to clear the current cache for positions and notify the chart that it needs to request positions again.
 	 * Use this method only in cases such as ID mismatches.
 	 * For more details, see [Order and position IDs mismatch](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/common-issues#order-and-position-ids-mismatch).
 	 */
-	positionsFullUpdate(): void;
+	positionsFullUpdate: () => void;
 	/**
 	 * Call this method when a position is not changed, but the fields that you added to the position object to display in the Account Manager have changed.
 	 * It should be used only if you want to display custom fields in the Account Manager.
 	 * @param  {string} id - id of the position
 	 * @param  {Partial<Position>} positionChanges - changes to the position object
 	 */
-	positionPartialUpdate(id: string, positionChanges: Partial<Position>): void;
+	positionPartialUpdate: (id: string, positionChanges: Partial<Position>) => void;
 	/**
 	 * Call this method when an individual position is added or changed.
 	 * @param  {IndividualPosition} individualPosition - updated individual position
 	 * @param  {boolean} [isHistoryUpdate] - whether the change is a history update
 	 */
-	individualPositionUpdate(individualPosition: IndividualPosition, isHistoryUpdate?: boolean): void;
+	individualPositionUpdate: (individualPosition: IndividualPosition, isHistoryUpdate?: boolean) => void;
 	/**
 	 * Call this method to clear the current cache for individual positions and notify the chart that it needs to request individual positions again.
 	 * Use this method only in cases such as ID mismatches.
 	 * For more details, see [Order and position IDs mismatch](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/common-issues#order-and-position-ids-mismatch).
 	 */
-	individualPositionsFullUpdate(): void;
+	individualPositionsFullUpdate: () => void;
 	/**
 	 * Call this method when an individual position has not changed, but fields that you added to the individual position object to display in the Account Manager have changed.
 	 * @param  {string} id - ID of the updated individual position
 	 * @param  {Partial<IndividualPosition>} changes - changes to the individual position object
 	 */
-	individualPositionPartialUpdate(id: string, changes: Partial<IndividualPosition>): void;
+	individualPositionPartialUpdate: (id: string, changes: Partial<IndividualPosition>) => void;
 	/**
 	 * Call this method when an execution is added.
 	 * @param  {Execution} execution - execution which was added
 	 */
-	executionUpdate(execution: Execution): void;
+	executionUpdate: (execution: Execution) => void;
 	/**
 	 * Call this method when user account has been changed synchronously. The terminal will re-request all displayed information.
 	 */
-	currentAccountUpdate(): void;
+	currentAccountUpdate: () => void;
 	/**
 	 * Trading quote realtime update
 	 * @param  {string} symbol - symbol identifier
 	 * @param  {TradingQuotes} data - realtime updated data for the symbol quotes
 	 */
-	realtimeUpdate(symbol: string, data: TradingQuotes): void;
+	realtimeUpdate: (symbol: string, data: TradingQuotes) => void;
 	/**
 	 * Call this method when a broker connection has received a [profit and loss](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/trading-concepts/profit-and-loss) update.
 	 * Use this method when the {@link BrokerConfigFlags.supportPLUpdate} flag is set to `true` in {@link SingleBrokerMetaInfo.configFlags}.
 	 * @param  {string} positionId - ID of the position
 	 * @param  {number} pl - updated profit / loss value
 	 */
-	plUpdate(positionId: string, pl: number): void;
+	plUpdate: (positionId: string, pl: number) => void;
 	/**
 	 * Call this method when a broker connection has a `pipValue` update.
 	 * The library subscribes to `pipValue` updates using {@link IBrokerTerminal.subscribePipValue}.
 	 * @param  {string} symbol - symbol with updated pip values
 	 * @param  {PipValues} pipValues - updated pip values
 	 */
-	pipValueUpdate(symbol: string, pipValues: PipValues): void;
+	pipValueUpdate: (symbol: string, pipValues: PipValues) => void;
 	/**
 	 * Call this method when a broker connection has received an individual position [profit and loss](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/trading-concepts/profit-and-loss) update.
 	 * @param  {string} individualPositionId - ID of the individual position
 	 * @param  {number} pl - updated profit / loss for the individual position
 	 */
-	individualPositionPLUpdate(individualPositionId: string, pl: number): void;
+	individualPositionPLUpdate: (individualPositionId: string, pl: number) => void;
 	/**
 	 * Call this method when a broker connection has received an equity update. This method is required by the standard Order Ticket to calculate risks.
 	 * @param  {number} equity - updated equity
 	 */
-	equityUpdate(equity: number): void;
+	equityUpdate: (equity: number) => void;
 	/**
 	 * Call this method when a broker connection has received a margin available update.
 	 * This method is required by the standard Order Ticket to display the margin meter.
@@ -10292,7 +10292,7 @@ export interface IBrokerConnectionAdapterHost {
 	 * The Trading Platform subscribes to margin available updates using {@link IBrokerTerminal.subscribeMarginAvailable}.
 	 * @param  {number} marginAvailable - updated available margin
 	 */
-	marginAvailableUpdate(marginAvailable: number): void;
+	marginAvailableUpdate: (marginAvailable: number) => void;
 	/**
 	 * Call this method when a broker connection has received a balance update.
 	 * This method is required by the crypto Order Ticket.
@@ -10300,13 +10300,13 @@ export interface IBrokerConnectionAdapterHost {
 	 * @param  {string} symbol - symbol ID
 	 * @param  {CryptoBalance} balance - updated crypto balance
 	 */
-	cryptoBalanceUpdate(symbol: string, balance: CryptoBalance): void;
+	cryptoBalanceUpdate: (symbol: string, balance: CryptoBalance) => void;
 	/**
 	 * Update the [Depth of Market](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/depth-of-market) data for a specified symbol.
 	 * @param  {string} symbol - symbol identifier
 	 * @param  {DOMData} equity - Depth of Market data
 	 */
-	domUpdate(symbol: string, equity: DOMData): void;
+	domUpdate: (symbol: string, equity: DOMData) => void;
 	/**
 	 * Sets the quantity for a given symbol.
 	 * Use this method only when you need to [override the user-specified quantity](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/common-issues#symbol-quantity-is-overridden) with a new value.
@@ -10315,13 +10315,13 @@ export interface IBrokerConnectionAdapterHost {
 	 * @param  {string} symbol - symbol
 	 * @param  {number} quantity - quantity to update
 	 */
-	setQty(symbol: string, quantity: number): void;
+	setQty: (symbol: string, quantity: number) => void;
 	/**
 	 * Returns the quantity for a given symbol.
 	 * @param  {string} symbol - symbol
 	 * @return  {Promise<number>} - quantity for the given symbol
 	 */
-	getQty(symbol: string): Promise<number>;
+	getQty: (symbol: string) => Promise<number>;
 	/**
 	 * Adds a callback to be executed whenever there's a change of quantity for a given symbol.
 	 *
@@ -10330,32 +10330,32 @@ export interface IBrokerConnectionAdapterHost {
 	 * @param  {string} symbol - symbol to which the callback will be linked to
 	 * @param  {SuggestedQtyChangedListener} listener - callback
 	 */
-	subscribeSuggestedQtyChange(symbol: string, listener: SuggestedQtyChangedListener): void;
+	subscribeSuggestedQtyChange: (symbol: string, listener: SuggestedQtyChangedListener) => void;
 	/**
 	 * Remove a previously added callback from the list.
 	 * @param  {string} symbol - symbol to remove the callback from
 	 * @param  {SuggestedQtyChangedListener} listener - callback to be removed
 	 */
-	unsubscribeSuggestedQtyChange(symbol: string, listener: SuggestedQtyChangedListener): void;
+	unsubscribeSuggestedQtyChange: (symbol: string, listener: SuggestedQtyChangedListener) => void;
 	/**
 	 * Shows the Order Ticket
 	 * @param  {T extends PreOrder} order - order to show in the dialog
 	 * @param  {OrderTicketFocusControl} [focus] - input control to focus on when dialog is opened
 	 */
-	showOrderDialog?<T extends PreOrder>(order: T, focus?: OrderTicketFocusControl): Promise<boolean>;
+	showOrderDialog?: <T extends PreOrder>(order: T, focus?: OrderTicketFocusControl) => Promise<boolean>;
 	/**
 	 * Shows notification message
 	 * @param  {string} title - notification title
 	 * @param  {string} text - notification content
 	 * @param  {NotificationType} [notificationType] - type of notification (default: NotificationType.Error)
 	 */
-	showNotification(title: string, text: string, notificationType?: NotificationType): void;
+	showNotification: (title: string, text: string, notificationType?: NotificationType) => void;
 	/**
 	 * Shows the cancel Order Ticket for specified order
 	 * @param  {string} orderId - id of order to potentially cancel
 	 * @param  {()=>Promise<void>} handler - cancel order confirmation handler (called when order should be cancelled)
 	 */
-	showCancelOrderDialog(orderId: string, handler: () => Promise<void>): Promise<void>;
+	showCancelOrderDialog: (orderId: string, handler: () => Promise<void>) => Promise<void>;
 	/**
 	 * Shows the cancel Order Ticket for multiple orders
 	 * @param  {string} symbol - symbol for which to cancel orders
@@ -10363,61 +10363,61 @@ export interface IBrokerConnectionAdapterHost {
 	 * @param  {number} qty - quantity of the order
 	 * @param  {()=>Promise<void>} handler - cancel orders confirmation handler (called when orders should be cancelled)
 	 */
-	showCancelMultipleOrdersDialog(symbol: string, side: Side, qty: number, handler: () => Promise<void>): Promise<void>;
+	showCancelMultipleOrdersDialog: (symbol: string, side: Side, qty: number, handler: () => Promise<void>) => Promise<void>;
 	/**
 	 * Shows the cancel brackets dialog
 	 * @param  {string} orderId - id of order
 	 * @param  {()=>Promise<void>} handler - cancel brackets confirmation handler (called when brackets should be cancelled)
 	 */
-	showCancelBracketsDialog(orderId: string, handler: () => Promise<void>): Promise<void>;
+	showCancelBracketsDialog: (orderId: string, handler: () => Promise<void>) => Promise<void>;
 	/**
 	 * Shows the cancel brackets dialog for multiple brackets
 	 * @param  {string} orderId - id of order
 	 * @param  {()=>Promise<void>} handler - cancel brackets confirmation handler (called when brackets should be cancelled)
 	 */
-	showCancelMultipleBracketsDialog(orderId: string, handler: () => Promise<void>): Promise<void>;
+	showCancelMultipleBracketsDialog: (orderId: string, handler: () => Promise<void>) => Promise<void>;
 	/**
 	 * Shows reverse position dialog
 	 * @param  {string} position - position to be reversed
 	 * @param  {()=>Promise<boolean>} handler - reverse position confirmation handler (called when the position should be reversed)
 	 */
-	showReversePositionDialog(position: string, handler: () => Promise<boolean>): Promise<boolean>;
+	showReversePositionDialog: (position: string, handler: () => Promise<boolean>) => Promise<boolean>;
 	/**
 	 * Shows the position brackets dialog
 	 * @param  {Position|IndividualPosition} position - position or individual position
 	 * @param  {Brackets} brackets - brackets for the position or individual position
 	 * @param  {OrderTicketFocusControl} focus - input control to focus on when dialog is opened
 	 */
-	showPositionBracketsDialog(position: Position | IndividualPosition, brackets: Brackets, focus: OrderTicketFocusControl): Promise<boolean>;
+	showPositionBracketsDialog: (position: Position | IndividualPosition, brackets: Brackets, focus: OrderTicketFocusControl) => Promise<boolean>;
 	/**
 	 * @deprecated This method will be removed from the library in the next major version. Please use {@link setAccountManagerVisibilityMode} instead.
 	 * Activate bottom widget
 	 */
-	activateBottomWidget(): Promise<void>;
+	activateBottomWidget: () => Promise<void>;
 	/**
 	 * Method to retrieve the current visibility mode of the Account Manager.
 	 */
-	getAccountManagerVisibilityMode(): IWatchedValueReadonly<BottomWidgetBarMode>;
+	getAccountManagerVisibilityMode: () => IWatchedValueReadonly<BottomWidgetBarMode>;
 	/**
 	 * Method to set a new visibility mode for the Account Manager.
 	 */
-	setAccountManagerVisibilityMode(mode: BottomWidgetBarMode): void;
+	setAccountManagerVisibilityMode: (mode: BottomWidgetBarMode) => void;
 	/**
 	 * Shows trading properties
 	 */
-	showTradingProperties(): void;
+	showTradingProperties: () => void;
 	/**
 	 * Returns symbol `minTick`.
 	 * @param  {string} symbol - symbol identifier
 	 */
-	getSymbolMinTick(symbol: string): Promise<number>;
+	getSymbolMinTick: (symbol: string) => Promise<number>;
 	/**
 	 * Displays a message dialog to a user.
 	 * @param  {string} title - title of the message dialog
 	 * @param  {string} text - message
 	 * @param  {boolean} [textHasHTML] - whether message text contains HTML
 	 */
-	showMessageDialog(title: string, text: string, textHasHTML?: boolean): void;
+	showMessageDialog: (title: string, text: string, textHasHTML?: boolean) => void;
 	/**
 	 * Displays a confirmation dialog to a user and returns a Promise to the result.
 	 * @param  {string} title - title of the confirmation dialog
@@ -10426,7 +10426,7 @@ export interface IBrokerConnectionAdapterHost {
 	 * @param  {string} [cancelButtonText] - text for the cancel button (`false` result)
 	 * @param  {boolean} [showDisableConfirmationsCheckbox] - show disable confirmations checkbox within the dialog
 	 */
-	showConfirmDialog(title: string, content: string | string[], mainButtonText?: string, cancelButtonText?: string, showDisableConfirmationsCheckbox?: boolean): Promise<boolean>;
+	showConfirmDialog: (title: string, content: string | string[], mainButtonText?: string, cancelButtonText?: string, showDisableConfirmationsCheckbox?: boolean) => Promise<boolean>;
 	/**
 	 * Displays a simple confirmation dialog to a user and returns a Promise to the result.
 	 * @param  {string} title - title of the confirmation dialog
@@ -10435,7 +10435,7 @@ export interface IBrokerConnectionAdapterHost {
 	 * @param  {string} [cancelButtonText] - text for the cancel button (`false` result)
 	 * @param  {boolean} [showDisableConfirmationsCheckbox] - show disable confirmations checkbox within the dialog
 	 */
-	showSimpleConfirmDialog(title: string, content: string | string[], mainButtonText?: string, cancelButtonText?: string, showDisableConfirmationsCheckbox?: boolean): Promise<boolean>;
+	showSimpleConfirmDialog: (title: string, content: string | string[], mainButtonText?: string, cancelButtonText?: string, showDisableConfirmationsCheckbox?: boolean) => Promise<boolean>;
 	/**
 	 * Retrieves the current value for a specified [Order Ticket](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/order-ticket) setting in the ellipsis menu.
 	 *
@@ -10443,7 +10443,7 @@ export interface IBrokerConnectionAdapterHost {
 	 * @param {K} settingName - The name of the Order Ticket setting.
 	 * @returns {Promise<OrderTicketSettings[K]>} A promise that resolves with the value of the specified setting.
 	 */
-	getOrderTicketSetting<K extends keyof OrderTicketSettings>(settingName: K): Promise<OrderTicketSettings[K]>;
+	getOrderTicketSetting: <K extends keyof OrderTicketSettings>(settingName: K) => Promise<OrderTicketSettings[K]>;
 	/**
 	 * Updates the value of a specified [Order Ticket](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/order-ticket) setting in the ellipsis menu.
 	 *
@@ -10452,7 +10452,7 @@ export interface IBrokerConnectionAdapterHost {
 	 * @param {OrderTicketSettings[K]} value - The new value to be assigned to the setting.
 	 * @returns {Promise<void>} A promise that resolves when the setting is successfully updated.
 	 */
-	setOrderTicketSetting<K extends keyof OrderTicketSettings>(settingName: K, value: OrderTicketSettings[K]): Promise<void>;
+	setOrderTicketSetting: <K extends keyof OrderTicketSettings>(settingName: K, value: OrderTicketSettings[K]) => Promise<void>;
 }
 /**
  * The Broker API is a key component that enables trading.
@@ -10470,7 +10470,7 @@ export interface IBrokerTerminal extends IBrokerCommon, IBrokerAccountInfo {
 	 * @param  {string} [confirmId] - The ID of the confirmed order. This parameter is passed if [`supportPlaceOrderPreview`](https://www.tradingview.com/charting-library-docs/latest/api/interfaces/Charting_Library.BrokerConfigFlags#supportplaceorderpreview) is `true`.
 	 * @returns {PlaceOrderResult}  An object with the order ID.
 	 */
-	placeOrder(order: PreOrder, confirmId?: string): Promise<PlaceOrderResult>;
+	placeOrder: (order: PreOrder, confirmId?: string) => Promise<PlaceOrderResult>;
 	/**
 	 * The library calls `previewOrder` to show an order preview when a user clicks _Buy order_ or _Modify order_ in the Order Ticket.
 	 * To [enable order preview](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/order-ticket#enable-order-preview), set the {@link BrokerConfigFlags.supportPlaceOrderPreview} or {@link BrokerConfigFlags.supportModifyOrderPreview} configuration flag to `true`.
@@ -10478,7 +10478,7 @@ export interface IBrokerTerminal extends IBrokerCommon, IBrokerAccountInfo {
 	 * This method returns estimated commission, fees, margin, and other information for the order without it actually being placed.
 	 * @param  {PreOrder} order - Order information.
 	 */
-	previewOrder?(order: PreOrder): Promise<OrderPreviewResult>;
+	previewOrder?: (order: PreOrder) => Promise<OrderPreviewResult>;
 	/**
 	 * The library calls `modifyOrder` to request modifying an existing order.
 	 * You should handle this request on your backend side and provide the library with a new order state. To do this, call the {@link IBrokerConnectionAdapterHost.orderUpdate} method right afterwards.
@@ -10491,13 +10491,13 @@ export interface IBrokerTerminal extends IBrokerCommon, IBrokerAccountInfo {
 	 * @param  {Order} order - Order information.
 	 * @param  {string} [confirmId] - The ID of the confirmed order. This parameter is passed if [`supportModifyOrderPreview`](https://www.tradingview.com/charting-library-docs/latest/api/interfaces/Charting_Library.BrokerConfigFlags#supportmodifyorderpreview) is `true`.
 	 */
-	modifyOrder(order: Order, confirmId?: string): Promise<void>;
+	modifyOrder: (order: Order, confirmId?: string) => Promise<void>;
 	/**
 	 * The library calls `cancelOrder` to request canceling an order.
 	 * You should handle this request on your backend side and provide the library with a new order state. To do this, call the {@link IBrokerConnectionAdapterHost.orderUpdate} method right afterwards.
 	 * @param  {string} orderId - The ID of the order to cancel.
 	 */
-	cancelOrder(orderId: string): Promise<void>;
+	cancelOrder: (orderId: string) => Promise<void>;
 	/**
 	 * The library calls `cancelOrders` to request canceling multiple orders for a symbol.
 	 * You should handle this request on your backend side and provide the library with a new order states. To do this, call the {@link IBrokerConnectionAdapterHost.orderUpdate} method right afterwards.
@@ -10507,7 +10507,7 @@ export interface IBrokerTerminal extends IBrokerCommon, IBrokerAccountInfo {
 	 * @param  {Side|undefined} side - An order side.
 	 * @param  {string[]} ordersIds - IDs of the orders to cancel. The orders are selected based on the specified `symbol` and `side`.
 	 */
-	cancelOrders?(symbol: string, side: Side | undefined, ordersIds: string[]): Promise<void>;
+	cancelOrders?: (symbol: string, side: Side | undefined, ordersIds: string[]) => Promise<void>;
 	/**
 	 * This method is called if the {@link BrokerConfigFlags.supportNativeReversePosition} configuration flag is on.
 	 * It allows reversing the position by ID.
@@ -10516,7 +10516,7 @@ export interface IBrokerTerminal extends IBrokerCommon, IBrokerAccountInfo {
 	 * Otherwise, the library will return a [timeout issue](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/common-issues#timeout-issue).
 	 * @param  {string} positionId - position
 	 */
-	reversePosition?(positionId: string): Promise<void>;
+	reversePosition?: (positionId: string) => Promise<void>;
 	/**
 	 * The library calls `closePosition` to request [closing a position](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/trading-concepts/positions#close-positions) by ID.
 	 * You should handle this request on your backend side and provide the library with a new position state. To do this, call the {@link IBrokerConnectionAdapterHost.positionUpdate} method right afterwards.
@@ -10527,7 +10527,7 @@ export interface IBrokerTerminal extends IBrokerCommon, IBrokerAccountInfo {
 	 * @param  {number} [amount] - The amount is specified if [`supportPartialClosePosition`](https://www.tradingview.com/charting-library-docs/latest/api/interfaces/Charting_Library.BrokerConfigFlags#supportpartialcloseposition) is `true` and the user wants to close only [part of the position](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/trading-concepts/positions#partial-closing).
 	 * @param  {string} [confirmId] - The ID of the confirmed close position preview. This parameter is passed if [`supportPreviewClosePosition`](https://www.tradingview.com/charting-library-docs/latest/api/interfaces/Charting_Library.BrokerConfigFlags#supportpreviewcloseposition) is `true`.
 	 */
-	closePosition?(positionId: string, amount?: number, confirmId?: string): Promise<void>;
+	closePosition?: (positionId: string, amount?: number, confirmId?: string) => Promise<void>;
 	/**
 	 * The library calls `closeIndividualPosition` if the {@link BrokerConfigFlags.supportCloseIndividualPosition} or {@link BrokerConfigFlags.supportPartialCloseIndividualPosition} configuration flag is `true`.
 	 * `closeIndividualPosition` allows [closing an individual position](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/trading-concepts/positions#close-positions) by ID.
@@ -10538,7 +10538,7 @@ export interface IBrokerTerminal extends IBrokerCommon, IBrokerAccountInfo {
 	 * @param  {number} [amount] - The amount is specified if `supportPartialCloseIndividualPosition` is `true` and the user wants to close only [part of the individual position](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/trading-concepts/positions#partial-closing).
 	 * @param  {string} [confirmId] - The ID of the confirmed close position preview. This parameter is passed if [`supportPreviewClosePosition`](https://www.tradingview.com/charting-library-docs/latest/api/interfaces/Charting_Library.BrokerConfigFlags#supportpreviewcloseposition) is `true`.
 	 */
-	closeIndividualPosition?(individualPositionId: string, amount?: number, confirmId?: string): Promise<void>;
+	closeIndividualPosition?: (individualPositionId: string, amount?: number, confirmId?: string) => Promise<void>;
 	/**
 	 * The library calls `editPositionBrackets` if the {@link BrokerConfigFlags.supportPositionBrackets} configuration flag is `true`.
 	 * It shows a dialog that enables take-profit and stop-loss editing.
@@ -10548,7 +10548,7 @@ export interface IBrokerTerminal extends IBrokerCommon, IBrokerAccountInfo {
 	 * @param  {Brackets} brackets - New brackets to be set for the position.
 	 * @param  {CustomInputFieldsValues} [customFields] - Custom fields to display in the dialog.
 	 */
-	editPositionBrackets?(positionId: string, brackets: Brackets, customFields?: CustomInputFieldsValues): Promise<void>;
+	editPositionBrackets?: (positionId: string, brackets: Brackets, customFields?: CustomInputFieldsValues) => Promise<void>;
 	/**
 	 * This method is called if the {@link BrokerConfigFlags.supportIndividualPositionBrackets} configuration flag is on.
 	 * It displays a dialog that enables take-profit and stop-loss editing.
@@ -10557,35 +10557,35 @@ export interface IBrokerTerminal extends IBrokerCommon, IBrokerAccountInfo {
 	 * @param  {string} individualPositionId - ID of existing individual position to be modified
 	 * @param  {Brackets} brackets - new Brackets to be set for the individual position
 	 */
-	editIndividualPositionBrackets?(individualPositionId: string, brackets: Brackets): Promise<void>;
+	editIndividualPositionBrackets?: (individualPositionId: string, brackets: Brackets) => Promise<void>;
 	/**
 	 * This method is called to receive leverageInfo from the broker.
 	 * @param  {LeverageInfoParams} leverageInfoParams - information about the specific symbol to provide leverage information for
 	 */
-	leverageInfo?(leverageInfoParams: LeverageInfoParams): Promise<LeverageInfo>;
+	leverageInfo?: (leverageInfoParams: LeverageInfoParams) => Promise<LeverageInfo>;
 	/**
 	 * This method is called to send user's leverage value to the broker. The value should be verified and corrected on the broker's side if required, and sent back in the response.
 	 * @param  {LeverageSetParams} leverageSetParams - `leverageSetParams` is an object similar to {@link leverageInfoParams}, but contains an additional `leverage: number` field, which holds the leverage value set by the user.
 	 */
-	setLeverage?(leverageSetParams: LeverageSetParams): Promise<LeverageSetResult>;
+	setLeverage?: (leverageSetParams: LeverageSetParams) => Promise<LeverageSetResult>;
 	/**
 	 * This method is called to receive {@link LeveragePreviewResult} object which holds messages about the leverage value set by the user.
 	 * @param  {LeverageSetParams} leverageSetParams - `leverageSetParams` is an object similar to {@link leverageInfoParams}, but contains an additional `leverage: number` field, which holds the leverage value set by the user.
 	 */
-	previewLeverage?(leverageSetParams: LeverageSetParams): Promise<LeveragePreviewResult>;
+	previewLeverage?: (leverageSetParams: LeverageSetParams) => Promise<LeveragePreviewResult>;
 	/**
 	 * The method should be implemented if you use the standard Order Ticket and support stop loss. Equity is used to calculate Risk in Percent.
 	 *
 	 * Once this method is called the broker should provide equity (Balance + P/L) updates via {@link IBrokerConnectionAdapterHost.equityUpdate} method.
 	 */
-	subscribeEquity?(): void;
+	subscribeEquity?: () => void;
 	/**
 	 * The method should be implemented if you use the standard Order Ticket and want to show the margin meter.
 	 *
 	 * Once this method is called the broker should provide margin available updates via {@link IBrokerConnectionAdapterHost.marginAvailableUpdate} method.
 	 * @param  {string} symbol - symbol identifier
 	 */
-	subscribeMarginAvailable?(symbol: string): void;
+	subscribeMarginAvailable?: (symbol: string) => void;
 	/**
 	 * Use this method to enable dynamic updates of the pip value defined in {@link InstrumentInfo.pipValue}.
 	 * The pip value is displayed in the *Order info* section of the [Order Ticket](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/order-ticket) and is used to calculate the trade value and risks.
@@ -10594,27 +10594,27 @@ export interface IBrokerTerminal extends IBrokerCommon, IBrokerAccountInfo {
 	 * If `subscribePipValue` is not implemented, the static value from {@link InstrumentInfo.pipValue} is displayed in the UI.
 	 * @param  {string} symbol - symbol identifier
 	 */
-	subscribePipValue?(symbol: string): void;
+	subscribePipValue?: (symbol: string) => void;
 	/**
 	 * The method should be implemented if you use a standard Order Ticket and implement `subscribePipValue`.
 	 *
 	 * Once this method is called the broker should stop providing `pipValue` updates.
 	 * @param  {string} symbol - symbol identifier
 	 */
-	unsubscribePipValue?(symbol: string): void;
+	unsubscribePipValue?: (symbol: string) => void;
 	/**
 	 * The method should be implemented if you use the standard Order Ticket want to show the margin meter.
 	 *
 	 * Once this method is called the broker should stop providing margin available updates.
 	 * @param  {string} symbol - symbol identifier
 	 */
-	unsubscribeMarginAvailable?(symbol: string): void;
+	unsubscribeMarginAvailable?: (symbol: string) => void;
 	/**
 	 * The method should be implemented if you use the standard Order Ticket and support stop loss.
 	 *
 	 * Once this method is called the broker should stop providing equity updates.
 	 */
-	unsubscribeEquity?(): void;
+	unsubscribeEquity?: () => void;
 }
 /**
  * The main chart API.
@@ -10637,7 +10637,7 @@ export interface IChartWidgetApi {
 	 * ```
 	 * @returns A subscription object for new data loaded for the chart.
 	 */
-	onDataLoaded(): ISubscription<() => void>;
+	onDataLoaded: () => ISubscription<() => void>;
 	/**
 	 * Get a subscription object for the chart symbol changing.
 	 *
@@ -10647,7 +10647,7 @@ export interface IChartWidgetApi {
 	 * ```
 	 * @returns A subscription object for when a symbol is resolved (ie changing resolution, timeframe, currency, etc.)
 	 */
-	onSymbolChanged(): ISubscription<(symbol: LibrarySymbolInfo) => void>;
+	onSymbolChanged: () => ISubscription<(symbol: LibrarySymbolInfo) => void>;
 	/**
 	 * Get a subscription object for the chart resolution (interval) changing. This method also allows you to track whether the chart's [date range](https://www.tradingview.com/charting-library-docs/latest/getting_started/glossary#date-range) is changed.
 	 * The `timeframe` argument represents if a user clicks on the [time frame toolbar](https://www.tradingview.com/charting-library-docs/latest/ui_elements/Time-Scale#time-frame-toolbar) or changes the date range manually.
@@ -10678,7 +10678,7 @@ export interface IChartWidgetApi {
 	 * ```
 	 * @returns A subscription object for the chart interval (resolution) changing.
 	 */
-	onIntervalChanged(): ISubscription<(interval: ResolutionString, timeFrameParameters: {
+	onIntervalChanged: () => ISubscription<(interval: ResolutionString, timeFrameParameters: {
 		timeframe?: TimeFrameValue;
 	}) => void>;
 	/**
@@ -10693,7 +10693,7 @@ export interface IChartWidgetApi {
 	 * ```
 	 * @returns A subscription object for the chart's visible range changing.
 	 */
-	onVisibleRangeChanged(): ISubscription<(range: VisibleTimeRange) => void>;
+	onVisibleRangeChanged: () => ISubscription<(range: VisibleTimeRange) => void>;
 	/**
 	 * Get a subscription object for the chart type changing.
 	 *
@@ -10706,7 +10706,7 @@ export interface IChartWidgetApi {
 	 * ```
 	 * @returns A subscription object for the chart type changing.
 	 */
-	onChartTypeChanged(): ISubscription<(chartType: SeriesType) => void>;
+	onChartTypeChanged: () => ISubscription<(chartType: SeriesType) => void>;
 	/**
 	 * Provide a callback function that will be called when chart data is loaded.
 	 * If chart data is already loaded when this method is called, the callback is called immediately.
@@ -10720,7 +10720,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @param callback A callback function called when chart data is loaded.
 	 */
-	dataReady(callback?: () => void): boolean;
+	dataReady: (callback?: () => void) => boolean;
 	/**
 	 * Get a subscription object for the crosshair moving over the chart.
 	 *
@@ -10733,13 +10733,13 @@ export interface IChartWidgetApi {
 	 * ```
 	 * @returns A subscription object for the crosshair moving over the chart.
 	 */
-	crossHairMoved(): ISubscription<(params: CrossHairMovedEventParams) => void>;
+	crossHairMoved: () => ISubscription<(params: CrossHairMovedEventParams) => void>;
 	/**
 	 * Get a subscription object for the ID of the study or series hovered by the crosshair.
 	 *
 	 * @returns A subscription object for the ID of the study or series hovered by the crosshair. Subscribers will be called with `null` if there is no study or series hovered.
 	 */
-	onHoveredSourceChanged(): ISubscription<(sourceId: EntityId) => void>;
+	onHoveredSourceChanged: () => ISubscription<(sourceId: EntityId) => void>;
 	/**
 	 * Allows you to display a certain time range on the chart.
 	 *
@@ -10756,7 +10756,7 @@ export interface IChartWidgetApi {
 	 * @param options Options for the new visible range.
 	 * @returns A promise that resolves when the visible range is set.
 	 */
-	setVisibleRange(range: SetVisibleTimeRange, options?: SetVisibleRangeOptions): Promise<void>;
+	setVisibleRange: (range: SetVisibleTimeRange, options?: SetVisibleRangeOptions) => Promise<void>;
 	/**
 	 * Change the chart's symbol.
 	 *
@@ -10771,7 +10771,7 @@ export interface IChartWidgetApi {
 	 * @param options Optional object of options for the new symbol or optional callback that is called when the data for the new symbol has loaded.
 	 * @returns A promise that resolves with a boolean value. It's `true` when the symbol has been set and `false` when setting the symbol is not possible.
 	 */
-	setSymbol(symbol: string, options?: SetSymbolOptions | (() => void)): Promise<boolean>;
+	setSymbol: (symbol: string, options?: SetSymbolOptions | (() => void)) => Promise<boolean>;
 	/**
 	 * Change the chart's interval (resolution).
 	 *
@@ -10786,7 +10786,7 @@ export interface IChartWidgetApi {
 	 * @param options Optional object of options for the new resolution or optional callback that is called when the data for the new resolution has loaded.
 	 * @returns A promise that resolves with a boolean value. It's `true` when the resolution has been set and `false` when setting the resolution is not possible.
 	 */
-	setResolution(resolution: ResolutionString, options?: SetResolutionOptions | (() => void)): Promise<boolean>;
+	setResolution: (resolution: ResolutionString, options?: SetResolutionOptions | (() => void)) => Promise<boolean>;
 	/**
 	 * Change the chart's type.
 	 *
@@ -10799,7 +10799,7 @@ export interface IChartWidgetApi {
 	 * @param callback An optional callback function. Called when the chart type has changed and data has loaded.
 	 * @returns A promise that resolves with a boolean value. It's `true` when the chart type has been set and `false` when setting the chart type is not possible.
 	 */
-	setChartType(type: SeriesType, callback?: () => void): void;
+	setChartType: (type: SeriesType, callback?: () => void) => void;
 	/**
 	 * Force the chart to re-request data, for example if there are [internet connection issues](https://www.tradingview.com/charting-library-docs/latest/connecting_data/Datafeed-Issues#internet-connection-issues).
 	 * Before calling this function the {@link IChartWidgetApi.resetCache} method should be called.
@@ -10810,7 +10810,7 @@ export interface IChartWidgetApi {
 	 * ```
 	 *
 	 */
-	resetData(): void;
+	resetData: () => void;
 	/**
 	 * Execute an action by ID.
 	 * See [Chart methods](https://www.tradingview.com/charting-library-docs/latest/ui_elements/Chart#execute-action-by-id) for more information.
@@ -10826,7 +10826,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @param actionId An action ID.
 	 */
-	executeActionById(actionId: ChartActionId): void;
+	executeActionById: (actionId: ChartActionId) => void;
 	/**
 	 * Get the state of a checkable action.
 	 *
@@ -10840,7 +10840,7 @@ export interface IChartWidgetApi {
 	 * @param actionId An action ID.
 	 * @returns `null` if the action with specified id doesn't exist or is not checkable, `true` if the action is checked, `false` otherwise.
 	 */
-	getCheckableActionState(actionId: ChartActionId): boolean | null;
+	getCheckableActionState: (actionId: ChartActionId) => boolean | null;
 	/**
 	 * Force the chart to re-request all bar marks and timescale marks.
 	 *
@@ -10850,7 +10850,7 @@ export interface IChartWidgetApi {
 	 * ```
 	 *
 	 */
-	refreshMarks(): void;
+	refreshMarks: () => void;
 	/**
 	 * Remove marks from the chart.
 	 *
@@ -10861,7 +10861,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @param marksToClear type of marks to clear. If nothing is specified both bar & timescale marks will be removed.
 	 */
-	clearMarks(marksToClear?: ClearMarksMode): void;
+	clearMarks: (marksToClear?: ClearMarksMode) => void;
 	/**
 	 * Get an array of IDs and name for all drawings on the chart.
 	 *
@@ -10872,7 +10872,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @returns An array of drawing information.
 	 */
-	getAllShapes(): EntityInfo[];
+	getAllShapes: () => EntityInfo[];
 	/**
 	 * Get an array of IDs and names for all studies on the chart.
 	 *
@@ -10883,7 +10883,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @returns An array of study information.
 	 */
-	getAllStudies(): EntityInfo[];
+	getAllStudies: () => EntityInfo[];
 	/**
 	 * Get the chart's price to bar ratio.
 	 *
@@ -10894,7 +10894,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @returns The ratio or `null` if no ratio is defined.
 	 */
-	getPriceToBarRatio(): number | null;
+	getPriceToBarRatio: () => number | null;
 	/**
 	 * Set the chart's price to bar ratio.
 	 *
@@ -10906,7 +10906,7 @@ export interface IChartWidgetApi {
 	 * @param ratio The new price to bar ratio.
 	 * @param options Optional undo options.
 	 */
-	setPriceToBarRatio(ratio: number, options?: UndoOptions): void;
+	setPriceToBarRatio: (ratio: number, options?: UndoOptions) => void;
 	/**
 	 * Get the locked/unlocked state of the chart's price to bar ratio.
 	 *
@@ -10916,7 +10916,7 @@ export interface IChartWidgetApi {
 	 * ```
 	 *
 	 */
-	isPriceToBarRatioLocked(): boolean;
+	isPriceToBarRatioLocked: () => boolean;
 	/**
 	 * Lock or unlock the chart's price to bar ratio.
 	 *
@@ -10928,7 +10928,7 @@ export interface IChartWidgetApi {
 	 * @param value `true` to lock, `false` to unlock.
 	 * @param options Optional undo options.
 	 */
-	setPriceToBarRatioLocked(value: boolean, options?: UndoOptions): void;
+	setPriceToBarRatioLocked: (value: boolean, options?: UndoOptions) => void;
 	/**
 	 * Get an array of the heigh of all panes.
 	 *
@@ -10939,7 +10939,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @returns An array of heights.
 	 */
-	getAllPanesHeight(): number[];
+	getAllPanesHeight: () => number[];
 	/**
 	 * Set the height for each pane in the order provided.
 	 *
@@ -10950,7 +10950,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @param heights An array of heights.
 	 */
-	setAllPanesHeight(heights: readonly number[]): void;
+	setAllPanesHeight: (heights: readonly number[]) => void;
 	/**
 	 * Maximize to its full size currently selected chart.
 	 *
@@ -10959,13 +10959,13 @@ export interface IChartWidgetApi {
 	 * widget.activeChart().maximizeChart();
 	 * ```
 	 */
-	maximizeChart(): void;
+	maximizeChart: () => void;
 	/**
 	 * Check if the chart is maximized or not.
 	 *
 	 * @returns `true` if maximized, `false` otherwise.
 	 */
-	isMaximized(): boolean;
+	isMaximized: () => boolean;
 	/**
 	 * Restore to its initial size currently selected chart.
 	 *
@@ -10974,7 +10974,7 @@ export interface IChartWidgetApi {
 	 * widget.activeChart().restoreChart();
 	 * ```
 	 */
-	restoreChart(): void;
+	restoreChart: () => void;
 	/**
 	 * Get an object with operations available for the specified set of entities.
 	 *
@@ -10985,7 +10985,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @param sources An array of entity IDs.
 	 */
-	availableZOrderOperations(sources: readonly EntityId[]): AvailableZOrderOperations;
+	availableZOrderOperations: (sources: readonly EntityId[]) => AvailableZOrderOperations;
 	/**
 	 * Move the group to the bottom of the Z-order.
 	 *
@@ -10996,7 +10996,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @param entities An array of entity IDs.
 	 */
-	sendToBack(entities: readonly EntityId[]): void;
+	sendToBack: (entities: readonly EntityId[]) => void;
 	/**
 	 * Move the sources to the top of the Z-order.
 	 *
@@ -11007,7 +11007,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @param sources An array of source IDs.
 	 */
-	bringToFront(sources: readonly EntityId[]): void;
+	bringToFront: (sources: readonly EntityId[]) => void;
 	/**
 	 * Move the sources one level up in the Z-order.
 	 *
@@ -11018,7 +11018,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @param sources An array of source IDs.
 	 */
-	bringForward(sources: readonly EntityId[]): void;
+	bringForward: (sources: readonly EntityId[]) => void;
 	/**
 	 * Move the sources one level down in the Z-order.
 	 *
@@ -11029,7 +11029,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @param sources An array of source IDs.
 	 */
-	sendBackward(sources: readonly EntityId[]): void;
+	sendBackward: (sources: readonly EntityId[]) => void;
 	/**
 	 * Adds an indicator or a symbol for comparison to the chart.
 	 * For more information, refer to the [Indicators](https://www.tradingview.com/charting-library-docs/latest/ui_elements/indicators/) article.
@@ -11042,7 +11042,7 @@ export interface IChartWidgetApi {
 	 * @param  {CreateStudyOptions} [options] - study creation options
 	 * @returns ID of the created study
 	 */
-	createStudy<TOverrides extends Partial<SingleIndicatorOverrides>>(name: string, forceOverlay?: boolean, lock?: boolean, inputs?: Record<string, StudyInputValue>, overrides?: TOverrides, options?: CreateStudyOptions): Promise<EntityId | null>;
+	createStudy: <TOverrides extends Partial<SingleIndicatorOverrides>>(name: string, forceOverlay?: boolean, lock?: boolean, inputs?: Record<string, StudyInputValue>, overrides?: TOverrides, options?: CreateStudyOptions) => Promise<EntityId | null>;
 	/**
 	 * Get a study by ID.
 	 *
@@ -11054,7 +11054,7 @@ export interface IChartWidgetApi {
 	 * @param entityId The study ID.
 	 * @returns An API object for interacting with the study.
 	 */
-	getStudyById(entityId: EntityId): IStudyApi;
+	getStudyById: (entityId: EntityId) => IStudyApi;
 	/**
 	 * Get the main series.
 	 *
@@ -11065,7 +11065,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @returns An API object for interacting with the main series.
 	 */
-	getSeries(): ISeriesApi;
+	getSeries: () => ISeriesApi;
 	/**
 	 * Create a new single point drawing.
 	 *
@@ -11080,7 +11080,7 @@ export interface IChartWidgetApi {
 	 * @param options An options object for the new drawing.
 	 * @returns Promise of the ID for the new drawing if it was created successfully.
 	 */
-	createShape<TOverrides extends object>(point: ShapePoint, options: CreateShapeOptions<TOverrides>): Promise<EntityId>;
+	createShape: <TOverrides extends object>(point: ShapePoint, options: CreateShapeOptions<TOverrides>) => Promise<EntityId>;
 	/**
 	 * Create a new multi point drawing.
 	 *
@@ -11107,7 +11107,7 @@ export interface IChartWidgetApi {
 	 * @param options An options object for the new drawing.
 	 * @returns Promise of the ID for the new drawing if it was created successfully.
 	 */
-	createMultipointShape<TOverrides extends object>(points: ShapePoint[], options: CreateMultipointShapeOptions<TOverrides>): Promise<EntityId>;
+	createMultipointShape: <TOverrides extends object>(points: ShapePoint[], options: CreateMultipointShapeOptions<TOverrides>) => Promise<EntityId>;
 	/**
 	 * Create a new anchored drawing. Anchored drawings maintain their position when the chart's visible range changes.
 	 *
@@ -11121,7 +11121,7 @@ export interface IChartWidgetApi {
 	 * @param position Percent-based x and y position of the new drawing, relative to the top left of the chart.
 	 * @param options An options object for the new drawing.
 	 */
-	createAnchoredShape<TOverrides extends object>(position: PositionPercents, options: CreateAnchoredShapeOptions<TOverrides>): Promise<EntityId>;
+	createAnchoredShape: <TOverrides extends object>(position: PositionPercents, options: CreateAnchoredShapeOptions<TOverrides>) => Promise<EntityId>;
 	/**
 	 * Get a drawing by ID.
 	 *
@@ -11135,7 +11135,7 @@ export interface IChartWidgetApi {
 	 * @param entityId A drawing ID.
 	 * @returns An API object for interacting with the drawing.
 	 */
-	getShapeById(entityId: EntityId): ILineDataSourceApi;
+	getShapeById: (entityId: EntityId) => ILineDataSourceApi;
 	/**
 	 * Remove an entity (e.g. drawing or study) from the chart.
 	 *
@@ -11147,7 +11147,7 @@ export interface IChartWidgetApi {
 	 * @param entityId The ID of the entity.
 	 * @param options Optional undo options.
 	 */
-	removeEntity(entityId: EntityId, options?: UndoOptions): void;
+	removeEntity: (entityId: EntityId, options?: UndoOptions) => void;
 	/**
 	 * Remove all drawings from the chart.
 	 *
@@ -11157,7 +11157,7 @@ export interface IChartWidgetApi {
 	 * ```
 	 *
 	 */
-	removeAllShapes(): void;
+	removeAllShapes: () => void;
 	/**
 	 * Remove all studies from the chart.
 	 *
@@ -11167,7 +11167,7 @@ export interface IChartWidgetApi {
 	 * ```
 	 *
 	 */
-	removeAllStudies(): void;
+	removeAllStudies: () => void;
 	/**
 	 * Get an API object for interacting with the selection.
 	 *
@@ -11177,7 +11177,7 @@ export interface IChartWidgetApi {
 	 * ```
 	 *
 	 */
-	selection(): ISelectionApi;
+	selection: () => ISelectionApi;
 	/**
 	 * Show the properties dialog for a study or drawing.
 	 *
@@ -11189,7 +11189,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @param studyId An ID of the study or drawing.
 	 */
-	showPropertiesDialog(studyId: EntityId): void;
+	showPropertiesDialog: (studyId: EntityId) => void;
 	/**
 	 * Save the current study template to a object.
 	 *
@@ -11202,7 +11202,7 @@ export interface IChartWidgetApi {
 	 * @param options An object of study template options.
 	 * @returns A study template object.
 	 */
-	createStudyTemplate(options: CreateStudyTemplateOptions): object;
+	createStudyTemplate: (options: CreateStudyTemplateOptions) => object;
 	/**
 	 * Apply a study template to the chart.
 	 *
@@ -11213,7 +11213,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @param template A study template object.
 	 */
-	applyStudyTemplate(template: object): void;
+	applyStudyTemplate: (template: object) => void;
 	/**
 	 * Creates a new trading order on the chart.
 	 * For more information, refer to [Trading primitives](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/Trading-Primitives).
@@ -11242,7 +11242,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @returns An API object for interacting with the order.
 	 */
-	createOrderLine(): Promise<IOrderLineAdapter>;
+	createOrderLine: () => Promise<IOrderLineAdapter>;
 	/**
 	 * Creates a new trading position on the chart.
 	 * For more information, refer to [Trading primitives](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/Trading-Primitives).
@@ -11276,7 +11276,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @returns An API object for interacting with the position.
 	 */
-	createPositionLine(): Promise<IPositionLineAdapter>;
+	createPositionLine: () => Promise<IPositionLineAdapter>;
 	/**
 	 * Creates a new trade execution on the chart.
 	 * For more information, refer to [Trading primitives](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/Trading-Primitives).
@@ -11298,7 +11298,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @returns An API object for interacting with the execution.
 	 */
-	createExecutionShape(): Promise<IExecutionLineAdapter>;
+	createExecutionShape: () => Promise<IExecutionLineAdapter>;
 	/**
 	 * Get the name of the current symbol.
 	 *
@@ -11308,7 +11308,7 @@ export interface IChartWidgetApi {
 	 * ```
 	 *
 	 */
-	symbol(): string;
+	symbol: () => string;
 	/**
 	 * Get an extended information object for the current symbol.
 	 *
@@ -11318,7 +11318,7 @@ export interface IChartWidgetApi {
 	 * ```
 	 *
 	 */
-	symbolExt(): SymbolExt | null;
+	symbolExt: () => SymbolExt | null;
 	/**
 	 * Get the current resolution (interval).
 	 *
@@ -11328,7 +11328,7 @@ export interface IChartWidgetApi {
 	 * ```
 	 *
 	 */
-	resolution(): ResolutionString;
+	resolution: () => ResolutionString;
 	/**
 	 * Get the current visible time range.
 	 *
@@ -11338,13 +11338,13 @@ export interface IChartWidgetApi {
 	 * ```
 	 *
 	 */
-	getVisibleRange(): VisibleTimeRange;
+	getVisibleRange: () => VisibleTimeRange;
 	/**
 	 * Returns the range of bar times currently shown on the chart.
 	 * - This range **includes** existing bars and any visible incomplete bars created by non-time-based chart styles (for example, Renko).
 	 * - This range **does not include** future bar times beyond the last visible bar. To include them, use {@link IChartWidgetApi.getVisibleRange} instead.
 	 */
-	getVisibleBarsRange(): VisibleBarsTimeRange | null;
+	getVisibleBarsRange: () => VisibleBarsTimeRange | null;
 	/**
 	 * Returns the object with 'format' function that you can use to format the prices.
 	 *
@@ -11352,7 +11352,7 @@ export interface IChartWidgetApi {
 	 * widget.activeChart().priceFormatter().format(123);
 	 * ```
 	 */
-	priceFormatter(): INumberFormatter;
+	priceFormatter: () => INumberFormatter;
 	/**
 	 * Returns the main series style type.
 	 *
@@ -11360,11 +11360,11 @@ export interface IChartWidgetApi {
 	 * console.log(widget.activeChart().chartType());
 	 * ```
 	 */
-	chartType(): SeriesType;
+	chartType: () => SeriesType;
 	/**
 	 * Get an API object for interacting with the chart timezone.
 	 */
-	getTimezoneApi(): ITimezoneApi;
+	getTimezoneApi: () => ITimezoneApi;
 	/**
 	 * Get an array of API objects for interacting with the chart panes.
 	 *
@@ -11374,7 +11374,7 @@ export interface IChartWidgetApi {
 	 * ```
 	 *
 	 */
-	getPanes(): IPaneApi[];
+	getPanes: () => IPaneApi[];
 	/**
 	 * Export the current data from the chart.
 	 *
@@ -11403,7 +11403,7 @@ export interface IChartWidgetApi {
 	 * @param options Optional object of options to control the exported data.
 	 * @returns A promise that resolves with the exported data.
 	 */
-	exportData(options?: Partial<ExportDataOptions>): Promise<ExportedData>;
+	exportData: (options?: Partial<ExportDataOptions>) => Promise<ExportedData>;
 	/**
 	 * Enable or disable [drag-to-export feature](https://www.tradingview.com/charting-library-docs/latest/ui_elements/Chart#enable-drag-to-export-feature).
 	 *
@@ -11425,7 +11425,7 @@ export interface IChartWidgetApi {
 	 * To implement drag-to-export, you need to handle the `dragstart` event in your application and set the data to the `dataTransfer` object.
 	 * @param enabled `true` to enable drag-to-export, `false` to disable.
 	 */
-	setDragExportEnabled(enabled: boolean): void;
+	setDragExportEnabled: (enabled: boolean) => void;
 	/**
 	 * Check if the chart can be zoomed out using the {@link zoomOut} method.
 	 *
@@ -11438,15 +11438,15 @@ export interface IChartWidgetApi {
 	 *
 	 * @returns `true` if the chart can be zoomed out.
 	 */
-	canZoomOut(): boolean;
+	canZoomOut: () => boolean;
 	/**
 	 * Subscription if the chart can be zoomed out using the {@link zoomOut} method.
 	 */
-	canZoomOutWV(): IWatchedValueReadonly<boolean>;
+	canZoomOutWV: () => IWatchedValueReadonly<boolean>;
 	/**
 	 * Zoom out. The method has the same effect as clicking on the "Zoom out" button.
 	 */
-	zoomOut(): void;
+	zoomOut: () => void;
 	/**
 	 * Enable or disable zooming of the chart.
 	 *
@@ -11457,7 +11457,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @param enabled `true` to enable zooming, `false` to disable.
 	 */
-	setZoomEnabled(enabled: boolean): void;
+	setZoomEnabled: (enabled: boolean) => void;
 	/**
 	 * Enable or disable scrolling of the chart.
 	 *
@@ -11468,7 +11468,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @param enabled `true` to enable scrolling, `false` to disable.
 	 */
-	setScrollEnabled(enabled: boolean): void;
+	setScrollEnabled: (enabled: boolean) => void;
 	/**
 	 * Get an API object for interacting with groups of drawings.
 	 * Refer to the [Drawings API](https://www.tradingview.com/charting-library-docs/latest/ui_elements/drawings/drawings-api#drawing-groups-api) article for more information.
@@ -11479,17 +11479,17 @@ export interface IChartWidgetApi {
 	 * ```
 	 *
 	 */
-	shapesGroupController(): IShapesGroupControllerApi;
+	shapesGroupController: () => IShapesGroupControllerApi;
 	/**
 	 * Get the bar time to the end of the period
 	 * @param  {number} unixTime - date timestamp
 	 */
-	barTimeToEndOfPeriod(unixTime: number): number;
+	barTimeToEndOfPeriod: (unixTime: number) => number;
 	/**
 	 * Get the end of period to bar time
 	 * @param  {number} unixTime - date timestamp
 	 */
-	endOfPeriodToBarTime(unixTime: number): number;
+	endOfPeriodToBarTime: (unixTime: number) => number;
 	/**
 	 * Get an API object for interacting with the timescale.
 	 *
@@ -11499,7 +11499,7 @@ export interface IChartWidgetApi {
 	 * ```
 	 *
 	 */
-	getTimeScale(): ITimeScaleApi;
+	getTimeScale: () => ITimeScaleApi;
 	/**
 	 * Check if bar selection mode is active or not.
 	 *
@@ -11510,7 +11510,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @returns `true` if active, `false` otherwise.
 	 */
-	isSelectBarRequested(): boolean;
+	isSelectBarRequested: () => boolean;
 	/**
 	 * Switch the chart to bar selection mode.
 	 *
@@ -11527,7 +11527,7 @@ export interface IChartWidgetApi {
 	 *
 	 * @returns A promise that resolves to the timestamp of a bar selected by the user. Rejects if the bar selection was already requested or is cancelled.
 	 */
-	requestSelectBar(): Promise<number>;
+	requestSelectBar: () => Promise<number>;
 	/**
 	 * Cancel any active bar selection requests.
 	 *
@@ -11537,17 +11537,17 @@ export interface IChartWidgetApi {
 	 * ```
 	 *
 	 */
-	cancelSelectBar(): void;
+	cancelSelectBar: () => void;
 	/**
 	 * Load and apply a chart template.
 	 *
 	 * @param templateName The name of the template to load.
 	 */
-	loadChartTemplate(templateName: string): Promise<void>;
+	loadChartTemplate: (templateName: string) => Promise<void>;
 	/**
 	 * Get a readonly watched value that can be used to read/subscribe to the state of the chart's market status.
 	 */
-	marketStatus(): IWatchedValueReadonly<MarketStatus | null>;
+	marketStatus: () => IWatchedValueReadonly<MarketStatus | null>;
 	/**
 	 * Set the time frame for this chart.
 	 *
@@ -11564,26 +11564,26 @@ export interface IChartWidgetApi {
 	 *
 	 * @param timeFrame Object specifying the range and resolution to be applied
 	 */
-	setTimeFrame(timeFrame: RangeOptions): void;
+	setTimeFrame: (timeFrame: RangeOptions) => void;
 	/**
 	 * Get the line tools state containing the drawings on the active chart.
 	 *
 	 * This method requires that the [`saveload_separate_drawings_storage`](https://www.tradingview.com/charting-library-docs/latest/customization/Featuresets#saveload_separate_drawings_storage) featureset is enabled.
 	 */
-	getLineToolsState(): LineToolsAndGroupsState;
+	getLineToolsState: () => LineToolsAndGroupsState;
 	/**
 	 * Apply line tools state to the chart which will restore the drawings from the saved content.
 	 *
 	 * This method requires that the [`saveload_separate_drawings_storage`](https://www.tradingview.com/charting-library-docs/latest/customization/Featuresets#saveload_separate_drawings_storage) featureset is enabled.
 	 */
-	applyLineToolsState(state: LineToolsAndGroupsState): Promise<void>;
+	applyLineToolsState: (state: LineToolsAndGroupsState) => Promise<void>;
 	/**
 	 * Manually trigger the chart to request the linetools again from the {@link IExternalSaveLoadAdapter.loadLineToolsAndGroups} method
 	 * or the 'load_line_tools' endpoint of the [Save and load REST API](https://www.tradingview.com/charting-library-docs/latest/saving_loading/save-load-rest-api/).
 	 *
 	 * This method requires that the [`saveload_separate_drawings_storage`](https://www.tradingview.com/charting-library-docs/latest/customization/Featuresets#saveload_separate_drawings_storage) featureset is enabled.
 	 */
-	reloadLineToolsFromServer(): void;
+	reloadLineToolsFromServer: () => void;
 	/**
 	 * The visibility of inactivity gaps on intraday and DWM (daily, weekly, monthly) charts.
 	 *
@@ -11592,7 +11592,7 @@ export interface IChartWidgetApi {
 	 * When enabled (`true`), the chart displays gaps during trading sessions where there is missing data due to market inactivity.
 	 * Otherwise, these gaps are hidden and the chart appears continuous.
 	 */
-	inactivityGaps(): IWatchedValue<boolean>;
+	inactivityGaps: () => IWatchedValue<boolean>;
 }
 /**
  * The main interface for interacting with the library, returned by {@link ChartingLibraryWidgetConstructor}.
@@ -11602,19 +11602,19 @@ export interface IChartingLibraryWidget {
 	/**
 	 * A promise that resolves if and when the header is ready to be used.
 	 */
-	headerReady(): Promise<void>;
+	headerReady: () => Promise<void>;
 	/**
 	 * The library will call `callback` when the chart is ready to be used.
 	 *
 	 * @param callback A function that will be called when the chart is ready to be used.
 	 */
-	onChartReady(callback: EmptyCallback): void;
+	onChartReady: (callback: EmptyCallback) => void;
 	/**
 	 * The library will call `callback` when a greyed-out drawing tool or study is clicked.
 	 *
 	 * @param callback A function that will be called when a greyed-out drawing tool or study is clicked.
 	 */
-	onGrayedObjectClicked(callback: (obj: GrayedObject) => void): void;
+	onGrayedObjectClicked: (callback: (obj: GrayedObject) => void) => void;
 	/**
 	 * This method specifies an action that happens when a user presses certain keys.
 	 * It allows you to override the built&#8209;in shortcuts or specify custom ones.
@@ -11627,115 +11627,88 @@ export interface IChartingLibraryWidget {
 	 * @param shortCut A number, a string, or an array of numbers and strings.
 	 * @param callback A function that is called when the `shortCut` keys are pressed.
 	 */
-	onShortcut(shortCut: string | number | (string | number)[], callback: EmptyCallback): void;
+	onShortcut: (shortCut: string | number | (string | number)[], callback: EmptyCallback) => void;
 	/**
 	 * Subscribe to library events.
 	 *
 	 * @param event A event to subscribe to.
 	 * @param callback A callback that will be called when the event happens.
 	 */
-	subscribe<EventName extends keyof SubscribeEventsMap>(event: EventName, callback: SubscribeEventsMap[EventName]): void;
+	subscribe: <EventName extends keyof SubscribeEventsMap>(event: EventName, callback: SubscribeEventsMap[EventName]) => void;
 	/**
 	 * Unsubscribe from library events.
 	 *
 	 * @param event A event to unsubscribe from.
 	 * @param callback A callback to unsubscribe. Must be the same reference as a callback passed to {@link subscribe}.
 	 */
-	unsubscribe<EventName extends keyof SubscribeEventsMap>(event: EventName, callback: SubscribeEventsMap[EventName]): void;
+	unsubscribe: <EventName extends keyof SubscribeEventsMap>(event: EventName, callback: SubscribeEventsMap[EventName]) => void;
 	/**
 	 * Get an API instance that can be used to interact with a chart.
 	 *
 	 * @param index Zero based index of the chart.
 	 * @returns An API instance.
 	 */
-	chart(index?: number): IChartWidgetApi;
+	chart: (index?: number) => IChartWidgetApi;
 	/**
 	 * Get the configured locale of the widget. For example `en`, `zh`, `ru`.
 	 *
 	 * @returns A code representing the locale of the widget.
 	 */
-	getLanguage(): LanguageCode;
+	getLanguage: () => LanguageCode;
 	/**
 	 * Set the symbol and resolution of the active chart.
 	 * @param symbol A symbol to load.
 	 * @param interval A interval (resolution) to load.
 	 * @param callback A callback. Called when the symbol's data has finished loading.
 	 */
-	setSymbol(symbol: string, interval: ResolutionString, callback: EmptyCallback): void;
+	setSymbol: (symbol: string, interval: ResolutionString, callback: EmptyCallback) => void;
 	/**
 	 * Remove the widget and all its data from the page. The widget cannot be interacted with after it has been removed.
 	 */
-	remove(): void;
+	remove: () => void;
 	/**
 	 * Close all open context menus, pop-ups or dialogs.
 	 */
-	closePopupsAndDialogs(): void;
+	closePopupsAndDialogs: () => void;
 	/**
 	 * Select an icon. It's the same as clicking on the corresponding button in the left toolbar.
 	 *
 	 * @param linetool An icon drawing tool.
 	 * @param options An optional object with options.
 	 */
-	selectLineTool(linetool: "icon", options?: IconOptions): Promise<void>;
-	/**
-	 * Select a drawing or a cursor. It's the same as clicking on the corresponding button in the left toolbar.
-	 *
-	 * @param linetool A drawing or cursor to select (excluding 'icon')
-	 */
-	selectLineTool(linetool: Omit<"icon", SupportedLineTools>): Promise<void>;
-	/**
-	 * Select the Icon line tool. It's the same as clicking on the corresponding button in the left toolbar.
-	 *
-	 * @param linetool Icon line tool.
-	 * @param options An optional object with options. Currently only used for the 'icon' drawing.
-	 */
-	selectLineTool(linetool: "icon", options?: IconOptions): Promise<void>;
-	/**
-	 * Select the Emoji line tool. It's the same as clicking on the corresponding button in the left toolbar.
-	 *
-	 * @param linetool Emoji line tool.
-	 * @param options Options for the Emoji line tool
-	 */
-	selectLineTool(linetool: "emoji", options?: EmojiOptions): Promise<void>;
-	/**
-	 * Select a drawing, icon, or a cursor. It's the same as clicking on the corresponding button in the left toolbar.
-	 *
-	 * @param linetool A drawing or cursor to select.
-	 * @param options An optional object with options.
-	 */
-	selectLineTool(linetool: SupportedLineTools, options?: IconOptions | EmojiOptions): Promise<void>;
+	selectLineTool: ((linetool: "icon", options?: IconOptions) => Promise<void>) & ((linetool: Omit<"icon", SupportedLineTools>) => Promise<void>) & ((linetool: "icon", options?: IconOptions) => Promise<void>) & ((linetool: "emoji", options?: EmojiOptions) => Promise<void>) & ((linetool: SupportedLineTools, options?: IconOptions | EmojiOptions) => Promise<void>);
 	/**
 	 * Get the currently selected drawing or cursor.
 	 *
 	 * @returns An identifier for drawing or cursor.
 	 */
-	selectedLineTool(): SupportedLineTools;
+	selectedLineTool: () => SupportedLineTools;
 	/**
 	 * Saves the chart state to an object. This method is part of the [low-level save/load API](https://www.tradingview.com/charting-library-docs/latest/saving_loading/low-level-api).
 	 *
 	 * @param callback A function called with the chart state as the first argument.
 	 * @param options Options for customising the saved data.
 	 */
-	save(callback: (state: object) => void, options?: SaveChartOptions): void;
+	save: (callback: (state: object) => void, options?: SaveChartOptions) => void;
 	/**
 	 * Loads the chart state from an object. This method is part of the [low-level save/load API](https://www.tradingview.com/charting-library-docs/latest/saving_loading/low-level-api).
 	 *
 	 * @param state A chart state object to load.
 	 * @param extendedData A optional object of information about the saved state.
 	 */
-	load(state: object, extendedData?: SavedStateMetaInfo): Promise<void>;
+	load: (state: object, extendedData?: SavedStateMetaInfo) => Promise<void>;
 	/**
 	 * Get a list of chart descriptions saved to the server for the current user.
 	 *
 	 * @param callback A function called with an array of saved chart information as the first argument.
 	 */
-	getSavedCharts(callback: (chartRecords: SaveLoadChartRecord[]) => void): void;
+	getSavedCharts: (callback: (chartRecords: SaveLoadChartRecord[]) => void) => void;
 	/**
 	 * Load a saved chart from the server.
 	 *
 	 * @param chartRecord A chart information object (returned by {@link getSavedCharts}).
 	 */
-	loadChartFromServer(chartRecord: SaveLoadChartRecord): Promise<void>;
+	loadChartFromServer: (chartRecord: SaveLoadChartRecord) => Promise<void>;
 	/**
 	 * Save the current chart to the server.
 	 *
@@ -11743,14 +11716,14 @@ export interface IChartingLibraryWidget {
 	 * @param onFail An optional callback function called when the chart fails to save.
 	 * @param options An optional object of options for saving the chart.
 	 */
-	saveChartToServer(onComplete?: EmptyCallback, onFail?: (error: SaveChartErrorInfo) => void, options?: SaveChartToServerOptions): void;
+	saveChartToServer: (onComplete?: EmptyCallback, onFail?: (error: SaveChartErrorInfo) => void, options?: SaveChartToServerOptions) => void;
 	/**
 	 * Remove a saved chart from the server.
 	 *
 	 * @param chartId A chart ID from a {@link SaveLoadChartRecord} (returned by {@link getSavedCharts}).
 	 * @param onCompleteCallback A callback function called when the chart is successfully saved.
 	 */
-	removeChartFromServer(chartId: string | number, onCompleteCallback: EmptyCallback): void;
+	removeChartFromServer: (chartId: string | number, onCompleteCallback: EmptyCallback) => void;
 	/**
 	 * The widget will call the callback function each time the widget wants to display a context menu.
 	 * See also {@link ChartingLibraryWidgetOptions.context_menu}.
@@ -11782,7 +11755,7 @@ export interface IChartingLibraryWidget {
 	 * @param callback A function called with the time and price of the location on the chart that triggered the context menu.
 	 * The array of objects returned will add or remove items from the context menu.
 	 */
-	onContextMenu(callback: (unixTime: number, price: number) => ContextMenuItem[]): void;
+	onContextMenu: (callback: (unixTime: number, price: number) => ContextMenuItem[]) => void;
 	/**
 	 * Create a button in the top toolbar. This should be called after {@link headerReady} has resolved.
 	 *
@@ -11799,21 +11772,7 @@ export interface IChartingLibraryWidget {
 	 * @param options A optional object of options for the button.
 	 * @returns A `HTMLElement` you can customize.
 	 */
-	createButton(options?: CreateHTMLButtonOptions): HTMLElement;
-	/**
-	 * Create a button in the top toolbar. This should be called after {@link headerReady} has resolved.
-	 * If the `title` option is provided then the title text will be shown in a tooltip on hover.
-	 * If the `onClick` option is provided then the button will be clickable.
-	 * @param options A object of options for the button.
-	 * @returns A `string` button id
-	 */
-	createButton(options: CreateTradingViewStyledButtonOptions): string;
-	/**
-	 * Create a button in the top toolbar. This should be called after {@link headerReady} has resolved.
-	 * @param options A optional object of options for the button.
-	 * @returns A `HTMLElement` if the `useTradingViewStyle` option is `false` or undefined. `string`(button id) if `useTradingViewStyle` is `true`.
-	 */
-	createButton(options?: CreateButtonOptions): HTMLElement | string;
+	createButton: ((options?: CreateHTMLButtonOptions) => HTMLElement) & ((options: CreateTradingViewStyledButtonOptions) => string) & ((options?: CreateButtonOptions) => HTMLElement | string);
 	/**
 	 * Remove a button from the top toolbar. This should be called after {@link headerReady} has resolved.
 	 *
@@ -11827,7 +11786,7 @@ export interface IChartingLibraryWidget {
 	 *
 	 * @param buttonIdOrHtmlElement The button link or id that you receive from createButton method.
 	 */
-	removeButton(buttonIdOrHtmlElement: HTMLElement | string): void;
+	removeButton: (buttonIdOrHtmlElement: HTMLElement | string) => void;
 	/**
 	 * Add a custom dropdown menu to the top toolbar.
 	 *
@@ -11877,46 +11836,46 @@ export interface IChartingLibraryWidget {
 	 * ```
 	 * @param  {DropdownParams} params
 	 */
-	createDropdown(params: DropdownParams): Promise<IDropdownApi>;
+	createDropdown: (params: DropdownParams) => Promise<IDropdownApi>;
 	/**
 	 * Show a dialog with custom title and text along with an "OK" buttons.
 	 * @param params A object of options for the created dialog.
 	 */
-	showNoticeDialog(params: DialogParams<() => void>): void;
+	showNoticeDialog: (params: DialogParams<() => void>) => void;
 	/**
 	 * Show a dialog with custom title and text along with "OK" and "CANCEL" buttons.
 	 *
 	 * @param params A object of options for the created dialog.
 	 */
-	showConfirmDialog(params: DialogParams<(confirmed: boolean) => void>): void;
+	showConfirmDialog: (params: DialogParams<(confirmed: boolean) => void>) => void;
 	/**
 	 * Show the "Load Chart Layout" dialog.
 	 */
-	showLoadChartDialog(): void;
+	showLoadChartDialog: () => void;
 	/**
 	 * Show the "Copy Chart Layout" dialog.
 	 */
-	showSaveAsChartDialog(): void;
+	showSaveAsChartDialog: () => void;
 	/**
 	 * Get the symbol and interval of the active chart.
 	 */
-	symbolInterval(): SymbolIntervalResult;
+	symbolInterval: () => SymbolIntervalResult;
 	/**
 	 * Get the price formatter for the main series. You can use this to format prices as the char
 	 */
-	mainSeriesPriceFormatter(): INumberFormatter;
+	mainSeriesPriceFormatter: () => INumberFormatter;
 	/**
 	 * Get an array of supported intervals (resolutions).
 	 *
 	 * @returns An array of supported intervals. E.g. `['1D', '5D', '1Y']`.
 	 */
-	getIntervals(): string[];
+	getIntervals: () => string[];
 	/**
 	 * Get an array of the names of all supported studies. These names can be used when calling {@link IChartWidgetApi.createStudy}.
 	 *
 	 * @returns An array of supported study names. E.g. `['Accumulation/Distribution', 'Accumulative Swing Index', 'Advance/Decline', ...]`.
 	 */
-	getStudiesList(): string[];
+	getStudiesList: () => string[];
 	/**
 	 * Get an array of information about indicator inputs, including their names.
 	 * You need to know an input name to refer to this property in the code.
@@ -11925,7 +11884,7 @@ export interface IChartingLibraryWidget {
 	 *
 	 * @param studyName The name of a study.
 	 */
-	getStudyInputs(studyName: string): StudyInputInformation[];
+	getStudyInputs: (studyName: string) => StudyInputInformation[];
 	/**
 	 * Get information about indicator properties.
 	 * You can use this information to refer to the properties in the code.
@@ -11936,19 +11895,19 @@ export interface IChartingLibraryWidget {
 	 *
 	 * @param studyName The name of a indicator.
 	 */
-	getStudyStyles(studyName: string): StudyStyleInfo;
+	getStudyStyles: (studyName: string) => StudyStyleInfo;
 	/**
 	 * Add a custom CSS file for the library to load.
 	 *
 	 * @param url A url to the custom CSS file. Should be absolute or relative to the `static` folder.
 	 */
-	addCustomCSSFile(url: string): void;
+	addCustomCSSFile: (url: string) => void;
 	/**
 	 * Apply overrides to the chart without reloading. See also {@link ChartingLibraryWidgetOptions.overrides}.
 	 *
 	 * @param overrides An object of overrides to apply to the chart.
 	 */
-	applyOverrides<TOverrides extends Partial<ChartPropertiesOverrides>>(overrides: TOverrides): void;
+	applyOverrides: <TOverrides extends Partial<ChartPropertiesOverrides>>(overrides: TOverrides) => void;
 	/**
 	 * Apply overrides to indicator styles and inputs without reloading.
 	 * Refer to [Indicator Overrides](https://www.tradingview.com/charting-library-docs/latest/customization/overrides/indicator-overrides#change-default-properties-on-the-fly) for more information.
@@ -11956,11 +11915,11 @@ export interface IChartingLibraryWidget {
 	 *
 	 * @param overrides An object of overrides to apply to the studies.
 	 */
-	applyStudiesOverrides(overrides: object): void;
+	applyStudiesOverrides: (overrides: object) => void;
 	/**
 	 * Apply overrides to the order and position lines created either using the [Broker API](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/trading-concepts/#broker-api) or [trading primitives](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/Trading-Primitives) methods.
 	 */
-	applyTradingCustomization(tradingCustomization: TradingCustomization): Promise<void>;
+	applyTradingCustomization: (tradingCustomization: TradingCustomization) => Promise<void>;
 	/**
 	 * Trading Platform only. Get a promise that resolves with an API object for interacting with the widgetbar (right sidebar) watchlist.
 	 *
@@ -11975,19 +11934,19 @@ export interface IChartingLibraryWidget {
 	 *
 	 * @returns An API object for interacting with the widgetbar (right sidebar) watchlist.
 	 */
-	watchList(): Promise<IWatchListApi>;
+	watchList: () => Promise<IWatchListApi>;
 	/**
 	 * Trading Platform only. Get a promise that resolves with an API object for interacting with the widgetbar (right sidebar) news widget.
 	 *
 	 * @returns An API object for interacting with the widgetbar (right sidebar) widget.
 	 */
-	news(): Promise<INewsApi>;
+	news: () => Promise<INewsApi>;
 	/**
 	 * Trading Platform only. Get a promise that resolves with an API object for interacting with the widgetbar (right sidebar).
 	 *
 	 * @returns An API object for interacting with the widgetbar (right sidebar).
 	 */
-	widgetbar(): Promise<IWidgetbarApi>;
+	widgetbar: () => Promise<IWidgetbarApi>;
 	/**
 	 * Get an API object for interacting with the active chart.
 	 * For example, you can subscribe to events on the active chart, such as {@link IChartWidgetApi.onIntervalChanged}.
@@ -11997,13 +11956,13 @@ export interface IChartingLibraryWidget {
 	 *
 	 * @returns An API object for interacting with the chart.
 	 */
-	activeChart(): IChartWidgetApi;
+	activeChart: () => IChartWidgetApi;
 	/**
 	 * Get the index of the active chart in the layout.
 	 *
 	 * @returns number.
 	 */
-	activeChartIndex(): number;
+	activeChartIndex: () => number;
 	/**
 	 * Set which chart is currently active.
 	 * It is recommended that this method is only used when linked to a user action
@@ -12014,13 +11973,13 @@ export interface IChartingLibraryWidget {
 	 * then this method will not change the active chart.
 	 * @param index - index of chart to set as the active chart. Index is zero-based.
 	 */
-	setActiveChart(index: number): void;
+	setActiveChart: (index: number) => void;
 	/**
 	 * Get the number of charts in the current layout.
 	 *
 	 * @returns A count of the charts in the current layout.
 	 */
-	chartsCount(): number;
+	chartsCount: () => number;
 	/**
 	 * This method deletes non-visible charts from a multiple-chart layout.
 	 *
@@ -12038,39 +11997,39 @@ export interface IChartingLibraryWidget {
 	 *
 	 * @returns void
 	 */
-	unloadUnusedCharts(): void;
+	unloadUnusedCharts: () => void;
 	/**
 	 * Get the current chart layout type.
 	 *
 	 * @returns A string representation of the current layout type. E.g. `'2h'` for two charts split vertically.
 	 */
-	layout(): LayoutType;
+	layout: () => LayoutType;
 	/**
 	 * Set the current chart layout type.
 	 *
 	 * @params layout A string representation of the new layout type. E.g. `'2h'` for two charts split vertically.
 	 */
-	setLayout(layout: LayoutType): void;
+	setLayout: (layout: LayoutType) => void;
 	/**
 	 * Get the name of the current chart layout. The return value will be `undefined` if the current layout has not been saved.
 	 *
 	 * @returns A string of the name of the current chart layout.
 	 */
-	layoutName(): string;
+	layoutName: () => string;
 	/**
 	 * Resets the sizes of all charts within a multiple-chart layout back to their initial default values.
 	 * This action redistributes the space equally among all charts to ensure consistency in layout design.
 	 *
 	 * @param disableUndo When set to true, the reset action is not added to the undo stack. Hence, the user cannot undo the reset operation.
 	 */
-	resetLayoutSizes(disableUndo?: boolean): void;
+	resetLayoutSizes: (disableUndo?: boolean) => void;
 	/**
 	 * Set the sizes of charts within a multiple-chart layout.
 	 *
 	 * @param sizes An object of sizes to set for the charts.
 	 * @param disableUndo When set to `true`, the set action is not added to the undo stack. Hence, a user cannot undo the size changes.
 	 */
-	setLayoutSizes(sizes: Partial<LayoutSizes>, disableUndo?: boolean): void;
+	setLayoutSizes: (sizes: Partial<LayoutSizes>, disableUndo?: boolean) => void;
 	/**
 	 * Change the theme of the chart.
 	 *
@@ -12078,7 +12037,7 @@ export interface IChartingLibraryWidget {
 	 * @param options An optional object of options for the theme.
 	 * @returns A promise that resolves when the theme has been changed.
 	 */
-	changeTheme(themeName: ThemeName, options?: ChangeThemeOptions): Promise<void>;
+	changeTheme: (themeName: ThemeName, options?: ChangeThemeOptions) => Promise<void>;
 	/**
 	 * Get the current theme of the chart.
 	 *
@@ -12089,13 +12048,13 @@ export interface IChartingLibraryWidget {
 	 *
 	 * @returns A theme name. The name of the current theme.
 	 */
-	getTheme(): ThemeName;
+	getTheme: () => ThemeName;
 	/**
 	 * Create a snapshot of the chart and upload it to the server.
 	 * When it is ready callback functions subscribed to the `'onScreenshotReady'` event using {@link subscribe} will be called.
 	 * The URL of the snapshot will be passed as an argument to the callback function.
 	 */
-	takeScreenshot(): void;
+	takeScreenshot: () => void;
 	/**
 	 * Create a snapshot of the chart and return it as a canvas.
 	 * Use this method to [implement your logic](https://www.tradingview.com/charting-library-docs/latest/ui_elements/Snapshots#implement-your-logic) for taking snapshots.
@@ -12103,31 +12062,31 @@ export interface IChartingLibraryWidget {
 	 * @param options An optional object that customizes the returned snapshot.
 	 * @returns A promise containing a `HTMLCanvasElement` of the snapshot.
 	 */
-	takeClientScreenshot(options?: Partial<ClientSnapshotOptions>): Promise<HTMLCanvasElement>;
+	takeClientScreenshot: (options?: Partial<ClientSnapshotOptions>) => Promise<HTMLCanvasElement>;
 	/**
 	 * Get a watched value that can be used to read/write/subscribe to the state of the "Lock All Drawing Tools" button.
 	 *
 	 * @returns A watched value of the state of the "Lock All Drawing Tools" button.
 	 */
-	lockAllDrawingTools(): IWatchedValue<boolean>;
+	lockAllDrawingTools: () => IWatchedValue<boolean>;
 	/**
 	 * Get a watched value that can be used to read/write/subscribe to the state of the "Hide All Drawing Tools" button.
 	 *
 	 * @returns A watched value of the state of the "Hide All Drawing Tools" button.
 	 */
-	hideAllDrawingTools(): IWatchedValue<boolean>;
+	hideAllDrawingTools: () => IWatchedValue<boolean>;
 	/**
 	 * Get a watched value that can be used to read/write/subscribe to the state of the magnet.
 	 *
 	 * @returns A watched value of the state of the magnet.
 	 */
-	magnetEnabled(): IWatchedValue<boolean>;
+	magnetEnabled: () => IWatchedValue<boolean>;
 	/**
 	 * Get a watched value that can be used to read/write/subscribe to the state of the magnet mode.
 	 *
 	 * @returns A watched value of the state of the magnet mode.
 	 */
-	magnetMode(): IWatchedValue<number>;
+	magnetMode: () => IWatchedValue<number>;
 	/**
 	 * Only available in Trading Platform. Get a watched value that can be used to read/write/subscribe to the state of the symbol sync between charts.
 	 *
@@ -12140,7 +12099,7 @@ export interface IChartingLibraryWidget {
 	 *
 	 * @returns A watched value of the state of the symbol sync.
 	 */
-	symbolSync(): IWatchedValue<boolean>;
+	symbolSync: () => IWatchedValue<boolean>;
 	/**
 	 * Only available in Trading Platform. Get a watched value that can be used to read/write/subscribe to the state of the interval sync between charts.
 	 *
@@ -12151,7 +12110,7 @@ export interface IChartingLibraryWidget {
 	 *
 	 * @returns A watched value of the state of the interval sync.
 	 */
-	intervalSync(): IWatchedValue<boolean>;
+	intervalSync: () => IWatchedValue<boolean>;
 	/**
 	 * Only available in Trading Platform. Get a watched value that can be used to read/write/subscribe to the state of the crosshair sync between charts.
 	 *
@@ -12162,7 +12121,7 @@ export interface IChartingLibraryWidget {
 	 *
 	 * @returns A watched value of the state of the crosshair sync.
 	 */
-	crosshairSync(): IWatchedValue<boolean>;
+	crosshairSync: () => IWatchedValue<boolean>;
 	/**
 	 * Only available in Trading Platform. Get a watched value that can be used to read/write/subscribe to the state of the time sync between charts.
 	 *
@@ -12173,7 +12132,7 @@ export interface IChartingLibraryWidget {
 	 *
 	 * @returns A watched value of the state of the time sync.
 	 */
-	timeSync(): IWatchedValue<boolean>;
+	timeSync: () => IWatchedValue<boolean>;
 	/**
 	 * Only available in Trading Platform. Get a watched value that can be used to read/write/subscribe to the state of the date range sync between charts.
 	 *
@@ -12184,61 +12143,61 @@ export interface IChartingLibraryWidget {
 	 *
 	 * @returns A watched value of the state of the date range sync.
 	 */
-	dateRangeSync(): IWatchedValue<boolean>;
+	dateRangeSync: () => IWatchedValue<boolean>;
 	/**
 	 * Set the chart into fullscreen mode (if it isn't already).
 	 */
-	startFullscreen(): void;
+	startFullscreen: () => void;
 	/**
 	 * Set the chart into non-fullscreen mode (if it isn't already).
 	 */
-	exitFullscreen(): void;
+	exitFullscreen: () => void;
 	/**
 	 * Get the state of the undo/redo stack.
 	 */
-	undoRedoState(): UndoRedoState;
+	undoRedoState: () => UndoRedoState;
 	/**
 	 * Get a watched value that can be used to read/write/subscribe to the state of the navigation buttons.
 	 *
 	 * @returns A watched value of the state of the navigation buttons.
 	 */
-	navigationButtonsVisibility(): IWatchedValue<VisibilityType>;
+	navigationButtonsVisibility: () => IWatchedValue<VisibilityType>;
 	/**
 	 * Get a watched value that can be used to read/write/subscribe to the state of the pane buttons.
 	 *
 	 * @returns A watched value of the state of the pane buttons.
 	 */
-	paneButtonsVisibility(): IWatchedValue<VisibilityType>;
+	paneButtonsVisibility: () => IWatchedValue<VisibilityType>;
 	/**
 	 * Get a watched value that can be used to read/write/subscribe to the state of the date format.
 	 *
 	 * @returns A watched value of the state of the date format.
 	 */
-	dateFormat(): IWatchedValue<DateFormat>;
+	dateFormat: () => IWatchedValue<DateFormat>;
 	/**
 	 * Get a watched value that can be used to read/write/subscribe to the state of the timeHours format.
 	 */
-	timeHoursFormat(): IWatchedValue<TimeHoursFormat>;
+	timeHoursFormat: () => IWatchedValue<TimeHoursFormat>;
 	/**
 	 * Get a watched value that can be used to read/write/subscribe to the state of the currency and unit
 	 * visibility setting on the price scale.
 	 *
 	 * @returns A watched value of the state of the currency and unit visibility option.
 	 */
-	currencyAndUnitVisibility(): IWatchedValue<VisibilityType>;
+	currencyAndUnitVisibility: () => IWatchedValue<VisibilityType>;
 	/**
 	 * Enable or disable writing detailed [Datafeed API](https://www.tradingview.com/charting-library-docs/latest/connecting_data/datafeed-api/) logs into the browser console.
 	 *
 	 * @param enabled A boolean flag. `true` to enable debug mode, `false` to disable.
 	 */
-	setDebugMode(enabled: boolean): void;
+	setDebugMode: (enabled: boolean) => void;
 	/**
 	 * Get a watched value that read/write/subscribe to the state of the 'draw on all charts' mode.
 	 *
 	 * When enabled new drawings will be replicated to all charts in the layout
 	 * and shown when the same ticker is selected.
 	 */
-	drawOnAllChartsEnabled(): IWatchedValue<boolean>;
+	drawOnAllChartsEnabled: () => IWatchedValue<boolean>;
 	/**
 	 * Clears the undo & redo history.
 	 *
@@ -12250,7 +12209,7 @@ export interface IChartingLibraryWidget {
 	 * pages / tabs on a Single Page Application, and presenting it to the user as a
 	 * new chart.
 	 */
-	clearUndoHistory(): void;
+	clearUndoHistory: () => void;
 	/**
 	 * This method returns a readonly WatchedValue ({@link IWatchedValueReadonly})
 	 * object that can be used to read/watch the current supported chart types
@@ -12261,14 +12220,14 @@ export interface IChartingLibraryWidget {
 	 * [Overrides](https://www.tradingview.com/charting-library-docs/latest/customization/overrides/Overrides)
 	 * documentation for `mainSeriesProperties.style`.
 	 */
-	supportedChartTypes(): IWatchedValueReadonly<ChartStyle[]>;
+	supportedChartTypes: () => IWatchedValueReadonly<ChartStyle[]>;
 	/**
 	 * Get an API object for adjusting the watermarks present on the charts.
 	 * This can only be accessed when the chart is ready to be used. ({@link onChartReady})
 	 *
 	 * @returns An API object for adjusting the watermark settings.
 	 */
-	watermark(): IWatermarkApi;
+	watermark: () => IWatermarkApi;
 	/**
 	 * Get an API object for creating, and adjusting, custom status items to
 	 * be displayed within the legend for the main series of each chart.
@@ -12277,7 +12236,7 @@ export interface IChartingLibraryWidget {
 	 *
 	 * @returns An API object for controlling additional custom status items within the legend area.
 	 */
-	customSymbolStatus(): ICustomSymbolStatusApi;
+	customSymbolStatus: () => ICustomSymbolStatusApi;
 	/**
 	 * Sets the value for a CSS custom property.
 	 *
@@ -12289,7 +12248,7 @@ export interface IChartingLibraryWidget {
 	 * @param customPropertyName A string representing the CSS custom property name. It is expected that the name should start with a double hyphen ('--').
 	 * @param value A string containing the new property value.
 	 */
-	setCSSCustomProperty(customPropertyName: string, value: string): void;
+	setCSSCustomProperty: (customPropertyName: string, value: string) => void;
 	/**
 	 * Returns the current value for a CSS custom property.
 	 *
@@ -12301,19 +12260,19 @@ export interface IChartingLibraryWidget {
 	 * @param customPropertyName A string representing the CSS custom property name to be checked. It is expected that the name should start with a double hyphen ('--').
 	 * @returns A string containing the value of the property. If not set, returns the empty string.
 	 */
-	getCSSCustomPropertyValue(customPropertyName: string): string;
+	getCSSCustomPropertyValue: (customPropertyName: string) => string;
 	/**
 	 * Get a promise that resolves with an API object for interacting with the custom themes. For more information on custom themes, refer to the [Custom themes API](https://www.tradingview.com/charting-library-docs/latest/customization/styles/custom-themes) article.
 	 *
 	 * @returns An API object for interacting with the custom themes.
 	 */
-	customThemes(): Promise<ICustomThemesApi>;
+	customThemes: () => Promise<ICustomThemesApi>;
 	/**
 	 * Reset cached bar data from the datafeed, for all symbols.
 	 *
 	 * This has the same effect as calling [`onResetCacheNeededCallback`](https://www.tradingview.com/charting-library-docs/latest/api/interfaces/Charting_Library.IDatafeedChartApi#subscribebars) for all symbol and resolution combinations at once.
 	 */
-	resetCache(): void;
+	resetCache: () => void;
 }
 /**
  * PineJS execution context.
@@ -12331,32 +12290,32 @@ export interface IContext {
 	 * @param  {string} [unitId] - Unit ID
 	 * @param  {string} [subsessionId] - Subsession ID
 	 */
-	new_sym(tickerid: string, period: string, currencyCode?: string, unitId?: string, subsessionId?: string): ISymbolInstrument;
+	new_sym: (tickerid: string, period: string, currencyCode?: string, unitId?: string, subsessionId?: string) => ISymbolInstrument;
 	/**
 	 * Switch context to the other symbol received through {@link IContext.new_sym}
 	 * @param  {number} i - the index of the symbol (`0` for the main series)
 	 */
-	select_sym(i: number): void;
+	select_sym: (i: number) => void;
 	/**
 	 * Creates an in-memory temporary storage with depth defined by the first call `new_var(value).get(n)`
 	 * @param  {number} [value] - variable's value
 	 */
-	new_var(value?: number): IPineSeries;
+	new_var: (value?: number) => IPineSeries;
 	/**
 	 * Creates an in-memory temporary storage with unlimited depth.
 	 * @param  {number} [value] - variable's value
 	 */
-	new_unlimited_var(value?: number): IPineSeries;
+	new_unlimited_var: (value?: number) => IPineSeries;
 	/**
 	 * Creates a new context
 	 */
-	new_ctx(): IContext;
+	new_ctx: () => IContext;
 	/**
 	 * Checks if symbol is the main symbol
 	 * @param  {ISymbolInstrument|undefined} symbol - symbol to check
 	 * @returns `true` if symbol is the main symbol
 	 */
-	is_main_symbol(symbol: ISymbolInstrument | undefined): boolean;
+	is_main_symbol: (symbol: ISymbolInstrument | undefined) => boolean;
 	/**
 	 * Allows you to specify how many data points beyond the [visible range](https://www.tradingview.com/charting-library-docs/latest/ui_elements/Time-Scale#time-range) the library should request.
 	 * You should use this method only in **exceptional** cases.
@@ -12369,22 +12328,22 @@ export interface IContext {
 	 * Consider the [Custom Moving Average](https://www.tradingview.com/charting-library-docs/latest/tutorials/how-to-guides/create-custom-indicator/constructor-implementation#2-call-setminimumadditionaldepth) example, where a series is calculated and then used as an input for the second calculation.
 	 * @param  {number} value - minimum number of bars to request
 	 */
-	setMinimumAdditionalDepth(value: number): void;
+	setMinimumAdditionalDepth: (value: number) => void;
 }
 export interface IContextMenuRenderer {
 	/**
 	 * Displays the menu at the position.
 	 * @param pos Position to show context menu
 	 */
-	show(pos: ContextMenuPosition): void;
+	show: (pos: ContextMenuPosition) => void;
 	/**
 	 * hides the menu.
 	 */
-	hide(): void;
+	hide: () => void;
 	/**
 	 * @returns `true` when the menu is currently displayed.
 	 */
-	isShown(): boolean;
+	isShown: () => boolean;
 }
 /**
  * Adapter API for reading and setting the state of a
@@ -12404,7 +12363,7 @@ export interface ICustomSymbolStatusAdapter {
 	 * Get the current visibility of the status item.
 	 * @returns the current visibility
 	 */
-	getVisible(): boolean;
+	getVisible: () => boolean;
 	/**
 	 * Set the visibility for the status item. @default false
 	 *
@@ -12413,12 +12372,12 @@ export interface ICustomSymbolStatusAdapter {
 	 * @returns the current symbol status adapter so you can
 	 * chain 'set' functions together.
 	 */
-	setVisible(visible: boolean): ICustomSymbolStatusAdapter;
+	setVisible: (visible: boolean) => ICustomSymbolStatusAdapter;
 	/**
 	 * Get the current icon for the status item.
 	 * @returns the current icon SVG string
 	 */
-	getIcon(): string | null;
+	getIcon: () => string | null;
 	/**
 	 * Set the icon for the status item. @default blank
 	 * The icon should be provided as an svg markup. It is
@@ -12436,12 +12395,12 @@ export interface ICustomSymbolStatusAdapter {
 	 * @returns the current symbol status adapter so you can
 	 * chain 'set' functions together.
 	 */
-	setIcon(icon: string | null): ICustomSymbolStatusAdapter;
+	setIcon: (icon: string | null) => ICustomSymbolStatusAdapter;
 	/**
 	 * Get the current color of the status item.
 	 * @returns the current color
 	 */
-	getColor(): string;
+	getColor: () => string;
 	/**
 	 * Set the color for the status item. @default '#9598a1'
 	 *
@@ -12451,12 +12410,12 @@ export interface ICustomSymbolStatusAdapter {
 	 * @returns the current symbol status adapter so you can
 	 * chain 'set' functions together.
 	 */
-	setColor(color: string): ICustomSymbolStatusAdapter;
+	setColor: (color: string) => ICustomSymbolStatusAdapter;
 	/**
 	 * Get the current tooltip text for the status item.
 	 * @returns the current tooltip text
 	 */
-	getTooltip(): string | null;
+	getTooltip: () => string | null;
 	/**
 	 * Set the text to be displayed within the tooltip displayed
 	 * when hovering over the statuses for the symbol.
@@ -12466,13 +12425,13 @@ export interface ICustomSymbolStatusAdapter {
 	 * @returns the current symbol status adapter so you can
 	 * chain 'set' functions together.
 	 */
-	setTooltip(tooltip: string | null): ICustomSymbolStatusAdapter;
+	setTooltip: (tooltip: string | null) => ICustomSymbolStatusAdapter;
 	/**
 	 * Get the current content of the status item displayed within
 	 * the pop-up tooltip.
 	 * @returns the current pop-up content
 	 */
-	getDropDownContent(): CustomStatusDropDownContent[] | null;
+	getDropDownContent: () => CustomStatusDropDownContent[] | null;
 	/**
 	 * Set the content to be displayed within the pop-up which appears
 	 * when the user clicks on the symbol statuses.
@@ -12483,7 +12442,7 @@ export interface ICustomSymbolStatusAdapter {
 	 * @returns the current symbol status adapter so you can
 	 * chain 'set' functions together.
 	 */
-	setDropDownContent(content: CustomStatusDropDownContent[] | null): ICustomSymbolStatusAdapter;
+	setDropDownContent: (content: CustomStatusDropDownContent[] | null) => ICustomSymbolStatusAdapter;
 }
 /**
  * This API allows you to create custom sections in the [Market Status](https://www.tradingview.com/charting-library-docs/latest/ui_elements/market-status) popup to display additional information on a symbol, such as warnings.
@@ -12530,12 +12489,12 @@ export interface ICustomSymbolStatusApi {
 	 * @param symbolId - symbol id for which you would like to create / adjust
 	 * the custom status
 	 */
-	symbol(symbolId: string): ICustomSymbolStatusAdapter;
+	symbol: (symbolId: string) => ICustomSymbolStatusAdapter;
 	/**
 	 * Hide all the custom status items. This is equivalent to using
 	 * `setVisible(false)` on all of the current custom symbol status items.
 	 */
-	hideAll(): void;
+	hideAll: () => void;
 }
 /**
  * An API for controlling custom themes. To retrieve this interface, call the {@link IChartingLibraryWidget.customThemes} method.
@@ -12549,11 +12508,11 @@ export interface ICustomThemesApi {
 	 *
 	 * @param customThemes Custom theme color definitions
 	 */
-	applyCustomThemes(customThemes: CustomThemes): Promise<void>;
+	applyCustomThemes: (customThemes: CustomThemes) => Promise<void>;
 	/**
 	 * Reset the widget's color theme colors back to the default values.
 	 */
-	resetCustomThemes(): Promise<void>;
+	resetCustomThemes: () => Promise<void>;
 }
 export interface IDatafeedChartApi {
 	/**
@@ -12570,7 +12529,7 @@ export interface IDatafeedChartApi {
 	 * @param onDataCallback Callback function containing an array of marks
 	 * @param resolution Resolution of the symbol
 	 */
-	getMarks?(symbolInfo: LibrarySymbolInfo, from: number, to: number, onDataCallback: GetMarksCallback<Mark>, resolution: ResolutionString): void;
+	getMarks?: (symbolInfo: LibrarySymbolInfo, from: number, to: number, onDataCallback: GetMarksCallback<Mark>, resolution: ResolutionString) => void;
 	/**
 	 * The library calls this function to get timescale marks for visible bars range.
 	 * The library assumes that you will call `onDataCallback` only once per `getTimescaleMarks` call.
@@ -12583,7 +12542,7 @@ export interface IDatafeedChartApi {
 	 * @param onDataCallback Callback function containing an array of marks
 	 * @param resolution Resolution of the symbol
 	 */
-	getTimescaleMarks?(symbolInfo: LibrarySymbolInfo, from: number, to: number, onDataCallback: GetMarksCallback<TimescaleMark>, resolution: ResolutionString): void;
+	getTimescaleMarks?: (symbolInfo: LibrarySymbolInfo, from: number, to: number, onDataCallback: GetMarksCallback<TimescaleMark>, resolution: ResolutionString) => void;
 	/**
 	 * This function is called if the `supports_time` configuration flag is `true` when the chart needs to know the server time.
 	 * The library expects a callback to be called once.
@@ -12592,7 +12551,7 @@ export interface IDatafeedChartApi {
 	 * `getServerTime` is used to display countdown on the price scale.
 	 * Note that the countdown can be displayed only for [intraday](https://www.tradingview.com/charting-library-docs/latest/connecting_data/time-and-sessions/configure-datafeed-resolutions#resolution-in-minutes-intraday) resolutions.
 	 */
-	getServerTime?(callback: ServerTimeCallback): void;
+	getServerTime?: (callback: ServerTimeCallback) => void;
 	/**
 	 * Provides a list of symbols that match the user's search query.
 	 *
@@ -12602,7 +12561,7 @@ export interface IDatafeedChartApi {
 	 * @param onResult Callback function that returns an array of results ({@link SearchSymbolResultItem}) or empty array if no symbols found
 	 * @param searchSource The source of the search ({@link SearchInitiationPoint}).
 	 */
-	searchSymbols(userInput: string, exchange: string, symbolType: string, onResult: SearchSymbolsCallback, searchSource?: SearchInitiationPoint): void;
+	searchSymbols: (userInput: string, exchange: string, symbolType: string, onResult: SearchSymbolsCallback, searchSource?: SearchInitiationPoint) => void;
 	/**
 	 * Provides a list of symbols that match the user's search query.
 	 *
@@ -12615,7 +12574,7 @@ export interface IDatafeedChartApi {
 	 * @param options Object containing the user input, exchange, symbol type, and search source ({@link SearchInitiationPoint}).
 	 * @param onResult Callback function that returns an array of results ({@link SearchSymbolResultItem}) or an empty array if no symbols are found.
 	 */
-	searchSymbolsPaginated?(options: SymbolSearchPaginatedOptions, onResult: SearchSymbolsPaginatedCallback): void;
+	searchSymbolsPaginated?: (options: SymbolSearchPaginatedOptions, onResult: SearchSymbolsPaginatedCallback) => void;
 	/**
 	 * The library will call this function when it needs to get SymbolInfo by symbol name.
 	 *
@@ -12624,7 +12583,7 @@ export interface IDatafeedChartApi {
 	 * @param onError Callback function whose only argument is a text error message
 	 * @param extension An optional object with additional parameters
 	 */
-	resolveSymbol(symbolName: string, onResolve: ResolveCallback, onError: DatafeedErrorCallback, extension?: SymbolResolveExtension): void;
+	resolveSymbol: (symbolName: string, onResolve: ResolveCallback, onError: DatafeedErrorCallback, extension?: SymbolResolveExtension) => void;
 	/**
 	 * This function is called when the chart needs a history fragment defined by dates range.
 	 *
@@ -12634,7 +12593,7 @@ export interface IDatafeedChartApi {
 	 * @param onResult Callback function for historical data
 	 * @param onError Callback function whose only argument is a text error message. If using special characters, please consider `encodeURIComponent`.
 	 */
-	getBars(symbolInfo: LibrarySymbolInfo, resolution: ResolutionString, periodParams: PeriodParams, onResult: HistoryCallback, onError: DatafeedErrorCallback): void;
+	getBars: (symbolInfo: LibrarySymbolInfo, resolution: ResolutionString, periodParams: PeriodParams, onResult: HistoryCallback, onError: DatafeedErrorCallback) => void;
 	/**
 	 * The library calls this function when it wants to receive real-time updates for a symbol.
 	 * The library assumes that you will call the callback provided by the `onTick` parameter every time you want to update the most recent bar or to add a new one.
@@ -12645,13 +12604,13 @@ export interface IDatafeedChartApi {
 	 * @param listenerGuid
 	 * @param onResetCacheNeededCallback Function to be executed when bar data has changed
 	 */
-	subscribeBars(symbolInfo: LibrarySymbolInfo, resolution: ResolutionString, onTick: SubscribeBarsCallback, listenerGuid: string, onResetCacheNeededCallback: () => void): void;
+	subscribeBars: (symbolInfo: LibrarySymbolInfo, resolution: ResolutionString, onTick: SubscribeBarsCallback, listenerGuid: string, onResetCacheNeededCallback: () => void) => void;
 	/**
 	 * The library calls this function when it doesn't want to receive updates anymore.
 	 *
 	 * @param listenerGuid id to unsubscribe from
 	 */
-	unsubscribeBars(listenerGuid: string): void;
+	unsubscribeBars: (listenerGuid: string) => void;
 	/**
 	 * The library calls this function when it wants to receive real-time symbol data in the [Depth of Market](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/depth-of-market) (DOM) widget.
 	 * Note that you should set the {@link BrokerConfigFlags.supportLevel2Data} configuration flag to `true`.
@@ -12660,14 +12619,14 @@ export interface IDatafeedChartApi {
 	 * @param callback A function returning an object to update DOM data
 	 * @returns A unique identifier that will be used to unsubscribe from the data
 	 */
-	subscribeDepth?(symbol: string, callback: DOMCallback): string;
+	subscribeDepth?: (symbol: string, callback: DOMCallback) => string;
 	/**
 	 * The library calls this function to stop receiving real-time updates for the [Depth of Market](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/depth-of-market) listener.
 	 * Note that you should set the {@link BrokerConfigFlags.supportLevel2Data} configuration flag to `true`.
 	 *
 	 * @param subscriberUID A string returned by `subscribeDepth`
 	 */
-	unsubscribeDepth?(subscriberUID: string): void;
+	unsubscribeDepth?: (subscriberUID: string) => void;
 	/**
 	 * The library calls this function to get the resolution that will be used to calculate the Volume Profile Visible Range indicator.
 	 *
@@ -12681,7 +12640,7 @@ export interface IDatafeedChartApi {
 	 * @param symbolInfo A Symbol object
 	 * @returns A resolution
 	 */
-	getVolumeProfileResolutionForPeriod?(currentResolution: ResolutionString, from: number, to: number, symbolInfo: LibrarySymbolInfo): ResolutionString;
+	getVolumeProfileResolutionForPeriod?: (currentResolution: ResolutionString, from: number, to: number, symbolInfo: LibrarySymbolInfo) => ResolutionString;
 }
 /** Quotes datafeed API */
 export interface IDatafeedQuotesApi {
@@ -12692,7 +12651,7 @@ export interface IDatafeedQuotesApi {
 	 * @param  {QuotesCallback} onDataCallback - callback to return the requested data.
 	 * @param  {QuotesErrorCallback} onErrorCallback - callback for responding with an error.
 	 */
-	getQuotes(symbols: string[], onDataCallback: QuotesCallback, onErrorCallback: QuotesErrorCallback): void;
+	getQuotes: (symbols: string[], onDataCallback: QuotesCallback, onErrorCallback: QuotesErrorCallback) => void;
 	/**
 	 * Trading Platform calls this function when it wants to receive real-time quotes for a symbol.
 	 * The library assumes that you will call `onRealtimeCallback` every time you want to update the quotes.
@@ -12701,13 +12660,13 @@ export interface IDatafeedQuotesApi {
 	 * @param  {QuotesCallback} onRealtimeCallback - callback to send realtime quote data updates
 	 * @param  {string} listenerGUID - unique identifier of the listener
 	 */
-	subscribeQuotes(symbols: string[], fastSymbols: string[], onRealtimeCallback: QuotesCallback, listenerGUID: string): void;
+	subscribeQuotes: (symbols: string[], fastSymbols: string[], onRealtimeCallback: QuotesCallback, listenerGUID: string) => void;
 	/**
 	 * Trading Platform calls this function when it doesn't want to receive updates for this listener anymore.
 	 * `listenerGUID` will be the same object that the Library passed to `subscribeQuotes` before.
 	 * @param  {string} listenerGUID - unique identifier of the listener
 	 */
-	unsubscribeQuotes(listenerGUID: string): void;
+	unsubscribeQuotes: (listenerGUID: string) => void;
 }
 export interface IDelegate<TFunc extends Function> extends ISubscription<TFunc> {
 	/** Fire (Evoke) */
@@ -12715,7 +12674,7 @@ export interface IDelegate<TFunc extends Function> extends ISubscription<TFunc> 
 }
 export interface IDestroyable {
 	/** Clean up (destroy) any subscriptions, intervals, or other resources that this `IDestroyable` instance has. */
-	destroy(): void;
+	destroy: () => void;
 }
 /** Dropdown menu API */
 export interface IDropdownApi {
@@ -12730,11 +12689,11 @@ export interface IDropdownApi {
 	 *
 	 * @param  {DropdownUpdateParams} options - Partial options for the dropdown menu
 	 */
-	applyOptions(options: DropdownUpdateParams): void;
+	applyOptions: (options: DropdownUpdateParams) => void;
 	/**
 	 * Remove the dropdown menu.
 	 */
-	remove(): void;
+	remove: () => void;
 }
 /**
  * An API object that controls execution lines created with {@link IChartWidgetApi.createExecutionShape}.
@@ -12744,107 +12703,107 @@ export interface IExecutionLineAdapter {
 	/**
 	 * Remove the execution line. This API object cannot be used after this call.
 	 */
-	remove(): void;
+	remove: () => void;
 	/**
 	 * Get the price of the execution line.
 	 */
-	getPrice(): number;
+	getPrice: () => number;
 	/**
 	 * Set the price of the execution line.
 	 *
 	 * @param value The new price.
 	 */
-	setPrice(value: number): this;
+	setPrice: (value: number) => this;
 	/**
 	 * Get the time of the execution line.
 	 */
-	getTime(): number;
+	getTime: () => number;
 	/**
 	 * Set the time of the execution line.
 	 *
 	 * @param value The new time.
 	 */
-	setTime(value: number): this;
+	setTime: (value: number) => this;
 	/**
 	 * Get the direction of the execution line.
 	 */
-	getDirection(): Direction;
+	getDirection: () => Direction;
 	/**
 	 * Set the direction of the execution line.
 	 *
 	 * @param value The new direction.
 	 */
-	setDirection(value: Direction): this;
+	setDirection: (value: Direction) => this;
 	/**
 	 * Get the text of the execution line.
 	 */
-	getText(): string;
+	getText: () => string;
 	/**
 	 * Set the text of the execution line.
 	 *
 	 * @param value The new text.
 	 */
-	setText(value: string): this;
+	setText: (value: string) => this;
 	/**
 	 * Get the tooltip of the execution line.
 	 */
-	getTooltip(): string;
+	getTooltip: () => string;
 	/**
 	 * Set the tooltip of the execution line.
 	 *
 	 * @param value The new tooltip.
 	 */
-	setTooltip(value: string): this;
+	setTooltip: (value: string) => this;
 	/**
 	 * Get the arrow height of the execution line.
 	 */
-	getArrowHeight(): number;
+	getArrowHeight: () => number;
 	/**
 	 * Set the arrow height of the execution line.
 	 *
 	 * @param value The new arrow height.
 	 */
-	setArrowHeight(value: number): this;
+	setArrowHeight: (value: number) => this;
 	/**
 	 * Get the arrow spacing of the execution line.
 	 */
-	getArrowSpacing(): number;
+	getArrowSpacing: () => number;
 	/**
 	 * Set the arrow spacing of the execution line.
 	 *
 	 * @param value The new arrow spacing.
 	 */
-	setArrowSpacing(value: number): this;
+	setArrowSpacing: (value: number) => this;
 	/**
 	 * Get the font of the execution line.
 	 */
-	getFont(): string;
+	getFont: () => string;
 	/**
 	 * Set the font of the execution line.
 	 *
 	 * @param value The new font.
 	 */
-	setFont(value: string): this;
+	setFont: (value: string) => this;
 	/**
 	 * Get the text color of the execution line.
 	 */
-	getTextColor(): string;
+	getTextColor: () => string;
 	/**
 	 * Set the text color of the execution line.
 	 *
 	 * @param value The new text color.
 	 */
-	setTextColor(value: string): this;
+	setTextColor: (value: string) => this;
 	/**
 	 * Get the arrow color of the execution line.
 	 */
-	getArrowColor(): string;
+	getArrowColor: () => string;
 	/**
 	 * Set the arrow color of the execution line.
 	 *
 	 * @param value The new arrow color.
 	 */
-	setArrowColor(value: string): this;
+	setArrowColor: (value: string) => this;
 }
 export interface IExternalDatafeed {
 	/**
@@ -12853,78 +12812,78 @@ export interface IExternalDatafeed {
 	 *
 	 * @param  {OnReadyCallback} callback - callback to return your datafeed configuration ({@link DatafeedConfiguration}) to the library.
 	 */
-	onReady(callback: OnReadyCallback): void;
+	onReady: (callback: OnReadyCallback) => void;
 }
 export interface IExternalSaveLoadAdapter {
 	/**
 	 * Get all saved charts.
 	 * @returns Array of chart meta information
 	 */
-	getAllCharts(): Promise<ChartMetaInfo[]>;
+	getAllCharts: () => Promise<ChartMetaInfo[]>;
 	/**
 	 * Remove a chart.
 	 * @param  id - Unique ID of the chart (see {@link getAllCharts})
 	 */
-	removeChart(id: string | number): Promise<void>;
+	removeChart: (id: string | number) => Promise<void>;
 	/**
 	 * Save the chart
 	 * @param  {ChartData} chartData - Chart description data
 	 * @returns unique ID of the chart
 	 */
-	saveChart(chartData: ChartData): Promise<string | number>;
+	saveChart: (chartData: ChartData) => Promise<string | number>;
 	/**
 	 * Load the chart from the server
 	 * @param  {number | string} chartId - Unique ID of the chart to load (see {@link getAllCharts})
 	 * @returns chart content contained in the `content` field when saving the chart ({@link ChartData})
 	 */
-	getChartContent(chartId: number | string): Promise<string>;
+	getChartContent: (chartId: number | string) => Promise<string>;
 	/**
 	 * Get all saved study templates
 	 * @returns Array of study template meta information
 	 */
-	getAllStudyTemplates(): Promise<StudyTemplateMetaInfo[]>;
+	getAllStudyTemplates: () => Promise<StudyTemplateMetaInfo[]>;
 	/**
 	 * Remove a study template
 	 * @param  {StudyTemplateMetaInfo} studyTemplateInfo
 	 */
-	removeStudyTemplate(studyTemplateInfo: StudyTemplateMetaInfo): Promise<void>;
+	removeStudyTemplate: (studyTemplateInfo: StudyTemplateMetaInfo) => Promise<void>;
 	/**
 	 * Save a study template
 	 * @param  {StudyTemplateData} studyTemplateData - Study template data to save
 	 */
-	saveStudyTemplate(studyTemplateData: StudyTemplateData): Promise<void>;
+	saveStudyTemplate: (studyTemplateData: StudyTemplateData) => Promise<void>;
 	/**
 	 * load a study template from the server
 	 * @param  {StudyTemplateMetaInfo} studyTemplateInfo
 	 * @returns Study template `content`
 	 */
-	getStudyTemplateContent(studyTemplateInfo: StudyTemplateMetaInfo): Promise<string>;
+	getStudyTemplateContent: (studyTemplateInfo: StudyTemplateMetaInfo) => Promise<string>;
 	/**
 	 * Get names of all saved drawing templates
 	 * @param  {string} toolName - name of the drawing tool
 	 * @returns names of saved drawing templates
 	 */
-	getDrawingTemplates(toolName: string): Promise<string[]>;
+	getDrawingTemplates: (toolName: string) => Promise<string[]>;
 	/**
 	 * Load a drawing template from the server
 	 * @param  {string} toolName - name of the drawing tool
 	 * @param  {string} templateName - name of the template
 	 * @returns content of the drawing template
 	 */
-	loadDrawingTemplate(toolName: string, templateName: string): Promise<string>;
+	loadDrawingTemplate: (toolName: string, templateName: string) => Promise<string>;
 	/**
 	 * Remove a drawing template
 	 * @param  {string} toolName - name of the drawing tool
 	 * @param  {string} templateName - name of the template
 	 */
-	removeDrawingTemplate(toolName: string, templateName: string): Promise<void>;
+	removeDrawingTemplate: (toolName: string, templateName: string) => Promise<void>;
 	/**
 	 * Save a drawing template
 	 * @param  {string} toolName - name of the drawing tool
 	 * @param  {string} templateName - name of the template
 	 * @param  {string} content - content of the drawing template
 	 */
-	saveDrawingTemplate(toolName: string, templateName: string, content: string): Promise<void>;
+	saveDrawingTemplate: (toolName: string, templateName: string, content: string) => Promise<void>;
 	/**
 	 * Load a chart template from the server
 	 *
@@ -12932,26 +12891,26 @@ export interface IExternalSaveLoadAdapter {
 	 *
 	 * @returns The chart template content.
 	 */
-	getChartTemplateContent(templateName: string): Promise<ChartTemplate>;
+	getChartTemplateContent: (templateName: string) => Promise<ChartTemplate>;
 	/**
 	 * Get names of all saved chart templates.
 	 *
 	 * @returns An array of names.
 	 */
-	getAllChartTemplates(): Promise<string[]>;
+	getAllChartTemplates: () => Promise<string[]>;
 	/**
 	 * Save a chart template.
 	 *
 	 * @param newName The name of the template.
 	 * @param theme The template content.
 	 */
-	saveChartTemplate(newName: string, theme: ChartTemplateContent): Promise<void>;
+	saveChartTemplate: (newName: string, theme: ChartTemplateContent) => Promise<void>;
 	/**
 	 * Remove a chart template.
 	 *
 	 * @param templateName The name of the template.
 	 */
-	removeChartTemplate(templateName: string): Promise<void>;
+	removeChartTemplate: (templateName: string) => Promise<void>;
 	/**
 	 * Save drawings and drawing groups associated with a chart layout.
 	 *
@@ -12959,7 +12918,7 @@ export interface IExternalSaveLoadAdapter {
 	 * @param chartId The chart ID
 	 * @param state The drawings and drawing groups state
 	 */
-	saveLineToolsAndGroups(layoutId: string | undefined, chartId: string | number, state: LineToolsAndGroupsState): Promise<void>;
+	saveLineToolsAndGroups: (layoutId: string | undefined, chartId: string | number, state: LineToolsAndGroupsState) => Promise<void>;
 	/**
 	 * Load drawings and drawing groups associated with a chart layout.
 	 *
@@ -12970,20 +12929,20 @@ export interface IExternalSaveLoadAdapter {
 	 *
 	 * @returns The drawings and drawing groups state
 	 */
-	loadLineToolsAndGroups(layoutId: string | undefined, chartId: string | number, requestType: LineToolsAndGroupsLoadRequestType, requestContext: LineToolsAndGroupsLoadRequestContext): Promise<Partial<LineToolsAndGroupsState> | null>;
+	loadLineToolsAndGroups: (layoutId: string | undefined, chartId: string | number, requestType: LineToolsAndGroupsLoadRequestType, requestContext: LineToolsAndGroupsLoadRequestContext) => Promise<Partial<LineToolsAndGroupsState> | null>;
 }
 /** Definition of a formatter */
 export interface IFormatter<T> {
 	/** Whatever the input type, formats the data following a certain logic and return that value as a string  */
-	format(value?: T, options?: FormatterFormatOptions): string;
+	format: (value?: T, options?: FormatterFormatOptions) => string;
 	/** Check if the input value satisfies the logic and return either an error or the result of the parsing  */
-	parse?(value: string, options?: FormatterParseOptions): ErrorFormatterParseResult | SuccessFormatterParseResult<T>;
+	parse?: (value: string, options?: FormatterParseOptions) => ErrorFormatterParseResult | SuccessFormatterParseResult<T>;
 }
 export interface IImageStorageAdapter {
 	/**
 	 * Return the maximum allowed image size in bytes that will be allowed by the image drawing tool.
 	 */
-	getMaxImageSizeInBytes(): number;
+	getMaxImageSizeInBytes: () => number;
 }
 /**
  * Drawing API
@@ -12995,78 +12954,78 @@ export interface ILineDataSourceApi {
 	 * Is the drawing selectable by the user.
 	 * @returns `true` when the drawing can be selected
 	 */
-	isSelectionEnabled(): boolean;
+	isSelectionEnabled: () => boolean;
 	/**
 	 * Set whether the drawing can be selected by the user or not.
 	 * @param  {boolean} enable - if `true` then the user can select the drawing (see `disableSelection` option of `createMultipointShape`)
 	 */
-	setSelectionEnabled(enable: boolean): void;
+	setSelectionEnabled: (enable: boolean) => void;
 	/**
 	 * Can the drawing be saved in the chart layout
 	 * @returns `true` when the drawing can be saved
 	 */
-	isSavingEnabled(): boolean;
+	isSavingEnabled: () => boolean;
 	/**
 	 * Enables or disables saving of the drawing in the chart layout (see `disableSave` option of `createMultipointShape`).
 	 * @param  {boolean} enable - if `true`, the drawing can be saved to the chart
 	 */
-	setSavingEnabled(enable: boolean): void;
+	setSavingEnabled: (enable: boolean) => void;
 	/**
 	 * Is the drawing shown in the Object Tree Panel
 	 * @returns `true` when the drawing is visible in the tree.
 	 */
-	isShowInObjectsTreeEnabled(): boolean;
+	isShowInObjectsTreeEnabled: () => boolean;
 	/**
 	 * Enables or disables the visibility of the drawing in the Object Tree panel
 	 * @param  {boolean} enabled - if `true` then the drawing will be visible
 	 */
-	setShowInObjectsTreeEnabled(enabled: boolean): void;
+	setShowInObjectsTreeEnabled: (enabled: boolean) => void;
 	/**
 	 * Is the drawing editable by the user.
 	 * @returns `true` when the drawing is editable
 	 */
-	isUserEditEnabled(): boolean;
+	isUserEditEnabled: () => boolean;
 	/**
 	 * Enables or disables whether the drawing is editable
 	 * @param  {boolean} enabled - if `true`, then the drawing will be editable
 	 */
-	setUserEditEnabled(enabled: boolean): void;
+	setUserEditEnabled: (enabled: boolean) => void;
 	/**
 	 * Places the drawing on top of all other chart objects.
 	 */
-	bringToFront(): void;
+	bringToFront: () => void;
 	/**
 	 * Places the drawing behind all other chart objects.
 	 */
-	sendToBack(): void;
+	sendToBack: () => void;
 	/**
 	 * Get all the properties of the drawing.
 	 * @param  {PropertyKeyType} optionally specifies subset of properties to return.
 	 * @nopack some shapes line fib retracement could provide properties in a packed format (using arrays instead of objects). This flag allows controlling this.
 	 * @returns properties of the drawing
 	 */
-	getProperties<P extends Record<string, any> = Record<string, any>>(target?: PropertyKeyType, nopack?: boolean): P;
+	getProperties: <P extends Record<string, any> = Record<string, any>>(target?: PropertyKeyType, nopack?: boolean) => P;
 	/**
 	 * Sets the properties of the drawing.
 	 * @param  {object} newProperties - Drawing properties to be set on the drawing. It should have the same structure as an object from {@link ILineDataSourceApi.getProperties}. It can only include the properties that you want to override.
 	 * @param  {boolean} saveDefaults - If `true`, the properties will be saved as defaults for the drawing. Defaults are used when the drawing is created.
 	 */
-	setProperties<P extends Record<string, any> = Record<string, any>>(newProperties: P, saveDefaults?: boolean): void;
+	setProperties: <P extends Record<string, any> = Record<string, any>>(newProperties: P, saveDefaults?: boolean) => void;
 	/**
 	 * Returns the points of the drawing.
 	 */
-	getPoints(): PricedPoint[];
+	getPoints: () => PricedPoint[];
 	/**
 	 * Set the new points of the drawing. All points must be provided: for example if the drawing is defined by 5 points then all 5 must be provided.
 	 *
 	 * @param  points - The new points.
 	 *
 	 */
-	setPoints(points: ShapePoint[]): void;
+	setPoints: (points: ShapePoint[]) => void;
 	/**
 	 * Get the position percents of a fixed drawing.
 	 */
-	getAnchoredPosition(): PositionPercents | undefined;
+	getAnchoredPosition: () => PositionPercents | undefined;
 	/**
 	 * Set the position percents for a fixed drawing.
 	 * For example `setPoints([{ x: 0.1, y: 0.1 }])` would set a fixed drawing defined by
@@ -13074,7 +13033,7 @@ export interface ILineDataSourceApi {
 	 *
 	 * @param positionPercents The new position percents.
 	 */
-	setAnchoredPosition(positionPercents: PositionPercents): void;
+	setAnchoredPosition: (positionPercents: PositionPercents) => void;
 }
 export interface IMenuItem {
 	/** Menu item type */
@@ -13086,7 +13045,7 @@ export interface IMenuItem {
 }
 export interface INewsApi {
 	/** Refresh News */
-	refresh(): void;
+	refresh: () => void;
 }
 export interface INonSeriesStudyBarsResult {
 	type: "non_series_bars";
@@ -13106,26 +13065,26 @@ export interface INonSeriesStudyResult {
 /** Specific formatter for number */
 export interface INumberFormatter extends IFormatter<number> {
 	/** Formatter for a number */
-	format(value?: number, options?: NumberFormatterFormatOptions): string;
+	format: (value?: number, options?: NumberFormatterFormatOptions) => string;
 	/**
 	 * Formatter for a price change
 	 * @param currentPrice - current price
 	 * @param prevPrice - previous price
 	 * @param options - format options
 	 */
-	formatChange?(currentPrice: number, prevPrice: number, options?: NumberFormatterFormatOptions): string;
+	formatChange?: (currentPrice: number, prevPrice: number, options?: NumberFormatterFormatOptions) => string;
 }
 export interface IObservable<T> {
 	/**
 	 * Subscribe to changes
 	 * @param  {(value:T)=>void} callback - callback function to be evoked when observed value changes
 	 */
-	subscribe(callback: ObservableCallback<T>): void;
+	subscribe: (callback: ObservableCallback<T>) => void;
 	/**
 	 * Unsubscribe from changes
 	 * @param  {(value:T)=>void} callback - callback function to be unsubscribed
 	 */
-	unsubscribe(callback: ObservableCallback<T>): void;
+	unsubscribe: (callback: ObservableCallback<T>) => void;
 }
 export interface IObservableValue<T> extends IBoxedValue<T>, IObservable<T> {
 }
@@ -13139,157 +13098,129 @@ export interface IOrderLineAdapter {
 	/**
 	 * Remove the order line. This API object cannot be used after this call.
 	 */
-	remove(): void;
+	remove: () => void;
 	/**
 	 * Attach a callback to be executed when the order line is modified.
 	 *
 	 * @param callback Callback to be executed when the order line is modified.
 	 */
-	onModify(callback: () => void): this;
-	/**
-	 * Attach a callback to be executed when the order line is modified.
-	 *
-	 * @param data Data to be passed to the callback.
-	 * @param callback Callback to be executed when the order line is modified.
-	 */
-	onModify<T>(data: T, callback: (data: T) => void): this;
+	onModify: ((callback: () => void) => this) & (<T>(data: T, callback: (data: T) => void) => this);
 	/**
 	 * Attach a callback to be executed when the order line is moved.
 	 *
 	 * @param callback Callback to be executed when the order line is moved.
 	 */
-	onMove(callback: () => void): this;
-	/**
-	 * Attach a callback to be executed when the order line is moved.
-	 *
-	 * @param data Data to be passed to the callback.
-	 * @param callback Callback to be executed when the order line is moved.
-	 */
-	onMove<T>(data: T, callback: (data: T) => void): this;
+	onMove: ((callback: () => void) => this) & (<T>(data: T, callback: (data: T) => void) => this);
 	/**
 	 * Attach a callback to be executed while the order line is being moved.
 	 *
 	 * @param callback Callback to be executed while the order line is being moved.
 	 */
-	onMoving(callback: () => void): this;
-	/**
-	 * Attach a callback to be executed while the order line is being moved.
-	 *
-	 * @param data Data to be passed to the callback.
-	 * @param callback Callback to be executed while the order line is being moved.
-	 */
-	onMoving<T>(data: T, callback: (data: T) => void): this;
+	onMoving: ((callback: () => void) => this) & (<T>(data: T, callback: (data: T) => void) => this);
 	/**
 	 * Attach a callback to be executed when the order line is cancelled.
 	 *
 	 * @param callback Callback to be executed when the order line is cancelled.
 	 */
-	onCancel(callback: () => void): this;
-	/**
-	 * Attach a callback to be executed when the order line is cancelled.
-	 *
-	 * @param data Data to be passed to the callback.
-	 * @param callback Callback to be executed when the order line is cancelled.
-	 */
-	onCancel<T>(data: T, callback: (data: T) => void): this;
+	onCancel: ((callback: () => void) => this) & (<T>(data: T, callback: (data: T) => void) => this);
 	/**
 	 * Get the price of the order line.
 	 */
-	getPrice(): number;
+	getPrice: () => number;
 	/**
 	 * Set the price of the order line.
 	 *
 	 * @param value The new price
 	 */
-	setPrice(value: number): this;
+	setPrice: (value: number) => this;
 	/**
 	 * Get the text of the order line.
 	 */
-	getText(): string;
+	getText: () => string;
 	/**
 	 * Set the text of the order line.
 	 *
 	 * @param value The new text
 	 */
-	setText(value: string): this;
+	setText: (value: string) => this;
 	/**
 	 * Get the tooltip of the order line.
 	 */
-	getTooltip(): string;
+	getTooltip: () => string;
 	/**
 	 * Set the tooltip of the order line.
 	 *
 	 * @param value The new tooltip
 	 */
-	setTooltip(value: string): this;
+	setTooltip: (value: string) => this;
 	/**
 	 * Get the modify tooltip of the order line.
 	 */
-	getModifyTooltip(): string;
+	getModifyTooltip: () => string;
 	/**
 	 * Set the modify tooltip of the order line.
 	 *
 	 * @param value The new modify tooltip
 	 */
-	setModifyTooltip(value: string): this;
+	setModifyTooltip: (value: string) => this;
 	/**
 	 * Get the cancel tooltip of the order line.
 	 */
-	getCancelTooltip(): string;
+	getCancelTooltip: () => string;
 	/**
 	 * Set the cancel tooltip of the order line.
 	 *
 	 * @param value The new cancel tooltip
 	 */
-	setCancelTooltip(value: string): this;
+	setCancelTooltip: (value: string) => this;
 	/**
 	 * Get the quantity of the order line.
 	 */
-	getQuantity(): string;
+	getQuantity: () => string;
 	/**
 	 * Set the quantity of the order line.
 	 *
 	 * @param value The new quantity.
 	 */
-	setQuantity(value: string): this;
+	setQuantity: (value: string) => this;
 	/**
 	 * Get the editable flag value of the order line.
 	 */
-	getEditable(): boolean;
+	getEditable: () => boolean;
 	/**
 	 * Set the editable of the order line.
 	 *
 	 * @param value The new editable.
 	 */
-	setEditable(value: boolean): this;
+	setEditable: (value: boolean) => this;
 	/**
 	 * Get the cancellable flag value of the order line.
 	 */
-	getCancellable(): boolean;
+	getCancellable: () => boolean;
 	/**
 	 * Set the cancellable flag value of the order line.
 	 *
 	 * @param value The new cancellable flag value.
 	 */
-	setCancellable(value: boolean): this;
+	setCancellable: (value: boolean) => this;
 	/**
 	 * Get the extend left flag value of the order line.
 	 */
-	getExtendLeft(): boolean;
+	getExtendLeft: () => boolean;
 	/**
 	 * Set the extend left flag value of the order line.
 	 *
 	 * @param value The new extend left flag value.
 	 */
-	setExtendLeft(value: boolean): this;
+	setExtendLeft: (value: boolean) => this;
 	/**
 	 * Get the line length of the order line.
 	 */
-	getLineLength(): number;
+	getLineLength: () => number;
 	/**
 	 * Get the unit of length specified for the line length of the order line.
 	 */
-	getLineLengthUnit(): OrderLineLengthUnit;
+	getLineLengthUnit: () => OrderLineLengthUnit;
 	/**
 	 * Set the line length of the order line.
 	 *
@@ -13299,31 +13230,31 @@ export interface IOrderLineAdapter {
 	 * @param value The new line length.
 	 * @param [unit] - unit for the line length, defaults to 'percentage'.
 	 */
-	setLineLength(value: number, unit?: OrderLineLengthUnit): this;
+	setLineLength: (value: number, unit?: OrderLineLengthUnit) => this;
 	/**
 	 * Get the line style of the order line.
 	 */
-	getLineStyle(): number;
+	getLineStyle: () => number;
 	/**
 	 * Set the line style of the order line.
 	 *
 	 * @param value The new line style.
 	 */
-	setLineStyle(value: number): this;
+	setLineStyle: (value: number) => this;
 	/**
 	 * Get the line width of the order line.
 	 */
-	getLineWidth(): number;
+	getLineWidth: () => number;
 	/**
 	 * Set the line width of the order line.
 	 *
 	 * @param value The new line width.
 	 */
-	setLineWidth(value: number): this;
+	setLineWidth: (value: number) => this;
 	/**
 	 * Get the body font of the order line.
 	 */
-	getBodyFont(): string;
+	getBodyFont: () => string;
 	/**
 	 * Set the body font of the order line.
 	 *
@@ -13334,11 +13265,11 @@ export interface IOrderLineAdapter {
 	 *
 	 * @param value The new body font.
 	 */
-	setBodyFont(value: string): this;
+	setBodyFont: (value: string) => this;
 	/**
 	 * Get the quantity font of the order line.
 	 */
-	getQuantityFont(): string;
+	getQuantityFont: () => string;
 	/**
 	 * Set the quantity font of the order line.
 	 *
@@ -13349,152 +13280,152 @@ export interface IOrderLineAdapter {
 	 *
 	 * @param value The new quantity font.
 	 */
-	setQuantityFont(value: string): this;
+	setQuantityFont: (value: string) => this;
 	/**
 	 * Get the line color of the order line.
 	 */
-	getLineColor(): string;
+	getLineColor: () => string;
 	/**
 	 * Set the line color of the order line.
 	 *
 	 * @param value The new line color.
 	 */
-	setLineColor(value: string): this;
+	setLineColor: (value: string) => this;
 	/**
 	 * Get the body border color of the order line.
 	 */
-	getBodyBorderColor(): string;
+	getBodyBorderColor: () => string;
 	/**
 	 * Set the body border color of the order line.
 	 *
 	 * @param value The new body border color.
 	 */
-	setBodyBorderColor(value: string): this;
+	setBodyBorderColor: (value: string) => this;
 	/**
 	 * Get the body background color of the order line.
 	 */
-	getBodyBackgroundColor(): string;
+	getBodyBackgroundColor: () => string;
 	/**
 	 * Set the body background color of the order line.
 	 *
 	 * @param value A color string in RGBA format for the body background color (e.g., `"rgba(255, 0, 0, 0.5)"`).
 	 */
-	setBodyBackgroundColor(value: string): this;
+	setBodyBackgroundColor: (value: string) => this;
 	/**
 	 * Get the body text color of the order line.
 	 */
-	getBodyTextColor(): string;
+	getBodyTextColor: () => string;
 	/**
 	 * Set the body text color of the order line.
 	 *
 	 * @param value A simple color string for the body text (e.g., `"red"`, `"#FF0000"`).
 	 */
-	setBodyTextColor(value: string): this;
+	setBodyTextColor: (value: string) => this;
 	/**
 	 * Get the quantity border color of the order line.
 	 */
-	getQuantityBorderColor(): string;
+	getQuantityBorderColor: () => string;
 	/**
 	 * Set the quantity border color of the order line.
 	 *
 	 * @param value The new quantity border color.
 	 */
-	setQuantityBorderColor(value: string): this;
+	setQuantityBorderColor: (value: string) => this;
 	/**
 	 * Get the quantity background color of the order line.
 	 */
-	getQuantityBackgroundColor(): string;
+	getQuantityBackgroundColor: () => string;
 	/**
 	 * Set the quantity background color of the order line.
 	 *
 	 * @param value The new quantity background color.
 	 */
-	setQuantityBackgroundColor(value: string): this;
+	setQuantityBackgroundColor: (value: string) => this;
 	/**
 	 * Get the quantity text color of the order line.
 	 */
-	getQuantityTextColor(): string;
+	getQuantityTextColor: () => string;
 	/**
 	 * Set the quantity text color of the order line.
 	 *
 	 * @param value A color string in RGBA format (e.g., `"rgba(255, 0, 0, 0.5)"`).
 	 */
-	setQuantityTextColor(value: string): this;
+	setQuantityTextColor: (value: string) => this;
 	/**
 	 * Get the cancel button border color of the order line.
 	 */
-	getCancelButtonBorderColor(): string;
+	getCancelButtonBorderColor: () => string;
 	/**
 	 * Set the cancel button border color of the order line.
 	 *
 	 * @param value The new cancel button border color.
 	 */
-	setCancelButtonBorderColor(value: string): this;
+	setCancelButtonBorderColor: (value: string) => this;
 	/**
 	 * Get the cancel button background color of the order line.
 	 */
-	getCancelButtonBackgroundColor(): string;
+	getCancelButtonBackgroundColor: () => string;
 	/**
 	 * Set the cancel button background color of the order line.
 	 *
 	 * @param value A color string in RGBA format for the cancel button background color (e.g., `"rgba(255, 0, 0, 0.5)"`).
 	 */
-	setCancelButtonBackgroundColor(value: string): this;
+	setCancelButtonBackgroundColor: (value: string) => this;
 	/**
 	 * Get the cancel button icon color of the order line.
 	 */
-	getCancelButtonIconColor(): string;
+	getCancelButtonIconColor: () => string;
 	/**
 	 * Set the cancel button icon color of the order line.
 	 *
 	 * @param value The new cancel button icon color.
 	 */
-	setCancelButtonIconColor(value: string): this;
+	setCancelButtonIconColor: (value: string) => this;
 }
 /**
  * You can retrieve this interface by using the {@link IChartWidgetApi.getPanes} method
  */
 export interface IPaneApi {
 	/** Returns `true` if the price scale contains the main series */
-	hasMainSeries(): boolean;
+	hasMainSeries: () => boolean;
 	/**
 	 * Returns an array of the PriceScaleApi instances that allows interaction with right price scales.
 	 * The array may be empty if there is not any price scale on the left side of the pane
 	 */
-	getLeftPriceScales(): readonly IPriceScaleApi[];
+	getLeftPriceScales: () => readonly IPriceScaleApi[];
 	/**
 	 * Returns an array of the PriceScaleApi instances that allows interaction with right price scales.
 	 * The array may be empty if there is not any price scale on the right side of the pane
 	 */
-	getRightPriceScales(): readonly IPriceScaleApi[];
+	getRightPriceScales: () => readonly IPriceScaleApi[];
 	/**
 	 * Returns an instance of the PriceScaleApi that allows you to interact with the price scale of the main source
 	 * or `null` if the main source is not attached to any price scale (it is in 'No Scale' mode)
 	 */
-	getMainSourcePriceScale(): IPriceScaleApi | null;
+	getMainSourcePriceScale: () => IPriceScaleApi | null;
 	/**
 	 * Returns an instance of the PriceScaleApi that allows you to interact with the price scale of the main source
 	 * or `null` if the main source is not attached to any price scale (it is in 'No Scale' mode)
 	 */
-	getPriceScaleById(priceScaleId: string): IPriceScaleApi | null;
+	getPriceScaleById: (priceScaleId: string) => IPriceScaleApi | null;
 	/** Returns the pane's height */
-	getHeight(): number;
+	getHeight: () => number;
 	/** Sets the pane's height */
-	setHeight(height: number): void;
+	setHeight: (height: number) => void;
 	/** Moves the pane to a new position, `paneIndex` should be a number between 0 and all panes count - 1 */
-	moveTo(paneIndex: number): void;
+	moveTo: (paneIndex: number) => void;
 	/** Returns the pane's index, it's a number between 0 and all panes count - 1 */
-	paneIndex(): number;
+	paneIndex: () => number;
 	/** Collapse the current pane */
-	collapse(): void;
+	collapse: () => void;
 	/** Restore the size of a previously collapsed pane */
-	restore(): void;
+	restore: () => void;
 	/** Returns the pane's collapsed state */
-	isCollapsed(): boolean;
+	isCollapsed: () => boolean;
 	/** Change the maximized state of the pane */
-	setMaximized(value: boolean): void;
+	setMaximized: (value: boolean) => void;
 	/** Returns the maximized state of the pane */
-	isMaximized(): boolean;
+	isMaximized: () => boolean;
 }
 export interface IPineSeries {
 	/**
@@ -13508,17 +13439,17 @@ export interface IPineSeries {
 	 * - and so on
 	 * @param  {number} [n] - index
 	 */
-	get(n?: number): number;
+	get: (n?: number) => number;
 	/**
 	 * Set the value for the pine series at the current index interation.
 	 * @param  {number} value - value to be set
 	 */
-	set(value: number): void;
+	set: (value: number) => void;
 	/**
 	 * Get the index for the bar at the specified timestamp
 	 * @param  {number} time - timestamp
 	 */
-	indexOf(time: number): number;
+	indexOf: (time: number) => number;
 	/**
 	 * Map some values from one time scale to another.
 	 *
@@ -13565,7 +13496,7 @@ export interface IPineSeries {
 	 *   return value at sourceIndex
 	 * ```
 	 */
-	adopt(source: IPineSeries, destination: IPineSeries, mode: 0 | 1): number;
+	adopt: (source: IPineSeries, destination: IPineSeries, mode: 0 | 1) => number;
 }
 /**
  * An API object that controls position lines created with {@link IChartWidgetApi.createPositionLine}.
@@ -13575,133 +13506,112 @@ export interface IPositionLineAdapter {
 	/**
 	 * Remove the position line. This API object cannot be used after this call.
 	 */
-	remove(): void;
+	remove: () => void;
 	/**
 	 * Attach a callback to be executed when the position line is closed.
 	 *
 	 * @param callback Callback to be executed when the position line is closed.
 	 */
-	onClose(callback: () => void): this;
-	/**
-	 * Attach a callback to be executed when the position line is closed.
-	 *
-	 * @param data Data to be passed to the callback.
-	 * @param callback Callback to be executed when the position line is closed.
-	 */
-	onClose<T>(data: T, callback: (data: T) => void): this;
+	onClose: ((callback: () => void) => this) & (<T>(data: T, callback: (data: T) => void) => this);
 	/**
 	 * Attach a callback to be executed when the position line is modified.
 	 *
 	 * @param callback Callback to be executed when the position line is modified.
 	 */
-	onModify(callback: () => void): this;
-	/**
-	 * Attach a callback to be executed when the position line is modified.
-	 *
-	 * @param data Data to be passed to the callback.
-	 * @param callback Callback to be executed when the position line is modified.
-	 */
-	onModify<T>(data: T, callback: (data: T) => void): this;
+	onModify: ((callback: () => void) => this) & (<T>(data: T, callback: (data: T) => void) => this);
 	/**
 	 * Attach a callback to be executed when the position line is reversed.
 	 *
 	 * @param callback Callback to be executed when the position line is reversed.
 	 */
-	onReverse(callback: () => void): this;
-	/**
-	 * Attach a callback to be executed when the position line is reversed.
-	 *
-	 * @param data Data to be passed to the callback.
-	 * @param callback Callback to be executed when the position line is reversed.
-	 */
-	onReverse<T>(data: T, callback: (data: T) => void): this;
+	onReverse: ((callback: () => void) => this) & (<T>(data: T, callback: (data: T) => void) => this);
 	/**
 	 * Get the price of the position line.
 	 */
-	getPrice(): number;
+	getPrice: () => number;
 	/**
 	 * Set the price of the position line.
 	 *
 	 * @param value The new price.
 	 */
-	setPrice(value: number): this;
+	setPrice: (value: number) => this;
 	/**
 	 * Get the text of the position line.
 	 */
-	getText(): string;
+	getText: () => string;
 	/**
 	 * Set the text of the position line.
 	 *
 	 * @param value The new text.
 	 */
-	setText(value: string): this;
+	setText: (value: string) => this;
 	/**
 	 * Get the tooltip of the position line.
 	 */
-	getTooltip(): string;
+	getTooltip: () => string;
 	/**
 	 * Set the tooltip of the position line.
 	 *
 	 * @param value The new tooltip.
 	 */
-	setTooltip(value: string): this;
+	setTooltip: (value: string) => this;
 	/**
 	 * Get the protect tooltip of the position line.
 	 */
-	getProtectTooltip(): string;
+	getProtectTooltip: () => string;
 	/**
 	 * Set the protect tooltip of the position line.
 	 *
 	 * @param value The new protect tooltip.
 	 */
-	setProtectTooltip(value: string): this;
+	setProtectTooltip: (value: string) => this;
 	/**
 	 * Get the close tooltip of the position line.
 	 */
-	getCloseTooltip(): string;
+	getCloseTooltip: () => string;
 	/**
 	 * Set the close tooltip of the position line.
 	 *
 	 * @param value The new close tooltip.
 	 */
-	setCloseTooltip(value: string): this;
+	setCloseTooltip: (value: string) => this;
 	/**
 	 * Get the reverse tooltip of the position line.
 	 */
-	getReverseTooltip(): string;
+	getReverseTooltip: () => string;
 	/**
 	 * Set the reverse tooltip of the position line.
 	 *
 	 * @param value The new reverse tooltip.
 	 */
-	setReverseTooltip(value: string): this;
+	setReverseTooltip: (value: string) => this;
 	/**
 	 * Get the quantity of the position line.
 	 */
-	getQuantity(): string;
+	getQuantity: () => string;
 	/**
 	 * Set the quantity of the position line.
 	 *
 	 * @param value The new quantity.
 	 */
-	setQuantity(value: string): this;
+	setQuantity: (value: string) => this;
 	/**
 	 * Get the extend left flag value of the position line.
 	 */
-	getExtendLeft(): boolean;
+	getExtendLeft: () => boolean;
 	/**
 	 * Set the extend left flag value of the position line.
 	 * @param value The new extend left flag value.
 	 */
-	setExtendLeft(value: boolean): this;
+	setExtendLeft: (value: boolean) => this;
 	/**
 	 * Get the unit of length specified for the line length of the position line.
 	 */
-	getLineLengthUnit(): PositionLineLengthUnit;
+	getLineLengthUnit: () => PositionLineLengthUnit;
 	/**
 	 * Get the line length of the position line.
 	 */
-	getLineLength(): number;
+	getLineLength: () => number;
 	/**
 	 * Set the line length of the position line.
 	 *
@@ -13711,29 +13621,29 @@ export interface IPositionLineAdapter {
 	 * @param value The new line length.
 	 * @param [unit] - unit for the line length, defaults to 'percentage'.
 	 */
-	setLineLength(value: number, unit?: PositionLineLengthUnit): this;
+	setLineLength: (value: number, unit?: PositionLineLengthUnit) => this;
 	/**
 	 * Get the line style of the position line.
 	 */
-	getLineStyle(): number;
+	getLineStyle: () => number;
 	/**
 	 * Set the line style of the position line.
 	 * @param value The new line style.
 	 */
-	setLineStyle(value: number): this;
+	setLineStyle: (value: number) => this;
 	/**
 	 * Get the line width of the position line.
 	 */
-	getLineWidth(): number;
+	getLineWidth: () => number;
 	/**
 	 * Set the line width of the position line.
 	 * @param value The new line width.
 	 */
-	setLineWidth(value: number): this;
+	setLineWidth: (value: number) => this;
 	/**
 	 * Get the body font of the position line.
 	 */
-	getBodyFont(): string;
+	getBodyFont: () => string;
 	/**
 	 * Set the body font of the position line.
 	 *
@@ -13744,11 +13654,11 @@ export interface IPositionLineAdapter {
 	 *
 	 * @param value The new body font.
 	 */
-	setBodyFont(value: string): this;
+	setBodyFont: (value: string) => this;
 	/**
 	 * Get the quantity font of the position line.
 	 */
-	getQuantityFont(): string;
+	getQuantityFont: () => string;
 	/**
 	 * Set the quantity font of the position line.
 	 *
@@ -13759,136 +13669,136 @@ export interface IPositionLineAdapter {
 	 *
 	 * @param value The new quantity font.
 	 */
-	setQuantityFont(value: string): this;
+	setQuantityFont: (value: string) => this;
 	/**
 	 * Get the line color of the position line.
 	 */
-	getLineColor(): string;
+	getLineColor: () => string;
 	/**
 	 * Set the line color of the position line.
 	 * @param value The new line color.
 	 */
-	setLineColor(value: string): this;
+	setLineColor: (value: string) => this;
 	/**
 	 * Get the body border color of the position line.
 	 */
-	getBodyBorderColor(): string;
+	getBodyBorderColor: () => string;
 	/**
 	 * Set the body border color of the position line.
 	 * @param value The new body border color.
 	 */
-	setBodyBorderColor(value: string): this;
+	setBodyBorderColor: (value: string) => this;
 	/**
 	 * Get the body background color of the position line.
 	 */
-	getBodyBackgroundColor(): string;
+	getBodyBackgroundColor: () => string;
 	/**
 	 * Set the body background color of the position line.
 	 * @param value A color string in RGBA format for the body background color (e.g., `"rgba(255, 0, 0, 0.5)"`).
 	 */
-	setBodyBackgroundColor(value: string): this;
+	setBodyBackgroundColor: (value: string) => this;
 	/**
 	 * Get the body text color of the position line.
 	 */
-	getBodyTextColor(): string;
+	getBodyTextColor: () => string;
 	/**
 	 * Set the body text color of the position line.
 	 * @param value A simple color string for the body text (e.g., `"red"`, `"#FF0000"`).
 	 */
-	setBodyTextColor(value: string): this;
+	setBodyTextColor: (value: string) => this;
 	/**
 	 * Get the quantity border color of the position line.
 	 */
-	getQuantityBorderColor(): string;
+	getQuantityBorderColor: () => string;
 	/**
 	 * Set the quantity border color of the position line.
 	 *
 	 * @param value The new quantity border color.
 	 */
-	setQuantityBorderColor(value: string): this;
+	setQuantityBorderColor: (value: string) => this;
 	/**
 	 * Get the quantity background color of the position line.
 	 */
-	getQuantityBackgroundColor(): string;
+	getQuantityBackgroundColor: () => string;
 	/**
 	 * Set the quantity background color of the position line.
 	 *
 	 * @param value The new quantity background color.
 	 */
-	setQuantityBackgroundColor(value: string): this;
+	setQuantityBackgroundColor: (value: string) => this;
 	/**
 	 * Get the quantity text color of the position line.
 	 */
-	getQuantityTextColor(): string;
+	getQuantityTextColor: () => string;
 	/**
 	 * Set the quantity text color of the position line.
 	 *
 	 * @param value A color string in RGBA format (e.g., `"rgba(255, 0, 0, 0.5)"`).
 	 */
-	setQuantityTextColor(value: string): this;
+	setQuantityTextColor: (value: string) => this;
 	/**
 	 * Get the reverse button border color of the position line.
 	 */
-	getReverseButtonBorderColor(): string;
+	getReverseButtonBorderColor: () => string;
 	/**
 	 * Set the reverse button border color of the position line.
 	 * @param value The new reverse button border color.
 	 */
-	setReverseButtonBorderColor(value: string): this;
+	setReverseButtonBorderColor: (value: string) => this;
 	/**
 	 * Get the reverse button background color of the position line.
 	 */
-	getReverseButtonBackgroundColor(): string;
+	getReverseButtonBackgroundColor: () => string;
 	/**
 	 * Set the reverse button background color of the position line.
 	 * @param value A color string in RGBA format for the reverse button background color (e.g., `"rgba(255, 0, 0, 0.5)"`).
 	 */
-	setReverseButtonBackgroundColor(value: string): this;
+	setReverseButtonBackgroundColor: (value: string) => this;
 	/**
 	 * Get the reverse button icon color of the position line.
 	 */
-	getReverseButtonIconColor(): string;
+	getReverseButtonIconColor: () => string;
 	/**
 	 * Set the reverse button icon color of the position line.
 	 * @param value The new reverse button icon color.
 	 */
-	setReverseButtonIconColor(value: string): this;
+	setReverseButtonIconColor: (value: string) => this;
 	/**
 	 * Get the close button border color of the position line.
 	 */
-	getCloseButtonBorderColor(): string;
+	getCloseButtonBorderColor: () => string;
 	/**
 	 * Set the close button border color of the position line.
 	 * @param value The new close button border color.
 	 */
-	setCloseButtonBorderColor(value: string): this;
+	setCloseButtonBorderColor: (value: string) => this;
 	/**
 	 * Get the close button background color of the position line.
 	 */
-	getCloseButtonBackgroundColor(): string;
+	getCloseButtonBackgroundColor: () => string;
 	/**
 	 * Set the close button background color of the position line.
 	 * @param value The new close button background color.
 	 */
-	setCloseButtonBackgroundColor(value: string): this;
+	setCloseButtonBackgroundColor: (value: string) => this;
 	/**
 	 * Get the close button icon color of the position line.
 	 */
-	getCloseButtonIconColor(): string;
+	getCloseButtonIconColor: () => string;
 	/**
 	 * Set the close button icon color of the position line.
 	 * @param value The new close button icon color.
 	 */
-	setCloseButtonIconColor(value: string): this;
+	setCloseButtonIconColor: (value: string) => this;
 }
 /**
  * Specific formatter for numbers
  */
 export interface IPriceFormatter extends ISymbolValueFormatter {
 	/** Price formatter */
-	format(price: number, options?: PriceFormatterFormatOptions): string;
+	format: (price: number, options?: PriceFormatterFormatOptions) => string;
 	/** Price change formatter */
-	formatChange?(price: number, prevPrice: number, options?: PriceFormatterFormatOptions): string;
+	formatChange?: (price: number, prevPrice: number, options?: PriceFormatterFormatOptions) => string;
 }
 /**
  * The Price Scale API allows interacting with the [price scale](https://www.tradingview.com/charting-library-docs/latest/ui_elements/Price-Scale).
@@ -13899,66 +13809,66 @@ export interface IPriceFormatter extends ISymbolValueFormatter {
  */
 export interface IPriceScaleApi {
 	/** Returns current mode of the price scale */
-	getMode(): PriceScaleMode;
+	getMode: () => PriceScaleMode;
 	/**
 	 * Changes current mode of the price scale
 	 * @param newMode new mode to set for the price scale
 	 */
-	setMode(newMode: PriceScaleMode): void;
+	setMode: (newMode: PriceScaleMode) => void;
 	/** Returns whether the price scale is inverted or not */
-	isInverted(): boolean;
+	isInverted: () => boolean;
 	/**
 	 * Changes current inverted state of the price scale
 	 * @param isInverted set to `true` if the price scale should become inverted
 	 */
-	setInverted(isInverted: boolean): void;
+	setInverted: (isInverted: boolean) => void;
 	/**
 	 * Returns `true` when the price scale is locked
 	 */
-	isLocked(): boolean;
+	isLocked: () => boolean;
 	/**
 	 * Set whether the price scale should be locked or not
 	 * @param  {boolean} isLocked - set to `true` to lock the price scale
 	 */
-	setLocked(isLocked: boolean): void;
+	setLocked: (isLocked: boolean) => void;
 	/**
 	 * Returns `true` when the price scale has auto scaling enabled
 	 */
-	isAutoScale(): boolean;
+	isAutoScale: () => boolean;
 	/**
 	 * Set whether auto scaling should be enabled or not for the price scale
 	 * @param  {boolean} isAutoScale - set to `true` to enable auto scaling
 	 */
-	setAutoScale(isAutoScale: boolean): void;
+	setAutoScale: (isAutoScale: boolean) => void;
 	/**
 	 * Returns current visible price range of the price scale.
 	 * The result is an object with `from` and `to`,
 	 * which are the boundaries of the price scale visible range.
 	 */
-	getVisiblePriceRange(): VisiblePriceRange | null;
+	getVisiblePriceRange: () => VisiblePriceRange | null;
 	/**
 	 * Sets current visible price range of the price scale,
 	 * @param range an object with `from` and `to`, which are the boundaries of the price scale visible range.
 	 */
-	setVisiblePriceRange(range: VisiblePriceRange): void;
+	setVisiblePriceRange: (range: VisiblePriceRange) => void;
 	/** Returns `true` if the price scale contains the main series */
-	hasMainSeries(): boolean;
+	hasMainSeries: () => boolean;
 	/** Returns an array of IDs of all studies attached to the price scale */
-	getStudies(): EntityId[];
+	getStudies: () => EntityId[];
 	/** Returns the current currency set on the [price scale](https://www.tradingview.com/charting-library-docs/latest/ui_elements/Price-Scale). Returns `null` if no currency is specified. */
-	currency(): CurrencyInfo | null;
+	currency: () => CurrencyInfo | null;
 	/**
 	 * Sets a currency on the price scale.
 	 * @param  {string|null} currency - currency supported by your backend (for example 'EUR', 'USD'). A null value will reset the currency to default.
 	 */
-	setCurrency(currency: string | null): void;
+	setCurrency: (currency: string | null) => void;
 	/** Returns the current unit set on the [price scale](https://www.tradingview.com/charting-library-docs/latest/ui_elements/Price-Scale). Returns `null` if no unit is specified. */
-	unit(): UnitInfo | null;
+	unit: () => UnitInfo | null;
 	/**
 	 * Sets a unit on the price scale.
 	 * @param  {string|null} unit - unit supported by your backend (for example 'weight', 'energy'). A null value will reset the unit to default.
 	 */
-	setUnit(unit: string | null): void;
+	setUnit: (unit: string | null) => void;
 }
 export interface IProjectionStudyResult {
 	/** array of projection bars */
@@ -14003,46 +13913,46 @@ export interface ISelectionApi {
 	 * Add entity / entities to selection
 	 * @param  {EntityId[]|EntityId} entities - entities to be added to selection
 	 */
-	add(entities: EntityId[] | EntityId): void;
+	add: (entities: EntityId[] | EntityId) => void;
 	/**
 	 * Set entity / entities as the selection
 	 * @param  {EntityId[]|EntityId} entities - entities to be selected
 	 */
-	set(entities: EntityId[] | EntityId): void;
+	set: (entities: EntityId[] | EntityId) => void;
 	/**
 	 * Remove entities from the selection
 	 * @param  {EntityId[]} entities - entities to be removed from the selection
 	 */
-	remove(entities: EntityId[]): void;
+	remove: (entities: EntityId[]) => void;
 	/**
 	 * Does the selection contain the entity
 	 * @param  {EntityId} entity - entity to be checked
 	 * @returns `true` when entity is in the selection
 	 */
-	contains(entity: EntityId): boolean;
+	contains: (entity: EntityId) => boolean;
 	/**
 	 * Returns all the entities in the selection
 	 */
-	allSources(): EntityId[];
+	allSources: () => EntityId[];
 	/**
 	 * Is the selection empty
 	 * @returns `true` when empty
 	 */
-	isEmpty(): boolean;
+	isEmpty: () => boolean;
 	/**
 	 * Clear selection
 	 */
-	clear(): void;
+	clear: () => void;
 	/**
 	 * Subscription for selection changes.
 	 */
-	onChanged(): ISubscription<() => void>;
+	onChanged: () => ISubscription<() => void>;
 	/**
 	 * Whether the entity can be added to the selection
 	 * @param  {EntityId} entity - entity to be checked
 	 * @returns `true` when entity can be added to the selection
 	 */
-	canBeAddedToSelection(entity: EntityId): boolean;
+	canBeAddedToSelection: (entity: EntityId) => boolean;
 }
 export interface ISeparator extends IMenuItem {
 	/** @inheritDoc */
@@ -14055,41 +13965,41 @@ export interface ISeparator extends IMenuItem {
  */
 export interface ISeriesApi {
 	/** Returns `true` if a user is able to remove/change/hide the main series */
-	isUserEditEnabled(): boolean;
+	isUserEditEnabled: () => boolean;
 	/**
 	 * Enables or disables removing/changing/hiding the main series by the user
 	 */
-	setUserEditEnabled(enabled: boolean): void;
+	setUserEditEnabled: (enabled: boolean) => void;
 	/** Moves the main series to the pane above. Note that this method works only if the pane exists. */
-	mergeUp(): void;
+	mergeUp: () => void;
 	/** Moves the main series to the pane below. Note that this method works only if the pane exists. */
-	mergeDown(): void;
+	mergeDown: () => void;
 	/** Moves the main series to a **new** pane above. Note that this method does not work if the main series is the only series on the current pane. */
-	unmergeUp(): void;
+	unmergeUp: () => void;
 	/** Moves the main series to a **new** pane below. Note that this method does not work if the main series is the only series on the current pane. */
-	unmergeDown(): void;
+	unmergeDown: () => void;
 	/** Pins the main series to a new price axis at right */
-	detachToRight(): void;
+	detachToRight: () => void;
 	/** Pins the main series to a new price axis at left */
-	detachToLeft(): void;
+	detachToLeft: () => void;
 	/** Makes the main series to be an overlay source */
-	detachNoScale(): void;
+	detachNoScale: () => void;
 	/** Changes the price scale of the main series */
-	changePriceScale(newPriceScale: SeriesPriceScale): void;
+	changePriceScale: (newPriceScale: SeriesPriceScale) => void;
 	/** Returns `true` if the main series is visible */
-	isVisible(): boolean;
+	isVisible: () => boolean;
 	/** Shows/hides the main series */
-	setVisible(visible: boolean): void;
+	setVisible: (visible: boolean) => void;
 	/** Places main series on top of all other chart objects */
-	bringToFront(): void;
+	bringToFront: () => void;
 	/** Places main series behind all other chart objects */
-	sendToBack(): void;
+	sendToBack: () => void;
 	/** Value that is returned when a study is created via API */
-	entityId(): EntityId;
+	entityId: () => EntityId;
 	/** Returns properties for a specific chart style */
-	chartStyleProperties<T extends ChartStyle>(chartStyle: T): SeriesPreferencesMap[T];
+	chartStyleProperties: <T extends ChartStyle>(chartStyle: T) => SeriesPreferencesMap[T];
 	/** Sets properties for a specific chart style */
-	setChartStyleProperties<T extends ChartStyle>(chartStyle: T, newPrefs: DeepPartial<SeriesPreferencesMap[T]>): void;
+	setChartStyleProperties: <T extends ChartStyle>(chartStyle: T, newPrefs: DeepPartial<SeriesPreferencesMap[T]>) => void;
 }
 /**
  * Properties of the {@link ChartingLibraryWidgetOptions.settings_adapter} property that allows saving [user settings](https://www.tradingview.com/charting-library-docs/latest/saving_loading/user-settings) to your preferred storage, including server-side.
@@ -14098,9 +14008,9 @@ export interface ISettingsAdapter {
 	/** Initial settings the chart should be initiated with. */
 	initialSettings?: InitialSettingsMap;
 	/** Set a value for a setting. */
-	setValue(key: string, value: string): void;
+	setValue: (key: string, value: string) => void;
 	/** Remove a value for a setting. */
-	removeValue(key: string): void;
+	removeValue: (key: string) => void;
 }
 /**
  * Drawing Groups API. Refer to the [Drawings API](https://www.tradingview.com/charting-library-docs/latest/ui_elements/drawings/drawings-api#drawing-groups-api) article for more information.
@@ -14112,134 +14022,134 @@ export interface IShapesGroupControllerApi {
 	 * @throws If selection is empty, or selection contains non-drawings, or selection contains drawings from more than one pane.
 	 * @return The ID of the created group.
 	 */
-	createGroupFromSelection(): ShapesGroupId;
+	createGroupFromSelection: () => ShapesGroupId;
 	/**
 	 * Remove a group of drawings.
 	 *
 	 * @param groupId A group ID.
 	 */
-	removeGroup(groupId: ShapesGroupId): void;
+	removeGroup: (groupId: ShapesGroupId) => void;
 	/**
 	 * Get an array of all drawing groups.
 	 *
 	 * @returns An array of group IDs.
 	 */
-	groups(): readonly ShapesGroupId[];
+	groups: () => readonly ShapesGroupId[];
 	/**
 	 * Get an array of IDs for each drawing in a group.
 	 *
 	 * @param groupId A group ID.
 	 * @returns An array of drawing IDs.
 	 */
-	shapesInGroup(groupId: ShapesGroupId): readonly EntityId[];
+	shapesInGroup: (groupId: ShapesGroupId) => readonly EntityId[];
 	/**
 	 * Remove a drawing from a group. If the drawing is the only drawing in the group then the group is also removed.
 	 *
 	 * @param groupId A group ID.
 	 * @param shapeId A drawing ID.
 	 */
-	excludeShapeFromGroup(groupId: ShapesGroupId, shapeId: EntityId): void;
+	excludeShapeFromGroup: (groupId: ShapesGroupId, shapeId: EntityId) => void;
 	/**
 	 * Add a drawing to a group.
 	 *
 	 * @param groupId A group ID.
 	 * @param shapeId A drawing ID.
 	 */
-	addShapeToGroup(groupId: ShapesGroupId, shapeId: EntityId): void;
+	addShapeToGroup: (groupId: ShapesGroupId, shapeId: EntityId) => void;
 	/**
 	 * Get an object containing the available Z-order operations for a group.
 	 *
 	 * @param groupId A group ID.
 	 * @returns The available Z-order operations.
 	 */
-	availableZOrderOperations(groupId: ShapesGroupId): AvailableZOrderOperations;
+	availableZOrderOperations: (groupId: ShapesGroupId) => AvailableZOrderOperations;
 	/**
 	 * Move the group to the top of the Z-order.
 	 *
 	 * @param groupId A group ID.
 	 */
-	bringToFront(groupId: ShapesGroupId): void;
+	bringToFront: (groupId: ShapesGroupId) => void;
 	/**
 	 * Move the group to the bottom of the Z-order.
 	 *
 	 * @param groupId A group ID.
 	 */
-	sendToBack(groupId: ShapesGroupId): void;
+	sendToBack: (groupId: ShapesGroupId) => void;
 	/**
 	 * Move the group one level up in the Z-order.
 	 *
 	 * @param groupId A group ID.
 	 */
-	bringForward(groupId: ShapesGroupId): void;
+	bringForward: (groupId: ShapesGroupId) => void;
 	/**
 	 * Move the group one level down in the Z-order.
 	 *
 	 * @param groupId A group ID.
 	 */
-	sendBackward(groupId: ShapesGroupId): void;
+	sendBackward: (groupId: ShapesGroupId) => void;
 	/**
 	 * Move the group immediately below the target in the Z-order.
 	 *
 	 * @param groupId A group ID.
 	 * @param target A target ID.
 	 */
-	insertAfter(groupId: ShapesGroupId, target: ShapesGroupId | EntityId): void;
+	insertAfter: (groupId: ShapesGroupId, target: ShapesGroupId | EntityId) => void;
 	/**
 	 * Move the group immediately above the target in the Z-order.
 	 *
 	 * @param groupId A group ID.
 	 * @param target A target ID.
 	 */
-	insertBefore(groupId: ShapesGroupId, target: ShapesGroupId | EntityId): void;
+	insertBefore: (groupId: ShapesGroupId, target: ShapesGroupId | EntityId) => void;
 	/**
 	 * Show or hide all drawings in a group.
 	 *
 	 * @param groupId A group ID.
 	 * @param value A boolean flag. `true` to show, `false` to hide.
 	 */
-	setGroupVisibility(groupId: ShapesGroupId, value: boolean): void;
+	setGroupVisibility: (groupId: ShapesGroupId, value: boolean) => void;
 	/**
 	 * Get the visibility state of a group.
 	 *
 	 * @param groupId A group ID.
 	 * @returns The visibility state.
 	 */
-	groupVisibility(groupId: ShapesGroupId): GroupVisibilityState;
+	groupVisibility: (groupId: ShapesGroupId) => GroupVisibilityState;
 	/**
 	 * Lock or unlock a group.
 	 *
 	 * @param groupId A group ID.
 	 * @param value A boolean flag. `true` to lock, `false` to unlock.
 	 */
-	setGroupLock(groupId: ShapesGroupId, value: boolean): void;
+	setGroupLock: (groupId: ShapesGroupId, value: boolean) => void;
 	/**
 	 * Get locked state of a group.
 	 *
 	 * @param groupId A group ID.
 	 * @returns The locked state.
 	 */
-	groupLock(groupId: ShapesGroupId): GroupLockState;
+	groupLock: (groupId: ShapesGroupId) => GroupLockState;
 	/**
 	 * Get the name of a group.
 	 *
 	 * @param groupId A group ID.
 	 * @returns The name of the group.
 	 */
-	getGroupName(groupId: ShapesGroupId): string;
+	getGroupName: (groupId: ShapesGroupId) => string;
 	/**
 	 * Set the name of a group. Names do not need to be unique.
 	 *
 	 * @param groupId A group ID.
 	 * @param name The new name of the group.
 	 */
-	setGroupName(groupId: ShapesGroupId, name: string): void;
+	setGroupName: (groupId: ShapesGroupId, name: string) => void;
 	/**
 	 * Check if some drawings can be grouped.
 	 *
 	 * @param shapes An array of drawing IDs.
 	 * @return `true` if the drawings can be grouped, `false` otherwise.
 	 */
-	canBeGroupped(shapes: readonly EntityId[]): boolean;
+	canBeGroupped: (shapes: readonly EntityId[]) => boolean;
 }
 /**
  * API object for interacting with a study.
@@ -14252,83 +14162,83 @@ export interface IStudyApi {
 	 *
 	 * @returns `true` if editing is enabled, `false` otherwise.
 	 */
-	isUserEditEnabled(): boolean;
+	isUserEditEnabled: () => boolean;
 	/**
 	 * Set if user editing is enabled for the study.
 	 *
 	 * @param enabled `true` if editing should be enabled, `false` otherwise.
 	 */
-	setUserEditEnabled(enabled: boolean): void;
+	setUserEditEnabled: (enabled: boolean) => void;
 	/**
 	 * Get descriptions of the study inputs.
 	 */
-	getInputsInfo(): StudyInputInformation[];
+	getInputsInfo: () => StudyInputInformation[];
 	/**
 	 * Get current values of the study inputs.
 	 */
-	getInputValues(): StudyInputValueItem[];
+	getInputValues: () => StudyInputValueItem[];
 	/**
 	 * Set the value of one or more study inputs.
 	 *
 	 * @param values Study input values to set.
 	 */
-	setInputValues(values: StudyInputValueItem[]): void;
+	setInputValues: (values: StudyInputValueItem[]) => void;
 	/**
 	 * Get descriptions of study styles.
 	 */
-	getStyleInfo(): StudyStyleInfo;
+	getStyleInfo: () => StudyStyleInfo;
 	/**
 	 * Get current values of the study styles.
 	 */
-	getStyleValues(): StudyStyleValues;
+	getStyleValues: () => StudyStyleValues;
 	/**
 	 * Moves the indicator to the pane above. Note that this method works only if the pane exists.
 	 */
-	mergeUp(): void;
+	mergeUp: () => void;
 	/**
 	 * Moves the indicator to the pane below. Note that this method works only if the pane exists.
 	 */
-	mergeDown(): void;
+	mergeDown: () => void;
 	/**
 	 * Moves the indicator to a **new** pane above. Note that this method does not work if the indicator is the only series on the current pane.
 	 */
-	unmergeUp(): void;
+	unmergeUp: () => void;
 	/**
 	 * Moves the indicator to a **new** pane below. Note that this method does not work if the indicator is the only series on the current pane.
 	 */
-	unmergeDown(): void;
+	unmergeDown: () => void;
 	/**
 	 * Get the index of the pane that the study is attached to.
 	 *
 	 * @returns The pane index.
 	 */
-	paneIndex(): number;
+	paneIndex: () => number;
 	/**
 	 * Change the price scale that the study is attached to.
 	 *
 	 * @param newPriceScale Price scale identifier, or the ID of another study whose price scale the study should be moved to.
 	 */
-	changePriceScale(newPriceScale: StudyPriceScale | EntityId): void;
+	changePriceScale: (newPriceScale: StudyPriceScale | EntityId) => void;
 	/**
 	 * Get if the study is visible.
 	 *
 	 * @returns `true` if visible, `false` otherwise.
 	 */
-	isVisible(): boolean;
+	isVisible: () => boolean;
 	/**
 	 * Set the study visibility.
 	 *
 	 * @param visible `true` if the study should be visible, `false` otherwise.
 	 */
-	setVisible(visible: boolean): void;
+	setVisible: (visible: boolean) => void;
 	/**
 	 * Move the study visually in front of all other chart objects.
 	 */
-	bringToFront(): void;
+	bringToFront: () => void;
 	/**
 	 * Move the study visually behind of all other chart objects.
 	 */
-	sendToBack(): void;
+	sendToBack: () => void;
 	/**
 	 * Override one or more of the indicator's properties.
 	 * Refer to [Indicator Overrides](https://www.tradingview.com/charting-library-docs/latest/customization/overrides/indicator-overrides#change-the-existing-indicator) for more information.
@@ -14336,12 +14246,12 @@ export interface IStudyApi {
 	 *
 	 * @param overrides Property values to override.
 	 */
-	applyOverrides<TOverrides extends Partial<SingleIndicatorOverrides>>(overrides: TOverrides): void;
+	applyOverrides: <TOverrides extends Partial<SingleIndicatorOverrides>>(overrides: TOverrides) => void;
 	/**
 	 * Copies the study to all charts in the layout.
 	 * Only applicable to multi-chart layouts (Trading Platform).
 	 */
-	applyToEntireLayout(): Promise<void>;
+	applyToEntireLayout: () => Promise<void>;
 	/**
 	 * Get a subscription that can be used to subscribe a callback when the study data has loaded.
 	 *
@@ -14356,7 +14266,7 @@ export interface IStudyApi {
 	 * );
 	 * ```
 	 */
-	onDataLoaded(): ISubscription<() => void>;
+	onDataLoaded: () => ISubscription<() => void>;
 	/**
 	 * Get a subscription that can be used to subscribe a callback when the study has an error.
 	 *
@@ -14371,7 +14281,7 @@ export interface IStudyApi {
 	 * );
 	 * ```
 	 */
-	onStudyError(): ISubscription<() => void>;
+	onStudyError: () => ISubscription<() => void>;
 }
 /**
  * A subscription. Used to subscribe callbacks to events.
@@ -14407,7 +14317,7 @@ export interface ISubscription<TFunc extends Function> {
 	 * }
 	 * ```
 	 */
-	subscribe(obj: object | null, member: TFunc, singleshot?: boolean): void;
+	subscribe: (obj: object | null, member: TFunc, singleshot?: boolean) => void;
 	/**
 	 * Unsubscribe a previously subscribed callback function.
 	 * It is important that the `obj` and `member` arguments are the same as the ones passed when the callback was subscribed.
@@ -14415,7 +14325,7 @@ export interface ISubscription<TFunc extends Function> {
 	 * @param obj Object passed as the `this` value when the callback was subscribed.
 	 * @param member Function subscribed to the event.
 	 */
-	unsubscribe(obj: object | null, member: TFunc): void;
+	unsubscribe: (obj: object | null, member: TFunc) => void;
 	/**
 	 * Unsubscribe all callbacks that were subscribed with the same `obj` value.
 	 *
@@ -14441,7 +14351,7 @@ export interface ISubscription<TFunc extends Function> {
 	 * }
 	 * ```
 	 */
-	unsubscribeAll(obj: object | null): void;
+	unsubscribeAll: (obj: object | null) => void;
 }
 /**
  * PineJS execution context symbol information.
@@ -14496,22 +14406,22 @@ export interface ISymbolInstrument {
 	 *
 	 * @returns the timestamp in milliseconds
 	 */
-	bartime(): number;
+	bartime: () => number;
 	/**
 	 * @returns true if the bar resolution is day/week/month, false if it is intraday
 	 */
-	isdwm(): boolean;
+	isdwm: () => boolean;
 }
 export interface ISymbolValueFormatter extends INumberFormatter {
 	/** Default formatter function used to assign the correct sign (+ or -) to a number  */
-	format(price: number, options?: SymbolValueFormatterFormatOptions): string;
+	format: (price: number, options?: SymbolValueFormatterFormatOptions) => string;
 	/**
 	 * Formatter for a price change
 	 * @param currentPrice - current price
 	 * @param prevPrice - previous price
 	 * @param options - format options
 	 */
-	formatChange?(currentPrice: number, prevPrice: number, options?: SymbolValueFormatterFormatOptions): string;
+	formatChange?: (currentPrice: number, prevPrice: number, options?: SymbolValueFormatterFormatOptions) => string;
 }
 /**
  * API object for interacting with the [time scale](https://www.tradingview.com/charting-library-docs/latest/ui_elements/Time-Scale).
@@ -14520,31 +14430,31 @@ export interface ISymbolValueFormatter extends INumberFormatter {
  */
 export interface ITimeScaleApi {
 	/** Returns the time associated to a given coordinate (distance in pixels from the leftmost visible bar) */
-	coordinateToTime(x: number): number | null;
+	coordinateToTime: (x: number) => number | null;
 	/**
 	 * Users will be notified every time `barSpacing` value is changed. This typically occurs when zooming in/out on the chart.
 	 * This is to detect when the chart has been zoomed in/out
 	 */
-	barSpacingChanged(): ISubscription<(newBarSpacing: number) => void>;
+	barSpacingChanged: () => ISubscription<(newBarSpacing: number) => void>;
 	/**
 	 * Users will be notified every time `rightOffset` value is changed.
 	 * This is to detect when the chart has been scrolled left/right.
 	 */
-	rightOffsetChanged(): ISubscription<(rightOffset: number) => void>;
+	rightOffsetChanged: () => ISubscription<(rightOffset: number) => void>;
 	/** To set a new right offset */
-	setRightOffset(offset: number): void;
+	setRightOffset: (offset: number) => void;
 	/** Sets a new [bar spacing](https://www.tradingview.com/charting-library-docs/latest/getting_started/glossary#bar-spacing). You can call {@link barSpacing} to get the current value. */
-	setBarSpacing(newBarSpacing: number): void;
+	setBarSpacing: (newBarSpacing: number) => void;
 	/** Returns the current [bar spacing](https://www.tradingview.com/charting-library-docs/latest/getting_started/glossary#bar-spacing). */
-	barSpacing(): number;
+	barSpacing: () => number;
 	/** Returns the current right offset */
-	rightOffset(): number;
+	rightOffset: () => number;
 	/** Returns the current width of the chart in pixels */
-	width(): number;
+	width: () => number;
 	/** Object that can be used to read/set/watch the default right offset (margin)  */
-	defaultRightOffset(): IWatchedValue<number>;
+	defaultRightOffset: () => IWatchedValue<number>;
 	/** Object that can be used to read/set/watch the default right offset (in percent) (margin)  */
-	defaultRightOffsetPercentage(): IWatchedValue<number>;
+	defaultRightOffsetPercentage: () => IWatchedValue<number>;
 	/**
 	 * Object that can be used to read/set/watch whether to use `defaultRightOffset` or `defaultRightOffsetPercentage`
 	 * option for the right offset (margin).
@@ -14553,15 +14463,15 @@ export interface ITimeScaleApi {
 	 *
 	 * Default: `false`
 	 */
-	usePercentageRightOffset(): IWatchedValue<boolean>;
+	usePercentageRightOffset: () => IWatchedValue<boolean>;
 }
 export interface ITimezoneApi {
 	/** Array of supported TimezoneInfo */
-	availableTimezones(): readonly TimezoneInfo[];
+	availableTimezones: () => readonly TimezoneInfo[];
 	/** Returns the current TimezoneInfo */
-	getTimezone(): TimezoneInfo;
+	getTimezone: () => TimezoneInfo;
 	/** Sets the current timezone */
-	setTimezone(timezone: TimezoneId | CustomTimezoneId, options?: UndoOptions): void;
+	setTimezone: (timezone: TimezoneId | CustomTimezoneId, options?: UndoOptions) => void;
 	/**
 	 * To be notified when the timezone is changed
 	 *
@@ -14574,7 +14484,7 @@ export interface ITimezoneApi {
 	 * );
 	 * ```
 	 */
-	onTimezoneChanged(): ISubscription<(timezone: TimezoneId) => void>;
+	onTimezoneChanged: () => ISubscription<(timezone: TimezoneId) => void>;
 }
 /**
  * An API object for interacting with the [Watchlist](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/Watch-List) widget.
@@ -14594,86 +14504,86 @@ export interface IWatchListApi {
 	 * Get a default list of symbols.
 	 * @returns default list of symbols
 	 */
-	defaultList(): string[];
+	defaultList: () => string[];
 	/**
 	 * Get a list of symbols.
 	 * If the `id` parameter is not provided, the current list will be returned. If there is no watchList, `null` will be returned.
 	 * @param  {string} [id] - Watchlist ID
 	 * @returns list of symbols for watchlist
 	 */
-	getList(id?: string): string[] | null;
+	getList: (id?: string) => string[] | null;
 	/**
 	 * Get all watchlists. If there is no WatchList then `null` will be returned.
 	 * @returns object of all watchlists
 	 */
-	getAllLists(): WatchListSymbolListMap | null;
+	getAllLists: () => WatchListSymbolListMap | null;
 	/**
 	 * Make the watchlist with the specified `id` active.
 	 * @param  {string} id - watchlist ID
 	 */
-	setActiveList(id: string): void;
+	setActiveList: (id: string) => void;
 	/**
 	 * Get the ID of the current watchlist. If there is no WatchList then `null` will be returned.
 	 * @returns id of active watchlist
 	 */
-	getActiveListId(): string | null;
+	getActiveListId: () => string | null;
 	/**
 	 * **Obsolete. Use `updateList` instead.**
 	 *
 	 * Set the list of symbols for the watchlist. It will replace the entire list.
 	 * @param  {string[]} symbols - symbol IDs
 	 */
-	setList(symbols: string[]): void;
+	setList: (symbols: string[]) => void;
 	/**
 	 * Edit the list of symbols for a watchlist.
 	 * @param  {string} listId - ID of the watchlist
 	 * @param  {string[]} symbols - Symbols to be set for the watchlist. Any list item that has the `###` prefix is considered a section divider in the watchlist.
 	 */
-	updateList(listId: string, symbols: string[]): void;
+	updateList: (listId: string, symbols: string[]) => void;
 	/**
 	 * Rename the watchlist.
 	 * @param  {string} listId - ID of the watchlist
 	 * @param  {string} newName - New name to set for the watchlist
 	 */
-	renameList(listId: string, newName: string): void;
+	renameList: (listId: string, newName: string) => void;
 	/**
 	 * Create a list of symbols with `listName` name. If the `listName` parameter is not provided or there is no WatchList then `null` will be returned;
 	 * @param  {string} [listName] - name for the watchlist
 	 * @param  {string[]} [symbols] - Symbol IDs for the watchlist. Any list item that has the `###` prefix is considered a section divider in the watchlist.
 	 * @returns WatchListSymbolList
 	 */
-	createList(listName?: string, symbols?: string[]): WatchListSymbolList | null;
+	createList: (listName?: string, symbols?: string[]) => WatchListSymbolList | null;
 	/**
 	 * Save a list of symbols.
 	 * @param  {WatchListSymbolList} list
 	 * @returns If there is no watchList or an equivalent list already exists, `false` will be returned. Otherwise, `true` will be returned.
 	 */
-	saveList(list: WatchListSymbolList): boolean;
+	saveList: (list: WatchListSymbolList) => boolean;
 	/**
 	 * Delete a watchlist of symbols
 	 * @param  {string} listId - watchlist ID
 	 */
-	deleteList(listId: string): void;
+	deleteList: (listId: string) => void;
 	/**
 	 * Subscription for when the symbols of the active watchlist are changed. Use the `subscribe` method of the returned {@link ISubscription} object to subscribe to the notifications.
 	 */
-	onListChanged(): ISubscription<WatchListSymbolListChangedCallback>;
+	onListChanged: () => ISubscription<WatchListSymbolListChangedCallback>;
 	/**
 	 * Subscription for when the active watchlist is changed to a different list. Use the `subscribe` method of the returned {@link ISubscription} object to subscribe to the notifications.
 	 */
-	onActiveListChanged(): ISubscription<EmptyCallback>;
+	onActiveListChanged: () => ISubscription<EmptyCallback>;
 	/**
 	 * Subscription for when a new list is added to the watchlist widget. Use the `subscribe` method of the returned {@link ISubscription} object to subscribe to the notifications.
 	 */
-	onListAdded(): ISubscription<WatchListSymbolListAddedCallback>;
+	onListAdded: () => ISubscription<WatchListSymbolListAddedCallback>;
 	/**
 	 * Subscription for when a list is removed from the watchlist widget. Use the `subscribe` method of the returned {@link ISubscription} object to subscribe to the notifications.
 	 */
-	onListRemoved(): ISubscription<WatchListSymbolListRemovedCallback>;
+	onListRemoved: () => ISubscription<WatchListSymbolListRemovedCallback>;
 	/**
 	 * Subscription for when a list is renamed. Use the `subscribe` method of the returned {@link ISubscription} object to subscribe to the notifications.
 	 */
-	onListRenamed(): ISubscription<WatchListSymbolListRenamedCallback>;
+	onListRenamed: () => ISubscription<WatchListSymbolListRenamedCallback>;
 }
 export interface IWatchedValue<T> extends IWatchedValueReadonly<T>, IObservableValue<T> {
 	/**
@@ -14681,11 +14591,11 @@ export interface IWatchedValue<T> extends IWatchedValueReadonly<T>, IObservableV
 	 * @param  {T} value - value to set
 	 * @param  {boolean} [forceUpdate] - force an update
 	 */
-	setValue(value: T, forceUpdate?: boolean): void;
+	setValue: (value: T, forceUpdate?: boolean) => void;
 	/** @inheritDoc */
-	subscribe(callback: WatchedValueCallback<T>, options?: WatchedValueSubscribeOptions): void;
+	subscribe: (callback: WatchedValueCallback<T>, options?: WatchedValueSubscribeOptions) => void;
 	/** @inheritDoc */
-	unsubscribe(callback?: WatchedValueCallback<T> | null): void;
+	unsubscribe: (callback?: WatchedValueCallback<T> | null) => void;
 }
 export interface IWatchedValueReadonly<T> extends IObservableValueReadOnly<T> {
 	/**
@@ -14693,17 +14603,17 @@ export interface IWatchedValueReadonly<T> extends IObservableValueReadOnly<T> {
 	 * @param  {(value:T)=>void} callback - callback to be evoked when change occurs
 	 * @param  {WatchedValueSubscribeOptions} [options] - watch subscriber options
 	 */
-	subscribe(callback: (value: T) => void, options?: WatchedValueSubscribeOptions): void;
+	subscribe: (callback: (value: T) => void, options?: WatchedValueSubscribeOptions) => void;
 	/**
 	 * Unsubscribe to watched value changes
 	 * @param  {((value:T)=>void)|null} [callback] - callback to remove
 	 */
-	unsubscribe(callback?: ((value: T) => void) | null): void;
+	unsubscribe: (callback?: ((value: T) => void) | null) => void;
 	/**
 	 * A simplified version of subscription, with promise-like interface, generally for using with boolean-valued watched values
 	 * @param  {WatchedValueCallback<T>} callback - a function to be called when the value became `true`. `once` and `callWithLast` are implicitly set to true.
 	 */
-	when(callback: WatchedValueCallback<T>): void;
+	when: (callback: WatchedValueCallback<T>) => void;
 }
 /**
  * An API object used to change the settings of the [watermark](https://www.tradingview.com/charting-library-docs/latest/ui_elements/watermarks).
@@ -14712,39 +14622,39 @@ export interface IWatermarkApi {
 	/**
 	 * Object that can be used to read/set/watch the color of the watermark text.
 	 */
-	color(): IWatchedValue<string>;
+	color: () => IWatchedValue<string>;
 	/**
 	 * Object that can be used to read/set/watch the visibility of the watermark.
 	 * @deprecated use ticker/resolution/description visibility instead
 	 */
-	visibility(): IWatchedValue<boolean>;
+	visibility: () => IWatchedValue<boolean>;
 	/**
 	 * Object that can be used to read/set/watch the visibility of the watermark's ticker part.
 	 */
-	tickerVisibility(): IWatchedValue<boolean>;
+	tickerVisibility: () => IWatchedValue<boolean>;
 	/**
 	 * Object that can be used to read/set/watch the visibility of the watermark's interval part.
 	 */
-	intervalVisibility(): IWatchedValue<boolean>;
+	intervalVisibility: () => IWatchedValue<boolean>;
 	/**
 	 * Object that can be used to read/set/watch the visibility of the watermark's description part.
 	 */
-	descriptionVisibility(): IWatchedValue<boolean>;
+	descriptionVisibility: () => IWatchedValue<boolean>;
 	/**
 	 * Object that can be used to read/set/watch the visibility of the watermark provider by WatermarkContentProvider.
 	 */
-	customVisibility(): IWatchedValue<boolean>;
+	customVisibility: () => IWatchedValue<boolean>;
 	/**
 	 * Set a custom content provider for the watermark content.
 	 * Set any part visible to turn custom watermark visibility on.
 	 *
 	 * @param provider - Custom watermark content provider, use `null` if you would like to revert back to the default content for the watermark.
 	 */
-	setContentProvider(provider: WatermarkContentProvider | null): void;
+	setContentProvider: (provider: WatermarkContentProvider | null) => void;
 	/**
 	 * Returns the current watermark content provider.
 	 */
-	provider(): IWatchedValueReadonly<WatermarkContentProvider | null>;
+	provider: () => IWatchedValueReadonly<WatermarkContentProvider | null>;
 }
 /**
  * Widget Bar API
@@ -14754,31 +14664,31 @@ export interface IWidgetbarApi extends IDestroyable {
 	 * Show page
 	 * @param  {PageName} pageName - name of page to show
 	 */
-	showPage(pageName: PageName): void;
+	showPage: (pageName: PageName) => void;
 	/**
 	 * Hide page
 	 * @param  {PageName} pageName - name of page to hide
 	 */
-	hidePage(pageName: PageName): void;
+	hidePage: (pageName: PageName) => void;
 	/**
 	 * Checks if page is visible
 	 * @param  {PageName} pageName - page to check if visible
 	 * @returns true` when page is visible
 	 */
-	isPageVisible(pageName: PageName): boolean;
+	isPageVisible: (pageName: PageName) => boolean;
 	/**
 	 * Open order panel widget
 	 */
-	openOrderPanel(): void;
+	openOrderPanel: () => void;
 	/**
 	 * Close order panel widget
 	 */
-	closeOrderPanel(): void;
+	closeOrderPanel: () => void;
 	/**
 	 * Change the visibility of the right toolbar
 	 * @param {boolean} visible - true to display the toolbar, false to hide
 	 */
-	changeWidgetBarVisibility(visible: boolean): void;
+	changeWidgetBarVisibility: (visible: boolean) => void;
 }
 /**
  * Overrides for the 'Ichimoku Cloud' indicator.
@@ -14983,11 +14893,11 @@ export interface InitialSettingsMap {
 	[key: string]: string;
 }
 export interface InputFunctions {
-	bool(defaultValue: boolean, title: string, options?: Partial<BoolInputOptions>): boolean;
-	int(defaultValue: number, title: string, options?: Partial<IntInputOptions>): number;
-	source(defaultValue: StudyPriceSource, title: string, options?: Partial<SourceInputOptions>): IPineSeries;
-	string<TOptions extends readonly string[]>(defaultValue: string, title: string, options?: Partial<StringInputOptions<TOptions>>): TOptions[number];
-	symbol(defaultValue: string, title: string, options?: Partial<SymbolInputOptions>): string;
+	bool: (defaultValue: boolean, title: string, options?: Partial<BoolInputOptions>) => boolean;
+	int: (defaultValue: number, title: string, options?: Partial<IntInputOptions>) => number;
+	source: (defaultValue: StudyPriceSource, title: string, options?: Partial<SourceInputOptions>) => IPineSeries;
+	string: <TOptions extends readonly string[]>(defaultValue: string, title: string, options?: Partial<StringInputOptions<TOptions>>) => TOptions[number];
+	symbol: (defaultValue: string, title: string, options?: Partial<SymbolInputOptions>) => string;
 }
 /**
  * Override properties for the Insidepitchfork drawing tool.
@@ -15453,14 +15363,14 @@ export interface LibraryPineStudy<TPineStudyResult> {
 	 * @param  ctx - An object containing symbol info along with some useful methods to load/store symbol
 	 * @param  {<TextendsStudyInputValue>(index:number} inputs - The inputs callback is an array of input values, placed in order of inputs in Metainfo.
 	 */
-	init?(ctx: IContext, inputs: <T extends StudyInputValue>(index: number) => T): void;
+	init?: (ctx: IContext, inputs: <T extends StudyInputValue>(index: number) => T) => void;
 	/**
 	 * Called every time the library wants to calculate the study. Also it's called for every bar of every symbol.
 	 * Thus, if you request several additional symbols inside your indicator it will increase the count of runs.
 	 * @param  ctx - An object containing symbol info along with some useful methods to load/store symbol
 	 * @param  {<TextendsStudyInputValue>(index:number} inputs - The inputs callback is an array of input values, placed in order of inputs in Metainfo.
 	 */
-	main(ctx: IContext, inputs: <T extends StudyInputValue>(index: number) => T): TPineStudyResult | null;
+	main: (ctx: IContext, inputs: <T extends StudyInputValue>(index: number) => T) => TPineStudyResult | null;
 	// Indicator defined properties
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	[key: string]: any;
@@ -15723,9 +15633,9 @@ export interface LibrarySymbolInfo {
 	/**
 	 * The boolean value showing whether or not seconds bars for this symbol can be built from ticks. Only available in Trading Platform.
 	 *
-	 * * {@link LibrarySymbolInfo.has_seconds} must also be `true`
-	 * * {@link LibrarySymbolInfo.has_ticks} must also be `true`
-	 * * {@link LibrarySymbolInfo.seconds_multipliers} must be an empty array or only contain multipliers that the datafeed provides itself
+	 * {@link LibrarySymbolInfo.has_seconds} must also be `true`
+	 * {@link LibrarySymbolInfo.has_ticks} must also be `true`
+	 * {@link LibrarySymbolInfo.seconds_multipliers} must be an empty array or only contain multipliers that the datafeed provides itself
 	 *
 	 * The library builds resolutions from ticks only if there are no seconds resolutions from the datafeed or the provided resolutions are larger then the required one. For example, the datafeed provides `3S` resolution. In this case, the library can build only `1S` or `2S` resolutions from ticks. Resolutions such as `15S` will be build with seconds bars.
 	 * @default false
@@ -16309,12 +16219,9 @@ export interface MassIndexIndicatorOverrides {
 	[key: string]: StudyOverrideValueType;
 }
 export interface MathFunctions {
-	max(value: number, ...args: (IPineSeries | number)[] | number[]): number;
-	max(value: IPineSeries, ...args: (IPineSeries | number)[] | number[]): IPineSeries;
-	min(value: number, ...args: (IPineSeries | number)[] | number[]): number;
-	min(value: IPineSeries, ...args: (IPineSeries | number)[] | number[]): IPineSeries;
-	negative(value: IPineSeries): IPineSeries;
-	negative(value: number): number;
+	max: ((value: number, ...args: (IPineSeries | number)[] | number[]) => number) & ((value: IPineSeries, ...args: (IPineSeries | number)[] | number[]) => IPineSeries);
+	min: ((value: number, ...args: (IPineSeries | number)[] | number[]) => number) & ((value: IPineSeries, ...args: (IPineSeries | number)[] | number[]) => IPineSeries);
+	negative: ((value: IPineSeries) => IPineSeries) & ((value: number) => number);
 }
 /**
  * Overrides for the 'McGinley Dynamic' indicator.
@@ -17418,92 +17325,84 @@ export interface PineJSStd {
 	 *
 	 * @returns Epsilon (machine precision). Upper bound on the relative approximation error due to rounding in floating point arithmetic.
 	 */
-	eps(): number;
+	eps: () => number;
 	/**
 	 * High Price
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns Current high price.
 	 */
-	high(context: IContext): number;
+	high: (context: IContext) => number;
 	/**
 	 * Low Price
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns Current low price.
 	 */
-	low(context: IContext): number;
+	low: (context: IContext) => number;
 	/**
 	 * Open Price
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns Current open price.
 	 */
-	open(context: IContext): number;
+	open: (context: IContext) => number;
 	/**
 	 * Close Price
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns Current close price.
 	 */
-	close(context: IContext): number;
+	close: (context: IContext) => number;
 	/**
 	 * Is a shortcut for (open + high + low + close)/4
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns Calculated average of the current OHLC values
 	 */
-	ohlc4(context: IContext): number;
+	ohlc4: (context: IContext) => number;
 	/**
 	 * Current bar volume
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns Current bar volume
 	 */
-	volume(context: IContext): number;
+	volume: (context: IContext) => number;
 	/**
 	 * Current bar time
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns UNIX time of current bar according to the symbol timezone and not UTC.
 	 */
-	time(context: IContext): number;
-	/**
-	 * Current bar time
-	 *
-	 * @param context - PineJS execution context.
-	 * @param period - Period
-	 * @returns UNIX time of current bar according to the symbol timezone and not UTC.
-	 */
-	time(context: IContext, period: string): number;
+	time: ((context: IContext) => number) & ((context: IContext, period: string) => number);
 	/**
 	 * Is a shortcut for (high + low)/2
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns Calculated average of the current HL values
 	 */
-	hl2(context: IContext): number;
+	hl2: (context: IContext) => number;
 	/**
 	 * Is a shortcut for (high + low + close)/3
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns Calculated average of the current HLC values
 	 */
-	hlc3(context: IContext): number;
+	hlc3: (context: IContext) => number;
 	/**
 	 * Resolution string, e.g. 60 - 60 minutes, D - daily, W - weekly, M - monthly, 5D - 5 days, 12M - one year, 3M - one quarter
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns The resolution string for the current context
 	 */
-	period(context: IContext): ResolutionString;
+	period: (context: IContext) => ResolutionString;
 	/**
 	 * Ticker ID
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns Ticker ID for the current symbol
 	 */
-	tickerid(context: IContext): string;
+	tickerid: (context: IContext) => string;
 	/**
 	 * Year of current bar time in exchange timezone.
 	 *
@@ -17511,7 +17410,7 @@ export interface PineJSStd {
 	 * @param time optional time. Current bar time will be used by default.
 	 * @returns Current bar year in exchange timezone.
 	 */
-	year(context: IContext, time?: number): number;
+	year: (context: IContext, time?: number) => number;
 	/**
 	 * Month of current bar time in exchange timezone.
 	 *
@@ -17519,7 +17418,7 @@ export interface PineJSStd {
 	 * @param time optional time. Current bar time will be used by default.
 	 * @returns Current bar month in exchange timezone.
 	 */
-	month(context: IContext, time?: number): number;
+	month: (context: IContext, time?: number) => number;
 	/**
 	 * Week number of current bar time in exchange timezone.
 	 *
@@ -17527,7 +17426,7 @@ export interface PineJSStd {
 	 * @param time optional time. Current bar time will be used by default.
 	 * @returns Week number of current bar in exchange timezone.
 	 */
-	weekofyear(context: IContext, time?: number): number;
+	weekofyear: (context: IContext, time?: number) => number;
 	/**
 	 * Day of month for current bar time in exchange timezone.
 	 *
@@ -17535,7 +17434,7 @@ export interface PineJSStd {
 	 * @param time optional time. Current bar time will be used by default.
 	 * @returns Day of month for current bar time in exchange timezone.
 	 */
-	dayofmonth(context: IContext, time?: number): number;
+	dayofmonth: (context: IContext, time?: number) => number;
 	/**
 	 * Day of week for current bar time in exchange timezone.
 	 *
@@ -17543,7 +17442,7 @@ export interface PineJSStd {
 	 * @param time optional time. Current bar time will be used by default.
 	 * @returns Day of week for current bar time in exchange timezone.
 	 */
-	dayofweek(context: IContext, time?: number): number;
+	dayofweek: (context: IContext, time?: number) => number;
 	/**
 	 * Hour of current bar time in exchange timezone.
 	 *
@@ -17551,7 +17450,7 @@ export interface PineJSStd {
 	 * @param time optional time. Current bar time will be used by default.
 	 * @returns Current bar hour in exchange timezone.
 	 */
-	hour(context: IContext, time?: number): number;
+	hour: (context: IContext, time?: number) => number;
 	/**
 	 * Minute of current bar time in exchange timezone.
 	 *
@@ -17559,7 +17458,7 @@ export interface PineJSStd {
 	 * @param time optional time. Current bar time will be used by default.
 	 * @returns Current bar minute in exchange timezone.
 	 */
-	minute(context: IContext, time?: number): number;
+	minute: (context: IContext, time?: number) => number;
 	/**
 	 * Second of current bar time in exchange timezone.
 	 *
@@ -17567,7 +17466,7 @@ export interface PineJSStd {
 	 * @param time optional time. Current bar time will be used by default.
 	 * @returns Current bar second in exchange timezone.
 	 */
-	second(context: IContext, time?: number): number;
+	second: (context: IContext, time?: number) => number;
 	/**
 	 * Checks if `n1` is greater than or equal to `n2`
 	 *
@@ -17576,7 +17475,7 @@ export interface PineJSStd {
 	 * @param eps - Epsilon (Optional).
 	 * @returns True if `n1` is greater than or equal to `n2`.
 	 */
-	greaterOrEqual(n1: number, n2: number, eps?: number): boolean;
+	greaterOrEqual: (n1: number, n2: number, eps?: number) => boolean;
 	/**
 	 * Checks if `n1` is less than or equal to `n2`
 	 *
@@ -17585,7 +17484,7 @@ export interface PineJSStd {
 	 * @param eps - Epsilon (Optional).
 	 * @returns True if `n1` is less than or equal to `n2`.
 	 */
-	lessOrEqual(n1: number, n2: number, eps?: number): boolean;
+	lessOrEqual: (n1: number, n2: number, eps?: number) => boolean;
 	/**
 	 * Checks if `n1` is equal to `n2` (within the accuracy of epsilon).
 	 *
@@ -17594,7 +17493,7 @@ export interface PineJSStd {
 	 * @param eps - Epsilon (Optional).
 	 * @returns True if `n1` is equal to `n2`.
 	 */
-	equal(n1: number, n2: number, eps?: number): boolean;
+	equal: (n1: number, n2: number, eps?: number) => boolean;
 	/**
 	 * Checks if `n1` is greater than `n2`
 	 *
@@ -17603,7 +17502,7 @@ export interface PineJSStd {
 	 * @param eps - Epsilon (Optional).
 	 * @returns True if `n1` is greater than `n2`.
 	 */
-	greater(n1: number, n2: number, eps?: number): boolean;
+	greater: (n1: number, n2: number, eps?: number) => boolean;
 	/**
 	 * Checks if `n1` is less than `n2`
 	 *
@@ -17612,7 +17511,7 @@ export interface PineJSStd {
 	 * @param eps - Epsilon (Optional).
 	 * @returns True if `n1` is less than `n2`.
 	 */
-	less(n1: number, n2: number, eps?: number): boolean;
+	less: (n1: number, n2: number, eps?: number) => boolean;
 	/**
 	 * Compare the values of `n1` and `n2`
 	 *
@@ -17621,7 +17520,7 @@ export interface PineJSStd {
 	 * @param eps - Epsilon (Optional).
 	 * @returns `0` if values are equal. `1` if x1 is greater than x2. `-1` if x1 is less than x2
 	 */
-	compare(n1: number, n2: number, eps?: number): -1 | 0 | 1;
+	compare: (n1: number, n2: number, eps?: number) => -1 | 0 | 1;
 	/**
 	 * Checks if `n1` is greater than or equal to `n2`
 	 *
@@ -17629,7 +17528,7 @@ export interface PineJSStd {
 	 * @param n2
 	 * @returns `1` if `n1` is greater than or equal to `n2`, `0` otherwise.
 	 */
-	ge(n1: number, n2: number): number;
+	ge: (n1: number, n2: number) => number;
 	/**
 	 * Checks if `n1` is less than or equal to `n2`
 	 *
@@ -17637,7 +17536,7 @@ export interface PineJSStd {
 	 * @param n2
 	 * @returns `1` if `n1` is greater than or equal to `n2`, `0` otherwise.
 	 */
-	le(n1: number, n2: number): number;
+	le: (n1: number, n2: number) => number;
 	/**
 	 * Checks if `n1` is equal to `n2`.
 	 *
@@ -17645,7 +17544,7 @@ export interface PineJSStd {
 	 * @param n2
 	 * @returns `1` if `n1` is equal to `n2`, `0` otherwise.
 	 */
-	eq(n1: number, n2: number): number;
+	eq: (n1: number, n2: number) => number;
 	/**
 	 * Checks if `n1` is not equal to `n2`.
 	 *
@@ -17653,7 +17552,7 @@ export interface PineJSStd {
 	 * @param n2
 	 * @returns `1` if `n1` is not equal to `n2`, `0` otherwise.
 	 */
-	neq(n1: number, n2: number): number;
+	neq: (n1: number, n2: number) => number;
 	/**
 	 * Checks if `n1` is greater than `n2`
 	 *
@@ -17661,7 +17560,7 @@ export interface PineJSStd {
 	 * @param n2
 	 * @returns `1` if `n1` is greater than `n2`, `0` otherwise.
 	 */
-	gt(n1: number, n2: number): number;
+	gt: (n1: number, n2: number) => number;
 	/**
 	 * Checks if `n1` is less than `n2`
 	 *
@@ -17669,7 +17568,7 @@ export interface PineJSStd {
 	 * @param n2
 	 * @returns `1` if `n1` is less than `n2`, `0` otherwise.
 	 */
-	lt(n1: number, n2: number): number;
+	lt: (n1: number, n2: number) => number;
 	/**
 	 * If ... then ... else ...
 	 * `iff` does exactly the same thing as ternary conditional operator `?:` but in a functional style. Also `iff` is slightly less efficient than operator `?:`
@@ -17679,7 +17578,7 @@ export interface PineJSStd {
 	 * @param elseValue - value to use if condition is false
 	 * @returns either thenValue or elseValue
 	 */
-	iff(condition: number, thenValue: number, elseValue: number): number;
+	iff: (condition: number, thenValue: number, elseValue: number) => number;
 	/**
 	 * True Range
 	 *
@@ -17687,7 +17586,7 @@ export interface PineJSStd {
 	 * @param ctx - PineJS execution context.
 	 * @returns True range. It is `max(high - low, abs(high - close[1]), abs(low - close[1]))`
 	 */
-	tr(n_handleNaN: number | undefined, ctx: IContext): number;
+	tr: (n_handleNaN: number | undefined, ctx: IContext) => number;
 	/**
 	 * Function atr (average true range) returns the RMA of true range. True range is `max(high - low, abs(high - close[1]), abs(low - close[1]))`
 	 *
@@ -17695,42 +17594,42 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns Average true range.
 	 */
-	atr(length: number, context: IContext): number;
+	atr: (length: number, context: IContext) => number;
 	/**
 	 * Determines whether the current resolution is a daily, weekly, or monthly resolution.
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns true if current resolution is a daily or weekly or monthly resolution
 	 */
-	isdwm(context: IContext): boolean;
+	isdwm: (context: IContext) => boolean;
 	/**
 	 * Determines whether the current resolution is an intraday (minutes or seconds) resolution.
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns true if current resolution is an intraday (minutes or seconds) resolution
 	 */
-	isintraday(context: IContext): boolean;
+	isintraday: (context: IContext) => boolean;
 	/**
 	 * Determines whether the current resolution is a daily resolution.
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns true if current resolution is a daily resolution
 	 */
-	isdaily(context: IContext): boolean;
+	isdaily: (context: IContext) => boolean;
 	/**
 	 * Determines whether the current resolution is a weekly resolution.
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns true if current resolution is a weekly resolution
 	 */
-	isweekly(context: IContext): boolean;
+	isweekly: (context: IContext) => boolean;
 	/**
 	 * Determines whether the current resolution is a monthly resolution.
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns true if current resolution is a monthly resolution
 	 */
-	ismonthly(context: IContext): boolean;
+	ismonthly: (context: IContext) => boolean;
 	/**
 	 * select session breaks for intraday resolutions only
 	 *
@@ -17738,21 +17637,21 @@ export interface PineJSStd {
 	 * @param times - An array of numbers representing the times to select session breaks from.
 	 * @returns session breaks for intraday resolutions only.
 	 */
-	selectSessionBreaks(context: IContext, times: number[]): number[];
+	selectSessionBreaks: (context: IContext, times: number[]) => number[];
 	/**
 	 * checks whether a new session can be created
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns checks whether a new session can be created
 	 */
-	createNewSessionCheck(context: IContext): (time: number) => boolean;
+	createNewSessionCheck: (context: IContext) => (time: number) => boolean;
 	/**
 	 * Display an error message.
 	 *
 	 * @param message - message to display for error
 	 * @param title - title to display for error
 	 */
-	error(message: string, title?: string): never;
+	error: (message: string, title?: string) => never;
 	/**
 	 * Zig-zag pivot points
 	 *
@@ -17761,7 +17660,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns the zig-zag pivot points
 	 */
-	zigzag(n_deviation: number, n_depth: number, context: IContext): number;
+	zigzag: (n_deviation: number, n_depth: number, context: IContext) => number;
 	/**
 	 * Zig-zag pivot points
 	 *
@@ -17770,21 +17669,21 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns the zig-zag pivot points (for bars)
 	 */
-	zigzagbars(n_deviation: number, n_depth: number, context: IContext): number;
+	zigzagbars: (n_deviation: number, n_depth: number, context: IContext) => number;
 	/**
 	 * Time of the current update
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns symbol update time
 	 */
-	updatetime(context: IContext): number;
+	updatetime: (context: IContext) => number;
 	/**
 	 * Ticker ID for the current symbol
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns Ticker ID for the current symbol
 	 */
-	ticker(context: IContext): string;
+	ticker: (context: IContext) => string;
 	/**
 	 * Percent rank is the percentage of how many previous values were less than or equal to the current value of given series.
 	 *
@@ -17792,7 +17691,7 @@ export interface PineJSStd {
 	 * @param length - Number of bars (length).
 	 * @returns Percent rank of `source` for `length` bars back.
 	 */
-	percentrank(source: IPineSeries, length: number): number;
+	percentrank: (source: IPineSeries, length: number) => number;
 	/**
 	 * Test if the series is now rising for length bars long.
 	 *
@@ -17800,7 +17699,7 @@ export interface PineJSStd {
 	 * @param length - Number of bars (length).
 	 * @returns `true` if current `x` is greater than any previous `x` for length bars back, `false` otherwise.
 	 */
-	rising(series: IPineSeries, length: number): number;
+	rising: (series: IPineSeries, length: number) => number;
 	/**
 	 * Test if the series is now falling for length bars long.
 	 *
@@ -17808,7 +17707,7 @@ export interface PineJSStd {
 	 * @param length - Number of bars (length).
 	 * @returns `true` if current `x` is less than any previous `x` for length bars back, `false` otherwise.
 	 */
-	falling(series: IPineSeries, length: number): number;
+	falling: (series: IPineSeries, length: number) => number;
 	/**
 	 * Relative strength index. It is calculated based on rma's of upward and downward change of x.
 	 *
@@ -17816,7 +17715,7 @@ export interface PineJSStd {
 	 * @param lower - downward change
 	 * @returns Relative strength index.
 	 */
-	rsi(upper: number, lower: number): number;
+	rsi: (upper: number, lower: number) => number;
 	/**
 	 * The sum function returns the sliding sum of last y values of x.
 	 *
@@ -17825,7 +17724,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns Sum of x for y bars back.
 	 */
-	sum(source: IPineSeries, length: number, context: IContext): number;
+	sum: (source: IPineSeries, length: number, context: IContext) => number;
 	/**
 	 * Simple Moving Average. The sum of last `length` values of `source`, divided by `length`.
 	 *
@@ -17834,7 +17733,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns Simple moving average of x for y bars back.
 	 */
-	sma(source: IPineSeries, length: number, context: IContext): number;
+	sma: (source: IPineSeries, length: number, context: IContext) => number;
 	/**
 	 * Smoothed Moving Average.
 	 *
@@ -17843,7 +17742,7 @@ export interface PineJSStd {
 	 * @param ctx PineJS execution context.
 	 * @returns The smoothed moving average value.
 	 */
-	smma(n_value: number, n_length: number, ctx: IContext): number;
+	smma: (n_value: number, n_length: number, ctx: IContext) => number;
 	/**
 	 * Moving average used in RSI. It is the exponentially weighted moving average with `alpha = 1 / length`.
 	 *
@@ -17852,7 +17751,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns Exponential moving average of `x` with `alpha = 1 / y`.
 	 */
-	rma(source: IPineSeries, length: number, context: IContext): number;
+	rma: (source: IPineSeries, length: number, context: IContext) => number;
 	/**
 	 * Exponential Moving Average. In EMA weighting factors decrease exponentially.
 	 *
@@ -17863,7 +17762,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns Exponential moving average of `x` with `alpha = 2 / (y + 1)`
 	 */
-	ema(source: IPineSeries, length: number, context: IContext): number;
+	ema: (source: IPineSeries, length: number, context: IContext) => number;
 	/**
 	 * The wma function returns weighted moving average of `source` for `length` bars back. In wma weighting factors decrease in arithmetical progression.
 	 *
@@ -17872,7 +17771,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns Weighted moving average of `series` for `length` bars back.
 	 */
-	wma(source: IPineSeries, length: number, context: IContext): number;
+	wma: (source: IPineSeries, length: number, context: IContext) => number;
 	/**
 	 * The vwma function returns volume-weighted moving average of `source` for `length` bars back. It is the same as: `sma(x * volume, y) / sma(volume, y)`
 	 *
@@ -17881,7 +17780,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns Volume-weighted moving average of `source` for `length` bars back.
 	 */
-	vwma(source: IPineSeries, length: number, context: IContext): number;
+	vwma: (source: IPineSeries, length: number, context: IContext) => number;
 	/**
 	 * Symmetrically weighted moving average with fixed length: 4. Weights: `[1/6, 2/6, 2/6, 1/6]`.
 	 *
@@ -17889,7 +17788,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns Symmetrically weighted moving average
 	 */
-	swma(source: IPineSeries, context: IContext): number;
+	swma: (source: IPineSeries, context: IContext) => number;
 	/**
 	 * For a given series replaces NaN values with previous nearest non-NaN value.
 	 *
@@ -17897,7 +17796,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns Series without na gaps.
 	 */
-	fixnan(n_current: number, context: IContext): number;
+	fixnan: (n_current: number, context: IContext) => number;
 	/**
 	 * Lowest value offset for a given number of bars back.
 	 *
@@ -17906,7 +17805,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns Offset to the lowest bar.
 	 */
-	lowestbars(source: IPineSeries, length: number, context: IContext): number;
+	lowestbars: (source: IPineSeries, length: number, context: IContext) => number;
 	/**
 	 * Lowest value for a given number of bars back.
 	 *
@@ -17915,7 +17814,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns Lowest value.
 	 */
-	lowest(source: IPineSeries, length: number, context: IContext): number;
+	lowest: (source: IPineSeries, length: number, context: IContext) => number;
 	/**
 	 * Highest value offset for a given number of bars back.
 	 *
@@ -17924,7 +17823,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns Offset to the highest bar.
 	 */
-	highestbars(source: IPineSeries, length: number, context: IContext): number;
+	highestbars: (source: IPineSeries, length: number, context: IContext) => number;
 	/**
 	 * Highest value for a given number of bars back.
 	 *
@@ -17933,7 +17832,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns Highest value.
 	 */
-	highest(source: IPineSeries, length: number, context: IContext): number;
+	highest: (source: IPineSeries, length: number, context: IContext) => number;
 	/**
 	 * Cumulative (total) sum. The function tracks the previous values internally.
 	 *
@@ -17941,14 +17840,14 @@ export interface PineJSStd {
 	 * @param context PineJS execution context.
 	 * @returns The sum.
 	 */
-	cum(n_value: number, context: IContext): number;
+	cum: (n_value: number, context: IContext) => number;
 	/**
 	 * Accumulation/distribution index.
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns Accumulation/distribution index.
 	 */
-	accdist(context: IContext): number;
+	accdist: (context: IContext) => number;
 	/**
 	 * Correlation coefficient. Describes the degree to which two series tend to deviate from their `sma` values.
 	 *
@@ -17958,7 +17857,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns Correlation coefficient.
 	 */
-	correlation(sourceA: IPineSeries, sourceB: IPineSeries, length: number, context: IContext): number;
+	correlation: (sourceA: IPineSeries, sourceB: IPineSeries, length: number, context: IContext) => number;
 	/**
 	 * Stochastic. It is calculated by a formula: `100 * (close - lowest(low, length)) / (highest(high, length) - lowest(low, length))`
 	 *
@@ -17969,7 +17868,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns Stochastic value.
 	 */
-	stoch(source: IPineSeries, high: IPineSeries, low: IPineSeries, length: number, context: IContext): number;
+	stoch: (source: IPineSeries, high: IPineSeries, low: IPineSeries, length: number, context: IContext) => number;
 	/**
 	 * True strength index. It uses moving averages of the underlying momentum of a financial instrument.
 	 *
@@ -17979,7 +17878,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns True strength index. A value in range `[-1, 1]`
 	 */
-	tsi(source: IPineSeries, shortLength: number, longLength: number, context: IContext): number;
+	tsi: (source: IPineSeries, shortLength: number, longLength: number, context: IContext) => number;
 	/**
 	 * Crossing of series.
 	 *
@@ -17988,7 +17887,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns `true` if two series have crossed each other, otherwise `false`.
 	 */
-	cross(n_0: number, n_1: number, context: IContext): boolean;
+	cross: (n_0: number, n_1: number, context: IContext) => boolean;
 	/**
 	 * Linear regression curve. A line that best fits the prices specified over a user-defined time period.
 	 * It is calculated using the least squares method. The result of this function is calculated using the formula:
@@ -18000,7 +17899,7 @@ export interface PineJSStd {
 	 * @param offset - Offset (number of bars)
 	 * @returns Linear regression curve point.
 	 */
-	linreg(source: IPineSeries, length: number, offset: number): number;
+	linreg: (source: IPineSeries, length: number, offset: number) => number;
 	/**
 	 * Parabolic SAR (parabolic stop and reverse) is a method devised by J. Welles Wilder, Jr., to find potential reversals in the market price direction of traded goods.
 	 *
@@ -18010,7 +17909,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns Parabolic SAR value.
 	 */
-	sar(start: number, inc: number, max: number, context: IContext): number;
+	sar: (start: number, inc: number, max: number, context: IContext) => number;
 	/**
 	 * Arnaud Legoux Moving Average. It uses Gaussian distribution as weights for moving average.
 	 *
@@ -18019,14 +17918,14 @@ export interface PineJSStd {
 	 * @param offset - Controls tradeoff between smoothness (closer to 1) and responsiveness (closer to 0).
 	 * @param sigma - Changes the smoothness of ALMA. The larger sigma the smoother ALMA.
 	 */
-	alma(series: IPineSeries, length: number, offset: number, sigma: number): number;
+	alma: (series: IPineSeries, length: number, offset: number, sigma: number) => number;
 	/**
 	 * Difference between current value and previous, `x - x[1]`.
 	 *
 	 * @param source - Series to process.
 	 * @returns The result of subtraction.
 	 */
-	change(source: IPineSeries): number;
+	change: (source: IPineSeries) => number;
 	/**
 	 * Rate of Change.
 	 *
@@ -18036,7 +17935,7 @@ export interface PineJSStd {
 	 * @param length - Number of bars (length).
 	 * @returns The rate of change of `source` for `length` bars back.
 	 */
-	roc(source: IPineSeries, length: number): number;
+	roc: (source: IPineSeries, length: number) => number;
 	/**
 	 * Measure of difference between the series and its sma.
 	 *
@@ -18045,7 +17944,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns Deviation of source for length bars back.
 	 */
-	dev(source: IPineSeries, length: number, context: IContext): number;
+	dev: (source: IPineSeries, length: number, context: IContext) => number;
 	/**
 	 * Standard deviation. Note: This is a biased estimation of standard deviation.
 	 *
@@ -18054,7 +17953,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns Standard deviation.
 	 */
-	stdev(source: IPineSeries, length: number, context: IContext): number;
+	stdev: (source: IPineSeries, length: number, context: IContext) => number;
 	/**
 	 * Variance is the expectation of the squared deviation of a series from its mean `sma`, and it informally measures how far a set of numbers are spread out from their mean. Note: This is a biased estimation of sample variance.
 	 *
@@ -18063,7 +17962,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns Variance of `source` for `length` bars back.
 	 */
-	variance(source: IPineSeries, length: number, context: IContext): number;
+	variance: (source: IPineSeries, length: number, context: IContext) => number;
 	/**
 	 * Get time in `daysCount` number of days while taking Daylight savings time into account.
 	 *
@@ -18072,7 +17971,7 @@ export interface PineJSStd {
 	 * @param daysCount - Number of days
 	 * @returns The time is `daysCount` number of days, taking into account Daylight savings time.
 	 */
-	add_days_considering_dst(timezone: string, utcTime: Date, daysCount: number): Date;
+	add_days_considering_dst: (timezone: string, utcTime: Date, daysCount: number) => Date;
 	/**
 	 * Get time in `yearsCount` number of years while taking Daylight savings time into account.
 	 *
@@ -18081,7 +17980,7 @@ export interface PineJSStd {
 	 * @param yearsCount - Number of years
 	 * @returns The time is `yearsCount` number of years, taking into account Daylight savings time.
 	 */
-	add_years_considering_dst(timezone: string, utcTime: Date, yearsCount: number): Date;
+	add_years_considering_dst: (timezone: string, utcTime: Date, yearsCount: number) => Date;
 	/**
 	 * Calculates the directional movement values +DI, -DI, DX, ADX, and ADXR.
 	 *
@@ -18090,7 +17989,7 @@ export interface PineJSStd {
 	 * @param context - PineJS execution context.
 	 * @returns An array of the +DI, -DI, DX, ADX, and ADXR values with diLength smoothing for the (+/-)DI values and adxSmoothingLength for the ADX value.
 	 */
-	dmi(diLength: number, adxSmoothingLength: number, context: IContext): [
+	dmi: (diLength: number, adxSmoothingLength: number, context: IContext) => [
 		number,
 		number,
 		number,
@@ -18103,7 +18002,7 @@ export interface PineJSStd {
 	 * @param n - value to test
 	 * @returns `1` if `n` is not a valid number (`n` is `NaN`), otherwise `0`. Returns `NaN` if `n` is undefined.
 	 */
-	na(n?: number): number;
+	na: (n?: number) => number;
 	/**
 	 * Replaces NaN values with zeros (or given value) in a series.
 	 *
@@ -18111,37 +18010,37 @@ export interface PineJSStd {
 	 * @param y - fallback value. `0` by default.
 	 * @returns `x` if it's a valid (not NaN) number, otherwise `y`
 	 */
-	nz(x: number, y?: number): number;
+	nz: (x: number, y?: number) => number;
 	/**
 	 * Logical AND.
 	 *
 	 * @returns `1` if both values are truthy, `0` otherwise.
 	 */
-	and(n_0: number, n_1: number): number;
+	and: (n_0: number, n_1: number) => number;
 	/**
 	 * Logical OR.
 	 *
 	 * @returns `1` if either value is truthy, `0` otherwise.
 	 */
-	or(n_0: number, n_1: number): number;
+	or: (n_0: number, n_1: number) => number;
 	/**
 	 * Logical negation (NOT).
 	 *
 	 * @returns `1` if value is falsy, `0` if value is truthy.
 	 */
-	not(n_0: number): number;
+	not: (n_0: number) => number;
 	/**
 	 * Maximum number in the array
 	 *
 	 * @returns The greatest of multiple given values
 	 */
-	max(...values: number[]): number;
+	max: (...values: number[]) => number;
 	/**
 	 * Minimum number in the array
 	 *
 	 * @returns The smallest of multiple given values
 	 */
-	min(...values: number[]): number;
+	min: (...values: number[]) => number;
 	/**
 	 * Mathematical power function.
 	 *
@@ -18149,116 +18048,116 @@ export interface PineJSStd {
 	 * @param exponent - Specifies the exponent.
 	 * @returns `x` raised to the power of `y`.
 	 */
-	pow(base: number, exponent: number): number;
+	pow: (base: number, exponent: number) => number;
 	/**
 	 * Absolute value of x is x if x >= 0, or -x otherwise.
 	 *
 	 * @returns The absolute value of `x`
 	 */
-	abs(x: number): number;
+	abs: (x: number) => number;
 	/**
 	 * Natural logarithm of any `x > 0` is the unique `y` such that `e^y = x`
 	 *
 	 * @returns The natural logarithm of `x`.
 	 */
-	log(x: number): number;
+	log: (x: number) => number;
 	/**
 	 * Base 10 logarithm of any `x > 0` is the unique `y` such that `10^y = x`
 	 *
 	 * @returns The base 10 logarithm of `x`.
 	 */
-	log10(x: number): number;
+	log10: (x: number) => number;
 	/**
 	 * Square root of any `x >= 0` is the unique `y >= 0` such that `y^2 = x`
 	 *
 	 * @returns The square root of `x`
 	 */
-	sqrt(x: number): number;
+	sqrt: (x: number) => number;
 	/**
 	 * Sign (signum) of `x` is `0` if the x is zero, `1.0` if the `x` is greater than zero, `-1.0` if the `x` is less than zero.
 	 *
 	 * @returns The sign of `x`
 	 */
-	sign(x: number): number;
+	sign: (x: number) => number;
 	/**
 	 * The exp function of `x` is `e^x`, where `x` is the argument and `e` is Euler's number.
 	 *
 	 * @returns A number representing `e^x`.
 	 */
-	exp(x: number): number;
+	exp: (x: number) => number;
 	/**
 	 * The sin function returns the trigonometric sine of an angle.
 	 *
 	 * @param x - Angle, in radians.
 	 * @returns The trigonometric sine of an angle.
 	 */
-	sin(x: number): number;
+	sin: (x: number) => number;
 	/**
 	 * The cos function returns the trigonometric cosine of an angle.
 	 *
 	 * @param x - Angle, in radians.
 	 * @returns The trigonometric cosine of an angle.
 	 */
-	cos(x: number): number;
+	cos: (x: number) => number;
 	/**
 	 * The tan function returns the trigonometric tangent of an angle.
 	 *
 	 * @param x - Angle, in radians.
 	 * @returns The trigonometric tangent of an angle.
 	 */
-	tan(x: number): number;
+	tan: (x: number) => number;
 	/**
 	 * The asin function returns the arcsine (in radians) of number such that `sin(asin(y)) = y` for `y` in range `[-1, 1]`.
 	 *
 	 * @param x - Angle, in radians.
 	 * @returns The arcsine of a value; the returned angle is in the range `[-Pi/2, Pi/2]`, or na if y is outside of range `[-1, 1]`.
 	 */
-	asin(x: number): number;
+	asin: (x: number) => number;
 	/**
 	 * The acos function returns the arccosine (in radians) of number such that `cos(acos(y)) = y` for `y` in range `[-1, 1]`.
 	 *
 	 * @param x - Angle, in radians.
 	 * @returns The arc cosine of a value; the returned angle is in the range `[0, Pi]`, or na if y is outside of range `[-1, 1]`.
 	 */
-	acos(x: number): number;
+	acos: (x: number) => number;
 	/**
 	 * The atan function returns the arctangent (in radians) of number such that `tan(atan(y)) = y` for any `y`.
 	 *
 	 * @param x - Angle, in radians.
 	 * @returns The arc tangent of a value; the returned angle is in the range `[-Pi/2, Pi/2]`.
 	 */
-	atan(x: number): number;
+	atan: (x: number) => number;
 	/**
 	 * Round the number down to the closest integer
 	 *
 	 * @returns The largest integer less than or equal to the given number.
 	 */
-	floor(x: number): number;
+	floor: (x: number) => number;
 	/**
 	 * The ceil function returns the smallest (closest to negative infinity) integer that is greater than or equal to the argument.
 	 *
 	 * @returns The smallest integer greater than or equal to the given number.
 	 */
-	ceil(x: number): number;
+	ceil: (x: number) => number;
 	/**
 	 * Round the number to the nearest integer
 	 *
 	 * @returns The value of `x` rounded to the nearest integer, with ties rounding up. If the precision parameter is used, returns a float value rounded to that number of decimal places.
 	 */
-	round(x: number): number;
+	round: (x: number) => number;
 	/**
 	 * Calculates average of all given series (elementwise).
 	 *
 	 * @returns the average of the values
 	 */
-	avg(...values: number[]): number;
+	avg: (...values: number[]) => number;
 	/**
 	 * Current bar index
 	 *
 	 * @param context - PineJS execution context.
 	 * @returns Current bar index. Numbering is zero-based, index of the first historical bar is 0.
 	 */
-	n(context: IContext): number;
+	n: (context: IContext) => number;
 	/**
 	 * Check if a value is zero.
 	 *
@@ -18272,28 +18171,28 @@ export interface PineJSStd {
 	 * @param v the value to convert.
 	 * @returns `true` if the number is finite and non-zero, `false` otherwise.
 	 */
-	toBool(v: number): boolean;
+	toBool: (v: number) => boolean;
 	/**
 	 * Get the symbol currency code.
 	 *
 	 * @param ctx PineJS execution context.
 	 * @returns Symbol currency code.
 	 */
-	currencyCode(ctx: IContext): string | null | undefined;
+	currencyCode: (ctx: IContext) => string | null | undefined;
 	/**
 	 * Get the symbol unit ID.
 	 *
 	 * @param ctx PineJS execution context.
 	 * @returns Symbol unit ID.
 	 */
-	unitId(ctx: IContext): string | null | undefined;
+	unitId: (ctx: IContext) => string | null | undefined;
 	/**
 	 * Get the symbol interval. For example: if the symbol has a resolution of `1D` then this function would return `1`.
 	 *
 	 * @param ctx PineJS execution context.
 	 * @returns Symbol interval.
 	 */
-	interval(ctx: IContext): number;
+	interval: (ctx: IContext) => number;
 }
 export interface PineStudyResultComposite<TPineStudyResultSimple> {
 	/** Type is composite */
@@ -19531,7 +19430,7 @@ export interface RenkoStylePreferences {
 	wickDownColor: string;
 }
 export interface RequestFunctions {
-	security(tickerId: TickerId, options?: RequestSecurityOptions): IPineSeries;
+	security: (tickerId: TickerId, options?: RequestSecurityOptions) => IPineSeries;
 }
 export interface RequestSecurityOptions {
 	expression: () => IPineSeries;
@@ -19667,7 +19566,7 @@ export interface RssNewsFeedParams {
 	[symbolType: string]: RssNewsFeedItem;
 }
 export interface RuntimeFunctions {
-	error(message: string): never;
+	error: (message: string) => never;
 }
 /**
  * Overrides for the 'SMI Ergodic Indicator/Oscillator' indicator.
@@ -20002,19 +19901,18 @@ export interface ScriptContext {
 	readonly ta: TAFunctions;
 	readonly ticker: TickerFunctions;
 	readonly timeframe: TimeframeFunctions;
-	open(): IPineSeries;
-	high(): IPineSeries;
-	low(): IPineSeries;
-	close(): IPineSeries;
-	volume(): IPineSeries;
-	year(): number;
-	na(value: number): boolean;
-	series(value: number): IPineSeries;
-	fill(plot1: HLine, plot2: HLine, options?: Partial<FillOptions>): unknown;
-	fill(plot1: Plot, plot2: Plot, options?: Partial<FillOptions>): unknown;
-	hline(price: number, options?: Partial<HlineOptions>): HLine;
-	indicator(options: Partial<IndicatorOptions>): void;
-	plot(source: IPineSeries | number, options?: Partial<PlotOptions>): Plot;
+	open: () => IPineSeries;
+	high: () => IPineSeries;
+	low: () => IPineSeries;
+	close: () => IPineSeries;
+	volume: () => IPineSeries;
+	year: () => number;
+	na: (value: number) => boolean;
+	series: (value: number) => IPineSeries;
+	fill: ((plot1: HLine, plot2: HLine, options?: Partial<FillOptions>) => unknown) & ((plot1: Plot, plot2: Plot, options?: Partial<FillOptions>) => unknown);
+	hline: (price: number, options?: Partial<HlineOptions>) => HLine;
+	indicator: (options: Partial<IndicatorOptions>) => void;
+	plot: (source: IPineSeries | number, options?: Partial<PlotOptions>) => Plot;
 }
 /**
  * [Symbol Search](https://www.tradingview.com/charting-library-docs/latest/ui_elements/Symbol-Search) result item.
@@ -20459,7 +20357,7 @@ export interface StandardErrorIndicatorOverrides {
  * The interface that describes the mapping of values in the {@link AccountManagerColumnBase.formatter} and {@link AccountManagerColumnBase.dataFields} properties of the Account Manager columns.
  * Refer to the [Value formatters](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/account-manager/value-formatters) section for more information.
  */
-/* eslint-disable jsdoc/require-jsdoc */
+ 
 export interface StandardFormattersDependenciesMapping {
 	[StandardFormatterName.Default]: string[];
 	[StandardFormatterName.Symbol]: SymbolFormatterProperties[keyof SymbolFormatterProperties];
@@ -20538,7 +20436,7 @@ export interface StandardFormattersDependenciesMapping {
 	[StandardFormatterName.Empty]: [
 	];
 }
-/* eslint-enable jsdoc/require-jsdoc */
+ 
 /**
  * Position defined by an OHLC price on a bar at a specified time.
  */
@@ -27294,18 +27192,18 @@ export interface SymbolValueFormatterFormatOptions extends NumberFormatterFormat
 	signPositive?: boolean;
 }
 export interface TAFunctions {
-	change(source: IPineSeries): IPineSeries;
-	correlation(source1: IPineSeries, source2: IPineSeries, length: number): IPineSeries;
-	cum(source: IPineSeries): IPineSeries;
-	ema(source: IPineSeries, length: number): IPineSeries;
-	rma(source: IPineSeries, length: number): IPineSeries;
-	sma(source: IPineSeries, length: number): IPineSeries;
-	vwap(source: IPineSeries, anchor: boolean, stdDevMult: number): [
+	change: (source: IPineSeries) => IPineSeries;
+	correlation: (source1: IPineSeries, source2: IPineSeries, length: number) => IPineSeries;
+	cum: (source: IPineSeries) => IPineSeries;
+	ema: (source: IPineSeries, length: number) => IPineSeries;
+	rma: (source: IPineSeries, length: number) => IPineSeries;
+	sma: (source: IPineSeries, length: number) => IPineSeries;
+	vwap: (source: IPineSeries, anchor: boolean, stdDevMult: number) => [
 		IPineSeries,
 		IPineSeries,
 		IPineSeries
 	];
-	wma(source: IPineSeries, length: number): IPineSeries;
+	wma: (source: IPineSeries, length: number) => IPineSeries;
 }
 /**
  * Overrides for the 'TRIX' indicator.
@@ -27470,7 +27368,7 @@ export interface ThreedriversLineToolOverrides {
 	"linetoolthreedrivers.transparency": number;
 }
 export interface TickerFunctions {
-	modify(symbol: string, session?: SessionId): TickerId;
+	modify: (symbol: string, session?: SessionId) => TickerId;
 }
 /**
  * Used in the schema defined in exportData API to describe the time field.
@@ -27562,8 +27460,8 @@ export interface TimecyclesLineToolOverrides {
 	"linetooltimecycles.transparency": number;
 }
 export interface TimeframeFunctions {
-	change(resolution: ResolutionString): boolean;
-	isDWM(): boolean;
+	change: (resolution: ResolutionString) => boolean;
+	isDWM: () => boolean;
 }
 export interface TimescaleMark {
 	/** ID of the timescale mark */
@@ -27802,7 +27700,7 @@ export interface TradingTerminalWidgetOptions extends Omit<ChartingLibraryWidget
 	 * ```
 	 * @param host - Trading Host
 	 */
-	broker_factory?(host: IBrokerConnectionAdapterHost): IBrokerTerminal;
+	broker_factory?: (host: IBrokerConnectionAdapterHost) => IBrokerTerminal;
 	/**
 	 * Setting this property makes the library write detailed [Broker API](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/trading-concepts/#broker-api) and [Trading Host](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/trading-concepts/#trading-host) logs into the browser console.
 	 *
@@ -29756,9 +29654,9 @@ export type GroupVisibilityState = "Visible" | "Invisible" | "Partial";
 /**
  * Mode can be of the following:
  *
- * * `fullsize`: always full-size buttons on the top toolbar
- * * `adaptive`: adaptive/auto mode (fullsize if the window width allows and icons on small windows).
- * * `compact`: icons only buttons on the top toolbar (favorites won't be shown)
+ * `fullsize`: always full-size buttons on the top toolbar
+ * `adaptive`: adaptive/auto mode (fullsize if the window width allows and icons on small windows).
+ * `compact`: icons only buttons on the top toolbar (favorites won't be shown)
  */
 export type HeaderWidgetButtonsMode = "fullsize" | "compact" | "adaptive";
 export type HistoryCallback = (bars: Bar[], meta?: HistoryMetadata) => void;
@@ -29963,10 +29861,10 @@ export type StudyPlotValueFormat = StudyPlotValueInheritFormat | StudyPlotValueP
  * Price scale to display a study on.
  *
  * Possible values are:
- * * `new-left` - attach the study to a new left price scale
- * * `new-right` - attach the study to a new right price scale
- * * `no-scale` - do not attach the study to any price scale. The study will be added in 'No Scale' mode
- * * `as-series` - attach the study to the price scale where the main series is attached (it is only applicable the study is added to the pane with the main series)
+ * `new-left` - attach the study to a new left price scale
+ * `new-right` - attach the study to a new right price scale
+ * `no-scale` - do not attach the study to any price scale. The study will be added in 'No Scale' mode
+ * `as-series` - attach the study to the price scale where the main series is attached (it is only applicable the study is added to the pane with the main series)
  */
 export type StudyPriceScale = "new-left" | "new-right" | "no-scale" | "as-series";
 export type StudyPriceSource = "open" | "high" | "low" | "close" | "hl2" | "hlc3" | "ohlc4" | "hlcc4";
@@ -30022,11 +29920,11 @@ export type TickerId = Nominal<string, "Ticker">;
  *
  * Examples:
  * 1. a timeframe object, `{type, value}`:
- *     * `type`: `period-back`.
- *     * `value`: valid timeframe is a number with letter D for days and M for months.
+ *     `type`: `period-back`.
+ *     `value`: valid timeframe is a number with letter D for days and M for months.
  * 2. a range object, `{type, from, to}`
- *     * `type`: `time-range`.
- *     * `from`, `to`: UNIX timestamps, UTC.
+ *     `type`: `time-range`.
+ *     `from`, `to`: UNIX timestamps, UTC.
  */
 export type TimeFrameValue = TimeFramePeriodBack | TimeFrameTimeRange;
 export type TimeScaleMarkShape = "circle" | "earningUp" | "earningDown" | "earning";

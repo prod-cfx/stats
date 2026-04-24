@@ -176,9 +176,9 @@ export async function apiCall<T>(operation: () => Promise<T>, context: string): 
 
 export {
   API_BASE_URL,
+  ApiError,
+  AuthenticationError,
   client,
   unwrapApiResponse,
   validateId,
-  ApiError,
-  AuthenticationError,
 }

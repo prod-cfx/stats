@@ -1,5 +1,5 @@
-import { useTranslation } from 'react-i18next'
 import type { DisplayBlock, DisplayExecuteItem, DisplayLogicGraph } from './display-logic-graph'
+import { useTranslation } from 'react-i18next'
 
 interface DisplayLogicGraphPreviewProps {
   graph: DisplayLogicGraph

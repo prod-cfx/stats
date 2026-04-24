@@ -1,5 +1,5 @@
-import type { StrategyLogicGraph } from './logic-graph-model'
 import type { DisplayBlock, DisplayExecuteItem, DisplayLogicGraph } from './display-logic-graph'
+import type { StrategyLogicGraph } from './logic-graph-model'
 import { DisplayLogicGraphPreview } from './DisplayLogicGraphPreview'
 
 interface LogicGraphPreviewProps {
