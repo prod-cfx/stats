@@ -126,19 +126,15 @@ export class StrategyPlazaOfficialSnapshotRepository {
       data: { strategyInstanceId: strategyInstance.id },
     })
 
-    const concurrentExisting = await this.findExistingUserSnapshot(input.userId, sessionId, sourceSnapshot)
-    if (concurrentExisting) {
-      await this.bindStrategyInstanceToSnapshot(
-        concurrentExisting.strategyInstanceId,
-        input.template,
-        sourceSnapshot,
-        concurrentExisting,
-      )
-      return { id: concurrentExisting.id }
-    }
-
-    const snapshot = await client.publishedStrategySnapshot.create({
-      data: {
+    const copiedSnapshotId = this.buildCopiedSnapshotId(sessionId, sourceSnapshot)
+    const snapshot = await client.publishedStrategySnapshot.upsert({
+      where: { id: copiedSnapshotId },
+      update: {
+        strategyInstanceId: strategyInstance.id,
+        strategyTemplateId: strategyTemplate.id,
+      },
+      create: {
+        id: copiedSnapshotId,
         session: { connect: { id: sessionId } },
         strategyTemplateId: strategyTemplate.id,
         strategyInstanceId: strategyInstance.id,
@@ -200,6 +196,10 @@ export class StrategyPlazaOfficialSnapshotRepository {
 
   private buildSourceFingerprint(sourceSnapshot: PublishedStrategySnapshot): string {
     return sha256(`${sourceSnapshot.id}:${sourceSnapshot.snapshotHash}:${sourceSnapshot.snapshotVersion}`)
+  }
+
+  private buildCopiedSnapshotId(sessionId: string, sourceSnapshot: PublishedStrategySnapshot): string {
+    return `plaza_${sha256(`${sessionId}:${this.buildSourceFingerprint(sourceSnapshot)}`).slice(0, 32)}`
   }
 
   private buildStrategyTemplateName(

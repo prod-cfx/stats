@@ -81,6 +81,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         findUnique: jest.fn().mockResolvedValue(overrides?.source === undefined ? sourceSnapshot : overrides.source),
         findFirst: jest.fn().mockResolvedValue(overrides?.existingSnapshot ?? null),
         create: jest.fn().mockResolvedValue({ id: 'user-snapshot-1', snapshotHash: sourceSnapshot.snapshotHash }),
+        upsert: jest.fn().mockResolvedValue({ id: 'user-snapshot-1', snapshotHash: sourceSnapshot.snapshotHash }),
       },
       llmStrategyCodegenSession: {
         upsert: jest.fn().mockResolvedValue({ id: 'strategy-plaza-session-1' }),
@@ -107,6 +108,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
       where: { id: 'official-plaza-ma-cross-v1-snapshot' },
     })
     expect(tx.publishedStrategySnapshot.create).not.toHaveBeenCalled()
+    expect(tx.publishedStrategySnapshot.upsert).not.toHaveBeenCalled()
     expect(tx.strategyInstance.upsert).not.toHaveBeenCalled()
   })
 
@@ -135,6 +137,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
       select: { id: true, snapshotHash: true, strategyInstanceId: true },
     })
     expect(tx.publishedStrategySnapshot.create).not.toHaveBeenCalled()
+    expect(tx.publishedStrategySnapshot.upsert).not.toHaveBeenCalled()
     expect(tx.strategyInstance.update).toHaveBeenCalledWith({
       where: { id: 'strategy-instance-1' },
       data: {
@@ -150,7 +153,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
     })
   })
 
-  it('creates a new copy instead of reusing an old official source version', async () => {
+  it('upserts a deterministic copied snapshot instead of reusing an old official source version', async () => {
     const tx = buildTx({ existingSnapshot: null })
     const repo = new StrategyPlazaOfficialSnapshotRepository(createTxHost(tx))
 
@@ -166,7 +169,57 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
       orderBy: [{ createdAt: 'desc' }],
       select: { id: true, snapshotHash: true, strategyInstanceId: true },
     })
-    expect(tx.publishedStrategySnapshot.create).toHaveBeenCalledTimes(1)
+    expect(tx.publishedStrategySnapshot.create).not.toHaveBeenCalled()
+    expect(tx.publishedStrategySnapshot.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        id: expect.stringMatching(/^plaza_[0-9a-f]{32}$/u),
+      },
+      create: expect.objectContaining({
+        id: expect.stringMatching(/^plaza_[0-9a-f]{32}$/u),
+        snapshotHash: sourceSnapshot.snapshotHash,
+        snapshotVersion: sourceSnapshot.snapshotVersion,
+      }),
+      update: expect.objectContaining({
+        strategyInstanceId: 'strategy-instance-1',
+      }),
+      select: { id: true, snapshotHash: true },
+    }))
+  })
+
+  it('returns the same deterministic copied snapshot id for repeated create attempts', async () => {
+    const tx = buildTx({ existingSnapshot: null })
+    tx.publishedStrategySnapshot.upsert.mockImplementation(async ({ where, create }) => ({
+      id: where.id,
+      snapshotHash: create.snapshotHash,
+    }))
+    const repo = new StrategyPlazaOfficialSnapshotRepository(createTxHost(tx))
+
+    const first = await repo.resolveOfficialSnapshotForUser({ userId: 'user-1', template })
+    const second = await repo.resolveOfficialSnapshotForUser({ userId: 'user-1', template })
+
+    expect(first).toEqual(second)
+    expect(tx.publishedStrategySnapshot.create).not.toHaveBeenCalled()
+    expect(tx.publishedStrategySnapshot.upsert).toHaveBeenCalledTimes(2)
+    const firstSnapshotId = tx.publishedStrategySnapshot.upsert.mock.calls[0][0].where.id
+    const secondSnapshotId = tx.publishedStrategySnapshot.upsert.mock.calls[1][0].where.id
+    expect(secondSnapshotId).toBe(firstSnapshotId)
+    expect(tx.strategyInstance.update).toHaveBeenCalledWith({
+      where: { id: 'strategy-instance-1' },
+      data: {
+        metadata: expect.objectContaining({
+          publishedSnapshotId: firstSnapshotId,
+          snapshotHash: sourceSnapshot.snapshotHash,
+        }),
+      },
+    })
+    expect(tx.strategyInstance.update).not.toHaveBeenCalledWith({
+      where: { id: 'strategy-instance-1' },
+      data: {
+        metadata: expect.objectContaining({
+          publishedSnapshotId: expect.not.stringMatching(firstSnapshotId),
+        }),
+      },
+    })
   })
 
   it('copies executable artifacts and config from the official source snapshot', async () => {
@@ -199,8 +252,9 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         }),
       }),
     }))
-    expect(tx.publishedStrategySnapshot.create).toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
+    expect(tx.publishedStrategySnapshot.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({
+        id: expect.stringMatching(/^plaza_[0-9a-f]{32}$/u),
         session: { connect: { id: expect.stringContaining('strategy-plaza:official:ma-cross') } },
         strategyInstanceId: 'strategy-instance-1',
         strategyTemplateId: 'strategy-template-1',
@@ -234,8 +288,8 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
       }),
       select: { id: true, snapshotHash: true },
     }))
-    expect(tx.publishedStrategySnapshot.create).not.toHaveBeenCalledWith(expect.objectContaining({
-      data: expect.objectContaining({
+    expect(tx.publishedStrategySnapshot.upsert).not.toHaveBeenCalledWith(expect.objectContaining({
+      create: expect.objectContaining({
         scriptSnapshot: expect.stringContaining('// Official Strategy Plaza template'),
       }),
     }))
