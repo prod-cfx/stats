@@ -62,16 +62,21 @@ describe('BetaCodesPage', () => {
   })
 
   it('renders beta code list with usage count', async () => {
-    fetchBetaCodes.mockResolvedValueOnce([
-      {
-        id: 'code-1',
-        code: 'BETA123',
-        maxUses: 2,
-        usedCount: 1,
-        isActive: true,
-        createdAt: '2026-04-24T08:00:00.000Z',
-      },
-    ])
+    fetchBetaCodes.mockResolvedValueOnce({
+      total: 101,
+      page: 1,
+      limit: 20,
+      items: [
+        {
+          id: 'code-1',
+          code: 'BETA123',
+          maxUses: 2,
+          usedCount: 1,
+          isActive: true,
+          createdAt: '2026-04-24T08:00:00.000Z',
+        },
+      ],
+    })
 
     const { default: BetaCodesPage } = await import('./page')
 
@@ -87,7 +92,9 @@ describe('BetaCodesPage', () => {
       await Promise.resolve()
     })
 
+    expect(fetchBetaCodes).toHaveBeenCalledWith({ page: 1, limit: 20 })
     expect(container.textContent).toContain('BETA123')
     expect(container.textContent).toContain('1/2')
+    expect(container.textContent).toContain('共 101 个内测码')
   })
 })

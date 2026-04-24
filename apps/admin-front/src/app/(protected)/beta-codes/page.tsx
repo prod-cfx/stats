@@ -1,6 +1,6 @@
 'use client'
 
-import type { ColumnsType } from 'antd/es/table'
+import type { ColumnsType, TablePaginationConfig } from 'antd/es/table'
 import type { BetaCode, CreateBetaCodeBatchPayload } from '@/lib/api'
 import { CopyOutlined, PlusOutlined } from '@ant-design/icons'
 import {
@@ -37,13 +37,19 @@ export default function BetaCodesPage() {
   const [creating, setCreating] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [switchingIds, setSwitchingIds] = useState<Set<string>>(() => new Set())
+  const [page, setPage] = useState(1)
+  const [limit, setLimit] = useState(20)
+  const [total, setTotal] = useState(0)
   const [form] = Form.useForm<CreateBetaCodeBatchPayload>()
 
-  const loadCodes = useCallback(async () => {
+  const loadCodes = useCallback(async (pageParam: number, limitParam: number) => {
     setLoading(true)
     try {
-      const data = await fetchBetaCodes()
-      setCodes(data)
+      const result = await fetchBetaCodes({ page: pageParam, limit: limitParam })
+      setCodes(result.items)
+      setPage(result.page)
+      setLimit(result.limit)
+      setTotal(result.total)
     }
     catch (error: unknown) {
       message.error(getErrorMessage(error) ?? '获取内测码失败')
@@ -54,7 +60,7 @@ export default function BetaCodesPage() {
   }, [message])
 
   useEffect(() => {
-    void loadCodes()
+    void loadCodes(1, 20)
   }, [loadCodes])
 
   const openCreateModal = useCallback(() => {
@@ -73,7 +79,7 @@ export default function BetaCodesPage() {
       const created = await createBetaCodeBatch(values)
       setGeneratedCodes(created)
       message.success(`已生成 ${created.length} 个内测码`)
-      await loadCodes()
+      await loadCodes(1, limit)
     }
     catch (error: unknown) {
       const errorMessage = getErrorMessage(error)
@@ -83,7 +89,7 @@ export default function BetaCodesPage() {
     finally {
       setCreating(false)
     }
-  }, [form, loadCodes, message])
+  }, [form, limit, loadCodes, message])
 
   const copyGeneratedCodes = useCallback(async () => {
     const text = generatedCodes.map(item => item.code).join('\n')
@@ -104,7 +110,7 @@ export default function BetaCodesPage() {
     try {
       await updateBetaCodeStatus(record.id, checked)
       message.success(checked ? '内测码已启用' : '内测码已停用')
-      await loadCodes()
+      await loadCodes(page, limit)
     }
     catch (error: unknown) {
       message.error(getErrorMessage(error) ?? '更新内测码状态失败')
@@ -116,7 +122,13 @@ export default function BetaCodesPage() {
         return next
       })
     }
-  }, [loadCodes, message])
+  }, [limit, loadCodes, message, page])
+
+  const handleTableChange = useCallback((pagination: TablePaginationConfig) => {
+    const nextPage = pagination.current ?? 1
+    const nextLimit = pagination.pageSize ?? limit
+    void loadCodes(nextPage, nextLimit)
+  }, [limit, loadCodes])
 
   const columns: ColumnsType<BetaCode> = useMemo(
     () => [
@@ -179,7 +191,14 @@ export default function BetaCodesPage() {
           columns={columns}
           dataSource={codes}
           loading={loading}
-          pagination={false}
+          pagination={{
+            current: page,
+            pageSize: limit,
+            total,
+            showSizeChanger: true,
+            showTotal: value => `共 ${value} 个内测码`,
+          }}
+          onChange={handleTableChange}
         />
       </Card>
 

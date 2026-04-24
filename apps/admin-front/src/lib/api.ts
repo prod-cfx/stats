@@ -44,7 +44,7 @@ export type SettingResponse = z.infer<typeof schemas.SettingResponseDto>
 // 数据拉取任务相关类型
 export type DataPullTask = _DataPullTaskDto
 
-interface _PaginationResult<T> {
+export interface PaginationResult<T> {
   total: number
   page: number
   limit: number
@@ -187,16 +187,29 @@ export function updateAdminUser(id: string, payload: UpdateAdminUserPayload) {
   )
 }
 
-export async function fetchBetaCodes(): Promise<BetaCode[]> {
+export interface BetaCodeListQuery {
+  page?: number
+  limit?: number
+}
+
+export async function fetchBetaCodes(
+  query: BetaCodeListQuery = {},
+): Promise<PaginationResult<BetaCode>> {
   return withAuthErrorHandling(async () => {
     const response = await client.AdminBetaCodeController_list({
       headers: requireAuthHeaders(),
       queries: {
-        page: 1,
-        limit: 100,
+        page: query.page,
+        limit: query.limit,
       },
     })
-    return unwrapListResponse<BetaCode>(response)
+    const data = unwrapResponse<any>(response)
+    return {
+      total: data.total ?? 0,
+      page: data.page ?? query.page ?? 1,
+      limit: data.limit ?? query.limit ?? 20,
+      items: Array.isArray(data.items) ? (data.items as BetaCode[]) : [],
+    }
   })
 }
 
