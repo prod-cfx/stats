@@ -40,7 +40,7 @@ describe('StrategyPlazaController', () => {
     },
     editSeed: {
       initialMessage: 'Build a MA cross strategy',
-      guideConfig: { exchange: 'okx', symbol: 'BTC-USDT-SWAP' },
+      guideConfig: { symbolExample: 'BTC-USDT-SWAP', timeframeExample: '15m' },
     },
     displayMetrics: {
       label: 'official_sample_backtest',

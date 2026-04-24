@@ -32,10 +32,11 @@ export interface OfficialStrategyPlazaRunConfig {
 export interface OfficialStrategyPlazaEditSeed {
   initialMessage: string
   guideConfig?: {
-    exchange?: 'okx'
-    symbol?: string
-    timeframe?: string
-    positionPct?: number
+    symbolExample?: string
+    timeframeExample?: string
+    entryRuleExample?: string
+    exitRuleExample?: string
+    riskRuleExample?: string
   }
 }
 

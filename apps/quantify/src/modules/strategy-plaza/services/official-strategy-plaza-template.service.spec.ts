@@ -62,12 +62,12 @@ describe('OfficialStrategyPlazaTemplateService', () => {
     const originalStatus = template.status
 
     try {
-      ;(template as { status: 'hidden' }).status = 'hidden'
+      ;(template as unknown as { status: 'hidden' }).status = 'hidden'
 
       expect(() => service.getRequired(template.id)).toThrow(StrategyPlazaTemplateNotFoundException)
     }
     finally {
-      ;(template as { status: typeof originalStatus }).status = originalStatus
+      ;(template as unknown as { status: typeof originalStatus }).status = originalStatus
     }
   })
 

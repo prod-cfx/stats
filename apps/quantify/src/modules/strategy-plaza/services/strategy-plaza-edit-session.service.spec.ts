@@ -6,7 +6,7 @@ describe('StrategyPlazaEditSessionService', () => {
       id: 'ma-cross',
       editSeed: {
         initialMessage: 'Build a MA cross strategy',
-        guideConfig: { exchange: 'okx', symbol: 'BTC-USDT-SWAP' },
+        guideConfig: { symbolExample: 'BTC-USDT-SWAP', timeframeExample: '15m' },
       },
     }
     const templates = {
@@ -28,7 +28,7 @@ describe('StrategyPlazaEditSessionService', () => {
     expect(templates.getRequired).toHaveBeenCalledWith('ma-cross')
     expect(codegenConversationService.startSession).toHaveBeenCalledWith({
       initialMessage: 'Build a MA cross strategy',
-      guideConfig: { exchange: 'okx', symbol: 'BTC-USDT-SWAP' },
+      guideConfig: { symbolExample: 'BTC-USDT-SWAP', timeframeExample: '15m' },
     }, 'user-1')
     expect(result).toEqual({
       sessionId: 'session-1',

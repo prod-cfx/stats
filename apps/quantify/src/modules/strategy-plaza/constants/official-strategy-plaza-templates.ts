@@ -25,7 +25,13 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
     },
     editSeed: {
       initialMessage: '基于 OKX 模拟盘 BTC-USDT-SWAP 15m，创建一个 MA 20/60 均线交叉趋势跟随策略，仓位 10%，2 倍杠杆。',
-      guideConfig: { exchange: 'okx', symbol: 'BTC-USDT-SWAP', timeframe: '15m', positionPct: 10 },
+      guideConfig: {
+        symbolExample: 'BTC-USDT-SWAP',
+        timeframeExample: '15m',
+        entryRuleExample: 'MA20 上穿 MA60',
+        exitRuleExample: 'MA20 下穿 MA60',
+        riskRuleExample: 'OKX 模拟盘，仓位 10%，2 倍杠杆',
+      },
     },
     displayMetrics: { label: 'official_sample_backtest', returnPct: null, winRatePct: null, maxDrawdownPct: null },
   },
@@ -53,7 +59,13 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
     },
     editSeed: {
       initialMessage: '基于 OKX 模拟盘 ETH-USDT-SWAP 15m，创建布林带均值回归策略，触及外轨后回归中轨止盈，仓位 8%，2 倍杠杆。',
-      guideConfig: { exchange: 'okx', symbol: 'ETH-USDT-SWAP', timeframe: '15m', positionPct: 8 },
+      guideConfig: {
+        symbolExample: 'ETH-USDT-SWAP',
+        timeframeExample: '15m',
+        entryRuleExample: '价格触及布林带下轨后出现回归信号',
+        exitRuleExample: '价格回归布林带中轨附近',
+        riskRuleExample: 'OKX 模拟盘，仓位 8%，2 倍杠杆',
+      },
     },
     displayMetrics: { label: 'official_sample_backtest', returnPct: null, winRatePct: null, maxDrawdownPct: null },
   },
@@ -81,7 +93,13 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
     },
     editSeed: {
       initialMessage: '基于 OKX 模拟盘 BTC-USDT 现货 15m，创建网格区间策略，在震荡区间内低买高卖，单次仓位 10%。',
-      guideConfig: { exchange: 'okx', symbol: 'BTC-USDT', timeframe: '15m', positionPct: 10 },
+      guideConfig: {
+        symbolExample: 'BTC-USDT',
+        timeframeExample: '15m',
+        entryRuleExample: '价格触及网格下沿买入',
+        exitRuleExample: '价格触及上一个网格卖出',
+        riskRuleExample: 'OKX 模拟盘现货，单次仓位 10%，不使用杠杆',
+      },
     },
     displayMetrics: { label: 'official_sample_backtest', returnPct: null, winRatePct: null, maxDrawdownPct: null },
   },
@@ -109,7 +127,13 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
     },
     editSeed: {
       initialMessage: '基于 OKX 模拟盘 ETH-USDT 现货 15m，创建 RSI 14 超买超卖策略，RSI 低于 30 买入，高于 70 卖出，仓位 8%。',
-      guideConfig: { exchange: 'okx', symbol: 'ETH-USDT', timeframe: '15m', positionPct: 8 },
+      guideConfig: {
+        symbolExample: 'ETH-USDT',
+        timeframeExample: '15m',
+        entryRuleExample: 'RSI14 低于 30',
+        exitRuleExample: 'RSI14 高于 70',
+        riskRuleExample: 'OKX 模拟盘现货，仓位 8%，不使用杠杆',
+      },
     },
     displayMetrics: { label: 'official_sample_backtest', returnPct: null, winRatePct: null, maxDrawdownPct: null },
   },
@@ -137,7 +161,13 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
     },
     editSeed: {
       initialMessage: '基于 OKX 模拟盘 BTC-USDT-SWAP 5m，创建突破追踪策略，突破近期高点跟随，跌回区间退出，仓位 8%，2 倍杠杆。',
-      guideConfig: { exchange: 'okx', symbol: 'BTC-USDT-SWAP', timeframe: '5m', positionPct: 8 },
+      guideConfig: {
+        symbolExample: 'BTC-USDT-SWAP',
+        timeframeExample: '5m',
+        entryRuleExample: '价格突破近期高点',
+        exitRuleExample: '价格跌回突破区间',
+        riskRuleExample: 'OKX 模拟盘，仓位 8%，2 倍杠杆',
+      },
     },
     displayMetrics: { label: 'official_sample_backtest', returnPct: null, winRatePct: null, maxDrawdownPct: null },
   },
@@ -165,7 +195,13 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
     },
     editSeed: {
       initialMessage: '基于 OKX 模拟盘 ETH-USDT-SWAP 15m，创建 MACD 12/26/9 金叉死叉策略，金叉做多，死叉退出，仓位 8%，2 倍杠杆。',
-      guideConfig: { exchange: 'okx', symbol: 'ETH-USDT-SWAP', timeframe: '15m', positionPct: 8 },
+      guideConfig: {
+        symbolExample: 'ETH-USDT-SWAP',
+        timeframeExample: '15m',
+        entryRuleExample: 'MACD DIF 上穿 DEA',
+        exitRuleExample: 'MACD DIF 下穿 DEA',
+        riskRuleExample: 'OKX 模拟盘，仓位 8%，2 倍杠杆',
+      },
     },
     displayMetrics: { label: 'official_sample_backtest', returnPct: null, winRatePct: null, maxDrawdownPct: null },
   },
