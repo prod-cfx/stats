@@ -9,6 +9,9 @@ export type StrategyPlazaTemplateId =
 export type StrategyPlazaMarketType = 'spot' | 'perp'
 export type StrategyPlazaRiskLevel = 'low' | 'medium' | 'high'
 export type StrategyPlazaTemplateStatus = 'live' | 'hidden'
+export type StrategyPlazaDeploymentPriceSource = 'last' | 'mark'
+export type StrategyPlazaDeploymentOrderType = 'market'
+export type StrategyPlazaDeploymentTimeInForce = 'ioc'
 
 export interface OfficialStrategyPlazaRunConfig {
   exchange: 'okx'
@@ -20,9 +23,9 @@ export interface OfficialStrategyPlazaRunConfig {
   publishedSnapshotId: string
   deploymentExecutionConfig: {
     leverage?: number | null
-    priceSource?: string | null
-    orderType?: string | null
-    timeInForce?: string | null
+    priceSource?: StrategyPlazaDeploymentPriceSource | null
+    orderType?: StrategyPlazaDeploymentOrderType | null
+    timeInForce?: StrategyPlazaDeploymentTimeInForce | null
   }
 }
 

@@ -66,7 +66,7 @@ export class StrategyPlazaTemplateResponseDto {
     this.name = template.name
     this.description = template.description
     this.logicDescription = template.logicDescription
-    this.tags = template.tags
+    this.tags = [...template.tags]
     this.riskLevel = template.riskLevel
     this.scenario = template.scenario
     this.exchange = template.exchange
@@ -78,6 +78,6 @@ export class StrategyPlazaTemplateResponseDto {
     this.leverage = template.runConfig.leverage
     this.status = template.status
     this.displayOrder = template.displayOrder
-    this.displayMetrics = template.displayMetrics
+    this.displayMetrics = { ...template.displayMetrics }
   }
 }

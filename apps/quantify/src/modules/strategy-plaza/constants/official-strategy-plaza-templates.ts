@@ -1,6 +1,6 @@
 import type { OfficialStrategyPlazaTemplate } from '../types/official-strategy-plaza-template'
 
-export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES: OfficialStrategyPlazaTemplate[] = [
+export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES = [
   {
     id: 'ma-cross',
     name: 'MA 均线交叉',
@@ -169,4 +169,4 @@ export const OFFICIAL_STRATEGY_PLAZA_TEMPLATES: OfficialStrategyPlazaTemplate[] 
     },
     displayMetrics: { label: 'official_sample_backtest', returnPct: null, winRatePct: null, maxDrawdownPct: null },
   },
-]
+] satisfies readonly OfficialStrategyPlazaTemplate[]
