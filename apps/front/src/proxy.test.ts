@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, jest } from '@jest/globals'
-import { config, middleware } from './middleware'
+import { config, proxy } from './proxy'
 
 const mockCookieSet = jest.fn()
 const mockNext = jest.fn((options?: unknown) => ({
@@ -19,7 +19,7 @@ function createRequest(pathname: string, headers = new Headers()) {
   return {
     headers,
     nextUrl: { pathname },
-  } as Parameters<typeof middleware>[0]
+  } as Parameters<typeof proxy>[0]
 }
 
 function getForwardedHeaders() {
@@ -41,7 +41,7 @@ describe('middleware', () => {
   ])('syncs locale header and cookie for %s', (pathname, locale) => {
     const headers = new Headers({ 'x-existing-header': 'keep-me' })
 
-    middleware(createRequest(pathname, headers))
+    proxy(createRequest(pathname, headers))
 
     const forwardedHeaders = getForwardedHeaders()
     expect(forwardedHeaders?.get('x-coinflux-locale')).toBe(locale)
@@ -54,7 +54,7 @@ describe('middleware', () => {
   })
 
   it('leaves non-locale paths untouched', () => {
-    middleware(createRequest('/account'))
+    proxy(createRequest('/account'))
 
     expect(mockNext).toHaveBeenCalledWith(undefined)
     expect(mockCookieSet).not.toHaveBeenCalled()

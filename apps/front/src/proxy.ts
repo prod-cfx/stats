@@ -10,7 +10,7 @@ function getRouteLocale(pathname: string) {
   return SUPPORTED_LOCALES.has(locale) ? locale : null
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const locale = getRouteLocale(request.nextUrl.pathname)
   if (!locale) return NextResponse.next()
 
