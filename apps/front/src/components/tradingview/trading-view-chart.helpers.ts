@@ -1,13 +1,13 @@
-type LongShortRatioLike = {
+interface LongShortRatioLike {
   timestamp: string
   longShortRatio: string
 }
 
-type LongShortRatioPaginatedPayload<T> = {
+interface LongShortRatioPaginatedPayload<T> {
   items?: T[]
 }
 
-type WidgetLike<TChart = unknown> = {
+interface WidgetLike<TChart = unknown> {
   activeChart?: () => TChart
   chart?: () => TChart
 }

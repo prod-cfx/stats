@@ -1,14 +1,15 @@
 'use client'
 
+import type {HyperliquidHistoricalOrderEntry} from '@/lib/hyperliquid-api';
 import { ArrowUpDown, ChevronDown, ChevronUp, Search, X } from 'lucide-react'
 import React, { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useTranslation } from 'react-i18next'
 
+import { useTranslation } from 'react-i18next'
 import { getRelativeTimeParams } from '@/lib/formatters'
 import {
   fetchTraderHistoricalOrdersFromHyperliquid,
-  fetchUserFillsFromHyperliquid,
-  type HyperliquidHistoricalOrderEntry,
+  fetchUserFillsFromHyperliquid
+  
 } from '@/lib/hyperliquid-api'
 
 type AnyComponent = React.ComponentType<Record<string, unknown>>

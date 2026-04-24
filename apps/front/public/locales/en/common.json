@@ -214,7 +214,8 @@
       "riskDrawdown": "Max Drawdown Threshold {{percent}}%"
     },
     "homepage": {
-      "cta": "Experience AI Quant",
+      "heroCta": "Get Started",
+      "finalCta": "Create Strategy",
       "hero": {
         "eyebrow": "AI Quant Strategy Builder",
         "title": "Generate backtestable quant strategies with AI",

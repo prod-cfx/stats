@@ -12,7 +12,7 @@ export function isShortConfirmationMessage(message: string): boolean {
   if (/[?？吗嘛吧呢]/.test(normalized)) return false
   if (/(不|别|不要|不是|没问题吗|有问题|再改|修改|调整)/.test(normalized)) return false
 
-  return /^(?:这样)?可以(?:了)?$/.test(normalized)
+  return /^(?:这样)?可以了?$/.test(normalized)
     || /^(?:就这样|确认正确|正确|继续|按你说的来|好的?|行|ok|okay|yes|yep|同意|没问题|这样对的|按这个来|确认)$/.test(normalized)
 }
 

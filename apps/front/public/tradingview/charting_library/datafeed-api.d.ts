@@ -24,7 +24,7 @@ export declare const enum SearchInitiationPoint {
  * @example
  * type TagName = Nominal<string, 'TagName'>;
  */
-export declare type Nominal<T, Name extends string> = T & { /* eslint-disable-next-line jsdoc/require-jsdoc */
+export declare type Nominal<T, Name extends string> = T & {  
 	[Symbol.species]: Name;
 };
 /**
@@ -273,7 +273,7 @@ export interface IDatafeedChartApi {
 	 * @param onDataCallback Callback function containing an array of marks
 	 * @param resolution Resolution of the symbol
 	 */
-	getMarks?(symbolInfo: LibrarySymbolInfo, from: number, to: number, onDataCallback: GetMarksCallback<Mark>, resolution: ResolutionString): void;
+	getMarks?: (symbolInfo: LibrarySymbolInfo, from: number, to: number, onDataCallback: GetMarksCallback<Mark>, resolution: ResolutionString) => void;
 	/**
 	 * The library calls this function to get timescale marks for visible bars range.
 	 * The library assumes that you will call `onDataCallback` only once per `getTimescaleMarks` call.
@@ -286,7 +286,7 @@ export interface IDatafeedChartApi {
 	 * @param onDataCallback Callback function containing an array of marks
 	 * @param resolution Resolution of the symbol
 	 */
-	getTimescaleMarks?(symbolInfo: LibrarySymbolInfo, from: number, to: number, onDataCallback: GetMarksCallback<TimescaleMark>, resolution: ResolutionString): void;
+	getTimescaleMarks?: (symbolInfo: LibrarySymbolInfo, from: number, to: number, onDataCallback: GetMarksCallback<TimescaleMark>, resolution: ResolutionString) => void;
 	/**
 	 * This function is called if the `supports_time` configuration flag is `true` when the chart needs to know the server time.
 	 * The library expects a callback to be called once.
@@ -295,7 +295,7 @@ export interface IDatafeedChartApi {
 	 * `getServerTime` is used to display countdown on the price scale.
 	 * Note that the countdown can be displayed only for [intraday](https://www.tradingview.com/charting-library-docs/latest/connecting_data/time-and-sessions/configure-datafeed-resolutions#resolution-in-minutes-intraday) resolutions.
 	 */
-	getServerTime?(callback: ServerTimeCallback): void;
+	getServerTime?: (callback: ServerTimeCallback) => void;
 	/**
 	 * Provides a list of symbols that match the user's search query.
 	 *
@@ -305,7 +305,7 @@ export interface IDatafeedChartApi {
 	 * @param onResult Callback function that returns an array of results ({@link SearchSymbolResultItem}) or empty array if no symbols found
 	 * @param searchSource The source of the search ({@link SearchInitiationPoint}).
 	 */
-	searchSymbols(userInput: string, exchange: string, symbolType: string, onResult: SearchSymbolsCallback, searchSource?: SearchInitiationPoint): void;
+	searchSymbols: (userInput: string, exchange: string, symbolType: string, onResult: SearchSymbolsCallback, searchSource?: SearchInitiationPoint) => void;
 	/**
 	 * Provides a list of symbols that match the user's search query.
 	 *
@@ -318,7 +318,7 @@ export interface IDatafeedChartApi {
 	 * @param options Object containing the user input, exchange, symbol type, and search source ({@link SearchInitiationPoint}).
 	 * @param onResult Callback function that returns an array of results ({@link SearchSymbolResultItem}) or an empty array if no symbols are found.
 	 */
-	searchSymbolsPaginated?(options: SymbolSearchPaginatedOptions, onResult: SearchSymbolsPaginatedCallback): void;
+	searchSymbolsPaginated?: (options: SymbolSearchPaginatedOptions, onResult: SearchSymbolsPaginatedCallback) => void;
 	/**
 	 * The library will call this function when it needs to get SymbolInfo by symbol name.
 	 *
@@ -327,7 +327,7 @@ export interface IDatafeedChartApi {
 	 * @param onError Callback function whose only argument is a text error message
 	 * @param extension An optional object with additional parameters
 	 */
-	resolveSymbol(symbolName: string, onResolve: ResolveCallback, onError: DatafeedErrorCallback, extension?: SymbolResolveExtension): void;
+	resolveSymbol: (symbolName: string, onResolve: ResolveCallback, onError: DatafeedErrorCallback, extension?: SymbolResolveExtension) => void;
 	/**
 	 * This function is called when the chart needs a history fragment defined by dates range.
 	 *
@@ -337,7 +337,7 @@ export interface IDatafeedChartApi {
 	 * @param onResult Callback function for historical data
 	 * @param onError Callback function whose only argument is a text error message. If using special characters, please consider `encodeURIComponent`.
 	 */
-	getBars(symbolInfo: LibrarySymbolInfo, resolution: ResolutionString, periodParams: PeriodParams, onResult: HistoryCallback, onError: DatafeedErrorCallback): void;
+	getBars: (symbolInfo: LibrarySymbolInfo, resolution: ResolutionString, periodParams: PeriodParams, onResult: HistoryCallback, onError: DatafeedErrorCallback) => void;
 	/**
 	 * The library calls this function when it wants to receive real-time updates for a symbol.
 	 * The library assumes that you will call the callback provided by the `onTick` parameter every time you want to update the most recent bar or to add a new one.
@@ -348,13 +348,13 @@ export interface IDatafeedChartApi {
 	 * @param listenerGuid
 	 * @param onResetCacheNeededCallback Function to be executed when bar data has changed
 	 */
-	subscribeBars(symbolInfo: LibrarySymbolInfo, resolution: ResolutionString, onTick: SubscribeBarsCallback, listenerGuid: string, onResetCacheNeededCallback: () => void): void;
+	subscribeBars: (symbolInfo: LibrarySymbolInfo, resolution: ResolutionString, onTick: SubscribeBarsCallback, listenerGuid: string, onResetCacheNeededCallback: () => void) => void;
 	/**
 	 * The library calls this function when it doesn't want to receive updates anymore.
 	 *
 	 * @param listenerGuid id to unsubscribe from
 	 */
-	unsubscribeBars(listenerGuid: string): void;
+	unsubscribeBars: (listenerGuid: string) => void;
 	/**
 	 * The library calls this function when it wants to receive real-time symbol data in the [Depth of Market](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/depth-of-market) (DOM) widget.
 	 * Note that you should set the {@link BrokerConfigFlags.supportLevel2Data} configuration flag to `true`.
@@ -363,14 +363,14 @@ export interface IDatafeedChartApi {
 	 * @param callback A function returning an object to update DOM data
 	 * @returns A unique identifier that will be used to unsubscribe from the data
 	 */
-	subscribeDepth?(symbol: string, callback: DOMCallback): string;
+	subscribeDepth?: (symbol: string, callback: DOMCallback) => string;
 	/**
 	 * The library calls this function to stop receiving real-time updates for the [Depth of Market](https://www.tradingview.com/charting-library-docs/latest/trading_terminal/depth-of-market) listener.
 	 * Note that you should set the {@link BrokerConfigFlags.supportLevel2Data} configuration flag to `true`.
 	 *
 	 * @param subscriberUID A string returned by `subscribeDepth`
 	 */
-	unsubscribeDepth?(subscriberUID: string): void;
+	unsubscribeDepth?: (subscriberUID: string) => void;
 	/**
 	 * The library calls this function to get the resolution that will be used to calculate the Volume Profile Visible Range indicator.
 	 *
@@ -384,7 +384,7 @@ export interface IDatafeedChartApi {
 	 * @param symbolInfo A Symbol object
 	 * @returns A resolution
 	 */
-	getVolumeProfileResolutionForPeriod?(currentResolution: ResolutionString, from: number, to: number, symbolInfo: LibrarySymbolInfo): ResolutionString;
+	getVolumeProfileResolutionForPeriod?: (currentResolution: ResolutionString, from: number, to: number, symbolInfo: LibrarySymbolInfo) => ResolutionString;
 }
 /** Quotes datafeed API */
 export interface IDatafeedQuotesApi {
@@ -395,7 +395,7 @@ export interface IDatafeedQuotesApi {
 	 * @param  {QuotesCallback} onDataCallback - callback to return the requested data.
 	 * @param  {QuotesErrorCallback} onErrorCallback - callback for responding with an error.
 	 */
-	getQuotes(symbols: string[], onDataCallback: QuotesCallback, onErrorCallback: QuotesErrorCallback): void;
+	getQuotes: (symbols: string[], onDataCallback: QuotesCallback, onErrorCallback: QuotesErrorCallback) => void;
 	/**
 	 * Trading Platform calls this function when it wants to receive real-time quotes for a symbol.
 	 * The library assumes that you will call `onRealtimeCallback` every time you want to update the quotes.
@@ -404,13 +404,13 @@ export interface IDatafeedQuotesApi {
 	 * @param  {QuotesCallback} onRealtimeCallback - callback to send realtime quote data updates
 	 * @param  {string} listenerGUID - unique identifier of the listener
 	 */
-	subscribeQuotes(symbols: string[], fastSymbols: string[], onRealtimeCallback: QuotesCallback, listenerGUID: string): void;
+	subscribeQuotes: (symbols: string[], fastSymbols: string[], onRealtimeCallback: QuotesCallback, listenerGUID: string) => void;
 	/**
 	 * Trading Platform calls this function when it doesn't want to receive updates for this listener anymore.
 	 * `listenerGUID` will be the same object that the Library passed to `subscribeQuotes` before.
 	 * @param  {string} listenerGUID - unique identifier of the listener
 	 */
-	unsubscribeQuotes(listenerGUID: string): void;
+	unsubscribeQuotes: (listenerGUID: string) => void;
 }
 export interface IExternalDatafeed {
 	/**
@@ -419,7 +419,7 @@ export interface IExternalDatafeed {
 	 *
 	 * @param  {OnReadyCallback} callback - callback to return your datafeed configuration ({@link DatafeedConfiguration}) to the library.
 	 */
-	onReady(callback: OnReadyCallback): void;
+	onReady: (callback: OnReadyCallback) => void;
 }
 export interface LibrarySubsessionInfo {
 	/**
@@ -672,9 +672,9 @@ export interface LibrarySymbolInfo {
 	/**
 	 * The boolean value showing whether or not seconds bars for this symbol can be built from ticks. Only available in Trading Platform.
 	 *
-	 * * {@link LibrarySymbolInfo.has_seconds} must also be `true`
-	 * * {@link LibrarySymbolInfo.has_ticks} must also be `true`
-	 * * {@link LibrarySymbolInfo.seconds_multipliers} must be an empty array or only contain multipliers that the datafeed provides itself
+	 * {@link LibrarySymbolInfo.has_seconds} must also be `true`
+	 * {@link LibrarySymbolInfo.has_ticks} must also be `true`
+	 * {@link LibrarySymbolInfo.seconds_multipliers} must be an empty array or only contain multipliers that the datafeed provides itself
 	 *
 	 * The library builds resolutions from ticks only if there are no seconds resolutions from the datafeed or the provided resolutions are larger then the required one. For example, the datafeed provides `3S` resolution. In this case, the library can build only `1S` or `2S` resolutions from ticks. Resolutions such as `15S` will be build with seconds bars.
 	 * @default false

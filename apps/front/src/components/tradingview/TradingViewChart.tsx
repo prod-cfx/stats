@@ -1285,23 +1285,8 @@ function tryExecuteActionInsertIndicator(widget: any) {
   }
 }
 
-export const TradingViewChart = forwardRef(
-  (
-    {
-      symbol = 'BTCUSDT',
-      interval = '60',
-      theme = 'Light',
-      isAggregated = true,
-      selectedExchange = 'binance',
-      onSelectExchange,
-      onToggleAggregate,
-      onOpenIndicator,
-      onOpenDataIndicator,
-      onIntervalChanged,
-      onRemoveIndicator,
-      activeIndicators = EMPTY_ACTIVE_INDICATORS,
-    }: TradingViewChartProps,
-    ref: Ref<TradingViewChartRef>,
+export const TradingViewChart = (
+    { ref, symbol = 'BTCUSDT', interval = '60', theme = 'Light', isAggregated = true, selectedExchange = 'binance', onSelectExchange, onToggleAggregate, onOpenIndicator, onOpenDataIndicator, onIntervalChanged, onRemoveIndicator, activeIndicators = EMPTY_ACTIVE_INDICATORS },
   ) => {
     const { t, i18n } = useTranslation()
     const widgetRef = useRef<TradingViewWidget | null>(null)
@@ -3542,5 +3527,4 @@ export const TradingViewChart = forwardRef(
         )}
       </div>
     )
-  },
-)
+  }

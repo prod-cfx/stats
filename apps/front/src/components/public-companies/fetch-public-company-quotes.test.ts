@@ -1,5 +1,5 @@
-import { describe, expect, it, jest } from '@jest/globals'
 import type { CryptoStockQuoteLatest } from '@/lib/api'
+import { describe, expect, it, jest } from '@jest/globals'
 import { fetchPublicCompanyQuotes } from './fetch-public-company-quotes'
 
 const baseQuote = (overrides: Partial<CryptoStockQuoteLatest>): CryptoStockQuoteLatest =>

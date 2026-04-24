@@ -1,8 +1,8 @@
 'use client'
 
+import type { UserFillsResponse } from '@/lib/api'
 import React, { useCallback, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import type { UserFillsResponse } from '@/lib/api'
 import { getRelativeTimeParams } from '@/lib/formatters'
 
 const SortIcon = (props: React.SVGProps<SVGSVGElement>) => (

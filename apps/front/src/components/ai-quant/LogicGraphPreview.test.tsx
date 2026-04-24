@@ -1,5 +1,6 @@
+import type {Root} from 'react-dom/client';
 import { act } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
+import { createRoot  } from 'react-dom/client'
 import { LogicGraphPreview } from './LogicGraphPreview'
 
 jest.mock('react-i18next', () => ({
@@ -10,7 +11,7 @@ jest.mock('react-i18next', () => ({
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
-describe('LogicGraphPreview', () => {
+describe('logicGraphPreview', () => {
   let container: HTMLDivElement
   let root: Root
 

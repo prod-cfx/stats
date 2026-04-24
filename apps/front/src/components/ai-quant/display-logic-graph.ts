@@ -92,7 +92,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function asString(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
-  return trimmed ? trimmed : null
+  return trimmed || null
 }
 
 function asStringList(value: unknown): string[] {

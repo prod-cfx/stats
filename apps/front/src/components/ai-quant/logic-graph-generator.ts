@@ -1,6 +1,6 @@
+import type { TFunction } from 'i18next'
 import type { StrategyLogicGraph } from './logic-graph-model'
 import type { QuantParams } from '@/app/[lng]/ai-quant/AiQuantPageClient'
-import type { TFunction } from 'i18next'
 
 function findPercent(input: string, fallback: number) {
   const match = input.match(/(\d+(?:\.\d+)?)%/)

@@ -65,7 +65,7 @@ export function WidgetConfigurator({ item, onBack, onSave }: WidgetConfiguratorP
     if (!sizePresets[selectedSize]) {
       const firstAvailable = Object.keys(sizePresets)[0] as UnitSize
       if (firstAvailable) {
-        // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- normalize invalid size
+         
         setSelectedSize(firstAvailable)
       }
     }
