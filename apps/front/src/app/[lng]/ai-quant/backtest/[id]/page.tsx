@@ -4,6 +4,7 @@ import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
 import { fetchBacktestJobServer } from '@/lib/server-api'
 import { BacktestReportClient } from './BacktestReportClient'
+import { normalizeBacktestMarketType } from './backtest-result-presentation'
 
 interface CoverageRange {
   fromTs: number
@@ -63,7 +64,7 @@ function resolveBacktestMarketType(inputSummary: unknown): 'spot' | 'perp' {
   }
 
   const marketType = (inputSummary as { marketType?: unknown }).marketType
-  return marketType === 'perp' ? 'perp' : 'spot'
+  return normalizeBacktestMarketType(marketType)
 }
 
 function resolveBacktestSymbol(inputSummary: unknown, fallback: string): string {

@@ -214,6 +214,41 @@ describe('AiQuantBacktestDetailPage', () => {
     expect(props).toMatchObject({ marketType: 'perp' })
   })
 
+  it('normalizes derivative market aliases before rendering the report', async () => {
+    for (const marketType of ['perpetual', 'futures', 'swap', 'delivery']) {
+      mockBacktestReportClient.mockClear()
+      mockFetchBacktestJobServer.mockResolvedValue({
+        inputSummary: {
+          marketType,
+          symbols: ['ETHUSDT'],
+        },
+        resultSummary: {
+          netProfit: 12,
+          netProfitPct: 0.12,
+          maxDrawdownPct: 0.45,
+          winRate: 1,
+          profitFactor: 1.4,
+          totalTrades: 3,
+        },
+      })
+
+      const element = await AiQuantBacktestDetailPage({
+        params: { lng: 'zh', id: `backtest-${marketType}` },
+        searchParams: {},
+      })
+
+      renderToStaticMarkup(element)
+      const props = mockBacktestReportClient.mock.calls.at(-1)?.[0] as Record<string, unknown>
+      expect(props).toMatchObject({
+        marketType: 'perp',
+        reportContext: {
+          marketType: 'perp',
+          symbol: 'ETHUSDT',
+        },
+      })
+    }
+  })
+
   it('passes normalized report context from inputSummary without tying it to OKX', async () => {
     mockFetchBacktestJobServer.mockResolvedValue({
       id: 'backtest-context',
