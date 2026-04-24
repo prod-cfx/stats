@@ -52,6 +52,11 @@
     "register": "Register",
     "yesterday": "Yesterday"
   },
+  "theme": {
+    "dark": "Dark",
+    "light": "Light",
+    "toggle": "Toggle light/dark mode"
+  },
   "account": {
     "title": "Account",
     "loginMethods": "Login Methods",

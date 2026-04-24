@@ -52,6 +52,11 @@
     "register": "注册",
     "yesterday": "昨天"
   },
+  "theme": {
+    "dark": "夜间",
+    "light": "白天",
+    "toggle": "切换白天/夜间模式"
+  },
   "account": {
     "title": "个人中心",
     "loginMethods": "账户登录方式",
