@@ -104,6 +104,20 @@ export interface AdminUser {
   }[]
 }
 
+export interface BetaCode {
+  id: string
+  code: string
+  maxUses: number
+  usedCount: number
+  isActive: boolean
+  createdAt: string
+}
+
+export interface CreateBetaCodeBatchPayload {
+  count: number
+  maxUsesPerCode: number
+}
+
 export async function fetchAdminMenus(): Promise<AdminMenuNode[]> {
   return withAuthErrorHandling(async () => {
     const response = await client['AdminMenuController_findMenuTree[0]']({
@@ -171,6 +185,49 @@ export function updateAdminUser(id: string, payload: UpdateAdminUserPayload) {
       params: { id },
     }).then(unwrapResponse),
   )
+}
+
+export async function fetchBetaCodes(): Promise<BetaCode[]> {
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminBetaCodeController_list({
+      headers: requireAuthHeaders(),
+      queries: {
+        page: 1,
+        limit: 100,
+      },
+    })
+    return unwrapListResponse<BetaCode>(response)
+  })
+}
+
+export async function createBetaCodeBatch(
+  payload: CreateBetaCodeBatchPayload,
+): Promise<BetaCode[]> {
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminBetaCodeController_createBatch(
+      {
+        count: payload.count,
+        maxUsesPerCode: payload.maxUsesPerCode,
+      },
+      {
+        headers: requireAuthHeaders(),
+      },
+    )
+    return unwrapListResponse<BetaCode>(response)
+  })
+}
+
+export async function updateBetaCodeStatus(
+  id: string,
+  isActive: boolean,
+): Promise<BetaCode> {
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminBetaCodeController_updateStatus({ isActive }, {
+      headers: requireAuthHeaders(),
+      params: { id },
+    })
+    return unwrapResponse<BetaCode>(response)
+  })
 }
 
 // 订单薄交易对配置相关 API
