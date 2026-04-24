@@ -212,6 +212,125 @@
       "riskPosition": "单笔仓位 {{percent}}%",
       "riskDrawdown": "默认最大回撤阈值 {{percent}}%"
     },
+    "homepage": {
+      "cta": "体验 AI 量化",
+      "hero": {
+        "eyebrow": "AI Quant Strategy Builder",
+        "title": "用 AI 生成可回测的量化策略",
+        "description": "从一句交易想法开始，AI 生成策略逻辑，并串联回测验证、风险检查与交易所部署。"
+      },
+      "visual": {
+        "workspace": "AI 量化工作台",
+        "status": "策略可回测",
+        "aiGenerated": "AI 已生成",
+        "parsedStrategy": "AI 解析策略",
+        "assistant": "告诉我你的交易想法，我会生成策略逻辑并准备回测。",
+        "userPrompt": "BTC 3分钟跌 1% 买入，反弹 2% 卖出，单笔 10% 资金。",
+        "logicTitle": "AI 生成的策略逻辑",
+        "rule1": "价格 3 分钟内下跌 1%",
+        "rule2": "使用 10% 资金买入",
+        "rule3": "反弹 2% 后卖出并准备回测",
+        "inputPlaceholder": "继续让 AI 优化策略...",
+        "deployAction": "部署策略",
+        "sidebar": {
+          "btcPullback": "BTC 回调策略",
+          "ethBreakout": "ETH 突破策略",
+          "gridTemplate": "网格策略模板"
+        },
+        "metrics": {
+          "return": "收益",
+          "maxDrawdown": "最大回撤",
+          "winRate": "胜率",
+          "trades": "成交次数"
+        },
+        "deployRows": {
+          "snapshot": "策略快照",
+          "backtestGate": "回测门槛",
+          "exchangeApi": "交易所 API",
+          "confirmed": "已确认",
+          "passed": "已通过",
+          "ready": "就绪"
+        },
+        "plaza": {
+          "trend": "趋势跟随",
+          "grid": "网格策略",
+          "reversion": "均值回归",
+          "breakout": "突破策略",
+          "template": "AI 可优化模板"
+        }
+      },
+      "workflow": {
+        "eyebrow": "AI Quant Workflow",
+        "title": "从 AI 对话到一键部署，完整策略闭环",
+        "items": {
+          "chat": {
+            "title": "AI对话",
+            "desc": "用自然语言输入交易想法。"
+          },
+          "strategy": {
+            "title": "策略",
+            "desc": "AI 生成可确认的策略逻辑。"
+          },
+          "backtest": {
+            "title": "回测",
+            "desc": "用历史数据验证策略表现。"
+          },
+          "deploy": {
+            "title": "一键部署",
+            "desc": "回测达标后连接交易所执行。"
+          }
+        }
+      },
+      "features": {
+        "conversation": {
+          "eyebrow": "AI Strategy Creation",
+          "title": "用对话生成策略草案",
+          "description": "AI 从自然语言中提取入场、离场、仓位和风险条件，生成可确认的策略逻辑。"
+        },
+        "backtest": {
+          "eyebrow": "Backtesting",
+          "title": "部署前先看历史表现",
+          "description": "收益、最大回撤、胜率和成交次数集中呈现，帮助用户判断策略是否值得继续优化或部署。"
+        },
+        "deploy": {
+          "eyebrow": "Deployment",
+          "title": "回测达标后进入部署确认",
+          "description": "策略快照、回测结果与交易所 API 状态统一校验，再进入自动化执行。"
+        },
+        "plaza": {
+          "eyebrow": "Strategy Plaza",
+          "title": "从策略广场快速开始",
+          "description": "选择常见策略模板，直接运行、回测，或通过 AI 对话继续优化策略条件。"
+        }
+      },
+      "advantages": {
+        "eyebrow": "Why Coinflux AI Quant",
+        "title": "面向新手的 AI 量化完整路径",
+        "items": {
+          "barrier": {
+            "title": "AI 降低创建门槛",
+            "desc": "用交易语言开始，不从代码和复杂参数开始。"
+          },
+          "logic": {
+            "title": "策略逻辑可确认",
+            "desc": "AI 生成后先展示结构化逻辑，减少理解偏差。"
+          },
+          "validation": {
+            "title": "回测辅助决策",
+            "desc": "用历史数据呈现策略表现，明确优化方向。"
+          },
+          "closedLoop": {
+            "title": "部署形成闭环",
+            "desc": "策略生成、验证和交易所部署在同一条路径内完成。"
+          }
+        }
+      },
+      "final": {
+        "eyebrow": "Start with AI",
+        "title": "从一个交易想法，生成可验证的量化策略",
+        "description": "体验 AI 策略生成、历史回测与自动化部署的完整流程。"
+      }
+    },
     "guestLanding": {
       "title": "AI 量化策略生成",
       "subtitle": "描述你的交易想法，AI 将为你自动生成可回测的量化策略代码。",
