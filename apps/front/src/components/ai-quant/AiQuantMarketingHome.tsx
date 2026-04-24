@@ -1,349 +1,247 @@
-import { motion } from 'framer-motion'
+'use client'
+
 import type { ReactNode } from 'react'
-import { ArrowRight, Bot, Check, LineChart, Play, ShieldCheck, Sparkles, Zap } from 'lucide-react'
+import { motion } from 'framer-motion'
+import { ArrowRight, Bot, Check, LineChart, Play, ShieldCheck, Sparkles, Zap, Activity, Cpu, Globe, Lock, TrendingUp, BarChart3, Terminal } from 'lucide-react'
 import Link from 'next/link'
+import { useTranslation } from 'react-i18next'
 
 type FeatureKey = 'conversation' | 'backtest' | 'deploy' | 'plaza'
 type AdvantageKey = 'barrier' | 'logic' | 'validation' | 'closedLoop'
-type Translate = (key: string, options?: Record<string, unknown>) => string
 
 const workflowKeys = ['chat', 'strategy', 'backtest', 'deploy'] as const
 const featureKeys: FeatureKey[] = ['conversation', 'backtest', 'deploy', 'plaza']
 const advantageKeys: AdvantageKey[] = ['barrier', 'logic', 'validation', 'closedLoop']
-export function AiQuantMarketingHome({ lng, t }: { lng: 'zh' | 'en', t: Translate }) {
+
+export function AiQuantMarketingHome({ lng }: { lng: 'zh' | 'en' }) {
+  const { t } = useTranslation()
   const ctaHref = `/${lng}/ai-quant`
 
   return (
-    <main className="relative overflow-hidden bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
-      {/* Global Grid Background */}
-      <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,var(--cf-border)_1px,transparent_1px),linear-gradient(to_bottom,var(--cf-border)_1px,transparent_1px)] bg-[size:64px_64px] opacity-[0.05]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(100,108,255,0.05),transparent_70%)]" />
+    <main className="relative min-h-screen bg-[#030303] text-white selection:bg-primary/30 font-sans">
+      {/* VergeX Style Premium Background */}
+      <div className="pointer-events-none fixed inset-0 z-0">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:40px_40px]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(100,108,255,0.12),transparent_50%)]" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_0%_100%,rgba(34,197,94,0.05),transparent_40%)]" />
       </div>
 
       <div className="relative z-10">
-        <HeroSection ctaHref={ctaHref} t={t} />
-        <WorkflowSection t={t} />
+        <HeroSection ctaHref={ctaHref} />
+        
+        <div id="workflow" className="border-t border-white/5 bg-white/[0.01]">
+          <WorkflowSection />
+        </div>
+
         {featureKeys.map((key, index) => (
-          <FeatureSection key={key} featureKey={key} reverse={index % 2 === 1} t={t} />
+          <FeatureSection key={key} featureKey={key} reverse={index % 2 === 1} />
         ))}
-        <AdvantageSection t={t} />
-        <section className="px-4 py-20 md:px-8 md:py-28">
-          <div className="mx-auto max-w-5xl rounded-[2rem] border border-white/5 bg-[color:var(--cf-surface)]/50 px-6 py-12 text-center shadow-2xl shadow-black/10 backdrop-blur-xl md:px-12 md:py-16">
-            <p className="text-xs font-bold tracking-[0.24em] text-primary uppercase">
-              {t('aiQuant.homepage.final.eyebrow')}
-            </p>
-            <h2 className="mx-auto mt-4 max-w-3xl text-4xl leading-tight font-semibold tracking-tighter text-[color:var(--cf-text-strong)] md:text-6xl">
-              {t('aiQuant.homepage.final.title')}
-            </h2>
-            <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-[color:var(--cf-muted)] md:text-lg">
-              {t('aiQuant.homepage.final.description')}
-            </p>
-            <PrimaryCta href={ctaHref} className="mt-8" label={t('aiQuant.homepage.finalCta')} />
-          </div>
-        </section>
+
+        <div className="bg-white/[0.01] border-y border-white/5">
+          <AdvantageSection />
+        </div>
+
+        <FinalCtaSection ctaHref={ctaHref} />
       </div>
     </main>
   )
 }
 
-function HeroSection({ ctaHref, t }: { ctaHref: string, t: Translate }) {
+function HeroSection({ ctaHref }: { ctaHref: string }) {
+  const { t } = useTranslation()
 
   return (
-    <section className="relative">
-      <div className="relative mx-auto grid min-h-[840px] max-w-7xl items-center gap-14 px-4 pt-24 pb-20 md:grid-cols-[0.9fr_1.1fr] md:px-8 md:pt-32 md:pb-24">
-        <div className="relative z-10">
+    <section className="relative pt-12 pb-16 md:pt-20 md:pb-24">
+      <div className="mx-auto max-w-7xl px-6 md:px-8">
+        <div className="grid items-center gap-12 lg:grid-cols-[1fr_1.1fr]">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
+            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            className="max-w-2xl"
           >
-            <p className="text-xs font-bold tracking-[0.24em] text-primary uppercase">
-              {t('aiQuant.homepage.hero.eyebrow')}
-            </p>
-            <h1 className="mt-5 max-w-3xl bg-gradient-to-b from-[color:var(--cf-text-strong)] to-[color:var(--cf-text-strong)]/60 bg-clip-text text-5xl leading-[1.04] font-semibold tracking-tighter text-transparent md:text-7xl">
-              {t('aiQuant.homepage.hero.title')}
+            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-[11px] font-bold tracking-[0.2em] text-primary uppercase">
+              <Sparkles className="h-3 w-3" />
+              Next-Gen AI Quant
+            </div>
+            <h1 className="mt-8 text-6xl font-extrabold leading-[1.08] tracking-tight text-white antialiased sm:text-7xl md:text-8xl lg:text-[5.5rem] lg:leading-[1.06] xl:text-[6rem] xl:leading-[1.05]">
+              {t('aiQuant.homepage.hero.title').split('AI 量化').map((part, i, arr) => (
+                <span key={i}>
+                  {part}
+                  {i < arr.length - 1 && (
+                    <span className="bg-gradient-to-r from-[#a5b4fc] via-primary to-[#c4b5fd] bg-clip-text text-transparent">
+                      AI 量化
+                    </span>
+                  )}
+                </span>
+              ))}
             </h1>
-            <p className="mt-6 max-w-2xl text-lg leading-8 text-[color:var(--cf-muted)] md:text-xl">
+            <p className="mt-10 max-w-xl text-[15px] leading-[1.65] text-zinc-400 md:text-base md:leading-relaxed">
               {t('aiQuant.homepage.hero.description')}
             </p>
-            <div className="mt-10 flex flex-wrap gap-4">
+            <div className="mt-10">
               <PrimaryCta href={ctaHref} label={t('aiQuant.homepage.heroCta')} />
-              <Link
-                href="#workflow"
-                className="inline-flex items-center justify-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-6 py-4 text-base font-bold text-[color:var(--cf-text-strong)] backdrop-blur-sm transition hover:bg-white/10"
-              >
-                {t('aiQuant.homepage.howItWorks')}
-              </Link>
-            </div>
-          </motion.div>
-        </div>
-
-        <div className="relative flex min-h-[600px] items-center justify-center">
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(100,108,255,0.15),transparent_60%)]" />
-          
-          <motion.div
-            initial={{ opacity: 0, scale: 0.9, rotateY: -10 }}
-            animate={{ opacity: 1, scale: 1, rotateY: 0 }}
-            transition={{ duration: 0.8, delay: 0.2 }}
-            className="relative z-10 w-full perspective-1000"
-          >
-            <ProductWorkspaceVisual t={t} />
-          </motion.div>
-
-          {/* Floating Cards */}
-          <motion.div
-            animate={{ y: [0, -15, 0] }}
-            transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            className="absolute -top-10 -right-4 z-20 md:right-0"
-          >
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl">
-              <div className="flex items-center gap-3">
-                <div className="grid h-10 w-10 place-items-center rounded-full bg-emerald-500/20 text-emerald-500">
-                  <LineChart className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="text-[10px] font-medium text-[color:var(--cf-muted)] uppercase tracking-wider">ROI</div>
-                  <div className="text-lg font-bold text-emerald-500">+124.8%</div>
-                </div>
-              </div>
             </div>
           </motion.div>
 
-          <motion.div
-            animate={{ y: [0, 15, 0] }}
-            transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-            className="absolute -bottom-10 -left-4 z-20 md:left-0"
-          >
-            <div className="rounded-2xl border border-white/10 bg-white/5 p-4 shadow-2xl backdrop-blur-xl">
-              <div className="flex items-center gap-3">
-                <div className="grid h-10 w-10 place-items-center rounded-full bg-primary/20 text-primary">
-                  <ShieldCheck className="h-5 w-5" />
-                </div>
-                <div>
-                  <div className="text-[10px] font-medium text-[color:var(--cf-muted)] uppercase tracking-wider">Risk Control</div>
-                  <div className="text-lg font-bold text-primary">Max DD 8.2%</div>
-                </div>
-              </div>
-            </div>
-          </motion.div>
+          <div className="relative mt-12 lg:mt-0 flex justify-end">
+            <HeroVisual />
+          </div>
         </div>
       </div>
     </section>
   )
 }
 
-function PrimaryCta({ href, className = '', label }: { href: string, className?: string, label: string }) {
+function HeroVisual() {
+  return (
+    <div className="relative flex items-center justify-end py-10 w-full">
+      {/* Background Glow */}
+      <div className="absolute top-1/2 right-1/4 h-[400px] w-[400px] -translate-y-1/2 translate-x-1/4 rounded-full bg-primary/10 blur-[100px] -z-10" />
+      
+      {/* Main Abstract Panel */}
+      <motion.div
+        initial={{ opacity: 0, x: 20 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 1, ease: "easeOut" }}
+        className="relative z-10 w-full max-w-[560px] rounded-[24px] border border-white/5 bg-[#0a0a0a]/90 p-1 shadow-2xl backdrop-blur-xl"
+      >
+        <div className="overflow-hidden rounded-[20px] bg-[#050505] p-6">
+          <div className="flex items-center justify-between mb-8">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
+                <Cpu className="h-4 w-4" />
+              </div>
+              <div>
+                <div className="text-sm font-medium text-white/90">AI Strategy Engine</div>
+                <div className="text-[10px] text-emerald-500 font-mono tracking-widest mt-0.5 uppercase">Active • V2.4.1</div>
+              </div>
+            </div>
+            <div className="flex gap-1.5">
+              <div className="h-1.5 w-1.5 rounded-full bg-white/20" />
+              <div className="h-1.5 w-1.5 rounded-full bg-white/20" />
+              <div className="h-1.5 w-1.5 rounded-full bg-white/20" />
+            </div>
+          </div>
+          
+          {/* Abstract Chart Area */}
+          <div className="relative h-[200px] w-full rounded-xl border border-white/5 bg-black/40 overflow-hidden mb-6">
+            {/* Grid lines */}
+            <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:24px_24px]" />
+            
+            {/* Glowing Line Chart */}
+            <svg className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
+              <defs>
+                <linearGradient id="chart-gradient" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="rgba(100,108,255,0.3)" />
+                  <stop offset="100%" stopColor="rgba(100,108,255,0)" />
+                </linearGradient>
+                <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feGaussianBlur stdDeviation="2" result="blur" />
+                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                </filter>
+              </defs>
+              <path d="M0,100 L0,70 Q15,65 25,75 T50,55 T75,30 T100,20 L100,100 Z" fill="url(#chart-gradient)" />
+              <path d="M0,70 Q15,65 25,75 T50,55 T75,30 T100,20" fill="none" stroke="rgba(100,108,255,0.8)" strokeWidth="1.5" filter="url(#glow)" />
+              
+              {/* Data points */}
+              <circle cx="25" cy="75" r="2" fill="#fff" className="drop-shadow-[0_0_4px_#fff]" />
+              <circle cx="50" cy="55" r="2" fill="#fff" className="drop-shadow-[0_0_4px_#fff]" />
+              <circle cx="75" cy="30" r="2" fill="#fff" className="drop-shadow-[0_0_4px_#fff]" />
+              <circle cx="100" cy="20" r="2" fill="#fff" className="drop-shadow-[0_0_4px_#fff]" />
+            </svg>
+          </div>
 
+          {/* Data Rows */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between rounded-lg bg-white/[0.02] px-4 py-3 border border-white/5">
+              <span className="text-xs text-white/40 font-mono">Signal Confidence</span>
+              <span className="text-xs font-bold text-white">94.2%</span>
+            </div>
+            <div className="flex items-center justify-between rounded-lg bg-white/[0.02] px-4 py-3 border border-white/5">
+              <span className="text-xs text-white/40 font-mono">Execution Latency</span>
+              <span className="text-xs font-bold text-white">12ms</span>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Floating Elements */}
+      <motion.div
+        animate={{ y: [0, -8, 0] }}
+        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
+        className="absolute top-8 -right-4 z-20 md:-right-8"
+      >
+        <div className="rounded-xl border border-white/10 bg-[#111]/90 p-3 shadow-2xl backdrop-blur-xl flex items-center gap-3">
+          <div className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            <TrendingUp className="h-4 w-4" />
+          </div>
+          <div className="pr-2">
+            <div className="text-[9px] font-medium text-white/40 uppercase tracking-wider">Total Return</div>
+            <div className="text-sm font-bold text-emerald-400">+124.8%</div>
+          </div>
+        </div>
+      </motion.div>
+
+      <motion.div
+        animate={{ y: [0, 8, 0] }}
+        transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
+        className="absolute bottom-16 -left-4 z-20 md:-left-8"
+      >
+        <div className="rounded-xl border border-white/10 bg-[#111]/90 p-3 shadow-2xl backdrop-blur-xl flex items-center gap-3">
+          <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary/10 text-primary border border-primary/20">
+            <ShieldCheck className="h-4 w-4" />
+          </div>
+          <div className="pr-2">
+            <div className="text-[9px] font-medium text-white/40 uppercase tracking-wider">Max Drawdown</div>
+            <div className="text-sm font-bold text-white">8.2%</div>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  )
+}
+
+function PrimaryCta({ href, className = '', label }: { href: string, className?: string, label: string }) {
   return (
     <Link
       href={href}
-      className={`inline-flex items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-primary to-secondary px-8 py-4 text-base font-bold text-white shadow-2xl shadow-primary/25 transition hover:scale-105 hover:opacity-95 active:scale-[0.98] ${className}`}
+      className={`group relative inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary px-8 py-4 text-base font-bold text-white shadow-[0_0_30px_-5px_rgba(100,108,255,0.4)] transition-all hover:shadow-[0_0_40px_-5px_rgba(100,108,255,0.6)] hover:-translate-y-0.5 active:translate-y-0 ${className}`}
     >
       {label}
-      <ArrowRight className="h-5 w-5" />
+      <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
     </Link>
   )
 }
 
-function ProductWorkspaceVisual({ t }: { t: Translate }) {
+function WorkflowSection() {
+  const { t } = useTranslation()
 
   return (
-    <div className="mx-auto w-full max-w-[720px] overflow-hidden rounded-[2.5rem] border border-white/10 bg-[color:var(--cf-surface)]/40 shadow-[0_32px_64px_-16px_rgba(0,0,0,0.5)] backdrop-blur-2xl">
-      <div className="flex h-12 items-center justify-between border-b border-white/5 bg-white/5 px-6 text-[10px] font-medium text-[color:var(--cf-muted)] uppercase tracking-widest">
-        <div className="flex items-center gap-4">
-          <div className="flex gap-1.5">
-            <div className="h-2.5 w-2.5 rounded-full bg-red-500/50" />
-            <div className="h-2.5 w-2.5 rounded-full bg-amber-500/50" />
-            <div className="h-2.5 w-2.5 rounded-full bg-emerald-500/50" />
-          </div>
-          <span>{t('aiQuant.homepage.visual.workspace')}</span>
-        </div>
-        <span className="flex items-center gap-2 text-emerald-500">
-          <span className="relative flex h-2 w-2">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75"></span>
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500"></span>
-          </span>
-          {t('aiQuant.homepage.visual.status')}
-        </span>
-      </div>
-      <div className="grid min-h-[480px] grid-cols-[140px_minmax(0,1fr)] md:grid-cols-[160px_minmax(0,1fr)]">
-        <aside className="border-r border-white/5 bg-black/20 p-4">
-          <div className="grid h-9 place-items-center rounded-xl bg-gradient-to-r from-primary to-secondary text-[10px] font-bold text-white uppercase tracking-wider">
-            {t('aiQuant.createChat')}
-          </div>
-          <div className="mt-6 space-y-2.5">
-            {(['btcPullback', 'ethBreakout', 'gridTemplate'] as const).map((item, index) => (
-              <div
-                key={item}
-                className={`rounded-xl border px-3 py-2.5 text-[11px] transition-colors ${
-                  index === 0
-                    ? 'border-primary/40 bg-primary/10 text-[color:var(--cf-text-strong)]'
-                    : 'border-white/5 text-[color:var(--cf-muted)] hover:bg-white/5'
-                }`}
-              >
-                {t(`aiQuant.homepage.visual.sidebar.${item}`)}
-              </div>
-            ))}
-          </div>
-        </aside>
-
-        <div className="grid min-w-0 md:grid-cols-[1.1fr_0.9fr]">
-          <div className="border-r border-white/5 p-5">
-            <ChatBubble icon={<Bot className="h-4 w-4" />} text={t('aiQuant.homepage.visual.assistant')} />
-            <ChatBubble user text={t('aiQuant.homepage.visual.userPrompt')} />
-            <div className="mt-6 rounded-2xl border border-white/5 bg-black/20 p-4">
-              <div className="text-[10px] font-medium text-[color:var(--cf-muted)] uppercase tracking-wider">
-                {t('aiQuant.homepage.visual.logicTitle')}
-              </div>
-              <div className="mt-4 space-y-3 text-[11px] text-[color:var(--cf-text)]">
-                <RuleDot color="bg-sky-400" text={t('aiQuant.homepage.visual.rule1')} />
-                <RuleDot color="bg-secondary" text={t('aiQuant.homepage.visual.rule2')} />
-                <RuleDot color="bg-emerald-400" text={t('aiQuant.homepage.visual.rule3')} />
-              </div>
-            </div>
-            <div className="mt-6 flex h-11 items-center justify-between rounded-2xl border border-white/5 bg-black/20 px-4 text-[11px] text-[color:var(--cf-muted)]">
-              <span>{t('aiQuant.homepage.visual.inputPlaceholder')}</span>
-              <span className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-r from-primary to-secondary text-white">
-                ↑
-              </span>
-            </div>
-          </div>
-
-          <div className="hidden bg-black/10 p-5 md:block">
-            <div className="mb-4 flex items-center justify-between text-[10px] font-medium uppercase tracking-wider">
-              <span className="text-[color:var(--cf-muted)]">{t('aiQuant.backtestResult')}</span>
-              <span className="text-emerald-500">{t('aiQuant.deploy')}</span>
-            </div>
-            <MiniEquityChart />
-            <div className="mt-6 grid grid-cols-2 gap-2.5">
-              <MetricTile label={t('aiQuant.homepage.visual.metrics.return')} value="+18.4%" good />
-              <MetricTile label={t('aiQuant.homepage.visual.metrics.maxDrawdown')} value="12.8%" />
-              <MetricTile label={t('aiQuant.homepage.visual.metrics.winRate')} value="63%" />
-              <MetricTile label={t('aiQuant.homepage.visual.metrics.trades')} value="48" />
-            </div>
-            <div className="mt-6 grid h-10 place-items-center rounded-xl bg-gradient-to-r from-primary to-secondary text-xs font-bold text-white uppercase tracking-wider">
-              {t('aiQuant.deploy')}
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ChatBubble({
-  text,
-  user = false,
-  icon,
-}: {
-  text: string
-  user?: boolean
-  icon?: ReactNode
-}) {
-  return (
-    <div className="mb-3 flex gap-3">
-      <div className={`grid h-8 w-8 shrink-0 place-items-center rounded-full ${user ? 'bg-[color:var(--cf-surface-2)]' : 'bg-primary/15 text-primary'}`}>
-        {icon ?? <span className="text-xs font-bold">U</span>}
-      </div>
-      <div className={`flex-1 rounded-2xl border px-4 py-3 text-sm leading-6 ${
-        user
-          ? 'border-primary/35 bg-primary/10 text-[color:var(--cf-text-strong)]'
-          : 'border-[color:var(--cf-border)] bg-[color:var(--cf-surface-2)] text-[color:var(--cf-text)]'
-      }`}
-      >
-        {text}
-      </div>
-    </div>
-  )
-}
-
-function RuleDot({ color, text }: { color: string, text: string }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className={`h-2 w-2 rounded-full ${color}`} />
-      <span>{text}</span>
-    </div>
-  )
-}
-
-function LogicFloatCard({ t }: { t: Translate }) {
-
-  return (
-    <div className="absolute bottom-2 left-0 hidden w-[360px] -rotate-2 rounded-[1.6rem] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 shadow-2xl shadow-black/25 backdrop-blur md:block">
-      <div className="mb-3 flex items-center justify-between">
-        <span className="text-xs text-[color:var(--cf-muted)]">{t('aiQuant.messages.graphTitle')}</span>
-        <span className="text-xs font-bold text-primary">{t('aiQuant.homepage.visual.aiGenerated')}</span>
-      </div>
-      <div className="space-y-2 text-xs">
-        <LogicLine tag="IF" color="text-amber-400" text={t('aiQuant.homepage.visual.rule1')} />
-        <LogicLine tag="THEN" color="text-sky-400" text={t('aiQuant.homepage.visual.rule2')} />
-        <LogicLine tag="EXECUTE" color="text-emerald-400" text={t('aiQuant.homepage.visual.rule3')} />
-      </div>
-    </div>
-  )
-}
-
-function LogicLine({ tag, color, text }: { tag: string, color: string, text: string }) {
-  return (
-    <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-[color:var(--cf-text)]">
-      <b className={color}>{tag}</b> {text}
-    </div>
-  )
-}
-
-function MiniEquityChart() {
-  return (
-    <div className="h-36 overflow-hidden rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)]">
-      <svg viewBox="0 0 310 150" className="h-full w-full">
-        <path d="M0 112 H310 M0 76 H310 M0 40 H310" stroke="currentColor" className="text-[color:var(--cf-border)]" strokeWidth="1" />
-        <path d="M18 118 C52 100,74 124,108 82 S168 64,206 56 S256 36,292 22" fill="none" stroke="#22c55e" strokeWidth="4" strokeLinecap="round" />
-        <path d="M18 118 C52 100,74 124,108 82 S168 64,206 56 S256 36,292 22 L292 150 L18 150 Z" fill="rgba(34,197,94,.14)" />
-      </svg>
-    </div>
-  )
-}
-
-function MetricTile({ label, value, good = false }: { label: string, value: string, good?: boolean }) {
-  return (
-    <div className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-3">
-      <div className="text-[10px] text-[color:var(--cf-muted)]">{label}</div>
-      <div className={`mt-1 text-lg font-semibold ${good ? 'text-emerald-500' : 'text-[color:var(--cf-text-strong)]'}`}>
-        {value}
-      </div>
-    </div>
-  )
-}
-
-function WorkflowSection({ t }: { t: Translate }) {
-
-  return (
-    <section id="workflow" className="relative px-4 py-24 md:px-8 md:py-32">
+    <section className="px-6 py-20 md:px-8 md:py-24">
       <div className="mx-auto max-w-7xl">
-        <SectionHeading
-          eyebrow={t('aiQuant.homepage.workflow.eyebrow')}
-          title={t('aiQuant.homepage.workflow.title')}
-          centered
-        />
-        <div className="mt-16 grid gap-6 md:grid-cols-4">
+        <div className="text-center mb-16">
+          <h2 className="text-3xl font-bold tracking-tight text-white md:text-5xl">
+            {t('aiQuant.homepage.workflow.title')}
+          </h2>
+        </div>
+        <div className="grid gap-6 md:grid-cols-4">
           {workflowKeys.map((key, index) => (
             <motion.div
               key={key}
-              whileHover={{ y: -8 }}
-              className="group relative rounded-[2rem] border border-white/5 bg-white/5 p-8 shadow-2xl backdrop-blur-sm transition-all hover:bg-white/10"
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true }}
+              transition={{ delay: index * 0.1 }}
+              className="group relative rounded-2xl border border-white/5 bg-white/[0.02] p-8 transition-all hover:bg-white/[0.04] hover:border-white/10"
             >
-              <div className="absolute -inset-px rounded-[2rem] bg-gradient-to-b from-primary/20 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-              <div className="relative z-10">
-                <div className="mb-10 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-lg font-bold text-primary">
-                  0{index + 1}
-                </div>
-                <h3 className="text-2xl font-semibold tracking-tight text-[color:var(--cf-text-strong)]">
-                  {t(`aiQuant.homepage.workflow.items.${key}.title`)}
-                </h3>
-                <p className="mt-4 text-sm leading-7 text-[color:var(--cf-muted)]">
-                  {t(`aiQuant.homepage.workflow.items.${key}.desc`)}
-                </p>
-              </div>
+              <div className="mb-8 text-xs font-black text-primary/40 group-hover:text-primary transition-colors">0{index + 1}</div>
+              <h3 className="text-xl font-bold text-white">
+                {t(`aiQuant.homepage.workflow.items.${key}.title`)}
+              </h3>
+              <p className="mt-4 text-sm leading-relaxed text-white/40">
+                {t(`aiQuant.homepage.workflow.items.${key}.desc`)}
+              </p>
             </motion.div>
           ))}
         </div>
@@ -355,170 +253,191 @@ function WorkflowSection({ t }: { t: Translate }) {
 function FeatureSection({
   featureKey,
   reverse = false,
-  t,
 }: {
   featureKey: FeatureKey
   reverse?: boolean
-  t: Translate
 }) {
+  const { t } = useTranslation()
 
   return (
-    <section className="px-4 py-20 md:px-8 md:py-28">
+    <section className="px-6 py-20 md:px-8 md:py-24">
       <div className={`mx-auto grid max-w-7xl items-center gap-16 md:grid-cols-2 ${reverse ? 'md:[&>*:first-child]:order-2' : ''}`}>
         <motion.div
-          initial={{ opacity: 0, x: reverse ? 20 : -20 }}
+          initial={{ opacity: 0, x: reverse ? 30 : -30 }}
           whileInView={{ opacity: 1, x: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.6 }}
         >
-          <p className="text-xs font-bold tracking-[0.24em] text-primary uppercase">
+          <div className="text-[10px] font-bold text-primary uppercase tracking-[0.3em] mb-4">
             {t(`aiQuant.homepage.features.${featureKey}.eyebrow`)}
-          </p>
-          <h2 className="mt-4 text-4xl leading-tight font-semibold tracking-tighter text-[color:var(--cf-text-strong)] md:text-5xl">
+          </div>
+          <h2 className="text-3xl font-bold tracking-tight text-white md:text-5xl">
             {t(`aiQuant.homepage.features.${featureKey}.title`)}
           </h2>
-          <p className="mt-5 max-w-xl text-base leading-8 text-[color:var(--cf-muted)] md:text-lg">
+          <p className="mt-6 text-base leading-relaxed text-white/50 md:text-lg">
             {t(`aiQuant.homepage.features.${featureKey}.description`)}
           </p>
         </motion.div>
+        
         <motion.div
-          initial={{ opacity: 0, scale: 0.95, rotateX: 5, rotateY: reverse ? -5 : 5 }}
-          whileInView={{ opacity: 1, scale: 1, rotateX: 0, rotateY: 0 }}
+          initial={{ opacity: 0, scale: 0.95 }}
+          whileInView={{ opacity: 1, scale: 1 }}
           viewport={{ once: true }}
           transition={{ duration: 0.8 }}
-          className="perspective-1000"
+          className="relative"
         >
-          <FeatureVisual featureKey={featureKey} t={t} />
+          <div className="absolute inset-0 bg-primary/5 blur-[80px] -z-10" />
+          <FeatureVisual featureKey={featureKey} />
         </motion.div>
       </div>
     </section>
   )
 }
 
-function FeatureVisual({ featureKey, t }: { featureKey: FeatureKey, t: Translate }) {
-  if (featureKey === 'conversation') return <ConversationVisual t={t} />
-  if (featureKey === 'backtest') return <BacktestVisual t={t} />
-  if (featureKey === 'deploy') return <DeployVisual t={t} />
-  return <PlazaVisual t={t} />
+function FeatureVisual({ featureKey }: { featureKey: FeatureKey }) {
+  if (featureKey === 'conversation') return <ConversationVisual />
+  if (featureKey === 'backtest') return <BacktestVisual />
+  if (featureKey === 'deploy') return <DeployVisual />
+  return <PlazaVisual />
 }
 
-function ConversationVisual({ t }: { t: Translate }) {
-
+function ConversationVisual() {
+  const { t } = useTranslation()
   return (
-    <div className="rounded-[2.5rem] border border-white/10 bg-[color:var(--cf-surface)]/40 p-6 shadow-2xl backdrop-blur-xl transition-transform hover:scale-[1.02]">
-      <ChatBubble icon={<Sparkles className="h-4 w-4" />} text={t('aiQuant.homepage.visual.assistant')} />
-      <ChatBubble user text={t('aiQuant.homepage.visual.userPrompt')} />
-      <div className="mt-6 rounded-2xl border border-primary/30 bg-primary/10 p-5">
-        <p className="text-[10px] font-bold text-primary uppercase tracking-wider">{t('aiQuant.homepage.visual.parsedStrategy')}</p>
-        <div className="mt-4 grid gap-3 text-[11px] text-[color:var(--cf-text)]">
-          <RuleDot color="bg-sky-400" text={t('aiQuant.homepage.visual.rule1')} />
-          <RuleDot color="bg-secondary" text={t('aiQuant.homepage.visual.rule2')} />
-          <RuleDot color="bg-emerald-400" text={t('aiQuant.homepage.visual.rule3')} />
+    <div className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-white/[0.05] to-transparent p-8 shadow-2xl backdrop-blur-xl">
+      <div className="space-y-6">
+        <div className="flex gap-4">
+          <div className="h-10 w-10 shrink-0 rounded-2xl bg-primary/20 flex items-center justify-center text-primary border border-primary/30">
+            <Sparkles className="h-5 w-5" />
+          </div>
+          <div className="rounded-2xl bg-white/5 px-5 py-3 text-sm text-white/80 border border-white/5">
+            {t('aiQuant.homepage.visual.assistant')}
+          </div>
+        </div>
+        <div className="flex justify-end">
+          <div className="rounded-2xl bg-primary/20 px-5 py-3 text-sm text-primary font-medium border border-primary/30">
+            {t('aiQuant.homepage.visual.userPrompt')}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-6 mt-6">
+          <div className="text-[10px] font-bold text-primary uppercase tracking-widest mb-4">{t('aiQuant.homepage.visual.parsedStrategy')}</div>
+          <div className="space-y-3">
+            <div className="flex items-center gap-3 text-sm text-white/70">
+              <div className="h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]" />
+              {t('aiQuant.homepage.visual.rule1')}
+            </div>
+            <div className="flex items-center gap-3 text-sm text-white/70">
+              <div className="h-2 w-2 rounded-full bg-secondary shadow-[0_0_8px_var(--tw-colors-secondary)]" />
+              {t('aiQuant.homepage.visual.rule2')}
+            </div>
+          </div>
         </div>
       </div>
     </div>
   )
 }
 
-function BacktestVisual({ t }: { t: Translate }) {
-
+function BacktestVisual() {
+  const { t } = useTranslation()
   return (
-    <div className="rounded-[2.5rem] border border-white/10 bg-[color:var(--cf-surface)]/40 p-6 shadow-2xl backdrop-blur-xl transition-transform hover:scale-[1.02]">
-      <div className="mb-6 flex items-center justify-between">
-        <span className="text-[10px] font-bold text-[color:var(--cf-text-strong)] uppercase tracking-wider">{t('aiQuant.backtestResult')}</span>
-        <LineChart className="h-5 w-5 text-primary" />
+    <div className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-white/[0.05] to-transparent p-8 shadow-2xl backdrop-blur-xl">
+      <div className="flex items-center justify-between mb-8">
+        <div className="text-xs font-medium text-white/40 uppercase tracking-widest">{t('aiQuant.backtestResult')}</div>
+        <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
+          <BarChart3 className="h-5 w-5" />
+        </div>
       </div>
-      <MiniEquityChart />
-      <div className="mt-6 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <MetricTile label={t('aiQuant.homepage.visual.metrics.return')} value="+18.4%" good />
-        <MetricTile label={t('aiQuant.homepage.visual.metrics.maxDrawdown')} value="12.8%" />
-        <MetricTile label={t('aiQuant.homepage.visual.metrics.winRate')} value="63%" />
-        <MetricTile label={t('aiQuant.homepage.visual.metrics.trades')} value="48" />
+      <div className="h-48 w-full bg-black/20 rounded-2xl flex items-end p-4 gap-2 border border-white/5">
+        {[30, 50, 40, 80, 60, 75, 45, 90, 100].map((h, i) => (
+          <motion.div 
+            key={i}
+            initial={{ height: 0 }}
+            whileInView={{ height: `${h}%` }}
+            className="flex-1 bg-gradient-to-t from-primary/20 to-primary/60 rounded-t-md border-t border-primary/50"
+          />
+        ))}
+      </div>
+      <div className="grid grid-cols-2 gap-4 mt-8">
+        <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5">
+          <div className="text-[10px] text-white/40 uppercase font-medium mb-1">Return</div>
+          <div className="text-xl font-bold text-emerald-400">+18.4%</div>
+        </div>
+        <div className="p-4 rounded-2xl bg-white/[0.02] border border-white/5">
+          <div className="text-[10px] text-white/40 uppercase font-medium mb-1">Win Rate</div>
+          <div className="text-xl font-bold text-white">63%</div>
+        </div>
       </div>
     </div>
   )
 }
 
-function DeployVisual({ t }: { t: Translate }) {
-  const rows = [
-    [t('aiQuant.homepage.visual.deployRows.snapshot'), t('aiQuant.homepage.visual.deployRows.confirmed')],
-    [t('aiQuant.homepage.visual.deployRows.backtestGate'), t('aiQuant.homepage.visual.deployRows.passed')],
-    [t('aiQuant.homepage.visual.deployRows.exchangeApi'), t('aiQuant.homepage.visual.deployRows.ready')],
-  ] as const
-
+function DeployVisual() {
+  const { t } = useTranslation()
   return (
-    <div className="rounded-[2.5rem] border border-white/10 bg-[color:var(--cf-surface)]/40 p-6 shadow-2xl backdrop-blur-xl transition-transform hover:scale-[1.02]">
-      <div className="space-y-3">
-        {rows.map(([label, value]) => (
-          <div key={label} className="flex items-center justify-between rounded-2xl border border-white/5 bg-black/20 p-4">
-            <span className="text-[11px] text-[color:var(--cf-text)]">{label}</span>
-            <span className="inline-flex items-center gap-2 text-[11px] font-bold text-emerald-500">
-              <Check className="h-4 w-4" />
-              {value}
-            </span>
+    <div className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-white/[0.05] to-transparent p-8 shadow-2xl backdrop-blur-xl">
+      <div className="space-y-4">
+        {[
+          { label: t('aiQuant.homepage.visual.deployRows.snapshot'), status: 'ACTIVE' },
+          { label: t('aiQuant.homepage.visual.deployRows.backtestGate'), status: 'PASSED' },
+          { label: t('aiQuant.homepage.visual.deployRows.exchangeApi'), status: 'SECURE' }
+        ].map((item, i) => (
+          <div key={i} className="flex items-center justify-between p-5 rounded-2xl bg-white/[0.02] border border-white/5">
+            <span className="text-sm font-medium text-white/70">{item.label}</span>
+            <span className="text-[10px] font-bold text-emerald-400 tracking-widest px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/20">{item.status}</span>
           </div>
         ))}
       </div>
-      <div className="mt-6 grid h-12 place-items-center rounded-2xl bg-gradient-to-r from-primary to-secondary text-xs font-bold text-white uppercase tracking-wider">
+      <div className="mt-10 h-14 rounded-2xl bg-gradient-to-r from-primary to-secondary flex items-center justify-center text-sm font-bold text-white uppercase tracking-widest shadow-[0_0_20px_rgba(100,108,255,0.3)]">
         {t('aiQuant.homepage.visual.deployAction')}
       </div>
     </div>
   )
 }
 
-function PlazaVisual({ t }: { t: Translate }) {
+function PlazaVisual() {
+  const { t } = useTranslation()
   const cards = [
-    [t('aiQuant.homepage.visual.plaza.trend'), '+12.5%', ShieldCheck],
-    [t('aiQuant.homepage.visual.plaza.grid'), '95%', Zap],
-    [t('aiQuant.homepage.visual.plaza.reversion'), '72%', Play],
-    [t('aiQuant.homepage.visual.plaza.breakout'), t('aiQuant.homepage.visual.deployRows.ready'), LineChart],
-  ] as const
-
+    { title: t('aiQuant.homepage.visual.plaza.trend'), stat: '+12.5%', icon: ShieldCheck },
+    { title: t('aiQuant.homepage.visual.plaza.grid'), stat: '95%', icon: Zap },
+    { title: t('aiQuant.homepage.visual.plaza.reversion'), stat: '72%', icon: Play },
+    { title: t('aiQuant.homepage.visual.plaza.breakout'), stat: 'Ready', icon: LineChart },
+  ]
   return (
-    <div className="grid grid-cols-2 gap-4">
-      {cards.map(([title, stat, Icon]) => (
-        <div key={title} className="rounded-[2rem] border border-white/10 bg-[color:var(--cf-surface)]/40 p-6 shadow-2xl backdrop-blur-xl transition-transform hover:scale-[1.05]">
-          <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary">
-            <Icon className="h-5 w-5" />
+    <div className="grid grid-cols-2 gap-5">
+      {cards.map((card, i) => (
+        <div key={i} className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-white/[0.05] to-transparent p-6 shadow-2xl backdrop-blur-xl hover:bg-white/[0.08] transition-all">
+          <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-6 border border-primary/20">
+            <card.icon className="h-6 w-6" />
           </div>
-          <h3 className="mt-5 text-lg font-semibold tracking-tight text-[color:var(--cf-text-strong)]">{title}</h3>
-          <p className="mt-2 text-[11px] text-[color:var(--cf-muted)]">{t('aiQuant.homepage.visual.plaza.template')}</p>
-          <div className="mt-6 text-2xl font-bold text-emerald-500">{stat}</div>
+          <h3 className="text-base font-bold text-white mb-1">{card.title}</h3>
+          <div className="text-2xl font-bold text-emerald-400">{card.stat}</div>
         </div>
       ))}
     </div>
   )
 }
 
-function AdvantageSection({ t }: { t: Translate }) {
-
+function AdvantageSection() {
+  const { t } = useTranslation()
   return (
-    <section className="relative px-4 py-24 md:px-8 md:py-32">
-      <div className="relative mx-auto grid max-w-7xl gap-16 md:grid-cols-[0.8fr_1.2fr] md:items-center">
-        <SectionHeading
-          eyebrow={t('aiQuant.homepage.advantages.eyebrow')}
-          title={t('aiQuant.homepage.advantages.title')}
-        />
+    <section className="px-6 py-20 md:px-8 md:py-24">
+      <div className="mx-auto max-w-7xl">
+        <div className="text-center mb-20">
+          <h2 className="text-3xl font-bold tracking-tight text-white md:text-5xl">
+            {t('aiQuant.homepage.advantages.title')}
+          </h2>
+        </div>
         <div className="grid gap-6 md:grid-cols-2">
           {advantageKeys.map((key, index) => (
-            <motion.div
-              key={key}
-              whileHover={{ y: -8 }}
-              className="group relative min-h-[240px] rounded-[2rem] border border-white/5 bg-white/5 p-8 shadow-2xl backdrop-blur-sm transition-all hover:bg-white/10"
-            >
-              <div className="absolute -inset-px rounded-[2rem] bg-gradient-to-b from-emerald-500/20 to-transparent opacity-0 transition-opacity group-hover:opacity-100" />
-              <div className="relative z-10">
-                <div className="mb-10 flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-lg font-bold text-emerald-500">
-                  0{index + 1}
-                </div>
-                <h3 className="text-2xl font-semibold tracking-tight text-[color:var(--cf-text-strong)]">
-                  {t(`aiQuant.homepage.advantages.items.${key}.title`)}
-                </h3>
-                <p className="mt-4 text-sm leading-7 text-[color:var(--cf-muted)]">
-                  {t(`aiQuant.homepage.advantages.items.${key}.desc`)}
-                </p>
-              </div>
-            </motion.div>
+            <div key={key} className="group relative rounded-2xl border border-white/5 bg-white/[0.02] p-10 transition-all hover:bg-white/[0.04] hover:border-white/10">
+              <div className="text-5xl font-black text-white/[0.02] absolute top-6 right-8 group-hover:text-primary/5 transition-colors">0{index + 1}</div>
+              <h3 className="text-2xl font-bold text-white mb-4">
+                {t(`aiQuant.homepage.advantages.items.${key}.title`)}
+              </h3>
+              <p className="text-base leading-relaxed text-white/40">
+                {t(`aiQuant.homepage.advantages.items.${key}.desc`)}
+              </p>
+            </div>
           ))}
         </div>
       </div>
@@ -526,28 +445,26 @@ function AdvantageSection({ t }: { t: Translate }) {
   )
 }
 
-function SectionHeading({
-  eyebrow,
-  title,
-  centered = false,
-}: {
-  eyebrow: string
-  title: string
-  centered?: boolean
-}) {
+function FinalCtaSection({ ctaHref }: { ctaHref: string }) {
+  const { t } = useTranslation()
   return (
-    <div className={centered ? 'text-center' : ''}>
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
+    <section className="px-6 py-20 md:px-8 md:py-24">
+      <motion.div 
+        initial={{ opacity: 0, y: 30 }}
         whileInView={{ opacity: 1, y: 0 }}
         viewport={{ once: true }}
-        transition={{ duration: 0.5 }}
+        className="mx-auto max-w-4xl rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-transparent p-12 text-center shadow-2xl backdrop-blur-3xl md:p-20"
       >
-        <p className="text-xs font-bold tracking-[0.24em] text-primary uppercase">{eyebrow}</p>
-        <h2 className="mt-4 text-4xl leading-tight font-semibold tracking-tighter text-[color:var(--cf-text-strong)] md:text-6xl">
-          {title}
+        <h2 className="text-3xl font-bold tracking-tight text-white md:text-6xl">
+          {t('aiQuant.homepage.final.title')}
         </h2>
+        <p className="mx-auto mt-6 max-w-xl text-base text-white/40 md:text-lg">
+          {t('aiQuant.homepage.final.description')}
+        </p>
+        <div className="mt-10">
+          <PrimaryCta href={ctaHref} label={t('aiQuant.homepage.finalCta')} className="scale-110" />
+        </div>
       </motion.div>
-    </div>
+    </section>
   )
 }
