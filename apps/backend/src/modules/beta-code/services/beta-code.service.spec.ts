@@ -1,6 +1,7 @@
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
+import { SettingsService } from '@/modules/settings/services/settings.service'
 import {
   BetaCodeDisabledException,
   BetaCodeExhaustedException,
@@ -13,6 +14,7 @@ import { BetaCodeService } from './beta-code.service'
 describe('BetaCodeService', () => {
   let service: BetaCodeService
   let repository: jest.Mocked<BetaAccessCodeRepository>
+  let settingsService: jest.Mocked<Pick<SettingsService, 'getBoolean'>>
 
   const activeCode = {
     id: 'code-1',
@@ -42,11 +44,18 @@ describe('BetaCodeService', () => {
             updateStatus: jest.fn(),
           },
         },
+        {
+          provide: SettingsService,
+          useValue: {
+            getBoolean: jest.fn().mockResolvedValue(true),
+          },
+        },
       ],
     }).compile()
 
     service = module.get(BetaCodeService)
     repository = module.get(BetaAccessCodeRepository)
+    settingsService = module.get(SettingsService)
   })
 
   afterEach(() => {
@@ -107,6 +116,18 @@ describe('BetaCodeService', () => {
   })
 
   describe('consumeForNewUser', () => {
+    it('skips beta code validation when beta gate is disabled', async () => {
+      settingsService.getBoolean.mockResolvedValueOnce(false)
+
+      await expect(service.consumeForNewUser({ betaCode: undefined, userId: 'user-1' })).resolves.toBeUndefined()
+
+      expect(settingsService.getBoolean).toHaveBeenCalledWith('beta_code.enabled', false)
+      expect(repository.findByCode).not.toHaveBeenCalled()
+      expect(repository.incrementUsedCountIfAvailable).not.toHaveBeenCalled()
+      expect(repository.createRedemption).not.toHaveBeenCalled()
+      expect(repository.updateUserInvitationCode).not.toHaveBeenCalled()
+    })
+
     it('throws required when a new user has no beta code', async () => {
       await expectRejectsWith(
         service.consumeForNewUser({ betaCode: undefined, userId: 'user-1' }),

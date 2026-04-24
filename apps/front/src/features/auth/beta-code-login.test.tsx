@@ -107,6 +107,27 @@ describe('beta code login flow', () => {
     expect(loginWithEmailCodeMock).toHaveBeenCalledWith('user@example.com', '123456', ' beta-42 ')
   })
 
+  it('shows get beta code hint when email login fails without a beta code', async () => {
+    loginWithEmailCodeMock.mockRejectedValueOnce(new Error('HTTP_400'))
+
+    await act(async () => {
+      root?.render(<EmailOtpForm betaCode="" onBetaCodeChange={() => {}} onSuccess={() => {}} />)
+    })
+
+    const inputs = Array.from(container.querySelectorAll('input'))
+    await act(async () => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(inputs[0], 'user@example.com')
+      inputs[0]!.dispatchEvent(new Event('input', { bubbles: true }))
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set?.call(inputs[1], '123456')
+      inputs[1]!.dispatchEvent(new Event('input', { bubbles: true }))
+      container.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).toContain('auth.betaCodeRequired')
+    expect(container.textContent).not.toContain('HTTP_400')
+  })
+
   it('allows Telegram login intent when beta code is missing', async () => {
     window.sessionStorage.setItem('auth:telegram:betaCode', 'STALE-CODE')
 

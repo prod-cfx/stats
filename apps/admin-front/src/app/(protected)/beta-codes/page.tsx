@@ -19,7 +19,9 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   createBetaCodeBatch,
+  fetchBetaCodeGateSetting,
   fetchBetaCodes,
+  updateBetaCodeGateSetting,
   updateBetaCodeStatus,
 } from '@/lib/api'
 
@@ -35,6 +37,9 @@ export default function BetaCodesPage() {
   const [generatedCodes, setGeneratedCodes] = useState<BetaCode[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [gateEnabled, setGateEnabled] = useState(false)
+  const [gateLoading, setGateLoading] = useState(true)
+  const [gateSaving, setGateSaving] = useState(false)
   const [modalOpen, setModalOpen] = useState(false)
   const [switchingIds, setSwitchingIds] = useState<Set<string>>(() => new Set())
   const [page, setPage] = useState(1)
@@ -62,6 +67,34 @@ export default function BetaCodesPage() {
   useEffect(() => {
     void loadCodes(1, 20)
   }, [loadCodes])
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadGateSetting() {
+      setGateLoading(true)
+      try {
+        const enabled = await fetchBetaCodeGateSetting()
+        if (mounted)
+          setGateEnabled(enabled)
+      }
+      catch (error: unknown) {
+        if (mounted)
+          message.error(getErrorMessage(error) ?? '获取内测码准入开关失败')
+      }
+      finally {
+        if (mounted)
+          setGateLoading(false)
+      }
+    }
+
+    void loadGateSetting()
+
+    return () => {
+      mounted = false
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const openCreateModal = useCallback(() => {
     form.setFieldsValue({
@@ -123,6 +156,23 @@ export default function BetaCodesPage() {
       })
     }
   }, [limit, loadCodes, message, page])
+
+  const handleGateChange = useCallback(async (checked: boolean) => {
+    const previous = gateEnabled
+    setGateEnabled(checked)
+    setGateSaving(true)
+    try {
+      await updateBetaCodeGateSetting(checked)
+      message.success(checked ? '内测码准入已开启' : '内测码准入已关闭')
+    }
+    catch (error: unknown) {
+      setGateEnabled(previous)
+      message.error(getErrorMessage(error) ?? '更新内测码准入开关失败')
+    }
+    finally {
+      setGateSaving(false)
+    }
+  }, [gateEnabled, message])
 
   const handleTableChange = useCallback((pagination: TablePaginationConfig) => {
     const nextPage = pagination.current ?? 1
@@ -186,6 +236,21 @@ export default function BetaCodesPage() {
           </Button>
         )}
       >
+        <Space style={{ marginBottom: 16 }}>
+          <Typography.Text strong>内测码准入</Typography.Text>
+          <Switch
+            checked={gateEnabled}
+            checkedChildren="开启"
+            unCheckedChildren="关闭"
+            disabled={gateLoading}
+            loading={gateSaving}
+            onChange={checked => void handleGateChange(checked)}
+          />
+          <Typography.Text type="secondary">
+            {gateEnabled ? '新用户首次登录必须填写内测码' : '新用户可不填内测码直接登录'}
+          </Typography.Text>
+        </Space>
+
         <Table<BetaCode>
           rowKey="id"
           columns={columns}

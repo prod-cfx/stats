@@ -119,6 +119,9 @@ export interface CreateBetaCodeBatchPayload {
   maxUsesPerCode: number
 }
 
+const BETA_CODE_GATE_SETTING_KEY = 'beta_code.enabled'
+const BETA_CODE_GATE_CATEGORY = 'beta_code'
+
 export async function fetchAdminMenus(): Promise<AdminMenuNode[]> {
   return withAuthErrorHandling(async () => {
     const response = await client['AdminMenuController_findMenuTree[0]']({
@@ -241,6 +244,42 @@ export async function updateBetaCodeStatus(
       params: { id },
     })
     return unwrapResponse<BetaCode>(response)
+  })
+}
+
+export async function fetchBetaCodeGateSetting(): Promise<boolean> {
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminSettingsController_getAllSettings({
+      headers: requireAuthHeaders(),
+      queries: { category: BETA_CODE_GATE_CATEGORY },
+    })
+    const data = unwrapResponse<SettingResponse[] | { items: SettingResponse[] }>(response as any)
+    const settings: SettingResponse[] = Array.isArray(data)
+      ? data
+      : Array.isArray((data as any)?.items)
+        ? (data as any).items
+        : []
+    const setting = settings.find(item => item.key === BETA_CODE_GATE_SETTING_KEY)
+    return setting?.value === 'true'
+  })
+}
+
+export async function updateBetaCodeGateSetting(enabled: boolean): Promise<boolean> {
+  return withAuthErrorHandling(async () => {
+    await client.AdminSettingsController_updateSetting(
+      {
+        value: String(enabled),
+        type: 'boolean',
+        description: '是否启用内测码准入',
+        category: BETA_CODE_GATE_CATEGORY,
+        isSystem: true,
+      },
+      {
+        headers: requireAuthHeaders(),
+        params: { key: BETA_CODE_GATE_SETTING_KEY },
+      },
+    )
+    return enabled
   })
 }
 

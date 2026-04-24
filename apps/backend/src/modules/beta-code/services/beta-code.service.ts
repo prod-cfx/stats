@@ -3,6 +3,9 @@ import { isValidInvitationCode } from '@ai/shared/constants/invite'
 import { Injectable } from '@nestjs/common'
 import { randomInt } from 'node:crypto'
 import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
+// Nest 注入需要运行时引用 SettingsService，保留值导入
+// eslint-disable-next-line ts/consistent-type-imports
+import { SettingsService } from '@/modules/settings/services/settings.service'
 import {
   BetaCodeDisabledException,
   BetaCodeExhaustedException,
@@ -31,11 +34,13 @@ export interface ConsumeBetaCodeInput {
 
 const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
 const CODE_LENGTH = 12
+export const BETA_CODE_GATE_ENABLED_SETTING_KEY = 'beta_code.enabled'
 
 @Injectable()
 export class BetaCodeService {
   constructor(
     private readonly repository: BetaAccessCodeRepository,
+    private readonly settingsService: SettingsService,
   ) {}
 
   async list(query: QueryBetaCodeListInput): Promise<BasePaginationResponseDto<BetaAccessCode>> {
@@ -83,6 +88,11 @@ export class BetaCodeService {
   }
 
   async consumeForNewUser(input: ConsumeBetaCodeInput): Promise<void> {
+    const gateEnabled = await this.settingsService.getBoolean(BETA_CODE_GATE_ENABLED_SETTING_KEY, false)
+    if (!gateEnabled) {
+      return
+    }
+
     const normalizedCode = input.betaCode?.trim().toUpperCase()
     if (!normalizedCode) {
       throw new BetaCodeRequiredException()

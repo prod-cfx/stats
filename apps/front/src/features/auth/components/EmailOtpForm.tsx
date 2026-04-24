@@ -18,6 +18,14 @@ interface EmailOtpFormProps {
   onSuccess: () => void
 }
 
+function getLoginErrorMessage(error: unknown, betaCode: string, t: (key: string) => string): string {
+  const message = error instanceof Error ? error.message : ''
+  if (!betaCode.trim() && (message === 'HTTP_400' || message === 'BETA_CODE_REQUIRED')) {
+    return t('auth.betaCodeRequired')
+  }
+  return message || t('auth.loginFailed')
+}
+
 export function EmailOtpForm({ betaCode, onBetaCodeChange, onSuccess }: EmailOtpFormProps) {
   const { t } = useTranslation()
   const { sendEmailCode, loginWithEmailCode } = useAuth()
@@ -136,7 +144,7 @@ export function EmailOtpForm({ betaCode, onBetaCodeChange, onSuccess }: EmailOtp
       await loginWithEmailCode(normalizedEmail, code, betaCode)
       onSuccess()
     } catch (e) {
-      setError(e instanceof Error ? e.message : t('auth.loginFailed'))
+      setError(getLoginErrorMessage(e, betaCode, t))
     } finally {
       setVerifying(false)
     }
