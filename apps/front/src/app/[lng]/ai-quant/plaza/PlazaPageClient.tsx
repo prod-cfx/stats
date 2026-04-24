@@ -2,11 +2,11 @@
 
 import type { QuantReturnIntentInput } from '@/components/ai-quant/intent-storage'
 import type { StrategyPlazaTemplate } from '@/lib/api'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useTranslation } from 'react-i18next'
-import { setIntent } from '@/components/ai-quant/intent-storage'
+import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-storage'
 import { StrategyPlaza } from '@/components/ai-quant/StrategyPlaza'
 import { useAuth } from '@/hooks/use-auth'
 import {
@@ -18,6 +18,7 @@ import {
 import { ApiError } from '@/lib/errors'
 
 const OKX_DEMO_API_KEY_REQUIRED_CODE = 'strategy_plaza.okx_demo_api_key_required'
+const INTENT_TTL_MS = 10 * 60 * 1000
 
 function getErrorMessage(error: unknown, fallback: string): string {
   if (error instanceof ApiError && error.message.trim()) return error.message
@@ -37,6 +38,7 @@ export function AiQuantPlazaPageClient() {
   const [actionError, setActionError] = useState<string | null>(null)
   const [runningTemplateId, setRunningTemplateId] = useState<string | null>(null)
   const [pendingAction, setPendingAction] = useState<'run' | 'edit' | null>(null)
+  const resumingIntentKeyRef = useRef<string | null>(null)
 
   const goLoginWithIntent = (intent: QuantReturnIntentInput) => {
     setIntent(intent)
@@ -84,7 +86,7 @@ export function AiQuantPlazaPageClient() {
     } catch (error) {
       if (error instanceof ApiError && error.code === OKX_DEMO_API_KEY_REQUIRED_CODE) {
         setIntent({ type: 'plaza-run', templateId })
-        router.push(`/${lng}/account?tab=ai-quant#exchange-api`)
+        router.push(`/${lng}/account?tab=ai-quant&redirect=${encodeURIComponent(`/${lng}/ai-quant/plaza`)}#exchange-api`)
         return
       }
       setActionError(getErrorMessage(error, '运行策略广场模板失败'))
@@ -115,6 +117,25 @@ export function AiQuantPlazaPageClient() {
       setPendingAction(null)
     }
   }
+
+  useEffect(() => {
+    if (isLoading || !session) return
+
+    const intent = getIntent(INTENT_TTL_MS)
+    if (!intent || (intent.type !== 'plaza-run' && intent.type !== 'plaza-edit')) return
+
+    const intentKey = `${intent.type}:${intent.templateId}`
+    if (resumingIntentKeyRef.current === intentKey) return
+    resumingIntentKeyRef.current = intentKey
+    clearIntent()
+
+    if (intent.type === 'plaza-run') {
+      void runTemplate(intent.templateId)
+      return
+    }
+
+    void editTemplate(intent.templateId)
+  })
 
   return (
     <main className="mx-auto flex w-full max-w-[1120px] flex-1 flex-col gap-6 px-4 py-8 md:px-8">

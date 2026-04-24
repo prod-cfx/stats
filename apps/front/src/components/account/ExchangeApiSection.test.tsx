@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
-import { ExchangeApiSection } from './ExchangeApiSection'
+import { accountExchangeNavigation, ExchangeApiSection, getOkxSaveRedirect } from './ExchangeApiSection'
 
 const mockFetchUserExchangeAccountStatuses = jest.fn()
 const mockUpsertUserExchangeAccount = jest.fn()
@@ -135,6 +135,14 @@ describe('ExchangeApiSection', () => {
     })
   }
 
+  async function fillOkxCredentials() {
+    const okxCard = findExchangeCard('OKX API')
+    await setInputValue(findInput(okxCard, 'API Key'), 'demo-key')
+    await setInputValue(findInput(okxCard, 'Secret Key'), 'demo-secret')
+    await setInputValue(findInput(okxCard, 'Passphrase'), 'demo-passphrase')
+    return okxCard
+  }
+
   async function flushPromises() {
     await act(async () => {
       await Promise.resolve()
@@ -160,6 +168,7 @@ describe('ExchangeApiSection', () => {
     mockFetchUserExchangeAccountStatuses.mockResolvedValue(emptyStatuses)
     mockUpsertUserExchangeAccount.mockResolvedValue(buildBoundOkxStatus())
     mockDeleteUserExchangeAccount.mockResolvedValue(undefined)
+    window.history.replaceState({}, '', '/zh/account')
   })
 
   afterEach(async () => {
@@ -170,6 +179,7 @@ describe('ExchangeApiSection', () => {
       root = null
     }
     document.body.innerHTML = ''
+    jest.restoreAllMocks()
   })
 
   it('blocks a first-time OKX bind when required credentials are blank', async () => {
@@ -244,5 +254,62 @@ describe('ExchangeApiSection', () => {
     expect(payload.apiKey).toBeUndefined()
     expect(payload.apiSecret).toBeUndefined()
     expect(payload.passphrase).toBeUndefined()
+  })
+
+  it('redirects back to plaza after OKX is saved with a redirect query', async () => {
+    window.history.replaceState({}, '', '/zh/account?tab=ai-quant&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api')
+    const redirectSpy = jest.spyOn(accountExchangeNavigation, 'redirectTo').mockImplementation(() => undefined)
+    await renderSection()
+
+    const okxCard = await fillOkxCredentials()
+
+    await act(async () => {
+      clickButton(okxCard, 'Save API Config')
+    })
+    await flushPromises()
+
+    expect(getOkxSaveRedirect()).toBe('/zh/ai-quant/plaza')
+    expect(redirectSpy).toHaveBeenCalledWith('/zh/ai-quant/plaza')
+    expect(mockUpsertUserExchangeAccount).toHaveBeenCalledTimes(1)
+    expect(mockFetchUserExchangeAccountStatuses).toHaveBeenCalledTimes(1)
+  })
+
+  it('does not redirect when OKX save fails', async () => {
+    window.history.replaceState({}, '', '/zh/account?tab=ai-quant&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api')
+    const redirectSpy = jest.spyOn(accountExchangeNavigation, 'redirectTo').mockImplementation(() => undefined)
+    mockUpsertUserExchangeAccount.mockRejectedValue(new Error('save failed'))
+    await renderSection()
+
+    const okxCard = await fillOkxCredentials()
+
+    await act(async () => {
+      clickButton(okxCard, 'Save API Config')
+    })
+    await flushPromises()
+
+    expect(mockUpsertUserExchangeAccount).toHaveBeenCalledTimes(1)
+    expect(redirectSpy).not.toHaveBeenCalled()
+    expect(mockFetchUserExchangeAccountStatuses).toHaveBeenCalledTimes(1)
+    expect(okxCard.textContent).toContain('save failed')
+  })
+
+  it('keeps non-OKX saves on the account page even with a redirect query', async () => {
+    window.history.replaceState({}, '', '/zh/account?tab=ai-quant&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api')
+    const redirectSpy = jest.spyOn(accountExchangeNavigation, 'redirectTo').mockImplementation(() => undefined)
+    await renderSection()
+
+    const binanceCard = findExchangeCard('Binance API')
+    await setInputValue(findInput(binanceCard, 'API Key'), 'binance-key')
+    await setInputValue(findInput(binanceCard, 'Secret Key'), 'binance-secret')
+
+    await act(async () => {
+      clickButton(binanceCard, 'Save API Config')
+    })
+    await flushPromises()
+
+    expect(mockUpsertUserExchangeAccount).toHaveBeenCalledTimes(1)
+    expect(mockUpsertUserExchangeAccount).toHaveBeenCalledWith(expect.objectContaining({ exchangeId: 'binance' }))
+    expect(redirectSpy).not.toHaveBeenCalled()
+    expect(mockFetchUserExchangeAccountStatuses).toHaveBeenCalledTimes(2)
   })
 })

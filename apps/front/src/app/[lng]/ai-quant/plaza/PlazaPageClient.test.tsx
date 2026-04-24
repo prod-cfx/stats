@@ -13,6 +13,8 @@ const mockRunStrategyPlazaTemplate = jest.fn()
 const mockStartStrategyPlazaEditSession = jest.fn()
 const mockCreateStrategyPlazaRunRequestId = jest.fn()
 const mockSetIntent = jest.fn()
+const mockGetIntent = jest.fn()
+const mockClearIntent = jest.fn()
 
 let mockSession: { userId: string } | null = { userId: 'u-1' }
 let mockIsLoading = false
@@ -76,6 +78,8 @@ jest.mock('@/hooks/use-auth', () => ({
 }))
 
 jest.mock('@/components/ai-quant/intent-storage', () => ({
+  clearIntent: (...args: Parameters<typeof mockClearIntent>) => mockClearIntent(...args),
+  getIntent: (...args: Parameters<typeof mockGetIntent>) => mockGetIntent(...args),
   setIntent: (...args: Parameters<typeof mockSetIntent>) => mockSetIntent(...args),
 }))
 
@@ -121,12 +125,15 @@ describe('AiQuantPlazaPageClient', () => {
     plazaProps = null
     mockPush.mockReset()
     mockSetIntent.mockReset()
+    mockGetIntent.mockReset()
+    mockClearIntent.mockReset()
     mockFetchStrategyPlazaTemplates.mockReset()
     mockRunStrategyPlazaTemplate.mockReset()
     mockStartStrategyPlazaEditSession.mockReset()
     mockCreateStrategyPlazaRunRequestId.mockReset()
     mockFetchStrategyPlazaTemplates.mockResolvedValue([template])
     mockCreateStrategyPlazaRunRequestId.mockReturnValue('plaza-run-1')
+    mockGetIntent.mockReturnValue(null)
   })
 
   afterEach(async () => {
@@ -205,7 +212,7 @@ describe('AiQuantPlazaPageClient', () => {
     })
 
     expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-run', templateId: 'ma-cross' })
-    expect(mockPush).toHaveBeenCalledWith('/zh/account?tab=ai-quant#exchange-api')
+    expect(mockPush).toHaveBeenCalledWith('/zh/account?tab=ai-quant&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api')
   })
 
   it('keeps loaded templates visible and passes action error when run fails', async () => {
@@ -240,5 +247,57 @@ describe('AiQuantPlazaPageClient', () => {
     expect(mockStartStrategyPlazaEditSession).toHaveBeenCalledWith('ma-cross')
     expect(mockSetIntent).toHaveBeenCalledWith({ type: 'chat', draft: 'Edit MA Cross' })
     expect(mockPush).toHaveBeenCalledWith('/zh/ai-quant')
+  })
+
+  it('resumes plaza-edit intent after login and opens AI Quant chat draft', async () => {
+    mockGetIntent.mockReturnValue({ type: 'plaza-edit', templateId: 'ma-cross', ts: Date.now() })
+    mockStartStrategyPlazaEditSession.mockResolvedValue({ initialMessage: 'Resume MA Cross edit' })
+
+    await act(async () => {
+      root.render(<AiQuantPlazaPageClient />)
+    })
+    await flushPromises()
+
+    expect(mockGetIntent).toHaveBeenCalledWith(10 * 60 * 1000)
+    expect(mockClearIntent).toHaveBeenCalledTimes(1)
+    expect(mockStartStrategyPlazaEditSession).toHaveBeenCalledTimes(1)
+    expect(mockStartStrategyPlazaEditSession).toHaveBeenCalledWith('ma-cross')
+    expect(mockSetIntent).toHaveBeenCalledWith({ type: 'chat', draft: 'Resume MA Cross edit' })
+    expect(mockPush).toHaveBeenCalledWith('/zh/ai-quant')
+  })
+
+  it('resumes plaza-run intent after login and navigates to strategy detail', async () => {
+    mockGetIntent.mockReturnValue({ type: 'plaza-run', templateId: 'ma-cross', ts: Date.now() })
+    mockRunStrategyPlazaTemplate.mockResolvedValue({ id: 'strategy-1' })
+
+    await act(async () => {
+      root.render(<AiQuantPlazaPageClient />)
+    })
+    await flushPromises()
+
+    expect(mockClearIntent).toHaveBeenCalledTimes(1)
+    expect(mockRunStrategyPlazaTemplate).toHaveBeenCalledTimes(1)
+    expect(mockRunStrategyPlazaTemplate).toHaveBeenCalledWith('ma-cross', 'plaza-run-1')
+    expect(mockPush).toHaveBeenCalledWith('/zh/account/ai-quant/strategy/strategy-1')
+  })
+
+  it('re-stores plaza-run intent and routes to OKX binding when resumed run needs OKX demo key', async () => {
+    mockGetIntent.mockReturnValue({ type: 'plaza-run', templateId: 'ma-cross', ts: Date.now() })
+    mockRunStrategyPlazaTemplate.mockRejectedValue(
+      new ApiError(
+        '请先绑定 OKX 模拟盘 API Key',
+        'strategy_plaza.okx_demo_api_key_required',
+        400,
+      ),
+    )
+
+    await act(async () => {
+      root.render(<AiQuantPlazaPageClient />)
+    })
+    await flushPromises()
+
+    expect(mockClearIntent).toHaveBeenCalledTimes(1)
+    expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-run', templateId: 'ma-cross' })
+    expect(mockPush).toHaveBeenCalledWith('/zh/account?tab=ai-quant&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api')
   })
 })

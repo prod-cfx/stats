@@ -30,6 +30,17 @@ interface ExchangeFormState {
 
 const EXCHANGES: UserExchangeId[] = ['binance', 'okx', 'hyperliquid']
 
+export function getOkxSaveRedirect(): string | null {
+  if (typeof window === 'undefined') return null
+  return new URLSearchParams(window.location.search).get('redirect')
+}
+
+export const accountExchangeNavigation = {
+  redirectTo(redirect: string) {
+    window.location.href = redirect
+  },
+}
+
 function createEmptyFormState(): ExchangeFormState {
   return {
     name: '',
@@ -262,6 +273,11 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
     setErrors(prev => ({ ...prev, [exchangeId]: null }))
     try {
       await upsertUserExchangeAccount(buildPayload(exchangeId))
+      const redirect = exchangeId === 'okx' ? getOkxSaveRedirect() : null
+      if (redirect) {
+        accountExchangeNavigation.redirectTo(redirect)
+        return
+      }
       setForms(prev => ({
         ...prev,
         [exchangeId]: createEmptyFormState(),
