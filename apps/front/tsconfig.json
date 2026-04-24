@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
     "incremental": true,
-    "forceConsistentCasingInFileNames": true,
     "target": "ES2017",
     "jsx": "react-jsx",
     "lib": [
@@ -20,6 +19,9 @@
       ]
     },
     "resolveJsonModule": true,
+    "typeRoots": [
+      "./node_modules/@types"
+    ],
     "allowJs": true,
     "strict": true,
     "exactOptionalPropertyTypes": false,
@@ -27,11 +29,9 @@
     "noEmit": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "skipLibCheck": true,
-    "typeRoots": [
-      "./node_modules/@types"
-    ],
     "plugins": [
       {
         "name": "next"

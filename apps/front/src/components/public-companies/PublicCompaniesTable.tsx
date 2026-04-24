@@ -11,9 +11,9 @@ import { useAsync } from '@/hooks/use-async'
 import { fetchCryptoStockQuotesLatest } from '@/lib/api'
 import { AuthenticationError } from '@/lib/errors'
 import { formatNumber } from '@/lib/formatters'
-import { fetchPublicCompanyQuotes } from './fetch-public-company-quotes'
 import { formatSignedAbsoluteChange, formatSignedPercentChange } from './change-formatters'
 import { isPublicCompaniesColumnVisible } from './column-visibility'
+import { fetchPublicCompanyQuotes } from './fetch-public-company-quotes'
 
 interface CompanyData {
   asset: string

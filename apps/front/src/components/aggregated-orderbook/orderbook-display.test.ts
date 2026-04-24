@@ -1,5 +1,5 @@
-import { describe, expect, it } from '@jest/globals'
 import type { AggregatedOrderbookLevel } from '@/lib/api'
+import { describe, expect, it } from '@jest/globals'
 
 import { sampleLevelsForDisplay } from './orderbook-display'
 

@@ -29,7 +29,7 @@ export function deriveQuantParamsFromPrompt(input: string, current: QuantParams)
     }
   }
 
-  const timeframeMatch = text.match(/交易周期[：: ]*\s*(\d{1,4})\s*(分钟|min|m|小时|h)/i)
+  const timeframeMatch = text.match(/交易周期[：: ]*(?:[\x09-\x0D\xA0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]\s*)?(\d{1,4})\s*(分钟|min|m|小时|h)/i)
   if (timeframeMatch?.[1] && timeframeMatch[2]) {
     const rawValue = Number(timeframeMatch[1])
     if (Number.isFinite(rawValue) && rawValue > 0) {
@@ -39,7 +39,7 @@ export function deriveQuantParamsFromPrompt(input: string, current: QuantParams)
     }
   }
 
-  const takeProfitMatch = text.match(/止盈[：: ]*[^%\n]*?(\d+(?:\.\d+)?)\s*%/i)
+  const takeProfitMatch = text.match(/止盈[^%\n]*?(\d+(?:\.\d+)?)\s*%/)
   if (takeProfitMatch?.[1]) {
     const takeProfitPct = Number(takeProfitMatch[1])
     if (Number.isFinite(takeProfitPct) && takeProfitPct > 0) {
@@ -47,7 +47,7 @@ export function deriveQuantParamsFromPrompt(input: string, current: QuantParams)
     }
   }
 
-  const stopLossMatch = text.match(/止损[：: ]*[^%\n]*?(\d+(?:\.\d+)?)\s*%/i)
+  const stopLossMatch = text.match(/止损[^%\n]*?(\d+(?:\.\d+)?)\s*%/)
   if (stopLossMatch?.[1]) {
     const stopLossPct = Number(stopLossMatch[1])
     if (Number.isFinite(stopLossPct) && stopLossPct > 0) {
@@ -55,8 +55,8 @@ export function deriveQuantParamsFromPrompt(input: string, current: QuantParams)
     }
   }
 
-  const balanceMatch = text.match(/账户余额[：: ]*\s*(\d+(?:\.\d+)?)\s*USDT/i)
-  const buyAmountMatch = text.match(/(?:开仓|买入)[：: ]*[^。\n]*?(\d+(?:\.\d+)?)\s*USDT/i)
+  const balanceMatch = text.match(/账户余额[：: ]*(?:[\x09-\x0D\xA0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]\s*)?(\d+(?:\.\d+)?)\s*USDT/i)
+  const buyAmountMatch = text.match(/(?:开仓|买入)[^。\n]*?(\d+(?:\.\d+)?)\s*USDT/i)
   if (balanceMatch?.[1] && buyAmountMatch?.[1]) {
     const balance = Number(balanceMatch[1])
     const buyAmount = Number(buyAmountMatch[1])

@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 'use client'
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, useCallback, use, useEffect, useMemo, useState } from 'react'
 
 export type AppTheme = 'light' | 'dark'
 
@@ -80,11 +80,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [setTheme, theme, toggleTheme],
   )
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+  return <ThemeContext value={value}>{children}</ThemeContext>
 }
 
 export function useTheme() {
-  const ctx = useContext(ThemeContext)
+  const ctx = use(ThemeContext)
   if (!ctx) throw new Error('useTheme must be used within ThemeProvider')
   return ctx
 }
