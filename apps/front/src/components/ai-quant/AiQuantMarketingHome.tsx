@@ -1,49 +1,60 @@
 'use client'
 
-import type { ReactNode } from 'react'
-import { motion } from 'framer-motion'
-import { ArrowRight, Bot, Check, LineChart, Play, ShieldCheck, Sparkles, Zap, Activity, Cpu, Globe, Lock, TrendingUp, BarChart3, Terminal } from 'lucide-react'
+import { motion, type Transition } from 'framer-motion'
+import { ArrowRight, BarChart3, Cpu, LineChart, Play, ShieldCheck, Sparkles, TrendingUp, Zap } from 'lucide-react'
 import Link from 'next/link'
 import { useTranslation } from 'react-i18next'
 
 type FeatureKey = 'conversation' | 'backtest' | 'deploy' | 'plaza'
 type AdvantageKey = 'barrier' | 'logic' | 'validation' | 'closedLoop'
 
+const sectionShell = 'relative border-t border-slate-200/70 bg-white/45 px-6 py-20 dark:border-white/[0.06] dark:bg-[#080c12]/80 md:px-8 md:py-24'
+const blackSectionShell = 'relative border-t border-slate-200/70 bg-[#f8fafc] px-6 py-20 dark:border-white/[0.06] dark:bg-[#020305] md:px-8 md:py-24'
+const panelClass = 'border border-slate-200/80 bg-white/75 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur-xl dark:border-white/[0.08] dark:bg-[#10151d]/72 dark:shadow-[0_28px_100px_rgba(0,0,0,0.35)]'
+const mutedText = 'text-slate-600 dark:text-[#8f98aa]'
+
+const revealUp = {
+  hidden: { opacity: 0, y: 24 },
+  visible: { opacity: 1, y: 0 },
+}
+
+const revealTransition: Transition = {
+  duration: 0.65,
+  ease: [0.22, 1, 0.36, 1],
+}
+
 const workflowKeys = ['chat', 'strategy', 'backtest', 'deploy'] as const
 const featureKeys: FeatureKey[] = ['conversation', 'backtest', 'deploy', 'plaza']
 const advantageKeys: AdvantageKey[] = ['barrier', 'logic', 'validation', 'closedLoop']
 
 export function AiQuantMarketingHome({ lng }: { lng: 'zh' | 'en' }) {
-  const { t } = useTranslation()
   const ctaHref = `/${lng}/ai-quant`
 
   return (
-    <main className="relative min-h-screen bg-[#030303] text-white selection:bg-primary/30 font-sans">
-      {/* VergeX Style Premium Background */}
-      <div className="pointer-events-none fixed inset-0 z-0">
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:40px_40px]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(100,108,255,0.12),transparent_50%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_0%_100%,rgba(34,197,94,0.05),transparent_40%)]" />
-      </div>
-
+    <main className="relative min-h-screen overflow-hidden bg-[#f6f8fc] text-slate-950 selection:bg-primary/20 dark:bg-[#020305] dark:text-white">
+      <ThemeAmbientBackground />
       <div className="relative z-10">
         <HeroSection ctaHref={ctaHref} />
-        
-        <div id="workflow" className="border-t border-white/5 bg-white/[0.01]">
-          <WorkflowSection />
-        </div>
-
+        <WorkflowSection />
         {featureKeys.map((key, index) => (
           <FeatureSection key={key} featureKey={key} reverse={index % 2 === 1} />
         ))}
-
-        <div className="bg-white/[0.01] border-y border-white/5">
-          <AdvantageSection />
-        </div>
-
+        <AdvantageSection />
         <FinalCtaSection ctaHref={ctaHref} />
       </div>
     </main>
+  )
+}
+
+function ThemeAmbientBackground() {
+  return (
+    <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(15,23,42,0.045)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.04)_1px,transparent_1px)] bg-[size:44px_44px] dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.025)_1px,transparent_1px)]" />
+      <div className="absolute -top-40 left-1/2 h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-primary/14 blur-[120px] dark:bg-primary/16" />
+      <div className="absolute top-1/3 -left-48 h-[30rem] w-[30rem] rounded-full bg-cyan-300/18 blur-[120px] dark:bg-cyan-500/8" />
+      <div className="absolute -right-40 bottom-0 h-[32rem] w-[32rem] rounded-full bg-emerald-300/18 blur-[120px] dark:bg-emerald-500/8" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.72),transparent_45%)] dark:bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.06),transparent_48%)]" />
+    </div>
   )
 }
 
@@ -55,9 +66,10 @@ function HeroSection({ ctaHref }: { ctaHref: string }) {
       <div className="mx-auto max-w-7xl px-6 md:px-8">
         <div className="grid items-center gap-12 lg:grid-cols-[1fr_1.1fr]">
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+            initial="hidden"
+            animate="visible"
+            variants={revealUp}
+            transition={revealTransition}
             className="max-w-2xl"
           >
             <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-[11px] font-bold tracking-[0.2em] text-primary uppercase">
@@ -76,7 +88,7 @@ function HeroSection({ ctaHref }: { ctaHref: string }) {
                 </span>
               ))}
             </h1>
-            <p className="mt-10 max-w-xl text-[15px] leading-[1.65] text-zinc-400 md:text-base md:leading-relaxed">
+            <p className={`mt-10 max-w-xl text-[15px] leading-[1.65] md:text-base md:leading-relaxed ${mutedText}`}>
               {t('aiQuant.homepage.hero.description')}
             </p>
             <div className="mt-10">
@@ -218,7 +230,7 @@ function WorkflowSection() {
   const { t } = useTranslation()
 
   return (
-    <section className="px-6 py-20 md:px-8 md:py-24">
+    <section id="workflow" className={sectionShell}>
       <div className="mx-auto max-w-7xl">
         <div className="text-center mb-16">
           <h2 className="text-3xl font-bold tracking-tight text-white md:text-5xl">
@@ -229,10 +241,11 @@ function WorkflowSection() {
           {workflowKeys.map((key, index) => (
             <motion.div
               key={key}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
+              initial="hidden"
+              whileInView="visible"
+              variants={revealUp}
               viewport={{ once: true }}
-              transition={{ delay: index * 0.1 }}
+              transition={{ ...revealTransition, delay: index * 0.1 }}
               className="group relative rounded-2xl border border-white/5 bg-white/[0.02] p-8 transition-all hover:bg-white/[0.04] hover:border-white/10"
             >
               <div className="mb-8 text-xs font-black text-primary/40 group-hover:text-primary transition-colors">0{index + 1}</div>
@@ -260,7 +273,7 @@ function FeatureSection({
   const { t } = useTranslation()
 
   return (
-    <section className="px-6 py-20 md:px-8 md:py-24">
+    <section className={blackSectionShell}>
       <div className={`mx-auto grid max-w-7xl items-center gap-16 md:grid-cols-2 ${reverse ? 'md:[&>*:first-child]:order-2' : ''}`}>
         <motion.div
           initial={{ opacity: 0, x: reverse ? 30 : -30 }}
@@ -304,7 +317,7 @@ function FeatureVisual({ featureKey }: { featureKey: FeatureKey }) {
 function ConversationVisual() {
   const { t } = useTranslation()
   return (
-    <div className="rounded-[2rem] border border-white/10 bg-gradient-to-br from-white/[0.05] to-transparent p-8 shadow-2xl backdrop-blur-xl">
+    <div className={`rounded-[2rem] bg-gradient-to-br from-white/[0.05] to-transparent p-8 ${panelClass}`}>
       <div className="space-y-6">
         <div className="flex gap-4">
           <div className="h-10 w-10 shrink-0 rounded-2xl bg-primary/20 flex items-center justify-center text-primary border border-primary/30">
@@ -420,7 +433,7 @@ function PlazaVisual() {
 function AdvantageSection() {
   const { t } = useTranslation()
   return (
-    <section className="px-6 py-20 md:px-8 md:py-24">
+    <section className={sectionShell}>
       <div className="mx-auto max-w-7xl">
         <div className="text-center mb-20">
           <h2 className="text-3xl font-bold tracking-tight text-white md:text-5xl">
@@ -448,11 +461,13 @@ function AdvantageSection() {
 function FinalCtaSection({ ctaHref }: { ctaHref: string }) {
   const { t } = useTranslation()
   return (
-    <section className="px-6 py-20 md:px-8 md:py-24">
+    <section className={blackSectionShell}>
       <motion.div 
-        initial={{ opacity: 0, y: 30 }}
-        whileInView={{ opacity: 1, y: 0 }}
+        initial="hidden"
+        whileInView="visible"
+        variants={revealUp}
         viewport={{ once: true }}
+        transition={revealTransition}
         className="mx-auto max-w-4xl rounded-3xl border border-white/10 bg-gradient-to-b from-white/[0.05] to-transparent p-12 text-center shadow-2xl backdrop-blur-3xl md:p-20"
       >
         <h2 className="text-3xl font-bold tracking-tight text-white md:text-6xl">
