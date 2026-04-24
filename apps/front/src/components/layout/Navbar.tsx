@@ -82,15 +82,11 @@ export const Navbar = () => {
 
   // 临时隐藏：清算地图、爆仓数据（需要时再恢复展示）
   const dataNavHiddenIds = ['nav-liquidation-map', 'nav-liquidation-data']
-  const marketDataChild = { name: t('nav.home'), href: withLng('/market') }
-  const dataChildren = [
-    marketDataChild,
-    ...catalogItems
+  const dataChildren = catalogItems
     .filter(x => x.kind === 'nav' && x.href && !dataNavHiddenIds.includes(x.id))
     .slice()
     .sort((a, b) => dataNavOrder.indexOf(a.id) - dataNavOrder.indexOf(b.id))
-    .map(x => ({ name: t(x.labelKey), href: normalizeHref(x.href!) })),
-  ]
+    .map(x => ({ name: t(x.labelKey), href: normalizeHref(x.href!) }))
 
   const whaleChildren = [
     { name: t('nav.discover'), href: withLng('/whale-tracking/discover') },
@@ -101,7 +97,7 @@ export const Navbar = () => {
 
   // 临时隐藏看板，需要时再恢复
   const navLinks = [
-    { name: t('nav.aiQuant', { defaultValue: 'AI量化' }), href: withLng('/ai-quant') },
+    { name: t('nav.home'), href: withLng('/') },
     {
       name: t('nav.data'),
       href: '#',
@@ -112,6 +108,7 @@ export const Navbar = () => {
       href: '#',
       children: whaleChildren,
     },
+    { name: t('nav.aiQuant', { defaultValue: 'AI量化' }), href: withLng('/ai-quant') },
     // { name: t('nav.dashboard'), href: withLng('/dashboard') },
   ]
 
@@ -307,7 +304,6 @@ export const Navbar = () => {
           {navLinks.map(link => {
             const isActive =
               pathname === link.href ||
-              (link.href === withLng('/ai-quant') && pathname === withLng('/')) ||
               (link.children && link.children.some(child => pathname === child.href))
 
             if (link.children) {
