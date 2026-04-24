@@ -4785,6 +4785,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     mockRepo.findLatestBySessionId.mockResolvedValue({
       id: 'snapshot-bound-spec',
       specSnapshot: {
+        market: {
+          exchange: 'okx',
+          symbol: 'DOGEUSDT',
+          marketType: 'spot',
+          defaultTimeframe: '3m',
+        },
         rules: [
           {
             id: 'snapshot-rule',
@@ -4793,11 +4799,6 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
             actions: [{ type: 'OPEN_LONG' }],
           },
         ],
-        lockedParams: {
-          exchange: 'okx',
-          symbol: 'DOGEUSDT',
-          timeframe: '3m',
-        },
       },
       consistencyReport: { status: 'PASSED' },
       paramsSnapshot: {
@@ -4850,6 +4851,19 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           passed: true,
           blockingMismatches: [],
         },
+        lockedParams: {
+          exchange: 'binance',
+          symbol: 'ETHUSDT',
+          timeframe: '1h',
+        },
+        canonicalSpec: {
+          market: {
+            exchange: 'binance',
+            symbol: 'ETHUSDT',
+            marketType: 'perp',
+            defaultTimeframe: '1h',
+          },
+        },
         rules: [
           {
             id: 'session-drift-rule',
@@ -4878,6 +4892,17 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
         passed: true,
         blockingMismatches: [],
       },
+      lockedParams: {
+        exchange: 'okx',
+        symbol: 'DOGEUSDT',
+        timeframe: '3m',
+      },
+      market: {
+        exchange: 'okx',
+        symbol: 'DOGEUSDT',
+        marketType: 'spot',
+        defaultTimeframe: '3m',
+      },
       rules: [
         expect.objectContaining({
           id: 'snapshot-rule',
@@ -4885,6 +4910,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       ],
     }))
     expect(JSON.stringify(result.specDesc)).not.toContain('session-drift-rule')
+    expect(JSON.stringify(result.specDesc)).not.toContain('ETHUSDT')
   })
 
   it('marks published sessions as republish-required when formal snapshot projection is incomplete', async () => {

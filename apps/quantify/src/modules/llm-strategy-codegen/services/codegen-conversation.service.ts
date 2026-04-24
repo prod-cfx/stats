@@ -1955,10 +1955,23 @@ export class CodegenConversationService {
     const snapshotSpecDesc = latestSnapshot?.specSnapshot && typeof latestSnapshot.specSnapshot === 'object' && !Array.isArray(latestSnapshot.specSnapshot)
       ? (latestSnapshot.specSnapshot as Record<string, unknown>)
       : null
+    const snapshotLockedParams = latestSnapshot?.lockedParams && typeof latestSnapshot.lockedParams === 'object' && !Array.isArray(latestSnapshot.lockedParams)
+      ? (latestSnapshot.lockedParams as Record<string, unknown>)
+      : null
+    const sessionSpecMetadata = sessionSpecDesc
+      ? {
+          ...(sessionSpecDesc.canonicalDigest !== undefined ? { canonicalDigest: sessionSpecDesc.canonicalDigest } : {}),
+          ...(sessionSpecDesc.confirmation !== undefined ? { confirmation: sessionSpecDesc.confirmation } : {}),
+          ...(sessionSpecDesc.publicationGate !== undefined ? { publicationGate: sessionSpecDesc.publicationGate } : {}),
+          ...(sessionSpecDesc.consistencyReport !== undefined ? { consistencyReport: sessionSpecDesc.consistencyReport } : {}),
+          ...(sessionSpecDesc.publishedSnapshotId !== undefined ? { publishedSnapshotId: sessionSpecDesc.publishedSnapshotId } : {}),
+        }
+      : {}
     const effectiveSpecDesc = snapshotSpecDesc
       ? {
-          ...(sessionSpecDesc ?? {}),
           ...snapshotSpecDesc,
+          ...sessionSpecMetadata,
+          ...(snapshotLockedParams ? { lockedParams: snapshotLockedParams } : {}),
         }
       : sessionSpecDesc
     const sessionConsistencyReport = sessionSpecDesc?.consistencyReport
