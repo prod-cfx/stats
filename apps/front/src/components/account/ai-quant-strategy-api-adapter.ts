@@ -194,7 +194,9 @@ function buildRuntimeSemanticSummary(input: {
       cycleStatusLabel = '本轮已完成'
       positionState = 'flat'
       cycleState = 'completed'
-      explanation = `本轮现货交易已完成，当前未持有 ${input.symbol}。策略服务仍在运行，等待下一次入场条件。`
+      explanation = input.status === 'running'
+        ? `本轮现货交易已完成，当前未持有 ${input.symbol}。策略服务运行中，等待下一次入场条件。`
+        : `本轮现货交易已完成，当前未持有 ${input.symbol}。策略服务${serviceStatusLabel}。`
       nextExpectedAction = input.status === 'running' ? '等待下一次入场条件' : null
     } else {
       positionStatusLabel = '空仓'
@@ -218,7 +220,9 @@ function buildRuntimeSemanticSummary(input: {
       cycleStatusLabel = '上一轮已平仓'
       positionState = 'flat'
       cycleState = 'completed'
-      explanation = `上一轮合约仓位已平，当前无未平仓位。策略服务仍在运行，等待下一次入场条件。`
+      explanation = input.status === 'running'
+        ? `上一轮合约仓位已平，当前无未平仓位。策略服务运行中，等待下一次入场条件。`
+        : `上一轮合约仓位已平，当前无未平仓位。策略服务${serviceStatusLabel}。`
       nextExpectedAction = input.status === 'running' ? '等待下一次入场条件' : null
     } else {
       positionStatusLabel = '无仓位'

@@ -826,7 +826,7 @@ describe('ai-quant-strategy-api-adapter', () => {
   })
 
   it('builds spot runtime semantics for a completed flat cycle', () => {
-    const record = mapAccountStrategyDetailToRecord({
+    const completedSpotDetail = {
       id: 'inst-spot-completed',
       name: 'spot completed',
       status: 'running',
@@ -902,7 +902,8 @@ describe('ai-quant-strategy-api-adapter', () => {
           orderId: 'okx-buy-1',
         },
       ],
-    } as any)
+    } as any
+    const record = mapAccountStrategyDetailToRecord(completedSpotDetail)
 
     expect(record.marketType).toBe('spot')
     expect(record.latestOrders?.[0]).toEqual(expect.objectContaining({
@@ -924,6 +925,16 @@ describe('ai-quant-strategy-api-adapter', () => {
         latestSyncOrderId: 'sync-close-1',
       }),
     }))
+
+    const stopped = mapAccountStrategyDetailToRecord({
+      ...completedSpotDetail,
+      id: 'inst-spot-completed-stopped',
+      status: 'stopped',
+    })
+    expect(stopped.runtimeSemanticSummary?.headline).toBe('已停止 · 空仓 · 本轮已完成')
+    expect(stopped.runtimeSemanticSummary?.explanation).toContain('策略服务已停止')
+    expect(stopped.runtimeSemanticSummary?.explanation).not.toContain('仍在运行')
+    expect(stopped.runtimeSemanticSummary?.nextExpectedAction).toBeNull()
   })
 
   it('builds contract runtime semantics without spot-specific buy/sell wording', () => {
