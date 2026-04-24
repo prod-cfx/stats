@@ -40,6 +40,7 @@ describe('AiQuantStrategyDetail', () => {
             status: 'running',
             exchange: 'okx',
             symbol: 'DOGEUSDT',
+            marketType: 'spot',
             timeframe: '1h',
             positionPct: 10,
             initialCapital: 10000,
@@ -73,21 +74,57 @@ describe('AiQuantStrategyDetail', () => {
               baseCurrency: 'USDT',
             },
             positionOverview: {
-              openPositionsCount: 1,
-              closedPositionsCount: 0,
+              openPositionsCount: 0,
+              closedPositionsCount: 1,
               totalRealizedPnl: 0,
-              totalUnrealizedPnl: -15.44,
+              totalUnrealizedPnl: 0,
             },
-            latestOrders: [{
-              executedAt: '2026-04-24 14:45',
-              side: 'BUY',
-              symbol: 'DOGEUSDT',
-              price: 0.0979498171758591,
-              quantity: 51497.435487,
-              fee: 51.737672883,
-              feeCurrency: 'DOGE',
-              orderId: '3507763615427895296',
-            }],
+            latestOrders: [
+              {
+                executedAt: '2026-04-24 15:00',
+                side: 'SELL',
+                semanticAction: '卖出',
+                semanticRole: 'exit',
+                symbol: 'DOGEUSDT',
+                price: 0.0979498171758591,
+                quantity: 51497.435487,
+                fee: 0,
+                feeCurrency: null,
+                orderId: 'sync-close-1777042803366',
+              },
+              {
+                executedAt: '2026-04-24 14:45',
+                side: 'BUY',
+                semanticAction: '买入',
+                semanticRole: 'entry',
+                symbol: 'DOGEUSDT',
+                price: 0.0979498171758591,
+                quantity: 51497.435487,
+                fee: 51.737672883,
+                feeCurrency: 'DOGE',
+                orderId: '3507763615427895296',
+              },
+            ],
+            runtimeSemanticSummary: {
+              serviceStatusLabel: '运行中',
+              positionStatusLabel: '空仓',
+              cycleStatusLabel: '本轮已完成',
+              headline: '运行中 · 空仓 · 本轮已完成',
+              explanation: '本轮现货交易已完成，当前未持有 DOGEUSDT。策略服务仍在运行，等待下一次入场条件。',
+              nextExpectedAction: '等待下一次入场条件',
+              marketType: 'spot',
+              positionState: 'flat',
+              cycleState: 'completed',
+              evidence: {
+                openPositionsCount: 0,
+                latestEntryOrderId: '3507763615427895296',
+                latestExitOrderId: 'sync-close-1777042803366',
+                latestSyncOrderId: 'sync-close-1777042803366',
+                latestEntryAt: '2026-04-24 14:45',
+                latestExitAt: '2026-04-24 15:00',
+                latestSemanticAction: '卖出',
+              },
+            },
             ruleSummary: {
               rules: [{
                 id: 'entry',
@@ -113,14 +150,22 @@ describe('AiQuantStrategyDetail', () => {
 
     expect(container.textContent).toContain('在 OKX 现货 DOGEUSD')
     expect(container.textContent).toContain('OKX / DOGEUSDT / 1h')
+    expect(container.textContent).toContain('运行中 · 空仓 · 本轮已完成')
+    expect(container.textContent).toContain('本轮现货交易已完成，当前未持有 DOGEUSDT')
+    expect(container.textContent).toContain('当前状态解释')
+    expect(container.textContent).toContain('最近入场：2026-04-24 14:45 / 3507763615427895296')
+    expect(container.textContent).toContain('最近出场：2026-04-24 15:00 / sync-close-1777042803366')
     expect(container.textContent).toContain('发布快照规则摘要')
     expect(container.textContent).toContain('启动时执行：OPEN_LONG')
     expect(container.textContent).toContain('价格变化 GTE 5%：CLOSE_LONG')
     expect(container.textContent).toContain('本地账户台账 + 最新行情估值')
     expect(container.textContent).toContain('手续费优先展示 OKX 原始 fee / feeCcy')
     expect(container.textContent).toContain('51.73767288 DOGE')
+    expect(container.textContent).toContain('--（同步记录未含手续费）')
     expect(container.textContent).toContain('真实性审计')
     expect(container.textContent).toContain('3507763615427895296')
+    expect(container.textContent).toContain('最近出场订单')
+    expect(container.textContent).toContain('sync-close-1777042803366')
     expect(container.textContent).toContain('已执行 1 个发布快照运行语义，待执行/冷却/失败 0 个')
   })
 

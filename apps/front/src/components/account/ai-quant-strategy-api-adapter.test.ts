@@ -825,4 +825,185 @@ describe('ai-quant-strategy-api-adapter', () => {
     expect(record.deploy).toBeUndefined()
   })
 
+  it('builds spot runtime semantics for a completed flat cycle', () => {
+    const record = mapAccountStrategyDetailToRecord({
+      id: 'inst-spot-completed',
+      name: 'spot completed',
+      status: 'running',
+      exchange: 'okx',
+      symbol: 'DOGEUSDT',
+      timeframe: '1h',
+      positionPct: 10,
+      isSubscribed: true,
+      metrics: { returnPct: 0, maxDrawdownPct: 0, winRatePct: 0, tradeCount: 2 },
+      updatedAt: '2026-04-24T15:00:00.000Z',
+      totalPnl: 0,
+      todayPnl: 0,
+      equitySeries: [],
+      snapshot: {
+        exchange: 'okx',
+        symbol: 'DOGEUSDT',
+        timeframe: '1h',
+        positionPct: 10,
+        publishedSnapshotId: 'snapshot-spot',
+        snapshotHash: 'hash-spot',
+        paramSchema: null,
+        paramValues: null,
+        schemaVersion: null,
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'DOGEUSDT',
+          marketType: 'spot',
+          baseTimeframe: '1h',
+          positionPct: 10,
+        },
+        ruleSummary: {
+          rules: [
+            { id: 'entry', phase: 'entry', conditionKey: 'execution.on_start', operator: null, value: null, actions: ['OPEN_LONG'] },
+            { id: 'exit', phase: 'exit', conditionKey: 'price.change_pct', operator: 'GTE', value: 0.05, actions: ['CLOSE_LONG'] },
+          ],
+        },
+      },
+      timeline: [],
+      runtimeExecutionStates: [],
+      accountOverview: {
+        initialBalance: 10000,
+        totalEquity: 10000,
+        availableBalance: 10000,
+        totalPnl: 0,
+        todayPnl: 0,
+        baseCurrency: 'USDT',
+      },
+      positionOverview: {
+        openPositionsCount: 0,
+        closedPositionsCount: 1,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 0,
+      },
+      latestOrders: [
+        {
+          executedAt: '2026-04-24T15:00:03.366Z',
+          side: 'SELL',
+          symbol: 'DOGEUSDT',
+          price: 0.097,
+          quantity: 100,
+          fee: 0,
+          feeCurrency: null,
+          orderId: 'sync-close-1',
+        },
+        {
+          executedAt: '2026-04-24T14:45:02.126Z',
+          side: 'BUY',
+          symbol: 'DOGEUSDT',
+          price: 0.097,
+          quantity: 100,
+          fee: 51.737672883,
+          feeCurrency: 'DOGE',
+          orderId: 'okx-buy-1',
+        },
+      ],
+    } as any)
+
+    expect(record.marketType).toBe('spot')
+    expect(record.latestOrders?.[0]).toEqual(expect.objectContaining({
+      semanticAction: '卖出',
+      semanticRole: 'exit',
+    }))
+    expect(record.latestOrders?.[1]).toEqual(expect.objectContaining({
+      semanticAction: '买入',
+      semanticRole: 'entry',
+    }))
+    expect(record.runtimeSemanticSummary).toEqual(expect.objectContaining({
+      headline: '运行中 · 空仓 · 本轮已完成',
+      positionState: 'flat',
+      cycleState: 'completed',
+      nextExpectedAction: '等待下一次入场条件',
+      evidence: expect.objectContaining({
+        latestEntryOrderId: 'okx-buy-1',
+        latestExitOrderId: 'sync-close-1',
+        latestSyncOrderId: 'sync-close-1',
+      }),
+    }))
+  })
+
+  it('builds contract runtime semantics without spot-specific buy/sell wording', () => {
+    const record = mapAccountStrategyDetailToRecord({
+      id: 'inst-perp-short',
+      name: 'perp short',
+      status: 'running',
+      exchange: 'okx',
+      symbol: 'BTC-USDT-SWAP',
+      timeframe: '15m',
+      positionPct: 10,
+      isSubscribed: true,
+      metrics: { returnPct: 0, maxDrawdownPct: 0, winRatePct: 0, tradeCount: 1 },
+      updatedAt: '2026-04-24T15:00:00.000Z',
+      totalPnl: 0,
+      todayPnl: 0,
+      equitySeries: [],
+      snapshot: {
+        exchange: 'okx',
+        symbol: 'BTC-USDT-SWAP',
+        timeframe: '15m',
+        positionPct: 10,
+        publishedSnapshotId: 'snapshot-perp',
+        snapshotHash: 'hash-perp',
+        paramSchema: null,
+        paramValues: null,
+        schemaVersion: null,
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'BTC-USDT-SWAP',
+          marketType: 'perp',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
+        ruleSummary: {
+          rules: [
+            { id: 'entry', phase: 'entry', conditionKey: 'execution.on_start', operator: null, value: null, actions: ['OPEN_SHORT'] },
+            { id: 'exit', phase: 'exit', conditionKey: 'price.change_pct', operator: 'LTE', value: -0.03, actions: ['CLOSE_SHORT'] },
+          ],
+        },
+      },
+      timeline: [],
+      runtimeExecutionStates: [],
+      accountOverview: {
+        initialBalance: 10000,
+        totalEquity: 10000,
+        availableBalance: 10000,
+        totalPnl: 0,
+        todayPnl: 0,
+        baseCurrency: 'USDT',
+      },
+      positionOverview: {
+        openPositionsCount: 1,
+        closedPositionsCount: 0,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 0,
+      },
+      latestOrders: [{
+        executedAt: '2026-04-24T15:00:03.366Z',
+        side: 'SELL',
+        symbol: 'BTC-USDT-SWAP',
+        price: 68000,
+        quantity: 0.01,
+        fee: 0.2,
+        feeCurrency: 'USDT',
+        orderId: 'okx-short-1',
+      }],
+    } as any)
+
+    expect(record.marketType).toBe('perp')
+    expect(record.latestOrders?.[0]).toEqual(expect.objectContaining({
+      semanticAction: '开空',
+      semanticRole: 'entry',
+    }))
+    expect(record.runtimeSemanticSummary).toEqual(expect.objectContaining({
+      headline: '运行中 · 持有空头 · 等待出场',
+      positionState: 'short',
+      cycleState: 'entered',
+      nextExpectedAction: '等待出场条件触发',
+    }))
+  })
+
 })

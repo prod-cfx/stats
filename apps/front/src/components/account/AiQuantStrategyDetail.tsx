@@ -176,6 +176,17 @@ function formatRuleSummary(rule: NonNullable<AiQuantStrategyRecord['ruleSummary'
   return `${rule.conditionKey ?? rule.id ?? '--'}：${actions}`
 }
 
+function formatOrderFee(order: NonNullable<AiQuantStrategyRecord['latestOrders']>[number]) {
+  if (order.fee == null) return '--'
+  if (order.fee === 0 && !order.feeCurrency && order.orderId?.startsWith('sync-')) {
+    return '--（同步记录未含手续费）'
+  }
+  if (order.fee === 0) {
+    return '0（交易所回执为 0）'
+  }
+  return `${formatOptionalPreciseAmount(order.fee)} ${order.feeCurrency ?? ''}`.trim()
+}
+
 interface AiQuantStrategyDetailProps {
   lng: 'zh' | 'en'
   strategy: AiQuantStrategyRecord | null
@@ -262,6 +273,10 @@ export function AiQuantStrategyDetail({
 
   const consumedRuntimeStates = strategy.runtimeExecutionStates?.filter(state => state.status === 'consumed') ?? []
   const pendingRuntimeStates = strategy.runtimeExecutionStates?.filter(state => state.status !== 'consumed') ?? []
+  const semanticSummary = strategy.runtimeSemanticSummary
+  const latestEntryOrderId = semanticSummary?.evidence.latestEntryOrderId ?? null
+  const latestExitOrderId = semanticSummary?.evidence.latestExitOrderId ?? null
+  const latestSyncOrderId = semanticSummary?.evidence.latestSyncOrderId ?? null
 
   return (
     <main className="mx-auto flex w-full max-w-[920px] flex-1 flex-col gap-4 px-4 py-8 md:px-8">
@@ -274,7 +289,7 @@ export function AiQuantStrategyDetail({
         </div>
         <div className="flex items-center gap-2">
           <span className={`rounded-lg border px-2 py-1 text-xs ${STATUS_CLASS[strategy.status]}`}>
-            {STATUS_LABEL[strategy.status]}
+            {semanticSummary?.headline ?? STATUS_LABEL[strategy.status]}
           </span>
           <button
             type="button"
@@ -316,6 +331,51 @@ export function AiQuantStrategyDetail({
           <p className="mt-1">
             当前部署实例的运行时绑定与快照真相不一致，已自动隐藏执行配置与运行时状态。请重新发布并重新部署。
           </p>
+        </section>
+      )}
+
+      {semanticSummary && (
+        <section className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-5">
+          <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">当前状态解释</h2>
+          <p className="mt-2 text-sm text-cyan-100">{semanticSummary.explanation}</p>
+          <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
+            <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+              <p className="text-xs text-[color:var(--cf-muted)]">策略服务</p>
+              <p className="mt-1 font-semibold text-[color:var(--cf-text-strong)]">{semanticSummary.serviceStatusLabel}</p>
+            </article>
+            <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+              <p className="text-xs text-[color:var(--cf-muted)]">当前仓位</p>
+              <p className="mt-1 font-semibold text-[color:var(--cf-text-strong)]">{semanticSummary.positionStatusLabel}</p>
+            </article>
+            <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+              <p className="text-xs text-[color:var(--cf-muted)]">当前周期</p>
+              <p className="mt-1 font-semibold text-[color:var(--cf-text-strong)]">{semanticSummary.cycleStatusLabel}</p>
+            </article>
+          </div>
+          <div className="mt-4 grid gap-2 text-sm md:grid-cols-2">
+            <p className="text-[color:var(--cf-muted)]">
+              最近入场：
+              <span className="ml-1 text-[color:var(--cf-text-strong)]">
+                {semanticSummary.evidence.latestEntryAt ?? '--'}
+                {latestEntryOrderId ? ` / ${latestEntryOrderId}` : ''}
+              </span>
+            </p>
+            <p className="text-[color:var(--cf-muted)]">
+              最近出场：
+              <span className="ml-1 text-[color:var(--cf-text-strong)]">
+                {semanticSummary.evidence.latestExitAt ?? '--'}
+                {latestExitOrderId ? ` / ${latestExitOrderId}` : ''}
+              </span>
+            </p>
+            <p className="text-[color:var(--cf-muted)]">
+              下一步预期：
+              <span className="ml-1 text-[color:var(--cf-text-strong)]">{semanticSummary.nextExpectedAction ?? '--'}</span>
+            </p>
+            <p className="text-[color:var(--cf-muted)]">
+              证据来源：
+              <span className="ml-1 text-[color:var(--cf-text-strong)]">本地持仓台账、最新成交、发布快照规则</span>
+            </p>
+          </div>
         </section>
       )}
 
@@ -559,6 +619,7 @@ export function AiQuantStrategyDetail({
                     <tr className="border-b border-[color:var(--cf-border)] text-[color:var(--cf-muted)]">
                       <th className="py-2 pr-3">时间</th>
                       <th className="py-2 pr-3">方向</th>
+                      <th className="py-2 pr-3">语义动作</th>
                       <th className="py-2 pr-3">交易对</th>
                       <th className="py-2 pr-3">价格</th>
                       <th className="py-2 pr-3">数量</th>
@@ -570,11 +631,12 @@ export function AiQuantStrategyDetail({
                       <tr key={`${order.executedAt}-${order.symbol}-${order.side}-${order.orderId ?? ''}`} className="border-b border-[color:var(--cf-border)]/60">
                         <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.executedAt}</td>
                         <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.side}</td>
+                        <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.semanticAction ?? '语义待确认'}</td>
                         <td className="py-2 pr-3 text-[color:var(--cf-text)]">{order.symbol}</td>
                         <td className="py-2 pr-3 text-[color:var(--cf-text)]">{formatOptionalAmount(order.price)}</td>
                         <td className="py-2 pr-3 text-[color:var(--cf-text)]">{formatOptionalAmount(order.quantity)}</td>
                         <td className="py-2 pr-3 text-[color:var(--cf-text)]">
-                          {order.fee == null ? '--' : formatOptionalPreciseAmount(order.fee)} {order.feeCurrency ?? ''}
+                          {formatOrderFee(order)}
                         </td>
                       </tr>
                     ))}
@@ -688,8 +750,16 @@ export function AiQuantStrategyDetail({
               <span className="break-all text-[color:var(--cf-text)]">{strategy.snapshotHash ?? '--'}</span>
             </p>
             <p className="flex items-start gap-2">
-              <span className="min-w-28 text-[color:var(--cf-muted)]">最近订单</span>
-              <span className="break-all text-[color:var(--cf-text)]">{strategy.latestOrders?.[0]?.orderId ?? '--'}</span>
+              <span className="min-w-28 text-[color:var(--cf-muted)]">最近入场订单</span>
+              <span className="break-all text-[color:var(--cf-text)]">{latestEntryOrderId ?? '--'}</span>
+            </p>
+            <p className="flex items-start gap-2">
+              <span className="min-w-28 text-[color:var(--cf-muted)]">最近出场订单</span>
+              <span className="break-all text-[color:var(--cf-text)]">{latestExitOrderId ?? '--'}</span>
+            </p>
+            <p className="flex items-start gap-2">
+              <span className="min-w-28 text-[color:var(--cf-muted)]">最近同步订单</span>
+              <span className="break-all text-[color:var(--cf-text)]">{latestSyncOrderId ?? '--'}</span>
             </p>
             <p className="flex items-start gap-2">
               <span className="min-w-28 text-[color:var(--cf-muted)]">数据边界</span>

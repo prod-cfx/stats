@@ -108,6 +108,157 @@ function normalizeDeploymentExecutionConfig(
   }
 }
 
+function normalizeMarketType(value: unknown): AiQuantStrategyRecord['marketType'] {
+  if (value === 'spot' || value === 'perp' || value === 'futures' || value === 'swap') return value
+  return 'unknown'
+}
+
+function findRuleAction(
+  ruleSummary: AiQuantStrategyRecord['ruleSummary'],
+  phase: string,
+): string | null {
+  const rule = ruleSummary?.rules.find(item => item.phase === phase && item.actions.length > 0)
+  return rule?.actions[0] ?? null
+}
+
+function classifyOrderSemantic(input: {
+  side: string
+  marketType: AiQuantStrategyRecord['marketType']
+  entryAction: string | null
+  exitAction: string | null
+}): { semanticAction: string; semanticRole: 'entry' | 'exit' | 'unknown' } {
+  const side = input.side.toUpperCase()
+  const marketType = input.marketType ?? 'unknown'
+
+  if (marketType === 'spot') {
+    if (side === 'BUY') return { semanticAction: '买入', semanticRole: 'entry' }
+    if (side === 'SELL') return { semanticAction: '卖出', semanticRole: 'exit' }
+    return { semanticAction: side || '语义待确认', semanticRole: 'unknown' }
+  }
+
+  if (marketType === 'perp' || marketType === 'futures' || marketType === 'swap') {
+    const entryAction = input.entryAction
+    const exitAction = input.exitAction
+    if (entryAction === 'OPEN_SHORT') {
+      if (side === 'SELL') return { semanticAction: '开空', semanticRole: 'entry' }
+      if (side === 'BUY') return { semanticAction: exitAction === 'CLOSE_SHORT' ? '平空' : '平仓', semanticRole: 'exit' }
+    }
+    if (entryAction === 'OPEN_LONG' || !entryAction) {
+      if (side === 'BUY') return { semanticAction: '开多', semanticRole: 'entry' }
+      if (side === 'SELL') return { semanticAction: exitAction === 'CLOSE_LONG' ? '平多' : '平仓', semanticRole: 'exit' }
+    }
+    return { semanticAction: side || '语义待确认', semanticRole: 'unknown' }
+  }
+
+  return { semanticAction: side || '语义待确认', semanticRole: 'unknown' }
+}
+
+function buildRuntimeSemanticSummary(input: {
+  status: AiQuantStrategyRecord['status']
+  marketType: AiQuantStrategyRecord['marketType']
+  symbol: string
+  positionOverview: AiQuantStrategyRecord['positionOverview']
+  latestOrders: NonNullable<AiQuantStrategyRecord['latestOrders']>
+}): AiQuantStrategyRecord['runtimeSemanticSummary'] {
+  const marketType = input.marketType ?? 'unknown'
+  const openPositionsCount = input.positionOverview?.openPositionsCount ?? null
+  const hasOpenPosition = typeof openPositionsCount === 'number' && openPositionsCount > 0
+  const latestEntry = input.latestOrders.find(order => order.semanticRole === 'entry') ?? null
+  const latestExit = input.latestOrders.find(order => order.semanticRole === 'exit') ?? null
+  const latestSync = input.latestOrders.find(order => order.orderId?.startsWith('sync-')) ?? null
+  const latestSemanticAction = input.latestOrders[0]?.semanticAction ?? null
+
+  const serviceStatusLabel = input.status === 'running'
+    ? '运行中'
+    : input.status === 'stopped'
+      ? '已停止'
+      : '草稿'
+
+  let positionStatusLabel = '状态待确认'
+  let cycleStatusLabel = '查看成交与规则'
+  let explanation = '当前策略类型暂未提供专用语义解释，请结合成交记录、持仓概览和发布快照规则核对。'
+  let nextExpectedAction: string | null = null
+  let positionState: NonNullable<AiQuantStrategyRecord['runtimeSemanticSummary']>['positionState'] = 'unknown'
+  let cycleState: NonNullable<AiQuantStrategyRecord['runtimeSemanticSummary']>['cycleState'] = 'unknown'
+
+  if (marketType === 'spot') {
+    if (hasOpenPosition) {
+      positionStatusLabel = '持有现货'
+      cycleStatusLabel = '等待出场'
+      positionState = 'spot_holding'
+      cycleState = 'entered'
+      explanation = `当前持有 ${input.symbol} 现货仓位，策略服务${serviceStatusLabel}，等待出场条件触发。`
+      nextExpectedAction = '等待出场条件触发'
+    } else if (latestEntry && latestExit) {
+      positionStatusLabel = '空仓'
+      cycleStatusLabel = '本轮已完成'
+      positionState = 'flat'
+      cycleState = 'completed'
+      explanation = `本轮现货交易已完成，当前未持有 ${input.symbol}。策略服务仍在运行，等待下一次入场条件。`
+      nextExpectedAction = input.status === 'running' ? '等待下一次入场条件' : null
+    } else {
+      positionStatusLabel = '空仓'
+      cycleStatusLabel = '等待入场'
+      positionState = 'flat'
+      cycleState = 'waiting_entry'
+      explanation = `当前未持有 ${input.symbol}。策略服务${serviceStatusLabel}，等待入场条件触发。`
+      nextExpectedAction = input.status === 'running' ? '等待入场条件触发' : null
+    }
+  } else if (marketType === 'perp' || marketType === 'futures' || marketType === 'swap') {
+    if (hasOpenPosition) {
+      const entryAction = latestEntry?.semanticAction
+      positionStatusLabel = entryAction === '开空' ? '持有空头' : '持有多头'
+      cycleStatusLabel = '等待出场'
+      positionState = entryAction === '开空' ? 'short' : 'long'
+      cycleState = 'entered'
+      explanation = `当前${positionStatusLabel}仓位，策略服务${serviceStatusLabel}，等待出场条件触发。`
+      nextExpectedAction = '等待出场条件触发'
+    } else if (latestExit) {
+      positionStatusLabel = '无仓位'
+      cycleStatusLabel = '上一轮已平仓'
+      positionState = 'flat'
+      cycleState = 'completed'
+      explanation = `上一轮合约仓位已平，当前无未平仓位。策略服务仍在运行，等待下一次入场条件。`
+      nextExpectedAction = input.status === 'running' ? '等待下一次入场条件' : null
+    } else {
+      positionStatusLabel = '无仓位'
+      cycleStatusLabel = '等待入场'
+      positionState = 'flat'
+      cycleState = 'waiting_entry'
+      explanation = `当前无未平仓位。策略服务${serviceStatusLabel}，等待入场条件触发。`
+      nextExpectedAction = input.status === 'running' ? '等待入场条件触发' : null
+    }
+  }
+
+  if (input.status === 'stopped' && hasOpenPosition) {
+    cycleStatusLabel = '需处理'
+    cycleState = 'needs_attention'
+    explanation = `策略服务已停止，但本地台账仍显示存在未平仓位，请核对交易所仓位和本地记录。`
+    nextExpectedAction = '核对并处理未平仓位'
+  }
+
+  return {
+    serviceStatusLabel,
+    positionStatusLabel,
+    cycleStatusLabel,
+    headline: `${serviceStatusLabel} · ${positionStatusLabel} · ${cycleStatusLabel}`,
+    explanation,
+    nextExpectedAction,
+    marketType,
+    positionState,
+    cycleState,
+    evidence: {
+      openPositionsCount,
+      latestEntryOrderId: latestEntry?.orderId ?? null,
+      latestExitOrderId: latestExit?.orderId ?? null,
+      latestSyncOrderId: latestSync?.orderId ?? null,
+      latestEntryAt: latestEntry?.executedAt ?? null,
+      latestExitAt: latestExit?.executedAt ?? null,
+      latestSemanticAction,
+    },
+  }
+}
+
 function normalizeCompatibilityMetadata(
   metadata: AccountAiQuantSnapshotCompatibilityMetadata | null | undefined,
 ): AiQuantStrategyRecord['compatibilityMetadata'] {
@@ -251,18 +402,50 @@ export function mapAccountStrategyDetailToRecord(
     detail.snapshot.paramValues ?? detail.paramValues,
     detail.snapshot.schemaVersion ?? detail.schemaVersion,
   )
-  const snapshotMarketType =
-    detail.snapshot.strategyConfig?.marketType === 'spot' || detail.snapshot.strategyConfig?.marketType === 'perp'
-      ? detail.snapshot.strategyConfig.marketType
-      : null
+  const snapshotMarketType = normalizeMarketType(detail.snapshot.strategyConfig?.marketType)
+  const deploymentMarketType = snapshotMarketType === 'unknown' ? null : snapshotMarketType === 'spot' || snapshotMarketType === 'perp' ? snapshotMarketType : null
   const invalidBinding = detail.snapshot.compatibilityMetadata?.invalidBinding === true
+  const ruleSummary = normalizeRuleSummary(detail.snapshot.ruleSummary)
+  const entryAction = findRuleAction(ruleSummary, 'entry')
+  const exitAction = findRuleAction(ruleSummary, 'exit')
+  const positionOverview = detail.positionOverview
+    ? {
+        openPositionsCount: detail.positionOverview.openPositionsCount ?? null,
+        closedPositionsCount: detail.positionOverview.closedPositionsCount ?? null,
+        totalRealizedPnl: detail.positionOverview.totalRealizedPnl ?? null,
+        totalUnrealizedPnl: detail.positionOverview.totalUnrealizedPnl ?? null,
+      }
+    : undefined
+  const latestOrders = Array.isArray(detail.latestOrders)
+    ? detail.latestOrders.map((order) => {
+        const semantic = classifyOrderSemantic({
+          side: order.side,
+          marketType: snapshotMarketType,
+          entryAction,
+          exitAction,
+        })
+        return {
+          executedAt: fmtTimelineTime(order.executedAt),
+          side: order.side,
+          semanticAction: semantic.semanticAction,
+          semanticRole: semantic.semanticRole,
+          symbol: order.symbol,
+          price: typeof order.price === 'number' && Number.isFinite(order.price) ? order.price : null,
+          quantity: typeof order.quantity === 'number' && Number.isFinite(order.quantity) ? order.quantity : null,
+          fee: typeof order.fee === 'number' && Number.isFinite(order.fee) ? order.fee : null,
+          feeCurrency: order.feeCurrency ?? null,
+          orderId: order.orderId ?? null,
+        }
+      })
+    : []
 
-  return {
+  const record: AiQuantStrategyRecord = {
     id: detail.id,
     name: detail.name,
     status: normalizeStatus(detail.status),
     exchange,
     symbol: detail.snapshot.symbol ?? detail.symbol ?? '--',
+    marketType: snapshotMarketType,
     timeframe: detail.snapshot.timeframe ?? detail.timeframe ?? '--',
     positionPct: normalizeNumber(detail.snapshot.positionPct ?? detail.positionPct),
     initialCapital,
@@ -278,15 +461,15 @@ export function mapAccountStrategyDetailToRecord(
     snapshotBacktestConfigDefaults: normalizeBacktestConfigDefaults(detail.snapshot.backtestConfigDefaults),
     deploymentExecutionBaseline: invalidBinding
       ? null
-      : normalizeDeploymentExecutionConfig(detail.snapshot.deploymentExecutionBaseline, snapshotMarketType),
+      : normalizeDeploymentExecutionConfig(detail.snapshot.deploymentExecutionBaseline, deploymentMarketType),
     deploymentExecutionCurrent: invalidBinding
       ? null
-      : normalizeDeploymentExecutionConfig(detail.snapshot.deploymentExecutionCurrent, snapshotMarketType),
+      : normalizeDeploymentExecutionConfig(detail.snapshot.deploymentExecutionCurrent, deploymentMarketType),
     executionConfigVersion:
       typeof detail.snapshot.executionConfigVersion === 'number'
         ? detail.snapshot.executionConfigVersion
         : null,
-    deploymentLeverageRange: !invalidBinding && snapshotMarketType === 'perp'
+    deploymentLeverageRange: !invalidBinding && deploymentMarketType === 'perp'
       ? normalizeLeverageRange(
           detail.snapshot.effectiveAllowedLeverageRange
             ?? detail.snapshot.deploymentExecutionConstraints?.effectiveAllowedLeverageRange,
@@ -297,10 +480,10 @@ export function mapAccountStrategyDetailToRecord(
       : detail.snapshot.deploymentExecutionConstraints?.constraintExplanation ?? null,
     compatibilityMetadata: normalizeCompatibilityMetadata(detail.snapshot.compatibilityMetadata),
     consistencySummary: normalizeConsistencySummary(detail.snapshot.consistencySummary),
-    ruleSummary: normalizeRuleSummary(detail.snapshot.ruleSummary),
+    ruleSummary,
     canEditDeploymentLeverage:
       !invalidBinding
-      && snapshotMarketType === 'perp'
+      && deploymentMarketType === 'perp'
       && Boolean(detail.snapshot.deploymentExecutionCurrent)
       && detail.snapshot.compatibilityMetadata?.requiresRepublishForDeploy !== true,
     publishedSnapshotId: detail.snapshot.publishedSnapshotId ?? null,
@@ -317,26 +500,8 @@ export function mapAccountStrategyDetailToRecord(
           baseCurrency: detail.accountOverview.baseCurrency ?? null,
         }
       : undefined,
-    positionOverview: detail.positionOverview
-      ? {
-          openPositionsCount: detail.positionOverview.openPositionsCount ?? null,
-          closedPositionsCount: detail.positionOverview.closedPositionsCount ?? null,
-          totalRealizedPnl: detail.positionOverview.totalRealizedPnl ?? null,
-          totalUnrealizedPnl: detail.positionOverview.totalUnrealizedPnl ?? null,
-        }
-      : undefined,
-    latestOrders: Array.isArray(detail.latestOrders)
-      ? detail.latestOrders.map(order => ({
-          executedAt: fmtTimelineTime(order.executedAt),
-          side: order.side,
-          symbol: order.symbol,
-          price: typeof order.price === 'number' && Number.isFinite(order.price) ? order.price : null,
-          quantity: typeof order.quantity === 'number' && Number.isFinite(order.quantity) ? order.quantity : null,
-          fee: typeof order.fee === 'number' && Number.isFinite(order.fee) ? order.fee : null,
-          feeCurrency: order.feeCurrency ?? null,
-          orderId: order.orderId ?? null,
-        }))
-      : [],
+    positionOverview,
+    latestOrders,
     equitySeries: detail.equitySeries.map(item => ({
       ts: fmtTimelineTime(item.ts),
       value: normalizeNumber(item.value),
@@ -356,5 +521,15 @@ export function mapAccountStrategyDetailToRecord(
         }
       : undefined,
     updatedAt: detail.updatedAt,
+  }
+  return {
+    ...record,
+    runtimeSemanticSummary: buildRuntimeSemanticSummary({
+      status: record.status,
+      marketType: record.marketType,
+      symbol: record.symbol,
+      positionOverview: record.positionOverview,
+      latestOrders,
+    }),
   }
 }
