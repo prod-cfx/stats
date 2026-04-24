@@ -1,9 +1,15 @@
 import type { ReactNode } from 'react'
-import { cookies } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import './globals.css'
 
+const ROUTE_LOCALE_HEADER = 'x-coinflux-locale'
+
 async function inferHtmlLang() {
-  const cookieStore = await cookies()
+  const [cookieStore, headerStore] = await Promise.all([cookies(), headers()])
+
+  const routeLng = headerStore.get(ROUTE_LOCALE_HEADER)?.toLowerCase()
+  if (routeLng === 'zh') return 'zh-CN'
+  if (routeLng === 'en') return 'en'
 
   const cookieLng = cookieStore.get('i18next')?.value?.toLowerCase()
   if (cookieLng?.startsWith('zh')) return 'zh-CN'
