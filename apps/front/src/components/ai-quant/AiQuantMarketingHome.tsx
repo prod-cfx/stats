@@ -173,13 +173,15 @@ function HeroParticles() {
 }
 
 function PrimaryCta({ href, className = '', label }: { href: string, className?: string, label: string }) {
+  const shouldReduceMotion = useReducedMotion()
+
   return (
     <Link
       href={href}
-      className={`group relative inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-primary to-secondary px-8 py-4 text-base font-bold text-white shadow-[0_0_30px_-5px_rgba(100,108,255,0.4)] transition-all hover:shadow-[0_0_40px_-5px_rgba(100,108,255,0.6)] hover:-translate-y-0.5 active:translate-y-0 ${className}`}
+      className={`group inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#3474ff] to-[#8a55ff] px-7 py-3 text-sm font-bold text-white shadow-[0_14px_40px_rgba(79,70,229,0.35)] transition duration-200 hover:shadow-[0_18px_54px_rgba(79,70,229,0.48)] active:translate-y-0 ${shouldReduceMotion ? '' : 'hover:-translate-y-0.5'} ${className}`}
     >
       {label}
-      <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-1" />
+      <ArrowRight className={`h-4 w-4 transition-transform ${shouldReduceMotion ? '' : 'group-hover:translate-x-1'}`} />
     </Link>
   )
 }
@@ -264,7 +266,7 @@ function FeatureSection({
           variants={revealUp}
           viewport={{ once: true, margin: '-80px' }}
           transition={shouldReduceMotion ? undefined : { ...revealTransition, delay: 0.08 }}
-          className="relative"
+          className="relative min-w-0"
         >
           <FeatureVisual featureKey={featureKey} />
         </motion.div>
@@ -610,24 +612,27 @@ function AdvantageSection() {
 
 function FinalCtaSection({ ctaHref }: { ctaHref: string }) {
   const { t } = useTranslation()
+  const shouldReduceMotion = useReducedMotion()
+
   return (
-    <section className={alternateSectionShell}>
-      <motion.div 
-        initial="hidden"
-        whileInView="visible"
+    <section className={sectionShell}>
+      <motion.div
+        initial={shouldReduceMotion ? false : 'hidden'}
+        whileInView={shouldReduceMotion ? undefined : 'visible'}
+        animate={shouldReduceMotion ? { opacity: 1, y: 0 } : undefined}
         variants={revealUp}
-        viewport={{ once: true }}
-        transition={revealTransition}
-        className={`mx-auto max-w-4xl rounded-3xl bg-gradient-to-b from-white/[0.72] to-transparent p-12 text-center backdrop-blur-3xl md:p-20 ${panelClass}`}
+        viewport={{ once: true, margin: '-80px' }}
+        transition={shouldReduceMotion ? undefined : revealTransition}
+        className={`mx-auto max-w-4xl rounded-2xl px-8 py-12 text-center md:px-20 md:py-14 ${panelClass}`}
       >
-        <h2 className="text-3xl font-bold tracking-tight text-slate-950 dark:text-white md:text-6xl">
+        <h2 className="text-2xl font-black text-slate-950 dark:text-white md:text-3xl">
           {t('aiQuant.homepage.final.title')}
         </h2>
-        <p className={`mx-auto mt-6 max-w-xl text-base md:text-lg ${mutedText}`}>
+        <p className={`mx-auto mt-5 max-w-2xl text-base leading-7 ${mutedText}`}>
           {t('aiQuant.homepage.final.description')}
         </p>
-        <div className="mt-10">
-          <PrimaryCta href={ctaHref} label={t('aiQuant.homepage.finalCta')} className="scale-110" />
+        <div className="mt-8">
+          <PrimaryCta href={ctaHref} label={t('aiQuant.homepage.finalCta')} />
         </div>
       </motion.div>
     </section>
