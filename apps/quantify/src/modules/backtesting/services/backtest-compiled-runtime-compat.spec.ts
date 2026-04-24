@@ -2,6 +2,7 @@ import { evaluateExprPool } from '@ai/shared/script-engine/compiled-runtime/eval
 import { evaluateGuards } from '@ai/shared/script-engine/compiled-runtime/evaluate-guards'
 import { runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime/run-decision-programs'
 import { buildStrategyContext } from '@ai/shared/script-engine/helpers/context-builder'
+import { validateStrategyDecision } from '@/modules/strategy-runtime/strategy-protocol.util'
 
 describe('backtestCompiledRuntimeCompat', () => {
   it('evaluates CROSS_OVER using previous and current series values', () => {
@@ -653,8 +654,65 @@ describe('backtestCompiledRuntimeCompat', () => {
 
     expect(decision).toEqual({
       action: 'CLOSE_SHORT',
+      size: { mode: 'QTY', value: 2 },
       reason: 'compiled.force_exit',
     })
+    expect(validateStrategyDecision(decision)).toMatchObject({ valid: true })
+  })
+
+  it('forces exit using the active long position side when guards trigger', () => {
+    const decision = runDecisionPrograms(
+      {
+        currentPrice: 100,
+        baseTimeframeBar: { close: 100 },
+        position: { qty: 3 },
+        portfolio: { equity: 10000 },
+      } as any,
+      [],
+      {},
+      {
+        blockNewEntry: false,
+        forceExit: true,
+        strategyHalt: false,
+        cancelOrderPrograms: false,
+        triggered: ['guard-stop-loss'],
+      },
+      [],
+    )
+
+    expect(decision).toEqual({
+      action: 'CLOSE_LONG',
+      size: { mode: 'QTY', value: 3 },
+      reason: 'compiled.force_exit',
+    })
+    expect(validateStrategyDecision(decision)).toMatchObject({ valid: true })
+  })
+
+  it('does not emit a close decision when force exit triggers without an active position', () => {
+    const decision = runDecisionPrograms(
+      {
+        currentPrice: 100,
+        baseTimeframeBar: { close: 100 },
+        position: { qty: 0 },
+        portfolio: { equity: 10000 },
+      } as any,
+      [],
+      {},
+      {
+        blockNewEntry: false,
+        forceExit: true,
+        strategyHalt: false,
+        cancelOrderPrograms: false,
+        triggered: ['guard-stop-loss'],
+      },
+      [],
+    )
+
+    expect(decision).toEqual({
+      action: 'NOOP',
+      reason: 'compiled.force_exit.noop',
+    })
+    expect(validateStrategyDecision(decision)).toMatchObject({ valid: true })
   })
 
   it('skips entry programs while cooldown bars are still in effect', () => {
