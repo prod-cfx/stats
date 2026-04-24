@@ -286,6 +286,7 @@
       "status": "状态",
       "confirmedGraph": "逻辑图已确认",
       "confirmGraph": "确认逻辑图",
+      "snapshotId": "策略快照 ID",
       "returnRevise": "返回对话修改"
     },
     "strategies": {

@@ -1183,6 +1183,7 @@ export function AiQuantPageClient({
                 !semanticViewConfirmable
               }
               confirmed={activeConversation.logicGraph.status === 'confirmed'}
+              publishedSnapshotId={activeConversation.publishedSnapshotId}
               onConfirm={() => {
                 confirmCurrentLogicGraph({
                   conversationId: activeConversation.id,
@@ -1216,6 +1217,7 @@ export function AiQuantPageClient({
                 activeConversation.logicGraph.status === 'confirmed' ||
                 !semanticViewConfirmable
               }
+              publishedSnapshotId={activeConversation.publishedSnapshotId}
               onConfirm={() => {
                 confirmCurrentLogicGraph({
                   conversationId: activeConversation.id,

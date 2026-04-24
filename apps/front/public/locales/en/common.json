@@ -286,6 +286,7 @@
       "status": "Status",
       "confirmedGraph": "Logic Graph Confirmed",
       "confirmGraph": "Confirm Logic Graph",
+      "snapshotId": "Strategy Snapshot ID",
       "returnRevise": "Return to Chat to Revise"
     },
     "strategies": {
