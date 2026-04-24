@@ -305,6 +305,38 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
     expect(text).not.toContain('不支持的条件，待补充')
   })
 
+  it('does not render position-pnl take-profit rules as entry-price profit', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        rules: [
+          {
+            id: 'risk-take-profit-position-pnl',
+            phase: 'risk',
+            condition: {
+              key: 'risk.take_profit_pct',
+              params: {
+                basis: 'position_pnl',
+                valuePct: 2,
+              },
+            },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+      },
+      fallbackMeta: {
+        exchange: 'okx',
+        symbol: 'DOGEUSDT',
+        timeframe: '3m',
+        positionPct: 10,
+      },
+    })
+
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(text).toContain('风控: 持仓收益达到 2% -> 平仓')
+    expect(text).not.toContain('相对开仓均价盈利达到 2%')
+  })
+
   it('renders the first exit path as AND_AT_THEN instead of OR_THEN', () => {
     const graph = buildDisplayLogicGraphFromCodegenSpec({
       specDesc: {

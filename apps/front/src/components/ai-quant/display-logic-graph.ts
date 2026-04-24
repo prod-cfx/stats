@@ -170,7 +170,14 @@ function formatTakeProfitCondition(condition: DisplayLogicGraphCondition): strin
     : condition.params?.valuePct
   const percent = formatPercent(rawValue)
   if (!percent) return '止盈条件'
-  return `相对开仓均价盈利达到 ${percent}%`
+  const basis = pickString(condition.params?.basis)
+  if (basis === 'entry_avg_price') {
+    return `相对开仓均价盈利达到 ${percent}%`
+  }
+  if (basis === 'position_pnl') {
+    return `持仓收益达到 ${percent}%`
+  }
+  return `盈利达到 ${percent}%`
 }
 
 function formatPositionLossCondition(condition: DisplayLogicGraphCondition): string {
