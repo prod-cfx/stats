@@ -19,6 +19,13 @@ interface QuantifyErrorPayload {
   message?: string
 }
 
+interface NormalizedQuantifyErrorPayload {
+  status: number
+  message: string
+  code?: string
+  args?: Record<string, unknown>
+}
+
 @Injectable()
 export class QuantifyAiQuantClient {
   private static readonly DEFAULT_REQUEST_TIMEOUT_MS = 10_000
@@ -453,12 +460,12 @@ export class QuantifyAiQuantClient {
           )
         }
 
-        const errorPayload = payload as QuantifyErrorPayload
+        const errorPayload = normalizeQuantifyErrorPayload(payload as QuantifyErrorPayload, response.status)
         throw new QuantifyClientError(
-          errorPayload.message || 'Quantify request failed',
-          errorPayload.status || response.status,
-          errorPayload.error?.code,
-          errorPayload.error?.args,
+          errorPayload.message,
+          errorPayload.status,
+          errorPayload.code,
+          errorPayload.args,
         )
       }
 
@@ -496,6 +503,47 @@ export class QuantifyAiQuantClient {
       QuantifyAiQuantClient.MIN_REQUEST_TIMEOUT_MS,
       Math.floor(configured),
     )
+  }
+}
+
+function normalizeQuantifyErrorPayload(
+  payload: QuantifyErrorPayload,
+  responseStatus: number,
+): NormalizedQuantifyErrorPayload {
+  const status = payload.status || responseStatus
+  const message = payload.message || 'Quantify request failed'
+  const code = payload.error?.code
+  const args = payload.error?.args
+
+  if (message === 'strategy_plaza.okx_demo_api_key_required' && code === 'BAD_REQUEST') {
+    return {
+      status,
+      message,
+      code: message,
+      args: {
+        ...(args ?? {}),
+        reasonMessage: stringOrUndefined(args?.reasonMessage) ?? '请先绑定 OKX 模拟盘 API Key',
+      },
+    }
+  }
+
+  if (message === 'strategy_plaza.official_snapshot_unavailable' && code === 'NOT_FOUND') {
+    return {
+      status,
+      message,
+      code: message,
+      args: {
+        ...(args ?? {}),
+        reasonMessage: stringOrUndefined(args?.reasonMessage) ?? '官方策略快照暂不可用，请稍后重试',
+      },
+    }
+  }
+
+  return {
+    status,
+    message,
+    code,
+    args,
   }
 }
 

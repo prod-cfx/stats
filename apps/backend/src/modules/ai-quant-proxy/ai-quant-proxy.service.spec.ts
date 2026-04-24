@@ -334,6 +334,31 @@ describe('aiQuantProxyService', () => {
     )
   })
 
+  it('preserves strategy plaza okx demo key code and reason after service mapping', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.runStrategyPlazaTemplate.mockRejectedValue(new QuantifyClientError(
+      'strategy_plaza.okx_demo_api_key_required',
+      400,
+      'strategy_plaza.okx_demo_api_key_required',
+      {
+        userId: 'user-1',
+        reasonMessage: '请先绑定 OKX 模拟盘 API Key',
+      },
+    ))
+
+    await expect(service.runStrategyPlazaTemplate('user-1', 'Bearer token-1', 'ma-cross', {
+      runRequestId: 'plaza-run-12345678',
+    })).rejects.toMatchObject({
+      status: 400,
+      code: 'strategy_plaza.okx_demo_api_key_required',
+      message: '请先绑定 OKX 模拟盘 API Key',
+      args: {
+        userId: 'user-1',
+        reasonMessage: '请先绑定 OKX 模拟盘 API Key',
+      },
+    })
+  })
+
   it('maps transient AI Quant conversation list failures to service unavailable', async () => {
     const { service, quantifyClient } = createService()
     quantifyClient.get.mockRejectedValue(new QuantifyClientError(

@@ -374,6 +374,41 @@ describe('quantifyAiQuantClient', () => {
     expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty('body')
   })
 
+  it('normalizes legacy strategy plaza okx demo key errors to the dedicated code', async () => {
+    mockedCreateQuantifyApiClient.mockReturnValue(createContractMock() as never)
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => JSON.stringify({
+        status: 400,
+        message: 'strategy_plaza.okx_demo_api_key_required',
+        error: {
+          code: 'BAD_REQUEST',
+          args: {
+            userId: 'user-1',
+          },
+        },
+      }),
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const client = new QuantifyAiQuantClient(env as any)
+
+    await expect(client.runStrategyPlazaTemplate('ma-cross', {
+      runRequestId: 'plaza-run-12345678',
+    }, {
+      userId: 'user-1',
+      headers: { authorization: 'Bearer token-1' },
+    })).rejects.toMatchObject({
+      status: 400,
+      code: 'strategy_plaza.okx_demo_api_key_required',
+      args: {
+        userId: 'user-1',
+        reasonMessage: '请先绑定 OKX 模拟盘 API Key',
+      },
+    })
+  })
+
   it('unwraps transport-envelope backtesting capabilities responses from the contract alias', async () => {
     const contract = createContractMock()
     contract.BacktestingController_getCapabilities.mockResolvedValue({
