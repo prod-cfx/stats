@@ -50,6 +50,9 @@ export interface AiQuantRuntimeSemanticSummary {
     latestEntryOrderId: string | null
     latestExitOrderId: string | null
     latestSyncOrderId: string | null
+    entryOrders: Array<{ orderId: string | null; executedAt: string }>
+    exitOrders: Array<{ orderId: string | null; executedAt: string }>
+    syncOrders: Array<{ orderId: string | null; executedAt: string }>
     latestEntryAt: string | null
     latestExitAt: string | null
     latestSemanticAction: string | null

@@ -113,19 +113,21 @@ function normalizeMarketType(value: unknown): AiQuantStrategyRecord['marketType'
   return 'unknown'
 }
 
-function findRuleAction(
+function findRuleActions(
   ruleSummary: AiQuantStrategyRecord['ruleSummary'],
   phase: string,
-): string | null {
-  const rule = ruleSummary?.rules.find(item => item.phase === phase && item.actions.length > 0)
-  return rule?.actions[0] ?? null
+): string[] {
+  const actions = ruleSummary?.rules
+    .filter(item => item.phase === phase)
+    .flatMap(item => item.actions) ?? []
+  return Array.from(new Set(actions))
 }
 
 function classifyOrderSemantic(input: {
   side: string
   marketType: AiQuantStrategyRecord['marketType']
-  entryAction: string | null
-  exitAction: string | null
+  entryActions: string[]
+  exitActions: string[]
 }): { semanticAction: string; semanticRole: 'entry' | 'exit' | 'unknown' } {
   const side = input.side.toUpperCase()
   const marketType = input.marketType ?? 'unknown'
@@ -137,16 +139,27 @@ function classifyOrderSemantic(input: {
   }
 
   if (marketType === 'perp' || marketType === 'futures' || marketType === 'swap') {
-    const entryAction = input.entryAction
-    const exitAction = input.exitAction
-    if (entryAction === 'OPEN_SHORT') {
-      if (side === 'SELL') return { semanticAction: '开空', semanticRole: 'entry' }
-      if (side === 'BUY') return { semanticAction: exitAction === 'CLOSE_SHORT' ? '平空' : '平仓', semanticRole: 'exit' }
+    const entryCandidates: Array<{ action: string; side: string; label: string }> = [
+      { action: 'OPEN_LONG', side: 'BUY', label: '开多' },
+      { action: 'OPEN_SHORT', side: 'SELL', label: '开空' },
+    ].filter(candidate => input.entryActions.includes(candidate.action) && candidate.side === side)
+    const exitCandidates: Array<{ action: string; side: string; label: string }> = [
+      { action: 'CLOSE_LONG', side: 'SELL', label: '平多' },
+      { action: 'CLOSE_SHORT', side: 'BUY', label: '平空' },
+      { action: 'FORCE_EXIT', side, label: '平仓' },
+    ].filter(candidate => input.exitActions.includes(candidate.action) && candidate.side === side)
+
+    if (entryCandidates.length === 1 && exitCandidates.length === 0) {
+      return { semanticAction: entryCandidates[0]!.label, semanticRole: 'entry' }
     }
-    if (entryAction === 'OPEN_LONG' || !entryAction) {
-      if (side === 'BUY') return { semanticAction: '开多', semanticRole: 'entry' }
-      if (side === 'SELL') return { semanticAction: exitAction === 'CLOSE_LONG' ? '平多' : '平仓', semanticRole: 'exit' }
+    if (exitCandidates.length === 1 && entryCandidates.length === 0) {
+      return { semanticAction: exitCandidates[0]!.label, semanticRole: 'exit' }
     }
+    if (entryCandidates.length > 0 || exitCandidates.length > 0) {
+      return { semanticAction: '语义待确认', semanticRole: 'unknown' }
+    }
+
+    if (side === 'BUY' || side === 'SELL') return { semanticAction: '合约成交', semanticRole: 'unknown' }
     return { semanticAction: side || '语义待确认', semanticRole: 'unknown' }
   }
 
@@ -166,6 +179,15 @@ function buildRuntimeSemanticSummary(input: {
   const latestEntry = input.latestOrders.find(order => order.semanticRole === 'entry') ?? null
   const latestExit = input.latestOrders.find(order => order.semanticRole === 'exit') ?? null
   const latestSync = input.latestOrders.find(order => order.orderId?.startsWith('sync-')) ?? null
+  const entryOrders = input.latestOrders
+    .filter(order => order.semanticRole === 'entry')
+    .map(order => ({ orderId: order.orderId, executedAt: order.executedAt }))
+  const exitOrders = input.latestOrders
+    .filter(order => order.semanticRole === 'exit')
+    .map(order => ({ orderId: order.orderId, executedAt: order.executedAt }))
+  const syncOrders = input.latestOrders
+    .filter(order => order.orderId?.startsWith('sync-'))
+    .map(order => ({ orderId: order.orderId, executedAt: order.executedAt }))
   const latestSemanticAction = input.latestOrders[0]?.semanticAction ?? null
 
   const serviceStatusLabel = input.status === 'running'
@@ -239,6 +261,11 @@ function buildRuntimeSemanticSummary(input: {
     cycleState = 'needs_attention'
     explanation = `策略服务已停止，但本地台账仍显示存在未平仓位，请核对交易所仓位和本地记录。`
     nextExpectedAction = '核对并处理未平仓位'
+  } else if (input.status === 'stopped' && !hasOpenPosition && cycleState === 'waiting_entry') {
+    cycleStatusLabel = '待启动'
+    cycleState = 'unknown'
+    explanation = `策略服务已停止，当前无未平仓位。启动策略后才会继续等待入场条件。`
+    nextExpectedAction = null
   }
 
   return {
@@ -256,6 +283,9 @@ function buildRuntimeSemanticSummary(input: {
       latestEntryOrderId: latestEntry?.orderId ?? null,
       latestExitOrderId: latestExit?.orderId ?? null,
       latestSyncOrderId: latestSync?.orderId ?? null,
+      entryOrders,
+      exitOrders,
+      syncOrders,
       latestEntryAt: latestEntry?.executedAt ?? null,
       latestExitAt: latestExit?.executedAt ?? null,
       latestSemanticAction,
@@ -410,8 +440,8 @@ export function mapAccountStrategyDetailToRecord(
   const deploymentMarketType = snapshotMarketType === 'unknown' ? null : snapshotMarketType === 'spot' || snapshotMarketType === 'perp' ? snapshotMarketType : null
   const invalidBinding = detail.snapshot.compatibilityMetadata?.invalidBinding === true
   const ruleSummary = normalizeRuleSummary(detail.snapshot.ruleSummary)
-  const entryAction = findRuleAction(ruleSummary, 'entry')
-  const exitAction = findRuleAction(ruleSummary, 'exit')
+  const entryActions = findRuleActions(ruleSummary, 'entry')
+  const exitActions = findRuleActions(ruleSummary, 'exit')
   const positionOverview = detail.positionOverview
     ? {
         openPositionsCount: detail.positionOverview.openPositionsCount ?? null,
@@ -425,8 +455,8 @@ export function mapAccountStrategyDetailToRecord(
         const semantic = classifyOrderSemantic({
           side: order.side,
           marketType: snapshotMarketType,
-          entryAction,
-          exitAction,
+          entryActions,
+          exitActions,
         })
         return {
           executedAt: fmtTimelineTime(order.executedAt),

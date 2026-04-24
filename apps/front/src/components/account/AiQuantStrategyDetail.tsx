@@ -181,10 +181,16 @@ function formatOrderFee(order: NonNullable<AiQuantStrategyRecord['latestOrders']
   if (order.fee === 0 && !order.feeCurrency && order.orderId?.startsWith('sync-')) {
     return '--（同步记录未含手续费）'
   }
-  if (order.fee === 0) {
-    return '0（交易所回执为 0）'
-  }
   return `${formatOptionalPreciseAmount(order.fee)} ${order.feeCurrency ?? ''}`.trim()
+}
+
+function formatOrderEvidenceList(
+  orders: Array<{ orderId: string | null; executedAt: string }> | undefined,
+) {
+  if (!orders?.length) return '--'
+  return orders
+    .map(order => `${order.executedAt}${order.orderId ? ` / ${order.orderId}` : ''}`)
+    .join('；')
 }
 
 interface AiQuantStrategyDetailProps {
@@ -276,7 +282,9 @@ export function AiQuantStrategyDetail({
   const semanticSummary = strategy.runtimeSemanticSummary
   const latestEntryOrderId = semanticSummary?.evidence.latestEntryOrderId ?? null
   const latestExitOrderId = semanticSummary?.evidence.latestExitOrderId ?? null
-  const latestSyncOrderId = semanticSummary?.evidence.latestSyncOrderId ?? null
+  const entryOrderEvidence = semanticSummary?.evidence.entryOrders
+  const exitOrderEvidence = semanticSummary?.evidence.exitOrders
+  const syncOrderEvidence = semanticSummary?.evidence.syncOrders
 
   return (
     <main className="mx-auto flex w-full max-w-[920px] flex-1 flex-col gap-4 px-4 py-8 md:px-8">
@@ -750,16 +758,16 @@ export function AiQuantStrategyDetail({
               <span className="break-all text-[color:var(--cf-text)]">{strategy.snapshotHash ?? '--'}</span>
             </p>
             <p className="flex items-start gap-2">
-              <span className="min-w-28 text-[color:var(--cf-muted)]">最近入场订单</span>
-              <span className="break-all text-[color:var(--cf-text)]">{latestEntryOrderId ?? '--'}</span>
+              <span className="min-w-28 text-[color:var(--cf-muted)]">入场订单证据</span>
+              <span className="break-all text-[color:var(--cf-text)]">{formatOrderEvidenceList(entryOrderEvidence)}</span>
             </p>
             <p className="flex items-start gap-2">
-              <span className="min-w-28 text-[color:var(--cf-muted)]">最近出场订单</span>
-              <span className="break-all text-[color:var(--cf-text)]">{latestExitOrderId ?? '--'}</span>
+              <span className="min-w-28 text-[color:var(--cf-muted)]">出场订单证据</span>
+              <span className="break-all text-[color:var(--cf-text)]">{formatOrderEvidenceList(exitOrderEvidence)}</span>
             </p>
             <p className="flex items-start gap-2">
-              <span className="min-w-28 text-[color:var(--cf-muted)]">最近同步订单</span>
-              <span className="break-all text-[color:var(--cf-text)]">{latestSyncOrderId ?? '--'}</span>
+              <span className="min-w-28 text-[color:var(--cf-muted)]">同步订单证据</span>
+              <span className="break-all text-[color:var(--cf-text)]">{formatOrderEvidenceList(syncOrderEvidence)}</span>
             </p>
             <p className="flex items-start gap-2">
               <span className="min-w-28 text-[color:var(--cf-muted)]">数据边界</span>

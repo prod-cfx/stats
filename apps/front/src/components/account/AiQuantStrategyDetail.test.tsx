@@ -120,6 +120,9 @@ describe('AiQuantStrategyDetail', () => {
                 latestEntryOrderId: '3507763615427895296',
                 latestExitOrderId: 'sync-close-1777042803366',
                 latestSyncOrderId: 'sync-close-1777042803366',
+                entryOrders: [{ orderId: '3507763615427895296', executedAt: '2026-04-24 14:45' }],
+                exitOrders: [{ orderId: 'sync-close-1777042803366', executedAt: '2026-04-24 15:00' }],
+                syncOrders: [{ orderId: 'sync-close-1777042803366', executedAt: '2026-04-24 15:00' }],
                 latestEntryAt: '2026-04-24 14:45',
                 latestExitAt: '2026-04-24 15:00',
                 latestSemanticAction: '卖出',
@@ -164,7 +167,7 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('--（同步记录未含手续费）')
     expect(container.textContent).toContain('真实性审计')
     expect(container.textContent).toContain('3507763615427895296')
-    expect(container.textContent).toContain('最近出场订单')
+    expect(container.textContent).toContain('出场订单证据')
     expect(container.textContent).toContain('sync-close-1777042803366')
     expect(container.textContent).toContain('已执行 1 个发布快照运行语义，待执行/冷却/失败 0 个')
   })

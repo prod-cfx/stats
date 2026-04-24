@@ -901,6 +901,16 @@ describe('ai-quant-strategy-api-adapter', () => {
           feeCurrency: 'DOGE',
           orderId: 'okx-buy-1',
         },
+        {
+          executedAt: '2026-04-24T14:44:59.000Z',
+          side: 'BUY',
+          symbol: 'DOGEUSDT',
+          price: 0.097,
+          quantity: 50,
+          fee: 0.01,
+          feeCurrency: 'DOGE',
+          orderId: 'okx-buy-0',
+        },
       ],
     } as any
     const record = mapAccountStrategyDetailToRecord(completedSpotDetail)
@@ -923,6 +933,12 @@ describe('ai-quant-strategy-api-adapter', () => {
         latestEntryOrderId: 'okx-buy-1',
         latestExitOrderId: 'sync-close-1',
         latestSyncOrderId: 'sync-close-1',
+        entryOrders: [
+          { orderId: 'okx-buy-1', executedAt: '2026-04-24 14:45' },
+          { orderId: 'okx-buy-0', executedAt: '2026-04-24 14:44' },
+        ],
+        exitOrders: [{ orderId: 'sync-close-1', executedAt: '2026-04-24 15:00' }],
+        syncOrders: [{ orderId: 'sync-close-1', executedAt: '2026-04-24 15:00' }],
       }),
     }))
 
@@ -935,6 +951,59 @@ describe('ai-quant-strategy-api-adapter', () => {
     expect(stopped.runtimeSemanticSummary?.explanation).toContain('策略服务已停止')
     expect(stopped.runtimeSemanticSummary?.explanation).not.toContain('仍在运行')
     expect(stopped.runtimeSemanticSummary?.nextExpectedAction).toBeNull()
+  })
+
+  it('does not describe stopped flat strategies as waiting for automatic entry', () => {
+    const record = mapAccountStrategyDetailToRecord({
+      id: 'inst-stopped-flat',
+      name: 'stopped flat',
+      status: 'stopped',
+      exchange: 'okx',
+      symbol: 'ETHUSDT',
+      timeframe: '15m',
+      positionPct: 10,
+      isSubscribed: true,
+      metrics: { returnPct: 0, maxDrawdownPct: 0, winRatePct: 0, tradeCount: 0 },
+      updatedAt: '2026-04-24T15:00:00.000Z',
+      totalPnl: 0,
+      todayPnl: 0,
+      equitySeries: [],
+      snapshot: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        timeframe: '15m',
+        positionPct: 10,
+        publishedSnapshotId: 'snapshot-stopped-flat',
+        snapshotHash: 'hash-stopped-flat',
+        paramSchema: null,
+        paramValues: null,
+        schemaVersion: null,
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          marketType: 'spot',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
+      },
+      timeline: [],
+      runtimeExecutionStates: [],
+      accountOverview: null,
+      positionOverview: {
+        openPositionsCount: 0,
+        closedPositionsCount: 0,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 0,
+      },
+      latestOrders: [],
+    } as any)
+
+    expect(record.runtimeSemanticSummary).toEqual(expect.objectContaining({
+      headline: '已停止 · 空仓 · 待启动',
+      cycleState: 'unknown',
+      nextExpectedAction: null,
+    }))
+    expect(record.runtimeSemanticSummary?.explanation).toContain('启动策略后才会继续等待入场条件')
   })
 
   it('builds contract runtime semantics without spot-specific buy/sell wording', () => {
@@ -1015,6 +1084,74 @@ describe('ai-quant-strategy-api-adapter', () => {
       cycleState: 'entered',
       nextExpectedAction: '等待出场条件触发',
     }))
+  })
+
+  it('falls back to neutral contract semantics when rule actions are bidirectional', () => {
+    const record = mapAccountStrategyDetailToRecord({
+      id: 'inst-perp-bidirectional',
+      name: 'perp bidirectional',
+      status: 'running',
+      exchange: 'okx',
+      symbol: 'BTC-USDT-SWAP',
+      timeframe: '15m',
+      positionPct: 10,
+      isSubscribed: true,
+      metrics: { returnPct: 0, maxDrawdownPct: 0, winRatePct: 0, tradeCount: 1 },
+      updatedAt: '2026-04-24T15:00:00.000Z',
+      totalPnl: 0,
+      todayPnl: 0,
+      equitySeries: [],
+      snapshot: {
+        exchange: 'okx',
+        symbol: 'BTC-USDT-SWAP',
+        timeframe: '15m',
+        positionPct: 10,
+        publishedSnapshotId: 'snapshot-perp-bi',
+        snapshotHash: 'hash-perp-bi',
+        paramSchema: null,
+        paramValues: null,
+        schemaVersion: null,
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'BTC-USDT-SWAP',
+          marketType: 'perp',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
+        ruleSummary: {
+          rules: [
+            { id: 'entry-long', phase: 'entry', conditionKey: 'signal.long', operator: null, value: null, actions: ['OPEN_LONG'] },
+            { id: 'entry-short', phase: 'entry', conditionKey: 'signal.short', operator: null, value: null, actions: ['OPEN_SHORT'] },
+            { id: 'exit-long', phase: 'exit', conditionKey: 'signal.exit', operator: null, value: null, actions: ['CLOSE_LONG'] },
+          ],
+        },
+      },
+      timeline: [],
+      runtimeExecutionStates: [],
+      accountOverview: null,
+      positionOverview: {
+        openPositionsCount: 1,
+        closedPositionsCount: 0,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 0,
+      },
+      latestOrders: [{
+        executedAt: '2026-04-24T15:00:03.366Z',
+        side: 'SELL',
+        symbol: 'BTC-USDT-SWAP',
+        price: 68000,
+        quantity: 0.01,
+        fee: 0.2,
+        feeCurrency: 'USDT',
+        orderId: 'ambiguous-sell-1',
+      }],
+    } as any)
+
+    expect(record.latestOrders?.[0]).toEqual(expect.objectContaining({
+      semanticAction: '语义待确认',
+      semanticRole: 'unknown',
+    }))
+    expect(record.runtimeSemanticSummary?.evidence.latestEntryOrderId).toBeNull()
   })
 
 })
