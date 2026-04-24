@@ -357,6 +357,7 @@ describe('BacktestReportClient', () => {
     expect(container.textContent).toContain('现货报告关注持仓、成本、未实现盈亏和资金占用，不展示强平风险。')
     expect(container.textContent).toContain('报告解读')
     expect(container.textContent).not.toContain('AI 深度洞察')
+    expect(container.textContent).not.toContain('本次报告数据覆盖完整，样本量偏少，需要结合更长周期验证。现货报告关注')
     expect(container.textContent).toContain('$0.098038')
     expect(container.textContent).toContain('$0.100010')
     expect(container.textContent).toContain('上线前继续验证')

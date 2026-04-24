@@ -237,7 +237,6 @@ function DecisionSummarySection({
         <h3 className="mb-4 text-base font-medium text-[color:var(--cf-text-strong)]">
           {confidence.title === '报告可信度' ? '市场风险能力' : 'Market Risk Coverage'}
         </h3>
-        <p className="mb-4 text-sm text-[color:var(--cf-muted)]">{confidence.summary}</p>
         <ul className="space-y-3 text-sm text-[color:var(--cf-text)]">
           {marketCapabilityNotes.map(note => (
             <li key={note}>{note}</li>
