@@ -76,6 +76,36 @@ describe('BetaCodeService', () => {
     expectDomainError(thrown, code, status)
   }
 
+  describe('createBatch', () => {
+    it('keeps generating codes when database uniqueness skips a collision', async () => {
+      const firstCreated = { ...activeCode, id: 'code-1', code: 'BETA00000001' }
+      const secondCreated = { ...activeCode, id: 'code-2', code: 'BETA00000003' }
+      jest.spyOn(service as unknown as { generateCode: () => string }, 'generateCode')
+        .mockReturnValueOnce('BETA00000001')
+        .mockReturnValueOnce('BETA00000002')
+        .mockReturnValueOnce('BETA00000003')
+      repository.createMany
+        .mockResolvedValueOnce([firstCreated])
+        .mockResolvedValueOnce([secondCreated])
+
+      const result = await service.createBatch({
+        count: 2,
+        maxUsesPerCode: 1,
+        adminId: 'admin-1',
+      })
+
+      expect(result).toEqual([firstCreated, secondCreated])
+      expect(repository.createMany).toHaveBeenCalledTimes(2)
+      expect(repository.createMany).toHaveBeenNthCalledWith(1, [
+        { code: 'BETA00000001', maxUses: 1, createdByAdminId: 'admin-1' },
+        { code: 'BETA00000002', maxUses: 1, createdByAdminId: 'admin-1' },
+      ])
+      expect(repository.createMany).toHaveBeenNthCalledWith(2, [
+        { code: 'BETA00000003', maxUses: 1, createdByAdminId: 'admin-1' },
+      ])
+    })
+  })
+
   describe('consumeForNewUser', () => {
     it('throws required when a new user has no beta code', async () => {
       await expectRejectsWith(

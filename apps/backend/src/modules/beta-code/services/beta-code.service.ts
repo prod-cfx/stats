@@ -52,18 +52,30 @@ export class BetaCodeService {
   }
 
   async createBatch(input: CreateBetaCodeBatchInput): Promise<BetaAccessCode[]> {
-    const codes = new Set<string>()
-    while (codes.size < input.count) {
-      codes.add(this.generateCode())
+    const created: BetaAccessCode[] = []
+    const attemptedCodes = new Set<string>()
+
+    while (created.length < input.count) {
+      const codes = new Set<string>()
+      while (codes.size < input.count - created.length) {
+        const code = this.generateCode()
+        if (!attemptedCodes.has(code)) {
+          codes.add(code)
+          attemptedCodes.add(code)
+        }
+      }
+
+      const batch = await this.repository.createMany(
+        [...codes].map(code => ({
+          code,
+          maxUses: input.maxUsesPerCode,
+          createdByAdminId: input.adminId ?? null,
+        })),
+      )
+      created.push(...batch)
     }
 
-    return this.repository.createMany(
-      [...codes].map(code => ({
-        code,
-        maxUses: input.maxUsesPerCode,
-        createdByAdminId: input.adminId ?? null,
-      })),
-    )
+    return created
   }
 
   async updateStatus(id: string, isActive: boolean): Promise<BetaAccessCode> {

@@ -41,6 +41,7 @@ export class BetaAccessCodeRepository {
 
     return this.txHost.tx.betaAccessCode.createManyAndReturn({
       data,
+      skipDuplicates: true,
       orderBy: { createdAt: 'desc' },
     })
   }
