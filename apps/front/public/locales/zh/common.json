@@ -232,7 +232,12 @@
         "logicTitle": "AI 生成的策略逻辑",
         "rule1": "价格 3 分钟内下跌 1%",
         "rule2": "使用 10% 资金买入",
-        "rule3": "反弹 2% 后卖出并准备回测",
+        "rule3": "价格反弹 2% 卖出",
+        "ruleMeta": {
+          "trigger": "触发条件",
+          "takeProfit": "止盈条件",
+          "position": "仓位管理"
+        },
         "inputPlaceholder": "继续让 AI 优化策略...",
         "deployAction": "部署策略",
         "sidebar": {

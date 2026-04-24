@@ -1,7 +1,7 @@
 'use client'
 
 import { motion, type Transition, useReducedMotion } from 'framer-motion'
-import { ArrowRight, BarChart3, LineChart, Play, ShieldCheck, Sparkles, Star, Zap } from 'lucide-react'
+import { ArrowRight, BarChart3, CircleDot, LineChart, ShieldCheck, Sparkles, Star, TrendingUp, UserRound, WalletCards, Zap } from 'lucide-react'
 import Link from 'next/link'
 import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -292,6 +292,7 @@ function FeatureSection({
   const { t } = useTranslation()
   const shouldReduceMotion = useReducedMotion()
   const sectionClass = featureKey === 'conversation' || featureKey === 'deploy' ? alternateSectionShell : sectionShell
+  const isConversation = featureKey === 'conversation'
 
   return (
     <section className={sectionClass}>
@@ -304,13 +305,15 @@ function FeatureSection({
           viewport={{ once: true, margin: '-80px' }}
           transition={shouldReduceMotion ? undefined : revealTransition}
         >
-          <div className="mb-4 text-[10px] font-bold tracking-[0.3em] text-primary uppercase">
+          <div className={`${isConversation ? '!text-[12px] !leading-none tracking-[0.18em]' : 'mb-4 text-[10px] tracking-[0.3em]'} font-bold text-primary uppercase`}>
             {t(`aiQuant.homepage.features.${featureKey}.eyebrow`)}
           </div>
-          <h2 className="text-2xl leading-tight font-black tracking-tight text-slate-950 dark:text-white md:text-3xl">
+          {isConversation && <div aria-hidden="true" className="h-5 shrink-0 md:h-6" />}
+          <h2 className={`${isConversation ? '!m-0 !text-[1.9rem] !leading-[1.18] md:!text-[2.15rem]' : 'text-2xl leading-tight md:text-3xl'} font-black tracking-normal text-slate-950 dark:text-white`}>
             {t(`aiQuant.homepage.features.${featureKey}.title`)}
           </h2>
-          <p className={`mt-5 text-base leading-relaxed ${mutedText}`}>
+          {isConversation && <div aria-hidden="true" className="h-5 shrink-0 md:h-6" />}
+          <p className={`${isConversation ? '!m-0 !text-[16px] !leading-[1.75] md:!text-[17px]' : 'mt-5 text-base leading-relaxed'} ${mutedText}`}>
             {t(`aiQuant.homepage.features.${featureKey}.description`)}
           </p>
         </motion.div>
@@ -342,64 +345,95 @@ function ConversationStrategyVisual() {
   const { t } = useTranslation()
   const shouldReduceMotion = useReducedMotion()
   const rules = [
-    { id: 'buy', label: 'BUY', text: t('aiQuant.homepage.visual.rule1'), icon: LineChart, tone: 'text-sky-500 dark:text-sky-300' },
-    { id: 'sell', label: 'SELL', text: t('aiQuant.homepage.visual.rule3'), icon: Play, tone: 'text-rose-500 dark:text-rose-300' },
-    { id: 'capital', label: '10%', text: t('aiQuant.homepage.visual.rule2'), icon: ShieldCheck, tone: 'text-emerald-500 dark:text-emerald-300' },
+    {
+      id: 'buy',
+      action: 'BUY',
+      meta: t('aiQuant.homepage.visual.ruleMeta.trigger'),
+      text: t('aiQuant.homepage.visual.rule1'),
+      icon: LineChart,
+      iconClass: 'bg-[#08264a] text-[#4da3ff]',
+      actionClass: 'border-[#1f4d88] bg-[#0c2447] text-[#62aaff]',
+    },
+    {
+      id: 'sell',
+      action: 'SELL',
+      meta: t('aiQuant.homepage.visual.ruleMeta.takeProfit'),
+      text: t('aiQuant.homepage.visual.rule3'),
+      icon: TrendingUp,
+      iconClass: 'bg-[#2c2108] text-[#f6c744]',
+      actionClass: 'border-[#6b4d0f] bg-[#2b210b] text-[#f6c744]',
+    },
+    {
+      id: 'capital',
+      action: '10%',
+      meta: t('aiQuant.homepage.visual.ruleMeta.position'),
+      text: t('aiQuant.homepage.visual.rule2'),
+      icon: WalletCards,
+      iconClass: 'bg-[#28114a] text-[#c084fc]',
+      actionClass: 'border-[#5b2a86] bg-[#2c1650] text-[#c084fc]',
+    },
   ]
 
   return (
-    <div className="mx-auto w-full max-w-[560px] overflow-hidden rounded-[1.75rem]">
-      <div className={`rounded-[1.75rem] p-4 sm:p-5 ${panelClass}`}>
-        <div className="rounded-[1.35rem] border border-slate-200/75 bg-slate-50/80 p-4 dark:border-white/[0.07] dark:bg-white/[0.035]">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary shadow-[0_12px_30px_rgba(100,108,255,0.16)]">
-              <Sparkles className="h-5 w-5" />
-            </div>
-            <div className="rounded-2xl border border-slate-200/85 bg-white px-4 py-3 text-sm leading-relaxed text-slate-700 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.06] dark:text-white/[0.78]">
-              {t('aiQuant.homepage.visual.assistant')}
-            </div>
+    <div className="mx-auto w-full max-w-[592px]">
+      <div className="rounded-xl border border-slate-200/80 bg-white/82 p-5 shadow-[0_22px_70px_rgba(15,23,42,0.08)] dark:border-white/[0.08] dark:bg-[#050607]/92 dark:shadow-[0_30px_90px_rgba(0,0,0,0.45)] md:p-7">
+        <div className="flex items-start gap-4">
+          <div className="mt-2 flex h-4 w-4 shrink-0 items-center justify-center text-slate-500 dark:text-white/70">
+            <CircleDot className="h-3.5 w-3.5" />
           </div>
-          <div className="mt-4 flex justify-end">
-            <div className="max-w-[82%] rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm leading-relaxed font-semibold text-primary shadow-[0_14px_34px_rgba(100,108,255,0.12)] dark:bg-primary/[0.16]">
-              {t('aiQuant.homepage.visual.userPrompt')}
-            </div>
+          <div className="rounded-xl border border-slate-200/75 bg-slate-100 px-5 py-4 text-[14px] leading-relaxed text-slate-700 shadow-sm dark:border-[#1b2940] dark:bg-[#101827] dark:text-[#b9c3d4]">
+            {t('aiQuant.homepage.visual.assistant')}
           </div>
         </div>
+        <div className="mt-4 flex items-center justify-end gap-3">
+          <div className="max-w-[82%] rounded-xl border border-slate-400/80 bg-transparent px-5 py-3 text-[14px] leading-relaxed text-slate-900 dark:border-white/80 dark:text-white">
+            {t('aiQuant.homepage.visual.userPrompt')}
+          </div>
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-300 text-slate-600 dark:bg-[#344154] dark:text-white">
+            <UserRound className="h-4 w-4" />
+          </div>
+        </div>
+      </div>
 
-        <div className="mt-4 rounded-[1.35rem] border border-slate-200/80 bg-white/[0.88] p-4 shadow-[0_18px_44px_rgba(15,23,42,0.06)] dark:border-white/[0.07] dark:bg-[#0b1119]/[0.84]">
-          <div className="flex items-center justify-between gap-3">
-            <div className="text-[11px] font-black tracking-[0.2em] text-slate-500 uppercase dark:text-white/48">
-              {t('aiQuant.homepage.visual.parsedStrategy')}
-            </div>
-            <div className="flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-bold text-emerald-500 dark:text-emerald-300">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)]" />
-              Processing
-            </div>
+      <div className="mt-4 rounded-xl border border-slate-200/80 bg-white/82 p-5 shadow-[0_22px_70px_rgba(15,23,42,0.08)] dark:border-white/[0.08] dark:bg-[#060708]/94 dark:shadow-[0_30px_90px_rgba(0,0,0,0.45)] md:p-6">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 text-[12px] font-bold tracking-[0.12em] text-primary">
+            <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary/10">
+              <Sparkles className="h-3.5 w-3.5 fill-current" />
+            </span>
+            {t('aiQuant.homepage.visual.parsedStrategy')}
           </div>
-          <div className="mt-4 space-y-2.5">
-            {rules.map((rule, index) => (
-              <motion.div
-                key={rule.id}
-                initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
-                whileInView={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: '-60px' }}
-                transition={shouldReduceMotion ? undefined : { duration: 0.45, ease: 'easeOut', delay: index * 0.08 }}
-                className="flex items-center gap-3 rounded-2xl border border-slate-200/75 bg-slate-50/80 px-3.5 py-3 dark:border-white/[0.06] dark:bg-white/[0.035]"
-              >
-                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm dark:bg-white/[0.06] ${rule.tone}`}>
-                  <rule.icon className="h-4 w-4" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className={`text-[11px] font-black tracking-[0.18em] ${rule.tone}`}>
-                    {rule.label}
-                  </div>
-                  <div className="mt-0.5 truncate text-sm font-semibold text-slate-700 dark:text-white/[0.78]">
-                    {rule.text}
-                  </div>
-                </div>
-              </motion.div>
-            ))}
+          <div className="flex items-center gap-1.5 text-[12px] font-bold text-emerald-400">
+            <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)]" />
+            Processing
           </div>
+        </div>
+        <div className="mt-5 space-y-3">
+          {rules.map((rule, index) => (
+            <motion.div
+              key={rule.id}
+              initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
+              whileInView={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: '-60px' }}
+              transition={shouldReduceMotion ? undefined : { duration: 0.45, ease: 'easeOut', delay: index * 0.08 }}
+              className="flex items-center gap-3 rounded-xl border border-slate-200/75 bg-slate-50/90 px-3.5 py-3 dark:border-white/[0.07] dark:bg-[#0c1119]"
+            >
+              <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${rule.iconClass}`}>
+                <rule.icon className="h-[18px] w-[18px]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-[11px] leading-none text-slate-500 dark:text-[#6f7a8c]">
+                  {rule.meta}
+                </div>
+                <div className="mt-1.5 text-[14px] leading-snug font-bold text-slate-900 dark:text-white">
+                  {rule.text}
+                </div>
+              </div>
+              <div className={`rounded-md border px-3 py-2 text-[12px] leading-none font-bold ${rule.actionClass}`}>
+                {rule.action}
+              </div>
+            </motion.div>
+          ))}
         </div>
       </div>
     </div>

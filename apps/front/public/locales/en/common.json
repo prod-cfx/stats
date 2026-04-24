@@ -232,7 +232,12 @@
         "logicTitle": "AI-generated strategy logic",
         "rule1": "Price drops 1% within 3 minutes",
         "rule2": "Buy with 10% capital",
-        "rule3": "Sell after a 2% rebound and prepare backtest",
+        "rule3": "Sell after a 2% price rebound",
+        "ruleMeta": {
+          "trigger": "Trigger",
+          "takeProfit": "Take profit",
+          "position": "Position"
+        },
         "inputPlaceholder": "Ask AI to refine the strategy...",
         "deployAction": "Deploy strategy",
         "sidebar": {
