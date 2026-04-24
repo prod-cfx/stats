@@ -1955,7 +1955,12 @@ export class CodegenConversationService {
     const snapshotSpecDesc = latestSnapshot?.specSnapshot && typeof latestSnapshot.specSnapshot === 'object' && !Array.isArray(latestSnapshot.specSnapshot)
       ? (latestSnapshot.specSnapshot as Record<string, unknown>)
       : null
-    const effectiveSpecDesc = snapshotSpecDesc ?? sessionSpecDesc
+    const effectiveSpecDesc = snapshotSpecDesc
+      ? {
+          ...(sessionSpecDesc ?? {}),
+          ...snapshotSpecDesc,
+        }
+      : sessionSpecDesc
     const sessionConsistencyReport = sessionSpecDesc?.consistencyReport
     const sessionPublishedSnapshotId = typeof sessionSpecDesc?.publishedSnapshotId === 'string'
       ? sessionSpecDesc.publishedSnapshotId

@@ -4845,6 +4845,11 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       constraintPack: {},
       latestDraftCode: 'return null',
       latestSpecDesc: {
+        canonicalDigest: 'sha256:session-digest',
+        publicationGate: {
+          passed: true,
+          blockingMismatches: [],
+        },
         rules: [
           {
             id: 'session-drift-rule',
@@ -4862,7 +4867,17 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const result = await service.getSession('s-drifted-published', 'u1')
 
     expect(result.publishedSnapshotId).toBe('snapshot-bound-spec')
+    expect(result.canonicalDigest).toBe('sha256:session-digest')
+    expect(result.publicationGate).toEqual({
+      passed: true,
+      blockingMismatches: [],
+    })
     expect(result.specDesc).toEqual(expect.objectContaining({
+      canonicalDigest: 'sha256:session-digest',
+      publicationGate: {
+        passed: true,
+        blockingMismatches: [],
+      },
       rules: [
         expect.objectContaining({
           id: 'snapshot-rule',
