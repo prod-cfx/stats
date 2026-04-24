@@ -140,7 +140,7 @@ export function buildAccountStrategyMixedTimeline(source: AccountStrategyTimelin
 
   return events
     .sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime())
-    .slice(0, 30)
+    .slice(-30)
 }
 
 export function buildAccountStrategyLatestOrders(
