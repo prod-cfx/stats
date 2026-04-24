@@ -11,6 +11,10 @@ describe('aiQuantProxyService', () => {
       get: jest.fn(),
       delete: jest.fn(),
       deleteAccountStrategy: jest.fn(),
+      listStrategyPlazaTemplates: jest.fn(),
+      getStrategyPlazaTemplateDetail: jest.fn(),
+      runStrategyPlazaTemplate: jest.fn(),
+      startStrategyPlazaEditSession: jest.fn(),
       getDeployResult: jest.fn(),
       deployAccountStrategy: jest.fn(),
       updateAccountStrategyExecutionLeverage: jest.fn(),
@@ -283,6 +287,50 @@ describe('aiQuantProxyService', () => {
         timeoutMs: codegenTimeoutMs,
         headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
       },
+    )
+  })
+
+  it('publicly proxies strategy plaza template list without user headers', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.listStrategyPlazaTemplates.mockResolvedValue([{ id: 'ma-cross' }])
+
+    await expect(service.listStrategyPlazaTemplates()).resolves.toEqual([{ id: 'ma-cross' }])
+
+    expect(quantifyClient.listStrategyPlazaTemplates).toHaveBeenCalledWith()
+  })
+
+  it('forwards strategy plaza run with user/auth headers and only runRequestId', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.runStrategyPlazaTemplate.mockResolvedValue({ id: 'strategy-1' })
+
+    await service.runStrategyPlazaTemplate('user-1', 'Bearer token-1', 'ma-cross', {
+      runRequestId: 'plaza-run-12345678',
+      marketType: 'spot',
+      symbol: 'ETH-USDT',
+      positionPct: 99,
+      leverage: 99,
+    })
+
+    expect(quantifyClient.runStrategyPlazaTemplate).toHaveBeenCalledWith(
+      'ma-cross',
+      { runRequestId: 'plaza-run-12345678' },
+      { userId: 'user-1', headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
+    )
+  })
+
+  it('forwards strategy plaza edit session with user/auth headers and no body', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.startStrategyPlazaEditSession.mockResolvedValue({
+      sessionId: 'session-1',
+      templateId: 'ma-cross',
+      initialMessage: 'Edit this strategy',
+    })
+
+    await service.startStrategyPlazaEditSession('user-1', 'Bearer token-1', 'ma-cross')
+
+    expect(quantifyClient.startStrategyPlazaEditSession).toHaveBeenCalledWith(
+      'ma-cross',
+      { userId: 'user-1', headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
     )
   })
 

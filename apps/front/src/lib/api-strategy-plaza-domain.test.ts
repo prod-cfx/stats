@@ -45,7 +45,7 @@ jest.mock('./api-client', () => ({
   safeApiCall: jest.fn(),
   unwrapApiResponse: (value: unknown) => value,
   validateId: (id: string, label?: string) => {
-    if (!id?.trim()) {
+    if (!id?.trim() || !/^[a-z0-9]{24}$/.test(id)) {
       throw new Error(`${label ?? 'id'} is required`)
     }
   },
@@ -172,7 +172,7 @@ describe('strategy plaza domain API', () => {
     )
   })
 
-  it('runs an encoded strategy plaza template with only runRequestId in the JSON body', async () => {
+  it('runs official strategy plaza template slugs with only runRequestId in the JSON body', async () => {
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -181,10 +181,12 @@ describe('strategy plaza domain API', () => {
     globalThis.fetch = fetchMock as unknown as typeof fetch
 
     const { runStrategyPlazaTemplate } = await import('./api')
-    await expect(runStrategyPlazaTemplate('ma cross/1', 'run-123456')).resolves.toEqual(strategyDetailPayload)
+    await expect(runStrategyPlazaTemplate('ma-cross', 'run-123456')).resolves.toEqual(strategyDetailPayload)
+    await expect(runStrategyPlazaTemplate('bollinger-reversion', 'run-789012')).resolves.toEqual(strategyDetailPayload)
 
-    expect(fetchMock).toHaveBeenCalledWith(
-      'http://localhost:3000/api/v1/strategy-plaza/templates/ma%20cross%2F1/run',
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'http://localhost:3000/api/v1/strategy-plaza/templates/ma-cross/run',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({
@@ -192,6 +194,13 @@ describe('strategy plaza domain API', () => {
           'Content-Type': 'application/json',
         }),
         body: JSON.stringify({ runRequestId: 'run-123456' }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://localhost:3000/api/v1/strategy-plaza/templates/bollinger-reversion/run',
+      expect.objectContaining({
+        body: JSON.stringify({ runRequestId: 'run-789012' }),
       }),
     )
   })
@@ -230,5 +239,45 @@ describe('strategy plaza domain API', () => {
 
     expect(requestId.startsWith('plaza-run-')).toBe(true)
     expect(requestId.length).toBeGreaterThanOrEqual('plaza-run-'.length + 8)
+  })
+
+  it('rejects blank template ids before making authenticated requests', async () => {
+    const fetchMock = jest.fn()
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { runStrategyPlazaTemplate, startStrategyPlazaEditSession } = await import('./api')
+
+    await expect(runStrategyPlazaTemplate('  ', 'run-123456')).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    })
+    await expect(startStrategyPlazaEditSession('')).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('preserves backend strategy plaza error code and reason message', async () => {
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({
+        message: 'OKX demo API key required',
+        error: {
+          code: 'strategy_plaza.okx_demo_api_key_required',
+          args: {
+            reasonMessage: '请先绑定 OKX 模拟盘 API Key',
+          },
+        },
+      }),
+    } as Response)
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { runStrategyPlazaTemplate } = await import('./api')
+
+    await expect(runStrategyPlazaTemplate('ma-cross', 'run-123456')).rejects.toMatchObject({
+      code: 'strategy_plaza.okx_demo_api_key_required',
+      message: '请先绑定 OKX 模拟盘 API Key',
+      statusCode: 400,
+    })
   })
 })

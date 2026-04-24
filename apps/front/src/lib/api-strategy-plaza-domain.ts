@@ -4,11 +4,13 @@ import {
   API_BASE_URL,
   ApiError,
   apiCall,
+  extractBackendErrorMessage,
   optionalAuthHeaders,
   requireAuthHeaders,
   unwrapResponse,
-  validateId,
 } from './api-access'
+
+const STRATEGY_PLAZA_TEMPLATE_SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
 export interface StrategyPlazaTemplate {
   id: string
@@ -50,10 +52,29 @@ async function parseStrategyPlazaJson(response: Response, fallbackMessage: strin
   }
 
   if (!response.ok) {
-    throw new ApiError(fallbackMessage, 'STRATEGY_PLAZA_REQUEST_FAILED', response.status, json)
+    throw new ApiError(
+      extractBackendErrorMessage(json, fallbackMessage),
+      extractBackendErrorCode(json) ?? 'STRATEGY_PLAZA_REQUEST_FAILED',
+      response.status,
+      json,
+    )
   }
 
   return json
+}
+
+function getStrategyPlazaTemplateSlug(templateId: string): string {
+  const slug = templateId.trim()
+  if (!STRATEGY_PLAZA_TEMPLATE_SLUG_PATTERN.test(slug)) {
+    throw new ApiError('strategy plaza template ID is required', 'INVALID_INPUT')
+  }
+  return slug
+}
+
+function extractBackendErrorCode(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== 'object') return undefined
+  const error = (payload as { error?: { code?: unknown } }).error
+  return typeof error?.code === 'string' && error.code.trim() ? error.code : undefined
 }
 
 function buildStrategyPlazaUrl(templateId?: string, action?: 'run' | 'edit-session'): string {
@@ -82,12 +103,12 @@ export async function runStrategyPlazaTemplate(
   runRequestId: string,
 ): Promise<AccountAiQuantStrategyDetail> {
   return apiCall(async () => {
-    validateId(templateId, 'strategy plaza template ID')
+    const slug = getStrategyPlazaTemplateSlug(templateId)
     if (!runRequestId?.trim()) {
       throw new ApiError('runRequestId is required', 'INVALID_INPUT')
     }
 
-    const response = await fetch(buildStrategyPlazaUrl(templateId, 'run'), {
+    const response = await fetch(buildStrategyPlazaUrl(slug, 'run'), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -106,9 +127,9 @@ export async function startStrategyPlazaEditSession(
   templateId: string,
 ): Promise<StrategyPlazaEditSessionResponse> {
   return apiCall(async () => {
-    validateId(templateId, 'strategy plaza template ID')
+    const slug = getStrategyPlazaTemplateSlug(templateId)
 
-    const response = await fetch(buildStrategyPlazaUrl(templateId, 'edit-session'), {
+    const response = await fetch(buildStrategyPlazaUrl(slug, 'edit-session'), {
       method: 'POST',
       headers: requireAuthHeaders(),
     })

@@ -35,6 +35,10 @@ export class QuantifyAiQuantClient {
     return this.runUntypedRequest<T>(path, 'DELETE', options)
   }
 
+  async post<T>(path: string, body?: Record<string, unknown>, options?: QuantifyRequestOptions): Promise<T> {
+    return this.runUntypedJsonRequest<T>(path, 'POST', options, body)
+  }
+
   async listAccountStrategies(
     query: Record<string, string | number | boolean | undefined>,
     options: QuantifyRequestOptions & { userId: string },
@@ -131,6 +135,43 @@ export class QuantifyAiQuantClient {
           signal,
         }) as Promise<unknown>,
       options,
+    )
+  }
+
+  async listStrategyPlazaTemplates() {
+    return this.get('/strategy-plaza/templates')
+  }
+
+  async getStrategyPlazaTemplateDetail(templateId: string) {
+    return this.get(`/strategy-plaza/templates/${encodeURIComponent(templateId)}`)
+  }
+
+  async runStrategyPlazaTemplate(
+    templateId: string,
+    body: Record<string, unknown>,
+    options: QuantifyRequestOptions & { userId: string },
+  ) {
+    return this.post(
+      `/strategy-plaza/templates/${encodeURIComponent(templateId)}/run`,
+      { runRequestId: body.runRequestId },
+      {
+        ...options,
+        headers: buildUserHeaders(options.userId, options.headers?.authorization),
+      },
+    )
+  }
+
+  async startStrategyPlazaEditSession(
+    templateId: string,
+    options: QuantifyRequestOptions & { userId: string },
+  ) {
+    return this.post(
+      `/strategy-plaza/templates/${encodeURIComponent(templateId)}/edit-session`,
+      undefined,
+      {
+        ...options,
+        headers: buildUserHeaders(options.userId, options.headers?.authorization),
+      },
     )
   }
 

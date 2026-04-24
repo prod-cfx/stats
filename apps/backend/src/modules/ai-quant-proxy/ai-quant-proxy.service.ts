@@ -186,6 +186,40 @@ export class AiQuantProxyService {
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
+  async listStrategyPlazaTemplates(): Promise<unknown> {
+    return this.quantifyClient.listStrategyPlazaTemplates()
+      .catch(error => { throw this.mapQuantifyError(error) })
+  }
+
+  async getStrategyPlazaTemplateDetail(templateId: string): Promise<unknown> {
+    return this.quantifyClient.getStrategyPlazaTemplateDetail(templateId)
+      .catch(error => { throw this.mapQuantifyError(error) })
+  }
+
+  async runStrategyPlazaTemplate(
+    userId: string,
+    authorization: string | undefined,
+    templateId: string,
+    body: Record<string, unknown>,
+  ): Promise<unknown> {
+    return this.quantifyClient.runStrategyPlazaTemplate(
+      templateId,
+      { runRequestId: body.runRequestId },
+      { userId, headers: this.userHeaders(userId, authorization) },
+    ).catch(error => { throw this.mapQuantifyError(error) })
+  }
+
+  async startStrategyPlazaEditSession(
+    userId: string,
+    authorization: string | undefined,
+    templateId: string,
+  ): Promise<unknown> {
+    return this.quantifyClient.startStrategyPlazaEditSession(
+      templateId,
+      { userId, headers: this.userHeaders(userId, authorization) },
+    ).catch(error => { throw this.mapQuantifyError(error) })
+  }
+
   async deleteAiQuantConversation(userId: string, authorization: string | undefined, conversationId: string): Promise<void> {
     return this.quantifyClient.delete<void>(`/account/ai-quant/conversations/${encodeURIComponent(conversationId)}`, {
       timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
