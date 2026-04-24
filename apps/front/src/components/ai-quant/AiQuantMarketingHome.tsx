@@ -1,36 +1,25 @@
-'use client'
-
 import type { ReactNode } from 'react'
 import { ArrowRight, Bot, Check, LineChart, Play, ShieldCheck, Sparkles, Zap } from 'lucide-react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
-import { useTranslation } from 'react-i18next'
 
 type FeatureKey = 'conversation' | 'backtest' | 'deploy' | 'plaza'
 type AdvantageKey = 'barrier' | 'logic' | 'validation' | 'closedLoop'
+type Translate = (key: string, options?: Record<string, unknown>) => string
 
 const workflowKeys = ['chat', 'strategy', 'backtest', 'deploy'] as const
 const featureKeys: FeatureKey[] = ['conversation', 'backtest', 'deploy', 'plaza']
 const advantageKeys: AdvantageKey[] = ['barrier', 'logic', 'validation', 'closedLoop']
-
-function useCurrentLng() {
-  const params = useParams<{ lng?: string }>()
-  return params?.lng === 'en' ? 'en' : 'zh'
-}
-
-export function AiQuantMarketingHome() {
-  const { t } = useTranslation()
-  const lng = useCurrentLng()
+export function AiQuantMarketingHome({ lng, t }: { lng: 'zh' | 'en', t: Translate }) {
   const ctaHref = `/${lng}/ai-quant`
 
   return (
     <main className="overflow-hidden bg-[color:var(--cf-bg)] text-[color:var(--cf-text)]">
-      <HeroSection ctaHref={ctaHref} />
-      <WorkflowSection />
+      <HeroSection ctaHref={ctaHref} t={t} />
+      <WorkflowSection t={t} />
       {featureKeys.map((key, index) => (
-        <FeatureSection key={key} featureKey={key} reverse={index % 2 === 1} />
+        <FeatureSection key={key} featureKey={key} reverse={index % 2 === 1} t={t} />
       ))}
-      <AdvantageSection />
+      <AdvantageSection t={t} />
       <section className="px-4 py-20 md:px-8 md:py-28">
         <div className="mx-auto max-w-5xl rounded-[2rem] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-6 py-12 text-center shadow-2xl shadow-black/10 md:px-12 md:py-16">
           <p className="text-xs font-bold tracking-[0.24em] text-primary uppercase">
@@ -42,15 +31,14 @@ export function AiQuantMarketingHome() {
           <p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-[color:var(--cf-muted)] md:text-lg">
             {t('aiQuant.homepage.final.description')}
           </p>
-          <PrimaryCta href={ctaHref} className="mt-8" />
+          <PrimaryCta href={ctaHref} className="mt-8" t={t} />
         </div>
       </section>
     </main>
   )
 }
 
-function HeroSection({ ctaHref }: { ctaHref: string }) {
-  const { t } = useTranslation()
+function HeroSection({ ctaHref, t }: { ctaHref: string, t: Translate }) {
 
   return (
     <section className="relative border-b border-[color:var(--cf-border)] bg-[color:var(--cf-bg)]">
@@ -70,20 +58,19 @@ function HeroSection({ ctaHref }: { ctaHref: string }) {
           <p className="mt-6 max-w-2xl text-lg leading-8 text-[color:var(--cf-muted)] md:text-xl">
             {t('aiQuant.homepage.hero.description')}
           </p>
-          <PrimaryCta href={ctaHref} className="mt-9" />
+          <PrimaryCta href={ctaHref} className="mt-9" t={t} />
         </div>
 
         <div className="relative min-h-[560px]">
-          <ProductWorkspaceVisual />
-          <LogicFloatCard />
+          <ProductWorkspaceVisual t={t} />
+          <LogicFloatCard t={t} />
         </div>
       </div>
     </section>
   )
 }
 
-function PrimaryCta({ href, className = '' }: { href: string, className?: string }) {
-  const { t } = useTranslation()
+function PrimaryCta({ href, className = '', t }: { href: string, className?: string, t: Translate }) {
 
   return (
     <Link
@@ -96,8 +83,7 @@ function PrimaryCta({ href, className = '' }: { href: string, className?: string
   )
 }
 
-function ProductWorkspaceVisual() {
-  const { t } = useTranslation()
+function ProductWorkspaceVisual({ t }: { t: Translate }) {
 
   return (
     <div className="absolute inset-x-0 top-4 mx-auto w-full max-w-[720px] overflow-hidden rounded-[2rem] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] shadow-2xl shadow-black/25 md:right-0 md:left-auto">
@@ -205,8 +191,7 @@ function RuleDot({ color, text }: { color: string, text: string }) {
   )
 }
 
-function LogicFloatCard() {
-  const { t } = useTranslation()
+function LogicFloatCard({ t }: { t: Translate }) {
 
   return (
     <div className="absolute bottom-2 left-0 hidden w-[360px] -rotate-2 rounded-[1.6rem] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 shadow-2xl shadow-black/25 backdrop-blur md:block">
@@ -254,8 +239,7 @@ function MetricTile({ label, value, good = false }: { label: string, value: stri
   )
 }
 
-function WorkflowSection() {
-  const { t } = useTranslation()
+function WorkflowSection({ t }: { t: Translate }) {
 
   return (
     <section className="px-4 py-20 md:px-8 md:py-28">
@@ -288,11 +272,12 @@ function WorkflowSection() {
 function FeatureSection({
   featureKey,
   reverse = false,
+  t,
 }: {
   featureKey: FeatureKey
   reverse?: boolean
+  t: Translate
 }) {
-  const { t } = useTranslation()
 
   return (
     <section className="px-4 py-16 md:px-8 md:py-24">
@@ -308,21 +293,20 @@ function FeatureSection({
             {t(`aiQuant.homepage.features.${featureKey}.description`)}
           </p>
         </div>
-        <FeatureVisual featureKey={featureKey} />
+        <FeatureVisual featureKey={featureKey} t={t} />
       </div>
     </section>
   )
 }
 
-function FeatureVisual({ featureKey }: { featureKey: FeatureKey }) {
-  if (featureKey === 'conversation') return <ConversationVisual />
-  if (featureKey === 'backtest') return <BacktestVisual />
-  if (featureKey === 'deploy') return <DeployVisual />
-  return <PlazaVisual />
+function FeatureVisual({ featureKey, t }: { featureKey: FeatureKey, t: Translate }) {
+  if (featureKey === 'conversation') return <ConversationVisual t={t} />
+  if (featureKey === 'backtest') return <BacktestVisual t={t} />
+  if (featureKey === 'deploy') return <DeployVisual t={t} />
+  return <PlazaVisual t={t} />
 }
 
-function ConversationVisual() {
-  const { t } = useTranslation()
+function ConversationVisual({ t }: { t: Translate }) {
 
   return (
     <div className="rounded-[2rem] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 shadow-2xl shadow-black/10">
@@ -340,8 +324,7 @@ function ConversationVisual() {
   )
 }
 
-function BacktestVisual() {
-  const { t } = useTranslation()
+function BacktestVisual({ t }: { t: Translate }) {
 
   return (
     <div className="rounded-[2rem] border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 shadow-2xl shadow-black/10">
@@ -360,8 +343,7 @@ function BacktestVisual() {
   )
 }
 
-function DeployVisual() {
-  const { t } = useTranslation()
+function DeployVisual({ t }: { t: Translate }) {
   const rows = [
     [t('aiQuant.homepage.visual.deployRows.snapshot'), t('aiQuant.homepage.visual.deployRows.confirmed')],
     [t('aiQuant.homepage.visual.deployRows.backtestGate'), t('aiQuant.homepage.visual.deployRows.passed')],
@@ -388,8 +370,7 @@ function DeployVisual() {
   )
 }
 
-function PlazaVisual() {
-  const { t } = useTranslation()
+function PlazaVisual({ t }: { t: Translate }) {
   const cards = [
     [t('aiQuant.homepage.visual.plaza.trend'), '+12.5%', ShieldCheck],
     [t('aiQuant.homepage.visual.plaza.grid'), '95%', Zap],
@@ -413,8 +394,7 @@ function PlazaVisual() {
   )
 }
 
-function AdvantageSection() {
-  const { t } = useTranslation()
+function AdvantageSection({ t }: { t: Translate }) {
 
   return (
     <section className="relative px-4 py-20 md:px-8 md:py-28">

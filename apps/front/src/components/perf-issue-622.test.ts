@@ -38,6 +38,7 @@ describe('issue #622 page-level RSC boundaries', () => {
       'app/[lng]/long-short-ratio/page.tsx',
       'app/[lng]/prediction-market/page.tsx',
       'app/[lng]/liquidation-map/page.tsx',
+      'app/[lng]/page.tsx',
     ] as const
 
     for (const file of translationOnlyPages) {
@@ -51,7 +52,6 @@ describe('issue #622 page-level RSC boundaries', () => {
 
   it('moves client-only hooks out of the remaining page entrypoints', () => {
     const pageToClientBoundary = [
-      ['app/[lng]/page.tsx', 'AiQuantMarketingHome'],
       ['app/[lng]/market/page.tsx', 'MarketPageClient'],
       ['app/[lng]/account/page.tsx', 'AccountPageClient'],
       ['app/[lng]/auth/login/page.tsx', 'LoginPageClient'],
@@ -71,7 +71,6 @@ describe('issue #622 page-level RSC boundaries', () => {
 
   it('keeps extracted client boundaries colocated and explicitly client-only', () => {
     const clientBoundaryFiles = [
-      'components/ai-quant/AiQuantMarketingHome.tsx',
       'app/[lng]/MarketPageClient.tsx',
       'app/[lng]/account/AccountPageClient.tsx',
       'app/[lng]/auth/login/LoginPageClient.tsx',
