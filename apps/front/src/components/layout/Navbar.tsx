@@ -82,7 +82,7 @@ export const Navbar = () => {
 
   // 临时隐藏：清算地图、爆仓数据（需要时再恢复展示）
   const dataNavHiddenIds = ['nav-liquidation-map', 'nav-liquidation-data']
-  const marketDataChild = { name: t('nav.home'), href: withLng('/market') }
+  const marketDataChild = { name: t('nav.marketData'), href: withLng('/market') }
   const dataChildren = [
     marketDataChild,
     ...catalogItems
