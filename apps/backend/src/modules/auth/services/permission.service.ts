@@ -90,13 +90,19 @@ export class PermissionService {
     }
 
     return roles.some(role => {
-      const permission = RBAC_PERMISSIONS.permission({
-        role,
-        action: rule.action,
-        resource: rule.resource,
-        possession: rule.possession ?? 'any',
-      })
-      if (permission.granted) return true
+      try {
+        const permission = RBAC_PERMISSIONS.permission({
+          role,
+          action: rule.action,
+          resource: rule.resource,
+          possession: rule.possession ?? 'any',
+        })
+        if (permission.granted) return true
+      } catch (error) {
+        if (BUILTIN_ROLE_CODES.has(role)) {
+          throw error
+        }
+      }
       return this.hasCustomPermission(role, rule)
     })
   }
@@ -266,6 +272,15 @@ export class PermissionService {
       case 'orderbook':
       case 'orderbooks':
         return AppResource.ORDERBOOK_CONFIG
+      case 'beta_code':
+      case 'betacode':
+      case 'beta_codes':
+      case 'betacodes':
+      case 'beta_access_code':
+      case 'betaaccesscode':
+      case 'beta_access_codes':
+      case 'betaaccesscodes':
+        return AppResource.BETA_CODE
       default:
         return null
     }
