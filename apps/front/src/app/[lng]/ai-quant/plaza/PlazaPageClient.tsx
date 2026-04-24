@@ -108,7 +108,7 @@ export function AiQuantPlazaPageClient() {
     setActionError(null)
     try {
       const editSession = await startStrategyPlazaEditSession(templateId)
-      setIntent({ type: 'chat', draft: editSession.initialMessage })
+      setIntent({ type: 'plaza-chat-session', sessionId: editSession.sessionId })
       router.push(`/${lng}/ai-quant`)
     } catch (error) {
       setActionError(getErrorMessage(error, '创建策略广场编辑会话失败'))

@@ -918,6 +918,16 @@ export function AiQuantPageClient({
       return
     }
 
+    if (intent.type === 'plaza-chat-session') {
+      const targetConversation = conversations.find(conversation =>
+        conversation.llmCodegenSessionId === intent.sessionId || conversation.id === intent.sessionId,
+      )
+      if (!targetConversation) return
+      clearIntent()
+      setActiveConversationId(targetConversation.id)
+      return
+    }
+
     if (intent.type === 'chat') {
       clearIntent()
       onSend(intent.draft)

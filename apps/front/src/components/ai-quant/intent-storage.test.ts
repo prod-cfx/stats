@@ -26,5 +26,11 @@ describe('intent-storage', () => {
       type: 'plaza-edit',
       templateId: 'bollinger-reversion',
     })
+
+    setIntent({ type: 'plaza-chat-session', sessionId: 'session-1' })
+    expect(getIntent(30 * 60 * 1000)).toMatchObject({
+      type: 'plaza-chat-session',
+      sessionId: 'session-1',
+    })
   })
 })

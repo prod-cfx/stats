@@ -659,6 +659,51 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(container.textContent).not.toContain('persisted-message')
   })
 
+  it('activates a plaza edit session conversation without appending to the existing conversation', async () => {
+    localStorage.clear()
+    localStorage.setItem('ai_quant_return_intent_v1', JSON.stringify({
+      type: 'plaza-chat-session',
+      sessionId: 'plaza-session-1',
+      ts: Date.now(),
+    }))
+
+    const { listAiQuantConversations } = jest.requireMock('@/lib/api') as {
+      listAiQuantConversations: jest.Mock
+    }
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'existing-conv',
+        status: 'DRAFTING',
+        activeCodegenSessionId: 'existing-session',
+        updatedAt: '2026-04-10T12:00:00.000Z',
+        conversationTitle: 'existing',
+        conversationMessages: [
+          { role: 'assistant', content: 'existing-message' },
+        ],
+      },
+      {
+        id: 'plaza-conv',
+        status: 'DRAFTING',
+        activeCodegenSessionId: 'plaza-session-1',
+        updatedAt: '2026-04-10T12:01:00.000Z',
+        conversationTitle: 'plaza edit',
+        conversationMessages: [
+          { role: 'user', content: 'plaza-template-edit-message' },
+        ],
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(localStorage.getItem('ai_quant_return_intent_v1')).toBeNull()
+    expect(container.textContent).toContain('plaza-template-edit-message')
+    expect(container.textContent).not.toContain('existing-message|plaza-template-edit-message')
+  })
+
   it('shows a dedicated loading state while server-owned conversations are syncing', async () => {
     localStorage.clear()
     seedVersionedConversation('deploy-current', Date.now())

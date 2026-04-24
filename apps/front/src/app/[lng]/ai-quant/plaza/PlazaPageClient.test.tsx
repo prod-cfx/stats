@@ -232,8 +232,8 @@ describe('AiQuantPlazaPageClient', () => {
     expect(plazaProps?.actionError).toBe('运行失败')
   })
 
-  it('starts an authenticated edit session and opens AI Quant chat draft', async () => {
-    mockStartStrategyPlazaEditSession.mockResolvedValue({ initialMessage: 'Edit MA Cross' })
+  it('starts an authenticated edit session and opens its AI Quant conversation', async () => {
+    mockStartStrategyPlazaEditSession.mockResolvedValue({ sessionId: 'session-1', initialMessage: 'Edit MA Cross' })
 
     await act(async () => {
       root.render(<AiQuantPlazaPageClient />)
@@ -245,13 +245,13 @@ describe('AiQuantPlazaPageClient', () => {
     })
 
     expect(mockStartStrategyPlazaEditSession).toHaveBeenCalledWith('ma-cross')
-    expect(mockSetIntent).toHaveBeenCalledWith({ type: 'chat', draft: 'Edit MA Cross' })
+    expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-chat-session', sessionId: 'session-1' })
     expect(mockPush).toHaveBeenCalledWith('/zh/ai-quant')
   })
 
-  it('resumes plaza-edit intent after login and opens AI Quant chat draft', async () => {
+  it('resumes plaza-edit intent after login and opens the created AI Quant conversation', async () => {
     mockGetIntent.mockReturnValue({ type: 'plaza-edit', templateId: 'ma-cross', ts: Date.now() })
-    mockStartStrategyPlazaEditSession.mockResolvedValue({ initialMessage: 'Resume MA Cross edit' })
+    mockStartStrategyPlazaEditSession.mockResolvedValue({ sessionId: 'session-resume-1', initialMessage: 'Resume MA Cross edit' })
 
     await act(async () => {
       root.render(<AiQuantPlazaPageClient />)
@@ -262,7 +262,7 @@ describe('AiQuantPlazaPageClient', () => {
     expect(mockClearIntent).toHaveBeenCalledTimes(1)
     expect(mockStartStrategyPlazaEditSession).toHaveBeenCalledTimes(1)
     expect(mockStartStrategyPlazaEditSession).toHaveBeenCalledWith('ma-cross')
-    expect(mockSetIntent).toHaveBeenCalledWith({ type: 'chat', draft: 'Resume MA Cross edit' })
+    expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-chat-session', sessionId: 'session-resume-1' })
     expect(mockPush).toHaveBeenCalledWith('/zh/ai-quant')
   })
 
