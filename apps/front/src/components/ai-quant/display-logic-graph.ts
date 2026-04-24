@@ -164,6 +164,15 @@ function formatPositionGainCondition(condition: DisplayLogicGraphCondition): str
   return `相对开仓均价盈利达到 ${percent}%`
 }
 
+function formatTakeProfitCondition(condition: DisplayLogicGraphCondition): string {
+  const rawValue = typeof condition.value === 'number' && Number.isFinite(condition.value)
+    ? condition.value
+    : condition.params?.valuePct
+  const percent = formatPercent(rawValue)
+  if (!percent) return '止盈条件'
+  return `相对开仓均价盈利达到 ${percent}%`
+}
+
 function formatPositionLossCondition(condition: DisplayLogicGraphCondition): string {
   const rawValue = typeof condition.value === 'number' && Number.isFinite(condition.value)
     ? condition.value
@@ -241,10 +250,14 @@ function formatConditionText(condition: DisplayLogicGraphCondition | undefined):
   if (!condition) return '条件待补充'
 
   switch (condition.key) {
+    case 'execution.on_start':
+      return '启动时执行'
     case 'price.change_pct':
       return formatPriceChangeCondition(condition)
     case 'position_gain_pct':
       return formatPositionGainCondition(condition)
+    case 'risk.take_profit_pct':
+      return formatTakeProfitCondition(condition)
     case 'position_loss_pct':
       return formatPositionLossCondition(condition)
     case 'bollinger.upper_break':

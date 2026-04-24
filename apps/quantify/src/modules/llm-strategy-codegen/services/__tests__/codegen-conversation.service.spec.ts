@@ -4781,6 +4781,97 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.consistencyReport).toEqual({ status: 'PASSED' })
   })
 
+  it('uses the published snapshot spec for published session responses', async () => {
+    mockRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-bound-spec',
+      specSnapshot: {
+        rules: [
+          {
+            id: 'snapshot-rule',
+            phase: 'entry',
+            condition: { key: 'execution.on_start' },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+        lockedParams: {
+          exchange: 'okx',
+          symbol: 'DOGEUSDT',
+          timeframe: '3m',
+        },
+      },
+      consistencyReport: { status: 'PASSED' },
+      paramsSnapshot: {
+        exchange: 'okx',
+        symbol: 'DOGEUSDT',
+        timeframe: '3m',
+      },
+      lockedParams: {
+        exchange: 'okx',
+        symbol: 'DOGEUSDT',
+        timeframe: '3m',
+      },
+      strategyConfig: {
+        exchange: 'okx',
+        symbol: 'DOGEUSDT',
+        baseTimeframe: '3m',
+        positionPct: 10,
+      },
+      backtestConfigDefaults: {
+        initialCash: 10000,
+        leverage: 1,
+        slippageBps: 10,
+        feeBps: 5,
+        priceSource: 'close',
+        allowPartial: false,
+      },
+      deploymentExecutionDefaults: {
+        leverage: 1,
+        priceSource: 'close',
+        orderType: 'market',
+        timeInForce: 'gtc',
+      },
+      deploymentExecutionConstraints: {
+        supportedPriceSources: ['close'],
+        supportedOrderTypes: ['market'],
+        supportedTimeInForce: ['gtc'],
+        defaultLeverage: 1,
+      },
+    })
+    mockRepo.findById.mockResolvedValue({
+      id: 's-drifted-published',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      checklist: {},
+      constraintPack: {},
+      latestDraftCode: 'return null',
+      latestSpecDesc: {
+        rules: [
+          {
+            id: 'session-drift-rule',
+            phase: 'entry',
+            condition: { key: 'price.change_pct', value: -0.01 },
+            actions: [{ type: 'OPEN_SHORT' }],
+          },
+        ],
+      },
+      strategyInstanceId: 'instance-1',
+      clarificationState: null,
+      rejectReason: null,
+    })
+
+    const result = await service.getSession('s-drifted-published', 'u1')
+
+    expect(result.publishedSnapshotId).toBe('snapshot-bound-spec')
+    expect(result.specDesc).toEqual(expect.objectContaining({
+      rules: [
+        expect.objectContaining({
+          id: 'snapshot-rule',
+        }),
+      ],
+    }))
+    expect(JSON.stringify(result.specDesc)).not.toContain('session-drift-rule')
+  })
+
   it('marks published sessions as republish-required when formal snapshot projection is incomplete', async () => {
     mockRepo.findLatestBySessionId.mockResolvedValue({
       id: 'snapshot-legacy-1',

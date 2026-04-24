@@ -1952,6 +1952,10 @@ export class CodegenConversationService {
     const sessionSpecDesc = session.latestSpecDesc && typeof session.latestSpecDesc === 'object' && !Array.isArray(session.latestSpecDesc)
       ? (session.latestSpecDesc as Record<string, unknown>)
       : null
+    const snapshotSpecDesc = latestSnapshot?.specSnapshot && typeof latestSnapshot.specSnapshot === 'object' && !Array.isArray(latestSnapshot.specSnapshot)
+      ? (latestSnapshot.specSnapshot as Record<string, unknown>)
+      : null
+    const effectiveSpecDesc = snapshotSpecDesc ?? sessionSpecDesc
     const sessionConsistencyReport = sessionSpecDesc?.consistencyReport
     const sessionPublishedSnapshotId = typeof sessionSpecDesc?.publishedSnapshotId === 'string'
       ? sessionSpecDesc.publishedSnapshotId
@@ -1983,12 +1987,12 @@ export class CodegenConversationService {
         : (sessionConsistencyReport && typeof sessionConsistencyReport === 'object' && !Array.isArray(sessionConsistencyReport)
             ? sessionConsistencyReport as Record<string, unknown>
             : null),
-      specDesc: sessionSpecDesc,
-      canonicalDigest: this.readCanonicalDigest(sessionSpecDesc),
+      specDesc: effectiveSpecDesc,
+      canonicalDigest: this.readCanonicalDigest(effectiveSpecDesc),
       strategyInstanceId: session.strategyInstanceId ?? null,
       clarificationState: this.readClarificationState(session.clarificationState),
       publicationGate:
-        this.readPublicationGate(sessionSpecDesc?.publicationGate)
+        this.readPublicationGate(effectiveSpecDesc?.publicationGate)
         ?? this.readPublicationGate(latestSnapshot?.consistencyReport)
         ?? this.readPublicationGate(sessionConsistencyReport),
       rejectReason: session.rejectReason,

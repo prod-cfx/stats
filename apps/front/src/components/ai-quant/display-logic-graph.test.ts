@@ -238,6 +238,73 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
     expect(graph.blocks[1].items.map(item => item.text).join(' ')).toContain('亏损达到 5%')
   })
 
+  it('renders start execution entries and take-profit risk rules from published snapshots', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        rules: [
+          {
+            id: 'entry-execution-on_start-210',
+            phase: 'entry',
+            condition: {
+              key: 'execution.on_start',
+            },
+            actions: [
+              {
+                type: 'OPEN_LONG',
+                sizing: {
+                  mode: 'RATIO',
+                  value: 0.1,
+                },
+              },
+            ],
+          },
+          {
+            id: 'exit-price-percent_change-140',
+            phase: 'exit',
+            condition: {
+              key: 'price.change_pct',
+              op: 'GTE',
+              value: 0.02,
+              params: {
+                basis: 'prev_close',
+                timeframe: '3m',
+              },
+            },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+          {
+            id: 'risk-take-profit',
+            phase: 'risk',
+            condition: {
+              key: 'risk.take_profit_pct',
+              value: 0.02,
+              params: {
+                basis: 'entry_avg_price',
+              },
+            },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+        lockedParams: {
+          exchange: 'okx',
+          symbol: 'DOGEUSDT',
+          timeframe: '3m',
+          marketType: 'spot',
+          positionPct: 10,
+        },
+      },
+    })
+
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(graph.blocks.map(block => block.type)).toEqual(['IF', 'AND_AT_THEN', 'EXECUTE'])
+    expect(text).toContain('启动时执行')
+    expect(text).toContain('开多')
+    expect(text).toContain('3m 内相对前收盘上涨 2%')
+    expect(text).toContain('风控: 相对开仓均价盈利达到 2% -> 平仓')
+    expect(text).not.toContain('不支持的条件，待补充')
+  })
+
   it('renders the first exit path as AND_AT_THEN instead of OR_THEN', () => {
     const graph = buildDisplayLogicGraphFromCodegenSpec({
       specDesc: {
