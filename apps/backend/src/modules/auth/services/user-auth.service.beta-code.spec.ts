@@ -37,7 +37,7 @@ type AuthRepositoryMock = Pick<
 interface TestContext {
   service: UserAuthService
   repository: AuthRepositoryMock
-  betaCodeService: jest.Mocked<Pick<BetaCodeService, 'consumeForNewUser'>>
+  betaCodeService: jest.Mocked<Pick<BetaCodeService, 'consumeForNewUser' | 'isGateEnabled'>>
   cacheService: jest.Mocked<Pick<CacheService, 'del' | 'get'>>
 }
 
@@ -62,6 +62,7 @@ describe('UserAuthService beta code creation flows', () => {
     }
     const betaCodeService = {
       consumeForNewUser: jest.fn().mockResolvedValue(undefined),
+      isGateEnabled: jest.fn().mockResolvedValue(false),
     }
     const cacheService = {
       del: jest.fn().mockResolvedValue(undefined),
@@ -118,6 +119,18 @@ describe('UserAuthService beta code creation flows', () => {
       betaCode: 'BETA1',
       userId: 'user-new-email',
     })
+  })
+
+  it('returns beta gate status in login config', async () => {
+    const { service, betaCodeService } = await createContext()
+    betaCodeService.isGateEnabled.mockResolvedValueOnce(true)
+
+    await expect(service.getTelegramLoginConfig()).resolves.toEqual({
+      botName: null,
+      betaCodeGateEnabled: true,
+    })
+
+    expect(betaCodeService.isGateEnabled).toHaveBeenCalledTimes(1)
   })
 
   it('consumes beta code when password registration creates a new user', async () => {

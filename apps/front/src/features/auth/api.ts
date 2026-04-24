@@ -197,6 +197,7 @@ export async function getTelegramDesktopIntentStatusRequest(intentId: string): P
 
 export async function getTelegramLoginConfigRequest(): Promise<{
   botName?: string | null
+  betaCodeGateEnabled?: boolean
 }> {
   return callClient(() => client.AuthController_getTelegramLoginConfig())
 }

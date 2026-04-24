@@ -87,9 +87,12 @@ export class BetaCodeService {
     return this.repository.updateStatus(id, isActive)
   }
 
+  async isGateEnabled(): Promise<boolean> {
+    return this.settingsService.getBoolean(BETA_CODE_GATE_ENABLED_SETTING_KEY, false)
+  }
+
   async consumeForNewUser(input: ConsumeBetaCodeInput): Promise<void> {
-    const gateEnabled = await this.settingsService.getBoolean(BETA_CODE_GATE_ENABLED_SETTING_KEY, false)
-    if (!gateEnabled) {
+    if (!(await this.isGateEnabled())) {
       return
     }
 

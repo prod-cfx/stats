@@ -14,6 +14,7 @@ import { useAuth } from '@/hooks/use-auth'
 
 interface EmailOtpFormProps {
   betaCode: string
+  betaCodeGateEnabled: boolean
   onBetaCodeChange: (betaCode: string) => void
   onSuccess: () => void
 }
@@ -26,7 +27,7 @@ function getLoginErrorMessage(error: unknown, betaCode: string, t: (key: string)
   return message || t('auth.loginFailed')
 }
 
-export function EmailOtpForm({ betaCode, onBetaCodeChange, onSuccess }: EmailOtpFormProps) {
+export function EmailOtpForm({ betaCode, betaCodeGateEnabled, onBetaCodeChange, onSuccess }: EmailOtpFormProps) {
   const { t } = useTranslation()
   const { sendEmailCode, loginWithEmailCode } = useAuth()
   const [email, setEmail] = useState('')
@@ -141,7 +142,7 @@ export function EmailOtpForm({ betaCode, onBetaCodeChange, onSuccess }: EmailOtp
     setVerifying(true)
 
     try {
-      await loginWithEmailCode(normalizedEmail, code, betaCode)
+      await loginWithEmailCode(normalizedEmail, code, betaCodeGateEnabled ? betaCode : undefined)
       onSuccess()
     } catch (e) {
       setError(getLoginErrorMessage(e, betaCode, t))
@@ -210,20 +211,22 @@ export function EmailOtpForm({ betaCode, onBetaCodeChange, onSuccess }: EmailOtp
         )}
       </div>
 
-      <div className="space-y-2">
-        <label htmlFor="beta-code-input" className="text-sm text-[color:var(--cf-muted)]">{t('auth.betaCode')}</label>
-        <input
-          id="beta-code-input"
-          type="text"
-          value={betaCode}
-          onChange={event => onBetaCodeChange(event.target.value)}
-          className="h-11 w-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm outline-none transition focus:border-primary"
-          placeholder={t('auth.betaCodePlaceholder')}
-        />
-        <p className="text-xs text-[color:var(--cf-muted)]">
-          {t('auth.betaCodeHint')}
-        </p>
-      </div>
+      {betaCodeGateEnabled && (
+        <div className="space-y-2">
+          <label htmlFor="beta-code-input" className="text-sm text-[color:var(--cf-muted)]">{t('auth.betaCode')}</label>
+          <input
+            id="beta-code-input"
+            type="text"
+            value={betaCode}
+            onChange={event => onBetaCodeChange(event.target.value)}
+            className="h-11 w-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm outline-none transition focus:border-primary"
+            placeholder={t('auth.betaCodePlaceholder')}
+          />
+          <p className="text-xs text-[color:var(--cf-muted)]">
+            {t('auth.betaCodeHint')}
+          </p>
+        </div>
+      )}
 
       {error && (
         <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-300">

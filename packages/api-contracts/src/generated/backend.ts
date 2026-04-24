@@ -3259,7 +3259,15 @@ const endpoints = makeApi([
     path: '/auth/telegram/login-config',
     alias: 'AuthController_getTelegramLoginConfig',
     requestFormat: 'json',
-    response: z.void(),
+    response: z
+      .object({
+        data: z
+          .object({ botName: z.string().nullable(), betaCodeGateEnabled: z.boolean() })
+          .passthrough(),
+        message: z.string(),
+      })
+      .partial()
+      .passthrough(),
   },
   {
     method: 'get',

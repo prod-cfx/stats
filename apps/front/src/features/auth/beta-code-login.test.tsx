@@ -80,7 +80,7 @@ describe('beta code login flow', () => {
 
   it('renders beta code field in the email form', async () => {
     await act(async () => {
-      root?.render(<EmailOtpForm betaCode="" onBetaCodeChange={() => {}} onSuccess={() => {}} />)
+      root?.render(<EmailOtpForm betaCode="" betaCodeGateEnabled onBetaCodeChange={() => {}} onSuccess={() => {}} />)
     })
 
     const betaCodeLabel = Array.from(container.querySelectorAll('label'))
@@ -89,9 +89,19 @@ describe('beta code login flow', () => {
     expect(container.textContent).toContain('auth.betaCodeHint')
   })
 
+  it('hides beta code field in the email form when beta gate is disabled', async () => {
+    await act(async () => {
+      root?.render(<EmailOtpForm betaCode="" betaCodeGateEnabled={false} onBetaCodeChange={() => {}} onSuccess={() => {}} />)
+    })
+
+    expect(container.querySelector('#beta-code-input')).toBeNull()
+    expect(container.textContent).not.toContain('auth.betaCode')
+    expect(container.textContent).not.toContain('auth.betaCodeHint')
+  })
+
   it('passes beta code when submitting an email code login', async () => {
     await act(async () => {
-      root?.render(<EmailOtpForm betaCode=" beta-42 " onBetaCodeChange={() => {}} onSuccess={() => {}} />)
+      root?.render(<EmailOtpForm betaCode=" beta-42 " betaCodeGateEnabled onBetaCodeChange={() => {}} onSuccess={() => {}} />)
     })
 
     const inputs = Array.from(container.querySelectorAll('input'))
@@ -111,7 +121,7 @@ describe('beta code login flow', () => {
     loginWithEmailCodeMock.mockRejectedValueOnce(new Error('HTTP_400'))
 
     await act(async () => {
-      root?.render(<EmailOtpForm betaCode="" onBetaCodeChange={() => {}} onSuccess={() => {}} />)
+      root?.render(<EmailOtpForm betaCode="" betaCodeGateEnabled onBetaCodeChange={() => {}} onSuccess={() => {}} />)
     })
 
     const inputs = Array.from(container.querySelectorAll('input'))

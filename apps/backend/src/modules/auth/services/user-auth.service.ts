@@ -253,9 +253,12 @@ export class UserAuthService {
     })
   }
 
-  async getTelegramLoginConfig(): Promise<{ botName: string | null }> {
-    const botName = await this.resolveTelegramBotName()
-    return { botName }
+  async getTelegramLoginConfig(): Promise<{ botName: string | null, betaCodeGateEnabled: boolean }> {
+    const [botName, betaCodeGateEnabled] = await Promise.all([
+      this.resolveTelegramBotName(),
+      this.betaCodeService.isGateEnabled(),
+    ])
+    return { botName, betaCodeGateEnabled }
   }
 
   async getTelegramWebAuthorizeUrl(payload: {
