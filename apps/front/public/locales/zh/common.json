@@ -217,7 +217,7 @@
       "heroCta": "立即体验",
       "finalCta": "开始创建策略",
       "hero": {
-        "eyebrow": "",
+        "eyebrow": "NEXT-GEN AI QUANT",
         "title": "小白也能用的 AI 量化交易工具",
         "description": "描述你的交易想法，AI 自动生成策略，完成回测并帮你执行交易",
         "howItWorks": "了解工作原理"
@@ -276,11 +276,11 @@
           },
           "backtest": {
             "title": "先回测，再决定是否运行",
-            "desc": "验证策略效果，避免盲目上实盘"
+            "desc": "验证策略效果，避免盲目上实盘。"
           },
           "deploy": {
             "title": "一键部署自动执行",
-            "desc": "策略启动后自动执行，不用盯盘"
+            "desc": "策略启动后自动执行，不用盯盘。"
           }
         }
       },

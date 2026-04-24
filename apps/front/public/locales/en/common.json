@@ -214,12 +214,13 @@
       "riskDrawdown": "Max Drawdown Threshold {{percent}}%"
     },
     "homepage": {
-      "heroCta": "Get Started",
-      "finalCta": "Create Strategy",
+      "heroCta": "Try it now",
+      "finalCta": "Create a strategy",
       "hero": {
-        "eyebrow": "AI Quant Strategy Builder",
-        "title": "Generate backtestable quant strategies with AI",
-        "description": "Start with a trading idea. AI generates strategy logic, then connects backtesting, risk checks, and exchange deployment."
+        "eyebrow": "NEXT-GEN AI QUANT",
+        "title": "AI quant trading tools beginners can use",
+        "description": "Describe your trading idea. AI generates the strategy, runs the backtest, and helps execute it.",
+        "howItWorks": "See how it works"
       },
       "visual": {
         "workspace": "AI Quant Workspace",
@@ -263,23 +264,23 @@
       },
       "workflow": {
         "eyebrow": "AI Quant Workflow",
-        "title": "A complete strategy loop from AI chat to one-click deployment",
+        "title": "Automated trading in 4 steps",
         "items": {
           "chat": {
-            "title": "AI Chat",
-            "desc": "Describe your trading idea in natural language."
+            "title": "Describe your trading idea",
+            "desc": "For example: \"Buy BTC when it drops 3%, sell when it rises 5%.\""
           },
           "strategy": {
-            "title": "Strategy",
-            "desc": "AI generates confirmable strategy logic."
+            "title": "AI generates a complete strategy",
+            "desc": "It identifies the symbol, timeframe, take-profit, stop-loss, and other rules."
           },
           "backtest": {
-            "title": "Backtest",
-            "desc": "Validate performance with historical data."
+            "title": "Backtest before you run it",
+            "desc": "Validate performance first so you do not go live blindly."
           },
           "deploy": {
-            "title": "Deploy",
-            "desc": "Connect execution after the strategy passes checks."
+            "title": "Deploy and automate in one click",
+            "desc": "Once started, the strategy executes automatically so you do not have to watch the market."
           }
         }
       },
