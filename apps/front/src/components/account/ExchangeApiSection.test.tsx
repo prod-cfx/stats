@@ -312,4 +312,26 @@ describe('ExchangeApiSection', () => {
     expect(redirectSpy).not.toHaveBeenCalled()
     expect(mockFetchUserExchangeAccountStatuses).toHaveBeenCalledTimes(2)
   })
+
+  it.each([
+    ['external URL', 'https://evil.example/zh/ai-quant/plaza'],
+    ['protocol-relative URL', '//evil.example/zh/ai-quant/plaza'],
+    ['javascript URL', 'javascript:alert(1)'],
+  ])('ignores %s OKX save redirect', async (_label, redirect) => {
+    window.history.replaceState({}, '', `/zh/account?tab=ai-quant&redirect=${encodeURIComponent(redirect)}#exchange-api`)
+    const redirectSpy = jest.spyOn(accountExchangeNavigation, 'redirectTo').mockImplementation(() => undefined)
+    await renderSection()
+
+    const okxCard = await fillOkxCredentials()
+
+    await act(async () => {
+      clickButton(okxCard, 'Save API Config')
+    })
+    await flushPromises()
+
+    expect(getOkxSaveRedirect()).toBeNull()
+    expect(mockUpsertUserExchangeAccount).toHaveBeenCalledTimes(1)
+    expect(redirectSpy).not.toHaveBeenCalled()
+    expect(mockFetchUserExchangeAccountStatuses).toHaveBeenCalledTimes(2)
+  })
 })

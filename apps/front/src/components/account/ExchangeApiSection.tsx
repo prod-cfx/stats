@@ -29,10 +29,13 @@ interface ExchangeFormState {
 }
 
 const EXCHANGES: UserExchangeId[] = ['binance', 'okx', 'hyperliquid']
+const OKX_SAVE_ALLOWED_REDIRECTS = new Set(['/zh/ai-quant/plaza', '/en/ai-quant/plaza'])
 
 export function getOkxSaveRedirect(): string | null {
   if (typeof window === 'undefined') return null
-  return new URLSearchParams(window.location.search).get('redirect')
+  const redirect = new URLSearchParams(window.location.search).get('redirect')
+  if (!redirect || !OKX_SAVE_ALLOWED_REDIRECTS.has(redirect)) return null
+  return redirect
 }
 
 export const accountExchangeNavigation = {
