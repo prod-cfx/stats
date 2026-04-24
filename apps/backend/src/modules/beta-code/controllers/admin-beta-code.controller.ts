@@ -1,3 +1,4 @@
+import type { BetaAccessCode } from '../../../../generated/prisma'
 import { Transactional } from '@nestjs-cls/transactional'
 import { Body, Controller, Get, Param, Post, Put, Query } from '@nestjs/common'
 import {
@@ -48,11 +49,17 @@ export class AdminBetaCodeController {
       ],
     },
   })
-  async list(@Query() query: QueryBetaCodeDto) {
-    return this.betaCodeService.list({
+  async list(@Query() query: QueryBetaCodeDto): Promise<BasePaginationResponseDto<BetaCodeResponseDto>> {
+    const result = await this.betaCodeService.list({
       page: query.page ?? 1,
       limit: query.limit ?? 20,
     })
+    return new BasePaginationResponseDto(
+      result.total,
+      result.page,
+      result.limit,
+      result.items.map(item => this.toResponse(item)),
+    )
   }
 
   @Post('batch')
@@ -64,12 +71,13 @@ export class AdminBetaCodeController {
   async createBatch(
     @CurrentUser('id') adminId: string,
     @Body() dto: CreateBetaCodeBatchDto,
-  ) {
-    return this.betaCodeService.createBatch({
+  ): Promise<BetaCodeResponseDto[]> {
+    const result = await this.betaCodeService.createBatch({
       count: dto.count,
       maxUsesPerCode: dto.maxUsesPerCode,
       adminId,
     })
+    return result.map(item => this.toResponse(item))
   }
 
   @Put(':id/status')
@@ -81,7 +89,19 @@ export class AdminBetaCodeController {
   async updateStatus(
     @Param('id') id: string,
     @Body() dto: UpdateBetaCodeStatusDto,
-  ) {
-    return this.betaCodeService.updateStatus(id, dto.isActive)
+  ): Promise<BetaCodeResponseDto> {
+    const result = await this.betaCodeService.updateStatus(id, dto.isActive)
+    return this.toResponse(result)
+  }
+
+  private toResponse(code: BetaAccessCode): BetaCodeResponseDto {
+    return {
+      id: code.id,
+      code: code.code,
+      maxUses: code.maxUses,
+      usedCount: code.usedCount,
+      isActive: code.isActive,
+      createdAt: code.createdAt,
+    }
   }
 }
