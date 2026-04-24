@@ -218,6 +218,9 @@ export class AccountStrategySnapshotDto {
   @ApiPropertyOptional({ nullable: true, type: AccountStrategyConsistencySummaryDto })
   consistencySummary!: AccountStrategyConsistencySummaryDto | null
 
+  @ApiPropertyOptional({ nullable: true, type: 'object', additionalProperties: true })
+  ruleSummary!: Record<string, unknown> | null
+
   @ApiPropertyOptional({ nullable: true })
   executionConfigVersion!: number | null
 

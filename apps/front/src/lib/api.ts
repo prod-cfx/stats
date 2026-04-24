@@ -319,6 +319,17 @@ export interface AccountAiQuantStrategySnapshot {
   effectiveAllowedLeverageRange?: AccountAiQuantLeverageRange | null
   compatibilityMetadata?: AccountAiQuantSnapshotCompatibilityMetadata | null
   consistencySummary?: AccountAiQuantConsistencySummary | null
+  ruleSummary?: {
+    rules?: Array<{
+      id?: string | null
+      phase?: string | null
+      conditionKey?: string | null
+      operator?: string | null
+      value?: number | null
+      actions?: string[]
+    }>
+    executionPolicy?: Record<string, unknown> | null
+  } | null
   executionConfigVersion?: number | null
 }
 

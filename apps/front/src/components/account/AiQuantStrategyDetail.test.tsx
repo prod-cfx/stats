@@ -29,6 +29,100 @@ describe('AiQuantStrategyDetail', () => {
     container.remove()
   })
 
+  it('shows truthful source, audit, rule summary, and OKX fee currency on detail page', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={{
+            id: 'inst-okx-1',
+            name: '在 OKX 现货 DOGEUSD',
+            status: 'running',
+            exchange: 'okx',
+            symbol: 'DOGEUSDT',
+            timeframe: '1h',
+            positionPct: 10,
+            initialCapital: 10000,
+            metrics: { returnPct: -0.03, maxDrawdownPct: 0.03, winRatePct: 0, tradeCount: 1 },
+            equitySeries: [],
+            timeline: [],
+            runtimeExecutionStates: [{
+              executionSemanticKey: 'on_start.entry.primary',
+              status: 'consumed',
+              failureFamily: null,
+              failureReason: null,
+              failureCode: null,
+              lastAttemptAt: '2026-04-24T14:45:01.824Z',
+              consumedAt: '2026-04-24T14:45:01.824Z',
+              cooldownUntil: null,
+              publishedSnapshotId: 'snapshot-okx-1',
+              snapshotHash: 'hash-okx-1',
+            }],
+            paramSchema: null,
+            paramValues: null,
+            schemaVersion: null,
+            supportsDynamicParams: false,
+            publishedSnapshotId: 'snapshot-okx-1',
+            snapshotHash: 'hash-okx-1',
+            accountOverview: {
+              initialBalance: 50615.55,
+              totalEquity: 50600.11,
+              availableBalance: 45571.38,
+              totalPnl: -15.44,
+              todayPnl: -15.44,
+              baseCurrency: 'USDT',
+            },
+            positionOverview: {
+              openPositionsCount: 1,
+              closedPositionsCount: 0,
+              totalRealizedPnl: 0,
+              totalUnrealizedPnl: -15.44,
+            },
+            latestOrders: [{
+              executedAt: '2026-04-24 14:45',
+              side: 'BUY',
+              symbol: 'DOGEUSDT',
+              price: 0.0979498171758591,
+              quantity: 51497.435487,
+              fee: 51.737672883,
+              feeCurrency: 'DOGE',
+              orderId: '3507763615427895296',
+            }],
+            ruleSummary: {
+              rules: [{
+                id: 'entry',
+                phase: 'entry',
+                conditionKey: 'execution.on_start',
+                operator: null,
+                value: null,
+                actions: ['OPEN_LONG'],
+              }, {
+                id: 'exit',
+                phase: 'exit',
+                conditionKey: 'price.change_pct',
+                operator: 'GTE',
+                value: 0.05,
+                actions: ['CLOSE_LONG'],
+              }],
+            },
+            updatedAt: '2026-04-24T14:45:00.000Z',
+          }}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('在 OKX 现货 DOGEUSDT')
+    expect(container.textContent).toContain('发布快照规则摘要')
+    expect(container.textContent).toContain('启动时执行：OPEN_LONG')
+    expect(container.textContent).toContain('价格变化 GTE 5%：CLOSE_LONG')
+    expect(container.textContent).toContain('本地账户台账 + 最新行情估值')
+    expect(container.textContent).toContain('手续费优先展示 OKX 原始 fee / feeCcy')
+    expect(container.textContent).toContain('51.73767288 DOGE')
+    expect(container.textContent).toContain('真实性审计')
+    expect(container.textContent).toContain('3507763615427895296')
+    expect(container.textContent).toContain('已执行 1 个发布快照运行语义，待执行/冷却/失败 0 个')
+  })
+
   it('shows compatibility warning, leverage drift, and leverage-only update controls from truthful execution data', async () => {
     await act(async () => {
       root.render(

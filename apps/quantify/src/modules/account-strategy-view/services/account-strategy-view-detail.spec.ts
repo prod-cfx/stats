@@ -152,7 +152,22 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
           stoppedAt: null,
         },
         subscription: { subscribedAt: new Date('2026-03-20T10:00:00.000Z') },
-        signalExecutions: [{ createdAt: new Date('2026-03-20T11:00:00.000Z'), status: 'SUCCESS', errorMessage: null }],
+        signalExecutions: [{
+          createdAt: new Date('2026-03-20T11:00:00.000Z'),
+          status: 'SUCCESS',
+          errorMessage: null,
+          tradeId: 'ord-1',
+          fee: 0,
+          feeCurrency: 'USDT',
+          metadata: {
+            orderResponse: {
+              raw: {
+                fee: '-51.737672883',
+                feeCcy: 'DOGE',
+              },
+            },
+          },
+        }],
         trades: [{
           executedAt: new Date('2026-03-20T11:01:00.000Z'),
           side: 'BUY',
@@ -211,6 +226,20 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         lockedParams: {
           exchange: 'okx',
           positionPct: 25,
+        },
+        specSnapshot: {
+          rules: [{
+            id: 'entry-on-start',
+            phase: 'entry',
+            condition: { key: 'execution.on_start' },
+            actions: [{ type: 'OPEN_LONG' }],
+          }, {
+            id: 'exit-price-change',
+            phase: 'exit',
+            condition: { key: 'price.change_pct', op: 'GTE', value: 0.05 },
+            actions: [{ type: 'CLOSE_LONG' }],
+          }],
+          executionPolicy: { signalTiming: 'BAR_CLOSE' },
         },
       }),
     }
@@ -287,8 +316,8 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       symbol: 'BTCUSDT',
       price: 68000,
       quantity: 0.12,
-      fee: 1.5,
-      feeCurrency: 'USDT',
+      fee: 51.737672883,
+      feeCurrency: 'DOGE',
       orderId: 'ord-1',
     })
     expect(detail.timeline.some(e => e.eventType === 'system')).toBe(true)
@@ -331,6 +360,24 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       marketType: 'perp',
       positionPct: 25,
       strategyDeclaredLeverageRange: { min: 1, max: 8 },
+    })
+    expect(detail.snapshot.ruleSummary).toEqual({
+      rules: [{
+        id: 'entry-on-start',
+        phase: 'entry',
+        conditionKey: 'execution.on_start',
+        operator: null,
+        value: null,
+        actions: ['OPEN_LONG'],
+      }, {
+        id: 'exit-price-change',
+        phase: 'exit',
+        conditionKey: 'price.change_pct',
+        operator: 'GTE',
+        value: 0.05,
+        actions: ['CLOSE_LONG'],
+      }],
+      executionPolicy: { signalTiming: 'BAR_CLOSE' },
     })
     expect(detail.snapshot.backtestConfigDefaults).toEqual({
       initialCash: 20000,

@@ -64,6 +64,22 @@ function formatOptionalAmount(value: number | null | undefined) {
   return formatAmount(value)
 }
 
+function formatOptionalPreciseAmount(value: number | null | undefined) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '--'
+  return Number(value.toFixed(8)).toLocaleString('en-US', {
+    maximumFractionDigits: 8,
+    minimumFractionDigits: 0,
+  })
+}
+
+function buildDisplayStrategyName(name: string, symbol: string) {
+  const normalizedSymbol = symbol.trim().toUpperCase()
+  if (!normalizedSymbol.endsWith('USDT')) return name
+  const base = normalizedSymbol.slice(0, -4)
+  if (!base) return name
+  return name.replace(new RegExp(`${base}USD(?!T)`, 'gi'), `${base}USDT`)
+}
+
 function formatExecutionValue(value: string | number | null | undefined, suffix = '') {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return `${value}${suffix}`
@@ -152,6 +168,22 @@ function formatRuntimeExecutionFailureFamily(
   }
 }
 
+function formatRuleSummary(rule: NonNullable<AiQuantStrategyRecord['ruleSummary']>['rules'][number]) {
+  const actions = rule.actions.length > 0 ? rule.actions.join(', ') : '--'
+  if (rule.conditionKey === 'execution.on_start') {
+    return `启动时执行：${actions}`
+  }
+  if (rule.conditionKey === 'price.change_pct') {
+    const pct = typeof rule.value === 'number' ? `${formatOptionalPreciseAmount(rule.value * 100)}%` : '--'
+    return `价格变化 ${rule.operator ?? ''} ${pct}：${actions}`
+  }
+  if (rule.conditionKey === 'position_loss_pct') {
+    const pct = typeof rule.value === 'number' ? `${formatOptionalPreciseAmount(rule.value * 100)}%` : '--'
+    return `持仓亏损 ${rule.operator ?? ''} ${pct}：${actions}`
+  }
+  return `${rule.conditionKey ?? rule.id ?? '--'}：${actions}`
+}
+
 interface AiQuantStrategyDetailProps {
   lng: 'zh' | 'en'
   strategy: AiQuantStrategyRecord | null
@@ -233,11 +265,15 @@ export function AiQuantStrategyDetail({
     )
   }
 
+  const displayName = buildDisplayStrategyName(strategy.name, strategy.symbol)
+  const consumedRuntimeStates = strategy.runtimeExecutionStates?.filter(state => state.status === 'consumed') ?? []
+  const pendingRuntimeStates = strategy.runtimeExecutionStates?.filter(state => state.status !== 'consumed') ?? []
+
   return (
     <main className="mx-auto flex w-full max-w-[920px] flex-1 flex-col gap-4 px-4 py-8 md:px-8">
       <section className="flex items-center justify-between rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
         <div>
-          <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">{strategy.name}</h1>
+          <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">{displayName}</h1>
           <p className="mt-1 text-sm text-[color:var(--cf-muted)]">
             {strategy.exchange.toUpperCase()} / {strategy.symbol} / {strategy.timeframe}
           </p>
@@ -292,6 +328,10 @@ export function AiQuantStrategyDetail({
       {strategy.runtimeExecutionStates && strategy.runtimeExecutionStates.length > 0 && (
         <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
           <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">运行时执行语义状态</h2>
+          <p className="mt-2 text-sm text-[color:var(--cf-muted)]">
+            已执行 {consumedRuntimeStates.length} 个发布快照运行语义，待执行/冷却/失败 {pendingRuntimeStates.length} 个。
+            当前状态只代表已注册的运行语义，不等同于所有规则都已进入持续监控。
+          </p>
           <div className="mt-3 space-y-3">
             {strategy.runtimeExecutionStates.map((state) => (
               <article
@@ -338,6 +378,20 @@ export function AiQuantStrategyDetail({
           </div>
         </section>
       )}
+
+      {strategy.ruleSummary?.rules?.length ? (
+        <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
+          <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">发布快照规则摘要</h2>
+          <div className="mt-3 grid gap-3 md:grid-cols-3">
+            {strategy.ruleSummary.rules.map(rule => (
+              <article key={rule.id ?? `${rule.phase}-${rule.conditionKey}`} className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
+                <p className="text-xs text-[color:var(--cf-muted)]">{rule.phase ?? '--'}</p>
+                <p className="mt-1 text-sm font-semibold text-[color:var(--cf-text-strong)]">{formatRuleSummary(rule)}</p>
+              </article>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       {(strategy.snapshotBacktestConfigDefaults || strategy.deploymentExecutionBaseline || strategy.deploymentExecutionCurrent) && (
         <section className="grid gap-4 md:grid-cols-2">
@@ -470,6 +524,7 @@ export function AiQuantStrategyDetail({
       <section className="grid gap-4 md:grid-cols-2">
         <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
           <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">账户概览</h2>
+          <p className="mt-1 text-xs text-[color:var(--cf-muted)]">来源：本地账户台账 + 最新行情估值；不等同于 OKX 钱包实时余额。</p>
           <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
             <p className="text-[color:var(--cf-muted)]">初始资金</p>
             <p className="text-right text-[color:var(--cf-text-strong)]">{formatOptionalAmount(strategy.accountOverview?.initialBalance)} {baseCurrency}</p>
@@ -485,6 +540,7 @@ export function AiQuantStrategyDetail({
         </article>
         <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
           <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">持仓概览</h2>
+          <p className="mt-1 text-xs text-[color:var(--cf-muted)]">来源：本地成交与持仓台账，未实现盈亏按行情估值刷新。</p>
           <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
             <p className="text-[color:var(--cf-muted)]">当前持仓数</p>
             <p className="text-right text-[color:var(--cf-text-strong)]">{strategy.positionOverview?.openPositionsCount ?? '--'}</p>
@@ -500,6 +556,7 @@ export function AiQuantStrategyDetail({
 
       <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
         <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">最新成交</h2>
+        <p className="mt-1 text-xs text-[color:var(--cf-muted)]">来源：交易所订单回执落库；手续费优先展示 OKX 原始 fee / feeCcy。</p>
         {strategy.latestOrders && strategy.latestOrders.length > 0
           ? (
               <div className="mt-3 overflow-x-auto">
@@ -523,7 +580,7 @@ export function AiQuantStrategyDetail({
                         <td className="py-2 pr-3 text-[color:var(--cf-text)]">{formatOptionalAmount(order.price)}</td>
                         <td className="py-2 pr-3 text-[color:var(--cf-text)]">{formatOptionalAmount(order.quantity)}</td>
                         <td className="py-2 pr-3 text-[color:var(--cf-text)]">
-                          {order.fee == null ? '--' : formatAmount(order.fee)} {order.feeCurrency ?? ''}
+                          {order.fee == null ? '--' : formatOptionalPreciseAmount(order.fee)} {order.feeCurrency ?? ''}
                         </td>
                       </tr>
                     ))}
@@ -620,6 +677,32 @@ export function AiQuantStrategyDetail({
                 <p className="mt-3 text-sm text-amber-300">{t('aiQuant.legacyUnsupportedMessage')}</p>
               </article>
             )}
+
+        <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
+          <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">真实性审计</h2>
+          <div className="mt-3 space-y-2 text-sm">
+            <p className="flex items-start gap-2">
+              <span className="min-w-28 text-[color:var(--cf-muted)]">策略实例</span>
+              <span className="break-all text-[color:var(--cf-text)]">{strategy.id}</span>
+            </p>
+            <p className="flex items-start gap-2">
+              <span className="min-w-28 text-[color:var(--cf-muted)]">发布快照</span>
+              <span className="break-all text-[color:var(--cf-text)]">{strategy.publishedSnapshotId ?? '--'}</span>
+            </p>
+            <p className="flex items-start gap-2">
+              <span className="min-w-28 text-[color:var(--cf-muted)]">快照哈希</span>
+              <span className="break-all text-[color:var(--cf-text)]">{strategy.snapshotHash ?? '--'}</span>
+            </p>
+            <p className="flex items-start gap-2">
+              <span className="min-w-28 text-[color:var(--cf-muted)]">最近订单</span>
+              <span className="break-all text-[color:var(--cf-text)]">{strategy.latestOrders?.[0]?.orderId ?? '--'}</span>
+            </p>
+            <p className="flex items-start gap-2">
+              <span className="min-w-28 text-[color:var(--cf-muted)]">数据边界</span>
+              <span className="text-[color:var(--cf-text)]">回测使用发布快照；部署执行绑定同一快照；当前成交来自交易所回执落库。</span>
+            </p>
+          </div>
+        </article>
 
         <article className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
           <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">运行时间线</h2>

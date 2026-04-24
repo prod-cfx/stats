@@ -134,6 +134,26 @@ function normalizeConsistencySummary(
   }
 }
 
+function normalizeRuleSummary(
+  summary: AccountAiQuantStrategyDetail['snapshot']['ruleSummary'] | null | undefined,
+): AiQuantStrategyRecord['ruleSummary'] {
+  if (!summary || !Array.isArray(summary.rules)) return null
+  const rules = summary.rules.map(rule => ({
+    id: typeof rule.id === 'string' ? rule.id : null,
+    phase: typeof rule.phase === 'string' ? rule.phase : null,
+    conditionKey: typeof rule.conditionKey === 'string' ? rule.conditionKey : null,
+    operator: typeof rule.operator === 'string' ? rule.operator : null,
+    value: typeof rule.value === 'number' && Number.isFinite(rule.value) ? rule.value : null,
+    actions: Array.isArray(rule.actions)
+      ? rule.actions.filter((action): action is string => typeof action === 'string' && action.trim().length > 0)
+      : [],
+  }))
+  return {
+    rules,
+    executionPolicy: summary.executionPolicy ?? null,
+  }
+}
+
 function normalizeRuntimeExecutionStates(
   states: AccountAiQuantRuntimeExecutionState[] | null | undefined,
 ): AiQuantStrategyRecord['runtimeExecutionStates'] {
@@ -277,6 +297,7 @@ export function mapAccountStrategyDetailToRecord(
       : detail.snapshot.deploymentExecutionConstraints?.constraintExplanation ?? null,
     compatibilityMetadata: normalizeCompatibilityMetadata(detail.snapshot.compatibilityMetadata),
     consistencySummary: normalizeConsistencySummary(detail.snapshot.consistencySummary),
+    ruleSummary: normalizeRuleSummary(detail.snapshot.ruleSummary),
     canEditDeploymentLeverage:
       !invalidBinding
       && snapshotMarketType === 'perp'

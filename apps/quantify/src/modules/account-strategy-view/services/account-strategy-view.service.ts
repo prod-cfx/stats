@@ -55,6 +55,7 @@ interface FormalSnapshotDetail {
   deploymentExecutionDefaults: Record<string, unknown> | null
   deploymentExecutionConstraints: Record<string, unknown> | null
   compatibilityMetadata: Record<string, unknown> | null
+  ruleSummary: Record<string, unknown> | null
 }
 
 interface StrategyAccountFallback {
@@ -454,6 +455,7 @@ export class AccountStrategyViewService {
           driftReasons,
           consistencyScore: driftReasons.length === 0 ? 100 : null,
         },
+        ruleSummary: resolvedSnapshot.ruleSummary,
         executionConfigVersion: typeof (row as Record<string, unknown>).executionConfigVersion === 'number'
           ? ((row as Record<string, unknown>).executionConfigVersion as number)
           : null,
@@ -473,7 +475,7 @@ export class AccountStrategyViewService {
         totalRealizedPnl: account ? resolvedRealizedPnl : null,
         totalUnrealizedPnl: account ? resolvedUnrealizedPnl : null,
       },
-      latestOrders: buildAccountStrategyLatestOrders(timelineSource.trades),
+      latestOrders: buildAccountStrategyLatestOrders(timelineSource.trades, timelineSource.signalExecutions),
       runtimeExecutionStates,
       deployment: !resolvedSnapshot.publishedSnapshotId
         || resolvedSnapshot.compatibilityMetadata?.requiresRepublishForDeploy
@@ -624,6 +626,7 @@ export class AccountStrategyViewService {
         deploymentExecutionDefaults: null,
         deploymentExecutionConstraints: null,
         compatibilityMetadata: null,
+        ruleSummary: null,
       }
     }
 
@@ -647,6 +650,7 @@ export class AccountStrategyViewService {
           requiresRepublishForDeploy: true,
           invalidBinding: true,
         },
+        ruleSummary: null,
       }
     }
 
@@ -669,6 +673,7 @@ export class AccountStrategyViewService {
           requiresRepublishForDeploy: true,
           invalidBinding: true,
         },
+        ruleSummary: null,
       }
     }
 
@@ -716,7 +721,50 @@ export class AccountStrategyViewService {
       deploymentExecutionDefaults,
       deploymentExecutionConstraints,
       compatibilityMetadata,
+      ruleSummary: this.buildPublishedSnapshotRuleSummary(snapshot),
     }
+  }
+
+  private buildPublishedSnapshotRuleSummary(snapshot: unknown): Record<string, unknown> | null {
+    const root = this.readRecord(snapshot)
+    const specSnapshot = this.readRecord(root?.specSnapshot)
+    const rules = Array.isArray(specSnapshot?.rules) ? specSnapshot.rules : []
+    if (!rules.length) return null
+
+    const normalizedRules = rules
+      .map((rule) => {
+        const record = this.readRecord(rule)
+        if (!record) return null
+        const condition = this.readRecord(record.condition)
+        const actions = Array.isArray(record.actions)
+          ? record.actions
+              .map(action => this.readString(this.readRecord(action), ['type']))
+              .filter((action): action is string => Boolean(action))
+          : []
+        return {
+          id: this.readString(record, ['id']),
+          phase: this.readString(record, ['phase']),
+          conditionKey: this.readString(condition, ['key']),
+          operator: this.readString(condition, ['op']),
+          value: this.readNumber(condition, ['value']),
+          actions,
+        }
+      })
+      .filter((rule): rule is {
+        id: string | null
+        phase: string | null
+        conditionKey: string | null
+        operator: string | null
+        value: number | null
+        actions: string[]
+      } => rule !== null)
+
+    return normalizedRules.length > 0
+      ? {
+          rules: normalizedRules,
+          executionPolicy: this.readRecord(specSnapshot?.executionPolicy),
+        }
+      : null
   }
 
   async performAction(

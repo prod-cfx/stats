@@ -15,6 +15,10 @@ interface TimelineSignalExecution {
   createdAt: Date
   status?: string
   errorMessage?: string | null
+  tradeId?: string | null
+  fee?: unknown
+  feeCurrency?: string | null
+  metadata?: unknown
 }
 
 interface TimelineTrade {
@@ -40,6 +44,57 @@ function toFiniteNumber(value: unknown): number | null {
   if (typeof value === 'string' && value.trim().length === 0) return null
   const normalized = Number(value)
   return Number.isFinite(normalized) ? normalized : null
+}
+
+function readRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  return value as Record<string, unknown>
+}
+
+function readNestedRecord(root: unknown, keys: string[]): Record<string, unknown> | null {
+  let current: unknown = root
+  for (const key of keys) {
+    const record = readRecord(current)
+    if (!record) return null
+    current = record[key]
+  }
+  return readRecord(current)
+}
+
+function normalizeFeeAmount(value: unknown): number | null {
+  const amount = toFiniteNumber(value)
+  if (amount === null) return null
+  return Math.abs(amount)
+}
+
+function buildExecutionFeeByOrderId(
+  executions: TimelineSignalExecution[],
+): Map<string, { fee: number | null; feeCurrency: string | null }> {
+  const feeByOrderId = new Map<string, { fee: number | null; feeCurrency: string | null }>()
+
+  for (const execution of executions) {
+    const orderId = typeof execution.tradeId === 'string' && execution.tradeId.trim()
+      ? execution.tradeId.trim()
+      : null
+    if (!orderId) continue
+
+    const rawOrder = readNestedRecord(execution.metadata, ['orderResponse', 'raw'])
+    const rawFee = normalizeFeeAmount(rawOrder?.fee)
+    const rawFeeCurrency = typeof rawOrder?.feeCcy === 'string' && rawOrder.feeCcy.trim()
+      ? rawOrder.feeCcy.trim()
+      : null
+    const executionFee = normalizeFeeAmount(execution.fee)
+    const executionFeeCurrency = typeof execution.feeCurrency === 'string' && execution.feeCurrency.trim()
+      ? execution.feeCurrency.trim()
+      : null
+
+    feeByOrderId.set(orderId, {
+      fee: rawFee ?? executionFee,
+      feeCurrency: rawFeeCurrency ?? executionFeeCurrency,
+    })
+  }
+
+  return feeByOrderId
 }
 
 export function buildAccountStrategyMixedTimeline(source: AccountStrategyTimelineSource): AccountStrategyTimelineEventDto[] {
@@ -86,18 +141,25 @@ export function buildAccountStrategyMixedTimeline(source: AccountStrategyTimelin
 
 export function buildAccountStrategyLatestOrders(
   trades: TimelineTrade[],
+  signalExecutions: TimelineSignalExecution[] = [],
 ): AccountStrategyLatestOrderDto[] {
+  const feeByOrderId = buildExecutionFeeByOrderId(signalExecutions)
+
   return trades
     .filter(trade => trade.executedAt instanceof Date && typeof trade.symbol === 'string' && typeof trade.side === 'string')
     .slice(0, 10)
-    .map(trade => ({
-      executedAt: trade.executedAt.toISOString(),
-      side: trade.side,
-      symbol: trade.symbol,
-      price: toFiniteNumber(trade.price),
-      quantity: toFiniteNumber(trade.quantity),
-      fee: toFiniteNumber(trade.fee),
-      feeCurrency: trade.feeCurrency ?? null,
-      orderId: trade.orderId ?? null,
-    }))
+    .map((trade) => {
+      const orderId = trade.orderId ?? null
+      const executionFee = orderId ? feeByOrderId.get(orderId) : undefined
+      return {
+        executedAt: trade.executedAt.toISOString(),
+        side: trade.side,
+        symbol: trade.symbol,
+        price: toFiniteNumber(trade.price),
+        quantity: toFiniteNumber(trade.quantity),
+        fee: executionFee?.fee ?? toFiniteNumber(trade.fee),
+        feeCurrency: executionFee?.feeCurrency ?? trade.feeCurrency ?? null,
+        orderId,
+      }
+    })
 }

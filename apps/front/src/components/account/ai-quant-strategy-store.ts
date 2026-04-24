@@ -88,6 +88,17 @@ export interface AiQuantStrategyRecord {
     driftReasons: string[]
     consistencyScore?: number | null
   } | null
+  ruleSummary?: {
+    rules: Array<{
+      id: string | null
+      phase: string | null
+      conditionKey: string | null
+      operator: string | null
+      value: number | null
+      actions: string[]
+    }>
+    executionPolicy?: Record<string, unknown> | null
+  } | null
   canEditDeploymentLeverage?: boolean
   schemaVersion: string | null
   supportsDynamicParams: boolean
