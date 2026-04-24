@@ -29,6 +29,8 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 import { EnvService } from '@/common/services/env.service'
 import { MailService } from '@/common/services/mail.service'
 import { CacheService } from '@/common/services/cache.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { BetaCodeService } from '@/modules/beta-code/services/beta-code.service'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionEventsService } from '@/common/services/transaction-events.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -87,6 +89,7 @@ export class UserAuthService {
     @Inject(EnvService) private readonly envService: EnvService,
     @Inject(CacheService) private readonly cacheService: CacheService,
     private readonly txEvents: TransactionEventsService,
+    private readonly betaCodeService: BetaCodeService,
   ) {
     this.tokenExpiresInSeconds = this.resolveExpiresInSeconds(
       this.configService.get<string | number>('jwt.expiresIn'),
@@ -119,6 +122,7 @@ export class UserAuthService {
       })
 
       await this.ensureDefaultRoleAssignment(user.id)
+      await this.betaCodeService.consumeForNewUser({ betaCode: dto.betaCode, userId: user.id })
 
       return await this.buildAuthResponse(user, [AppRole.USER])
     } catch (error) {
@@ -359,6 +363,7 @@ export class UserAuthService {
     const user = await this.createUserWithEmail(placeholderEmail, {
       nickname: payload.username || payload.firstName || `tg_${telegramId.slice(0, 6)}`,
     })
+    await this.betaCodeService.consumeForNewUser({ betaCode: dto.betaCode, userId: user.id })
 
     await this.userAuthRepository.createUserCredential({
       userId: user.id,
@@ -467,6 +472,7 @@ export class UserAuthService {
     let user = await this.userAuthRepository.findUserByEmail(email)
     if (!user) {
       user = await this.createUserWithEmail(email)
+      await this.betaCodeService.consumeForNewUser({ betaCode: dto.betaCode, userId: user.id })
     } else if (!user.emailVerified) {
       user = await this.userAuthRepository.updateUser(user.id, {
         emailVerified: true,
@@ -504,6 +510,7 @@ export class UserAuthService {
     const user = await this.createUserWithEmail(placeholderEmail, {
       nickname: `tg_${telegramId.slice(0, 6)}`,
     })
+    await this.betaCodeService.consumeForNewUser({ betaCode: dto.betaCode, userId: user.id })
 
     await this.userAuthRepository.createUserCredential({
       userId: user.id,
