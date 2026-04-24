@@ -263,13 +263,13 @@ function WorkflowSection() {
               viewport={{ once: true, margin: '-80px' }}
               transition={shouldReduceMotion ? undefined : { ...revealTransition, delay: index * 0.06 }}
               whileHover={shouldReduceMotion ? undefined : { y: -4 }}
-              className={`min-h-[174px] rounded-xl p-8 md:p-9 ${panelClass}`}
+              className={`min-h-[190px] rounded-xl p-8 md:min-h-[196px] md:p-9 ${panelClass}`}
             >
               <div className="text-[13px] leading-none font-black text-primary">0{index + 1}</div>
-              <h3 className="mt-7 text-[17px] leading-snug font-bold text-slate-950 dark:text-white md:text-[19px]">
+              <h3 className="mt-8 text-[17px] leading-snug font-bold text-slate-950 dark:text-white md:mt-9 md:text-[19px]">
                 {t(`aiQuant.homepage.workflow.items.${key}.title`)}
               </h3>
-              <p className={`mt-4 text-[14.5px] leading-[1.78] md:text-[15px] ${mutedText}`}>
+              <p className={`mt-5 text-[14.5px] leading-[1.78] md:mt-6 md:text-[15px] ${mutedText}`}>
                 {t(`aiQuant.homepage.workflow.items.${key}.desc`)}
               </p>
             </motion.div>
