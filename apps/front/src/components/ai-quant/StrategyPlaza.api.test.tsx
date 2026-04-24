@@ -114,4 +114,54 @@ describe('StrategyPlaza API rendering', () => {
     expect(onRunStrategy).toHaveBeenCalledWith('ma-cross')
     expect(onEditStrategy).toHaveBeenCalledWith('ma-cross')
   })
+
+  it('keeps loaded templates visible when showing an action error', async () => {
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template]}
+          loading={false}
+          actionError="运行策略失败"
+          onRunStrategy={() => undefined}
+          onEditStrategy={() => undefined}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('MA Cross Demo')
+    expect(container.textContent).toContain('运行策略失败')
+  })
+
+  it('disables actions and marks the pending button while a template action is running', async () => {
+    const onRunStrategy = jest.fn()
+    const onEditStrategy = jest.fn()
+
+    await act(async () => {
+      root.render(
+        <StrategyPlaza
+          templates={[template]}
+          loading={false}
+          pendingTemplateId="ma-cross"
+          pendingAction="run"
+          onRunStrategy={onRunStrategy}
+          onEditStrategy={onEditStrategy}
+        />,
+      )
+    })
+
+    const buttons = Array.from(container.querySelectorAll('button'))
+    expect(buttons).toHaveLength(2)
+    expect(buttons[0]?.disabled).toBe(true)
+    expect(buttons[0]?.getAttribute('aria-busy')).toBe('true')
+    expect(buttons[0]?.textContent).toContain('运行中')
+    expect(buttons[1]?.disabled).toBe(true)
+
+    await act(async () => {
+      buttons[0]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      buttons[1]?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(onRunStrategy).not.toHaveBeenCalled()
+    expect(onEditStrategy).not.toHaveBeenCalled()
+  })
 })

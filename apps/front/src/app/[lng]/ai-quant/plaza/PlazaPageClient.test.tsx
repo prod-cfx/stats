@@ -20,6 +20,9 @@ let plazaProps: {
   templates: StrategyPlazaTemplate[]
   loading: boolean
   error?: string | null
+  actionError?: string | null
+  pendingTemplateId?: string | null
+  pendingAction?: 'run' | 'edit' | null
   onRunStrategy: (templateId: string) => void
   onEditStrategy: (templateId: string) => void
 } | null = null
@@ -203,6 +206,23 @@ describe('AiQuantPlazaPageClient', () => {
 
     expect(mockSetIntent).toHaveBeenCalledWith({ type: 'plaza-run', templateId: 'ma-cross' })
     expect(mockPush).toHaveBeenCalledWith('/zh/account?tab=ai-quant#exchange-api')
+  })
+
+  it('keeps loaded templates visible and passes action error when run fails', async () => {
+    mockRunStrategyPlazaTemplate.mockRejectedValue(new ApiError('运行失败', 'API_ERROR', 500))
+
+    await act(async () => {
+      root.render(<AiQuantPlazaPageClient />)
+    })
+    await flushPromises()
+
+    await act(async () => {
+      await plazaProps?.onRunStrategy('ma-cross')
+    })
+
+    expect(plazaProps?.templates).toEqual([template])
+    expect(plazaProps?.error).toBeNull()
+    expect(plazaProps?.actionError).toBe('运行失败')
   })
 
   it('starts an authenticated edit session and opens AI Quant chat draft', async () => {

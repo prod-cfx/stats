@@ -843,17 +843,17 @@ export function AiQuantPageClient({
     const intent = getIntent(INTENT_TTL_MS)
     if (!intent) return
 
-    clearIntent()
-
-    if (intent.type === 'chat') {
-      onSend(intent.draft)
-      return
-    }
-
     if (intent.type === 'plaza-run' || intent.type === 'plaza-edit') {
       return
     }
 
+    if (intent.type === 'chat') {
+      clearIntent()
+      onSend(intent.draft)
+      return
+    }
+
+    clearIntent()
     const preset = findPresetById(intent.strategyId)
     if (!preset) {
       updateActiveConversation(curr => ({

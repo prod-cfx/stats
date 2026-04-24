@@ -33,8 +33,10 @@ export function AiQuantPlazaPageClient() {
   const { session, isLoading } = useAuth()
   const [templates, setTemplates] = useState<StrategyPlazaTemplate[]>([])
   const [loadingTemplates, setLoadingTemplates] = useState(true)
-  const [templateError, setTemplateError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
   const [runningTemplateId, setRunningTemplateId] = useState<string | null>(null)
+  const [pendingAction, setPendingAction] = useState<'run' | 'edit' | null>(null)
 
   const goLoginWithIntent = (intent: QuantReturnIntentInput) => {
     setIntent(intent)
@@ -46,13 +48,13 @@ export function AiQuantPlazaPageClient() {
 
     async function loadTemplates() {
       setLoadingTemplates(true)
-      setTemplateError(null)
+      setLoadError(null)
       try {
         const data = await fetchStrategyPlazaTemplates()
         if (!cancelled) setTemplates(data)
       } catch (error) {
         if (!cancelled) {
-          setTemplateError(getErrorMessage(error, '获取策略广场模板失败'))
+          setLoadError(getErrorMessage(error, '获取策略广场模板失败'))
         }
       } finally {
         if (!cancelled) setLoadingTemplates(false)
@@ -74,7 +76,8 @@ export function AiQuantPlazaPageClient() {
     if (runningTemplateId) return
 
     setRunningTemplateId(templateId)
-    setTemplateError(null)
+    setPendingAction('run')
+    setActionError(null)
     try {
       const strategy = await runStrategyPlazaTemplate(templateId, createStrategyPlazaRunRequestId())
       router.push(`/${lng}/account/ai-quant/strategy/${strategy.id}`)
@@ -84,9 +87,10 @@ export function AiQuantPlazaPageClient() {
         router.push(`/${lng}/account?tab=ai-quant#exchange-api`)
         return
       }
-      setTemplateError(getErrorMessage(error, '运行策略广场模板失败'))
+      setActionError(getErrorMessage(error, '运行策略广场模板失败'))
     } finally {
       setRunningTemplateId(null)
+      setPendingAction(null)
     }
   }
 
@@ -98,15 +102,17 @@ export function AiQuantPlazaPageClient() {
     if (runningTemplateId) return
 
     setRunningTemplateId(templateId)
-    setTemplateError(null)
+    setPendingAction('edit')
+    setActionError(null)
     try {
       const editSession = await startStrategyPlazaEditSession(templateId)
       setIntent({ type: 'chat', draft: editSession.initialMessage })
       router.push(`/${lng}/ai-quant`)
     } catch (error) {
-      setTemplateError(getErrorMessage(error, '创建策略广场编辑会话失败'))
+      setActionError(getErrorMessage(error, '创建策略广场编辑会话失败'))
     } finally {
       setRunningTemplateId(null)
+      setPendingAction(null)
     }
   }
 
@@ -134,7 +140,10 @@ export function AiQuantPlazaPageClient() {
       <StrategyPlaza
         templates={templates}
         loading={loadingTemplates}
-        error={templateError}
+        error={loadError}
+        actionError={actionError}
+        pendingTemplateId={runningTemplateId}
+        pendingAction={pendingAction}
         subtitle={t('aiQuant.strategyPlazaSubtitle')}
         onRunStrategy={runTemplate}
         onEditStrategy={editTemplate}
