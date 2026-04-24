@@ -178,7 +178,7 @@ function PrimaryCta({ href, className = '', label }: { href: string, className?:
   return (
     <Link
       href={href}
-      className={`group inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#3474ff] to-[#8a55ff] px-7 py-3 text-sm font-bold text-white shadow-[0_14px_40px_rgba(79,70,229,0.35)] transition duration-200 hover:shadow-[0_18px_54px_rgba(79,70,229,0.48)] active:translate-y-0 ${shouldReduceMotion ? '' : 'hover:-translate-y-0.5'} ${className}`}
+      className={`group inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#3474ff] to-[#8a55ff] px-7 py-3 text-sm font-bold !text-white shadow-[0_14px_40px_rgba(79,70,229,0.35)] transition duration-200 hover:shadow-[0_18px_54px_rgba(79,70,229,0.48)] active:translate-y-0 ${shouldReduceMotion ? '' : 'hover:-translate-y-0.5'} ${className}`}
     >
       {label}
       <ArrowRight className={`h-4 w-4 transition-transform ${shouldReduceMotion ? '' : 'group-hover:translate-x-1'}`} />

@@ -34,6 +34,7 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                       : 'light'
                   const theme = stored === 'light' || stored === 'dark' ? stored : preferred
                   document.documentElement.dataset.theme = theme
+                  document.documentElement.classList.toggle('dark', theme === 'dark')
                   document.documentElement.style.colorScheme = theme
                 } catch {}
               })()

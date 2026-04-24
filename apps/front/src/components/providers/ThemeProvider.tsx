@@ -18,6 +18,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null)
 function applyTheme(theme: AppTheme) {
   if (typeof document === 'undefined') return
   document.documentElement.dataset.theme = theme
+  document.documentElement.classList.toggle('dark', theme === 'dark')
   // Help browser render built-in controls correctly
   document.documentElement.style.colorScheme = theme
 }
@@ -46,6 +47,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     try {
       const fromDom = document.documentElement.dataset.theme
       if (fromDom === 'light' || fromDom === 'dark') {
+        applyTheme(fromDom)
         // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- hydration sync
         setThemeState(fromDom)
         return
