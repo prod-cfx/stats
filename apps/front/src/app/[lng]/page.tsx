@@ -1,7 +1,18 @@
+import type { Metadata } from 'next'
 import { AiQuantMarketingHome } from '@/components/ai-quant/AiQuantMarketingHome'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
 import { getServerTranslator } from '@/lib/i18n/server'
+import { getPageMetadata } from '@/lib/page-metadata'
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ lng: string }> | { lng: string }
+}): Promise<Metadata> {
+  const resolved = await Promise.resolve(params)
+  return getPageMetadata('home', resolved.lng)
+}
 
 export default async function HomePage({
   params,
