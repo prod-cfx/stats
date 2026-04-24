@@ -491,6 +491,10 @@ export function AiQuantPageClient({
     activeConversation?.publishedSnapshotStrategyConfig,
   ])
   const graphConfirmed = activeConversation?.logicGraph?.status === 'confirmed'
+  const activePublishedSnapshotId =
+    activeConversation && hasLatestPublishedCode(activeConversation)
+      ? activeConversation.publishedSnapshotId
+      : null
   const clarificationBlocked = activeConversation?.clarificationGate?.blocked === true
   const semanticViewConfirmable = canConfirmSemanticView({
     logicGraph: activeConversation?.logicGraph,
@@ -1183,7 +1187,7 @@ export function AiQuantPageClient({
                 !semanticViewConfirmable
               }
               confirmed={activeConversation.logicGraph.status === 'confirmed'}
-              publishedSnapshotId={activeConversation.publishedSnapshotId}
+              publishedSnapshotId={activePublishedSnapshotId}
               onConfirm={() => {
                 confirmCurrentLogicGraph({
                   conversationId: activeConversation.id,
@@ -1217,7 +1221,7 @@ export function AiQuantPageClient({
                 activeConversation.logicGraph.status === 'confirmed' ||
                 !semanticViewConfirmable
               }
-              publishedSnapshotId={activeConversation.publishedSnapshotId}
+              publishedSnapshotId={activePublishedSnapshotId}
               onConfirm={() => {
                 confirmCurrentLogicGraph({
                   conversationId: activeConversation.id,
