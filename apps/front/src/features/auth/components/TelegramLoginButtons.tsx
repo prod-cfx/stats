@@ -79,8 +79,12 @@ export function TelegramLoginButtons({ lng, intent = 'login', redirect, betaCode
               setWebBusy(true)
               setStatusMessage(null)
               const result = await getTelegramWebAuthorizeUrlRequest({ intent, lng, redirect })
-              if (loginBetaCode && typeof window !== 'undefined') {
-                window.sessionStorage.setItem(TELEGRAM_WEB_BETA_CODE_KEY, loginBetaCode)
+              if (intent === 'login' && typeof window !== 'undefined') {
+                if (loginBetaCode) {
+                  window.sessionStorage.setItem(TELEGRAM_WEB_BETA_CODE_KEY, loginBetaCode)
+                } else {
+                  window.sessionStorage.removeItem(TELEGRAM_WEB_BETA_CODE_KEY)
+                }
               }
               window.location.href = result.authorizeUrl
             } catch (error) {

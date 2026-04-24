@@ -108,6 +108,8 @@ describe('beta code login flow', () => {
   })
 
   it('allows Telegram login intent when beta code is missing', async () => {
+    window.sessionStorage.setItem('auth:telegram:betaCode', 'STALE-CODE')
+
     await act(async () => {
       root?.render(<TelegramLoginButtons lng="zh" intent="login" betaCode="   " />)
     })
