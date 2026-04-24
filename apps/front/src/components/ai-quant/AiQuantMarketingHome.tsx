@@ -1,7 +1,7 @@
 'use client'
 
 import { motion, type Transition, useReducedMotion } from 'framer-motion'
-import { ArrowRight, BarChart3, LineChart, Play, ShieldCheck, Sparkles, Zap } from 'lucide-react'
+import { ArrowRight, BarChart3, LineChart, Play, ShieldCheck, Sparkles, Star, Zap } from 'lucide-react'
 import Link from 'next/link'
 import { useTranslation } from 'react-i18next'
 
@@ -231,35 +231,40 @@ function FeatureSection({
   reverse?: boolean
 }) {
   const { t } = useTranslation()
+  const shouldReduceMotion = useReducedMotion()
+  const sectionClass = featureKey === 'conversation' || featureKey === 'deploy' ? alternateSectionShell : sectionShell
 
   return (
-    <section className={alternateSectionShell}>
-      <div className={`mx-auto grid max-w-7xl items-center gap-16 md:grid-cols-2 ${reverse ? 'md:[&>*:first-child]:order-2' : ''}`}>
+    <section className={sectionClass}>
+      <div className={`mx-auto grid max-w-7xl items-center gap-12 md:grid-cols-2 md:gap-16 ${reverse ? 'md:[&>*:first-child]:order-2' : ''}`}>
         <motion.div
-          initial={{ opacity: 0, x: reverse ? 30 : -30 }}
-          whileInView={{ opacity: 1, x: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6 }}
+          initial={shouldReduceMotion ? false : 'hidden'}
+          whileInView={shouldReduceMotion ? undefined : 'visible'}
+          animate={shouldReduceMotion ? { opacity: 1, y: 0 } : undefined}
+          variants={revealUp}
+          viewport={{ once: true, margin: '-80px' }}
+          transition={shouldReduceMotion ? undefined : revealTransition}
         >
-          <div className="text-[10px] font-bold text-primary uppercase tracking-[0.3em] mb-4">
+          <div className="mb-4 text-[10px] font-bold tracking-[0.3em] text-primary uppercase">
             {t(`aiQuant.homepage.features.${featureKey}.eyebrow`)}
           </div>
-          <h2 className="text-3xl font-bold tracking-tight text-slate-950 dark:text-white md:text-5xl">
+          <h2 className="text-2xl leading-tight font-black tracking-tight text-slate-950 dark:text-white md:text-3xl">
             {t(`aiQuant.homepage.features.${featureKey}.title`)}
           </h2>
-          <p className={`mt-6 text-base leading-relaxed md:text-lg ${mutedText}`}>
+          <p className={`mt-5 text-base leading-relaxed ${mutedText}`}>
             {t(`aiQuant.homepage.features.${featureKey}.description`)}
           </p>
         </motion.div>
-        
+
         <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          whileInView={{ opacity: 1, scale: 1 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.8 }}
+          initial={shouldReduceMotion ? false : 'hidden'}
+          whileInView={shouldReduceMotion ? undefined : 'visible'}
+          animate={shouldReduceMotion ? { opacity: 1, y: 0 } : undefined}
+          variants={revealUp}
+          viewport={{ once: true, margin: '-80px' }}
+          transition={shouldReduceMotion ? undefined : { ...revealTransition, delay: 0.08 }}
           className="relative"
         >
-          <div className="absolute inset-0 bg-primary/5 blur-[80px] -z-10" />
           <FeatureVisual featureKey={featureKey} />
         </motion.div>
       </div>
@@ -268,41 +273,73 @@ function FeatureSection({
 }
 
 function FeatureVisual({ featureKey }: { featureKey: FeatureKey }) {
-  if (featureKey === 'conversation') return <ConversationVisual />
-  if (featureKey === 'backtest') return <BacktestVisual />
-  if (featureKey === 'deploy') return <DeployVisual />
-  return <PlazaVisual />
+  if (featureKey === 'conversation') return <ConversationStrategyVisual />
+  if (featureKey === 'backtest') return <BacktestResultVisual />
+  if (featureKey === 'deploy') return <DeployOrbitVisual />
+  return <StrategyPlazaVisual />
 }
 
-function ConversationVisual() {
+function ConversationStrategyVisual() {
   const { t } = useTranslation()
+  const shouldReduceMotion = useReducedMotion()
+  const rules = [
+    { id: 'buy', label: 'BUY', text: t('aiQuant.homepage.visual.rule1'), icon: LineChart, tone: 'text-sky-500 dark:text-sky-300' },
+    { id: 'sell', label: 'SELL', text: t('aiQuant.homepage.visual.rule3'), icon: Play, tone: 'text-rose-500 dark:text-rose-300' },
+    { id: 'capital', label: '10%', text: t('aiQuant.homepage.visual.rule2'), icon: ShieldCheck, tone: 'text-emerald-500 dark:text-emerald-300' },
+  ]
+
   return (
-    <div className={`rounded-[2rem] bg-gradient-to-br from-white/[0.05] to-transparent p-8 ${panelClass}`}>
-      <div className="space-y-6">
-        <div className="flex gap-4">
-          <div className="h-10 w-10 shrink-0 rounded-2xl bg-primary/20 flex items-center justify-center text-primary border border-primary/30">
-            <Sparkles className="h-5 w-5" />
+    <div className="mx-auto w-full max-w-[560px] overflow-hidden rounded-[1.75rem]">
+      <div className={`rounded-[1.75rem] p-4 sm:p-5 ${panelClass}`}>
+        <div className="rounded-[1.35rem] border border-slate-200/75 bg-slate-50/80 p-4 dark:border-white/[0.07] dark:bg-white/[0.035]">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-primary/25 bg-primary/10 text-primary shadow-[0_12px_30px_rgba(100,108,255,0.16)]">
+              <Sparkles className="h-5 w-5" />
+            </div>
+            <div className="rounded-2xl border border-slate-200/85 bg-white px-4 py-3 text-sm leading-relaxed text-slate-700 shadow-sm dark:border-white/[0.07] dark:bg-white/[0.06] dark:text-white/[0.78]">
+              {t('aiQuant.homepage.visual.assistant')}
+            </div>
           </div>
-          <div className="rounded-2xl border border-slate-200/80 bg-white/75 px-5 py-3 text-sm text-slate-700 dark:border-white/5 dark:bg-white/5 dark:text-white/80">
-            {t('aiQuant.homepage.visual.assistant')}
+          <div className="mt-4 flex justify-end">
+            <div className="max-w-[82%] rounded-2xl border border-primary/25 bg-primary/10 px-4 py-3 text-sm leading-relaxed font-semibold text-primary shadow-[0_14px_34px_rgba(100,108,255,0.12)] dark:bg-primary/[0.16]">
+              {t('aiQuant.homepage.visual.userPrompt')}
+            </div>
           </div>
         </div>
-        <div className="flex justify-end">
-          <div className="rounded-2xl bg-primary/20 px-5 py-3 text-sm text-primary font-medium border border-primary/30">
-            {t('aiQuant.homepage.visual.userPrompt')}
+
+        <div className="mt-4 rounded-[1.35rem] border border-slate-200/80 bg-white/[0.88] p-4 shadow-[0_18px_44px_rgba(15,23,42,0.06)] dark:border-white/[0.07] dark:bg-[#0b1119]/[0.84]">
+          <div className="flex items-center justify-between gap-3">
+            <div className="text-[11px] font-black tracking-[0.2em] text-slate-500 uppercase dark:text-white/48">
+              {t('aiQuant.homepage.visual.parsedStrategy')}
+            </div>
+            <div className="flex items-center gap-2 rounded-full border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-bold text-emerald-500 dark:text-emerald-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)]" />
+              Processing
+            </div>
           </div>
-        </div>
-        <div className="rounded-2xl border border-primary/20 bg-primary/5 p-6 mt-6">
-          <div className="text-[10px] font-bold text-primary uppercase tracking-widest mb-4">{t('aiQuant.homepage.visual.parsedStrategy')}</div>
-          <div className="space-y-3">
-            <div className="flex items-center gap-3 text-sm text-slate-700 dark:text-white/70">
-              <div className="h-2 w-2 rounded-full bg-sky-400 shadow-[0_0_8px_#38bdf8]" />
-              {t('aiQuant.homepage.visual.rule1')}
-            </div>
-            <div className="flex items-center gap-3 text-sm text-slate-700 dark:text-white/70">
-              <div className="h-2 w-2 rounded-full bg-secondary shadow-[0_0_8px_var(--tw-colors-secondary)]" />
-              {t('aiQuant.homepage.visual.rule2')}
-            </div>
+          <div className="mt-4 space-y-2.5">
+            {rules.map((rule, index) => (
+              <motion.div
+                key={rule.id}
+                initial={shouldReduceMotion ? false : { opacity: 0, y: 12 }}
+                whileInView={shouldReduceMotion ? undefined : { opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: '-60px' }}
+                transition={shouldReduceMotion ? undefined : { duration: 0.45, ease: 'easeOut', delay: index * 0.08 }}
+                className="flex items-center gap-3 rounded-2xl border border-slate-200/75 bg-slate-50/80 px-3.5 py-3 dark:border-white/[0.06] dark:bg-white/[0.035]"
+              >
+                <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm dark:bg-white/[0.06] ${rule.tone}`}>
+                  <rule.icon className="h-4 w-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className={`text-[11px] font-black tracking-[0.18em] ${rule.tone}`}>
+                    {rule.label}
+                  </div>
+                  <div className="mt-0.5 truncate text-sm font-semibold text-slate-700 dark:text-white/[0.78]">
+                    {rule.text}
+                  </div>
+                </div>
+              </motion.div>
+            ))}
           </div>
         </div>
       </div>
@@ -310,82 +347,199 @@ function ConversationVisual() {
   )
 }
 
-function BacktestVisual() {
+function BacktestResultVisual() {
   const { t } = useTranslation()
+  const shouldReduceMotion = useReducedMotion()
+  const bars = [
+    { id: 'm1', height: 34 },
+    { id: 'm2', height: 54 },
+    { id: 'm3', height: 42 },
+    { id: 'm4', height: 72 },
+    { id: 'm5', height: 58 },
+    { id: 'm6', height: 78 },
+    { id: 'm7', height: 64 },
+    { id: 'm8', height: 90 },
+    { id: 'm9', height: 82 },
+  ]
+
   return (
-    <div className={`rounded-[2rem] bg-gradient-to-br from-white/[0.45] to-transparent p-8 ${panelClass}`}>
-      <div className="flex items-center justify-between mb-8">
-        <div className={`text-xs font-medium uppercase tracking-widest ${mutedText}`}>{t('aiQuant.backtestResult')}</div>
-        <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
+    <div className={`mx-auto w-full max-w-[560px] overflow-hidden rounded-[1.75rem] p-5 sm:p-6 ${panelClass}`}>
+      <div className="mb-5 flex items-center justify-between">
+        <div className="text-xs font-black tracking-[0.22em] text-slate-500 uppercase dark:text-white/48">
+          {t('aiQuant.backtestResult')}
+        </div>
+        <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
           <BarChart3 className="h-5 w-5" />
         </div>
       </div>
-      <div className="h-48 w-full bg-slate-950/[0.04] rounded-2xl flex items-end p-4 gap-2 border border-slate-200/80 dark:border-white/5 dark:bg-black/20">
-        {[30, 50, 40, 80, 60, 75, 45, 90, 100].map((h, i) => (
-          <motion.div 
-            key={i}
-            initial={{ height: 0 }}
-            whileInView={{ height: `${h}%` }}
-            className="flex-1 bg-gradient-to-t from-primary/20 to-primary/60 rounded-t-md border-t border-primary/50"
+
+      <div className="relative h-56 overflow-hidden rounded-[1.35rem] border border-slate-200/80 bg-slate-50/80 p-4 dark:border-white/[0.06] dark:bg-black/20">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(15,23,42,0.055)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.05)_1px,transparent_1px)] bg-[size:42px_42px] dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.035)_1px,transparent_1px)]" />
+        <div className="relative z-10 flex h-full items-end gap-2.5 pt-8">
+          {bars.map((bar, index) => (
+            <motion.div
+              key={bar.id}
+              initial={shouldReduceMotion ? false : { height: 0 }}
+              whileInView={shouldReduceMotion ? undefined : { height: `${bar.height}%` }}
+              animate={shouldReduceMotion ? { height: `${bar.height}%` } : undefined}
+              viewport={{ once: true, margin: '-60px' }}
+              transition={shouldReduceMotion ? undefined : { duration: 0.55, ease: 'easeOut', delay: index * 0.035 }}
+              className="min-h-4 flex-1 rounded-t-md border-t border-primary/50 bg-gradient-to-t from-primary/22 to-primary/70 shadow-[0_0_22px_rgba(100,108,255,0.12)]"
+            />
+          ))}
+        </div>
+        <svg className="pointer-events-none absolute inset-x-4 top-7 z-20 h-[58%] w-[calc(100%-2rem)] overflow-visible" viewBox="0 0 420 130" fill="none" aria-hidden="true">
+          <motion.path
+            d="M4 104 C44 92 62 56 98 64 C134 72 140 34 176 42 C214 50 226 20 262 28 C308 38 316 12 356 20 C382 25 398 15 416 9"
+            initial={shouldReduceMotion ? false : { pathLength: 0, opacity: 0 }}
+            whileInView={shouldReduceMotion ? undefined : { pathLength: 1, opacity: 1 }}
+            animate={shouldReduceMotion ? { pathLength: 1, opacity: 1 } : undefined}
+            viewport={{ once: true, margin: '-60px' }}
+            transition={shouldReduceMotion ? undefined : { duration: 1.25, ease: 'easeInOut', delay: 0.18 }}
+            stroke="url(#equityCurve)"
+            strokeWidth="5"
+            strokeLinecap="round"
+          />
+          <defs>
+            <linearGradient id="equityCurve" x1="4" y1="104" x2="416" y2="9" gradientUnits="userSpaceOnUse">
+              <stop stopColor="#22c55e" />
+              <stop offset="0.5" stopColor="#38bdf8" />
+              <stop offset="1" stopColor="#646cff" />
+            </linearGradient>
+          </defs>
+        </svg>
+      </div>
+
+      <div className="mt-5 grid grid-cols-2 gap-3">
+        <MetricCard label={t('aiQuant.homepage.visual.metrics.return')} value="+18.4%" positive />
+        <MetricCard label={t('aiQuant.homepage.visual.metrics.winRate')} value="63%" />
+      </div>
+    </div>
+  )
+}
+
+function MetricCard({ label, value, positive = false }: { label: string, value: string, positive?: boolean }) {
+  return (
+    <div className="rounded-2xl border border-slate-200/80 bg-white/[0.78] p-4 shadow-sm dark:border-white/[0.06] dark:bg-white/[0.035]">
+      <div className={`mb-1 text-[10px] font-black tracking-[0.18em] uppercase ${mutedText}`}>
+        {label}
+      </div>
+      <div className={`text-2xl font-black ${positive ? 'text-emerald-500 dark:text-emerald-300' : 'text-slate-950 dark:text-white'}`}>
+        {value}
+      </div>
+    </div>
+  )
+}
+
+function DeployOrbitVisual() {
+  const { t } = useTranslation()
+  const shouldReduceMotion = useReducedMotion()
+  const rings = [
+    { id: 'outer', className: 'inset-6 border-primary/[0.12] dark:border-primary/[0.18]', duration: 18 },
+    { id: 'middle', className: 'inset-16 border-sky-400/18 dark:border-sky-300/16', duration: 14 },
+    { id: 'inner', className: 'inset-[6.5rem] border-emerald-400/24 dark:border-emerald-300/18', duration: 10 },
+  ]
+
+  return (
+    <div className={`mx-auto aspect-square min-h-[320px] w-full max-w-[520px] overflow-hidden rounded-[1.75rem] ${panelClass}`}>
+      <div className="relative h-full min-h-[320px] overflow-hidden rounded-[1.75rem] bg-[radial-gradient(circle_at_50%_50%,rgba(100,108,255,0.16),transparent_32%),linear-gradient(135deg,rgba(248,250,252,0.9),rgba(255,255,255,0.58))] dark:bg-[radial-gradient(circle_at_50%_50%,rgba(100,108,255,0.24),transparent_34%),linear-gradient(135deg,rgba(16,21,29,0.92),rgba(2,3,5,0.9))]">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(15,23,42,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.035)_1px,transparent_1px)] bg-[size:44px_44px] dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.026)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.026)_1px,transparent_1px)]" />
+        {rings.map((ring, index) => (
+          <motion.div
+            key={ring.id}
+            aria-hidden="true"
+            animate={shouldReduceMotion ? undefined : { rotate: index % 2 === 0 ? 360 : -360, scale: [1, 1.035, 1] }}
+            transition={shouldReduceMotion ? undefined : { duration: ring.duration, repeat: Infinity, ease: 'linear' }}
+            className={`absolute rounded-full border border-dashed ${ring.className}`}
           />
         ))}
-      </div>
-      <div className="grid grid-cols-2 gap-4 mt-8">
-        <div className="p-4 rounded-2xl bg-white/75 border border-slate-200/80 dark:border-white/5 dark:bg-white/[0.02]">
-          <div className={`mb-1 text-[10px] font-medium uppercase ${mutedText}`}>Return</div>
-          <div className="text-xl font-bold text-emerald-400">+18.4%</div>
-        </div>
-        <div className="p-4 rounded-2xl bg-white/75 border border-slate-200/80 dark:border-white/5 dark:bg-white/[0.02]">
-          <div className={`mb-1 text-[10px] font-medium uppercase ${mutedText}`}>Win Rate</div>
-          <div className="text-xl font-bold text-slate-950 dark:text-white">63%</div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function DeployVisual() {
-  const { t } = useTranslation()
-  return (
-    <div className={`rounded-[2rem] bg-gradient-to-br from-white/[0.45] to-transparent p-8 ${panelClass}`}>
-      <div className="space-y-4">
-        {[
-          { label: t('aiQuant.homepage.visual.deployRows.snapshot'), status: 'ACTIVE' },
-          { label: t('aiQuant.homepage.visual.deployRows.backtestGate'), status: 'PASSED' },
-          { label: t('aiQuant.homepage.visual.deployRows.exchangeApi'), status: 'SECURE' }
-        ].map((item, i) => (
-          <div key={i} className="flex items-center justify-between p-5 rounded-2xl bg-white/75 border border-slate-200/80 dark:border-white/5 dark:bg-white/[0.02]">
-            <span className="text-sm font-medium text-slate-700 dark:text-white/70">{item.label}</span>
-            <span className="text-[10px] font-bold text-emerald-400 tracking-widest px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/20">{item.status}</span>
+        <motion.div
+          aria-hidden="true"
+          animate={shouldReduceMotion ? undefined : { opacity: [0.35, 0.72, 0.35], scale: [0.92, 1.08, 0.92] }}
+          transition={shouldReduceMotion ? undefined : { duration: 3.8, repeat: Infinity, ease: 'easeInOut' }}
+          className="absolute inset-1/2 h-44 w-44 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/20 blur-3xl"
+        />
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="relative flex h-36 w-36 flex-col items-center justify-center rounded-[2rem] border border-white/55 bg-white/[0.86] text-center shadow-[0_28px_80px_rgba(100,108,255,0.24)] backdrop-blur-xl dark:border-white/[0.1] dark:bg-[#121926]/[0.88]">
+            <div className="absolute inset-3 rounded-[1.4rem] border border-primary/[0.16]" />
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-primary to-secondary text-white shadow-[0_0_28px_rgba(100,108,255,0.42)]">
+              <Zap className="h-6 w-6" />
+            </div>
+            <div className="mt-4 px-4 text-xs font-black tracking-[0.2em] text-slate-900 uppercase dark:text-white">
+              {t('aiQuant.homepage.visual.deployAction')}
+            </div>
           </div>
-        ))}
-      </div>
-      <div className="mt-10 h-14 rounded-2xl bg-gradient-to-r from-primary to-secondary flex items-center justify-center text-sm font-bold text-white uppercase tracking-widest shadow-[0_0_20px_rgba(100,108,255,0.3)]">
-        {t('aiQuant.homepage.visual.deployAction')}
+        </div>
+        <div className="absolute top-[18%] left-[18%] h-3 w-3 rounded-full bg-sky-400 shadow-[0_0_22px_rgba(56,189,248,0.75)]" />
+        <div className="absolute right-[20%] bottom-[21%] h-3 w-3 rounded-full bg-emerald-400 shadow-[0_0_22px_rgba(52,211,153,0.75)]" />
+        <div className="absolute top-[24%] right-[22%] h-2.5 w-2.5 rounded-full bg-primary shadow-[0_0_20px_rgba(100,108,255,0.75)]" />
       </div>
     </div>
   )
 }
 
-function PlazaVisual() {
+function StrategyPlazaVisual() {
   const { t } = useTranslation()
-  const cards = [
-    { title: t('aiQuant.homepage.visual.plaza.trend'), stat: '+12.5%', icon: ShieldCheck },
-    { title: t('aiQuant.homepage.visual.plaza.grid'), stat: '95%', icon: Zap },
-    { title: t('aiQuant.homepage.visual.plaza.reversion'), stat: '72%', icon: Play },
-    { title: t('aiQuant.homepage.visual.plaza.breakout'), stat: 'Ready', icon: LineChart },
+  const shouldReduceMotion = useReducedMotion()
+  const floatingCards = [
+    { id: 'grid', title: t('aiQuant.homepage.visual.plaza.grid'), stat: '95%', icon: Zap, className: 'top-[10%] left-[5%] rotate-[-7deg]', delay: 0 },
+    { id: 'reversion', title: t('aiQuant.homepage.visual.plaza.reversion'), stat: '72%', icon: ShieldCheck, className: 'right-[6%] top-[18%] rotate-[7deg]', delay: 0.4 },
+    { id: 'breakout', title: t('aiQuant.homepage.visual.plaza.breakout'), stat: 'Ready', icon: LineChart, className: 'bottom-[9%] left-[10%] rotate-[5deg]', delay: 0.8 },
   ]
+
   return (
-    <div className="grid grid-cols-2 gap-5">
-      {cards.map((card, i) => (
-        <div key={i} className={`rounded-[2rem] bg-gradient-to-br from-white/[0.45] to-transparent p-6 transition-all hover:bg-white ${panelClass} dark:hover:bg-white/[0.08]`}>
-          <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center text-primary mb-6 border border-primary/20">
-            <card.icon className="h-6 w-6" />
+    <div className={`relative mx-auto aspect-[1.22] w-full max-w-[560px] overflow-hidden rounded-[1.75rem] ${panelClass}`}>
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_35%,rgba(100,108,255,0.14),transparent_36%),linear-gradient(135deg,rgba(248,250,252,0.92),rgba(255,255,255,0.6))] dark:bg-[radial-gradient(circle_at_50%_35%,rgba(100,108,255,0.2),transparent_38%),linear-gradient(135deg,rgba(16,21,29,0.92),rgba(2,3,5,0.94))]" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(15,23,42,0.04)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.035)_1px,transparent_1px)] bg-[size:40px_40px] dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.026)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.026)_1px,transparent_1px)]" />
+
+      {floatingCards.map(card => (
+        <motion.div
+          key={card.id}
+          animate={shouldReduceMotion ? undefined : { y: [0, -10, 0] }}
+          transition={shouldReduceMotion ? undefined : { duration: 4.8, repeat: Infinity, ease: 'easeInOut', delay: card.delay }}
+          className={`absolute w-[42%] rounded-2xl border border-slate-200/80 bg-white/[0.78] p-4 shadow-[0_18px_48px_rgba(15,23,42,0.1)] backdrop-blur-xl dark:border-white/[0.07] dark:bg-white/[0.055] ${card.className}`}
+        >
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <card.icon className="h-4 w-4" />
+            </div>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-black text-slate-900 dark:text-white">{card.title}</div>
+              <div className="mt-0.5 text-xs font-bold text-emerald-500 dark:text-emerald-300">{card.stat}</div>
+            </div>
           </div>
-          <h3 className="text-base font-bold text-slate-950 mb-1 dark:text-white">{card.title}</h3>
-          <div className="text-2xl font-bold text-emerald-400">{card.stat}</div>
-        </div>
+        </motion.div>
       ))}
+
+      <div className="absolute inset-0 flex items-center justify-center p-6">
+        <div className="relative w-[58%] min-w-[230px] rounded-[1.5rem] border border-primary/25 bg-white/[0.92] p-5 shadow-[0_30px_90px_rgba(100,108,255,0.24)] backdrop-blur-2xl dark:border-primary/25 dark:bg-[#101722]/[0.92]">
+          <div className="mb-5 flex items-start justify-between gap-3">
+            <div>
+              <div className="text-[11px] font-black tracking-[0.18em] text-primary uppercase">
+                {t('aiQuant.homepage.visual.plaza.template')}
+              </div>
+              <div className="mt-2 text-lg font-black text-slate-950 dark:text-white">
+                {t('aiQuant.homepage.visual.plaza.trend')}
+              </div>
+            </div>
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-400/14 text-amber-500 dark:text-amber-300">
+              <Star className="h-5 w-5 fill-current" />
+            </div>
+          </div>
+          <div className="flex items-end justify-between gap-4">
+            <div className="text-3xl font-black text-emerald-500 dark:text-emerald-300">+12.5%</div>
+            <div className="flex h-14 flex-1 items-end gap-1.5">
+              {[38, 58, 46, 76, 62, 88].map(height => (
+                <div
+                  key={height}
+                  className="flex-1 rounded-t bg-gradient-to-t from-primary/30 to-primary/75"
+                  style={{ height: `${height}%` }}
+                />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
