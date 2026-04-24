@@ -7,6 +7,7 @@ jest.mock('../services/strategy-plaza-run.service', () => ({
 }))
 
 import { Test } from '@nestjs/testing'
+import { HTTP_CODE_METADATA } from '@nestjs/common/constants'
 import { CallerIdentityService } from '@/modules/llm-strategy-codegen/services/caller-identity.service'
 import { RunStrategyPlazaTemplateDto } from '../dto/run-strategy-plaza-template.dto'
 import { StrategyPlazaEditSessionService } from '../services/strategy-plaza-edit-session.service'
@@ -136,6 +137,11 @@ describe('StrategyPlazaController', () => {
       runRequestId: 'run-123456',
     })
     expect(result).toEqual({ id: 'strategy-1', status: 'running' })
+  })
+
+  it('documents mutating endpoints as 200 responses', () => {
+    expect(Reflect.getMetadata(HTTP_CODE_METADATA, StrategyPlazaController.prototype.run)).toBe(200)
+    expect(Reflect.getMetadata(HTTP_CODE_METADATA, StrategyPlazaController.prototype.editSession)).toBe(200)
   })
 
   it('starts an edit session using caller identity from auth', async () => {
