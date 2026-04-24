@@ -395,6 +395,49 @@ describe('backtest-report-data live mapping', () => {
     expect(data?.trades[0].reasonClose).toBe('Stop loss condition triggered')
   })
 
+  it('prefers stable reason codes and display labels over legacy compiled reason strings', () => {
+    const data = createBacktestReportDataFromLive(
+      'btjob-reason-code',
+      {
+        maxDrawdownPct: 0.5,
+        totalReturnPct: 1,
+        winRatePct: 100,
+        tradeCount: 1,
+      },
+      {
+        equityCurve: [
+          { ts: Date.parse('2026-04-20T00:00:00.000Z'), equity: 10000 },
+          { ts: Date.parse('2026-04-21T00:00:00.000Z'), equity: 10100 },
+        ],
+        trades: [
+          {
+            id: 'trade-coded',
+            side: 'LONG',
+            exitTs: Date.parse('2026-04-21T00:00:00.000Z'),
+            exitPrice: 1.23,
+            returnPct: 1,
+            reasonOpen: 'compiled.decision_99_unknown-internal-name',
+            reasonClose: 'compiled.decision_99_unknown-internal-name',
+            reasonOpenCode: 'ENTRY_ON_START',
+            reasonCloseDisplay: '用户可读止盈',
+          },
+        ],
+      },
+      {
+        lng: 'zh',
+        context: {
+          marketType: 'spot',
+        },
+      },
+    )
+
+    expect(data).not.toBeNull()
+    expect(data?.trades[0]).toEqual(expect.objectContaining({
+      reasonOpen: '策略启动后首次入场',
+      reasonClose: '用户可读止盈',
+    }))
+  })
+
   it('marks reports with no closed trades as low confidence', () => {
     const data = createBacktestReportDataFromLive(
       'btjob-no-trades',

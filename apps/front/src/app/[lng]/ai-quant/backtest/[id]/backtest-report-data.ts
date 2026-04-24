@@ -106,6 +106,10 @@ export interface LiveBacktestReportInput {
     returnPct: number
     reasonOpen?: string
     reasonClose?: string
+    reasonOpenCode?: string
+    reasonCloseCode?: string
+    reasonOpenDisplay?: string
+    reasonCloseDisplay?: string
   }> | null
   openPositions?: Array<{
     symbol: string
@@ -293,8 +297,18 @@ function mapLiveTrades(
         exitPriceDisplay: formatPrice(trade.exitPrice),
         profitPct,
         isProfit: profitPct >= 0,
-        reasonOpen: sanitizeReason(trade.reasonOpen, lng),
-        reasonClose: sanitizeReason(trade.reasonClose, lng),
+        reasonOpen: resolveTradeReason({
+          code: trade.reasonOpenCode,
+          display: trade.reasonOpenDisplay,
+          legacyReason: trade.reasonOpen,
+          lng,
+        }),
+        reasonClose: resolveTradeReason({
+          code: trade.reasonCloseCode,
+          display: trade.reasonCloseDisplay,
+          legacyReason: trade.reasonClose,
+          lng,
+        }),
       }
     })
 }
@@ -490,7 +504,55 @@ function formatDateTime(ts: number | undefined): string {
   return Number.isNaN(date.getTime()) ? '-' : date.toISOString().slice(0, 16).replace('T', ' ')
 }
 
-function sanitizeReason(value: string | undefined, lng: 'en' | 'zh' = 'en'): string | undefined {
+function resolveTradeReason(args: {
+  code?: string
+  display?: string
+  legacyReason?: string
+  lng: 'en' | 'zh'
+}): string | undefined {
+  if (typeof args.display === 'string' && args.display.trim()) {
+    return args.display.trim()
+  }
+
+  const normalizedCode = normalizeReasonCode(args.code)
+  if (normalizedCode) {
+    return formatReasonCode(normalizedCode, args.lng)
+  }
+
+  return sanitizeLegacyReason(args.legacyReason, args.lng)
+}
+
+function normalizeReasonCode(value: string | undefined): string | null {
+  if (typeof value !== 'string' || !value.trim()) {
+    return null
+  }
+  return value.trim().toUpperCase().replace(/[\s.-]+/g, '_')
+}
+
+function formatReasonCode(code: string, lng: 'en' | 'zh'): string {
+  const labels: Record<string, { en: string; zh: string }> = {
+    ENTRY_ON_START: {
+      en: 'Entered once when the strategy started',
+      zh: '策略启动后首次入场',
+    },
+    TAKE_PROFIT: {
+      en: 'Take-profit condition triggered',
+      zh: '达到止盈条件',
+    },
+    STOP_LOSS: {
+      en: 'Stop loss condition triggered',
+      zh: '达到止损条件',
+    },
+    STRATEGY_CONDITION: {
+      en: 'Strategy logic condition triggered',
+      zh: '策略逻辑条件触发',
+    },
+  }
+
+  return labels[code]?.[lng] ?? (lng === 'zh' ? '策略逻辑条件触发' : 'Strategy logic condition triggered')
+}
+
+function sanitizeLegacyReason(value: string | undefined, lng: 'en' | 'zh' = 'en'): string | undefined {
   if (typeof value !== 'string' || !value.trim()) {
     return undefined
   }

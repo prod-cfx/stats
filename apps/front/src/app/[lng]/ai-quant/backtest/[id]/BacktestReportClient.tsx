@@ -59,6 +59,10 @@ function mapDetailedReport(result: BacktestJobResult): LiveBacktestReportInput |
       returnPct: trade.returnPct,
       reasonOpen: trade.reasonOpen,
       reasonClose: trade.reasonClose,
+      reasonOpenCode: trade.reasonOpenCode,
+      reasonCloseCode: trade.reasonCloseCode,
+      reasonOpenDisplay: trade.reasonOpenDisplay,
+      reasonCloseDisplay: trade.reasonCloseDisplay,
     })),
     openPositions: Array.isArray(result.openPositions)
       ? result.openPositions.map(position => ({

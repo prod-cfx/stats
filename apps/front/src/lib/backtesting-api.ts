@@ -102,6 +102,10 @@ export interface BacktestJobResult {
     returnPct: number
     reasonOpen?: string
     reasonClose?: string
+    reasonOpenCode?: string
+    reasonCloseCode?: string
+    reasonOpenDisplay?: string
+    reasonCloseDisplay?: string
   }>
   openPositions?: Array<{
     symbol: string
