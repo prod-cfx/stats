@@ -88,6 +88,7 @@ export interface AdminMenuNode {
   i18nKey?: string | null
   sort?: number | null
   isShow?: boolean | null
+  children?: AdminMenuNode[]
 }
 
 export interface AdminUser {

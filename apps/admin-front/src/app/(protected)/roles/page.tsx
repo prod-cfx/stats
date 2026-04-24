@@ -2,6 +2,7 @@
 'use client'
 
 import type {
+  AdminMenuNode,
   AdminRole} from '@/lib/api';
 import {
   App,
@@ -31,6 +32,18 @@ interface RoleFormValues {
   menuPermissions?: string[]
 }
 
+function flattenMenuOptions(nodes: AdminMenuNode[]): Array<{ label: string; value: string }> {
+  return nodes.flatMap((node) => {
+    const current = node.code
+      ? [{
+          label: `${node.title} (${node.code})`,
+          value: node.code,
+        }]
+      : []
+    return [...current, ...flattenMenuOptions(node.children ?? [])]
+  })
+}
+
 export default function RolesPage() {
   const { message } = App.useApp()
   const [roles, setRoles] = useState<AdminRole[]>([])
@@ -56,13 +69,7 @@ export default function RolesPage() {
   const loadMenus = useCallback(async () => {
     try {
       const data = await fetchAdminMenus()
-      const options = data
-        .filter(node => node.code)
-        .map(node => ({
-          label: node.code ? `${node.title} (${node.code})` : node.title,
-          value: node.code!,
-        }))
-      setMenuOptions(options)
+      setMenuOptions(flattenMenuOptions(data))
     } catch (error: any) {
       message.error(error?.message ?? '加载菜单失败')
     }
