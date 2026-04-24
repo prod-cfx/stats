@@ -81,7 +81,7 @@ function HeroSection({ ctaHref, lng }: { ctaHref: string, lng: 'zh' | 'en' }) {
   const title = t('aiQuant.homepage.hero.title')
 
   return (
-    <section className="relative overflow-hidden bg-[#f6f8fc]/80 px-6 pt-20 pb-24 dark:bg-[#020305]/90 md:px-8 md:pt-28 md:pb-32">
+    <section className="relative flex min-h-[calc(100svh-64px)] items-center overflow-hidden bg-[#f6f8fc]/80 px-6 py-24 dark:bg-[#020305]/90 md:min-h-[calc(100vh-72px)] md:px-8 md:py-28">
       <HeroLines />
       <HeroParticles />
       <motion.div
@@ -89,13 +89,13 @@ function HeroSection({ ctaHref, lng }: { ctaHref: string, lng: 'zh' | 'en' }) {
         animate="visible"
         variants={revealUp}
         transition={revealTransition}
-        className="relative z-10 mx-auto flex max-w-4xl flex-col items-center text-center"
+        className="relative z-10 mx-auto flex max-w-5xl flex-col items-center text-center"
       >
         <div className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-white/65 px-4 py-1.5 text-[11px] font-bold tracking-[0.22em] text-primary uppercase shadow-[0_10px_30px_rgba(100,108,255,0.12)] backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.04]">
           <Sparkles className="h-3 w-3" />
           {t('aiQuant.homepage.hero.eyebrow')}
         </div>
-        <h1 className="mt-8 text-5xl leading-[1.08] font-extrabold tracking-tight text-slate-950 antialiased dark:text-white sm:text-6xl md:text-7xl lg:text-[5.8rem] lg:leading-[1.04]">
+        <h1 className="mt-8 !text-[2.35rem] !leading-[1.08] !font-black !tracking-normal text-balance text-slate-950 antialiased dark:text-white sm:!text-6xl md:!text-7xl lg:!text-[5.35rem] lg:!leading-[1.02] xl:!text-[5.9rem]">
           <GradientTitle title={title} lng={lng} />
         </h1>
         <p className={`mx-auto mt-8 max-w-2xl text-[15px] leading-[1.75] md:text-base md:leading-relaxed ${mutedText}`}>
@@ -117,6 +117,21 @@ function GradientTitle({ title, lng }: { title: string, lng: 'zh' | 'en' }) {
   }
 
   const parts = title.split(target)
+
+  if (lng === 'zh') {
+    return (
+      <>
+        <span className="block">{parts[0].trim()}</span>
+        <span className="block text-[0.86em] sm:text-[1em]">
+          <span className="bg-gradient-to-r from-[#3e69ff] via-[#6d57ff] to-[#8a5bff] bg-clip-text text-transparent dark:from-[#60a5fa] dark:via-primary dark:to-[#c084fc]">
+            {target}
+          </span>
+          {' '}
+          {parts[1].trim()}
+        </span>
+      </>
+    )
+  }
 
   return (
     <>
