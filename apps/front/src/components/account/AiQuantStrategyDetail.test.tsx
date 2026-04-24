@@ -111,7 +111,8 @@ describe('AiQuantStrategyDetail', () => {
       )
     })
 
-    expect(container.textContent).toContain('在 OKX 现货 DOGEUSDT')
+    expect(container.textContent).toContain('在 OKX 现货 DOGEUSD')
+    expect(container.textContent).toContain('OKX / DOGEUSDT / 1h')
     expect(container.textContent).toContain('发布快照规则摘要')
     expect(container.textContent).toContain('启动时执行：OPEN_LONG')
     expect(container.textContent).toContain('价格变化 GTE 5%：CLOSE_LONG')

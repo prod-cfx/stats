@@ -72,14 +72,6 @@ function formatOptionalPreciseAmount(value: number | null | undefined) {
   })
 }
 
-function buildDisplayStrategyName(name: string, symbol: string) {
-  const normalizedSymbol = symbol.trim().toUpperCase()
-  if (!normalizedSymbol.endsWith('USDT')) return name
-  const base = normalizedSymbol.slice(0, -4)
-  if (!base) return name
-  return name.replace(new RegExp(`${base}USD(?!T)`, 'gi'), `${base}USDT`)
-}
-
 function formatExecutionValue(value: string | number | null | undefined, suffix = '') {
   if (typeof value === 'number' && Number.isFinite(value)) {
     return `${value}${suffix}`
@@ -265,7 +257,6 @@ export function AiQuantStrategyDetail({
     )
   }
 
-  const displayName = buildDisplayStrategyName(strategy.name, strategy.symbol)
   const consumedRuntimeStates = strategy.runtimeExecutionStates?.filter(state => state.status === 'consumed') ?? []
   const pendingRuntimeStates = strategy.runtimeExecutionStates?.filter(state => state.status !== 'consumed') ?? []
 
@@ -273,7 +264,7 @@ export function AiQuantStrategyDetail({
     <main className="mx-auto flex w-full max-w-[920px] flex-1 flex-col gap-4 px-4 py-8 md:px-8">
       <section className="flex items-center justify-between rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
         <div>
-          <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">{displayName}</h1>
+          <h1 className="text-2xl font-bold text-[color:var(--cf-text-strong)]">{strategy.name}</h1>
           <p className="mt-1 text-sm text-[color:var(--cf-muted)]">
             {strategy.exchange.toUpperCase()} / {strategy.symbol} / {strategy.timeframe}
           </p>
