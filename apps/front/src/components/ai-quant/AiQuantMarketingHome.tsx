@@ -1,7 +1,7 @@
 'use client'
 
 import { motion, type Transition } from 'framer-motion'
-import { ArrowRight, BarChart3, Cpu, LineChart, Play, ShieldCheck, Sparkles, TrendingUp, Zap } from 'lucide-react'
+import { ArrowRight, BarChart3, LineChart, Play, ShieldCheck, Sparkles, Zap } from 'lucide-react'
 import Link from 'next/link'
 import { useTranslation } from 'react-i18next'
 
@@ -34,7 +34,7 @@ export function AiQuantMarketingHome({ lng }: { lng: 'zh' | 'en' }) {
     <main className="relative min-h-screen overflow-hidden bg-[#f6f8fc] text-slate-950 selection:bg-primary/20 dark:bg-[#020305] dark:text-white">
       <ThemeAmbientBackground />
       <div className="relative z-10">
-        <HeroSection ctaHref={ctaHref} />
+        <HeroSection ctaHref={ctaHref} lng={lng} />
         <WorkflowSection />
         {featureKeys.map((key, index) => (
           <FeatureSection key={key} featureKey={key} reverse={index % 2 === 1} />
@@ -49,167 +49,120 @@ export function AiQuantMarketingHome({ lng }: { lng: 'zh' | 'en' }) {
 function ThemeAmbientBackground() {
   return (
     <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden">
-      <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(15,23,42,0.045)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.04)_1px,transparent_1px)] bg-[size:44px_44px] dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.025)_1px,transparent_1px)]" />
-      <div className="absolute -top-40 left-1/2 h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-primary/14 blur-[120px] dark:bg-primary/16" />
-      <div className="absolute top-1/3 -left-48 h-[30rem] w-[30rem] rounded-full bg-cyan-300/18 blur-[120px] dark:bg-cyan-500/8" />
-      <div className="absolute -right-40 bottom-0 h-[32rem] w-[32rem] rounded-full bg-emerald-300/18 blur-[120px] dark:bg-emerald-500/8" />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.72),transparent_45%)] dark:bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.06),transparent_48%)]" />
+      <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(15,23,42,0.035)_1px,transparent_1px),linear-gradient(to_bottom,rgba(15,23,42,0.03)_1px,transparent_1px)] bg-[size:48px_48px] dark:bg-[linear-gradient(to_right,rgba(255,255,255,0.018)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.018)_1px,transparent_1px)]" />
+      <motion.div
+        aria-hidden="true"
+        animate={{ opacity: [0.5, 0.82, 0.5], scale: [0.96, 1.06, 0.96] }}
+        transition={{ duration: 10, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute -top-48 left-1/2 h-[38rem] w-[38rem] -translate-x-1/2 rounded-full bg-blue-300/24 blur-[140px] dark:bg-blue-500/14"
+      />
+      <motion.div
+        aria-hidden="true"
+        animate={{ opacity: [0.34, 0.62, 0.34], scale: [1, 1.12, 1] }}
+        transition={{ duration: 13, repeat: Infinity, ease: 'easeInOut', delay: 1.2 }}
+        className="absolute top-1/4 -left-52 h-[34rem] w-[34rem] rounded-full bg-violet-300/22 blur-[130px] dark:bg-violet-500/12"
+      />
+      <motion.div
+        aria-hidden="true"
+        animate={{ opacity: [0.28, 0.5, 0.28], scale: [1.04, 0.95, 1.04] }}
+        transition={{ duration: 12, repeat: Infinity, ease: 'easeInOut', delay: 0.6 }}
+        className="absolute -right-48 bottom-0 h-[32rem] w-[32rem] rounded-full bg-cyan-300/18 blur-[130px] dark:bg-cyan-500/10"
+      />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.78),transparent_46%)] dark:bg-[radial-gradient(circle_at_50%_0%,rgba(255,255,255,0.055),transparent_50%)]" />
     </div>
   )
 }
 
-function HeroSection({ ctaHref }: { ctaHref: string }) {
+function HeroSection({ ctaHref, lng }: { ctaHref: string, lng: 'zh' | 'en' }) {
   const { t } = useTranslation()
+  const title = t('aiQuant.homepage.hero.title')
 
   return (
-    <section className="relative pt-12 pb-16 md:pt-20 md:pb-24">
-      <div className="mx-auto max-w-7xl px-6 md:px-8">
-        <div className="grid items-center gap-12 lg:grid-cols-[1fr_1.1fr]">
-          <motion.div
-            initial="hidden"
-            animate="visible"
-            variants={revealUp}
-            transition={revealTransition}
-            className="max-w-2xl"
-          >
-            <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-1.5 text-[11px] font-bold tracking-[0.2em] text-primary uppercase">
-              <Sparkles className="h-3 w-3" />
-              Next-Gen AI Quant
-            </div>
-            <h1 className="mt-8 text-6xl font-extrabold leading-[1.08] tracking-tight text-slate-950 antialiased dark:text-white sm:text-7xl md:text-8xl lg:text-[5.5rem] lg:leading-[1.06] xl:text-[6rem] xl:leading-[1.05]">
-              {t('aiQuant.homepage.hero.title').split('AI 量化').map((part, i, arr) => (
-                <span key={i}>
-                  {part}
-                  {i < arr.length - 1 && (
-                    <span className="bg-gradient-to-r from-[#a5b4fc] via-primary to-[#c4b5fd] bg-clip-text text-transparent">
-                      AI 量化
-                    </span>
-                  )}
-                </span>
-              ))}
-            </h1>
-            <p className={`mt-10 max-w-xl text-[15px] leading-[1.65] md:text-base md:leading-relaxed ${mutedText}`}>
-              {t('aiQuant.homepage.hero.description')}
-            </p>
-            <div className="mt-10">
-              <PrimaryCta href={ctaHref} label={t('aiQuant.homepage.heroCta')} />
-            </div>
-          </motion.div>
-
-          <div className="relative mt-12 lg:mt-0 flex justify-end">
-            <HeroVisual />
-          </div>
+    <section className="relative overflow-hidden bg-[#f6f8fc]/80 px-6 pt-20 pb-24 dark:bg-[#020305]/90 md:px-8 md:pt-28 md:pb-32">
+      <HeroLines />
+      <HeroParticles />
+      <motion.div
+        initial="hidden"
+        animate="visible"
+        variants={revealUp}
+        transition={revealTransition}
+        className="relative z-10 mx-auto flex max-w-4xl flex-col items-center text-center"
+      >
+        <div className="inline-flex items-center gap-2 rounded-full border border-primary/25 bg-white/65 px-4 py-1.5 text-[11px] font-bold tracking-[0.22em] text-primary uppercase shadow-[0_10px_30px_rgba(100,108,255,0.12)] backdrop-blur-xl dark:border-white/10 dark:bg-white/[0.04]">
+          <Sparkles className="h-3 w-3" />
+          {t('aiQuant.homepage.hero.eyebrow')}
         </div>
-      </div>
+        <h1 className="mt-8 text-5xl leading-[1.08] font-extrabold tracking-tight text-slate-950 antialiased dark:text-white sm:text-6xl md:text-7xl lg:text-[5.8rem] lg:leading-[1.04]">
+          <GradientTitle title={title} lng={lng} />
+        </h1>
+        <p className={`mx-auto mt-8 max-w-2xl text-[15px] leading-[1.75] md:text-base md:leading-relaxed ${mutedText}`}>
+          {t('aiQuant.homepage.hero.description')}
+        </p>
+        <div className="mt-10">
+          <PrimaryCta href={ctaHref} label={t('aiQuant.homepage.heroCta')} />
+        </div>
+      </motion.div>
     </section>
   )
 }
 
-function HeroVisual() {
+function GradientTitle({ title, lng }: { title: string, lng: 'zh' | 'en' }) {
+  const target = lng === 'zh' ? 'AI 量化' : 'AI quant'
+
+  if (!title.includes(target)) {
+    return <>{title}</>
+  }
+
+  const parts = title.split(target)
+
   return (
-    <div className="relative flex items-center justify-end py-10 w-full">
-      {/* Background Glow */}
-      <div className="absolute top-1/2 right-1/4 h-[400px] w-[400px] -translate-y-1/2 translate-x-1/4 rounded-full bg-primary/10 blur-[100px] -z-10" />
-      
-      {/* Main Abstract Panel */}
-      <motion.div
-        initial={{ opacity: 0, x: 20 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 1, ease: "easeOut" }}
-        className="relative z-10 w-full max-w-[560px] rounded-[24px] border border-slate-200/80 bg-white/85 p-1 shadow-2xl backdrop-blur-xl dark:border-white/5 dark:bg-[#0a0a0a]/90"
-      >
-        <div className="overflow-hidden rounded-[20px] bg-slate-50/90 p-6 dark:bg-[#050505]">
-          <div className="flex items-center justify-between mb-8">
-            <div className="flex items-center gap-3">
-              <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary border border-primary/20">
-                <Cpu className="h-4 w-4" />
-              </div>
-              <div>
-                <div className="text-sm font-medium text-slate-950 dark:text-white/90">AI Strategy Engine</div>
-                <div className="text-[10px] text-emerald-500 font-mono tracking-widest mt-0.5 uppercase">Active • V2.4.1</div>
-              </div>
-            </div>
-            <div className="flex gap-1.5">
-              <div className="h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-white/20" />
-              <div className="h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-white/20" />
-              <div className="h-1.5 w-1.5 rounded-full bg-slate-300 dark:bg-white/20" />
-            </div>
-          </div>
-          
-          {/* Abstract Chart Area */}
-          <div className="relative h-[200px] w-full rounded-xl border border-slate-200/80 bg-slate-950/[0.04] overflow-hidden mb-6 dark:border-white/5 dark:bg-black/40">
-            {/* Grid lines */}
-            <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff03_1px,transparent_1px),linear-gradient(to_bottom,#ffffff03_1px,transparent_1px)] bg-[size:24px_24px]" />
-            
-            {/* Glowing Line Chart */}
-            <svg className="absolute inset-0 h-full w-full" preserveAspectRatio="none" viewBox="0 0 100 100">
-              <defs>
-                <linearGradient id="chart-gradient" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="rgba(100,108,255,0.3)" />
-                  <stop offset="100%" stopColor="rgba(100,108,255,0)" />
-                </linearGradient>
-                <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-                  <feGaussianBlur stdDeviation="2" result="blur" />
-                  <feComposite in="SourceGraphic" in2="blur" operator="over" />
-                </filter>
-              </defs>
-              <path d="M0,100 L0,70 Q15,65 25,75 T50,55 T75,30 T100,20 L100,100 Z" fill="url(#chart-gradient)" />
-              <path d="M0,70 Q15,65 25,75 T50,55 T75,30 T100,20" fill="none" stroke="rgba(100,108,255,0.8)" strokeWidth="1.5" filter="url(#glow)" />
-              
-              {/* Data points */}
-              <circle cx="25" cy="75" r="2" fill="#fff" className="drop-shadow-[0_0_4px_#fff]" />
-              <circle cx="50" cy="55" r="2" fill="#fff" className="drop-shadow-[0_0_4px_#fff]" />
-              <circle cx="75" cy="30" r="2" fill="#fff" className="drop-shadow-[0_0_4px_#fff]" />
-              <circle cx="100" cy="20" r="2" fill="#fff" className="drop-shadow-[0_0_4px_#fff]" />
-            </svg>
-          </div>
+    <>
+      {parts.map((part, index) => (
+        <span key={`${part}-${index}`}>
+          {part}
+          {index < parts.length - 1 && (
+            <span className="bg-gradient-to-r from-[#60a5fa] via-primary to-[#c084fc] bg-clip-text text-transparent">
+              {target}
+            </span>
+          )}
+        </span>
+      ))}
+    </>
+  )
+}
 
-          {/* Data Rows */}
-          <div className="space-y-2">
-            <div className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-white/75 px-4 py-3 dark:border-white/5 dark:bg-white/[0.02]">
-              <span className={`font-mono text-xs ${mutedText}`}>Signal Confidence</span>
-              <span className="text-xs font-bold text-slate-950 dark:text-white">94.2%</span>
-            </div>
-            <div className="flex items-center justify-between rounded-lg border border-slate-200/80 bg-white/75 px-4 py-3 dark:border-white/5 dark:bg-white/[0.02]">
-              <span className={`font-mono text-xs ${mutedText}`}>Execution Latency</span>
-              <span className="text-xs font-bold text-slate-950 dark:text-white">12ms</span>
-            </div>
-          </div>
-        </div>
-      </motion.div>
+function HeroLines() {
+  return (
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0">
+      <div className="absolute top-16 left-[8%] h-px w-[28rem] -rotate-12 bg-gradient-to-r from-transparent via-blue-400/28 to-transparent dark:via-blue-300/16" />
+      <div className="absolute right-[4%] bottom-20 h-px w-[34rem] -rotate-12 bg-gradient-to-r from-transparent via-violet-400/24 to-transparent dark:via-violet-300/14" />
+    </div>
+  )
+}
 
-      {/* Floating Elements */}
+function HeroParticles() {
+  return (
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0">
       <motion.div
-        animate={{ y: [0, -8, 0] }}
-        transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-        className="absolute top-8 -right-4 z-20 md:-right-8"
-      >
-        <div className="rounded-xl border border-slate-200/80 bg-white/90 p-3 shadow-2xl backdrop-blur-xl flex items-center gap-3 dark:border-white/10 dark:bg-[#111]/90">
-          <div className="grid h-8 w-8 place-items-center rounded-lg bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            <TrendingUp className="h-4 w-4" />
-          </div>
-          <div className="pr-2">
-            <div className={`text-[9px] font-medium uppercase tracking-wider ${mutedText}`}>Total Return</div>
-            <div className="text-sm font-bold text-emerald-400">+124.8%</div>
-          </div>
-        </div>
-      </motion.div>
-
+        animate={{ opacity: [0.2, 0.75, 0.2], y: [0, -10, 0] }}
+        transition={{ duration: 5.5, repeat: Infinity, ease: 'easeInOut' }}
+        className="absolute top-[26%] left-[18%] h-1.5 w-1.5 rounded-full bg-blue-400 shadow-[0_0_18px_rgba(96,165,250,0.75)]"
+      />
       <motion.div
-        animate={{ y: [0, 8, 0] }}
-        transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
-        className="absolute bottom-16 -left-4 z-20 md:-left-8"
-      >
-        <div className="rounded-xl border border-slate-200/80 bg-white/90 p-3 shadow-2xl backdrop-blur-xl flex items-center gap-3 dark:border-white/10 dark:bg-[#111]/90">
-          <div className="grid h-8 w-8 place-items-center rounded-lg bg-primary/10 text-primary border border-primary/20">
-            <ShieldCheck className="h-4 w-4" />
-          </div>
-          <div className="pr-2">
-            <div className={`text-[9px] font-medium uppercase tracking-wider ${mutedText}`}>Max Drawdown</div>
-            <div className="text-sm font-bold text-slate-950 dark:text-white">8.2%</div>
-          </div>
-        </div>
-      </motion.div>
+        animate={{ opacity: [0.15, 0.65, 0.15], y: [0, 12, 0] }}
+        transition={{ duration: 6.5, repeat: Infinity, ease: 'easeInOut', delay: 0.5 }}
+        className="absolute top-[34%] right-[20%] h-2 w-2 rounded-full bg-violet-400 shadow-[0_0_20px_rgba(167,139,250,0.7)]"
+      />
+      <motion.div
+        animate={{ opacity: [0.18, 0.58, 0.18], y: [0, -8, 0] }}
+        transition={{ duration: 6, repeat: Infinity, ease: 'easeInOut', delay: 1.1 }}
+        className="absolute bottom-[25%] left-[25%] h-1 w-1 rounded-full bg-cyan-300 shadow-[0_0_16px_rgba(103,232,249,0.7)]"
+      />
+      <motion.div
+        animate={{ opacity: [0.12, 0.5, 0.12], y: [0, 9, 0] }}
+        transition={{ duration: 7, repeat: Infinity, ease: 'easeInOut', delay: 1.6 }}
+        className="absolute right-[28%] bottom-[19%] h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_18px_rgba(100,108,255,0.72)]"
+      />
     </div>
   )
 }
