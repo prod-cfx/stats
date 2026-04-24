@@ -95,13 +95,13 @@ function HeroSection({ ctaHref, lng }: { ctaHref: string, lng: 'zh' | 'en' }) {
           <Sparkles className="h-3 w-3" />
           {t('aiQuant.homepage.hero.eyebrow')}
         </div>
-        <h1 className="mt-8 !text-[2.35rem] !leading-[1.08] !font-black !tracking-normal text-balance text-slate-950 antialiased dark:text-white sm:!text-6xl md:!text-7xl lg:!text-[5.35rem] lg:!leading-[1.02] xl:!text-[5.9rem]">
+        <h1 className="mt-8 !text-[2.35rem] !leading-[1.08] !font-black !tracking-normal text-balance text-slate-950 antialiased dark:text-white sm:!text-6xl md:!text-7xl lg:!text-[4.2rem] lg:!leading-[1.05] xl:!text-[4.55rem]">
           <GradientTitle title={title} lng={lng} />
         </h1>
-        <p className={`mx-auto mt-8 max-w-2xl text-[15px] leading-[1.75] md:text-base md:leading-relaxed ${mutedText}`}>
+        <p className={`mx-auto mt-7 max-w-3xl !text-[15px] !leading-[1.8] md:!text-[17px] md:!leading-[1.7] ${mutedText}`}>
           {t('aiQuant.homepage.hero.description')}
         </p>
-        <div className="mt-10">
+        <div className="mt-12">
           <PrimaryCta href={ctaHref} label={t('aiQuant.homepage.heroCta')} />
         </div>
       </motion.div>
@@ -193,7 +193,7 @@ function PrimaryCta({ href, className = '', label }: { href: string, className?:
   return (
     <Link
       href={href}
-      className={`group inline-flex min-h-12 items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#3474ff] to-[#8a55ff] px-7 py-3 text-sm font-bold !text-white shadow-[0_14px_40px_rgba(79,70,229,0.35)] transition duration-200 hover:shadow-[0_18px_54px_rgba(79,70,229,0.48)] active:translate-y-0 ${shouldReduceMotion ? '' : 'hover:-translate-y-0.5'} ${className}`}
+      className={`group inline-flex min-h-[52px] items-center justify-center gap-2 rounded-lg bg-gradient-to-r from-[#3474ff] to-[#8a55ff] px-8 py-3 text-[15px] font-bold !text-white shadow-[0_14px_40px_rgba(79,70,229,0.35)] transition duration-200 hover:shadow-[0_18px_54px_rgba(79,70,229,0.48)] active:translate-y-0 ${shouldReduceMotion ? '' : 'hover:-translate-y-0.5'} ${className}`}
     >
       {label}
       <ArrowRight className={`h-4 w-4 transition-transform ${shouldReduceMotion ? '' : 'group-hover:translate-x-1'}`} />
