@@ -1193,8 +1193,11 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
   private extractOrderFee(order: UnifiedOrder): { amount: number; currency: string | null } {
     const raw = order.raw as any
 
-    if (raw?.fee !== undefined) {
-      const fee = Math.abs(Number(raw.fee))
+    if (raw?.fee !== undefined && raw?.fee !== null) {
+      const rawFee = typeof raw.fee === 'string' && raw.fee.trim() === ''
+        ? Number.NaN
+        : Number(raw.fee)
+      const fee = Math.abs(rawFee)
       const currency = typeof raw?.feeCcy === 'string'
         ? raw.feeCcy
         : typeof raw?.feeCurrency === 'string'
