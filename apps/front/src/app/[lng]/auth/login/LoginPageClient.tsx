@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { EmailOtpForm } from '@/features/auth/components/EmailOtpForm'
 import { TelegramLoginButtons } from '@/features/auth/components/TelegramLoginButtons'
@@ -16,6 +16,7 @@ export function LoginPageClient({ lng }: LoginPageClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { isAuthenticated } = useAuth()
+  const [betaCode, setBetaCode] = useState('')
   const redirect = searchParams?.get('redirect') || `/${lng}/account`
 
   useEffect(() => {
@@ -38,13 +39,17 @@ export function LoginPageClient({ lng }: LoginPageClientProps) {
           </p>
         </div>
 
-        <EmailOtpForm onSuccess={() => router.replace(redirect)} />
+        <EmailOtpForm
+          betaCode={betaCode}
+          onBetaCodeChange={setBetaCode}
+          onSuccess={() => router.replace(redirect)}
+        />
 
         <div className="relative py-1 text-center text-xs text-[color:var(--cf-muted)]">
           <span className="px-2">{t('auth.or')}</span>
         </div>
 
-        <TelegramLoginButtons lng={lng} redirect={redirect} />
+        <TelegramLoginButtons lng={lng} redirect={redirect} betaCode={betaCode} />
       </div>
     </main>
   )

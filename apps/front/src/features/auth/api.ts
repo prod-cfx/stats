@@ -14,6 +14,10 @@ function normalizeEmail(email: string) {
   return email.trim().toLowerCase()
 }
 
+function normalizeBetaCode(betaCode?: string) {
+  return betaCode?.trim() || undefined
+}
+
 function authHeader(token?: string): { Authorization?: string } {
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
@@ -77,7 +81,7 @@ export async function sendEmailCodeRequest(email: string): Promise<void> {
   }
 }
 
-export async function verifyEmailCodeRequest(email: string, code: string): Promise<AuthSession> {
+export async function verifyEmailCodeRequest(email: string, code: string, betaCode?: string): Promise<AuthSession> {
   const normalized = normalizeEmail(email)
   const normalizedCode = code.trim()
 
@@ -97,6 +101,7 @@ export async function verifyEmailCodeRequest(email: string, code: string): Promi
     client.AuthController_verifyEmailLoginCode({
       email: normalized,
       code: normalizedCode,
+      betaCode: normalizeBetaCode(betaCode),
     }),
   )
 
@@ -116,6 +121,7 @@ export async function completeTelegramLogin(payload: {
   lastName?: string
   username?: string
   photoUrl?: string
+  betaCode?: string
 }): Promise<AuthSession> {
   const authResponse = await callClient<AuthResponseDto>(() =>
     client.AuthController_telegramExchange({
@@ -127,6 +133,7 @@ export async function completeTelegramLogin(payload: {
       username: payload.username,
       photoUrl: payload.photoUrl,
       source: payload.source,
+      betaCode: normalizeBetaCode(payload.betaCode),
     }),
   )
 
@@ -194,9 +201,9 @@ export async function getTelegramLoginConfigRequest(): Promise<{
   return callClient(() => client.AuthController_getTelegramLoginConfig())
 }
 
-export async function completeTelegramDesktopLoginRequest(intentId: string): Promise<AuthSession> {
+export async function completeTelegramDesktopLoginRequest(intentId: string, betaCode?: string): Promise<AuthSession> {
   const authResponse = await callClient<AuthResponseDto>(() =>
-    client.AuthController_telegramDesktopExchange({ intentId }),
+    client.AuthController_telegramDesktopExchange({ intentId, betaCode: normalizeBetaCode(betaCode) }),
   )
   const session = buildSession(authResponse)
   return mergeLoginMethod(

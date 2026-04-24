@@ -11,13 +11,20 @@ interface TelegramLoginButtonsProps {
   lng: 'zh' | 'en'
   intent?: 'login' | 'bind'
   redirect?: string
+  betaCode?: string
 }
 
 interface TelegramConfigResponse {
   botName?: string | null
 }
 
-export function TelegramLoginButtons({ lng, intent = 'login', redirect }: TelegramLoginButtonsProps) {
+const TELEGRAM_WEB_BETA_CODE_KEY = 'auth:telegram:betaCode'
+
+function getTelegramDesktopBetaCodeKey(intentId: string) {
+  return `auth:telegram:desktop:${intentId}:betaCode`
+}
+
+export function TelegramLoginButtons({ lng, intent = 'login', redirect, betaCode }: TelegramLoginButtonsProps) {
   const { t } = useTranslation()
   const [showDesktopEntry, setShowDesktopEntry] = useState(false)
   const [showWebAppEntry, setShowWebAppEntry] = useState(false)
@@ -59,6 +66,13 @@ export function TelegramLoginButtons({ lng, intent = 'login', redirect }: Telegr
 
   const buttonClassName = 'flex h-11 items-center justify-center gap-2 rounded-full border border-violet-500/30 bg-transparent px-4 text-sm font-semibold text-black transition hover:bg-violet-500/5 disabled:opacity-50 dark:text-white'
   const showBotDomainHint = Boolean(statusMessage && /bot domain invalid/i.test(statusMessage))
+  const requireBetaCode = () => {
+    if (intent !== 'login' || betaCode?.trim()) {
+      return false
+    }
+    setStatusMessage(t('auth.betaCodeRequired'))
+    return true
+  }
 
   return (
     <div className="space-y-3">
@@ -70,7 +84,13 @@ export function TelegramLoginButtons({ lng, intent = 'login', redirect }: Telegr
             try {
               setWebBusy(true)
               setStatusMessage(null)
+              if (requireBetaCode()) {
+                return
+              }
               const result = await getTelegramWebAuthorizeUrlRequest({ intent, lng, redirect })
+              if (intent === 'login' && typeof window !== 'undefined' && betaCode) {
+                window.sessionStorage.setItem(TELEGRAM_WEB_BETA_CODE_KEY, betaCode)
+              }
               window.location.href = result.authorizeUrl
             } catch (error) {
               setStatusMessage(error instanceof Error ? error.message : t('auth.launchFailed'))
@@ -90,11 +110,18 @@ export function TelegramLoginButtons({ lng, intent = 'login', redirect }: Telegr
             onClick={async () => {
               try {
                 setDesktopBusy(true)
+                setStatusMessage(null)
+                if (requireBetaCode()) {
+                  return
+                }
                 const result = await createTelegramDesktopIntent({
                   intent,
                   lng,
                   redirect,
                 })
+                if (intent === 'login' && typeof window !== 'undefined' && betaCode) {
+                  window.sessionStorage.setItem(getTelegramDesktopBetaCodeKey(result.intentId), betaCode)
+                }
                 const launchLink = result.deepLink?.trim() || result.webLink?.trim()
                 if (!launchLink) {
                   throw new Error('Telegram launch link is missing. Please try again.')

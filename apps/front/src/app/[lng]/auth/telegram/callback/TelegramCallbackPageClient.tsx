@@ -11,6 +11,26 @@ interface TelegramCallbackPageClientProps {
   lng: 'zh' | 'en'
 }
 
+const TELEGRAM_WEB_BETA_CODE_KEY = 'auth:telegram:betaCode'
+
+function getTelegramDesktopBetaCodeKey(intentId: string) {
+  return `auth:telegram:desktop:${intentId}:betaCode`
+}
+
+function readSessionStorage(key: string) {
+  if (typeof window === 'undefined') {
+    return undefined
+  }
+  return window.sessionStorage.getItem(key) || undefined
+}
+
+function removeSessionStorage(key: string) {
+  if (typeof window === 'undefined') {
+    return
+  }
+  window.sessionStorage.removeItem(key)
+}
+
 export function TelegramCallbackPageClient({ lng }: TelegramCallbackPageClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -54,12 +74,15 @@ export function TelegramCallbackPageClient({ lng }: TelegramCallbackPageClientPr
         }
 
         if (isLoading) return 'waiting'
+        const betaCodeKey = getTelegramDesktopBetaCodeKey(desktopIntentId)
         if (isAuthenticated || loadStoredSession()) {
+          removeSessionStorage(betaCodeKey)
           router.replace(redirect)
           return 'done'
         }
 
-        await loginWithTelegramDesktopIntent(desktopIntentId)
+        await loginWithTelegramDesktopIntent(desktopIntentId, readSessionStorage(betaCodeKey))
+        removeSessionStorage(betaCodeKey)
         router.replace(redirect)
         return 'done'
       }
@@ -154,12 +177,16 @@ export function TelegramCallbackPageClient({ lng }: TelegramCallbackPageClientPr
     }
     handledCallbackKeyRef.current = callbackKey
 
-    loginWithTelegramCallback(payload)
+    const betaCode = readSessionStorage(TELEGRAM_WEB_BETA_CODE_KEY)
+
+    loginWithTelegramCallback({ ...payload, betaCode })
       .then(() => {
+        removeSessionStorage(TELEGRAM_WEB_BETA_CODE_KEY)
         router.replace(redirect)
       })
       .catch(err => {
         if (loadStoredSession()) {
+          removeSessionStorage(TELEGRAM_WEB_BETA_CODE_KEY)
           router.replace(redirect)
           return
         }

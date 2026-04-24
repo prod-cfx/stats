@@ -13,10 +13,12 @@ import {
 import { useAuth } from '@/hooks/use-auth'
 
 interface EmailOtpFormProps {
+  betaCode: string
+  onBetaCodeChange: (betaCode: string) => void
   onSuccess: () => void
 }
 
-export function EmailOtpForm({ onSuccess }: EmailOtpFormProps) {
+export function EmailOtpForm({ betaCode, onBetaCodeChange, onSuccess }: EmailOtpFormProps) {
   const { t } = useTranslation()
   const { sendEmailCode, loginWithEmailCode } = useAuth()
   const [email, setEmail] = useState('')
@@ -131,7 +133,7 @@ export function EmailOtpForm({ onSuccess }: EmailOtpFormProps) {
     setVerifying(true)
 
     try {
-      await loginWithEmailCode(normalizedEmail, code)
+      await loginWithEmailCode(normalizedEmail, code, betaCode)
       onSuccess()
     } catch (e) {
       setError(e instanceof Error ? e.message : t('auth.loginFailed'))
@@ -198,6 +200,20 @@ export function EmailOtpForm({ onSuccess }: EmailOtpFormProps) {
             {t('auth.latestCodeHint')}
           </p>
         )}
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm text-[color:var(--cf-muted)]">{t('auth.betaCode')}</label>
+        <input
+          type="text"
+          value={betaCode}
+          onChange={event => onBetaCodeChange(event.target.value)}
+          className="h-11 w-full rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 text-sm outline-none transition focus:border-primary"
+          placeholder={t('auth.betaCodePlaceholder')}
+        />
+        <p className="text-xs text-[color:var(--cf-muted)]">
+          {t('auth.betaCodeHint')}
+        </p>
       </div>
 
       {error && (
