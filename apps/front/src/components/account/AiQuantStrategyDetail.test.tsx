@@ -65,6 +65,15 @@ describe('AiQuantStrategyDetail', () => {
             supportsDynamicParams: false,
             publishedSnapshotId: 'snapshot-okx-1',
             snapshotHash: 'hash-okx-1',
+            snapshotBacktestConfigDefaults: {
+              initialCash: 10000,
+              leverage: 1,
+              slippageBps: 8,
+              feeBps: 4,
+              priceSource: 'close',
+              allowPartial: false,
+              stateTimeframes: ['1h'],
+            },
             accountOverview: {
               initialBalance: 50615.55,
               totalEquity: 50600.11,
@@ -163,13 +172,23 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('价格变化 GTE 5%：CLOSE_LONG')
     expect(container.textContent).toContain('本地账户台账 + 最新行情估值')
     expect(container.textContent).toContain('手续费优先展示 OKX 原始 fee / feeCcy')
+    expect(container.textContent).toContain('0.09794982')
+    expect(container.textContent).not.toContain('0.10')
     expect(container.textContent).toContain('51.73767288 DOGE')
     expect(container.textContent).toContain('--（同步记录未含手续费）')
+    expect(container.textContent).not.toContain('运行回测')
+    expect(container.textContent).not.toContain('回测中')
+    expect(container.textContent).not.toContain('回测杠杆')
+    expect(container.textContent).toContain('当前持币')
+    expect(container.textContent).toContain('已完成买卖轮次')
+    expect(container.textContent).not.toContain('当前持仓数')
+    expect(container.textContent).not.toContain('已平仓数')
     expect(container.textContent).toContain('真实性审计')
     expect(container.textContent).toContain('3507763615427895296')
     expect(container.textContent).toContain('出场订单证据')
     expect(container.textContent).toContain('sync-close-1777042803366')
-    expect(container.textContent).toContain('已执行 1 个发布快照运行语义，待执行/冷却/失败 0 个')
+    expect(container.textContent).toContain('高级运行诊断')
+    expect(container.textContent).toContain('已执行 1 个运行诊断项，待执行/冷却/失败 0 个')
   })
 
   it('shows compatibility warning, leverage drift, and leverage-only update controls from truthful execution data', async () => {
@@ -235,7 +254,6 @@ describe('AiQuantStrategyDetail', () => {
           },
           canEditDeploymentLeverage: true,
         }}
-        onRunBacktest={() => {}}
         onUpdateLeverage={() => {}}
       />,
       )
@@ -248,9 +266,7 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('允许杠杆范围')
     expect(container.textContent).toContain('1x - 5x')
     expect(container.textContent).toContain('leverage drift')
-    const backtestButton = Array.from(container.querySelectorAll('button'))
-      .find(button => button.textContent?.includes('运行回测')) as HTMLButtonElement | undefined
-    expect(backtestButton?.disabled).toBe(true)
+    expect(container.textContent).not.toContain('运行回测')
     expect(Array.from(container.querySelectorAll('button')).some(button => button.textContent?.includes('更新杠杆'))).toBe(true)
   })
 
@@ -368,7 +384,7 @@ describe('AiQuantStrategyDetail', () => {
       )
     })
 
-    expect(container.textContent).toContain('运行时执行语义状态')
+    expect(container.textContent).toContain('高级运行诊断')
     expect(container.textContent).toContain('on_start.entry.primary')
     expect(container.textContent).toContain('失败')
     expect(container.textContent).toContain('最近尝试')
@@ -477,7 +493,7 @@ describe('AiQuantStrategyDetail', () => {
       )
     })
 
-    expect(container.textContent).not.toContain('运行时执行语义状态')
+    expect(container.textContent).not.toContain('高级运行诊断')
     expect(container.textContent).toContain('需要重新发布')
   })
 
@@ -515,15 +531,12 @@ describe('AiQuantStrategyDetail', () => {
               invalidBinding: true,
             },
           }}
-          onRunBacktest={() => {}}
         />,
       )
     })
 
     expect(container.textContent).toContain('快照绑定已失效')
     expect(container.textContent).toContain('请重新发布并重新部署')
-    const backtestButton = Array.from(container.querySelectorAll('button'))
-      .find(button => button.textContent?.includes('运行回测')) as HTMLButtonElement | undefined
-    expect(backtestButton?.disabled).toBe(true)
+    expect(container.textContent).not.toContain('运行回测')
   })
 })
