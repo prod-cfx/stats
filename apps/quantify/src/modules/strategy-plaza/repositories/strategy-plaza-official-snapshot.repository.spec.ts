@@ -1,4 +1,5 @@
 import type { OfficialStrategyPlazaTemplate } from '../types/official-strategy-plaza-template'
+import { StrategyPlazaOfficialSnapshotUnavailableException } from '../exceptions'
 import { StrategyPlazaOfficialSnapshotRepository } from './strategy-plaza-official-snapshot.repository'
 
 function createTxHost(tx: unknown): ConstructorParameters<typeof StrategyPlazaOfficialSnapshotRepository>[0] {
@@ -34,64 +35,55 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
     displayMetrics: { label: 'official_sample_backtest', returnPct: null, winRatePct: null, maxDrawdownPct: null },
   } satisfies OfficialStrategyPlazaTemplate
 
-  it('reuses an existing user-visible official snapshot', async () => {
-    const existingSnapshot = {
-      id: 'user-snapshot-1',
-      snapshotHash: 'snapshot-hash-1',
-      strategyInstanceId: 'strategy-instance-1',
-    }
-    const tx = {
+  const sourceSnapshot = {
+    id: 'official-plaza-ma-cross-v1-snapshot',
+    snapshotHash: 'official-snapshot-hash-v1',
+    scriptHash: 'official-script-hash-v1',
+    specHash: 'official-spec-hash-v1',
+    irHash: 'official-ir-hash-v1',
+    astDigest: 'official-ast-digest-v1',
+    structuralDigest: 'official-structural-digest-v1',
+    scriptSnapshot: 'export default function strategy() { return { action: "HOLD" } }\n',
+    specSnapshot: { official: true, rules: ['ma-cross'] },
+    semanticGraph: { nodes: ['entry'] },
+    compiledIr: { program: 'compiled' },
+    irSnapshot: { ir: 'snapshot' },
+    astSnapshot: { runtimeExecutionSemantics: [{ semanticKey: 'on_start.entry.official' }] },
+    compiledManifest: { artifact: 'manifest' },
+    consistencyReport: { status: 'PASSED' },
+    paramsSnapshot: { positionPct: 10 },
+    strategyConfig: {
+      exchange: 'okx',
+      marketType: 'perp',
+      symbol: 'BTC-USDT-SWAP',
+      timeframe: '15m',
+      positionPct: 10,
+    },
+    backtestConfigDefaults: { initialCash: 10000 },
+    deploymentExecutionDefaults: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
+    deploymentExecutionConstraints: { platformRiskMaxLeverage: 2, defaultLeverage: 2 },
+    executionEnvelope: { runtime: 'signal-generator' },
+    executionPolicy: { signalTiming: 'BAR_CLOSE' },
+    dataRequirements: { primary: ['15m'] },
+    userIntentSummary: { template: 'ma-cross' },
+    strategySummary: { name: 'MA 均线交叉' },
+    scriptSummary: { indicators: ['MA'] },
+    lockedParams: { leverage: 2 },
+    snapshotVersion: 7,
+  }
+
+  function buildTx(overrides?: {
+    existingSnapshot?: { id: string, snapshotHash: string, strategyInstanceId: string } | null
+    source?: typeof sourceSnapshot | null
+  }) {
+    return {
       publishedStrategySnapshot: {
-        findFirst: jest.fn().mockResolvedValue(existingSnapshot),
-        create: jest.fn(),
+        findUnique: jest.fn().mockResolvedValue(overrides?.source === undefined ? sourceSnapshot : overrides.source),
+        findFirst: jest.fn().mockResolvedValue(overrides?.existingSnapshot ?? null),
+        create: jest.fn().mockResolvedValue({ id: 'user-snapshot-1', snapshotHash: sourceSnapshot.snapshotHash }),
       },
       llmStrategyCodegenSession: {
-        upsert: jest.fn(),
-      },
-      strategyTemplate: {
-        upsert: jest.fn(),
-      },
-      strategyInstance: {
-        upsert: jest.fn(),
-        update: jest.fn(),
-      },
-    }
-    const repo = new StrategyPlazaOfficialSnapshotRepository(createTxHost(tx))
-
-    await expect(repo.resolveOfficialSnapshotForUser({ userId: 'user-1', template })).resolves.toEqual({
-      id: 'user-snapshot-1',
-    })
-
-    expect(tx.publishedStrategySnapshot.findFirst).toHaveBeenCalledWith({
-      where: {
-        sessionId: 'strategy-plaza:official:ma-cross:user:user-1',
-        strategyInstanceId: { not: null },
-        session: { userId: 'user-1' },
-      },
-      orderBy: [{ createdAt: 'desc' }],
-      select: { id: true, snapshotHash: true, strategyInstanceId: true },
-    })
-    expect(tx.publishedStrategySnapshot.create).not.toHaveBeenCalled()
-    expect(tx.strategyInstance.update).toHaveBeenCalledWith({
-      where: { id: 'strategy-instance-1' },
-      data: {
-        metadata: expect.objectContaining({
-          bindingSource: 'PUBLISHED_SNAPSHOT',
-          publishedSnapshotId: 'user-snapshot-1',
-          snapshotHash: 'snapshot-hash-1',
-        }),
-      },
-    })
-  })
-
-  it('creates a user-visible snapshot and binds the source strategy instance to it', async () => {
-    const tx = {
-      publishedStrategySnapshot: {
-        findFirst: jest.fn().mockResolvedValue(null),
-        create: jest.fn().mockResolvedValue({ id: 'user-snapshot-1', snapshotHash: 'snapshot-hash-1' }),
-      },
-      llmStrategyCodegenSession: {
-        upsert: jest.fn().mockResolvedValue({ id: 'strategy-plaza:official:ma-cross:user:user-1' }),
+        upsert: jest.fn().mockResolvedValue({ id: 'strategy-plaza-session-1' }),
         update: jest.fn(),
       },
       strategyTemplate: {
@@ -102,6 +94,83 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         update: jest.fn(),
       },
     }
+  }
+
+  it('throws when the official source snapshot is unavailable', async () => {
+    const tx = buildTx({ source: null })
+    const repo = new StrategyPlazaOfficialSnapshotRepository(createTxHost(tx))
+
+    await expect(repo.resolveOfficialSnapshotForUser({ userId: 'user-1', template }))
+      .rejects.toBeInstanceOf(StrategyPlazaOfficialSnapshotUnavailableException)
+
+    expect(tx.publishedStrategySnapshot.findUnique).toHaveBeenCalledWith({
+      where: { id: 'official-plaza-ma-cross-v1-snapshot' },
+    })
+    expect(tx.publishedStrategySnapshot.create).not.toHaveBeenCalled()
+    expect(tx.strategyInstance.upsert).not.toHaveBeenCalled()
+  })
+
+  it('reuses an existing user-visible snapshot for the same official source hash and version', async () => {
+    const existingSnapshot = {
+      id: 'user-snapshot-1',
+      snapshotHash: sourceSnapshot.snapshotHash,
+      strategyInstanceId: 'strategy-instance-1',
+    }
+    const tx = buildTx({ existingSnapshot })
+    const repo = new StrategyPlazaOfficialSnapshotRepository(createTxHost(tx))
+
+    await expect(repo.resolveOfficialSnapshotForUser({ userId: 'user-1', template })).resolves.toEqual({
+      id: 'user-snapshot-1',
+    })
+
+    expect(tx.publishedStrategySnapshot.findFirst).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        sessionId: expect.stringContaining('strategy-plaza:official:ma-cross'),
+        snapshotHash: sourceSnapshot.snapshotHash,
+        snapshotVersion: sourceSnapshot.snapshotVersion,
+        strategyInstanceId: { not: null },
+        session: { userId: 'user-1' },
+      }),
+      orderBy: [{ createdAt: 'desc' }],
+      select: { id: true, snapshotHash: true, strategyInstanceId: true },
+    })
+    expect(tx.publishedStrategySnapshot.create).not.toHaveBeenCalled()
+    expect(tx.strategyInstance.update).toHaveBeenCalledWith({
+      where: { id: 'strategy-instance-1' },
+      data: {
+        metadata: expect.objectContaining({
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          officialSnapshotHash: sourceSnapshot.snapshotHash,
+          officialSnapshotId: sourceSnapshot.id,
+          officialSnapshotVersion: sourceSnapshot.snapshotVersion,
+          publishedSnapshotId: 'user-snapshot-1',
+          snapshotHash: sourceSnapshot.snapshotHash,
+        }),
+      },
+    })
+  })
+
+  it('creates a new copy instead of reusing an old official source version', async () => {
+    const tx = buildTx({ existingSnapshot: null })
+    const repo = new StrategyPlazaOfficialSnapshotRepository(createTxHost(tx))
+
+    await expect(repo.resolveOfficialSnapshotForUser({ userId: 'user-1', template })).resolves.toEqual({
+      id: 'user-snapshot-1',
+    })
+
+    expect(tx.publishedStrategySnapshot.findFirst).toHaveBeenCalledWith({
+      where: expect.objectContaining({
+        snapshotHash: sourceSnapshot.snapshotHash,
+        snapshotVersion: sourceSnapshot.snapshotVersion,
+      }),
+      orderBy: [{ createdAt: 'desc' }],
+      select: { id: true, snapshotHash: true, strategyInstanceId: true },
+    })
+    expect(tx.publishedStrategySnapshot.create).toHaveBeenCalledTimes(1)
+  })
+
+  it('copies executable artifacts and config from the official source snapshot', async () => {
+    const tx = buildTx()
     const repo = new StrategyPlazaOfficialSnapshotRepository(createTxHost(tx))
 
     await expect(repo.resolveOfficialSnapshotForUser({ userId: 'user-1', template })).resolves.toEqual({
@@ -109,58 +178,66 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
     })
 
     expect(tx.llmStrategyCodegenSession.upsert).toHaveBeenCalledWith(expect.objectContaining({
-      where: { id: 'strategy-plaza:official:ma-cross:user:user-1' },
       create: expect.objectContaining({
-        id: 'strategy-plaza:official:ma-cross:user:user-1',
-        userId: 'user-1',
+        latestDraftCode: sourceSnapshot.scriptSnapshot,
+        latestSpecDesc: sourceSnapshot.specSnapshot,
         status: 'PUBLISHED',
+        userId: 'user-1',
       }),
     }))
     expect(tx.strategyTemplate.upsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({
+        script: sourceSnapshot.scriptSnapshot,
+        rulesJson: sourceSnapshot.specSnapshot,
         status: 'live',
         createdBy: 'user-1',
         metadata: expect.objectContaining({
-          officialSnapshotId: 'official-plaza-ma-cross-v1-snapshot',
-          officialTemplateId: 'ma-cross',
+          officialSnapshotHash: sourceSnapshot.snapshotHash,
+          officialSnapshotId: sourceSnapshot.id,
+          officialSnapshotVersion: sourceSnapshot.snapshotVersion,
           source: 'strategy-plaza-official-template',
         }),
       }),
     }))
     expect(tx.publishedStrategySnapshot.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
-        session: { connect: { id: 'strategy-plaza:official:ma-cross:user:user-1' } },
+        session: { connect: { id: expect.stringContaining('strategy-plaza:official:ma-cross') } },
         strategyInstanceId: 'strategy-instance-1',
         strategyTemplateId: 'strategy-template-1',
-        strategyConfig: expect.objectContaining({
-          exchange: 'okx',
-          marketType: 'perp',
-          symbol: 'BTC-USDT-SWAP',
-          positionPct: 10,
-        }),
-        deploymentExecutionDefaults: {
-          leverage: 2,
-          priceSource: 'mark',
-          orderType: 'market',
-          timeInForce: 'ioc',
-        },
-        astSnapshot: expect.objectContaining({
-          runtimeExecutionSemantics: [expect.objectContaining({
-            semanticKey: 'on_start.entry.ma-cross',
-          })],
-        }),
+        snapshotHash: sourceSnapshot.snapshotHash,
+        scriptHash: sourceSnapshot.scriptHash,
+        specHash: sourceSnapshot.specHash,
+        irHash: sourceSnapshot.irHash,
+        astDigest: sourceSnapshot.astDigest,
+        structuralDigest: sourceSnapshot.structuralDigest,
+        scriptSnapshot: sourceSnapshot.scriptSnapshot,
+        specSnapshot: sourceSnapshot.specSnapshot,
+        semanticGraph: sourceSnapshot.semanticGraph,
+        compiledIr: sourceSnapshot.compiledIr,
+        irSnapshot: sourceSnapshot.irSnapshot,
+        astSnapshot: sourceSnapshot.astSnapshot,
+        compiledManifest: sourceSnapshot.compiledManifest,
+        consistencyReport: sourceSnapshot.consistencyReport,
+        paramsSnapshot: sourceSnapshot.paramsSnapshot,
+        strategyConfig: sourceSnapshot.strategyConfig,
+        backtestConfigDefaults: sourceSnapshot.backtestConfigDefaults,
+        deploymentExecutionDefaults: sourceSnapshot.deploymentExecutionDefaults,
+        deploymentExecutionConstraints: sourceSnapshot.deploymentExecutionConstraints,
+        executionEnvelope: sourceSnapshot.executionEnvelope,
+        executionPolicy: sourceSnapshot.executionPolicy,
+        dataRequirements: sourceSnapshot.dataRequirements,
+        userIntentSummary: sourceSnapshot.userIntentSummary,
+        strategySummary: sourceSnapshot.strategySummary,
+        scriptSummary: sourceSnapshot.scriptSummary,
+        lockedParams: sourceSnapshot.lockedParams,
+        snapshotVersion: sourceSnapshot.snapshotVersion,
       }),
       select: { id: true, snapshotHash: true },
     }))
-    expect(tx.strategyInstance.update).toHaveBeenCalledWith({
-      where: { id: 'strategy-instance-1' },
-      data: {
-        metadata: expect.objectContaining({
-          bindingSource: 'PUBLISHED_SNAPSHOT',
-          publishedSnapshotId: 'user-snapshot-1',
-          snapshotHash: 'snapshot-hash-1',
-        }),
-      },
-    })
+    expect(tx.publishedStrategySnapshot.create).not.toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        scriptSnapshot: expect.stringContaining('// Official Strategy Plaza template'),
+      }),
+    }))
   })
 })
