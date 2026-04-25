@@ -32,6 +32,7 @@
     "analysis": "Analysis",
     "settings": "Settings",
     "home": "Market",
+    "marketData": "Market Data",
     "data": "Data",
     "liquidation_map": "Liquidation Map",
     "long_short_ratio": "Long/Short Ratio",
@@ -50,6 +51,11 @@
     "login": "Login",
     "register": "Register",
     "yesterday": "Yesterday"
+  },
+  "theme": {
+    "dark": "Dark",
+    "light": "Light",
+    "toggle": "Toggle light/dark mode"
   },
   "account": {
     "title": "Account",
@@ -213,11 +219,13 @@
       "riskDrawdown": "Max Drawdown Threshold {{percent}}%"
     },
     "homepage": {
-      "cta": "Experience AI Quant",
+      "heroCta": "Try it now",
+      "finalCta": "Create a strategy",
       "hero": {
-        "eyebrow": "AI Quant Strategy Builder",
-        "title": "Generate backtestable quant strategies with AI",
-        "description": "Start with a trading idea. AI generates strategy logic, then connects backtesting, risk checks, and exchange deployment."
+        "eyebrow": "NEXT-GEN AI QUANT",
+        "title": "AI quant trading tools beginners can use",
+        "description": "Describe your trading idea. AI generates the strategy, runs the backtest, and helps execute it.",
+        "howItWorks": "See how it works"
       },
       "visual": {
         "workspace": "AI Quant Workspace",
@@ -229,7 +237,12 @@
         "logicTitle": "AI-generated strategy logic",
         "rule1": "Price drops 1% within 3 minutes",
         "rule2": "Buy with 10% capital",
-        "rule3": "Sell after a 2% rebound and prepare backtest",
+        "rule3": "Sell after a 2% price rebound",
+        "ruleMeta": {
+          "trigger": "Trigger",
+          "takeProfit": "Take profit",
+          "position": "Position"
+        },
         "inputPlaceholder": "Ask AI to refine the strategy...",
         "deployAction": "Deploy strategy",
         "sidebar": {
@@ -261,23 +274,23 @@
       },
       "workflow": {
         "eyebrow": "AI Quant Workflow",
-        "title": "A complete strategy loop from AI chat to one-click deployment",
+        "title": "Automated trading in 4 steps",
         "items": {
           "chat": {
-            "title": "AI Chat",
-            "desc": "Describe your trading idea in natural language."
+            "title": "Describe your trading idea",
+            "desc": "For example: \"Buy BTC when it drops 3%, sell when it rises 5%.\""
           },
           "strategy": {
-            "title": "Strategy",
-            "desc": "AI generates confirmable strategy logic."
+            "title": "AI generates a complete strategy",
+            "desc": "It identifies the symbol, timeframe, take-profit, stop-loss, and other rules."
           },
           "backtest": {
-            "title": "Backtest",
-            "desc": "Validate performance with historical data."
+            "title": "Backtest before you run it",
+            "desc": "Validate performance first so you do not go live blindly."
           },
           "deploy": {
-            "title": "Deploy",
-            "desc": "Connect execution after the strategy passes checks."
+            "title": "Deploy and automate in one click",
+            "desc": "Once started, the strategy executes automatically so you do not have to watch the market."
           }
         }
       },
@@ -405,6 +418,7 @@
       "status": "Status",
       "confirmedGraph": "Logic Graph Confirmed",
       "confirmGraph": "Confirm Logic Graph",
+      "snapshotId": "Strategy Snapshot ID",
       "returnRevise": "Return to Chat to Revise"
     },
     "strategies": {

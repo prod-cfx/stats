@@ -1,11 +1,12 @@
 'use client';
 
+import type {AggregatedVolumeApiItem} from '@/lib/api';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Check, ChevronDown } from 'lucide-react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { SubTitle } from '@/components/ui/Typography';
-import { fetchAggregatedVolume, type AggregatedVolumeApiItem } from '@/lib/api';
+import { fetchAggregatedVolume  } from '@/lib/api';
 
 interface VolumeItem {
   name: string;

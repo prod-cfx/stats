@@ -193,6 +193,22 @@ export class AiQuantProxyService {
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
+  async updateAiQuantConversationBacktestDraft(
+    userId: string,
+    authorization: string | undefined,
+    conversationId: string,
+    body: Record<string, unknown>,
+  ): Promise<void> {
+    return this.quantifyClient.patch<void>(
+      `/account/ai-quant/conversations/${encodeURIComponent(conversationId)}/backtest-draft`,
+      body,
+      {
+        timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
+        headers: this.userHeaders(userId, authorization),
+      },
+    ).catch(error => { throw this.mapQuantifyError(error) })
+  }
+
   async getCodegenSession(
     userId: string,
     authorization: string | undefined,

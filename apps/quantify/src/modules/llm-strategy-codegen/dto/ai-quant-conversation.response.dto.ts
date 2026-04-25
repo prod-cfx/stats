@@ -10,6 +10,85 @@ class AiQuantConversationMessageDto {
   content!: string
 }
 
+class AiQuantConversationLastBacktestSummaryDto {
+  @ApiProperty()
+  maxDrawdownPct!: number
+
+  @ApiProperty()
+  totalReturnPct!: number
+
+  @ApiProperty()
+  winRatePct!: number
+
+  @ApiProperty()
+  tradeCount!: number
+
+  @ApiPropertyOptional()
+  openTradeCount?: number
+
+  @ApiPropertyOptional()
+  openPnl?: number
+
+  @ApiPropertyOptional({ enum: ['spot', 'perp'] })
+  marketType?: 'spot' | 'perp'
+}
+
+export class AiQuantConversationBacktestRangeDto {
+  @ApiProperty({ enum: ['7D', '30D', '90D', '1Y', 'CUSTOM'] })
+  preset!: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
+
+  @ApiPropertyOptional()
+  startAt?: string
+
+  @ApiPropertyOptional()
+  endAt?: string
+}
+
+export class AiQuantConversationBacktestExecutionDto {
+  @ApiProperty()
+  initialCash!: number
+
+  @ApiPropertyOptional({ nullable: true })
+  leverage!: number | null
+
+  @ApiProperty()
+  slippageBps!: number
+
+  @ApiProperty()
+  feeBps!: number
+
+  @ApiProperty({ enum: ['open', 'close', 'mid'] })
+  priceSource!: 'open' | 'close' | 'mid'
+
+  @ApiProperty()
+  allowPartial!: boolean
+}
+
+export class AiQuantConversationBacktestConfigDto {
+  @ApiProperty({ type: AiQuantConversationBacktestRangeDto })
+  range!: AiQuantConversationBacktestRangeDto
+
+  @ApiProperty({ type: AiQuantConversationBacktestExecutionDto })
+  execution!: AiQuantConversationBacktestExecutionDto
+}
+
+class AiQuantConversationLastBacktestRefDto {
+  @ApiProperty()
+  jobId!: string
+
+  @ApiProperty()
+  publishedSnapshotId!: string
+
+  @ApiProperty({ type: AiQuantConversationBacktestConfigDto })
+  config!: AiQuantConversationBacktestConfigDto
+
+  @ApiProperty({ type: AiQuantConversationLastBacktestSummaryDto })
+  summary!: AiQuantConversationLastBacktestSummaryDto
+
+  @ApiProperty()
+  completedAt!: string
+}
+
 export class AiQuantConversationResponseDto {
   @ApiProperty({ description: '会话 ID' })
   id!: string
@@ -34,6 +113,12 @@ export class AiQuantConversationResponseDto {
 
   @ApiPropertyOptional({ description: '更新时间' })
   updatedAt?: string
+
+  @ApiPropertyOptional({ description: '当前显式保存的回测草稿配置', type: AiQuantConversationBacktestConfigDto, nullable: true })
+  backtestDraftConfig?: AiQuantConversationBacktestConfigDto | null
+
+  @ApiPropertyOptional({ description: '最近一次可恢复的回测引用', type: AiQuantConversationLastBacktestRefDto, nullable: true })
+  lastBacktestRef?: AiQuantConversationLastBacktestRefDto | null
 
   @ApiPropertyOptional({ description: '当前待确认 canonical spec digest' })
   canonicalDigest?: string | null

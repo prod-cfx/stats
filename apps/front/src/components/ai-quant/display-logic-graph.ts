@@ -92,7 +92,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 function asString(value: unknown): string | null {
   if (typeof value !== 'string') return null
   const trimmed = value.trim()
-  return trimmed ? trimmed : null
+  return trimmed || null
 }
 
 function asStringList(value: unknown): string[] {
@@ -162,6 +162,22 @@ function formatPositionGainCondition(condition: DisplayLogicGraphCondition): str
   const percent = formatPercent(rawValue)
   if (!percent) return '持仓收益条件'
   return `相对开仓均价盈利达到 ${percent}%`
+}
+
+function formatTakeProfitCondition(condition: DisplayLogicGraphCondition): string {
+  const rawValue = typeof condition.value === 'number' && Number.isFinite(condition.value)
+    ? condition.value
+    : condition.params?.valuePct
+  const percent = formatPercent(rawValue)
+  if (!percent) return '止盈条件'
+  const basis = pickString(condition.params?.basis)
+  if (basis === 'entry_avg_price') {
+    return `相对开仓均价盈利达到 ${percent}%`
+  }
+  if (basis === 'position_pnl') {
+    return `持仓收益达到 ${percent}%`
+  }
+  return `盈利达到 ${percent}%`
 }
 
 function formatPositionLossCondition(condition: DisplayLogicGraphCondition): string {
@@ -241,10 +257,14 @@ function formatConditionText(condition: DisplayLogicGraphCondition | undefined):
   if (!condition) return '条件待补充'
 
   switch (condition.key) {
+    case 'execution.on_start':
+      return '启动时执行'
     case 'price.change_pct':
       return formatPriceChangeCondition(condition)
     case 'position_gain_pct':
       return formatPositionGainCondition(condition)
+    case 'risk.take_profit_pct':
+      return formatTakeProfitCondition(condition)
     case 'position_loss_pct':
       return formatPositionLossCondition(condition)
     case 'bollinger.upper_break':
@@ -322,7 +342,7 @@ function buildLegacyRuleBlocks(specDesc: DisplayLogicGraphSpecDesc | null): Disp
   const entryRules = asStringList(specDesc.entryRules)
   const exitRules = asStringList(specDesc.exitRules)
 
-  const entryBlocks = entryRules.map((rule, index) => ({
+  const entryBlocks: DisplayBlock[] = entryRules.map((rule, index) => ({
     type: index === 0 ? 'IF' : 'AND_AT_THEN',
     items: [
       {
@@ -333,7 +353,7 @@ function buildLegacyRuleBlocks(specDesc: DisplayLogicGraphSpecDesc | null): Disp
     ],
   }))
 
-  const exitBlocks = exitRules.map((rule, index) => ({
+  const exitBlocks: DisplayBlock[] = exitRules.map((rule, index) => ({
     type: entryBlocks.length === 0 && index === 0 ? 'IF' : 'AND_AT_THEN',
     items: [
       {

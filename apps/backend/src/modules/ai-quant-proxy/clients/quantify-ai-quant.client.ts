@@ -35,6 +35,14 @@ export class QuantifyAiQuantClient {
     return this.runUntypedRequest<T>(path, 'DELETE', options)
   }
 
+  async patch<T>(
+    path: string,
+    body: Record<string, unknown>,
+    options?: QuantifyRequestOptions,
+  ): Promise<T> {
+    return this.runUntypedJsonRequest(path, 'PATCH', options, body)
+  }
+
   async listAccountStrategies(
     query: Record<string, string | number | boolean | undefined>,
     options: QuantifyRequestOptions & { userId: string },
@@ -367,7 +375,7 @@ export class QuantifyAiQuantClient {
 
   private async runUntypedJsonRequest<T>(
     path: string,
-    method: 'GET' | 'POST' | 'DELETE',
+    method: 'GET' | 'POST' | 'DELETE' | 'PATCH',
     options?: QuantifyRequestOptions,
     body?: Record<string, unknown>,
   ): Promise<T> {

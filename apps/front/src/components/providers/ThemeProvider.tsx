@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components */
 'use client'
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import React, { createContext, useCallback, use, useEffect, useMemo, useState } from 'react'
 
 export type AppTheme = 'light' | 'dark'
 
@@ -18,6 +18,7 @@ const ThemeContext = createContext<ThemeContextValue | null>(null)
 function applyTheme(theme: AppTheme) {
   if (typeof document === 'undefined') return
   document.documentElement.dataset.theme = theme
+  document.documentElement.classList.toggle('dark', theme === 'dark')
   // Help browser render built-in controls correctly
   document.documentElement.style.colorScheme = theme
 }
@@ -31,11 +32,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       if (fromDom === 'light' || fromDom === 'dark') return fromDom
       const stored = localStorage.getItem(STORAGE_KEY)
       if (stored === 'light' || stored === 'dark') return stored
-      const preferred =
-        window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-          ? 'dark'
-          : 'light'
-      return preferred
+      return 'dark'
     } catch {
       return 'dark'
     }
@@ -46,6 +43,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     try {
       const fromDom = document.documentElement.dataset.theme
       if (fromDom === 'light' || fromDom === 'dark') {
+        applyTheme(fromDom)
         // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- hydration sync
         setThemeState(fromDom)
         return
@@ -80,11 +78,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [setTheme, theme, toggleTheme],
   )
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+  return <ThemeContext value={value}>{children}</ThemeContext>
 }
 
 export function useTheme() {
-  const ctx = useContext(ThemeContext)
+  const ctx = use(ThemeContext)
   if (!ctx) throw new Error('useTheme must be used within ThemeProvider')
   return ctx
 }

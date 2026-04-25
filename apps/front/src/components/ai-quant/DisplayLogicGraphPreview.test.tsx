@@ -1,5 +1,6 @@
+import type {Root} from 'react-dom/client';
 import { act } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
+import { createRoot  } from 'react-dom/client'
 import { DisplayLogicGraphPreview } from './DisplayLogicGraphPreview'
 
 jest.mock('react-i18next', () => ({
@@ -10,7 +11,7 @@ jest.mock('react-i18next', () => ({
 
 globalThis.IS_REACT_ACT_ENVIRONMENT = true
 
-describe('DisplayLogicGraphPreview', () => {
+describe('displayLogicGraphPreview', () => {
   let container: HTMLDivElement
   let root: Root
 
@@ -137,5 +138,53 @@ describe('DisplayLogicGraphPreview', () => {
     expect(container.textContent).toContain('IF')
     expect(container.textContent).toContain('THEN')
     expect(container.textContent).toContain('等待策略规则补充')
+  })
+
+  it('shows the published snapshot id below graph actions only after confirmation', () => {
+    const graph = {
+      blocks: [
+        {
+          type: 'EXECUTE' as const,
+          items: [
+            {
+              kind: 'execute' as const,
+              id: 'execute-1',
+              key: 'exchange',
+              text: '交易所: OKX',
+            },
+          ],
+        },
+      ],
+    }
+
+    act(() => {
+      root.render(
+        <DisplayLogicGraphPreview
+          graph={graph}
+          confirmed
+          publishedSnapshotId="snapshot-1"
+          onConfirm={() => {}}
+          onRevise={() => {}}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('aiQuant.messages.snapshotId')
+    expect(container.textContent).toContain('snapshot-1')
+
+    act(() => {
+      root.render(
+        <DisplayLogicGraphPreview
+          graph={graph}
+          confirmed={false}
+          publishedSnapshotId="snapshot-1"
+          onConfirm={() => {}}
+          onRevise={() => {}}
+        />,
+      )
+    })
+
+    expect(container.textContent).not.toContain('aiQuant.messages.snapshotId')
+    expect(container.textContent).not.toContain('snapshot-1')
   })
 })

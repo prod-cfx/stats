@@ -1,3 +1,4 @@
+import { schemas } from '@ai/api-contracts'
 import { buildAiQuantErrorMessage, parseAiQuantErrorMeta } from '@/components/ai-quant/ai-quant-error-stage'
 import { API_BASE_URL, client, unwrapApiResponse } from '@/lib/api-client'
 import { getToken } from '@/lib/auth-storage'
@@ -43,9 +44,15 @@ export interface CreateBacktestJobPayload {
     publishedSnapshotId?: string
     params?: Record<string, unknown>
   }
+  conversationId?: string
   dataRange: {
     fromTs: number
     toTs: number
+  }
+  requestedRangeInput?: {
+    preset: '7D' | '30D' | '90D' | '1Y' | 'CUSTOM'
+    startAt?: string
+    endAt?: string
   }
   allowPartial?: boolean
   bars?: unknown[]
@@ -95,6 +102,10 @@ export interface BacktestJobResult {
     returnPct: number
     reasonOpen?: string
     reasonClose?: string
+    reasonOpenCode?: string
+    reasonCloseCode?: string
+    reasonOpenDisplay?: string
+    reasonCloseDisplay?: string
   }>
   openPositions?: Array<{
     symbol: string
@@ -362,10 +373,15 @@ export async function postBacktestSymbolSupportCheck(
 
 export async function createBacktestJob(payload: CreateBacktestJobPayload): Promise<BacktestJob> {
   const headers = buildBacktestingHeaders('create-job')
+  const request = schemas.BacktestingCreateJobRequestDto.parse(payload)
+  const requestHeaders = {
+    authorization: headers.Authorization,
+    'x-request-id': headers['x-request-id'],
+  }
   const job = await requestJson<BacktestJob>(
     signal =>
-      (client as any).BacktestingProxyController_createJob(payload, {
-        headers,
+      client.BacktestingProxyController_createJob(request, {
+        headers: requestHeaders,
         signal,
       }),
     BACKTEST_REQUEST_TIMEOUT_MS,

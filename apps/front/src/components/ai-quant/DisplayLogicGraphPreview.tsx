@@ -1,5 +1,5 @@
-import { useTranslation } from 'react-i18next'
 import type { DisplayBlock, DisplayExecuteItem, DisplayLogicGraph } from './display-logic-graph'
+import { useTranslation } from 'react-i18next'
 
 interface DisplayLogicGraphPreviewProps {
   graph: DisplayLogicGraph
@@ -7,6 +7,7 @@ interface DisplayLogicGraphPreviewProps {
   onRevise: () => void
   confirmDisabled?: boolean
   confirmed?: boolean
+  publishedSnapshotId?: string | null
 }
 
 const EMPTY_THEN_FALLBACK = '等待策略规则补充'
@@ -38,8 +39,12 @@ export function DisplayLogicGraphPreview({
   onRevise,
   confirmDisabled = false,
   confirmed = false,
+  publishedSnapshotId = null,
 }: DisplayLogicGraphPreviewProps) {
   const { t } = useTranslation()
+  const normalizedSnapshotId = typeof publishedSnapshotId === 'string'
+    ? publishedSnapshotId.trim()
+    : ''
 
   return (
     <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
@@ -124,6 +129,16 @@ export function DisplayLogicGraphPreview({
           {t('aiQuant.messages.returnRevise')}
         </button>
       </div>
+
+      {confirmed && normalizedSnapshotId && (
+        <div className="mt-3 rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-3 py-2 text-xs text-[color:var(--cf-muted)]">
+          <span className="font-semibold text-[color:var(--cf-text-strong)]">
+            {t('aiQuant.messages.snapshotId')}
+          </span>
+          <span className="mx-1">:</span>
+          <span className="break-all font-mono">{normalizedSnapshotId}</span>
+        </div>
+      )}
     </section>
   )
 }

@@ -33,20 +33,12 @@ await generateZodClientFromOpenAPI({
 let generatedSource = await fs.readFile(outputPath, 'utf8')
 generatedSource = generatedSource.replace(/^\/\/ @ts-nocheck\n/, '')
 generatedSource = generatedSource.replace(
-  "import { makeApi, Zodios, type ZodiosOptions } from '@zodios/core'\n",
-  "import { makeApi, Zodios, type ZodiosInstance, type ZodiosOptions } from '@zodios/core'\n",
-)
-generatedSource = generatedSource.replace(
   'const endpoints: ZodiosEndpointDefinitions = makeApi([',
   'const endpoints = makeApi([',
 )
 generatedSource = generatedSource.replace(
-  "import { makeApi, Zodios, type ZodiosEndpointDefinitions, type ZodiosInstance, type ZodiosOptions } from '@zodios/core'\n",
-  "import { makeApi, Zodios, type ZodiosInstance, type ZodiosOptions } from '@zodios/core'\n",
-)
-generatedSource = generatedSource.replace(
-  'const endpoints = makeApi([',
-  'const endpoints = makeApi([',
+  "import { makeApi, Zodios, type ZodiosEndpointDefinitions, type ZodiosOptions } from '@zodios/core'\n",
+  "import { makeApi, Zodios, type ZodiosOptions } from '@zodios/core'\n",
 )
 generatedSource = generatedSource.replace(
   'const endpoints = makeApi([',
@@ -55,10 +47,6 @@ generatedSource = generatedSource.replace(
 generatedSource = generatedSource.replaceAll(
   'response: AccountStrategyDetailResponseDto,',
   'response: AccountStrategyDetailTransportEnvelope,',
-)
-generatedSource = generatedSource.replace(
-  'export const aiQuantifyClient = new Zodios(\'/api/v1\', endpoints)\n\nexport function createApiClient(baseUrl: string, options?: ZodiosOptions) {\n  return new Zodios(baseUrl, endpoints, options)\n}\n',
-  'export type QuantifyApi = typeof endpoints\n\nexport const aiQuantifyClient: ZodiosInstance<QuantifyApi> = new Zodios(\'/api/v1\', endpoints)\n\nexport function createApiClient(baseUrl: string, options?: ZodiosOptions): ZodiosInstance<QuantifyApi> {\n  return new Zodios(baseUrl, endpoints, options)\n}\n',
 )
 await fs.writeFile(outputPath, generatedSource)
 

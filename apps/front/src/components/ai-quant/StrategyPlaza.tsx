@@ -1,8 +1,8 @@
 'use client'
 
+import type {ElementType} from 'react';
 import type { QuantParams } from '@/app/[lng]/ai-quant/AiQuantPageClient'
 import { Activity, BarChart3, Edit3, Play, Shield, TrendingUp, Zap } from 'lucide-react'
-import { type ElementType } from 'react'
 import { useTranslation } from 'react-i18next'
 import { STRATEGY_PRESETS } from './strategy-presets'
 

@@ -292,4 +292,133 @@ describe('BacktestReportClient', () => {
     expect(container.textContent).toContain('BTCUSDT 现货')
     expect(container.textContent).not.toContain('未平仓持仓')
   })
+
+  it('renders decision-oriented report sections for spot backtests', async () => {
+    await act(async () => {
+      root.render(
+        <BacktestReportClient
+          lng="zh"
+          id="btjob-doge-report"
+          symbol="DOGEUSDT"
+          marketType="spot"
+          rangeDisplay="2026-04-17 ~ 2026-04-24"
+          reportContext={{
+            exchange: 'binance',
+            marketType: 'spot',
+            symbol: 'DOGEUSDT',
+            timeframe: '3m',
+            requestedRange: '2026-04-17 00:00 UTC ~ 2026-04-24 00:00 UTC',
+            appliedRange: '2026-04-17 00:00 UTC ~ 2026-04-24 00:00 UTC',
+            dataCoverage: {
+              isPartial: false,
+              barCount: 3361,
+            },
+            execution: {
+              initialCash: 10000,
+              leverage: 1,
+              allowPartial: false,
+            },
+          }}
+          metrics={{
+            maxDrawdownPct: 0.18,
+            totalReturnPct: 0.19,
+            winRatePct: 100,
+            tradeCount: 1,
+          }}
+          report={{
+            equityCurve: [
+              { ts: Date.parse('2026-04-17T00:00:00.000Z'), equity: 10000 },
+              { ts: Date.parse('2026-04-24T00:00:00.000Z'), equity: 10019 },
+            ],
+            trades: [
+              {
+                id: 'trade-doge',
+                side: 'LONG',
+                entryTs: Date.parse('2026-04-18T06:31:00.000Z'),
+                entryPrice: 0.09803794,
+                exitTs: Date.parse('2026-04-18T11:31:00.000Z'),
+                exitPrice: 0.10000989,
+                returnPct: 2.0114,
+                reasonOpen: 'compiled.decision_01_entry-execution-on_start-210',
+                reasonClose: 'compiled.decision_03_risk-take-profit',
+              },
+            ],
+          }}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('报告可信度')
+    expect(container.textContent).toContain('策略执行匹配')
+    expect(container.textContent).toContain('完整覆盖')
+    expect(container.textContent).toContain('1 笔闭合交易，统计意义有限')
+    expect(container.textContent).toContain('策略启动后首次入场')
+    expect(container.textContent).toContain('达到止盈条件')
+    expect(container.textContent).toContain('现货报告关注持仓、成本、未实现盈亏和资金占用，不展示强平风险。')
+    expect(container.textContent).toContain('报告解读')
+    expect(container.textContent).not.toContain('AI 深度洞察')
+    expect(container.textContent).not.toContain('本次报告数据覆盖完整，样本量偏少，需要结合更长周期验证。现货报告关注')
+    expect(container.textContent).toContain('$0.098038')
+    expect(container.textContent).toContain('$0.100010')
+    expect(container.textContent).toContain('上线前继续验证')
+    expect(container.textContent).not.toContain('一键部署')
+  })
+
+  it('renders derivative capability notes for contract backtests', async () => {
+    await act(async () => {
+      root.render(
+        <BacktestReportClient
+          lng="en"
+          id="btjob-perp-report"
+          symbol="BTCUSDT"
+          marketType="perp"
+          rangeDisplay="2026-04-20 ~ 2026-04-21"
+          reportContext={{
+            exchange: 'binance',
+            marketType: 'perp',
+            symbol: 'BTCUSDT',
+            execution: {
+              leverage: 5,
+              allowPartial: false,
+            },
+          }}
+          metrics={{
+            maxDrawdownPct: 5,
+            totalReturnPct: 3,
+            winRatePct: 50,
+            tradeCount: 2,
+          }}
+          report={{
+            equityCurve: [
+              { ts: Date.parse('2026-04-20T00:00:00.000Z'), equity: 10000 },
+              { ts: Date.parse('2026-04-21T00:00:00.000Z'), equity: 10300 },
+            ],
+            trades: [
+              {
+                id: 'long-1',
+                side: 'LONG',
+                exitTs: Date.parse('2026-04-21T00:00:00.000Z'),
+                exitPrice: 88888.12,
+                returnPct: 3,
+              },
+              {
+                id: 'short-1',
+                side: 'SHORT',
+                exitTs: Date.parse('2026-04-21T01:00:00.000Z'),
+                exitPrice: 88111.12,
+                returnPct: -1,
+              },
+            ],
+          }}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('Report Confidence')
+    expect(container.textContent).toContain('Strategy Execution Fit')
+    expect(container.textContent).toContain('Derivative report focuses on leverage, margin, funding, liquidation risk, and long/short split.')
+    expect(container.textContent).toContain('Funding and liquidation data were not provided by this backtest model.')
+    expect(container.textContent).toContain('1 long / 1 short closed trades')
+    expect(container.textContent).toContain('Review Before Deploy')
+  })
 })

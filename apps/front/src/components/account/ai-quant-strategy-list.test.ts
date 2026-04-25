@@ -1,7 +1,7 @@
 import type { AiQuantStrategyRecord } from './ai-quant-strategy-store'
 import { describe, expect, it, jest } from '@jest/globals'
-import { renderToStaticMarkup } from 'react-dom/server.node'
 import React from 'react'
+import { renderToStaticMarkup } from 'react-dom/server.node'
 import { AiQuantStrategyPrimarySummary, buildParamSummary, buildPrimarySummary } from './AiQuantStrategyList'
 
 jest.mock('lucide-react', () => ({

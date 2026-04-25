@@ -1,12 +1,44 @@
+import type { BacktestReportContext } from './backtest-report-data'
 import { formatBacktestRange } from '@/components/ai-quant/backtest-date'
 import { Footer } from '@/components/layout/Footer'
 import { Navbar } from '@/components/layout/Navbar'
 import { fetchBacktestJobServer } from '@/lib/server-api'
 import { BacktestReportClient } from './BacktestReportClient'
+import { normalizeBacktestMarketType } from './backtest-result-presentation'
 
 interface CoverageRange {
   fromTs: number
   toTs: number
+}
+
+interface BacktestInputSummaryView {
+  [key: string]: unknown
+  actualBars?: unknown
+  allowPartial?: unknown
+  appliedRange?: unknown
+  barCount?: unknown
+  bars?: unknown
+  baseTimeframe?: unknown
+  dataRange?: unknown
+  exchange?: unknown
+  expectedBarCount?: unknown
+  expectedBars?: unknown
+  feeBps?: unknown
+  initialCash?: unknown
+  isPartial?: unknown
+  leverage?: unknown
+  marketType?: unknown
+  priceSource?: unknown
+  requestedRange?: unknown
+  slippageBps?: unknown
+  symbols?: unknown
+  timeframe?: unknown
+}
+
+function toBacktestInputSummaryView(value: unknown): BacktestInputSummaryView | null {
+  return typeof value === 'object' && value !== null
+    ? value as BacktestInputSummaryView
+    : null
 }
 
 function isCoverageRange(value: unknown): value is CoverageRange {
@@ -32,14 +64,9 @@ function resolvePartialCoverageNotice(inputSummary: unknown): {
   requestedRange: string
   appliedRange: string
 } | null {
-  if (typeof inputSummary !== 'object' || inputSummary === null) {
+  const candidate = toBacktestInputSummaryView(inputSummary)
+  if (!candidate) {
     return null
-  }
-
-  const candidate = inputSummary as {
-    isPartial?: unknown
-    requestedRange?: unknown
-    appliedRange?: unknown
   }
 
   if (candidate.isPartial !== true) {
@@ -57,22 +84,22 @@ function resolvePartialCoverageNotice(inputSummary: unknown): {
 }
 
 function resolveBacktestMarketType(inputSummary: unknown): 'spot' | 'perp' {
-  if (typeof inputSummary !== 'object' || inputSummary === null) {
+  const summary = toBacktestInputSummaryView(inputSummary)
+  if (!summary) {
     return 'spot'
   }
 
-  const marketType = (inputSummary as { marketType?: unknown }).marketType
-  return marketType === 'perp' ? 'perp' : 'spot'
+  return normalizeBacktestMarketType(summary.marketType)
 }
 
 function resolveBacktestSymbol(inputSummary: unknown, fallback: string): string {
-  if (typeof inputSummary !== 'object' || inputSummary === null) {
+  const summary = toBacktestInputSummaryView(inputSummary)
+  if (!summary) {
     return fallback
   }
 
-  const symbols = (inputSummary as { symbols?: unknown }).symbols
-  return Array.isArray(symbols) && typeof symbols[0] === 'string' && symbols[0].trim()
-    ? symbols[0]
+  return Array.isArray(summary.symbols) && typeof summary.symbols[0] === 'string' && summary.symbols[0].trim()
+    ? summary.symbols[0]
     : fallback
 }
 
@@ -81,12 +108,8 @@ function resolveBacktestRangeDisplay(
   fallbackStartAt: string | null,
   fallbackEndAt: string | null,
 ): string {
-  if (typeof inputSummary === 'object' && inputSummary !== null) {
-    const candidate = inputSummary as {
-      appliedRange?: unknown
-      requestedRange?: unknown
-      dataRange?: unknown
-    }
+  const candidate = toBacktestInputSummaryView(inputSummary)
+  if (candidate) {
     const preferredRange =
       isCoverageRange(candidate.appliedRange)
         ? candidate.appliedRange
@@ -105,6 +128,82 @@ function resolveBacktestRangeDisplay(
   }
 
   return formatBacktestRange(fallbackStartAt, fallbackEndAt)
+}
+
+function readStringField(source: Record<string, unknown>, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = source[key]
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim()
+    }
+  }
+  return undefined
+}
+
+function readNumberField(source: Record<string, unknown>, keys: string[]): number | undefined {
+  for (const key of keys) {
+    const value = source[key]
+    if (Number.isFinite(value)) {
+      return value as number
+    }
+  }
+  return undefined
+}
+
+function readBooleanField(source: Record<string, unknown>, keys: string[]): boolean | undefined {
+  for (const key of keys) {
+    const value = source[key]
+    if (typeof value === 'boolean') {
+      return value
+    }
+  }
+  return undefined
+}
+
+function resolveBacktestReportContext(inputSummary: unknown, symbol: string, marketType: 'spot' | 'perp'): BacktestReportContext | null {
+  const source = toBacktestInputSummaryView(inputSummary)
+  if (!source) {
+    return null
+  }
+
+  const requestedRange = isCoverageRange(source.requestedRange)
+    ? formatCoverageRange(source.requestedRange)
+    : undefined
+  const appliedRange = isCoverageRange(source.appliedRange)
+    ? formatCoverageRange(source.appliedRange)
+    : undefined
+
+  const barCount = readNumberField(source, ['actualBars', 'barCount', 'bars'])
+  const expectedBarCount = readNumberField(source, ['expectedBars', 'expectedBarCount'])
+  const isPartial = readBooleanField(source, ['isPartial'])
+  const initialCash = readNumberField(source, ['initialCash'])
+  const leverage = readNumberField(source, ['leverage'])
+  const allowPartial = readBooleanField(source, ['allowPartial'])
+  const feeBps = readNumberField(source, ['feeBps'])
+  const slippageBps = readNumberField(source, ['slippageBps'])
+  const priceSource = readStringField(source, ['priceSource'])
+
+  return {
+    exchange: readStringField(source, ['exchange']),
+    marketType,
+    symbol,
+    timeframe: readStringField(source, ['baseTimeframe', 'timeframe']),
+    requestedRange,
+    appliedRange,
+    dataCoverage: {
+      isPartial,
+      barCount,
+      expectedBarCount,
+    },
+    execution: {
+      initialCash,
+      leverage,
+      allowPartial,
+      feeBps,
+      slippageBps,
+      priceSource,
+    },
+  }
 }
 
 export default async function AiQuantBacktestDetailPage({
@@ -134,6 +233,7 @@ export default async function AiQuantBacktestDetailPage({
   const rangeDisplay = resolveBacktestRangeDisplay(job?.inputSummary, fallbackStartAt, fallbackEndAt)
   const partialCoverageNotice = resolvePartialCoverageNotice(job?.inputSummary)
   const marketType = resolveBacktestMarketType(job?.inputSummary)
+  const reportContext = resolveBacktestReportContext(job?.inputSummary, symbol, marketType)
   const metrics = job?.resultSummary
       ? {
         maxDrawdownPct: Number(job.resultSummary.maxDrawdownPct.toFixed(2)),
@@ -165,6 +265,7 @@ export default async function AiQuantBacktestDetailPage({
           marketType={marketType}
           rangeDisplay={rangeDisplay}
           metrics={metrics}
+          reportContext={reportContext}
           partialCoverageNotice={partialCoverageNotice}
         />
       </main>

@@ -15,6 +15,7 @@ const mockBacktestReportClient = jest.fn(
     rangeDisplay,
     metrics,
     partialCoverageNotice,
+    reportContext,
   }: {
     symbol: string
     marketType?: 'spot' | 'perp'
@@ -31,6 +32,7 @@ const mockBacktestReportClient = jest.fn(
       requestedRange: string
       appliedRange: string
     } | null
+    reportContext?: unknown
   }) => (
     <section>
       <div>{symbol}</div>
@@ -38,6 +40,7 @@ const mockBacktestReportClient = jest.fn(
       <div>{rangeDisplay}</div>
       <div>{metrics ? `${metrics.winRatePct}%` : '--'}</div>
       <div>{partialCoverageNotice?.appliedRange ?? 'full-range'}</div>
+      <div>{JSON.stringify(reportContext ?? null)}</div>
     </section>
   ),
 )
@@ -209,6 +212,106 @@ describe('AiQuantBacktestDetailPage', () => {
     renderToStaticMarkup(element)
     const props = mockBacktestReportClient.mock.calls.at(-1)?.[0] as Record<string, unknown>
     expect(props).toMatchObject({ marketType: 'perp' })
+  })
+
+  it('normalizes derivative market aliases before rendering the report', async () => {
+    for (const marketType of ['perpetual', 'futures', 'swap', 'delivery']) {
+      mockBacktestReportClient.mockClear()
+      mockFetchBacktestJobServer.mockResolvedValue({
+        inputSummary: {
+          marketType,
+          symbols: ['ETHUSDT'],
+        },
+        resultSummary: {
+          netProfit: 12,
+          netProfitPct: 0.12,
+          maxDrawdownPct: 0.45,
+          winRate: 1,
+          profitFactor: 1.4,
+          totalTrades: 3,
+        },
+      })
+
+      const element = await AiQuantBacktestDetailPage({
+        params: { lng: 'zh', id: `backtest-${marketType}` },
+        searchParams: {},
+      })
+
+      renderToStaticMarkup(element)
+      const props = mockBacktestReportClient.mock.calls.at(-1)?.[0] as Record<string, unknown>
+      expect(props).toMatchObject({
+        marketType: 'perp',
+        reportContext: {
+          marketType: 'perp',
+          symbol: 'ETHUSDT',
+        },
+      })
+    }
+  })
+
+  it('passes normalized report context from inputSummary without tying it to OKX', async () => {
+    mockFetchBacktestJobServer.mockResolvedValue({
+      id: 'backtest-context',
+      inputSummary: {
+        exchange: 'binance',
+        marketType: 'perp',
+        symbols: ['BTCUSDT'],
+        baseTimeframe: '3m',
+        initialCash: 10000,
+        leverage: 5,
+        allowPartial: false,
+        requestedRange: {
+          fromTs: Date.parse('2026-04-01T00:00:00.000Z'),
+          toTs: Date.parse('2026-04-08T00:00:00.000Z'),
+        },
+        appliedRange: {
+          fromTs: Date.parse('2026-04-01T00:00:00.000Z'),
+          toTs: Date.parse('2026-04-08T00:00:00.000Z'),
+        },
+        isPartial: false,
+        expectedBars: 3361,
+        actualBars: 3361,
+      },
+      resultSummary: {
+        netProfit: 12,
+        netProfitPct: 0.12,
+        maxDrawdownPct: 0.45,
+        winRate: 1,
+        profitFactor: 1.4,
+        totalTrades: 3,
+      },
+    })
+
+    const element = await AiQuantBacktestDetailPage({
+      params: { lng: 'en', id: 'backtest-context' },
+      searchParams: {},
+    })
+
+    renderToStaticMarkup(element)
+    const props = mockBacktestReportClient.mock.calls.at(-1)?.[0] as Record<string, unknown>
+
+    expect(props).toMatchObject({
+      symbol: 'BTCUSDT',
+      marketType: 'perp',
+      reportContext: {
+        exchange: 'binance',
+        marketType: 'perp',
+        symbol: 'BTCUSDT',
+        timeframe: '3m',
+        requestedRange: '2026-04-01 00:00 UTC ~ 2026-04-08 00:00 UTC',
+        appliedRange: '2026-04-01 00:00 UTC ~ 2026-04-08 00:00 UTC',
+        dataCoverage: {
+          isPartial: false,
+          barCount: 3361,
+          expectedBarCount: 3361,
+        },
+        execution: {
+          initialCash: 10000,
+          leverage: 5,
+          allowPartial: false,
+        },
+      },
+    })
   })
 
   it('passes partial coverage notice when the server marks the backtest as partial', async () => {

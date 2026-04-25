@@ -97,14 +97,30 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
     messages,
     onRunBacktest,
     canRunBacktest,
+    paramValues,
+    onConfirmBacktestParams,
   }: {
     messages: Array<{ id: string; role: string; content: string }>
     onRunBacktest: () => void
     canRunBacktest?: boolean
+    paramValues?: Record<string, unknown>
+    onConfirmBacktestParams?: (nextValues: Record<string, unknown>) => void
   }) => (
     <div>
       <button data-testid="run-backtest" disabled={!canRunBacktest} onClick={onRunBacktest}>
         run
+      </button>
+      <button
+        data-testid="set-range-7d"
+        onClick={() => onConfirmBacktestParams?.({ ...(paramValues ?? {}), backtestRangePreset: '7D' })}
+      >
+        set-range-7d
+      </button>
+      <button
+        data-testid="set-initial-cash-20000"
+        onClick={() => onConfirmBacktestParams?.({ ...(paramValues ?? {}), backtestInitialCash: 20000 })}
+      >
+        set-initial-cash-20000
       </button>
       <div data-testid="messages">{messages.map(msg => msg.content).join('|')}</div>
     </div>
@@ -167,7 +183,9 @@ jest.mock('@/lib/api', () => ({
   continueLlmCodegenSession: jest.fn(),
   fetchUserExchangeAccountStatuses: jest.fn(async () => []),
   getLlmCodegenSession: jest.fn(),
+  listAiQuantConversations: jest.fn(async () => []),
   startLlmCodegenSession: jest.fn(),
+  updateAiQuantConversationBacktestDraft: jest.fn(async () => undefined),
 }))
 
 function defaultPayload() {
@@ -272,7 +290,7 @@ function seedConfirmedConversation(now = Date.now()) {
           backtestSlippageBps: 10,
           backtestFeeBps: 5,
           backtestPriceSource: 'close',
-          backtestAllowPartial: true,
+          backtestAllowPartial: false,
         },
         backtestResult: null,
         logicGraph: {
@@ -315,7 +333,7 @@ function seedConfirmedConversation(now = Date.now()) {
           slippageBps: 10,
           feeBps: 5,
           priceSource: 'close',
-          allowPartial: true,
+          allowPartial: false,
         },
         publishedSnapshotCompatibilityMetadata: {
           isLegacySnapshot: false,
@@ -554,7 +572,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     )
   })
 
-  it('passes allowPartial to the backtest payload builder when submitting a job', async () => {
+  it('does not force partial coverage when the user has not enabled partial backtests', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
     seeded[0].paramValues = {
       ...seeded[0].paramValues,
@@ -563,7 +581,38 @@ describe('AiQuantPageClient backtest jobs integration', () => {
       backtestSlippageBps: 10,
       backtestFeeBps: 5,
       backtestPriceSource: 'close',
+      backtestAllowPartial: false,
+    }
+    localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(seeded))
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allowPartial: false,
+      }),
+    )
+  })
+
+  it('passes explicit partial coverage opt-in to the backtest payload builder', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    seeded[0].paramValues = {
+      ...seeded[0].paramValues,
       backtestAllowPartial: true,
+    }
+    seeded[0].publishedSnapshotBacktestConfigDefaults = {
+      ...seeded[0].publishedSnapshotBacktestConfigDefaults,
+      allowPartial: true,
     }
     localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(seeded))
 
@@ -582,6 +631,26 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
       expect.objectContaining({
         allowPartial: true,
+      }),
+    )
+  })
+
+  it('does not pass a local conversation id to the backtest payload builder when no serverConversationId exists', async () => {
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        conversationId: expect.anything(),
       }),
     )
   })
@@ -852,6 +921,410 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(mockGetBacktestJobResult).toHaveBeenCalledWith('job-1')
   })
 
+  it('restores the latest backtest summary from server-owned conversations after reload when snapshot ids still match', async () => {
+    const listAiQuantConversations = jest.requireMock('@/lib/api')
+      .listAiQuantConversations as jest.Mock
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'conv-1',
+        conversationTitle: 'server conv',
+        conversationMessages: [],
+        status: 'PUBLISHED',
+        publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotParamValues: null,
+        publishedSnapshotStrategyConfig: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
+        publishedSnapshotBacktestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: true,
+        },
+        backtestDraftConfig: {
+          range: {
+            preset: '30D',
+          },
+          execution: {
+            initialCash: 10000,
+            leverage: 1,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: true,
+          },
+        },
+        lastBacktestRef: {
+          jobId: 'btjob-1',
+          publishedSnapshotId: 'snapshot-1',
+          config: {
+            range: {
+              preset: '30D',
+            },
+            execution: {
+              initialCash: 10000,
+              leverage: 1,
+              slippageBps: 10,
+              feeBps: 5,
+              priceSource: 'close',
+              allowPartial: true,
+            },
+          },
+          summary: {
+            maxDrawdownPct: 8,
+            totalReturnPct: 12,
+            winRatePct: 60,
+            tradeCount: 5,
+            marketType: 'spot',
+          },
+          completedAt: '2026-04-23T00:04:00.000Z',
+        },
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient serverOwnedConversations />)
+    })
+
+    expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('btjob-1')
+    expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('deployable')
+  })
+
+  it('allows rerunning backtest immediately after server-owned recovery by backfilling snapshot execution defaults', async () => {
+    const listAiQuantConversations = jest.requireMock('@/lib/api')
+      .listAiQuantConversations as jest.Mock
+    localStorage.clear()
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'conv-1',
+        conversationTitle: 'server conv',
+        conversationMessages: [],
+        status: 'PUBLISHED',
+        scriptCode: 'return { ok: true }',
+        publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotParamValues: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
+        publishedSnapshotStrategyConfig: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
+        specDesc: {
+          market: {
+            symbols: ['BTCUSDT'],
+            timeframes: ['15m'],
+          },
+          rules: [],
+        },
+        publishedSnapshotBacktestConfigDefaults: {
+          initialCash: 25000,
+          leverage: 1,
+          slippageBps: 12,
+          feeBps: 4,
+          priceSource: 'mid',
+          allowPartial: false,
+        },
+        backtestDraftConfig: {
+          range: {
+            preset: '30D',
+          },
+          execution: {
+            initialCash: 25000,
+            leverage: 1,
+            slippageBps: 12,
+            feeBps: 4,
+            priceSource: 'mid',
+            allowPartial: false,
+          },
+        },
+        lastBacktestRef: {
+          jobId: 'btjob-1',
+          publishedSnapshotId: 'snapshot-1',
+          config: {
+            range: {
+              preset: '30D',
+            },
+            execution: {
+              initialCash: 25000,
+              leverage: 1,
+              slippageBps: 12,
+              feeBps: 4,
+              priceSource: 'mid',
+              allowPartial: false,
+            },
+          },
+          summary: {
+            maxDrawdownPct: 8,
+            totalReturnPct: 12,
+            winRatePct: 60,
+            tradeCount: 5,
+            marketType: 'spot',
+          },
+          completedAt: '2026-04-23T00:04:00.000Z',
+        },
+      },
+    ])
+
+    mockBuildBacktestPayload.mockImplementation((input: any) => {
+      if (
+        !Number.isFinite(input.initialCash) ||
+        !Number.isFinite(input.leverage) ||
+        !Number.isFinite(input.execution?.slippageBps) ||
+        !Number.isFinite(input.execution?.feeBps) ||
+        (input.execution?.priceSource !== 'open' &&
+          input.execution?.priceSource !== 'close' &&
+          input.execution?.priceSource !== 'mid')
+      ) {
+        const error = new Error('invalid_execution_config')
+        ;(error as Error & { __builderError: boolean; code: string }).__builderError = true
+        ;(error as Error & { __builderError: boolean; code: string }).code =
+          'invalid_execution_config'
+        throw error
+      }
+      return {
+        ...defaultPayload(),
+        initialCash: input.initialCash,
+        leverage: input.leverage,
+        execution: { ...input.execution },
+        allowPartial: input.allowPartial,
+      }
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient serverOwnedConversations />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="run-backtest"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mockCreateBacktestJob).toHaveBeenCalledTimes(1)
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        initialCash: 25000,
+        leverage: 1,
+        execution: expect.objectContaining({
+          slippageBps: 12,
+          feeBps: 4,
+          priceSource: 'mid',
+        }),
+        allowPartial: false,
+      }),
+    )
+    expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain(
+      'invalid_execution_config',
+    )
+  })
+
+  it('does not restore server-owned lastBacktestRef when execution config changed under the same snapshot', async () => {
+    const listAiQuantConversations = jest.requireMock('@/lib/api')
+      .listAiQuantConversations as jest.Mock
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'conv-1',
+        conversationTitle: 'server conv',
+        conversationMessages: [],
+        status: 'PUBLISHED',
+        publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotParamValues: null,
+        publishedSnapshotStrategyConfig: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
+        publishedSnapshotBacktestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: true,
+        },
+        backtestDraftConfig: {
+          range: {
+            preset: '30D',
+          },
+          execution: {
+            initialCash: 20000,
+            leverage: 1,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: true,
+          },
+        },
+        lastBacktestRef: {
+          jobId: 'btjob-1',
+          publishedSnapshotId: 'snapshot-1',
+          config: {
+            range: {
+              preset: '30D',
+            },
+            execution: {
+              initialCash: 10000,
+              leverage: 1,
+              slippageBps: 10,
+              feeBps: 5,
+              priceSource: 'close',
+              allowPartial: true,
+            },
+          },
+          summary: {
+            maxDrawdownPct: 8,
+            totalReturnPct: 12,
+            winRatePct: 60,
+            tradeCount: 5,
+            marketType: 'spot',
+          },
+          completedAt: '2026-04-23T00:04:00.000Z',
+        },
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient serverOwnedConversations />)
+    })
+
+    expect(container.querySelector('[data-testid="backtest-summary"]')).toBeNull()
+  })
+
+  it.each([
+    ['backtest range', 'set-range-7d'],
+    ['backtest execution', 'set-initial-cash-20000'],
+  ])('clears current backtestResult immediately when %s changes', async (_label, testId) => {
+    localStorage.setItem(
+      'ai_quant_conversations_v1',
+      JSON.stringify([
+        {
+          id: 'conv-1',
+          title: 'conv',
+          messages: [
+            { id: 'welcome', role: 'assistant', content: '```typescript\nreturn { ok: true }\n```' },
+          ],
+          params: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            baseTimeframe: '15m',
+            buyWindowMin: 3,
+            buyDropPct: 1,
+            sellWindowMin: 15,
+            sellRisePct: 2,
+            positionPct: 10,
+          },
+          paramSchema: null,
+          paramValues: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            baseTimeframe: '15m',
+            buyWindowMin: 3,
+            buyDropPct: 1,
+            sellWindowMin: 15,
+            sellRisePct: 2,
+            positionPct: 10,
+            backtestRangePreset: '30D',
+            backtestInitialCash: 10000,
+            backtestLeverage: 1,
+            backtestSlippageBps: 10,
+            backtestFeeBps: 5,
+            backtestPriceSource: 'close',
+            backtestAllowPartial: true,
+          },
+          backtestResult: {
+            id: 'btjob-existing',
+            symbol: 'BTCUSDT',
+            startAt: '2026-03-01T00:00:00.000Z',
+            endAt: '2026-03-24T00:00:00.000Z',
+            maxDrawdownPct: 8,
+            totalReturnPct: 12,
+            winRatePct: 60,
+            tradeCount: 5,
+            marketType: 'spot',
+          },
+          logicGraph: {
+            version: 1,
+            status: 'confirmed',
+            trigger: [],
+            actions: [],
+            risk: [],
+            meta: {
+              exchange: 'binance',
+              symbol: 'BTCUSDT',
+              timeframe: '15m',
+              positionPct: 10,
+            },
+          },
+          llmCodegenSessionId: null,
+          publishedStrategyInstanceId: null,
+          publishedSnapshotId: 'snapshot-1',
+          publishedSnapshotParamValues: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            marketType: 'spot',
+            baseTimeframe: '15m',
+            positionPct: 10,
+          },
+          publishedSnapshotStrategyConfig: {
+            exchange: 'binance',
+            symbol: 'BTCUSDT',
+            marketType: 'spot',
+            baseTimeframe: '15m',
+            positionPct: 10,
+          },
+          publishedSnapshotBacktestConfigDefaults: {
+            initialCash: 10000,
+            leverage: 1,
+            slippageBps: 10,
+            feeBps: 5,
+            priceSource: 'close',
+            allowPartial: true,
+          },
+          publishedSnapshotDeploymentExecutionDefaults: null,
+          publishedSnapshotDeploymentExecutionConstraints: null,
+          publishedSnapshotCompatibilityMetadata: null,
+          publishedScriptCode: 'return { ok: true }',
+          publishedScriptGraphVersion: 1,
+          latestSignalMessage: null,
+          backtestExecutionConfigExplicit: true,
+          backtestExecutionState: 'succeeded',
+          updatedAt: Date.now(),
+        },
+      ]),
+    )
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="backtest-summary"]')?.textContent).toContain('btjob-existing')
+
+    await act(async () => {
+      container.querySelector(`[data-testid="${testId}"]`)?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="backtest-summary"]')).toBeNull()
+  })
+
   it('running state disables backtest button', async () => {
     let resolvePoll: ((value: unknown) => void) | null = null
     const pollPromise = new Promise(resolve => {
@@ -1088,7 +1561,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
           feeBps: 4,
           priceSource: 'mid',
         }),
-        allowPartial: true,
+        allowPartial: false,
       }),
     )
     expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain(
@@ -1156,7 +1629,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
 
   it('uses AI-Quant page execution params instead of snapshot defaults for published snapshot backtests', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
-    seeded[0].backtestExecutionConfigExplicit = false
+    seeded[0].backtestExecutionConfigExplicit = true
     seeded[0].paramValues = {
       ...seeded[0].paramValues,
       backtestInitialCash: 32000,
@@ -1223,7 +1696,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
           feeBps: 6,
           priceSource: 'mid',
         }),
-        allowPartial: true,
+        allowPartial: false,
       }),
     )
     expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').not.toContain(
@@ -1358,7 +1831,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     )
   })
 
-  it('fails fast when allowPartial is present but invalid', async () => {
+  it('rejects invalid allowPartial instead of silently enabling partial backtests', async () => {
     const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
     seeded[0].paramValues = {
       ...seeded[0].paramValues,
@@ -1383,12 +1856,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     })
 
     expect(mockCreateBacktestJob).not.toHaveBeenCalled()
-    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain(
-      'aiQuant.messages.backtestPayloadInvalid',
-    )
-    expect(container.querySelector('[data-testid="messages"]')?.textContent).toContain(
-      'invalid_allow_partial',
-    )
+    expect(container.querySelector('[data-testid="messages"]')?.textContent ?? '').toContain('invalid_allow_partial')
   })
 
   it('keeps exact default execution values when the conversation marked them as explicit', async () => {
@@ -1516,6 +1984,100 @@ describe('AiQuantPageClient backtest jobs integration', () => {
           id: 'snapshot-1',
           publishedSnapshotId: 'snapshot-1',
         }),
+      }),
+    )
+  })
+
+  it('uses serverConversationId in the backtest payload when a local conversation has been persisted', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    const activeConversation = {
+      ...seeded[0],
+      serverConversationId: 'server-conv-1',
+      publishedScriptGraphVersion: 1,
+      publishedScriptCode: 'return { ok: true }',
+    } as ConversationState
+
+    mockCreateBacktestJob.mockResolvedValueOnce({
+      id: 'job-1',
+      status: 'succeeded',
+      createdAt: '2026-03-24T12:00:01.000Z',
+    })
+
+    let currentConversation = activeConversation
+
+    await runAiQuantBacktest({
+      activeConversation,
+      activeConversationIdRef: { current: activeConversation.id },
+      backtestCapabilities: {
+        allowedBaseTimeframes: ['15m'],
+      },
+      backtestCapabilityState: 'ready',
+      backtestRunMutexRef: { current: new Set<string>() },
+      backtestRunTokenRef: { current: new Map<string, number>() },
+      graphConfirmed: true,
+      isMountedRef: { current: true },
+      setConversationBacktestExecutionState: jest.fn(),
+      t: (key: string) => key,
+      updateConversationById: (_conversationId, updater) => {
+        currentConversation = updater(currentConversation)
+      },
+    })
+
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'server-conv-1',
+      }),
+    )
+    expect(mockBuildBacktestPayload).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-1',
+      }),
+    )
+  })
+
+  it('omits conversationId from the backtest payload when the local conversation has no serverConversationId', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    const activeConversation = {
+      ...seeded[0],
+      serverConversationId: null,
+      publishedScriptGraphVersion: 1,
+      publishedScriptCode: 'return { ok: true }',
+    } as ConversationState
+
+    mockCreateBacktestJob.mockResolvedValueOnce({
+      id: 'job-1',
+      status: 'succeeded',
+      createdAt: '2026-03-24T12:00:01.000Z',
+    })
+
+    let currentConversation = activeConversation
+
+    await runAiQuantBacktest({
+      activeConversation,
+      activeConversationIdRef: { current: activeConversation.id },
+      backtestCapabilities: {
+        allowedBaseTimeframes: ['15m'],
+      },
+      backtestCapabilityState: 'ready',
+      backtestRunMutexRef: { current: new Set<string>() },
+      backtestRunTokenRef: { current: new Map<string, number>() },
+      graphConfirmed: true,
+      isMountedRef: { current: true },
+      setConversationBacktestExecutionState: jest.fn(),
+      t: (key: string) => key,
+      updateConversationById: (_conversationId, updater) => {
+        currentConversation = updater(currentConversation)
+      },
+    })
+
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
+      expect.not.objectContaining({
+        conversationId: expect.anything(),
+      }),
+    )
+    expect(mockBuildBacktestPayload).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        conversationId: 'conv-1',
       }),
     )
   })

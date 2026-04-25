@@ -1,5 +1,5 @@
+import type { ApiError } from '@/lib/errors'
 import { beforeEach, describe, expect, it, jest } from '@jest/globals'
-import { ApiError } from '@/lib/errors'
 
 const mockClient = {
   WhaleNotificationInboxController_unreadCount: jest.fn(),

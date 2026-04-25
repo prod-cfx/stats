@@ -1,9 +1,14 @@
 import { Body, Controller, Get, Headers, Inject, Param, Post, UseGuards } from '@nestjs/common'
-import { ApiBearerAuth, ApiBody, ApiHeader, ApiOkResponse, ApiTags } from '@nestjs/swagger'
+import { ApiBearerAuth, ApiBody, ApiExtraModels, ApiHeader, ApiOkResponse, ApiTags } from '@nestjs/swagger'
 import { Throttle } from '@nestjs/throttler'
+import { buildBaseResponseSchema } from '@/common/swagger/base-response-schema.helper'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
 import { AuthRateLimitGuard } from '@/modules/auth/guards/auth-rate-limit.guard'
+import {
+  BacktestingCreateJobRequestDto,
+  BacktestingCreateJobResponseDto,
+} from './dto/backtesting-create-job.dto'
 import {
   BacktestingSymbolSupportRequestDto,
   BacktestingSymbolSupportResponseDto,
@@ -12,6 +17,7 @@ import { AiQuantProxyService } from './ai-quant-proxy.service'
 
 @ApiTags('backtesting')
 @ApiBearerAuth('bearer')
+@ApiExtraModels(BacktestingCreateJobRequestDto, BacktestingCreateJobResponseDto)
 @Auth()
 @Controller('backtesting')
 export class BacktestingProxyController {
@@ -44,13 +50,16 @@ export class BacktestingProxyController {
   }
 
   @Post('jobs')
+  @ApiBody({ type: BacktestingCreateJobRequestDto })
+  @ApiHeader({ name: 'x-request-id', required: false })
+  @ApiOkResponse({ schema: buildBaseResponseSchema(BacktestingCreateJobResponseDto) })
   async createJob(
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,
     @Headers('x-request-id') requestId: string | undefined,
-    @Body() body: Record<string, unknown>,
+    @Body() body: BacktestingCreateJobRequestDto,
   ): Promise<unknown> {
-    return this.service.createBacktestJob(userId, authorization, body, requestId)
+    return this.service.createBacktestJob(userId, authorization, body as unknown as Record<string, unknown>, requestId)
   }
 
   @Get('jobs/:id')

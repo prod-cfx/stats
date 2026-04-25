@@ -33,8 +33,19 @@ export function runDecisionPrograms(
   const compiledState = ensureCompiledDecisionState(ctx)
   if (guardState.forceExit) {
     const currentQty = readCurrentQty(ctx)
+    if (currentQty === 0) {
+      return Object.freeze({
+        action: 'NOOP',
+        reason: 'compiled.force_exit.noop',
+      })
+    }
+
     return Object.freeze({
       action: currentQty < 0 ? 'CLOSE_SHORT' : 'CLOSE_LONG',
+      size: {
+        mode: 'QTY' as const,
+        value: Math.abs(currentQty),
+      },
       reason: 'compiled.force_exit',
     })
   }

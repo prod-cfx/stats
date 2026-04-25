@@ -1,5 +1,5 @@
+import type { DisplayBlock, DisplayExecuteItem, DisplayLogicGraph } from './display-logic-graph'
 import type { StrategyLogicGraph } from './logic-graph-model'
-import type { DisplayBlock, DisplayLogicGraph } from './display-logic-graph'
 import { DisplayLogicGraphPreview } from './DisplayLogicGraphPreview'
 
 interface LogicGraphPreviewProps {
@@ -7,6 +7,7 @@ interface LogicGraphPreviewProps {
   onConfirm: () => void
   onRevise: () => void
   confirmDisabled?: boolean
+  publishedSnapshotId?: string | null
 }
 
 function formatLegacyConditionText(subject: string, operator: string, value: string) {
@@ -34,7 +35,7 @@ function buildDisplayGraph(graph: StrategyLogicGraph): DisplayLogicGraph {
     text: `${action.action} ${action.amount} 的 ${action.target}`,
   }))
 
-  const executeItems = [
+  const executeItems: DisplayExecuteItem[] = [
     {
       key: 'exchange',
       value: graph.meta.exchange.toUpperCase(),
@@ -61,14 +62,14 @@ function buildDisplayGraph(graph: StrategyLogicGraph): DisplayLogicGraph {
       value: tag,
       text: `标签: ${tag}`,
       id: `execute-tag-${index}`,
-      kind: 'execute',
+      kind: 'execute' as const,
     })) ?? []),
     ...graph.risk.map((item, index) => ({
       key: 'risk',
       value: item,
       text: `风险: ${item}`,
       id: `execute-risk-${index}`,
-      kind: 'execute',
+      kind: 'execute' as const,
     })),
   ]
 
@@ -94,6 +95,7 @@ export function LogicGraphPreview({
   onConfirm,
   onRevise,
   confirmDisabled = false,
+  publishedSnapshotId = null,
 }: LogicGraphPreviewProps) {
   return (
     <DisplayLogicGraphPreview
@@ -102,6 +104,7 @@ export function LogicGraphPreview({
       onRevise={onRevise}
       confirmDisabled={confirmDisabled}
       confirmed={graph.status === 'confirmed'}
+      publishedSnapshotId={publishedSnapshotId}
     />
   )
 }

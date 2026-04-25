@@ -198,4 +198,44 @@ describe('quantify contract generated responses', () => {
       expect(continueSnippet).not.toContain(`${removedField}:`)
     }
   })
+
+  it('includes lastBacktestRef in generated AI Quant conversation response contracts', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+    const responseStart = source.indexOf('const AiQuantConversationResponseDto = z')
+    const refStart = source.indexOf('const AiQuantConversationLastBacktestRefDto = z')
+    const configStart = source.indexOf('const AiQuantConversationLastBacktestConfigDto = z')
+    const summaryStart = source.indexOf('const AiQuantConversationLastBacktestSummaryDto = z')
+
+    expect(responseStart).toBeGreaterThanOrEqual(0)
+    expect(refStart).toBeGreaterThanOrEqual(0)
+    expect(configStart).toBeGreaterThanOrEqual(0)
+    expect(summaryStart).toBeGreaterThanOrEqual(0)
+
+    const responseSnippet = source.slice(responseStart, responseStart + 1200)
+    const refSnippet = source.slice(refStart, refStart + 500)
+    const configSnippet = source.slice(configStart, configStart + 700)
+    const summarySnippet = source.slice(summaryStart, summaryStart + 500)
+
+    expect(responseSnippet).toContain('backtestDraftConfig: AiQuantConversationLastBacktestConfigDto.nullish()')
+    expect(responseSnippet).toContain('lastBacktestRef: AiQuantConversationLastBacktestRefDto.nullish()')
+    expect(refSnippet).toContain('publishedSnapshotId: z.string()')
+    expect(refSnippet).toContain('config: AiQuantConversationLastBacktestConfigDto')
+    expect(configSnippet).toContain('range: AiQuantConversationLastBacktestRangeDto')
+    expect(configSnippet).toContain('execution: AiQuantConversationLastBacktestExecutionDto')
+    expect(refSnippet).toContain('summary: AiQuantConversationLastBacktestSummaryDto')
+    expect(refSnippet).toContain('completedAt: z.string()')
+    expect(summarySnippet).toContain('maxDrawdownPct: z.number()')
+    expect(summarySnippet).toContain('totalReturnPct: z.number()')
+    expect(summarySnippet).toContain('winRatePct: z.number()')
+    expect(summarySnippet).toContain('tradeCount: z.number()')
+  })
+
+  it('keeps quantify generated client footer on constructor inference instead of exported QuantifyApi wrappers', () => {
+    const source = readFileSync(generatedPath, 'utf8')
+
+    expect(source).not.toContain('export type QuantifyApi = typeof endpoints')
+    expect(source).not.toContain('ZodiosInstance<QuantifyApi>')
+    expect(source).toContain("export const aiQuantifyClient = new Zodios('/api/v1', endpoints)")
+    expect(source).toContain('export function createApiClient(baseUrl: string, options?: ZodiosOptions) {')
+  })
 })

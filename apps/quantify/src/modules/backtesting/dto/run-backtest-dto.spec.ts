@@ -142,6 +142,33 @@ describe('runBacktestDto', () => {
     expect(errors).toHaveLength(0)
   })
 
+  it('accepts optional conversationId in run-backtest payloads', async () => {
+    const payload = {
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '15m',
+      stateTimeframes: ['15m'],
+      initialCash: 10000,
+      execution: { slippageBps: 5, feeBps: 2, priceSource: 'close' },
+      strategy: {
+        id: 'snapshot-1',
+        protocolVersion: 'v1',
+        publishedSnapshotId: 'snapshot-1',
+        params: { marketType: 'spot' },
+      },
+      conversationId: 'conv-1',
+      dataRange: { fromTs: 1, toTs: 2 },
+    }
+
+    const dto = plainToInstance(RunBacktestDto, payload)
+    const errors = await validate(dto, {
+      whitelist: true,
+      forbidNonWhitelisted: true,
+    })
+
+    expect(errors).toHaveLength(0)
+    expect(dto.conversationId).toBe('conv-1')
+  })
+
   it('accepts spot payload without leverage', async () => {
     const payload = buildValidPayload()
     delete payload.leverage

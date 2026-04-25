@@ -1,8 +1,7 @@
 /** @jest-environment jsdom */
 
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
-import React from 'react'
-import { act } from 'react'
+import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AiQuantStrategyDetail } from './AiQuantStrategyDetail'
 
