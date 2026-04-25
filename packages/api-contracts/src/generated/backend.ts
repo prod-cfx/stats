@@ -53,7 +53,9 @@ const CreateTelegramDesktopIntentRequestDto = z
   })
   .partial()
   .passthrough()
-const TelegramDesktopExchangeRequestDto = z.object({ intentId: z.string() }).passthrough()
+const TelegramDesktopExchangeRequestDto = z
+  .object({ intentId: z.string(), betaCode: z.string().optional() })
+  .passthrough()
 const UserProfileResponseDto = z
   .object({
     id: z.string(),
@@ -82,7 +84,7 @@ const SendVerificationCodeRequestDto = z
   .passthrough()
 const SendEmailLoginCodeRequestDto = z.object({ email: z.string() }).passthrough()
 const VerifyEmailLoginCodeRequestDto = z
-  .object({ email: z.string(), code: z.string() })
+  .object({ email: z.string(), code: z.string(), betaCode: z.string().optional() })
   .passthrough()
 const TelegramExchangeRequestDto = z
   .object({
@@ -94,10 +96,16 @@ const TelegramExchangeRequestDto = z
     username: z.string().optional(),
     photoUrl: z.string().optional(),
     source: z.enum(['web', 'desktop', 'webapp']).optional(),
+    betaCode: z.string().optional(),
   })
   .passthrough()
 const RegisterRequestDto = z
-  .object({ email: z.string(), password: z.string(), nickname: z.string().optional() })
+  .object({
+    email: z.string(),
+    password: z.string(),
+    nickname: z.string().optional(),
+    betaCode: z.string().optional(),
+  })
   .passthrough()
 const LoginRequestDto = z.object({ email: z.string(), password: z.string() }).passthrough()
 const PasswordResetRequestDto = z.object({ email: z.string() }).passthrough()
@@ -124,6 +132,28 @@ const BindTelegramRequestDto = z
     photoUrl: z.string().optional(),
   })
   .passthrough()
+const BasePaginationResponseDto = z
+  .object({
+    total: z.number(),
+    page: z.number(),
+    limit: z.number(),
+    items: z.array(z.object({}).partial().passthrough()),
+  })
+  .passthrough()
+const BetaCodeResponseDto = z
+  .object({
+    id: z.string(),
+    code: z.string(),
+    maxUses: z.number(),
+    usedCount: z.number(),
+    isActive: z.boolean(),
+    createdAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough()
+const CreateBetaCodeBatchDto = z
+  .object({ count: z.number().gte(1).lte(500), maxUsesPerCode: z.number().gte(1).lte(1000) })
+  .passthrough()
+const UpdateBetaCodeStatusDto = z.object({ isActive: z.boolean() }).passthrough()
 const AccountExchangeAccountResponseDto = z
   .object({
     id: z.string().nullish(),
@@ -232,14 +262,6 @@ const AiQuantConversationResponseDto = z
   .passthrough()
 const AiQuantConversationBacktestDraftConfigRequestDto = z
   .object({ backtestDraftConfig: AiQuantConversationBacktestConfigResponseDto })
-  .passthrough()
-const BasePaginationResponseDto = z
-  .object({
-    total: z.number(),
-    page: z.number(),
-    limit: z.number(),
-    items: z.array(z.object({}).partial().passthrough()),
-  })
   .passthrough()
 const AccountAiQuantStrategyListItemResponseDto = z
   .object({
@@ -1435,6 +1457,10 @@ export const schemas = {
   ResendVerificationRequestDto,
   BindEmailRequestDto,
   BindTelegramRequestDto,
+  BasePaginationResponseDto,
+  BetaCodeResponseDto,
+  CreateBetaCodeBatchDto,
+  UpdateBetaCodeStatusDto,
   AccountExchangeAccountResponseDto,
   CreateAccountExchangeAccountDto,
   AiQuantConversationMessageResponseDto,
@@ -1445,7 +1471,6 @@ export const schemas = {
   AiQuantConversationLastBacktestRefResponseDto,
   AiQuantConversationResponseDto,
   AiQuantConversationBacktestDraftConfigRequestDto,
-  BasePaginationResponseDto,
   AccountAiQuantStrategyListItemResponseDto,
   AccountAiQuantStrategyDetailResponseDto,
   AccountAiQuantActionRequestDto,
@@ -1881,6 +1906,63 @@ const endpoints = makeApi([
       },
     ],
     response: AdminAuthResponseDto,
+  },
+  {
+    method: 'get',
+    path: '/admin/beta-codes',
+    alias: 'AdminBetaCodeController_list',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'page',
+        type: 'Query',
+        schema: z.number().gte(1).optional().default(1),
+      },
+      {
+        name: 'limit',
+        type: 'Query',
+        schema: z.number().gte(1).lte(100).optional().default(20),
+      },
+    ],
+    response: BasePaginationResponseDto.and(
+      z
+        .object({ items: z.array(BetaCodeResponseDto) })
+        .partial()
+        .passthrough(),
+    ),
+  },
+  {
+    method: 'put',
+    path: '/admin/beta-codes/:id/status',
+    alias: 'AdminBetaCodeController_updateStatus',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: z.object({ isActive: z.boolean() }).passthrough(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: BetaCodeResponseDto,
+  },
+  {
+    method: 'post',
+    path: '/admin/beta-codes/batch',
+    alias: 'AdminBetaCodeController_createBatch',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: CreateBetaCodeBatchDto,
+      },
+    ],
+    response: z.array(BetaCodeResponseDto),
   },
   {
     method: 'get',
@@ -3228,7 +3310,7 @@ const endpoints = makeApi([
       {
         name: 'body',
         type: 'Body',
-        schema: z.object({ intentId: z.string() }).passthrough(),
+        schema: TelegramDesktopExchangeRequestDto,
       },
     ],
     response: z.object({ data: AuthResponseDto, message: z.string().optional() }).passthrough(),
@@ -3373,7 +3455,7 @@ const endpoints = makeApi([
       {
         name: 'body',
         type: 'Body',
-        schema: z.object({ intentId: z.string() }).passthrough(),
+        schema: TelegramDesktopExchangeRequestDto,
       },
     ],
     response: z.object({ data: AuthResponseDto, message: z.string().optional() }).passthrough(),
@@ -3425,7 +3507,15 @@ const endpoints = makeApi([
     path: '/auth/telegram/login-config',
     alias: 'AuthController_getTelegramLoginConfig',
     requestFormat: 'json',
-    response: z.void(),
+    response: z
+      .object({
+        data: z
+          .object({ botName: z.string().nullable(), betaCodeGateEnabled: z.boolean() })
+          .passthrough(),
+        message: z.string(),
+      })
+      .partial()
+      .passthrough(),
   },
   {
     method: 'get',

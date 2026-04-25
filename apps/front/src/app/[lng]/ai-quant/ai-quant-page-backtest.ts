@@ -329,7 +329,7 @@ export async function runAiQuantBacktest(args: {
       },
       ...(serverConversationId ? { conversationId: serverConversationId } : {}),
       range: resolveBacktestRangeInput(activeConversation.paramValues),
-      allowPartial: true,
+      allowPartial: executionConfig.allowPartial,
     })
     backtestDraftConfig = buildBacktestDraftConfigFromValues(activeConversation.paramValues)
   } catch (error) {

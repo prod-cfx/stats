@@ -37,9 +37,9 @@ export function useAggregatedVolumeData(options: UseAggregatedVolumeDataOptions)
     dataMapRef.current.clear()
     lastFetchTimeRef.current = 0
     retryCountRef.current = 0
-    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- reset data for new symbol/interval
+     
     setData([])
-    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- reset error for new symbol/interval
+     
     setError(null)
   }, [symbol, interval])
 

@@ -49,6 +49,12 @@ export interface BacktestJobResultTradeRecord {
   fee: number
   pnl: number
   returnPct: number
+  reasonOpen?: string
+  reasonClose?: string
+  reasonOpenCode?: string
+  reasonCloseCode?: string
+  reasonOpenDisplay?: string
+  reasonCloseDisplay?: string
 }
 
 export interface BacktestJobResultOpenPositionRecord {

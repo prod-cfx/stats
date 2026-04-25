@@ -1,5 +1,6 @@
 import type { StrategyDecisionV1 } from '@ai/shared'
 import type { BacktestRunInput } from '../types/backtesting.types'
+import { runDecisionPrograms } from '@ai/shared/script-engine/compiled-runtime/run-decision-programs'
 import { DomainException } from '@/common/exceptions/domain.exception'
 import { TheoreticalExecutionModel } from '../execution/theoretical-execution.model'
 import { PortfolioLedgerServiceFactory } from '../portfolio/portfolio-ledger.service'
@@ -296,6 +297,64 @@ describe('backtestRunnerService', () => {
     })
 
     expect(report.openPositions?.[0]?.qty).toBeCloseTo(1.5)
+  })
+
+  it('should consume compiled force-exit decisions and close the active position', async () => {
+    const runner = createRunner()
+
+    const report = await runner.run({
+      symbols: ['BTCUSDT'],
+      baseTimeframe: '5m',
+      stateTimeframes: ['1h'],
+      initialCash: 1000,
+      leverage: 1,
+      execution: { slippageBps: 0, feeBps: 0, priceSource: 'close' },
+      strategy: {
+        id: 's-compiled-force-exit',
+        params: {},
+        fn: (ctx): StrategyDecisionV1 => {
+          if (ctx.ts === 1) {
+            return {
+              action: 'OPEN_LONG',
+              size: { mode: 'QTY', value: 1 },
+              reason: 'open',
+            }
+          }
+
+          if (ctx.ts === 2) {
+            return runDecisionPrograms(
+              ctx,
+              [],
+              {},
+              {
+                blockNewEntry: false,
+                forceExit: true,
+                strategyHalt: false,
+                cancelOrderPrograms: false,
+                triggered: ['guard-stop-loss'],
+              },
+              [],
+            )
+          }
+
+          return { action: 'NOOP', reason: 'idle' }
+        },
+      },
+      dataRange: { fromTs: 1, toTs: 3 },
+      bars: [
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 1, open: 100, close: 100 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 2, open: 99, close: 99 }),
+        createBar({ symbol: 'BTCUSDT', timeframe: '5m', closeTime: 3, open: 95, close: 95 }),
+      ],
+    })
+
+    expect(report.openPositions).toEqual([])
+    expect(report.summary.totalTrades).toBe(1)
+    expect(report.trades[0]).toMatchObject({
+      side: 'LONG',
+      exitReason: 'compiled.force_exit',
+      exitSource: 'strategy',
+    })
   })
 
   it('should reject invalid strategy adapter decisions instead of silently no-oping', async () => {

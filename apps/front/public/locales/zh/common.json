@@ -52,6 +52,11 @@
     "register": "注册",
     "yesterday": "昨天"
   },
+  "theme": {
+    "dark": "夜间",
+    "light": "白天",
+    "toggle": "切换白天/夜间模式"
+  },
   "account": {
     "title": "个人中心",
     "loginMethods": "账户登录方式",
@@ -214,11 +219,13 @@
       "riskDrawdown": "默认最大回撤阈值 {{percent}}%"
     },
     "homepage": {
-      "cta": "体验 AI 量化",
+      "heroCta": "立即体验",
+      "finalCta": "开始创建策略",
       "hero": {
-        "eyebrow": "AI Quant Strategy Builder",
-        "title": "用 AI 生成可回测的量化策略",
-        "description": "从一句交易想法开始，AI 生成策略逻辑，并串联回测验证、风险检查与交易所部署。"
+        "eyebrow": "NEXT-GEN AI QUANT",
+        "title": "小白也能用的 AI 量化交易工具",
+        "description": "描述你的交易想法，AI 自动生成策略，完成回测并帮你执行交易",
+        "howItWorks": "了解工作原理"
       },
       "visual": {
         "workspace": "AI 量化工作台",
@@ -230,7 +237,12 @@
         "logicTitle": "AI 生成的策略逻辑",
         "rule1": "价格 3 分钟内下跌 1%",
         "rule2": "使用 10% 资金买入",
-        "rule3": "反弹 2% 后卖出并准备回测",
+        "rule3": "价格反弹 2% 卖出",
+        "ruleMeta": {
+          "trigger": "触发条件",
+          "takeProfit": "止盈条件",
+          "position": "仓位管理"
+        },
         "inputPlaceholder": "继续让 AI 优化策略...",
         "deployAction": "部署策略",
         "sidebar": {
@@ -239,7 +251,7 @@
           "gridTemplate": "网格策略模板"
         },
         "metrics": {
-          "return": "收益",
+          "return": "回报率",
           "maxDrawdown": "最大回撤",
           "winRate": "胜率",
           "trades": "成交次数"
@@ -261,75 +273,75 @@
         }
       },
       "workflow": {
-        "eyebrow": "AI Quant Workflow",
-        "title": "从 AI 对话到一键部署，完整策略闭环",
+        "eyebrow": "",
+        "title": "4 步完成自动交易",
         "items": {
           "chat": {
-            "title": "AI对话",
-            "desc": "用自然语言输入交易想法。"
+            "title": "说出你的交易想法",
+            "desc": "例如：\"BTC 下跌 3% 时买入，涨 5% 卖出。\""
           },
           "strategy": {
-            "title": "策略",
-            "desc": "AI 生成可确认的策略逻辑。"
+            "title": "AI 帮你生成完整策略",
+            "desc": "自动识别交易品种、周期、止盈止损等规则。"
           },
           "backtest": {
-            "title": "回测",
-            "desc": "用历史数据验证策略表现。"
+            "title": "先回测，再决定是否运行",
+            "desc": "验证策略效果，避免盲目上实盘。"
           },
           "deploy": {
-            "title": "一键部署",
-            "desc": "回测达标后连接交易所执行。"
+            "title": "一键部署自动执行",
+            "desc": "策略启动后自动执行，不用盯盘。"
           }
         }
       },
       "features": {
         "conversation": {
-          "eyebrow": "AI Strategy Creation",
-          "title": "用对话生成策略草案",
-          "description": "AI 从自然语言中提取入场、离场、仓位和风险条件，生成可确认的策略逻辑。"
+          "eyebrow": "AI聊天",
+          "title": "像聊天一样创建量化策略",
+          "description": "不用写代码，只需描述你的想法，AI 会帮你生成完整的交易策略"
         },
         "backtest": {
-          "eyebrow": "Backtesting",
-          "title": "部署前先看历史表现",
-          "description": "收益、最大回撤、胜率和成交次数集中呈现，帮助用户判断策略是否值得继续优化或部署。"
+          "eyebrow": "一键回测",
+          "title": "先看策略回测结果，再决定是否运行",
+          "description": "展示收益、回撤、胜率等数据，帮助你评估风险"
         },
         "deploy": {
-          "eyebrow": "Deployment",
-          "title": "回测达标后进入部署确认",
-          "description": "策略快照、回测结果与交易所 API 状态统一校验，再进入自动化执行。"
+          "eyebrow": "一键部署",
+          "title": "策略确认后，一键部署，自动执行",
+          "description": "无需搭建服务器，点击即可部署"
         },
         "plaza": {
-          "eyebrow": "Strategy Plaza",
-          "title": "从策略广场快速开始",
-          "description": "选择常见策略模板，直接运行、回测，或通过 AI 对话继续优化策略条件。"
+          "eyebrow": "策略广场",
+          "title": "不知道怎么写策略？",
+          "description": "可以直接使用官方模板，也可以让 AI 优化已有策略"
         }
       },
       "advantages": {
-        "eyebrow": "Why Coinflux AI Quant",
-        "title": "面向新手的 AI 量化完整路径",
+        "eyebrow": "",
+        "title": "为什么小白更适合用这个做量化？",
         "items": {
           "barrier": {
-            "title": "AI 降低创建门槛",
-            "desc": "用交易语言开始，不从代码和复杂参数开始。"
+            "title": "上手门槛极低",
+            "desc": "不需要懂量化、不需要写代码，一句话就可以开始"
           },
           "logic": {
-            "title": "策略逻辑可确认",
-            "desc": "AI 生成后先展示结构化逻辑，减少理解偏差。"
+            "title": "策略可理解（白盒）",
+            "desc": "AI 给你的不是黑箱信号，而是你能看懂的交易规则和逻辑"
           },
           "validation": {
-            "title": "回测辅助决策",
-            "desc": "用历史数据呈现策略表现，明确优化方向。"
+            "title": "先验证，再实盘",
+            "desc": "每个策略都可以先回测，明确风险和表现，再决定是否运行。"
           },
           "closedLoop": {
-            "title": "部署形成闭环",
-            "desc": "策略生成、验证和交易所部署在同一条路径内完成。"
+            "title": "过程可控",
+            "desc": "运行前确认规则，运行中随时查看状态，保证策略执行按照预期，避免失控"
           }
         }
       },
       "final": {
-        "eyebrow": "Start with AI",
-        "title": "从一个交易想法，生成可验证的量化策略",
-        "description": "体验 AI 策略生成、历史回测与自动化部署的完整流程。"
+        "eyebrow": "",
+        "title": "从第一条 AI 量化策略开始",
+        "description": "不用写代码，也不用盯盘。只需描述一个简单的想法，AI 就能帮你完成整个交易过程"
       }
     },
     "guestLanding": {
@@ -467,6 +479,10 @@
     "emailPlaceholder": "name@example.com",
     "code": "验证码",
     "codePlaceholder": "6位验证码",
+    "betaCode": "内测码",
+    "betaCodePlaceholder": "请输入内测码",
+    "betaCodeHint": "首次登录需要内测码，已有账号可直接登录。",
+    "betaCodeRequired": "请获取内测码",
     "sendCode": "发送验证码",
     "sendingCode": "发送中...",
     "resendCode": "重新发送",

@@ -25,6 +25,7 @@ import { AggregatedLiquidationModule } from './aggregated-liquidation/aggregated
 import { AggregatedOrderbookModule } from './aggregated-orderbook/aggregated-orderbook.module'
 import { AiQuantProxyModule } from './ai-quant-proxy/ai-quant-proxy.module'
 import { AuthModule } from './auth/auth.module'
+import { BetaCodeModule } from './beta-code/beta-code.module'
 import { CryptoStockQuotesModule } from './crypto-stock-quotes/crypto-stock-quotes.module'
 import { DataSyncModule } from './data-sync/data-sync.module'
 import { ExchangeConfigModule } from './exchange-config/exchange-config.module'
@@ -92,6 +93,7 @@ const currentEnv = defaultEnvAccessor.appEnv()
     SettingsModule,
     UserModule,
     AuthModule,
+    BetaCodeModule,
     AccountExchangeAccountsModule,
     AiQuantProxyModule,
     AdminModule,

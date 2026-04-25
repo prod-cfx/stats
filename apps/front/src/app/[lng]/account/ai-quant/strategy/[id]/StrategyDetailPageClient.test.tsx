@@ -3,8 +3,8 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
-import { StrategyDetailPageClient } from './StrategyDetailPageClient'
 import { ApiError } from '@/lib/errors'
+import { StrategyDetailPageClient } from './StrategyDetailPageClient'
 
 const mockPush = jest.fn()
 const mockFetchDetail = jest.fn()

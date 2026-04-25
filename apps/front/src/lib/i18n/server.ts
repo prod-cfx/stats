@@ -13,10 +13,10 @@ export type AppLocale = 'zh' | 'en'
  * You can control the default via `NEXT_PUBLIC_DEFAULT_LOCALE`.
  */
 const DEFAULT_LOCALE: AppLocale
-  = (process.env.NEXT_PUBLIC_DEFAULT_LOCALE === 'en' ? 'en' : 'zh')
+  = (process.env.NEXT_PUBLIC_DEFAULT_LOCALE === 'zh' ? 'zh' : 'en')
 
 function normalizeLocale(locale?: string): AppLocale {
-  return locale === 'en' ? 'en' : 'zh'
+  return locale === 'zh' ? 'zh' : 'en'
 }
 
 export function getRequestLocale(locale?: string): AppLocale {
@@ -28,7 +28,7 @@ export async function getServerTranslator(locale?: string) {
   const instance = i18next.createInstance()
   await instance.init({
     lng,
-    fallbackLng: 'zh',
+    fallbackLng: 'en',
     supportedLngs: ['zh', 'en'],
     nonExplicitSupportedLngs: true,
     defaultNS: 'common',

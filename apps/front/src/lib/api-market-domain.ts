@@ -8,13 +8,6 @@ import type {
 } from './hyperliquid-api'
 import type { MarketDataCatalogItem } from './market-data/catalog-types'
 
-import { cachedRequest, CacheTTL } from './api-cache'
-import {
-  API_BASE_URL,
-  client,
-  safeApiCall,
-  validateId,
-} from './api-client'
 import {
   ApiError,
   AuthenticationError,
@@ -25,12 +18,19 @@ import {
   unwrapPaginatedItems,
   unwrapResponse,
 } from './api-access'
+import { cachedRequest, CacheTTL } from './api-cache'
+import {
+  API_BASE_URL,
+  client,
+  safeApiCall,
+  validateId,
+} from './api-client'
+import { hashStringToSeed, mulberry32 } from './api-mock'
 import {
   fetchTraderFullData as fetchTraderFullDataFromHyperliquid,
   fetchUserFillsFromHyperliquid,
   fetchUserPortfolioFromHyperliquid,
 } from './hyperliquid-api'
-import { hashStringToSeed, mulberry32 } from './api-mock'
 import { FALLBACK_MARKET_DATA_CATALOG } from './market-data/catalog-fallback'
 
 type Infer<T extends ZodTypeAny> = T['_output']

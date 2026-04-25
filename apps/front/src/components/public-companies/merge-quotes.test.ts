@@ -1,5 +1,5 @@
-import { describe, expect, it } from '@jest/globals'
 import type { CryptoStockQuoteLatest } from '@/lib/api'
+import { describe, expect, it } from '@jest/globals'
 import { mergeQuotesBySymbol } from './merge-quotes'
 
 const baseQuote = (overrides: Partial<CryptoStockQuoteLatest>): CryptoStockQuoteLatest =>

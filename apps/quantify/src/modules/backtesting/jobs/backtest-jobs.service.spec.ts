@@ -197,6 +197,10 @@ function createService(args?: {
 }
 
 describe('backtestJobsService', () => {
+  afterEach(() => {
+    jest.useRealTimers()
+  })
+
   it('persists created jobs with queued status and owner identity', async () => {
     const { service, marketData, prisma, availability } = createService()
 
@@ -854,6 +858,56 @@ describe('backtestJobsService', () => {
         },
       },
     })
+  })
+
+  it('resolves preset ranges on the server to the previous closed base timeframe candle', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-04-24T07:33:20.000Z'))
+    const runner = {
+      run: jest.fn().mockResolvedValue({
+        summary: {
+          netProfit: 0,
+          netProfitPct: 0,
+          maxDrawdownPct: 0,
+          winRate: 0,
+          profitFactor: null,
+          totalTrades: 0,
+        },
+        equityCurve: [],
+        trades: [],
+        markers: [],
+        bySymbol: [],
+      }),
+    }
+    const marketData = createMarketDataMock({
+      coverage: createCoverage({
+        availableRange: {
+          fromTs: Date.parse('2026-04-01T00:00:00.000Z'),
+          toTs: Date.parse('2026-04-24T07:30:00.000Z'),
+        },
+        appliedRange: {
+          fromTs: Date.parse('2026-04-17T07:30:00.000Z'),
+          toTs: Date.parse('2026-04-24T07:30:00.000Z'),
+        },
+      }),
+    })
+    const { service } = createService({ runner, marketData })
+    const input = createInput()
+    input.baseTimeframe = '3m'
+    input.stateTimeframes = []
+    input.requestedRangeInput = { preset: '7D' }
+    input.dataRange = {
+      fromTs: Date.parse('2026-04-17T07:33:00.000Z'),
+      toTs: Date.parse('2026-04-24T07:33:00.000Z'),
+    }
+
+    const created = await service.createJob(input, OWNER_USER_ID)
+
+    const expectedRange = {
+      fromTs: Date.parse('2026-04-17T07:30:00.000Z'),
+      toTs: Date.parse('2026-04-24T07:30:00.000Z'),
+    }
+    expect(created.inputSummary.dataRange).toEqual(expectedRange)
+    expect(created.inputSummary.requestedRange).toEqual(expectedRange)
   })
 
   it('does not write lastBacktestRef for successful runs that are not explicitly snapshot-bound', async () => {

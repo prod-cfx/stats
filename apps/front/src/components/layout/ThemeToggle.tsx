@@ -2,10 +2,12 @@
 
 import { Moon, Sun } from 'lucide-react'
 import React from 'react'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '@/components/providers/ThemeProvider'
 
 export function ThemeToggle() {
   const { theme, toggleTheme } = useTheme()
+  const { t } = useTranslation()
   const [mounted, setMounted] = React.useState(false)
 
   React.useEffect(() => {
@@ -19,15 +21,19 @@ export function ThemeToggle() {
   }
 
   const Icon = theme === 'dark' ? Moon : Sun
-  const label = theme === 'dark' ? '夜间' : '白天'
+  const label =
+    theme === 'dark'
+      ? t('theme.dark', { defaultValue: 'Dark' })
+      : t('theme.light', { defaultValue: 'Light' })
+  const toggleLabel = t('theme.toggle', { defaultValue: 'Toggle light/dark mode' })
 
   return (
     <button
       type="button"
       onClick={toggleTheme}
       className="flex items-center gap-2 rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-2 text-[color:var(--cf-text)] transition-colors hover:bg-[color:var(--cf-surface-hover)]"
-      aria-label="切换白天/夜间模式"
-      title="切换白天/夜间模式"
+      aria-label={toggleLabel}
+      title={toggleLabel}
     >
       <Icon className="h-4 w-4 text-[color:var(--cf-muted)]" />
       <span className="text-xs font-bold">{label}</span>

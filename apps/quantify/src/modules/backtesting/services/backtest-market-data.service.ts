@@ -44,6 +44,7 @@ export interface BacktestRangeCoverage {
 @Injectable()
 export class BacktestMarketDataService {
   private static readonly DEFAULT_BACKFILL_BATCH_SIZE = 500
+  private static readonly OKX_BACKFILL_BATCH_SIZE = 100
   private readonly logger = new Logger(BacktestMarketDataService.name)
 
   constructor(
@@ -411,6 +412,11 @@ export class BacktestMarketDataService {
     timeframe: Timeframe,
     range: { fromTs: number; toTs: number },
   ): Promise<void> {
+    if (provider.name.toUpperCase() === 'OKX') {
+      await this.backfillOkxHistoricalBars(provider, symbol, timeframe, range)
+      return
+    }
+
     const timeframeMs = getMarketTimeframeMs(timeframe)
     const maxIterations = Math.ceil(
       Math.max(range.toTs - range.fromTs, timeframeMs) / (timeframeMs * BacktestMarketDataService.DEFAULT_BACKFILL_BATCH_SIZE),
@@ -438,6 +444,48 @@ export class BacktestMarketDataService {
         break
       }
       cursor = new Date(nextCursorMs)
+    }
+  }
+
+  private async backfillOkxHistoricalBars(
+    provider: MarketDataProvider,
+    symbol: string,
+    timeframe: Timeframe,
+    range: { fromTs: number; toTs: number },
+  ): Promise<void> {
+    const timeframeMs = getMarketTimeframeMs(timeframe)
+    const maxIterations = Math.ceil(
+      Math.max(range.toTs - range.fromTs, timeframeMs) / (timeframeMs * BacktestMarketDataService.OKX_BACKFILL_BATCH_SIZE),
+    ) + 2
+    let cursorMs = range.toTs
+
+    for (let i = 0; i < maxIterations; i += 1) {
+      const bars = await provider.fetchHistoricalBars({
+        symbol,
+        timeframe: timeframe as MarketTimeframe,
+        end: new Date(cursorMs),
+        limit: BacktestMarketDataService.OKX_BACKFILL_BATCH_SIZE,
+      })
+
+      if (bars.length === 0) break
+
+      let oldestTs = Number.POSITIVE_INFINITY
+      for (const bar of bars) {
+        if (Number.isFinite(bar.timestamp)) {
+          oldestTs = Math.min(oldestTs, bar.timestamp)
+        }
+        if (bar.timestamp < range.fromTs || bar.timestamp > range.toTs) continue
+        await this.marketDataService.saveBarFromProvider(bar)
+      }
+
+      if (!Number.isFinite(oldestTs) || oldestTs <= range.fromTs) {
+        break
+      }
+      const nextCursorMs = oldestTs
+      if (nextCursorMs >= cursorMs || cursorMs - nextCursorMs < timeframeMs) {
+        break
+      }
+      cursorMs = nextCursorMs
     }
   }
 

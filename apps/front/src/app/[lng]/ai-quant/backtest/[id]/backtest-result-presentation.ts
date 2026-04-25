@@ -46,7 +46,7 @@ function formatSignedPnl(value: number): string {
 }
 
 export function normalizeBacktestMarketType(value: unknown): BacktestMarketType {
-  return value === 'perp' ? 'perp' : 'spot'
+  return ['perp', 'perpetual', 'futures', 'future', 'swap', 'delivery'].includes(String(value ?? '').toLowerCase()) ? 'perp' : 'spot'
 }
 
 export function formatBacktestDisplaySymbol(

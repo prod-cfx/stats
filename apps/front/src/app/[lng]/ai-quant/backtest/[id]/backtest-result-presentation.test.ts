@@ -1,5 +1,5 @@
 import { describe, expect, it } from '@jest/globals'
-import { buildBacktestResultPresentation, formatBacktestDisplaySymbol, formatOpenPositionForDisplay } from './backtest-result-presentation'
+import { buildBacktestResultPresentation, formatBacktestDisplaySymbol, formatOpenPositionForDisplay, normalizeBacktestMarketType } from './backtest-result-presentation'
 
 describe('backtest-result-presentation', () => {
   it('maps spot summary fields into holding-oriented labels', () => {
@@ -73,5 +73,14 @@ describe('backtest-result-presentation', () => {
     })).toEqual(expect.objectContaining({
       symbol: 'BTCUSDT Spot',
     }))
+  })
+
+  it('normalizes derivative aliases without requiring exchange-specific UI branches', () => {
+    expect(normalizeBacktestMarketType('perp')).toBe('perp')
+    expect(normalizeBacktestMarketType('perpetual')).toBe('perp')
+    expect(normalizeBacktestMarketType('futures')).toBe('perp')
+    expect(normalizeBacktestMarketType('swap')).toBe('perp')
+    expect(normalizeBacktestMarketType('spot')).toBe('spot')
+    expect(normalizeBacktestMarketType('unknown')).toBe('spot')
   })
 })

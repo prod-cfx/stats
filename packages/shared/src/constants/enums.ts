@@ -24,6 +24,7 @@ export const AppResource = {
   ORDERBOOK_CONFIG: 'orderbook_config',
   EXCHANGE_CONFIG: 'exchange_config',
   TRADES_CONFIG: 'trades_config',
+  BETA_CODE: 'beta_code',
 } as const
 export type AppResource = (typeof AppResource)[keyof typeof AppResource]
 

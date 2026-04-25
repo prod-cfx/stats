@@ -1,8 +1,8 @@
 import type { schemas } from '@ai/api-contracts'
 import type { ZodTypeAny } from 'zod'
 
-import { client } from './api-client'
 import { apiCall, requireAuthHeaders, unwrapResponse } from './api-access'
+import { client } from './api-client'
 
 type Infer<T extends ZodTypeAny> = T['_output']
 

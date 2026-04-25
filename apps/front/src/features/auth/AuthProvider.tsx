@@ -54,8 +54,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [])
 
   const loginWithEmailCode = useCallback(
-    async (email: string, code: string) => {
-      const nextSession = await verifyEmailCodeRequest(email, code)
+    async (email: string, code: string, betaCode?: string) => {
+      const nextSession = await verifyEmailCodeRequest(email, code, betaCode)
       saveSession(nextSession)
     },
     [saveSession],
@@ -71,6 +71,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       lastName?: string
       username?: string
       photoUrl?: string
+      betaCode?: string
     }) => {
       const nextSession = await completeTelegramLogin(payload)
       saveSession(nextSession)
@@ -91,8 +92,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [])
 
   const loginWithTelegramDesktopIntent = useCallback(
-    async (intentId: string) => {
-      const nextSession = await completeTelegramDesktopLoginRequest(intentId)
+    async (intentId: string, betaCode?: string) => {
+      const nextSession = await completeTelegramDesktopLoginRequest(intentId, betaCode)
       saveSession(nextSession)
     },
     [saveSession],
@@ -164,5 +165,5 @@ export function AuthProvider({ children }: AuthProviderProps) {
     ],
   )
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+  return <AuthContext value={value}>{children}</AuthContext>
 }

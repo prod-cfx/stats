@@ -1,8 +1,9 @@
 'use client'
 
 import { useRouter, useSearchParams } from 'next/navigation'
-import React, { useEffect } from 'react'
+import React, { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { getTelegramLoginConfigRequest } from '@/features/auth/api'
 import { EmailOtpForm } from '@/features/auth/components/EmailOtpForm'
 import { TelegramLoginButtons } from '@/features/auth/components/TelegramLoginButtons'
 import { useAuth } from '@/hooks/use-auth'
@@ -16,6 +17,8 @@ export function LoginPageClient({ lng }: LoginPageClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { isAuthenticated } = useAuth()
+  const [betaCode, setBetaCode] = useState('')
+  const [betaCodeGateEnabled, setBetaCodeGateEnabled] = useState(false)
   const redirect = searchParams?.get('redirect') || `/${lng}/account`
 
   useEffect(() => {
@@ -23,6 +26,28 @@ export function LoginPageClient({ lng }: LoginPageClientProps) {
       router.replace(redirect)
     }
   }, [isAuthenticated, redirect, router])
+
+  useEffect(() => {
+    let mounted = true
+
+    async function loadLoginConfig() {
+      try {
+        const config = await getTelegramLoginConfigRequest()
+        if (mounted)
+          setBetaCodeGateEnabled(Boolean(config.betaCodeGateEnabled))
+      }
+      catch {
+        if (mounted)
+          setBetaCodeGateEnabled(false)
+      }
+    }
+
+    void loadLoginConfig()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   if (isAuthenticated) return null
 
@@ -38,13 +63,18 @@ export function LoginPageClient({ lng }: LoginPageClientProps) {
           </p>
         </div>
 
-        <EmailOtpForm onSuccess={() => router.replace(redirect)} />
+        <EmailOtpForm
+          betaCode={betaCode}
+          betaCodeGateEnabled={betaCodeGateEnabled}
+          onBetaCodeChange={setBetaCode}
+          onSuccess={() => router.replace(redirect)}
+        />
 
         <div className="relative py-1 text-center text-xs text-[color:var(--cf-muted)]">
           <span className="px-2">{t('auth.or')}</span>
         </div>
 
-        <TelegramLoginButtons lng={lng} redirect={redirect} />
+        <TelegramLoginButtons lng={lng} redirect={redirect} betaCode={betaCodeGateEnabled ? betaCode : undefined} />
       </div>
     </main>
   )

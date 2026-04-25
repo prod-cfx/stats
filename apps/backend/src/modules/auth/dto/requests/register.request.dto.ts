@@ -15,5 +15,9 @@ export class RegisterRequestDto {
   @IsOptional()
   @IsString()
   nickname?: string
-}
 
+  @ApiProperty({ required: false, description: '内测码，首次创建用户时必填' })
+  @IsOptional()
+  @IsString()
+  betaCode?: string
+}

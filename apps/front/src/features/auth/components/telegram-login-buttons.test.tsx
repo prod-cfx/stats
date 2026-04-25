@@ -38,7 +38,7 @@ describe('TelegramLoginButtons desktop flow', () => {
   let root: ReturnType<typeof createRoot> | null
 
   beforeEach(() => {
-    ;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
+    ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -63,6 +63,7 @@ describe('TelegramLoginButtons desktop flow', () => {
     }
     jest.restoreAllMocks()
     jest.clearAllMocks()
+    window.sessionStorage.clear()
     document.body.innerHTML = ''
   })
 
@@ -70,7 +71,7 @@ describe('TelegramLoginButtons desktop flow', () => {
     const timeoutSpy = jest.spyOn(window, 'setTimeout')
 
     await act(async () => {
-      root?.render(<TelegramLoginButtons lng="zh" intent="login" />)
+      root?.render(<TelegramLoginButtons lng="zh" intent="login" betaCode=" beta-42 " />)
     })
 
     await act(async () => {
@@ -92,6 +93,7 @@ describe('TelegramLoginButtons desktop flow', () => {
       lng: 'zh',
       redirect: undefined,
     })
+    expect(window.sessionStorage.getItem('auth:telegram:desktop:intent-1:betaCode')).toBe('beta-42')
     expect(timeoutSpy).not.toHaveBeenCalled()
   })
 })

@@ -38,7 +38,7 @@ export function DashboardHeader({ dashboard, onRefresh }: DashboardHeaderProps) 
   // 监听看板变化，检测是否有未保存的修改
   useEffect(() => {
     const currentState = JSON.stringify(dashboard)
-    // eslint-disable-next-line react-hooks-extra/no-direct-set-state-in-use-effect -- derived from dashboard prop
+     
     setHasUnsavedChanges(currentState !== lastSavedStateRef.current)
   }, [dashboard])
 
