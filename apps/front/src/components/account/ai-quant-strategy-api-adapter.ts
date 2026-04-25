@@ -540,7 +540,6 @@ export function mapAccountStrategyDetailToRecord(
       ts: fmtTimelineTime(item.ts),
       value: normalizeNumber(item.value),
     })),
-    equitySeriesSource: detail.equitySeriesSource === 'backtest' ? 'backtest' : 'account',
     timeline: detail.timeline.map(item => ({
       at: fmtTimelineTime(item.at),
       event: item.event,

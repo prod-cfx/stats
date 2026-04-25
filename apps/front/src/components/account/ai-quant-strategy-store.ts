@@ -71,7 +71,6 @@ export interface AiQuantStrategyRecord {
   initialCapital: number
   metrics: StrategyMetricSnapshot
   equitySeries: StrategyEquityPoint[]
-  equitySeriesSource?: 'account' | 'backtest'
   timeline: StrategyTimelineEvent[]
   runtimeExecutionStates?: StrategyRuntimeExecutionState[]
   paramSchema: Record<string, unknown> | null

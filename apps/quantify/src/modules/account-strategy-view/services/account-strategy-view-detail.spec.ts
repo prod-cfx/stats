@@ -1238,7 +1238,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(detail.equitySeries.every(item => item.value === 60000)).toBe(true)
   })
 
-  it('falls back to latest successful snapshot backtest curve for flat contract account equity', async () => {
+  it('does not substitute snapshot backtest equity for an empty strategy account curve', async () => {
     const repo = {
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-perp-flat-account',
@@ -1345,15 +1345,13 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
     const detail = await service.getStrategyDetail('user-1', 'inst-perp-flat-account')
 
-    expect(repo.loadLatestSuccessfulBacktestResultBySnapshot).toHaveBeenCalledWith('user-1', 'snapshot-perp-1')
-    expect(detail.equitySeriesSource).toBe('backtest')
-    expect(detail.equitySeries).toEqual([
-      { ts: '2026-03-25T13:00:00.000Z', value: 10000 },
-      { ts: '2026-04-24T13:00:00.000Z', value: 9944.91649512 },
-    ])
+    expect(repo.loadLatestSuccessfulBacktestResultBySnapshot).not.toHaveBeenCalled()
+    expect(detail.equitySeries.length).toBeGreaterThan(0)
+    expect(detail.equitySeries.every(item => item.value === 10000)).toBe(true)
+    expect(detail.equitySeries.some(item => item.value === 9944.91649512)).toBe(false)
   })
 
-  it('keeps real account equity series ahead of snapshot backtest fallback', async () => {
+  it('keeps real account equity series separate from snapshot backtest results', async () => {
     const repo = {
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-account-moving',
@@ -1427,7 +1425,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
 
     const detail = await service.getStrategyDetail('user-1', 'inst-account-moving')
 
-    expect(detail.equitySeriesSource).toBe('account')
+    expect(repo.loadLatestSuccessfulBacktestResultBySnapshot).not.toHaveBeenCalled()
     expect(detail.equitySeries.some(item => item.value === 9000)).toBe(false)
     expect(detail.equitySeries.at(-1)?.value).toBe(10020)
   })

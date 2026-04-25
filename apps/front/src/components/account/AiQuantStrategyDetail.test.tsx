@@ -561,7 +561,6 @@ describe('AiQuantStrategyDetail', () => {
               { ts: '2026-04-24 15:00', value: 50615.549094 },
               { ts: '2026-04-25 06:19', value: 50615.549094 },
             ],
-            equitySeriesSource: 'account',
             timeline: [],
             paramSchema: null,
             paramValues: null,
@@ -573,45 +572,10 @@ describe('AiQuantStrategyDetail', () => {
       )
     })
 
-    expect(container.textContent).toContain('现货账户收益曲线')
+    expect(container.textContent).toContain('策略收益曲线')
+    expect(container.textContent).toContain('来源：策略现货账户权益台账')
     const points = container.querySelector('polyline')?.getAttribute('points') ?? ''
     expect(points).not.toContain(',220')
     expect(points).toContain(',110')
-  })
-
-  it('labels fallback backtest equity curves with contract strategy semantics', async () => {
-    await act(async () => {
-      root.render(
-        <AiQuantStrategyDetail
-          lng="zh"
-          strategy={{
-            id: 'inst-perp-backtest-equity',
-            name: 'Perp fallback strategy',
-            status: 'running',
-            exchange: 'okx',
-            symbol: 'BTC-USDT-SWAP',
-            marketType: 'perp',
-            timeframe: '1h',
-            positionPct: 10,
-            initialCapital: 10000,
-            metrics: { returnPct: -0.55, maxDrawdownPct: 1.2, winRatePct: 0, tradeCount: 0 },
-            equitySeries: [
-              { ts: '2026-04-24 14:00', value: 10000 },
-              { ts: '2026-04-24 15:00', value: 9944.91649512 },
-            ],
-            equitySeriesSource: 'backtest',
-            timeline: [],
-            paramSchema: null,
-            paramValues: null,
-            schemaVersion: null,
-            supportsDynamicParams: false,
-            updatedAt: '2026-04-25T06:19:00.000Z',
-          }}
-        />,
-      )
-    })
-
-    expect(container.textContent).toContain('合约回测收益曲线')
-    expect(container.textContent).toContain('来源：最新成功回测结果')
   })
 })

@@ -337,7 +337,6 @@ export interface AccountAiQuantStrategyDetail extends AccountAiQuantStrategyList
   totalPnl: number | null
   todayPnl: number | null
   equitySeries: AccountAiQuantStrategyEquityPoint[]
-  equitySeriesSource?: 'account' | 'backtest'
   snapshot: AccountAiQuantStrategySnapshot
   timeline: AccountAiQuantStrategyTimelineEvent[]
   runtimeExecutionStates: AccountAiQuantRuntimeExecutionState[]

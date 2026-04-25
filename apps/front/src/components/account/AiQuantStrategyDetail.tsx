@@ -108,24 +108,14 @@ function isContractMarket(marketType: AiQuantStrategyRecord['marketType']) {
   return marketType === 'perp' || marketType === 'swap' || marketType === 'futures'
 }
 
-function formatEquitySeriesTitle(
-  marketType: AiQuantStrategyRecord['marketType'],
-  source: NonNullable<AiQuantStrategyRecord['equitySeriesSource']>,
-) {
-  if (source === 'backtest') {
-    return isContractMarket(marketType) ? '合约回测收益曲线' : '现货回测收益曲线'
-  }
-  return isContractMarket(marketType) ? '合约账户权益曲线' : '现货账户收益曲线'
+function formatEquitySeriesTitle() {
+  return '策略收益曲线'
 }
 
-function formatEquitySeriesSource(
-  marketType: AiQuantStrategyRecord['marketType'],
-  source: NonNullable<AiQuantStrategyRecord['equitySeriesSource']>,
-) {
-  if (source === 'backtest') return '来源：最新成功回测结果'
+function formatEquitySeriesSource(marketType: AiQuantStrategyRecord['marketType']) {
   return isContractMarket(marketType)
-    ? '来源：合约账户权益台账，按保证金币种、已实现/未实现盈亏口径展示。'
-    : '来源：现货账户权益台账，按现金余额、持币市值、已实现/未实现盈亏口径展示。'
+    ? '来源：策略合约账户权益台账，按保证金币种、已实现/未实现盈亏口径展示。'
+    : '来源：策略现货账户权益台账，按现金余额、持币市值、已实现/未实现盈亏口径展示。'
 }
 
 function inferBaseAsset(symbol: string) {
@@ -282,7 +272,6 @@ export function AiQuantStrategyDetail({
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const [leverageDraft, setLeverageDraft] = useState<number | ''>('')
   const series = strategy?.equitySeries ?? []
-  const equitySeriesSource = strategy?.equitySeriesSource ?? 'account'
   const coords = useMemo(() => buildCoordinates(series), [series])
   const { displayTotalPnl, displayTodayPnl } = useMemo(
     () => resolveDisplayMetrics({
@@ -718,10 +707,10 @@ export function AiQuantStrategyDetail({
 
       <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
         <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
-          {formatEquitySeriesTitle(strategy.marketType, equitySeriesSource)}
+          {formatEquitySeriesTitle()}
         </h2>
         <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
-          {formatEquitySeriesSource(strategy.marketType, equitySeriesSource)}
+          {formatEquitySeriesSource(strategy.marketType)}
         </p>
         <div className="relative mt-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
           <svg

@@ -95,8 +95,6 @@ export class AccountStrategyEquityPointDto {
   value!: number
 }
 
-export type AccountStrategyEquitySeriesSource = 'account' | 'backtest'
-
 export class AccountStrategyTimelineEventDto {
   @ApiProperty()
   at!: string
@@ -273,9 +271,6 @@ export class AccountStrategyDetailResponseDto extends AccountStrategyListItemDto
 
   @ApiProperty({ type: [AccountStrategyEquityPointDto] })
   equitySeries!: AccountStrategyEquityPointDto[]
-
-  @ApiProperty({ enum: ['account', 'backtest'] })
-  equitySeriesSource!: AccountStrategyEquitySeriesSource
 
   @ApiProperty({ type: AccountStrategySnapshotDto })
   snapshot!: AccountStrategySnapshotDto

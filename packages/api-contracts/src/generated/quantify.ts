@@ -629,7 +629,6 @@ const AccountStrategyDetailResponseDto = z
     totalPnl: z.number().nullish(),
     todayPnl: z.number().nullish(),
     equitySeries: z.array(AccountStrategyEquityPointDto),
-    equitySeriesSource: z.enum(['account', 'backtest']),
     snapshot: AccountStrategySnapshotDto,
     timeline: z.array(AccountStrategyTimelineEventDto),
     accountOverview: AccountStrategyAccountOverviewDto,

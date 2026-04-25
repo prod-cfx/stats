@@ -276,7 +276,6 @@ const AccountAiQuantStrategyDetailResponseDto = z
     totalPnl: z.number().nullish(),
     todayPnl: z.number().nullish(),
     equitySeries: z.array(z.object({}).partial().passthrough()),
-    equitySeriesSource: z.enum(['account', 'backtest']),
     snapshot: z.object({}).partial().passthrough(),
     timeline: z.array(z.object({}).partial().passthrough()),
     accountOverview: z.object({}).partial().passthrough(),
