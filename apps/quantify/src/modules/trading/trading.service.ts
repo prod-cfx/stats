@@ -99,6 +99,71 @@ export class TradingService {
     }
   }
 
+  async getOpenOrders(
+    userId: string,
+    exchangeId: ExchangeId,
+    marketType: MarketType,
+    symbol?: string,
+    exchangeAccountId?: string,
+  ): Promise<UnifiedOrder[]> {
+    const account = exchangeAccountId
+      ? await this.accountStore.getAccountConfigById(exchangeAccountId, userId)
+      : await this.accountStore.getAccountConfig(userId, exchangeId)
+    if (!account) {
+      throw new TradingAccountNotFoundException({ userId, exchangeId })
+    }
+    this.ensureMarketTypeSupported(exchangeId, marketType, account)
+
+    const client = this.exchangeFactory.createClient(exchangeId, marketType, account)
+
+    try {
+      return await client.fetchOpenOrders(symbol)
+    }
+    catch (error) {
+      if (error instanceof ExchangeError) {
+        throw new ExchangeOperationFailedException({ operation: 'fetch open orders', exchangeId, reason: error.message })
+      }
+      throw new ExchangeOperationFailedException({
+        operation: 'fetch open orders',
+        exchangeId,
+        reason: (error as Error).message,
+      })
+    }
+  }
+
+  async cancelOrder(
+    userId: string,
+    exchangeId: ExchangeId,
+    marketType: MarketType,
+    orderId: string,
+    symbol: string,
+    exchangeAccountId?: string,
+  ): Promise<UnifiedOrder> {
+    const account = exchangeAccountId
+      ? await this.accountStore.getAccountConfigById(exchangeAccountId, userId)
+      : await this.accountStore.getAccountConfig(userId, exchangeId)
+    if (!account) {
+      throw new TradingAccountNotFoundException({ userId, exchangeId })
+    }
+    this.ensureMarketTypeSupported(exchangeId, marketType, account)
+
+    const client = this.exchangeFactory.createClient(exchangeId, marketType, account)
+
+    try {
+      return await client.cancelOrder(orderId, symbol)
+    }
+    catch (error) {
+      if (error instanceof ExchangeError) {
+        throw new ExchangeOperationFailedException({ operation: 'cancel order', exchangeId, reason: error.message })
+      }
+      throw new ExchangeOperationFailedException({
+        operation: 'cancel order',
+        exchangeId,
+        reason: (error as Error).message,
+      })
+    }
+  }
+
   async getPositions(
     userId: string,
     exchangeId: ExchangeId,

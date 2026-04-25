@@ -12,7 +12,7 @@ jest.mock('react-i18next', () => ({
       language: 'zh',
       resolvedLanguage: 'zh',
     },
-    t: (key: string) => ({
+    t: (key: string, options?: { defaultValue?: string }) => ({
       'aiQuant.backtestResult': '回测结果',
       'aiQuant.messages.backtestDrawdownLimit': '最大回撤不超过 20% 方可部署',
       'aiQuant.messages.backtestDrawdownFail': '回撤超标，暂不允许部署',
@@ -25,7 +25,7 @@ jest.mock('react-i18next', () => ({
       'aiQuant.openPnl': 'Open P&L',
       'aiQuant.messages.returnToChat': '返回对话继续优化',
       'aiQuant.deploy': '一键部署',
-    }[key] ?? key),
+    }[key] ?? options?.defaultValue ?? key),
   }),
 }))
 
@@ -146,5 +146,78 @@ describe('BacktestSummaryCard', () => {
 
     expect(container.textContent).toContain('回撤超标，暂不允许部署')
     expect(container.textContent).not.toContain('未形成已完成交易')
+  })
+
+  it('shows running deployment state with a locked primary action and view entry', async () => {
+    const onDeploy = jest.fn()
+    const onViewRunningStrategy = jest.fn()
+
+    await act(async () => {
+      root.render(
+        <BacktestSummaryCard
+          result={{
+            id: 'bt-running',
+            symbol: 'BTCUSDT',
+            startAt: '2026-04-01T00:00:00.000Z',
+            endAt: '2026-04-15T00:00:00.000Z',
+            maxDrawdownPct: 5,
+            totalReturnPct: 12,
+            winRatePct: 55,
+            tradeCount: 21,
+          }}
+          marketType="perp"
+          canDeploy
+          deploymentState="running"
+          onViewRunningStrategy={onViewRunningStrategy}
+          onOpenFullScreen={() => undefined}
+          onOptimize={() => undefined}
+          onDeploy={onDeploy}
+        />,
+      )
+    })
+
+    const deployButton = Array.from(container.querySelectorAll('button'))
+      .find(button => button.textContent === '已部署运行') as HTMLButtonElement | undefined
+    expect(deployButton).toBeDefined()
+    expect(deployButton?.disabled).toBe(true)
+    expect(container.textContent).toContain('查看运行策略')
+
+    await act(async () => {
+      deployButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      container.querySelector('[data-deployment-view-running="true"]')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      )
+    })
+
+    expect(onDeploy).not.toHaveBeenCalled()
+    expect(onViewRunningStrategy).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses redeploy wording after the published strategy is stopped', async () => {
+    await act(async () => {
+      root.render(
+        <BacktestSummaryCard
+          result={{
+            id: 'bt-stopped',
+            symbol: 'BTCUSDT',
+            startAt: '2026-04-01T00:00:00.000Z',
+            endAt: '2026-04-15T00:00:00.000Z',
+            maxDrawdownPct: 5,
+            totalReturnPct: 12,
+            winRatePct: 55,
+            tradeCount: 21,
+          }}
+          marketType="perp"
+          canDeploy
+          deploymentState="stopped"
+          onOpenFullScreen={() => undefined}
+          onOptimize={() => undefined}
+          onDeploy={() => undefined}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('重新部署')
+    expect(container.textContent).not.toContain('已部署运行')
   })
 })

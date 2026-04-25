@@ -167,10 +167,22 @@ jest.mock('@/lib/api', () => ({
   deployAccountAiQuantStrategy: jest.fn(),
   deleteAiQuantConversation: jest.fn(async () => undefined),
   continueLlmCodegenSession: jest.fn(),
+  fetchAccountAiQuantStrategyDetail: jest.fn(async () => ({
+    id: 'strategy-1',
+    status: 'stopped',
+    positionOverview: { openPositionsCount: 0, totalUnrealizedPnl: 0 },
+    latestOrders: [],
+  })),
   fetchUserExchangeAccountStatuses: jest.fn(async () => []),
   listAiQuantConversations: jest.fn(async () => []),
   getLlmCodegenSession: jest.fn(),
   listLlmCodegenSessions: jest.fn(async () => []),
+  performAccountAiQuantStrategyAction: jest.fn(async () => ({
+    id: 'strategy-1',
+    status: 'stopped',
+    positionOverview: { openPositionsCount: 0, totalUnrealizedPnl: 0 },
+    latestOrders: [],
+  })),
   startLlmCodegenSession: jest.fn(),
   updateAiQuantConversationBacktestDraft: jest.fn(async () => undefined),
 }))

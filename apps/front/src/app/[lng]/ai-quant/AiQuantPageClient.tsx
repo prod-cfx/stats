@@ -1,5 +1,6 @@
 'use client'
 
+import type { AccountAiQuantStrategyDetail } from '@/lib/api'
 import type { ConversationState, QuantParams } from './ai-quant-page-conversation'
 import type { BacktestCapabilities } from '@/components/ai-quant/backtest-capability-client'
 import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
@@ -23,8 +24,10 @@ import { GuestAiQuantLanding } from '@/components/ai-quant/GuestAiQuantLanding'
 import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-storage'
 import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
+import { RunningStrategyEditGuardDialog } from '@/components/ai-quant/RunningStrategyEditGuardDialog'
 import { SemanticGraphCard } from '@/components/ai-quant/SemanticGraphCard'
 import { SemanticGraphValidationAlert } from '@/components/ai-quant/SemanticGraphValidationAlert'
+import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
 import {
   buildAutoAdvanceMessage,
   isStrategyModificationIntent,
@@ -35,8 +38,10 @@ import { findPresetById } from '@/components/ai-quant/strategy-presets'
 import { useAuth } from '@/hooks/use-auth'
 import {
   deleteAiQuantConversation,
+  fetchAccountAiQuantStrategyDetail,
   fetchUserExchangeAccountStatuses,
   listAiQuantConversations,
+  performAccountAiQuantStrategyAction,
   updateAiQuantConversationBacktestDraft,
 } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
@@ -87,6 +92,7 @@ const INTENT_TTL_MS = 30 * 60 * 1000
 
 type CapabilityState = 'loading' | 'ready' | 'failed'
 type ConversationSyncState = 'idle' | 'loading' | 'ready' | 'error'
+type DeploymentDetailStatus = 'idle' | 'loading' | 'ready' | 'error'
 
 interface AiQuantPageClientProps {
   deployVersion?: string
@@ -140,6 +146,15 @@ export function AiQuantPageClient({
   )
   const [conversationStorageReady, setConversationStorageReady] = useState(false)
   const [conversationSyncState, setConversationSyncState] = useState<ConversationSyncState>('idle')
+  const [deploymentDetail, setDeploymentDetail] = useState<AccountAiQuantStrategyDetail | null>(null)
+  const [deploymentDetailStatus, setDeploymentDetailStatus] =
+    useState<DeploymentDetailStatus>('idle')
+  const [deploymentActionPending, setDeploymentActionPending] = useState(false)
+  const [editGuardOpen, setEditGuardOpen] = useState(false)
+  const [stopDialogOpen, setStopDialogOpen] = useState(false)
+  const [deploymentGuardErrorMessage, setDeploymentGuardErrorMessage] = useState<string | null>(
+    null,
+  )
   const [backtestCapabilityRetryNonce, setBacktestCapabilityRetryNonce] = useState(0)
   const [codegenBusyConversationIds, setCodegenBusyConversationIds] = useState<string[]>([])
   const isMountedRef = useRef(true)
@@ -161,6 +176,40 @@ export function AiQuantPageClient({
       setActiveConversationId(conversations[0].id)
     }
   }, [activeConversationId, conversations])
+
+  useEffect(() => {
+    const publishedStrategyInstanceId = activeConversation?.publishedStrategyInstanceId?.trim()
+    if (!session?.userId || !publishedStrategyInstanceId) {
+      setDeploymentDetail(null)
+      setDeploymentDetailStatus('idle')
+      setDeploymentActionPending(false)
+      setEditGuardOpen(false)
+      setStopDialogOpen(false)
+      setDeploymentGuardErrorMessage(null)
+      return
+    }
+
+    let cancelled = false
+    setDeploymentDetail(null)
+    setDeploymentDetailStatus('loading')
+    setDeploymentGuardErrorMessage(null)
+
+    void fetchAccountAiQuantStrategyDetail(publishedStrategyInstanceId, session.userId)
+      .then((detail) => {
+        if (cancelled) return
+        setDeploymentDetail(detail)
+        setDeploymentDetailStatus('ready')
+      })
+      .catch(() => {
+        if (cancelled) return
+        setDeploymentDetail(null)
+        setDeploymentDetailStatus('error')
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeConversation?.id, activeConversation?.publishedStrategyInstanceId, session?.userId])
 
   useEffect(() => {
     if (serverOwnedConversations) {
@@ -461,6 +510,34 @@ export function AiQuantPageClient({
   const canDeploy = useMemo(() => {
     return isDeployableBacktestResult(activeConversation?.backtestResult)
   }, [activeConversation?.backtestResult])
+  const deploymentState = useMemo(() => {
+    const publishedStrategyInstanceId = activeConversation?.publishedStrategyInstanceId?.trim()
+    if (!publishedStrategyInstanceId) {
+      return 'not_deployed' as const
+    }
+    if (deploymentDetailStatus !== 'ready') {
+      return 'unknown' as const
+    }
+    return deploymentDetail?.status === 'running' ? 'running' as const : 'stopped' as const
+  }, [
+    activeConversation?.publishedStrategyInstanceId,
+    deploymentDetail?.status,
+    deploymentDetailStatus,
+  ])
+  const deployLabel = useMemo(() => {
+    if (deploymentState === 'running') {
+      return t('aiQuant.deploy.running', { defaultValue: '已部署运行' })
+    }
+    if (deploymentState === 'stopped') {
+      return t('aiQuant.deploy.redeploy', { defaultValue: '重新部署' })
+    }
+    if (deploymentState === 'unknown') {
+      return deploymentDetailStatus === 'loading'
+        ? t('aiQuant.deploy.loading', { defaultValue: '正在确认部署状态' })
+        : t('aiQuant.deploy.pending', { defaultValue: '部署状态待确认' })
+    }
+    return t('aiQuant.deploy')
+  }, [deploymentDetailStatus, deploymentState, t])
   const activePublishedDeployTruth = useMemo(() => resolveEffectivePublishedBacktestInputs({
     publishedSnapshotId: activeConversation?.publishedSnapshotId ?? null,
     publishedSnapshotStrategyConfig: activeConversation?.publishedSnapshotStrategyConfig ?? null,
@@ -585,6 +662,89 @@ export function AiQuantPageClient({
       (backtestRunTokenRef.current.get(conversationId) ?? 0) + 1,
     )
     backtestRunMutexRef.current.delete(conversationId)
+  }
+
+  function proceedToOptimizeConversation() {
+    const optimizeMessage: QuantMessage = {
+      id: `opt-${Date.now()}`,
+      role: 'assistant',
+      content: t('aiQuant.messages.optimizeHint'),
+    }
+    updateActiveConversation(curr => ({
+      ...invalidateConversationPublication(curr, { markGraphDraft: true }),
+      messages: [...curr.messages, optimizeMessage],
+      updatedAt: Date.now(),
+    }))
+  }
+
+  function viewRunningStrategy() {
+    const strategyInstanceId = activeConversation?.publishedStrategyInstanceId
+    if (!strategyInstanceId) return
+    router.push(`/${lng}/account/ai-quant/strategy/${strategyInstanceId}`)
+  }
+
+  async function openStopDialogWithLatestDeploymentDetail() {
+    const strategyInstanceId = activeConversation?.publishedStrategyInstanceId
+    if (!strategyInstanceId || !session?.userId || deploymentActionPending) {
+      return
+    }
+
+    setDeploymentActionPending(true)
+    setDeploymentGuardErrorMessage(null)
+
+    try {
+      const latestDetail = await fetchAccountAiQuantStrategyDetail(strategyInstanceId, session.userId)
+      if (!isMountedRef.current) return
+      setDeploymentDetail(latestDetail)
+      setDeploymentDetailStatus('ready')
+      setStopDialogOpen(true)
+    } catch (error) {
+      if (!isMountedRef.current) return
+      setDeploymentGuardErrorMessage(
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : '无法确认策略最新状态，请稍后重试。',
+      )
+    } finally {
+      if (isMountedRef.current) {
+        setDeploymentActionPending(false)
+      }
+    }
+  }
+
+  async function performPublishedStrategyRuntimeAction(action: 'stop' | 'liquidate_and_stop') {
+    const strategyInstanceId = activeConversation?.publishedStrategyInstanceId
+    if (!strategyInstanceId || !session?.userId || deploymentActionPending) {
+      return
+    }
+
+    setDeploymentActionPending(true)
+    setDeploymentGuardErrorMessage(null)
+
+    try {
+      const nextDetail = await performAccountAiQuantStrategyAction(strategyInstanceId, {
+        userId: session.userId,
+        action,
+      })
+      if (!isMountedRef.current) return
+      setDeploymentDetail(nextDetail)
+      setDeploymentDetailStatus('ready')
+      setEditGuardOpen(false)
+      setStopDialogOpen(false)
+    } catch (error) {
+      if (!isMountedRef.current) return
+      setDeploymentGuardErrorMessage(
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : action === 'liquidate_and_stop'
+            ? '平仓并停止失败，请检查模拟盘账户状态后重试。'
+            : '停止策略失败，请稍后重试。',
+      )
+    } finally {
+      if (isMountedRef.current) {
+        setDeploymentActionPending(false)
+      }
+    }
   }
 
   function appendSemanticGraphGuardMessage(conversationId: string) {
@@ -1253,7 +1413,10 @@ export function AiQuantPageClient({
               result={activeConversation.backtestResult}
               marketType={activeBacktestMarketType}
               canDeploy={canDeploy}
+              deploymentState={deploymentState}
+              deployLabel={deployLabel}
               drawdownLimited
+              onViewRunningStrategy={deploymentState === 'running' ? viewRunningStrategy : undefined}
               onOpenFullScreen={() => {
                 const currentBacktest = activeConversation.backtestResult
                 if (!currentBacktest) {
@@ -1270,18 +1433,17 @@ export function AiQuantPageClient({
                 router.push(`/${lng}/ai-quant/backtest/${currentBacktest.id}?${search.toString()}`)
               }}
               onOptimize={() => {
-                const optimizeMessage: QuantMessage = {
-                  id: `opt-${Date.now()}`,
-                  role: 'assistant',
-                  content: t('aiQuant.messages.optimizeHint'),
+                if (deploymentState === 'running' || deploymentState === 'unknown') {
+                  setDeploymentGuardErrorMessage(null)
+                  setEditGuardOpen(true)
+                  return
                 }
-                updateActiveConversation(curr => ({
-                  ...invalidateConversationPublication(curr, { markGraphDraft: true }),
-                  messages: [...curr.messages, optimizeMessage],
-                  updatedAt: Date.now(),
-                }))
+                proceedToOptimizeConversation()
               }}
               onDeploy={() => {
+                if (deploymentState === 'running' || deploymentState === 'unknown') {
+                  return
+                }
                 setDeployRequestId(createDeployRequestId())
                 const baselineLeverage = activeConversation.publishedSnapshotDeploymentExecutionDefaults?.leverage
                 setSelectedDeployLeverage(
@@ -1297,6 +1459,46 @@ export function AiQuantPageClient({
           )}
         </div>
       </div>
+
+      <RunningStrategyEditGuardDialog
+        open={editGuardOpen}
+        mode={deploymentState === 'running' ? 'running' : 'unknown'}
+        stopPending={deploymentActionPending}
+        errorMessage={deploymentGuardErrorMessage}
+        onViewRunningStrategy={viewRunningStrategy}
+        onStopStrategy={() => {
+          setDeploymentGuardErrorMessage(null)
+          void openStopDialogWithLatestDeploymentDetail()
+        }}
+        onClose={() => {
+          if (deploymentActionPending) {
+            return
+          }
+          setEditGuardOpen(false)
+          setStopDialogOpen(false)
+          setDeploymentGuardErrorMessage(null)
+        }}
+      />
+
+      <StopRunningStrategyDialog
+        open={stopDialogOpen}
+        strategy={deploymentDetail}
+        pending={deploymentActionPending}
+        errorMessage={deploymentGuardErrorMessage}
+        onStopOnly={() => {
+          void performPublishedStrategyRuntimeAction('stop')
+        }}
+        onLiquidateAndStop={() => {
+          void performPublishedStrategyRuntimeAction('liquidate_and_stop')
+        }}
+        onCancel={() => {
+          if (deploymentActionPending) {
+            return
+          }
+          setStopDialogOpen(false)
+          setDeploymentGuardErrorMessage(null)
+        }}
+      />
 
       <DeployDialog
         open={deployOpen}
@@ -1320,6 +1522,7 @@ export function AiQuantPageClient({
         onSelectLeverage={setSelectedDeployLeverage}
         leverageExplanation={activeConversation.publishedSnapshotDeploymentExecutionConstraints?.constraintExplanation ?? null}
         deploymentBaseline={activeConversation.publishedSnapshotDeploymentExecutionDefaults ?? null}
+        mode={deploymentState === 'stopped' ? 'redeploy' : 'deploy'}
         driftReasons={[]}
         onSelectAccount={setSelectedDeployAccountId}
         onConfirmDeploy={async () => {

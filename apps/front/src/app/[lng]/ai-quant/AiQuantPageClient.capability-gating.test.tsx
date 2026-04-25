@@ -116,8 +116,20 @@ jest.mock('@/components/ai-quant/backtest-job-client', () => ({
 jest.mock('@/lib/api', () => ({
   deployAccountAiQuantStrategy: jest.fn(),
   continueLlmCodegenSession: jest.fn(),
+  fetchAccountAiQuantStrategyDetail: jest.fn(async () => ({
+    id: 'strategy-1',
+    status: 'stopped',
+    positionOverview: { openPositionsCount: 0, totalUnrealizedPnl: 0 },
+    latestOrders: [],
+  })),
   fetchUserExchangeAccountStatuses: jest.fn(async () => []),
   getLlmCodegenSession: jest.fn(),
+  performAccountAiQuantStrategyAction: jest.fn(async () => ({
+    id: 'strategy-1',
+    status: 'stopped',
+    positionOverview: { openPositionsCount: 0, totalUnrealizedPnl: 0 },
+    latestOrders: [],
+  })),
   startLlmCodegenSession: jest.fn(),
   updateAiQuantConversationBacktestDraft: jest.fn(async () => undefined),
 }))

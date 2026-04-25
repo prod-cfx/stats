@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common'
 import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-codegen/repositories/published-strategy-snapshots.repository'
 import { MarketDataModule } from '@/modules/market-data/market-data.module'
+import { PositionsModule } from '@/modules/positions/positions.module'
 import { StrategyInstancesModule } from '@/modules/strategy-instances/strategy-instances.module'
 import { StrategySignalsGenerationModule } from '@/modules/strategy-signals/strategy-signals-generation.module'
 import { TradingModule } from '@/modules/trading/trading.module'
@@ -11,7 +12,7 @@ import { AccountStrategyCallerIdentityService } from './services/account-strateg
 import { AccountStrategyViewService } from './services/account-strategy-view.service'
 
 @Module({
-  imports: [PrismaModule, StrategyInstancesModule, MarketDataModule, TradingModule, StrategySignalsGenerationModule],
+  imports: [PrismaModule, StrategyInstancesModule, MarketDataModule, TradingModule, StrategySignalsGenerationModule, PositionsModule],
   controllers: [AccountStrategyViewController],
   providers: [
     AccountStrategyViewService,

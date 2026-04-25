@@ -9,11 +9,12 @@ import { AiQuantPageClient } from './AiQuantPageClient'
 const mockPush = jest.fn()
 const mockDeployAccountAiQuantStrategy = jest.fn()
 const mockFetchAccountAiQuantDeployResult = jest.fn()
+const mockFetchAccountAiQuantStrategyDetail = jest.fn()
 const mockFetchUserExchangeAccountStatuses = jest.fn()
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
   }),
 }))
 
@@ -51,8 +52,42 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
 }))
 
 jest.mock('@/components/ai-quant/BacktestSummaryCard', () => ({
-  BacktestSummaryCard: ({ onDeploy }: { onDeploy: () => void }) => (
-    <button type="button" data-testid="open-deploy" onClick={onDeploy}>open deploy</button>
+  BacktestSummaryCard: ({
+    onDeploy,
+    onOptimize,
+    onViewRunningStrategy,
+    deploymentState,
+    deployLabel,
+  }: {
+    onDeploy: () => void
+    onOptimize: () => void
+    onViewRunningStrategy?: () => void
+    deploymentState?: 'not_deployed' | 'running' | 'stopped' | 'unknown'
+    deployLabel?: string
+  }) => (
+    <div>
+      <button type="button" data-testid="return-to-chat" onClick={onOptimize}>return to chat</button>
+      <button
+        type="button"
+        data-testid="open-deploy"
+        disabled={deploymentState === 'running' || deploymentState === 'unknown'}
+        onClick={onDeploy}
+      >
+        {deployLabel ?? 'open deploy'}
+      </button>
+      {onViewRunningStrategy
+        ? (
+            <button
+              type="button"
+              data-testid="view-running-strategy"
+              onClick={onViewRunningStrategy}
+            >
+              view running strategy
+            </button>
+          )
+        : null}
+      <div data-testid="deployment-state">{deploymentState ?? 'not_deployed'}</div>
+    </div>
   ),
 }))
 
@@ -123,12 +158,74 @@ jest.mock('@/components/ai-quant/backtest-capability-client', () => ({
 jest.mock('@/lib/api', () => ({
   deployAccountAiQuantStrategy: (...args: unknown[]) => mockDeployAccountAiQuantStrategy(...args),
   fetchAccountAiQuantDeployResult: (...args: unknown[]) => mockFetchAccountAiQuantDeployResult(...args),
+  fetchAccountAiQuantStrategyDetail: (...args: unknown[]) => mockFetchAccountAiQuantStrategyDetail(...args),
   continueLlmCodegenSession: jest.fn(),
   fetchUserExchangeAccountStatuses: (...args: unknown[]) => mockFetchUserExchangeAccountStatuses(...args),
   getLlmCodegenSession: jest.fn(),
+  performAccountAiQuantStrategyAction: jest.fn(),
   startLlmCodegenSession: jest.fn(),
   updateAiQuantConversationBacktestDraft: jest.fn(async () => undefined),
 }))
+
+function buildStrategyDetail(
+  overrides: Partial<{
+    id: string
+    status: 'running' | 'stopped' | 'draft'
+    positionCount: number
+  }> = {},
+) {
+  return {
+    id: overrides.id ?? 'strategy-1',
+    name: 'Binance strategy',
+    status: overrides.status ?? 'stopped',
+    exchange: 'binance',
+    symbol: 'BTCUSDT',
+    timeframe: '15m',
+    positionPct: 10,
+    isSubscribed: true,
+    paramSchema: null,
+    paramValues: null,
+    schemaVersion: null,
+    metrics: {
+      returnPct: 12,
+      maxDrawdownPct: 9.5,
+      winRatePct: 55,
+      tradeCount: 42,
+    },
+    totalPnl: 120,
+    todayPnl: 10,
+    equitySeries: [],
+    snapshot: {
+      exchange: 'binance',
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      positionPct: 10,
+      publishedSnapshotId: 'snapshot-1',
+      snapshotHash: 'hash-1',
+      paramSchema: null,
+      paramValues: null,
+      schemaVersion: null,
+    },
+    timeline: [],
+    runtimeExecutionStates: [],
+    accountOverview: {
+      initialBalance: 10000,
+      totalEquity: 10120,
+      availableBalance: 10000,
+      totalPnl: 120,
+      todayPnl: 10,
+      baseCurrency: 'USDT',
+    },
+    positionOverview: {
+      openPositionsCount: overrides.positionCount ?? 0,
+      closedPositionsCount: 0,
+      totalRealizedPnl: 0,
+      totalUnrealizedPnl: 0,
+    },
+    latestOrders: [],
+    updatedAt: '2026-04-25T00:00:00.000Z',
+  }
+}
 
 function seedDeployableConversation(now = Date.now()) {
   localStorage.setItem('ai_quant_conversations_v1', JSON.stringify([
@@ -240,6 +337,8 @@ describe('AiQuantPageClient deploy guard', () => {
     ])
     mockFetchUserExchangeAccountStatuses.mockResolvedValueOnce([])
     mockFetchAccountAiQuantDeployResult.mockReset()
+    mockFetchAccountAiQuantStrategyDetail.mockReset()
+    mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(buildStrategyDetail())
   })
 
   afterEach(async () => {
@@ -276,6 +375,60 @@ describe('AiQuantPageClient deploy guard', () => {
     expect(mockFetchUserExchangeAccountStatuses).toHaveBeenCalledTimes(2)
     expect(mockDeployAccountAiQuantStrategy).not.toHaveBeenCalled()
     expect(mockPush).toHaveBeenCalledWith('/zh/account?tab=ai-quant#exchange-api')
+  })
+
+  it('shows 已部署运行 and blocks deploy when the published strategy is still running', async () => {
+    mockFetchAccountAiQuantStrategyDetail.mockResolvedValueOnce(
+      buildStrategyDetail({ status: 'running', positionCount: 1 }),
+    )
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const deployButton = container.querySelector('[data-testid="open-deploy"]') as HTMLButtonElement | null
+    expect(container.querySelector('[data-testid="deployment-state"]')?.textContent).toBe('running')
+    expect(deployButton?.textContent).toBe('已部署运行')
+    expect(deployButton?.disabled).toBe(true)
+
+    await act(async () => {
+      deployButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="confirm-deploy"]')).toBeNull()
+    expect(mockDeployAccountAiQuantStrategy).not.toHaveBeenCalled()
+  })
+
+  it('fails closed for deploy when strategy detail lookup cannot be confirmed', async () => {
+    mockFetchAccountAiQuantStrategyDetail.mockRejectedValueOnce(new Error('detail failed'))
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const deployButton = container.querySelector('[data-testid="open-deploy"]') as HTMLButtonElement | null
+    expect(container.querySelector('[data-testid="deployment-state"]')?.textContent).toBe('unknown')
+    expect(deployButton?.textContent).toBe('部署状态待确认')
+    expect(deployButton?.disabled).toBe(true)
+
+    await act(async () => {
+      deployButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="confirm-deploy"]')).toBeNull()
+    expect(mockDeployAccountAiQuantStrategy).not.toHaveBeenCalled()
   })
 
   it('locks deploy exchange and market type to the published snapshot truth', async () => {

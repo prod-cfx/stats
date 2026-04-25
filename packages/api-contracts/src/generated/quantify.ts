@@ -678,7 +678,7 @@ const AccountStrategyDetailResponseDto = z
   })
   .passthrough()
 const AccountStrategyActionDto = z
-  .object({ userId: z.string().optional(), action: z.enum(['run', 'stop']) })
+  .object({ userId: z.string().optional(), action: z.enum(['run', 'stop', 'liquidate_and_stop']) })
   .passthrough()
 const AccountStrategyDeployDto = z
   .object({

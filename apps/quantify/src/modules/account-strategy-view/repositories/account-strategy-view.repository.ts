@@ -1,6 +1,6 @@
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { PrismaClient } from '@/prisma/prisma.types'
-import { ErrorCode, SubscriptionStatus  } from '@ai/shared'
+import { ErrorCode, PositionStatus, SubscriptionStatus  } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { HttpStatus, Injectable  } from '@nestjs/common'
@@ -809,6 +809,25 @@ export class AccountStrategyViewRepository {
         quantity: true,
         avgEntryPrice: true,
         unrealizedPnl: true,
+      },
+    })
+  }
+
+  async loadOpenPositionsForLiquidation(accountId: string) {
+    const client = this.txHost.tx
+    return client.position.findMany({
+      where: {
+        userStrategyAccountId: accountId,
+        status: PositionStatus.OPEN,
+      },
+      select: {
+        id: true,
+        symbol: true,
+        positionSide: true,
+        quantity: true,
+        exchangeId: true,
+        marketType: true,
+        status: true,
       },
     })
   }

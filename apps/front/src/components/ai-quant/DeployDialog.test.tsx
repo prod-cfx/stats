@@ -7,7 +7,7 @@ import { DeployDialog } from './DeployDialog'
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
-    t: (key: string) => key,
+    t: (key: string, options?: { defaultValue?: string }) => options?.defaultValue ?? key,
   }),
 }))
 
@@ -140,5 +140,36 @@ describe('DeployDialog', () => {
 
     expect(container.textContent).not.toContain('部署杠杆')
     expect(container.querySelector('select[name="deployment-leverage"]')).toBeNull()
+  })
+
+  it('uses redeploy wording in redeploy mode', async () => {
+    await act(async () => {
+      root.render(
+        <DeployDialog
+          open
+          canDeploy
+          deploySubmitting={false}
+          apiConfigured
+          exchange="okx"
+          marketType="spot"
+          accounts={[{
+            accountId: 'acct-1',
+            exchange: 'okx',
+            accountName: 'OKX Main',
+            apiKeyMask: 'OKX***1',
+            status: 'available',
+          }]}
+          selectedAccountId="acct-1"
+          mode="redeploy"
+          lng="zh"
+          onSelectAccount={() => {}}
+          onConfirmDeploy={() => {}}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('重新部署策略？')
+    expect(container.textContent).toContain('系统将按当前已发布版本重新部署策略，并开始运行。')
+    expect(container.textContent).toContain('确认重新部署')
   })
 })

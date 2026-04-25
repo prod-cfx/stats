@@ -1,4 +1,7 @@
+import { plainToInstance } from 'class-transformer'
+import { validateSync } from 'class-validator'
 import { AccountAiQuantStrategiesController } from './account-ai-quant-strategies.controller'
+import { AccountAiQuantActionRequestDto } from './dto/account-ai-quant-action.request.dto'
 
 describe('accountAiQuantStrategiesController', () => {
   function createController() {
@@ -36,13 +39,36 @@ describe('accountAiQuantStrategiesController', () => {
     })
   })
 
+  it.each(['run', 'stop', 'liquidate_and_stop'] as const)(
+    'accepts %s as a valid account strategy action dto value',
+    (action) => {
+      const dto = plainToInstance(AccountAiQuantActionRequestDto, { action })
+
+      expect(validateSync(dto)).toHaveLength(0)
+    },
+  )
+
+  it('rejects unsupported account strategy action dto values', () => {
+    const dto = plainToInstance(AccountAiQuantActionRequestDto, { action: 'pause' })
+
+    const errors = validateSync(dto)
+
+    expect(errors).toHaveLength(1)
+    expect(errors[0]?.constraints).toMatchObject({
+      isIn: expect.any(String),
+    })
+  })
+
   it('forwards authenticated user id when executing strategy actions', async () => {
     const { controller, service } = createController()
 
-    await controller.action('user-1', 'Bearer token-1', 'strategy-1', { action: 'run' })
+    await controller.action('user-1', 'Bearer token-1', 'strategy-1', {
+      action: 'liquidate_and_stop',
+      userId: 'attacker',
+    } as any)
 
     expect(service.performAccountStrategyAction).toHaveBeenCalledWith('user-1', 'Bearer token-1', 'strategy-1', {
-      action: 'run',
+      action: 'liquidate_and_stop',
     })
   })
 

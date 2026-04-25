@@ -2,9 +2,14 @@
 
 import type { AiQuantStrategyRecord, StrategyEquityPoint, AiQuantStrategyViewState } from './ai-quant-strategy-store'
 import Link from 'next/link'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useAuth } from '@/hooks/use-auth'
+import { fetchAccountAiQuantStrategyDetail, performAccountAiQuantStrategyAction } from '@/lib/api'
+import { RunningStrategyEditGuardDialog } from '@/components/ai-quant/RunningStrategyEditGuardDialog'
+import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
 import { resolveDisplayMetrics } from './account-strategy-display-metrics'
+import { mapAccountStrategyDetailToRecord } from './ai-quant-strategy-api-adapter'
 import { buildDynamicParamRows } from './dynamic-param-summary'
 import { deriveAdjacentChangePct, formatSignedNumber } from './pnl-metrics'
 
@@ -23,6 +28,10 @@ const STATUS_CLASS: Record<AiQuantStrategyViewState, string> = {
 const EQUITY_CHART_WIDTH = 900
 const EQUITY_CHART_HEIGHT = 220
 const EQUITY_CHART_PADDING_Y = 16
+const STOP_SUCCESS_MESSAGE = '策略已停止。现有持仓和挂单仍然保留，需要你单独管理。'
+const LIQUIDATE_AND_STOP_SUCCESS_MESSAGE = '策略已平仓并停止。'
+const STOP_ERROR_MESSAGE = '停止策略失败，请稍后重试。'
+const LIQUIDATE_AND_STOP_ERROR_MESSAGE = '平仓并停止失败，请检查模拟盘账户状态后重试。'
 
 function resolveEquityY(value: number, min: number, max: number) {
   if (max === min) return EQUITY_CHART_HEIGHT / 2
@@ -253,6 +262,16 @@ function formatOrderEvidenceList(
     .join('；')
 }
 
+function resolveRuntimeControlErrorMessage(
+  action: 'stop' | 'liquidate_and_stop',
+  error: unknown,
+) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+  return action === 'liquidate_and_stop' ? LIQUIDATE_AND_STOP_ERROR_MESSAGE : STOP_ERROR_MESSAGE
+}
+
 interface AiQuantStrategyDetailProps {
   lng: 'zh' | 'en'
   strategy: AiQuantStrategyRecord | null
@@ -263,14 +282,28 @@ interface AiQuantStrategyDetailProps {
 
 export function AiQuantStrategyDetail({
   lng,
-  strategy,
+  strategy: initialStrategy,
   onUpdateLeverage,
   isUpdatingLeverage = false,
   leverageUpdateError = null,
 }: AiQuantStrategyDetailProps) {
   const { t } = useTranslation()
+  const { session } = useAuth()
+  const [strategy, setStrategy] = useState<AiQuantStrategyRecord | null>(initialStrategy)
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const [leverageDraft, setLeverageDraft] = useState<number | ''>('')
+  const [runtimeControlFeedback, setRuntimeControlFeedback] = useState<{
+    kind: 'success' | 'error'
+    message: string
+  } | null>(null)
+  const [pendingRuntimeAction, setPendingRuntimeAction] = useState<'stop' | 'liquidate_and_stop' | null>(null)
+  const [stopDialogOpen, setStopDialogOpen] = useState(false)
+  const [editGuardOpen, setEditGuardOpen] = useState(false)
+
+  useEffect(() => {
+    setStrategy(initialStrategy)
+  }, [initialStrategy])
+
   const series = strategy?.equitySeries ?? []
   const coords = useMemo(() => buildCoordinates(series), [series])
   const { displayTotalPnl, displayTodayPnl } = useMemo(
@@ -337,6 +370,60 @@ export function AiQuantStrategyDetail({
   const entryOrderEvidence = semanticSummary?.evidence.entryOrders
   const exitOrderEvidence = semanticSummary?.evidence.exitOrders
   const syncOrderEvidence = semanticSummary?.evidence.syncOrders
+  const openPositionsCount = strategy.positionOverview?.openPositionsCount ?? 0
+  const latestOrderCount = strategy.latestOrders?.length ?? 0
+  const hasRuntimeRisk = openPositionsCount > 0 || latestOrderCount > 0
+  const showLiquidateAndStop = strategy.status === 'running' && hasRuntimeRisk
+  const runtimeActionDisabled = !session?.userId || pendingRuntimeAction !== null
+
+  const handleRuntimeAction = async (action: 'stop' | 'liquidate_and_stop') => {
+    if (!session?.userId || pendingRuntimeAction || !strategy) return
+
+    setPendingRuntimeAction(action)
+    setRuntimeControlFeedback(null)
+
+    try {
+      const detail = await performAccountAiQuantStrategyAction(strategy.id, {
+        userId: session.userId,
+        action,
+      })
+      setStrategy(mapAccountStrategyDetailToRecord(detail))
+      setStopDialogOpen(false)
+      setRuntimeControlFeedback({
+        kind: 'success',
+        message: action === 'liquidate_and_stop'
+          ? LIQUIDATE_AND_STOP_SUCCESS_MESSAGE
+          : STOP_SUCCESS_MESSAGE,
+      })
+    } catch (error) {
+      setRuntimeControlFeedback({
+        kind: 'error',
+        message: resolveRuntimeControlErrorMessage(action, error),
+      })
+    } finally {
+      setPendingRuntimeAction(null)
+    }
+  }
+
+  const openStopDialogWithLatestDetail = async () => {
+    if (!session?.userId || pendingRuntimeAction || !strategy) return
+
+    setPendingRuntimeAction('stop')
+    setRuntimeControlFeedback(null)
+
+    try {
+      const detail = await fetchAccountAiQuantStrategyDetail(strategy.id, session.userId)
+      setStrategy(mapAccountStrategyDetailToRecord(detail))
+      setStopDialogOpen(true)
+    } catch (error) {
+      setRuntimeControlFeedback({
+        kind: 'error',
+        message: resolveRuntimeControlErrorMessage('stop', error),
+      })
+    } finally {
+      setPendingRuntimeAction(null)
+    }
+  }
 
   return (
     <main className="mx-auto flex w-full max-w-[920px] flex-1 flex-col gap-4 px-4 py-8 md:px-8">
@@ -359,6 +446,120 @@ export function AiQuantStrategyDetail({
           </Link>
         </div>
       </section>
+
+      {(strategy.status === 'running' || strategy.status === 'stopped') && (
+        <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
+          <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">运行控制</h2>
+              <p className="mt-2 text-sm leading-6 text-[color:var(--cf-text)]">
+                {strategy.status === 'running'
+                  ? (showLiquidateAndStop
+                      ? '策略当前正在运行且账户中存在持仓或最近订单记录。你可以只停止策略，或先撤销未成交挂单并平仓后再停止。'
+                      : '策略当前正在运行。停止策略只会停止运行实例，现有持仓和挂单仍然保留。')
+                  : '策略当前已停止。可返回 AI Quant 重新部署当前已发布版本。'}
+              </p>
+              {showLiquidateAndStop && (
+                <p className="mt-2 text-xs text-[color:var(--cf-muted)]">
+                  检测到 {openPositionsCount} 个 open positions，最近订单记录 {latestOrderCount} 条；平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理持仓。
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-3">
+              {strategy.status === 'stopped' && (
+                <Link
+                  href={`/${lng}/ai-quant`}
+                  className="from-primary to-secondary rounded-xl bg-gradient-to-r px-4 py-2 text-sm font-bold text-white"
+                >
+                  重新部署
+                </Link>
+              )}
+              <Link
+                href={strategy.status === 'running' ? '#' : `/${lng}/ai-quant`}
+                onClick={(event) => {
+                  if (strategy.status === 'running') {
+                    event.preventDefault()
+                    setEditGuardOpen(true)
+                  }
+                }}
+                className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
+              >
+                返回对话修改
+              </Link>
+            </div>
+            {strategy.status === 'running' && (
+              <div className="flex flex-wrap gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    void openStopDialogWithLatestDetail()
+                  }}
+                  disabled={runtimeActionDisabled}
+                  className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:text-[color:var(--cf-muted)]"
+                >
+                  停止策略
+                </button>
+                {showLiquidateAndStop && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void openStopDialogWithLatestDetail()
+                    }}
+                    disabled={runtimeActionDisabled}
+                    className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-semibold text-rose-200 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    平仓并停止
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+          {runtimeControlFeedback && (
+            <p className={`mt-4 text-sm ${
+              runtimeControlFeedback.kind === 'error' ? 'text-rose-300' : 'text-emerald-300'
+            }`}
+            >
+              {runtimeControlFeedback.message}
+            </p>
+          )}
+        </section>
+      )}
+
+      <StopRunningStrategyDialog
+        open={stopDialogOpen}
+        strategy={strategy}
+        pending={pendingRuntimeAction !== null}
+        errorMessage={runtimeControlFeedback?.kind === 'error' ? runtimeControlFeedback.message : null}
+        onStopOnly={() => {
+          void handleRuntimeAction('stop')
+        }}
+        onLiquidateAndStop={() => {
+          void handleRuntimeAction('liquidate_and_stop')
+        }}
+        onCancel={() => {
+          if (pendingRuntimeAction) return
+          setStopDialogOpen(false)
+          if (runtimeControlFeedback?.kind === 'error') {
+            setRuntimeControlFeedback(null)
+          }
+        }}
+      />
+
+      <RunningStrategyEditGuardDialog
+        open={editGuardOpen}
+        mode="running"
+        stopPending={pendingRuntimeAction !== null}
+        errorMessage={runtimeControlFeedback?.kind === 'error' ? runtimeControlFeedback.message : null}
+        onViewRunningStrategy={() => setEditGuardOpen(false)}
+        onStopStrategy={() => {
+          setEditGuardOpen(false)
+          void openStopDialogWithLatestDetail()
+        }}
+        onClose={() => {
+          if (pendingRuntimeAction) return
+          setEditGuardOpen(false)
+        }}
+      />
 
       {strategy.compatibilityMetadata?.isLegacySnapshot && (
         <section className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
