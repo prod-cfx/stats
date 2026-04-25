@@ -44,7 +44,7 @@ export type SettingResponse = z.infer<typeof schemas.SettingResponseDto>
 // 数据拉取任务相关类型
 export type DataPullTask = _DataPullTaskDto
 
-interface _PaginationResult<T> {
+export interface PaginationResult<T> {
   total: number
   page: number
   limit: number
@@ -88,6 +88,7 @@ export interface AdminMenuNode {
   i18nKey?: string | null
   sort?: number | null
   isShow?: boolean | null
+  children?: AdminMenuNode[]
 }
 
 export interface AdminUser {
@@ -103,6 +104,23 @@ export interface AdminUser {
     description?: string | null
   }[]
 }
+
+export interface BetaCode {
+  id: string
+  code: string
+  maxUses: number
+  usedCount: number
+  isActive: boolean
+  createdAt: string
+}
+
+export interface CreateBetaCodeBatchPayload {
+  count: number
+  maxUsesPerCode: number
+}
+
+const BETA_CODE_GATE_SETTING_KEY = 'beta_code.enabled'
+const BETA_CODE_GATE_CATEGORY = 'beta_code'
 
 export async function fetchAdminMenus(): Promise<AdminMenuNode[]> {
   return withAuthErrorHandling(async () => {
@@ -171,6 +189,98 @@ export function updateAdminUser(id: string, payload: UpdateAdminUserPayload) {
       params: { id },
     }).then(unwrapResponse),
   )
+}
+
+export interface BetaCodeListQuery {
+  page?: number
+  limit?: number
+}
+
+export async function fetchBetaCodes(
+  query: BetaCodeListQuery = {},
+): Promise<PaginationResult<BetaCode>> {
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminBetaCodeController_list({
+      headers: requireAuthHeaders(),
+      queries: {
+        page: query.page,
+        limit: query.limit,
+      },
+    })
+    const data = unwrapResponse<any>(response)
+    return {
+      total: data.total ?? 0,
+      page: data.page ?? query.page ?? 1,
+      limit: data.limit ?? query.limit ?? 20,
+      items: Array.isArray(data.items) ? (data.items as BetaCode[]) : [],
+    }
+  })
+}
+
+export async function createBetaCodeBatch(
+  payload: CreateBetaCodeBatchPayload,
+): Promise<BetaCode[]> {
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminBetaCodeController_createBatch(
+      {
+        count: payload.count,
+        maxUsesPerCode: payload.maxUsesPerCode,
+      },
+      {
+        headers: requireAuthHeaders(),
+      },
+    )
+    return unwrapListResponse<BetaCode>(response)
+  })
+}
+
+export async function updateBetaCodeStatus(
+  id: string,
+  isActive: boolean,
+): Promise<BetaCode> {
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminBetaCodeController_updateStatus({ isActive }, {
+      headers: requireAuthHeaders(),
+      params: { id },
+    })
+    return unwrapResponse<BetaCode>(response)
+  })
+}
+
+export async function fetchBetaCodeGateSetting(): Promise<boolean> {
+  return withAuthErrorHandling(async () => {
+    const response = await client.AdminSettingsController_getAllSettings({
+      headers: requireAuthHeaders(),
+      queries: { category: BETA_CODE_GATE_CATEGORY },
+    })
+    const data = unwrapResponse<SettingResponse[] | { items: SettingResponse[] }>(response as any)
+    const settings: SettingResponse[] = Array.isArray(data)
+      ? data
+      : Array.isArray((data as any)?.items)
+        ? (data as any).items
+        : []
+    const setting = settings.find(item => item.key === BETA_CODE_GATE_SETTING_KEY)
+    return setting?.value === 'true'
+  })
+}
+
+export async function updateBetaCodeGateSetting(enabled: boolean): Promise<boolean> {
+  return withAuthErrorHandling(async () => {
+    await client.AdminSettingsController_updateSetting(
+      {
+        value: String(enabled),
+        type: 'boolean',
+        description: '是否启用内测码准入',
+        category: BETA_CODE_GATE_CATEGORY,
+        isSystem: true,
+      },
+      {
+        headers: requireAuthHeaders(),
+        params: { key: BETA_CODE_GATE_SETTING_KEY },
+      },
+    )
+    return enabled
+  })
 }
 
 // 订单薄交易对配置相关 API
@@ -296,7 +406,7 @@ export interface ExchangeConfigListQuery {
 
 export async function fetchExchangeConfigs(
   query: ExchangeConfigListQuery = {},
-): Promise<_PaginationResult<ExchangeConfigResponse>> {
+): Promise<PaginationResult<ExchangeConfigResponse>> {
   return withAuthErrorHandling(async () => {
     const page = query.page ?? 1
     const limit = query.limit ?? 20

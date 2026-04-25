@@ -41,7 +41,28 @@ export class AuthController {
   @Get('telegram/login-config')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '获取 Telegram 登录配置' })
-  async getTelegramLoginConfig(): Promise<{ botName: string | null }> {
+  @ApiResponse({
+    status: HttpStatus.OK,
+    description: '成功获取登录配置',
+    schema: {
+      type: 'object',
+      properties: {
+        data: {
+          type: 'object',
+          properties: {
+            botName: { type: 'string', nullable: true },
+            betaCodeGateEnabled: { type: 'boolean' },
+          },
+          required: ['botName', 'betaCodeGateEnabled'],
+        },
+        message: {
+          type: 'string',
+          example: 'Success',
+        },
+      },
+    },
+  })
+  async getTelegramLoginConfig(): Promise<{ botName: string | null, betaCodeGateEnabled: boolean }> {
     return this.userAuthService.getTelegramLoginConfig()
   }
 

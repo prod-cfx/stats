@@ -20,7 +20,7 @@ export interface AuthContextValue {
   isAuthenticated: boolean
   isLoading: boolean
   sendEmailCode: (email: string) => Promise<void>
-  loginWithEmailCode: (email: string, code: string) => Promise<void>
+  loginWithEmailCode: (email: string, code: string, betaCode?: string) => Promise<void>
   loginWithTelegramCallback: (payload: {
     source: 'web' | 'desktop' | 'webapp'
     telegramId: string
@@ -30,6 +30,7 @@ export interface AuthContextValue {
     lastName?: string
     username?: string
     photoUrl?: string
+    betaCode?: string
   }) => Promise<void>
   createTelegramDesktopIntent: (payload: {
     intent: 'login' | 'bind'
@@ -43,7 +44,7 @@ export interface AuthContextValue {
     expiresInSeconds: number
   }>
   getTelegramDesktopIntentStatus: (intentId: string) => Promise<{ status: 'pending' | 'confirmed' | 'expired' }>
-  loginWithTelegramDesktopIntent: (intentId: string) => Promise<void>
+  loginWithTelegramDesktopIntent: (intentId: string, betaCode?: string) => Promise<void>
   bindEmail: (email: string, code: string) => Promise<void>
   bindTelegram: (payload: {
     telegramId: string

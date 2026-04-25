@@ -129,6 +129,12 @@ export const LlmCodegenSessionStatus = {
 } as const
 export type LlmCodegenSessionStatus = (typeof LlmCodegenSessionStatus)[keyof typeof LlmCodegenSessionStatus]
 
+export const AiQuantConversationMessageRole = {
+  user: 'user',
+  assistant: 'assistant',
+} as const
+export type AiQuantConversationMessageRole = (typeof AiQuantConversationMessageRole)[keyof typeof AiQuantConversationMessageRole]
+
 export const SymbolType = {
   CRYPTO: 'CRYPTO',
   STOCK: 'STOCK',
