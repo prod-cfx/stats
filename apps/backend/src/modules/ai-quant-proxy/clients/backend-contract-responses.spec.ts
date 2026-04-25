@@ -82,7 +82,10 @@ describe('backend contract generated AI Quant codegen responses', () => {
     const source = readFileSync(generatedPath, 'utf8')
     const responseStart = source.indexOf('const AiQuantConversationResponseDto = z')
     const refStart = source.indexOf('const AiQuantConversationLastBacktestRefResponseDto = z')
-    const configStart = source.indexOf('const AiQuantConversationLastBacktestConfigResponseDto = z')
+    const configSchemaName = source.includes('const AiQuantConversationLastBacktestConfigResponseDto = z')
+      ? 'AiQuantConversationLastBacktestConfigResponseDto'
+      : 'AiQuantConversationBacktestConfigResponseDto'
+    const configStart = source.indexOf(`const ${configSchemaName} = z`)
     const summaryStart = source.indexOf('const AiQuantConversationLastBacktestSummaryResponseDto = z')
 
     expect(responseStart).toBeGreaterThanOrEqual(0)
@@ -95,12 +98,12 @@ describe('backend contract generated AI Quant codegen responses', () => {
     const configSnippet = source.slice(configStart, configStart + 700)
     const summarySnippet = source.slice(summaryStart, summaryStart + 500)
 
-    expect(responseSnippet).toContain('backtestDraftConfig: AiQuantConversationLastBacktestConfigResponseDto.nullish()')
+    expect(responseSnippet).toContain(`backtestDraftConfig: ${configSchemaName}.nullish()`)
     expect(responseSnippet).toContain('lastBacktestRef: AiQuantConversationLastBacktestRefResponseDto.nullish()')
     expect(refSnippet).toContain('publishedSnapshotId: z.string()')
-    expect(refSnippet).toContain('config: AiQuantConversationLastBacktestConfigResponseDto')
-    expect(configSnippet).toContain('range: AiQuantConversationLastBacktestRangeResponseDto')
-    expect(configSnippet).toContain('execution: AiQuantConversationLastBacktestExecutionResponseDto')
+    expect(refSnippet).toContain(`config: ${configSchemaName}`)
+    expect(configSnippet).toMatch(/range: AiQuantConversation(?:LastBacktest|Backtest)RangeResponseDto/)
+    expect(configSnippet).toMatch(/execution: AiQuantConversation(?:LastBacktest|Backtest)ExecutionResponseDto/)
     expect(refSnippet).toContain('summary: AiQuantConversationLastBacktestSummaryResponseDto')
     expect(refSnippet).toContain('completedAt: z.string()')
     expect(summarySnippet).toContain('maxDrawdownPct: z.number()')
