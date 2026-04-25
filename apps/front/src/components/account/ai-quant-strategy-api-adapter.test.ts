@@ -1152,6 +1152,13 @@ describe('ai-quant-strategy-api-adapter', () => {
       semanticRole: 'unknown',
     }))
     expect(record.runtimeSemanticSummary?.evidence.latestEntryOrderId).toBeNull()
+    expect(record.runtimeSemanticSummary).toEqual(expect.objectContaining({
+      headline: '运行中 · 方向待确认 · 查看成交与规则',
+      positionStatusLabel: '方向待确认',
+      positionState: 'unknown',
+      cycleState: 'unknown',
+      nextExpectedAction: null,
+    }))
   })
 
 })

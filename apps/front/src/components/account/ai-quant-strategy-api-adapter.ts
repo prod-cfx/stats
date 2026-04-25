@@ -231,12 +231,21 @@ function buildRuntimeSemanticSummary(input: {
   } else if (marketType === 'perp' || marketType === 'futures' || marketType === 'swap') {
     if (hasOpenPosition) {
       const entryAction = latestEntry?.semanticAction
-      positionStatusLabel = entryAction === '开空' ? '持有空头' : '持有多头'
-      cycleStatusLabel = '等待出场'
-      positionState = entryAction === '开空' ? 'short' : 'long'
-      cycleState = 'entered'
-      explanation = `当前${positionStatusLabel}仓位，策略服务${serviceStatusLabel}，等待出场条件触发。`
-      nextExpectedAction = '等待出场条件触发'
+      if (entryAction === '开多' || entryAction === '开空') {
+        positionStatusLabel = entryAction === '开空' ? '持有空头' : '持有多头'
+        cycleStatusLabel = '等待出场'
+        positionState = entryAction === '开空' ? 'short' : 'long'
+        cycleState = 'entered'
+        explanation = `当前${positionStatusLabel}仓位，策略服务${serviceStatusLabel}，等待出场条件触发。`
+        nextExpectedAction = '等待出场条件触发'
+      } else {
+        positionStatusLabel = '方向待确认'
+        cycleStatusLabel = '查看成交与规则'
+        positionState = 'unknown'
+        cycleState = 'unknown'
+        explanation = `当前存在未平仓位，但最近成交无法确认多空方向。请结合持仓概览、最新成交和发布快照规则核对。`
+        nextExpectedAction = null
+      }
     } else if (latestExit) {
       positionStatusLabel = '无仓位'
       cycleStatusLabel = '上一轮已平仓'
