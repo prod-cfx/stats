@@ -36,12 +36,10 @@ describe('RootLayout', () => {
       children: React.createElement('div', null, 'content'),
     })
 
-    expect(mockCookies).toHaveBeenCalledTimes(1)
-
     expect(element.props.lang).toBe('en')
   })
 
-  it('honors an explicit Chinese locale cookie for html lang', async () => {
+  it('defaults html lang to English when only a stale Chinese locale cookie is set', async () => {
     const cookieStore = {
       get: jest.fn(() => ({ value: 'zh' })),
     }
@@ -53,10 +51,10 @@ describe('RootLayout', () => {
       children: React.createElement('div', null, 'content'),
     })
 
-    expect(element.props.lang).toBe('zh-CN')
+    expect(element.props.lang).toBe('en')
   })
 
-  it('uses the route locale header before falling back to cookies', async () => {
+  it('uses the route locale header even when a stale cookie differs', async () => {
     const cookieStore = {
       get: jest.fn(() => ({ value: 'zh' })),
     }
