@@ -381,9 +381,9 @@ export function AiQuantStrategyDetail({
       )}
 
       {semanticSummary && (
-        <section className="rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-5">
+        <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
           <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">当前状态解释</h2>
-          <p className="mt-2 text-sm text-cyan-100">{semanticSummary.explanation}</p>
+          <p className="mt-2 text-sm leading-6 text-[color:var(--cf-text)]">{semanticSummary.explanation}</p>
           <div className="mt-4 grid gap-3 text-sm md:grid-cols-3">
             <article className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
               <p className="text-xs text-[color:var(--cf-muted)]">策略服务</p>
@@ -445,7 +445,7 @@ export function AiQuantStrategyDetail({
                       快照：{state.publishedSnapshotId}
                     </p>
                   </div>
-                  <span className="rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-xs text-cyan-200">
+                  <span className="rounded-full border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-2 py-1 text-xs text-[color:var(--cf-text-strong)]">
                     {formatRuntimeExecutionStatus(state.status)}
                   </span>
                 </div>
@@ -589,7 +589,7 @@ export function AiQuantStrategyDetail({
                       }
                     }}
                     disabled={typeof leverageDraft !== 'number' || isUpdatingLeverage}
-                    className="rounded-lg border border-cyan-500/30 px-3 py-1.5 text-xs font-semibold text-cyan-300 disabled:cursor-not-allowed disabled:border-[color:var(--cf-border)] disabled:text-[color:var(--cf-muted)]"
+                    className="rounded-lg border border-[color:var(--cf-border)] px-3 py-1.5 text-xs font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:text-[color:var(--cf-muted)]"
                   >
                     {isUpdatingLeverage ? '更新中…' : '更新杠杆'}
                   </button>

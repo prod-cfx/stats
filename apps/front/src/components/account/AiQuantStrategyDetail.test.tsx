@@ -189,6 +189,13 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).toContain('sync-close-1777042803366')
     expect(container.textContent).toContain('高级运行诊断')
     expect(container.textContent).toContain('已执行 1 个运行诊断项，待执行/冷却/失败 0 个')
+    const statusHeading = Array.from(container.querySelectorAll('h2'))
+      .find(heading => heading.textContent === '当前状态解释')
+    const statusSection = statusHeading?.closest('section')
+    expect(statusSection?.className).toContain('bg-[color:var(--cf-surface)]')
+    expect(statusSection?.className).not.toContain('cyan')
+    expect(statusSection?.querySelector('p')?.className).toContain('text-[color:var(--cf-text)]')
+    expect(statusSection?.querySelector('p')?.className).not.toContain('cyan')
   })
 
   it('shows compatibility warning, leverage drift, and leverage-only update controls from truthful execution data', async () => {
