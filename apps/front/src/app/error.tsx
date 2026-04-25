@@ -31,7 +31,7 @@ export default function ErrorPage({
             Try again
           </button>
           <Link
-            href="/zh"
+            href="/en"
             className="inline-flex items-center justify-center px-4 py-2 rounded-md border border-[color:var(--cf-border)] text-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-surface)] transition-colors"
           >
             Back to Home
@@ -41,4 +41,3 @@ export default function ErrorPage({
     </div>
   )
 }
-

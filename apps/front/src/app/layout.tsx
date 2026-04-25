@@ -1,16 +1,17 @@
 import type { ReactNode } from 'react'
-import { cookies, headers } from 'next/headers'
+import { headers } from 'next/headers'
 import './globals.css'
 
+const ROUTE_LOCALE_HEADER = 'x-coinflux-locale'
+
 async function inferHtmlLang() {
-  const [cookieStore, headerStore] = await Promise.all([cookies(), headers()])
+  const headerStore = await headers()
 
-  const cookieLng = cookieStore.get('i18next')?.value?.toLowerCase()
-  if (cookieLng?.startsWith('zh')) return 'zh-CN'
-  if (cookieLng?.startsWith('en')) return 'en'
+  const routeLng = headerStore.get(ROUTE_LOCALE_HEADER)?.toLowerCase()
+  if (routeLng === 'zh') return 'zh-CN'
+  if (routeLng === 'en') return 'en'
 
-  const accept = headerStore.get('accept-language')?.toLowerCase() ?? ''
-  return accept.startsWith('zh') ? 'zh-CN' : 'en'
+  return 'en'
 }
 
 export default async function RootLayout({ children }: { children: ReactNode }) {
@@ -28,12 +29,9 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
                 try {
                   const key = 'cf-theme'
                   const stored = localStorage.getItem(key)
-                  const preferred =
-                    window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches
-                      ? 'dark'
-                      : 'light'
-                  const theme = stored === 'light' || stored === 'dark' ? stored : preferred
+                  const theme = stored === 'light' || stored === 'dark' ? stored : 'dark'
                   document.documentElement.dataset.theme = theme
+                  document.documentElement.classList.toggle('dark', theme === 'dark')
                   document.documentElement.style.colorScheme = theme
                 } catch {}
               })()
