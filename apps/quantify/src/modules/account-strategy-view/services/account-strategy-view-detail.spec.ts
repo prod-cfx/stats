@@ -1238,6 +1238,200 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(detail.equitySeries.every(item => item.value === 60000)).toBe(true)
   })
 
+  it('falls back to latest successful snapshot backtest curve for flat contract account equity', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-perp-flat-account',
+        name: 'Perp flat account strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-perp-1',
+          snapshotHash: 'snapshot-hash-perp-1',
+        },
+        params: { symbol: 'BTC-USDT-SWAP', exchange: 'okx', marketType: 'perp' },
+        strategyTemplateId: 'tpl-perp-flat-account',
+        strategyTemplate: { defaultParams: {} },
+        subscriptions: [{ userId: 'user-1', status: 'active', customParams: {} }],
+        startedAt: new Date('2026-04-24T14:43:40.000Z'),
+        updatedAt: new Date('2026-04-24T14:43:40.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue({
+        id: 'acc-perp-flat-account',
+        baseCurrency: 'USDT',
+        initialBalance: 10000,
+        balance: 10000,
+        equity: 10000,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 0,
+      }),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadClosedPositionPnlSeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
+      loadPositionFinancials: jest.fn().mockResolvedValue({
+        openCostBasis: 0,
+        totalUnrealizedPnl: 0,
+        totalRealizedPnl: 0,
+      }),
+      loadOpenPositionsForValuation: jest.fn().mockResolvedValue([]),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-04-24T14:43:40.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+      loadLatestSuccessfulBacktestResultBySnapshot: jest.fn().mockResolvedValue({
+        id: 'btjob-latest',
+        result: {
+          equityCurve: [
+            { ts: 1774443600000, equity: 10000 },
+            { ts: 1777035600000, equity: 9944.916495122703 },
+          ],
+        },
+      }),
+    }
+    const statsService = {
+      calculateStats: jest.fn().mockResolvedValue(null),
+      calculateBatchStats: jest.fn(),
+    }
+    const strategyInstancesService = { updateInstance: jest.fn() }
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+    const publishedSnapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-perp-1',
+        snapshotHash: 'snapshot-hash-perp-1',
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'BTC-USDT-SWAP',
+          baseTimeframe: '1h',
+          marketType: 'perp',
+          positionPct: 10,
+        },
+        backtestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 3,
+          slippageBps: 6,
+          feeBps: 4,
+          priceSource: 'mark',
+          allowPartial: false,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 3,
+          priceSource: 'mark',
+          orderType: 'market',
+          timeInForce: 'IOC',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 5,
+        },
+        paramsSnapshot: {},
+        lockedParams: {},
+        specSnapshot: { rules: [] },
+      }),
+    }
+
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+      undefined,
+      undefined,
+      undefined,
+      publishedSnapshotsRepository as any,
+    )
+
+    const detail = await service.getStrategyDetail('user-1', 'inst-perp-flat-account')
+
+    expect(repo.loadLatestSuccessfulBacktestResultBySnapshot).toHaveBeenCalledWith('user-1', 'snapshot-perp-1')
+    expect(detail.equitySeriesSource).toBe('backtest')
+    expect(detail.equitySeries).toEqual([
+      { ts: '2026-03-25T13:00:00.000Z', value: 10000 },
+      { ts: '2026-04-24T13:00:00.000Z', value: 9944.91649512 },
+    ])
+  })
+
+  it('keeps real account equity series ahead of snapshot backtest fallback', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-account-moving',
+        name: 'Moving account strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-moving-1',
+          snapshotHash: 'snapshot-hash-moving-1',
+        },
+        params: { symbol: 'BTCUSDT', exchange: 'okx', marketType: 'spot' },
+        strategyTemplateId: 'tpl-account-moving',
+        strategyTemplate: { defaultParams: {} },
+        subscriptions: [{ userId: 'user-1', status: 'active', customParams: {} }],
+        startedAt: new Date('2026-04-24T14:43:40.000Z'),
+        updatedAt: new Date('2026-04-24T14:43:40.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue({
+        id: 'acc-account-moving',
+        baseCurrency: 'USDT',
+        initialBalance: 10000,
+        balance: 10020,
+        equity: 10020,
+        totalRealizedPnl: 20,
+        totalUnrealizedPnl: 0,
+      }),
+      loadEquitySeries: jest.fn().mockResolvedValue([
+        { date: new Date('2026-04-24T15:00:00.000Z'), equityEnd: 10000 },
+        { date: new Date('2026-04-25T00:00:00.000Z'), equityEnd: 10020 },
+      ]),
+      loadLatestDailySnapshot: jest.fn().mockResolvedValue(null),
+      loadClosedPositionPnlSeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 1, closedCount: 1, winningCount: 1 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 1 }),
+      loadPositionFinancials: jest.fn().mockResolvedValue({
+        openCostBasis: 0,
+        totalUnrealizedPnl: 0,
+        totalRealizedPnl: 20,
+      }),
+      loadOpenPositionsForValuation: jest.fn().mockResolvedValue([]),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-04-24T14:43:40.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+      loadLatestSuccessfulBacktestResultBySnapshot: jest.fn().mockResolvedValue({
+        id: 'btjob-latest',
+        result: {
+          equityCurve: [
+            { ts: '2026-04-24T00:00:00.000Z', equity: 10000 },
+            { ts: '2026-04-25T00:00:00.000Z', equity: 9000 },
+          ],
+        },
+      }),
+    }
+    const statsService = {
+      calculateStats: jest.fn().mockResolvedValue(null),
+      calculateBatchStats: jest.fn(),
+    }
+    const strategyInstancesService = { updateInstance: jest.fn() }
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+    )
+
+    const detail = await service.getStrategyDetail('user-1', 'inst-account-moving')
+
+    expect(detail.equitySeriesSource).toBe('account')
+    expect(detail.equitySeries.some(item => item.value === 9000)).toBe(false)
+    expect(detail.equitySeries.at(-1)?.value).toBe(10020)
+  })
+
   it('uses live exchange equity as the latest curve point for pristine non-default seed accounts', async () => {
     const repo = {
       findStrategyForUser: jest.fn().mockResolvedValue({

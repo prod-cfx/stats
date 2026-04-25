@@ -707,6 +707,22 @@ export class AccountStrategyViewRepository {
     })
   }
 
+  async loadLatestSuccessfulBacktestResultBySnapshot(ownerUserId: string, snapshotId: string) {
+    const client = this.txHost.tx
+    return client.backtestJob.findFirst({
+      where: {
+        ownerUserId,
+        snapshotId,
+        status: 'succeeded',
+      },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        result: true,
+      },
+    })
+  }
+
   async loadLatestDailySnapshot(accountId: string) {
     const client = this.txHost.tx
     return client.strategyPnlDaily.findFirst({

@@ -20,19 +20,27 @@ const STATUS_CLASS: Record<AiQuantStrategyViewState, string> = {
   draft: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
 }
 
+const EQUITY_CHART_WIDTH = 900
+const EQUITY_CHART_HEIGHT = 220
+const EQUITY_CHART_PADDING_Y = 16
+
+function resolveEquityY(value: number, min: number, max: number) {
+  if (max === min) return EQUITY_CHART_HEIGHT / 2
+  const spread = max - min
+  const normalized = (value - min) / spread
+  const drawableHeight = EQUITY_CHART_HEIGHT - EQUITY_CHART_PADDING_Y * 2
+  return EQUITY_CHART_PADDING_Y + (1 - normalized) * drawableHeight
+}
+
 function buildPolyline(data: StrategyEquityPoint[]) {
   if (!data.length) return ''
   const values = data.map(item => item.value)
   const min = Math.min(...values)
   const max = Math.max(...values)
-  const spread = Math.max(max - min, 1)
-  const width = 900
-  const height = 220
   return data
     .map((item, idx) => {
-      const x = (idx / Math.max(data.length - 1, 1)) * width
-      const normalized = (item.value - min) / spread
-      const y = height - normalized * height
+      const x = (idx / Math.max(data.length - 1, 1)) * EQUITY_CHART_WIDTH
+      const y = resolveEquityY(item.value, min, max)
       return `${x},${y}`
     })
     .join(' ')
@@ -43,14 +51,10 @@ function buildCoordinates(data: StrategyEquityPoint[]) {
   const values = data.map(item => item.value)
   const min = Math.min(...values)
   const max = Math.max(...values)
-  const spread = Math.max(max - min, 1)
-  const width = 900
-  const height = 220
 
   return data.map((item, idx) => {
-    const x = (idx / Math.max(data.length - 1, 1)) * width
-    const normalized = (item.value - min) / spread
-    const y = height - normalized * height
+    const x = (idx / Math.max(data.length - 1, 1)) * EQUITY_CHART_WIDTH
+    const y = resolveEquityY(item.value, min, max)
     return { x, y }
   })
 }
@@ -98,6 +102,30 @@ function formatMarketTypeLabel(marketType: AiQuantStrategyRecord['marketType']) 
     default:
       return '--'
   }
+}
+
+function isContractMarket(marketType: AiQuantStrategyRecord['marketType']) {
+  return marketType === 'perp' || marketType === 'swap' || marketType === 'futures'
+}
+
+function formatEquitySeriesTitle(
+  marketType: AiQuantStrategyRecord['marketType'],
+  source: NonNullable<AiQuantStrategyRecord['equitySeriesSource']>,
+) {
+  if (source === 'backtest') {
+    return isContractMarket(marketType) ? '合约回测收益曲线' : '现货回测收益曲线'
+  }
+  return isContractMarket(marketType) ? '合约账户权益曲线' : '现货账户收益曲线'
+}
+
+function formatEquitySeriesSource(
+  marketType: AiQuantStrategyRecord['marketType'],
+  source: NonNullable<AiQuantStrategyRecord['equitySeriesSource']>,
+) {
+  if (source === 'backtest') return '来源：最新成功回测结果'
+  return isContractMarket(marketType)
+    ? '来源：合约账户权益台账，按保证金币种、已实现/未实现盈亏口径展示。'
+    : '来源：现货账户权益台账，按现金余额、持币市值、已实现/未实现盈亏口径展示。'
 }
 
 function inferBaseAsset(symbol: string) {
@@ -254,6 +282,7 @@ export function AiQuantStrategyDetail({
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const [leverageDraft, setLeverageDraft] = useState<number | ''>('')
   const series = strategy?.equitySeries ?? []
+  const equitySeriesSource = strategy?.equitySeriesSource ?? 'account'
   const coords = useMemo(() => buildCoordinates(series), [series])
   const { displayTotalPnl, displayTodayPnl } = useMemo(
     () => resolveDisplayMetrics({
@@ -688,12 +717,18 @@ export function AiQuantStrategyDetail({
       </section>
 
       <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
-        <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">收益曲线</h2>
+        <h2 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+          {formatEquitySeriesTitle(strategy.marketType, equitySeriesSource)}
+        </h2>
+        <p className="mt-1 text-xs text-[color:var(--cf-muted)]">
+          {formatEquitySeriesSource(strategy.marketType, equitySeriesSource)}
+        </p>
         <div className="relative mt-3 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
           <svg
             viewBox="0 0 900 220"
             className="h-56 w-full"
             onMouseMove={(event) => {
+              if (series.length === 0) return
               const rect = event.currentTarget.getBoundingClientRect()
               const ratio = (event.clientX - rect.left) / rect.width
               const idx = Math.max(0, Math.min(series.length - 1, Math.round(ratio * (series.length - 1))))
@@ -715,6 +750,9 @@ export function AiQuantStrategyDetail({
               strokeLinejoin="round"
               points={buildPolyline(series)}
             />
+            {series.length === 1 && coords[0] && (
+              <circle cx={coords[0].x} cy={coords[0].y} r={4} fill="#38bdf8" />
+            )}
             {hoverCoord && (
               <>
                 <line x1={hoverCoord.x} y1={0} x2={hoverCoord.x} y2={220} stroke="#9ca3af" strokeDasharray="4 4" opacity={0.5} />
@@ -722,6 +760,11 @@ export function AiQuantStrategyDetail({
               </>
             )}
           </svg>
+          {series.length === 0 && (
+            <p className="absolute inset-0 flex items-center justify-center text-sm text-[color:var(--cf-muted)]">
+              暂无收益曲线数据
+            </p>
+          )}
           {hoverPoint && hoverCoord && (
             <div
               className="pointer-events-none absolute rounded-lg border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-3 py-2 text-xs text-[color:var(--cf-text)] shadow-lg"

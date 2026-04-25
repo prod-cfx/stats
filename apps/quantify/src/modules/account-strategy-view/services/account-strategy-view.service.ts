@@ -319,6 +319,18 @@ export class AccountStrategyViewService {
       userId,
       source: row,
     })
+    let displayEquitySeries = derivedEquitySeries
+    let equitySeriesSource: AccountStrategyDetailResponseDto['equitySeriesSource'] = 'account'
+    if (this.shouldFallbackToBacktestEquitySeries(displayEquitySeries)) {
+      const backtestEquitySeries = await this.resolveLatestSuccessfulBacktestEquitySeries(
+        userId,
+        resolvedSnapshot.publishedSnapshotId,
+      )
+      if (backtestEquitySeries.length > 0) {
+        displayEquitySeries = backtestEquitySeries
+        equitySeriesSource = 'backtest'
+      }
+    }
     let runtimeExecutionStates: AccountStrategyDetailResponseDto['runtimeExecutionStates'] = []
     let runtimeExecutionStateInvalid = false
     try {
@@ -413,7 +425,8 @@ export class AccountStrategyViewService {
       updatedAt: row.updatedAt.toISOString(),
       totalPnl,
       todayPnl,
-      equitySeries: derivedEquitySeries,
+      equitySeries: displayEquitySeries,
+      equitySeriesSource,
       snapshot: {
         publishedSnapshotId: resolvedSnapshot.publishedSnapshotId,
         snapshotHash: resolvedSnapshot.snapshotHash,
@@ -509,7 +522,7 @@ export class AccountStrategyViewService {
           },
     }
 
-    if (detail.equitySeries.length === 0 && account) {
+    if (detail.equitySeries.length === 0 && account && detail.equitySeriesSource === 'account') {
       detail.equitySeries = [{
         ts: new Date().toISOString(),
         value: shouldUseExchangeBalance
@@ -1336,6 +1349,59 @@ export class AccountStrategyViewService {
     })
 
     return this.normalizeEquitySeries(points)
+  }
+
+  private shouldFallbackToBacktestEquitySeries(series: Array<{ ts: string; value: number }>): boolean {
+    if (series.length <= 1) return true
+    const first = series[0]?.value
+    if (typeof first !== 'number' || !Number.isFinite(first)) return true
+    return series.every(item => item.value === first)
+  }
+
+  private async resolveLatestSuccessfulBacktestEquitySeries(
+    userId: string,
+    publishedSnapshotId: string | null,
+  ): Promise<Array<{ ts: string; value: number }>> {
+    if (!publishedSnapshotId) return []
+    const loadLatestBacktest = (this.repo as {
+      loadLatestSuccessfulBacktestResultBySnapshot?: (
+        ownerUserId: string,
+        snapshotId: string,
+      ) => Promise<{ result: unknown } | null>
+    }).loadLatestSuccessfulBacktestResultBySnapshot
+    if (!loadLatestBacktest) return []
+
+    const job = await loadLatestBacktest.call(this.repo, userId, publishedSnapshotId)
+    return this.normalizeBacktestEquitySeries(job?.result)
+  }
+
+  private normalizeBacktestEquitySeries(result: unknown): Array<{ ts: string; value: number }> {
+    const root = this.readRecord(result)
+    const curve = Array.isArray(root?.equityCurve) ? root.equityCurve : []
+    const points = curve
+      .map((item) => {
+        const point = this.readRecord(item)
+        if (!point) return null
+        const value = this.readNumber(point, ['equity', 'value'])
+        const ts = this.normalizeEquityPointTimestamp(point.ts)
+        if (!ts || value === null) return null
+        return { ts, value }
+      })
+      .filter((item): item is { ts: string; value: number } => item !== null)
+
+    return this.normalizeEquitySeries(points)
+  }
+
+  private normalizeEquityPointTimestamp(value: unknown): string | null {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      const date = new Date(value)
+      return Number.isNaN(date.getTime()) ? null : date.toISOString()
+    }
+    if (typeof value === 'string' && value.trim().length > 0) {
+      const date = new Date(value)
+      return Number.isNaN(date.getTime()) ? null : date.toISOString()
+    }
+    return null
   }
 
   private normalizeEquitySeries(series: Array<{ ts: string; value: number }>): Array<{ ts: string; value: number }> {

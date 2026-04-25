@@ -51,6 +51,9 @@ export class AccountAiQuantStrategyDetailResponseDto extends AccountAiQuantStrat
   @ApiProperty({ type: 'array', items: { type: 'object', additionalProperties: true } })
   equitySeries!: Record<string, unknown>[]
 
+  @ApiProperty({ enum: ['account', 'backtest'] })
+  equitySeriesSource!: 'account' | 'backtest'
+
   @ApiProperty({ type: 'object', additionalProperties: true })
   snapshot!: Record<string, unknown>
 
