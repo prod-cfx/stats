@@ -1,7 +1,7 @@
 'use client'
 
 import { motion, type Transition, useReducedMotion } from 'framer-motion'
-import { ArrowRight, CircleDot, LineChart, RefreshCw, Sparkles, Star, TrendingUp, UserRound, WalletCards, Zap } from 'lucide-react'
+import { ArrowRight, CircleDot, LineChart, RefreshCw, Sparkles, Star, TrendingUp, UserRound, WalletCards } from 'lucide-react'
 import Link from 'next/link'
 import { useId } from 'react'
 import { useTranslation } from 'react-i18next'
