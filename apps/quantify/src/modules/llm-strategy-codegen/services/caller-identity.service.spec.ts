@@ -19,7 +19,10 @@ describe('callerIdentityService', () => {
 
   function createService() {
     return new CallerIdentityService({
-      getString: jest.fn().mockReturnValue(undefined),
+      getString: jest.fn((key: string) => {
+        if (key === 'NEXT_PUBLIC_API_SERVER_URL') return 'https://backend.example.com'
+        return undefined
+      }),
       isDev: jest.fn().mockReturnValue(false),
       getBoolean: jest.fn().mockReturnValue(false),
     } as never)
@@ -50,7 +53,7 @@ describe('callerIdentityService', () => {
       service.resolveCallerUserIdFromAuthorization(`Bearer ${token}`, 'user-1'),
     ).resolves.toBe('user-1')
     expect(globalThis.fetch).toHaveBeenCalledWith(
-      'http://127.0.0.1:3000/api/v1/users/me',
+      'https://backend.example.com/api/v1/users/me',
       expect.objectContaining({
         headers: { authorization: `Bearer ${token}` },
       }),
