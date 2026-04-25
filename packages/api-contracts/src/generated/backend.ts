@@ -188,14 +188,14 @@ const CreateAccountExchangeAccountDto = z
 const AiQuantConversationMessageResponseDto = z
   .object({ role: z.enum(['user', 'assistant']), content: z.string() })
   .passthrough()
-const AiQuantConversationLastBacktestRangeResponseDto = z
+const AiQuantConversationBacktestRangeResponseDto = z
   .object({
     preset: z.enum(['7D', '30D', '90D', '1Y', 'CUSTOM']),
     startAt: z.string().optional(),
     endAt: z.string().optional(),
   })
   .passthrough()
-const AiQuantConversationLastBacktestExecutionResponseDto = z
+const AiQuantConversationBacktestExecutionResponseDto = z
   .object({
     initialCash: z.number(),
     leverage: z.number().nullish(),
@@ -205,10 +205,10 @@ const AiQuantConversationLastBacktestExecutionResponseDto = z
     allowPartial: z.boolean(),
   })
   .passthrough()
-const AiQuantConversationLastBacktestConfigResponseDto = z
+const AiQuantConversationBacktestConfigResponseDto = z
   .object({
-    range: AiQuantConversationLastBacktestRangeResponseDto,
-    execution: AiQuantConversationLastBacktestExecutionResponseDto,
+    range: AiQuantConversationBacktestRangeResponseDto,
+    execution: AiQuantConversationBacktestExecutionResponseDto,
   })
   .passthrough()
 const AiQuantConversationLastBacktestSummaryResponseDto = z
@@ -226,7 +226,7 @@ const AiQuantConversationLastBacktestRefResponseDto = z
   .object({
     jobId: z.string(),
     publishedSnapshotId: z.string(),
-    config: AiQuantConversationLastBacktestConfigResponseDto,
+    config: AiQuantConversationBacktestConfigResponseDto,
     summary: AiQuantConversationLastBacktestSummaryResponseDto,
     completedAt: z.string(),
   })
@@ -240,7 +240,7 @@ const AiQuantConversationResponseDto = z
     status: z.string().optional(),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
-    backtestDraftConfig: AiQuantConversationLastBacktestConfigResponseDto.nullish(),
+    backtestDraftConfig: AiQuantConversationBacktestConfigResponseDto.nullish(),
     lastBacktestRef: AiQuantConversationLastBacktestRefResponseDto.nullish(),
     canonicalDigest: z.string().optional(),
     specDesc: z.object({}).partial().passthrough().optional(),
@@ -259,6 +259,9 @@ const AiQuantConversationResponseDto = z
     strategyInstanceId: z.string().optional(),
     rejectReason: z.string().optional(),
   })
+  .passthrough()
+const AiQuantConversationBacktestDraftConfigRequestDto = z
+  .object({ backtestDraftConfig: AiQuantConversationBacktestConfigResponseDto })
   .passthrough()
 const AccountAiQuantStrategyListItemResponseDto = z
   .object({
@@ -1428,12 +1431,13 @@ export const schemas = {
   AccountExchangeAccountResponseDto,
   CreateAccountExchangeAccountDto,
   AiQuantConversationMessageResponseDto,
-  AiQuantConversationLastBacktestRangeResponseDto,
-  AiQuantConversationLastBacktestExecutionResponseDto,
-  AiQuantConversationLastBacktestConfigResponseDto,
+  AiQuantConversationBacktestRangeResponseDto,
+  AiQuantConversationBacktestExecutionResponseDto,
+  AiQuantConversationBacktestConfigResponseDto,
   AiQuantConversationLastBacktestSummaryResponseDto,
   AiQuantConversationLastBacktestRefResponseDto,
   AiQuantConversationResponseDto,
+  AiQuantConversationBacktestDraftConfigRequestDto,
   AccountAiQuantStrategyListItemResponseDto,
   AccountAiQuantStrategyDetailResponseDto,
   AccountAiQuantActionRequestDto,
@@ -1561,6 +1565,30 @@ const endpoints = makeApi([
     alias: 'AccountAiQuantConversationsController_remove',
     requestFormat: 'json',
     parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'patch',
+    path: '/account/ai-quant/conversations/:id/backtest-draft',
+    alias: 'AccountAiQuantConversationsController_updateBacktestDraft',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: AiQuantConversationBacktestDraftConfigRequestDto,
+      },
       {
         name: 'authorization',
         type: 'Header',

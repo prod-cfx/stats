@@ -1193,9 +1193,24 @@ export class SignalExecutorService implements OnModuleInit, OnModuleDestroy {
   private extractOrderFee(order: UnifiedOrder): { amount: number; currency: string | null } {
     const raw = order.raw as any
 
+    if (raw?.fee !== undefined && raw?.fee !== null) {
+      const rawFee = typeof raw.fee === 'string' && raw.fee.trim() === ''
+        ? Number.NaN
+        : Number(raw.fee)
+      const fee = Math.abs(rawFee)
+      const currency = typeof raw?.feeCcy === 'string'
+        ? raw.feeCcy
+        : typeof raw?.feeCurrency === 'string'
+          ? raw.feeCurrency
+          : null
+      if (Number.isFinite(fee)) {
+        return { amount: fee, currency }
+      }
+    }
+
     if (typeof raw?.fee === 'number' && Number.isFinite(raw.fee)) {
       const currency = typeof raw?.feeCurrency === 'string' ? raw.feeCurrency : null
-      return { amount: raw.fee, currency }
+      return { amount: Math.abs(raw.fee), currency }
     }
 
     if (Array.isArray(raw?.fills) && raw.fills.length > 0) {

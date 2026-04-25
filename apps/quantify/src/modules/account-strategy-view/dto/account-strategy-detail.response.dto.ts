@@ -169,6 +169,106 @@ export class AccountStrategyLatestOrderDto {
   orderId!: string | null
 }
 
+export class AccountStrategyRuntimeSemanticOrderEvidenceDto {
+  @ApiPropertyOptional({ nullable: true })
+  orderId!: string | null
+
+  @ApiProperty()
+  executedAt!: string
+}
+
+export class AccountStrategyRuntimeSemanticEvidenceDto {
+  @ApiPropertyOptional({ nullable: true })
+  openPositionsCount!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  latestEntryOrderId!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  latestExitOrderId!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  latestSyncOrderId!: string | null
+
+  @ApiProperty({ type: [AccountStrategyRuntimeSemanticOrderEvidenceDto] })
+  entryOrders!: AccountStrategyRuntimeSemanticOrderEvidenceDto[]
+
+  @ApiProperty({ type: [AccountStrategyRuntimeSemanticOrderEvidenceDto] })
+  exitOrders!: AccountStrategyRuntimeSemanticOrderEvidenceDto[]
+
+  @ApiProperty({ type: [AccountStrategyRuntimeSemanticOrderEvidenceDto] })
+  syncOrders!: AccountStrategyRuntimeSemanticOrderEvidenceDto[]
+
+  @ApiPropertyOptional({ nullable: true })
+  latestEntryAt!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  latestExitAt!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  latestSemanticAction!: string | null
+}
+
+export class AccountStrategyRuntimeSemanticSummaryDto {
+  @ApiProperty()
+  serviceStatusLabel!: string
+
+  @ApiProperty()
+  positionStatusLabel!: string
+
+  @ApiProperty()
+  cycleStatusLabel!: string
+
+  @ApiProperty()
+  headline!: string
+
+  @ApiProperty()
+  explanation!: string
+
+  @ApiPropertyOptional({ nullable: true })
+  nextExpectedAction!: string | null
+
+  @ApiProperty({ enum: ['spot', 'perp', 'futures', 'swap', 'unknown'] })
+  marketType!: 'spot' | 'perp' | 'futures' | 'swap' | 'unknown'
+
+  @ApiProperty({ enum: ['flat', 'spot_holding', 'long', 'short', 'unknown'] })
+  positionState!: 'flat' | 'spot_holding' | 'long' | 'short' | 'unknown'
+
+  @ApiProperty({ enum: ['waiting_entry', 'entered', 'exit_triggered', 'completed', 'needs_attention', 'unknown'] })
+  cycleState!: 'waiting_entry' | 'entered' | 'exit_triggered' | 'completed' | 'needs_attention' | 'unknown'
+
+  @ApiProperty({ type: AccountStrategyRuntimeSemanticEvidenceDto })
+  evidence!: AccountStrategyRuntimeSemanticEvidenceDto
+}
+
+export class AccountStrategyRuleSummaryItemDto {
+  @ApiPropertyOptional({ nullable: true })
+  id!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  phase!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  conditionKey!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  operator!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  value!: number | null
+
+  @ApiProperty({ type: [String] })
+  actions!: string[]
+}
+
+export class AccountStrategyRuleSummaryDto {
+  @ApiProperty({ type: [AccountStrategyRuleSummaryItemDto] })
+  rules!: AccountStrategyRuleSummaryItemDto[]
+
+  @ApiPropertyOptional({ nullable: true, type: 'object', additionalProperties: true })
+  executionPolicy!: Record<string, unknown> | null
+}
+
 export class AccountStrategySnapshotDto {
   @ApiPropertyOptional({ nullable: true })
   publishedSnapshotId!: string | null
@@ -218,6 +318,9 @@ export class AccountStrategySnapshotDto {
   @ApiPropertyOptional({ nullable: true, type: AccountStrategyConsistencySummaryDto })
   consistencySummary!: AccountStrategyConsistencySummaryDto | null
 
+  @ApiPropertyOptional({ nullable: true, type: AccountStrategyRuleSummaryDto })
+  ruleSummary!: AccountStrategyRuleSummaryDto | null
+
   @ApiPropertyOptional({ nullable: true })
   executionConfigVersion!: number | null
 
@@ -258,6 +361,9 @@ export class AccountStrategyDetailResponseDto extends AccountStrategyListItemDto
 
   @ApiProperty({ type: [RuntimeExecutionStateDto] })
   runtimeExecutionStates!: RuntimeExecutionStateDto[]
+
+  @ApiPropertyOptional({ nullable: true, type: AccountStrategyRuntimeSemanticSummaryDto })
+  runtimeSemanticSummary!: AccountStrategyRuntimeSemanticSummaryDto | null
 
   @ApiPropertyOptional({ nullable: true, type: AccountStrategyDeploymentDto })
   deployment?: AccountStrategyDeploymentDto | null

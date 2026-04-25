@@ -494,6 +494,22 @@ const AccountStrategyConsistencySummaryDto = z
     consistencyScore: z.number().nullish(),
   })
   .passthrough()
+const AccountStrategyRuleSummaryItemDto = z
+  .object({
+    id: z.string().nullish(),
+    phase: z.string().nullish(),
+    conditionKey: z.string().nullish(),
+    operator: z.string().nullish(),
+    value: z.number().nullish(),
+    actions: z.array(z.string()),
+  })
+  .passthrough()
+const AccountStrategyRuleSummaryDto = z
+  .object({
+    rules: z.array(AccountStrategyRuleSummaryItemDto),
+    executionPolicy: z.object({}).partial().passthrough().nullish(),
+  })
+  .passthrough()
 const AccountStrategySnapshotDto = z
   .object({
     publishedSnapshotId: z.string().nullable(),
@@ -512,6 +528,7 @@ const AccountStrategySnapshotDto = z
     effectiveAllowedLeverageRange: AccountStrategyLeverageRangeDto.nullable(),
     compatibilityMetadata: z.object({}).partial().passthrough().nullable(),
     consistencySummary: AccountStrategyConsistencySummaryDto.nullable(),
+    ruleSummary: AccountStrategyRuleSummaryDto.nullable(),
     executionConfigVersion: z.number().nullable(),
     schemaVersion: z.string().nullable(),
     deployAccountName: z.string().nullable(),
@@ -573,6 +590,44 @@ const RuntimeExecutionStateDto = z
     snapshotHash: z.string(),
   })
   .passthrough()
+const AccountStrategyRuntimeSemanticOrderEvidenceDto = z
+  .object({ orderId: z.string().nullish(), executedAt: z.string() })
+  .passthrough()
+const AccountStrategyRuntimeSemanticEvidenceDto = z
+  .object({
+    openPositionsCount: z.number().nullish(),
+    latestEntryOrderId: z.string().nullish(),
+    latestExitOrderId: z.string().nullish(),
+    latestSyncOrderId: z.string().nullish(),
+    entryOrders: z.array(AccountStrategyRuntimeSemanticOrderEvidenceDto),
+    exitOrders: z.array(AccountStrategyRuntimeSemanticOrderEvidenceDto),
+    syncOrders: z.array(AccountStrategyRuntimeSemanticOrderEvidenceDto),
+    latestEntryAt: z.string().nullish(),
+    latestExitAt: z.string().nullish(),
+    latestSemanticAction: z.string().nullish(),
+  })
+  .passthrough()
+const AccountStrategyRuntimeSemanticSummaryDto = z
+  .object({
+    serviceStatusLabel: z.string(),
+    positionStatusLabel: z.string(),
+    cycleStatusLabel: z.string(),
+    headline: z.string(),
+    explanation: z.string(),
+    nextExpectedAction: z.string().nullish(),
+    marketType: z.enum(['spot', 'perp', 'futures', 'swap', 'unknown']),
+    positionState: z.enum(['flat', 'spot_holding', 'long', 'short', 'unknown']),
+    cycleState: z.enum([
+      'waiting_entry',
+      'entered',
+      'exit_triggered',
+      'completed',
+      'needs_attention',
+      'unknown',
+    ]),
+    evidence: AccountStrategyRuntimeSemanticEvidenceDto,
+  })
+  .passthrough()
 const AccountStrategyExecutionConfigDto = z
   .object({
     leverage: z.number().nullable(),
@@ -618,6 +673,7 @@ const AccountStrategyDetailResponseDto = z
     positionOverview: AccountStrategyPositionOverviewDto,
     latestOrders: z.array(AccountStrategyLatestOrderDto),
     runtimeExecutionStates: z.array(RuntimeExecutionStateDto),
+    runtimeSemanticSummary: AccountStrategyRuntimeSemanticSummaryDto.nullish(),
     deployment: AccountStrategyDeploymentDto.nullish(),
   })
   .passthrough()
@@ -1154,14 +1210,14 @@ const LlmStrategyInstancePublicResponseDto = z
 const AiQuantConversationMessageDto = z
   .object({ role: z.enum(['user', 'assistant']), content: z.string() })
   .passthrough()
-const AiQuantConversationLastBacktestRangeDto = z
+const AiQuantConversationBacktestRangeDto = z
   .object({
     preset: z.enum(['7D', '30D', '90D', '1Y', 'CUSTOM']),
     startAt: z.string().optional(),
     endAt: z.string().optional(),
   })
   .passthrough()
-const AiQuantConversationLastBacktestExecutionDto = z
+const AiQuantConversationBacktestExecutionDto = z
   .object({
     initialCash: z.number(),
     leverage: z.number().nullish(),
@@ -1171,10 +1227,10 @@ const AiQuantConversationLastBacktestExecutionDto = z
     allowPartial: z.boolean(),
   })
   .passthrough()
-const AiQuantConversationLastBacktestConfigDto = z
+const AiQuantConversationBacktestConfigDto = z
   .object({
-    range: AiQuantConversationLastBacktestRangeDto,
-    execution: AiQuantConversationLastBacktestExecutionDto,
+    range: AiQuantConversationBacktestRangeDto,
+    execution: AiQuantConversationBacktestExecutionDto,
   })
   .passthrough()
 const AiQuantConversationLastBacktestSummaryDto = z
@@ -1192,7 +1248,7 @@ const AiQuantConversationLastBacktestRefDto = z
   .object({
     jobId: z.string(),
     publishedSnapshotId: z.string(),
-    config: AiQuantConversationLastBacktestConfigDto,
+    config: AiQuantConversationBacktestConfigDto,
     summary: AiQuantConversationLastBacktestSummaryDto,
     completedAt: z.string(),
   })
@@ -1206,7 +1262,7 @@ const AiQuantConversationResponseDto = z
     status: z.string().optional(),
     createdAt: z.string().optional(),
     updatedAt: z.string().optional(),
-    backtestDraftConfig: AiQuantConversationLastBacktestConfigDto.nullish(),
+    backtestDraftConfig: AiQuantConversationBacktestConfigDto.nullish(),
     lastBacktestRef: AiQuantConversationLastBacktestRefDto.nullish(),
     canonicalDigest: z.string().optional(),
     specDesc: z.object({}).partial().passthrough().optional(),
@@ -1225,6 +1281,9 @@ const AiQuantConversationResponseDto = z
     strategyInstanceId: z.string().optional(),
     rejectReason: z.string().optional(),
   })
+  .passthrough()
+const AiQuantConversationBacktestDraftConfigRequestDto = z
+  .object({ backtestDraftConfig: AiQuantConversationBacktestConfigDto })
   .passthrough()
 const CodegenGuideConfigDto = z
   .object({
@@ -1563,12 +1622,17 @@ export const schemas = {
   AccountStrategyEquityPointDto,
   AccountStrategyLeverageRangeDto,
   AccountStrategyConsistencySummaryDto,
+  AccountStrategyRuleSummaryItemDto,
+  AccountStrategyRuleSummaryDto,
   AccountStrategySnapshotDto,
   AccountStrategyTimelineEventDto,
   AccountStrategyAccountOverviewDto,
   AccountStrategyPositionOverviewDto,
   AccountStrategyLatestOrderDto,
   RuntimeExecutionStateDto,
+  AccountStrategyRuntimeSemanticOrderEvidenceDto,
+  AccountStrategyRuntimeSemanticEvidenceDto,
+  AccountStrategyRuntimeSemanticSummaryDto,
   AccountStrategyExecutionConfigDto,
   AccountStrategyDeploymentDto,
   AccountStrategyDetailResponseDto,
@@ -1611,12 +1675,13 @@ export const schemas = {
   LlmStrategyRunResponseDto,
   LlmStrategyInstancePublicResponseDto,
   AiQuantConversationMessageDto,
-  AiQuantConversationLastBacktestRangeDto,
-  AiQuantConversationLastBacktestExecutionDto,
-  AiQuantConversationLastBacktestConfigDto,
+  AiQuantConversationBacktestRangeDto,
+  AiQuantConversationBacktestExecutionDto,
+  AiQuantConversationBacktestConfigDto,
   AiQuantConversationLastBacktestSummaryDto,
   AiQuantConversationLastBacktestRefDto,
   AiQuantConversationResponseDto,
+  AiQuantConversationBacktestDraftConfigRequestDto,
   CodegenGuideConfigDto,
   StartCodegenSessionDto,
   CodegenConversationMessageDto,
@@ -1674,6 +1739,35 @@ const endpoints = makeApi([
     alias: 'AccountAiQuantConversationsController_remove',
     requestFormat: 'json',
     parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z.void(),
+  },
+  {
+    method: 'patch',
+    path: '/account/ai-quant/conversations/:id/backtest-draft',
+    alias: 'AccountAiQuantConversationsController_updateBacktestDraft',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: AiQuantConversationBacktestDraftConfigRequestDto,
+      },
       {
         name: 'authorization',
         type: 'Header',

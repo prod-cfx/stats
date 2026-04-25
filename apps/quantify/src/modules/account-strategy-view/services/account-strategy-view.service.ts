@@ -1,6 +1,10 @@
 import type { AccountStrategyActionDto } from '../dto/account-strategy-action.dto'
 import type { AccountStrategyDeployDto } from '../dto/account-strategy-deploy.dto'
-import type { AccountStrategyDetailResponseDto, AccountStrategyTimelineEventDto } from '../dto/account-strategy-detail.response.dto'
+import type {
+  AccountStrategyDetailResponseDto,
+  AccountStrategyRuleSummaryDto,
+  AccountStrategyTimelineEventDto,
+} from '../dto/account-strategy-detail.response.dto'
 import type { AccountStrategyListItemDto } from '../dto/account-strategy-list-item.dto'
 import type { AccountStrategyListQueryDto } from '../dto/account-strategy-list-query.dto'
 import type { AccountStrategyUpdateExecutionLeverageDto } from '../dto/account-strategy-update-execution-leverage.dto'
@@ -44,6 +48,7 @@ import { AccountStrategyViewRepository } from '../repositories/account-strategy-
 import {
   buildAccountStrategyLatestOrders,
   buildAccountStrategyMixedTimeline,
+  buildAccountStrategyRuntimeSemanticSummary,
 } from './account-strategy-view-detail-projection'
 
 interface FormalSnapshotDetail {
@@ -55,6 +60,7 @@ interface FormalSnapshotDetail {
   deploymentExecutionDefaults: Record<string, unknown> | null
   deploymentExecutionConstraints: Record<string, unknown> | null
   compatibilityMetadata: Record<string, unknown> | null
+  ruleSummary: AccountStrategyRuleSummaryDto | null
 }
 
 interface StrategyAccountFallback {
@@ -386,6 +392,25 @@ export class AccountStrategyViewService {
                 : {}),
             }
           : null)
+    const detailPositionOverview = {
+      openPositionsCount: account ? positionOverview.openCount : null,
+      closedPositionsCount: account ? positionOverview.closedCount : null,
+      totalRealizedPnl: account ? resolvedRealizedPnl : null,
+      totalUnrealizedPnl: account ? resolvedUnrealizedPnl : null,
+    }
+    const latestOrders = buildAccountStrategyLatestOrders(timelineSource.trades, timelineSource.signalExecutions)
+    const runtimeSemanticMarketType = snapshotMarketType ?? marketType
+    const runtimeSemanticSymbol = snapshotStrategyConfig
+      ? this.readString(snapshotStrategyConfig, ['symbol']) ?? symbol
+      : symbol
+    const runtimeSemanticSummary = buildAccountStrategyRuntimeSemanticSummary({
+      status: this.mapUiStatus(row.status),
+      marketType: runtimeSemanticMarketType ?? 'unknown',
+      symbol: runtimeSemanticSymbol ?? '',
+      openPositionsCount: detailPositionOverview.openPositionsCount,
+      trades: timelineSource.trades,
+      ruleSummary: resolvedSnapshot.ruleSummary,
+    })
 
     const detail: AccountStrategyDetailResponseDto = {
       id: row.id,
@@ -424,9 +449,9 @@ export class AccountStrategyViewService {
         positionPct: resolvedSnapshot.strategyConfig
           ? this.readNumber(resolvedSnapshot.strategyConfig, ['positionPct', 'positionSizeRatioPercent'])
           : null,
-        paramSchema: dynamicParams.paramSchema,
+        paramSchema: null,
         paramValues: resolvedSnapshot.paramValues,
-        schemaVersion: dynamicParams.schemaVersion,
+        schemaVersion: null,
         deployAccountName: sub?.exchangeAccount?.name ?? null,
         deployAt: sub?.subscribedAt?.toISOString() ?? row.startedAt?.toISOString() ?? null,
         strategyConfig: snapshotStrategyConfig,
@@ -454,6 +479,7 @@ export class AccountStrategyViewService {
           driftReasons,
           consistencyScore: driftReasons.length === 0 ? 100 : null,
         },
+        ruleSummary: resolvedSnapshot.ruleSummary,
         executionConfigVersion: typeof (row as Record<string, unknown>).executionConfigVersion === 'number'
           ? ((row as Record<string, unknown>).executionConfigVersion as number)
           : null,
@@ -467,14 +493,10 @@ export class AccountStrategyViewService {
         todayPnl: todayPnl ?? null,
         baseCurrency: overviewBaseCurrency,
       },
-      positionOverview: {
-        openPositionsCount: account ? positionOverview.openCount : null,
-        closedPositionsCount: account ? positionOverview.closedCount : null,
-        totalRealizedPnl: account ? resolvedRealizedPnl : null,
-        totalUnrealizedPnl: account ? resolvedUnrealizedPnl : null,
-      },
-      latestOrders: buildAccountStrategyLatestOrders(timelineSource.trades),
+      positionOverview: detailPositionOverview,
+      latestOrders,
       runtimeExecutionStates,
+      runtimeSemanticSummary,
       deployment: !resolvedSnapshot.publishedSnapshotId
         || resolvedSnapshot.compatibilityMetadata?.requiresRepublishForDeploy
         || resolvedSnapshot.compatibilityMetadata?.invalidBinding === true
@@ -624,6 +646,7 @@ export class AccountStrategyViewService {
         deploymentExecutionDefaults: null,
         deploymentExecutionConstraints: null,
         compatibilityMetadata: null,
+        ruleSummary: null,
       }
     }
 
@@ -647,6 +670,7 @@ export class AccountStrategyViewService {
           requiresRepublishForDeploy: true,
           invalidBinding: true,
         },
+        ruleSummary: null,
       }
     }
 
@@ -669,6 +693,7 @@ export class AccountStrategyViewService {
           requiresRepublishForDeploy: true,
           invalidBinding: true,
         },
+        ruleSummary: null,
       }
     }
 
@@ -716,7 +741,50 @@ export class AccountStrategyViewService {
       deploymentExecutionDefaults,
       deploymentExecutionConstraints,
       compatibilityMetadata,
+      ruleSummary: this.buildPublishedSnapshotRuleSummary(snapshot),
     }
+  }
+
+  private buildPublishedSnapshotRuleSummary(snapshot: unknown): AccountStrategyRuleSummaryDto | null {
+    const root = this.readRecord(snapshot)
+    const specSnapshot = this.readRecord(root?.specSnapshot)
+    const rules = Array.isArray(specSnapshot?.rules) ? specSnapshot.rules : []
+    if (!rules.length) return null
+
+    const normalizedRules = rules
+      .map((rule) => {
+        const record = this.readRecord(rule)
+        if (!record) return null
+        const condition = this.readRecord(record.condition)
+        const actions = Array.isArray(record.actions)
+          ? record.actions
+              .map(action => this.readString(this.readRecord(action), ['type']))
+              .filter((action): action is string => Boolean(action))
+          : []
+        return {
+          id: this.readString(record, ['id']),
+          phase: this.readString(record, ['phase']),
+          conditionKey: this.readString(condition, ['key']),
+          operator: this.readString(condition, ['op']),
+          value: this.readNumber(condition, ['value']),
+          actions,
+        }
+      })
+      .filter((rule): rule is {
+        id: string | null
+        phase: string | null
+        conditionKey: string | null
+        operator: string | null
+        value: number | null
+        actions: string[]
+      } => rule !== null)
+
+    return normalizedRules.length > 0
+      ? {
+          rules: normalizedRules,
+          executionPolicy: this.readRecord(specSnapshot?.executionPolicy),
+        }
+      : null
   }
 
   async performAction(
