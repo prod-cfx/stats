@@ -48,6 +48,7 @@ import { AccountStrategyViewRepository } from '../repositories/account-strategy-
 import {
   buildAccountStrategyLatestOrders,
   buildAccountStrategyMixedTimeline,
+  buildAccountStrategyRuntimeSemanticSummary,
 } from './account-strategy-view-detail-projection'
 
 interface FormalSnapshotDetail {
@@ -391,6 +392,25 @@ export class AccountStrategyViewService {
                 : {}),
             }
           : null)
+    const detailPositionOverview = {
+      openPositionsCount: account ? positionOverview.openCount : null,
+      closedPositionsCount: account ? positionOverview.closedCount : null,
+      totalRealizedPnl: account ? resolvedRealizedPnl : null,
+      totalUnrealizedPnl: account ? resolvedUnrealizedPnl : null,
+    }
+    const latestOrders = buildAccountStrategyLatestOrders(timelineSource.trades, timelineSource.signalExecutions)
+    const runtimeSemanticMarketType = snapshotMarketType ?? marketType
+    const runtimeSemanticSymbol = snapshotStrategyConfig
+      ? this.readString(snapshotStrategyConfig, ['symbol']) ?? symbol
+      : symbol
+    const runtimeSemanticSummary = buildAccountStrategyRuntimeSemanticSummary({
+      status: this.mapUiStatus(row.status),
+      marketType: runtimeSemanticMarketType ?? 'unknown',
+      symbol: runtimeSemanticSymbol ?? '',
+      openPositionsCount: detailPositionOverview.openPositionsCount,
+      trades: timelineSource.trades,
+      ruleSummary: resolvedSnapshot.ruleSummary,
+    })
 
     const detail: AccountStrategyDetailResponseDto = {
       id: row.id,
@@ -429,9 +449,9 @@ export class AccountStrategyViewService {
         positionPct: resolvedSnapshot.strategyConfig
           ? this.readNumber(resolvedSnapshot.strategyConfig, ['positionPct', 'positionSizeRatioPercent'])
           : null,
-        paramSchema: dynamicParams.paramSchema,
+        paramSchema: null,
         paramValues: resolvedSnapshot.paramValues,
-        schemaVersion: dynamicParams.schemaVersion,
+        schemaVersion: null,
         deployAccountName: sub?.exchangeAccount?.name ?? null,
         deployAt: sub?.subscribedAt?.toISOString() ?? row.startedAt?.toISOString() ?? null,
         strategyConfig: snapshotStrategyConfig,
@@ -473,14 +493,10 @@ export class AccountStrategyViewService {
         todayPnl: todayPnl ?? null,
         baseCurrency: overviewBaseCurrency,
       },
-      positionOverview: {
-        openPositionsCount: account ? positionOverview.openCount : null,
-        closedPositionsCount: account ? positionOverview.closedCount : null,
-        totalRealizedPnl: account ? resolvedRealizedPnl : null,
-        totalUnrealizedPnl: account ? resolvedUnrealizedPnl : null,
-      },
-      latestOrders: buildAccountStrategyLatestOrders(timelineSource.trades, timelineSource.signalExecutions),
+      positionOverview: detailPositionOverview,
+      latestOrders,
       runtimeExecutionStates,
+      runtimeSemanticSummary,
       deployment: !resolvedSnapshot.publishedSnapshotId
         || resolvedSnapshot.compatibilityMetadata?.requiresRepublishForDeploy
         || resolvedSnapshot.compatibilityMetadata?.invalidBinding === true

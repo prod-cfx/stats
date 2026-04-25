@@ -113,6 +113,11 @@ function normalizeMarketType(value: unknown): AiQuantStrategyRecord['marketType'
   return 'unknown'
 }
 
+function normalizeExchange(value: unknown): AiQuantStrategyRecord['exchange'] {
+  if (value === 'okx' || value === 'hyperliquid') return value
+  return 'binance'
+}
+
 function findRuleActions(
   ruleSummary: AiQuantStrategyRecord['ruleSummary'],
   phase: string,
@@ -367,6 +372,45 @@ function normalizeRuntimeExecutionStates(
   }))
 }
 
+function normalizeRuntimeSemanticSummary(
+  summary: AccountAiQuantStrategyDetail['runtimeSemanticSummary'] | null | undefined,
+): AiQuantStrategyRecord['runtimeSemanticSummary'] | null {
+  if (!summary) return null
+
+  return {
+    serviceStatusLabel: summary.serviceStatusLabel,
+    positionStatusLabel: summary.positionStatusLabel,
+    cycleStatusLabel: summary.cycleStatusLabel,
+    headline: summary.headline,
+    explanation: summary.explanation,
+    nextExpectedAction: summary.nextExpectedAction,
+    marketType: normalizeMarketType(summary.marketType),
+    positionState: summary.positionState,
+    cycleState: summary.cycleState,
+    evidence: {
+      openPositionsCount: summary.evidence.openPositionsCount,
+      latestEntryOrderId: summary.evidence.latestEntryOrderId,
+      latestExitOrderId: summary.evidence.latestExitOrderId,
+      latestSyncOrderId: summary.evidence.latestSyncOrderId,
+      entryOrders: summary.evidence.entryOrders.map(order => ({
+        orderId: order.orderId,
+        executedAt: fmtTimelineTime(order.executedAt),
+      })),
+      exitOrders: summary.evidence.exitOrders.map(order => ({
+        orderId: order.orderId,
+        executedAt: fmtTimelineTime(order.executedAt),
+      })),
+      syncOrders: summary.evidence.syncOrders.map(order => ({
+        orderId: order.orderId,
+        executedAt: fmtTimelineTime(order.executedAt),
+      })),
+      latestEntryAt: summary.evidence.latestEntryAt ? fmtTimelineTime(summary.evidence.latestEntryAt) : null,
+      latestExitAt: summary.evidence.latestExitAt ? fmtTimelineTime(summary.evidence.latestExitAt) : null,
+      latestSemanticAction: summary.evidence.latestSemanticAction,
+    },
+  }
+}
+
 function buildStrategyBoundPublishedSnapshotParamValues(input: {
   exchange: AiQuantStrategyRecord['exchange']
   strategyConfig: AccountAiQuantPublishedStrategyConfig | null | undefined
@@ -404,7 +448,7 @@ export function mapAccountStrategyListItemToRecord(
     id: item.id,
     name: item.name,
     status: normalizeStatus(item.status),
-    exchange: (item.exchange === 'okx' ? 'okx' : 'binance'),
+    exchange: normalizeExchange(item.exchange),
     symbol: item.symbol ?? '--',
     timeframe: item.timeframe ?? '--',
     positionPct: normalizeNumber(item.positionPct),
@@ -427,7 +471,7 @@ export function mapAccountStrategyDetailToRecord(
 ): AiQuantStrategyRecord {
   const snapshotExchange = detail.snapshot.exchange
   const resolvedExchange = snapshotExchange ?? detail.exchange
-  const exchange = resolvedExchange === 'okx' ? 'okx' : resolvedExchange === 'hyperliquid' ? 'hyperliquid' : 'binance'
+  const exchange = normalizeExchange(resolvedExchange)
   const publishedSnapshotParamValues = detail.snapshot.publishedSnapshotId
     ? buildStrategyBoundPublishedSnapshotParamValues({
         exchange,
@@ -440,10 +484,11 @@ export function mapAccountStrategyDetailToRecord(
   const initialCapital = detail.accountOverview?.initialBalance
     ?? detail.equitySeries[0]?.value
     ?? 10000
+  const hasPublishedSnapshotBinding = Boolean(detail.snapshot.publishedSnapshotId)
   const dynamicParams = mapDynamicParamFields(
-    detail.snapshot.paramSchema ?? detail.paramSchema,
-    detail.snapshot.paramValues ?? detail.paramValues,
-    detail.snapshot.schemaVersion ?? detail.schemaVersion,
+    hasPublishedSnapshotBinding ? detail.snapshot.paramSchema : (detail.snapshot.paramSchema ?? detail.paramSchema),
+    hasPublishedSnapshotBinding ? detail.snapshot.paramValues : (detail.snapshot.paramValues ?? detail.paramValues),
+    hasPublishedSnapshotBinding ? detail.snapshot.schemaVersion : (detail.snapshot.schemaVersion ?? detail.schemaVersion),
   )
   const snapshotMarketType = normalizeMarketType(detail.snapshot.strategyConfig?.marketType)
   const deploymentMarketType = snapshotMarketType === 'unknown' ? null : snapshotMarketType === 'spot' || snapshotMarketType === 'perp' ? snapshotMarketType : null
@@ -567,7 +612,7 @@ export function mapAccountStrategyDetailToRecord(
   }
   return {
     ...record,
-    runtimeSemanticSummary: buildRuntimeSemanticSummary({
+    runtimeSemanticSummary: normalizeRuntimeSemanticSummary(detail.runtimeSemanticSummary) ?? buildRuntimeSemanticSummary({
       status: record.status,
       marketType: record.marketType,
       symbol: record.symbol,

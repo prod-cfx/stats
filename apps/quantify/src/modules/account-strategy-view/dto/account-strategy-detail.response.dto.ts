@@ -169,6 +169,78 @@ export class AccountStrategyLatestOrderDto {
   orderId!: string | null
 }
 
+export class AccountStrategyRuntimeSemanticOrderEvidenceDto {
+  @ApiPropertyOptional({ nullable: true })
+  orderId!: string | null
+
+  @ApiProperty()
+  executedAt!: string
+}
+
+export class AccountStrategyRuntimeSemanticEvidenceDto {
+  @ApiPropertyOptional({ nullable: true })
+  openPositionsCount!: number | null
+
+  @ApiPropertyOptional({ nullable: true })
+  latestEntryOrderId!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  latestExitOrderId!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  latestSyncOrderId!: string | null
+
+  @ApiProperty({ type: [AccountStrategyRuntimeSemanticOrderEvidenceDto] })
+  entryOrders!: AccountStrategyRuntimeSemanticOrderEvidenceDto[]
+
+  @ApiProperty({ type: [AccountStrategyRuntimeSemanticOrderEvidenceDto] })
+  exitOrders!: AccountStrategyRuntimeSemanticOrderEvidenceDto[]
+
+  @ApiProperty({ type: [AccountStrategyRuntimeSemanticOrderEvidenceDto] })
+  syncOrders!: AccountStrategyRuntimeSemanticOrderEvidenceDto[]
+
+  @ApiPropertyOptional({ nullable: true })
+  latestEntryAt!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  latestExitAt!: string | null
+
+  @ApiPropertyOptional({ nullable: true })
+  latestSemanticAction!: string | null
+}
+
+export class AccountStrategyRuntimeSemanticSummaryDto {
+  @ApiProperty()
+  serviceStatusLabel!: string
+
+  @ApiProperty()
+  positionStatusLabel!: string
+
+  @ApiProperty()
+  cycleStatusLabel!: string
+
+  @ApiProperty()
+  headline!: string
+
+  @ApiProperty()
+  explanation!: string
+
+  @ApiPropertyOptional({ nullable: true })
+  nextExpectedAction!: string | null
+
+  @ApiProperty({ enum: ['spot', 'perp', 'futures', 'swap', 'unknown'] })
+  marketType!: 'spot' | 'perp' | 'futures' | 'swap' | 'unknown'
+
+  @ApiProperty({ enum: ['flat', 'spot_holding', 'long', 'short', 'unknown'] })
+  positionState!: 'flat' | 'spot_holding' | 'long' | 'short' | 'unknown'
+
+  @ApiProperty({ enum: ['waiting_entry', 'entered', 'exit_triggered', 'completed', 'needs_attention', 'unknown'] })
+  cycleState!: 'waiting_entry' | 'entered' | 'exit_triggered' | 'completed' | 'needs_attention' | 'unknown'
+
+  @ApiProperty({ type: AccountStrategyRuntimeSemanticEvidenceDto })
+  evidence!: AccountStrategyRuntimeSemanticEvidenceDto
+}
+
 export class AccountStrategyRuleSummaryItemDto {
   @ApiPropertyOptional({ nullable: true })
   id!: string | null
@@ -289,6 +361,9 @@ export class AccountStrategyDetailResponseDto extends AccountStrategyListItemDto
 
   @ApiProperty({ type: [RuntimeExecutionStateDto] })
   runtimeExecutionStates!: RuntimeExecutionStateDto[]
+
+  @ApiPropertyOptional({ nullable: true, type: AccountStrategyRuntimeSemanticSummaryDto })
+  runtimeSemanticSummary!: AccountStrategyRuntimeSemanticSummaryDto | null
 
   @ApiPropertyOptional({ nullable: true, type: AccountStrategyDeploymentDto })
   deployment?: AccountStrategyDeploymentDto | null

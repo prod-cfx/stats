@@ -335,6 +335,13 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       feeCurrency: 'DOGE',
       orderId: 'ord-1',
     })
+    expect(detail.runtimeSemanticSummary).toEqual(expect.objectContaining({
+      headline: '运行中 · 持有多头 · 等待出场',
+      positionState: 'long',
+      cycleState: 'entered',
+      nextExpectedAction: '等待出场条件触发',
+    }))
+    expect(detail.runtimeSemanticSummary?.evidence.latestEntryOrderId).toBe('ord-1')
     expect(detail.timeline.some(e => e.eventType === 'system')).toBe(true)
     expect(detail.timeline.some(e => e.eventType === 'trade')).toBe(true)
     expect(detail.timeline[0]?.event).toBe('创建策略')
@@ -353,7 +360,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       riskMode: 'aggressive',
     })
     expect(detail.schemaVersion).toBe('7')
-    expect(detail.snapshot.paramSchema).toEqual(detail.paramSchema)
+    expect(detail.snapshot.paramSchema).toBeNull()
     expect(detail.snapshot.publishedSnapshotId).toBe('snapshot-1')
     expect(detail.snapshot.snapshotHash).toBe('snapshot-hash-1')
     expect(detail.snapshot.exchange).toBe('okx')
@@ -469,7 +476,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       reReadAtNextEligibleExecutionCycle: true,
       updatedBy: 'user-1',
     })
-    expect(detail.snapshot.schemaVersion).toBe('7')
+    expect(detail.snapshot.schemaVersion).toBeNull()
     expect(publishedSnapshotsRepository.findByIdForUser).toHaveBeenCalledWith('snapshot-1', 'user-1')
     expect(tradingService.getLeverageConstraints).toHaveBeenCalledWith({
       userId: 'user-1',

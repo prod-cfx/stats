@@ -52,6 +52,31 @@ describe('ai-quant-strategy-api-adapter', () => {
     expect(record.supportsDynamicParams).toBe(true)
   })
 
+  it('preserves hyperliquid exchange in strategy list records', () => {
+    const record = mapAccountStrategyListItemToRecord({
+      id: 'inst-hl-1',
+      name: 'hyperliquid strategy',
+      status: 'running',
+      exchange: 'hyperliquid',
+      symbol: 'BTC-USD',
+      timeframe: '15m',
+      positionPct: 10,
+      isSubscribed: true,
+      paramSchema: null,
+      paramValues: null,
+      schemaVersion: null,
+      metrics: {
+        returnPct: 1,
+        maxDrawdownPct: 2,
+        winRatePct: 3,
+        tradeCount: 4,
+      },
+      updatedAt: '2026-03-20T00:00:00.000Z',
+    })
+
+    expect(record.exchange).toBe('hyperliquid')
+  })
+
   it('enforces dynamic param contract when schema is missing', () => {
     const record = mapAccountStrategyDetailToRecord({
       id: 'inst-2',

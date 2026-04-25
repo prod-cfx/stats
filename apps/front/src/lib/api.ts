@@ -299,6 +299,30 @@ export interface AccountAiQuantStrategyTimelineEvent {
   note?: string | null
 }
 
+export interface AccountAiQuantRuntimeSemanticSummary {
+  serviceStatusLabel: string
+  positionStatusLabel: string
+  cycleStatusLabel: string
+  headline: string
+  explanation: string
+  nextExpectedAction: string | null
+  marketType: 'spot' | 'perp' | 'futures' | 'swap' | 'unknown'
+  positionState: 'flat' | 'spot_holding' | 'long' | 'short' | 'unknown'
+  cycleState: 'waiting_entry' | 'entered' | 'exit_triggered' | 'completed' | 'needs_attention' | 'unknown'
+  evidence: {
+    openPositionsCount: number | null
+    latestEntryOrderId: string | null
+    latestExitOrderId: string | null
+    latestSyncOrderId: string | null
+    entryOrders: Array<{ orderId: string | null; executedAt: string }>
+    exitOrders: Array<{ orderId: string | null; executedAt: string }>
+    syncOrders: Array<{ orderId: string | null; executedAt: string }>
+    latestEntryAt: string | null
+    latestExitAt: string | null
+    latestSemanticAction: string | null
+  }
+}
+
 export interface AccountAiQuantStrategySnapshot {
   exchange: string | null
   symbol: string | null
@@ -320,13 +344,13 @@ export interface AccountAiQuantStrategySnapshot {
   compatibilityMetadata?: AccountAiQuantSnapshotCompatibilityMetadata | null
   consistencySummary?: AccountAiQuantConsistencySummary | null
   ruleSummary?: {
-    rules?: Array<{
-      id?: string | null
-      phase?: string | null
-      conditionKey?: string | null
-      operator?: string | null
-      value?: number | null
-      actions?: string[]
+    rules: Array<{
+      id: string | null
+      phase: string | null
+      conditionKey: string | null
+      operator: string | null
+      value: number | null
+      actions: string[]
     }>
     executionPolicy?: Record<string, unknown> | null
   } | null
@@ -364,6 +388,7 @@ export interface AccountAiQuantStrategyDetail extends AccountAiQuantStrategyList
     feeCurrency: string | null
     orderId: string | null
   }>
+  runtimeSemanticSummary?: AccountAiQuantRuntimeSemanticSummary | null
 }
 
 export interface AccountAiQuantDeployPayload {
