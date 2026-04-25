@@ -88,6 +88,15 @@ const ADMIN_MENU_DEFINITIONS: Array<{
     sort: 13,
   },
   {
+    code: 'beta.access-codes',
+    title: '内测码',
+    type: AdminMenuType.MENU,
+    path: '/beta-codes',
+    parentCode: 'system',
+    icon: 'lucide:key-round',
+    sort: 14,
+  },
+  {
     code: 'data',
     title: '数据管理',
     type: AdminMenuType.DIRECTORY,

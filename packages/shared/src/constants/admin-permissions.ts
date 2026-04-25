@@ -64,6 +64,7 @@ export const ADMIN_PERMISSION = {
     'manage',
   ] as const),
   SETTINGS: definePermissions('settings', ['create', 'read', 'update'] as const),
+  BETA_CODE: definePermissions('beta-code', ['create', 'read', 'update'] as const),
   DEBUG_TRACE: definePermissions('debug-trace', ['read', 'update'] as const),
   INVITATION: definePermissions('invitation', ['read', 'update'] as const),
   MODEL_PROVIDER: definePermissions('model-provider', [

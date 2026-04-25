@@ -45,4 +45,9 @@ export class TelegramExchangeRequestDto {
   @IsEnum(TelegramLoginSource)
   @IsOptional()
   source?: TelegramLoginSource
+
+  @ApiProperty({ required: false, description: '内测码，首次创建用户时必填' })
+  @IsOptional()
+  @IsString()
+  betaCode?: string
 }

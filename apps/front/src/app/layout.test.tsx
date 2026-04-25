@@ -1,4 +1,4 @@
-import { describe, expect, it, jest } from '@jest/globals'
+import { beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React from 'react'
 import RootLayout from './layout'
 
@@ -12,39 +12,75 @@ jest.mock('next/headers', () => ({
   headers: () => mockHeaders(),
 }))
 
-function createDeferred<T>() {
-  let resolve!: (value: T) => void
-  const promise = new Promise<T>(innerResolve => {
-    resolve = innerResolve
+describe('RootLayout', () => {
+  beforeEach(() => {
+    mockCookies.mockReset()
+    mockHeaders.mockReset()
   })
 
-  return { promise, resolve }
-}
+  function mockLocaleHeader(value?: string) {
+    mockHeaders.mockResolvedValueOnce({
+      get: jest.fn((name: string) => (name === 'x-coinflux-locale' ? value : null)),
+    })
+  }
 
-describe('RootLayout', () => {
-  it('starts cookies and headers reads in parallel when inferring html lang', async () => {
+  it('defaults html lang to English when no locale cookie is set', async () => {
     const cookieStore = {
       get: jest.fn(() => undefined),
     }
-    const headerStore = {
-      get: jest.fn(() => 'en-US,en;q=0.9'),
-    }
-    const cookieDeferred = createDeferred<typeof cookieStore>()
 
-    mockCookies.mockReturnValueOnce(cookieDeferred.promise)
-    mockHeaders.mockResolvedValueOnce(headerStore)
+    mockCookies.mockResolvedValueOnce(cookieStore)
+    mockLocaleHeader()
 
-    const layoutPromise = RootLayout({
+    const element = await RootLayout({
       children: React.createElement('div', null, 'content'),
     })
 
-    expect(mockCookies).toHaveBeenCalledTimes(1)
-    expect(mockHeaders).toHaveBeenCalledTimes(1)
+    expect(element.props.lang).toBe('en')
+  })
 
-    cookieDeferred.resolve(cookieStore)
+  it('defaults html lang to English when only a stale Chinese locale cookie is set', async () => {
+    const cookieStore = {
+      get: jest.fn(() => ({ value: 'zh' })),
+    }
 
-    const element = await layoutPromise
+    mockCookies.mockResolvedValueOnce(cookieStore)
+    mockLocaleHeader()
+
+    const element = await RootLayout({
+      children: React.createElement('div', null, 'content'),
+    })
 
     expect(element.props.lang).toBe('en')
+  })
+
+  it('uses the route locale header even when a stale cookie differs', async () => {
+    const cookieStore = {
+      get: jest.fn(() => ({ value: 'zh' })),
+    }
+
+    mockCookies.mockResolvedValueOnce(cookieStore)
+    mockLocaleHeader('en')
+
+    const element = await RootLayout({
+      children: React.createElement('div', null, 'content'),
+    })
+
+    expect(element.props.lang).toBe('en')
+  })
+
+  it('uses Chinese html lang for a direct zh route without a locale cookie', async () => {
+    const cookieStore = {
+      get: jest.fn(() => undefined),
+    }
+
+    mockCookies.mockResolvedValueOnce(cookieStore)
+    mockLocaleHeader('zh')
+
+    const element = await RootLayout({
+      children: React.createElement('div', null, 'content'),
+    })
+
+    expect(element.props.lang).toBe('zh-CN')
   })
 })

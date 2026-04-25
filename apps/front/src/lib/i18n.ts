@@ -25,7 +25,7 @@ export function createAppI18n(initialLocale: AppLocale) {
   instance.init({
     initImmediate: false,
     lng: initialLocale,
-    fallbackLng: 'zh',
+    fallbackLng: 'en',
     supportedLngs: ['zh', 'en'],
     nonExplicitSupportedLngs: true,
     defaultNS: 'common',
@@ -51,4 +51,3 @@ export function createAppI18n(initialLocale: AppLocale) {
 
   return instance
 }
-

@@ -1,5 +1,5 @@
 import type { JwtSignOptions } from '@nestjs/jwt'
-import { Module } from '@nestjs/common'
+import { forwardRef, Module } from '@nestjs/common'
 import { ConfigModule, ConfigService } from '@nestjs/config'
 import { JwtModule } from '@nestjs/jwt'
 import { PassportModule } from '@nestjs/passport'
@@ -7,6 +7,7 @@ import { seconds, ThrottlerModule } from '@nestjs/throttler'
 import { AccessControlModule } from 'nest-access-control'
 import { MailService } from '@/common/services/mail.service'
 import { RedisService } from '@/common/services/redis.service'
+import { BetaCodeModule } from '@/modules/beta-code/beta-code.module'
 import { PrismaModule } from '@/prisma/prisma.module'
 import { AuthController } from './auth.controller'
 import { ACGuard } from './guards/ac.guard'
@@ -50,6 +51,7 @@ import { JwtStrategy } from './strategies/jwt.strategy'
       }),
     }),
     AccessControlModule.forRoles(RBAC_PERMISSIONS),
+    forwardRef(() => BetaCodeModule),
   ],
   controllers: [AuthController],
   providers: [

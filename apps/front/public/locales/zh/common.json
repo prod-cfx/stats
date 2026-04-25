@@ -52,6 +52,11 @@
     "register": "注册",
     "yesterday": "昨天"
   },
+  "theme": {
+    "dark": "夜间",
+    "light": "白天",
+    "toggle": "切换白天/夜间模式"
+  },
   "account": {
     "title": "个人中心",
     "loginMethods": "账户登录方式",
@@ -217,7 +222,7 @@
       "heroCta": "立即体验",
       "finalCta": "开始创建策略",
       "hero": {
-        "eyebrow": "",
+        "eyebrow": "NEXT-GEN AI QUANT",
         "title": "小白也能用的 AI 量化交易工具",
         "description": "描述你的交易想法，AI 自动生成策略，完成回测并帮你执行交易",
         "howItWorks": "了解工作原理"
@@ -232,7 +237,12 @@
         "logicTitle": "AI 生成的策略逻辑",
         "rule1": "价格 3 分钟内下跌 1%",
         "rule2": "使用 10% 资金买入",
-        "rule3": "反弹 2% 后卖出并准备回测",
+        "rule3": "价格反弹 2% 卖出",
+        "ruleMeta": {
+          "trigger": "触发条件",
+          "takeProfit": "止盈条件",
+          "position": "仓位管理"
+        },
         "inputPlaceholder": "继续让 AI 优化策略...",
         "deployAction": "部署策略",
         "sidebar": {
@@ -241,7 +251,7 @@
           "gridTemplate": "网格策略模板"
         },
         "metrics": {
-          "return": "收益",
+          "return": "回报率",
           "maxDrawdown": "最大回撤",
           "winRate": "胜率",
           "trades": "成交次数"
@@ -276,11 +286,11 @@
           },
           "backtest": {
             "title": "先回测，再决定是否运行",
-            "desc": "验证策略效果，避免盲目上实盘"
+            "desc": "验证策略效果，避免盲目上实盘。"
           },
           "deploy": {
             "title": "一键部署自动执行",
-            "desc": "策略启动后自动执行，不用盯盘"
+            "desc": "策略启动后自动执行，不用盯盘。"
           }
         }
       },
@@ -469,6 +479,10 @@
     "emailPlaceholder": "name@example.com",
     "code": "验证码",
     "codePlaceholder": "6位验证码",
+    "betaCode": "内测码",
+    "betaCodePlaceholder": "请输入内测码",
+    "betaCodeHint": "首次登录需要内测码，已有账号可直接登录。",
+    "betaCodeRequired": "请获取内测码",
     "sendCode": "发送验证码",
     "sendingCode": "发送中...",
     "resendCode": "重新发送",

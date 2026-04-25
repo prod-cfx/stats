@@ -29,6 +29,8 @@ import { DomainException } from '@/common/exceptions/domain.exception'
 import { EnvService } from '@/common/services/env.service'
 import { MailService } from '@/common/services/mail.service'
 import { CacheService } from '@/common/services/cache.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
+import { BetaCodeService } from '@/modules/beta-code/services/beta-code.service'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionEventsService } from '@/common/services/transaction-events.service'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
@@ -87,6 +89,7 @@ export class UserAuthService {
     @Inject(EnvService) private readonly envService: EnvService,
     @Inject(CacheService) private readonly cacheService: CacheService,
     private readonly txEvents: TransactionEventsService,
+    private readonly betaCodeService: BetaCodeService,
   ) {
     this.tokenExpiresInSeconds = this.resolveExpiresInSeconds(
       this.configService.get<string | number>('jwt.expiresIn'),
@@ -119,6 +122,7 @@ export class UserAuthService {
       })
 
       await this.ensureDefaultRoleAssignment(user.id)
+      await this.betaCodeService.consumeForNewUser({ betaCode: dto.betaCode, userId: user.id })
 
       return await this.buildAuthResponse(user, [AppRole.USER])
     } catch (error) {
@@ -249,9 +253,12 @@ export class UserAuthService {
     })
   }
 
-  async getTelegramLoginConfig(): Promise<{ botName: string | null }> {
-    const botName = await this.resolveTelegramBotName()
-    return { botName }
+  async getTelegramLoginConfig(): Promise<{ botName: string | null, betaCodeGateEnabled: boolean }> {
+    const [botName, betaCodeGateEnabled] = await Promise.all([
+      this.resolveTelegramBotName(),
+      this.betaCodeService.isGateEnabled(),
+    ])
+    return { botName, betaCodeGateEnabled }
   }
 
   async getTelegramWebAuthorizeUrl(payload: {
@@ -339,7 +346,7 @@ export class UserAuthService {
   }
 
   async telegramDesktopExchange(dto: TelegramDesktopExchangeRequestDto): Promise<AuthResponseDto> {
-    const payload = await this.consumeTelegramDesktopIntent(dto.intentId, 'login')
+    const payload = await this.readTelegramDesktopIntent(dto.intentId, 'login')
     const telegramId = payload.telegramId!
     const credentialValue = this.buildTelegramCredentialValue(telegramId)
 
@@ -348,17 +355,22 @@ export class UserAuthService {
     if (credential?.user) {
       const roles = await this.getUserRoles(credential.user.id)
       if (roles.length > 0) {
-        return this.buildAuthResponse(credential.user, roles)
+        const response = await this.buildAuthResponse(credential.user, roles)
+        await this.deleteTelegramDesktopIntent(dto.intentId)
+        return response
       }
       await this.ensureDefaultRoleAssignment(credential.user.id)
       const latestRoles = await this.getUserRoles(credential.user.id)
-      return this.buildAuthResponse(credential.user, latestRoles)
+      const response = await this.buildAuthResponse(credential.user, latestRoles)
+      await this.deleteTelegramDesktopIntent(dto.intentId)
+      return response
     }
 
     const placeholderEmail = this.buildTelegramPlaceholderEmail(telegramId)
     const user = await this.createUserWithEmail(placeholderEmail, {
       nickname: payload.username || payload.firstName || `tg_${telegramId.slice(0, 6)}`,
     })
+    await this.betaCodeService.consumeForNewUser({ betaCode: dto.betaCode, userId: user.id })
 
     await this.userAuthRepository.createUserCredential({
       userId: user.id,
@@ -367,11 +379,13 @@ export class UserAuthService {
     })
 
     const roles = await this.getUserRoles(user.id)
-    return this.buildAuthResponse(user, roles)
+    const response = await this.buildAuthResponse(user, roles)
+    await this.deleteTelegramDesktopIntent(dto.intentId)
+    return response
   }
 
   async bindTelegramByDesktopIntent(userId: string, dto: TelegramDesktopExchangeRequestDto): Promise<AuthResponseDto> {
-    const payload = await this.consumeTelegramDesktopIntent(dto.intentId, 'bind')
+    const payload = await this.readTelegramDesktopIntent(dto.intentId, 'bind')
     const credentialValue = this.buildTelegramCredentialValue(payload.telegramId!)
 
     const existing = await this.userAuthRepository.findUserCredential(credentialValue)
@@ -393,7 +407,9 @@ export class UserAuthService {
 
     const user = await this.userAuthRepository.findUserByIdOrThrow(userId)
     const roles = await this.getUserRoles(userId)
-    return this.buildAuthResponse(user, roles)
+    const response = await this.buildAuthResponse(user, roles)
+    await this.deleteTelegramDesktopIntent(dto.intentId)
+    return response
   }
 
   async handleTelegramBotWebhook(dto: TelegramBotWebhookRequestDto, secretToken?: string): Promise<void> {
@@ -467,6 +483,7 @@ export class UserAuthService {
     let user = await this.userAuthRepository.findUserByEmail(email)
     if (!user) {
       user = await this.createUserWithEmail(email)
+      await this.betaCodeService.consumeForNewUser({ betaCode: dto.betaCode, userId: user.id })
     } else if (!user.emailVerified) {
       user = await this.userAuthRepository.updateUser(user.id, {
         emailVerified: true,
@@ -504,6 +521,7 @@ export class UserAuthService {
     const user = await this.createUserWithEmail(placeholderEmail, {
       nickname: `tg_${telegramId.slice(0, 6)}`,
     })
+    await this.betaCodeService.consumeForNewUser({ betaCode: dto.betaCode, userId: user.id })
 
     await this.userAuthRepository.createUserCredential({
       userId: user.id,
@@ -768,7 +786,7 @@ export class UserAuthService {
     }
   }
 
-  private async consumeTelegramDesktopIntent(
+  private async readTelegramDesktopIntent(
     intentId: string,
     expectedIntent: 'login' | 'bind',
   ): Promise<TelegramDesktopIntentPayload> {
@@ -792,8 +810,11 @@ export class UserAuthService {
         status: HttpStatus.UNAUTHORIZED,
       })
     }
-    await this.cacheService.del(cacheKey)
     return payload
+  }
+
+  private async deleteTelegramDesktopIntent(intentId: string): Promise<void> {
+    await this.cacheService.del(this.telegramDesktopIntentCacheKey(intentId))
   }
 
   private async sendTelegramMessage(chatId: number, text: string): Promise<void> {
