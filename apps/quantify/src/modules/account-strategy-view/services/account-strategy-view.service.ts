@@ -14,7 +14,6 @@ import type { ExchangeId, MarketType, UnifiedBalance } from '@/modules/trading/c
 import { createHash } from 'node:crypto'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common'
-import { Mutex } from 'async-mutex'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { ConfigService } from '@nestjs/config'
 import { BasePaginationResponseDto } from '@/common/dto/base-pagination.response.dto'
@@ -80,7 +79,7 @@ type StrategyRow = NonNullable<Awaited<ReturnType<AccountStrategyViewRepository[
 export class AccountStrategyViewService {
   private static readonly BEST_EFFORT_EXTERNAL_TIMEOUT_MS = 1_500
   private readonly logger = new Logger(AccountStrategyViewService.name)
-  private readonly liquidationLocks = new Map<string, Mutex>()
+  private readonly liquidationLocks = new Map<string, Promise<void>>()
 
   constructor(
     private readonly repo: AccountStrategyViewRepository,
@@ -853,10 +852,7 @@ export class AccountStrategyViewService {
     strategyInstanceId: string,
     fallbackRow: StrategyRow,
   ): Promise<AccountStrategyDetailResponseDto> {
-    const mutex = this.liquidationLocks.get(strategyInstanceId) ?? new Mutex()
-    this.liquidationLocks.set(strategyInstanceId, mutex)
-
-    return mutex.runExclusive(async () => {
+    return this.runWithLiquidationLock(strategyInstanceId, async () => {
       const latestRow = await this.repo.findStrategyForUser(userId, strategyInstanceId)
       const row = latestRow ?? fallbackRow
 
@@ -871,6 +867,29 @@ export class AccountStrategyViewService {
 
       return this.liquidateAndStopStrategy(userId, strategyInstanceId, row)
     })
+  }
+
+  private async runWithLiquidationLock<T>(
+    strategyInstanceId: string,
+    task: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.liquidationLocks.get(strategyInstanceId) ?? Promise.resolve()
+    let releaseCurrent!: () => void
+    const current = new Promise<void>(resolve => {
+      releaseCurrent = resolve
+    })
+    const next = previous.catch(() => undefined).then(() => current)
+    this.liquidationLocks.set(strategyInstanceId, next)
+
+    await previous.catch(() => undefined)
+    try {
+      return await task()
+    } finally {
+      releaseCurrent()
+      if (this.liquidationLocks.get(strategyInstanceId) === next) {
+        this.liquidationLocks.delete(strategyInstanceId)
+      }
+    }
   }
 
   private async liquidateAndStopStrategy(
