@@ -198,13 +198,15 @@ export class SemanticStateProjectionService {
           && trigger.params.period !== undefined
         ) {
           const period = typeof trigger.params.period === 'number' ? trigger.params.period : null
+          const stdDev = typeof trigger.params.stdDev === 'number' ? trigger.params.stdDev : null
           const band = trigger.key === 'bollinger.touch_upper'
             ? '上轨'
             : trigger.key === 'bollinger.touch_lower'
               ? '下轨'
               : '中轨'
-          const periodText = period === null ? '周期待补充' : `MA${period}`
-          const condition = `触及 ${periodText} 的布林带${band}`
+          const condition = period !== null && stdDev !== null
+            ? `触及布林带 ${this.formatNumber(period)} 周期 ${this.formatNumber(stdDev)} 倍标准差${band}`
+            : `触及 ${period === null ? '周期待补充' : `MA${this.formatNumber(period)}`} 的布林带${band}`
           return `${trigger.phase === 'entry' ? '入场' : '出场'}：${condition}${this.formatActionSuffix(trigger, condition)}`
         }
 
