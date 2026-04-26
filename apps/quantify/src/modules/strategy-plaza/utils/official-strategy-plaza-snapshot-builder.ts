@@ -156,7 +156,7 @@ function buildOfficialStrategyScript(template: OfficialStrategyPlazaTemplate): s
     '      const lookback = Number(optimized.lookback || 24)',
     '      const high = highestHigh(bars, lookback)',
     '      const low = lowestLow(bars, Math.max(2, Math.floor(lookback / 2)))',
-    '      return { enter: high != null && close >= high * (1 - Number(optimized.breakoutBufferPct || 0.25) / 100), exit: low != null && close < low }',
+    '      return { enter: high != null && close >= high * (1 + Number(optimized.breakoutBufferPct || 0.25) / 100), exit: low != null && close < low }',
     '    }',
     '    case "macd-cross": {',
     '      const points = macd(values, Number(optimized.fastPeriod || 16), Number(optimized.slowPeriod || 34), Number(optimized.signalPeriod || 12))',

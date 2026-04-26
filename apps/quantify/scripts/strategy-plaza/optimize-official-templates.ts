@@ -481,7 +481,7 @@ function runBreakoutFollow(bars: OptimizerBar[], params: Record<string, number |
     const trailLow = lowestLow(context.bars, context.index, Math.max(2, Math.floor(lookback / 2)))
     const close = context.bars[context.index].close
     return {
-      enter: breakoutHigh != null && close >= breakoutHigh * (1 - breakoutBufferPct / 100),
+      enter: breakoutHigh != null && close >= breakoutHigh * (1 + breakoutBufferPct / 100),
       exit: trailLow != null && close < trailLow,
     }
   })

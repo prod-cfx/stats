@@ -2,7 +2,7 @@ import type { OfficialStrategyPlazaBacktestEvidence } from '../../strategy-plaza
 
 export const OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE: OfficialStrategyPlazaBacktestEvidence = {
   "status": "VERIFIED",
-  "generatedAt": "2026-04-26T04:41:24.473Z",
+  "generatedAt": "2026-04-26T05:00:33.997Z",
   "generatedBy": "apps/quantify/scripts/strategy-plaza/optimize-official-templates.ts",
   "admission": {
     "maxDrawdownPctCeiling": 20,
@@ -227,29 +227,29 @@ export const OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE: OfficialStrategyPlazaBac
       "params": {
         "lookback": 24,
         "breakoutBufferPct": 0.25,
-        "stopLossPct": 3,
+        "stopLossPct": 2,
         "takeProfitPct": 0.6,
         "positionPct": 25
       },
       "metrics": {
-        "winRate": 0.5745,
-        "maxDrawdownPct": 1.12,
-        "totalReturnPct": 0.71,
-        "tradeCount": 94
+        "winRate": 0.7059,
+        "maxDrawdownPct": 1.04,
+        "totalReturnPct": 0.78,
+        "tradeCount": 34
       },
       "best": {
         "params": {
           "lookback": 24,
           "breakoutBufferPct": 0.25,
-          "stopLossPct": 3,
+          "stopLossPct": 2,
           "takeProfitPct": 0.6,
           "positionPct": 25
         },
         "metrics": {
-          "winRate": 0.5745,
-          "maxDrawdownPct": 1.12,
-          "totalReturnPct": 0.71,
-          "tradeCount": 94
+          "winRate": 0.7059,
+          "maxDrawdownPct": 1.04,
+          "totalReturnPct": 0.78,
+          "tradeCount": 34
         }
       }
     },
