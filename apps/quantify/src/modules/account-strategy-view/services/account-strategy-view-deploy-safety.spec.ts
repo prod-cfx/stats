@@ -263,6 +263,84 @@ describe('accountStrategyViewService.deployStrategy safety', () => {
     expect(repo.deployStrategyForUser).not.toHaveBeenCalled()
   })
 
+  it('allows official strategy plaza snapshots to deploy as continuous signal-generator scripts without runtime states', async () => {
+    const runtimeExecutionStateService = {
+      buildExecutionSemanticKeysFromSnapshot: jest.fn().mockReturnValue([]),
+      initializeStatesForDeploy: jest.fn().mockResolvedValue([]),
+    }
+    const { service, repo } = buildService({
+      snapshotsRepository: {
+        findByIdForUser: jest.fn().mockResolvedValue({
+          id: 'snapshot-official-plaza-continuous',
+          snapshotHash: 'snapshot-hash-official-plaza-continuous',
+          strategyConfig: {
+            exchange: 'okx',
+            symbol: 'BTC-USDT-SWAP',
+            baseTimeframe: '15m',
+            marketType: 'perp',
+            positionPct: 35,
+          },
+          deploymentExecutionDefaults: {
+            leverage: 2,
+            priceSource: 'mark',
+            orderType: 'market',
+            timeInForce: 'ioc',
+          },
+          deploymentExecutionConstraints: {
+            platformRiskMaxLeverage: 2,
+            strategyDeclaredLeverageRange: { min: 1, max: 2 },
+            defaultLeverage: 2,
+            supportedPriceSources: ['mark'],
+            supportedOrderTypes: ['market'],
+            supportedTimeInForce: ['ioc'],
+          },
+          executionEnvelope: {
+            runtime: 'signal-generator',
+            source: 'strategy-plaza-official-template',
+          },
+          strategyInstanceId: 'inst-official-plaza-draft',
+          strategyTemplateId: 'template-official-plaza',
+          astSnapshot: {
+            runtimeExecutionSemantics: [],
+          },
+        }),
+      },
+      runtimeExecutionStateService,
+    })
+
+    await expect(service.deployStrategy({
+      userId: 'user-1',
+      name: 'official plaza MA',
+      publishedSnapshotId: 'snapshot-official-plaza-continuous',
+      deployRequestId: 'deploy-req-official-plaza-continuous',
+      exchangeAccountId: 'acc-1',
+      deploymentExecutionConfig: { leverage: 2 },
+    } as any)).resolves.toEqual({ id: 'inst-1' })
+
+    expect(runtimeExecutionStateService.buildExecutionSemanticKeysFromSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'snapshot-official-plaza-continuous' }),
+    )
+    expect(runtimeExecutionStateService.initializeStatesForDeploy).toHaveBeenCalledWith({
+      strategyInstanceId: 'inst-1',
+      publishedSnapshotId: 'snapshot-official-plaza-continuous',
+      snapshotHash: 'snapshot-hash-official-plaza-continuous',
+      snapshot: expect.objectContaining({
+        executionEnvelope: {
+          runtime: 'signal-generator',
+          source: 'strategy-plaza-official-template',
+        },
+      }),
+    })
+    expect(repo.deployStrategyForUser).toHaveBeenCalledWith(expect.objectContaining({
+      exchange: 'okx',
+      symbol: 'BTC-USDT-SWAP',
+      timeframe: '15m',
+      publishedSnapshotBinding: expect.objectContaining({
+        publishedSnapshotId: 'snapshot-official-plaza-continuous',
+      }),
+    }))
+  })
+
   it('returns existing result for succeeded idempotent request', async () => {
     const dto = {
       userId: 'user-1',

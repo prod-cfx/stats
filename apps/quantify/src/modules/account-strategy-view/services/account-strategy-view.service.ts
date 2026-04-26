@@ -1826,7 +1826,7 @@ export class AccountStrategyViewService {
     const runtimeExecutionStateService = this.requireRuntimeExecutionStateService()
     try {
       const semanticKeys = runtimeExecutionStateService.buildExecutionSemanticKeysFromSnapshot(snapshot)
-      if (!semanticKeys.length) {
+      if (!semanticKeys.length && !this.isContinuousOfficialStrategyPlazaSnapshot(snapshot)) {
         throw new DeploySnapshotRequiresRepublishException({
           publishedSnapshotId: snapshot.id,
         })
@@ -1963,6 +1963,15 @@ export class AccountStrategyViewService {
     const max = maxCandidates.length > 0 ? Math.min(...maxCandidates) : null
     if (!max || max < min) return null
     return { min, max, accountMax }
+  }
+
+  private isContinuousOfficialStrategyPlazaSnapshot(snapshot: unknown): boolean {
+    const record = this.readRecord(snapshot)
+    const executionEnvelope = this.readRecord(record?.executionEnvelope)
+    if (!executionEnvelope) return false
+
+    return this.readString(executionEnvelope, ['source']) === 'strategy-plaza-official-template'
+      && this.readString(executionEnvelope, ['runtime']) === 'signal-generator'
   }
 
   private readSnapshotMarketType(source: Record<string, unknown> | null | undefined): MarketType | null {
