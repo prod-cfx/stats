@@ -72,6 +72,14 @@ export {
   type TickerData,
 } from './api-market-domain'
 export {
+  createStrategyPlazaRunRequestId,
+  fetchStrategyPlazaTemplates,
+  runStrategyPlazaTemplate,
+  startStrategyPlazaEditSession,
+  type StrategyPlazaEditSessionResponse,
+  type StrategyPlazaTemplate,
+} from './api-strategy-plaza-domain'
+export {
   fetchRealtimeWhaleAlerts,
   type FetchRealtimeWhaleAlertsParams,
   fetchTraderDiscoverTags,

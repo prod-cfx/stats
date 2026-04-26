@@ -7,6 +7,12 @@ import { PrismaClient } from '../generated/prisma'
 import { createEnvAccessor } from '../src/common/env/env.accessor'
 import { applyQuantifyEnvOverrides } from '../src/config/quantify-env'
 import { resolveConfiguredBacktestCapabilityConfig } from '../src/modules/backtesting/backtest-capability-config'
+import { OFFICIAL_STRATEGY_PLAZA_TEMPLATES } from '../src/modules/strategy-plaza/constants/official-strategy-plaza-templates'
+import {
+  buildOfficialStrategySnapshotContent,
+  OFFICIAL_STRATEGY_PLAZA_LLM_MODEL,
+  OFFICIAL_STRATEGY_PLAZA_USER_ID,
+} from '../src/modules/strategy-plaza/utils/official-strategy-plaza-snapshot-builder'
 
 // Load environment variables using the shared loader.
 const rootDir = path.resolve(__dirname, '../../..')
@@ -24,7 +30,6 @@ if (!dbUrl || dbUrl === '__SET_IN_env.local__') {
 const pool = new Pool({ connectionString: dbUrl })
 const adapter = new PrismaPg(pool)
 const prisma = new PrismaClient({ adapter })
-
 async function seedAiProviderKeys() {
   const rawKey = env.raw('UNIAPI_API_KEY')
   const apiKey = rawKey?.trim()
@@ -134,11 +139,171 @@ async function seedBacktestCapabilityConfig() {
   console.log('[seed] Backtest capability config ensured')
 }
 
+async function seedOfficialStrategyPlazaSnapshots() {
+  console.log('[seed] Ensuring official Strategy Plaza snapshots...')
+
+  interface LlmStrategyCodegenSessionDelegate {
+    upsert: (args: unknown) => Promise<unknown>
+  }
+  interface StrategyTemplateDelegate {
+    upsert: (args: unknown) => Promise<{ id: string }>
+  }
+  interface StrategyInstanceDelegate {
+    upsert: (args: unknown) => Promise<{ id: string }>
+  }
+  interface PublishedStrategySnapshotDelegate {
+    upsert: (args: unknown) => Promise<unknown>
+  }
+
+  const client = prisma as unknown as {
+    llmStrategyCodegenSession?: LlmStrategyCodegenSessionDelegate
+    strategyTemplate?: StrategyTemplateDelegate
+    strategyInstance?: StrategyInstanceDelegate
+    publishedStrategySnapshot?: PublishedStrategySnapshotDelegate
+  }
+
+  if (
+    !client.llmStrategyCodegenSession
+    || !client.strategyTemplate
+    || !client.strategyInstance
+    || !client.publishedStrategySnapshot
+  ) {
+    console.warn('[seed] Prisma Client is missing Strategy Plaza delegates. Skipping official snapshots.')
+    return
+  }
+
+  for (const template of OFFICIAL_STRATEGY_PLAZA_TEMPLATES) {
+    const sessionId = `official-strategy-plaza:${template.id}:seed-session`
+    const templateName = `Strategy Plaza Official Source ${template.id}`
+    const instanceName = `${template.name} 官方源模板`
+    const content = buildOfficialStrategySnapshotContent(template)
+
+    await client.llmStrategyCodegenSession.upsert({
+      where: { id: sessionId },
+      update: {
+        status: 'PUBLISHED',
+        latestDraftCode: content.scriptSnapshot,
+        latestSpecDesc: content.specSnapshot,
+        semanticGraph: content.semanticGraph,
+        compiledIr: content.compiledIr,
+      },
+      create: {
+        id: sessionId,
+        userId: OFFICIAL_STRATEGY_PLAZA_USER_ID,
+        status: 'PUBLISHED',
+        latestDraftCode: content.scriptSnapshot,
+        latestSpecDesc: content.specSnapshot,
+        semanticGraph: content.semanticGraph,
+        compiledIr: content.compiledIr,
+      },
+    })
+
+    const strategyTemplate = await client.strategyTemplate.upsert({
+      where: { name: templateName },
+      update: {
+        description: template.description,
+        script: content.scriptSnapshot,
+        defaultParams: content.paramsSnapshot,
+        rulesJson: content.specSnapshot,
+        dataRequirements: content.dataRequirements,
+        updatedBy: OFFICIAL_STRATEGY_PLAZA_USER_ID,
+        metadata: {
+          source: 'strategy-plaza-official-template',
+          officialTemplateId: template.id,
+          officialSnapshotId: template.runConfig.publishedSnapshotId,
+        },
+      },
+      create: {
+        name: templateName,
+        description: template.description,
+        legs: [{
+          id: 'primary',
+          symbol: template.runConfig.symbol,
+          role: 'primary',
+          description: template.name,
+        }],
+        execution: { timeframe: template.runConfig.timeframe },
+        dataRequirements: content.dataRequirements,
+        llmModel: OFFICIAL_STRATEGY_PLAZA_LLM_MODEL,
+        promptTemplate: 'OFFICIAL_STRATEGY_PLAZA_TEMPLATE',
+        script: content.scriptSnapshot,
+        paramsSchema: {},
+        defaultParams: content.paramsSnapshot,
+        rulesJson: content.specSnapshot,
+        requiredFields: [],
+        status: 'live',
+        createdBy: OFFICIAL_STRATEGY_PLAZA_USER_ID,
+        updatedBy: OFFICIAL_STRATEGY_PLAZA_USER_ID,
+        metadata: {
+          source: 'strategy-plaza-official-template',
+          officialTemplateId: template.id,
+          officialSnapshotId: template.runConfig.publishedSnapshotId,
+        },
+      },
+    })
+
+    const strategyInstance = await client.strategyInstance.upsert({
+      where: {
+        strategyTemplateId_llmModel_name: {
+          strategyTemplateId: strategyTemplate.id,
+          llmModel: OFFICIAL_STRATEGY_PLAZA_LLM_MODEL,
+          name: instanceName,
+        },
+      },
+      update: {
+        description: template.description,
+        params: content.paramsSnapshot,
+        updatedBy: OFFICIAL_STRATEGY_PLAZA_USER_ID,
+        metadata: {
+          source: 'strategy-plaza-official-template',
+          officialTemplateId: template.id,
+          officialSnapshotId: template.runConfig.publishedSnapshotId,
+        },
+      },
+      create: {
+        strategyTemplateId: strategyTemplate.id,
+        name: instanceName,
+        description: template.description,
+        llmModel: OFFICIAL_STRATEGY_PLAZA_LLM_MODEL,
+        params: content.paramsSnapshot,
+        status: 'draft',
+        mode: 'PAPER',
+        createdBy: OFFICIAL_STRATEGY_PLAZA_USER_ID,
+        updatedBy: OFFICIAL_STRATEGY_PLAZA_USER_ID,
+        metadata: {
+          source: 'strategy-plaza-official-template',
+          officialTemplateId: template.id,
+          officialSnapshotId: template.runConfig.publishedSnapshotId,
+        },
+      },
+    })
+
+    await client.publishedStrategySnapshot.upsert({
+      where: { id: template.runConfig.publishedSnapshotId },
+      update: {
+        strategyTemplateId: strategyTemplate.id,
+        strategyInstanceId: strategyInstance.id,
+        ...content,
+      },
+      create: {
+        id: template.runConfig.publishedSnapshotId,
+        session: { connect: { id: sessionId } },
+        strategyTemplateId: strategyTemplate.id,
+        strategyInstanceId: strategyInstance.id,
+        ...content,
+      },
+    })
+  }
+
+  console.log(`[seed] Official Strategy Plaza snapshots ensured: ${OFFICIAL_STRATEGY_PLAZA_TEMPLATES.length}`)
+}
+
 async function main() {
   console.log('Starting quantify seed...')
 
   await seedAiProviderKeys()
   await seedBacktestCapabilityConfig()
+  await seedOfficialStrategyPlazaSnapshots()
 
   console.log('Quantify seed finished')
 }

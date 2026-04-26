@@ -12,6 +12,10 @@ describe('aiQuantProxyService', () => {
       patch: jest.fn(),
       delete: jest.fn(),
       deleteAccountStrategy: jest.fn(),
+      listStrategyPlazaTemplates: jest.fn(),
+      getStrategyPlazaTemplateDetail: jest.fn(),
+      runStrategyPlazaTemplate: jest.fn(),
+      startStrategyPlazaEditSession: jest.fn(),
       getDeployResult: jest.fn(),
       deployAccountStrategy: jest.fn(),
       updateAccountStrategyExecutionLeverage: jest.fn(),
@@ -303,6 +307,75 @@ describe('aiQuantProxyService', () => {
         headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' },
       },
     )
+  })
+
+  it('publicly proxies strategy plaza template list without user headers', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.listStrategyPlazaTemplates.mockResolvedValue([{ id: 'ma-cross' }])
+
+    await expect(service.listStrategyPlazaTemplates()).resolves.toEqual([{ id: 'ma-cross' }])
+
+    expect(quantifyClient.listStrategyPlazaTemplates).toHaveBeenCalledWith()
+  })
+
+  it('forwards strategy plaza run with user/auth headers and only runRequestId', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.runStrategyPlazaTemplate.mockResolvedValue({ id: 'strategy-1' })
+
+    await service.runStrategyPlazaTemplate('user-1', 'Bearer token-1', 'ma-cross', {
+      runRequestId: 'plaza-run-12345678',
+      marketType: 'spot',
+      symbol: 'ETH-USDT',
+      positionPct: 99,
+      leverage: 99,
+    })
+
+    expect(quantifyClient.runStrategyPlazaTemplate).toHaveBeenCalledWith(
+      'ma-cross',
+      { runRequestId: 'plaza-run-12345678' },
+      { userId: 'user-1', headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
+    )
+  })
+
+  it('forwards strategy plaza edit session with user/auth headers and no body', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.startStrategyPlazaEditSession.mockResolvedValue({
+      sessionId: 'session-1',
+      templateId: 'ma-cross',
+      initialMessage: 'Edit this strategy',
+    })
+
+    await service.startStrategyPlazaEditSession('user-1', 'Bearer token-1', 'ma-cross')
+
+    expect(quantifyClient.startStrategyPlazaEditSession).toHaveBeenCalledWith(
+      'ma-cross',
+      { userId: 'user-1', headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
+    )
+  })
+
+  it('preserves strategy plaza okx demo key code and reason after service mapping', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.runStrategyPlazaTemplate.mockRejectedValue(new QuantifyClientError(
+      'strategy_plaza.okx_demo_api_key_required',
+      400,
+      'strategy_plaza.okx_demo_api_key_required',
+      {
+        userId: 'user-1',
+        reasonMessage: '请先绑定 OKX 模拟盘 API Key',
+      },
+    ))
+
+    await expect(service.runStrategyPlazaTemplate('user-1', 'Bearer token-1', 'ma-cross', {
+      runRequestId: 'plaza-run-12345678',
+    })).rejects.toMatchObject({
+      status: 400,
+      code: 'strategy_plaza.okx_demo_api_key_required',
+      message: '请先绑定 OKX 模拟盘 API Key',
+      args: {
+        userId: 'user-1',
+        reasonMessage: '请先绑定 OKX 模拟盘 API Key',
+      },
+    })
   })
 
   it('maps transient AI Quant conversation list failures to service unavailable', async () => {

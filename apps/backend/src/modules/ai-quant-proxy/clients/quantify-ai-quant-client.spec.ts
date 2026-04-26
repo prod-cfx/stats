@@ -5,6 +5,8 @@ jest.mock('@ai/api-contracts', () => ({
   createQuantifyApiClient: jest.fn(),
 }))
 
+const originalFetch = globalThis.fetch
+
 describe('quantifyAiQuantClient', () => {
   const mockedCreateQuantifyApiClient = jest.mocked(createQuantifyApiClient)
 
@@ -35,6 +37,11 @@ describe('quantifyAiQuantClient', () => {
     jest.useRealTimers()
     jest.restoreAllMocks()
     jest.clearAllMocks()
+    if (originalFetch) {
+      globalThis.fetch = originalFetch
+    } else {
+      delete (globalThis as { fetch?: typeof fetch }).fetch
+    }
   })
 
   it('creates the quantify contract client with the configured api base url', () => {
@@ -290,6 +297,149 @@ describe('quantifyAiQuantClient', () => {
       headers: {
         'x-user-id': 'user-1',
         authorization: 'Bearer token-1',
+      },
+    })
+  })
+
+  it('proxies strategy plaza run through untyped POST with only runRequestId and user headers', async () => {
+    mockedCreateQuantifyApiClient.mockReturnValue(createContractMock() as never)
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ data: { id: 'strategy-1' } }),
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const client = new QuantifyAiQuantClient(env as any)
+
+    await expect(client.runStrategyPlazaTemplate('ma-cross', {
+      runRequestId: 'plaza-run-12345678',
+      marketType: 'spot',
+      symbol: 'ETH-USDT',
+    }, {
+      userId: 'user-1',
+      headers: { authorization: 'Bearer token-1' },
+    })).resolves.toEqual({ id: 'strategy-1' })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://quantify.test/api/v1/strategy-plaza/templates/ma-cross/run',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'content-type': 'application/json',
+          'x-user-id': 'user-1',
+          authorization: 'Bearer token-1',
+        }),
+        body: JSON.stringify({ runRequestId: 'plaza-run-12345678' }),
+      }),
+    )
+  })
+
+  it('proxies strategy plaza edit session through untyped POST without a request body', async () => {
+    mockedCreateQuantifyApiClient.mockReturnValue(createContractMock() as never)
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({
+        data: {
+          sessionId: 'session-1',
+          templateId: 'bollinger-reversion',
+          initialMessage: 'Edit this strategy',
+        },
+      }),
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const client = new QuantifyAiQuantClient(env as any)
+
+    await expect(client.startStrategyPlazaEditSession('bollinger-reversion', {
+      userId: 'user-1',
+      headers: { authorization: 'Bearer token-1' },
+    })).resolves.toEqual({
+      sessionId: 'session-1',
+      templateId: 'bollinger-reversion',
+      initialMessage: 'Edit this strategy',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://quantify.test/api/v1/strategy-plaza/templates/bollinger-reversion/edit-session',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          'x-user-id': 'user-1',
+          authorization: 'Bearer token-1',
+        }),
+      }),
+    )
+    expect(fetchMock.mock.calls[0]?.[1]).not.toHaveProperty('body')
+  })
+
+  it('normalizes legacy strategy plaza okx demo key errors to the dedicated code', async () => {
+    mockedCreateQuantifyApiClient.mockReturnValue(createContractMock() as never)
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => JSON.stringify({
+        status: 400,
+        message: 'strategy_plaza.okx_demo_api_key_required',
+        error: {
+          code: 'BAD_REQUEST',
+          args: {
+            userId: 'user-1',
+          },
+        },
+      }),
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const client = new QuantifyAiQuantClient(env as any)
+
+    await expect(client.runStrategyPlazaTemplate('ma-cross', {
+      runRequestId: 'plaza-run-12345678',
+    }, {
+      userId: 'user-1',
+      headers: { authorization: 'Bearer token-1' },
+    })).rejects.toMatchObject({
+      status: 400,
+      code: 'strategy_plaza.okx_demo_api_key_required',
+      args: {
+        userId: 'user-1',
+        reasonMessage: '请先绑定 OKX 模拟盘 API Key',
+      },
+    })
+  })
+
+  it('preserves production strategy plaza okx demo key errors without message', async () => {
+    mockedCreateQuantifyApiClient.mockReturnValue(createContractMock() as never)
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => JSON.stringify({
+        status: 400,
+        error: {
+          code: 'strategy_plaza.okx_demo_api_key_required',
+          args: {
+            userId: 'user-1',
+            reasonMessage: '请先绑定 OKX 模拟盘 API Key',
+          },
+        },
+      }),
+    })
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const client = new QuantifyAiQuantClient(env as any)
+
+    await expect(client.runStrategyPlazaTemplate('ma-cross', {
+      runRequestId: 'plaza-run-12345678',
+    }, {
+      userId: 'user-1',
+      headers: { authorization: 'Bearer token-1' },
+    })).rejects.toMatchObject({
+      status: 400,
+      code: 'strategy_plaza.okx_demo_api_key_required',
+      args: {
+        userId: 'user-1',
+        reasonMessage: '请先绑定 OKX 模拟盘 API Key',
       },
     })
   })

@@ -29,6 +29,20 @@ interface ExchangeFormState {
 }
 
 const EXCHANGES: UserExchangeId[] = ['binance', 'okx', 'hyperliquid']
+const OKX_SAVE_ALLOWED_REDIRECTS = new Set(['/zh/ai-quant/plaza', '/en/ai-quant/plaza'])
+
+export function getOkxSaveRedirect(): string | null {
+  if (typeof window === 'undefined') return null
+  const redirect = new URLSearchParams(window.location.search).get('redirect')
+  if (!redirect || !OKX_SAVE_ALLOWED_REDIRECTS.has(redirect)) return null
+  return redirect
+}
+
+export const accountExchangeNavigation = {
+  redirectTo(redirect: string) {
+    window.location.href = redirect
+  },
+}
 
 function createEmptyFormState(): ExchangeFormState {
   return {
@@ -39,6 +53,17 @@ function createEmptyFormState(): ExchangeFormState {
     passphrase: '',
     mainWalletAddress: '',
     agentPrivateKey: '',
+  }
+}
+
+function createInitialForms(): Record<UserExchangeId, ExchangeFormState> {
+  return {
+    binance: createEmptyFormState(),
+    okx: {
+      ...createEmptyFormState(),
+      isTestnet: getOkxSaveRedirect() !== null,
+    },
+    hyperliquid: createEmptyFormState(),
   }
 }
 
@@ -122,11 +147,7 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
     okx: buildEmptyStatus('okx'),
     hyperliquid: buildEmptyStatus('hyperliquid'),
   })
-  const [forms, setForms] = useState<Record<UserExchangeId, ExchangeFormState>>({
-    binance: createEmptyFormState(),
-    okx: createEmptyFormState(),
-    hyperliquid: createEmptyFormState(),
-  })
+  const [forms, setForms] = useState<Record<UserExchangeId, ExchangeFormState>>(createInitialForms)
   const [editing, setEditing] = useState<Record<UserExchangeId, boolean>>({
     binance: false,
     okx: false,
@@ -257,11 +278,26 @@ export function ExchangeApiSection({ highlighted = false }: ExchangeApiSectionPr
       }))
       return
     }
+    const okxRecoveryRedirect = exchangeId === 'okx' ? getOkxSaveRedirect() : null
+    if (okxRecoveryRedirect && !forms.okx.isTestnet) {
+      setErrors(prev => ({
+        ...prev,
+        okx: t('aiQuant.validation.requiredOkxDemoCredentials', {
+          defaultValue: 'Please save an OKX demo trading API key before returning to Strategy Plaza.',
+        }),
+      }))
+      return
+    }
 
     setSubmittingExchange(exchangeId)
     setErrors(prev => ({ ...prev, [exchangeId]: null }))
     try {
       await upsertUserExchangeAccount(buildPayload(exchangeId))
+      const redirect = okxRecoveryRedirect
+      if (redirect) {
+        accountExchangeNavigation.redirectTo(redirect)
+        return
+      }
       setForms(prev => ({
         ...prev,
         [exchangeId]: createEmptyFormState(),

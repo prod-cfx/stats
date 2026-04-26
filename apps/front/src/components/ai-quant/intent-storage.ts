@@ -1,11 +1,17 @@
 export type QuantReturnIntent =
   | { type: 'run', strategyId: string, ts?: number }
   | { type: 'edit', strategyId: string, ts?: number }
+  | { type: 'plaza-run', templateId: string, ts?: number }
+  | { type: 'plaza-edit', templateId: string, ts?: number }
+  | { type: 'plaza-chat-session', sessionId: string, ts?: number }
   | { type: 'chat', draft: string, ts?: number }
 
 export type QuantReturnIntentInput =
   | { type: 'run', strategyId: string }
   | { type: 'edit', strategyId: string }
+  | { type: 'plaza-run', templateId: string }
+  | { type: 'plaza-edit', templateId: string }
+  | { type: 'plaza-chat-session', sessionId: string }
   | { type: 'chat', draft: string }
 
 const INTENT_STORAGE_KEY = 'ai_quant_return_intent_v1'

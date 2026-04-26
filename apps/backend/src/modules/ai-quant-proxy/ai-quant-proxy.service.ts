@@ -1,5 +1,10 @@
 import type { AiQuantConversationResponseDto } from './dto/ai-quant-conversation.response.dto'
 import type { CodegenSessionResponseDto } from './dto/codegen-session.response.dto'
+import type { AccountAiQuantStrategyDetailResponseDto } from './dto/account-ai-quant-strategy.response.dto'
+import type {
+  StrategyPlazaEditSessionResponseDto,
+  StrategyPlazaTemplateResponseDto,
+} from './dto/strategy-plaza.response.dto'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
 import { DomainException } from '@/common/exceptions/domain.exception'
@@ -184,6 +189,40 @@ export class AiQuantProxyService {
       timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
       headers: this.userHeaders(userId, authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })
+  }
+
+  async listStrategyPlazaTemplates(): Promise<StrategyPlazaTemplateResponseDto[]> {
+    return this.quantifyClient.listStrategyPlazaTemplates<StrategyPlazaTemplateResponseDto[]>()
+      .catch(error => { throw this.mapQuantifyError(error) })
+  }
+
+  async getStrategyPlazaTemplateDetail(templateId: string): Promise<StrategyPlazaTemplateResponseDto> {
+    return this.quantifyClient.getStrategyPlazaTemplateDetail<StrategyPlazaTemplateResponseDto>(templateId)
+      .catch(error => { throw this.mapQuantifyError(error) })
+  }
+
+  async runStrategyPlazaTemplate(
+    userId: string,
+    authorization: string | undefined,
+    templateId: string,
+    body: Record<string, unknown>,
+  ): Promise<AccountAiQuantStrategyDetailResponseDto> {
+    return this.quantifyClient.runStrategyPlazaTemplate<AccountAiQuantStrategyDetailResponseDto>(
+      templateId,
+      { runRequestId: body.runRequestId },
+      { userId, headers: this.userHeaders(userId, authorization) },
+    ).catch(error => { throw this.mapQuantifyError(error) })
+  }
+
+  async startStrategyPlazaEditSession(
+    userId: string,
+    authorization: string | undefined,
+    templateId: string,
+  ): Promise<StrategyPlazaEditSessionResponseDto> {
+    return this.quantifyClient.startStrategyPlazaEditSession<StrategyPlazaEditSessionResponseDto>(
+      templateId,
+      { userId, headers: this.userHeaders(userId, authorization) },
+    ).catch(error => { throw this.mapQuantifyError(error) })
   }
 
   async deleteAiQuantConversation(userId: string, authorization: string | undefined, conversationId: string): Promise<void> {

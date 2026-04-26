@@ -1,5 +1,6 @@
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
+import { resolveBackendApiBaseUrl } from '@/common/auth/backend-api-base-url'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时引用
 import { EnvService } from '@/common/services/env.service'
@@ -37,15 +38,15 @@ export class CallerIdentityService {
       })
     }
 
-    const jwtUserId = this.extractUserIdFromJwtPayload(payload)
+    const verifiedUserId = await this.verifyTokenByBackendAuth(token, payload)
     const normalizedForwardedUserId = forwardedUserId?.trim()
     if (normalizedForwardedUserId) {
-      if (!jwtUserId || jwtUserId !== normalizedForwardedUserId) {
+      if (verifiedUserId !== normalizedForwardedUserId) {
         throw new DomainException('codegen.caller_user_id_mismatch', {
           code: ErrorCode.UNAUTHORIZED,
           status: HttpStatus.UNAUTHORIZED,
           args: {
-            authUserId: jwtUserId ?? undefined,
+            authUserId: verifiedUserId,
             inputUserId: normalizedForwardedUserId,
           },
         })
@@ -53,14 +54,13 @@ export class CallerIdentityService {
       return normalizedForwardedUserId
     }
 
-    const callerUserId = await this.verifyTokenByBackendAuth(token, payload)
-    if (!callerUserId) {
+    if (!verifiedUserId) {
       throw new DomainException('codegen.jwt_subject_missing', {
         code: ErrorCode.UNAUTHORIZED,
         status: HttpStatus.UNAUTHORIZED,
       })
     }
-    return callerUserId
+    return verifiedUserId
   }
 
   private decodeJwtPart(part: string, errorCode: string): Record<string, unknown> {
@@ -98,11 +98,7 @@ export class CallerIdentityService {
   }
 
   private resolveBackendApiBaseUrl(): string {
-    const configured = this.env.getString('BACKEND_API_BASE_URL')?.trim()
-    if (configured) {
-      return configured.replace(/\/$/, '')
-    }
-    return 'http://127.0.0.1:3000/api/v1'
+    return resolveBackendApiBaseUrl(this.env)
   }
 
   private extractUserId(payload: unknown): string | null {

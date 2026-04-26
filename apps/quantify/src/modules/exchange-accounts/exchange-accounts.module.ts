@@ -11,5 +11,6 @@ import { ExchangeAccountRepository } from './repositories/exchange-account.repos
   imports: [PrismaModule, TradingModule],
   controllers: [ExchangeAccountsController],
   providers: [ExchangeAccountsService, ExchangeAccountRepository],
+  exports: [ExchangeAccountsService, ExchangeAccountRepository],
 })
 export class ExchangeAccountsModule {}

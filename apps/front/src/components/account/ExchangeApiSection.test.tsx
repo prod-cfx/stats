@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
-import { ExchangeApiSection } from './ExchangeApiSection'
+import { accountExchangeNavigation, ExchangeApiSection, getOkxSaveRedirect } from './ExchangeApiSection'
 
 const mockFetchUserExchangeAccountStatuses = jest.fn()
 const mockUpsertUserExchangeAccount = jest.fn()
@@ -48,6 +48,7 @@ jest.mock('react-i18next', () => ({
         'aiQuant.useTestnet': 'Use testnet / paper trading',
         'aiQuant.validation.requiredBinanceCredentials': 'Binance API key and secret are required.',
         'aiQuant.validation.requiredHyperliquidCredentials': 'Hyperliquid wallet address and agent private key are required.',
+        'aiQuant.validation.requiredOkxDemoCredentials': 'Please save an OKX demo trading API key before returning to Strategy Plaza.',
         'aiQuant.validation.requiredOkxCredentials': 'OKX API key, secret, and passphrase are required.',
         'aiQuant.walletAddress': 'Wallet Address',
         'aiQuant.agentPrivateKey': 'Agent Private Key',
@@ -135,6 +136,14 @@ describe('ExchangeApiSection', () => {
     })
   }
 
+  async function fillOkxCredentials() {
+    const okxCard = findExchangeCard('OKX API')
+    await setInputValue(findInput(okxCard, 'API Key'), 'demo-key')
+    await setInputValue(findInput(okxCard, 'Secret Key'), 'demo-secret')
+    await setInputValue(findInput(okxCard, 'Passphrase'), 'demo-passphrase')
+    return okxCard
+  }
+
   async function flushPromises() {
     await act(async () => {
       await Promise.resolve()
@@ -160,6 +169,7 @@ describe('ExchangeApiSection', () => {
     mockFetchUserExchangeAccountStatuses.mockResolvedValue(emptyStatuses)
     mockUpsertUserExchangeAccount.mockResolvedValue(buildBoundOkxStatus())
     mockDeleteUserExchangeAccount.mockResolvedValue(undefined)
+    window.history.replaceState({}, '', '/zh/account')
   })
 
   afterEach(async () => {
@@ -170,6 +180,7 @@ describe('ExchangeApiSection', () => {
       root = null
     }
     document.body.innerHTML = ''
+    jest.restoreAllMocks()
   })
 
   it('blocks a first-time OKX bind when required credentials are blank', async () => {
@@ -244,5 +255,112 @@ describe('ExchangeApiSection', () => {
     expect(payload.apiKey).toBeUndefined()
     expect(payload.apiSecret).toBeUndefined()
     expect(payload.passphrase).toBeUndefined()
+  })
+
+  it('redirects back to plaza after OKX is saved with a redirect query', async () => {
+    window.history.replaceState({}, '', '/zh/account?tab=ai-quant&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api')
+    const redirectSpy = jest.spyOn(accountExchangeNavigation, 'redirectTo').mockImplementation(() => undefined)
+    await renderSection()
+
+    const okxCard = await fillOkxCredentials()
+
+    await act(async () => {
+      clickButton(okxCard, 'Save API Config')
+    })
+    await flushPromises()
+
+    expect(getOkxSaveRedirect()).toBe('/zh/ai-quant/plaza')
+    expect(redirectSpy).toHaveBeenCalledWith('/zh/ai-quant/plaza')
+    expect(mockUpsertUserExchangeAccount).toHaveBeenCalledTimes(1)
+    expect(mockFetchUserExchangeAccountStatuses).toHaveBeenCalledTimes(1)
+  })
+
+  it('defaults OKX recovery binding to testnet demo mode', async () => {
+    window.history.replaceState({}, '', '/zh/account?tab=ai-quant&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api')
+    await renderSection()
+
+    const okxCard = findExchangeCard('OKX API')
+    const checkbox = Array.from(okxCard.querySelectorAll('input')).find(node => node.type === 'checkbox') as HTMLInputElement
+
+    expect(checkbox.checked).toBe(true)
+  })
+
+  it('does not return to plaza when OKX recovery binding is saved as non-demo', async () => {
+    window.history.replaceState({}, '', '/zh/account?tab=ai-quant&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api')
+    const redirectSpy = jest.spyOn(accountExchangeNavigation, 'redirectTo').mockImplementation(() => undefined)
+    await renderSection()
+
+    const okxCard = await fillOkxCredentials()
+    await setCheckbox(Array.from(okxCard.querySelectorAll('input')).find(node => node.type === 'checkbox') as HTMLInputElement, false)
+
+    await act(async () => {
+      clickButton(okxCard, 'Save API Config')
+    })
+    await flushPromises()
+
+    expect(mockUpsertUserExchangeAccount).not.toHaveBeenCalled()
+    expect(redirectSpy).not.toHaveBeenCalled()
+    expect(okxCard.textContent).toContain('Please save an OKX demo trading API key before returning to Strategy Plaza.')
+  })
+
+  it('does not redirect when OKX save fails', async () => {
+    window.history.replaceState({}, '', '/zh/account?tab=ai-quant&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api')
+    const redirectSpy = jest.spyOn(accountExchangeNavigation, 'redirectTo').mockImplementation(() => undefined)
+    mockUpsertUserExchangeAccount.mockRejectedValue(new Error('save failed'))
+    await renderSection()
+
+    const okxCard = await fillOkxCredentials()
+
+    await act(async () => {
+      clickButton(okxCard, 'Save API Config')
+    })
+    await flushPromises()
+
+    expect(mockUpsertUserExchangeAccount).toHaveBeenCalledTimes(1)
+    expect(redirectSpy).not.toHaveBeenCalled()
+    expect(mockFetchUserExchangeAccountStatuses).toHaveBeenCalledTimes(1)
+    expect(okxCard.textContent).toContain('save failed')
+  })
+
+  it('keeps non-OKX saves on the account page even with a redirect query', async () => {
+    window.history.replaceState({}, '', '/zh/account?tab=ai-quant&redirect=%2Fzh%2Fai-quant%2Fplaza#exchange-api')
+    const redirectSpy = jest.spyOn(accountExchangeNavigation, 'redirectTo').mockImplementation(() => undefined)
+    await renderSection()
+
+    const binanceCard = findExchangeCard('Binance API')
+    await setInputValue(findInput(binanceCard, 'API Key'), 'binance-key')
+    await setInputValue(findInput(binanceCard, 'Secret Key'), 'binance-secret')
+
+    await act(async () => {
+      clickButton(binanceCard, 'Save API Config')
+    })
+    await flushPromises()
+
+    expect(mockUpsertUserExchangeAccount).toHaveBeenCalledTimes(1)
+    expect(mockUpsertUserExchangeAccount).toHaveBeenCalledWith(expect.objectContaining({ exchangeId: 'binance' }))
+    expect(redirectSpy).not.toHaveBeenCalled()
+    expect(mockFetchUserExchangeAccountStatuses).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([
+    ['external URL', 'https://evil.example/zh/ai-quant/plaza'],
+    ['protocol-relative URL', '//evil.example/zh/ai-quant/plaza'],
+    ['javascript URL', 'javascript:alert(1)'],
+  ])('ignores %s OKX save redirect', async (_label, redirect) => {
+    window.history.replaceState({}, '', `/zh/account?tab=ai-quant&redirect=${encodeURIComponent(redirect)}#exchange-api`)
+    const redirectSpy = jest.spyOn(accountExchangeNavigation, 'redirectTo').mockImplementation(() => undefined)
+    await renderSection()
+
+    const okxCard = await fillOkxCredentials()
+
+    await act(async () => {
+      clickButton(okxCard, 'Save API Config')
+    })
+    await flushPromises()
+
+    expect(getOkxSaveRedirect()).toBeNull()
+    expect(mockUpsertUserExchangeAccount).toHaveBeenCalledTimes(1)
+    expect(redirectSpy).not.toHaveBeenCalled()
+    expect(mockFetchUserExchangeAccountStatuses).toHaveBeenCalledTimes(2)
   })
 })

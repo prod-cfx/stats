@@ -13,5 +13,24 @@ describe('intent-storage', () => {
     clearIntent()
     expect(getIntent(30 * 60 * 1000)).toBeNull()
   })
-})
 
+  it('supports strategy plaza run and edit intents', () => {
+    setIntent({ type: 'plaza-run', templateId: 'ma-cross' })
+    expect(getIntent(30 * 60 * 1000)).toMatchObject({
+      type: 'plaza-run',
+      templateId: 'ma-cross',
+    })
+
+    setIntent({ type: 'plaza-edit', templateId: 'bollinger-reversion' })
+    expect(getIntent(30 * 60 * 1000)).toMatchObject({
+      type: 'plaza-edit',
+      templateId: 'bollinger-reversion',
+    })
+
+    setIntent({ type: 'plaza-chat-session', sessionId: 'session-1' })
+    expect(getIntent(30 * 60 * 1000)).toMatchObject({
+      type: 'plaza-chat-session',
+      sessionId: 'session-1',
+    })
+  })
+})
