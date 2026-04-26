@@ -148,6 +148,36 @@ export class AiQuantConversationsRepository {
     return rows.length > 0
   }
 
+  async findActiveByIdAndUser(conversationId: string, userId: string): Promise<AiQuantConversationSnapshotRecord | null> {
+    const conversation = await this.txHost.tx.aiQuantConversation.findFirst({
+      where: {
+        id: conversationId,
+        userId,
+        archivedAt: null,
+      },
+      select: {
+        id: true,
+        userId: true,
+        codegenSessionId: true,
+        title: true,
+        archivedAt: true,
+        createdAt: true,
+        updatedAt: true,
+        backtestDraftConfig: true,
+        lastBacktestRef: true,
+        messages: {
+          orderBy: { sortOrder: 'asc' },
+          select: {
+            role: true,
+            content: true,
+          },
+        },
+      },
+    })
+
+    return conversation ? this.mapSnapshotRecord(conversation) : null
+  }
+
   async findByCodegenSessionId(codegenSessionId: string): Promise<AiQuantConversationSnapshotRecord | null> {
     const conversation = await this.txHost.tx.aiQuantConversation.findUnique({
       where: { codegenSessionId },

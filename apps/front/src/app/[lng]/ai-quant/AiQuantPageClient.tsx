@@ -37,6 +37,7 @@ import { applyCapabilitiesToParamSchema } from '@/components/ai-quant/strategy-p
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
 import { useAuth } from '@/hooks/use-auth'
 import {
+  deleteAccountAiQuantStrategy,
   deleteAiQuantConversation,
   fetchAccountAiQuantStrategyDetail,
   fetchUserExchangeAccountStatuses,
@@ -93,6 +94,17 @@ const INTENT_TTL_MS = 30 * 60 * 1000
 type CapabilityState = 'loading' | 'ready' | 'failed'
 type ConversationSyncState = 'idle' | 'loading' | 'ready' | 'error'
 type DeploymentDetailStatus = 'idle' | 'loading' | 'ready' | 'error'
+
+type ConversationDeleteDialogState = {
+  conversation: ConversationState
+  serverConversationId: string
+  strategyInstanceId: string
+  strategy: AccountAiQuantStrategyDetail | null
+  status: 'loading' | 'running' | 'stopped' | 'draft' | 'unknown'
+  deleteStoppedStrategy: boolean
+  pending: boolean
+  errorMessage: string | null
+} | null
 
 interface AiQuantPageClientProps {
   deployVersion?: string
@@ -155,6 +167,8 @@ export function AiQuantPageClient({
   const [deploymentGuardErrorMessage, setDeploymentGuardErrorMessage] = useState<string | null>(
     null,
   )
+  const [conversationDeleteDialog, setConversationDeleteDialog] =
+    useState<ConversationDeleteDialogState>(null)
   const [backtestCapabilityRetryNonce, setBacktestCapabilityRetryNonce] = useState(0)
   const [codegenBusyConversationIds, setCodegenBusyConversationIds] = useState<string[]>([])
   const isMountedRef = useRef(true)
@@ -755,6 +769,141 @@ export function AiQuantPageClient({
     }
   }
 
+  function removeDeletedConversation(conversationId: string) {
+    setConversations(prev => {
+      const next = prev.filter(conv => conv.id !== conversationId)
+      if (next.length === 0) {
+        const seed = createConversation(t)
+        setActiveConversationId(seed.id)
+        return [seed]
+      }
+      if (conversationId === activeConversation.id) {
+        setActiveConversationId(next[0].id)
+      }
+      return next
+    })
+  }
+
+  async function deleteConversationByMode(args: {
+    conversation: ConversationState
+    serverConversationId: string
+    deleteStoppedStrategy?: boolean
+  }) {
+    if (args.deleteStoppedStrategy && args.conversation.publishedStrategyInstanceId && session?.userId) {
+      await deleteAccountAiQuantStrategy(args.conversation.publishedStrategyInstanceId, session.userId)
+      await deleteAiQuantConversation(args.serverConversationId)
+    } else {
+      if (args.deleteStoppedStrategy) {
+        await deleteAiQuantConversation(args.serverConversationId, { deleteStoppedStrategy: true })
+      } else {
+        await deleteAiQuantConversation(args.serverConversationId)
+      }
+    }
+    removeDeletedConversation(args.conversation.id)
+  }
+
+  async function requestDeleteConversation(conversationId: string) {
+    const targetConversation = conversations.find(conv => conv.id === conversationId)
+    if (!targetConversation) return
+    const serverConversationId = targetConversation.serverConversationId ?? conversationId
+    const strategyInstanceId = targetConversation.publishedStrategyInstanceId?.trim() ?? ''
+
+    if (!serverOwnedConversations) {
+      removeDeletedConversation(conversationId)
+      return
+    }
+
+    if (!strategyInstanceId) {
+      try {
+        await deleteConversationByMode({
+          conversation: targetConversation,
+          serverConversationId,
+        })
+      } catch {
+        // Keep the current lightweight sidebar behavior for unbound conversations.
+      }
+      return
+    }
+
+    if (!session?.userId) {
+      setConversationDeleteDialog({
+        conversation: targetConversation,
+        serverConversationId,
+        strategyInstanceId,
+        strategy: null,
+        status: 'unknown',
+        deleteStoppedStrategy: false,
+        pending: false,
+        errorMessage: '暂时无法确认该策略是否正在运行。为避免误删运行中的策略，请稍后重试。',
+      })
+      return
+    }
+
+    setConversationDeleteDialog({
+      conversation: targetConversation,
+      serverConversationId,
+      strategyInstanceId,
+      strategy: null,
+      status: 'loading',
+      deleteStoppedStrategy: false,
+      pending: false,
+      errorMessage: null,
+    })
+
+    try {
+      const detail = activeConversation.id === targetConversation.id
+        && deploymentDetail?.id === strategyInstanceId
+        && deploymentDetailStatus === 'ready'
+        ? deploymentDetail
+        : await fetchAccountAiQuantStrategyDetail(strategyInstanceId, session.userId)
+      const status = detail.status === 'running' || detail.status === 'stopped' || detail.status === 'draft'
+        ? detail.status
+        : 'unknown'
+      setConversationDeleteDialog(curr => curr && curr.conversation.id === conversationId
+        ? {
+            ...curr,
+            strategy: detail,
+            status,
+          }
+        : curr)
+    } catch (error) {
+      setConversationDeleteDialog(curr => curr && curr.conversation.id === conversationId
+        ? {
+            ...curr,
+            status: 'unknown',
+            errorMessage: error instanceof Error && error.message.trim()
+              ? error.message
+              : '暂时无法确认该策略是否正在运行。为避免误删运行中的策略，请稍后重试。',
+          }
+        : curr)
+    }
+  }
+
+  async function confirmDeleteConversation() {
+    if (!conversationDeleteDialog || conversationDeleteDialog.pending) return
+    if (conversationDeleteDialog.status === 'running' || conversationDeleteDialog.status === 'unknown') return
+
+    setConversationDeleteDialog(curr => curr ? { ...curr, pending: true, errorMessage: null } : curr)
+    try {
+      await deleteConversationByMode({
+        conversation: conversationDeleteDialog.conversation,
+        serverConversationId: conversationDeleteDialog.serverConversationId,
+        deleteStoppedStrategy: conversationDeleteDialog.deleteStoppedStrategy,
+      })
+      setConversationDeleteDialog(null)
+    } catch (error) {
+      setConversationDeleteDialog(curr => curr
+        ? {
+            ...curr,
+            pending: false,
+            errorMessage: error instanceof Error && error.message.trim()
+              ? error.message
+              : '删除失败，请稍后重试。',
+          }
+        : curr)
+    }
+  }
+
   function appendSemanticGraphGuardMessage(conversationId: string) {
     updateConversationById(conversationId, curr => ({
       ...curr,
@@ -1259,35 +1408,7 @@ export function AiQuantPageClient({
             )
           }}
           onDelete={id => {
-            if (serverOwnedConversations) {
-              const targetConversation = conversations.find(conv => conv.id === id)
-              const serverConversationId = targetConversation?.serverConversationId ?? id
-              void deleteAiQuantConversation(serverConversationId)
-                .then(() => {
-                  setConversations(prev => {
-                    const next = prev.filter(conv => conv.id !== id)
-                    if (next.length === 0) {
-                      const seed = createConversation(t)
-                      setActiveConversationId(seed.id)
-                      return [seed]
-                    }
-                    if (id === activeConversation.id) setActiveConversationId(next[0].id)
-                    return next
-                  })
-                })
-                .catch(() => {})
-              return
-            }
-            setConversations(prev => {
-              const next = prev.filter(conv => conv.id !== id)
-              if (next.length === 0) {
-                const seed = createConversation(t)
-                setActiveConversationId(seed.id)
-                return [seed]
-              }
-              if (id === activeConversation.id) setActiveConversationId(next[0].id)
-              return next
-            })
+            void requestDeleteConversation(id)
           }}
         />
 
@@ -1473,6 +1594,125 @@ export function AiQuantPageClient({
           setDeploymentGuardErrorMessage(null)
         }}
       />
+
+      {conversationDeleteDialog && (
+        <div
+          className="fixed inset-0 z-[95] flex items-center justify-center bg-black/50 px-4"
+          onClick={() => {
+            if (!conversationDeleteDialog.pending) setConversationDeleteDialog(null)
+          }}
+        >
+          <div
+            className="w-full max-w-[560px] rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5"
+            onClick={event => event.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">
+              {conversationDeleteDialog.status === 'running'
+                ? '当前策略正在运行'
+                : conversationDeleteDialog.status === 'unknown'
+                  ? '暂时无法删除会话'
+                  : '删除 AI Quant 会话'}
+            </h3>
+            <p className="mt-2 text-sm leading-6 text-[color:var(--cf-muted)]">
+              {conversationDeleteDialog.status === 'loading'
+                ? '正在确认关联策略的运行状态。'
+                : conversationDeleteDialog.status === 'running'
+                  ? '当前会话关联的策略正在运行，不能删除。请先前往策略详情停止运行；如有持仓或挂单，可选择仅停止或平仓并停止。'
+                  : conversationDeleteDialog.status === 'unknown'
+                    ? '暂时无法确认该策略是否正在运行。为避免误删运行中的策略，请稍后重试。'
+                    : '这个会话已生成过策略，当前策略已停止。默认只删除 AI 对话和生成过程，不删除我的策略列表中的策略记录。'}
+            </p>
+
+            <div className="mt-4 grid gap-2 rounded-xl border border-[color:var(--cf-border)] bg-black/10 p-3 text-sm text-[color:var(--cf-text)]">
+              <div className="flex justify-between gap-3">
+                <span className="text-[color:var(--cf-muted)]">会话</span>
+                <span className="text-right text-[color:var(--cf-text-strong)]">
+                  {conversationDeleteDialog.conversation.title}
+                </span>
+              </div>
+              <div className="flex justify-between gap-3">
+                <span className="text-[color:var(--cf-muted)]">策略</span>
+                <span className="text-right text-[color:var(--cf-text-strong)]">
+                  {conversationDeleteDialog.strategy?.name ?? conversationDeleteDialog.strategyInstanceId}
+                </span>
+              </div>
+            </div>
+
+            {(conversationDeleteDialog.status === 'stopped' || conversationDeleteDialog.status === 'draft') && (
+              <label className="mt-4 flex items-start gap-2 rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3 text-sm text-[color:var(--cf-text)]">
+                <input
+                  type="checkbox"
+                  className="mt-1"
+                  checked={conversationDeleteDialog.deleteStoppedStrategy}
+                  disabled={conversationDeleteDialog.pending}
+                  onChange={event => {
+                    setConversationDeleteDialog(curr => curr
+                      ? { ...curr, deleteStoppedStrategy: event.target.checked }
+                      : curr)
+                  }}
+                />
+                <span>
+                  同时删除已停止策略记录
+                  <span className="block text-xs leading-5 text-[color:var(--cf-muted)]">
+                    删除后该策略将从我的策略列表移除，不能再次运行。
+                  </span>
+                </span>
+              </label>
+            )}
+
+            {conversationDeleteDialog.errorMessage && (
+              <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-400">
+                {conversationDeleteDialog.errorMessage}
+              </div>
+            )}
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              {conversationDeleteDialog.status === 'running' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setConversationDeleteDialog(null)
+                    router.push(`/${lng}/account/ai-quant/strategy/${conversationDeleteDialog.strategyInstanceId}`)
+                  }}
+                  className="rounded-xl bg-violet-600 px-4 py-2 text-sm font-semibold text-white"
+                >
+                  前往运行策略
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  data-testid="confirm-delete-conversation"
+                  disabled={
+                    conversationDeleteDialog.pending
+                    || conversationDeleteDialog.status === 'loading'
+                    || conversationDeleteDialog.status === 'unknown'
+                  }
+                  onClick={() => {
+                    if (
+                      conversationDeleteDialog.deleteStoppedStrategy
+                      && !window.confirm('删除后该策略将从我的策略列表移除，不能再次运行。确认继续？')
+                    ) {
+                      return
+                    }
+                    void confirmDeleteConversation()
+                  }}
+                  className="rounded-xl bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {conversationDeleteDialog.deleteStoppedStrategy ? '删除会话和策略' : '仅删除会话'}
+                </button>
+              )}
+              <button
+                type="button"
+                disabled={conversationDeleteDialog.pending}
+                onClick={() => setConversationDeleteDialog(null)}
+                className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <DeployDialog
         open={deployOpen}

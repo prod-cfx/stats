@@ -31,6 +31,7 @@ function createActionTestContext(
     }),
     findUserStrategyAccount: jest.fn().mockResolvedValue({ id: 'account-1' }),
     loadOpenPositionsForLiquidation: jest.fn().mockResolvedValue([]),
+    deleteStrategyForUser: jest.fn().mockResolvedValue(undefined),
   }
 
   const statsService = { calculateStats: jest.fn(), calculateBatchStats: jest.fn() }
@@ -87,6 +88,13 @@ describe('accountStrategyViewService.performAction', () => {
       expect.objectContaining({ status: 'stopped', updatedBy: 'user-1' }),
       'user-1',
     )
+  })
+
+  it('rejects deleting a running strategy instance', async () => {
+    const { service, repo } = createActionTestContext({ status: 'running' })
+
+    await expect(service.deleteStrategy('user-1', 'inst-1')).rejects.toThrow('account_strategy.delete_running_forbidden')
+    expect(repo.deleteStrategyForUser).not.toHaveBeenCalled()
   })
 
   it('rejects subscriber changing global strategy instance status', async () => {

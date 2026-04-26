@@ -48,9 +48,11 @@ describe('accountAiQuantConversationsController', () => {
     }
     const controller = new AccountAiQuantConversationsController(service as never)
 
-    await controller.remove('user-1', 'Bearer token-1', 'conv-1')
+    await controller.remove('user-1', 'Bearer token-1', 'conv-1', undefined)
 
-    expect(service.deleteAiQuantConversation).toHaveBeenCalledWith('user-1', 'Bearer token-1', 'conv-1')
+    expect(service.deleteAiQuantConversation).toHaveBeenCalledWith('user-1', 'Bearer token-1', 'conv-1', {
+      deleteStoppedStrategy: false,
+    })
   })
 
   it('forwards AI Quant backtest draft updates through the proxy service', async () => {

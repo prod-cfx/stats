@@ -186,8 +186,14 @@ export class AiQuantProxyService {
     }).catch(error => { throw this.mapQuantifyError(error) })
   }
 
-  async deleteAiQuantConversation(userId: string, authorization: string | undefined, conversationId: string): Promise<void> {
-    return this.quantifyClient.delete<void>(`/account/ai-quant/conversations/${encodeURIComponent(conversationId)}`, {
+  async deleteAiQuantConversation(
+    userId: string,
+    authorization: string | undefined,
+    conversationId: string,
+    options: { deleteStoppedStrategy?: boolean } = {},
+  ): Promise<void> {
+    const search = options.deleteStoppedStrategy ? '?deleteStoppedStrategy=true' : ''
+    return this.quantifyClient.delete<void>(`/account/ai-quant/conversations/${encodeURIComponent(conversationId)}${search}`, {
       timeoutMs: AiQuantProxyService.CODEGEN_REQUEST_TIMEOUT_MS,
       headers: this.userHeaders(userId, authorization),
     }).catch(error => { throw this.mapQuantifyError(error) })

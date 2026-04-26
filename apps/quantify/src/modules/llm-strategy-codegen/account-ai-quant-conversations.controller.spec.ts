@@ -103,8 +103,11 @@ describe('accountAiQuantConversationsController', () => {
       createBearerToken({ sub: 'caller-u1', principalType: 'user', exp: 4_102_444_800 }),
       'caller-u1',
       'conv-1',
+      undefined,
     )
 
-    expect(service.deleteConversation).toHaveBeenCalledWith('conv-1', 'caller-u1')
+    expect(service.deleteConversation).toHaveBeenCalledWith('conv-1', 'caller-u1', {
+      deleteStoppedStrategy: false,
+    })
   })
 })

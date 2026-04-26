@@ -165,6 +165,7 @@ jest.mock('@/components/ai-quant/backtest-capability-client', () => ({
 
 jest.mock('@/lib/api', () => ({
   deployAccountAiQuantStrategy: jest.fn(),
+  deleteAccountAiQuantStrategy: jest.fn(async () => undefined),
   deleteAiQuantConversation: jest.fn(async () => undefined),
   continueLlmCodegenSession: jest.fn(),
   fetchAccountAiQuantStrategyDetail: jest.fn(async () => ({
@@ -722,6 +723,108 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(deleteAiQuantConversation).toHaveBeenCalledWith('conv-1')
     expect(container.textContent).not.toContain('server-message-1')
     expect(container.textContent).toContain('server-message-2')
+  })
+
+  it('blocks deleting a server-owned conversation while its linked strategy is running', async () => {
+    localStorage.clear()
+
+    const { listAiQuantConversations, deleteAiQuantConversation, fetchAccountAiQuantStrategyDetail } = jest.requireMock('@/lib/api') as {
+      listAiQuantConversations: jest.Mock
+      deleteAiQuantConversation: jest.Mock
+      fetchAccountAiQuantStrategyDetail: jest.Mock
+    }
+
+    listAiQuantConversations.mockResolvedValue([{
+      id: 'conv-running',
+      status: 'PUBLISHED',
+      updatedAt: '2026-04-10T12:00:00.000Z',
+      conversationTitle: 'running-conv',
+      conversationMessages: [{ role: 'assistant', content: 'running-message' }],
+      strategyInstanceId: 'strategy-running',
+    }])
+    fetchAccountAiQuantStrategyDetail.mockResolvedValue({
+      id: 'strategy-running',
+      name: 'running-strategy',
+      status: 'running',
+      positionOverview: { openPositionsCount: 0, totalUnrealizedPnl: 0 },
+      latestOrders: [],
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      (container.querySelector('[data-testid="delete-conv-running"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).toContain('当前策略正在运行')
+    expect(deleteAiQuantConversation).not.toHaveBeenCalled()
+  })
+
+  it('can delete the linked stopped strategy before removing a server-owned conversation', async () => {
+    localStorage.clear()
+    jest.spyOn(window, 'confirm').mockReturnValue(true)
+
+    const {
+      deleteAccountAiQuantStrategy,
+      deleteAiQuantConversation,
+      fetchAccountAiQuantStrategyDetail,
+      listAiQuantConversations,
+    } = jest.requireMock('@/lib/api') as {
+      deleteAccountAiQuantStrategy: jest.Mock
+      deleteAiQuantConversation: jest.Mock
+      fetchAccountAiQuantStrategyDetail: jest.Mock
+      listAiQuantConversations: jest.Mock
+    }
+
+    listAiQuantConversations.mockResolvedValue([{
+      id: 'conv-stopped',
+      status: 'PUBLISHED',
+      updatedAt: '2026-04-10T12:00:00.000Z',
+      conversationTitle: 'stopped-conv',
+      conversationMessages: [{ role: 'assistant', content: 'stopped-message' }],
+      strategyInstanceId: 'strategy-stopped',
+    }])
+    fetchAccountAiQuantStrategyDetail.mockResolvedValue({
+      id: 'strategy-stopped',
+      name: 'stopped-strategy',
+      status: 'stopped',
+      positionOverview: { openPositionsCount: 0, totalUnrealizedPnl: 0 },
+      latestOrders: [],
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      (container.querySelector('[data-testid="delete-conv-stopped"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).toContain('同时删除已停止策略记录')
+
+    await act(async () => {
+      ;(container.querySelector('input[type="checkbox"]') as HTMLInputElement).click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      ;(container.querySelector('[data-testid="confirm-delete-conversation"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(deleteAccountAiQuantStrategy).toHaveBeenCalledWith('strategy-stopped', 'u-1')
+    expect(deleteAiQuantConversation).toHaveBeenCalledWith('conv-stopped')
+    expect(container.textContent).not.toContain('stopped-message')
   })
 
 })

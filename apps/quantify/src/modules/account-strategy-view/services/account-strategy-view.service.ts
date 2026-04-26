@@ -1251,6 +1251,13 @@ export class AccountStrategyViewService {
     if (!isOwner) {
       throw new StrategyOwnerOnlyException({ userId, ownerId: row.createdBy })
     }
+    if (row.status === 'running') {
+      throw new DomainException('account_strategy.delete_running_forbidden', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: { strategyInstanceId },
+      })
+    }
 
     await this.repo.deleteStrategyForUser(userId, strategyInstanceId)
   }

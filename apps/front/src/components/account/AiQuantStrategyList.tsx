@@ -122,22 +122,26 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
     }
   }
 
-  const handleDelete = async (e: React.MouseEvent, id: string, name: string) => {
+  const handleDelete = async (e: React.MouseEvent, item: AiQuantStrategyRecord) => {
     e.preventDefault()
     e.stopPropagation()
     if (!session) return
+    if (item.status === 'running') {
+      setError('运行中的策略不能删除，请先停止策略。')
+      return
+    }
     const confirmed = window.confirm(
       t('aiQuant.confirmDeleteStrategy', {
-        defaultValue: `Delete strategy "${name}"? This action cannot be undone.`,
-        name,
+        defaultValue: `Delete strategy "${item.name}"? This action cannot be undone.`,
+        name: item.name,
       }),
     )
     if (!confirmed) return
 
-    setPendingDeleteId(id)
+    setPendingDeleteId(item.id)
     try {
-      await deleteAccountAiQuantStrategy(id, session.userId)
-      setStrategies(prev => prev.filter(item => item.id !== id))
+      await deleteAccountAiQuantStrategy(item.id, session.userId)
+      setStrategies(prev => prev.filter(strategy => strategy.id !== item.id))
     } catch (err) {
       setError(err instanceof Error ? err.message : t('aiQuant.errors.deleteFailed', { defaultValue: 'Failed to delete strategy' }))
     } finally {
@@ -282,8 +286,9 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
 
                 <button
                   type="button"
-                  onClick={e => handleDelete(e, item.id, item.name)}
+                  onClick={e => handleDelete(e, item)}
                   disabled={pendingDeleteId === item.id}
+                  title={item.status === 'running' ? '运行中的策略不能删除，请先停止策略。' : undefined}
                   className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-50 dark:text-red-400"
                 >
                   <Trash2 className="h-3 w-3" />
