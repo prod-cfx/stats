@@ -32,7 +32,7 @@ export class ConversationSemanticEditService {
     const message = input.message.trim()
     if (!message) return { kind: 'NO_EDIT' }
 
-    if (isProcessingCodegenSessionStatus(input.status)) {
+    if (isProcessingCodegenSessionStatus(input.status) && this.hasSemanticEditIntent(message, input.semanticState)) {
       return {
         kind: 'REJECT_WHILE_PROCESSING',
         message: PROCESSING_REJECTION_MESSAGE,
@@ -148,6 +148,18 @@ export class ConversationSemanticEditService {
   private extractReplacementSymbol(message: string): string | null {
     const match = /交易标的改为\s*([A-Za-z0-9:/-]+)/u.exec(message)
     return canonicalizeStrategySymbolInput(match?.[1])
+  }
+
+  private hasSemanticEditIntent(message: string, state: SemanticState): boolean {
+    return Boolean(
+      this.extractReplacementSymbol(message)
+        || this.extractStrategyReplacementSeed(message)
+        || this.isStrategyRestartWithoutSeed(message)
+        || (readPendingSemanticEdit(state) && /算了|保持原来|不改了|取消/u.test(message))
+        || /触发.*改成\s*RSI|把触发改成\s*RSI/u.test(message)
+        || /(?:改|修改|更改|替换|删除|取消|换成|改成|改为).*(?:触发|行动|风控|仓位|止损|止盈|交易标的|周期|交易所|市场类型)/u.test(message)
+        || /(?:触发|行动|风控|仓位|止损|止盈|交易标的|周期|交易所|市场类型).*(?:改|修改|更改|替换|删除|取消|换成|改成|改为)/u.test(message),
+    )
   }
 
   private extractStrategyReplacementSeed(message: string): string | null {

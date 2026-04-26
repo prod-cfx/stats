@@ -60,6 +60,16 @@ describe('ConversationSemanticEditService', () => {
     })
   })
 
+  it('does not reject ordinary processing follow-up messages as edits', () => {
+    const decision = service.decide({
+      status: 'GENERATING',
+      message: '继续',
+      semanticState: service.createEmptySemanticStateForTest(),
+    })
+
+    expect(decision).toEqual({ kind: 'NO_EDIT' })
+  })
+
   it('applies context replacement without changing triggers', () => {
     const base = service.createEmptySemanticStateForTest()
     const state = {
