@@ -204,6 +204,7 @@ function buildOfficialStrategyAstSnapshot() {
 
 export function buildOfficialStrategySnapshotContent(template: OfficialStrategyPlazaTemplate) {
   const scriptSnapshot = buildOfficialStrategyScript(template)
+  const scriptHash = sha256Json(scriptSnapshot)
   const specSnapshot = buildOfficialStrategySpec(template)
   const astSnapshot = buildOfficialStrategyAstSnapshot()
   const semanticGraph = {
@@ -236,8 +237,8 @@ export function buildOfficialStrategySnapshotContent(template: OfficialStrategyP
   }
 
   return {
-    snapshotHash: sha256Json({ specSnapshot, runtimeContent }),
-    scriptHash: sha256Json(scriptSnapshot),
+    snapshotHash: sha256Json({ scriptHash, specSnapshot, runtimeContent }),
+    scriptHash,
     specHash: sha256Json(specSnapshot),
     irHash: sha256Json(compiledIr),
     astDigest: sha256Json(astSnapshot),

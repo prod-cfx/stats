@@ -167,14 +167,14 @@ export class StrategyPlazaOfficialSnapshotRepository {
     template: OfficialStrategyPlazaTemplate,
   ): Promise<PublishedStrategySnapshot> {
     const client = this.txHost.tx
+    const content = this.buildOfficialSourceSnapshotContent(template)
     const existingSourceSnapshot = await client.publishedStrategySnapshot.findUnique({
       where: { id: template.runConfig.publishedSnapshotId },
     })
-    if (existingSourceSnapshot && this.isCurrentOfficialSourceSnapshot(existingSourceSnapshot)) {
+    if (existingSourceSnapshot && this.isCurrentOfficialSourceSnapshot(existingSourceSnapshot, content)) {
       return existingSourceSnapshot
     }
 
-    const content = this.buildOfficialSourceSnapshotContent(template)
     const sessionId = `official-strategy-plaza:${template.id}:seed-session`
     await client.llmStrategyCodegenSession.upsert({
       where: { id: sessionId },
@@ -207,8 +207,13 @@ export class StrategyPlazaOfficialSnapshotRepository {
     })
   }
 
-  private isCurrentOfficialSourceSnapshot(snapshot: Pick<PublishedStrategySnapshot, 'scriptSnapshot' | 'snapshotVersion'>): boolean {
-    return snapshot.snapshotVersion === 3
+  private isCurrentOfficialSourceSnapshot(
+    snapshot: Pick<PublishedStrategySnapshot, 'scriptHash' | 'scriptSnapshot' | 'snapshotHash' | 'snapshotVersion'>,
+    expected: Pick<Prisma.PublishedStrategySnapshotCreateInput, 'scriptHash' | 'snapshotHash' | 'snapshotVersion'>,
+  ): boolean {
+    return snapshot.snapshotVersion === expected.snapshotVersion
+      && snapshot.snapshotHash === expected.snapshotHash
+      && snapshot.scriptHash === expected.scriptHash
       && typeof snapshot.scriptSnapshot === 'string'
       && snapshot.scriptSnapshot.includes('protocolVersion: "v1"')
       && !snapshot.scriptSnapshot.includes('action: "HOLD"')
@@ -272,7 +277,7 @@ export class StrategyPlazaOfficialSnapshotRepository {
   }
 
   private buildSourceFingerprint(sourceSnapshot: PublishedStrategySnapshot): string {
-    return sha256(`${sourceSnapshot.id}:${sourceSnapshot.snapshotHash}:${sourceSnapshot.snapshotVersion}`)
+    return sha256(`${sourceSnapshot.id}:${sourceSnapshot.snapshotHash}:${sourceSnapshot.scriptHash}:${sourceSnapshot.snapshotVersion}`)
   }
 
   private buildCopiedSnapshotId(sessionId: string, sourceSnapshot: PublishedStrategySnapshot): string {

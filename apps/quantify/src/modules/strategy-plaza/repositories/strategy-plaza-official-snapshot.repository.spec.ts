@@ -1,4 +1,5 @@
 import type { OfficialStrategyPlazaTemplate } from '../types/official-strategy-plaza-template'
+import { buildOfficialStrategySnapshotContent } from '../utils/official-strategy-plaza-snapshot-builder'
 import { StrategyPlazaOfficialSnapshotRepository } from './strategy-plaza-official-snapshot.repository'
 
 function createTxHost(tx: unknown): ConstructorParameters<typeof StrategyPlazaOfficialSnapshotRepository>[0] {
@@ -34,41 +35,36 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
     displayMetrics: { label: 'official_sample_backtest', returnPct: null, winRatePct: null, maxDrawdownPct: null },
   } satisfies OfficialStrategyPlazaTemplate
 
+  const sourceContent = buildOfficialStrategySnapshotContent(template)
   const sourceSnapshot = {
     id: 'official-plaza-ma-cross-v1-snapshot',
-    snapshotHash: 'official-snapshot-hash-v1',
-    scriptHash: 'official-script-hash-v1',
-    specHash: 'official-spec-hash-v1',
-    irHash: 'official-ir-hash-v1',
-    astDigest: 'official-ast-digest-v1',
-    structuralDigest: 'official-structural-digest-v1',
-    scriptSnapshot: 'const strategy = { protocolVersion: "v1", onBar: () => ({ action: "NOOP" }) }\nstrategy\n',
-    specSnapshot: { official: true, rules: ['ma-cross'] },
-    semanticGraph: { nodes: ['entry'] },
-    compiledIr: { program: 'compiled' },
-    irSnapshot: { ir: 'snapshot' },
-    astSnapshot: { runtimeExecutionSemantics: [{ semanticKey: 'on_start.entry.official' }] },
-    compiledManifest: { artifact: 'manifest' },
-    consistencyReport: { status: 'PASSED' },
-    paramsSnapshot: { positionPct: 10 },
-    strategyConfig: {
-      exchange: 'okx',
-      marketType: 'perp',
-      symbol: 'BTC-USDT-SWAP',
-      timeframe: '15m',
-      positionPct: 10,
-    },
-    backtestConfigDefaults: { initialCash: 10000 },
-    deploymentExecutionDefaults: { leverage: 2, priceSource: 'mark', orderType: 'market', timeInForce: 'ioc' },
-    deploymentExecutionConstraints: { platformRiskMaxLeverage: 2, defaultLeverage: 2 },
-    executionEnvelope: { runtime: 'signal-generator' },
-    executionPolicy: { signalTiming: 'BAR_CLOSE' },
-    dataRequirements: { primary: ['15m'] },
-    userIntentSummary: { template: 'ma-cross' },
-    strategySummary: { name: 'MA 均线交叉' },
-    scriptSummary: { indicators: ['MA'] },
-    lockedParams: { leverage: 2 },
-    snapshotVersion: 3,
+    snapshotHash: sourceContent.snapshotHash,
+    scriptHash: sourceContent.scriptHash,
+    specHash: sourceContent.specHash,
+    irHash: sourceContent.irHash,
+    astDigest: sourceContent.astDigest,
+    structuralDigest: sourceContent.structuralDigest,
+    scriptSnapshot: sourceContent.scriptSnapshot,
+    specSnapshot: sourceContent.specSnapshot,
+    semanticGraph: sourceContent.semanticGraph,
+    compiledIr: sourceContent.compiledIr,
+    irSnapshot: sourceContent.irSnapshot,
+    astSnapshot: sourceContent.astSnapshot,
+    compiledManifest: sourceContent.compiledManifest,
+    consistencyReport: sourceContent.consistencyReport,
+    paramsSnapshot: sourceContent.paramsSnapshot,
+    strategyConfig: sourceContent.strategyConfig,
+    backtestConfigDefaults: sourceContent.backtestConfigDefaults,
+    deploymentExecutionDefaults: sourceContent.deploymentExecutionDefaults,
+    deploymentExecutionConstraints: sourceContent.deploymentExecutionConstraints,
+    executionEnvelope: sourceContent.executionEnvelope,
+    executionPolicy: sourceContent.executionPolicy,
+    dataRequirements: sourceContent.dataRequirements,
+    userIntentSummary: sourceContent.userIntentSummary,
+    strategySummary: sourceContent.strategySummary,
+    scriptSummary: sourceContent.scriptSummary,
+    lockedParams: sourceContent.lockedParams,
+    snapshotVersion: sourceContent.snapshotVersion,
   }
 
   function buildTx(overrides?: {
@@ -158,6 +154,37 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
       where: { id: 'official-plaza-ma-cross-v1-snapshot' },
       update: expect.objectContaining({
         scriptSnapshot: expect.stringContaining('protocolVersion: "v1"'),
+      }),
+    }))
+  })
+
+  it('refreshes a source snapshot when only the generated script identity changes', async () => {
+    const tx = buildTx({
+      source: {
+        ...sourceSnapshot,
+        snapshotHash: 'stale-snapshot-hash',
+        scriptHash: 'stale-script-hash',
+        scriptSnapshot: sourceSnapshot.scriptSnapshot.replace('riskForEntry', 'legacyRiskForEntry'),
+      },
+    })
+    tx.publishedStrategySnapshot.upsert.mockImplementation(async ({ where, create }) => {
+      if (where.id === 'official-plaza-ma-cross-v1-snapshot') {
+        return { ...sourceSnapshot, ...create }
+      }
+      return { id: 'user-snapshot-1', snapshotHash: sourceSnapshot.snapshotHash }
+    })
+    const repo = new StrategyPlazaOfficialSnapshotRepository(createTxHost(tx))
+
+    await expect(repo.resolveOfficialSnapshotForUser({ userId: 'user-1', template })).resolves.toEqual({
+      id: 'user-snapshot-1',
+    })
+
+    expect(tx.publishedStrategySnapshot.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'official-plaza-ma-cross-v1-snapshot' },
+      update: expect.objectContaining({
+        snapshotHash: sourceSnapshot.snapshotHash,
+        scriptHash: sourceSnapshot.scriptHash,
+        scriptSnapshot: sourceSnapshot.scriptSnapshot,
       }),
     }))
   })
