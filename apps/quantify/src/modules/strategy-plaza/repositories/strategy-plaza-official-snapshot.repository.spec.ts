@@ -1,4 +1,5 @@
 import type { OfficialStrategyPlazaTemplate } from '../types/official-strategy-plaza-template'
+import { BacktestStrategyAdapterService } from '@/modules/backtesting/services/backtest-strategy-adapter.service'
 import { buildOfficialStrategySnapshotContent } from '../utils/official-strategy-plaza-snapshot-builder'
 import { StrategyPlazaOfficialSnapshotRepository } from './strategy-plaza-official-snapshot.repository'
 
@@ -187,6 +188,24 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         scriptSnapshot: sourceSnapshot.scriptSnapshot,
       }),
     }))
+  })
+
+  it('builds a backtest adapter from the generated official source script', async () => {
+    const content = buildOfficialStrategySnapshotContent(template)
+    const adapter = new BacktestStrategyAdapterService()
+
+    await expect(adapter.build({
+      id: 'official-ma-cross',
+      protocolVersion: 'v1',
+      scriptCode: content.scriptSnapshot,
+      params: content.paramsSnapshot,
+    })).resolves.toMatchObject({
+      id: 'official-ma-cross',
+      params: expect.objectContaining({
+        symbol: 'BTC-USDT-SWAP',
+        timeframe: '15m',
+      }),
+    })
   })
 
   it('reuses an existing user-visible snapshot for the same official source hash and version', async () => {
