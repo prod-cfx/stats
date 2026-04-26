@@ -1370,7 +1370,7 @@ describe('ai-quant-page-conversation', () => {
     expect(conversation.messages.at(-1)?.content).toContain('规则解释：风控规则“价格连续若干根 K 线位于布林带外”没有在最终脚本里正确实现（同时作用于多头和空头）')
   })
 
-  it('hydrates published server conversations with a generated code summary when history lacks it', () => {
+  it('hydrates published server conversations with a generated summary when history lacks it', () => {
     const conversation = createConversationFromServerConversation({
       id: 'server-conv-2',
       conversationTitle: '成功会话',
@@ -1392,7 +1392,9 @@ describe('ai-quant-page-conversation', () => {
 
     expect(conversation.logicGraph?.status).toBe('confirmed')
     expect(conversation.messages.at(-1)?.content).toContain('Strategy code generated, ready to backtest.')
-    expect(conversation.messages.at(-1)?.content).toContain('export default function strategy()')
+    expect(conversation.messages.at(-1)?.content).not.toContain('Generated strategy code')
+    expect(conversation.messages.at(-1)?.content).not.toContain('export default function strategy()')
+    expect(conversation.publishedScriptCode).toBe('export default function strategy() { return true }')
   })
 
   it('normalizes hydrated clarification gates so server-owned conversations preserve blocked parity', () => {
