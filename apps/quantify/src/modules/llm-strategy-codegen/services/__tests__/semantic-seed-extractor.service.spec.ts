@@ -705,6 +705,37 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.triggers?.find(trigger => trigger.key === 'bollinger.touch_middle')?.params).not.toHaveProperty('confirmationMode')
   })
 
+  it('extracts optimized Bollinger parameters from the official reversion template', () => {
+    const patch = service.extract('基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建布林带均值回归策略。入场规则：价格触及布林带 30 周期 0.9 倍标准差下轨时做多开仓；出场规则：价格回归布林带中轨时平多；风控：仓位 35%，2 倍杠杆，止损 3%，止盈 0.5%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'bollinger.touch_lower',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          band: 'lower',
+          period: 30,
+          stdDev: 0.9,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_middle',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          band: 'middle',
+          period: 30,
+          stdDev: 0.9,
+        }),
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+  })
+
   it('respects explicit long intent for Bollinger upper-band wording', () => {
     const patch = service.extract('突破布林带上轨买入做多；单笔 10%。')
 

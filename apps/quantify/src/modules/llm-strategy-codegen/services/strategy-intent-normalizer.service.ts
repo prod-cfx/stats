@@ -239,6 +239,7 @@ export class StrategyIntentNormalizerService {
       return null
     }
     const bandMatch = rule.match(/布林带\s*[（(]\s*(\d{1,3})\s*[,，]\s*(\d+(?:\.\d+)?)\s*[)）]/u)
+      ?? rule.match(/布林带\s*(\d{1,3})\s*(?:周期|日|根|period)?\s*(\d+(?:\.\d+)?)\s*(?:倍)?\s*标准差/u)
     const middleMatch = rule.match(/中轨\s*\(?(?:MA|ma)\s*(\d{1,3})\)?/u)
       ?? rule.match(/均线\s*(\d{1,3})/u)
     const period = bandMatch?.[1]

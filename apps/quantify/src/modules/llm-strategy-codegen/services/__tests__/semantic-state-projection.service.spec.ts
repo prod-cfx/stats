@@ -123,6 +123,16 @@ describe('SemanticStateProjectionService', () => {
           openSlots: [],
         },
         {
+          id: 'exit-bollinger',
+          key: 'bollinger.touch_middle',
+          phase: 'exit',
+          sideScope: 'long',
+          params: { period: 30, stdDev: 0.9 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
           id: 'entry-macd',
           key: 'indicator.cross_over',
           phase: 'entry',
@@ -148,7 +158,10 @@ describe('SemanticStateProjectionService', () => {
     expect(result.summary).toContain('出场：价格位于最近 36 根 K 线区间上 55% 时卖出平仓')
     expect(result.summary).toContain('入场：RSI14 上穿 38 时买入')
     expect(result.summary).toContain('入场：触及 MA30 的布林带下轨时做多开仓')
+    expect(result.summary).toContain('出场：触及 MA30 的布林带中轨时平多')
     expect(result.summary).toContain('入场：MACD 16/34/12 金叉时做多开仓')
+    expect(result.summary).not.toContain('bollinger.touch_lower')
+    expect(result.summary).not.toContain('bollinger.touch_middle')
     expect(result.summary).not.toContain('indicator.cross_over')
     expect(result.summary).not.toContain('price.breakout_up')
   })

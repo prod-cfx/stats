@@ -79,6 +79,64 @@ describe('canonicalSpecV2IrCompilerService', () => {
     ]))
   })
 
+  it('compiles MACD 16/34/12 cross rules without falling back to defaults', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const result = compiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        indicators: [{ kind: 'macd', params: { fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 } }],
+        sizing: { mode: 'RATIO', value: 0.35 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['15m'],
+        },
+        rules: [
+          {
+            id: 'entry-macd-cross',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 200,
+            condition: { kind: 'atom', key: 'macd.golden_cross', semanticScope: 'market', op: 'CROSS_OVER' },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.35 } }],
+          },
+          {
+            id: 'exit-macd-cross',
+            phase: 'exit',
+            sideScope: 'long',
+            priority: 140,
+            condition: { kind: 'atom', key: 'macd.death_cross', semanticScope: 'market', op: 'CROSS_UNDER' },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+      },
+      fallback: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '15m',
+        positionPct: 35,
+      },
+    })
+
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'macd_line_16_34_12_15m', params: { fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 } }),
+      expect.objectContaining({ id: 'macd_signal_16_34_12_15m', params: { fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 } }),
+    ]))
+    expect(result.ir.signalCatalog.series).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'macd_line_12_26_9_15m' }),
+      expect.objectContaining({ id: 'macd_signal_12_26_9_15m' }),
+    ]))
+  })
+
   it('compiles canonical spec v2 into deterministic graphSnapshot and IR without reading UI state', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 

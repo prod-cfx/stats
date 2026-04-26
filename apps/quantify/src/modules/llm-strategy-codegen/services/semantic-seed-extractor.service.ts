@@ -84,7 +84,7 @@ export class SemanticSeedExtractorService {
       this.pushPercentChangeTrigger(segment, triggers, seen, text)
     }
 
-    return triggers
+    return this.harmonizeBollingerTriggers(triggers)
   }
 
   private extractActions(text: string, triggers: SeedTrigger[]): NonNullable<CodegenSemanticPatch['actions']> {
@@ -839,6 +839,7 @@ export class SemanticSeedExtractorService {
 
   private extractBollingerBandParams(segment: string): { period?: number; stdDev?: number } | null {
     const match = segment.match(/布林带\s*[（(]\s*(\d{1,4})\s*[，,]\s*(\d+(?:\.\d+)?)\s*[)）]/u)
+      ?? segment.match(/布林带\s*(\d{1,4})\s*(?:周期|日|根|period)?\s*(\d+(?:\.\d+)?)\s*(?:倍)?\s*标准差/u)
     if (!match?.[1] || !match[2]) return null
 
     const period = Number(match[1])
@@ -846,6 +847,32 @@ export class SemanticSeedExtractorService {
     if (!Number.isFinite(period) || !Number.isFinite(stdDev)) return null
 
     return { period, stdDev }
+  }
+
+  private harmonizeBollingerTriggers(triggers: SeedTrigger[]): SeedTrigger[] {
+    const reference = triggers.find(trigger => (
+      trigger.key.startsWith('bollinger.touch_')
+      && typeof trigger.params?.period === 'number'
+      && typeof trigger.params.stdDev === 'number'
+    ))
+
+    if (!reference) {
+      return triggers
+    }
+
+    return triggers.map((trigger) => {
+      if (!trigger.key.startsWith('bollinger.touch_')) {
+        return trigger
+      }
+      return {
+        ...trigger,
+        params: {
+          ...trigger.params,
+          ...(typeof trigger.params?.period === 'number' ? {} : { period: reference.params.period }),
+          ...(typeof trigger.params?.stdDev === 'number' ? {} : { stdDev: reference.params.stdDev }),
+        },
+      }
+    })
   }
 
   private resolvePercentBasis(segment: string): 'prev_close' | 'entry_avg_price' | 'position_pnl' {
