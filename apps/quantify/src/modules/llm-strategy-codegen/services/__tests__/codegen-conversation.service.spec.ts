@@ -1630,6 +1630,62 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     ])
   })
 
+  it('does not list strategy plaza run sessions as AI Quant conversations', async () => {
+    mockConversationsRepo.listByUser.mockResolvedValue([
+      {
+        id: 'conv-visible',
+        userId: 'u1',
+        title: '编辑会话',
+        codegenSessionId: 'session-visible',
+        createdAt: new Date('2026-04-10T20:00:00.000Z'),
+        updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+        messages: [{ role: 'user', content: '从编辑进入' }],
+      },
+      {
+        id: 'conv-plaza-run',
+        userId: 'u1',
+        title: 'MA 均线交叉 官方模板',
+        codegenSessionId: 'strategy-plaza:official:ma-cross:user:hash:source:hash',
+        createdAt: new Date('2026-04-10T20:00:00.000Z'),
+        updatedAt: new Date('2026-04-10T20:02:00.000Z'),
+        messages: [{ role: 'assistant', content: '策略代码已生成，现在可以开始回测。' }],
+      },
+    ])
+    mockConversationsRepo.listKnownSessionIdsByUser.mockResolvedValue([
+      'session-visible',
+      'strategy-plaza:official:ma-cross:user:hash:source:hash',
+    ])
+    mockRepo.listByUser.mockResolvedValue([
+      { id: 'strategy-plaza:official:grid:user:hash:source:hash', userId: 'u1' },
+    ])
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-visible',
+      userId: 'u1',
+      status: 'CONFIRM_GATE',
+      checklist: {},
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: { conversationHistory: ['U: 从编辑进入'] },
+      latestDraftCode: null,
+      latestSpecDesc: null,
+      rejectReason: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+      strategyInstanceId: null,
+    })
+
+    const result = await service.listConversations('u1')
+
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({
+      id: 'conv-visible',
+      activeCodegenSessionId: 'session-visible',
+      conversationTitle: '编辑会话',
+    })
+    expect(mockConversationsRepo.upsertConversationSnapshot).not.toHaveBeenCalled()
+    expect(mockRepo.findById).not.toHaveBeenCalledWith('strategy-plaza:official:ma-cross:user:hash:source:hash')
+    expect(mockRepo.findById).not.toHaveBeenCalledWith('strategy-plaza:official:grid:user:hash:source:hash')
+  })
+
   it('includes snapshot-bound param values when listing published conversations', async () => {
     mockConversationsRepo.listByUser.mockResolvedValue([
       {
