@@ -26,11 +26,11 @@ const bars: OptimizerBar[] = [
 
 const evidencePath = resolve(
   __dirname,
-  '../../../src/modules/llm-strategy-codegen/constants/official-strategy-plaza-backtest-evidence.json',
+  '../../../src/modules/strategy-plaza/constants/official-strategy-plaza-backtest-evidence.json',
 )
 const evidenceConstantPath = resolve(
   __dirname,
-  '../../../src/modules/llm-strategy-codegen/constants/official-strategy-plaza-backtest-evidence.constant.ts',
+  '../../../src/modules/strategy-plaza/constants/official-strategy-plaza-backtest-evidence.constant.ts',
 )
 
 describe('strategy plaza optimizer', () => {

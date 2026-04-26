@@ -1,4 +1,4 @@
-import type { OfficialStrategyPlazaBacktestEvidence } from '../../strategy-plaza/types/official-strategy-plaza-template'
+import type { OfficialStrategyPlazaBacktestEvidence } from '../types/official-strategy-plaza-template'
 
 export const OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE: OfficialStrategyPlazaBacktestEvidence = {
   "status": "VERIFIED",

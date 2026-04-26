@@ -75,8 +75,8 @@ const ADMISSION: AdmissionRule = {
   minTradeCount: 20,
   minTotalReturnPct: 0.5,
 }
-const EVIDENCE_PATH = 'apps/quantify/src/modules/llm-strategy-codegen/constants/official-strategy-plaza-backtest-evidence.json'
-const EVIDENCE_CONSTANT_PATH = 'apps/quantify/src/modules/llm-strategy-codegen/constants/official-strategy-plaza-backtest-evidence.constant.ts'
+const EVIDENCE_PATH = 'apps/quantify/src/modules/strategy-plaza/constants/official-strategy-plaza-backtest-evidence.json'
+const EVIDENCE_CONSTANT_PATH = 'apps/quantify/src/modules/strategy-plaza/constants/official-strategy-plaza-backtest-evidence.constant.ts'
 const FIXED_BACKTEST_END_TS = 1777168800000
 const OKX_PAGE_LIMIT = 300
 const OKX_PAGE_COUNT = 8
@@ -130,7 +130,7 @@ export function selectBestCandidate(
 
 export function renderEvidenceConstantSource(evidence: unknown): string {
   return [
-    'import type { OfficialStrategyPlazaBacktestEvidence } from \'../../strategy-plaza/types/official-strategy-plaza-template\'',
+    'import type { OfficialStrategyPlazaBacktestEvidence } from \'../types/official-strategy-plaza-template\'',
     '',
     `export const OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE: OfficialStrategyPlazaBacktestEvidence = ${JSON.stringify(evidence, null, 2)}`,
     '',

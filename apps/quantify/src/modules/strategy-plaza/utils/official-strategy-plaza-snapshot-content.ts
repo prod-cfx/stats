@@ -1,5 +1,5 @@
 import type { OfficialStrategyPlazaTemplate } from '../types/official-strategy-plaza-template'
-import { OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE } from '../../llm-strategy-codegen/constants/official-strategy-plaza-backtest-evidence.constant'
+import { OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE } from '../constants/official-strategy-plaza-backtest-evidence.constant'
 
 function evidenceFor(template: OfficialStrategyPlazaTemplate) {
   const evidence = OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.templates.find(item => item.templateId === template.id)
