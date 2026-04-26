@@ -139,6 +139,17 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
+  it('canonicalizes OKX swap instrument ids into strategy symbols', () => {
+    const patch = service.extract('基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建 MA 6/48 均线交叉趋势跟随策略。')
+
+    expect(patch.contextSlots).toEqual(expect.objectContaining({
+      exchange: 'okx',
+      marketType: 'perp',
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+    }))
+  })
+
   it('extracts Chinese percent sizing and timeframes in deterministic seed fallback wording', () => {
     const patch = service.extract('BTCUSDT 3分钟之内跌百分1买入；15分钟之内涨百分2卖出；单笔用百分10资金')
 

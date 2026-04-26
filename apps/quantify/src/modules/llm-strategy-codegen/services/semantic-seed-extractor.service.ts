@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
+import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 
 type SeedTrigger = NonNullable<CodegenSemanticPatch['triggers']>[number]
 type SeedAction = NonNullable<CodegenSemanticPatch['actions']>[number]
@@ -644,8 +645,8 @@ export class SemanticSeedExtractorService {
   }
 
   private extractSymbol(text: string): string | null {
-    const match = text.match(/\b([A-Z0-9]{2,20}(?:USDT|USDC|USD))\b/iu)
-    return match?.[1]?.toUpperCase() ?? null
+    const match = text.match(/\b([A-Z0-9]{2,20}(?:[-/]?(?:USDT|USDC|USD))(?:-SWAP|:PERP|:SPOT)?)\b/iu)
+    return canonicalizeStrategySymbolInput(match?.[1])
   }
 
   private extractFirstTimeframe(text: string): string | null {
