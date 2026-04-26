@@ -42,7 +42,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
     irHash: 'official-ir-hash-v1',
     astDigest: 'official-ast-digest-v1',
     structuralDigest: 'official-structural-digest-v1',
-    scriptSnapshot: 'export default function strategy() { return { action: "HOLD" } }\n',
+    scriptSnapshot: 'const strategy = { protocolVersion: "v1", onBar: () => ({ action: "NOOP" }) }\nstrategy\n',
     specSnapshot: { official: true, rules: ['ma-cross'] },
     semanticGraph: { nodes: ['entry'] },
     compiledIr: { program: 'compiled' },
@@ -68,7 +68,7 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
     strategySummary: { name: 'MA 均线交叉' },
     scriptSummary: { indicators: ['MA'] },
     lockedParams: { leverage: 2 },
-    snapshotVersion: 7,
+    snapshotVersion: 3,
   }
 
   function buildTx(overrides?: {
@@ -123,9 +123,37 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
       }),
       update: expect.objectContaining({
         snapshotVersion: 3,
+        scriptSnapshot: expect.stringContaining('protocolVersion: "v1"'),
       }),
     }))
     expect(tx.strategyInstance.upsert).toHaveBeenCalled()
+  })
+
+  it('refreshes a legacy official source snapshot that still contains HOLD script', async () => {
+    const tx = buildTx({
+      source: {
+        ...sourceSnapshot,
+        scriptSnapshot: 'export default function strategy() { return { action: "HOLD" } }\n',
+      },
+    })
+    tx.publishedStrategySnapshot.upsert.mockImplementation(async ({ where, create }) => {
+      if (where.id === 'official-plaza-ma-cross-v1-snapshot') {
+        return { ...sourceSnapshot, ...create }
+      }
+      return { id: 'user-snapshot-1', snapshotHash: sourceSnapshot.snapshotHash }
+    })
+    const repo = new StrategyPlazaOfficialSnapshotRepository(createTxHost(tx))
+
+    await expect(repo.resolveOfficialSnapshotForUser({ userId: 'user-1', template })).resolves.toEqual({
+      id: 'user-snapshot-1',
+    })
+
+    expect(tx.publishedStrategySnapshot.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'official-plaza-ma-cross-v1-snapshot' },
+      update: expect.objectContaining({
+        scriptSnapshot: expect.stringContaining('protocolVersion: "v1"'),
+      }),
+    }))
   })
 
   it('reuses an existing user-visible snapshot for the same official source hash and version', async () => {
@@ -157,14 +185,16 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
     expect(tx.publishedStrategySnapshot.update).toHaveBeenCalledWith({
       where: { id: 'user-snapshot-1' },
       data: expect.objectContaining({
-        paramsSnapshot: {
+        paramsSnapshot: expect.objectContaining({
           exchange: 'okx',
           marketType: 'perp',
           symbol: 'BTC-USDT-SWAP',
           timeframe: '15m',
           positionPct: 10,
           leverage: 2,
-        },
+          optimizedParams: expect.objectContaining({ fastPeriod: 6, slowPeriod: 48 }),
+          parameterSearchId: expect.stringContaining('ma-cross'),
+        }),
         strategyConfig: expect.objectContaining({
           exchange: 'okx',
           marketType: 'perp',
@@ -296,47 +326,47 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
     }))
     expect(tx.strategyTemplate.upsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({
-        defaultParams: {
+        defaultParams: expect.objectContaining({
           exchange: 'okx',
           marketType: 'perp',
           symbol: 'BTC-USDT-SWAP',
           timeframe: '15m',
           positionPct: 10,
           leverage: 2,
-        },
+        }),
         dataRequirements: { primary: ['15m'] },
       }),
       update: expect.objectContaining({
-        defaultParams: {
+        defaultParams: expect.objectContaining({
           exchange: 'okx',
           marketType: 'perp',
           symbol: 'BTC-USDT-SWAP',
           timeframe: '15m',
           positionPct: 10,
           leverage: 2,
-        },
+        }),
       }),
     }))
     expect(tx.strategyInstance.upsert).toHaveBeenCalledWith(expect.objectContaining({
       create: expect.objectContaining({
-        params: {
+        params: expect.objectContaining({
           exchange: 'okx',
           marketType: 'perp',
           symbol: 'BTC-USDT-SWAP',
           timeframe: '15m',
           positionPct: 10,
           leverage: 2,
-        },
+        }),
       }),
       update: expect.objectContaining({
-        params: {
+        params: expect.objectContaining({
           exchange: 'okx',
           marketType: 'perp',
           symbol: 'BTC-USDT-SWAP',
           timeframe: '15m',
           positionPct: 10,
           leverage: 2,
-        },
+        }),
       }),
     }))
     expect(tx.publishedStrategySnapshot.upsert).toHaveBeenCalledWith(expect.objectContaining({
@@ -359,14 +389,16 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         astSnapshot: sourceSnapshot.astSnapshot,
         compiledManifest: sourceSnapshot.compiledManifest,
         consistencyReport: sourceSnapshot.consistencyReport,
-        paramsSnapshot: {
+        paramsSnapshot: expect.objectContaining({
           exchange: 'okx',
           marketType: 'perp',
           symbol: 'BTC-USDT-SWAP',
           timeframe: '15m',
           positionPct: 10,
           leverage: 2,
-        },
+          optimizedParams: expect.objectContaining({ fastPeriod: 6, slowPeriod: 48 }),
+          parameterSearchId: expect.stringContaining('ma-cross'),
+        }),
         strategyConfig: {
           exchange: 'okx',
           marketType: 'perp',
@@ -400,14 +432,14 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         userIntentSummary: sourceSnapshot.userIntentSummary,
         strategySummary: sourceSnapshot.strategySummary,
         scriptSummary: sourceSnapshot.scriptSummary,
-        lockedParams: {
+        lockedParams: expect.objectContaining({
           exchange: 'okx',
           marketType: 'perp',
           symbol: 'BTC-USDT-SWAP',
           timeframe: '15m',
           positionPct: 10,
           leverage: 2,
-        },
+        }),
         snapshotVersion: sourceSnapshot.snapshotVersion,
       }),
       update: expect.objectContaining({

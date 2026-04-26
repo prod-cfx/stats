@@ -29,6 +29,12 @@ function getLeverageLabel(leverage: number | null): string {
   return leverage ? `${leverage}x` : '无杠杆'
 }
 
+function formatMetricPct(value: number | null, options: { sign?: boolean } = {}): string {
+  if (value == null) return '--'
+  const formatted = `${Number(value.toFixed(2)).toString()}%`
+  return options.sign && value > 0 ? `+${formatted}` : formatted
+}
+
 export function StrategyPlaza({
   templates,
   loading,
@@ -161,6 +167,27 @@ export function StrategyPlaza({
                       {' / '}
                       {getLeverageLabel(template.leverage)}
                     </span>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="rounded-lg border border-[color:var(--cf-border)] px-2 py-2">
+                    <div className="text-[10px] text-[color:var(--cf-muted)]">胜率</div>
+                    <div className="mt-1 font-mono font-semibold text-[color:var(--cf-text-strong)]">
+                      {formatMetricPct(template.displayMetrics.winRatePct)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-[color:var(--cf-border)] px-2 py-2">
+                    <div className="text-[10px] text-[color:var(--cf-muted)]">最大回撤</div>
+                    <div className="mt-1 font-mono font-semibold text-emerald-500">
+                      {formatMetricPct(template.displayMetrics.maxDrawdownPct)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-[color:var(--cf-border)] px-2 py-2">
+                    <div className="text-[10px] text-[color:var(--cf-muted)]">收益</div>
+                    <div className="mt-1 font-mono font-semibold text-[color:var(--cf-text-strong)]">
+                      {formatMetricPct(template.displayMetrics.returnPct, { sign: true })}
+                    </div>
                   </div>
                 </div>
               </div>

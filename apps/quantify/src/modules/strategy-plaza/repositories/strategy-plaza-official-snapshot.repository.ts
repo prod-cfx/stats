@@ -170,7 +170,7 @@ export class StrategyPlazaOfficialSnapshotRepository {
     const existingSourceSnapshot = await client.publishedStrategySnapshot.findUnique({
       where: { id: template.runConfig.publishedSnapshotId },
     })
-    if (existingSourceSnapshot) {
+    if (existingSourceSnapshot && this.isCurrentOfficialSourceSnapshot(existingSourceSnapshot)) {
       return existingSourceSnapshot
     }
 
@@ -205,6 +205,14 @@ export class StrategyPlazaOfficialSnapshotRepository {
         ...content,
       },
     })
+  }
+
+  private isCurrentOfficialSourceSnapshot(snapshot: Pick<PublishedStrategySnapshot, 'scriptSnapshot' | 'snapshotVersion'>): boolean {
+    return snapshot.snapshotVersion === 3
+      && typeof snapshot.scriptSnapshot === 'string'
+      && snapshot.scriptSnapshot.includes('protocolVersion: "v1"')
+      && !snapshot.scriptSnapshot.includes('action: "HOLD"')
+      && !snapshot.scriptSnapshot.includes("action: 'HOLD'")
   }
 
   private async updateSnapshotTemplateRuntimeContent(

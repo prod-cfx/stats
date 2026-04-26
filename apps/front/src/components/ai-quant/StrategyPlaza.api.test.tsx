@@ -41,9 +41,9 @@ const template: StrategyPlazaTemplate = {
   displayOrder: 1,
   displayMetrics: {
     label: 'official_sample_backtest',
-    returnPct: null,
-    winRatePct: null,
-    maxDrawdownPct: null,
+    returnPct: 1.78,
+    winRatePct: 58.14,
+    maxDrawdownPct: 0.78,
   },
 }
 
@@ -65,7 +65,7 @@ describe('StrategyPlaza API rendering', () => {
     container.remove()
   })
 
-  it('renders backend templates without mock return or win-rate metrics', async () => {
+  it('renders backend templates with official sample backtest metrics', async () => {
     await act(async () => {
       root.render(
         <StrategyPlaza
@@ -86,6 +86,9 @@ describe('StrategyPlaza API rendering', () => {
     expect(container.textContent).toContain('永续')
     expect(container.textContent).toContain('25%')
     expect(container.textContent).toContain('3x')
+    expect(container.textContent).toContain('58.14%')
+    expect(container.textContent).toContain('0.78%')
+    expect(container.textContent).toContain('+1.78%')
     expect(container.textContent).not.toContain('+12.5%')
     expect(container.textContent).not.toContain('68%')
   })
