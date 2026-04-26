@@ -44,7 +44,7 @@ describe('SemanticStateProjectionService', () => {
     expect(result.nextQuestion).toBe('突破按收盘确认还是盘中触发？')
   })
 
-  it('describes official strategy plaza atomic triggers with concrete params', () => {
+  it('describes official strategy plaza atomic triggers with concrete params and actions', () => {
     const result = service.buildConversationView({
       version: 1,
       families: ['single-leg'],
@@ -79,6 +79,59 @@ describe('SemanticStateProjectionService', () => {
           source: 'user_explicit',
           openSlots: [],
         },
+        {
+          id: 'entry-range',
+          key: 'price.range_position_lte',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { lookbackBars: 36, thresholdPct: 20 },
+          status: 'locked',
+          source: 'user_explicit',
+          evidence: { text: '价格位于最近 36 根 K 线区间下 20% 时买入', source: 'user_explicit' },
+          openSlots: [],
+        },
+        {
+          id: 'exit-range',
+          key: 'price.range_position_gte',
+          phase: 'exit',
+          sideScope: 'long',
+          params: { lookbackBars: 36, thresholdPct: 55 },
+          status: 'locked',
+          source: 'user_explicit',
+          evidence: { text: '价格回到区间上 55% 时卖出平仓', source: 'user_explicit' },
+          openSlots: [],
+        },
+        {
+          id: 'entry-rsi',
+          key: 'indicator.cross_over',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { indicator: 'rsi', period: 14, value: 38 },
+          status: 'locked',
+          source: 'user_explicit',
+          evidence: { text: 'RSI14 从 38 下方向上穿回 38 时买入', source: 'user_explicit' },
+          openSlots: [],
+        },
+        {
+          id: 'entry-bollinger',
+          key: 'bollinger.touch_lower',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { period: 30, stdDev: 0.9 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'entry-macd',
+          key: 'indicator.cross_over',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { indicator: 'macd', fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
       ],
       actions: [],
       risk: [],
@@ -88,9 +141,14 @@ describe('SemanticStateProjectionService', () => {
       updatedAt: '2026-04-15T10:00:00.000Z',
     })
 
-    expect(result.summary).toContain('入场：MA6 上穿 MA48')
-    expect(result.summary).toContain('出场：MA6 下穿 MA48')
-    expect(result.summary).toContain('突破缓冲 0.25%')
+    expect(result.summary).toContain('入场：MA6 上穿 MA48 时做多开仓')
+    expect(result.summary).toContain('出场：MA6 下穿 MA48 时平多')
+    expect(result.summary).toContain('入场：价格突破最近 24 根 K 线高点，突破缓冲 0.25% 时做多开仓')
+    expect(result.summary).toContain('入场：价格位于最近 36 根 K 线区间下 20% 时买入')
+    expect(result.summary).toContain('出场：价格位于最近 36 根 K 线区间上 55% 时卖出平仓')
+    expect(result.summary).toContain('入场：RSI14 上穿 38 时买入')
+    expect(result.summary).toContain('入场：触及 MA30 的布林带下轨时做多开仓')
+    expect(result.summary).toContain('入场：MACD 16/34/12 金叉时做多开仓')
     expect(result.summary).not.toContain('indicator.cross_over')
     expect(result.summary).not.toContain('price.breakout_up')
   })
