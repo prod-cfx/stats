@@ -449,9 +449,9 @@ export class AccountStrategyViewService {
         positionPct: resolvedSnapshot.strategyConfig
           ? this.readNumber(resolvedSnapshot.strategyConfig, ['positionPct', 'positionSizeRatioPercent'])
           : null,
-        paramSchema: null,
+        paramSchema: resolvedSnapshot.paramValues ? dynamicParams.paramSchema : null,
         paramValues: resolvedSnapshot.paramValues,
-        schemaVersion: null,
+        schemaVersion: resolvedSnapshot.paramValues ? dynamicParams.schemaVersion : null,
         deployAccountName: sub?.exchangeAccount?.name ?? null,
         deployAt: sub?.subscribedAt?.toISOString() ?? row.startedAt?.toISOString() ?? null,
         strategyConfig: snapshotStrategyConfig,
