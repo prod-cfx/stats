@@ -760,10 +760,6 @@ export class CodegenConversationService {
       args.message,
       assistantPrompt,
     )
-    const shouldPersistSpecDesc = deterministicAuthority === 'confirm_gate'
-      || deterministicAuthority === 'normalization'
-      || deterministicAuthority === 'decision'
-
     await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
       status: targetStatus,
       semanticState: reducedSemanticState,
@@ -772,7 +768,7 @@ export class CodegenConversationService {
         ...nextConstraintPack,
         conversationHistory: historyAfterSemanticEdit,
       },
-      ...(shouldPersistSpecDesc ? { latestSpecDesc: specDesc } : {}),
+      latestSpecDesc: specDesc,
     }))
 
     const response = this.finalizeSessionResponse({
