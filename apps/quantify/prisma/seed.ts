@@ -8,7 +8,6 @@ import { createEnvAccessor } from '../src/common/env/env.accessor'
 import { applyQuantifyEnvOverrides } from '../src/config/quantify-env'
 import { resolveConfiguredBacktestCapabilityConfig } from '../src/modules/backtesting/backtest-capability-config'
 import { OFFICIAL_STRATEGY_PLAZA_TEMPLATES } from '../src/modules/strategy-plaza/constants/official-strategy-plaza-templates'
-import { buildOfficialTemplateDataRequirements, buildOfficialTemplateParamsSnapshot } from '../src/modules/strategy-plaza/utils/official-strategy-plaza-snapshot-content'
 import {
   buildOfficialStrategySnapshotContent,
   OFFICIAL_STRATEGY_PLAZA_LLM_MODEL,
