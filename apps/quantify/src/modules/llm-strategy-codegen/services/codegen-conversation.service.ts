@@ -796,15 +796,18 @@ export class CodegenConversationService {
         args.message,
         args.decision.question,
       )
-      await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
-        status: 'DRAFTING',
-        semanticState: nextState,
-        clarificationState: semanticArtifacts.clarificationState,
-        constraintPack: {
-          ...constraintPack,
-          conversationHistory: historyAfterQuestion,
-        },
-      }))
+      await this.sessionsRepo.updateSession(args.session.id, {
+        ...this.stateMachine.buildConversationUpdate({
+          status: 'DRAFTING',
+          semanticState: nextState,
+          clarificationState: semanticArtifacts.clarificationState,
+          constraintPack: {
+            ...constraintPack,
+            conversationHistory: historyAfterQuestion,
+          },
+        }),
+        ...(args.session.status === 'PUBLISHED' ? { latestDraftCode: null } : {}),
+      } as Prisma.LlmStrategyCodegenSessionUpdateInput)
 
       const response = this.finalizeSessionResponse({
         id: args.session.id,
@@ -875,16 +878,19 @@ export class CodegenConversationService {
       args.message,
       assistantPrompt,
     )
-    await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
-      status: targetStatus,
-      semanticState: reducedSemanticState,
-      clarificationState,
-      constraintPack: {
-        ...nextConstraintPack,
-        conversationHistory: historyAfterSemanticEdit,
-      },
-      latestSpecDesc: specDesc,
-    }))
+    await this.sessionsRepo.updateSession(args.session.id, {
+      ...this.stateMachine.buildConversationUpdate({
+        status: targetStatus,
+        semanticState: reducedSemanticState,
+        clarificationState,
+        constraintPack: {
+          ...nextConstraintPack,
+          conversationHistory: historyAfterSemanticEdit,
+        },
+        latestSpecDesc: specDesc,
+      }),
+      ...(args.session.status === 'PUBLISHED' ? { latestDraftCode: null } : {}),
+    } as Prisma.LlmStrategyCodegenSessionUpdateInput)
 
     const response = this.finalizeSessionResponse({
       id: args.session.id,

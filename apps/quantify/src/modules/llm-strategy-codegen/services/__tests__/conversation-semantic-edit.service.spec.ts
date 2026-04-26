@@ -65,6 +65,43 @@ describe('ConversationSemanticEditService', () => {
     expect(decision.pendingEdit.candidate.key).toBe('pending.strategy_replacement_seed')
   })
 
+  it('consumes pending replacement seed as a full strategy replacement', () => {
+    const semanticState = service.withStrategyReplacementSeedPendingEditForTest(
+      service.createEmptySemanticStateForTest(),
+      '之前不对，重新来',
+    )
+
+    const decision = service.decide({
+      status: 'DRAFTING',
+      message: '做一个 RSI 策略',
+      semanticState,
+    })
+
+    expect(decision).toEqual({
+      kind: 'REPLACE_STRATEGY_DRAFT',
+      seedText: '做一个 RSI 策略',
+    })
+  })
+
+  it('keeps asking when pending replacement seed follow-up is still generic', () => {
+    const semanticState = service.withStrategyReplacementSeedPendingEditForTest(
+      service.createEmptySemanticStateForTest(),
+      '之前不对，重新来',
+    )
+
+    const decision = service.decide({
+      status: 'DRAFTING',
+      message: '继续',
+      semanticState,
+    })
+
+    expect(decision.kind).toBe('ASK_EDIT_CLARIFICATION')
+    if (decision.kind !== 'ASK_EDIT_CLARIFICATION') return
+    expect(decision.pendingEdit.op).toBe('replace_trigger')
+    if (decision.pendingEdit.op !== 'replace_trigger') return
+    expect(decision.pendingEdit.candidate.key).toBe('pending.strategy_replacement_seed')
+  })
+
   it('rejects edits while generation is processing', () => {
     const decision = service.decide({
       status: 'GENERATING',

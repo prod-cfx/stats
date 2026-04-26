@@ -39,6 +39,30 @@ export class ConversationSemanticEditService {
       }
     }
 
+    const pendingEdit = readPendingSemanticEdit(input.semanticState)
+    if (pendingEdit && /算了|保持原来|不改了|取消/u.test(message)) {
+      return {
+        kind: 'APPLY_TO_SEMANTIC_STATE',
+        patch: { operations: [{ op: 'cancel_pending_edit' }] },
+      }
+    }
+
+    if (pendingEdit && this.isStrategyReplacementSeedPendingEdit(pendingEdit)) {
+      const seedText = this.extractPendingStrategyReplacementSeed(message)
+      if (seedText) {
+        return {
+          kind: 'REPLACE_STRATEGY_DRAFT',
+          seedText,
+        }
+      }
+
+      return {
+        kind: 'ASK_EDIT_CLARIFICATION',
+        question: '请描述新的触发、行动、风控、仓位和运行 context，我会按新的语义重新整理策略。',
+        pendingEdit,
+      }
+    }
+
     const symbol = this.extractReplacementSymbol(message)
     if (symbol) {
       return {
@@ -65,19 +89,12 @@ export class ConversationSemanticEditService {
       }
     }
 
-    if (readPendingSemanticEdit(input.semanticState) && /算了|保持原来|不改了|取消/u.test(message)) {
-      return {
-        kind: 'APPLY_TO_SEMANTIC_STATE',
-        patch: { operations: [{ op: 'cancel_pending_edit' }] },
-      }
-    }
-
     if (/触发.*改成\s*RSI|把触发改成\s*RSI/u.test(message)) {
-      const pendingEdit = this.createPendingTriggerReplacement(message)
+      const triggerPendingEdit = this.createPendingTriggerReplacement(message)
       return {
         kind: 'ASK_EDIT_CLARIFICATION',
         question: '你正在把触发语义改成 RSI。请确认 RSI 阈值，例如低于 30 或高于 70。',
-        pendingEdit,
+        pendingEdit: triggerPendingEdit,
       }
     }
 
@@ -105,6 +122,10 @@ export class ConversationSemanticEditService {
 
   withPendingEditForTest(state: SemanticState, createdFromMessage: string): SemanticState {
     return withPendingSemanticEdit(state, this.createPendingTriggerReplacement(createdFromMessage))
+  }
+
+  withStrategyReplacementSeedPendingEditForTest(state: SemanticState, createdFromMessage: string): SemanticState {
+    return withPendingSemanticEdit(state, this.createStrategyReplacementSeedPendingEdit(createdFromMessage))
   }
 
   readPendingEditForTest(state: SemanticState): PendingSemanticEdit | null {
@@ -148,6 +169,16 @@ export class ConversationSemanticEditService {
   private extractReplacementSymbol(message: string): string | null {
     const match = /交易标的\s*(?:改为|改成|换成)\s*([A-Za-z0-9:/-]+)/u.exec(message)
     return canonicalizeStrategySymbolInput(match?.[1])
+  }
+
+  private extractPendingStrategyReplacementSeed(message: string): string | null {
+    if (/^(继续|确认|好的|好|嗯|是|对|可以)$/u.test(message)) return null
+    return message
+  }
+
+  private isStrategyReplacementSeedPendingEdit(pendingEdit: PendingSemanticEdit): boolean {
+    return pendingEdit.op === 'replace_trigger'
+      && pendingEdit.candidate.key === 'pending.strategy_replacement_seed'
   }
 
   private hasSemanticEditIntent(message: string, state: SemanticState): boolean {

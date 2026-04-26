@@ -8062,6 +8062,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockRepo.createVersion).not.toHaveBeenCalled()
     expect(oldLatestSnapshot.paramsSnapshot.symbol).toBe('ETHUSDT')
     expect(oldLatestSnapshot.lockedParams.symbol).toBe('ETHUSDT')
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.latestDraftCode).toBeNull()
   })
 
   it.each(['REJECTED', 'CONSISTENCY_FAILED'] as const)(
@@ -8147,6 +8149,73 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(updatePayload.latestSpecDesc).not.toEqual(oldSpecDesc)
     expect(JSON.stringify(updatePayload.latestSpecDesc)).toContain('rsi')
     expect(result.status).toBe('CONFIRM_GATE')
+  })
+
+  it('consumes pending strategy replacement seed from a follow-up message', async () => {
+    const currentSemanticState = {
+      ...buildLockedMaSemanticState(),
+      pendingEdit: {
+        id: 'pending-strategy-replacement-seed-1',
+        op: 'replace_trigger',
+        candidate: {
+          id: 'candidate-strategy-replacement-seed-1',
+          key: 'pending.strategy_replacement_seed',
+          phase: 'gate',
+          params: {},
+          status: 'open',
+          source: 'user_explicit',
+          evidence: {
+            text: '之前不对，重新来',
+            source: 'user_explicit',
+          },
+          openSlots: [],
+        },
+        status: 'needs_clarification',
+        createdFromMessage: '之前不对，重新来',
+      },
+    }
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-pending-replacement-seed',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState: currentSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestDraftCode: 'const oldMaStrategy = {}',
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '已改为 RSI 策略，请确认逻辑图。',
+        semanticPatch: rsiSemanticPatch(),
+      }),
+    })
+
+    await service.continueSession('s-pending-replacement-seed', {
+      userId: 'u1',
+      message: '做一个 RSI 策略',
+    })
+
+    const plannerPayload = JSON.parse(mockAi.chat.mock.calls[0][0].messages[1].content)
+    expect(plannerPayload.message).toBe('做一个 RSI 策略')
+    expect(plannerPayload.currentSemanticState.triggers).toEqual([])
+
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.latestDraftCode).toBeNull()
+    expect(updatePayload.semanticState.previousVersions).toHaveLength(1)
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'oscillator.rsi_lte',
+        params: expect.objectContaining({ indicator: 'rsi' }),
+      }),
+    ]))
+    expect(updatePayload.semanticState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        params: expect.objectContaining({ indicator: 'ma' }),
+      }),
+    ]))
   })
 
   it('returns compileability blockers when semantic state is complete but planner follow-up is unrelated', async () => {
