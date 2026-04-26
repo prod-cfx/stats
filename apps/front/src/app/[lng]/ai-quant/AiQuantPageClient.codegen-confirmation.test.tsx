@@ -119,22 +119,17 @@ jest.mock('@/components/ai-quant/GuestAiQuantLanding', () => ({
 
 jest.mock('@/components/ai-quant/BacktestSummaryCard', () => ({
   BacktestSummaryCard: ({
-    onOptimize,
     onDeploy,
     onViewRunningStrategy,
     deploymentState,
     deployLabel,
   }: {
-    onOptimize: () => void
     onDeploy: () => void
     onViewRunningStrategy?: () => void
     deploymentState?: 'not_deployed' | 'running' | 'stopped' | 'unknown'
     deployLabel?: string
   }) => (
     <div>
-      <button data-testid="return-to-chat" onClick={onOptimize}>
-        optimize
-      </button>
       <button
         data-testid="open-deploy"
         disabled={deploymentState === 'running' || deploymentState === 'unknown'}
@@ -1760,7 +1755,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
 
     await act(async () => {
       container
-        .querySelector('[data-testid="return-to-chat"]')
+        .querySelector('[data-testid="display-revise-graph"], [data-testid="revise-graph"]')
         ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       await Promise.resolve()
     })
@@ -1805,7 +1800,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     expect(runButtonAfterReconfirm?.disabled).toBe(false)
   })
 
-  it('blocks return-to-chat edits behind the running strategy guard and preserves the published snapshot', async () => {
+  it('blocks logic graph revision behind the running strategy guard and preserves the published snapshot', async () => {
     localStorage.clear()
     seedPublishedConversation(Date.now())
     mockFetchAccountAiQuantStrategyDetail.mockResolvedValueOnce(
@@ -1828,7 +1823,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
 
     await act(async () => {
       container
-        .querySelector('[data-testid="return-to-chat"]')
+        .querySelector('[data-testid="display-revise-graph"], [data-testid="revise-graph"]')
         ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       await Promise.resolve()
     })
@@ -1863,7 +1858,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
 
     await act(async () => {
       container
-        .querySelector('[data-testid="return-to-chat"]')
+        .querySelector('[data-testid="display-revise-graph"], [data-testid="revise-graph"]')
         ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       await Promise.resolve()
     })
@@ -1875,7 +1870,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     expect(storedAfterStop[0]?.publishedSnapshotId ?? null).toBeNull()
   })
 
-  it('fails closed for return-to-chat edits while deployment state is still loading', async () => {
+  it('fails closed for logic graph revision while deployment state is still loading', async () => {
     localStorage.clear()
     seedPublishedConversation(Date.now())
     const detailDeferred = createDeferred<ReturnType<typeof buildStrategyDetail>>()
@@ -1888,7 +1883,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
 
     await act(async () => {
       container
-        .querySelector('[data-testid="return-to-chat"]')
+        .querySelector('[data-testid="display-revise-graph"], [data-testid="revise-graph"]')
         ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       await Promise.resolve()
     })

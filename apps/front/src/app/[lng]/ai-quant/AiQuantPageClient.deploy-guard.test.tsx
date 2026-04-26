@@ -54,19 +54,16 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
 jest.mock('@/components/ai-quant/BacktestSummaryCard', () => ({
   BacktestSummaryCard: ({
     onDeploy,
-    onOptimize,
     onViewRunningStrategy,
     deploymentState,
     deployLabel,
   }: {
     onDeploy: () => void
-    onOptimize: () => void
     onViewRunningStrategy?: () => void
     deploymentState?: 'not_deployed' | 'running' | 'stopped' | 'unknown'
     deployLabel?: string
   }) => (
     <div>
-      <button type="button" data-testid="return-to-chat" onClick={onOptimize}>return to chat</button>
       <button
         type="button"
         data-testid="open-deploy"

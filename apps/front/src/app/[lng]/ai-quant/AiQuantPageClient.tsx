@@ -664,15 +664,23 @@ export function AiQuantPageClient({
     backtestRunMutexRef.current.delete(conversationId)
   }
 
-  function proceedToOptimizeConversation() {
-    const optimizeMessage: QuantMessage = {
-      id: `opt-${Date.now()}`,
-      role: 'assistant',
-      content: t('aiQuant.messages.optimizeHint'),
+  function requestLogicGraphRevision() {
+    if (deploymentState === 'running' || deploymentState === 'unknown') {
+      setDeploymentGuardErrorMessage(null)
+      setEditGuardOpen(true)
+      return
     }
+
     updateActiveConversation(curr => ({
       ...invalidateConversationPublication(curr, { markGraphDraft: true }),
-      messages: [...curr.messages, optimizeMessage],
+      messages: [
+        ...curr.messages,
+        {
+          id: `graph-revise-${Date.now()}`,
+          role: 'assistant',
+          content: t('aiQuant.messages.graphRevise'),
+        },
+      ],
       updatedAt: Date.now(),
     }))
   }
@@ -1357,20 +1365,7 @@ export function AiQuantPageClient({
                   }),
                 })
               }}
-              onRevise={() => {
-                updateActiveConversation(curr => ({
-                  ...invalidateConversationPublication(curr, { markGraphDraft: true }),
-                  messages: [
-                    ...curr.messages,
-                    {
-                      id: `graph-revise-${Date.now()}`,
-                      role: 'assistant',
-                      content: t('aiQuant.messages.graphRevise'),
-                    },
-                  ],
-                  updatedAt: Date.now(),
-                }))
-              }}
+              onRevise={requestLogicGraphRevision}
             />
           ) : activeConversation.logicGraph ? (
             <LogicGraphPreview
@@ -1391,20 +1386,7 @@ export function AiQuantPageClient({
                   }),
                 })
               }}
-              onRevise={() => {
-                updateActiveConversation(curr => ({
-                  ...invalidateConversationPublication(curr, { markGraphDraft: true }),
-                  messages: [
-                    ...curr.messages,
-                    {
-                      id: `graph-revise-${Date.now()}`,
-                      role: 'assistant',
-                      content: t('aiQuant.messages.graphRevise'),
-                    },
-                  ],
-                  updatedAt: Date.now(),
-                }))
-              }}
+              onRevise={requestLogicGraphRevision}
             />
           ) : null}
 
@@ -1431,14 +1413,6 @@ export function AiQuantPageClient({
                   search.set('endAt', currentBacktest.endAt)
                 }
                 router.push(`/${lng}/ai-quant/backtest/${currentBacktest.id}?${search.toString()}`)
-              }}
-              onOptimize={() => {
-                if (deploymentState === 'running' || deploymentState === 'unknown') {
-                  setDeploymentGuardErrorMessage(null)
-                  setEditGuardOpen(true)
-                  return
-                }
-                proceedToOptimizeConversation()
               }}
               onDeploy={() => {
                 if (deploymentState === 'running' || deploymentState === 'unknown') {

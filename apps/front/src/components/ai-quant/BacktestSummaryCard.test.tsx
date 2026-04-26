@@ -23,7 +23,6 @@ jest.mock('react-i18next', () => ({
       'aiQuant.closedTradeCount': '已平仓交易数',
       'aiQuant.openTradeCount': '未平仓笔数',
       'aiQuant.openPnl': 'Open P&L',
-      'aiQuant.messages.returnToChat': '返回对话继续优化',
       'aiQuant.deploy': '一键部署',
     }[key] ?? options?.defaultValue ?? key),
   }),
@@ -68,7 +67,6 @@ describe('BacktestSummaryCard', () => {
           marketType="spot"
           canDeploy
           onOpenFullScreen={() => undefined}
-          onOptimize={() => undefined}
           onDeploy={() => undefined}
         />,
       )
@@ -79,6 +77,7 @@ describe('BacktestSummaryCard', () => {
     expect(container.textContent).toContain('已完成交易')
     expect(container.textContent).toContain('当前持仓')
     expect(container.textContent).toContain('持仓浮盈浮亏')
+    expect(container.textContent).not.toContain('返回对话继续优化')
     expect(container.textContent).not.toContain('暂不允许部署')
     expect(container.textContent).not.toContain('已平仓收益')
     expect(container.textContent).not.toContain('已平仓胜率')
@@ -104,7 +103,6 @@ describe('BacktestSummaryCard', () => {
           marketType="perp"
           canDeploy={false}
           onOpenFullScreen={() => undefined}
-          onOptimize={() => undefined}
           onDeploy={() => undefined}
         />,
       )
@@ -138,7 +136,6 @@ describe('BacktestSummaryCard', () => {
           marketType="perp"
           canDeploy={false}
           onOpenFullScreen={() => undefined}
-          onOptimize={() => undefined}
           onDeploy={() => undefined}
         />,
       )
@@ -170,7 +167,6 @@ describe('BacktestSummaryCard', () => {
           deploymentState="running"
           onViewRunningStrategy={onViewRunningStrategy}
           onOpenFullScreen={() => undefined}
-          onOptimize={() => undefined}
           onDeploy={onDeploy}
         />,
       )
@@ -211,7 +207,6 @@ describe('BacktestSummaryCard', () => {
           canDeploy
           deploymentState="stopped"
           onOpenFullScreen={() => undefined}
-          onOptimize={() => undefined}
           onDeploy={() => undefined}
         />,
       )

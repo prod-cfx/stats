@@ -11,7 +11,6 @@ interface BacktestSummaryCardProps {
   deployLabel?: string
   drawdownLimited?: boolean
   onOpenFullScreen: () => void
-  onOptimize: () => void
   onDeploy: () => void
   onViewRunningStrategy?: () => void
 }
@@ -38,7 +37,6 @@ export function BacktestSummaryCard({
   deployLabel,
   drawdownLimited = true,
   onOpenFullScreen,
-  onOptimize,
   onDeploy,
   onViewRunningStrategy,
 }: BacktestSummaryCardProps) {
@@ -208,13 +206,6 @@ export function BacktestSummaryCard({
       )}
 
       <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={onOptimize}
-          className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
-        >
-          {t('aiQuant.messages.returnToChat')}
-        </button>
         {deploymentState === 'running' && onViewRunningStrategy && (
           <button
             type="button"
