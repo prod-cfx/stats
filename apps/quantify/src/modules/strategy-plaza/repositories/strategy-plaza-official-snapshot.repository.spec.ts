@@ -126,6 +126,12 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
         scriptSnapshot: expect.stringContaining('protocolVersion: "v1"'),
       }),
     }))
+    expect(tx.publishedStrategySnapshot.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'official-plaza-ma-cross-v1-snapshot' },
+      update: expect.objectContaining({
+        scriptSnapshot: expect.stringContaining('risk.stopLoss'),
+      }),
+    }))
     expect(tx.strategyInstance.upsert).toHaveBeenCalled()
   })
 
