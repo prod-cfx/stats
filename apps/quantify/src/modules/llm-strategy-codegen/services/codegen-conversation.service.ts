@@ -667,10 +667,7 @@ export class CodegenConversationService {
     const constraintPack = this.readConstraintPack(args.session.constraintPack)
 
     if (args.decision.kind === 'REPLACE_STRATEGY_DRAFT') {
-      const seedSemanticState = this.mergeSemanticPatchIntoState(
-        this.createEmptySemanticState(),
-        this.extractSemanticPatchFromMessage(args.decision.seedText),
-      )
+      const seedSemanticState = this.createEmptySemanticState()
       const plan = await this.planConversationByLlm(args.decision.seedText, seedSemanticState, {
         providerCode: this.resolveProviderCode(args.providerCode),
         model: args.model,
