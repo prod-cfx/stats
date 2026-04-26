@@ -1079,4 +1079,32 @@ describe('signalExecutorService', () => {
       }),
     }))
   })
+
+  it('falls back to fill commissions when raw order fee is empty', () => {
+    const service = new SignalExecutorService(
+      {} as any,
+      { get: jest.fn() } as any,
+      createSchedulerRegistry() as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+      {} as any,
+    )
+
+    const fee = (service as any).extractOrderFee({
+      raw: {
+        fee: null,
+        fills: [
+          { commission: '0.001', commissionAsset: 'BNB' },
+          { commission: '0.002', commissionAsset: 'BNB' },
+        ],
+      },
+    })
+
+    expect(fee).toEqual({ amount: 0.003, currency: 'BNB' })
+  })
 })

@@ -152,7 +152,37 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
           stoppedAt: null,
         },
         subscription: { subscribedAt: new Date('2026-03-20T10:00:00.000Z') },
-        signalExecutions: [{ createdAt: new Date('2026-03-20T11:00:00.000Z'), status: 'SUCCESS', errorMessage: null }],
+        signalExecutions: [{
+          createdAt: new Date('2026-03-20T11:00:00.000Z'),
+          status: 'SUCCESS',
+          errorMessage: null,
+          tradeId: 'ord-1',
+          fee: 0,
+          feeCurrency: 'USDT',
+          metadata: {
+            orderResponse: {
+              raw: {
+                fee: '-51.737672883',
+                feeCcy: 'DOGE',
+              },
+            },
+          },
+        }, {
+          createdAt: new Date('2026-03-20T10:59:00.000Z'),
+          status: 'SUCCESS',
+          errorMessage: null,
+          tradeId: 'ord-1',
+          fee: 9,
+          feeCurrency: 'USDT',
+          metadata: {
+            orderResponse: {
+              raw: {
+                fee: '-9',
+                feeCcy: 'USDT',
+              },
+            },
+          },
+        }],
         trades: [{
           executedAt: new Date('2026-03-20T11:01:00.000Z'),
           side: 'BUY',
@@ -211,6 +241,20 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         lockedParams: {
           exchange: 'okx',
           positionPct: 25,
+        },
+        specSnapshot: {
+          rules: [{
+            id: 'entry-on-start',
+            phase: 'entry',
+            condition: { key: 'execution.on_start' },
+            actions: [{ type: 'OPEN_LONG' }],
+          }, {
+            id: 'exit-price-change',
+            phase: 'exit',
+            condition: { key: 'price.change_pct', op: 'GTE', value: 0.05 },
+            actions: [{ type: 'CLOSE_LONG' }],
+          }],
+          executionPolicy: { signalTiming: 'BAR_CLOSE' },
         },
       }),
     }
@@ -287,10 +331,17 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       symbol: 'BTCUSDT',
       price: 68000,
       quantity: 0.12,
-      fee: 1.5,
-      feeCurrency: 'USDT',
+      fee: 51.737672883,
+      feeCurrency: 'DOGE',
       orderId: 'ord-1',
     })
+    expect(detail.runtimeSemanticSummary).toEqual(expect.objectContaining({
+      headline: '运行中 · 持有多头 · 等待出场',
+      positionState: 'long',
+      cycleState: 'entered',
+      nextExpectedAction: '等待出场条件触发',
+    }))
+    expect(detail.runtimeSemanticSummary?.evidence.latestEntryOrderId).toBe('ord-1')
     expect(detail.timeline.some(e => e.eventType === 'system')).toBe(true)
     expect(detail.timeline.some(e => e.eventType === 'trade')).toBe(true)
     expect(detail.timeline[0]?.event).toBe('创建策略')
@@ -309,7 +360,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       riskMode: 'aggressive',
     })
     expect(detail.schemaVersion).toBe('7')
-    expect(detail.snapshot.paramSchema).toEqual(detail.paramSchema)
+    expect(detail.snapshot.paramSchema).toBeNull()
     expect(detail.snapshot.publishedSnapshotId).toBe('snapshot-1')
     expect(detail.snapshot.snapshotHash).toBe('snapshot-hash-1')
     expect(detail.snapshot.exchange).toBe('okx')
@@ -331,6 +382,24 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       marketType: 'perp',
       positionPct: 25,
       strategyDeclaredLeverageRange: { min: 1, max: 8 },
+    })
+    expect(detail.snapshot.ruleSummary).toEqual({
+      rules: [{
+        id: 'entry-on-start',
+        phase: 'entry',
+        conditionKey: 'execution.on_start',
+        operator: null,
+        value: null,
+        actions: ['OPEN_LONG'],
+      }, {
+        id: 'exit-price-change',
+        phase: 'exit',
+        conditionKey: 'price.change_pct',
+        operator: 'GTE',
+        value: 0.05,
+        actions: ['CLOSE_LONG'],
+      }],
+      executionPolicy: { signalTiming: 'BAR_CLOSE' },
     })
     expect(detail.snapshot.backtestConfigDefaults).toEqual({
       initialCash: 20000,
@@ -407,7 +476,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       reReadAtNextEligibleExecutionCycle: true,
       updatedBy: 'user-1',
     })
-    expect(detail.snapshot.schemaVersion).toBe('7')
+    expect(detail.snapshot.schemaVersion).toBeNull()
     expect(publishedSnapshotsRepository.findByIdForUser).toHaveBeenCalledWith('snapshot-1', 'user-1')
     expect(tradingService.getLeverageConstraints).toHaveBeenCalledWith({
       userId: 'user-1',
@@ -1174,6 +1243,198 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       baseCurrency: 'USDT',
     })
     expect(detail.equitySeries.every(item => item.value === 60000)).toBe(true)
+  })
+
+  it('does not substitute snapshot backtest equity for an empty strategy account curve', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-perp-flat-account',
+        name: 'Perp flat account strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-perp-1',
+          snapshotHash: 'snapshot-hash-perp-1',
+        },
+        params: { symbol: 'BTC-USDT-SWAP', exchange: 'okx', marketType: 'perp' },
+        strategyTemplateId: 'tpl-perp-flat-account',
+        strategyTemplate: { defaultParams: {} },
+        subscriptions: [{ userId: 'user-1', status: 'active', customParams: {} }],
+        startedAt: new Date('2026-04-24T14:43:40.000Z'),
+        updatedAt: new Date('2026-04-24T14:43:40.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue({
+        id: 'acc-perp-flat-account',
+        baseCurrency: 'USDT',
+        initialBalance: 10000,
+        balance: 10000,
+        equity: 10000,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 0,
+      }),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadClosedPositionPnlSeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
+      loadPositionFinancials: jest.fn().mockResolvedValue({
+        openCostBasis: 0,
+        totalUnrealizedPnl: 0,
+        totalRealizedPnl: 0,
+      }),
+      loadOpenPositionsForValuation: jest.fn().mockResolvedValue([]),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-04-24T14:43:40.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+      loadLatestSuccessfulBacktestResultBySnapshot: jest.fn().mockResolvedValue({
+        id: 'btjob-latest',
+        result: {
+          equityCurve: [
+            { ts: 1774443600000, equity: 10000 },
+            { ts: 1777035600000, equity: 9944.916495122703 },
+          ],
+        },
+      }),
+    }
+    const statsService = {
+      calculateStats: jest.fn().mockResolvedValue(null),
+      calculateBatchStats: jest.fn(),
+    }
+    const strategyInstancesService = { updateInstance: jest.fn() }
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+    const publishedSnapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-perp-1',
+        snapshotHash: 'snapshot-hash-perp-1',
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'BTC-USDT-SWAP',
+          baseTimeframe: '1h',
+          marketType: 'perp',
+          positionPct: 10,
+        },
+        backtestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 3,
+          slippageBps: 6,
+          feeBps: 4,
+          priceSource: 'mark',
+          allowPartial: false,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 3,
+          priceSource: 'mark',
+          orderType: 'market',
+          timeInForce: 'IOC',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 5,
+        },
+        paramsSnapshot: {},
+        lockedParams: {},
+        specSnapshot: { rules: [] },
+      }),
+    }
+
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+      undefined,
+      undefined,
+      undefined,
+      publishedSnapshotsRepository as any,
+    )
+
+    const detail = await service.getStrategyDetail('user-1', 'inst-perp-flat-account')
+
+    expect(repo.loadLatestSuccessfulBacktestResultBySnapshot).not.toHaveBeenCalled()
+    expect(detail.equitySeries.length).toBeGreaterThan(0)
+    expect(detail.equitySeries.every(item => item.value === 10000)).toBe(true)
+    expect(detail.equitySeries.some(item => item.value === 9944.91649512)).toBe(false)
+  })
+
+  it('keeps real account equity series separate from snapshot backtest results', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-account-moving',
+        name: 'Moving account strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-moving-1',
+          snapshotHash: 'snapshot-hash-moving-1',
+        },
+        params: { symbol: 'BTCUSDT', exchange: 'okx', marketType: 'spot' },
+        strategyTemplateId: 'tpl-account-moving',
+        strategyTemplate: { defaultParams: {} },
+        subscriptions: [{ userId: 'user-1', status: 'active', customParams: {} }],
+        startedAt: new Date('2026-04-24T14:43:40.000Z'),
+        updatedAt: new Date('2026-04-24T14:43:40.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue({
+        id: 'acc-account-moving',
+        baseCurrency: 'USDT',
+        initialBalance: 10000,
+        balance: 10020,
+        equity: 10020,
+        totalRealizedPnl: 20,
+        totalUnrealizedPnl: 0,
+      }),
+      loadEquitySeries: jest.fn().mockResolvedValue([
+        { date: new Date('2026-04-24T15:00:00.000Z'), equityEnd: 10000 },
+        { date: new Date('2026-04-25T00:00:00.000Z'), equityEnd: 10020 },
+      ]),
+      loadLatestDailySnapshot: jest.fn().mockResolvedValue(null),
+      loadClosedPositionPnlSeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 1, closedCount: 1, winningCount: 1 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 1 }),
+      loadPositionFinancials: jest.fn().mockResolvedValue({
+        openCostBasis: 0,
+        totalUnrealizedPnl: 0,
+        totalRealizedPnl: 20,
+      }),
+      loadOpenPositionsForValuation: jest.fn().mockResolvedValue([]),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-04-24T14:43:40.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+      loadLatestSuccessfulBacktestResultBySnapshot: jest.fn().mockResolvedValue({
+        id: 'btjob-latest',
+        result: {
+          equityCurve: [
+            { ts: '2026-04-24T00:00:00.000Z', equity: 10000 },
+            { ts: '2026-04-25T00:00:00.000Z', equity: 9000 },
+          ],
+        },
+      }),
+    }
+    const statsService = {
+      calculateStats: jest.fn().mockResolvedValue(null),
+      calculateBatchStats: jest.fn(),
+    }
+    const strategyInstancesService = { updateInstance: jest.fn() }
+    const marketDataIngestionService = { ensureSymbolsSubscribed: jest.fn() }
+
+    const service = new AccountStrategyViewService(
+      repo as any,
+      statsService as any,
+      strategyInstancesService as any,
+      marketDataIngestionService as any,
+    )
+
+    const detail = await service.getStrategyDetail('user-1', 'inst-account-moving')
+
+    expect(repo.loadLatestSuccessfulBacktestResultBySnapshot).not.toHaveBeenCalled()
+    expect(detail.equitySeries.some(item => item.value === 9000)).toBe(false)
+    expect(detail.equitySeries.at(-1)?.value).toBe(10020)
   })
 
   it('uses live exchange equity as the latest curve point for pristine non-default seed accounts', async () => {

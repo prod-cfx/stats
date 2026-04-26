@@ -31,12 +31,41 @@ export interface StrategyRuntimeExecutionState {
   snapshotHash: string
 }
 
+export type AiQuantMarketType = 'spot' | 'perp' | 'futures' | 'swap' | 'unknown'
+export type AiQuantPositionState = 'flat' | 'spot_holding' | 'long' | 'short' | 'unknown'
+export type AiQuantCycleState = 'waiting_entry' | 'entered' | 'exit_triggered' | 'completed' | 'needs_attention' | 'unknown'
+
+export interface AiQuantRuntimeSemanticSummary {
+  serviceStatusLabel: string
+  positionStatusLabel: string
+  cycleStatusLabel: string
+  headline: string
+  explanation: string
+  nextExpectedAction: string | null
+  marketType: AiQuantMarketType
+  positionState: AiQuantPositionState
+  cycleState: AiQuantCycleState
+  evidence: {
+    openPositionsCount: number | null
+    latestEntryOrderId: string | null
+    latestExitOrderId: string | null
+    latestSyncOrderId: string | null
+    entryOrders: Array<{ orderId: string | null; executedAt: string }>
+    exitOrders: Array<{ orderId: string | null; executedAt: string }>
+    syncOrders: Array<{ orderId: string | null; executedAt: string }>
+    latestEntryAt: string | null
+    latestExitAt: string | null
+    latestSemanticAction: string | null
+  }
+}
+
 export interface AiQuantStrategyRecord {
   id: string
   name: string
   status: AiQuantStrategyViewState
   exchange: 'binance' | 'okx' | 'hyperliquid'
   symbol: string
+  marketType?: AiQuantMarketType
   timeframe: string
   positionPct: number
   initialCapital: number
@@ -88,6 +117,17 @@ export interface AiQuantStrategyRecord {
     driftReasons: string[]
     consistencyScore?: number | null
   } | null
+  ruleSummary?: {
+    rules: Array<{
+      id: string | null
+      phase: string | null
+      conditionKey: string | null
+      operator: string | null
+      value: number | null
+      actions: string[]
+    }>
+    executionPolicy?: Record<string, unknown> | null
+  } | null
   canEditDeploymentLeverage?: boolean
   schemaVersion: string | null
   supportsDynamicParams: boolean
@@ -112,6 +152,8 @@ export interface AiQuantStrategyRecord {
   latestOrders?: Array<{
     executedAt: string
     side: string
+    semanticAction?: string
+    semanticRole?: 'entry' | 'exit' | 'sync' | 'unknown'
     symbol: string
     price: number | null
     quantity: number | null
@@ -119,6 +161,7 @@ export interface AiQuantStrategyRecord {
     feeCurrency: string | null
     orderId: string | null
   }>
+  runtimeSemanticSummary?: AiQuantRuntimeSemanticSummary
   deploy?: {
     exchange: 'binance' | 'okx' | 'hyperliquid'
     accountId: string

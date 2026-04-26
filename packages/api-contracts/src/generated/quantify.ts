@@ -494,6 +494,22 @@ const AccountStrategyConsistencySummaryDto = z
     consistencyScore: z.number().nullish(),
   })
   .passthrough()
+const AccountStrategyRuleSummaryItemDto = z
+  .object({
+    id: z.string().nullish(),
+    phase: z.string().nullish(),
+    conditionKey: z.string().nullish(),
+    operator: z.string().nullish(),
+    value: z.number().nullish(),
+    actions: z.array(z.string()),
+  })
+  .passthrough()
+const AccountStrategyRuleSummaryDto = z
+  .object({
+    rules: z.array(AccountStrategyRuleSummaryItemDto),
+    executionPolicy: z.object({}).partial().passthrough().nullish(),
+  })
+  .passthrough()
 const AccountStrategySnapshotDto = z
   .object({
     publishedSnapshotId: z.string().nullable(),
@@ -512,6 +528,7 @@ const AccountStrategySnapshotDto = z
     effectiveAllowedLeverageRange: AccountStrategyLeverageRangeDto.nullable(),
     compatibilityMetadata: z.object({}).partial().passthrough().nullable(),
     consistencySummary: AccountStrategyConsistencySummaryDto.nullable(),
+    ruleSummary: AccountStrategyRuleSummaryDto.nullable(),
     executionConfigVersion: z.number().nullable(),
     schemaVersion: z.string().nullable(),
     deployAccountName: z.string().nullable(),
@@ -573,6 +590,44 @@ const RuntimeExecutionStateDto = z
     snapshotHash: z.string(),
   })
   .passthrough()
+const AccountStrategyRuntimeSemanticOrderEvidenceDto = z
+  .object({ orderId: z.string().nullish(), executedAt: z.string() })
+  .passthrough()
+const AccountStrategyRuntimeSemanticEvidenceDto = z
+  .object({
+    openPositionsCount: z.number().nullish(),
+    latestEntryOrderId: z.string().nullish(),
+    latestExitOrderId: z.string().nullish(),
+    latestSyncOrderId: z.string().nullish(),
+    entryOrders: z.array(AccountStrategyRuntimeSemanticOrderEvidenceDto),
+    exitOrders: z.array(AccountStrategyRuntimeSemanticOrderEvidenceDto),
+    syncOrders: z.array(AccountStrategyRuntimeSemanticOrderEvidenceDto),
+    latestEntryAt: z.string().nullish(),
+    latestExitAt: z.string().nullish(),
+    latestSemanticAction: z.string().nullish(),
+  })
+  .passthrough()
+const AccountStrategyRuntimeSemanticSummaryDto = z
+  .object({
+    serviceStatusLabel: z.string(),
+    positionStatusLabel: z.string(),
+    cycleStatusLabel: z.string(),
+    headline: z.string(),
+    explanation: z.string(),
+    nextExpectedAction: z.string().nullish(),
+    marketType: z.enum(['spot', 'perp', 'futures', 'swap', 'unknown']),
+    positionState: z.enum(['flat', 'spot_holding', 'long', 'short', 'unknown']),
+    cycleState: z.enum([
+      'waiting_entry',
+      'entered',
+      'exit_triggered',
+      'completed',
+      'needs_attention',
+      'unknown',
+    ]),
+    evidence: AccountStrategyRuntimeSemanticEvidenceDto,
+  })
+  .passthrough()
 const AccountStrategyExecutionConfigDto = z
   .object({
     leverage: z.number().nullable(),
@@ -618,6 +673,7 @@ const AccountStrategyDetailResponseDto = z
     positionOverview: AccountStrategyPositionOverviewDto,
     latestOrders: z.array(AccountStrategyLatestOrderDto),
     runtimeExecutionStates: z.array(RuntimeExecutionStateDto),
+    runtimeSemanticSummary: AccountStrategyRuntimeSemanticSummaryDto.nullish(),
     deployment: AccountStrategyDeploymentDto.nullish(),
   })
   .passthrough()
@@ -1599,12 +1655,17 @@ export const schemas = {
   AccountStrategyEquityPointDto,
   AccountStrategyLeverageRangeDto,
   AccountStrategyConsistencySummaryDto,
+  AccountStrategyRuleSummaryItemDto,
+  AccountStrategyRuleSummaryDto,
   AccountStrategySnapshotDto,
   AccountStrategyTimelineEventDto,
   AccountStrategyAccountOverviewDto,
   AccountStrategyPositionOverviewDto,
   AccountStrategyLatestOrderDto,
   RuntimeExecutionStateDto,
+  AccountStrategyRuntimeSemanticOrderEvidenceDto,
+  AccountStrategyRuntimeSemanticEvidenceDto,
+  AccountStrategyRuntimeSemanticSummaryDto,
   AccountStrategyExecutionConfigDto,
   AccountStrategyDeploymentDto,
   AccountStrategyDetailResponseDto,

@@ -203,7 +203,10 @@ describe('quantify contract generated responses', () => {
     const source = readFileSync(generatedPath, 'utf8')
     const responseStart = source.indexOf('const AiQuantConversationResponseDto = z')
     const refStart = source.indexOf('const AiQuantConversationLastBacktestRefDto = z')
-    const configStart = source.indexOf('const AiQuantConversationLastBacktestConfigDto = z')
+    const configSchemaName = source.includes('const AiQuantConversationLastBacktestConfigDto = z')
+      ? 'AiQuantConversationLastBacktestConfigDto'
+      : 'AiQuantConversationBacktestConfigDto'
+    const configStart = source.indexOf(`const ${configSchemaName} = z`)
     const summaryStart = source.indexOf('const AiQuantConversationLastBacktestSummaryDto = z')
 
     expect(responseStart).toBeGreaterThanOrEqual(0)
@@ -216,12 +219,12 @@ describe('quantify contract generated responses', () => {
     const configSnippet = source.slice(configStart, configStart + 700)
     const summarySnippet = source.slice(summaryStart, summaryStart + 500)
 
-    expect(responseSnippet).toContain('backtestDraftConfig: AiQuantConversationLastBacktestConfigDto.nullish()')
+    expect(responseSnippet).toContain(`backtestDraftConfig: ${configSchemaName}.nullish()`)
     expect(responseSnippet).toContain('lastBacktestRef: AiQuantConversationLastBacktestRefDto.nullish()')
     expect(refSnippet).toContain('publishedSnapshotId: z.string()')
-    expect(refSnippet).toContain('config: AiQuantConversationLastBacktestConfigDto')
-    expect(configSnippet).toContain('range: AiQuantConversationLastBacktestRangeDto')
-    expect(configSnippet).toContain('execution: AiQuantConversationLastBacktestExecutionDto')
+    expect(refSnippet).toContain(`config: ${configSchemaName}`)
+    expect(configSnippet).toMatch(/range: AiQuantConversation(?:LastBacktest|Backtest)RangeDto/)
+    expect(configSnippet).toMatch(/execution: AiQuantConversation(?:LastBacktest|Backtest)ExecutionDto/)
     expect(refSnippet).toContain('summary: AiQuantConversationLastBacktestSummaryDto')
     expect(refSnippet).toContain('completedAt: z.string()')
     expect(summarySnippet).toContain('maxDrawdownPct: z.number()')
