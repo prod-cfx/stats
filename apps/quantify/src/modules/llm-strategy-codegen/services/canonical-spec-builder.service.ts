@@ -719,6 +719,7 @@ export class CanonicalSpecBuilderService {
     if (!ruleKey) return null
 
     const operator = ruleKey === 'ma.golden_cross' ? 'CROSS_OVER' : 'CROSS_UNDER'
+    const movingAverageConfig = this.resolveMovingAverageConfig([input.ruleText])
 
     return {
       id: `${input.phase}-${ruleKey.replace('.', '-')}-${input.index + 1}`,
@@ -730,6 +731,10 @@ export class CanonicalSpecBuilderService {
         key: ruleKey,
         semanticScope: 'market',
         op: operator,
+        params: {
+          indicator: movingAverageConfig.kind,
+          ...movingAverageConfig.params,
+        },
       },
       actions: [input.phase === 'entry'
         ? this.buildOpenAction(input.actionType as 'OPEN_LONG' | 'OPEN_SHORT', input.sizing)
@@ -1093,14 +1098,31 @@ export class CanonicalSpecBuilderService {
           if (indicator === 'ema') {
             pushIndicator({
               kind: 'ema',
-              params: { ...DEFAULT_INDICATOR_PARAMS.ema },
+              params: {
+                fastPeriod: typeof trigger.params.fastPeriod === 'number' && Number.isFinite(trigger.params.fastPeriod)
+                  ? trigger.params.fastPeriod
+                  : 7,
+                slowPeriod: typeof trigger.params.slowPeriod === 'number' && Number.isFinite(trigger.params.slowPeriod)
+                  ? trigger.params.slowPeriod
+                  : 21,
+              },
             })
             break
           }
-          if (indicator === 'sma' || indicator === 'indicator' || indicator.length === 0) {
+          if (indicator === 'ma' || indicator === 'sma' || indicator === 'indicator' || indicator.length === 0) {
             pushIndicator({
               kind: 'sma',
-              params: { ...DEFAULT_INDICATOR_PARAMS.sma },
+              params: {
+                fastPeriod: typeof trigger.params.fastPeriod === 'number' && Number.isFinite(trigger.params.fastPeriod)
+                  ? trigger.params.fastPeriod
+                  : 7,
+                slowPeriod: typeof trigger.params.slowPeriod === 'number' && Number.isFinite(trigger.params.slowPeriod)
+                  ? trigger.params.slowPeriod
+                  : 21,
+                ...(typeof trigger.params['reference.period'] === 'number' && Number.isFinite(trigger.params['reference.period'])
+                  ? { period: trigger.params['reference.period'] }
+                  : {}),
+              },
             })
           }
           break
@@ -1637,12 +1659,19 @@ export class CanonicalSpecBuilderService {
             },
           }
         }
+        const movingAverageIndicator = indicator === 'ema'
+          ? 'ema'
+          : (indicator === 'ma' || indicator === 'sma' || indicator.length === 0 ? 'sma' : indicator)
         return {
           kind: 'atom',
           key: trigger.key === 'indicator.cross_over' ? CANONICAL_RULE_KEYS.movingAverageGoldenCross : CANONICAL_RULE_KEYS.movingAverageDeathCross,
           semanticScope: 'market',
           op: operator,
-          ...(indicator ? { params: { indicator } } : {}),
+          params: {
+            indicator: movingAverageIndicator,
+            ...(typeof trigger.params.fastPeriod === 'number' ? { fastPeriod: trigger.params.fastPeriod } : {}),
+            ...(typeof trigger.params.slowPeriod === 'number' ? { slowPeriod: trigger.params.slowPeriod } : {}),
+          },
         }
       }
       case 'indicator.above':
@@ -1885,7 +1914,7 @@ export class CanonicalSpecBuilderService {
     params: Record<string, number>
   } {
     for (const text of texts) {
-      const pairMatch = text.match(/(?:EMA|ema|SMA|sma)?\s*(\d{1,3})\D{0,12}(?:EMA|ema|SMA|sma|日线|均线)\s*(\d{1,3})/u)
+      const pairMatch = text.match(/(?:EMA|ema|SMA|sma|MA|ma)?\s*(\d{1,3})\D{0,12}(?:EMA|ema|SMA|sma|MA|ma|日线|均线)\s*(\d{1,3})/u)
         ?? text.match(/(\d{1,3})\s*日线\D{0,12}(\d{1,3})\s*日线/u)
       if (pairMatch?.[1] && pairMatch[2]) {
         const first = Number(pairMatch[1])
@@ -1895,7 +1924,7 @@ export class CanonicalSpecBuilderService {
         const kind = /\bema\b|EMA/u.test(text) ? 'ema' : 'sma'
         return {
           kind,
-          params: { fast, slow },
+          params: { fastPeriod: fast, slowPeriod: slow },
         }
       }
     }

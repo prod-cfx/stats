@@ -46,7 +46,7 @@ describe('strategyIntentNormalizerService', () => {
     expect(first.normalizedIntent.triggers).toEqual(second.normalizedIntent.triggers)
   })
 
-  it('normalizes moving-average crossover rules into stable sma triggers and long-only position semantics', () => {
+  it('preserves moving-average crossover periods as atom params', () => {
     const service = new StrategyIntentNormalizerService()
 
     const result = service.normalize({
@@ -63,13 +63,13 @@ describe('strategyIntentNormalizerService', () => {
         key: 'indicator.cross_over',
         phase: 'entry',
         sideScope: 'long',
-        params: { indicator: 'sma' },
+        params: { indicator: 'ema', fastPeriod: 7, slowPeriod: 21 },
       }),
       expect.objectContaining({
         key: 'indicator.cross_under',
         phase: 'exit',
         sideScope: 'long',
-        params: { indicator: 'sma' },
+        params: { indicator: 'ema', fastPeriod: 7, slowPeriod: 21 },
       }),
     ]))
     expect(result.normalizedIntent.actions).toEqual([

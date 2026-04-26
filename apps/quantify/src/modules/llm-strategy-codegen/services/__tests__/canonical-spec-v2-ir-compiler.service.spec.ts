@@ -21,6 +21,64 @@ function findPredicate(
 }
 
 describe('canonicalSpecV2IrCompilerService', () => {
+  it('compiles moving-average fastPeriod and slowPeriod without falling back to defaults', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const result = compiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        indicators: [{ kind: 'sma', params: { fastPeriod: 6, slowPeriod: 48 } }],
+        sizing: { mode: 'RATIO', value: 0.35 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['15m'],
+        },
+        rules: [
+          {
+            id: 'entry-ma-cross',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 200,
+            condition: { kind: 'atom', key: 'ma.golden_cross', semanticScope: 'market', op: 'CROSS_OVER' },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.35 } }],
+          },
+          {
+            id: 'exit-ma-cross',
+            phase: 'exit',
+            sideScope: 'long',
+            priority: 140,
+            condition: { kind: 'atom', key: 'ma.death_cross', semanticScope: 'market', op: 'CROSS_UNDER' },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+      },
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 35,
+      },
+    })
+
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'sma_6_15m', params: { period: 6 } }),
+      expect.objectContaining({ id: 'sma_48_15m', params: { period: 48 } }),
+    ]))
+    expect(result.ir.signalCatalog.series).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'ema_7_15m' }),
+      expect.objectContaining({ id: 'ema_21_15m' }),
+    ]))
+  })
+
   it('compiles canonical spec v2 into deterministic graphSnapshot and IR without reading UI state', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 

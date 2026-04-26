@@ -533,7 +533,10 @@ export class StrategyIntentNormalizerService {
         key: 'indicator.above',
         phase,
         sideScope: this.resolveSideScope(rule, phase),
-        params: { indicator: this.resolveIndicatorName(rule) },
+        params: {
+          indicator: this.resolveIndicatorName(rule),
+          ...this.extractMovingAverageReferenceParams(rule),
+        },
       })
     }
 
@@ -542,7 +545,10 @@ export class StrategyIntentNormalizerService {
         key: 'indicator.below',
         phase,
         sideScope: this.resolveSideScope(rule, phase),
-        params: { indicator: this.resolveIndicatorName(rule) },
+        params: {
+          indicator: this.resolveIndicatorName(rule),
+          ...this.extractMovingAverageReferenceParams(rule),
+        },
       })
     }
 
@@ -558,7 +564,10 @@ export class StrategyIntentNormalizerService {
         key: 'indicator.cross_over',
         phase,
         sideScope: this.resolveSideScope(rule, phase),
-        params: { indicator: this.resolveIndicatorName(rule) },
+        params: {
+          indicator: this.resolveIndicatorName(rule),
+          ...this.extractMovingAverageCrossParams(rule),
+        },
       })
     }
     if (/死叉|cross under|下穿/u.test(rule)) {
@@ -566,11 +575,55 @@ export class StrategyIntentNormalizerService {
         key: 'indicator.cross_under',
         phase,
         sideScope: this.resolveSideScope(rule, phase),
-        params: { indicator: this.resolveIndicatorName(rule) },
+        params: {
+          indicator: this.resolveIndicatorName(rule),
+          ...this.extractMovingAverageCrossParams(rule),
+        },
       })
     }
 
     return null
+  }
+
+  private extractMovingAverageCrossParams(rule: string): Record<string, number> {
+    if (!/(?:均线|EMA\s*\d*|SMA\s*\d*|MA\s*\d*)/iu.test(rule)) return {}
+    const periods = this.extractMovingAveragePeriods(rule)
+    if (periods.length < 2) return {}
+    return {
+      fastPeriod: periods[0]!,
+      slowPeriod: periods[1]!,
+    }
+  }
+
+  private extractMovingAverageReferenceParams(rule: string): Record<string, number | string> {
+    if (!/(?:均线|EMA\s*\d*|SMA\s*\d*|MA\s*\d*)/iu.test(rule)) return {}
+    const periods = this.extractMovingAveragePeriods(rule)
+    const referencePeriod = periods[0]
+    if (referencePeriod === undefined) return {}
+    return {
+      referenceRole: referencePeriod >= 20 ? 'long_term' : 'short_term',
+      'reference.period': referencePeriod,
+    }
+  }
+
+  private extractMovingAveragePeriods(rule: string): number[] {
+    const compact = rule.replace(/\s+/gu, '')
+    const prefixedPeriods = Array.from(compact.matchAll(/(?:EMA|SMA|MA)(\d{1,4})/giu))
+      .map(match => Number(match[1]))
+      .filter(value => Number.isFinite(value))
+    if (prefixedPeriods.length > 0) {
+      return prefixedPeriods
+    }
+
+    const barePairMatch = compact.match(/(\d{1,4})[\/和与、](\d{1,4})均线/u)
+      ?? compact.match(/(\d{1,4})均线.*?(\d{1,4})均线/u)
+    if (!barePairMatch?.[1]) {
+      return []
+    }
+    const first = Number(barePairMatch[1])
+    const second = barePairMatch[2] === undefined ? null : Number(barePairMatch[2])
+    return [first, second]
+      .filter((value): value is number => typeof value === 'number' && Number.isFinite(value))
   }
 
   private normalizeGrid(checklist: StrategyLogicSnapshot): NormalizedGridIntent | null {
@@ -948,8 +1001,8 @@ export class StrategyIntentNormalizerService {
   private resolveIndicatorName(rule: string): string {
     if (/\brsi\b/i.test(rule)) return 'rsi'
     if (/\bmacd\b/i.test(rule)) return 'macd'
-    if (/\bema\b/i.test(rule)) return 'ema'
-    if (/\bsma\b/i.test(rule) || /均线|ma/iu.test(rule)) return 'sma'
+    if (/EMA\s*\d*/iu.test(rule)) return 'ema'
+    if (/SMA\s*\d*/iu.test(rule) || /均线|MA\s*\d*/iu.test(rule)) return 'sma'
     return 'indicator'
   }
 

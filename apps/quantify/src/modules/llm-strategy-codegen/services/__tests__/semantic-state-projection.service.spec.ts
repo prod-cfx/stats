@@ -44,6 +44,57 @@ describe('SemanticStateProjectionService', () => {
     expect(result.nextQuestion).toBe('突破按收盘确认还是盘中触发？')
   })
 
+  it('describes official strategy plaza atomic triggers with concrete params', () => {
+    const result = service.buildConversationView({
+      version: 1,
+      families: ['single-leg'],
+      triggers: [
+        {
+          id: 'entry-ma-cross',
+          key: 'indicator.cross_over',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { indicator: 'ma', fastPeriod: 6, slowPeriod: 48 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'exit-ma-cross',
+          key: 'indicator.cross_under',
+          phase: 'exit',
+          sideScope: 'long',
+          params: { indicator: 'ma', fastPeriod: 6, slowPeriod: 48 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'entry-breakout',
+          key: 'price.breakout_up',
+          phase: 'entry',
+          sideScope: 'long',
+          params: { period: 24, bufferPct: 0.25 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      actions: [],
+      risk: [],
+      position: null,
+      contextSlots: { exchange: null, symbol: null, marketType: null, timeframe: null },
+      normalizationNotes: [],
+      updatedAt: '2026-04-15T10:00:00.000Z',
+    })
+
+    expect(result.summary).toContain('入场：MA6 上穿 MA48')
+    expect(result.summary).toContain('出场：MA6 下穿 MA48')
+    expect(result.summary).toContain('突破缓冲 0.25%')
+    expect(result.summary).not.toContain('indicator.cross_over')
+    expect(result.summary).not.toContain('price.breakout_up')
+  })
+
   it('surfaces unsupported open work as a blocking fallback next question instead of hiding it', () => {
     const result = service.buildClarificationView({
       version: 1,

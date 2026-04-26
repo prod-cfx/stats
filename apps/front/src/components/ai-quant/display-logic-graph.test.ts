@@ -507,4 +507,60 @@ describe('buildDisplayLogicGraphFromCodegenSpec', () => {
       },
     ])
   })
+
+  it('renders official strategy plaza atomic conditions without unsupported placeholders', () => {
+    const graph = buildDisplayLogicGraphFromCodegenSpec({
+      specDesc: {
+        rules: [
+          {
+            id: 'ma-entry',
+            phase: 'entry',
+            condition: { key: 'ma.golden_cross', params: { indicator: 'sma', fastPeriod: 6, slowPeriod: 48 } },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+          {
+            id: 'grid-entry',
+            phase: 'entry',
+            condition: { key: 'price.range_position_lte', value: 0.2, params: { period: 36 } },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+          {
+            id: 'breakout-entry',
+            phase: 'entry',
+            condition: { key: 'breakout.channel_high_break', params: { period: 24, bufferPct: 0.25 } },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+          {
+            id: 'rsi-entry',
+            phase: 'entry',
+            condition: { key: 'rsi.cross_over', value: 38, params: { period: 14 } },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+          {
+            id: 'macd-entry',
+            phase: 'entry',
+            condition: { key: 'macd.golden_cross', params: { fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 } },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+          {
+            id: 'bollinger-entry',
+            phase: 'entry',
+            condition: { key: 'bollinger.lower_break', params: { period: 30, stdDev: 0.9 } },
+            actions: [{ type: 'OPEN_LONG' }],
+          },
+        ],
+      },
+    })
+
+    const text = graph.blocks.flatMap(block => block.items.map(item => item.text)).join(' ')
+
+    expect(text).toContain('SMA6 上穿 SMA48')
+    expect(text).toContain('最近 36 根 K 线区间下 20%')
+    expect(text).toContain('突破最近 24 根 K 线高点')
+    expect(text).toContain('突破缓冲 0.25%')
+    expect(text).toContain('RSI14 上穿 38')
+    expect(text).toContain('MACD 16/34/12 金叉')
+    expect(text).toContain('价格向下突破布林带下轨（30, 0.9）')
+    expect(text).not.toContain('不支持的条件，待补充')
+  })
 })
