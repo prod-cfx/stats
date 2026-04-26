@@ -46,7 +46,7 @@ describe('strategyIntentNormalizerService', () => {
     expect(first.normalizedIntent.triggers).toEqual(second.normalizedIntent.triggers)
   })
 
-  it('normalizes moving-average crossover rules into stable sma triggers and long-only position semantics', () => {
+  it('preserves moving-average crossover periods as atom params', () => {
     const service = new StrategyIntentNormalizerService()
 
     const result = service.normalize({
@@ -63,13 +63,13 @@ describe('strategyIntentNormalizerService', () => {
         key: 'indicator.cross_over',
         phase: 'entry',
         sideScope: 'long',
-        params: { indicator: 'sma' },
+        params: { indicator: 'ema', fastPeriod: 7, slowPeriod: 21 },
       }),
       expect.objectContaining({
         key: 'indicator.cross_under',
         phase: 'exit',
         sideScope: 'long',
-        params: { indicator: 'sma' },
+        params: { indicator: 'ema', fastPeriod: 7, slowPeriod: 21 },
       }),
     ]))
     expect(result.normalizedIntent.actions).toEqual([
@@ -169,6 +169,31 @@ describe('strategyIntentNormalizerService', () => {
       positionMode: 'long_short',
     })
     expect(result.normalizedIntent.unresolved).toEqual([])
+  })
+
+  it('preserves official optimized Bollinger period and stdDev during normalization', () => {
+    const result = service.normalize({
+      market: { exchange: 'okx', symbol: 'ETHUSDT', marketType: 'perp', timeframe: '15m' },
+      entryRules: ['价格触及布林带 30 周期 0.9 倍标准差下轨时做多开仓'],
+      exitRules: ['价格回归布林带中轨时平多'],
+      riskRules: { positionPct: 35, stopLossPct: 3, takeProfitPct: 0.5 },
+    } as any)
+
+    expect(result.blocked).toBe(false)
+    expect(result.normalizedIntent.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'bollinger.touch_lower',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({ band: 'lower', period: 30, stdDev: 0.9 }),
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_middle',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({ band: 'middle', period: 30, stdDev: 0.9 }),
+      }),
+    ]))
   })
 
   it('maps 多单 and 空单 Bollinger middle exits to their explicit sides', () => {

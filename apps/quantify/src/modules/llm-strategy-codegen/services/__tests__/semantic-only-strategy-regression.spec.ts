@@ -377,6 +377,38 @@ describe('semantic-only strategy regression verification', () => {
     ]))
   })
 
+  it.each([
+    {
+      sessionId: 'official-grid-range-position-publish',
+      message: '基于 OKX 模拟盘 BTC-USDT 现货 15m，创建网格区间策略。入场规则：价格位于最近 36 根 K 线区间下 20% 时买入；出场规则：价格回到区间上 55% 或盈利达到 0.45% 时卖出平仓；风控：单次仓位 25%，不使用杠杆，止损 3%。',
+      keys: ['price.range_position_lte', 'price.range_position_gte', 'position_loss_pct', 'risk.take_profit_pct'],
+      actions: ['OPEN_LONG', 'CLOSE_LONG', 'FORCE_EXIT'],
+    },
+    {
+      sessionId: 'official-rsi-reversal-publish',
+      message: '基于 OKX 模拟盘 ETH-USDT 现货 15m，创建 RSI 反转策略。入场规则：RSI14 从 38 下方向上穿回 38 时买入；出场规则：RSI14 高于 64 时卖出平仓；风控：仓位 25%，不使用杠杆，止损 5%，止盈 0.5%。',
+      keys: ['rsi.cross_over', 'rsi.threshold_gte', 'position_loss_pct', 'risk.take_profit_pct'],
+      actions: ['OPEN_LONG', 'CLOSE_LONG', 'FORCE_EXIT'],
+    },
+    {
+      sessionId: 'official-breakout-tracking-publish',
+      message: '基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建突破追踪策略。入场规则：价格突破最近 24 根 K 线高点且突破缓冲 0.25% 时做多开仓；出场规则：价格跌回最近 12 根 K 线低点时平多；风控：仓位 25%，2 倍杠杆，止损 3%，止盈 0.6%。',
+      keys: ['breakout.channel_high_break', 'breakout.channel_low_break', 'position_loss_pct', 'risk.take_profit_pct'],
+      actions: ['OPEN_LONG', 'CLOSE_LONG', 'FORCE_EXIT'],
+    },
+    {
+      sessionId: 'official-macd-cross-publish',
+      message: '基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建 MACD 16/34/12 金叉死叉策略。入场规则：MACD DIF 上穿 DEA 时做多开仓；出场规则：MACD DIF 下穿 DEA 时平多；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.5%。',
+      keys: ['macd.golden_cross', 'macd.death_cross', 'position_loss_pct', 'risk.take_profit_pct'],
+      actions: ['OPEN_LONG', 'CLOSE_LONG', 'FORCE_EXIT'],
+    },
+  ])('publishes $sessionId through atomic semantic generation', async ({ sessionId, message, keys, actions }) => {
+    const result = await generateAndPublish(sessionId, buildSemanticStateFromMessage(message))
+
+    expect(ruleConditionKeys(result.canonicalSpec)).toEqual(expect.arrayContaining(keys))
+    expect(ruleActionTypes(result.canonicalSpec)).toEqual(expect.arrayContaining(actions))
+  })
+
   it('documents the fixed-range grid wording extraction gap instead of manufacturing checklist rules', () => {
     const patch = seedExtractor.extract('BTCUSDT 固定区间 60000-80000，按 1% 网格买入，触达上方网格卖出，仓位 1%，单笔最大亏损 2%。')
 

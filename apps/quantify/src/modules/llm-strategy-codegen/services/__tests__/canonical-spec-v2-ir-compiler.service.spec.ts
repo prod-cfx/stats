@@ -21,6 +21,122 @@ function findPredicate(
 }
 
 describe('canonicalSpecV2IrCompilerService', () => {
+  it('compiles moving-average fastPeriod and slowPeriod without falling back to defaults', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const result = compiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        indicators: [{ kind: 'sma', params: { fastPeriod: 6, slowPeriod: 48 } }],
+        sizing: { mode: 'RATIO', value: 0.35 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['15m'],
+        },
+        rules: [
+          {
+            id: 'entry-ma-cross',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 200,
+            condition: { kind: 'atom', key: 'ma.golden_cross', semanticScope: 'market', op: 'CROSS_OVER' },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.35 } }],
+          },
+          {
+            id: 'exit-ma-cross',
+            phase: 'exit',
+            sideScope: 'long',
+            priority: 140,
+            condition: { kind: 'atom', key: 'ma.death_cross', semanticScope: 'market', op: 'CROSS_UNDER' },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+      },
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 35,
+      },
+    })
+
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'sma_6_15m', params: { period: 6 } }),
+      expect.objectContaining({ id: 'sma_48_15m', params: { period: 48 } }),
+    ]))
+    expect(result.ir.signalCatalog.series).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'ema_7_15m' }),
+      expect.objectContaining({ id: 'ema_21_15m' }),
+    ]))
+  })
+
+  it('compiles MACD 16/34/12 cross rules without falling back to defaults', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const result = compiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          marketType: 'perp',
+          timeframe: '15m',
+        },
+        indicators: [{ kind: 'macd', params: { fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 } }],
+        sizing: { mode: 'RATIO', value: 0.35 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['15m'],
+        },
+        rules: [
+          {
+            id: 'entry-macd-cross',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 200,
+            condition: { kind: 'atom', key: 'macd.golden_cross', semanticScope: 'market', op: 'CROSS_OVER' },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.35 } }],
+          },
+          {
+            id: 'exit-macd-cross',
+            phase: 'exit',
+            sideScope: 'long',
+            priority: 140,
+            condition: { kind: 'atom', key: 'macd.death_cross', semanticScope: 'market', op: 'CROSS_UNDER' },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+      },
+      fallback: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        baseTimeframe: '15m',
+        positionPct: 35,
+      },
+    })
+
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'macd_line_16_34_12_15m', params: { fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 } }),
+      expect.objectContaining({ id: 'macd_signal_16_34_12_15m', params: { fastPeriod: 16, slowPeriod: 34, signalPeriod: 12 } }),
+    ]))
+    expect(result.ir.signalCatalog.series).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: 'macd_line_12_26_9_15m' }),
+      expect.objectContaining({ id: 'macd_signal_12_26_9_15m' }),
+    ]))
+  })
+
   it('compiles canonical spec v2 into deterministic graphSnapshot and IR without reading UI state', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 
@@ -974,6 +1090,86 @@ describe('canonicalSpecV2IrCompilerService', () => {
     expect(result.ir.signalCatalog.predicates).toEqual(expect.arrayContaining([
       expect.objectContaining({ kind: 'TOUCH_LEVEL_DOWN' }),
       expect.objectContaining({ kind: 'TOUCH_LEVEL_UP' }),
+    ]))
+  })
+
+  it('compiles rolling range-position rules into dynamic channel predicates', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const result = compiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          timeframe: '15m',
+        },
+        indicators: [{ kind: 'custom', params: { atom: 'price.range_position' } }],
+        sizing: { mode: 'RATIO', value: 0.25 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['15m'],
+        },
+        rules: [
+          {
+            id: 'entry-range-low-zone',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 200,
+            condition: {
+              kind: 'atom',
+              key: 'price.range_position_lte',
+              semanticScope: 'market',
+              op: 'LTE',
+              value: 0.2,
+              params: { period: 36 },
+            },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.25 } }],
+          },
+          {
+            id: 'exit-range-upper-zone',
+            phase: 'exit',
+            sideScope: 'long',
+            priority: 100,
+            condition: {
+              kind: 'atom',
+              key: 'price.range_position_gte',
+              semanticScope: 'market',
+              op: 'GTE',
+              value: 0.55,
+              params: { period: 36 },
+            },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+      },
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 25,
+      },
+    })
+
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'HIGHEST_HIGH', params: expect.objectContaining({ period: 36 }) }),
+      expect.objectContaining({ kind: 'LOWEST_LOW', params: expect.objectContaining({ period: 36 }) }),
+      expect.objectContaining({
+        kind: 'RANGE_POSITION_PCT',
+        params: expect.objectContaining({ period: 36 }),
+      }),
+    ]))
+    expect(result.ir.signalCatalog.predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'LTE' }),
+      expect.objectContaining({ kind: 'GTE' }),
+    ]))
+    expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+      expect.objectContaining({ operator: 'LTE(RANGE_POSITION_PCT(CLOSE,HIGHEST_HIGH(36),LOWEST_LOW(36)),0.2)' }),
+      expect.objectContaining({ operator: 'GTE(RANGE_POSITION_PCT(CLOSE,HIGHEST_HIGH(36),LOWEST_LOW(36)),0.55)' }),
     ]))
   })
 

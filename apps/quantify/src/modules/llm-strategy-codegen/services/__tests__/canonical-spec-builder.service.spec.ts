@@ -104,7 +104,7 @@ describe('canonicalSpecBuilderService', () => {
       defaultTimeframe: '1h',
     })
     expect(spec.indicators).toEqual([
-      { kind: 'sma', params: { period: 20 } },
+      { kind: 'ema', params: { fastPeriod: 7, slowPeriod: 21 } },
     ])
     expect(spec.rules).toEqual(expect.arrayContaining([
       expect.objectContaining({
@@ -113,7 +113,7 @@ describe('canonicalSpecBuilderService', () => {
         condition: expect.objectContaining({
           key: 'ma.golden_cross',
           op: 'CROSS_OVER',
-          params: { indicator: 'sma' },
+          params: { indicator: 'ema', fastPeriod: 7, slowPeriod: 21 },
         }),
         actions: [expect.objectContaining({ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.1 } })],
         metadata: expect.objectContaining({
@@ -129,7 +129,7 @@ describe('canonicalSpecBuilderService', () => {
         condition: expect.objectContaining({
           key: 'ma.death_cross',
           op: 'CROSS_UNDER',
-          params: { indicator: 'sma' },
+          params: { indicator: 'ema', fastPeriod: 7, slowPeriod: 21 },
         }),
         actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
       }),
@@ -1022,6 +1022,43 @@ describe('canonicalSpecBuilderService', () => {
     ]))
   })
 
+  it('builds MA 6/48 crossover periods into canonical spec v2', () => {
+    const service = new CanonicalSpecBuilderService()
+
+    const spec = service.build({
+      symbols: ['BTCUSDT'],
+      timeframes: ['15m'],
+      entryRules: ['MA6 上穿 MA48 时做多开仓'],
+      exitRules: ['MA6 下穿 MA48 时平多'],
+      riskRules: { positionPct: 35, stopLossPct: 2, takeProfitPct: 0.6 },
+    })
+
+    expect(spec.indicators).toContainEqual({
+      kind: 'sma',
+      params: { fastPeriod: 6, slowPeriod: 48 },
+    })
+    expect(spec.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        phase: 'entry',
+        sideScope: 'long',
+        condition: expect.objectContaining({
+          key: 'ma.golden_cross',
+          params: expect.objectContaining({ indicator: 'sma', fastPeriod: 6, slowPeriod: 48 }),
+        }),
+        actions: [expect.objectContaining({ type: 'OPEN_LONG' })],
+      }),
+      expect.objectContaining({
+        phase: 'exit',
+        sideScope: 'long',
+        condition: expect.objectContaining({
+          key: 'ma.death_cross',
+          params: expect.objectContaining({ indicator: 'sma', fastPeriod: 6, slowPeriod: 48 }),
+        }),
+        actions: [expect.objectContaining({ type: 'CLOSE_LONG' })],
+      }),
+    ]))
+  })
+
   it('builds grid entry and exit rules into canonical spec v2', () => {
     const service = new CanonicalSpecBuilderService()
 
@@ -1580,8 +1617,8 @@ describe('canonicalSpecBuilderService', () => {
     expect(spec.indicators).toContainEqual({
       kind: 'sma',
       params: {
-        fast: 5,
-        slow: 20,
+        fastPeriod: 5,
+        slowPeriod: 20,
       },
     })
     expect(spec.rules).toEqual(expect.arrayContaining([

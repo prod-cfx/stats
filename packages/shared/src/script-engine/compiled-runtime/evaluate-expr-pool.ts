@@ -81,6 +81,7 @@ function evaluateSeries(
     case 'PRICE':
     case 'BAR_INDEX':
     case 'PRICE_CHANGE_PCT':
+    case 'RANGE_POSITION_PCT':
     case 'EMA':
     case 'SMA':
     case 'RSI':
@@ -409,6 +410,35 @@ function resolveSeriesValueAt(
         const window = collectBarHistory(period, offset + (node.payload.offsetBars ?? 0) + 1, bars)
         if (window.length === 0) return null
         return Math.min(...window.map(bar => bar.low))
+      }
+      case 'RANGE_POSITION_PCT': {
+        const [closeSeriesId, highSeriesId, lowSeriesId] = resolveSeriesInputNodeIds(node, exprIndex)
+        const close = resolveSeriesValueAt(
+          closeSeriesId,
+          offset + (node.payload.offsetBars ?? 0),
+          ctx,
+          executionModel,
+          exprIndex,
+          seriesMemo,
+        )
+        const high = resolveSeriesValueAt(
+          highSeriesId,
+          offset + (node.payload.offsetBars ?? 0),
+          ctx,
+          executionModel,
+          exprIndex,
+          seriesMemo,
+        )
+        const low = resolveSeriesValueAt(
+          lowSeriesId,
+          offset + (node.payload.offsetBars ?? 0),
+          ctx,
+          executionModel,
+          exprIndex,
+          seriesMemo,
+        )
+        if (close == null || high == null || low == null || high <= low) return null
+        return (close - low) / (high - low)
       }
       case 'BAR_INDEX': {
         const raw = (ctx as Record<string, unknown>).__compiledDecisionState

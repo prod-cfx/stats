@@ -20,6 +20,12 @@ describe('OfficialStrategyPlazaTemplateService', () => {
     expect(templates.every(item => item.exchange === 'okx')).toBe(true)
     expect(templates.every(item => item.environment === 'demo')).toBe(true)
     expect(templates.every(item => item.status === 'live')).toBe(true)
+    expect(templates.every(item =>
+      item.displayMetrics.returnPct != null
+      && item.displayMetrics.winRatePct != null
+      && item.displayMetrics.maxDrawdownPct != null,
+    )).toBe(true)
+    expect(Math.max(...templates.map(item => item.displayMetrics.maxDrawdownPct ?? Number.POSITIVE_INFINITY))).toBeLessThanOrEqual(20)
   })
 
   it('exposes fixed run parameters without user override fields', () => {
@@ -84,7 +90,7 @@ describe('OfficialStrategyPlazaTemplateService', () => {
 
     expect(freshTemplate.tags).not.toContain('mutated-tag')
     expect(freshTemplate.runConfig.deploymentExecutionConfig.orderType).toBe('market')
-    expect(freshTemplate.displayMetrics.returnPct).toBeNull()
+    expect(freshTemplate.displayMetrics.returnPct).toBe(1.78)
     expect(freshTemplate.status).toBe('live')
   })
 
@@ -98,6 +104,6 @@ describe('OfficialStrategyPlazaTemplateService', () => {
     const freshTemplate = service.getRequired('ma-cross')
 
     expect(freshTemplate.tags).not.toContain('dto-mutated-tag')
-    expect(freshTemplate.displayMetrics.returnPct).toBeNull()
+    expect(freshTemplate.displayMetrics.returnPct).toBe(1.78)
   })
 })

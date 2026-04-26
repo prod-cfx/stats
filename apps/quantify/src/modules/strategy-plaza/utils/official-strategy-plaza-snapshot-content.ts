@@ -1,6 +1,16 @@
 import type { OfficialStrategyPlazaTemplate } from '../types/official-strategy-plaza-template'
+import { OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE } from '../constants/official-strategy-plaza-backtest-evidence.constant'
+
+function evidenceFor(template: OfficialStrategyPlazaTemplate) {
+  const evidence = OFFICIAL_STRATEGY_PLAZA_BACKTEST_EVIDENCE.templates.find(item => item.templateId === template.id)
+  if (!evidence) {
+    throw new Error(`Missing official Strategy Plaza evidence for ${template.id}`)
+  }
+  return evidence
+}
 
 export function buildOfficialTemplateParamsSnapshot(template: OfficialStrategyPlazaTemplate): Record<string, unknown> {
+  const evidence = evidenceFor(template)
   return {
     exchange: template.runConfig.exchange,
     marketType: template.runConfig.marketType,
@@ -8,6 +18,9 @@ export function buildOfficialTemplateParamsSnapshot(template: OfficialStrategyPl
     timeframe: template.runConfig.timeframe,
     positionPct: template.runConfig.positionPct,
     leverage: template.runConfig.leverage,
+    optimizedParams: evidence.params,
+    verifiedBacktest: evidence.metrics,
+    parameterSearchId: evidence.parameterSearchId,
   }
 }
 

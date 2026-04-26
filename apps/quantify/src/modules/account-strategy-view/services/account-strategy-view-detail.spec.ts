@@ -360,7 +360,13 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       riskMode: 'aggressive',
     })
     expect(detail.schemaVersion).toBe('7')
-    expect(detail.snapshot.paramSchema).toBeNull()
+    expect(detail.snapshot.paramSchema).toEqual({
+      type: 'object',
+      properties: {
+        timeframe: { type: 'string' },
+        riskMode: { type: 'string' },
+      },
+    })
     expect(detail.snapshot.publishedSnapshotId).toBe('snapshot-1')
     expect(detail.snapshot.snapshotHash).toBe('snapshot-hash-1')
     expect(detail.snapshot.exchange).toBe('okx')
@@ -476,7 +482,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       reReadAtNextEligibleExecutionCycle: true,
       updatedBy: 'user-1',
     })
-    expect(detail.snapshot.schemaVersion).toBeNull()
+    expect(detail.snapshot.schemaVersion).toBe('7')
     expect(publishedSnapshotsRepository.findByIdForUser).toHaveBeenCalledWith('snapshot-1', 'user-1')
     expect(tradingService.getLeverageConstraints).toHaveBeenCalledWith({
       userId: 'user-1',

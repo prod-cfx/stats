@@ -59,6 +59,7 @@ export interface SeriesDef {
     | 'TREND_DIRECTION'
     | 'VOLATILITY_STATE'
     | 'PRICE_CHANGE_PCT'
+    | 'RANGE_POSITION_PCT'
     | 'POSITION_AVG_PRICE'
     | 'POSITION_PNL_PCT'
     | 'BOLLINGER_BARS_OUTSIDE'

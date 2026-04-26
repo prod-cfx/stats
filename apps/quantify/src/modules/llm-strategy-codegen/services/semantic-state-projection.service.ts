@@ -148,11 +148,49 @@ export class SemanticStateProjectionService {
         }
 
         if (trigger.key === 'indicator.above' && trigger.params['reference.period']) {
-          return `入场：突破 MA${trigger.params['reference.period']}`
+          const condition = `突破 MA${trigger.params['reference.period']}`
+          return `入场：${condition}${this.formatActionSuffix(trigger, condition)}`
         }
 
         if (trigger.key === 'indicator.below' && trigger.params['reference.period']) {
-          return `出场：跌破 MA${trigger.params['reference.period']}`
+          const condition = `跌破 MA${trigger.params['reference.period']}`
+          return `出场：${condition}${this.formatActionSuffix(trigger, condition)}`
+        }
+
+        if (trigger.key === 'indicator.cross_over' || trigger.key === 'indicator.cross_under') {
+          return this.formatCrossTriggerSummary(trigger)
+        }
+
+        if (trigger.key === 'oscillator.rsi_gte' || trigger.key === 'oscillator.rsi_lte') {
+          const period = typeof trigger.params.period === 'number' ? trigger.params.period : 14
+          const value = typeof trigger.params.value === 'number' ? trigger.params.value : null
+          const direction = trigger.key === 'oscillator.rsi_gte' ? '高于或等于' : '低于或等于'
+          const phase = trigger.phase === 'entry' ? '入场' : '出场'
+          const condition = value === null ? `RSI${period} ${direction}阈值` : `RSI${period} ${direction} ${value}`
+          return `${phase}：${condition}${this.formatActionSuffix(trigger, condition)}`
+        }
+
+        if (trigger.key === 'price.range_position_lte' || trigger.key === 'price.range_position_gte') {
+          const lookbackBars = typeof trigger.params.lookbackBars === 'number' ? trigger.params.lookbackBars : null
+          const thresholdPct = typeof trigger.params.thresholdPct === 'number' ? trigger.params.thresholdPct : null
+          const side = trigger.key === 'price.range_position_lte' ? '下' : '上'
+          const phase = trigger.phase === 'entry' ? '入场' : '出场'
+          const rangeText = lookbackBars === null ? '最近区间' : `最近 ${lookbackBars} 根 K 线区间`
+          const thresholdText = thresholdPct === null ? '阈值待补充' : `${this.formatPercent(thresholdPct)}%`
+          const condition = `价格位于${rangeText}${side} ${thresholdText}`
+          return `${phase}：${condition}${this.formatActionSuffix(trigger, condition)}`
+        }
+
+        if (trigger.key === 'price.breakout_up' || trigger.key === 'price.breakout_down') {
+          const period = typeof trigger.params.period === 'number' ? trigger.params.period : null
+          const bufferPct = typeof trigger.params.bufferPct === 'number' ? trigger.params.bufferPct : null
+          const phase = trigger.phase === 'entry' ? '入场' : '出场'
+          const direction = trigger.key === 'price.breakout_up' ? '突破' : '跌回'
+          const target = trigger.key === 'price.breakout_up' ? '高点' : '低点'
+          const periodText = period === null ? `近期${target}` : `最近 ${period} 根 K 线${target}`
+          const bufferText = bufferPct === null ? '' : `，突破缓冲 ${this.formatNumber(bufferPct)}%`
+          const condition = `价格${direction}${periodText}${bufferText}`
+          return `${phase}：${condition}${this.formatActionSuffix(trigger, condition)}`
         }
 
         if (
@@ -160,20 +198,79 @@ export class SemanticStateProjectionService {
           && trigger.params.period !== undefined
         ) {
           const period = typeof trigger.params.period === 'number' ? trigger.params.period : null
+          const stdDev = typeof trigger.params.stdDev === 'number' ? trigger.params.stdDev : null
           const band = trigger.key === 'bollinger.touch_upper'
             ? '上轨'
             : trigger.key === 'bollinger.touch_lower'
               ? '下轨'
               : '中轨'
-          const direction = trigger.sideScope === 'short' ? '做空' : '做多'
-          const periodText = period === null ? '周期待补充' : `MA${period}`
-          return `触及 ${periodText} 的布林带${band}时${direction}`
+          const condition = period !== null && stdDev !== null
+            ? `触及布林带 ${this.formatNumber(period)} 周期 ${this.formatNumber(stdDev)} 倍标准差${band}`
+            : `触及 ${period === null ? '周期待补充' : `MA${this.formatNumber(period)}`} 的布林带${band}`
+          return `${trigger.phase === 'entry' ? '入场' : '出场'}：${condition}${this.formatActionSuffix(trigger, condition)}`
         }
 
         return trigger.key
       })
       .filter(item => item.length > 0)
       .join('；')
+  }
+
+  private formatCrossTriggerSummary(trigger: SemanticState['triggers'][number]): string {
+    const indicator = typeof trigger.params.indicator === 'string'
+      ? trigger.params.indicator.trim().toLowerCase()
+      : ''
+    const phase = trigger.phase === 'entry' ? '入场' : '出场'
+    const direction = trigger.key === 'indicator.cross_over' ? '上穿' : '下穿'
+
+    if (indicator === 'macd') {
+      const fast = typeof trigger.params.fastPeriod === 'number' ? trigger.params.fastPeriod : 12
+      const slow = typeof trigger.params.slowPeriod === 'number' ? trigger.params.slowPeriod : 26
+      const signal = typeof trigger.params.signalPeriod === 'number' ? trigger.params.signalPeriod : 9
+      const condition = `MACD ${fast}/${slow}/${signal} ${direction === '上穿' ? '金叉' : '死叉'}`
+      return `${phase}：${condition}${this.formatActionSuffix(trigger, condition)}`
+    }
+
+    if (indicator === 'rsi') {
+      const period = typeof trigger.params.period === 'number' ? trigger.params.period : 14
+      const value = typeof trigger.params.value === 'number' ? trigger.params.value : null
+      const condition = value === null ? `RSI${period} ${direction}阈值` : `RSI${period} ${direction} ${value}`
+      return `${phase}：${condition}${this.formatActionSuffix(trigger, condition)}`
+    }
+
+    const label = indicator === 'ema'
+      ? 'EMA'
+      : 'MA'
+    const fast = typeof trigger.params.fastPeriod === 'number' ? trigger.params.fastPeriod : null
+    const slow = typeof trigger.params.slowPeriod === 'number' ? trigger.params.slowPeriod : null
+    const fastLabel = fast === null ? `${label}短周期` : `${label}${fast}`
+    const slowLabel = slow === null ? `${label}长周期` : `${label}${slow}`
+    const condition = `${fastLabel} ${direction} ${slowLabel}`
+    return `${phase}：${condition}${this.formatActionSuffix(trigger, condition)}`
+  }
+
+  private formatActionSuffix(trigger: SemanticState['triggers'][number], conditionText: string): string {
+    const evidenceText = typeof trigger.evidence?.text === 'string' ? trigger.evidence.text : ''
+    const separator = /[A-Za-z0-9%]$/u.test(conditionText) ? ' ' : ''
+    if (trigger.phase === 'entry') {
+      if (/买入|买进/u.test(evidenceText) && !/做多|开多/u.test(evidenceText)) {
+        return `${separator}时买入`
+      }
+      if (trigger.sideScope === 'short') return `${separator}时做空开仓`
+      if (trigger.sideScope === 'both') return `${separator}时双向开仓`
+      return `${separator}时做多开仓`
+    }
+
+    if (trigger.phase === 'exit') {
+      if (/卖出/u.test(evidenceText) && !/平多|平空/u.test(evidenceText)) {
+        return `${separator}时卖出平仓`
+      }
+      if (trigger.sideScope === 'short') return `${separator}时平空`
+      if (trigger.sideScope === 'both') return `${separator}时双向平仓`
+      return `${separator}时平多`
+    }
+
+    return ''
   }
 
   private buildRiskSummary(riskItems: SemanticState['risk']): string {
@@ -380,6 +477,11 @@ export class SemanticStateProjectionService {
   }
 
   private formatPercent(value: number): string {
+    const normalized = Number.parseFloat(Number(value).toFixed(6))
+    return `${normalized}`
+  }
+
+  private formatNumber(value: number): string {
     const normalized = Number.parseFloat(Number(value).toFixed(6))
     return `${normalized}`
   }

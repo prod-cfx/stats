@@ -519,19 +519,14 @@ export function applyCodegenResponseToConversationState(args: {
     }
     return readCanonicalDigest(response.specDesc)
   })()
-  const publishedReply = response.scriptCode
-    ? `${
-        confirmGenerate
-          ? t('aiQuant.messages.codeGeneratedBacktest', {
-              defaultValue: 'Strategy code generated, ready to backtest.',
-            })
-          : t('aiQuant.messages.graphGenerated')
-      }\n\n${t('aiQuant.messages.generatedCodeTitle', { defaultValue: 'Generated strategy code:' })}\n\`\`\`javascript\n${response.scriptCode}\n\`\`\``
-    : confirmGenerate
-      ? t('aiQuant.messages.codeGeneratedBacktest', {
-          defaultValue: 'Strategy code generated, ready to backtest.',
-        })
-      : t('aiQuant.messages.graphGenerated')
+  const publishedReplyBase = confirmGenerate
+    ? t('aiQuant.messages.codeGeneratedBacktest', {
+        defaultValue: 'Strategy code generated, ready to backtest.',
+      })
+    : t('aiQuant.messages.graphGenerated')
+  const publishedReply = confirmGenerate && response.scriptCode
+    ? `${publishedReplyBase}\n\n${t('aiQuant.messages.generatedCodeTitle', { defaultValue: 'Generated strategy code:' })}\n\`\`\`javascript\n${response.scriptCode}\n\`\`\``
+    : publishedReplyBase
   const replyContent = buildCodegenReplyContent({
     response,
     confirmGenerate,
