@@ -40,6 +40,8 @@ describe('ConversationSemanticEditService', () => {
 
     expect(decision.kind).toBe('ASK_EDIT_CLARIFICATION')
     if (decision.kind !== 'ASK_EDIT_CLARIFICATION') return
+    expect(decision.pendingEdit.op).toBe('replace_trigger')
+    if (decision.pendingEdit.op !== 'replace_trigger') return
     expect(decision.question).toContain('请描述新的触发、行动、风控、仓位和运行 context')
     expect(decision.pendingEdit.candidate.key).not.toBe('indicator.rsi_threshold')
     expect(decision.pendingEdit.candidate.key).toBe('pending.strategy_replacement_seed')
@@ -114,6 +116,7 @@ describe('ConversationSemanticEditService', () => {
       kind: 'APPLY_TO_SEMANTIC_STATE',
       patch: { operations: [{ op: 'cancel_pending_edit' }] },
     })
+    if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
     expect(service.readPendingEditForTest(service.applyPatch(withPending, decision.patch))).toBeNull()
   })
 
