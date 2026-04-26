@@ -977,6 +977,86 @@ describe('canonicalSpecV2IrCompilerService', () => {
     ]))
   })
 
+  it('compiles rolling range-position rules into dynamic channel predicates', () => {
+    const compiler = new CanonicalSpecV2IrCompilerService()
+
+    const result = compiler.compile({
+      canonicalSpec: {
+        version: 2,
+        market: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          marketType: 'spot',
+          timeframe: '15m',
+        },
+        indicators: [{ kind: 'custom', params: { atom: 'price.range_position' } }],
+        sizing: { mode: 'RATIO', value: 0.25 },
+        executionPolicy: {
+          signalTiming: 'BAR_CLOSE',
+          fillTiming: 'NEXT_BAR_OPEN',
+        },
+        dataRequirements: {
+          requiredTimeframes: ['15m'],
+        },
+        rules: [
+          {
+            id: 'entry-range-low-zone',
+            phase: 'entry',
+            sideScope: 'long',
+            priority: 200,
+            condition: {
+              kind: 'atom',
+              key: 'price.range_position_lte',
+              semanticScope: 'market',
+              op: 'LTE',
+              value: 0.2,
+              params: { period: 36 },
+            },
+            actions: [{ type: 'OPEN_LONG', sizing: { mode: 'RATIO', value: 0.25 } }],
+          },
+          {
+            id: 'exit-range-upper-zone',
+            phase: 'exit',
+            sideScope: 'long',
+            priority: 100,
+            condition: {
+              kind: 'atom',
+              key: 'price.range_position_gte',
+              semanticScope: 'market',
+              op: 'GTE',
+              value: 0.55,
+              params: { period: 36 },
+            },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+      },
+      fallback: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        baseTimeframe: '15m',
+        positionPct: 25,
+      },
+    })
+
+    expect(result.ir.signalCatalog.series).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'HIGHEST_HIGH', params: expect.objectContaining({ period: 36 }) }),
+      expect.objectContaining({ kind: 'LOWEST_LOW', params: expect.objectContaining({ period: 36 }) }),
+      expect.objectContaining({
+        kind: 'RANGE_POSITION_PCT',
+        params: expect.objectContaining({ period: 36 }),
+      }),
+    ]))
+    expect(result.ir.signalCatalog.predicates).toEqual(expect.arrayContaining([
+      expect.objectContaining({ kind: 'LTE' }),
+      expect.objectContaining({ kind: 'GTE' }),
+    ]))
+    expect(result.graphSnapshot.trigger).toEqual(expect.arrayContaining([
+      expect.objectContaining({ operator: 'LTE(RANGE_POSITION_PCT(CLOSE,HIGHEST_HIGH(36),LOWEST_LOW(36)),0.2)' }),
+      expect.objectContaining({ operator: 'GTE(RANGE_POSITION_PCT(CLOSE,HIGHEST_HIGH(36),LOWEST_LOW(36)),0.55)' }),
+    ]))
+  })
+
   it('compiles short-grid rules into short entry/exit actions and short_only position mode', () => {
     const compiler = new CanonicalSpecV2IrCompilerService()
 

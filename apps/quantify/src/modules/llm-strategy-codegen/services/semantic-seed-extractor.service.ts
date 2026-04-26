@@ -75,6 +75,10 @@ export class SemanticSeedExtractorService {
       this.pushMovingAverageCrossTrigger(segment, triggers, seen)
       this.pushMovingAverageTrigger(segment, triggers, seen)
       this.pushBollingerTriggers(segment, triggers, seen)
+      this.pushRsiTriggers(segment, triggers, seen)
+      this.pushMacdTriggers(segment, triggers, seen, text)
+      this.pushBreakoutTriggers(segment, triggers, seen)
+      this.pushRangePositionTriggers(segment, triggers, seen, text)
       this.pushGridTrigger(segment, triggers, seen)
       this.pushExecutionTrigger(segment, triggers, seen)
       this.pushPercentChangeTrigger(segment, triggers, seen, text)
@@ -159,6 +163,7 @@ export class SemanticSeedExtractorService {
 
     const takeProfit = this.extractPercent(text, [
       /盈利\s*(\d+(?:\.\d+)?)\s*%/u,
+      /盈利(?:达到|达|到)\s*(\d+(?:\.\d+)?)\s*%/u,
       /盈利\s*百分之?\s*(\d+(?:\.\d+)?)/u,
       /止盈\s*(\d+(?:\.\d+)?)\s*%/u,
       /止盈\s*百分之?\s*(\d+(?:\.\d+)?)/u,
@@ -391,6 +396,207 @@ export class SemanticSeedExtractorService {
     })
   }
 
+  private pushRsiTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+    if (!/RSI/iu.test(segment)) return
+
+    const clauses = this.splitLogicClauses(segment)
+    const segmentPeriod = this.extractNumber(segment, [/RSI\s*(\d{1,3})/iu]) ?? 14
+
+    for (const clause of clauses) {
+      if (!/RSI/iu.test(clause)) continue
+      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+      if (!intent) continue
+
+      const period = this.extractNumber(clause, [/RSI\s*(\d{1,3})/iu]) ?? segmentPeriod
+      const threshold = this.extractRsiThreshold(clause, period)
+      if (threshold === null) continue
+
+      if (/上穿|穿回|向上/u.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'indicator.cross_over',
+          phase: intent.phase,
+          sideScope: intent.sideScope,
+          params: {
+            indicator: 'rsi',
+            period,
+            value: threshold,
+          },
+        })
+        continue
+      }
+
+      if (/下穿|跌破|向下/u.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'indicator.cross_under',
+          phase: intent.phase,
+          sideScope: intent.sideScope,
+          params: {
+            indicator: 'rsi',
+            period,
+            value: threshold,
+          },
+        })
+        continue
+      }
+
+      if (/高于|大于|超过|上方/u.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'oscillator.rsi_gte',
+          phase: intent.phase,
+          sideScope: intent.sideScope,
+          params: {
+            period,
+            value: threshold,
+          },
+        })
+        continue
+      }
+
+      if (/低于|小于|下方/u.test(clause)) {
+        this.pushTrigger(triggers, seen, {
+          key: 'oscillator.rsi_lte',
+          phase: intent.phase,
+          sideScope: intent.sideScope,
+          params: {
+            period,
+            value: threshold,
+          },
+        })
+      }
+    }
+  }
+
+  private pushMacdTriggers(
+    segment: string,
+    triggers: SeedTrigger[],
+    seen: Set<string>,
+    contextText: string,
+  ): void {
+    if (!/MACD|DIF|DEA/iu.test(segment)) return
+
+    const clauses = this.splitLogicClauses(segment)
+    const params = this.extractMacdParams(segment) ?? this.extractMacdParams(contextText)
+
+    for (const clause of clauses) {
+      if (!/MACD|DIF|DEA/iu.test(clause)) continue
+      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+      if (!intent) continue
+
+      const direction = /上穿|金叉/iu.test(clause)
+        ? 'over'
+        : (/下穿|死叉/iu.test(clause) ? 'under' : null)
+      if (!direction) continue
+
+      this.pushTrigger(triggers, seen, {
+        key: direction === 'over' ? 'indicator.cross_over' : 'indicator.cross_under',
+        phase: intent.phase,
+        sideScope: intent.sideScope,
+        params: {
+          indicator: 'macd',
+          ...(params ? {
+            fastPeriod: params.fastPeriod,
+            slowPeriod: params.slowPeriod,
+            signalPeriod: params.signalPeriod,
+          } : {}),
+        },
+      })
+    }
+  }
+
+  private pushBreakoutTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+    if (!/最近\s*\d{1,4}\s*根\s*K\s*线/u.test(segment)) return
+    if (!/突破|跌回|跌破|高点|低点/u.test(segment)) return
+
+    for (const clause of this.splitLogicClauses(segment)) {
+      const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
+      if (!intent) continue
+
+      const highPeriod = this.extractNumber(clause, [
+        /(?:突破|升破|上破)\s*最近\s*(\d{1,4})\s*根\s*K\s*线(?:高点|最高|高位)/u,
+        /最近\s*(\d{1,4})\s*根\s*K\s*线(?:高点|最高|高位).*?(?:突破|升破|上破)/u,
+      ])
+      if (highPeriod !== null) {
+        const bufferPct = this.extractPercent(clause, [/突破缓冲\s*(\d+(?:\.\d+)?)\s*%/u])
+          ?? this.extractPercent(segment, [/突破缓冲\s*(\d+(?:\.\d+)?)\s*%/u])
+        this.pushTrigger(triggers, seen, {
+          key: 'price.breakout_up',
+          phase: intent.phase,
+          sideScope: intent.sideScope,
+          params: {
+            period: highPeriod,
+            reference: 'channel_high',
+            ...(bufferPct !== null ? { bufferPct } : {}),
+          },
+        })
+        continue
+      }
+
+      const lowPeriod = this.extractNumber(clause, [
+        /(?:跌回|跌破|下破|跌穿)\s*最近\s*(\d{1,4})\s*根\s*K\s*线(?:低点|最低|低位)/u,
+        /最近\s*(\d{1,4})\s*根\s*K\s*线(?:低点|最低|低位).*?(?:跌回|跌破|下破|跌穿)/u,
+      ])
+      if (lowPeriod !== null) {
+        this.pushTrigger(triggers, seen, {
+          key: 'price.breakout_down',
+          phase: intent.phase,
+          sideScope: intent.sideScope,
+          params: {
+            period: lowPeriod,
+            reference: 'channel_low',
+          },
+        })
+      }
+    }
+  }
+
+  private pushRangePositionTriggers(
+    segment: string,
+    triggers: SeedTrigger[],
+    seen: Set<string>,
+    contextText: string,
+  ): void {
+    if (!/区间/u.test(segment) || !/%/u.test(segment)) return
+
+    const lookbackBars = this.extractNumber(segment, [/最近\s*(\d{1,4})\s*根\s*K\s*线区间/u])
+      ?? this.extractNumber(contextText, [/最近\s*(\d{1,4})\s*根\s*K\s*线区间/u])
+      ?? 20
+    const intent = this.resolveTradeIntent(segment)
+    if (!intent) return
+
+    const lowerThreshold = this.extractPercent(segment, [
+      /区间\s*下\s*(\d+(?:\.\d+)?)\s*%/u,
+      /区间(?:低位|底部)\s*(\d+(?:\.\d+)?)\s*%/u,
+    ])
+    if (lowerThreshold !== null) {
+      this.pushTrigger(triggers, seen, {
+        key: 'price.range_position_lte',
+        phase: intent.phase,
+        sideScope: intent.sideScope,
+        params: {
+          lookbackBars,
+          thresholdPct: lowerThreshold,
+        },
+      })
+      return
+    }
+
+    const upperThreshold = this.extractPercent(segment, [
+      /区间\s*上\s*(\d+(?:\.\d+)?)\s*%/u,
+      /区间(?:高位|顶部)\s*(\d+(?:\.\d+)?)\s*%/u,
+    ])
+    if (upperThreshold !== null) {
+      this.pushTrigger(triggers, seen, {
+        key: 'price.range_position_gte',
+        phase: intent.phase,
+        sideScope: intent.sideScope,
+        params: {
+          lookbackBars,
+          thresholdPct: upperThreshold,
+        },
+      })
+    }
+  }
+
   private pushExecutionTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
     if (!/立即|立刻|马上|开始时|启动时|一开始/u.test(segment)) return
     if (!/市价|当前价/u.test(segment) || !/买入|卖出|开仓|平仓|做多|做空/u.test(segment)) return
@@ -582,6 +788,34 @@ export class SemanticSeedExtractorService {
       ...(fastPeriod !== undefined ? { fastPeriod } : {}),
       ...(slowPeriod !== undefined ? { slowPeriod } : {}),
     }
+  }
+
+  private extractRsiThreshold(clause: string, period: number): number | null {
+    const compact = clause.replace(/\s+/gu, '')
+    const numbers = Array.from(compact.matchAll(/\d+(?:\.\d+)?/gu))
+      .map(match => Number(match[0]))
+      .filter(value => Number.isFinite(value))
+    const withoutPeriod = numbers.filter(value => value !== period)
+    return withoutPeriod[0] ?? numbers[0] ?? null
+  }
+
+  private extractMacdParams(text: string): { fastPeriod: number; slowPeriod: number; signalPeriod: number } | null {
+    const match = text.match(/MACD\s*(\d{1,3})\s*\/\s*(\d{1,3})\s*\/\s*(\d{1,3})/iu)
+    if (!match?.[1] || !match[2] || !match[3]) return null
+    const fastPeriod = Number(match[1])
+    const slowPeriod = Number(match[2])
+    const signalPeriod = Number(match[3])
+    if (!Number.isFinite(fastPeriod) || !Number.isFinite(slowPeriod) || !Number.isFinite(signalPeriod)) {
+      return null
+    }
+    return { fastPeriod, slowPeriod, signalPeriod }
+  }
+
+  private splitLogicClauses(segment: string): string[] {
+    return segment
+      .split(/[，,、]|(?:且|并且|同时|以及)/u)
+      .map(clause => clause.trim())
+      .filter(Boolean)
   }
 
   private hasExplicitPriceChangeContext(segment: string): boolean {

@@ -1048,7 +1048,11 @@ export class CanonicalSpecBuilderService {
         case 'oscillator.rsi_lte':
           pushIndicator({
             kind: 'rsi',
-            params: { period: DEFAULT_INDICATOR_PARAMS.rsi.period },
+            params: {
+              period: typeof trigger.params.period === 'number' && Number.isFinite(trigger.params.period)
+                ? trigger.params.period
+                : DEFAULT_INDICATOR_PARAMS.rsi.period,
+            },
           })
           break
         case 'indicator.cross_over':
@@ -1061,7 +1065,28 @@ export class CanonicalSpecBuilderService {
           if (indicator === 'macd') {
             pushIndicator({
               kind: 'macd',
-              params: { ...DEFAULT_INDICATOR_PARAMS.macd },
+              params: {
+                fastPeriod: typeof trigger.params.fastPeriod === 'number' && Number.isFinite(trigger.params.fastPeriod)
+                  ? trigger.params.fastPeriod
+                  : DEFAULT_INDICATOR_PARAMS.macd.fastPeriod,
+                slowPeriod: typeof trigger.params.slowPeriod === 'number' && Number.isFinite(trigger.params.slowPeriod)
+                  ? trigger.params.slowPeriod
+                  : DEFAULT_INDICATOR_PARAMS.macd.slowPeriod,
+                signalPeriod: typeof trigger.params.signalPeriod === 'number' && Number.isFinite(trigger.params.signalPeriod)
+                  ? trigger.params.signalPeriod
+                  : DEFAULT_INDICATOR_PARAMS.macd.signalPeriod,
+              },
+            })
+            break
+          }
+          if (indicator === 'rsi') {
+            pushIndicator({
+              kind: 'rsi',
+              params: {
+                period: typeof trigger.params.period === 'number' && Number.isFinite(trigger.params.period)
+                  ? trigger.params.period
+                  : DEFAULT_INDICATOR_PARAMS.rsi.period,
+              },
             })
             break
           }
@@ -1102,6 +1127,13 @@ export class CanonicalSpecBuilderService {
       pushIndicator({
         kind: 'custom',
         params: { family: 'breakout' },
+      })
+    }
+
+    if (normalizedIntent.triggers.some(trigger => trigger.key === 'price.range_position_lte' || trigger.key === 'price.range_position_gte')) {
+      pushIndicator({
+        kind: 'custom',
+        params: { atom: 'price.range_position' },
       })
     }
 
@@ -1477,6 +1509,26 @@ export class CanonicalSpecBuilderService {
           },
         }
       }
+      case 'price.range_position_lte':
+      case 'price.range_position_gte': {
+        const thresholdPct = typeof trigger.params.thresholdPct === 'number'
+          ? trigger.params.thresholdPct
+          : null
+        if (thresholdPct === null || !Number.isFinite(thresholdPct)) {
+          return null
+        }
+        return {
+          kind: 'atom',
+          key: trigger.key,
+          semanticScope: 'market',
+          op: trigger.key === 'price.range_position_lte' ? 'LTE' : 'GTE',
+          value: Number((thresholdPct / 100).toFixed(4)),
+          params: {
+            period: typeof trigger.params.lookbackBars === 'number' ? trigger.params.lookbackBars : 20,
+            ...(defaultTimeframe ? { timeframe: defaultTimeframe } : {}),
+          },
+        }
+      }
       case 'price.breakout_up':
         return {
           kind: 'atom',
@@ -1486,6 +1538,7 @@ export class CanonicalSpecBuilderService {
           params: {
             period: typeof trigger.params.period === 'number' ? trigger.params.period : 20,
             ...(typeof trigger.params.reference === 'string' ? { reference: trigger.params.reference } : {}),
+            ...(typeof trigger.params.bufferPct === 'number' ? { bufferPct: trigger.params.bufferPct } : {}),
           },
         }
       case 'price.breakout_down':
@@ -1526,7 +1579,11 @@ export class CanonicalSpecBuilderService {
           semanticScope: 'market',
           op: 'LTE',
           value: typeof trigger.params.value === 'number' ? trigger.params.value : 30,
-          params: { period: DEFAULT_INDICATOR_PARAMS.rsi.period },
+          params: {
+            period: typeof trigger.params.period === 'number'
+              ? trigger.params.period
+              : DEFAULT_INDICATOR_PARAMS.rsi.period,
+          },
         }
       case 'oscillator.rsi_gte':
         return {
@@ -1535,7 +1592,11 @@ export class CanonicalSpecBuilderService {
           semanticScope: 'market',
           op: 'GTE',
           value: typeof trigger.params.value === 'number' ? trigger.params.value : 70,
-          params: { period: DEFAULT_INDICATOR_PARAMS.rsi.period },
+          params: {
+            period: typeof trigger.params.period === 'number'
+              ? trigger.params.period
+              : DEFAULT_INDICATOR_PARAMS.rsi.period,
+          },
         }
       case 'indicator.cross_over':
       case 'indicator.cross_under': {
@@ -1549,7 +1610,17 @@ export class CanonicalSpecBuilderService {
             key: trigger.key === 'indicator.cross_over' ? CANONICAL_RULE_KEYS.macdGoldenCross : CANONICAL_RULE_KEYS.macdDeathCross,
             semanticScope: 'market',
             op: operator,
-            params: { ...DEFAULT_INDICATOR_PARAMS.macd },
+            params: {
+              fastPeriod: typeof trigger.params.fastPeriod === 'number'
+                ? trigger.params.fastPeriod
+                : DEFAULT_INDICATOR_PARAMS.macd.fastPeriod,
+              slowPeriod: typeof trigger.params.slowPeriod === 'number'
+                ? trigger.params.slowPeriod
+                : DEFAULT_INDICATOR_PARAMS.macd.slowPeriod,
+              signalPeriod: typeof trigger.params.signalPeriod === 'number'
+                ? trigger.params.signalPeriod
+                : DEFAULT_INDICATOR_PARAMS.macd.signalPeriod,
+            },
           }
         }
         if (indicator === 'rsi') {
@@ -1559,7 +1630,11 @@ export class CanonicalSpecBuilderService {
             semanticScope: 'market',
             op: operator,
             value: typeof trigger.params.value === 'number' ? trigger.params.value : 50,
-            params: { period: DEFAULT_INDICATOR_PARAMS.rsi.period },
+            params: {
+              period: typeof trigger.params.period === 'number'
+                ? trigger.params.period
+                : DEFAULT_INDICATOR_PARAMS.rsi.period,
+            },
           }
         }
         return {
