@@ -1,5 +1,4 @@
 import type { OfficialStrategyPlazaTemplate } from '../types/official-strategy-plaza-template'
-import { StrategyPlazaOfficialSnapshotUnavailableException } from '../exceptions'
 import { StrategyPlazaOfficialSnapshotRepository } from './strategy-plaza-official-snapshot.repository'
 
 function createTxHost(tx: unknown): ConstructorParameters<typeof StrategyPlazaOfficialSnapshotRepository>[0] {
@@ -98,20 +97,35 @@ describe('StrategyPlazaOfficialSnapshotRepository', () => {
     }
   }
 
-  it('throws when the official source snapshot is unavailable', async () => {
+  it('self-heals the official source snapshot when it is unavailable', async () => {
     const tx = buildTx({ source: null })
+    tx.publishedStrategySnapshot.upsert.mockImplementation(async ({ where, create }) => {
+      if (where.id === 'official-plaza-ma-cross-v1-snapshot') {
+        return { ...sourceSnapshot, ...create }
+      }
+      return { id: 'user-snapshot-1', snapshotHash: sourceSnapshot.snapshotHash }
+    })
     const repo = new StrategyPlazaOfficialSnapshotRepository(createTxHost(tx))
 
-    await expect(repo.resolveOfficialSnapshotForUser({ userId: 'user-1', template }))
-      .rejects.toBeInstanceOf(StrategyPlazaOfficialSnapshotUnavailableException)
+    await expect(repo.resolveOfficialSnapshotForUser({ userId: 'user-1', template })).resolves.toEqual({
+      id: 'user-snapshot-1',
+    })
 
     expect(tx.publishedStrategySnapshot.findUnique).toHaveBeenCalledWith({
       where: { id: 'official-plaza-ma-cross-v1-snapshot' },
     })
-    expect(tx.publishedStrategySnapshot.create).not.toHaveBeenCalled()
-    expect(tx.publishedStrategySnapshot.upsert).not.toHaveBeenCalled()
-    expect(tx.publishedStrategySnapshot.update).not.toHaveBeenCalled()
-    expect(tx.strategyInstance.upsert).not.toHaveBeenCalled()
+    expect(tx.publishedStrategySnapshot.upsert).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'official-plaza-ma-cross-v1-snapshot' },
+      create: expect.objectContaining({
+        id: 'official-plaza-ma-cross-v1-snapshot',
+        snapshotVersion: 3,
+        userIntentSummary: expect.objectContaining({ templateId: 'ma-cross' }),
+      }),
+      update: expect.objectContaining({
+        snapshotVersion: 3,
+      }),
+    }))
+    expect(tx.strategyInstance.upsert).toHaveBeenCalled()
   })
 
   it('reuses an existing user-visible snapshot for the same official source hash and version', async () => {

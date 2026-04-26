@@ -5,7 +5,6 @@ import { createHash } from 'node:crypto'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
 import { Injectable } from '@nestjs/common'
-import { StrategyPlazaOfficialSnapshotUnavailableException } from '../exceptions'
 import {
   buildOfficialTemplateBacktestConfigDefaults,
   buildOfficialTemplateDataRequirements,
@@ -14,6 +13,10 @@ import {
   buildOfficialTemplateParamsSnapshot,
   buildOfficialTemplateStrategyConfig,
 } from '../utils/official-strategy-plaza-snapshot-content'
+import {
+  buildOfficialStrategySnapshotContent,
+  OFFICIAL_STRATEGY_PLAZA_USER_ID,
+} from '../utils/official-strategy-plaza-snapshot-builder'
 
 const LLM_MODEL = 'official-strategy-plaza'
 
@@ -41,16 +44,7 @@ export class StrategyPlazaOfficialSnapshotRepository {
     template: OfficialStrategyPlazaTemplate
   }): Promise<Pick<PublishedStrategySnapshot, 'id'>> {
     const client = this.txHost.tx
-    const sourceSnapshot = await client.publishedStrategySnapshot.findUnique({
-      where: { id: input.template.runConfig.publishedSnapshotId },
-    })
-    if (!sourceSnapshot) {
-      throw new StrategyPlazaOfficialSnapshotUnavailableException({
-        templateId: input.template.id,
-        officialSnapshotId: input.template.runConfig.publishedSnapshotId,
-      })
-    }
-
+    const sourceSnapshot = await this.resolveOrCreateOfficialSourceSnapshot(input.template)
     const sessionId = this.buildSessionId(input.userId, input.template.id, sourceSnapshot)
     const existing = await this.findExistingUserSnapshot(input.userId, sessionId, sourceSnapshot)
     if (existing) {
@@ -169,6 +163,50 @@ export class StrategyPlazaOfficialSnapshotRepository {
     return { id: snapshot.id }
   }
 
+  private async resolveOrCreateOfficialSourceSnapshot(
+    template: OfficialStrategyPlazaTemplate,
+  ): Promise<PublishedStrategySnapshot> {
+    const client = this.txHost.tx
+    const existingSourceSnapshot = await client.publishedStrategySnapshot.findUnique({
+      where: { id: template.runConfig.publishedSnapshotId },
+    })
+    if (existingSourceSnapshot) {
+      return existingSourceSnapshot
+    }
+
+    const content = this.buildOfficialSourceSnapshotContent(template)
+    const sessionId = `official-strategy-plaza:${template.id}:seed-session`
+    await client.llmStrategyCodegenSession.upsert({
+      where: { id: sessionId },
+      update: {
+        status: 'PUBLISHED',
+        latestDraftCode: content.scriptSnapshot,
+        latestSpecDesc: content.specSnapshot as Prisma.InputJsonValue,
+        semanticGraph: content.semanticGraph as Prisma.InputJsonValue,
+        compiledIr: content.compiledIr as Prisma.InputJsonValue,
+      },
+      create: {
+        id: sessionId,
+        userId: OFFICIAL_STRATEGY_PLAZA_USER_ID,
+        status: 'PUBLISHED',
+        latestDraftCode: content.scriptSnapshot,
+        latestSpecDesc: content.specSnapshot as Prisma.InputJsonValue,
+        semanticGraph: content.semanticGraph as Prisma.InputJsonValue,
+        compiledIr: content.compiledIr as Prisma.InputJsonValue,
+      },
+    })
+
+    return client.publishedStrategySnapshot.upsert({
+      where: { id: template.runConfig.publishedSnapshotId },
+      update: content,
+      create: {
+        id: template.runConfig.publishedSnapshotId,
+        session: { connect: { id: sessionId } },
+        ...content,
+      },
+    })
+  }
+
   private async updateSnapshotTemplateRuntimeContent(
     snapshotId: string,
     template: OfficialStrategyPlazaTemplate,
@@ -267,6 +305,41 @@ export class StrategyPlazaOfficialSnapshotRepository {
       deploymentExecutionConstraints: buildOfficialTemplateDeploymentExecutionConstraints(template) as Prisma.InputJsonValue,
       dataRequirements: buildOfficialTemplateDataRequirements(template) as Prisma.InputJsonValue,
       lockedParams: buildOfficialTemplateParamsSnapshot(template) as Prisma.InputJsonValue,
+    }
+  }
+
+  private buildOfficialSourceSnapshotContent(
+    template: OfficialStrategyPlazaTemplate,
+  ): Omit<Prisma.PublishedStrategySnapshotCreateInput, 'id' | 'session'> {
+    const content = buildOfficialStrategySnapshotContent(template)
+    return {
+      snapshotHash: content.snapshotHash,
+      scriptHash: content.scriptHash,
+      specHash: content.specHash,
+      irHash: content.irHash,
+      astDigest: content.astDigest,
+      structuralDigest: content.structuralDigest,
+      scriptSnapshot: content.scriptSnapshot,
+      specSnapshot: content.specSnapshot as Prisma.InputJsonValue,
+      semanticGraph: content.semanticGraph as Prisma.InputJsonValue,
+      compiledIr: content.compiledIr as Prisma.InputJsonValue,
+      irSnapshot: content.irSnapshot as Prisma.InputJsonValue,
+      astSnapshot: content.astSnapshot as Prisma.InputJsonValue,
+      compiledManifest: content.compiledManifest as Prisma.InputJsonValue,
+      consistencyReport: content.consistencyReport as Prisma.InputJsonValue,
+      paramsSnapshot: content.paramsSnapshot as Prisma.InputJsonValue,
+      strategyConfig: content.strategyConfig as Prisma.InputJsonValue,
+      backtestConfigDefaults: content.backtestConfigDefaults as Prisma.InputJsonValue,
+      deploymentExecutionDefaults: content.deploymentExecutionDefaults as Prisma.InputJsonValue,
+      deploymentExecutionConstraints: content.deploymentExecutionConstraints as Prisma.InputJsonValue,
+      executionEnvelope: content.executionEnvelope as Prisma.InputJsonValue,
+      executionPolicy: content.executionPolicy as Prisma.InputJsonValue,
+      dataRequirements: content.dataRequirements as Prisma.InputJsonValue,
+      userIntentSummary: content.userIntentSummary as Prisma.InputJsonValue,
+      strategySummary: content.strategySummary as Prisma.InputJsonValue,
+      scriptSummary: content.scriptSummary as Prisma.InputJsonValue,
+      lockedParams: content.lockedParams as Prisma.InputJsonValue,
+      snapshotVersion: content.snapshotVersion,
     }
   }
 
