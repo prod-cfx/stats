@@ -18,6 +18,24 @@ describe('ConversationSemanticEditService', () => {
     })
   })
 
+  it.each([
+    ['把交易标的改成 BTCUSDT'],
+    ['把交易标的换成 BTCUSDT'],
+  ])('classifies natural symbol replacement wording: %s', (message) => {
+    const decision = service.decide({
+      status: 'DRAFTING',
+      message,
+      semanticState: service.createEmptySemanticStateForTest(),
+    })
+
+    expect(decision).toEqual({
+      kind: 'APPLY_TO_SEMANTIC_STATE',
+      patch: {
+        operations: [{ op: 'replace_context', field: 'symbol', value: 'BTCUSDT' }],
+      },
+    })
+  })
+
   it('classifies strategy replacement with seed text', () => {
     const decision = service.decide({
       status: 'PUBLISHED',

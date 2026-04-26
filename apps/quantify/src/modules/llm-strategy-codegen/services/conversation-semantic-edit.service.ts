@@ -146,7 +146,7 @@ export class ConversationSemanticEditService {
   }
 
   private extractReplacementSymbol(message: string): string | null {
-    const match = /交易标的改为\s*([A-Za-z0-9:/-]+)/u.exec(message)
+    const match = /交易标的\s*(?:改为|改成|换成)\s*([A-Za-z0-9:/-]+)/u.exec(message)
     return canonicalizeStrategySymbolInput(match?.[1])
   }
 

@@ -7996,6 +7996,97 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
   })
 
+  it('edits published session semantic state without overwriting the published snapshot', async () => {
+    const currentSemanticState = buildLockedMaSemanticState({
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        symbol: {
+          ...buildLockedMaSemanticState().contextSlots.symbol,
+          value: 'ETHUSDT',
+        },
+      },
+    })
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-published-symbol-edit',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      semanticState: currentSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      publishedSnapshotId: 'snapshot-published-eth',
+      latestDraftCode: 'const publishedEthStrategy = {}',
+    })
+    const oldLatestSnapshot = {
+      id: 'snapshot-published-eth',
+      consistencyReport: { status: 'PASSED' },
+      paramsSnapshot: {
+        exchange: 'okx',
+        symbol: 'ETHUSDT',
+        timeframe: '1h',
+      },
+      lockedParams: {
+        symbol: 'ETHUSDT',
+        positionPct: 10,
+      },
+      specSnapshot: {
+        canonicalDigest: 'sha256:published-eth',
+        normalizedIntent: {
+          context: {
+            symbol: 'ETHUSDT',
+          },
+        },
+      },
+    }
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockRepo.findLatestBySessionId.mockResolvedValue(oldLatestSnapshot)
+
+    const result = await service.continueSession('s-published-symbol-edit', {
+      userId: 'u1',
+      message: '把交易标的改成 BTCUSDT',
+    })
+
+    expect(result.status === 'CONFIRM_GATE' || result.status === 'DRAFTING').toBe(true)
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-published-symbol-edit',
+      expect.objectContaining({
+        semanticState: expect.objectContaining({
+          contextSlots: expect.objectContaining({
+            symbol: expect.objectContaining({
+              value: 'BTCUSDT',
+            }),
+          }),
+        }),
+      }),
+    )
+    expect(mockRepo.create).not.toHaveBeenCalled()
+    expect(mockRepo.createVersion).not.toHaveBeenCalled()
+    expect(oldLatestSnapshot.paramsSnapshot.symbol).toBe('ETHUSDT')
+    expect(oldLatestSnapshot.lockedParams.symbol).toBe('ETHUSDT')
+  })
+
+  it.each(['REJECTED', 'CONSISTENCY_FAILED'] as const)(
+    'keeps %s terminal even when the message looks like a semantic edit',
+    async (status) => {
+      const sessionId = `s-terminal-${status.toLowerCase()}`
+      const sessionFixture = buildSemanticEraSessionFixture({
+        id: sessionId,
+        userId: 'u1',
+        status,
+        semanticState: buildLockedMaSemanticState(),
+        clarificationState: { status: 'CLEAR', items: [] },
+        constraintPack: {},
+      })
+      mockRepo.findById.mockResolvedValue(sessionFixture)
+
+      await expect(service.continueSession(sessionId, {
+        userId: 'u1',
+        message: '把交易标的改成 BTCUSDT',
+      })).rejects.toThrow('codegen.session_terminal_status')
+
+      expect(mockRepo.updateSession).not.toHaveBeenCalled()
+    },
+  )
+
   it('replaces the whole strategy draft from a replacement seed instead of merging into the locked MA state', async () => {
     const currentSemanticState = buildLockedMaSemanticState()
     const sessionFixture = buildSemanticEraSessionFixture({

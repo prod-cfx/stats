@@ -368,7 +368,17 @@ export class CodegenConversationService {
         args: { sessionId },
       })
     }
-    if (this.stateMachine.isTerminalStatus(session.status)) {
+    const currentSemanticState = this.readSemanticState((session as { semanticState?: Prisma.JsonValue | null }).semanticState)
+    let semanticEditDecision: SemanticEditDecision = { kind: 'NO_EDIT' }
+    if (dto.confirmGenerate !== true) {
+      semanticEditDecision = this.conversationSemanticEdit.decide({
+        status: session.status,
+        message: dto.message,
+        semanticState: currentSemanticState,
+      })
+    }
+    const canEditPublishedSession = session.status === 'PUBLISHED' && semanticEditDecision.kind !== 'NO_EDIT'
+    if (this.stateMachine.isTerminalStatus(session.status) && !canEditPublishedSession) {
       throw new DomainException('codegen.session_terminal_status', {
         code: ErrorCode.CONFLICT,
         status: HttpStatus.CONFLICT,
@@ -379,12 +389,6 @@ export class CodegenConversationService {
       return this.continueConfirmedSession(session, dto, sessionUserId)
     }
 
-    const currentSemanticState = this.readSemanticState((session as { semanticState?: Prisma.JsonValue | null }).semanticState)
-    const semanticEditDecision = this.conversationSemanticEdit.decide({
-      status: session.status,
-      message: dto.message,
-      semanticState: currentSemanticState,
-    })
     if (semanticEditDecision.kind !== 'NO_EDIT') {
       const semanticEditResponse = await this.handleSemanticEditDecision({
         session,
@@ -397,6 +401,14 @@ export class CodegenConversationService {
         model: dto.model,
       })
       if (semanticEditResponse) return semanticEditResponse
+    }
+
+    if (this.stateMachine.isTerminalStatus(session.status)) {
+      throw new DomainException('codegen.session_terminal_status', {
+        code: ErrorCode.CONFLICT,
+        status: HttpStatus.CONFLICT,
+        args: { sessionId, status: session.status },
+      })
     }
 
     if (this.stateMachine.isProcessingStatus(session.status)) {
