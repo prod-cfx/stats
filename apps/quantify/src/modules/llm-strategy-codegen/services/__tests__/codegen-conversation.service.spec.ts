@@ -149,6 +149,35 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       ...context,
     },
   })
+  const rsiSemanticPatch = (context: Record<string, unknown> = {}) => ({
+    triggers: [
+      {
+        key: 'oscillator.rsi_lte',
+        phase: 'entry',
+        sideScope: 'long',
+        params: { indicator: 'rsi', period: 14, value: 30 },
+      },
+      {
+        key: 'oscillator.rsi_gte',
+        phase: 'exit',
+        sideScope: 'long',
+        params: { indicator: 'rsi', period: 14, value: 70 },
+      },
+    ],
+    actions: [{ key: 'open_long' }, { key: 'close_long' }],
+    risk: [
+      { key: 'risk.stop_loss_pct', params: { valuePct: 5, basis: 'entry_avg_price' } },
+      { key: 'risk.take_profit_pct', params: { valuePct: 10, basis: 'entry_avg_price' } },
+    ],
+    position: { mode: 'fixed_ratio', value: 0.1, positionMode: 'long_only' },
+    contextSlots: {
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      marketType: 'perp',
+      timeframe: '15m',
+      ...context,
+    },
+  })
   const priceChangeSemanticPatch = (context: Record<string, unknown> = {}) => ({
     triggers: [
       { key: 'price.percent_change', phase: 'entry', params: { valuePct: -1, window: '3m', basis: 'prev_close' } },
@@ -7965,6 +7994,68 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(updatePayload.semanticState.contextSlots.symbol.value).toBe('BTCUSDT')
     expect(result.assistantPrompt).toContain('BTCUSDT')
     expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+  })
+
+  it('replaces the whole strategy draft from a replacement seed instead of merging into the locked MA state', async () => {
+    const currentSemanticState = buildLockedMaSemanticState()
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-semantic-whole-strategy-replacement',
+      userId: 'u1',
+      status: 'CONFIRM_GATE',
+      semanticState: currentSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      latestDraftCode: 'const oldMaStrategy = {}',
+      latestSpecDesc: {
+        canonicalSpec: {
+          rules: [{ condition: { key: 'indicator.above', indicator: 'ma' } }],
+        },
+      },
+    })
+    const oldSpecDesc = sessionFixture.latestSpecDesc
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValueOnce({
+      content: JSON.stringify({
+        related: true,
+        logicReady: true,
+        assistantPrompt: '已改为 RSI 策略，请确认逻辑图。',
+        semanticPatch: rsiSemanticPatch(),
+      }),
+    })
+
+    const result = await service.continueSession('s-semantic-whole-strategy-replacement', {
+      userId: 'u1',
+      message: '之前策略不对，重新做一个 RSI 策略',
+    })
+
+    expect(mockAi.chat).toHaveBeenCalledTimes(1)
+    const plannerPayload = JSON.parse(mockAi.chat.mock.calls[0][0].messages[1].content)
+    expect(plannerPayload.message).toBe('重新做一个 RSI 策略')
+    expect(plannerPayload.currentSemanticState.triggers).toEqual([])
+
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    const replacementState = updatePayload.semanticState
+    expect(replacementState.previousVersions).toHaveLength(1)
+    expect(replacementState.previousVersions[0]).toEqual(expect.objectContaining({
+      reason: 'strategy_replacement',
+      semanticState: currentSemanticState,
+    }))
+    expect(replacementState.pendingEdit).toBeNull()
+    expect(replacementState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'oscillator.rsi_lte',
+        params: expect.objectContaining({ indicator: 'rsi' }),
+      }),
+    ]))
+    expect(replacementState.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        params: expect.objectContaining({ indicator: 'ma' }),
+      }),
+    ]))
+    expect(updatePayload.latestDraftCode).toBeNull()
+    expect(updatePayload.latestSpecDesc).not.toEqual(oldSpecDesc)
+    expect(JSON.stringify(updatePayload.latestSpecDesc)).toContain('rsi')
+    expect(result.status).toBe('CONFIRM_GATE')
   })
 
   it('returns compileability blockers when semantic state is complete but planner follow-up is unrelated', async () => {

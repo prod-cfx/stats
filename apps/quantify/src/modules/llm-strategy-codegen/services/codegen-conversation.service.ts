@@ -46,7 +46,7 @@ import {
   STRATEGY_CLARIFICATION_REASONS,
   STRATEGY_CLARIFICATION_STATUSES,
 } from '../types/strategy-clarification'
-import { withPendingSemanticEdit } from '../types/semantic-edit'
+import { buildReplacementSemanticState, withPendingSemanticEdit } from '../types/semantic-edit'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
 import { buildStrategyRuleDrafts, resolveStrategyDefaultTimeframe } from './rule-draft-projection'
@@ -393,6 +393,8 @@ export class CodegenConversationService {
         message: dto.message,
         userId: sessionUserId,
         guideConfig: dto.guideConfig,
+        providerCode: dto.providerCode,
+        model: dto.model,
       })
       if (semanticEditResponse) return semanticEditResponse
     }
@@ -655,12 +657,116 @@ export class CodegenConversationService {
     message: string
     userId: string
     guideConfig?: CodegenGuideConfigDto
+    providerCode?: string
+    model?: string
   }): Promise<CodegenSessionResponseDto | null> {
-    if (args.decision.kind === 'REPLACE_STRATEGY_DRAFT' || args.decision.kind === 'REGENERATE_SCRIPT_VERSION') {
+    if (args.decision.kind === 'REGENERATE_SCRIPT_VERSION') {
       return null
     }
 
     const constraintPack = this.readConstraintPack(args.session.constraintPack)
+
+    if (args.decision.kind === 'REPLACE_STRATEGY_DRAFT') {
+      const seedSemanticState = this.mergeSemanticPatchIntoState(
+        this.createEmptySemanticState(),
+        this.extractSemanticPatchFromMessage(args.decision.seedText),
+      )
+      const plan = await this.planConversationByLlm(args.decision.seedText, seedSemanticState, {
+        providerCode: this.resolveProviderCode(args.providerCode),
+        model: args.model,
+      }, constraintPack.conversationHistory ?? [])
+      const plannedSemanticState = this.applyConversationPlanToSemanticState({
+        currentState: seedSemanticState,
+        plan,
+      })
+      const replacementState = buildReplacementSemanticState({
+        previous: args.currentSemanticState,
+        next: plannedSemanticState,
+      })
+      const semanticArtifacts = this.resolveSemanticClarificationArtifacts(replacementState)
+      const clarificationState = semanticArtifacts.clarificationState
+      const semanticReadyForGenerate = this.findNextOpenSemanticSlot(replacementState) === null
+      const normalization = semanticArtifacts.normalization
+      const canonicalSpec = this.buildCanonicalSpecForConversation(replacementState, normalization)
+      const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
+        normalizedIntent: normalization.normalizedIntent,
+        executionContext: semanticArtifacts.executionContext.context,
+      })
+      const canonicalDigest = this.readCanonicalDigest(specDesc)
+      const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
+      const canonicalLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(replacementState, {})
+      const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, args.guideConfig)
+      const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
+        args.decision.seedText,
+        replacementState,
+        constraintPack.recommendationStyle,
+      )
+      const nextConstraintPack = this.withGuidePrompt(constraintPack, guidePrompt, recommendationStyle)
+      const strategyDecision = this.buildStrategyDecision({
+        checklist: canonicalLogicSnapshot,
+        clarification: semanticArtifacts,
+        effectiveBlockingReasons: semanticArtifacts.blockingReasons,
+        compileability,
+        constraintPack: nextConstraintPack,
+      })
+      const decisionPrompt = strategyDecision.kind === 'CONFIRM_INFERRED'
+        ? this.clarificationQuestion.buildFromDecision(strategyDecision)
+        : semanticArtifacts.clarificationPrompt
+      const deterministicAuthority = this.resolveContinueSessionDeterministicAuthority({
+        semanticState: replacementState,
+        clarificationState,
+        normalization,
+        compileability,
+        decisionKind: strategyDecision.kind,
+        semanticReadyForGenerate,
+      })
+      const assistantPrompt = deterministicAuthority === 'clarification'
+        ? (semanticArtifacts.clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。')
+        : deterministicAuthority === 'decision'
+          ? (decisionPrompt || '请先确认当前推断，我再继续整理逻辑图。')
+          : deterministicAuthority === 'normalization'
+            ? this.buildSemanticNormalizationAssistantPrompt(replacementState, normalization)
+            : deterministicAuthority === 'compileability'
+              ? this.buildCompileabilityAssistantPrompt(compileability)
+              : deterministicAuthority === 'confirm_gate'
+                ? this.buildSemanticLogicGateAssistantPrompt(replacementState)
+                : (plan.assistantPrompt || '我已按你的新描述重新创建策略草稿，请继续补充缺失语义。')
+      const targetStatus = deterministicAuthority === 'confirm_gate' ? 'CONFIRM_GATE' : 'DRAFTING'
+      const historyAfterReplacement = this.appendConversationHistory(
+        constraintPack.conversationHistory ?? [],
+        args.message,
+        assistantPrompt,
+      )
+      await this.sessionsRepo.updateSession(args.session.id, {
+        ...this.stateMachine.buildConversationUpdate({
+          status: targetStatus,
+          semanticState: replacementState,
+          clarificationState,
+          constraintPack: {
+            ...nextConstraintPack,
+            conversationHistory: historyAfterReplacement,
+          },
+          latestSpecDesc: specDesc,
+        }),
+        latestDraftCode: null,
+      } as Prisma.LlmStrategyCodegenSessionUpdateInput)
+
+      const response = this.finalizeSessionResponse({
+        id: args.session.id,
+        status: targetStatus,
+        missingFields: [],
+        ...(deterministicAuthority === 'confirm_gate' || deterministicAuthority === 'decision'
+          ? {
+              specDesc,
+              canonicalDigest,
+            }
+          : {}),
+        ...(deterministicAuthority === 'normalization' ? { specDesc } : {}),
+        assistantPrompt,
+        clarificationState,
+      })
+      return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
+    }
 
     if (args.decision.kind === 'REJECT_WHILE_PROCESSING') {
       const response = this.finalizeSessionResponse({
