@@ -41,6 +41,8 @@ describe('ConversationSemanticEditService', () => {
     expect(decision.kind).toBe('ASK_EDIT_CLARIFICATION')
     if (decision.kind !== 'ASK_EDIT_CLARIFICATION') return
     expect(decision.question).toContain('请描述新的触发、行动、风控、仓位和运行 context')
+    expect(decision.pendingEdit.candidate.key).not.toBe('indicator.rsi_threshold')
+    expect(decision.pendingEdit.candidate.key).toBe('pending.strategy_replacement_seed')
   })
 
   it('rejects edits while generation is processing', () => {
@@ -82,5 +84,45 @@ describe('ConversationSemanticEditService', () => {
       status: 'locked',
     }))
     expect(next.triggers).toEqual(state.triggers)
+  })
+
+  it('creates pending edit when trigger replacement text is incomplete', () => {
+    const decision = service.decide({
+      status: 'CONFIRM_GATE',
+      message: '把触发改成 RSI',
+      semanticState: service.createEmptySemanticStateForTest(),
+    })
+
+    expect(decision.kind).toBe('ASK_EDIT_CLARIFICATION')
+    if (decision.kind !== 'ASK_EDIT_CLARIFICATION') return
+    expect(decision.pendingEdit.op).toBe('replace_trigger')
+    expect(decision.pendingEdit.status).toBe('needs_clarification')
+    expect(decision.question).toContain('RSI')
+  })
+
+  it('cancels pending edit without changing active state', () => {
+    const base = service.createEmptySemanticStateForTest()
+    const withPending = service.withPendingEditForTest(base, '把触发改成 RSI')
+
+    const decision = service.decide({
+      status: 'DRAFTING',
+      message: '算了，保持原来的',
+      semanticState: withPending,
+    })
+
+    expect(decision).toEqual({
+      kind: 'APPLY_TO_SEMANTIC_STATE',
+      patch: { operations: [{ op: 'cancel_pending_edit' }] },
+    })
+    expect(service.readPendingEditForTest(service.applyPatch(withPending, decision.patch))).toBeNull()
+  })
+
+  it('keeps an empty patch as a no-op even when a pending edit exists', () => {
+    const withPending = service.withPendingEditForTest(
+      service.createEmptySemanticStateForTest(),
+      '把触发改成 RSI',
+    )
+
+    expect(service.applyPatch(withPending, { operations: [] })).toBe(withPending)
   })
 })

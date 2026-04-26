@@ -11,6 +11,7 @@ export type SemanticEditNodeKind = 'trigger' | 'action' | 'risk' | 'position' | 
 export type SemanticEditContextField = 'symbol' | 'timeframe' | 'exchange' | 'marketType'
 
 export type SemanticEditOperation =
+  | { op: 'cancel_pending_edit' }
   | { op: 'replace_context', field: SemanticEditContextField, value: string }
   | { op: 'replace_position', targetRef?: string, text?: string }
   | { op: 'replace_trigger', targetRef?: string, text?: string }

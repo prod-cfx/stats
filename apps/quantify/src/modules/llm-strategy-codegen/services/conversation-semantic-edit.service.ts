@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
-import type { SemanticEditDecision, PendingSemanticEdit, SemanticEditPatch } from '../types/semantic-edit'
-import type { SemanticState, SemanticTriggerState } from '../types/semantic-state'
+import type { PendingSemanticEdit, SemanticEditDecision, SemanticEditPatch } from '../types/semantic-edit'
+import type { SemanticState } from '../types/semantic-state'
 import { isProcessingCodegenSessionStatus } from '../types/codegen-session-status'
+import { readPendingSemanticEdit, withPendingSemanticEdit } from '../types/semantic-edit'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 
 export interface ConversationSemanticEditDecisionInput {
@@ -17,6 +18,9 @@ const PROCESSING_REJECTION_MESSAGE = '当前策略正在生成或校验，请等
 export class ConversationSemanticEditService {
   applyPatch(state: SemanticState, patch: SemanticEditPatch): SemanticState {
     return patch.operations.reduce((next, operation) => {
+      if (operation.op === 'cancel_pending_edit') {
+        return withPendingSemanticEdit(next, null)
+      }
       if (operation.op === 'replace_context') {
         return this.applyContextReplacement(next, operation.field, operation.value)
       }
@@ -57,7 +61,23 @@ export class ConversationSemanticEditService {
       return {
         kind: 'ASK_EDIT_CLARIFICATION',
         question: '请描述新的触发、行动、风控、仓位和运行 context，我会按新的语义重新整理策略。',
-        pendingEdit: this.createPendingTriggerReplacement(message),
+        pendingEdit: this.createStrategyReplacementSeedPendingEdit(message),
+      }
+    }
+
+    if (readPendingSemanticEdit(input.semanticState) && /算了|保持原来|不改了|取消/u.test(message)) {
+      return {
+        kind: 'APPLY_TO_SEMANTIC_STATE',
+        patch: { operations: [{ op: 'cancel_pending_edit' }] },
+      }
+    }
+
+    if (/触发.*改成\s*RSI|把触发改成\s*RSI/u.test(message)) {
+      const pendingEdit = this.createPendingTriggerReplacement(message)
+      return {
+        kind: 'ASK_EDIT_CLARIFICATION',
+        question: '你正在把触发语义改成 RSI。请确认 RSI 阈值，例如低于 30 或高于 70。',
+        pendingEdit,
       }
     }
 
@@ -81,6 +101,14 @@ export class ConversationSemanticEditService {
       normalizationNotes: [],
       updatedAt: '1970-01-01T00:00:00.000Z',
     }
+  }
+
+  withPendingEditForTest(state: SemanticState, createdFromMessage: string): SemanticState {
+    return withPendingSemanticEdit(state, this.createPendingTriggerReplacement(createdFromMessage))
+  }
+
+  readPendingEditForTest(state: SemanticState): PendingSemanticEdit | null {
+    return readPendingSemanticEdit(state)
   }
 
   private applyContextReplacement(
@@ -131,27 +159,54 @@ export class ConversationSemanticEditService {
     return /(?:之前策略不对|之前不对)[，,\s]*重新来$/u.test(message)
   }
 
-  private createPendingTriggerReplacement(message: string): PendingSemanticEdit {
-    const candidate: SemanticTriggerState = {
-      id: 'pending-replace-trigger',
-      key: 'pending_replacement_trigger',
-      phase: 'entry',
-      params: {},
-      status: 'open',
-      source: 'user_explicit',
-      evidence: {
-        text: message,
-        source: 'user_explicit',
-      },
-      openSlots: [],
-    }
-
+  private createStrategyReplacementSeedPendingEdit(text: string): PendingSemanticEdit {
     return {
-      id: 'pending-replace-trigger',
+      id: `pending-strategy-replacement-seed-${Date.now()}`,
       op: 'replace_trigger',
+      candidate: {
+        id: `candidate-strategy-replacement-seed-${Date.now()}`,
+        key: 'pending.strategy_replacement_seed',
+        phase: 'gate',
+        params: {},
+        status: 'open',
+        source: 'user_explicit',
+        evidence: {
+          text,
+          source: 'user_explicit',
+        },
+        openSlots: [],
+      },
       status: 'needs_clarification',
-      createdFromMessage: message,
-      candidate,
+      createdFromMessage: text,
+    }
+  }
+
+  private createPendingTriggerReplacement(text: string): PendingSemanticEdit {
+    return {
+      id: `pending-trigger-${Date.now()}`,
+      op: 'replace_trigger',
+      candidate: {
+        id: `candidate-trigger-${Date.now()}`,
+        key: 'indicator.rsi_threshold',
+        phase: 'gate',
+        params: { indicator: 'rsi' },
+        status: 'open',
+        source: 'user_explicit',
+        evidence: {
+          text,
+          source: 'user_explicit',
+        },
+        openSlots: [{
+          slotKey: 'trigger.rsi.threshold',
+          fieldPath: 'triggers[].params.threshold',
+          status: 'open',
+          priority: 'behavior',
+          questionHint: '请确认 RSI 阈值，例如低于 30 或高于 70。',
+          affectsExecution: true,
+        }],
+      },
+      status: 'needs_clarification',
+      createdFromMessage: text,
     }
   }
 }
