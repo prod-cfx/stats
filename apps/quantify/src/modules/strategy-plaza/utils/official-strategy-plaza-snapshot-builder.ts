@@ -183,19 +183,7 @@ function buildOfficialStrategySpec(template: OfficialStrategyPlazaTemplate) {
 
 function buildOfficialStrategyAstSnapshot() {
   return {
-    runtimeExecutionSemantics: [{
-      semanticKey: 'on_start.entry.primary',
-      trigger: 'on_start',
-      phase: 'entry',
-      consumePolicy: 'once',
-      requiredRuntimeContext: {
-        barIndex: 1,
-        requiresReferenceBar: true,
-        requiresSymbol: true,
-        requiresTimeframe: true,
-      },
-      sourceRefs: ['official-template-entry'],
-    }],
+    runtimeExecutionSemantics: [],
   }
 }
 
