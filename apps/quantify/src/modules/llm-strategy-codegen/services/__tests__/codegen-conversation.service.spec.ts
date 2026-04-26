@@ -7916,6 +7916,57 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('这条消息看起来和策略无关')
   })
 
+  it('applies natural-language symbol edits before planner fallback can mark them unrelated', async () => {
+    const currentSemanticState = buildLockedMaSemanticState({
+      contextSlots: {
+        ...buildLockedMaSemanticState().contextSlots,
+        symbol: {
+          ...buildLockedMaSemanticState().contextSlots.symbol,
+          value: 'ETHUSDT',
+        },
+      },
+    })
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-semantic-symbol-edit-unrelated',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState: currentSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-semantic-symbol-edit-unrelated', {
+      userId: 'u1',
+      message: '我要把交易标的改为BTCUSDT',
+    })
+
+    expect(mockAi.chat).not.toHaveBeenCalled()
+    expect(mockRepo.updateSession).toHaveBeenCalledWith(
+      's-semantic-symbol-edit-unrelated',
+      expect.objectContaining({
+        semanticState: expect.objectContaining({
+          contextSlots: expect.objectContaining({
+            symbol: expect.objectContaining({
+              value: 'BTCUSDT',
+            }),
+          }),
+        }),
+      }),
+    )
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.semanticState.contextSlots.symbol.value).toBe('BTCUSDT')
+    expect(result.assistantPrompt).toContain('BTCUSDT')
+    expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
+  })
+
   it('returns compileability blockers when semantic state is complete but planner follow-up is unrelated', async () => {
     const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
       id: 's-unrelated-compileability-blocker',

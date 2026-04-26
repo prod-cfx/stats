@@ -17,6 +17,7 @@ import type { CanonicalStrategySpec } from '../types/canonical-strategy-spec'
 import type { StrategyAmbiguity } from '../types/strategy-ambiguity'
 import type { StrategyClarificationItem, StrategyClarificationState } from '../types/strategy-clarification'
 import type { StrategyBlockingReason, StrategyInferredAssumption } from '../types/strategy-decision'
+import type { SemanticEditDecision } from '../types/semantic-edit'
 import type { StrategyExecutionContextResolution } from '../types/strategy-execution-context'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
 import { buildSemanticSlotId, type SemanticSlotState, type SemanticState, type SemanticTriggerState } from '../types/semantic-state'
@@ -45,6 +46,7 @@ import {
   STRATEGY_CLARIFICATION_REASONS,
   STRATEGY_CLARIFICATION_STATUSES,
 } from '../types/strategy-clarification'
+import { withPendingSemanticEdit } from '../types/semantic-edit'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CanonicalSpecBuilderService } from './canonical-spec-builder.service'
 import { buildStrategyRuleDrafts, resolveStrategyDefaultTimeframe } from './rule-draft-projection'
@@ -64,6 +66,8 @@ import {
 import { CodegenConversationStateMachine } from './codegen-conversation-state-machine'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { CodegenSessionPublicationPipelineService } from './codegen-session-publication-pipeline.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { ConversationSemanticEditService } from './conversation-semantic-edit.service'
 import { isEquivalentMarketScopeValue } from './market-scope-equivalence'
 import { resolveDefaultRiskBasis } from './rule-family-default-semantics'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
@@ -181,6 +185,7 @@ export class CodegenConversationService {
     private readonly clarificationRules: StrategyClarificationRulesService,
     private readonly clarificationQuestion: StrategyClarificationQuestionService,
     private readonly publicationPipeline: CodegenSessionPublicationPipelineService,
+    private readonly conversationSemanticEdit: ConversationSemanticEditService = new ConversationSemanticEditService(),
     private readonly executionContext: StrategyExecutionContextService = new StrategyExecutionContextService(),
     private readonly intentNormalizer: StrategyIntentNormalizerService = new StrategyIntentNormalizerService(),
     private readonly intentResolution: StrategyIntentResolutionService = new StrategyIntentResolutionService(),
@@ -373,10 +378,28 @@ export class CodegenConversationService {
     if (dto.confirmGenerate === true) {
       return this.continueConfirmedSession(session, dto, sessionUserId)
     }
+
+    const currentSemanticState = this.readSemanticState((session as { semanticState?: Prisma.JsonValue | null }).semanticState)
+    const semanticEditDecision = this.conversationSemanticEdit.decide({
+      status: session.status,
+      message: dto.message,
+      semanticState: currentSemanticState,
+    })
+    if (semanticEditDecision.kind !== 'NO_EDIT') {
+      const semanticEditResponse = await this.handleSemanticEditDecision({
+        session,
+        decision: semanticEditDecision,
+        currentSemanticState,
+        message: dto.message,
+        userId: sessionUserId,
+        guideConfig: dto.guideConfig,
+      })
+      if (semanticEditResponse) return semanticEditResponse
+    }
+
     if (this.stateMachine.isProcessingStatus(session.status)) {
       return this.returnPersistedSnapshotResponse(session, sessionUserId)
     }
-
     const baseClarificationState = this.readClarificationState(session.clarificationState)
     const inferredSemanticClarificationAnswers = this.inferFreeformSemanticClarificationAnswers(
       baseClarificationState,
@@ -389,7 +412,6 @@ export class CodegenConversationService {
     const hasStructuredClarificationAnswers = Boolean(
       effectiveClarificationAnswers && Object.keys(effectiveClarificationAnswers).length > 0,
     )
-    const currentSemanticState = this.readSemanticState((session as { semanticState?: Prisma.JsonValue | null }).semanticState)
     const semanticStateAfterAnswers = this.applySemanticClarificationAnswers(
       currentSemanticState,
       baseClarificationState,
@@ -624,6 +646,173 @@ export class CodegenConversationService {
       clarificationState,
     })
     return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
+  }
+
+  private async handleSemanticEditDecision(args: {
+    session: PersistedConversationSessionForContinue
+    decision: Exclude<SemanticEditDecision, { kind: 'NO_EDIT' }>
+    currentSemanticState: SemanticState
+    message: string
+    userId: string
+    guideConfig?: CodegenGuideConfigDto
+  }): Promise<CodegenSessionResponseDto | null> {
+    if (args.decision.kind === 'REPLACE_STRATEGY_DRAFT' || args.decision.kind === 'REGENERATE_SCRIPT_VERSION') {
+      return null
+    }
+
+    const constraintPack = this.readConstraintPack(args.session.constraintPack)
+
+    if (args.decision.kind === 'REJECT_WHILE_PROCESSING') {
+      const response = this.finalizeSessionResponse({
+        id: args.session.id,
+        status: args.session.status,
+        missingFields: [],
+        assistantPrompt: args.decision.message,
+        clarificationState: this.readClarificationState(args.session.clarificationState),
+      })
+      return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
+    }
+
+    if (args.decision.kind === 'ASK_EDIT_CLARIFICATION') {
+      const nextState = withPendingSemanticEdit(args.currentSemanticState, args.decision.pendingEdit)
+      const semanticArtifacts = this.resolveSemanticClarificationArtifacts(nextState)
+      const historyAfterQuestion = this.appendConversationHistory(
+        constraintPack.conversationHistory ?? [],
+        args.message,
+        args.decision.question,
+      )
+      await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
+        status: 'DRAFTING',
+        semanticState: nextState,
+        clarificationState: semanticArtifacts.clarificationState,
+        constraintPack: {
+          ...constraintPack,
+          conversationHistory: historyAfterQuestion,
+        },
+      }))
+
+      const response = this.finalizeSessionResponse({
+        id: args.session.id,
+        status: 'DRAFTING',
+        missingFields: [],
+        assistantPrompt: args.decision.question,
+        clarificationState: semanticArtifacts.clarificationState,
+      })
+      return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
+    }
+
+    const reducedSemanticState = this.conversationSemanticEdit.applyPatch(
+      args.currentSemanticState,
+      args.decision.patch,
+    )
+    const semanticArtifacts = this.resolveSemanticClarificationArtifacts(reducedSemanticState)
+    const clarificationState = semanticArtifacts.clarificationState
+    const semanticReadyForGenerate = this.findNextOpenSemanticSlot(reducedSemanticState) === null
+    const normalization = semanticArtifacts.normalization
+    const canonicalSpec = this.buildCanonicalSpecForConversation(reducedSemanticState, normalization)
+    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
+      normalizedIntent: normalization.normalizedIntent,
+      executionContext: semanticArtifacts.executionContext.context,
+    })
+    const canonicalDigest = this.readCanonicalDigest(specDesc)
+    const compileability = this.evaluateCanonicalCompileability(canonicalSpec)
+    const canonicalLogicSnapshot = this.buildLegacyLogicSnapshotProjectionForCompatibility(reducedSemanticState, {})
+    const guidePrompt = this.mergeGuidePromptConfig(constraintPack.guidePrompt, args.guideConfig)
+    const recommendationStyle = this.inferRecommendationStyleFromSemanticContext(
+      args.message,
+      reducedSemanticState,
+      constraintPack.recommendationStyle,
+    )
+    const nextConstraintPack = this.withGuidePrompt(constraintPack, guidePrompt, recommendationStyle)
+    const strategyDecision = this.buildStrategyDecision({
+      checklist: canonicalLogicSnapshot,
+      clarification: semanticArtifacts,
+      effectiveBlockingReasons: semanticArtifacts.blockingReasons,
+      compileability,
+      constraintPack: nextConstraintPack,
+    })
+    const decisionPrompt = strategyDecision.kind === 'CONFIRM_INFERRED'
+      ? this.clarificationQuestion.buildFromDecision(strategyDecision)
+      : semanticArtifacts.clarificationPrompt
+    const deterministicAuthority = this.resolveContinueSessionDeterministicAuthority({
+      semanticState: reducedSemanticState,
+      clarificationState,
+      normalization,
+      compileability,
+      decisionKind: strategyDecision.kind,
+      semanticReadyForGenerate,
+    })
+    const baseAssistantPrompt = deterministicAuthority === 'clarification'
+      ? (semanticArtifacts.clarificationPrompt || '请先澄清这条规则，我再继续完善逻辑图。')
+      : deterministicAuthority === 'decision'
+        ? (decisionPrompt || '请先确认当前推断，我再继续整理逻辑图。')
+        : deterministicAuthority === 'normalization'
+          ? this.buildSemanticNormalizationAssistantPrompt(reducedSemanticState, normalization)
+          : deterministicAuthority === 'compileability'
+            ? this.buildCompileabilityAssistantPrompt(compileability)
+            : deterministicAuthority === 'confirm_gate'
+              ? this.buildSemanticLogicGateAssistantPrompt(reducedSemanticState)
+              : `已更新策略语义：${this.buildSemanticClarificationSummary(reducedSemanticState)}`
+    const assistantPrompt = this.withAppliedSemanticEditSummary(args.decision, baseAssistantPrompt)
+    const targetStatus = deterministicAuthority === 'confirm_gate' ? 'CONFIRM_GATE' : 'DRAFTING'
+    const historyAfterSemanticEdit = this.appendConversationHistory(
+      constraintPack.conversationHistory ?? [],
+      args.message,
+      assistantPrompt,
+    )
+    const shouldPersistSpecDesc = deterministicAuthority === 'confirm_gate'
+      || deterministicAuthority === 'normalization'
+      || deterministicAuthority === 'decision'
+
+    await this.sessionsRepo.updateSession(args.session.id, this.stateMachine.buildConversationUpdate({
+      status: targetStatus,
+      semanticState: reducedSemanticState,
+      clarificationState,
+      constraintPack: {
+        ...nextConstraintPack,
+        conversationHistory: historyAfterSemanticEdit,
+      },
+      ...(shouldPersistSpecDesc ? { latestSpecDesc: specDesc } : {}),
+    }))
+
+    const response = this.finalizeSessionResponse({
+      id: args.session.id,
+      status: targetStatus,
+      missingFields: [],
+      ...(deterministicAuthority === 'confirm_gate' || deterministicAuthority === 'decision'
+        ? {
+            specDesc,
+            canonicalDigest,
+          }
+        : {}),
+      ...(deterministicAuthority === 'normalization' ? { specDesc } : {}),
+      assistantPrompt,
+      clarificationState,
+    })
+    return this.returnPersistedSessionResponse(args.session.id, args.userId, response)
+  }
+
+  private withAppliedSemanticEditSummary(
+    decision: Extract<SemanticEditDecision, { kind: 'APPLY_TO_SEMANTIC_STATE' }>,
+    assistantPrompt: string,
+  ): string {
+    const contextFieldLabels: Record<string, string> = {
+      exchange: '交易所',
+      symbol: '交易标的',
+      marketType: '市场类型',
+      timeframe: '主周期',
+    }
+    const summaries = decision.patch.operations
+      .map((operation) => {
+        if (operation.op === 'cancel_pending_edit') return '已取消待确认的语义修改'
+        if (operation.op !== 'replace_context') return null
+
+        return `已更新${contextFieldLabels[operation.field] ?? operation.field}为 ${operation.value}`
+      })
+      .filter((summary): summary is string => summary !== null)
+
+    if (summaries.length === 0) return assistantPrompt
+    return `${summaries.join('；')}。${assistantPrompt}`
   }
 
   private async continueConfirmedSession(
