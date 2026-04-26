@@ -55,4 +55,32 @@ describe('ConversationSemanticEditService', () => {
       message: '当前策略正在生成或校验，请等待完成后再修改。',
     })
   })
+
+  it('applies context replacement without changing triggers', () => {
+    const base = service.createEmptySemanticStateForTest()
+    const state = {
+      ...base,
+      triggers: [{
+        id: 'trigger-1',
+        key: 'indicator.above',
+        phase: 'entry' as const,
+        params: { indicator: 'ma' },
+        status: 'locked' as const,
+        source: 'user_explicit' as const,
+        openSlots: [],
+      }],
+    }
+
+    const next = service.applyPatch(state, {
+      operations: [{ op: 'replace_context', field: 'symbol', value: 'BTCUSDT' }],
+    })
+
+    expect(next.contextSlots.symbol).toEqual(expect.objectContaining({
+      slotKey: 'symbol',
+      fieldPath: 'contextSlots.symbol',
+      value: 'BTCUSDT',
+      status: 'locked',
+    }))
+    expect(next.triggers).toEqual(state.triggers)
+  })
 })

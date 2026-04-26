@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
-import type { SemanticEditDecision, PendingSemanticEdit } from '../types/semantic-edit'
+import type { SemanticEditDecision, PendingSemanticEdit, SemanticEditPatch } from '../types/semantic-edit'
 import type { SemanticState, SemanticTriggerState } from '../types/semantic-state'
 import { isProcessingCodegenSessionStatus } from '../types/codegen-session-status'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
@@ -15,6 +15,15 @@ const PROCESSING_REJECTION_MESSAGE = '当前策略正在生成或校验，请等
 
 @Injectable()
 export class ConversationSemanticEditService {
+  applyPatch(state: SemanticState, patch: SemanticEditPatch): SemanticState {
+    return patch.operations.reduce((next, operation) => {
+      if (operation.op === 'replace_context') {
+        return this.applyContextReplacement(next, operation.field, operation.value)
+      }
+      return next
+    }, state)
+  }
+
   decide(input: ConversationSemanticEditDecisionInput): SemanticEditDecision {
     const message = input.message.trim()
     if (!message) return { kind: 'NO_EDIT' }
@@ -71,6 +80,40 @@ export class ConversationSemanticEditService {
       },
       normalizationNotes: [],
       updatedAt: '1970-01-01T00:00:00.000Z',
+    }
+  }
+
+  private applyContextReplacement(
+    state: SemanticState,
+    field: 'symbol' | 'timeframe' | 'exchange' | 'marketType',
+    value: string,
+  ): SemanticState {
+    const questionHints = {
+      exchange: '请确认交易所（binance / okx / hyperliquid）。',
+      symbol: '请确认策略交易标的（例如 BTCUSDT）。',
+      marketType: '请确认市场类型（现货或合约/perp）。',
+      timeframe: '请确认策略主周期（例如 15m 或 1h）。',
+    } as const
+
+    return {
+      ...state,
+      contextSlots: {
+        ...state.contextSlots,
+        [field]: {
+          slotKey: field,
+          fieldPath: `contextSlots.${field}`,
+          value,
+          status: 'locked',
+          priority: 'context',
+          questionHint: questionHints[field],
+          affectsExecution: true,
+          evidence: {
+            text: value,
+            source: 'user_explicit',
+          },
+        },
+      },
+      updatedAt: new Date().toISOString(),
     }
   }
 
