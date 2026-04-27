@@ -266,7 +266,9 @@ export class ConversationSemanticEditService {
       && pendingEdit.candidate.key === 'pending.strategy_replacement_seed'
   }
 
-  private isPendingRsiTriggerReplacement(pendingEdit: PendingSemanticEdit): boolean {
+  private isPendingRsiTriggerReplacement(
+    pendingEdit: PendingSemanticEdit,
+  ): pendingEdit is Extract<PendingSemanticEdit, { op: 'replace_trigger' }> {
     return pendingEdit.op === 'replace_trigger'
       && pendingEdit.candidate.key === 'indicator.rsi_threshold'
   }
