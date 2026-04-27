@@ -440,14 +440,14 @@ export class SemanticSeedExtractorService {
     if (!/RSI/iu.test(segment)) return
 
     const clauses = this.splitLogicClauses(segment)
-    const segmentPeriod = this.extractNumber(segment, [/RSI\s*(\d{1,3})/iu]) ?? aliasContext.rsi?.period ?? 14
+    const segmentPeriod = this.extractLastRsiPeriod(segment) ?? aliasContext.rsi?.period ?? 14
 
     for (const clause of clauses) {
       if (!/RSI/iu.test(clause)) continue
       const intent = this.resolveTradeIntent(clause) ?? this.resolveTradeIntent(segment)
       if (!intent) continue
 
-      const period = this.extractNumber(clause, [/RSI\s*(\d{1,3})/iu]) ?? segmentPeriod
+      const period = this.extractLastRsiPeriod(clause) ?? segmentPeriod
       const threshold = this.extractRsiThreshold(clause, period)
       if (threshold === null) continue
 

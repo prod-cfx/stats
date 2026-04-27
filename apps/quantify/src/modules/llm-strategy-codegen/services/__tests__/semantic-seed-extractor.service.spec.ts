@@ -1399,6 +1399,49 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('uses the latest RSI period when correction and trigger aliases are in the same segment', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 15m，使用 RSI 14，更正：改为 RSI 9，该 RSI 小于30做多，该 RSI 大于70平多；单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'oscillator.rsi_lte',
+        params: expect.objectContaining({
+          period: 9,
+          value: 30,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'oscillator.rsi_gte',
+        params: expect.objectContaining({
+          period: 9,
+          value: 70,
+        }),
+      }),
+    ]))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'oscillator.rsi_lte',
+        params: expect.objectContaining({
+          period: 14,
+        }),
+      }),
+    ]))
+  })
+
+  it('does not treat executable RSI trigger clauses as alias declarations', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 15m，RSI 9 小于30做多。该 RSI 大于70平多；单笔 10%。')
+
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'oscillator.rsi_gte',
+        params: expect.objectContaining({
+          period: 9,
+          value: 70,
+        }),
+      }),
+    ]))
+  })
+
   it('extracts percent-change and on-start semantics into semantic patches', () => {
     const percentChangePatch = service.extract('BTCUSDT 3m 当前K线收盘价相对上一根K线收盘价下跌 1% 时买入；15m 相对开仓均价上涨 2% 时卖出；5% 止损；10% 仓位。')
     expect(percentChangePatch).toEqual(expect.objectContaining({
