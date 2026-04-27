@@ -6,7 +6,7 @@ import type {
   SemanticEditDecision,
   SemanticEditPatch,
 } from '../types/semantic-edit'
-import type { SemanticPositionState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
+import type { SemanticActionState, SemanticPositionState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
 import { isProcessingCodegenSessionStatus } from '../types/codegen-session-status'
 import { readPendingSemanticEdit, withPendingSemanticEdit } from '../types/semantic-edit'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
@@ -18,6 +18,7 @@ export interface ConversationSemanticEditDecisionInput {
 }
 
 const PROCESSING_REJECTION_MESSAGE = '当前策略正在生成或校验，请等待完成后再修改。'
+type SemanticActionKey = 'open_long' | 'open_short' | 'close_long' | 'close_short'
 
 @Injectable()
 export class ConversationSemanticEditService {
@@ -37,6 +38,9 @@ export class ConversationSemanticEditService {
       }
       if (operation.op === 'replace_indicator_period') {
         return this.applyIndicatorPeriodReplacement(next, operation)
+      }
+      if (operation.op === 'replace_action') {
+        return this.applyActionReplacement(next, operation.text ?? '')
       }
       return next
     }, state)
@@ -134,6 +138,16 @@ export class ConversationSemanticEditService {
         kind: 'APPLY_TO_SEMANTIC_STATE',
         patch: {
           operations: [{ op: 'replace_indicator_period', ...indicatorPeriodReplacement, text: message }],
+        },
+      }
+    }
+
+    const actionReplacement = this.extractActionReplacement(message)
+    if (actionReplacement) {
+      return {
+        kind: 'APPLY_TO_SEMANTIC_STATE',
+        patch: {
+          operations: [{ op: 'replace_action', text: message }],
         },
       }
     }
@@ -352,6 +366,84 @@ export class ConversationSemanticEditService {
     }
   }
 
+  private applyActionReplacement(state: SemanticState, text: string): SemanticState {
+    const replacement = this.extractActionReplacement(text)
+    if (!replacement) return state
+
+    let changed = false
+    const actions = state.actions.map((action) => {
+      if (action.key !== replacement.from) return action
+      changed = true
+      return this.replaceActionState(action, replacement.to, text)
+    })
+
+    const actionKeys = new Set(actions.map(action => action.key))
+    const fromSide = this.actionSide(replacement.from)
+    const toSide = this.actionSide(replacement.to)
+
+    if (fromSide && toSide && fromSide !== toSide) {
+      const pairedFromAction = this.pairedActionForSide(replacement.from, fromSide)
+      const pairedToAction = this.pairedActionForSide(replacement.from, toSide)
+      if (pairedFromAction && pairedToAction && actionKeys.has(pairedFromAction) && !actionKeys.has(pairedToAction)) {
+        changed = true
+        for (let index = 0; index < actions.length; index += 1) {
+          if (actions[index]?.key === pairedFromAction) {
+            actions[index] = this.replaceActionState(actions[index]!, pairedToAction, text)
+          }
+        }
+      }
+    }
+
+    const triggers = fromSide && toSide && fromSide !== toSide
+      ? state.triggers.map((trigger) => {
+          if (trigger.sideScope !== fromSide) return trigger
+          changed = true
+          return {
+            ...trigger,
+            sideScope: toSide,
+            evidence: {
+              text,
+              source: 'user_explicit' as const,
+            },
+          }
+        })
+      : state.triggers
+
+    const position = fromSide && toSide && fromSide !== toSide && state.position
+      ? {
+          ...state.position,
+          positionMode: this.replacePositionModeSide(state.position.positionMode, fromSide, toSide),
+          evidence: {
+            text,
+            source: 'user_explicit' as const,
+          },
+        }
+      : state.position
+
+    if (!changed) return state
+
+    return {
+      ...state,
+      actions,
+      triggers,
+      position,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  private replaceActionState(action: SemanticActionState, key: SemanticActionKey, text: string): SemanticActionState {
+    return {
+      ...action,
+      key,
+      status: 'locked',
+      source: 'user_explicit',
+      evidence: {
+        text,
+        source: 'user_explicit',
+      },
+    }
+  }
+
   private extractReplacementSymbol(message: string): string | null {
     const explicitMatch = /交易标的\s*(?:改为|改成|换成)\s*([A-Za-z0-9:/-]+)/u.exec(message)
     const explicitSymbol = canonicalizeStrategySymbolInput(explicitMatch?.[1])
@@ -425,6 +517,43 @@ export class ConversationSemanticEditService {
     }
   }
 
+  private extractActionReplacement(message: string): { from: SemanticActionKey, to: SemanticActionKey } | null {
+    const match = /(?:把\s*)?([A-Za-z_\s-]+|开多|做多|买入|开空|做空|卖空|平多|平空|平仓)\s*(?:改为|改成|换成|替换为|修改为|更改为)\s*([A-Za-z_\s-]+|开多|做多|买入|开空|做空|卖空|平多|平空|平仓)/iu.exec(message)
+    const from = this.normalizeActionKey(match?.[1])
+    const to = this.normalizeActionKey(match?.[2])
+    if (!from || !to || from === to) return null
+    return { from, to }
+  }
+
+  private normalizeActionKey(value: string | undefined): SemanticActionKey | null {
+    const text = value?.trim().toLowerCase().replace(/[\s-]+/g, '_')
+    if (!text) return null
+    if (/^(开多|做多|买入|买多|open_long|long)$/iu.test(text)) return 'open_long'
+    if (/^(开空|做空|卖空|open_short|short)$/iu.test(text)) return 'open_short'
+    if (/^(平多|卖出|close_long)$/iu.test(text)) return 'close_long'
+    if (/^(平空|close_short)$/iu.test(text)) return 'close_short'
+    return null
+  }
+
+  private actionSide(action: SemanticActionKey): 'long' | 'short' {
+    return action.endsWith('_short') ? 'short' : 'long'
+  }
+
+  private pairedActionForSide(action: SemanticActionKey, side: 'long' | 'short'): SemanticActionKey | null {
+    if (action.startsWith('open_')) return side === 'long' ? 'close_long' : 'close_short'
+    if (action.startsWith('close_')) return side === 'long' ? 'open_long' : 'open_short'
+    return null
+  }
+
+  private replacePositionModeSide(
+    current: string,
+    fromSide: 'long' | 'short',
+    toSide: 'long' | 'short',
+  ): string {
+    if (current === `${fromSide}_only`) return `${toSide}_only`
+    return current
+  }
+
   private extractPendingStrategyReplacementSeed(message: string): string | null {
     if (/^(继续|确认|好的|好|嗯|是|对|可以)$/u.test(message)) return null
     return message
@@ -460,6 +589,7 @@ export class ConversationSemanticEditService {
       this.extractReplacementContextOperation(message)
         || this.extractReplacementPositionPct(message) !== null
         || this.extractIndicatorPeriodReplacement(message) !== null
+        || this.extractActionReplacement(message) !== null
         || this.extractImplicitStrategyReplacementSeed(message, state)
         || this.extractStrategyReplacementSeed(message)
         || this.isStrategyRestartWithoutSeed(message)

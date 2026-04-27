@@ -273,6 +273,109 @@ describe('ConversationSemanticEditService', () => {
   })
 
   it.each([
+    ['把开多改为开空'],
+    ['开多换成开空'],
+    ['open long 改成 open short'],
+  ])('classifies and applies action side replacement wording: %s', (message) => {
+    const semanticState = {
+      ...service.createEmptySemanticStateForTest(),
+      triggers: [
+        {
+          id: 'entry-bollinger-lower',
+          key: 'bollinger.touch_lower',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          params: { period: 20, stdDev: 2 },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+        {
+          id: 'exit-bollinger-middle',
+          key: 'bollinger.touch_middle',
+          phase: 'exit' as const,
+          sideScope: 'long' as const,
+          params: { period: 20, stdDev: 2 },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'action-open-long', key: 'open_long', status: 'locked' as const, source: 'user_explicit' as const },
+        { id: 'action-close-long', key: 'close_long', status: 'locked' as const, source: 'user_explicit' as const },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.35,
+        positionMode: 'long_only',
+        status: 'locked' as const,
+        source: 'user_explicit' as const,
+      },
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          value: 'okx',
+          status: 'locked' as const,
+          priority: 'context' as const,
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+        },
+        symbol: {
+          slotKey: 'symbol',
+          fieldPath: 'contextSlots.symbol',
+          value: 'ETHUSDT',
+          status: 'locked' as const,
+          priority: 'context' as const,
+          questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+          affectsExecution: true,
+        },
+        marketType: {
+          slotKey: 'marketType',
+          fieldPath: 'contextSlots.marketType',
+          value: 'perp',
+          status: 'locked' as const,
+          priority: 'context' as const,
+          questionHint: '请确认市场类型（现货或合约/perp）。',
+          affectsExecution: true,
+        },
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          value: '15m',
+          status: 'locked' as const,
+          priority: 'context' as const,
+          questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+          affectsExecution: true,
+        },
+      },
+    }
+
+    const decision = service.decide({
+      status: 'DRAFTING',
+      message,
+      semanticState,
+    })
+
+    expect(decision).toEqual({
+      kind: 'APPLY_TO_SEMANTIC_STATE',
+      patch: { operations: [{ op: 'replace_action', text: message }] },
+    })
+    if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
+
+    const next = service.applyPatch(semanticState, decision.patch)
+
+    expect(next.contextSlots.exchange?.value).toBe('okx')
+    expect(next.actions.map(action => action.key)).toEqual(['open_short', 'close_short'])
+    expect(next.triggers.map(trigger => trigger.sideScope)).toEqual(['short', 'short'])
+    expect(next.position).toEqual(expect.objectContaining({
+      value: 0.35,
+      positionMode: 'short_only',
+    }))
+  })
+
+  it.each([
     ['把MA6换成MA10'],
     ['MA6改成MA10'],
     ['把6周期均线换成10周期均线'],
