@@ -276,6 +276,7 @@ describe('ConversationSemanticEditService', () => {
     ['把开多改为开空'],
     ['开多换成开空'],
     ['open long 改成 open short'],
+    ['入场：触及布林带 30 周期 0.9 倍标准差下轨时做多开仓，改为做空开仓'],
   ])('classifies and applies action side replacement wording: %s', (message) => {
     const semanticState = {
       ...service.createEmptySemanticStateForTest(),
@@ -285,7 +286,7 @@ describe('ConversationSemanticEditService', () => {
           key: 'bollinger.touch_lower',
           phase: 'entry' as const,
           sideScope: 'long' as const,
-          params: { period: 20, stdDev: 2 },
+          params: { period: 30, stdDev: 0.9 },
           status: 'locked' as const,
           source: 'user_explicit' as const,
           openSlots: [],
@@ -295,7 +296,7 @@ describe('ConversationSemanticEditService', () => {
           key: 'bollinger.touch_middle',
           phase: 'exit' as const,
           sideScope: 'long' as const,
-          params: { period: 20, stdDev: 2 },
+          params: { period: 30, stdDev: 0.9 },
           status: 'locked' as const,
           source: 'user_explicit' as const,
           openSlots: [],
@@ -312,6 +313,24 @@ describe('ConversationSemanticEditService', () => {
         status: 'locked' as const,
         source: 'user_explicit' as const,
       },
+      risk: [
+        {
+          id: 'risk-stop-loss',
+          key: 'risk.stop_loss_pct',
+          params: { valuePct: 0.03, basis: 'entry_avg_price' },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+        {
+          id: 'risk-take-profit',
+          key: 'risk.take_profit_pct',
+          params: { valuePct: 0.005, basis: 'entry_avg_price' },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+      ],
       contextSlots: {
         exchange: {
           slotKey: 'exchange',
@@ -369,6 +388,11 @@ describe('ConversationSemanticEditService', () => {
     expect(next.contextSlots.exchange?.value).toBe('okx')
     expect(next.actions.map(action => action.key)).toEqual(['open_short', 'close_short'])
     expect(next.triggers.map(trigger => trigger.sideScope)).toEqual(['short', 'short'])
+    expect(next.triggers.map(trigger => trigger.params)).toEqual([
+      { period: 30, stdDev: 0.9 },
+      { period: 30, stdDev: 0.9 },
+    ])
+    expect(next.risk).toEqual(semanticState.risk)
     expect(next.position).toEqual(expect.objectContaining({
       value: 0.35,
       positionMode: 'short_only',

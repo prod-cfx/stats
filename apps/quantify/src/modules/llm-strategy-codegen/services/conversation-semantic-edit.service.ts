@@ -518,6 +518,13 @@ export class ConversationSemanticEditService {
   }
 
   private extractActionReplacement(message: string): { from: SemanticActionKey, to: SemanticActionKey } | null {
+    const phraseMatch = /(.+?)\s*(?:改为|改成|换成|替换为|修改为|更改为)\s*(.+)/iu.exec(message)
+    const phraseFrom = this.normalizeActionKey(phraseMatch?.[1])
+    const phraseTo = this.normalizeActionKey(phraseMatch?.[2])
+    if (phraseFrom && phraseTo && phraseFrom !== phraseTo) {
+      return { from: phraseFrom, to: phraseTo }
+    }
+
     const match = /(?:把\s*)?([A-Za-z_\s-]+|开多|做多|买入|开空|做空|卖空|平多|平空|平仓)\s*(?:改为|改成|换成|替换为|修改为|更改为)\s*([A-Za-z_\s-]+|开多|做多|买入|开空|做空|卖空|平多|平空|平仓)/iu.exec(message)
     const from = this.normalizeActionKey(match?.[1])
     const to = this.normalizeActionKey(match?.[2])
@@ -528,6 +535,10 @@ export class ConversationSemanticEditService {
   private normalizeActionKey(value: string | undefined): SemanticActionKey | null {
     const text = value?.trim().toLowerCase().replace(/[\s-]+/g, '_')
     if (!text) return null
+    if (/close_?long|平多|卖出/u.test(text)) return 'close_long'
+    if (/close_?short|平空/u.test(text)) return 'close_short'
+    if (/open_?long|(?:^|_)long$|开多|做多|买入|买多/u.test(text)) return 'open_long'
+    if (/open_?short|(?:^|_)short$|开空|做空|卖空/u.test(text)) return 'open_short'
     if (/^(开多|做多|买入|买多|open_long|long)$/iu.test(text)) return 'open_long'
     if (/^(开空|做空|卖空|open_short|short)$/iu.test(text)) return 'open_short'
     if (/^(平多|卖出|close_long)$/iu.test(text)) return 'close_long'
