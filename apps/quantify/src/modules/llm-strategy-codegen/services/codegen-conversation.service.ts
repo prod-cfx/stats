@@ -444,9 +444,9 @@ export class CodegenConversationService {
     _userId: string,
     _input: RecoverAiQuantEditConversationRequestDto,
   ): Promise<AiQuantConversationResponseDto> {
-    throw new DomainException('ai_quant.edit_context_recovery_not_implemented', {
-      code: ErrorCode.INTERNAL_SERVER_ERROR,
-      status: HttpStatus.NOT_IMPLEMENTED,
+    throw new DomainException('ai_quant.edit_context_recovery_unavailable', {
+      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+      status: HttpStatus.SERVICE_UNAVAILABLE,
     })
   }
 
