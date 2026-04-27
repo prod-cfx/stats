@@ -62,6 +62,7 @@ function buildStrategy(overrides: Partial<AiQuantStrategyRecord> = {}): AiQuantS
       totalUnrealizedPnl: 0,
     },
     latestOrders: [],
+    openOrdersCount: 0,
     updatedAt: '2026-04-25T00:00:00.000Z',
     ...overrides,
   }
@@ -128,6 +129,7 @@ function buildActionDetail(overrides: Partial<AccountAiQuantStrategyDetail> = {}
       totalUnrealizedPnl: 0,
     },
     latestOrders: [],
+    openOrdersCount: 0,
     runtimeSemanticSummary: null,
     ...overrides,
   }
@@ -886,7 +888,7 @@ describe('AiQuantStrategyDetail', () => {
     expect(container.textContent).not.toContain('停止策略')
   })
 
-  it('shows liquidate_and_stop when recent orders indicate runtime risk without open positions', async () => {
+  it('shows liquidate_and_stop when current open orders indicate runtime risk without open positions', async () => {
     await act(async () => {
       root.render(
         <AiQuantStrategyDetail
@@ -910,12 +912,13 @@ describe('AiQuantStrategyDetail', () => {
               feeCurrency: 'USDT',
               orderId: 'order-1',
             }],
+            openOrdersCount: 1,
           })}
         />,
       )
     })
 
     expect(container.textContent).toContain('平仓并停止')
-    expect(container.textContent).toContain('最近订单记录 1 条')
+    expect(container.textContent).toContain('当前未成交挂单 1 条')
   })
 })

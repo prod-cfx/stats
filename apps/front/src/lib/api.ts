@@ -396,6 +396,7 @@ export interface AccountAiQuantStrategyDetail extends AccountAiQuantStrategyList
     feeCurrency: string | null
     orderId: string | null
   }>
+  openOrdersCount?: number | null
   runtimeSemanticSummary?: AccountAiQuantRuntimeSemanticSummary | null
 }
 

@@ -10,7 +10,7 @@ import type { AccountStrategyListQueryDto } from '../dto/account-strategy-list-q
 import type { AccountStrategyUpdateExecutionLeverageDto } from '../dto/account-strategy-update-execution-leverage.dto'
 import type { StrategyInstanceStatsDto } from '@/modules/strategy-instances/dto/strategy-instance-stats.dto'
 import type { StrategySignalsRuntimeConfig } from '@/modules/strategy-signals/types/strategy-signals-config.type'
-import type { ExchangeId, MarketType, UnifiedBalance } from '@/modules/trading/core/types'
+import type { ExchangeId, MarketType, UnifiedBalance, UnifiedOrder } from '@/modules/trading/core/types'
 import { createHash } from 'node:crypto'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common'
@@ -74,6 +74,7 @@ interface StrategyAccountFallback {
 }
 
 type StrategyRow = NonNullable<Awaited<ReturnType<AccountStrategyViewRepository['findStrategyForUser']>>>
+type StrategyOpenOrder = UnifiedOrder & { exchangeId: ExchangeId; marketType: MarketType }
 
 @Injectable()
 export class AccountStrategyViewService {
@@ -406,6 +407,15 @@ export class AccountStrategyViewService {
       totalUnrealizedPnl: account ? resolvedUnrealizedPnl : null,
     }
     const latestOrders = buildAccountStrategyLatestOrders(timelineSource.trades, timelineSource.signalExecutions)
+    const currentOpenOrders = await this.loadCurrentOpenOrdersForStrategy({
+      userId,
+      row,
+      sub,
+      strict: false,
+    })
+    const openOrdersCount = currentOpenOrders
+      ? currentOpenOrders.filter(order => this.isOpenExchangeOrder(order)).length
+      : null
     const runtimeSemanticMarketType = snapshotMarketType ?? marketType
     const runtimeSemanticSymbol = snapshotStrategyConfig
       ? this.readString(snapshotStrategyConfig, ['symbol']) ?? symbol
@@ -502,6 +512,7 @@ export class AccountStrategyViewService {
       },
       positionOverview: detailPositionOverview,
       latestOrders,
+      openOrdersCount,
       runtimeExecutionStates,
       runtimeSemanticSummary,
       deployment: !resolvedSnapshot.publishedSnapshotId
@@ -967,55 +978,102 @@ export class AccountStrategyViewService {
     row: StrategyRow,
     exchangeAccountId?: string,
   ): Promise<void> {
+    const sub = row.subscriptions?.[0]
+    const openOrders = await this.loadCurrentOpenOrdersForStrategy({
+      userId,
+      row,
+      sub,
+      exchangeAccountId,
+      strict: true,
+    }) ?? []
+
+    for (const order of openOrders) {
+      if (!this.isOpenExchangeOrder(order)) {
+        continue
+      }
+      await this.tradingService.cancelOrder(
+        userId,
+        order.exchangeId,
+        order.marketType,
+        order.id,
+        order.symbol,
+        exchangeAccountId,
+      )
+    }
+  }
+
+  private async loadCurrentOpenOrdersForStrategy(input: {
+    userId: string
+    row: StrategyRow
+    sub?: StrategyRow['subscriptions'][number] | null
+    exchangeAccountId?: string
+    strict: boolean
+  }): Promise<StrategyOpenOrder[] | null> {
+    const { userId, row, sub, exchangeAccountId, strict } = input
     if (!this.tradingService) {
-      throw new DomainException('account_strategy.trading_service_unavailable', {
-        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
-        status: HttpStatus.SERVICE_UNAVAILABLE,
-      })
+      if (strict) {
+        throw new DomainException('account_strategy.trading_service_unavailable', {
+          code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+          status: HttpStatus.SERVICE_UNAVAILABLE,
+        })
+      }
+      return null
     }
 
     const mergedParams = {
       ...(this.readRecord(row.strategyTemplate?.defaultParams) ?? {}),
       ...(this.readRecord((row as Record<string, unknown>).params) ?? {}),
-      ...(this.readRecord(row.subscriptions?.[0]?.customParams) ?? {}),
+      ...(this.readRecord(sub?.customParams) ?? {}),
     }
     const exchangeId = this.resolveExchangeId(
       this.readString(mergedParams, ['exchange', 'provider', 'exchangeId'])
-      ?? row.subscriptions?.[0]?.exchangeAccount?.exchangeId
+      ?? sub?.exchangeAccount?.exchangeId
       ?? null,
     )
     const symbol = this.readString(mergedParams, ['symbol'])
-
     if (!exchangeId || !symbol) {
-      throw new DomainException('account_strategy.liquidation_order_context_missing', {
-        code: ErrorCode.BAD_REQUEST,
-        status: HttpStatus.BAD_REQUEST,
-      })
+      if (strict) {
+        throw new DomainException('account_strategy.liquidation_order_context_missing', {
+          code: ErrorCode.BAD_REQUEST,
+          status: HttpStatus.BAD_REQUEST,
+        })
+      }
+      return null
     }
 
     const marketType = this.resolveMarketType(mergedParams, symbol, exchangeId)
     const executionSymbol = normalizeExecutionSymbol(symbol, marketType, exchangeId)
-    const openOrders = await this.tradingService.getOpenOrders(
-      userId,
-      exchangeId,
-      marketType,
-      executionSymbol,
-      exchangeAccountId,
-    )
+    const resolvedExchangeAccountId = exchangeAccountId ?? sub?.exchangeAccount?.id ?? undefined
 
-    for (const order of openOrders) {
-      if (order.status !== 'open' && order.status !== 'partially_filled') {
-        continue
-      }
-      await this.tradingService.cancelOrder(
+    try {
+      return (await this.tradingService.getOpenOrders(
         userId,
         exchangeId,
         marketType,
-        order.id,
-        order.symbol || executionSymbol,
-        exchangeAccountId,
-      )
+        executionSymbol,
+        resolvedExchangeAccountId,
+      )).map(order => ({
+        ...order,
+        exchangeId,
+        marketType,
+        symbol: order.symbol || executionSymbol,
+      }))
     }
+    catch (error) {
+      if (strict) {
+        throw error
+      }
+      this.logger.warn(
+        `Failed to load current open orders for strategy ${row.id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return null
+    }
+  }
+
+  private isOpenExchangeOrder(order: Pick<UnifiedOrder, 'status'>): boolean {
+    return order.status === 'open' || order.status === 'partially_filled'
   }
 
   async deployStrategy(dto: AccountStrategyDeployDto): Promise<AccountStrategyDetailResponseDto> {

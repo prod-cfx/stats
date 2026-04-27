@@ -371,8 +371,9 @@ export function AiQuantStrategyDetail({
   const exitOrderEvidence = semanticSummary?.evidence.exitOrders
   const syncOrderEvidence = semanticSummary?.evidence.syncOrders
   const openPositionsCount = strategy.positionOverview?.openPositionsCount ?? 0
-  const latestOrderCount = strategy.latestOrders?.length ?? 0
-  const hasRuntimeRisk = openPositionsCount > 0 || latestOrderCount > 0
+  const openOrdersCount = strategy.openOrdersCount
+  const hasUnknownOpenOrders = openOrdersCount == null
+  const hasRuntimeRisk = openPositionsCount > 0 || hasUnknownOpenOrders || openOrdersCount > 0
   const showLiquidateAndStop = strategy.status === 'running' && hasRuntimeRisk
   const runtimeActionDisabled = !session?.userId || pendingRuntimeAction !== null
 
@@ -455,13 +456,13 @@ export function AiQuantStrategyDetail({
               <p className="mt-2 text-sm leading-6 text-[color:var(--cf-text)]">
                 {strategy.status === 'running'
                   ? (showLiquidateAndStop
-                      ? '策略当前正在运行且账户中存在持仓或最近订单记录。你可以只停止策略，或先撤销未成交挂单并平仓后再停止。'
+                      ? '策略当前正在运行且账户中存在持仓、未成交挂单，或暂时无法确认挂单状态。你可以只停止策略，或先撤销未成交挂单并平仓后再停止。'
                       : '策略当前正在运行。停止策略只会停止运行实例，现有持仓和挂单仍然保留。')
                   : '策略当前已停止。可返回 AI Quant 重新部署当前已发布版本。'}
               </p>
               {showLiquidateAndStop && (
                 <p className="mt-2 text-xs text-[color:var(--cf-muted)]">
-                  检测到 {openPositionsCount} 个 open positions，最近订单记录 {latestOrderCount} 条；平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理持仓。
+                  检测到 {openPositionsCount} 个 open positions，当前未成交挂单 {hasUnknownOpenOrders ? '待确认' : openOrdersCount} 条；平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理持仓。
                 </p>
               )}
             </div>

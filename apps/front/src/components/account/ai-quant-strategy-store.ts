@@ -161,6 +161,7 @@ export interface AiQuantStrategyRecord {
     feeCurrency: string | null
     orderId: string | null
   }>
+  openOrdersCount?: number | null
   runtimeSemanticSummary?: AiQuantRuntimeSemanticSummary
   deploy?: {
     exchange: 'binance' | 'okx' | 'hyperliquid'

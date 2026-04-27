@@ -8,7 +8,7 @@ interface StopRunningStrategy {
     openPositionsCount?: number | null
     totalUnrealizedPnl?: number | null
   } | null
-  latestOrders?: unknown[] | null
+  openOrdersCount?: number | null
 }
 
 interface StopRunningStrategyDialogProps {
@@ -38,8 +38,9 @@ export function StopRunningStrategyDialog({
   if (!open) return null
 
   const openPositionsCount = strategy?.positionOverview?.openPositionsCount ?? 0
-  const latestOrderCount = strategy?.latestOrders?.length ?? 0
-  const requiresRiskChoice = openPositionsCount > 0 || latestOrderCount > 0
+  const openOrdersCount = strategy?.openOrdersCount
+  const hasUnknownOpenOrders = openOrdersCount == null
+  const requiresRiskChoice = openPositionsCount > 0 || hasUnknownOpenOrders || openOrdersCount > 0
   const title = requiresRiskChoice ? '当前策略仍有持仓或挂单' : '确认停止策略？'
 
   return (
@@ -77,14 +78,16 @@ export function StopRunningStrategyDialog({
             </span>
           </div>
           <div className="flex justify-between gap-3">
-            <span className="text-[color:var(--cf-muted)]">最近订单记录</span>
-            <span className="text-right text-[color:var(--cf-text-strong)]">{latestOrderCount}</span>
+            <span className="text-[color:var(--cf-muted)]">当前未成交挂单</span>
+            <span className="text-right text-[color:var(--cf-text-strong)]">
+              {hasUnknownOpenOrders ? '待确认' : openOrdersCount}
+            </span>
           </div>
         </div>
 
         {requiresRiskChoice && (
           <p className="mt-3 text-xs leading-5 text-[color:var(--cf-muted)]">
-            平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理持仓；最近订单记录仅用于风险提示。
+            平仓并停止会先尝试撤销当前策略交易对的交易所未成交挂单，再处理持仓。
           </p>
         )}
 

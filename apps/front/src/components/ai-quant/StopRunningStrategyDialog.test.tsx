@@ -39,7 +39,7 @@ describe('StopRunningStrategyDialog', () => {
               openPositionsCount: 0,
               totalUnrealizedPnl: 0,
             },
-            latestOrders: [],
+            openOrdersCount: 0,
           }}
           onStopOnly={onStopOnly}
           onLiquidateAndStop={onLiquidateAndStop}
@@ -78,7 +78,7 @@ describe('StopRunningStrategyDialog', () => {
               openPositionsCount: 2,
               totalUnrealizedPnl: 12.5,
             },
-            latestOrders: [{ id: 'order-1' }],
+            openOrdersCount: 1,
           }}
           onStopOnly={onStopOnly}
           onLiquidateAndStop={onLiquidateAndStop}
@@ -90,7 +90,7 @@ describe('StopRunningStrategyDialog', () => {
     expect(container.textContent).toContain('当前策略仍有持仓或挂单')
     expect(container.textContent).toContain('仅停止，保留持仓/挂单')
     expect(container.textContent).toContain('平仓并停止')
-    expect(container.textContent).toContain('最近订单记录')
+    expect(container.textContent).toContain('当前未成交挂单')
 
     await act(async () => {
       container.querySelector('[data-testid="liquidate-and-stop-strategy"]')?.dispatchEvent(
@@ -116,7 +116,7 @@ describe('StopRunningStrategyDialog', () => {
               openPositionsCount: 1,
               totalUnrealizedPnl: null,
             },
-            latestOrders: [],
+            openOrdersCount: 0,
           }}
           onStopOnly={() => undefined}
           onLiquidateAndStop={() => undefined}
