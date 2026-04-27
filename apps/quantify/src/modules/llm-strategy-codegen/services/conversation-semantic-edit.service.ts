@@ -35,6 +35,9 @@ export class ConversationSemanticEditService {
       if (operation.op === 'replace_position') {
         return this.applyPositionReplacement(next, operation.text ?? '')
       }
+      if (operation.op === 'replace_indicator_period') {
+        return this.applyIndicatorPeriodReplacement(next, operation)
+      }
       return next
     }, state)
   }
@@ -113,6 +116,16 @@ export class ConversationSemanticEditService {
         kind: 'APPLY_TO_SEMANTIC_STATE',
         patch: {
           operations: [{ op: 'replace_position', text: message }],
+        },
+      }
+    }
+
+    const indicatorPeriodReplacement = this.extractIndicatorPeriodReplacement(message)
+    if (indicatorPeriodReplacement) {
+      return {
+        kind: 'APPLY_TO_SEMANTIC_STATE',
+        patch: {
+          operations: [{ op: 'replace_indicator_period', ...indicatorPeriodReplacement, text: message }],
         },
       }
     }
@@ -280,6 +293,57 @@ export class ConversationSemanticEditService {
     }
   }
 
+  private applyIndicatorPeriodReplacement(
+    state: SemanticState,
+    operation: { indicator?: string, from: number, to: number, text?: string },
+  ): SemanticState {
+    const targetIndicator = operation.indicator?.trim().toLowerCase()
+    let changed = false
+    const periodKeys = ['fastPeriod', 'slowPeriod', 'period', 'reference.period'] as const
+    const triggers = state.triggers.map((trigger) => {
+      const triggerIndicator = typeof trigger.params.indicator === 'string'
+        ? trigger.params.indicator.trim().toLowerCase()
+        : ''
+      if (
+        targetIndicator
+        && triggerIndicator
+        && triggerIndicator !== targetIndicator
+        && !(targetIndicator === 'ma' && triggerIndicator === 'sma')
+        && !(targetIndicator === 'sma' && triggerIndicator === 'ma')
+      ) {
+        return trigger
+      }
+
+      const nextParams = { ...trigger.params }
+      let triggerChanged = false
+      for (const key of periodKeys) {
+        if (nextParams[key] === operation.from) {
+          nextParams[key] = operation.to
+          triggerChanged = true
+        }
+      }
+      if (!triggerChanged) return trigger
+
+      changed = true
+      return {
+        ...trigger,
+        params: nextParams,
+        evidence: {
+          text: operation.text ?? `${operation.from}->${operation.to}`,
+          source: 'user_explicit' as const,
+        },
+      }
+    })
+
+    if (!changed) return state
+
+    return {
+      ...state,
+      triggers,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
   private extractReplacementSymbol(message: string): string | null {
     const match = /交易标的\s*(?:改为|改成|换成)\s*([A-Za-z0-9:/-]+)/u.exec(message)
     return canonicalizeStrategySymbolInput(match?.[1])
@@ -319,6 +383,31 @@ export class ConversationSemanticEditService {
     return valuePct / 100
   }
 
+  private extractIndicatorPeriodReplacement(message: string): {
+    indicator?: string
+    from: number
+    to: number
+  } | null {
+    const match = /(?:把\s*)?(ma|sma|ema)\s*(\d{1,4})\s*(?:换成|改成|改为|修改为|更改为|替换为)\s*(?:(ma|sma|ema)\s*)?(\d{1,4})/iu.exec(message)
+      ?? /(?:把\s*)?(\d{1,4})\s*(?:周期)?\s*(?:均线|ma|sma|ema)\s*(?:换成|改成|改为|修改为|更改为|替换为)\s*(\d{1,4})\s*(?:周期)?\s*(?:均线|ma|sma|ema)/iu.exec(message)
+    if (!match) return null
+
+    const indicator = typeof match[1] === 'string' && /ma|sma|ema/iu.test(match[1])
+      ? match[1].toLowerCase()
+      : undefined
+    const from = Number(indicator ? match[2] : match[1])
+    const to = Number(indicator ? match[4] : match[2])
+    if (!Number.isInteger(from) || !Number.isInteger(to) || from <= 0 || to <= 0 || from === to) {
+      return null
+    }
+
+    return {
+      ...(indicator ? { indicator } : {}),
+      from,
+      to,
+    }
+  }
+
   private extractPendingStrategyReplacementSeed(message: string): string | null {
     if (/^(继续|确认|好的|好|嗯|是|对|可以)$/u.test(message)) return null
     return message
@@ -353,6 +442,7 @@ export class ConversationSemanticEditService {
     return Boolean(
       this.extractReplacementContextOperation(message)
         || this.extractReplacementPositionPct(message) !== null
+        || this.extractIndicatorPeriodReplacement(message) !== null
         || this.extractStrategyReplacementSeed(message)
         || this.isStrategyRestartWithoutSeed(message)
         || (readPendingSemanticEdit(state) && /算了|保持原来|不改了|取消/u.test(message))

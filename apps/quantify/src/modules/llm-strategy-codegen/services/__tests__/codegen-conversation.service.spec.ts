@@ -8032,6 +8032,85 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('仓位：35%')
   })
 
+  it('applies natural-language moving-average period edits to returned specDesc before planner fallback', async () => {
+    const currentSemanticState = buildLockedMaSemanticState({
+      triggers: [
+        {
+          id: 'entry-ma-cross',
+          key: 'indicator.cross_over',
+          phase: 'entry',
+          params: { indicator: 'ma', fastPeriod: 6, slowPeriod: 48 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+        {
+          id: 'exit-ma-cross',
+          key: 'indicator.cross_under',
+          phase: 'exit',
+          params: { indicator: 'ma', fastPeriod: 6, slowPeriod: 48 },
+          status: 'locked',
+          source: 'user_explicit',
+          openSlots: [],
+        },
+      ],
+      position: {
+        ...buildLockedMaSemanticState().position,
+        value: 0.35,
+      },
+    })
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-semantic-ma-period-edit',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState: currentSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-semantic-ma-period-edit', {
+      userId: 'u1',
+      message: '把MA6换成MA10',
+    })
+
+    expect(mockAi.chat).not.toHaveBeenCalled()
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.semanticState.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'entry-ma-cross',
+        params: expect.objectContaining({ fastPeriod: 10, slowPeriod: 48 }),
+      }),
+      expect.objectContaining({
+        id: 'exit-ma-cross',
+        params: expect.objectContaining({ fastPeriod: 10, slowPeriod: 48 }),
+      }),
+    ]))
+    expect(result.assistantPrompt).toContain('MA10 上穿 MA48')
+    expect(result.assistantPrompt).not.toContain('MA6 上穿 MA48')
+    expect(result.specDesc?.rules).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        condition: expect.objectContaining({
+          key: 'ma.golden_cross',
+          params: expect.objectContaining({ fastPeriod: 10, slowPeriod: 48 }),
+        }),
+      }),
+      expect.objectContaining({
+        condition: expect.objectContaining({
+          key: 'ma.death_cross',
+          params: expect.objectContaining({ fastPeriod: 10, slowPeriod: 48 }),
+        }),
+      }),
+    ]))
+  })
+
   it('edits published session semantic state without overwriting the published snapshot', async () => {
     const currentSemanticState = buildLockedMaSemanticState({
       contextSlots: {

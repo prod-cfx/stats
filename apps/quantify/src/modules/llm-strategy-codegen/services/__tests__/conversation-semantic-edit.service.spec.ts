@@ -214,6 +214,67 @@ describe('ConversationSemanticEditService', () => {
     }))
   })
 
+  it.each([
+    ['把MA6换成MA10'],
+    ['MA6改成MA10'],
+    ['把6周期均线换成10周期均线'],
+  ])('classifies and applies moving-average period replacement wording: %s', (message) => {
+    const semanticState = {
+      ...service.createEmptySemanticStateForTest(),
+      triggers: [
+        {
+          id: 'entry-ma-cross',
+          key: 'indicator.cross_over',
+          phase: 'entry' as const,
+          params: { indicator: 'ma', fastPeriod: 6, slowPeriod: 48 },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+        {
+          id: 'exit-ma-cross',
+          key: 'indicator.cross_under',
+          phase: 'exit' as const,
+          params: { indicator: 'ma', fastPeriod: 6, slowPeriod: 48 },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+      ],
+    }
+
+    const decision = service.decide({
+      status: 'DRAFTING',
+      message,
+      semanticState,
+    })
+
+    expect(decision).toEqual({
+      kind: 'APPLY_TO_SEMANTIC_STATE',
+      patch: {
+        operations: [expect.objectContaining({
+          op: 'replace_indicator_period',
+          from: 6,
+          to: 10,
+        })],
+      },
+    })
+    if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
+
+    const next = service.applyPatch(semanticState, decision.patch)
+
+    expect(next.triggers).toEqual([
+      expect.objectContaining({
+        id: 'entry-ma-cross',
+        params: expect.objectContaining({ fastPeriod: 10, slowPeriod: 48 }),
+      }),
+      expect.objectContaining({
+        id: 'exit-ma-cross',
+        params: expect.objectContaining({ fastPeriod: 10, slowPeriod: 48 }),
+      }),
+    ])
+  })
+
   it('creates pending edit when trigger replacement text is incomplete', () => {
     const decision = service.decide({
       status: 'CONFIRM_GATE',
