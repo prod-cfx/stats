@@ -683,7 +683,7 @@ export class CodegenConversationService {
       const plan = await this.planConversationByLlm(args.decision.seedText, seedSemanticState, {
         providerCode: this.resolveProviderCode(args.providerCode),
         model: args.model,
-      }, constraintPack.conversationHistory ?? [])
+      }, [])
       const plannedSemanticState = this.applyConversationPlanToSemanticState({
         currentState: seedSemanticState,
         plan,
@@ -742,7 +742,7 @@ export class CodegenConversationService {
                 : (plan.assistantPrompt || '我已按你的新描述重新创建策略草稿，请继续补充缺失语义。')
       const targetStatus = deterministicAuthority === 'confirm_gate' ? 'CONFIRM_GATE' : 'DRAFTING'
       const historyAfterReplacement = this.appendConversationHistory(
-        constraintPack.conversationHistory ?? [],
+        [],
         args.message,
         assistantPrompt,
       )

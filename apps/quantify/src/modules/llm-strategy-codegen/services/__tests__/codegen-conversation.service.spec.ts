@@ -8097,7 +8097,12 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       status: 'CONFIRM_GATE',
       semanticState: currentSemanticState,
       clarificationState: { status: 'CLEAR', items: [] },
-      constraintPack: {},
+      constraintPack: {
+        conversationHistory: [
+          'U: 帮我做一个均线策略',
+          'A: 先确认入场条件：例如 5/20 金叉。',
+        ],
+      },
       latestDraftCode: 'const oldMaStrategy = {}',
       latestSpecDesc: {
         canonicalSpec: {
@@ -8125,9 +8130,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const plannerPayload = JSON.parse(mockAi.chat.mock.calls[0][0].messages[1].content)
     expect(plannerPayload.message).toBe('重新做一个 RSI 策略')
     expect(plannerPayload.currentSemanticState.triggers).toEqual([])
+    expect(JSON.stringify(mockAi.chat.mock.calls[0][0])).not.toContain('均线策略')
 
     const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
     const replacementState = updatePayload.semanticState
+    expect(updatePayload.constraintPack.conversationHistory).toHaveLength(2)
+    expect(updatePayload.constraintPack.conversationHistory[0]).toBe('U: 之前策略不对，重新做一个 RSI 策略')
+    expect(JSON.stringify(updatePayload.constraintPack.conversationHistory)).not.toContain('均线策略')
     expect(replacementState.previousVersions).toHaveLength(1)
     expect(replacementState.previousVersions[0]).toEqual(expect.objectContaining({
       reason: 'strategy_replacement',
