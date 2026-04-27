@@ -26,7 +26,11 @@ import { MarketDataIngestionService } from '@/modules/market-data/services/marke
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { PositionsService } from '@/modules/positions/positions.service'
-import { resolveStrategyFundingFromExchangeBalance } from '@/modules/trading/core/strategy-buying-power.resolver'
+import {
+  resolveStrategyFundingFromExchangeBalance,
+  resolveStrategyFundingFromStrategyAccount,
+  type StrategyFundingSnapshot,
+} from '@/modules/trading/core/strategy-buying-power.resolver'
 import { normalizeExecutionSymbol } from '@/modules/trading/core/symbol-normalizer'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { StrategyInstanceStatsService } from '@/modules/strategy-instances/services/strategy-instance-stats.service'
@@ -284,6 +288,27 @@ export class AccountStrategyViewService {
     const overviewBaseCurrency = shouldUseExchangeBalance
       ? exchangeBalance.asset
       : (account ? this.readAccountBaseCurrency(account) : exchangeBalance?.asset ?? null)
+    const paramsFundingSnapshot = this.readFundingSnapshot((row as Record<string, unknown>).params)
+    const localFundingSnapshot = account
+      ? resolveStrategyFundingFromStrategyAccount({
+          account: {
+            baseCurrency: this.readAccountBaseCurrency(account),
+            balance: overviewAvailableBalance,
+            equity: overviewTotalEquity,
+            initialBalance: account.initialBalance,
+          },
+          mode: (row as Record<string, unknown>).mode === 'LIVE' ? 'LIVE' : 'TESTNET',
+          reservedQuote: 0,
+        })
+      : null
+    const overviewFundingSnapshot = shouldUseExchangeBalance && exchangeBalance
+      ? resolveStrategyFundingFromExchangeBalance({
+          balance: exchangeBalance,
+          marketType,
+          mode: (row as Record<string, unknown>).mode === 'LIVE' ? 'LIVE' : 'TESTNET',
+          reservedQuote: 0,
+        })
+      : paramsFundingSnapshot ?? localFundingSnapshot
     const totalPnl = account
       ? (resolvedRealizedPnl ?? 0) + (resolvedUnrealizedPnl ?? 0)
       : this.readStatsNumber(stats, 'totalPnl')
@@ -506,11 +531,13 @@ export class AccountStrategyViewService {
       timeline: buildAccountStrategyMixedTimeline(timelineSource),
       accountOverview: {
         initialBalance: overviewInitialBalance,
-        totalEquity: overviewTotalEquity,
-        availableBalance: overviewAvailableBalance,
+        totalEquity: overviewFundingSnapshot?.totalEquity ?? overviewTotalEquity,
+        availableBalance: overviewFundingSnapshot?.buyingPower ?? overviewAvailableBalance,
+        executionCapital: overviewFundingSnapshot?.executionCapital ?? null,
+        nonTradableReason: overviewFundingSnapshot?.nonTradableReason ?? null,
         totalPnl: totalPnl ?? null,
         todayPnl: todayPnl ?? null,
-        baseCurrency: overviewBaseCurrency,
+        baseCurrency: overviewFundingSnapshot?.asset ?? overviewBaseCurrency,
       },
       positionOverview: detailPositionOverview,
       latestOrders,
@@ -1585,6 +1612,34 @@ export class AccountStrategyViewService {
     if (fallbackValue == null) return statsValue
     if (statsValue === 0 && fallbackValue !== 0) return fallbackValue
     return statsValue
+  }
+
+  private readFundingSnapshot(params: unknown): StrategyFundingSnapshot | null {
+    const record = this.readRecord(params)
+    const snapshot = this.readRecord(record?.fundingSnapshot)
+    if (!snapshot) return null
+    const totalEquity = this.toFiniteNumber(snapshot.totalEquity)
+    const buyingPower = this.toFiniteNumber(snapshot.buyingPower)
+    const executionCapital = this.toFiniteNumber(snapshot.executionCapital)
+    if (totalEquity === null || buyingPower === null || executionCapital === null) return null
+    return {
+      asset: this.readString(snapshot, ['asset']) ?? 'USDT',
+      totalEquity,
+      availableCash: this.toFiniteNumber(snapshot.availableCash),
+      availableEquity: this.toFiniteNumber(snapshot.availableEquity),
+      reservedQuote: this.toFiniteNumber(snapshot.reservedQuote) ?? 0,
+      usedMargin: this.toFiniteNumber(snapshot.usedMargin),
+      buyingPower,
+      executionCapital,
+      fundingSource: this.readString(snapshot, ['fundingSource']) === 'exchange_live'
+        ? 'exchange_live'
+        : this.readString(snapshot, ['fundingSource']) === 'paper'
+          ? 'paper'
+          : 'exchange_testnet',
+      accountMode: this.readString(snapshot, ['accountMode']),
+      marginMode: this.readString(snapshot, ['marginMode']),
+      nonTradableReason: this.readString(snapshot, ['nonTradableReason']),
+    }
   }
 
   private async buildAccountFallbackMetrics(userId: string, strategyTemplateId: string | null): Promise<{

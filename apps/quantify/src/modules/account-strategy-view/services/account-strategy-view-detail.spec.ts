@@ -1,3 +1,4 @@
+import { Prisma } from '@/prisma/prisma.types'
 import { AccountStrategyViewService } from './account-strategy-view.service'
 
 describe('accountStrategyViewService.getStrategyDetail', () => {
@@ -329,6 +330,8 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       initialBalance: 10000,
       totalEquity: 12000,
       availableBalance: 11500,
+      executionCapital: 12000,
+      nonTradableReason: null,
       totalPnl: 2000,
       todayPnl: 500,
       baseCurrency: 'USDT',
@@ -1266,6 +1269,8 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       initialBalance: 60000,
       totalEquity: 60000,
       availableBalance: 60000,
+      executionCapital: 60000,
+      nonTradableReason: null,
       totalPnl: 0,
       todayPnl: 0,
       baseCurrency: 'USDT',
@@ -1541,6 +1546,8 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       initialBalance: 50000,
       totalEquity: 60000,
       availableBalance: 58000,
+      executionCapital: 60000,
+      nonTradableReason: null,
       totalPnl: 0,
       todayPnl: 0,
       baseCurrency: 'USDT',
@@ -1728,6 +1735,8 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       initialBalance: 1000,
       totalEquity: 1015,
       availableBalance: 930,
+      executionCapital: 1015,
+      nonTradableReason: null,
       totalPnl: 15,
       todayPnl: 5,
       baseCurrency: 'USDT',
@@ -1807,6 +1816,8 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       initialBalance: 1000,
       totalEquity: 1000,
       availableBalance: 1000,
+      executionCapital: 1000,
+      nonTradableReason: null,
       totalPnl: 0,
       todayPnl: 0,
       baseCurrency: 'USDT',
@@ -1891,6 +1902,8 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       initialBalance: 1000,
       totalEquity: 999.94735,
       availableBalance: 919.760815,
+      executionCapital: 999.94735,
+      nonTradableReason: null,
       totalPnl: -0.05265,
       todayPnl: -0.05265,
       baseCurrency: 'USDT',
@@ -1960,6 +1973,8 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       initialBalance: 10000,
       totalEquity: 10320.12,
       availableBalance: 10300,
+      executionCapital: 10320.12,
+      nonTradableReason: null,
       totalPnl: 320.12,
       todayPnl: 20.12,
       baseCurrency: 'USDT',
@@ -1970,6 +1985,84 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       totalRealizedPnl: 300,
       totalUnrealizedPnl: 20.12,
     })
+  })
+
+  it('shows total equity separately from zero available buying power', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'strategy-1',
+        name: 'Funding semantics strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        params: {
+          symbol: 'BTCUSDT',
+          exchange: 'okx',
+          marketType: 'perp',
+          fundingSnapshot: {
+            asset: 'USDT',
+            totalEquity: 4901.58222,
+            availableCash: null,
+            availableEquity: 0,
+            reservedQuote: 0,
+            usedMargin: null,
+            buyingPower: 0,
+            executionCapital: 4901.58222,
+            fundingSource: 'exchange_testnet',
+            nonTradableReason: 'exchange_available_balance_zero',
+          },
+        },
+        strategyTemplateId: 'tpl-funding-semantics',
+        strategyTemplate: {
+          defaultParams: {},
+        },
+        subscriptions: [{ userId: 'user-1', status: 'active', customParams: {} }],
+        startedAt: new Date('2026-03-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue({
+        id: 'account-1',
+        baseCurrency: 'USDT',
+        initialBalance: new Prisma.Decimal('4901.58222'),
+        balance: new Prisma.Decimal(0),
+        equity: new Prisma.Decimal('4901.58222'),
+        totalRealizedPnl: new Prisma.Decimal(0),
+        totalUnrealizedPnl: new Prisma.Decimal(0),
+      }),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadLatestDailySnapshot: jest.fn().mockResolvedValue(null),
+      loadClosedPositionPnlSeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 0, closedCount: 0, winningCount: 0 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 0 }),
+      loadPositionFinancials: jest.fn().mockResolvedValue({
+        openCostBasis: 0,
+        totalUnrealizedPnl: 0,
+        totalRealizedPnl: 0,
+      }),
+      loadOpenPositionsForValuation: jest.fn().mockResolvedValue([]),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-03-18T10:00:00.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn() } as any,
+    )
+
+    const detail = await service.getStrategyDetail('user-1', 'strategy-1')
+
+    expect(detail.accountOverview).toEqual(expect.objectContaining({
+      initialBalance: 4901.58222,
+      totalEquity: 4901.58222,
+      availableBalance: 0,
+      executionCapital: 4901.58222,
+      nonTradableReason: 'exchange_available_balance_zero',
+      baseCurrency: 'USDT',
+    }))
   })
 
   it('derives today pnl from the latest daily equity start when available', async () => {
@@ -2201,6 +2294,8 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       initialBalance: 60000,
       totalEquity: 60000,
       availableBalance: 58000,
+      executionCapital: 60000,
+      nonTradableReason: null,
       totalPnl: 0,
       todayPnl: 0,
       baseCurrency: 'USDT',
