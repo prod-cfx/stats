@@ -142,7 +142,7 @@ describe('runBacktestDto', () => {
     expect(errors).toHaveLength(0)
   })
 
-  it('accepts optional conversationId in run-backtest payloads', async () => {
+  it('accepts optional conversationId and sessionId in run-backtest payloads', async () => {
     const payload = {
       symbols: ['BTCUSDT'],
       baseTimeframe: '15m',
@@ -156,6 +156,7 @@ describe('runBacktestDto', () => {
         params: { marketType: 'spot' },
       },
       conversationId: 'conv-1',
+      sessionId: 'session-1',
       dataRange: { fromTs: 1, toTs: 2 },
     }
 
@@ -167,6 +168,7 @@ describe('runBacktestDto', () => {
 
     expect(errors).toHaveLength(0)
     expect(dto.conversationId).toBe('conv-1')
+    expect(dto.sessionId).toBe('session-1')
   })
 
   it('accepts spot payload without leverage', async () => {

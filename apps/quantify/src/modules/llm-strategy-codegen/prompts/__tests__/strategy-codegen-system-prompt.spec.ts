@@ -22,6 +22,8 @@ describe('strategyCodegenSystemPrompt', () => {
     expect(prompt).toContain('semanticState')
     expect(prompt).toContain('canonical 语义')
     expect(prompt).toContain('禁止依赖旧 checklist 文本分类推断策略真实语义')
+    expect(prompt).toContain('不要从脚本文本反推策略语义')
+    expect(prompt).toContain('逻辑图和脚本必须从更新后的 SemanticState 与 canonical spec 派生')
     expect(prompt).not.toContain('entryRules / exitRules / riskRules')
   })
 })

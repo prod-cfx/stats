@@ -1,9 +1,13 @@
 import { describe, expect, it } from '@jest/globals'
 
+import type { ConversationState } from './ai-quant-page-conversation'
 import {
   AI_QUANT_PERSISTED_SCHEMA_VERSION,
   buildBacktestSummaryResult,
+  buildStrategyRevisionPromptMessage,
+  createConversation,
   createConversationFromServerConversation,
+  findConversationForEditIntent,
   hasExplicitBacktestExecutionOverrides,
   hydrateConversation,
   hydrateConversations,
@@ -1126,6 +1130,51 @@ describe('ai-quant-page-conversation', () => {
         llmCodegenSessionId: 'session-1',
         publishedStrategyInstanceId: 'strategy-1',
         publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotParamValues: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
+        publishedSnapshotStrategyConfig: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
+        publishedSnapshotBacktestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: true,
+        },
+        publishedSnapshotDeploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'gtc',
+        },
+        publishedSnapshotDeploymentExecutionConstraints: {
+          effectiveAllowedLeverageRange: {
+            min: 1,
+            max: 5,
+          },
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['gtc'],
+          constraintExplanation: 'old constraints',
+        },
+        publishedSnapshotCompatibilityMetadata: {
+          isLegacySnapshot: false,
+          missingBacktestConfigDefaults: false,
+          missingDeploymentExecutionDefaults: false,
+          missingDeploymentExecutionConstraints: false,
+          requiresRepublishForBacktest: false,
+          requiresRepublishForDeploy: false,
+        },
         publishedScriptCode: 'return { ok: true }',
         publishedScriptGraphVersion: 2,
         latestSignalMessage: 'latest',
@@ -1138,6 +1187,12 @@ describe('ai-quant-page-conversation', () => {
     expect(next.logicGraph?.status).toBe('draft')
     expect(next.publishedStrategyInstanceId).toBeNull()
     expect(next.publishedSnapshotId).toBeNull()
+    expect(next.publishedSnapshotParamValues).toBeNull()
+    expect(next.publishedSnapshotStrategyConfig).toBeNull()
+    expect(next.publishedSnapshotBacktestConfigDefaults).toBeNull()
+    expect(next.publishedSnapshotDeploymentExecutionDefaults).toBeNull()
+    expect(next.publishedSnapshotDeploymentExecutionConstraints).toBeNull()
+    expect(next.publishedSnapshotCompatibilityMetadata).toBeNull()
     expect(next.publishedScriptCode).toBeNull()
     expect(next.publishedScriptGraphVersion).toBeNull()
     expect(next.backtestResult).toBeNull()
@@ -1845,6 +1900,248 @@ describe('ai-quant-page-conversation', () => {
       baseTimeframe: '15m',
       positionPct: 12,
       buyDropPct: 1.5,
+    })
+  })
+
+  describe('findConversationForEditIntent', () => {
+    const makeConversation = (overrides: Partial<ConversationState>): ConversationState => ({
+      ...createConversation((key: string) => key),
+      ...overrides,
+    })
+
+    it('prefers conversation and session identifiers over strategy identifiers', () => {
+      const byStrategy = makeConversation({
+        id: 'by-strategy',
+        publishedStrategyInstanceId: 'strategy-1',
+        publishedSnapshotId: 'snapshot-1',
+      })
+      const bySession = makeConversation({
+        id: 'by-session',
+        serverConversationId: 'conversation-1',
+        llmCodegenSessionId: 'session-1',
+      })
+
+      expect(findConversationForEditIntent([byStrategy, bySession], {
+        type: 'strategy-edit-session',
+        strategyInstanceId: 'strategy-1',
+        publishedSnapshotId: 'snapshot-1',
+        conversationId: 'conversation-1',
+        sessionId: 'session-1',
+        ts: Date.now(),
+      })?.id).toBe('by-session')
+    })
+
+    it('matches published snapshot before strategy instance when both identifiers are present', () => {
+      const bySnapshot = makeConversation({ id: 'by-snapshot', publishedSnapshotId: 'snapshot-1' })
+      const byStrategy = makeConversation({ id: 'by-strategy', publishedStrategyInstanceId: 'strategy-1' })
+
+      expect(findConversationForEditIntent([bySnapshot, byStrategy], {
+        type: 'strategy-edit-session',
+        strategyInstanceId: 'strategy-1',
+        publishedSnapshotId: 'snapshot-1',
+        ts: Date.now(),
+      })?.id).toBe('by-snapshot')
+
+      expect(findConversationForEditIntent([bySnapshot], {
+        type: 'strategy-edit-session',
+        strategyInstanceId: 'missing',
+        publishedSnapshotId: 'snapshot-1',
+        ts: Date.now(),
+      })?.id).toBe('by-snapshot')
+
+      expect(findConversationForEditIntent([byStrategy], {
+        type: 'strategy-edit-session',
+        strategyInstanceId: 'strategy-1',
+        publishedSnapshotId: 'missing-snapshot',
+        ts: Date.now(),
+      })?.id).toBe('by-strategy')
+    })
+
+    it('trims identifiers and returns null when nothing matches', () => {
+      const conversation = makeConversation({
+        id: 'local-1',
+        serverConversationId: ' server-1 ',
+        llmCodegenSessionId: ' session-1 ',
+        publishedStrategyInstanceId: ' strategy-1 ',
+        publishedSnapshotId: ' snapshot-1 ',
+      })
+
+      expect(findConversationForEditIntent([conversation], {
+        type: 'strategy-edit-session',
+        strategyInstanceId: ' strategy-1 ',
+        sessionId: ' session-1 ',
+        ts: Date.now(),
+      })?.id).toBe('local-1')
+
+      expect(findConversationForEditIntent([conversation], {
+        type: 'strategy-edit-session',
+        strategyInstanceId: 'missing',
+        publishedSnapshotId: 'missing-snapshot',
+        ts: Date.now(),
+      })).toBeNull()
+    })
+  })
+
+  describe('buildStrategyRevisionPromptMessage', () => {
+    it('describes the current atomic strategy before asking for revisions', () => {
+      const conversation = {
+        ...createConversation((key: string) => key),
+        params: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 12,
+        },
+        displayLogicGraph: {
+          blocks: [
+            {
+              type: 'IF',
+              items: [
+                {
+                  id: 'entry-1',
+                  kind: 'condition',
+                  text: 'MA6 上穿 MA48',
+                },
+              ],
+            },
+            {
+              type: 'EXECUTE',
+              items: [
+                {
+                  id: 'market-1',
+                  kind: 'execute',
+                  key: 'symbol',
+                  value: 'ETHUSDT',
+                  text: '交易标的 ETHUSDT',
+                },
+              ],
+            },
+          ],
+        },
+      } as ConversationState
+
+      const message = buildStrategyRevisionPromptMessage(conversation, '请继续补充')
+
+      expect(message).toContain('当前策略：')
+      expect(message).toContain('OKX')
+      expect(message).toContain('ETHUSDT')
+      expect(message).toContain('15m')
+      expect(message).toContain('MA6 上穿 MA48')
+      expect(message).toContain('请直接说明你要修改的原子语义')
+      expect(message).toContain('交易标的')
+    })
+
+    it('prefers the latest codegen spec semantics over stale display graph text', () => {
+      const conversation = {
+        ...createConversation((key: string) => key),
+        params: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 25,
+        },
+        displayLogicGraph: {
+          blocks: [
+            {
+              type: 'IF',
+              items: [
+                {
+                  id: 'stale-entry',
+                  kind: 'condition',
+                  text: 'MA6 上穿 MA48',
+                },
+              ],
+            },
+          ],
+        },
+        codegenSpecDesc: {
+          rules: [
+            {
+              id: 'entry-rsi',
+              phase: 'entry',
+              condition: {
+                key: 'rsi.cross_over',
+                params: { period: 14, threshold: 38 },
+              },
+              actions: [{ type: 'OPEN_LONG' }],
+            },
+            {
+              id: 'exit-rsi',
+              phase: 'exit',
+              condition: {
+                key: 'rsi.gte',
+                params: { period: 14, threshold: 64 },
+              },
+              actions: [{ type: 'CLOSE_LONG' }],
+            },
+            {
+              id: 'risk-stop-loss',
+              phase: 'risk',
+              condition: {
+                key: 'position_loss_pct',
+                value: 0.05,
+              },
+              actions: [{ type: 'FORCE_EXIT' }],
+            },
+            {
+              id: 'risk-take-profit',
+              phase: 'risk',
+              condition: {
+                key: 'position_profit_pct',
+                value: 0.005,
+              },
+              actions: [{ type: 'CLOSE_LONG' }],
+            },
+          ],
+          lockedParams: {
+            exchange: 'okx',
+            symbol: 'ETHUSDT',
+            timeframe: '15m',
+            positionPct: 25,
+          },
+        },
+      } as ConversationState
+
+      const message = buildStrategyRevisionPromptMessage(conversation, '请继续补充')
+
+      expect(message).toContain('当前策略：')
+      expect(message).toContain('ETHUSDT')
+      expect(message).toContain('RSI')
+      expect(message).toContain('38')
+      expect(message).toContain('64')
+      expect(message).toContain('亏损达到 5%')
+      expect(message).toContain('盈利达到 0.5%')
+      expect(message).not.toContain('MA6 上穿 MA48')
+    })
+
+    it('keeps an atomic revision prompt when only params exist', () => {
+      const conversation = {
+        ...createConversation((key: string) => key),
+        params: {
+          exchange: 'binance',
+          symbol: '',
+          baseTimeframe: '',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+      } as ConversationState
+
+      const message = buildStrategyRevisionPromptMessage(conversation, '请继续补充')
+
+      expect(message).toContain('当前策略：')
+      expect(message).toContain('BINANCE')
+      expect(message).toContain('请直接说明你要修改的原子语义')
     })
   })
 

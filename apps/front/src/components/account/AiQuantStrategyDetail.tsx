@@ -4,6 +4,7 @@ import type { AiQuantStrategyRecord, StrategyEquityPoint, AiQuantStrategyViewSta
 import Link from 'next/link'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { setIntent } from '@/components/ai-quant/intent-storage'
 import { useAuth } from '@/hooks/use-auth'
 import { fetchAccountAiQuantStrategyDetail, performAccountAiQuantStrategyAction } from '@/lib/api'
 import { RunningStrategyEditGuardDialog } from '@/components/ai-quant/RunningStrategyEditGuardDialog'
@@ -481,7 +482,15 @@ export function AiQuantStrategyDetail({
                   if (strategy.status === 'running') {
                     event.preventDefault()
                     setEditGuardOpen(true)
+                    return
                   }
+
+                  setIntent({
+                    type: 'strategy-edit-session',
+                    strategyInstanceId: strategy.id,
+                    publishedSnapshotId: strategy.publishedSnapshotId ?? undefined,
+                    source: 'account-detail',
+                  })
                 }}
                 className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
               >

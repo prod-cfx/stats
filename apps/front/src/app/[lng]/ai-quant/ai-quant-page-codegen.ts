@@ -31,7 +31,7 @@ import {
   normalizeParamsFromValues,
 } from './ai-quant-page-conversation'
 
-const CODEGEN_TERMINAL_STATUSES = new Set(['PUBLISHED', 'REJECTED'])
+const CODEGEN_TERMINAL_STATUSES = new Set(['PUBLISHED'])
 const CODEGEN_PROCESSING_STATUSES = new Set([
   'GENERATING',
   'VALIDATING_STATIC',
@@ -44,6 +44,7 @@ const CODEGEN_RECOVERABLE_STATUSES = new Set([
   ...CODEGEN_PROCESSING_STATUSES,
   'CONFIRM_GATE',
   'CONSISTENCY_FAILED',
+  'REJECTED',
 ])
 
 function isCodegenTerminalStatus(status: string): boolean {
@@ -382,9 +383,17 @@ export function applyCodegenResponseToConversationState(args: {
   } = args
 
   const nextVersion = (conversation.logicGraph?.version || 0) + 1
-  const shouldReuseCodegenSession = !isCodegenTerminalStatus(response.status)
+  const shouldReuseCodegenSession = response.status === 'PUBLISHED'
+    ? Boolean(
+        activeSessionId
+          && (
+            confirmGenerate
+            || conversation.publishedSnapshotId === normalizePublishedSnapshotId(response.publishedSnapshotId)
+          ),
+      )
+    : !isCodegenTerminalStatus(response.status)
   const shouldUpdateGraph =
-    (response.status === 'CONFIRM_GATE' || response.status === 'PUBLISHED')
+    (response.status === 'DRAFTING' || response.status === 'CONFIRM_GATE' || response.status === 'PUBLISHED')
     && Boolean(response.specDesc)
   const syncResult = shouldUpdateGraph
     ? syncStrategyParamsFromCodegen({
@@ -483,6 +492,14 @@ export function applyCodegenResponseToConversationState(args: {
       const responseScriptCode = normalizePublishedScriptCode(response.scriptCode)
       if (responseScriptCode) {
         return responseScriptCode
+      }
+      const responseSnapshotId = normalizePublishedSnapshotId(response.publishedSnapshotId)
+      if (
+        conversation.publishedScriptCode
+        && conversation.publishedSnapshotId
+        && responseSnapshotId === conversation.publishedSnapshotId
+      ) {
+        return conversation.publishedScriptCode
       }
       if (!shouldUpdateGraph) {
         return conversation.publishedScriptCode

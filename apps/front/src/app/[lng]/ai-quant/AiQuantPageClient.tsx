@@ -25,7 +25,6 @@ import { clearIntent, getIntent, setIntent } from '@/components/ai-quant/intent-
 import { LogicGraphPreview } from '@/components/ai-quant/LogicGraphPreview'
 import { QuantChatPanel } from '@/components/ai-quant/QuantChatPanel'
 import { RunningStrategyEditGuardDialog } from '@/components/ai-quant/RunningStrategyEditGuardDialog'
-import { SemanticGraphCard } from '@/components/ai-quant/SemanticGraphCard'
 import { SemanticGraphValidationAlert } from '@/components/ai-quant/SemanticGraphValidationAlert'
 import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
 import {
@@ -42,6 +41,7 @@ import {
   fetchUserExchangeAccountStatuses,
   listAiQuantConversations,
   performAccountAiQuantStrategyAction,
+  recoverAiQuantEditConversation,
   updateAiQuantConversationBacktestDraft,
 } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
@@ -60,9 +60,11 @@ import {
   buildBacktestDraftConfigFromValues,
   buildBacktestSummaryResult,
   buildParamSchemaWithCapabilities,
+  buildStrategyRevisionPromptMessage,
   createConversation,
   createConversationFromServerConversation,
   createRecoveryConversation,
+  findConversationForEditIntent,
   hasExplicitBacktestExecutionOverrides,
   hasLatestPublishedCode,
   isDeployableBacktestResult,
@@ -104,6 +106,7 @@ function resolvePreferredDeployLeverage(conversation: ConversationState | null |
 type CapabilityState = 'loading' | 'ready' | 'failed'
 type ConversationSyncState = 'idle' | 'loading' | 'ready' | 'error'
 type DeploymentDetailStatus = 'idle' | 'loading' | 'ready' | 'not_found' | 'error'
+type StrategyEditIntent = Extract<ReturnType<typeof getIntent>, { type: 'strategy-edit-session' }>
 
 type ConversationDeleteDialogState = {
   conversation: ConversationState
@@ -131,6 +134,19 @@ function hasRenderableDisplayLogicGraph(
     if (!block || typeof block !== 'object') return false
     return Array.isArray((block as { items?: unknown }).items)
   })
+}
+
+function isSameStrategyEditIntent(
+  current: ReturnType<typeof getIntent>,
+  expected: StrategyEditIntent,
+): boolean {
+  return current?.type === 'strategy-edit-session'
+    && current.strategyInstanceId === expected.strategyInstanceId
+    && current.publishedSnapshotId === expected.publishedSnapshotId
+    && current.conversationId === expected.conversationId
+    && current.sessionId === expected.sessionId
+    && current.source === expected.source
+    && current.ts === expected.ts
 }
 
 function isAccountStrategyNotFoundError(error: unknown): boolean {
@@ -274,25 +290,70 @@ export function AiQuantPageClient({
       let cancelled = false
       setConversationSyncState('loading')
       localStorage.removeItem(CONVERSATIONS_STORAGE_KEY)
-      void listAiQuantConversations()
-        .then((serverConversations) => {
+
+      void (async () => {
+        try {
+          const serverConversations = await listAiQuantConversations()
           if (cancelled) return
-          const restored = serverConversations.length > 0
-            ? serverConversations.map(conversation => createConversationFromServerConversation(conversation, t))
-            : [createConversation(t)]
-          setConversations(restored)
-          setActiveConversationId(restored[0].id)
+          const restored = serverConversations.map(conversation => createConversationFromServerConversation(conversation, t))
+          const intent = getIntent(INTENT_TTL_MS)
+
+          if (intent?.type === 'strategy-edit-session') {
+            const matched = findConversationForEditIntent(restored, intent)
+
+            if (matched) {
+              clearIntent()
+              setConversations(restored)
+              setActiveConversationId(matched.id)
+              setConversationSyncState('ready')
+              setConversationStorageReady(true)
+              return
+            }
+
+            try {
+              const recoveredConversation = await recoverAiQuantEditConversation({
+                strategyInstanceId: intent.strategyInstanceId,
+                publishedSnapshotId: intent.publishedSnapshotId,
+                conversationId: intent.conversationId,
+                sessionId: intent.sessionId,
+                source: intent.source,
+              })
+              if (cancelled) return
+
+              const recovered = createConversationFromServerConversation(recoveredConversation, t)
+              if (isSameStrategyEditIntent(getIntent(INTENT_TTL_MS), intent)) {
+                clearIntent()
+              }
+              setConversations([recovered, ...restored])
+              setActiveConversationId(recovered.id)
+              setConversationSyncState('ready')
+              setConversationStorageReady(true)
+              return
+            } catch {
+              if (cancelled) return
+              const fallback = restored.length > 0 ? restored : [createConversation(t)]
+              setConversations(fallback)
+              setActiveConversationId(fallback[0].id)
+              setConversationSyncState('ready')
+              setConversationStorageReady(true)
+              return
+            }
+          }
+
+          const fallback = restored.length > 0 ? restored : [createConversation(t)]
+          setConversations(fallback)
+          setActiveConversationId(fallback[0].id)
           setConversationSyncState('ready')
           setConversationStorageReady(true)
-        })
-        .catch(() => {
+        } catch {
           if (cancelled) return
           const fallback = [createConversation(t)]
           setConversations(fallback)
           setActiveConversationId(fallback[0].id)
           setConversationSyncState('error')
           setConversationStorageReady(true)
-        })
+        }
+      })()
       return () => {
         cancelled = true
       }
@@ -760,7 +821,10 @@ export function AiQuantPageClient({
         {
           id: `graph-revise-${Date.now()}`,
           role: 'assistant',
-          content: t('aiQuant.messages.graphRevise'),
+          content: buildStrategyRevisionPromptMessage(
+            curr,
+            t('aiQuant.messages.graphRevise'),
+          ),
         },
       ],
       updatedAt: Date.now(),
@@ -1336,6 +1400,10 @@ export function AiQuantPageClient({
       return
     }
 
+    if (intent.type === 'strategy-edit-session') {
+      return
+    }
+
     clearIntent()
     const preset = findPresetById(intent.strategyId)
     if (!preset) {
@@ -1559,9 +1627,6 @@ export function AiQuantPageClient({
             canRunBacktest={canRunBacktest}
           />
 
-          {activeConversation.semanticGraph && (
-            <SemanticGraphCard semanticGraph={activeConversation.semanticGraph} />
-          )}
           {activeConversation.validationReport && !activeConversation.validationReport.ok && (
             <SemanticGraphValidationAlert validationReport={activeConversation.validationReport} />
           )}

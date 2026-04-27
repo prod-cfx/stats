@@ -3,6 +3,7 @@ import type { BacktestRangeInput } from '@/components/ai-quant/backtest-range'
 import type { BacktestResult } from '@/components/ai-quant/BacktestSummaryCard'
 import type { DeployExchangeAccount } from '@/components/ai-quant/DeployDialog'
 import type { DisplayLogicGraph } from '@/components/ai-quant/display-logic-graph'
+import type { QuantReturnIntent } from '@/components/ai-quant/intent-storage'
 import type { StrategyLogicGraph } from '@/components/ai-quant/logic-graph-model'
 import type { QuantMessage } from '@/components/ai-quant/QuantChatPanel'
 import type {
@@ -149,6 +150,47 @@ export interface ConversationState {
   backtestExecutionConfigExplicit?: boolean
   backtestExecutionState: 'idle' | 'submitting' | 'running' | 'succeeded' | 'failed' | 'timeout'
   updatedAt: number
+}
+
+function normalizeMatchId(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+export function findConversationForEditIntent(
+  conversations: ConversationState[],
+  intent: Extract<QuantReturnIntent, { type: 'strategy-edit-session' }>,
+): ConversationState | null {
+  const conversationId = normalizeMatchId(intent.conversationId)
+  const sessionId = normalizeMatchId(intent.sessionId)
+  const strategyInstanceId = normalizeMatchId(intent.strategyInstanceId)
+  const publishedSnapshotId = normalizeMatchId(intent.publishedSnapshotId)
+
+  if (conversationId || sessionId) {
+    const direct = conversations.find(conversation =>
+      (conversationId && (
+        normalizeMatchId(conversation.serverConversationId) === conversationId
+        || normalizeMatchId(conversation.id) === conversationId
+      ))
+      || (sessionId && normalizeMatchId(conversation.llmCodegenSessionId) === sessionId),
+    )
+    if (direct) return direct
+  }
+
+  if (publishedSnapshotId) {
+    const bySnapshot = conversations.find(conversation =>
+      normalizeMatchId(conversation.publishedSnapshotId) === publishedSnapshotId,
+    )
+    if (bySnapshot) return bySnapshot
+  }
+
+  if (strategyInstanceId) {
+    const byStrategy = conversations.find(conversation =>
+      normalizeMatchId(conversation.publishedStrategyInstanceId) === strategyInstanceId,
+    )
+    if (byStrategy) return byStrategy
+  }
+
+  return null
 }
 
 export type ConversationIntegrityIssue =
@@ -1328,6 +1370,12 @@ export function invalidateConversationPublication(
     publicationGate: null,
     publishedStrategyInstanceId: null,
     publishedSnapshotId: null,
+    publishedSnapshotParamValues: null,
+    publishedSnapshotStrategyConfig: null,
+    publishedSnapshotBacktestConfigDefaults: null,
+    publishedSnapshotDeploymentExecutionDefaults: null,
+    publishedSnapshotDeploymentExecutionConstraints: null,
+    publishedSnapshotCompatibilityMetadata: null,
     publishedScriptCode: null,
     publishedScriptGraphVersion: null,
     pendingCanonicalDigest: null,
@@ -1520,6 +1568,79 @@ export function mapExchangeStatusesToDeployAccounts(
 
 export function buildApiConfigHref(lng: 'zh' | 'en') {
   return `/${lng}/account?tab=ai-quant#exchange-api`
+}
+
+function normalizeRevisionSummaryText(value: string | null | undefined): string | null {
+  const text = value?.trim().replace(/\s+/g, ' ')
+  return text || null
+}
+
+function collectRevisionGraphTexts(
+  graph: DisplayLogicGraph | null | undefined,
+): string[] {
+  if (!graph?.blocks?.length) return []
+
+  const seen = new Set<string>()
+  const items: string[] = []
+  for (const block of graph.blocks) {
+    for (const item of block.items) {
+      const text = normalizeRevisionSummaryText(item.text)
+      if (!text || seen.has(text)) continue
+      seen.add(text)
+      items.push(text)
+    }
+  }
+  return items
+}
+
+function buildRevisionGraphFromCodegenSpec(
+  conversation: ConversationState,
+): DisplayLogicGraph | null {
+  if (!isRecord(conversation.codegenSpecDesc)) {
+    return null
+  }
+
+  const graph = normalizeDisplayLogicGraph(buildDisplayLogicGraphFromCodegenSpec({
+    specDesc: conversation.codegenSpecDesc,
+    fallbackMeta: {
+      exchange: conversation.params.exchange,
+      symbol: conversation.params.symbol,
+      timeframe: conversation.params.baseTimeframe,
+      baseTimeframe: conversation.params.baseTimeframe,
+      positionPct: conversation.params.positionPct,
+    },
+  }))
+
+  return collectRevisionGraphTexts(graph).length > 0 ? graph : null
+}
+
+export function buildStrategyRevisionPromptMessage(
+  conversation: ConversationState,
+  fallbackMessage: string,
+): string {
+  const contextParts = [
+    normalizeRevisionSummaryText(conversation.params.exchange)?.toUpperCase(),
+    normalizeRevisionSummaryText(conversation.params.symbol)?.toUpperCase(),
+    normalizeRevisionSummaryText(conversation.params.baseTimeframe),
+    Number.isFinite(conversation.params.positionPct)
+      ? `仓位 ${conversation.params.positionPct}%`
+      : null,
+  ].filter((item): item is string => Boolean(item))
+
+  const revisionGraph = buildRevisionGraphFromCodegenSpec(conversation) ?? conversation.displayLogicGraph
+  const graphTexts = collectRevisionGraphTexts(revisionGraph).slice(0, 12)
+  const currentStrategy = [...contextParts, ...graphTexts].join('；')
+  if (!currentStrategy) {
+    return [
+      fallbackMessage,
+      '请直接说明你要修改的原子语义，例如交易标的、交易所、周期、触发条件、行动、风控或仓位。',
+    ].join('\n')
+  }
+
+  return [
+    `当前策略：${currentStrategy}。`,
+    '请直接说明你要修改的原子语义，例如交易标的、交易所、周期、触发条件、行动、风控或仓位。',
+  ].join('\n')
 }
 
 export function createConversation(translate: (key: string) => string, now = Date.now()): ConversationState {

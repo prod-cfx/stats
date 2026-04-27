@@ -627,6 +627,94 @@ describe('publishedStrategySnapshotsRepository', () => {
     })
   })
 
+  it('requires strategy match when reading editable snapshot by exact snapshot id', async () => {
+    const tx = {
+      publishedStrategySnapshot: {
+        create: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(null),
+        findUnique: jest.fn(),
+      },
+    }
+    const repo = new PublishedStrategySnapshotsRepository(createTxHost(tx))
+
+    await expect(repo.findEditableSnapshotForUser({
+      userId: 'user-1',
+      strategyInstanceId: 'strategy-requested',
+      publishedSnapshotId: 'snapshot-other-strategy',
+    })).resolves.toBeNull()
+
+    expect(tx.publishedStrategySnapshot.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'snapshot-other-strategy',
+        strategyInstanceId: 'strategy-requested',
+        session: {
+          userId: 'user-1',
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      select: expect.objectContaining({
+        id: true,
+        strategyInstanceId: true,
+        session: expect.objectContaining({
+          select: expect.objectContaining({
+            semanticState: true,
+            latestSpecDesc: true,
+          }),
+        }),
+      }),
+    })
+  })
+
+  it('reads latest editable snapshot for a user-owned strategy when no snapshot id is provided', async () => {
+    const row = {
+      id: 'snapshot-latest',
+      sessionId: 'session-1',
+      strategyTemplateId: null,
+      strategyInstanceId: 'strategy-1',
+      specSnapshot: { market: { symbol: 'BTCUSDT' } },
+      semanticGraph: { version: 1, nodes: [] },
+      paramsSnapshot: { positionPct: 10 },
+      strategyConfig: { symbol: 'BTCUSDT' },
+      backtestConfigDefaults: null,
+      deploymentExecutionDefaults: null,
+      deploymentExecutionConstraints: null,
+      lockedParams: {},
+      executionPolicy: null,
+      createdAt: new Date('2026-04-26T00:00:00.000Z'),
+      session: {
+        semanticState: { version: 1, triggers: [], actions: [], risk: [] },
+        latestSpecDesc: { viewType: 'canonical-semantic-view.v1' },
+      },
+    }
+    const tx = {
+      publishedStrategySnapshot: {
+        create: jest.fn(),
+        findFirst: jest.fn().mockResolvedValue(row),
+        findUnique: jest.fn(),
+      },
+    }
+    const repo = new PublishedStrategySnapshotsRepository(createTxHost(tx))
+
+    await expect(repo.findEditableSnapshotForUser({
+      userId: 'user-1',
+      strategyInstanceId: 'strategy-1',
+    })).resolves.toEqual(expect.objectContaining({
+      id: 'snapshot-latest',
+      strategyInstanceId: 'strategy-1',
+      originalSessionSemanticState: row.session.semanticState,
+      originalSessionLatestSpecDesc: row.session.latestSpecDesc,
+    }))
+    expect(tx.publishedStrategySnapshot.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        strategyInstanceId: 'strategy-1',
+        session: {
+          userId: 'user-1',
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    }))
+  })
+
   it('produces stable hashes for objects with different key ordering', () => {
     const left = { b: 2, a: { d: 4, c: 3 } }
     const right = { a: { c: 3, d: 4 }, b: 2 }

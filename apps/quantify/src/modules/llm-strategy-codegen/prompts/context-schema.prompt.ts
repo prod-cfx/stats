@@ -153,6 +153,7 @@ export function buildContextSchemaPrompt(): string {
     '3) 多腿模式优先使用 ctx.data / ctx.execution / ctx.legs / ctx.dataRequirements。',
     '4) 访问字段前先判空，不要假设任何字段一定存在。',
     '5) 不要访问未声明字段，不要使用外部 I/O（网络/文件/进程）。',
+    '6) 只把 ctx 当作运行时输入协议，不要从脚本文本反推策略语义。',
   ].join('\n')
 
   return cachedPrompt

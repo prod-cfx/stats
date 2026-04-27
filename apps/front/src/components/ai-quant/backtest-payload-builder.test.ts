@@ -146,7 +146,7 @@ describe('backtest-payload-builder', () => {
     })
   })
 
-  it('includes conversationId when creating a snapshot-bound backtest payload', () => {
+  it('includes conversationId and sessionId when creating a snapshot-bound backtest payload', () => {
     const payload = buildBacktestPayload({
       marketType: 'spot',
       symbol: 'BTCUSDT',
@@ -161,11 +161,13 @@ describe('backtest-payload-builder', () => {
         publishedSnapshotId: 'snapshot-1',
       },
       conversationId: 'conv-1',
+      sessionId: 'session-1',
       range: { preset: '30D' },
     }, new Date('2026-04-23T00:00:00.000Z'))
 
     expect(payload).toEqual(expect.objectContaining({
       conversationId: 'conv-1',
+      sessionId: 'session-1',
     }))
   })
 

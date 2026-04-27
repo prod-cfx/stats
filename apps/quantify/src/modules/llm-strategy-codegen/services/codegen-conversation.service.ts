@@ -7,9 +7,11 @@ import type { CodegenGuideConfigDto } from '../dto/codegen-guide-config.dto'
 import type { CodegenSessionResponseDto } from '../dto/codegen-session.response.dto'
 import type { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.dto'
 import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-test.response.dto'
+import type { RecoverAiQuantEditConversationRequestDto } from '../dto/recover-ai-quant-edit-conversation.request.dto'
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
 import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant-conversations.repository'
+import type { EditablePublishedStrategySnapshotRecord } from '../repositories/published-strategy-snapshots.repository'
 import type { StrategyLogicSnapshot, StrategyRuleBasis, StrategyRuleDraft } from '../types/strategy-logic-snapshot'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
@@ -20,7 +22,7 @@ import type { StrategyBlockingReason, StrategyInferredAssumption } from '../type
 import type { SemanticEditDecision } from '../types/semantic-edit'
 import type { StrategyExecutionContextResolution } from '../types/strategy-execution-context'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
-import { buildSemanticSlotId, type SemanticSlotState, type SemanticState, type SemanticTriggerState } from '../types/semantic-state'
+import { buildSemanticSlotId, type SemanticActionState, type SemanticRiskState, type SemanticSlotState, type SemanticState, type SemanticTriggerState } from '../types/semantic-state'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 
 import type { Prisma } from '@/prisma/prisma.types'
@@ -146,6 +148,7 @@ const DEFAULT_CODEGEN_STRICT_ENABLED = true
 const DEFAULT_CODEGEN_STRICT_FALLBACK = true
 const STRATEGY_PLAZA_RUN_SESSION_ID_PREFIX = 'strategy-plaza:official:'
 const DEFAULT_CODEGEN_STRICT_UNSUPPORTED_TTL_MS = 10 * 60 * 1000
+const EDIT_RECOVERY_ASSISTANT_MESSAGE = '已基于上一版策略恢复修改上下文。'
 
 const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
   type: 'object',
@@ -439,6 +442,647 @@ export class CodegenConversationService {
     })
   }
 
+  async recoverEditConversation(
+    userId: string,
+    input: RecoverAiQuantEditConversationRequestDto,
+  ): Promise<AiQuantConversationResponseDto> {
+    const conversationId = this.readNullableString(input.conversationId)
+    if (conversationId) {
+      const conversation = await this.conversationsRepo.findActiveByIdAndUser(conversationId, userId)
+      if (conversation) {
+        const response = await this.toConversationResponse(conversation)
+        if (
+          this.isUsableRecoveredConversationResponse(response)
+          && this.recoveredConversationMatchesEditContext(response, input)
+        ) {
+          return response
+        }
+      }
+    }
+
+    const sessionId = this.readNullableString(input.sessionId)
+    if (sessionId) {
+      const conversation = await this.conversationsRepo.findActiveByAnyCodegenSessionIdAndUser([sessionId], userId)
+      if (conversation) {
+        const response = await this.toConversationResponse(conversation)
+        if (
+          this.isUsableRecoveredConversationResponse(response)
+          && this.recoveredConversationMatchesEditContext(response, input)
+        ) {
+          return response
+        }
+      }
+    }
+
+    const associatedConversation = await this.findActiveConversationResponseForEditContext(userId, input)
+    if (associatedConversation) {
+      return associatedConversation
+    }
+
+    return this.recoverEditConversationFromPublishedSnapshot(userId, input)
+  }
+
+  private async findActiveConversationResponseForEditContext(
+    userId: string,
+    input: RecoverAiQuantEditConversationRequestDto,
+  ): Promise<AiQuantConversationResponseDto | null> {
+    const strategyInstanceId = this.readNullableString(input.strategyInstanceId)
+    const publishedSnapshotId = this.readNullableString(input.publishedSnapshotId)
+    if (!strategyInstanceId && !publishedSnapshotId) {
+      return null
+    }
+
+    const conversations = this.excludeStrategyPlazaRunConversations(await this.conversationsRepo.listByUser(userId))
+    for (const conversation of conversations) {
+      const response = await this.toConversationResponse(conversation)
+      if (!this.isUsableRecoveredConversationResponse(response)) {
+        continue
+      }
+      if (publishedSnapshotId) {
+        if (response.publishedSnapshotId === publishedSnapshotId) {
+          return response
+        }
+        continue
+      }
+      if (strategyInstanceId && response.strategyInstanceId === strategyInstanceId) {
+        return response
+      }
+    }
+
+    return null
+  }
+
+  private isUsableRecoveredConversationResponse(
+    response: AiQuantConversationResponseDto,
+  ): boolean {
+    return Boolean(response.activeCodegenSessionId?.trim())
+  }
+
+  private recoveredConversationMatchesEditContext(
+    response: AiQuantConversationResponseDto,
+    input: RecoverAiQuantEditConversationRequestDto,
+  ): boolean {
+    const publishedSnapshotId = this.readNullableString(input.publishedSnapshotId)
+    if (publishedSnapshotId) {
+      return this.readRecoveredResponsePublishedSnapshotId(response) === publishedSnapshotId
+    }
+
+    const strategyInstanceId = this.readNullableString(input.strategyInstanceId)
+    if (strategyInstanceId) {
+      return response.strategyInstanceId === strategyInstanceId
+    }
+
+    return true
+  }
+
+  private readRecoveredResponsePublishedSnapshotId(
+    response: AiQuantConversationResponseDto,
+  ): string | null {
+    if (typeof response.publishedSnapshotId === 'string' && response.publishedSnapshotId.trim().length > 0) {
+      return response.publishedSnapshotId.trim()
+    }
+
+    const specDesc = response.specDesc
+    if (!specDesc || typeof specDesc !== 'object' || Array.isArray(specDesc)) {
+      return null
+    }
+    const candidate = (specDesc as Record<string, unknown>).publishedSnapshotId
+    return typeof candidate === 'string' && candidate.trim().length > 0 ? candidate.trim() : null
+  }
+
+  private async recoverEditConversationFromPublishedSnapshot(
+    userId: string,
+    input: RecoverAiQuantEditConversationRequestDto,
+  ): Promise<AiQuantConversationResponseDto> {
+    const strategyInstanceId = this.readNullableString(input.strategyInstanceId)
+    if (!strategyInstanceId) {
+      throw new DomainException('ai_quant.edit_context_not_found', {
+        code: ErrorCode.NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+        args: {
+          strategyInstanceId: input.strategyInstanceId,
+          publishedSnapshotId: input.publishedSnapshotId,
+          source: input.source,
+        },
+      })
+    }
+
+    const publishedSnapshotId = this.readNullableString(input.publishedSnapshotId)
+    const snapshot = await this.publishedSnapshotsRepo.findEditableSnapshotForUser({
+      userId,
+      strategyInstanceId,
+      publishedSnapshotId,
+    })
+    if (!snapshot) {
+      throw new DomainException('ai_quant.edit_context_not_found', {
+        code: ErrorCode.NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+        args: {
+          strategyInstanceId,
+          publishedSnapshotId,
+          source: input.source,
+        },
+      })
+    }
+
+    const semanticState = this.recoverSemanticStateFromEditableSnapshot(snapshot)
+    const normalization = this.buildNormalizationFromSemanticState(semanticState)
+    const canonicalSpec = this.buildCanonicalSpecForConversation(semanticState, normalization)
+    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
+      normalizedIntent: normalization.normalizedIntent,
+      executionContext: this.resolveSemanticClarificationArtifacts(semanticState).executionContext.context,
+    })
+    const recoveredSpecDesc = {
+      ...specDesc,
+      publishedSnapshotId: snapshot.id,
+    }
+    const semanticGraph = this.resolveRecoveredSemanticGraph(snapshot, semanticState)
+    const recoveryAssistantMessage = this.buildEditRecoveryAssistantMessage(semanticState)
+    const constraintPack = {
+      ...createDefaultConstraintPack(),
+      conversationHistory: [`A: ${recoveryAssistantMessage}`],
+    }
+
+    const session = await this.sessionsRepo.createSession({
+      userId,
+      status: 'DRAFTING',
+      semanticState: semanticState as unknown as Prisma.InputJsonValue,
+      clarificationState: this.resolveSemanticClarificationArtifacts(semanticState).clarificationState as unknown as Prisma.InputJsonValue,
+      constraintPack: constraintPack as unknown as Prisma.InputJsonValue,
+      latestDraftCode: null,
+      latestSpecDesc: recoveredSpecDesc as Prisma.InputJsonValue,
+      semanticGraph: semanticGraph as Prisma.InputJsonValue,
+      rejectReason: null,
+      strategyInstanceId: snapshot.strategyInstanceId ?? strategyInstanceId,
+    } as unknown as Prisma.LlmStrategyCodegenSessionCreateInput)
+
+    const titleSymbol = this.readRecoveredSnapshotSymbol(snapshot) ?? '上一版'
+    const conversation = await this.conversationsRepo.upsertConversationSnapshot({
+      userId,
+      codegenSessionId: session.id,
+      title: `修改 ${titleSymbol} 策略`,
+      messages: [{ role: 'assistant', content: recoveryAssistantMessage }],
+    })
+
+    return this.toConversationResponse(conversation)
+  }
+
+  private buildEditRecoveryAssistantMessage(semanticState: SemanticState): string {
+    const view = this.semanticStateProjection.buildConversationView(semanticState)
+    const contextParts = [
+      view.executionContext.exchange?.toUpperCase(),
+      view.executionContext.marketType === 'perp'
+        ? '合约'
+        : view.executionContext.marketType === 'spot'
+          ? '现货'
+          : null,
+      view.executionContext.symbol,
+      view.executionContext.timeframe,
+    ].filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    const contextSummary = contextParts.length > 0 ? contextParts.join(' ') : ''
+    const semanticSummary = view.summary?.trim() || '已识别部分条件，但仍未完整。'
+    const currentStrategy = contextSummary
+      ? `${contextSummary}；${semanticSummary}`
+      : semanticSummary
+
+    return `${EDIT_RECOVERY_ASSISTANT_MESSAGE}\n当前策略：${currentStrategy}\n请直接说明你要修改的原子语义，例如交易标的、交易所、周期、触发条件、行动、风控或仓位。`
+  }
+
+  private recoverSemanticStateFromEditableSnapshot(
+    snapshot: EditablePublishedStrategySnapshotRecord,
+  ): SemanticState {
+    if (this.hasPersistedSemanticState(snapshot.originalSessionSemanticState)) {
+      return snapshot.originalSessionSemanticState as unknown as SemanticState
+    }
+
+    const state = this.createEmptySemanticState()
+    const strategyConfig = this.readJsonRecord(snapshot.strategyConfig)
+    const paramsSnapshot = this.readJsonRecord(snapshot.paramsSnapshot)
+    const lockedParams = this.readJsonRecord(snapshot.lockedParams)
+    const canonicalSpec = this.readJsonRecord(snapshot.specSnapshot)
+      ?? this.readJsonRecord(snapshot.originalSessionLatestSpecDesc)
+    const canonicalMarket = this.readJsonRecord(canonicalSpec?.market)
+    const exchange = this.normalizeRecoveredExchange(
+      this.readFirstString(
+        strategyConfig?.exchange,
+        strategyConfig?.provider,
+        strategyConfig?.exchangeId,
+        canonicalMarket?.exchange,
+        canonicalMarket?.provider,
+        canonicalSpec?.exchange,
+        canonicalSpec?.provider,
+        paramsSnapshot?.exchange,
+        paramsSnapshot?.provider,
+        paramsSnapshot?.exchangeId,
+      ),
+    )
+    const symbol = this.normalizeRecoveredSymbol(
+      this.readFirstString(strategyConfig?.symbol, canonicalMarket?.symbol, canonicalSpec?.symbol, paramsSnapshot?.symbol, lockedParams?.symbol),
+    )
+    const marketType = this.normalizeRecoveredMarketType(
+      this.readFirstString(strategyConfig?.marketType, canonicalMarket?.marketType, canonicalSpec?.marketType, paramsSnapshot?.marketType, lockedParams?.marketType),
+    )
+    const timeframe = this.readFirstString(
+      strategyConfig?.baseTimeframe,
+      strategyConfig?.timeframe,
+      canonicalMarket?.primaryTimeframe,
+      canonicalSpec?.primaryTimeframe,
+      this.readFirstArrayString(canonicalSpec?.timeframes),
+      paramsSnapshot?.baseTimeframe,
+      paramsSnapshot?.timeframe,
+      lockedParams?.baseTimeframe,
+      lockedParams?.timeframe,
+    )
+
+    const recoveredState: SemanticState = {
+      ...state,
+      position: this.buildRecoveredSnapshotPosition(strategyConfig, paramsSnapshot, lockedParams),
+      contextSlots: {
+        exchange: exchange ? this.buildRecoveredContextSlot('exchange', exchange) : null,
+        symbol: symbol ? this.buildRecoveredContextSlot('symbol', symbol) : null,
+        marketType: marketType ? this.buildRecoveredContextSlot('marketType', marketType) : null,
+        timeframe: timeframe ? this.buildRecoveredContextSlot('timeframe', timeframe) : null,
+      },
+    }
+
+    return this.hydrateRecoveredSemanticStateFromCanonicalSpec(recoveredState, snapshot)
+  }
+
+  private hydrateRecoveredSemanticStateFromCanonicalSpec(
+    state: SemanticState,
+    snapshot: EditablePublishedStrategySnapshotRecord,
+  ): SemanticState {
+    if (state.triggers.length > 0 || state.actions.length > 0 || state.risk.length > 0) {
+      return state
+    }
+
+    const spec = this.readJsonRecord(snapshot.specSnapshot)
+      ?? this.readJsonRecord(snapshot.originalSessionLatestSpecDesc)
+    const rules = Array.isArray(spec?.rules) ? spec.rules : []
+    const triggers: SemanticTriggerState[] = []
+    const actions: SemanticActionState[] = []
+
+    for (const rule of rules) {
+      const ruleRecord = this.readJsonRecord(rule)
+      const trigger = this.buildRecoveredTriggerFromCanonicalRule(ruleRecord, triggers.length)
+      if (trigger) {
+        triggers.push(trigger)
+      }
+
+      actions.push(...this.buildRecoveredActionsFromCanonicalRule(ruleRecord, actions.length))
+    }
+
+    const risk = this.buildRecoveredRiskFromCanonicalSpec(spec)
+    if (triggers.length === 0 && actions.length === 0 && risk.length === 0) {
+      return state
+    }
+
+    return {
+      ...state,
+      triggers,
+      actions,
+      risk,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  private buildRecoveredTriggerFromCanonicalRule(
+    rule: Record<string, unknown> | null,
+    index: number,
+  ): SemanticTriggerState | null {
+    const condition = this.readJsonRecord(rule?.condition)
+    const key = this.readStringValue(condition?.key)
+    if (!key) return null
+
+    const phase = rule?.phase === 'exit' || rule?.phase === 'risk' ? rule.phase : 'entry'
+    const params = this.readJsonRecord(condition?.params) ?? {}
+    const triggerKey = this.mapCanonicalConditionKeyToSemanticTriggerKey(key)
+    if (!triggerKey) return null
+
+    const triggerParams = this.buildRecoveredTriggerParamsFromCanonicalCondition(key, condition, params)
+    return {
+      id: this.readStringValue(rule?.id) ?? `recovered-trigger-${index + 1}`,
+      key: triggerKey,
+      phase,
+      params: triggerParams,
+      sideScope: this.readSemanticSideScope(rule?.sideScope),
+      status: 'locked',
+      source: 'derived',
+      evidence: {
+        text: 'published snapshot canonical spec',
+        source: 'derived',
+      },
+      openSlots: [],
+    }
+  }
+
+  private mapCanonicalConditionKeyToSemanticTriggerKey(key: string): string | null {
+    const map: Record<string, string> = {
+      'ma.golden_cross': 'indicator.cross_over',
+      'ma.death_cross': 'indicator.cross_under',
+      'macd.golden_cross': 'indicator.cross_over',
+      'macd.death_cross': 'indicator.cross_under',
+      'rsi.cross_over': 'indicator.cross_over',
+      'rsi.cross_under': 'indicator.cross_under',
+      'rsi.threshold_lte': 'oscillator.rsi_lte',
+      'rsi.threshold_gte': 'oscillator.rsi_gte',
+      'price.percent_change': 'price.percent_change',
+      'price.range_position_lte': 'price.range_position_lte',
+      'price.range_position_gte': 'price.range_position_gte',
+      'price.breakout_up': 'price.breakout_up',
+      'price.breakout_down': 'price.breakout_down',
+      'bollinger.upper_break': 'bollinger.touch_upper',
+      'bollinger.lower_break': 'bollinger.touch_lower',
+      'bollinger.middle_revert': 'bollinger.touch_middle',
+      'trend.direction': 'trend.direction',
+      'market.regime': 'market.regime',
+      'volatility.state': 'volatility.state',
+    }
+    return map[key] ?? null
+  }
+
+  private buildRecoveredTriggerParamsFromCanonicalCondition(
+    key: string,
+    condition: Record<string, unknown>,
+    params: Record<string, unknown>,
+  ): Record<string, unknown> {
+    if (key.startsWith('ma.')) {
+      return {
+        indicator: this.readStringValue(params.indicator) ?? 'sma',
+        ...this.copyNumberParam(params, 'fastPeriod'),
+        ...this.copyNumberParam(params, 'slowPeriod'),
+      }
+    }
+    if (key.startsWith('macd.')) {
+      return {
+        indicator: 'macd',
+        ...this.copyNumberParam(params, 'fastPeriod'),
+        ...this.copyNumberParam(params, 'slowPeriod'),
+        ...this.copyNumberParam(params, 'signalPeriod'),
+      }
+    }
+    if (key.startsWith('rsi.cross')) {
+      return {
+        indicator: 'rsi',
+        ...this.copyNumberParam(params, 'period'),
+        ...this.copyNumberValue(condition, 'value'),
+      }
+    }
+    if (key === 'rsi.threshold_lte' || key === 'rsi.threshold_gte') {
+      return {
+        ...this.copyNumberParam(params, 'period'),
+        ...this.copyNumberValue(condition, 'value'),
+      }
+    }
+
+    return { ...params }
+  }
+
+  private buildRecoveredActionsFromCanonicalRule(
+    rule: Record<string, unknown> | null,
+    offset: number,
+  ): SemanticActionState[] {
+    const rawActions = Array.isArray(rule?.actions) ? rule.actions : []
+    return rawActions
+      .map((action, index): SemanticActionState | null => {
+        const actionRecord = this.readJsonRecord(action)
+        const key = this.mapCanonicalActionTypeToSemanticActionKey(this.readStringValue(actionRecord?.type))
+        if (!key) return null
+        return {
+          id: this.readStringValue(actionRecord?.id) ?? `recovered-action-${offset + index + 1}`,
+          key,
+          params: {},
+          status: 'locked',
+          source: 'derived',
+          evidence: {
+            text: 'published snapshot canonical spec',
+            source: 'derived',
+          },
+        }
+      })
+      .filter((action): action is SemanticActionState => action !== null)
+  }
+
+  private mapCanonicalActionTypeToSemanticActionKey(type: string | null): string | null {
+    const map: Record<string, string> = {
+      OPEN_LONG: 'open_long',
+      CLOSE_LONG: 'close_long',
+      OPEN_SHORT: 'open_short',
+      CLOSE_SHORT: 'close_short',
+      REDUCE_POSITION: 'reduce_position',
+    }
+    return type ? (map[type] ?? null) : null
+  }
+
+  private buildRecoveredRiskFromCanonicalSpec(spec: Record<string, unknown> | null): SemanticRiskState[] {
+    const riskRules = this.readJsonRecord(spec?.riskRules)
+    const risk: SemanticRiskState[] = []
+    const stopLossPct = this.readPositiveNumber(riskRules?.stopLossPct)
+    if (stopLossPct !== null) {
+      risk.push(this.buildRecoveredRiskAtom('recovered-risk-stop-loss', 'risk.stop_loss_pct', stopLossPct))
+    }
+    const takeProfitPct = this.readPositiveNumber(riskRules?.takeProfitPct)
+    if (takeProfitPct !== null) {
+      risk.push(this.buildRecoveredRiskAtom('recovered-risk-take-profit', 'risk.take_profit_pct', takeProfitPct))
+    }
+    return risk
+  }
+
+  private buildRecoveredRiskAtom(id: string, key: string, valuePct: number): SemanticRiskState {
+    return {
+      id,
+      key,
+      params: { valuePct },
+      status: 'locked',
+      source: 'derived',
+      evidence: {
+        text: 'published snapshot canonical spec',
+        source: 'derived',
+      },
+      openSlots: [],
+    }
+  }
+
+  private readSemanticSideScope(value: unknown): 'long' | 'short' | 'both' | undefined {
+    if (value === 'long' || value === 'short' || value === 'both') return value
+    return undefined
+  }
+
+  private copyNumberParam(source: Record<string, unknown>, key: string): Record<string, number> {
+    const value = this.readPositiveNumber(source[key])
+    return value === null ? {} : { [key]: value }
+  }
+
+  private copyNumberValue(source: Record<string, unknown>, key: string): Record<string, number> {
+    const value = this.readPositiveNumber(source[key])
+    return value === null ? {} : { [key]: value }
+  }
+
+  private resolveRecoveredSemanticGraph(
+    snapshot: EditablePublishedStrategySnapshotRecord,
+    semanticState: SemanticState,
+  ): Record<string, unknown> {
+    return this.readJsonRecord(snapshot.semanticGraph) ?? this.buildMinimalSemanticGraphFromState(semanticState)
+  }
+
+  private buildMinimalSemanticGraphFromState(
+    semanticState: SemanticState,
+  ): Record<string, unknown> {
+    return {
+      version: 1,
+      market: {
+        symbol: this.readSemanticContextValue(semanticState.contextSlots.symbol) ?? 'UNKNOWN',
+        primaryTimeframe: this.readSemanticContextValue(semanticState.contextSlots.timeframe) ?? '1h',
+      },
+      nodes: [],
+      actions: [],
+      risk: [],
+    }
+  }
+
+  private buildSemanticEditArtifactReset(
+    semanticState: SemanticState,
+  ): Pick<Prisma.LlmStrategyCodegenSessionUpdateInput, 'latestDraftCode' | 'rejectReason' | 'validationReport' | 'semanticGraph'> {
+    return {
+      latestDraftCode: null,
+      rejectReason: null,
+      validationReport: null,
+      semanticGraph: this.buildMinimalSemanticGraphFromState(semanticState) as Prisma.InputJsonValue,
+    }
+  }
+
+  private buildRecoveredSnapshotPosition(
+    strategyConfig: Record<string, unknown> | null,
+    paramsSnapshot: Record<string, unknown> | null,
+    lockedParams: Record<string, unknown> | null,
+  ): SemanticState['position'] {
+    const directRatio = this.readFirstPositiveNumber(
+      strategyConfig?.positionSizeRatio,
+      paramsSnapshot?.positionSizeRatio,
+      lockedParams?.positionSizeRatio,
+    )
+    const percent = this.readFirstPositiveNumber(
+      strategyConfig?.positionSizeRatioPercent,
+      strategyConfig?.positionPct,
+      paramsSnapshot?.positionSizeRatioPercent,
+      paramsSnapshot?.positionPct,
+      lockedParams?.positionSizeRatioPercent,
+      lockedParams?.positionPct,
+    )
+    const value = directRatio ?? (percent !== null ? this.normalizePercentToRatio(percent) : null)
+    if (value === null) {
+      return null
+    }
+
+    return {
+      mode: 'fixed_ratio',
+      value,
+      positionMode: this.readFirstString(
+        strategyConfig?.positionMode,
+        paramsSnapshot?.positionMode,
+        lockedParams?.positionMode,
+      ) ?? 'long_only',
+      status: 'locked',
+      source: 'derived',
+      evidence: {
+        text: 'published snapshot structured strategy config',
+        source: 'derived',
+      },
+    }
+  }
+
+  private buildRecoveredContextSlot(
+    slotKey: 'exchange' | 'symbol' | 'marketType' | 'timeframe',
+    value: string,
+  ): SemanticSlotState {
+    const hints: Record<typeof slotKey, string> = {
+      exchange: '请确认交易所。',
+      symbol: '请确认交易标的。',
+      marketType: '请确认市场类型（现货或合约/perp）。',
+      timeframe: '请确认主周期。',
+    }
+
+    return {
+      slotKey,
+      fieldPath: `contextSlots.${slotKey}`,
+      value,
+      status: 'locked',
+      priority: 'context',
+      questionHint: hints[slotKey],
+      affectsExecution: true,
+      evidence: {
+        text: 'published snapshot structured strategy config',
+        source: 'derived',
+      },
+    }
+  }
+
+  private readRecoveredSnapshotSymbol(snapshot: EditablePublishedStrategySnapshotRecord): string | null {
+    const strategyConfig = this.readJsonRecord(snapshot.strategyConfig)
+    const paramsSnapshot = this.readJsonRecord(snapshot.paramsSnapshot)
+    const canonicalSpec = this.readJsonRecord(snapshot.specSnapshot)
+      ?? this.readJsonRecord(snapshot.originalSessionLatestSpecDesc)
+    const canonicalMarket = this.readJsonRecord(canonicalSpec?.market)
+    return this.normalizeRecoveredSymbol(
+      this.readFirstString(strategyConfig?.symbol, canonicalMarket?.symbol, canonicalSpec?.symbol, paramsSnapshot?.symbol),
+    )
+  }
+
+  private readFirstString(...values: unknown[]): string | null {
+    for (const value of values) {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim()
+      }
+    }
+    return null
+  }
+
+  private readFirstArrayString(value: unknown): string | null {
+    if (!Array.isArray(value)) return null
+    return this.readFirstString(...value)
+  }
+
+  private readFirstPositiveNumber(...values: unknown[]): number | null {
+    for (const value of values) {
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+        return value
+      }
+      if (typeof value === 'string' && value.trim()) {
+        const parsed = Number(value.trim())
+        if (Number.isFinite(parsed) && parsed > 0) {
+          return parsed
+        }
+      }
+    }
+    return null
+  }
+
+  private normalizePercentToRatio(value: number): number {
+    return value > 1 ? value / 100 : value
+  }
+
+  private normalizeRecoveredExchange(value: string | null): string | null {
+    return value?.trim().toLowerCase() || null
+  }
+
+  private normalizeRecoveredSymbol(value: string | null): string | null {
+    return value ? normalizePublishedSymbol(value) : null
+  }
+
+  private normalizeRecoveredMarketType(value: string | null): 'spot' | 'perp' | null {
+    const normalized = value?.trim().toLowerCase()
+    if (!normalized) {
+      return null
+    }
+    if (normalized === 'spot') {
+      return 'spot'
+    }
+    if (normalized === 'perp' || normalized === 'swap' || normalized === 'perpetual' || normalized === 'futures') {
+      return 'perp'
+    }
+    return null
+  }
+
   async continueSession(
     sessionId: string,
     dto: ContinueCodegenSessionDto,
@@ -478,9 +1122,18 @@ export class CodegenConversationService {
         message: dto.message,
         semanticState: currentSemanticState,
       })
+    const hasTerminalPlannerEditIntent = this.stateMachine.isTerminalStatus(session.status)
+      && semanticEditDecision.kind === 'NO_EDIT'
+      && this.conversationSemanticEdit.hasEditIntent({
+        status: session.status,
+        message: dto.message,
+        semanticState: currentSemanticState,
+      })
     const canEditPublishedSession = session.status === 'PUBLISHED'
-      && (semanticEditDecision.kind !== 'NO_EDIT' || hasPublishedUnsupportedEditIntent)
-    if (this.stateMachine.isTerminalStatus(session.status) && !canEditPublishedSession) {
+      && (semanticEditDecision.kind !== 'NO_EDIT' || hasTerminalPlannerEditIntent)
+    const canEditFailedSession = (session.status === 'REJECTED' || session.status === 'CONSISTENCY_FAILED')
+      && (semanticEditDecision.kind !== 'NO_EDIT' || hasTerminalPlannerEditIntent)
+    if (this.stateMachine.isTerminalStatus(session.status) && !canEditPublishedSession && !canEditFailedSession) {
       throw new DomainException('codegen.session_terminal_status', {
         code: ErrorCode.CONFLICT,
         status: HttpStatus.CONFLICT,
@@ -505,7 +1158,7 @@ export class CodegenConversationService {
       if (semanticEditResponse) return semanticEditResponse
     }
 
-    if (hasPublishedUnsupportedEditIntent) {
+    if (hasPublishedUnsupportedEditIntent && !hasTerminalPlannerEditIntent) {
       const response = this.finalizeSessionResponse({
         id: session.id,
         status: session.status,
@@ -516,7 +1169,7 @@ export class CodegenConversationService {
       return this.returnPersistedSessionResponse(session.id, sessionUserId, response)
     }
 
-    if (this.stateMachine.isTerminalStatus(session.status)) {
+    if (this.stateMachine.isTerminalStatus(session.status) && !hasTerminalPlannerEditIntent) {
       throw new DomainException('codegen.session_terminal_status', {
         code: ErrorCode.CONFLICT,
         status: HttpStatus.CONFLICT,
@@ -612,6 +1265,9 @@ export class CodegenConversationService {
       semanticReadyForGenerate,
     })
     const semanticStateChanged = JSON.stringify(reducedSemanticState) !== JSON.stringify(preMergedSemanticState)
+    const terminalPlannerEditArtifactReset = this.stateMachine.isTerminalStatus(session.status)
+      ? this.buildSemanticEditArtifactReset(reducedSemanticState)
+      : {}
 
     if (deterministicAuthority) {
       const assistantPrompt = deterministicAuthority === 'clarification'
@@ -662,18 +1318,21 @@ export class CodegenConversationService {
         dto.message,
         assistantPrompt,
       )
-      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
-        status: targetStatus,
-        semanticState: reducedSemanticState,
-        clarificationState,
-        constraintPack: {
-          ...nextConstraintPack,
-          conversationHistory: historyAfterDeterministicOutcome,
-        },
-        ...(deterministicAuthority === 'confirm_gate' || deterministicAuthority === 'normalization' || shouldPersistDecisionSpecDesc
-          ? { latestSpecDesc: specDesc }
-          : {}),
-      }))
+      await this.sessionsRepo.updateSession(session.id, {
+        ...this.stateMachine.buildConversationUpdate({
+          status: targetStatus,
+          semanticState: reducedSemanticState,
+          clarificationState,
+          constraintPack: {
+            ...nextConstraintPack,
+            conversationHistory: historyAfterDeterministicOutcome,
+          },
+          ...(deterministicAuthority === 'confirm_gate' || deterministicAuthority === 'normalization' || shouldPersistDecisionSpecDesc
+            ? { latestSpecDesc: specDesc }
+            : {}),
+        }),
+        ...terminalPlannerEditArtifactReset,
+      } as Prisma.LlmStrategyCodegenSessionUpdateInput)
 
       const response = this.finalizeSessionResponse({
         id: session.id,
@@ -714,13 +1373,14 @@ export class CodegenConversationService {
       }
       if (inferredConfirmation.consumed) {
         const assistantPrompt = plan.assistantPrompt || '这条消息看起来和策略无关。请描述交易逻辑或修改条件。'
+        const consumedUnrelatedStatus = session.status === 'CONFIRM_GATE' ? 'CONFIRM_GATE' : 'DRAFTING'
         const historyAfterConsumedUnrelated = this.appendConversationHistory(
           constraintPack.conversationHistory ?? [],
           dto.message,
           assistantPrompt,
         )
         await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
-          status: session.status,
+          status: consumedUnrelatedStatus,
           semanticState: baseSemanticState,
           clarificationState: clarificationStateAfterAnswers,
           constraintPack: {
@@ -745,15 +1405,18 @@ export class CodegenConversationService {
     )
 
     if (!plan.logicReady) {
-      await this.sessionsRepo.updateSession(session.id, this.stateMachine.buildConversationUpdate({
-        status: 'DRAFTING',
-        semanticState: reducedSemanticState,
-        clarificationState,
-        constraintPack: {
-          ...nextConstraintPack,
-          conversationHistory: historyAfterPlanner,
-        },
-      }))
+      await this.sessionsRepo.updateSession(session.id, {
+        ...this.stateMachine.buildConversationUpdate({
+          status: 'DRAFTING',
+          semanticState: reducedSemanticState,
+          clarificationState,
+          constraintPack: {
+            ...nextConstraintPack,
+            conversationHistory: historyAfterPlanner,
+          },
+        }),
+        ...terminalPlannerEditArtifactReset,
+      } as Prisma.LlmStrategyCodegenSessionUpdateInput)
 
       const response = this.finalizeSessionResponse({
         id: session.id,
@@ -1024,6 +1687,9 @@ export class CodegenConversationService {
           latestSpecDesc: specDesc,
         }),
         latestDraftCode: null,
+        rejectReason: null,
+        validationReport: null,
+        semanticGraph: this.buildMinimalSemanticGraphFromState(replacementState) as Prisma.InputJsonValue,
       } as Prisma.LlmStrategyCodegenSessionUpdateInput)
 
       const response = this.finalizeSessionResponse({
@@ -1057,6 +1723,8 @@ export class CodegenConversationService {
     if (args.decision.kind === 'ASK_EDIT_CLARIFICATION') {
       const nextState = withPendingSemanticEdit(args.currentSemanticState, args.decision.pendingEdit)
       const semanticArtifacts = this.resolveSemanticClarificationArtifacts(nextState)
+      const shouldClearFailedArtifacts = args.session.status === 'REJECTED'
+        || args.session.status === 'CONSISTENCY_FAILED'
       const historyAfterQuestion = this.appendConversationHistory(
         constraintPack.conversationHistory ?? [],
         args.message,
@@ -1073,6 +1741,14 @@ export class CodegenConversationService {
           },
           latestSpecDesc: args.session.status === 'PUBLISHED' ? null : undefined,
         }),
+        ...(shouldClearFailedArtifacts
+          ? {
+              latestDraftCode: null,
+              rejectReason: null,
+              validationReport: null,
+              semanticGraph: this.buildMinimalSemanticGraphFromState(nextState) as Prisma.InputJsonValue,
+            }
+          : {}),
       } as Prisma.LlmStrategyCodegenSessionUpdateInput)
 
       const response = this.finalizeSessionResponse({
@@ -1171,7 +1847,15 @@ export class CodegenConversationService {
             },
             latestSpecDesc: specDesc,
           }),
-          ...(args.session.status === 'PUBLISHED' ? { latestDraftCode: null } : {}),
+          semanticGraph: this.buildMinimalSemanticGraphFromState(reducedSemanticState) as Prisma.InputJsonValue,
+          validationReport: null,
+          ...(
+            args.session.status === 'PUBLISHED'
+              || args.session.status === 'REJECTED'
+              || args.session.status === 'CONSISTENCY_FAILED'
+              ? { latestDraftCode: null, rejectReason: null }
+              : {}
+          ),
         }
     await this.sessionsRepo.updateSession(args.session.id, semanticEditUpdate as Prisma.LlmStrategyCodegenSessionUpdateInput)
 
@@ -2481,6 +3165,10 @@ export class CodegenConversationService {
     return typeof value === 'string' && value.trim() ? value.trim() : null
   }
 
+  private readStringValue(value: unknown): string | null {
+    return typeof value === 'string' && value.trim() ? value.trim() : null
+  }
+
   private restoreInferredAssumptionsFromLatestSpecDesc(
     specDescPayload: Prisma.JsonValue | null | undefined,
     checklist: StrategyLogicSnapshot,
@@ -2549,6 +3237,7 @@ export class CodegenConversationService {
     status: LlmCodegenSessionStatus
     latestDraftCode: Prisma.JsonValue | null
     latestSpecDesc: Prisma.JsonValue | null
+    semanticGraph?: Prisma.JsonValue | null
     constraintPack?: Prisma.JsonValue | null
     rejectReason: string | null
     createdAt: Date
@@ -2594,6 +3283,12 @@ export class CodegenConversationService {
     const effectivePublishedSnapshotId = session.status === 'PUBLISHED'
       ? latestSnapshot?.id ?? sessionPublishedSnapshotId ?? null
       : null
+    const effectiveScriptCode = this.resolvePublishedResponseScriptCode({
+      status: session.status,
+      latestDraftCode: session.latestDraftCode,
+      latestSnapshot,
+      effectivePublishedSnapshotId,
+    })
     const publishedSnapshotProjection = this.buildPublishedSnapshotProjection({
       publishedSnapshotId: effectivePublishedSnapshotId,
       snapshot: latestSnapshot,
@@ -2608,7 +3303,7 @@ export class CodegenConversationService {
       missingFields: [],
       createdAt: session.createdAt instanceof Date ? session.createdAt.toISOString() : undefined,
       updatedAt: session.updatedAt instanceof Date ? session.updatedAt.toISOString() : undefined,
-      scriptCode: typeof session.latestDraftCode === 'string' ? session.latestDraftCode : null,
+      scriptCode: effectiveScriptCode,
       publishedSnapshotId: effectivePublishedSnapshotId,
       publishedSnapshotParamValues: this.buildPublishedSnapshotParamValues(latestSnapshot),
       ...publishedSnapshotProjection,
@@ -2619,6 +3314,7 @@ export class CodegenConversationService {
             : null),
       specDesc: effectiveSpecDesc,
       canonicalDigest: this.readCanonicalDigest(effectiveSpecDesc),
+      semanticGraph: this.readJsonRecord(session.semanticGraph) ?? this.readJsonRecord(latestSnapshot?.semanticGraph),
       strategyInstanceId: session.strategyInstanceId ?? null,
       clarificationState: this.readClarificationState(session.clarificationState),
       publicationGate:
@@ -2627,6 +3323,27 @@ export class CodegenConversationService {
         ?? this.readPublicationGate(sessionConsistencyReport),
       rejectReason: session.rejectReason,
     })
+  }
+
+  private resolvePublishedResponseScriptCode(args: {
+    status: LlmCodegenSessionStatus
+    latestDraftCode: Prisma.JsonValue | null
+    latestSnapshot: { id?: string | null, scriptSnapshot?: unknown } | null
+    effectivePublishedSnapshotId: string | null
+  }): string | null {
+    if (typeof args.latestDraftCode === 'string' && args.latestDraftCode.trim().length > 0) {
+      return args.latestDraftCode
+    }
+    if (
+      args.status !== 'PUBLISHED'
+      || !args.effectivePublishedSnapshotId
+      || args.latestSnapshot?.id !== args.effectivePublishedSnapshotId
+    ) {
+      return null
+    }
+    return typeof args.latestSnapshot.scriptSnapshot === 'string' && args.latestSnapshot.scriptSnapshot.trim().length > 0
+      ? args.latestSnapshot.scriptSnapshot
+      : null
   }
 
   private async toConversationResponse(
@@ -2647,7 +3364,7 @@ export class CodegenConversationService {
 
     return {
       id: conversation.id,
-      activeCodegenSessionId: session && !this.stateMachine.isTerminalStatus(session.status) ? session.id : null,
+      activeCodegenSessionId: session && this.isEditableConversationSessionStatus(session.status) ? session.id : null,
       conversationTitle: conversation.title,
       conversationMessages: conversation.messages,
       status: snapshot?.status as LlmCodegenSessionStatus | undefined,
@@ -2672,6 +3389,13 @@ export class CodegenConversationService {
       strategyInstanceId: snapshot?.strategyInstanceId ?? null,
       rejectReason: snapshot?.rejectReason ?? null,
     }
+  }
+
+  private isEditableConversationSessionStatus(status: LlmCodegenSessionStatus): boolean {
+    return !this.stateMachine.isTerminalStatus(status)
+      || status === 'PUBLISHED'
+      || status === 'REJECTED'
+      || status === 'CONSISTENCY_FAILED'
   }
 
   private finalizeSessionResponse(
@@ -3572,14 +4296,61 @@ export class CodegenConversationService {
     }
 
     const snapshot = await this.toSessionSnapshotResponse(session)
-    const messages = snapshot.conversationMessages ?? []
-    const title = snapshot.conversationTitle?.trim() || this.deriveConversationTitle(messages)
+    const projectedMessages = snapshot.conversationMessages ?? []
+    const existingConversation = await this.conversationsRepo.findByCodegenSessionId(session.id)
+    const messages = this.mergeConversationProjectionMessages(
+      existingConversation?.messages ?? [],
+      projectedMessages,
+    )
+    const title = existingConversation?.title?.trim()
+      || snapshot.conversationTitle?.trim()
+      || this.deriveConversationTitle(messages)
     await this.conversationsRepo.upsertConversationSnapshot({
       userId: fallbackUserId ?? session.userId,
       codegenSessionId: session.id,
       title,
       messages,
     })
+  }
+
+  private mergeConversationProjectionMessages(
+    existingMessages: ConversationMessage[],
+    projectedMessages: ConversationMessage[],
+  ): ConversationMessage[] {
+    if (existingMessages.length === 0) return projectedMessages
+    if (projectedMessages.length === 0) return existingMessages
+
+    const overlap = this.findConversationMessageOverlap(existingMessages, projectedMessages)
+    return [
+      ...existingMessages,
+      ...projectedMessages.slice(overlap),
+    ]
+  }
+
+  private findConversationMessageOverlap(
+    existingMessages: ConversationMessage[],
+    projectedMessages: ConversationMessage[],
+  ): number {
+    const max = Math.min(existingMessages.length, projectedMessages.length)
+    for (let size = max; size > 0; size -= 1) {
+      const existingStart = existingMessages.length - size
+      let matches = true
+      for (let index = 0; index < size; index += 1) {
+        if (!this.isSameConversationMessage(existingMessages[existingStart + index], projectedMessages[index])) {
+          matches = false
+          break
+        }
+      }
+      if (matches) return size
+    }
+    return 0
+  }
+
+  private isSameConversationMessage(
+    left: ConversationMessage | undefined,
+    right: ConversationMessage | undefined,
+  ): boolean {
+    return Boolean(left && right && left.role === right.role && left.content.trim() === right.content.trim())
   }
 
   private excludeStrategyPlazaRunConversations(

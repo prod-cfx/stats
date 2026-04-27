@@ -195,4 +195,59 @@ describe('llm codegen session transport handling', () => {
     expect(result.publicationGate).toBeNull()
     expect(result.conversationMessages).toEqual(sessionPayload.conversationMessages)
   })
+
+  it('recovers AI Quant edit conversation through account endpoint', async () => {
+    const recoveryPayload = {
+      id: 'conversation-1',
+      activeCodegenSessionId: 'session-1',
+      conversationMessages: [{ role: 'assistant' as const, content: '已基于上一版策略恢复修改上下文。' }],
+      publishedSnapshotId: 'snapshot-1',
+      strategyInstanceId: 'strategy-1',
+      semanticGraph: { version: 1 },
+      specDesc: { rules: [] },
+    }
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ data: recoveryPayload }),
+    } as Response)
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { recoverAiQuantEditConversation } = await import('./api')
+
+    const result = await recoverAiQuantEditConversation({
+      strategyInstanceId: ' strategy-1 ',
+      publishedSnapshotId: ' snapshot-1 ',
+      conversationId: ' conversation-1 ',
+      sessionId: ' session-1 ',
+      source: 'account-detail',
+    })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3000/api/v1/account/ai-quant/conversations/edit-session',
+      expect.objectContaining({
+        method: 'POST',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer a.b.c',
+          'Content-Type': 'application/json',
+        }),
+        body: JSON.stringify({
+          strategyInstanceId: 'strategy-1',
+          publishedSnapshotId: 'snapshot-1',
+          conversationId: 'conversation-1',
+          sessionId: 'session-1',
+          source: 'account-detail',
+        }),
+      }),
+    )
+    expect(result).toEqual(recoveryPayload)
+  })
+
+  it('rejects recovery without strategy instance id', async () => {
+    const { recoverAiQuantEditConversation } = await import('./api')
+
+    await expect(recoverAiQuantEditConversation({ strategyInstanceId: '   ' })).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    })
+  })
 })

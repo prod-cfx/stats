@@ -21,4 +21,16 @@ describe('conversationPlannerSystemPrompt', () => {
     expect(prompt).toContain('不得泛化已锁定规则，不得把精确规则回退为模板化摘要')
     expect(prompt).toContain('只输出 JSON，不要 markdown')
   })
+
+  it('requires incremental atomic semantic edits when active semantic state exists', () => {
+    const prompt = buildConversationPlannerSystemPrompt()
+
+    expect(prompt).toContain('已有 active semantic state 时，默认按增量修改处理')
+    expect(prompt).toContain('输出原子语义 patch')
+    expect(prompt).toContain('context、trigger、action、risk、position')
+    expect(prompt).toContain('不要输出 checklist')
+    expect(prompt).toContain('用户明确要求替换整个策略')
+    expect(prompt).toContain('否则不得重置已有语义')
+    expect(prompt).toContain('若编辑意图不完整，只追问缺失的 semantic slot')
+  })
 })

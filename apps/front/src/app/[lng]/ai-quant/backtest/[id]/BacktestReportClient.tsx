@@ -13,6 +13,7 @@ import dynamic from 'next/dynamic'
 import Link from 'next/link'
 import React, { startTransition, useMemo, useState } from 'react'
 import { getBacktestJobResult } from '@/components/ai-quant/backtest-job-client'
+import { setIntent } from '@/components/ai-quant/intent-storage'
 import { createBacktestReportDataFromLive } from './backtest-report-data'
 import {
   buildBacktestResultPresentation,
@@ -551,6 +552,24 @@ export function BacktestReportClient({
       }),
     [lng, metrics, normalizedMarketType, symbol],
   )
+  const handleReturnToAiQuant = React.useCallback(() => {
+    const strategyInstanceId = reportContext?.strategyInstanceId?.trim()
+    if (!strategyInstanceId) {
+      return
+    }
+
+    const publishedSnapshotId = reportContext?.publishedSnapshotId?.trim()
+    const conversationId = reportContext?.conversationId?.trim()
+    const sessionId = reportContext?.sessionId?.trim()
+    setIntent({
+      type: 'strategy-edit-session',
+      strategyInstanceId,
+      ...(publishedSnapshotId ? { publishedSnapshotId } : {}),
+      ...(conversationId ? { conversationId } : {}),
+      ...(sessionId ? { sessionId } : {}),
+      source: 'backtest',
+    })
+  }, [reportContext?.conversationId, reportContext?.publishedSnapshotId, reportContext?.sessionId, reportContext?.strategyInstanceId])
 
   // Determine strategy status based on metrics
   let status: 'good' | 'warning' | 'danger' = 'warning'
@@ -580,6 +599,7 @@ export function BacktestReportClient({
         </div>
         <Link
           href={`/${lng}/ai-quant`}
+          onClick={handleReturnToAiQuant}
           className="rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)] transition-colors hover:bg-[color:var(--cf-surface-hover)]"
         >
           {lng === 'en' ? 'Back to AI Quant' : '返回 AI量化'}

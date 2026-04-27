@@ -17,6 +17,8 @@ export function buildStrategyCodegenSystemPrompt(helperSignatures: string): stri
     '禁止遗漏任何已经明确的策略语义；如果规则已出现在 canonical 语义或 semanticState 中，就不能静默忽略。',
     '禁止把强语义规则弱化；例如“直接平仓”不能实现成“减仓”，“强制止损”不能实现成普通提示。',
     '禁止依赖旧 checklist 文本分类推断策略真实语义。',
+    '不要从脚本文本反推策略语义，也不要用旧脚本补全、覆盖或恢复当前 semanticState。',
+    '逻辑图和脚本必须从更新后的 SemanticState 与 canonical spec 派生，不得从生成脚本文本倒推。',
     'exchange / marketType / symbol / timeframe 等市场元数据必须体现在执行模型、参数约束或编译配置中；不要为了“覆盖”而伪造无意义的运行时代码分支。',
     '生成前先逐条检查需求和约束里的 canonical 语义是否都已覆盖，确认每条语义都能在代码中找到对应逻辑。',
     '必须严格遵循以下 TypeScript 接口与输出合同（逐字遵守类型约束）：',
