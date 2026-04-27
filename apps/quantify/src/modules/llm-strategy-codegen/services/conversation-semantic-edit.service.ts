@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
 import type { PendingSemanticEdit, SemanticEditDecision, SemanticEditPatch } from '../types/semantic-edit'
-import type { SemanticState } from '../types/semantic-state'
+import type { SemanticState, SemanticTriggerState } from '../types/semantic-state'
 import { isProcessingCodegenSessionStatus } from '../types/codegen-session-status'
 import { readPendingSemanticEdit, withPendingSemanticEdit } from '../types/semantic-edit'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
@@ -23,6 +23,9 @@ export class ConversationSemanticEditService {
       }
       if (operation.op === 'replace_context') {
         return this.applyContextReplacement(next, operation.field, operation.value)
+      }
+      if (operation.op === 'replace_trigger') {
+        return this.applyTriggerReplacement(next, operation.text ?? '')
       }
       return next
     }, state)
@@ -59,6 +62,21 @@ export class ConversationSemanticEditService {
       return {
         kind: 'ASK_EDIT_CLARIFICATION',
         question: '请描述新的触发、行动、风控、仓位和运行 context，我会按新的语义重新整理策略。',
+        pendingEdit,
+      }
+    }
+
+    if (pendingEdit && this.isPendingRsiTriggerReplacement(pendingEdit)) {
+      if (this.extractRsiThreshold(message)) {
+        return {
+          kind: 'APPLY_TO_SEMANTIC_STATE',
+          patch: { operations: [{ op: 'replace_trigger', targetRef: pendingEdit.targetRef, text: message }] },
+        }
+      }
+
+      return {
+        kind: 'ASK_EDIT_CLARIFICATION',
+        question: '你正在把触发语义改成 RSI。请确认 RSI 阈值，例如低于 30 或高于 70。',
         pendingEdit,
       }
     }
@@ -132,6 +150,42 @@ export class ConversationSemanticEditService {
     return readPendingSemanticEdit(state)
   }
 
+  private applyTriggerReplacement(state: SemanticState, text: string): SemanticState {
+    const pendingEdit = readPendingSemanticEdit(state)
+    if (!pendingEdit || !this.isPendingRsiTriggerReplacement(pendingEdit)) return state
+
+    const threshold = this.extractRsiThreshold(text)
+    if (!threshold) return state
+
+    const trigger: SemanticTriggerState = {
+      ...pendingEdit.candidate,
+      id: pendingEdit.targetRef ?? pendingEdit.candidate.id,
+      key: threshold.direction === 'gte' ? 'oscillator.rsi_gte' : 'oscillator.rsi_lte',
+      phase: pendingEdit.candidate.phase === 'exit' ? 'exit' : 'entry',
+      params: {
+        indicator: 'rsi',
+        period: 14,
+        value: threshold.value,
+      },
+      status: 'locked',
+      source: 'user_explicit',
+      evidence: {
+        text,
+        source: 'user_explicit',
+      },
+      openSlots: [],
+    }
+    const triggers = pendingEdit.targetRef
+      ? state.triggers.map((item) => item.id === pendingEdit.targetRef ? trigger : item)
+      : [trigger, ...state.triggers.filter((item) => item.id !== trigger.id)]
+
+    return withPendingSemanticEdit({
+      ...state,
+      triggers,
+      updatedAt: new Date().toISOString(),
+    }, null)
+  }
+
   private applyContextReplacement(
     state: SemanticState,
     field: 'symbol' | 'timeframe' | 'exchange' | 'marketType',
@@ -179,6 +233,21 @@ export class ConversationSemanticEditService {
   private isStrategyReplacementSeedPendingEdit(pendingEdit: PendingSemanticEdit): boolean {
     return pendingEdit.op === 'replace_trigger'
       && pendingEdit.candidate.key === 'pending.strategy_replacement_seed'
+  }
+
+  private isPendingRsiTriggerReplacement(pendingEdit: PendingSemanticEdit): boolean {
+    return pendingEdit.op === 'replace_trigger'
+      && pendingEdit.candidate.key === 'indicator.rsi_threshold'
+  }
+
+  private extractRsiThreshold(message: string): { direction: 'lte' | 'gte', value: number } | null {
+    const match = /(\d+(?:\.\d+)?)/u.exec(message)
+    if (!match) return null
+    const value = Number(match[1])
+    if (!Number.isFinite(value)) return null
+
+    const direction = /高于|大于|超过|>=|>/u.test(message) ? 'gte' : 'lte'
+    return { direction, value }
   }
 
   private hasSemanticEditIntent(message: string, state: SemanticState): boolean {

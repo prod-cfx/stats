@@ -185,6 +185,39 @@ describe('ConversationSemanticEditService', () => {
     expect(service.readPendingEditForTest(service.applyPatch(withPending, decision.patch))).toBeNull()
   })
 
+  it('consumes pending trigger replacement when follow-up fills RSI threshold', () => {
+    const semanticState = service.withPendingEditForTest(
+      service.createEmptySemanticStateForTest(),
+      '把触发改成 RSI',
+    )
+
+    const decision = service.decide({
+      status: 'DRAFTING',
+      message: '低于 30',
+      semanticState,
+    })
+
+    expect(decision).toEqual({
+      kind: 'APPLY_TO_SEMANTIC_STATE',
+      patch: { operations: [{ op: 'replace_trigger', targetRef: undefined, text: '低于 30' }] },
+    })
+    if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
+
+    const next = service.applyPatch(semanticState, decision.patch)
+
+    expect(service.readPendingEditForTest(next)).toBeNull()
+    expect(next.triggers[0]).toEqual(expect.objectContaining({
+      key: 'oscillator.rsi_lte',
+      phase: 'entry',
+      params: {
+        indicator: 'rsi',
+        period: 14,
+        value: 30,
+      },
+      status: 'locked',
+    }))
+  })
+
   it('keeps an empty patch as a no-op even when a pending edit exists', () => {
     const withPending = service.withPendingEditForTest(
       service.createEmptySemanticStateForTest(),
