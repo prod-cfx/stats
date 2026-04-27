@@ -80,11 +80,13 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
     messages,
     paramValues,
     onConfirmBacktestParams,
+    onSend,
     onRunBacktest,
   }: {
     messages: Array<{ id: string, role: string, content: string }>
     paramValues: Record<string, unknown>
     onConfirmBacktestParams: (nextValues: Record<string, unknown>) => void
+    onSend: (input: string) => void | Promise<void>
     onRunBacktest: () => void
   }) => (
     <div>
@@ -117,6 +119,9 @@ jest.mock('@/components/ai-quant/QuantChatPanel', () => ({
         onClick={() => onConfirmBacktestParams({ ...paramValues, backtestInitialCash: 25000 })}
       >
         execution
+      </button>
+      <button data-testid="send-semantic-edit" onClick={() => onSend('把止损改成 3%')}>
+        semantic-edit
       </button>
       <button data-testid="run-backtest" onClick={onRunBacktest}>run</button>
       <div data-testid="params">{JSON.stringify(paramValues)}</div>
@@ -708,6 +713,134 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(listLlmCodegenSessions).not.toHaveBeenCalled()
     expect(container.textContent).toContain('server-message')
     expect(container.textContent).not.toContain('persisted-message')
+  })
+
+  it('semantic edit clears published/backtest artifacts and refreshes graph state from CONFIRM_GATE response', async () => {
+    localStorage.clear()
+    localStorage.setItem(
+      'ai_quant_conversations_v1',
+      JSON.stringify({
+        version: 'deploy-current',
+        conversations: [{
+          ...buildPersistedConversation(Date.now()),
+          llmCodegenSessionId: 'session-edit',
+          backtestResult: {
+            id: 'bt-old',
+            startAt: '2026-03-01T00:00:00.000Z',
+            endAt: '2026-03-08T00:00:00.000Z',
+            maxDrawdownPct: 5,
+            totalReturnPct: 12,
+            winRatePct: 60,
+            tradeCount: 8,
+          },
+          publishedScriptCode: 'export default function oldStrategy() { return true }',
+          publishedSnapshotDeploymentExecutionDefaults: {
+            leverage: 2,
+            priceSource: 'close',
+            orderType: 'market',
+            timeInForce: 'gtc',
+          },
+          publishedSnapshotDeploymentExecutionConstraints: {
+            effectiveAllowedLeverageRange: { min: 1, max: 3 },
+            supportedPriceSources: ['close'],
+            supportedOrderTypes: ['market'],
+            supportedTimeInForce: ['gtc'],
+            constraintExplanation: 'old constraints',
+          },
+          publicationGate: { passed: true, blockingMismatches: [] },
+        }],
+      }),
+    )
+
+    const newSpecDesc = {
+      canonicalDigest: 'sha256:new-semantic-digest',
+      market: {
+        symbols: ['ETHUSDT'],
+        timeframes: ['15m'],
+      },
+      rules: [
+        {
+          id: 'risk-stop-loss',
+          phase: 'risk',
+          condition: {
+            key: 'position_loss_pct',
+            value: 0.03,
+          },
+          actions: [{ type: 'FORCE_EXIT' }],
+        },
+      ],
+    }
+    const newSemanticGraph = {
+      version: 2,
+      nodes: [
+        {
+          id: 'risk-stop-loss',
+          label: '3% stop loss',
+        },
+      ],
+      edges: [],
+    }
+
+    const { continueLlmCodegenSession } = jest.requireMock('@/lib/api') as {
+      continueLlmCodegenSession: jest.Mock
+    }
+    continueLlmCodegenSession.mockResolvedValue({
+      id: 'session-edit',
+      conversationId: 'conv-1',
+      conversationTitle: 'edited strategy',
+      status: 'CONFIRM_GATE',
+      updatedAt: '2026-04-10T12:00:00.000Z',
+      canonicalDigest: 'sha256:new-semantic-digest',
+      specDesc: newSpecDesc,
+      semanticGraph: newSemanticGraph,
+      validationReport: { ok: true, errors: [] },
+      publicationGate: null,
+      assistantPrompt: '已更新为 3% stop loss，请确认逻辑图。',
+      conversationMessages: [
+        { role: 'user', content: '把止损改成 3%' },
+        { role: 'assistant', content: '已更新为 3% stop loss，请确认逻辑图。' },
+      ],
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      ;(container.querySelector('[data-testid="send-semantic-edit"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitForCondition(() => {
+      const stored = localStorage.getItem('ai_quant_conversations_v1')
+      expect(stored).toBeTruthy()
+      const parsed = JSON.parse(stored ?? '{}') as {
+        conversations: Array<Record<string, unknown>>
+      }
+      const conversation = parsed.conversations[0]
+      expect(conversation?.codegenSpecDesc).toEqual(newSpecDesc)
+      expect(conversation?.semanticGraph).toEqual(newSemanticGraph)
+      expect(conversation?.pendingCanonicalDigest).toBe('sha256:new-semantic-digest')
+      expect(conversation?.publishedStrategyInstanceId).toBeNull()
+      expect(conversation?.publishedSnapshotId).toBeNull()
+      expect(conversation?.publishedSnapshotParamValues).toBeNull()
+      expect(conversation?.publishedSnapshotStrategyConfig).toBeNull()
+      expect(conversation?.publishedSnapshotBacktestConfigDefaults).toBeNull()
+      expect(conversation?.publishedSnapshotDeploymentExecutionDefaults).toBeNull()
+      expect(conversation?.publishedSnapshotDeploymentExecutionConstraints).toBeNull()
+      expect(conversation?.publishedSnapshotCompatibilityMetadata).toBeNull()
+      expect(conversation?.publishedScriptCode).toBeNull()
+      expect(conversation?.publishedScriptGraphVersion).toBeNull()
+      expect(conversation?.publicationGate).toBeNull()
+      expect(conversation?.backtestResult).toBeNull()
+      expect(JSON.stringify(conversation?.logicGraph)).toContain('亏损达到 3%')
+    })
+    expect(container.querySelector('[data-testid="backtest-summary"]')).toBeNull()
+    expect(container.textContent).toContain('3% stop loss')
   })
 
   it('activates a plaza edit session conversation without appending to the existing conversation', async () => {

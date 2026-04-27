@@ -1129,6 +1129,51 @@ describe('ai-quant-page-conversation', () => {
         llmCodegenSessionId: 'session-1',
         publishedStrategyInstanceId: 'strategy-1',
         publishedSnapshotId: 'snapshot-1',
+        publishedSnapshotParamValues: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
+        publishedSnapshotStrategyConfig: {
+          exchange: 'binance',
+          symbol: 'BTCUSDT',
+          marketType: 'perp',
+          baseTimeframe: '15m',
+          positionPct: 10,
+        },
+        publishedSnapshotBacktestConfigDefaults: {
+          initialCash: 10000,
+          leverage: 1,
+          slippageBps: 10,
+          feeBps: 5,
+          priceSource: 'close',
+          allowPartial: true,
+        },
+        publishedSnapshotDeploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'gtc',
+        },
+        publishedSnapshotDeploymentExecutionConstraints: {
+          effectiveAllowedLeverageRange: {
+            min: 1,
+            max: 5,
+          },
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['gtc'],
+          constraintExplanation: 'old constraints',
+        },
+        publishedSnapshotCompatibilityMetadata: {
+          isLegacySnapshot: false,
+          missingBacktestConfigDefaults: false,
+          missingDeploymentExecutionDefaults: false,
+          missingDeploymentExecutionConstraints: false,
+          requiresRepublishForBacktest: false,
+          requiresRepublishForDeploy: false,
+        },
         publishedScriptCode: 'return { ok: true }',
         publishedScriptGraphVersion: 2,
         latestSignalMessage: 'latest',
@@ -1141,6 +1186,12 @@ describe('ai-quant-page-conversation', () => {
     expect(next.logicGraph?.status).toBe('draft')
     expect(next.publishedStrategyInstanceId).toBeNull()
     expect(next.publishedSnapshotId).toBeNull()
+    expect(next.publishedSnapshotParamValues).toBeNull()
+    expect(next.publishedSnapshotStrategyConfig).toBeNull()
+    expect(next.publishedSnapshotBacktestConfigDefaults).toBeNull()
+    expect(next.publishedSnapshotDeploymentExecutionDefaults).toBeNull()
+    expect(next.publishedSnapshotDeploymentExecutionConstraints).toBeNull()
+    expect(next.publishedSnapshotCompatibilityMetadata).toBeNull()
     expect(next.publishedScriptCode).toBeNull()
     expect(next.publishedScriptGraphVersion).toBeNull()
     expect(next.backtestResult).toBeNull()
