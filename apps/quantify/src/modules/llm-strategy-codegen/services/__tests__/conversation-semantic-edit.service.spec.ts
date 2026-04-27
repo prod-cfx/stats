@@ -601,6 +601,133 @@ describe('ConversationSemanticEditService', () => {
     }))
   })
 
+  it('classifies and applies generic semantic number replacement without dropping grid semantics', () => {
+    const semanticState = {
+      ...service.createEmptySemanticStateForTest(),
+      contextSlots: {
+        exchange: {
+          slotKey: 'exchange',
+          fieldPath: 'contextSlots.exchange',
+          value: 'okx',
+          status: 'locked' as const,
+          priority: 'context' as const,
+          questionHint: '请确认交易所（binance / okx / hyperliquid）。',
+          affectsExecution: true,
+        },
+        symbol: {
+          slotKey: 'symbol',
+          fieldPath: 'contextSlots.symbol',
+          value: 'BTCUSDT',
+          status: 'locked' as const,
+          priority: 'context' as const,
+          questionHint: '请确认策略交易标的（例如 BTCUSDT）。',
+          affectsExecution: true,
+        },
+        marketType: {
+          slotKey: 'marketType',
+          fieldPath: 'contextSlots.marketType',
+          value: 'spot',
+          status: 'locked' as const,
+          priority: 'context' as const,
+          questionHint: '请确认市场类型（现货或合约/perp）。',
+          affectsExecution: true,
+        },
+        timeframe: {
+          slotKey: 'timeframe',
+          fieldPath: 'contextSlots.timeframe',
+          value: '15m',
+          status: 'locked' as const,
+          priority: 'context' as const,
+          questionHint: '请确认策略主周期（例如 15m 或 1h）。',
+          affectsExecution: true,
+        },
+      },
+      triggers: [
+        {
+          id: 'entry-range-lower',
+          key: 'price.range_position_lte',
+          phase: 'entry' as const,
+          sideScope: 'long' as const,
+          params: { lookbackBars: 36, positionPct: 20 },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+        {
+          id: 'exit-range-upper',
+          key: 'price.range_position_gte',
+          phase: 'exit' as const,
+          sideScope: 'long' as const,
+          params: { lookbackBars: 36, positionPct: 55 },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+      ],
+      actions: [
+        { id: 'action-open-long', key: 'open_long', status: 'locked' as const, source: 'user_explicit' as const },
+        { id: 'action-close-long', key: 'close_long', status: 'locked' as const, source: 'user_explicit' as const },
+      ],
+      risk: [
+        {
+          id: 'risk-stop-loss',
+          key: 'risk.stop_loss_pct',
+          params: { valuePct: 0.03, basis: 'entry_avg_price' },
+          status: 'locked' as const,
+          source: 'user_explicit' as const,
+          openSlots: [],
+        },
+      ],
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.25,
+        positionMode: 'long_only',
+        status: 'locked' as const,
+        source: 'user_explicit' as const,
+        openSlots: [],
+      },
+    }
+    const message = '36根K线改为30根K线'
+
+    const decision = service.decide({
+      status: 'DRAFTING',
+      message,
+      semanticState,
+    })
+
+    expect(decision).toEqual({
+      kind: 'APPLY_TO_SEMANTIC_STATE',
+      patch: {
+        operations: [{
+          op: 'replace_semantic_number',
+          from: 36,
+          to: 30,
+          unit: 'bars',
+          text: message,
+        }],
+      },
+    })
+    if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
+
+    const next = service.applyPatch(semanticState, decision.patch)
+
+    expect(next.contextSlots.exchange?.value).toBe('okx')
+    expect(next.contextSlots.symbol?.value).toBe('BTCUSDT')
+    expect(next.contextSlots.timeframe?.value).toBe('15m')
+    expect(next.triggers).toHaveLength(2)
+    expect(next.triggers[0]).toEqual(expect.objectContaining({
+      id: 'entry-range-lower',
+      params: { lookbackBars: 30, positionPct: 20 },
+    }))
+    expect(next.triggers[1]).toEqual(expect.objectContaining({
+      id: 'exit-range-upper',
+      params: { lookbackBars: 30, positionPct: 55 },
+    }))
+    expect(next.actions).toEqual(semanticState.actions)
+    expect(next.risk).toEqual(semanticState.risk)
+    expect(next.position).toEqual(semanticState.position)
+  })
+
   it('creates pending edit when trigger replacement text is incomplete', () => {
     const decision = service.decide({
       status: 'CONFIRM_GATE',

@@ -42,6 +42,9 @@ export class ConversationSemanticEditService {
       if (operation.op === 'replace_trigger_number') {
         return this.applyTriggerNumberReplacement(next, operation)
       }
+      if (operation.op === 'replace_semantic_number') {
+        return this.applySemanticNumberReplacement(next, operation)
+      }
       if (operation.op === 'replace_action') {
         return this.applyActionReplacement(next, operation.text ?? '')
       }
@@ -161,6 +164,16 @@ export class ConversationSemanticEditService {
         kind: 'APPLY_TO_SEMANTIC_STATE',
         patch: {
           operations: [{ op: 'replace_trigger_number', ...triggerNumberReplacement, text: message }],
+        },
+      }
+    }
+
+    const semanticNumberReplacement = this.extractSemanticNumberReplacement(message)
+    if (semanticNumberReplacement) {
+      return {
+        kind: 'APPLY_TO_SEMANTIC_STATE',
+        patch: {
+          operations: [{ op: 'replace_semantic_number', ...semanticNumberReplacement, text: message }],
         },
       }
     }
@@ -412,6 +425,55 @@ export class ConversationSemanticEditService {
     }
   }
 
+  private applySemanticNumberReplacement(
+    state: SemanticState,
+    operation: { from: number, to: number, unit?: 'bars' | 'percent' | 'plain', text?: string },
+  ): SemanticState {
+    let changed = false
+    const triggers = state.triggers.map((trigger) => {
+      const nextParams = this.replaceNumericParamValue(trigger.params, operation.from, operation.to, operation.unit)
+      if (nextParams === trigger.params) return trigger
+
+      changed = true
+      return {
+        ...trigger,
+        params: nextParams,
+        evidence: {
+          text: operation.text ?? `${operation.from}->${operation.to}`,
+          source: 'user_explicit' as const,
+        },
+      }
+    })
+
+    const risk = state.risk.map((riskItem) => {
+      const nextParams = this.replaceNumericParamValue(riskItem.params, operation.from, operation.to, operation.unit)
+      if (nextParams === riskItem.params) return riskItem
+
+      changed = true
+      return {
+        ...riskItem,
+        params: nextParams,
+        evidence: {
+          text: operation.text ?? `${operation.from}->${operation.to}`,
+          source: 'user_explicit' as const,
+        },
+      }
+    })
+
+    const position = this.replacePositionNumberValue(state.position, operation)
+    if (position !== state.position) changed = true
+
+    if (!changed) return state
+
+    return {
+      ...state,
+      triggers,
+      risk,
+      position,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
   private doesTriggerMatchNumberReplacementDirection(
     trigger: SemanticTriggerState,
     direction: 'up' | 'down' | undefined,
@@ -437,18 +499,75 @@ export class ConversationSemanticEditService {
     params: Record<string, unknown>,
     from: number,
     to: number,
+    unit: 'bars' | 'percent' | 'plain' | undefined = 'plain',
   ): Record<string, unknown> {
     let changed = false
     const nextParams: Record<string, unknown> = {}
     for (const [key, value] of Object.entries(params)) {
-      if (typeof value === 'number' && Number.isFinite(value) && this.isSameNumericValue(value, from)) {
-        nextParams[key] = to
+      const replacement = this.replaceAtomicNumberValue(key, value, from, to, unit)
+      if (replacement.changed) {
+        nextParams[key] = replacement.value
         changed = true
         continue
       }
       nextParams[key] = value
     }
     return changed ? nextParams : params
+  }
+
+  private replacePositionNumberValue(
+    position: SemanticPositionState | null,
+    operation: { from: number, to: number, unit?: 'bars' | 'percent' | 'plain', text?: string },
+  ): SemanticPositionState | null {
+    if (!position || operation.unit === 'bars') return position
+    const replacement = this.replaceAtomicNumberValue('position.value', position.value, operation.from, operation.to, operation.unit)
+    if (!replacement.changed || typeof replacement.value !== 'number') return position
+
+    return {
+      ...position,
+      value: replacement.value,
+      status: 'locked',
+      source: 'user_explicit',
+      evidence: {
+        text: operation.text ?? `${operation.from}->${operation.to}`,
+        source: 'user_explicit',
+      },
+    }
+  }
+
+  private replaceAtomicNumberValue(
+    key: string,
+    value: unknown,
+    from: number,
+    to: number,
+    unit: 'bars' | 'percent' | 'plain' | undefined,
+  ): { changed: true, value: number } | { changed: false } {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return { changed: false }
+    if (unit === 'bars' && !this.isBarsParamKey(key)) return { changed: false }
+    if (unit === 'percent' && !this.isPercentParamKey(key)) return { changed: false }
+    if (!this.isSameSemanticNumericValue(value, from, unit)) return { changed: false }
+    return { changed: true, value: this.normalizeReplacementNumericValue(value, to, unit) }
+  }
+
+  private isBarsParamKey(key: string): boolean {
+    return /bars|bar|lookback|period|window|length|周期|k线/iu.test(key)
+  }
+
+  private isPercentParamKey(key: string): boolean {
+    return /pct|percent|ratio|position\.value|仓位|百分比/iu.test(key)
+  }
+
+  private isSameSemanticNumericValue(value: number, expected: number, unit: 'bars' | 'percent' | 'plain' | undefined): boolean {
+    if (this.isSameNumericValue(value, expected)) return true
+    if (unit !== 'percent') return false
+    return this.isSameNumericValue(value * 100, expected)
+  }
+
+  private normalizeReplacementNumericValue(value: number, next: number, unit: 'bars' | 'percent' | 'plain' | undefined): number {
+    if (unit === 'percent' && Math.abs(value) <= 1 && Math.abs(next) > 1) {
+      return next / 100
+    }
+    return next
   }
 
   private isSameNumericValue(left: number, right: number): boolean {
@@ -654,6 +773,31 @@ export class ConversationSemanticEditService {
     }
   }
 
+  private extractSemanticNumberReplacement(message: string): { from: number, to: number, unit?: 'bars' | 'percent' | 'plain' } | null {
+    const match = /(\d+(?:\.\d+)?)\s*(根\s*K\s*线|根K线|K\s*线|bars?|周期|%|％)?\s*(?:改为|改成|换成|替换为|修改为|更改为)\s*(\d+(?:\.\d+)?)\s*(根\s*K\s*线|根K线|K\s*线|bars?|周期|%|％)?/iu.exec(message)
+    if (!match) return null
+
+    const from = Number(match[1])
+    const to = Number(match[3])
+    if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return null
+
+    return {
+      from,
+      to,
+      unit: this.extractNumericReplacementUnit(match[2], match[4]),
+    }
+  }
+
+  private extractNumericReplacementUnit(
+    fromUnit: string | undefined,
+    toUnit: string | undefined,
+  ): 'bars' | 'percent' | 'plain' {
+    const unitText = `${fromUnit ?? ''}${toUnit ?? ''}`
+    if (/根\s*K\s*线|根K线|K\s*线|bars?|周期/iu.test(unitText)) return 'bars'
+    if (/%|％/u.test(unitText)) return 'percent'
+    return 'plain'
+  }
+
   private extractTriggerComparisonNumber(text: string): { value: number, direction?: 'up' | 'down' } | null {
     const upMatch = /(?:向?上穿(?:回)?|高于|大于|超过|突破|>=|>)\s*(?:至|到|回)?\s*(\d+(?:\.\d+)?)/u.exec(text)
     if (upMatch) {
@@ -763,6 +907,7 @@ export class ConversationSemanticEditService {
         || this.extractIndicatorPeriodReplacement(message) !== null
         || this.extractActionReplacement(message) !== null
         || this.extractTriggerNumberReplacement(message) !== null
+        || this.extractSemanticNumberReplacement(message) !== null
         || this.extractImplicitStrategyReplacementSeed(message, state)
         || this.extractStrategyReplacementSeed(message)
         || this.isStrategyRestartWithoutSeed(message)
