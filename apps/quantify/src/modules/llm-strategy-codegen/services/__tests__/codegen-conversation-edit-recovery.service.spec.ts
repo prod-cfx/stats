@@ -441,6 +441,72 @@ describe('codegenConversationService edit recovery', () => {
     }))
   })
 
+  it('recovers editable trigger atoms from snapshot canonical spec when original semantic state is missing', async () => {
+    const harness = createHarness()
+    harness.conversationsRepo.findActiveByIdAndUser.mockResolvedValue(null)
+    harness.conversationsRepo.findActiveByAnyCodegenSessionIdAndUser.mockResolvedValue(null)
+    harness.publishedSnapshotsRepo.findEditableSnapshotForUser.mockResolvedValue(buildSnapshot({
+      originalSessionSemanticState: null,
+      specSnapshot: {
+        version: 2,
+        market: { symbol: 'BTCUSDT' },
+        timeframes: ['15m'],
+        rules: [
+          {
+            id: 'entry-ma',
+            phase: 'entry',
+            sideScope: 'long',
+            condition: {
+              kind: 'atom',
+              key: 'ma.golden_cross',
+              params: { indicator: 'sma', fastPeriod: 6, slowPeriod: 48 },
+            },
+            actions: [{ type: 'OPEN_LONG', sizing: { type: 'fixed_pct', valuePct: 35 } }],
+          },
+          {
+            id: 'exit-ma',
+            phase: 'exit',
+            sideScope: 'long',
+            condition: {
+              kind: 'atom',
+              key: 'ma.death_cross',
+              params: { indicator: 'sma', fastPeriod: 6, slowPeriod: 48 },
+            },
+            actions: [{ type: 'CLOSE_LONG' }],
+          },
+        ],
+      },
+    }))
+
+    await harness.service.recoverEditConversation('user-1', {
+      strategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
+      source: 'backtest',
+    })
+
+    const createInput = harness.sessionsRepo.createSession.mock.calls[0][0]
+    expect(createInput.semanticState).toEqual(expect.objectContaining({
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          id: 'entry-ma',
+          key: 'indicator.cross_over',
+          phase: 'entry',
+          params: expect.objectContaining({ indicator: 'sma', fastPeriod: 6, slowPeriod: 48 }),
+        }),
+        expect.objectContaining({
+          id: 'exit-ma',
+          key: 'indicator.cross_under',
+          phase: 'exit',
+          params: expect.objectContaining({ indicator: 'sma', fastPeriod: 6, slowPeriod: 48 }),
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'open_long' }),
+        expect.objectContaining({ key: 'close_long' }),
+      ]),
+    }))
+  })
+
   it('reuses a published conversation by conversationId when no exact snapshot id is requested', async () => {
     const harness = createHarness()
     harness.sessions.set('published-session-1', buildSession({

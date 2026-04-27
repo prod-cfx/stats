@@ -22,7 +22,7 @@ import type { StrategyBlockingReason, StrategyInferredAssumption } from '../type
 import type { SemanticEditDecision } from '../types/semantic-edit'
 import type { StrategyExecutionContextResolution } from '../types/strategy-execution-context'
 import type { StrategyNormalizedIntent } from '../types/strategy-normalized-intent'
-import { buildSemanticSlotId, type SemanticSlotState, type SemanticState, type SemanticTriggerState } from '../types/semantic-state'
+import { buildSemanticSlotId, type SemanticActionState, type SemanticRiskState, type SemanticSlotState, type SemanticState, type SemanticTriggerState } from '../types/semantic-state'
 import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.interface'
 
 import type { Prisma } from '@/prisma/prisma.types'
@@ -637,32 +637,42 @@ export class CodegenConversationService {
     const strategyConfig = this.readJsonRecord(snapshot.strategyConfig)
     const paramsSnapshot = this.readJsonRecord(snapshot.paramsSnapshot)
     const lockedParams = this.readJsonRecord(snapshot.lockedParams)
+    const canonicalSpec = this.readJsonRecord(snapshot.specSnapshot)
+      ?? this.readJsonRecord(snapshot.originalSessionLatestSpecDesc)
+    const canonicalMarket = this.readJsonRecord(canonicalSpec?.market)
     const exchange = this.normalizeRecoveredExchange(
       this.readFirstString(
         strategyConfig?.exchange,
         strategyConfig?.provider,
         strategyConfig?.exchangeId,
+        canonicalMarket?.exchange,
+        canonicalMarket?.provider,
+        canonicalSpec?.exchange,
+        canonicalSpec?.provider,
         paramsSnapshot?.exchange,
         paramsSnapshot?.provider,
         paramsSnapshot?.exchangeId,
       ),
     )
     const symbol = this.normalizeRecoveredSymbol(
-      this.readFirstString(strategyConfig?.symbol, paramsSnapshot?.symbol, lockedParams?.symbol),
+      this.readFirstString(strategyConfig?.symbol, canonicalMarket?.symbol, canonicalSpec?.symbol, paramsSnapshot?.symbol, lockedParams?.symbol),
     )
     const marketType = this.normalizeRecoveredMarketType(
-      this.readFirstString(strategyConfig?.marketType, paramsSnapshot?.marketType, lockedParams?.marketType),
+      this.readFirstString(strategyConfig?.marketType, canonicalMarket?.marketType, canonicalSpec?.marketType, paramsSnapshot?.marketType, lockedParams?.marketType),
     )
     const timeframe = this.readFirstString(
       strategyConfig?.baseTimeframe,
       strategyConfig?.timeframe,
+      canonicalMarket?.primaryTimeframe,
+      canonicalSpec?.primaryTimeframe,
+      this.readFirstArrayString(canonicalSpec?.timeframes),
       paramsSnapshot?.baseTimeframe,
       paramsSnapshot?.timeframe,
       lockedParams?.baseTimeframe,
       lockedParams?.timeframe,
     )
 
-    return {
+    const recoveredState: SemanticState = {
       ...state,
       position: this.buildRecoveredSnapshotPosition(strategyConfig, paramsSnapshot, lockedParams),
       contextSlots: {
@@ -672,6 +682,218 @@ export class CodegenConversationService {
         timeframe: timeframe ? this.buildRecoveredContextSlot('timeframe', timeframe) : null,
       },
     }
+
+    return this.hydrateRecoveredSemanticStateFromCanonicalSpec(recoveredState, snapshot)
+  }
+
+  private hydrateRecoveredSemanticStateFromCanonicalSpec(
+    state: SemanticState,
+    snapshot: EditablePublishedStrategySnapshotRecord,
+  ): SemanticState {
+    if (state.triggers.length > 0 || state.actions.length > 0 || state.risk.length > 0) {
+      return state
+    }
+
+    const spec = this.readJsonRecord(snapshot.specSnapshot)
+      ?? this.readJsonRecord(snapshot.originalSessionLatestSpecDesc)
+    const rules = Array.isArray(spec?.rules) ? spec.rules : []
+    const triggers: SemanticTriggerState[] = []
+    const actions: SemanticActionState[] = []
+
+    for (const rule of rules) {
+      const ruleRecord = this.readJsonRecord(rule)
+      const trigger = this.buildRecoveredTriggerFromCanonicalRule(ruleRecord, triggers.length)
+      if (trigger) {
+        triggers.push(trigger)
+      }
+
+      actions.push(...this.buildRecoveredActionsFromCanonicalRule(ruleRecord, actions.length))
+    }
+
+    const risk = this.buildRecoveredRiskFromCanonicalSpec(spec)
+    if (triggers.length === 0 && actions.length === 0 && risk.length === 0) {
+      return state
+    }
+
+    return {
+      ...state,
+      triggers,
+      actions,
+      risk,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
+  private buildRecoveredTriggerFromCanonicalRule(
+    rule: Record<string, unknown> | null,
+    index: number,
+  ): SemanticTriggerState | null {
+    const condition = this.readJsonRecord(rule?.condition)
+    const key = this.readStringValue(condition?.key)
+    if (!key) return null
+
+    const phase = rule?.phase === 'exit' || rule?.phase === 'risk' ? rule.phase : 'entry'
+    const params = this.readJsonRecord(condition?.params) ?? {}
+    const triggerKey = this.mapCanonicalConditionKeyToSemanticTriggerKey(key)
+    if (!triggerKey) return null
+
+    const triggerParams = this.buildRecoveredTriggerParamsFromCanonicalCondition(key, condition, params)
+    return {
+      id: this.readStringValue(rule?.id) ?? `recovered-trigger-${index + 1}`,
+      key: triggerKey,
+      phase,
+      params: triggerParams,
+      sideScope: this.readSemanticSideScope(rule?.sideScope),
+      status: 'locked',
+      source: 'derived',
+      evidence: {
+        text: 'published snapshot canonical spec',
+        source: 'derived',
+      },
+      openSlots: [],
+    }
+  }
+
+  private mapCanonicalConditionKeyToSemanticTriggerKey(key: string): string | null {
+    const map: Record<string, string> = {
+      'ma.golden_cross': 'indicator.cross_over',
+      'ma.death_cross': 'indicator.cross_under',
+      'macd.golden_cross': 'indicator.cross_over',
+      'macd.death_cross': 'indicator.cross_under',
+      'rsi.cross_over': 'indicator.cross_over',
+      'rsi.cross_under': 'indicator.cross_under',
+      'rsi.threshold_lte': 'oscillator.rsi_lte',
+      'rsi.threshold_gte': 'oscillator.rsi_gte',
+      'price.percent_change': 'price.percent_change',
+      'price.range_position_lte': 'price.range_position_lte',
+      'price.range_position_gte': 'price.range_position_gte',
+      'price.breakout_up': 'price.breakout_up',
+      'price.breakout_down': 'price.breakout_down',
+      'bollinger.upper_break': 'bollinger.touch_upper',
+      'bollinger.lower_break': 'bollinger.touch_lower',
+      'bollinger.middle_revert': 'bollinger.touch_middle',
+      'trend.direction': 'trend.direction',
+      'market.regime': 'market.regime',
+      'volatility.state': 'volatility.state',
+    }
+    return map[key] ?? null
+  }
+
+  private buildRecoveredTriggerParamsFromCanonicalCondition(
+    key: string,
+    condition: Record<string, unknown>,
+    params: Record<string, unknown>,
+  ): Record<string, unknown> {
+    if (key.startsWith('ma.')) {
+      return {
+        indicator: this.readStringValue(params.indicator) ?? 'sma',
+        ...this.copyNumberParam(params, 'fastPeriod'),
+        ...this.copyNumberParam(params, 'slowPeriod'),
+      }
+    }
+    if (key.startsWith('macd.')) {
+      return {
+        indicator: 'macd',
+        ...this.copyNumberParam(params, 'fastPeriod'),
+        ...this.copyNumberParam(params, 'slowPeriod'),
+        ...this.copyNumberParam(params, 'signalPeriod'),
+      }
+    }
+    if (key.startsWith('rsi.cross')) {
+      return {
+        indicator: 'rsi',
+        ...this.copyNumberParam(params, 'period'),
+        ...this.copyNumberValue(condition, 'value'),
+      }
+    }
+    if (key === 'rsi.threshold_lte' || key === 'rsi.threshold_gte') {
+      return {
+        ...this.copyNumberParam(params, 'period'),
+        ...this.copyNumberValue(condition, 'value'),
+      }
+    }
+
+    return { ...params }
+  }
+
+  private buildRecoveredActionsFromCanonicalRule(
+    rule: Record<string, unknown> | null,
+    offset: number,
+  ): SemanticActionState[] {
+    const rawActions = Array.isArray(rule?.actions) ? rule.actions : []
+    return rawActions
+      .map((action, index): SemanticActionState | null => {
+        const actionRecord = this.readJsonRecord(action)
+        const key = this.mapCanonicalActionTypeToSemanticActionKey(this.readStringValue(actionRecord?.type))
+        if (!key) return null
+        return {
+          id: this.readStringValue(actionRecord?.id) ?? `recovered-action-${offset + index + 1}`,
+          key,
+          params: {},
+          status: 'locked',
+          source: 'derived',
+          evidence: {
+            text: 'published snapshot canonical spec',
+            source: 'derived',
+          },
+        }
+      })
+      .filter((action): action is SemanticActionState => action !== null)
+  }
+
+  private mapCanonicalActionTypeToSemanticActionKey(type: string | null): string | null {
+    const map: Record<string, string> = {
+      OPEN_LONG: 'open_long',
+      CLOSE_LONG: 'close_long',
+      OPEN_SHORT: 'open_short',
+      CLOSE_SHORT: 'close_short',
+      REDUCE_POSITION: 'reduce_position',
+    }
+    return type ? (map[type] ?? null) : null
+  }
+
+  private buildRecoveredRiskFromCanonicalSpec(spec: Record<string, unknown> | null): SemanticRiskState[] {
+    const riskRules = this.readJsonRecord(spec?.riskRules)
+    const risk: SemanticRiskState[] = []
+    const stopLossPct = this.readPositiveNumber(riskRules?.stopLossPct)
+    if (stopLossPct !== null) {
+      risk.push(this.buildRecoveredRiskAtom('recovered-risk-stop-loss', 'risk.stop_loss_pct', stopLossPct))
+    }
+    const takeProfitPct = this.readPositiveNumber(riskRules?.takeProfitPct)
+    if (takeProfitPct !== null) {
+      risk.push(this.buildRecoveredRiskAtom('recovered-risk-take-profit', 'risk.take_profit_pct', takeProfitPct))
+    }
+    return risk
+  }
+
+  private buildRecoveredRiskAtom(id: string, key: string, valuePct: number): SemanticRiskState {
+    return {
+      id,
+      key,
+      params: { valuePct },
+      status: 'locked',
+      source: 'derived',
+      evidence: {
+        text: 'published snapshot canonical spec',
+        source: 'derived',
+      },
+      openSlots: [],
+    }
+  }
+
+  private readSemanticSideScope(value: unknown): 'long' | 'short' | 'both' | undefined {
+    if (value === 'long' || value === 'short' || value === 'both') return value
+    return undefined
+  }
+
+  private copyNumberParam(source: Record<string, unknown>, key: string): Record<string, number> {
+    const value = this.readPositiveNumber(source[key])
+    return value === null ? {} : { [key]: value }
+  }
+
+  private copyNumberValue(source: Record<string, unknown>, key: string): Record<string, number> {
+    const value = this.readPositiveNumber(source[key])
+    return value === null ? {} : { [key]: value }
   }
 
   private resolveRecoveredSemanticGraph(
@@ -765,8 +987,11 @@ export class CodegenConversationService {
   private readRecoveredSnapshotSymbol(snapshot: EditablePublishedStrategySnapshotRecord): string | null {
     const strategyConfig = this.readJsonRecord(snapshot.strategyConfig)
     const paramsSnapshot = this.readJsonRecord(snapshot.paramsSnapshot)
+    const canonicalSpec = this.readJsonRecord(snapshot.specSnapshot)
+      ?? this.readJsonRecord(snapshot.originalSessionLatestSpecDesc)
+    const canonicalMarket = this.readJsonRecord(canonicalSpec?.market)
     return this.normalizeRecoveredSymbol(
-      this.readFirstString(strategyConfig?.symbol, paramsSnapshot?.symbol),
+      this.readFirstString(strategyConfig?.symbol, canonicalMarket?.symbol, canonicalSpec?.symbol, paramsSnapshot?.symbol),
     )
   }
 
@@ -777,6 +1002,11 @@ export class CodegenConversationService {
       }
     }
     return null
+  }
+
+  private readFirstArrayString(value: unknown): string | null {
+    if (!Array.isArray(value)) return null
+    return this.readFirstString(...value)
   }
 
   private readFirstPositiveNumber(...values: unknown[]): number | null {
@@ -2882,6 +3112,10 @@ export class CodegenConversationService {
   }
 
   private readNullableString(value: unknown): string | null {
+    return typeof value === 'string' && value.trim() ? value.trim() : null
+  }
+
+  private readStringValue(value: unknown): string | null {
     return typeof value === 'string' && value.trim() ? value.trim() : null
   }
 
