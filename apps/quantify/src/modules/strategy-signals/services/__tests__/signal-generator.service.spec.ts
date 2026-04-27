@@ -1029,6 +1029,79 @@ strategy`,
     expect(runtimeExecutionStateService.markRetryableFailure).not.toHaveBeenCalled()
   })
 
+  it('treats noop from continuous compiled snapshots as no trigger instead of a runtime failure', async () => {
+    const publishedSnapshotsRepository = {
+      findById: jest.fn().mockResolvedValue({
+        id: 'snapshot-continuous-1',
+        snapshotHash: 'snapshot-hash-continuous-1',
+        strategyInstanceId: 'source-instance-1',
+        strategyTemplateId: 'template-1',
+        scriptSnapshot: 'return "snapshot-script"',
+        astSnapshot: {
+          astVersion: 'csa.v1',
+          decisionPrograms: [{
+            id: 'decision_01_entry',
+            sourceRef: 'entry-bollinger-touch_upper-210',
+            phase: 'entry',
+            when: 'expr_01_entry',
+            actions: [{ kind: 'OPEN_SHORT' }],
+          }],
+        },
+        paramsSnapshot: {
+          symbol: 'BTCUSDT',
+          timeframe: '1m',
+        },
+      }),
+    }
+    const { runtimeExecutionStateService, service } = createService({
+      publishedSnapshotsRepository,
+      generatorRepository: {
+        findSymbolByCode: jest.fn().mockResolvedValue({ id: 'symbol-1', code: 'BTCUSDT' }),
+      },
+      runtimeExecutionStateService: {
+        buildExecutionSemanticKeysFromSnapshot: jest.fn().mockReturnValue([]),
+      },
+    })
+
+    jest.spyOn(service as any, 'isStrategyLocked').mockResolvedValue(false)
+    jest.spyOn(service as any, 'loadLatestBar').mockResolvedValue({
+      close: 100,
+      time: new Date('2026-04-20T09:00:00.000Z'),
+      timestamp: Date.now(),
+    })
+    jest.spyOn(service as any, 'generatePublishedSnapshotRuntimeSignalOutcome').mockResolvedValue({
+      kind: 'noop',
+      reasonCode: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+      reason: 'compiled.noop',
+    })
+    const handleStrategyFailure = jest.spyOn(service as any, 'handleStrategyFailure').mockResolvedValue(undefined)
+
+    await (service as any).processStrategyInstance(
+      {
+        id: 'instance-continuous-1',
+        llmModel: 'gpt-5.4',
+        params: {},
+        metadata: {
+          bindingSource: 'PUBLISHED_SNAPSHOT',
+          publishedSnapshotId: 'snapshot-continuous-1',
+          snapshotHash: 'snapshot-hash-continuous-1',
+        },
+        strategyTemplate: {
+          id: 'template-1',
+          promptTemplate: 'AI_CODEGEN_PUBLISHED_TEMPLATE',
+          script: 'return "template-script"',
+        },
+      },
+      config,
+    )
+
+    expect(runtimeExecutionStateService.loadExecutableStates).not.toHaveBeenCalled()
+    expect(runtimeExecutionStateService.markTerminalFailure).not.toHaveBeenCalled()
+    expect(runtimeExecutionStateService.markConsumed).not.toHaveBeenCalled()
+    expect(runtimeExecutionStateService.markRetryableFailure).not.toHaveBeenCalled()
+    expect(handleStrategyFailure).not.toHaveBeenCalled()
+  })
+
   it('marks a ready on_start snapshot semantic as terminal when the bound symbol cannot be loaded', async () => {
     const publishedSnapshotsRepository = {
       findById: jest.fn().mockResolvedValue({
