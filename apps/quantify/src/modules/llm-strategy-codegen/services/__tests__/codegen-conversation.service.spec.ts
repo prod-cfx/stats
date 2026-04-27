@@ -8066,6 +8066,35 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(updatePayload.latestDraftCode).toBeNull()
   })
 
+  it('edits published session context parameters beyond symbol', async () => {
+    const sessionFixture = buildSemanticEraSessionFixture({
+      id: 's-published-timeframe-edit',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      semanticState: buildLockedMaSemanticState(),
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+      publishedSnapshotId: 'snapshot-published-timeframe',
+      latestDraftCode: 'const publishedStrategy = {}',
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockRepo.findLatestBySessionId.mockResolvedValue({
+      id: 'snapshot-published-timeframe',
+      paramsSnapshot: { timeframe: '15m' },
+      lockedParams: { timeframe: '15m' },
+      specSnapshot: {},
+    })
+
+    await service.continueSession('s-published-timeframe-edit', {
+      userId: 'u1',
+      message: '把主周期改成 1h',
+    })
+
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.semanticState.contextSlots.timeframe.value).toBe('1h')
+    expect(updatePayload.latestDraftCode).toBeNull()
+  })
+
   it.each(['REJECTED', 'CONSISTENCY_FAILED'] as const)(
     'keeps %s terminal even when the message looks like a semantic edit',
     async (status) => {

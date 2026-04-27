@@ -37,6 +37,26 @@ describe('ConversationSemanticEditService', () => {
     })
   })
 
+  it.each([
+    ['把主周期改成 1h', 'timeframe', '1h'],
+    ['把交易所换成 OKX', 'exchange', 'okx'],
+    ['把市场类型改为现货', 'marketType', 'spot'],
+    ['把市场改成永续', 'marketType', 'perp'],
+  ])('classifies context parameter replacement wording: %s', (message, field, value) => {
+    const decision = service.decide({
+      status: 'PUBLISHED',
+      message,
+      semanticState: service.createEmptySemanticStateForTest(),
+    })
+
+    expect(decision).toEqual({
+      kind: 'APPLY_TO_SEMANTIC_STATE',
+      patch: {
+        operations: [{ op: 'replace_context', field, value }],
+      },
+    })
+  })
+
   it('classifies strategy replacement with seed text', () => {
     const decision = service.decide({
       status: 'PUBLISHED',

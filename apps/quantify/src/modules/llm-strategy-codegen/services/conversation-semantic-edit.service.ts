@@ -1,6 +1,11 @@
 import { Injectable } from '@nestjs/common'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
-import type { PendingSemanticEdit, SemanticEditDecision, SemanticEditPatch } from '../types/semantic-edit'
+import type {
+  PendingSemanticEdit,
+  SemanticEditContextField,
+  SemanticEditDecision,
+  SemanticEditPatch,
+} from '../types/semantic-edit'
 import type { SemanticState, SemanticTriggerState } from '../types/semantic-state'
 import { isProcessingCodegenSessionStatus } from '../types/codegen-session-status'
 import { readPendingSemanticEdit, withPendingSemanticEdit } from '../types/semantic-edit'
@@ -81,12 +86,12 @@ export class ConversationSemanticEditService {
       }
     }
 
-    const symbol = this.extractReplacementSymbol(message)
-    if (symbol) {
+    const contextOperation = this.extractReplacementContextOperation(message)
+    if (contextOperation) {
       return {
         kind: 'APPLY_TO_SEMANTIC_STATE',
         patch: {
-          operations: [{ op: 'replace_context', field: 'symbol', value: symbol }],
+          operations: [{ op: 'replace_context', ...contextOperation }],
         },
       }
     }
@@ -225,6 +230,32 @@ export class ConversationSemanticEditService {
     return canonicalizeStrategySymbolInput(match?.[1])
   }
 
+  private extractReplacementContextOperation(
+    message: string,
+  ): { field: SemanticEditContextField, value: string } | null {
+    const symbol = this.extractReplacementSymbol(message)
+    if (symbol) return { field: 'symbol', value: symbol }
+
+    const timeframe = /(?:主周期|周期)\s*(?:改为|改成|换成)\s*([0-9]+[mhdw])/iu.exec(message)?.[1]
+    if (timeframe) return { field: 'timeframe', value: timeframe.toLowerCase() }
+
+    const exchange = /(?:交易所|平台)\s*(?:改为|改成|换成)\s*([A-Za-z0-9_-]+)/u.exec(message)?.[1]
+    if (exchange) return { field: 'exchange', value: exchange.toLowerCase() }
+
+    const marketType = /(?:市场类型|市场)\s*(?:改为|改成|换成)\s*(现货|合约|永续|spot|perp|swap)/iu.exec(message)?.[1]
+    if (!marketType) return null
+
+    return {
+      field: 'marketType',
+      value: this.normalizeMarketType(marketType),
+    }
+  }
+
+  private normalizeMarketType(value: string): string {
+    if (/现货|spot/iu.test(value)) return 'spot'
+    return 'perp'
+  }
+
   private extractPendingStrategyReplacementSeed(message: string): string | null {
     if (/^(继续|确认|好的|好|嗯|是|对|可以)$/u.test(message)) return null
     return message
@@ -252,7 +283,7 @@ export class ConversationSemanticEditService {
 
   private hasSemanticEditIntent(message: string, state: SemanticState): boolean {
     return Boolean(
-      this.extractReplacementSymbol(message)
+      this.extractReplacementContextOperation(message)
         || this.extractStrategyReplacementSeed(message)
         || this.isStrategyRestartWithoutSeed(message)
         || (readPendingSemanticEdit(state) && /算了|保持原来|不改了|取消/u.test(message))
