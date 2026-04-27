@@ -189,10 +189,10 @@ describe('liveLlmStrategyCodegenController', () => {
     }).compile()
     const controller = moduleRef.get(LiveLlmStrategyCodegenController)
 
-    const result = await controller.getSession('s1', createBearerToken({ sub: 'u1', principalType: 'user', exp: 4_102_444_800 }), 'u1')
+    const result = await controller.getSession('s1', createBearerToken({ sub: 'caller-u1', principalType: 'user', exp: 4_102_444_800 }), 'caller-u1')
 
     expect(result.status).toBe('PUBLISHED')
-    expect(service.getSession).toHaveBeenCalledWith('s1', 'u1')
+    expect(service.getSession).toHaveBeenCalledWith('s1', 'caller-u1')
   })
 
   it('rejects getSession when authorization header is missing', async () => {

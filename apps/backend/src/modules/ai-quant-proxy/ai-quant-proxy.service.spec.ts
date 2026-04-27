@@ -11,6 +11,7 @@ describe('aiQuantProxyService', () => {
       get: jest.fn(),
       patch: jest.fn(),
       delete: jest.fn(),
+      performAccountStrategyAction: jest.fn(),
       deleteAccountStrategy: jest.fn(),
       listStrategyPlazaTemplates: jest.fn(),
       getStrategyPlazaTemplateDetail: jest.fn(),
@@ -93,6 +94,25 @@ describe('aiQuantProxyService', () => {
 
     expect(quantifyClient.deleteAccountStrategy).toHaveBeenCalledWith(
       'strategy-1',
+      { userId: 'user-1', headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
+    )
+  })
+
+  it('forces caller identity when forwarding liquidate_and_stop strategy actions', async () => {
+    const { service, quantifyClient } = createService()
+    quantifyClient.performAccountStrategyAction.mockResolvedValue({ id: 'strategy-1', status: 'stopped' })
+
+    await service.performAccountStrategyAction('user-1', 'Bearer token-1', 'strategy-1', {
+      action: 'liquidate_and_stop',
+      userId: 'attacker',
+    })
+
+    expect(quantifyClient.performAccountStrategyAction).toHaveBeenCalledWith(
+      'strategy-1',
+      {
+        action: 'liquidate_and_stop',
+        userId: 'user-1',
+      },
       { userId: 'user-1', headers: { 'x-user-id': 'user-1', authorization: 'Bearer token-1' } },
     )
   })

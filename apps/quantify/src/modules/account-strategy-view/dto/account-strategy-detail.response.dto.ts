@@ -359,6 +359,9 @@ export class AccountStrategyDetailResponseDto extends AccountStrategyListItemDto
   @ApiProperty({ type: [AccountStrategyLatestOrderDto] })
   latestOrders!: AccountStrategyLatestOrderDto[]
 
+  @ApiPropertyOptional({ nullable: true })
+  openOrdersCount!: number | null
+
   @ApiProperty({ type: [RuntimeExecutionStateDto] })
   runtimeExecutionStates!: RuntimeExecutionStateDto[]
 

@@ -26,11 +26,13 @@ import type { ChatMessage } from '@/modules/ai/providers/llm-provider-adapter.in
 import type { Prisma } from '@/prisma/prisma.types'
 import { ErrorCode } from '@ai/shared'
 import { getHelperDocs } from '@ai/shared/script-engine/helpers'
-import { HttpStatus, Injectable, Logger } from '@nestjs/common'
+import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common'
 import { defaultEnvAccessor } from '@/common/env/env.accessor'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
 import { AiService } from '@/modules/ai/ai.service'
+// eslint-disable-next-line ts/consistent-type-imports -- Nest DI 需要运行时导入
+import { AccountStrategyViewService } from '@/modules/account-strategy-view/services/account-strategy-view.service'
 import { createDefaultConstraintPack } from '../constants/constraint-pack'
 import { buildConversationPlannerSystemPrompt } from '../prompts/conversation-planner-system.prompt'
 import { buildStrategyCodegenSystemPrompt } from '../prompts/strategy-codegen-system.prompt'
@@ -193,6 +195,7 @@ export class CodegenConversationService {
     private readonly semanticStateProjection: SemanticStateProjectionService = new SemanticStateProjectionService(),
     private readonly semanticStateMerge: SemanticStateMergeService = new SemanticStateMergeService(),
     private readonly semanticSeedExtractor: SemanticSeedExtractorService = new SemanticSeedExtractorService(),
+    @Optional() private readonly accountStrategyViewService?: AccountStrategyViewService,
   ) {
     this.inferredConfirmationClassifier = new InferredConfirmationClassifierService(this.aiService)
   }
@@ -332,8 +335,96 @@ export class CodegenConversationService {
     return Promise.all(conversations.map(conversation => this.toConversationResponse(conversation)))
   }
 
-  async deleteConversation(conversationId: string, userId: string): Promise<void> {
+  async deleteConversation(
+    conversationId: string,
+    userId: string,
+    options: { deleteStoppedStrategy?: boolean } = {},
+  ): Promise<void> {
+    const conversation = await this.conversationsRepo.findActiveDeleteContextByIdAndUser(conversationId, userId)
+    if (!conversation) {
+      await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
+      return
+    }
+
+    const strategyInstanceId = await this.resolveConversationStrategyInstanceId(conversation.codegenSessionId)
+    if (!strategyInstanceId) {
+      await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
+      return
+    }
+
+    if (!this.accountStrategyViewService) {
+      throw new DomainException('ai_quant.conversation_delete_strategy_status_unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        args: { conversationId, strategyInstanceId },
+      })
+    }
+
+    const strategy = await this.accountStrategyViewService.getStrategyDetail(userId, strategyInstanceId)
+      .catch(error => {
+        if (this.isStrategyNotFoundError(error)) return null
+        throw error
+      })
+    if (!strategy) {
+      await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
+      return
+    }
+
+    if (strategy.status === 'running') {
+      throw new DomainException('ai_quant.conversation_delete_running_strategy', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: { conversationId, strategyInstanceId },
+      })
+    }
+
+    if (strategy.status !== 'stopped' && strategy.status !== 'draft') {
+      throw new DomainException('ai_quant.conversation_delete_strategy_status_unknown', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+        args: { conversationId, strategyInstanceId, status: strategy.status },
+      })
+    }
+
+    if (options.deleteStoppedStrategy) {
+      await this.accountStrategyViewService.deleteStrategy(userId, strategyInstanceId)
+    }
+
     await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
+  }
+
+  private isStrategyNotFoundError(error: unknown): boolean {
+    if (error instanceof DomainException) {
+      return error.code === ErrorCode.ACCOUNT_STRATEGY_NOT_FOUND
+        || error.message === 'account_strategy.not_found'
+        || error.getStatus() === HttpStatus.NOT_FOUND
+    }
+
+    if (!error || typeof error !== 'object') return false
+    const candidate = error as {
+      code?: unknown
+      status?: unknown
+      statusCode?: unknown
+      response?: { code?: unknown; error?: { code?: unknown } }
+      error?: { code?: unknown }
+      message?: unknown
+    }
+    return candidate.code === ErrorCode.ACCOUNT_STRATEGY_NOT_FOUND
+      || candidate.response?.code === ErrorCode.ACCOUNT_STRATEGY_NOT_FOUND
+      || candidate.response?.error?.code === ErrorCode.ACCOUNT_STRATEGY_NOT_FOUND
+      || candidate.error?.code === ErrorCode.ACCOUNT_STRATEGY_NOT_FOUND
+      || candidate.message === 'account_strategy.not_found'
+      || candidate.status === HttpStatus.NOT_FOUND
+      || candidate.statusCode === HttpStatus.NOT_FOUND
+  }
+
+  private async resolveConversationStrategyInstanceId(codegenSessionId: string): Promise<string | null> {
+    const session = await this.sessionsRepo.findById(codegenSessionId)
+    if (session?.strategyInstanceId) {
+      return session.strategyInstanceId
+    }
+    const latestSnapshot = await this.publishedSnapshotsRepo.findLatestBySessionId(codegenSessionId)
+    return latestSnapshot?.strategyInstanceId ?? null
   }
 
   async updateConversationBacktestDraft(

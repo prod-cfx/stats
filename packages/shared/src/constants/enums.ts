@@ -94,5 +94,6 @@ export type HyperliquidApiType = (typeof HyperliquidApiType)[keyof typeof Hyperl
 export const AccountStrategyAction = {
   RUN: 'run',
   STOP: 'stop',
+  LIQUIDATE_AND_STOP: 'liquidate_and_stop',
 } as const
 export type AccountStrategyAction = (typeof AccountStrategyAction)[keyof typeof AccountStrategyAction]

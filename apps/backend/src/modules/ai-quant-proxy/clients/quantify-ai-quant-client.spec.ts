@@ -14,6 +14,7 @@ describe('quantifyAiQuantClient', () => {
     return {
       AccountStrategyViewController_detail: jest.fn(),
       AccountStrategyViewController_list: jest.fn(),
+      AccountStrategyViewController_action: jest.fn(),
       AccountStrategyViewController_deploy: jest.fn(),
       AccountStrategyViewController_updateDeploymentLeverage: jest.fn(),
       BacktestingController_getCapabilities: jest.fn(),
@@ -255,6 +256,41 @@ describe('quantifyAiQuantClient', () => {
       deployRequestId: 'deploy-1',
       deploymentExecutionConfig: { leverage: 4 },
     }, {
+      headers: {
+        'x-user-id': 'user-1',
+        authorization: 'Bearer token-1',
+      },
+    })
+  })
+
+  it('uses the action contract alias for liquidate_and_stop passthrough', async () => {
+    const contract = createContractMock()
+    contract.AccountStrategyViewController_action.mockResolvedValue({
+      data: {
+        id: 'strategy-1',
+        status: 'stopped',
+      },
+    })
+    mockedCreateQuantifyApiClient.mockReturnValue(contract as never)
+
+    const client = new QuantifyAiQuantClient(env as any)
+
+    await expect(client.performAccountStrategyAction('strategy-1', {
+      action: 'liquidate_and_stop',
+      userId: 'user-1',
+    }, {
+      userId: 'user-1',
+      headers: { authorization: 'Bearer token-1' },
+    })).resolves.toEqual({
+      id: 'strategy-1',
+      status: 'stopped',
+    })
+
+    expect(contract.AccountStrategyViewController_action).toHaveBeenCalledWith({
+      action: 'liquidate_and_stop',
+      userId: 'user-1',
+    }, {
+      params: { id: 'strategy-1' },
       headers: {
         'x-user-id': 'user-1',
         authorization: 'Bearer token-1',

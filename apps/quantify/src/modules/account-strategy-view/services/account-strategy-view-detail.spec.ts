@@ -265,6 +265,20 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
         minLeverage: 1,
         maxLeverage: 4,
       }),
+      getOpenOrders: jest.fn().mockResolvedValue([
+        {
+          id: 'open-order-1',
+          symbol: 'BTC/USDT:PERP',
+          marketType: 'perp',
+          status: 'open',
+        },
+        {
+          id: 'closed-order-1',
+          symbol: 'BTC/USDT:PERP',
+          marketType: 'perp',
+          status: 'closed',
+        },
+      ]),
     }
     const runtimeExecutionStateService = {
       loadStatesForBinding: jest.fn().mockResolvedValue([
@@ -335,6 +349,14 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
       feeCurrency: 'DOGE',
       orderId: 'ord-1',
     })
+    expect(tradingService.getOpenOrders).toHaveBeenCalledWith(
+      'user-1',
+      'binance',
+      'spot',
+      'BTC/USDT',
+      'acct-1',
+    )
+    expect(detail.openOrdersCount).toBe(1)
     expect(detail.runtimeSemanticSummary).toEqual(expect.objectContaining({
       headline: '运行中 · 持有多头 · 等待出场',
       positionState: 'long',

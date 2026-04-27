@@ -1,9 +1,14 @@
 /** @jest-environment jsdom */
 
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
+import type { AccountAiQuantStrategyDetail } from '@/lib/api'
+import type { AiQuantStrategyRecord } from './ai-quant-strategy-store'
 import React, { act } from 'react'
 import { createRoot } from 'react-dom/client'
 import { AiQuantStrategyDetail } from './AiQuantStrategyDetail'
+
+const mockPerformAccountAiQuantStrategyAction = jest.fn()
+const mockFetchAccountAiQuantStrategyDetail = jest.fn()
 
 jest.mock('react-i18next', () => ({
   useTranslation: () => ({
@@ -11,12 +16,140 @@ jest.mock('react-i18next', () => ({
   }),
 }))
 
+jest.mock('@/hooks/use-auth', () => ({
+  useAuth: () => ({
+    session: { userId: 'user-1' },
+    isLoading: false,
+  }),
+}))
+
+jest.mock('@/lib/api', () => ({
+  fetchAccountAiQuantStrategyDetail: (...args: unknown[]) => mockFetchAccountAiQuantStrategyDetail(...args),
+  performAccountAiQuantStrategyAction: (...args: unknown[]) => mockPerformAccountAiQuantStrategyAction(...args),
+}))
+
+function buildStrategy(overrides: Partial<AiQuantStrategyRecord> = {}): AiQuantStrategyRecord {
+  return {
+    id: 'inst-runtime-control',
+    name: 'Runtime control strategy',
+    status: 'running',
+    exchange: 'okx',
+    symbol: 'BTC-USDT-SWAP',
+    timeframe: '15m',
+    positionPct: 10,
+    initialCapital: 10000,
+    metrics: { returnPct: 0, maxDrawdownPct: 0, winRatePct: 0, tradeCount: 0 },
+    equitySeries: [],
+    timeline: [],
+    paramSchema: null,
+    paramValues: null,
+    schemaVersion: null,
+    supportsDynamicParams: false,
+    publishedSnapshotId: 'snapshot-1',
+    snapshotHash: 'hash-1',
+    accountOverview: {
+      initialBalance: 10000,
+      totalEquity: 10000,
+      availableBalance: 10000,
+      totalPnl: 0,
+      todayPnl: 0,
+      baseCurrency: 'USDT',
+    },
+    positionOverview: {
+      openPositionsCount: 0,
+      closedPositionsCount: 0,
+      totalRealizedPnl: 0,
+      totalUnrealizedPnl: 0,
+    },
+    latestOrders: [],
+    openOrdersCount: 0,
+    updatedAt: '2026-04-25T00:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function buildActionDetail(overrides: Partial<AccountAiQuantStrategyDetail> = {}): AccountAiQuantStrategyDetail {
+  return {
+    id: 'inst-runtime-control',
+    name: 'Runtime control strategy',
+    status: 'stopped',
+    exchange: 'okx',
+    symbol: 'BTC-USDT-SWAP',
+    timeframe: '15m',
+    positionPct: 10,
+    isSubscribed: true,
+    paramSchema: null,
+    paramValues: null,
+    schemaVersion: null,
+    metrics: { returnPct: 0, maxDrawdownPct: 0, winRatePct: 0, tradeCount: 0 },
+    updatedAt: '2026-04-25T00:00:00.000Z',
+    totalPnl: 0,
+    todayPnl: 0,
+    equitySeries: [],
+    snapshot: {
+      exchange: 'okx',
+      symbol: 'BTC-USDT-SWAP',
+      timeframe: '15m',
+      positionPct: 10,
+      publishedSnapshotId: 'snapshot-1',
+      snapshotHash: 'hash-1',
+      paramSchema: null,
+      paramValues: null,
+      schemaVersion: null,
+      strategyConfig: {
+        exchange: 'okx',
+        symbol: 'BTC-USDT-SWAP',
+        marketType: 'perp',
+        baseTimeframe: '15m',
+        positionPct: 10,
+      },
+      compatibilityMetadata: {
+        isLegacySnapshot: false,
+        missingBacktestConfigDefaults: false,
+        missingDeploymentExecutionDefaults: false,
+        missingDeploymentExecutionConstraints: false,
+        requiresRepublishForBacktest: false,
+        requiresRepublishForDeploy: false,
+      },
+    },
+    timeline: [],
+    runtimeExecutionStates: [],
+    accountOverview: {
+      initialBalance: 10000,
+      totalEquity: 10000,
+      availableBalance: 10000,
+      totalPnl: 0,
+      todayPnl: 0,
+      baseCurrency: 'USDT',
+    },
+    positionOverview: {
+      openPositionsCount: 0,
+      closedPositionsCount: 0,
+      totalRealizedPnl: 0,
+      totalUnrealizedPnl: 0,
+    },
+    latestOrders: [],
+    openOrdersCount: 0,
+    runtimeSemanticSummary: null,
+    ...overrides,
+  }
+}
+
+function findButton(label: string): HTMLButtonElement | undefined {
+  return Array.from(document.querySelectorAll('button')).find(
+    button => button.textContent?.trim() === label,
+  ) as HTMLButtonElement | undefined
+}
+
 describe('AiQuantStrategyDetail', () => {
   let container: HTMLDivElement
   let root: ReturnType<typeof createRoot>
 
   beforeEach(() => {
     ;(globalThis as any).IS_REACT_ACT_ENVIRONMENT = true
+    mockPerformAccountAiQuantStrategyAction.mockReset()
+    mockFetchAccountAiQuantStrategyDetail.mockReset()
+    mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(buildActionDetail({ status: 'running' }))
     container = document.createElement('div')
     document.body.appendChild(container)
     root = createRoot(container)
@@ -584,5 +717,208 @@ describe('AiQuantStrategyDetail', () => {
     const points = container.querySelector('polyline')?.getAttribute('points') ?? ''
     expect(points).not.toContain(',220')
     expect(points).toContain(',110')
+  })
+
+  it('shows stop control for a running strategy and calls stop action', async () => {
+    mockPerformAccountAiQuantStrategyAction.mockResolvedValue(buildActionDetail())
+
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy()}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('停止策略')
+    expect(container.textContent).not.toContain('平仓并停止')
+
+    await act(async () => {
+      findButton('停止策略')?.click()
+    })
+
+    expect(container.textContent).toContain('确认停止策略？')
+    expect(container.textContent).toContain('确认停止')
+
+    await act(async () => {
+      container.querySelector('[data-testid="confirm-stop-strategy"]')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      )
+    })
+
+    expect(mockPerformAccountAiQuantStrategyAction).toHaveBeenCalledWith('inst-runtime-control', {
+      userId: 'user-1',
+      action: 'stop',
+    })
+    expect(container.textContent).toContain('策略已停止。现有持仓和挂单仍然保留，需要你单独管理。')
+    expect(container.textContent).toContain('已停止')
+  })
+
+  it('shows liquidate_and_stop control when open positions exist and disables controls while pending', async () => {
+    let resolveAction: ((value: AccountAiQuantStrategyDetail) => void) | null = null
+    mockPerformAccountAiQuantStrategyAction.mockReturnValue(new Promise<AccountAiQuantStrategyDetail>((resolve) => {
+      resolveAction = resolve
+    }))
+    mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(buildActionDetail({
+      status: 'running',
+      positionOverview: {
+        openPositionsCount: 2,
+        closedPositionsCount: 0,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 12,
+      },
+    }))
+
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy({
+            positionOverview: {
+              openPositionsCount: 2,
+              closedPositionsCount: 0,
+              totalRealizedPnl: 0,
+              totalUnrealizedPnl: 12,
+            },
+          })}
+        />,
+      )
+    })
+
+    const stopButton = findButton('停止策略')
+    const liquidateButton = findButton('平仓并停止')
+
+    expect(liquidateButton).toBeDefined()
+    expect(stopButton?.disabled).toBe(false)
+    expect(liquidateButton?.disabled).toBe(false)
+
+    await act(async () => {
+      liquidateButton?.click()
+    })
+
+    expect(container.textContent).toContain('当前策略仍有持仓或挂单')
+    expect(container.textContent).toContain('仅停止，保留持仓/挂单')
+
+    await act(async () => {
+      container.querySelector('[data-testid="liquidate-and-stop-strategy"]')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      )
+    })
+
+    expect(mockPerformAccountAiQuantStrategyAction).toHaveBeenCalledWith('inst-runtime-control', {
+      userId: 'user-1',
+      action: 'liquidate_and_stop',
+    })
+    expect(findButton('停止策略')?.disabled).toBe(true)
+    expect(findButton('平仓并停止')?.disabled).toBe(true)
+
+    await act(async () => {
+      resolveAction?.(buildActionDetail({
+        positionOverview: {
+          openPositionsCount: 0,
+          closedPositionsCount: 2,
+          totalRealizedPnl: 15,
+          totalUnrealizedPnl: 0,
+        },
+      }))
+    })
+
+    expect(container.textContent).toContain('策略已平仓并停止。')
+    expect(container.textContent).toContain('已停止')
+  })
+
+  it('shows the liquidate failure message and keeps the strategy running when action fails', async () => {
+    mockPerformAccountAiQuantStrategyAction.mockRejectedValue(new Error(''))
+    mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(buildActionDetail({
+      status: 'running',
+      positionOverview: {
+        openPositionsCount: 1,
+        closedPositionsCount: 0,
+        totalRealizedPnl: 0,
+        totalUnrealizedPnl: 9,
+      },
+    }))
+
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy({
+            positionOverview: {
+              openPositionsCount: 1,
+              closedPositionsCount: 0,
+              totalRealizedPnl: 0,
+              totalUnrealizedPnl: 9,
+            },
+          })}
+        />,
+      )
+    })
+
+    await act(async () => {
+      findButton('平仓并停止')?.click()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="liquidate-and-stop-strategy"]')?.dispatchEvent(
+        new MouseEvent('click', { bubbles: true }),
+      )
+    })
+
+    expect(container.textContent).toContain('平仓并停止失败，请检查模拟盘账户状态后重试。')
+    expect(container.textContent).toContain('运行中')
+    expect(container.textContent).toContain('停止策略')
+    expect(container.textContent).toContain('平仓并停止')
+    expect(container.textContent).not.toContain('策略已平仓并停止。')
+  })
+
+  it('shows redeploy and return-to-chat entries after the strategy is stopped', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy({ status: 'stopped' })}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('重新部署')
+    expect(container.textContent).toContain('返回对话修改')
+    expect(container.textContent).not.toContain('停止策略')
+  })
+
+  it('shows liquidate_and_stop when current open orders indicate runtime risk without open positions', async () => {
+    await act(async () => {
+      root.render(
+        <AiQuantStrategyDetail
+          lng="zh"
+          strategy={buildStrategy({
+            positionOverview: {
+              openPositionsCount: 0,
+              closedPositionsCount: 0,
+              totalRealizedPnl: 0,
+              totalUnrealizedPnl: 0,
+            },
+            latestOrders: [{
+              executedAt: '2026-04-25 20:00',
+              side: 'BUY',
+              semanticAction: '买入',
+              semanticRole: 'entry',
+              symbol: 'BTCUSDT',
+              price: 1,
+              quantity: 1,
+              fee: 0,
+              feeCurrency: 'USDT',
+              orderId: 'order-1',
+            }],
+            openOrdersCount: 1,
+          })}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain('平仓并停止')
+    expect(container.textContent).toContain('当前未成交挂单 1 条')
   })
 })

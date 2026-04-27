@@ -7,10 +7,12 @@ interface BacktestSummaryCardProps {
   result: BacktestResult
   marketType?: 'spot' | 'perp' | null
   canDeploy: boolean
+  deploymentState?: 'not_deployed' | 'running' | 'stopped' | 'unknown'
+  deployLabel?: string
   drawdownLimited?: boolean
   onOpenFullScreen: () => void
-  onOptimize: () => void
   onDeploy: () => void
+  onViewRunningStrategy?: () => void
 }
 
 export interface BacktestResult {
@@ -31,10 +33,12 @@ export function BacktestSummaryCard({
   result,
   marketType = null,
   canDeploy,
+  deploymentState = 'not_deployed',
+  deployLabel,
   drawdownLimited = true,
   onOpenFullScreen,
-  onOptimize,
   onDeploy,
+  onViewRunningStrategy,
 }: BacktestSummaryCardProps) {
   const { t, i18n } = useTranslation()
   const isEn = (i18n?.resolvedLanguage ?? i18n?.language ?? 'zh').toLowerCase().startsWith('en')
@@ -141,6 +145,20 @@ export function BacktestSummaryCard({
           : '本次回测未形成已完成交易，暂不允许部署。请调整现货策略条件后重试。'
         : t('aiQuant.messages.backtestNoTrades')
       : t('aiQuant.messages.backtestDrawdownFail')
+  const effectiveDeployLabel = deployLabel
+    ?? (deploymentState === 'running'
+      ? t('aiQuant.deploy.running', { defaultValue: '已部署运行' })
+      : deploymentState === 'stopped'
+        ? t('aiQuant.deploy.redeploy', { defaultValue: '重新部署' })
+        : deploymentState === 'unknown'
+          ? t('aiQuant.deploy.pending', { defaultValue: '部署状态待确认' })
+          : t('aiQuant.deploy'))
+  const deployDisabled = !canDeploy || deploymentState === 'running' || deploymentState === 'unknown'
+  const showDeployBlockMessage =
+    !canDeploy && deploymentState !== 'running' && deploymentState !== 'unknown'
+  const deploymentHint = deploymentState === 'unknown'
+    ? t('aiQuant.deploy.pendingHint', { defaultValue: '正在确认部署状态，确认前暂不能重复部署。' })
+    : null
 
   return (
     <section className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5">
@@ -176,30 +194,36 @@ export function BacktestSummaryCard({
         ))}
       </div>
 
-      {!canDeploy && (
+      {showDeployBlockMessage && (
         <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-500">
           {deployBlockMessage}
         </div>
       )}
+      {deploymentHint && (
+        <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-500">
+          {deploymentHint}
+        </div>
+      )}
 
       <div className="mt-4 flex flex-wrap gap-2">
-        {!canDeploy && (
+        {deploymentState === 'running' && onViewRunningStrategy && (
           <button
             type="button"
-            onClick={onOptimize}
+            data-deployment-view-running="true"
+            onClick={onViewRunningStrategy}
             className="rounded-xl border border-[color:var(--cf-border)] px-4 py-2 text-sm font-semibold text-[color:var(--cf-text-strong)]"
           >
-            {t('aiQuant.messages.returnToChat')}
+            {t('aiQuant.deploy.viewRunning', { defaultValue: '查看运行策略' })}
           </button>
         )}
 
         <button
           type="button"
           onClick={onDeploy}
-          disabled={!canDeploy}
+          disabled={deployDisabled}
           className="from-primary to-secondary rounded-xl bg-gradient-to-r px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
         >
-          {t('aiQuant.deploy')}
+          {effectiveDeployLabel}
         </button>
       </div>
     </section>

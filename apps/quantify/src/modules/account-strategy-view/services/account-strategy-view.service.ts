@@ -10,7 +10,7 @@ import type { AccountStrategyListQueryDto } from '../dto/account-strategy-list-q
 import type { AccountStrategyUpdateExecutionLeverageDto } from '../dto/account-strategy-update-execution-leverage.dto'
 import type { StrategyInstanceStatsDto } from '@/modules/strategy-instances/dto/strategy-instance-stats.dto'
 import type { StrategySignalsRuntimeConfig } from '@/modules/strategy-signals/types/strategy-signals-config.type'
-import type { ExchangeId, MarketType, UnifiedBalance } from '@/modules/trading/core/types'
+import type { ExchangeId, MarketType, UnifiedBalance, UnifiedOrder } from '@/modules/trading/core/types'
 import { createHash } from 'node:crypto'
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable, Logger, Optional } from '@nestjs/common'
@@ -24,6 +24,9 @@ import { PublishedStrategySnapshotsRepository } from '@/modules/llm-strategy-cod
 import { MarketDataIngestionService } from '@/modules/market-data/services/market-data-ingestion.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
+// eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
+import { PositionsService } from '@/modules/positions/positions.service'
+import { normalizeExecutionSymbol } from '@/modules/trading/core/symbol-normalizer'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { StrategyInstanceStatsService } from '@/modules/strategy-instances/services/strategy-instance-stats.service'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
@@ -70,10 +73,14 @@ interface StrategyAccountFallback {
   totalUnrealizedPnl: unknown
 }
 
+type StrategyRow = NonNullable<Awaited<ReturnType<AccountStrategyViewRepository['findStrategyForUser']>>>
+type StrategyOpenOrder = UnifiedOrder & { exchangeId: ExchangeId; marketType: MarketType }
+
 @Injectable()
 export class AccountStrategyViewService {
   private static readonly BEST_EFFORT_EXTERNAL_TIMEOUT_MS = 1_500
   private readonly logger = new Logger(AccountStrategyViewService.name)
+  private readonly liquidationLocks = new Map<string, Promise<void>>()
 
   constructor(
     private readonly repo: AccountStrategyViewRepository,
@@ -85,6 +92,7 @@ export class AccountStrategyViewService {
     @Optional() private readonly tradingService?: TradingService,
     @Optional() private readonly publishedSnapshotsRepository?: PublishedStrategySnapshotsRepository,
     private readonly runtimeExecutionStateService?: StrategyRuntimeExecutionStateService,
+    @Optional() private readonly positionsService?: PositionsService,
   ) {}
 
   async listStrategies(
@@ -399,6 +407,15 @@ export class AccountStrategyViewService {
       totalUnrealizedPnl: account ? resolvedUnrealizedPnl : null,
     }
     const latestOrders = buildAccountStrategyLatestOrders(timelineSource.trades, timelineSource.signalExecutions)
+    const currentOpenOrders = await this.loadCurrentOpenOrdersForStrategy({
+      userId,
+      row,
+      sub,
+      strict: false,
+    })
+    const openOrdersCount = currentOpenOrders
+      ? currentOpenOrders.filter(order => this.isOpenExchangeOrder(order)).length
+      : null
     const runtimeSemanticMarketType = snapshotMarketType ?? marketType
     const runtimeSemanticSymbol = snapshotStrategyConfig
       ? this.readString(snapshotStrategyConfig, ['symbol']) ?? symbol
@@ -495,6 +512,7 @@ export class AccountStrategyViewService {
       },
       positionOverview: detailPositionOverview,
       latestOrders,
+      openOrdersCount,
       runtimeExecutionStates,
       runtimeSemanticSummary,
       deployment: !resolvedSnapshot.publishedSnapshotId
@@ -808,8 +826,19 @@ export class AccountStrategyViewService {
 
     this.assertStrategyVisible(row, strategyInstanceId)
 
-    if (dto.action !== AccountStrategyAction.RUN && dto.action !== AccountStrategyAction.STOP) {
+    if (
+      dto.action !== AccountStrategyAction.RUN
+      && dto.action !== AccountStrategyAction.STOP
+      && dto.action !== AccountStrategyAction.LIQUIDATE_AND_STOP
+    ) {
       throw new InvalidStrategyActionException({ action: dto.action })
+    }
+
+    if (dto.action === AccountStrategyAction.LIQUIDATE_AND_STOP) {
+      if (row.status !== 'running') {
+        return this.getStrategyDetail(userId, strategyInstanceId)
+      }
+      return this.runLiquidateAndStopLocked(userId, strategyInstanceId, row)
     }
 
     const nextStatus = dto.action === AccountStrategyAction.RUN ? 'running' : 'stopped'
@@ -827,6 +856,224 @@ export class AccountStrategyViewService {
     )
 
     return this.getStrategyDetail(userId, strategyInstanceId)
+  }
+
+  private async runLiquidateAndStopLocked(
+    userId: string,
+    strategyInstanceId: string,
+    fallbackRow: StrategyRow,
+  ): Promise<AccountStrategyDetailResponseDto> {
+    return this.runWithLiquidationLock(strategyInstanceId, async () => {
+      const latestRow = await this.repo.findStrategyForUser(userId, strategyInstanceId)
+      const row = latestRow ?? fallbackRow
+
+      if (row.createdBy !== userId) {
+        throw new StrategyOwnerOnlyException({ userId, ownerId: row.createdBy })
+      }
+      this.assertStrategyVisible(row, strategyInstanceId)
+
+      if (row.status !== 'running') {
+        return this.getStrategyDetail(userId, strategyInstanceId)
+      }
+
+      return this.liquidateAndStopStrategy(userId, strategyInstanceId, row)
+    })
+  }
+
+  private async runWithLiquidationLock<T>(
+    strategyInstanceId: string,
+    task: () => Promise<T>,
+  ): Promise<T> {
+    const previous = this.liquidationLocks.get(strategyInstanceId) ?? Promise.resolve()
+    let releaseCurrent!: () => void
+    const current = new Promise<void>(resolve => {
+      releaseCurrent = resolve
+    })
+    const next = previous.catch(() => undefined).then(() => current)
+    this.liquidationLocks.set(strategyInstanceId, next)
+
+    await previous.catch(() => undefined)
+    try {
+      return await task()
+    } finally {
+      releaseCurrent()
+      if (this.liquidationLocks.get(strategyInstanceId) === next) {
+        this.liquidationLocks.delete(strategyInstanceId)
+      }
+    }
+  }
+
+  private async liquidateAndStopStrategy(
+    userId: string,
+    strategyInstanceId: string,
+    row: StrategyRow,
+  ): Promise<AccountStrategyDetailResponseDto> {
+    const sub = this.assertStrategyVisible(row, strategyInstanceId)
+    const account = await this.repo.findUserStrategyAccount(userId, row.strategyTemplateId)
+    if (!account) {
+      throw new StrategyNotFoundException({ strategyInstanceId })
+    }
+
+    await this.strategyInstancesService.updateInstance(
+      strategyInstanceId,
+      {
+        status: 'paused',
+        updatedBy: userId,
+      },
+      userId,
+    )
+
+    try {
+      await this.cancelOpenOrdersForStrategy(userId, row, sub.exchangeAccount?.id ?? undefined)
+
+      const openPositions = await this.repo.loadOpenPositionsForLiquidation(account.id)
+      // latestOrders is recent activity history, not authoritative open-order state.
+      if (openPositions.length > 0) {
+        if (!this.positionsService) {
+          throw new DomainException('account_strategy.liquidation_service_unavailable', {
+            code: ErrorCode.INTERNAL_SERVER_ERROR,
+            status: HttpStatus.INTERNAL_SERVER_ERROR,
+          })
+        }
+
+        for (const position of openPositions) {
+          await this.positionsService.closePosition({
+            userId,
+            userStrategyAccountId: account.id,
+            positionId: position.id,
+            quantity: position.quantity.toString(),
+            exchangeId: position.exchangeId as ExchangeId,
+            marketType: position.marketType as MarketType,
+            note: 'AI Quant 平仓并停止',
+          })
+        }
+      }
+
+      await this.strategyInstancesService.updateInstance(
+        strategyInstanceId,
+        {
+          status: 'stopped',
+          updatedBy: userId,
+        },
+        userId,
+      )
+    }
+    catch (error) {
+      await this.strategyInstancesService.updateInstance(
+        strategyInstanceId,
+        {
+          status: 'running',
+          updatedBy: userId,
+        },
+        userId,
+      ).catch(() => undefined)
+      throw error
+    }
+
+    return this.getStrategyDetail(userId, strategyInstanceId)
+  }
+
+  private async cancelOpenOrdersForStrategy(
+    userId: string,
+    row: StrategyRow,
+    exchangeAccountId?: string,
+  ): Promise<void> {
+    const sub = row.subscriptions?.[0]
+    const openOrders = await this.loadCurrentOpenOrdersForStrategy({
+      userId,
+      row,
+      sub,
+      exchangeAccountId,
+      strict: true,
+    }) ?? []
+
+    for (const order of openOrders) {
+      if (!this.isOpenExchangeOrder(order)) {
+        continue
+      }
+      await this.tradingService.cancelOrder(
+        userId,
+        order.exchangeId,
+        order.marketType,
+        order.id,
+        order.symbol,
+        exchangeAccountId,
+      )
+    }
+  }
+
+  private async loadCurrentOpenOrdersForStrategy(input: {
+    userId: string
+    row: StrategyRow
+    sub?: StrategyRow['subscriptions'][number] | null
+    exchangeAccountId?: string
+    strict: boolean
+  }): Promise<StrategyOpenOrder[] | null> {
+    const { userId, row, sub, exchangeAccountId, strict } = input
+    if (!this.tradingService) {
+      if (strict) {
+        throw new DomainException('account_strategy.trading_service_unavailable', {
+          code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+          status: HttpStatus.SERVICE_UNAVAILABLE,
+        })
+      }
+      return null
+    }
+
+    const mergedParams = {
+      ...(this.readRecord(row.strategyTemplate?.defaultParams) ?? {}),
+      ...(this.readRecord((row as Record<string, unknown>).params) ?? {}),
+      ...(this.readRecord(sub?.customParams) ?? {}),
+    }
+    const exchangeId = this.resolveExchangeId(
+      this.readString(mergedParams, ['exchange', 'provider', 'exchangeId'])
+      ?? sub?.exchangeAccount?.exchangeId
+      ?? null,
+    )
+    const symbol = this.readString(mergedParams, ['symbol'])
+    if (!exchangeId || !symbol) {
+      if (strict) {
+        throw new DomainException('account_strategy.liquidation_order_context_missing', {
+          code: ErrorCode.BAD_REQUEST,
+          status: HttpStatus.BAD_REQUEST,
+        })
+      }
+      return null
+    }
+
+    const marketType = this.resolveMarketType(mergedParams, symbol, exchangeId)
+    const executionSymbol = normalizeExecutionSymbol(symbol, marketType, exchangeId)
+    const resolvedExchangeAccountId = exchangeAccountId ?? sub?.exchangeAccount?.id ?? undefined
+
+    try {
+      return (await this.tradingService.getOpenOrders(
+        userId,
+        exchangeId,
+        marketType,
+        executionSymbol,
+        resolvedExchangeAccountId,
+      )).map(order => ({
+        ...order,
+        exchangeId,
+        marketType,
+        symbol: order.symbol || executionSymbol,
+      }))
+    }
+    catch (error) {
+      if (strict) {
+        throw error
+      }
+      this.logger.warn(
+        `Failed to load current open orders for strategy ${row.id}: ${
+          error instanceof Error ? error.message : String(error)
+        }`,
+      )
+      return null
+    }
+  }
+
+  private isOpenExchangeOrder(order: Pick<UnifiedOrder, 'status'>): boolean {
+    return order.status === 'open' || order.status === 'partially_filled'
   }
 
   async deployStrategy(dto: AccountStrategyDeployDto): Promise<AccountStrategyDetailResponseDto> {
@@ -1085,8 +1332,77 @@ export class AccountStrategyViewService {
     if (!isOwner) {
       throw new StrategyOwnerOnlyException({ userId, ownerId: row.createdBy })
     }
+    if (row.status === 'running') {
+      throw new DomainException('account_strategy.delete_running_forbidden', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: { strategyInstanceId },
+      })
+    }
+    if (row.status !== 'draft') {
+      await this.assertNoRuntimeRiskBeforeDelete(userId, row, strategyInstanceId)
+    }
 
     await this.repo.deleteStrategyForUser(userId, strategyInstanceId)
+  }
+
+  private async assertNoRuntimeRiskBeforeDelete(
+    userId: string,
+    row: StrategyRow,
+    strategyInstanceId: string,
+  ): Promise<void> {
+    const sub = this.assertStrategyVisible(row, strategyInstanceId)
+    const account = await this.repo.findUserStrategyAccount(userId, row.strategyTemplateId)
+    if (account) {
+      const openPositions = await this.repo.loadOpenPositionsForLiquidation(account.id)
+      if (openPositions.length > 0) {
+        throw new DomainException('account_strategy.delete_runtime_risk_forbidden', {
+          code: ErrorCode.BAD_REQUEST,
+          status: HttpStatus.BAD_REQUEST,
+          args: { strategyInstanceId, openPositionsCount: openPositions.length },
+        })
+      }
+    }
+
+    if (!this.tradingService) {
+      throw new DomainException('account_strategy.trading_service_unavailable', {
+        code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
+        status: HttpStatus.SERVICE_UNAVAILABLE,
+      })
+    }
+
+    const mergedParams = {
+      ...(this.readRecord(row.strategyTemplate?.defaultParams) ?? {}),
+      ...(this.readRecord((row as Record<string, unknown>).params) ?? {}),
+      ...(this.readRecord(sub.customParams) ?? {}),
+    }
+    const exchangeId = this.resolveExchangeId(
+      this.readString(mergedParams, ['exchange', 'provider', 'exchangeId'])
+      ?? sub.exchangeAccount?.exchangeId
+      ?? null,
+    )
+    const symbol = this.readString(mergedParams, ['symbol'])
+    if (!exchangeId || !symbol) {
+      return
+    }
+
+    const marketType = this.resolveMarketType(mergedParams, symbol, exchangeId)
+    const executionSymbol = normalizeExecutionSymbol(symbol, marketType, exchangeId)
+    const openOrders = await this.tradingService.getOpenOrders(
+      userId,
+      exchangeId,
+      marketType,
+      executionSymbol,
+      sub.exchangeAccount?.id ?? undefined,
+    )
+    const riskyOrders = openOrders.filter(order => order.status === 'open' || order.status === 'partially_filled')
+    if (riskyOrders.length > 0) {
+      throw new DomainException('account_strategy.delete_runtime_risk_forbidden', {
+        code: ErrorCode.BAD_REQUEST,
+        status: HttpStatus.BAD_REQUEST,
+        args: { strategyInstanceId, openOrdersCount: riskyOrders.length },
+      })
+    }
   }
 
   private mapUiStatus(status: string): 'running' | 'stopped' | 'draft' {

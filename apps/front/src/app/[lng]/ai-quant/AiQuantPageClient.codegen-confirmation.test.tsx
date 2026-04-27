@@ -6,8 +6,10 @@ import { createRoot } from 'react-dom/client'
 import { AiQuantPageClient } from './AiQuantPageClient'
 
 const mockContinueLlmCodegenSession = jest.fn()
+const mockFetchAccountAiQuantStrategyDetail = jest.fn()
 const mockFetchBacktestCapabilities = jest.fn()
 const mockGetLlmCodegenSession = jest.fn()
+const mockPerformAccountAiQuantStrategyAction = jest.fn()
 const mockReadPersistedConversations = jest.fn()
 const mockStartLlmCodegenSession = jest.fn()
 const validSemanticGraph = {
@@ -40,6 +42,7 @@ const translationMap: Record<string, string> = {
   'aiQuant.messages.graphConfirmed': '逻辑图已确认，正在生成策略代码...',
   'aiQuant.messages.graphGenerated': '我已把你的自然语言转换为逻辑图。请先确认逻辑图，再开始回测。',
   'aiQuant.messages.codeGeneratedBacktest': '策略代码已生成，现在可以开始回测。',
+  'aiQuant.messages.confirmGenerate': 'aiQuant.messages.confirmGenerate',
   'aiQuant.messages.generatedCodeTitle': '生成的策略代码：',
   'aiQuant.messages.staleConversationRecovered': '检测到本地会话已过期，已为你重建一个干净的对话，请重新确认并生成策略。',
 }
@@ -59,7 +62,10 @@ function readStoredConversations<T>(): T[] {
 }
 
 jest.mock('react-i18next', () => ({
-  useTranslation: () => ({ t: (key: string) => translationMap[key] ?? key }),
+  useTranslation: () => ({
+    t: (key: string, options?: { defaultValue?: string }) =>
+      translationMap[key] ?? options?.defaultValue ?? key,
+  }),
 }))
 
 jest.mock('next/navigation', () => ({
@@ -112,10 +118,34 @@ jest.mock('@/components/ai-quant/GuestAiQuantLanding', () => ({
 }))
 
 jest.mock('@/components/ai-quant/BacktestSummaryCard', () => ({
-  BacktestSummaryCard: ({ onOptimize }: { onOptimize: () => void }) => (
-    <button data-testid="return-to-chat" onClick={onOptimize}>
-      optimize
-    </button>
+  BacktestSummaryCard: ({
+    onDeploy,
+    onViewRunningStrategy,
+    deploymentState,
+    deployLabel,
+  }: {
+    onDeploy: () => void
+    onViewRunningStrategy?: () => void
+    deploymentState?: 'not_deployed' | 'running' | 'stopped' | 'unknown'
+    deployLabel?: string
+  }) => (
+    <div>
+      <button
+        data-testid="open-deploy"
+        disabled={deploymentState === 'running' || deploymentState === 'unknown'}
+        onClick={onDeploy}
+      >
+        {deployLabel ?? 'deploy'}
+      </button>
+      {onViewRunningStrategy
+        ? (
+            <button data-testid="view-running-strategy" onClick={onViewRunningStrategy}>
+              view running
+            </button>
+          )
+        : null}
+      <div data-testid="deployment-state">{deploymentState ?? 'not_deployed'}</div>
+    </div>
   ),
 }))
 
@@ -248,11 +278,73 @@ jest.mock('@/components/ai-quant/backtest-job-client', () => ({
 jest.mock('@/lib/api', () => ({
   deployAccountAiQuantStrategy: jest.fn(),
   continueLlmCodegenSession: (...args: unknown[]) => mockContinueLlmCodegenSession(...args),
+  fetchAccountAiQuantStrategyDetail: (...args: unknown[]) => mockFetchAccountAiQuantStrategyDetail(...args),
   fetchUserExchangeAccountStatuses: jest.fn(async () => []),
   getLlmCodegenSession: (...args: unknown[]) => mockGetLlmCodegenSession(...args),
+  performAccountAiQuantStrategyAction: (...args: unknown[]) => mockPerformAccountAiQuantStrategyAction(...args),
   startLlmCodegenSession: (...args: unknown[]) => mockStartLlmCodegenSession(...args),
   updateAiQuantConversationBacktestDraft: jest.fn(async () => undefined),
 }))
+
+function buildStrategyDetail(
+  overrides: Partial<{
+    id: string
+    status: 'running' | 'stopped' | 'draft'
+    positionCount: number
+  }> = {},
+) {
+  return {
+    id: overrides.id ?? 'strategy-1',
+    name: 'AI Quant strategy',
+    status: overrides.status ?? 'stopped',
+    exchange: 'okx',
+    symbol: 'BTCUSDT',
+    timeframe: '15m',
+    positionPct: 10,
+    isSubscribed: true,
+    paramSchema: null,
+    paramValues: null,
+    schemaVersion: null,
+    metrics: {
+      returnPct: 12,
+      maxDrawdownPct: 6,
+      winRatePct: 51,
+      tradeCount: 22,
+    },
+    totalPnl: 120,
+    todayPnl: 10,
+    equitySeries: [],
+    snapshot: {
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+      positionPct: 10,
+      publishedSnapshotId: 'snapshot-1',
+      snapshotHash: 'hash-1',
+      paramSchema: null,
+      paramValues: null,
+      schemaVersion: null,
+    },
+    timeline: [],
+    runtimeExecutionStates: [],
+    accountOverview: {
+      initialBalance: 10000,
+      totalEquity: 10120,
+      availableBalance: 10000,
+      totalPnl: 120,
+      todayPnl: 10,
+      baseCurrency: 'USDT',
+    },
+    positionOverview: {
+      openPositionsCount: overrides.positionCount ?? 0,
+      closedPositionsCount: 0,
+      totalRealizedPnl: 0,
+      totalUnrealizedPnl: 0,
+    },
+    latestOrders: [],
+    updatedAt: '2026-04-25T00:00:00.000Z',
+  }
+}
 
 function seedDraftConversation(
   now = Date.now(),
@@ -473,7 +565,11 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     mockFetchBacktestCapabilities.mockResolvedValue({
       allowedBaseTimeframes: ['15m'],
     })
+    mockFetchAccountAiQuantStrategyDetail.mockReset()
+    mockFetchAccountAiQuantStrategyDetail.mockResolvedValue(buildStrategyDetail())
     mockGetLlmCodegenSession.mockReset()
+    mockPerformAccountAiQuantStrategyAction.mockReset()
+    mockPerformAccountAiQuantStrategyAction.mockResolvedValue(buildStrategyDetail())
     mockStartLlmCodegenSession.mockReset()
     mockContinueLlmCodegenSession.mockResolvedValue({
       id: 'session-1',
@@ -1659,7 +1755,7 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
 
     await act(async () => {
       container
-        .querySelector('[data-testid="return-to-chat"]')
+        .querySelector('[data-testid="display-revise-graph"], [data-testid="revise-graph"]')
         ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
       await Promise.resolve()
     })
@@ -1702,6 +1798,107 @@ describe('AiQuantPageClient codegen confirmation flow', () => {
     ) as HTMLButtonElement | null
     expect(confirmButtonAfterReconfirm?.disabled).toBe(true)
     expect(runButtonAfterReconfirm?.disabled).toBe(false)
+  })
+
+  it('blocks logic graph revision behind the running strategy guard and preserves the published snapshot', async () => {
+    localStorage.clear()
+    seedPublishedConversation(Date.now())
+    mockFetchAccountAiQuantStrategyDetail.mockResolvedValueOnce(
+      buildStrategyDetail({ status: 'running', positionCount: 1 }),
+    )
+    mockFetchAccountAiQuantStrategyDetail.mockResolvedValueOnce(
+      buildStrategyDetail({ status: 'running', positionCount: 1 }),
+    )
+    mockPerformAccountAiQuantStrategyAction.mockResolvedValueOnce(
+      buildStrategyDetail({ status: 'stopped' }),
+    )
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="deployment-state"]')?.textContent).toBe('running')
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="display-revise-graph"], [data-testid="revise-graph"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).toContain('策略正在运行，不能直接修改')
+    const storedBeforeStop = readStoredCodegenConversations()
+    expect(storedBeforeStop[0]?.publishedSnapshotId ?? null).toBe('snapshot-1')
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="stop-running-strategy"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).toContain('当前策略仍有持仓或挂单')
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="stop-only-strategy"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(mockPerformAccountAiQuantStrategyAction).toHaveBeenCalledWith('strategy-1', {
+      userId: 'u-1',
+      action: 'stop',
+    })
+    expect(container.querySelector('[data-testid="deployment-state"]')?.textContent).toBe('stopped')
+    expect(container.textContent).not.toContain('策略正在运行，不能直接修改')
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="display-revise-graph"], [data-testid="revise-graph"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    await waitForAssertion(() => {
+      expect(container.querySelector('[data-testid="graph-status"]')?.textContent).toBe('draft')
+    })
+    const storedAfterStop = readStoredCodegenConversations()
+    expect(storedAfterStop[0]?.publishedSnapshotId ?? null).toBeNull()
+  })
+
+  it('fails closed for logic graph revision while deployment state is still loading', async () => {
+    localStorage.clear()
+    seedPublishedConversation(Date.now())
+    const detailDeferred = createDeferred<ReturnType<typeof buildStrategyDetail>>()
+    mockFetchAccountAiQuantStrategyDetail.mockReturnValueOnce(detailDeferred.promise)
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container
+        .querySelector('[data-testid="display-revise-graph"], [data-testid="revise-graph"]')
+        ?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(container.querySelector('[data-testid="deployment-state"]')?.textContent).toBe('unknown')
+    expect(container.textContent).toContain('部署状态待确认')
+    expect(container.querySelector('[data-testid="graph-status"]')?.textContent).toBe('confirmed')
+
+    const stored = readStoredCodegenConversations()
+    expect(stored[0]?.publishedSnapshotId ?? null).toBe('snapshot-1')
+    detailDeferred.resolve(buildStrategyDetail({ status: 'stopped' }))
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
   })
 
   it('invalidates published snapshot when a strategy param changes but keeps publication for pure backtest-range changes', async () => {

@@ -176,7 +176,7 @@ export interface PaginatedResponse<T> {
 }
 
 export type AccountAiQuantStrategyApiState = Extract<StrategyInstanceStatus, 'running' | 'stopped' | 'draft'>
-export type AccountAiQuantStrategyAction = 'run' | 'stop'
+export type AccountAiQuantStrategyAction = 'run' | 'stop' | 'liquidate_and_stop'
 
 export interface AccountAiQuantStrategyMetrics {
   returnPct: number | null
@@ -396,6 +396,7 @@ export interface AccountAiQuantStrategyDetail extends AccountAiQuantStrategyList
     feeCurrency: string | null
     orderId: string | null
   }>
+  openOrdersCount?: number | null
   runtimeSemanticSummary?: AccountAiQuantRuntimeSemanticSummary | null
 }
 

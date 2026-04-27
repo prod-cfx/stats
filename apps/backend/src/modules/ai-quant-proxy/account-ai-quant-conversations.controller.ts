@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Headers, Inject, Param, Patch } from '@nestjs/common'
+import { Body, Controller, Delete, Get, Headers, Inject, Param, Patch, Query } from '@nestjs/common'
 import { ApiBearerAuth, ApiBody, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { Auth } from '@/modules/auth/decorators/access-control.decorator'
 import { CurrentUser } from '@/modules/auth/decorators/current-user.decorator'
@@ -31,8 +31,11 @@ export class AccountAiQuantConversationsController {
     @CurrentUser('id') userId: string,
     @Headers('authorization') authorization: string | undefined,
     @Param('id') id: string,
+    @Query('deleteStoppedStrategy') deleteStoppedStrategy?: string,
   ): Promise<void> {
-    return this.service.deleteAiQuantConversation(userId, authorization, id)
+    return this.service.deleteAiQuantConversation(userId, authorization, id, {
+      deleteStoppedStrategy: deleteStoppedStrategy === 'true',
+    })
   }
 
   @Patch(':id/backtest-draft')

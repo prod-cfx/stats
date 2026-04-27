@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, jest } from '@jest/globals'
 
 const deleteMockStrategyById = jest.fn()
+const getTokenMock = jest.fn(() => null as string | null)
 const originalFetch = globalThis.fetch
 
 jest.mock('@/components/account/ai-quant-strategy-store', () => ({
@@ -32,7 +33,7 @@ jest.mock('./api-client', () => ({
 }))
 
 jest.mock('./auth-storage', () => ({
-  getToken: () => null,
+  getToken: () => getTokenMock(),
 }))
 
 jest.mock('./hyperliquid-api', () => ({
@@ -48,6 +49,8 @@ const originalAppEnv = process.env.NEXT_PUBLIC_APP_ENV
 describe('deleteAccountAiQuantStrategy', () => {
   beforeEach(() => {
     deleteMockStrategyById.mockReset()
+    getTokenMock.mockReset()
+    getTokenMock.mockReturnValue(null)
     jest.resetModules()
   })
 
@@ -131,5 +134,32 @@ describe('deleteAccountAiQuantStrategy', () => {
     await expect(deleteAccountAiQuantStrategy('strategy-4', 'user-4')).rejects.toThrow('fetch failed')
     expect(deleteMockStrategyById).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('passes deleteStoppedStrategy through the conversation delete endpoint', async () => {
+    const token = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1MSJ9.sig'
+    getTokenMock.mockReturnValue(token)
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({}),
+    } as Response)
+    globalThis.fetch = fetchMock as unknown as typeof fetch
+
+    const { deleteAiQuantConversation } = await import('./api')
+
+    await expect(
+      deleteAiQuantConversation('conv stopped', { deleteStoppedStrategy: true }),
+    ).resolves.toBeUndefined()
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://localhost:3000/api/account/ai-quant/conversations/conv%20stopped?deleteStoppedStrategy=true',
+      expect.objectContaining({
+        method: 'DELETE',
+        headers: expect.objectContaining({
+          Authorization: `Bearer ${token}`,
+        }),
+      }),
+    )
   })
 })

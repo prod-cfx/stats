@@ -29,6 +29,7 @@ interface DeployDialogProps {
     orderType?: string | null
     timeInForce?: string | null
   } | null
+  mode?: 'deploy' | 'redeploy'
   driftReasons?: string[]
   lng: 'zh' | 'en'
   onSelectAccount: (accountId: string) => void
@@ -50,6 +51,7 @@ export function DeployDialog({
   onSelectLeverage,
   leverageExplanation = null,
   deploymentBaseline = null,
+  mode = 'deploy',
   driftReasons = [],
   lng,
   onSelectAccount,
@@ -71,6 +73,16 @@ export function DeployDialog({
     : marketType === 'perp'
       ? t('trade.perpTag', { defaultValue: '合约' })
       : '--'
+  const isRedeploy = mode === 'redeploy'
+  const title = isRedeploy
+    ? t('aiQuant.deployDialog.redeployTitle', { defaultValue: '重新部署策略？' })
+    : t('aiQuant.deployDialog.title')
+  const description = isRedeploy
+    ? t('aiQuant.deployDialog.redeployDesc', { defaultValue: '系统将按当前已发布版本重新部署策略，并开始运行。' })
+    : t('aiQuant.deployDialog.desc')
+  const confirmLabel = isRedeploy
+    ? t('aiQuant.deployDialog.confirmRedeploy', { defaultValue: '确认重新部署' })
+    : t('aiQuant.deployDialog.confirmDeploy')
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/40 px-4" onClick={onClose}>
@@ -78,8 +90,8 @@ export function DeployDialog({
         className="w-full max-w-[520px] rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5"
         onClick={event => event.stopPropagation()}
       >
-        <h3 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{t('aiQuant.deployDialog.title')}</h3>
-        <p className="mt-1 text-sm text-[color:var(--cf-muted)]">{t('aiQuant.deployDialog.desc')}</p>
+        <h3 className="text-lg font-semibold text-[color:var(--cf-text-strong)]">{title}</h3>
+        <p className="mt-1 text-sm text-[color:var(--cf-muted)]">{description}</p>
 
         <div className="mt-4 flex items-center justify-between rounded-xl border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] p-3">
           <span className="text-sm text-[color:var(--cf-text)]">{t('aiQuant.deployDialog.apiStatus')}</span>
@@ -184,7 +196,7 @@ export function DeployDialog({
             disabled={!apiConfigured || !canDeploy || !marketTypeReady || !accountReady || !leverageReady || deploySubmitting}
             className="from-primary to-secondary rounded-xl bg-gradient-to-r px-4 py-2 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
           >
-            {t('aiQuant.deployDialog.confirmDeploy')}
+            {confirmLabel}
           </button>
           <button
             type="button"
