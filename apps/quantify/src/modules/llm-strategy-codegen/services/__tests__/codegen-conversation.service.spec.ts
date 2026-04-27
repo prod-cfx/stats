@@ -2224,6 +2224,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(systemPrompt).toContain('logicReady 只是建议性自评')
     expect(systemPrompt).toContain('semanticPatch 只表达当前消息涉及的增量语义')
+    expect(systemPrompt).toContain('已有 active semantic state 时，默认按增量修改处理')
+    expect(systemPrompt).toContain('输出原子语义 patch')
+    expect(systemPrompt).toContain('context、trigger、action、risk、position')
+    expect(systemPrompt).toContain('不要输出 checklist')
+    expect(systemPrompt).toContain('用户明确要求替换整个策略')
+    expect(systemPrompt).toContain('否则不得重置已有语义')
+    expect(systemPrompt).toContain('若编辑意图不完整，只追问缺失的 semantic slot')
     expect(systemPrompt).toContain('不得臆造新的核心交易规则')
     expect(systemPrompt).not.toContain('必须直接给出完整入场+出场规则草案')
   })
@@ -2259,6 +2266,8 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
 
     expect(systemPrompt).toContain('semanticState 派生约束')
     expect(systemPrompt).toContain('risk / sizing / context')
+    expect(systemPrompt).toContain('不要从脚本文本反推策略语义')
+    expect(systemPrompt).toContain('逻辑图和脚本必须从更新后的 SemanticState 与 canonical spec 派生')
     expect(systemPrompt).toContain('不要为了“覆盖”而伪造无意义的运行时代码分支')
     expect(userPrompt).toContain('价格连续3根K线在轨外时直接平仓')
     expect(userPrompt).not.toContain('价格连续3根K线在轨外时直接减仓')
