@@ -60,12 +60,72 @@ interface ExistingInstanceSnapshotBinding {
   snapshotHash?: unknown
 }
 
+interface ResolvedDeployExchangeAccount {
+  id: string
+  isTestnet: boolean | null
+  exchangeId: 'binance' | 'okx' | 'hyperliquid'
+}
+
 @Injectable()
 export class AccountStrategyViewRepository {
   constructor(
     private readonly txHost: TransactionHost<TransactionalAdapterPrisma<PrismaClient>>,
     private readonly prisma: PrismaService,
   ) {}
+
+  async resolveDeployExchangeAccount(input: {
+    userId: string
+    exchange: 'binance' | 'okx' | 'hyperliquid'
+    exchangeAccountId?: string | null
+  }): Promise<ResolvedDeployExchangeAccount> {
+    if (input.exchangeAccountId) {
+      const matchedAccount = await this.prisma.exchangeAccount.findFirst({
+        where: {
+          id: input.exchangeAccountId,
+          userId: input.userId,
+        },
+        select: { id: true, isTestnet: true, exchangeId: true },
+      })
+      if (!matchedAccount) {
+        throw new ExchangeAccountNotFoundException({ accountId: input.exchangeAccountId })
+      }
+      if (matchedAccount.exchangeId !== input.exchange) {
+        throw new DomainException('account_strategy.deploy_exchange_account_mismatch', {
+          code: ErrorCode.BAD_REQUEST,
+          status: HttpStatus.BAD_REQUEST,
+          args: {
+            exchangeAccountId: input.exchangeAccountId,
+            expectedExchange: input.exchange,
+            actualExchange: matchedAccount.exchangeId,
+          },
+        })
+      }
+      return {
+        id: matchedAccount.id,
+        isTestnet: matchedAccount.isTestnet,
+        exchangeId: matchedAccount.exchangeId as 'binance' | 'okx' | 'hyperliquid',
+      }
+    }
+
+    const existingAccount = await this.prisma.exchangeAccount.findFirst({
+      where: {
+        userId: input.userId,
+        exchangeId: input.exchange,
+      },
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+      select: { id: true, isTestnet: true, exchangeId: true },
+    })
+    if (!existingAccount) {
+      throw new ExchangeAccountNotFoundException({
+        accountId: `${input.exchange}-account`,
+      })
+    }
+    return {
+      id: existingAccount.id,
+      isTestnet: existingAccount.isTestnet,
+      exchangeId: existingAccount.exchangeId as 'binance' | 'okx' | 'hyperliquid',
+    }
+  }
 
   async deployStrategyForUser(input: DeployStrategyInput): Promise<{ strategyInstanceId: string; mode: 'TESTNET' | 'LIVE' }> {
     const normalizedName = this.normalizeStrategyName(input.name)
@@ -275,12 +335,13 @@ export class AccountStrategyViewRepository {
         if (!existingStrategyAccount) {
           const initialBalance = this.resolveInitialBalanceQuote(mergedParams)
           const accountBalance = this.resolveAccountBalanceQuote(mergedParams, initialBalance)
+          const baseCurrency = this.resolveStrategyAccountBaseCurrency(mergedParams, fundingSnapshot)
           await tx.userStrategyAccount.create({
             data: {
               userId: input.userId,
               strategyId: existingInstance.strategyTemplateId,
               strategyName: normalizedName,
-              baseCurrency: 'USDT',
+              baseCurrency,
               initialBalance,
               balance: accountBalance,
               equity: initialBalance,
@@ -290,10 +351,12 @@ export class AccountStrategyViewRepository {
         else if (this.isPristineStrategyAccount(existingStrategyAccount)) {
           const initialBalance = this.resolveInitialBalanceQuote(mergedParams)
           const accountBalance = this.resolveAccountBalanceQuote(mergedParams, initialBalance)
+          const baseCurrency = this.resolveStrategyAccountBaseCurrency(mergedParams, fundingSnapshot)
           await tx.userStrategyAccount.update({
             where: { id: existingStrategyAccount.id },
             data: {
               strategyName: normalizedName,
+              baseCurrency,
               initialBalance,
               balance: accountBalance,
               equity: initialBalance,
@@ -333,6 +396,22 @@ export class AccountStrategyViewRepository {
       ...fundingSnapshot,
       fundingSource: mode === 'LIVE' ? 'exchange_live' : 'exchange_testnet',
     }
+  }
+
+  private resolveStrategyAccountBaseCurrency(
+    params: Record<string, unknown>,
+    fundingSnapshot: StrategyFundingSnapshot | null,
+  ): string {
+    const snapshotAsset = fundingSnapshot?.asset?.trim().toUpperCase()
+    if (snapshotAsset) return snapshotAsset
+
+    const rawSymbol = params.symbol
+    if (typeof rawSymbol !== 'string') return 'USDT'
+    const normalized = rawSymbol.trim().toUpperCase()
+    if (normalized.endsWith('USDT')) return 'USDT'
+    if (normalized.endsWith('USDC')) return 'USDC'
+    const parts = normalized.split(/[/:-]/).filter(Boolean)
+    return parts[1] ?? 'USDT'
   }
 
   private isPristineStrategyAccount(account: {

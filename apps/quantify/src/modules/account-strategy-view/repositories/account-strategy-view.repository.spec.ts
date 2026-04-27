@@ -397,6 +397,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
 
     expect(tx.userStrategyAccount.create).toHaveBeenCalledWith(expect.objectContaining({
       data: expect.objectContaining({
+        baseCurrency: 'USDT',
         initialBalance: expect.objectContaining({}),
         balance: expect.objectContaining({}),
         equity: expect.objectContaining({}),
@@ -406,6 +407,91 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
     expect(String(call.data.initialBalance)).toBe('60000')
     expect(String(call.data.balance)).toBe('58000')
     expect(String(call.data.equity)).toBe('60000')
+  })
+
+  it('uses funding asset as strategy account base currency for non-USDT symbols', async () => {
+    const tx = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'user-1' }),
+        create: jest.fn(),
+      },
+      exchangeAccount: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'exchange-account-1', isTestnet: true, exchangeId: 'okx' }),
+      },
+      strategyTemplate: {
+        findUnique: jest.fn(),
+        create: jest.fn(),
+      },
+      strategyInstance: {
+        findFirst: jest.fn().mockResolvedValue({
+          id: 'strategy-instance-1',
+          createdBy: 'user-1',
+          strategyTemplateId: 'template-1',
+          params: {
+            symbol: 'BTCUSDC',
+            timeframe: '5m',
+            positionPct: 10,
+          },
+          metadata: {
+            bindingSource: 'PUBLISHED_SNAPSHOT',
+            publishedSnapshotId: 'snapshot-created',
+            snapshotHash: 'snapshot-hash-created',
+          },
+        }),
+        update: jest.fn().mockResolvedValue({ id: 'strategy-instance-1' }),
+        create: jest.fn(),
+      },
+      userStrategySubscription: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+      },
+      userStrategyAccount: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
+      },
+    }
+
+    const repo = new AccountStrategyViewRepository(createTxHost(tx) as any, { deployRequest: { findUnique: jest.fn(), create: jest.fn(), update: jest.fn() } } as any)
+
+    await repo.deployStrategyForUser({
+      userId: 'user-1',
+      name: 'OKX BTCUSDC 5m AI策略',
+      exchange: 'okx',
+      symbol: 'BTCUSDC',
+      marketType: 'spot',
+      timeframe: '5m',
+      positionPct: 10,
+      exchangeAccountId: 'exchange-account-1',
+      publishedSnapshotBinding: {
+        bindingSource: 'PUBLISHED_SNAPSHOT',
+        publishedSnapshotId: 'snapshot-created',
+        snapshotHash: 'snapshot-hash-created',
+        sourceStrategyInstanceId: 'strategy-instance-1',
+        sourceStrategyTemplateId: 'template-1',
+      },
+      initialBalanceQuote: 60000,
+      accountBalanceQuote: 58000,
+      fundingSnapshot: {
+        asset: 'USDC',
+        totalEquity: 60000,
+        availableCash: 58000,
+        availableEquity: null,
+        reservedQuote: 0,
+        usedMargin: null,
+        buyingPower: 58000,
+        executionCapital: 60000,
+        fundingSource: 'exchange_testnet',
+        accountMode: null,
+        marginMode: null,
+        nonTradableReason: null,
+      },
+    } as any)
+
+    expect(tx.userStrategyAccount.create).toHaveBeenCalledWith(expect.objectContaining({
+      data: expect.objectContaining({
+        baseCurrency: 'USDC',
+      }),
+    }))
   })
 
   it('normalizes funding snapshot source from inferred live exchange account mode', async () => {
@@ -597,6 +683,7 @@ describe('accountStrategyViewRepository.deployStrategyForUser', () => {
       where: { id: 'strategy-account-1' },
       data: expect.objectContaining({
         strategyName: 'OKX BTCUSDT 5m AI策略',
+        baseCurrency: 'USDT',
         initialBalance: expect.objectContaining({}),
         balance: expect.objectContaining({}),
         equity: expect.objectContaining({}),
