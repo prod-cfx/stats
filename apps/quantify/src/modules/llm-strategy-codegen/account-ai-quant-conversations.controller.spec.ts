@@ -1,6 +1,9 @@
 import { Test } from '@nestjs/testing'
+import { HTTP_CODE_METADATA } from '@nestjs/common/constants'
+import { validate } from 'class-validator'
 import { EnvService } from '@/common/services/env.service'
 import { AccountAiQuantConversationsController } from './controllers/account-ai-quant-conversations.controller'
+import { RecoverAiQuantEditConversationRequestDto } from './dto/recover-ai-quant-edit-conversation.request.dto'
 import { CallerIdentityService } from './services/caller-identity.service'
 import { CodegenConversationService } from './services/codegen-conversation.service'
 
@@ -8,6 +11,11 @@ function createBearerToken(payload: Record<string, unknown>): string {
   const encodedHeader = Buffer.from(JSON.stringify({ alg: 'none', typ: 'JWT' })).toString('base64url')
   const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url')
   return `Bearer ${encodedHeader}.${encodedPayload}.signature`
+}
+
+async function validateRecoverEditConversationDto(input: Partial<RecoverAiQuantEditConversationRequestDto>) {
+  const dto = Object.assign(new RecoverAiQuantEditConversationRequestDto(), input)
+  return validate(dto)
 }
 
 describe('accountAiQuantConversationsController', () => {
@@ -150,5 +158,76 @@ describe('accountAiQuantConversationsController', () => {
       publishedSnapshotId: 'snapshot-1',
       source: 'account-detail',
     })
+  })
+
+  it('forwards optional recovery identifiers to the service', async () => {
+    const service = {
+      recoverEditConversation: jest.fn().mockResolvedValue({ id: 'conversation-1' }),
+    }
+    const moduleRef = await Test.createTestingModule({
+      controllers: [AccountAiQuantConversationsController],
+      providers: [
+        { provide: CodegenConversationService, useValue: service },
+        {
+          provide: EnvService,
+          useValue: {
+            getString: jest.fn((key: string) => {
+              if (key === 'BACKEND_API_BASE_URL') return 'http://backend.test/api/v1'
+              return undefined
+            }),
+            getBoolean: jest.fn().mockReturnValue(false),
+            isDev: jest.fn().mockReturnValue(false),
+          },
+        },
+        CallerIdentityService,
+      ],
+    }).compile()
+    const controller = moduleRef.get(AccountAiQuantConversationsController)
+
+    await controller.recoverEditSession(
+      createBearerToken({ sub: 'caller-u1', principalType: 'user', exp: 4_102_444_800 }),
+      'caller-u1',
+      {
+        strategyInstanceId: 'strategy-1',
+        publishedSnapshotId: 'snapshot-1',
+        conversationId: 'conversation-1',
+        sessionId: 'session-1',
+        source: 'backtest',
+      },
+    )
+
+    expect(service.recoverEditConversation).toHaveBeenCalledWith('caller-u1', {
+      strategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
+      conversationId: 'conversation-1',
+      sessionId: 'session-1',
+      source: 'backtest',
+    })
+  })
+
+  it('declares edit session recovery as a 200 response', () => {
+    expect(Reflect.getMetadata(
+      HTTP_CODE_METADATA,
+      AccountAiQuantConversationsController.prototype.recoverEditSession,
+    )).toBe(200)
+  })
+
+  it('rejects missing and blank strategy instance ids', async () => {
+    await expect(validateRecoverEditConversationDto({})).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ property: 'strategyInstanceId' }),
+      ]),
+    )
+    await expect(validateRecoverEditConversationDto({ strategyInstanceId: '' })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ property: 'strategyInstanceId' }),
+      ]),
+    )
+    await expect(validateRecoverEditConversationDto({ strategyInstanceId: '   ' })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ property: 'strategyInstanceId' }),
+      ]),
+    )
+    await expect(validateRecoverEditConversationDto({ strategyInstanceId: 'strategy-1' })).resolves.toEqual([])
   })
 })
