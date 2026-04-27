@@ -11,7 +11,7 @@ import { StrategyClarificationRulesService } from '../strategy-clarification-rul
 import { StrategyCompileabilityDecisionService } from '../strategy-compileability-decision.service'
 
 describe('codegenConversationService edit recovery', () => {
-  const recoveryMessage = '已基于上一版策略恢复修改上下文。你可以直接说明要调整的触发、行动、风控、仓位或运行参数。'
+  const recoveryMessage = expect.stringContaining('已基于上一版策略恢复修改上下文。')
 
   const buildConversation = (
     overrides: Partial<AiQuantConversationSnapshotRecord> = {},
@@ -367,6 +367,8 @@ describe('codegenConversationService edit recovery', () => {
     expect(result.semanticGraph).toEqual(snapshotSemanticGraph)
     expect(harness.sessionsRepo.createSession.mock.calls[0][0].semanticGraph).toEqual(snapshotSemanticGraph)
     expect(result.conversationMessages).toEqual([{ role: 'assistant', content: recoveryMessage }])
+    expect(result.conversationMessages?.[0]?.content).toContain('当前策略：')
+    expect(result.conversationMessages?.[0]?.content).toContain('请直接说明你要修改的原子语义')
   })
 
   it('synthesizes a graph-shaped semantic graph when the snapshot has no semantic graph', async () => {

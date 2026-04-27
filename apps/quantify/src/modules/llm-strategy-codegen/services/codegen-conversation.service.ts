@@ -148,7 +148,7 @@ const DEFAULT_CODEGEN_STRICT_ENABLED = true
 const DEFAULT_CODEGEN_STRICT_FALLBACK = true
 const STRATEGY_PLAZA_RUN_SESSION_ID_PREFIX = 'strategy-plaza:official:'
 const DEFAULT_CODEGEN_STRICT_UNSUPPORTED_TTL_MS = 10 * 60 * 1000
-const EDIT_RECOVERY_ASSISTANT_MESSAGE = '已基于上一版策略恢复修改上下文。你可以直接说明要调整的触发、行动、风控、仓位或运行参数。'
+const EDIT_RECOVERY_ASSISTANT_MESSAGE = '已基于上一版策略恢复修改上下文。'
 
 const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
   type: 'object',
@@ -597,9 +597,10 @@ export class CodegenConversationService {
       publishedSnapshotId: snapshot.id,
     }
     const semanticGraph = this.resolveRecoveredSemanticGraph(snapshot, semanticState)
+    const recoveryAssistantMessage = this.buildEditRecoveryAssistantMessage(semanticState)
     const constraintPack = {
       ...createDefaultConstraintPack(),
-      conversationHistory: [`A: ${EDIT_RECOVERY_ASSISTANT_MESSAGE}`],
+      conversationHistory: [`A: ${recoveryAssistantMessage}`],
     }
 
     const session = await this.sessionsRepo.createSession({
@@ -620,10 +621,31 @@ export class CodegenConversationService {
       userId,
       codegenSessionId: session.id,
       title: `修改 ${titleSymbol} 策略`,
-      messages: [{ role: 'assistant', content: EDIT_RECOVERY_ASSISTANT_MESSAGE }],
+      messages: [{ role: 'assistant', content: recoveryAssistantMessage }],
     })
 
     return this.toConversationResponse(conversation)
+  }
+
+  private buildEditRecoveryAssistantMessage(semanticState: SemanticState): string {
+    const view = this.semanticStateProjection.buildConversationView(semanticState)
+    const contextParts = [
+      view.executionContext.exchange?.toUpperCase(),
+      view.executionContext.marketType === 'perp'
+        ? '合约'
+        : view.executionContext.marketType === 'spot'
+          ? '现货'
+          : null,
+      view.executionContext.symbol,
+      view.executionContext.timeframe,
+    ].filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+    const contextSummary = contextParts.length > 0 ? contextParts.join(' ') : ''
+    const semanticSummary = view.summary?.trim() || '已识别部分条件，但仍未完整。'
+    const currentStrategy = contextSummary
+      ? `${contextSummary}；${semanticSummary}`
+      : semanticSummary
+
+    return `${EDIT_RECOVERY_ASSISTANT_MESSAGE}\n当前策略：${currentStrategy}\n请直接说明你要修改的原子语义，例如交易标的、交易所、周期、触发条件、行动、风控或仓位。`
   }
 
   private recoverSemanticStateFromEditableSnapshot(

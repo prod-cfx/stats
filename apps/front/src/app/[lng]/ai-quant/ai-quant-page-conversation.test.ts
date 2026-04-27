@@ -4,6 +4,7 @@ import type { ConversationState } from './ai-quant-page-conversation'
 import {
   AI_QUANT_PERSISTED_SCHEMA_VERSION,
   buildBacktestSummaryResult,
+  buildStrategyRevisionPromptMessage,
   createConversation,
   createConversationFromServerConversation,
   findConversationForEditIntent,
@@ -1978,6 +1979,82 @@ describe('ai-quant-page-conversation', () => {
         publishedSnapshotId: 'missing-snapshot',
         ts: Date.now(),
       })).toBeNull()
+    })
+  })
+
+  describe('buildStrategyRevisionPromptMessage', () => {
+    it('describes the current atomic strategy before asking for revisions', () => {
+      const conversation = {
+        ...createConversation((key: string) => key),
+        params: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 12,
+        },
+        displayLogicGraph: {
+          blocks: [
+            {
+              type: 'IF',
+              items: [
+                {
+                  id: 'entry-1',
+                  kind: 'condition',
+                  text: 'MA6 上穿 MA48',
+                },
+              ],
+            },
+            {
+              type: 'EXECUTE',
+              items: [
+                {
+                  id: 'market-1',
+                  kind: 'execute',
+                  key: 'symbol',
+                  value: 'ETHUSDT',
+                  text: '交易标的 ETHUSDT',
+                },
+              ],
+            },
+          ],
+        },
+      } as ConversationState
+
+      const message = buildStrategyRevisionPromptMessage(conversation, '请继续补充')
+
+      expect(message).toContain('当前策略：')
+      expect(message).toContain('OKX')
+      expect(message).toContain('ETHUSDT')
+      expect(message).toContain('15m')
+      expect(message).toContain('MA6 上穿 MA48')
+      expect(message).toContain('请直接说明你要修改的原子语义')
+      expect(message).toContain('交易标的')
+    })
+
+    it('keeps an atomic revision prompt when only params exist', () => {
+      const conversation = {
+        ...createConversation((key: string) => key),
+        params: {
+          exchange: 'binance',
+          symbol: '',
+          baseTimeframe: '',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 10,
+        },
+      } as ConversationState
+
+      const message = buildStrategyRevisionPromptMessage(conversation, '请继续补充')
+
+      expect(message).toContain('当前策略：')
+      expect(message).toContain('BINANCE')
+      expect(message).toContain('请直接说明你要修改的原子语义')
     })
   })
 

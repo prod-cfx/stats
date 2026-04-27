@@ -61,6 +61,7 @@ import {
   buildBacktestDraftConfigFromValues,
   buildBacktestSummaryResult,
   buildParamSchemaWithCapabilities,
+  buildStrategyRevisionPromptMessage,
   createConversation,
   createConversationFromServerConversation,
   createRecoveryConversation,
@@ -806,7 +807,10 @@ export function AiQuantPageClient({
         {
           id: `graph-revise-${Date.now()}`,
           role: 'assistant',
-          content: t('aiQuant.messages.graphRevise'),
+          content: buildStrategyRevisionPromptMessage(
+            curr,
+            t('aiQuant.messages.graphRevise'),
+          ),
         },
       ],
       updatedAt: Date.now(),

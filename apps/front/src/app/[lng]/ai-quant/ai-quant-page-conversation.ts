@@ -1570,6 +1570,57 @@ export function buildApiConfigHref(lng: 'zh' | 'en') {
   return `/${lng}/account?tab=ai-quant#exchange-api`
 }
 
+function normalizeRevisionSummaryText(value: string | null | undefined): string | null {
+  const text = value?.trim().replace(/\s+/g, ' ')
+  return text || null
+}
+
+function collectRevisionGraphTexts(
+  graph: DisplayLogicGraph | null | undefined,
+): string[] {
+  if (!graph?.blocks?.length) return []
+
+  const seen = new Set<string>()
+  const items: string[] = []
+  for (const block of graph.blocks) {
+    for (const item of block.items) {
+      const text = normalizeRevisionSummaryText(item.text)
+      if (!text || seen.has(text)) continue
+      seen.add(text)
+      items.push(text)
+    }
+  }
+  return items
+}
+
+export function buildStrategyRevisionPromptMessage(
+  conversation: ConversationState,
+  fallbackMessage: string,
+): string {
+  const contextParts = [
+    normalizeRevisionSummaryText(conversation.params.exchange)?.toUpperCase(),
+    normalizeRevisionSummaryText(conversation.params.symbol)?.toUpperCase(),
+    normalizeRevisionSummaryText(conversation.params.baseTimeframe),
+    Number.isFinite(conversation.params.positionPct)
+      ? `仓位 ${conversation.params.positionPct}%`
+      : null,
+  ].filter((item): item is string => Boolean(item))
+
+  const graphTexts = collectRevisionGraphTexts(conversation.displayLogicGraph).slice(0, 8)
+  const currentStrategy = [...contextParts, ...graphTexts].join('；')
+  if (!currentStrategy) {
+    return [
+      fallbackMessage,
+      '请直接说明你要修改的原子语义，例如交易标的、交易所、周期、触发条件、行动、风控或仓位。',
+    ].join('\n')
+  }
+
+  return [
+    `当前策略：${currentStrategy}。`,
+    '请直接说明你要修改的原子语义，例如交易标的、交易所、周期、触发条件、行动、风控或仓位。',
+  ].join('\n')
+}
+
 export function createConversation(translate: (key: string) => string, now = Date.now()): ConversationState {
   return {
     id: `conv-${now}-${Math.random().toString(16).slice(2, 8)}`,

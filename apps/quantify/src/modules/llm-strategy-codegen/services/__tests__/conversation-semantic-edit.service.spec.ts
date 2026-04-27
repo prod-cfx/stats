@@ -22,6 +22,8 @@ describe('ConversationSemanticEditService', () => {
   it.each([
     ['把交易标的改成 BTCUSDT'],
     ['把交易标的换成 BTCUSDT'],
+    ['把ETHusdt改为BTCUSDT'],
+    ['ETHUSDT 换成 BTC-USDT'],
   ])('classifies natural symbol replacement wording: %s', (message) => {
     const decision = service.decide({
       status: 'DRAFTING',

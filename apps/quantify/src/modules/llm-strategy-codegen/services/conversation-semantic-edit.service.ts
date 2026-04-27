@@ -353,8 +353,17 @@ export class ConversationSemanticEditService {
   }
 
   private extractReplacementSymbol(message: string): string | null {
-    const match = /交易标的\s*(?:改为|改成|换成)\s*([A-Za-z0-9:/-]+)/u.exec(message)
-    return canonicalizeStrategySymbolInput(match?.[1])
+    const explicitMatch = /交易标的\s*(?:改为|改成|换成)\s*([A-Za-z0-9:/-]+)/u.exec(message)
+    const explicitSymbol = canonicalizeStrategySymbolInput(explicitMatch?.[1])
+    if (explicitSymbol) return explicitSymbol
+
+    const valueReplacementMatch = /(?:把\s*)?([A-Za-z0-9:/-]+)\s*(?:改为|改成|换成|替换为|修改为|更改为)\s*([A-Za-z0-9:/-]+)/iu.exec(message)
+    const fromSymbol = canonicalizeStrategySymbolInput(valueReplacementMatch?.[1])
+    const toSymbol = canonicalizeStrategySymbolInput(valueReplacementMatch?.[2])
+    if (fromSymbol && toSymbol && fromSymbol !== toSymbol) {
+      return toSymbol
+    }
+    return null
   }
 
   private extractReplacementContextOperation(
