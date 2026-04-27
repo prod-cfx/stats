@@ -421,6 +421,15 @@ export function getBacktestJobResult(jobId: string): Promise<BacktestJobResult> 
 
 export function formatBacktestJobFailure(job: Pick<BacktestJob, 'error' | 'errorDetails'>): string {
   const details = job.errorDetails
+  const rawFailure = `${details?.code ?? ''} ${details?.message ?? ''} ${job.error ?? ''}`.toLowerCase()
+  if (
+    details?.code === 'TOO_MANY_REQUESTS'
+    || rawFailure.includes('status code 429')
+    || rawFailure.includes('too many requests')
+  ) {
+    return '回测行情数据暂时被限流，请稍后重试；如果是 1m 长区间，可以先缩短回测范围后再跑。'
+  }
+
   if (details?.code === 'backtest.data_range_out_of_coverage') {
     const suggestedRange = readRangeBoundary(details.args?.suggestedRange)
     const availableRange = readRangeBoundary(details.args?.availableRange)

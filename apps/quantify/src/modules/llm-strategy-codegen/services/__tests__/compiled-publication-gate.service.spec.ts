@@ -172,6 +172,7 @@ describe('compiledPublicationGateService', () => {
         platformRiskMaxLeverage: 1,
         strategyDeclaredLeverageRange: null,
         defaultLeverage: 1,
+        effectiveAllowedLeverageRange: { min: 1, max: 1 },
         supportedPriceSources: ['close'],
         supportedOrderTypes: ['market'],
         supportedTimeInForce: ['gtc'],
@@ -254,6 +255,68 @@ describe('compiledPublicationGateService', () => {
           },
           sourceRefs: ['entry-execution-on_start-210'],
         }],
+      }),
+    }))
+  })
+
+  it('publishes deploy leverage ranges for generated perpetual snapshots', async () => {
+    const publishedSnapshotsRepo = {
+      create: jest.fn().mockResolvedValue({ id: 'snapshot-perp-1' }),
+    }
+    const gate = new CompiledPublicationGateService(publishedSnapshotsRepo as never)
+    const ir = createShortOnlyIrFixture()
+    const ast = new CanonicalStrategyAstCompilerService().compile(ir)
+    const executionEnvelope = {
+      positionMode: 'short_only' as const,
+      marginMode: 'isolated' as const,
+      tickSize: 0.01,
+      pricePrecision: 2,
+      quantityPrecision: 6,
+      fillAssumption: 'strict' as const,
+    }
+    const script = new CompiledScriptEmitterService().emit({ ast, executionEnvelope })
+
+    await gate.publish({
+      sessionId: 'session-perp-1',
+      strategyTemplateId: 'template-1',
+      strategyInstanceId: 'instance-1',
+      canonicalSnapshot: {
+        version: 2,
+        market: { exchange: 'binance', symbol: 'BTCUSDT', timeframe: '1h' },
+        indicators: [],
+        rules: [],
+      },
+      semanticView: { viewType: 'canonical-semantic-view.v1' },
+      graphSnapshot: {
+        version: 3,
+        status: 'confirmed' as const,
+        trigger: [],
+        actions: [],
+        risk: [],
+        meta: {
+          exchange: 'binance' as const,
+          symbol: 'BTCUSDT',
+          timeframe: '1h',
+          positionPct: 25,
+          executionTags: [],
+        },
+      },
+      ir,
+      ast,
+      executionEnvelope,
+      script,
+      semanticConsistencyReport: { status: 'PASSED', checks: [] },
+      userIntentSummary: { marketScope: ['BTCUSDT'] },
+      strategySummary: { thesis: 'perp-short' },
+      scriptSummary: { indicators: [] },
+      lockedParams: { positionPct: 25 },
+    })
+
+    expect(publishedSnapshotsRepo.create).toHaveBeenCalledWith(expect.objectContaining({
+      deploymentExecutionConstraints: expect.objectContaining({
+        platformRiskMaxLeverage: 5,
+        defaultLeverage: 1,
+        effectiveAllowedLeverageRange: { min: 1, max: 5 },
       }),
     }))
   })

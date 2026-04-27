@@ -56,12 +56,14 @@ function isTransientBacktestError(error: unknown): boolean {
   if (
     code === 'SERVICE_TEMPORARILY_UNAVAILABLE'
     || code === 'API_TIMEOUT'
+    || code === 'TOO_MANY_REQUESTS'
     || nestedCode === 'SERVICE_TEMPORARILY_UNAVAILABLE'
+    || nestedCode === 'TOO_MANY_REQUESTS'
   ) {
     return true
   }
 
-  return status === 502 || status === 503 || status === 504
+  return status === 429 || status === 502 || status === 503 || status === 504
 }
 
 function buildInvalidExecutionConfigMessage(args: {
@@ -150,6 +152,7 @@ function buildDynamicBacktestAvailabilityMessage(
     || code === 'BACKTEST_MARKET_DATA_UNAVAILABLE'
     || code === 'BACKTEST_SERVICE_TEMPORARILY_UNAVAILABLE'
     || code === 'SERVICE_TEMPORARILY_UNAVAILABLE'
+    || code === 'TOO_MANY_REQUESTS'
   ) {
     return buildLocalizedBacktestErrorMessage(t, 400, {
       code,

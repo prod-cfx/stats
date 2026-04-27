@@ -1,0 +1,90 @@
+name: Sync A tag snapshot to prod-cfx/stats
+
+on:
+  push:
+    tags:
+      - '*'                  # A 仓库任何 tag 推送都会触发
+  workflow_dispatch:         # 手动触发并可指定 tag
+    inputs:
+      tag:
+        description: 'Tag name in A to sync (leave empty = latest tag)'
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sync-tag-to-b
+  cancel-in-progress: true
+
+jobs:
+  sync-tag:
+    runs-on: ubuntu-latest
+    steps:
+      # 1) 检出 A 仓库（完整历史 + tags）
+      - name: Checkout A (all history & tags)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+
+      # 2) 解析要同步的 tag
+      - name: Resolve tag to sync
+        id: tag
+        shell: bash
+        run: |
+          set -euo pipefail
+          INPUT_TAG="${{ github.event.inputs.tag || '' }}"
+          if [[ -n "$INPUT_TAG" ]]; then
+            TAG="$INPUT_TAG"
+          elif [[ "${GITHUB_REF:-}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            # 无手动输入且非 tag 事件时，取按创建时间最新的一个 tag
+            TAG="$(git tag --sort=-creatordate | head -n 1 || true)"
+          fi
+          test -n "$TAG" || { echo "No tag to sync."; exit 1; }
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Will sync tag: $TAG"
+
+      # 3) 在 A 的工作区切到该 tag（得到该 tag 对应的代码快照）
+      - name: Checkout A at tag
+        id: commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag }}"
+          git checkout -f "tags/$TAG" || git checkout -f "$TAG"
+          COMMIT_SHA="$(git rev-parse HEAD)"
+          echo "sha=$COMMIT_SHA" >> "$GITHUB_OUTPUT"
+          echo "Checked out tag: $TAG at ${COMMIT_SHA:0:7}"
+
+      # 4) 用原先的 TARGET_REPO_TOKEN 检出 B（复用稳定的认证方式）
+      - name: Checkout B repo (target)
+        uses: actions/checkout@v4
+        with:
+          repository: prod-cfx/stats
+          token: ${{ secrets.TARGET_REPO_TOKEN }}
+          path: b-repo
+          fetch-depth: 0
+
+      # 5) 在 B 仓库中拉取 A@tag 对应提交对象，并强推 main/release/tag
+      - name: Force push B main, release branch and tag
+        working-directory: b-repo
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.tag }}"
+          COMMIT_SHA="${{ steps.commit.outputs.sha }}"
+          SAFE_TAG="${TAG//\//-}"
+          BRANCH="release-$SAFE_TAG"
+
+          # 从工作区中的 A 仓库引入该提交对象，避免向非裸仓库本地 push
+          git remote remove source-a 2>/dev/null || true
+          git remote add source-a "${GITHUB_WORKSPACE}"
+          git fetch --no-tags source-a "${COMMIT_SHA}"
+
+          git push origin "${COMMIT_SHA}:refs/heads/main" --force
+          git push origin "${COMMIT_SHA}:refs/heads/${BRANCH}" --force
+          git push origin "${COMMIT_SHA}:refs/tags/${TAG}" --force

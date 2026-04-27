@@ -888,6 +888,90 @@ describe('accountStrategyViewService.deployStrategy', () => {
     }))
   })
 
+  it('allows requested perp leverage for legacy generated snapshots whose platform max was only a placeholder', async () => {
+    const repo = {
+      deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-okx-legacy-exec-1', mode: 'LIVE' }),
+      findStrategyForUser: jest.fn().mockResolvedValue(null),
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-1' }),
+      markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
+      markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
+      upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
+    }
+    const snapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-legacy-exec-1',
+        snapshotHash: 'snapshot-legacy-exec-hash-1',
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '1m',
+          marketType: 'perp',
+          positionPct: 10,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'GTC',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 1,
+          strategyDeclaredLeverageRange: null,
+          defaultLeverage: 1,
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['GTC'],
+        },
+        strategyInstanceId: 'inst-draft-1',
+        strategyTemplateId: 'template-1',
+        astSnapshot: {
+          runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
+        },
+      }),
+    }
+    const tradingService = {
+      getLeverageConstraints: jest.fn().mockResolvedValue({
+        minLeverage: 1,
+        maxLeverage: 3,
+      }),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn(), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn().mockResolvedValue(undefined) } as any,
+      undefined,
+      undefined,
+      tradingService as any,
+      snapshotsRepository as any,
+      createRuntimeExecutionStateService() as any,
+    )
+    service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-okx-legacy-exec-1' } as any)
+
+    await service.deployStrategy({
+      userId: 'user-1',
+      name: 'OKX BTC 1m',
+      publishedSnapshotId: 'snapshot-legacy-exec-1',
+      deployRequestId: 'deploy-req-legacy-exec-1',
+      exchangeAccountId: 'acct-1',
+      deploymentExecutionConfig: {
+        leverage: 2,
+      },
+    } as any)
+
+    expect(repo.deployStrategyForUser).toHaveBeenCalledWith(expect.objectContaining({
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      marketType: 'perp',
+      deploymentExecutionConfig: expect.objectContaining({
+        leverage: 2,
+      }),
+    }))
+  })
+
   it('fails closed for deploy when snapshot formal execution fields are missing', async () => {
     const repo = {
       deployStrategyForUser: jest.fn(),

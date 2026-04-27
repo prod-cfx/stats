@@ -2412,6 +2412,49 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     )
   })
 
+  it('renders a user-readable zh message for rate-limited create-job failures', async () => {
+    const seeded = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    const activeConversation = {
+      ...seeded[0],
+      publishedScriptGraphVersion: 1,
+      publishedScriptCode: 'return { ok: true }',
+    } as ConversationState
+
+    mockCheckBacktestSymbolSupport.mockResolvedValueOnce({
+      status: 'supported',
+    })
+    mockCreateBacktestJob.mockRejectedValueOnce(
+      new ApiError('Request failed with status code 429', 'TOO_MANY_REQUESTS', 429, {
+        error: {
+          code: 'TOO_MANY_REQUESTS',
+          stage: 'backtest',
+        },
+      }),
+    )
+
+    let currentConversation = activeConversation
+    await runAiQuantBacktest({
+      activeConversation,
+      activeConversationIdRef: { current: activeConversation.id },
+      backtestCapabilities: {
+        allowedBaseTimeframes: ['15m'],
+      },
+      backtestCapabilityState: 'ready',
+      backtestRunMutexRef: { current: new Set<string>() },
+      backtestRunTokenRef: { current: new Map<string, number>() },
+      graphConfirmed: true,
+      isMountedRef: { current: true },
+      setConversationBacktestExecutionState: jest.fn(),
+      t: createLocalizedBacktestTranslator('zh'),
+      updateConversationById: (_conversationId, updater) => {
+        currentConversation = updater(currentConversation)
+      },
+    })
+
+    expect(currentConversation.messages.at(-1)?.content).toContain('回测服务暂时不可用，请稍后重试。')
+    expect(currentConversation.messages.at(-1)?.content).not.toContain('Request failed with status code 429')
+  })
+
   it('unmount while running does not emit react unmount update warning', async () => {
     const consoleErrorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
     let resolvePoll: ((value: unknown) => void) | null = null

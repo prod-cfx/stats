@@ -66,6 +66,7 @@ interface FormalDeploymentExecutionConstraints {
   platformRiskMaxLeverage: number
   strategyDeclaredLeverageRange: null
   defaultLeverage: number
+  effectiveAllowedLeverageRange: { min: number; max: number }
   supportedPriceSources: Array<'open' | 'close' | 'mid'>
   supportedOrderTypes: Array<'market' | 'limit'>
   supportedTimeInForce: Array<'gtc' | 'ioc' | 'fok'>
@@ -73,6 +74,7 @@ interface FormalDeploymentExecutionConstraints {
 }
 
 const ON_START_SOURCE_REF_PATTERN = /(^|[_-])(?:execution[_-])?on_start([_-]|$)/i
+const DEFAULT_PERP_PLATFORM_MAX_LEVERAGE = 5
 
 @Injectable()
 export class CompiledPublicationGateService {
@@ -106,7 +108,7 @@ export class CompiledPublicationGateService {
     const strategyConfig = this.buildStrategyConfig(input)
     const backtestConfigDefaults = this.buildBacktestConfigDefaults(input)
     const deploymentExecutionDefaults = this.buildDeploymentExecutionDefaults(input)
-    const deploymentExecutionConstraints = this.buildDeploymentExecutionConstraints(deploymentExecutionDefaults)
+    const deploymentExecutionConstraints = this.buildDeploymentExecutionConstraints(input, deploymentExecutionDefaults)
     const astSnapshot = this.buildPublicationAstSnapshot(input.ast)
     const semanticStatus = input.semanticConsistencyReport.status
     const consistencyReport = {
@@ -268,12 +270,17 @@ export class CompiledPublicationGateService {
   }
 
   private buildDeploymentExecutionConstraints(
+    input: PublishCompiledSnapshotInput,
     defaults: FormalDeploymentExecutionDefaults,
   ): FormalDeploymentExecutionConstraints {
+    const platformRiskMaxLeverage = input.ir.market.instrumentType === 'perpetual'
+      ? DEFAULT_PERP_PLATFORM_MAX_LEVERAGE
+      : 1
     return {
-      platformRiskMaxLeverage: 1,
+      platformRiskMaxLeverage,
       strategyDeclaredLeverageRange: null,
       defaultLeverage: defaults.leverage,
+      effectiveAllowedLeverageRange: { min: 1, max: platformRiskMaxLeverage },
       supportedPriceSources: [defaults.priceSource],
       supportedOrderTypes: [defaults.orderType],
       supportedTimeInForce: [defaults.timeInForce],
