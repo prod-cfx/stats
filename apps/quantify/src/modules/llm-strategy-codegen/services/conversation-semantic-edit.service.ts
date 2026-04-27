@@ -622,18 +622,69 @@ export class ConversationSemanticEditService {
   }
 
   private extractTriggerNumberReplacement(message: string): { from: number, to: number, direction?: 'up' | 'down' } | null {
-    const match = /(?:上穿|下穿|高于|低于|大于|小于|超过|突破|跌破|>=|<=|>|<)?\s*(\d+(?:\.\d+)?)\s*(?:改为|改成|换成|替换为|修改为|更改为)\s*(\d+(?:\.\d+)?)/u.exec(message)
-    if (!match) return null
+    const compactMatch = /(?:上穿|下穿|高于|低于|大于|小于|超过|突破|跌破|>=|<=|>|<)?\s*(\d+(?:\.\d+)?)\s*(?:改为|改成|换成|替换为|修改为|更改为)\s*(\d+(?:\.\d+)?)/u.exec(message)
+    if (compactMatch) {
+      const from = Number(compactMatch[1])
+      const to = Number(compactMatch[2])
+      if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return null
 
-    const from = Number(match[1])
-    const to = Number(match[2])
+      return {
+        from,
+        to,
+        ...this.extractTriggerDirectionHint(message),
+      }
+    }
+
+    const clauseMatch = /(.+?)(?:改为|改成|换成|替换为|修改为|更改为)(.+)/u.exec(message)
+    if (!clauseMatch) return null
+
+    const source = this.extractTriggerComparisonNumber(clauseMatch[1] ?? '')
+    const target = this.extractTriggerComparisonNumber(clauseMatch[2] ?? '')
+      ?? this.extractFirstNumber(clauseMatch[2] ?? '')
+    if (!source || target === null) return null
+
+    const from = source.value
+    const to = typeof target === 'number' ? target : target.value
     if (!Number.isFinite(from) || !Number.isFinite(to) || from === to) return null
 
     return {
       from,
       to,
-      ...this.extractTriggerDirectionHint(message),
+      ...(source.direction ? { direction: source.direction } : this.extractTriggerDirectionHint(message)),
     }
+  }
+
+  private extractTriggerComparisonNumber(text: string): { value: number, direction?: 'up' | 'down' } | null {
+    const upMatch = /(?:向?上穿(?:回)?|高于|大于|超过|突破|>=|>)\s*(?:至|到|回)?\s*(\d+(?:\.\d+)?)/u.exec(text)
+    if (upMatch) {
+      const value = Number(upMatch[1])
+      return Number.isFinite(value) ? { value, direction: 'up' } : null
+    }
+
+    const downMatch = /(?:向?下穿(?:回)?|低于|小于|跌破|<=|<)\s*(?:至|到|回)?\s*(\d+(?:\.\d+)?)/u.exec(text)
+    if (downMatch) {
+      const value = Number(downMatch[1])
+      return Number.isFinite(value) ? { value, direction: 'down' } : null
+    }
+
+    const aboveMatch = /(\d+(?:\.\d+)?)\s*(?:以上|及以上)/u.exec(text)
+    if (aboveMatch) {
+      const value = Number(aboveMatch[1])
+      return Number.isFinite(value) ? { value, direction: 'up' } : null
+    }
+
+    const belowMatch = /(\d+(?:\.\d+)?)\s*(?:以下|及以下)/u.exec(text)
+    if (belowMatch) {
+      const value = Number(belowMatch[1])
+      return Number.isFinite(value) ? { value, direction: 'down' } : null
+    }
+
+    return null
+  }
+
+  private extractFirstNumber(text: string): number | null {
+    const value = Number(/(\d+(?:\.\d+)?)/u.exec(text)?.[1])
+    return Number.isFinite(value) ? value : null
   }
 
   private extractTriggerDirectionHint(message: string): { direction?: 'up' | 'down' } {

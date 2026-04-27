@@ -462,7 +462,10 @@ describe('ConversationSemanticEditService', () => {
     ])
   })
 
-  it('classifies and applies trigger numeric threshold replacement without dropping existing semantics', () => {
+  it.each([
+    '上穿 38改为40',
+    'RSI14 上穿 38 时做多开仓，改为RSI14 上穿 40 时做多开仓',
+  ])('classifies and applies trigger numeric threshold replacement without dropping existing semantics: %s', (message) => {
     const semanticState = {
       ...service.createEmptySemanticStateForTest(),
       contextSlots: {
@@ -556,8 +559,6 @@ describe('ConversationSemanticEditService', () => {
         openSlots: [],
       },
     }
-    const message = '上穿 38改为40'
-
     const decision = service.decide({
       status: 'DRAFTING',
       message,
