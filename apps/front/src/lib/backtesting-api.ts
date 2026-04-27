@@ -45,6 +45,7 @@ export interface CreateBacktestJobPayload {
     params?: Record<string, unknown>
   }
   conversationId?: string
+  sessionId?: string
   dataRange: {
     fromTs: number
     toTs: number

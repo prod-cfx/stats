@@ -328,6 +328,7 @@ export async function runAiQuantBacktest(args: {
         publishedSnapshotId: activeConversation.publishedSnapshotId ?? '',
       },
       ...(serverConversationId ? { conversationId: serverConversationId } : {}),
+      sessionId: activeConversation.llmCodegenSessionId,
       range: resolveBacktestRangeInput(activeConversation.paramValues),
       allowPartial: executionConfig.allowPartial,
     })

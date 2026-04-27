@@ -560,14 +560,16 @@ export function BacktestReportClient({
 
     const publishedSnapshotId = reportContext?.publishedSnapshotId?.trim()
     const conversationId = reportContext?.conversationId?.trim()
+    const sessionId = reportContext?.sessionId?.trim()
     setIntent({
       type: 'strategy-edit-session',
       strategyInstanceId,
       ...(publishedSnapshotId ? { publishedSnapshotId } : {}),
       ...(conversationId ? { conversationId } : {}),
+      ...(sessionId ? { sessionId } : {}),
       source: 'backtest',
     })
-  }, [reportContext?.conversationId, reportContext?.publishedSnapshotId, reportContext?.strategyInstanceId])
+  }, [reportContext?.conversationId, reportContext?.publishedSnapshotId, reportContext?.sessionId, reportContext?.strategyInstanceId])
 
   // Determine strategy status based on metrics
   let status: 'good' | 'warning' | 'danger' = 'warning'

@@ -33,6 +33,7 @@ interface BacktestInputSummaryView {
   slippageBps?: unknown
   symbols?: unknown
   conversationId?: unknown
+  sessionId?: unknown
   publishedSnapshotId?: unknown
   snapshotId?: unknown
   strategyInstanceId?: unknown
@@ -191,6 +192,7 @@ function resolveBacktestReportContext(inputSummary: unknown, symbol: string, mar
     strategyInstanceId: readStringField(source, ['strategyInstanceId']),
     publishedSnapshotId: readStringField(source, ['publishedSnapshotId', 'snapshotId']),
     conversationId: readStringField(source, ['conversationId']),
+    sessionId: readStringField(source, ['sessionId', 'codegenSessionId']),
     exchange: readStringField(source, ['exchange']),
     marketType,
     symbol,

@@ -2026,6 +2026,7 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
       expect.objectContaining({
         conversationId: 'server-conv-1',
+        sessionId: activeConversation.llmCodegenSessionId,
       }),
     )
     expect(mockBuildBacktestPayload).not.toHaveBeenCalledWith(
@@ -2073,6 +2074,11 @@ describe('AiQuantPageClient backtest jobs integration', () => {
     expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
       expect.not.objectContaining({
         conversationId: expect.anything(),
+      }),
+    )
+    expect(mockBuildBacktestPayload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: activeConversation.llmCodegenSessionId,
       }),
     )
     expect(mockBuildBacktestPayload).not.toHaveBeenCalledWith(

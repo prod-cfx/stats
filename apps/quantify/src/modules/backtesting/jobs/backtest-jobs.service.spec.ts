@@ -269,6 +269,7 @@ describe('backtestJobsService', () => {
       specHash: 'spec-hash',
     })
     input.conversationId = 'conv-1'
+    input.sessionId = 'session-1'
 
     await service.createJob(input, OWNER_USER_ID)
 
@@ -283,6 +284,7 @@ describe('backtestJobsService', () => {
             strategyInstanceId: 'instance-1',
             strategyTemplateId: 'template-1',
             conversationId: 'conv-1',
+            sessionId: 'session-1',
             publishedSnapshotId: 'snapshot-1',
             snapshotId: 'snapshot-1',
             snapshotHash: 'snapshot-hash',

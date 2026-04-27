@@ -66,6 +66,7 @@ export interface BacktestReportContext {
   strategyInstanceId?: string
   publishedSnapshotId?: string
   conversationId?: string
+  sessionId?: string
   exchange?: string
   marketType?: string
   symbol?: string

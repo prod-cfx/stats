@@ -457,6 +457,7 @@ describe('BacktestReportClient', () => {
             strategyInstanceId: ' strategy-1 ',
             publishedSnapshotId: ' snapshot-1 ',
             conversationId: ' conversation-1 ',
+            sessionId: ' session-1 ',
             symbol: 'BTCUSDT',
             marketType: 'perp',
           }}
@@ -491,6 +492,7 @@ describe('BacktestReportClient', () => {
       strategyInstanceId: 'strategy-1',
       publishedSnapshotId: 'snapshot-1',
       conversationId: 'conversation-1',
+      sessionId: 'session-1',
       source: 'backtest',
     })
   })

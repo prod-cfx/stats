@@ -80,6 +80,7 @@ interface BacktestJobRecord {
     strategyInstanceId?: string
     strategyTemplateId?: string
     conversationId?: string
+    sessionId?: string
     publishedSnapshotId?: string
     snapshotId?: string
     snapshotHash?: string
@@ -470,6 +471,7 @@ export class BacktestJobsService {
       strategyInstanceId: this.readStrategyIdentity(input.strategy, 'strategyInstanceId'),
       strategyTemplateId: this.readStrategyIdentity(input.strategy, 'strategyTemplateId'),
       conversationId: this.readInputConversationId(input),
+      sessionId: this.readInputSessionId(input),
       publishedSnapshotId: this.readStrategyMetadata(input.strategy, 'snapshotId'),
       snapshotId: this.readStrategyMetadata(input.strategy, 'snapshotId'),
       snapshotHash: this.readStrategyMetadata(input.strategy, 'snapshotHash'),
@@ -494,6 +496,13 @@ export class BacktestJobsService {
 
   private readInputConversationId(input: BacktestRunInput): string | undefined {
     const candidate = input.conversationId
+    if (typeof candidate !== 'string') return undefined
+    const normalized = candidate.trim()
+    return normalized || undefined
+  }
+
+  private readInputSessionId(input: BacktestRunInput): string | undefined {
+    const candidate = input.sessionId
     if (typeof candidate !== 'string') return undefined
     const normalized = candidate.trim()
     return normalized || undefined
