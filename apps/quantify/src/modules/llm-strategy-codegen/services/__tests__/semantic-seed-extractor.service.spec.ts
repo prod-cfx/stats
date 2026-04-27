@@ -1283,6 +1283,35 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
+  it('binds split MA aliases to corrected periods instead of stale ones', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 15m，使用 MA20，更正：改为 MA6。价格上穿该均线做多，价格下穿该均线平多；单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        params: expect.objectContaining({
+          indicator: 'ma',
+          'reference.period': 6,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.below',
+        params: expect.objectContaining({
+          indicator: 'ma',
+          'reference.period': 6,
+        }),
+      }),
+    ]))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        params: expect.objectContaining({
+          'reference.period': 20,
+        }),
+      }),
+    ]))
+  })
+
   it('binds split RSI threshold aliases back to the declared oscillator context', () => {
     const patch = service.extract('OKX 合约 BTCUSDT 15m，使用 RSI 9。该 RSI 小于30做多，该 RSI 大于70平多，该 RSI 大于70做空；单笔 10%。')
 
@@ -1339,6 +1368,35 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch).not.toHaveProperty('grid')
     expect(patch).not.toHaveProperty('families')
     expect(patch).not.toHaveProperty('missingFields')
+  })
+
+  it('binds split RSI aliases to corrected periods instead of stale ones', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 15m，使用 RSI 14，更正：改为 RSI 9。该 RSI 小于30做多，该 RSI 大于70平多；单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'oscillator.rsi_lte',
+        params: expect.objectContaining({
+          period: 9,
+          value: 30,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'oscillator.rsi_gte',
+        params: expect.objectContaining({
+          period: 9,
+          value: 70,
+        }),
+      }),
+    ]))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'oscillator.rsi_lte',
+        params: expect.objectContaining({
+          period: 14,
+        }),
+      }),
+    ]))
   })
 
   it('extracts percent-change and on-start semantics into semantic patches', () => {

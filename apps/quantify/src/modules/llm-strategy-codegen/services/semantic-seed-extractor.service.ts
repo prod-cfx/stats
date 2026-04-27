@@ -901,24 +901,47 @@ export class SemanticSeedExtractorService {
     const declarations = this.splitSegments(text)
       .flatMap(segment => this.splitLogicClauses(segment))
       .filter(clause => this.isMovingAverageAliasDeclarationClause(clause))
-      .flatMap(clause => Array.from(clause.matchAll(/\b(MA|EMA)\s*(\d{1,4})(?!\s*[\/和与、]\s*\d)/giu)))
-      .map(match => ({
-        indicator: match[1]?.toLowerCase() === 'ema' ? ('ema' as const) : ('ma' as const),
-        period: Number(match[2]),
+      .map(clause => ({
+        declaration: this.extractLastMovingAverageDeclaration(clause),
+        isCorrection: this.isCorrectionClause(clause),
       }))
-      .filter(declaration => Number.isFinite(declaration.period))
-    const uniqueDeclarations = declarations.filter((declaration, index, all) => (
+      .filter((item): item is { declaration: { indicator: 'ma' | 'ema'; period: number }; isCorrection: boolean } => item.declaration !== null)
+    const lastCorrection = declarations.filter(item => item.isCorrection).at(-1)
+    if (lastCorrection) {
+      return lastCorrection.declaration
+    }
+
+    const uniqueDeclarations = declarations.map(item => item.declaration).filter((declaration, index, all) => (
       all.findIndex(item => item.indicator === declaration.indicator && item.period === declaration.period) === index
     ))
+    const declaration = uniqueDeclarations[0]
 
-    return uniqueDeclarations.length === 1 ? uniqueDeclarations[0] ?? null : null
+    return uniqueDeclarations.length === 1 && declaration ? declaration : null
+  }
+
+  private extractLastMovingAverageDeclaration(clause: string): { indicator: 'ma' | 'ema'; period: number } | null {
+    const matches = Array.from(clause.matchAll(/\b(MA|EMA)\s*(\d{1,4})(?!\s*[\/和与、]\s*\d)/giu))
+      .filter(match => match.index !== undefined)
+      .sort((left, right) => (left.index ?? 0) - (right.index ?? 0))
+    const match = matches.at(-1)
+    if (!match?.[1] || !match[2]) return null
+
+    const period = Number(match[2])
+    if (!Number.isFinite(period)) return null
+
+    return {
+      indicator: match[1].toLowerCase() === 'ema' ? 'ema' : 'ma',
+      period,
+    }
   }
 
   private isMovingAverageAliasDeclarationClause(clause: string): boolean {
     if (/布林|bollinger|上轨|下轨|中轨/iu.test(clause)) return false
-    if (/(更正|修正|改为|调整为|改成|不是|而是)/u.test(clause)) return false
     if (this.hasExecutableTradeIntent(clause)) return false
     if (/(?:突破|上穿|站上|高于|跌破|下穿|失守|低于)/u.test(clause)) return false
+    if (this.isCorrectionClause(clause)) {
+      return /\b(?:MA|EMA)\s*\d{1,4}(?!\s*[\/和与、]\s*\d)/iu.test(clause)
+    }
     if (!/(使用|采用|基于|指标|参数|设置|用)/u.test(clause)) return false
     return /\b(?:MA|EMA)\s*\d{1,4}(?!\s*[\/和与、]\s*\d)/iu.test(clause)
   }
@@ -927,12 +950,31 @@ export class SemanticSeedExtractorService {
     const declarations = this.splitSegments(text)
       .flatMap(segment => this.splitLogicClauses(segment))
       .filter(clause => this.isRsiAliasDeclarationClause(clause))
-      .map(clause => this.extractNumber(clause, [/RSI\s*(\d{1,3})/iu]))
-      .filter((period): period is number => period !== null && Number.isFinite(period))
-    const uniquePeriods = Array.from(new Set(declarations))
+      .map(clause => ({
+        period: this.extractLastRsiPeriod(clause),
+        isCorrection: this.isCorrectionClause(clause),
+      }))
+      .filter((item): item is { period: number; isCorrection: boolean } => item.period !== null)
+    const lastCorrection = declarations.filter(item => item.isCorrection).at(-1)
+    if (lastCorrection) {
+      return { period: lastCorrection.period }
+    }
+
+    const uniquePeriods = Array.from(new Set(declarations.map(item => item.period)))
     const period = uniquePeriods[0]
 
     return uniquePeriods.length === 1 && period !== undefined ? { period } : null
+  }
+
+  private extractLastRsiPeriod(clause: string): number | null {
+    const matches = Array.from(clause.matchAll(/RSI\s*(\d{1,3})/giu))
+      .filter(match => match.index !== undefined)
+      .sort((left, right) => (left.index ?? 0) - (right.index ?? 0))
+    const match = matches.at(-1)
+    if (!match?.[1]) return null
+
+    const period = Number(match[1])
+    return Number.isFinite(period) ? period : null
   }
 
   private extractBollingerBandAliasContext(text: string): SemanticAliasContext['bollingerBandParams'] | null {
@@ -971,7 +1013,7 @@ export class SemanticSeedExtractorService {
 
   private isRsiAliasDeclarationClause(clause: string): boolean {
     if (this.hasExecutableTradeIntent(clause)) return false
-    if (/(更正|修正|改为|调整为|改成|不是|而是)/u.test(clause)) return false
+    if (this.isCorrectionClause(clause)) return /RSI\s*\d{1,3}/iu.test(clause)
     if (!/(使用|采用|基于|指标|参数|设置|用)/u.test(clause)) return false
     return /RSI\s*\d{1,3}/iu.test(clause)
   }
