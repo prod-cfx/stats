@@ -766,6 +766,49 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(deleteAiQuantConversation).not.toHaveBeenCalled()
   })
 
+  it('deletes a server-owned conversation when its linked strategy record no longer exists', async () => {
+    localStorage.clear()
+
+    const { listAiQuantConversations, deleteAiQuantConversation, fetchAccountAiQuantStrategyDetail } = jest.requireMock('@/lib/api') as {
+      listAiQuantConversations: jest.Mock
+      deleteAiQuantConversation: jest.Mock
+      fetchAccountAiQuantStrategyDetail: jest.Mock
+    }
+
+    listAiQuantConversations.mockResolvedValue([{
+      id: 'conv-missing-strategy',
+      status: 'PUBLISHED',
+      updatedAt: '2026-04-10T12:00:00.000Z',
+      conversationTitle: 'missing-strategy-conv',
+      conversationMessages: [{ role: 'assistant', content: 'missing-strategy-message' }],
+      strategyInstanceId: 'strategy-missing',
+    }])
+    fetchAccountAiQuantStrategyDetail.mockRejectedValue(Object.assign(new Error('获取 AI 量化策略详情失败'), {
+      code: 'ACCOUNT_STRATEGY_NOT_FOUND',
+      statusCode: 404,
+      details: {
+        error: {
+          code: 'ACCOUNT_STRATEGY_NOT_FOUND',
+        },
+      },
+    }))
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient deployVersion="deploy-current" serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      (container.querySelector('[data-testid="delete-conv-missing-strategy"]') as HTMLButtonElement).click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(deleteAiQuantConversation).toHaveBeenCalledWith('conv-missing-strategy')
+    expect(container.textContent).not.toContain('missing-strategy-message')
+  })
+
   it('can delete the linked stopped strategy before removing a server-owned conversation', async () => {
     localStorage.clear()
     jest.spyOn(window, 'confirm').mockReturnValue(true)

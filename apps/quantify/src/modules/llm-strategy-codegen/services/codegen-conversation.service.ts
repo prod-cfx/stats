@@ -353,6 +353,15 @@ export class CodegenConversationService {
     }
 
     const strategy = await this.accountStrategyViewService.getStrategyDetail(userId, strategyInstanceId)
+      .catch(error => {
+        if (this.isStrategyNotFoundError(error)) return null
+        throw error
+      })
+    if (!strategy) {
+      await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
+      return
+    }
+
     if (strategy.status === 'running') {
       throw new DomainException('ai_quant.conversation_delete_running_strategy', {
         code: ErrorCode.BAD_REQUEST,
@@ -374,6 +383,31 @@ export class CodegenConversationService {
     }
 
     await this.conversationsRepo.archiveByIdAndUser(conversationId, userId)
+  }
+
+  private isStrategyNotFoundError(error: unknown): boolean {
+    if (error instanceof DomainException) {
+      return error.code === ErrorCode.ACCOUNT_STRATEGY_NOT_FOUND
+        || error.message === 'account_strategy.not_found'
+        || error.getStatus() === HttpStatus.NOT_FOUND
+    }
+
+    if (!error || typeof error !== 'object') return false
+    const candidate = error as {
+      code?: unknown
+      status?: unknown
+      statusCode?: unknown
+      response?: { code?: unknown; error?: { code?: unknown } }
+      error?: { code?: unknown }
+      message?: unknown
+    }
+    return candidate.code === ErrorCode.ACCOUNT_STRATEGY_NOT_FOUND
+      || candidate.response?.code === ErrorCode.ACCOUNT_STRATEGY_NOT_FOUND
+      || candidate.response?.error?.code === ErrorCode.ACCOUNT_STRATEGY_NOT_FOUND
+      || candidate.error?.code === ErrorCode.ACCOUNT_STRATEGY_NOT_FOUND
+      || candidate.message === 'account_strategy.not_found'
+      || candidate.status === HttpStatus.NOT_FOUND
+      || candidate.statusCode === HttpStatus.NOT_FOUND
   }
 
   private async resolveConversationStrategyInstanceId(codegenSessionId: string): Promise<string | null> {

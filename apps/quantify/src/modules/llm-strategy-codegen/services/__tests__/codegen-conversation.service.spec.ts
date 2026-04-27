@@ -2049,6 +2049,35 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(mockAccountStrategyViewService.deleteStrategy).not.toHaveBeenCalled()
   })
 
+  it('archives a conversation when its linked strategy record no longer exists', async () => {
+    mockConversationsRepo.findActiveByIdAndUser.mockResolvedValue({
+      id: 'conv-1',
+      userId: 'u1',
+      codegenSessionId: 'session-1',
+    })
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-1',
+      userId: 'u1',
+      status: 'PUBLISHED',
+      strategyInstanceId: 'inst-missing',
+      latestSpecDesc: null,
+      constraintPack: null,
+      latestDraftCode: null,
+      rejectReason: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+    })
+    mockAccountStrategyViewService.getStrategyDetail.mockRejectedValue(Object.assign(new Error('account_strategy.not_found'), {
+      code: 'ACCOUNT_STRATEGY_NOT_FOUND',
+      status: 404,
+    }))
+
+    await service.deleteConversation('conv-1', 'u1')
+
+    expect(mockAccountStrategyViewService.deleteStrategy).not.toHaveBeenCalled()
+    expect(mockConversationsRepo.archiveByIdAndUser).toHaveBeenCalledWith('conv-1', 'u1')
+  })
+
   it('deletes the linked stopped strategy before archiving when requested', async () => {
     mockConversationsRepo.findActiveByIdAndUser.mockResolvedValue({
       id: 'conv-1',

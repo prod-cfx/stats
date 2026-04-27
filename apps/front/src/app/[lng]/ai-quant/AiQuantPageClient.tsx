@@ -90,6 +90,7 @@ const CAPABILITY_AUTO_RETRY_DELAY_MS = 15_000
 const CAPABILITY_FAILED_MESSAGE_DEFAULT = '回测能力加载失败，请稍后重试。'
 
 const INTENT_TTL_MS = 30 * 60 * 1000
+const ACCOUNT_STRATEGY_NOT_FOUND_CODE = 'ACCOUNT_STRATEGY_NOT_FOUND'
 
 type CapabilityState = 'loading' | 'ready' | 'failed'
 type ConversationSyncState = 'idle' | 'loading' | 'ready' | 'error'
@@ -121,6 +122,25 @@ function hasRenderableDisplayLogicGraph(
     if (!block || typeof block !== 'object') return false
     return Array.isArray((block as { items?: unknown }).items)
   })
+}
+
+function isAccountStrategyNotFoundError(error: unknown): boolean {
+  if (error instanceof ApiError) {
+    if (error.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE) return true
+    const details = error.details as { error?: { code?: unknown }; code?: unknown } | null | undefined
+    return details?.error?.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE
+      || details?.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE
+  }
+
+  if (!error || typeof error !== 'object') return false
+  const candidate = error as {
+    code?: unknown
+    statusCode?: unknown
+    details?: { error?: { code?: unknown }; code?: unknown }
+  }
+  return candidate.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE
+    || candidate.details?.error?.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE
+    || candidate.details?.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE
 }
 
 export function AiQuantPageClient({
@@ -867,6 +887,28 @@ export function AiQuantPageClient({
           }
         : curr)
     } catch (error) {
+      if (isAccountStrategyNotFoundError(error)) {
+        try {
+          await deleteConversationByMode({
+            conversation: targetConversation,
+            serverConversationId,
+          })
+          setConversationDeleteDialog(null)
+          return
+        } catch (deleteError) {
+          setConversationDeleteDialog(curr => curr && curr.conversation.id === conversationId
+            ? {
+                ...curr,
+                status: 'unknown',
+                errorMessage: deleteError instanceof Error && deleteError.message.trim()
+                  ? deleteError.message
+                  : '删除失败，请稍后重试。',
+              }
+            : curr)
+          return
+        }
+      }
+
       setConversationDeleteDialog(curr => curr && curr.conversation.id === conversationId
         ? {
             ...curr,
