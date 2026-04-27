@@ -7,6 +7,7 @@ import type { CodegenGuideConfigDto } from '../dto/codegen-guide-config.dto'
 import type { CodegenSessionResponseDto } from '../dto/codegen-session.response.dto'
 import type { ContinueCodegenSessionDto } from '../dto/continue-codegen-session.dto'
 import type { LlmCodegenEngineTestResponseDto } from '../dto/llm-codegen-engine-test.response.dto'
+import type { RecoverAiQuantEditConversationRequestDto } from '../dto/recover-ai-quant-edit-conversation.request.dto'
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
 import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant-conversations.repository'
@@ -436,6 +437,16 @@ export class CodegenConversationService {
       conversationId,
       userId,
       backtestDraftConfig,
+    })
+  }
+
+  async recoverEditConversation(
+    _userId: string,
+    _input: RecoverAiQuantEditConversationRequestDto,
+  ): Promise<AiQuantConversationResponseDto> {
+    throw new DomainException('ai_quant.edit_context_recovery_not_implemented', {
+      code: ErrorCode.INTERNAL_SERVER_ERROR,
+      status: HttpStatus.NOT_IMPLEMENTED,
     })
   }
 
