@@ -1,5 +1,6 @@
 import type { TransactionalAdapterPrisma } from '@nestjs-cls/transactional-adapter-prisma'
 import type { PrismaClient } from '@/prisma/prisma.types'
+import type { StrategyFundingSnapshot } from '@/modules/trading/core/strategy-buying-power.resolver'
 import { ErrorCode, PositionStatus, SubscriptionStatus  } from '@ai/shared'
 // eslint-disable-next-line ts/consistent-type-imports
 import { TransactionHost } from '@nestjs-cls/transactional'
@@ -47,6 +48,7 @@ interface DeployStrategyInput {
   }
   initialBalanceQuote?: number
   accountBalanceQuote?: number
+  fundingSnapshot?: StrategyFundingSnapshot | null
   mode?: 'TESTNET' | 'LIVE'
   exchangeAccountId?: string
   exchangeAccountName?: string
@@ -185,6 +187,9 @@ export class AccountStrategyViewRepository {
             : {}),
           ...(typeof input.accountBalanceQuote === 'number' && Number.isFinite(input.accountBalanceQuote)
             ? { accountBalanceQuote: input.accountBalanceQuote }
+            : {}),
+          ...(input.fundingSnapshot
+            ? { fundingSnapshot: input.fundingSnapshot as unknown as Record<string, unknown> }
             : {}),
         }
 

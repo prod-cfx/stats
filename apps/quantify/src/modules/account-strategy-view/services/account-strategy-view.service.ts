@@ -26,6 +26,7 @@ import { MarketDataIngestionService } from '@/modules/market-data/services/marke
 import { MarketDataReadGateway } from '@/modules/market-data/services/market-data-read.gateway'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { PositionsService } from '@/modules/positions/positions.service'
+import { resolveStrategyFundingFromExchangeBalance } from '@/modules/trading/core/strategy-buying-power.resolver'
 import { normalizeExecutionSymbol } from '@/modules/trading/core/symbol-normalizer'
 // eslint-disable-next-line ts/consistent-type-imports -- DI requires value import with emitDecoratorMetadata
 import { StrategyInstanceStatsService } from '@/modules/strategy-instances/services/strategy-instance-stats.service'
@@ -1140,6 +1141,14 @@ export class AccountStrategyViewService {
           preferredAsset: this.resolvePreferredQuoteAsset(resolvedDeploy.symbol),
         })
       : null
+    const deployFundingSnapshot = exchangeBalance
+      ? resolveStrategyFundingFromExchangeBalance({
+          balance: exchangeBalance,
+          marketType: resolvedDeploy.marketType,
+          mode: dto.mode ?? null,
+          reservedQuote: 0,
+        })
+      : null
 
     let strategyInstanceIdForBinding: string | null = null
     let deployedStrategyInstanceId: string | null = null
@@ -1161,8 +1170,9 @@ export class AccountStrategyViewService {
           sourceStrategyInstanceId: resolvedDeploy.sourceStrategyInstanceId,
           sourceStrategyTemplateId: resolvedDeploy.sourceStrategyTemplateId,
         },
-        initialBalanceQuote: exchangeBalance?.total,
-        accountBalanceQuote: exchangeBalance?.free,
+        initialBalanceQuote: deployFundingSnapshot?.totalEquity ?? exchangeBalance?.total,
+        accountBalanceQuote: deployFundingSnapshot?.buyingPower ?? exchangeBalance?.free,
+        fundingSnapshot: deployFundingSnapshot,
         mode: dto.mode,
         exchangeAccountId: dto.exchangeAccountId,
         exchangeAccountName: dto.exchangeAccountName,

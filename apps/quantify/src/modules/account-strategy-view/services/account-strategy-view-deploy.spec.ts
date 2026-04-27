@@ -216,6 +216,93 @@ describe('accountStrategyViewService.deployStrategy', () => {
     expect(service.getStrategyDetail).toHaveBeenCalledWith('user-1', 'inst-okx-1')
   })
 
+  it('deploys with buying power zero while preserving exchange total equity', async () => {
+    const repo = {
+      deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-okx-1', mode: 'TESTNET' }),
+      findStrategyForUser: jest.fn().mockResolvedValue(null),
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-1' }),
+      markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
+      markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
+      upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
+    }
+    const snapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-1',
+        snapshotHash: 'snapshot-hash-1',
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'BTCUSDT',
+          baseTimeframe: '5m',
+          marketType: 'perp',
+          positionPct: 10,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'GTC',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 5,
+          defaultLeverage: 1,
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['GTC'],
+        },
+        strategyInstanceId: 'inst-draft-1',
+        strategyTemplateId: 'template-1',
+        astSnapshot: {
+          decisionPrograms: [{ phase: 'entry' }],
+          runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
+        },
+      }),
+    }
+    const tradingService = {
+      getBalance: jest.fn().mockResolvedValue([
+        { asset: 'USDT', free: 0, locked: 4901.58222, total: 4901.58222 },
+      ]),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn(), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn().mockResolvedValue(undefined) } as any,
+      undefined,
+      undefined,
+      tradingService as any,
+      snapshotsRepository as any,
+      createRuntimeExecutionStateService() as any,
+    )
+    service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-okx-1' } as any)
+
+    await service.deployStrategy({
+      userId: 'user-1',
+      name: 'OKX BTC 5m',
+      exchange: 'okx',
+      symbol: 'BTCUSDT',
+      timeframe: '5m',
+      positionPct: 10,
+      publishedSnapshotId: 'snapshot-1',
+      deployRequestId: 'deploy-req-1',
+      exchangeAccountId: 'exchange-account-1',
+      mode: 'TESTNET',
+    } as any)
+
+    expect(repo.deployStrategyForUser).toHaveBeenCalledWith(expect.objectContaining({
+      initialBalanceQuote: 4901.58222,
+      accountBalanceQuote: 0,
+      fundingSnapshot: expect.objectContaining({
+        totalEquity: 4901.58222,
+        buyingPower: 0,
+        executionCapital: 4901.58222,
+        nonTradableReason: 'exchange_available_balance_zero',
+      }),
+    }))
+  })
+
   it('does not rewrite a completed deploy as failed when detail hydration throws after activation', async () => {
     const repo = {
       deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-okx-1', mode: 'TESTNET' }),
