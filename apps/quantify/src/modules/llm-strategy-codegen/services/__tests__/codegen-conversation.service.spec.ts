@@ -8561,7 +8561,7 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     const sessionFixture = buildSemanticEraSessionFixture({
       id: 's-semantic-whole-strategy-replacement',
       userId: 'u1',
-      status: 'CONFIRM_GATE',
+      status: 'REJECTED',
       semanticState: currentSemanticState,
       clarificationState: { status: 'CLEAR', items: [] },
       constraintPack: {
@@ -8576,6 +8576,13 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
           rules: [{ condition: { key: 'indicator.above', indicator: 'ma' } }],
         },
       },
+      semanticGraph: {
+        version: 1,
+        market: { symbol: 'ETHUSDT', primaryTimeframe: '1h' },
+        nodes: [{ id: 'old-ma-graph' }],
+      },
+      validationReport: { ok: false, errors: ['old validation error'] },
+      rejectReason: '旧代码生成失败',
     })
     const oldSpecDesc = sessionFixture.latestSpecDesc
     mockRepo.findById.mockResolvedValue(sessionFixture)
@@ -8622,6 +8629,14 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
       }),
     ]))
     expect(updatePayload.latestDraftCode).toBeNull()
+    expect(updatePayload.rejectReason).toBeNull()
+    expect(updatePayload.validationReport).toBeNull()
+    expect(updatePayload.semanticGraph).toEqual(expect.objectContaining({
+      market: expect.objectContaining({
+        symbol: 'BTCUSDT',
+        primaryTimeframe: '15m',
+      }),
+    }))
     expect(updatePayload.latestSpecDesc).not.toEqual(oldSpecDesc)
     expect(JSON.stringify(updatePayload.latestSpecDesc)).toContain('rsi')
     expect(result.status).toBe('CONFIRM_GATE')

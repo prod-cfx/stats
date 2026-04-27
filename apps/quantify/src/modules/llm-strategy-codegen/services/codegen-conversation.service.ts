@@ -1407,6 +1407,9 @@ export class CodegenConversationService {
           latestSpecDesc: specDesc,
         }),
         latestDraftCode: null,
+        rejectReason: null,
+        validationReport: null,
+        semanticGraph: this.buildMinimalSemanticGraphFromState(replacementState) as Prisma.InputJsonValue,
       } as Prisma.LlmStrategyCodegenSessionUpdateInput)
 
       const response = this.finalizeSessionResponse({
