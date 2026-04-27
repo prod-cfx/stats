@@ -10,6 +10,7 @@ import type { SemanticActionState, SemanticPositionState, SemanticState, Semanti
 import { isProcessingCodegenSessionStatus } from '../types/codegen-session-status'
 import { readPendingSemanticEdit, withPendingSemanticEdit } from '../types/semantic-edit'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
+import { resolveEditableRangeParamPairs, resolveEditableScalarParamPaths } from './strategy-semantic-contracts'
 
 export interface ConversationSemanticEditDecisionInput {
   status: LlmCodegenSessionStatus
@@ -360,7 +361,6 @@ export class ConversationSemanticEditService {
   ): SemanticState {
     const targetIndicator = operation.indicator?.trim().toLowerCase()
     let changed = false
-    const periodKeys = ['fastPeriod', 'slowPeriod', 'period', 'reference.period'] as const
     const triggers = state.triggers.map((trigger) => {
       const triggerIndicator = typeof trigger.params.indicator === 'string'
         ? trigger.params.indicator.trim().toLowerCase()
@@ -375,11 +375,11 @@ export class ConversationSemanticEditService {
         return trigger
       }
 
-      const nextParams = { ...trigger.params }
+      let nextParams = trigger.params
       let triggerChanged = false
-      for (const key of periodKeys) {
-        if (nextParams[key] === operation.from) {
-          nextParams[key] = operation.to
+      for (const paramPath of resolveEditableScalarParamPaths(trigger.key, 'bars')) {
+        if (this.readParamPath(nextParams, paramPath) === operation.from) {
+          nextParams = this.writeParamPath(nextParams, paramPath, operation.to)
           triggerChanged = true
         }
       }
@@ -415,7 +415,7 @@ export class ConversationSemanticEditService {
         return trigger
       }
 
-      const nextParams = this.replaceNumericParamValue(trigger.params, operation.from, operation.to)
+      const nextParams = this.replaceNumericParamValue(trigger.key, trigger.params, operation.from, operation.to)
       if (nextParams === trigger.params) return trigger
 
       changed = true
@@ -444,7 +444,7 @@ export class ConversationSemanticEditService {
   ): SemanticState {
     let changed = false
     const triggers = state.triggers.map((trigger) => {
-      const nextParams = this.replaceNumericParamValue(trigger.params, operation.from, operation.to, operation.unit)
+      const nextParams = this.replaceNumericParamValue(trigger.key, trigger.params, operation.from, operation.to, operation.unit)
       if (nextParams === trigger.params) return trigger
 
       changed = true
@@ -459,7 +459,7 @@ export class ConversationSemanticEditService {
     })
 
     const risk = state.risk.map((riskItem) => {
-      const nextParams = this.replaceNumericParamValue(riskItem.params, operation.from, operation.to, operation.unit)
+      const nextParams = this.replaceNumericParamValue(riskItem.key, riskItem.params, operation.from, operation.to, operation.unit)
       if (nextParams === riskItem.params) return riskItem
 
       changed = true
@@ -493,7 +493,7 @@ export class ConversationSemanticEditService {
   ): SemanticState {
     let changed = false
     const triggers = state.triggers.map((trigger) => {
-      const nextParams = this.replaceRangeParamValue(trigger.params, operation.from, operation.to)
+      const nextParams = this.replaceRangeParamValue(trigger.key, trigger.params, operation.from, operation.to)
       if (nextParams === trigger.params) return trigger
 
       changed = true
@@ -508,7 +508,7 @@ export class ConversationSemanticEditService {
     })
 
     const risk = state.risk.map((riskItem) => {
-      const nextParams = this.replaceRangeParamValue(riskItem.params, operation.from, operation.to)
+      const nextParams = this.replaceRangeParamValue(riskItem.key, riskItem.params, operation.from, operation.to)
       if (nextParams === riskItem.params) return riskItem
 
       changed = true
@@ -554,21 +554,21 @@ export class ConversationSemanticEditService {
   }
 
   private replaceNumericParamValue(
+    semanticKey: string,
     params: Record<string, unknown>,
     from: number,
     to: number,
     unit: 'bars' | 'percent' | 'plain' | undefined = 'plain',
   ): Record<string, unknown> {
     let changed = false
-    const nextParams: Record<string, unknown> = {}
-    for (const [key, value] of Object.entries(params)) {
-      const replacement = this.replaceAtomicNumberValue(key, value, from, to, unit)
+    let nextParams: Record<string, unknown> = params
+    for (const paramPath of resolveEditableScalarParamPaths(semanticKey, unit)) {
+      const value = this.readParamPath(nextParams, paramPath)
+      const replacement = this.replaceAtomicNumberValue(value, from, to, unit)
       if (replacement.changed) {
-        nextParams[key] = replacement.value
+        nextParams = this.writeParamPath(nextParams, paramPath, replacement.value)
         changed = true
-        continue
       }
-      nextParams[key] = value
     }
     return changed ? nextParams : params
   }
@@ -578,7 +578,7 @@ export class ConversationSemanticEditService {
     operation: { from: number, to: number, unit?: 'bars' | 'percent' | 'plain', text?: string },
   ): SemanticPositionState | null {
     if (!position || operation.unit === 'bars') return position
-    const replacement = this.replaceAtomicNumberValue('position.value', position.value, operation.from, operation.to, operation.unit)
+    const replacement = this.replaceAtomicNumberValue(position.value, operation.from, operation.to, operation.unit)
     if (!replacement.changed || typeof replacement.value !== 'number') return position
 
     return {
@@ -594,88 +594,76 @@ export class ConversationSemanticEditService {
   }
 
   private replaceRangeParamValue(
+    semanticKey: string,
     params: Record<string, unknown>,
     from: { lower: number, upper: number },
     to: { lower: number, upper: number },
   ): Record<string, unknown> {
-    const direct = this.replaceDirectRangeParamValue(params, from, to)
-    if (direct !== params) return direct
-
-    const nested = this.replaceNestedRangeParamValue(params, from, to)
-    return nested
-  }
-
-  private replaceDirectRangeParamValue(
-    params: Record<string, unknown>,
-    from: { lower: number, upper: number },
-    to: { lower: number, upper: number },
-  ): Record<string, unknown> {
-    const pairs: Array<readonly [string, string]> = [
-      ['rangeLower', 'rangeUpper'],
-      ['rangeMin', 'rangeMax'],
-      ['lowerPrice', 'upperPrice'],
-      ['lower', 'upper'],
-      ['min', 'max'],
-    ]
-
-    for (const [lowerKey, upperKey] of pairs) {
-      const lowerValue = params[lowerKey]
-      const upperValue = params[upperKey]
+    for (const [lowerPath, upperPath] of resolveEditableRangeParamPairs(semanticKey)) {
+      const lowerValue = this.readParamPath(params, lowerPath)
+      const upperValue = this.readParamPath(params, upperPath)
       if (
         typeof lowerValue === 'number'
         && typeof upperValue === 'number'
         && this.isSameNumericValue(lowerValue, from.lower)
         && this.isSameNumericValue(upperValue, from.upper)
       ) {
-        return {
-          ...params,
-          [lowerKey]: to.lower,
-          [upperKey]: to.upper,
-        }
+        return this.writeParamPath(
+          this.writeParamPath(params, lowerPath, to.lower),
+          upperPath,
+          to.upper,
+        )
       }
     }
 
     return params
   }
 
-  private replaceNestedRangeParamValue(
+  private readParamPath(
     params: Record<string, unknown>,
-    from: { lower: number, upper: number },
-    to: { lower: number, upper: number },
-  ): Record<string, unknown> {
-    const rangeValue = params.range
-    if (!rangeValue || typeof rangeValue !== 'object' || Array.isArray(rangeValue)) return params
+    paramPath: string,
+  ): unknown {
+    return paramPath.split('.').reduce<unknown>((value, segment) => {
+      if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+      return (value as Record<string, unknown>)[segment]
+    }, params)
+  }
 
-    const range = rangeValue as Record<string, unknown>
-    const nested = this.replaceDirectRangeParamValue(range, from, to)
-    if (nested === range) return params
+  private writeParamPath(
+    params: Record<string, unknown>,
+    paramPath: string,
+    value: number,
+  ): Record<string, unknown> {
+    const segments = paramPath.split('.')
+    const [head, ...tail] = segments
+    if (!head) return params
+    if (tail.length === 0) {
+      return {
+        ...params,
+        [head]: value,
+      }
+    }
+
+    const child = params[head]
+    const childRecord = child && typeof child === 'object' && !Array.isArray(child)
+      ? child as Record<string, unknown>
+      : {}
 
     return {
       ...params,
-      range: nested,
+      [head]: this.writeParamPath(childRecord, tail.join('.'), value),
     }
   }
 
   private replaceAtomicNumberValue(
-    key: string,
     value: unknown,
     from: number,
     to: number,
     unit: 'bars' | 'percent' | 'plain' | undefined,
   ): { changed: true, value: number } | { changed: false } {
     if (typeof value !== 'number' || !Number.isFinite(value)) return { changed: false }
-    if (unit === 'bars' && !this.isBarsParamKey(key)) return { changed: false }
-    if (unit === 'percent' && !this.isPercentParamKey(key)) return { changed: false }
     if (!this.isSameSemanticNumericValue(value, from, unit)) return { changed: false }
     return { changed: true, value: this.normalizeReplacementNumericValue(value, to, unit) }
-  }
-
-  private isBarsParamKey(key: string): boolean {
-    return /bars|bar|lookback|period|window|length|周期|k线/iu.test(key)
-  }
-
-  private isPercentParamKey(key: string): boolean {
-    return /pct|percent|ratio|position\.value|仓位|百分比/iu.test(key)
   }
 
   private isSameSemanticNumericValue(value: number, expected: number, unit: 'bars' | 'percent' | 'plain' | undefined): boolean {
