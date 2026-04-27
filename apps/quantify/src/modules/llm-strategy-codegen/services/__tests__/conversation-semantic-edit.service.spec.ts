@@ -174,6 +174,46 @@ describe('ConversationSemanticEditService', () => {
     expect(next.triggers).toEqual(state.triggers)
   })
 
+  it.each([
+    ['仓位35%换成20%'],
+    ['把仓位35%换成20%'],
+    ['仓位改成20%'],
+  ])('classifies and applies position replacement wording: %s', (message) => {
+    const semanticState = {
+      ...service.createEmptySemanticStateForTest(),
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.35,
+        positionMode: 'long_only',
+        status: 'locked' as const,
+        source: 'user_explicit' as const,
+      },
+    }
+
+    const decision = service.decide({
+      status: 'DRAFTING',
+      message,
+      semanticState,
+    })
+
+    expect(decision).toEqual({
+      kind: 'APPLY_TO_SEMANTIC_STATE',
+      patch: { operations: [{ op: 'replace_position', text: message }] },
+    })
+    if (decision.kind !== 'APPLY_TO_SEMANTIC_STATE') return
+
+    const next = service.applyPatch(semanticState, decision.patch)
+
+    expect(next.position).toEqual(expect.objectContaining({
+      mode: 'fixed_ratio',
+      value: 0.2,
+      positionMode: 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+      openSlots: [],
+    }))
+  })
+
   it('creates pending edit when trigger replacement text is incomplete', () => {
     const decision = service.decide({
       status: 'CONFIRM_GATE',

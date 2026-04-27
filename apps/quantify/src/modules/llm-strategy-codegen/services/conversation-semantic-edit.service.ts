@@ -6,7 +6,7 @@ import type {
   SemanticEditDecision,
   SemanticEditPatch,
 } from '../types/semantic-edit'
-import type { SemanticState, SemanticTriggerState } from '../types/semantic-state'
+import type { SemanticPositionState, SemanticState, SemanticTriggerState } from '../types/semantic-state'
 import { isProcessingCodegenSessionStatus } from '../types/codegen-session-status'
 import { readPendingSemanticEdit, withPendingSemanticEdit } from '../types/semantic-edit'
 import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
@@ -31,6 +31,9 @@ export class ConversationSemanticEditService {
       }
       if (operation.op === 'replace_trigger') {
         return this.applyTriggerReplacement(next, operation.text ?? '')
+      }
+      if (operation.op === 'replace_position') {
+        return this.applyPositionReplacement(next, operation.text ?? '')
       }
       return next
     }, state)
@@ -100,6 +103,16 @@ export class ConversationSemanticEditService {
         kind: 'APPLY_TO_SEMANTIC_STATE',
         patch: {
           operations: [{ op: 'replace_context', ...contextOperation }],
+        },
+      }
+    }
+
+    const positionPct = this.extractReplacementPositionPct(message)
+    if (positionPct !== null) {
+      return {
+        kind: 'APPLY_TO_SEMANTIC_STATE',
+        patch: {
+          operations: [{ op: 'replace_position', text: message }],
         },
       }
     }
@@ -243,6 +256,30 @@ export class ConversationSemanticEditService {
     }
   }
 
+  private applyPositionReplacement(state: SemanticState, text: string): SemanticState {
+    const positionPct = this.extractReplacementPositionPct(text)
+    if (positionPct === null) return state
+
+    const position: SemanticPositionState = {
+      mode: state.position?.mode ?? 'fixed_ratio',
+      value: positionPct,
+      positionMode: state.position?.positionMode ?? 'long_only',
+      status: 'locked',
+      source: 'user_explicit',
+      evidence: {
+        text,
+        source: 'user_explicit',
+      },
+      openSlots: [],
+    }
+
+    return {
+      ...state,
+      position,
+      updatedAt: new Date().toISOString(),
+    }
+  }
+
   private extractReplacementSymbol(message: string): string | null {
     const match = /交易标的\s*(?:改为|改成|换成)\s*([A-Za-z0-9:/-]+)/u.exec(message)
     return canonicalizeStrategySymbolInput(match?.[1])
@@ -272,6 +309,14 @@ export class ConversationSemanticEditService {
   private normalizeMarketType(value: string): string {
     if (/现货|spot/iu.test(value)) return 'spot'
     return 'perp'
+  }
+
+  private extractReplacementPositionPct(message: string): number | null {
+    const match = /仓位\s*(?:从\s*)?(?:\d+(?:\.\d+)?\s*%)?\s*(?:换成|改成|改为|修改为|更改为)\s*(\d+(?:\.\d+)?)\s*%/u.exec(message)
+      ?? /(?:换成|改成|改为|修改为|更改为)\s*(\d+(?:\.\d+)?)\s*%\s*仓位/u.exec(message)
+    const valuePct = Number(match?.[1])
+    if (!Number.isFinite(valuePct) || valuePct <= 0 || valuePct > 100) return null
+    return valuePct / 100
   }
 
   private extractPendingStrategyReplacementSeed(message: string): string | null {
@@ -307,6 +352,7 @@ export class ConversationSemanticEditService {
   private hasSemanticEditIntent(message: string, state: SemanticState): boolean {
     return Boolean(
       this.extractReplacementContextOperation(message)
+        || this.extractReplacementPositionPct(message) !== null
         || this.extractStrategyReplacementSeed(message)
         || this.isStrategyRestartWithoutSeed(message)
         || (readPendingSemanticEdit(state) && /算了|保持原来|不改了|取消/u.test(message))

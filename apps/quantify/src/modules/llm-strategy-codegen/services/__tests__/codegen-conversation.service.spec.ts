@@ -7996,6 +7996,42 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     expect(result.assistantPrompt).not.toContain('未识别可编译入场规则')
   })
 
+  it('applies natural-language position edits in ordinary conversations before planner fallback', async () => {
+    const currentSemanticState = buildLockedMaSemanticState({
+      position: {
+        ...buildLockedMaSemanticState().position,
+        value: 0.35,
+      },
+    })
+    const sessionFixture = buildLegacyChecklistBridgeSessionFixture({
+      id: 's-semantic-position-edit-unrelated',
+      userId: 'u1',
+      status: 'DRAFTING',
+      semanticState: currentSemanticState,
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {},
+    })
+    mockRepo.findById.mockResolvedValue(sessionFixture)
+    mockAi.chat.mockResolvedValue({
+      content: JSON.stringify({
+        related: false,
+        logicReady: false,
+        assistantPrompt: '这条消息看起来和策略无关。请描述交易逻辑或修改条件。',
+      }),
+    })
+
+    const result = await service.continueSession('s-semantic-position-edit-unrelated', {
+      userId: 'u1',
+      message: '仓位35%换成20%',
+    })
+
+    expect(mockAi.chat).not.toHaveBeenCalled()
+    const updatePayload = mockRepo.updateSession.mock.calls.at(-1)?.[1] as Record<string, any>
+    expect(updatePayload.semanticState.position.value).toBe(0.2)
+    expect(result.assistantPrompt).toContain('仓位：20%')
+    expect(result.assistantPrompt).not.toContain('仓位：35%')
+  })
+
   it('edits published session semantic state without overwriting the published snapshot', async () => {
     const currentSemanticState = buildLockedMaSemanticState({
       contextSlots: {
