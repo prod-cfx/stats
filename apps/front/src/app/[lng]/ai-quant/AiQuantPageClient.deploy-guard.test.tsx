@@ -463,6 +463,35 @@ describe('AiQuantPageClient deploy guard', () => {
     expect(deployButton?.disabled).toBe(false)
   })
 
+  it('allows deploying when the linked older strategy instance no longer exists', async () => {
+    seedDeployableConversation(Date.now(), {
+      publishedSnapshotId: 'snapshot-new',
+      publishedStrategyInstanceId: 'strategy-missing',
+    })
+    mockFetchAccountAiQuantStrategyDetail.mockRejectedValueOnce({
+      statusCode: 404,
+      details: {
+        error: {
+          code: 'ACCOUNT_STRATEGY_NOT_FOUND',
+        },
+      },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const deployButton = container.querySelector('[data-testid="open-deploy"]') as HTMLButtonElement | null
+    expect(container.querySelector('[data-testid="deployment-state"]')?.textContent).toBe('not_deployed')
+    expect(deployButton?.textContent).toBe('aiQuant.deploy')
+    expect(deployButton?.disabled).toBe(false)
+  })
+
   it('locks deploy exchange and market type to the published snapshot truth', async () => {
     mockFetchUserExchangeAccountStatuses.mockReset()
     mockDeployAccountAiQuantStrategy.mockReset()

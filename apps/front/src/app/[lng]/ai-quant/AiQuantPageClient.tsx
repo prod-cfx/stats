@@ -94,7 +94,7 @@ const ACCOUNT_STRATEGY_NOT_FOUND_CODE = 'ACCOUNT_STRATEGY_NOT_FOUND'
 
 type CapabilityState = 'loading' | 'ready' | 'failed'
 type ConversationSyncState = 'idle' | 'loading' | 'ready' | 'error'
-type DeploymentDetailStatus = 'idle' | 'loading' | 'ready' | 'error'
+type DeploymentDetailStatus = 'idle' | 'loading' | 'ready' | 'not_found' | 'error'
 
 type ConversationDeleteDialogState = {
   conversation: ConversationState
@@ -249,10 +249,10 @@ export function AiQuantPageClient({
         setDeploymentDetail(detail)
         setDeploymentDetailStatus('ready')
       })
-      .catch(() => {
+      .catch((error) => {
         if (cancelled) return
         setDeploymentDetail(null)
-        setDeploymentDetailStatus('error')
+        setDeploymentDetailStatus(isAccountStrategyNotFoundError(error) ? 'not_found' : 'error')
       })
 
     return () => {
@@ -562,6 +562,9 @@ export function AiQuantPageClient({
   const deploymentState = useMemo(() => {
     const publishedStrategyInstanceId = activeConversation?.publishedStrategyInstanceId?.trim()
     if (!publishedStrategyInstanceId) {
+      return 'not_deployed' as const
+    }
+    if (deploymentDetailStatus === 'idle' || deploymentDetailStatus === 'not_found') {
       return 'not_deployed' as const
     }
     if (deploymentDetailStatus !== 'ready') {
