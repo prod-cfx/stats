@@ -955,6 +955,7 @@ export class AccountStrategyViewService {
     const mergedParams = {
       ...(this.readRecord(row.strategyTemplate?.defaultParams) ?? {}),
       ...(this.readRecord((row as Record<string, unknown>).params) ?? {}),
+      ...(this.readRecord(row.subscriptions?.[0]?.customParams) ?? {}),
     }
     const exchangeId = this.resolveExchangeId(
       this.readString(mergedParams, ['exchange', 'provider', 'exchangeId'])

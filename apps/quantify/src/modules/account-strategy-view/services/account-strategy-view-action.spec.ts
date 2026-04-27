@@ -239,6 +239,38 @@ describe('accountStrategyViewService.performAction', () => {
     )
   })
 
+  it('uses subscription custom params when canceling open orders', async () => {
+    const { service, tradingService } = createActionTestContext({
+      params: {
+        exchange: 'okx',
+        symbol: 'BTCUSDT',
+        marketType: 'spot',
+      },
+      subscriptions: [{
+        userId: 'user-1',
+        status: 'active',
+        exchangeAccount: { id: 'exchange-account-1', exchangeId: 'okx' },
+        customParams: {
+          symbol: 'ETHUSDT',
+          marketType: 'perp',
+        },
+      }],
+    })
+
+    await service.performAction('inst-1', {
+      userId: 'user-1',
+      action: 'liquidate_and_stop' as any,
+    })
+
+    expect(tradingService.getOpenOrders).toHaveBeenCalledWith(
+      'user-1',
+      'okx',
+      'perp',
+      'ETH/USDT:PERP',
+      'exchange-account-1',
+    )
+  })
+
   it('does not stop the strategy when canceling open orders fails', async () => {
     const { service, strategyInstancesService, tradingService, positionsService } = createActionTestContext()
     tradingService.getOpenOrders.mockResolvedValue([
