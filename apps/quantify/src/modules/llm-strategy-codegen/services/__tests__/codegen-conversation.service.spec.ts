@@ -1897,6 +1897,59 @@ describe('codegenConversationService (llm orchestrated flow)', () => {
     })
   })
 
+  it('preserves older conversation messages when persisting a truncated planner window', async () => {
+    const oldMessages = Array.from({ length: 14 }, (_, index) => ({
+      role: (index % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: `old-${index + 1}`,
+    }))
+    const projectedMessages = [
+      ...oldMessages.slice(-10),
+      { role: 'user' as const, content: 'new user' },
+      { role: 'assistant' as const, content: 'new assistant' },
+    ]
+    mockRepo.findById.mockResolvedValue({
+      id: 'session-full-history',
+      userId: 'u1',
+      status: 'DRAFTING',
+      checklist: {},
+      clarificationState: { status: 'CLEAR', items: [] },
+      constraintPack: {
+        conversationHistory: projectedMessages.map(message =>
+          `${message.role === 'user' ? 'U' : 'A'}: ${message.content}`,
+        ),
+      },
+      latestDraftCode: null,
+      latestSpecDesc: null,
+      rejectReason: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+      strategyInstanceId: null,
+    })
+    mockConversationsRepo.findByCodegenSessionId.mockResolvedValue({
+      id: 'conv-full-history',
+      userId: 'u1',
+      title: '完整历史',
+      codegenSessionId: 'session-full-history',
+      archivedAt: null,
+      createdAt: new Date('2026-04-10T20:00:00.000Z'),
+      updatedAt: new Date('2026-04-10T20:01:00.000Z'),
+      backtestDraftConfig: null,
+      lastBacktestRef: null,
+      messages: oldMessages,
+    })
+
+    await (service as any).persistConversationProjectionForSessionId('session-full-history', 'u1')
+
+    expect(mockConversationsRepo.upsertConversationSnapshot).toHaveBeenCalledWith(expect.objectContaining({
+      codegenSessionId: 'session-full-history',
+      messages: [
+        ...oldMessages,
+        { role: 'user', content: 'new user' },
+        { role: 'assistant', content: 'new assistant' },
+      ],
+    }))
+  })
+
   it('includes lastBacktestRef when it matches the current published snapshot', async () => {
     mockConversationsRepo.listByUser.mockResolvedValue([
       {

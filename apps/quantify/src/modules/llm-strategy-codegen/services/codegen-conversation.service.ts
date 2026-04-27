@@ -4296,14 +4296,61 @@ export class CodegenConversationService {
     }
 
     const snapshot = await this.toSessionSnapshotResponse(session)
-    const messages = snapshot.conversationMessages ?? []
-    const title = snapshot.conversationTitle?.trim() || this.deriveConversationTitle(messages)
+    const projectedMessages = snapshot.conversationMessages ?? []
+    const existingConversation = await this.conversationsRepo.findByCodegenSessionId(session.id)
+    const messages = this.mergeConversationProjectionMessages(
+      existingConversation?.messages ?? [],
+      projectedMessages,
+    )
+    const title = existingConversation?.title?.trim()
+      || snapshot.conversationTitle?.trim()
+      || this.deriveConversationTitle(messages)
     await this.conversationsRepo.upsertConversationSnapshot({
       userId: fallbackUserId ?? session.userId,
       codegenSessionId: session.id,
       title,
       messages,
     })
+  }
+
+  private mergeConversationProjectionMessages(
+    existingMessages: ConversationMessage[],
+    projectedMessages: ConversationMessage[],
+  ): ConversationMessage[] {
+    if (existingMessages.length === 0) return projectedMessages
+    if (projectedMessages.length === 0) return existingMessages
+
+    const overlap = this.findConversationMessageOverlap(existingMessages, projectedMessages)
+    return [
+      ...existingMessages,
+      ...projectedMessages.slice(overlap),
+    ]
+  }
+
+  private findConversationMessageOverlap(
+    existingMessages: ConversationMessage[],
+    projectedMessages: ConversationMessage[],
+  ): number {
+    const max = Math.min(existingMessages.length, projectedMessages.length)
+    for (let size = max; size > 0; size -= 1) {
+      const existingStart = existingMessages.length - size
+      let matches = true
+      for (let index = 0; index < size; index += 1) {
+        if (!this.isSameConversationMessage(existingMessages[existingStart + index], projectedMessages[index])) {
+          matches = false
+          break
+        }
+      }
+      if (matches) return size
+    }
+    return 0
+  }
+
+  private isSameConversationMessage(
+    left: ConversationMessage | undefined,
+    right: ConversationMessage | undefined,
+  ): boolean {
+    return Boolean(left && right && left.role === right.role && left.content.trim() === right.content.trim())
   }
 
   private excludeStrategyPlazaRunConversations(
