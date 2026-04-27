@@ -158,17 +158,17 @@ export async function confirmAiQuantDeploy(args: {
     const latestAvailableAccounts = latestExchangeAccounts.filter(
       item => item.exchange === selectedDeployExchange && item.status === 'available',
     )
-    const account = latestAvailableAccounts.find(
+    let account = latestAvailableAccounts.find(
       item => item.accountId === selectedDeployAccountId,
     )
 
     if (!account) {
-      const nextAccountId = latestAvailableAccounts[0]?.accountId ?? ''
-      setSelectedDeployAccountId(nextAccountId)
-      if (!nextAccountId) {
+      account = latestAvailableAccounts[0]
+      setSelectedDeployAccountId(account?.accountId ?? '')
+      if (!account) {
         push(apiConfigHref)
+        return
       }
-      return
     }
 
     try {
