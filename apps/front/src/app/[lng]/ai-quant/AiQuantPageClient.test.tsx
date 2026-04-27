@@ -184,6 +184,7 @@ jest.mock('@/lib/api', () => ({
     positionOverview: { openPositionsCount: 0, totalUnrealizedPnl: 0 },
     latestOrders: [],
   })),
+  recoverAiQuantEditConversation: jest.fn(),
   startLlmCodegenSession: jest.fn(),
   updateAiQuantConversationBacktestDraft: jest.fn(async () => undefined),
 }))
@@ -736,6 +737,119 @@ describe('AiQuantPageClient backtest range integration', () => {
     expect(localStorage.getItem('ai_quant_return_intent_v1')).toBeNull()
     expect(container.textContent).toContain('plaza-template-edit-message')
     expect(container.textContent).not.toContain('existing-message|plaza-template-edit-message')
+  })
+
+  it('selects existing conversation from strategy edit session intent', async () => {
+    localStorage.clear()
+    localStorage.setItem('ai_quant_return_intent_v1', JSON.stringify({
+      type: 'strategy-edit-session',
+      strategyInstanceId: 'strategy-2',
+      publishedSnapshotId: 'snapshot-2',
+      source: 'account-detail',
+      ts: Date.now(),
+    }))
+
+    const { listAiQuantConversations, recoverAiQuantEditConversation } = jest.requireMock('@/lib/api') as {
+      listAiQuantConversations: jest.Mock
+      recoverAiQuantEditConversation: jest.Mock
+    }
+    listAiQuantConversations.mockResolvedValue([
+      {
+        id: 'conversation-1',
+        activeCodegenSessionId: 'session-1',
+        conversationTitle: 'first',
+        conversationMessages: [{ role: 'assistant', content: 'first-message' }],
+        strategyInstanceId: 'strategy-1',
+      },
+      {
+        id: 'conversation-2',
+        activeCodegenSessionId: 'session-2',
+        conversationTitle: 'second',
+        conversationMessages: [{ role: 'assistant', content: 'second-message' }],
+        strategyInstanceId: 'strategy-2',
+        publishedSnapshotId: 'snapshot-2',
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).toContain('second-message')
+    expect(container.textContent).not.toContain('first-message')
+    expect(recoverAiQuantEditConversation).not.toHaveBeenCalled()
+    expect(localStorage.getItem('ai_quant_return_intent_v1')).toBeNull()
+  })
+
+  it('recovers edit conversation when no loaded conversation matches intent', async () => {
+    localStorage.clear()
+    localStorage.setItem('ai_quant_return_intent_v1', JSON.stringify({
+      type: 'strategy-edit-session',
+      strategyInstanceId: 'strategy-9',
+      publishedSnapshotId: 'snapshot-9',
+      source: 'account-detail',
+      ts: Date.now(),
+    }))
+
+    const { listAiQuantConversations, recoverAiQuantEditConversation } = jest.requireMock('@/lib/api') as {
+      listAiQuantConversations: jest.Mock
+      recoverAiQuantEditConversation: jest.Mock
+    }
+    listAiQuantConversations.mockResolvedValue([])
+    recoverAiQuantEditConversation.mockResolvedValue({
+      id: 'conversation-9',
+      activeCodegenSessionId: 'session-9',
+      conversationTitle: 'recovered',
+      conversationMessages: [{ role: 'assistant', content: '已基于上一版策略恢复修改上下文。' }],
+      strategyInstanceId: 'strategy-9',
+      publishedSnapshotId: 'snapshot-9',
+      semanticGraph: { version: 1 },
+      specDesc: { rules: [] },
+    })
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(container.textContent).toContain('已基于上一版策略恢复修改上下文。')
+    expect(recoverAiQuantEditConversation).toHaveBeenCalledWith({
+      strategyInstanceId: 'strategy-9',
+      publishedSnapshotId: 'snapshot-9',
+      conversationId: undefined,
+      sessionId: undefined,
+      source: 'account-detail',
+    })
+    expect(localStorage.getItem('ai_quant_return_intent_v1')).toBeNull()
+  })
+
+  it('preserves strategy edit intent when recovery fails', async () => {
+    localStorage.clear()
+    localStorage.setItem('ai_quant_return_intent_v1', JSON.stringify({
+      type: 'strategy-edit-session',
+      strategyInstanceId: 'strategy-9',
+      ts: Date.now(),
+    }))
+    const { listAiQuantConversations, recoverAiQuantEditConversation } = jest.requireMock('@/lib/api') as {
+      listAiQuantConversations: jest.Mock
+      recoverAiQuantEditConversation: jest.Mock
+    }
+    listAiQuantConversations.mockResolvedValue([])
+    recoverAiQuantEditConversation.mockRejectedValue(new Error('gateway'))
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient serverOwnedConversations />)
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(localStorage.getItem('ai_quant_return_intent_v1')).toContain('strategy-edit-session')
   })
 
   it('shows a dedicated loading state while server-owned conversations are syncing', async () => {

@@ -42,6 +42,7 @@ import {
   fetchUserExchangeAccountStatuses,
   listAiQuantConversations,
   performAccountAiQuantStrategyAction,
+  recoverAiQuantEditConversation,
   updateAiQuantConversationBacktestDraft,
 } from '@/lib/api'
 import { ApiError } from '@/lib/errors'
@@ -63,6 +64,7 @@ import {
   createConversation,
   createConversationFromServerConversation,
   createRecoveryConversation,
+  findConversationForEditIntent,
   hasExplicitBacktestExecutionOverrides,
   hasLatestPublishedCode,
   isDeployableBacktestResult,
@@ -264,25 +266,68 @@ export function AiQuantPageClient({
       let cancelled = false
       setConversationSyncState('loading')
       localStorage.removeItem(CONVERSATIONS_STORAGE_KEY)
-      void listAiQuantConversations()
-        .then((serverConversations) => {
+
+      void (async () => {
+        try {
+          const serverConversations = await listAiQuantConversations()
           if (cancelled) return
-          const restored = serverConversations.length > 0
-            ? serverConversations.map(conversation => createConversationFromServerConversation(conversation, t))
-            : [createConversation(t)]
-          setConversations(restored)
-          setActiveConversationId(restored[0].id)
+          const restored = serverConversations.map(conversation => createConversationFromServerConversation(conversation, t))
+          const intent = getIntent(INTENT_TTL_MS)
+
+          if (intent?.type === 'strategy-edit-session') {
+            const matched = findConversationForEditIntent(restored, intent)
+
+            if (matched) {
+              clearIntent()
+              setConversations(restored)
+              setActiveConversationId(matched.id)
+              setConversationSyncState('ready')
+              setConversationStorageReady(true)
+              return
+            }
+
+            try {
+              const recoveredConversation = await recoverAiQuantEditConversation({
+                strategyInstanceId: intent.strategyInstanceId,
+                publishedSnapshotId: intent.publishedSnapshotId,
+                conversationId: intent.conversationId,
+                sessionId: intent.sessionId,
+                source: intent.source,
+              })
+              if (cancelled) return
+
+              const recovered = createConversationFromServerConversation(recoveredConversation, t)
+              clearIntent()
+              setConversations([recovered, ...restored])
+              setActiveConversationId(recovered.id)
+              setConversationSyncState('ready')
+              setConversationStorageReady(true)
+              return
+            } catch {
+              if (cancelled) return
+              const fallback = restored.length > 0 ? restored : [createConversation(t)]
+              setConversations(fallback)
+              setActiveConversationId(fallback[0].id)
+              setConversationSyncState('ready')
+              setConversationStorageReady(true)
+              return
+            }
+          }
+
+          const fallback = restored.length > 0 ? restored : [createConversation(t)]
+          setConversations(fallback)
+          setActiveConversationId(fallback[0].id)
           setConversationSyncState('ready')
           setConversationStorageReady(true)
-        })
-        .catch(() => {
+        } catch {
           if (cancelled) return
           const fallback = [createConversation(t)]
           setConversations(fallback)
           setActiveConversationId(fallback[0].id)
           setConversationSyncState('error')
           setConversationStorageReady(true)
-        })
+        }
+      })()
       return () => {
         cancelled = true
       }
@@ -1537,7 +1582,7 @@ export function AiQuantPageClient({
             canRunBacktest={canRunBacktest}
           />
 
-          {activeConversation.semanticGraph && (
+          {activeConversation.semanticGraph?.market && (
             <SemanticGraphCard semanticGraph={activeConversation.semanticGraph} />
           )}
           {activeConversation.validationReport && !activeConversation.validationReport.ok && (
