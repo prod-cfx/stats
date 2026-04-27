@@ -263,32 +263,19 @@ export class AccountStrategyViewService {
     const resolvedTotalEquity = account
       ? this.resolveAccountEquity(account, livePositionFinancials ?? positionFinancials)
       : null
-    const exchangeBalance = exchangeId
-      ? await this.resolveExchangeBalanceSnapshot({
-          userId,
-          exchangeId,
-          marketType,
-          exchangeAccountId: sub?.exchangeAccount?.id ?? null,
-          preferredAsset: account
-            ? this.readAccountBaseCurrency(account)
-            : this.resolvePreferredQuoteAsset(symbol),
-        })
-      : null
-    const shouldUseExchangeBalance = !!exchangeBalance && !hasLocalActivity
-    const shouldSeedInitialBalanceFromExchange = shouldUseExchangeBalance && this.isDefaultSeedAccount(account)
-    const overviewInitialBalance = shouldSeedInitialBalanceFromExchange
-      ? exchangeBalance.total
-      : (account ? this.toFiniteNumber(account.initialBalance) : exchangeBalance?.total ?? null)
-    const overviewTotalEquity = shouldUseExchangeBalance
-      ? exchangeBalance.total
-      : resolvedTotalEquity
-    const overviewAvailableBalance = shouldUseExchangeBalance
-      ? exchangeBalance.free
-      : resolvedAvailableBalance
-    const overviewBaseCurrency = shouldUseExchangeBalance
-      ? exchangeBalance.asset
-      : (account ? this.readAccountBaseCurrency(account) : exchangeBalance?.asset ?? null)
     const paramsFundingSnapshot = this.readFundingSnapshot((row as Record<string, unknown>).params)
+    const overviewInitialBalance = account
+      ? this.toFiniteNumber(account.initialBalance)
+      : paramsFundingSnapshot?.totalEquity ?? null
+    const overviewTotalEquity = account
+      ? resolvedTotalEquity
+      : paramsFundingSnapshot?.totalEquity ?? null
+    const overviewAvailableBalance = account
+      ? resolvedAvailableBalance
+      : paramsFundingSnapshot?.buyingPower ?? null
+    const overviewBaseCurrency = account
+      ? this.readAccountBaseCurrency(account)
+      : paramsFundingSnapshot?.asset ?? null
     const localFundingSnapshot = account
       ? resolveStrategyFundingFromStrategyAccount({
           account: {
@@ -301,16 +288,9 @@ export class AccountStrategyViewService {
           reservedQuote: 0,
         })
       : null
-    const overviewFundingSnapshot = shouldUseExchangeBalance && exchangeBalance
-      ? resolveStrategyFundingFromExchangeBalance({
-          balance: exchangeBalance,
-          marketType,
-          mode: (row as Record<string, unknown>).mode === 'LIVE' ? 'LIVE' : 'TESTNET',
-          reservedQuote: 0,
-        })
-      : hasLocalActivity
-        ? localFundingSnapshot
-        : paramsFundingSnapshot ?? localFundingSnapshot
+    const overviewFundingSnapshot = hasLocalActivity
+      ? localFundingSnapshot
+      : paramsFundingSnapshot ?? localFundingSnapshot
     const totalPnl = account
       ? (resolvedRealizedPnl ?? 0) + (resolvedUnrealizedPnl ?? 0)
       : this.readStatsNumber(stats, 'totalPnl')
@@ -331,9 +311,7 @@ export class AccountStrategyViewService {
           closedPositionRows,
           startedAt: lifecycleStartAt,
           dailyRows: equityRows,
-          currentEquity: shouldUseExchangeBalance
-            ? overviewTotalEquity
-            : resolvedTotalEquity,
+          currentEquity: resolvedTotalEquity,
         })
       : []
 
@@ -348,7 +326,7 @@ export class AccountStrategyViewService {
     const todayPnl = account
       ? this.calculateTodayPnl(
           overviewTotalEquity,
-          shouldUseExchangeBalance ? null : latestDailySnapshot,
+          latestDailySnapshot,
           resolvedUnrealizedPnl ?? 0,
           closedPositionRows,
         )
@@ -577,11 +555,9 @@ export class AccountStrategyViewService {
     if (detail.equitySeries.length === 0 && account) {
       detail.equitySeries = [{
         ts: new Date().toISOString(),
-        value: shouldUseExchangeBalance
-          ? overviewTotalEquity
-          : (resolvedTotalEquity ?? (
-              Number(account.initialBalance) + (resolvedRealizedPnl ?? 0) + (resolvedUnrealizedPnl ?? 0)
-            )),
+        value: resolvedTotalEquity ?? (
+          Number(account.initialBalance) + (resolvedRealizedPnl ?? 0) + (resolvedUnrealizedPnl ?? 0)
+        ),
       }]
     }
 
@@ -1140,6 +1116,11 @@ export class AccountStrategyViewService {
     }
 
     const resolvedDeploy = await this.resolveDeployPayload(dto)
+    const resolvedExchangeAccount = await this.resolveDeployExchangeAccountForFunding({
+      userId: dto.userId,
+      exchange: resolvedDeploy.exchange,
+      exchangeAccountId: dto.exchangeAccountId ?? null,
+    })
 
     let deployRequest: { id: string }
     try {
@@ -1161,12 +1142,12 @@ export class AccountStrategyViewService {
         status: conflict?.status ?? 'PROCESSING',
       })
     }
-    const exchangeBalance = dto.exchangeAccountId && this.tradingService
+    const exchangeBalance = this.tradingService
       ? await this.resolveExchangeBalanceSnapshot({
           userId: dto.userId,
           exchangeId: resolvedDeploy.exchange,
           marketType: resolvedDeploy.marketType,
-          exchangeAccountId: dto.exchangeAccountId,
+          exchangeAccountId: resolvedExchangeAccount.id,
           preferredAsset: this.resolvePreferredQuoteAsset(resolvedDeploy.symbol),
         })
       : null
@@ -1203,7 +1184,7 @@ export class AccountStrategyViewService {
         accountBalanceQuote: deployFundingSnapshot?.buyingPower ?? exchangeBalance?.free,
         fundingSnapshot: deployFundingSnapshot,
         mode: dto.mode,
-        exchangeAccountId: dto.exchangeAccountId,
+        exchangeAccountId: resolvedExchangeAccount.id ?? undefined,
         exchangeAccountName: dto.exchangeAccountName,
         deploymentExecutionConfig: resolvedDeploy.deploymentExecutionConfig,
         executionConfigVersion: 1,
@@ -1999,25 +1980,6 @@ export class AccountStrategyViewService {
     return rows[0] ?? null
   }
 
-  private isDefaultSeedAccount(account: unknown): boolean {
-    if (!account) return true
-
-    const row = this.readRecord(account)
-    if (!row) return false
-
-    const initialBalance = this.toFiniteNumber(row.initialBalance)
-    const balance = this.toFiniteNumber(row.balance)
-    const equity = this.toFiniteNumber(row.equity)
-    const realizedPnl = this.toFiniteNumber(row.totalRealizedPnl) ?? 0
-    const unrealizedPnl = this.toFiniteNumber(row.totalUnrealizedPnl) ?? 0
-
-    return initialBalance === 1000
-      && (balance === null || balance === 1000)
-      && (equity === null || equity === 1000)
-      && realizedPnl === 0
-      && unrealizedPnl === 0
-  }
-
   private resolveExchangeId(value: string | null): ExchangeId | null {
     if (value === 'binance' || value === 'okx' || value === 'hyperliquid') {
       return value
@@ -2318,6 +2280,18 @@ export class AccountStrategyViewService {
       sourceStrategyTemplateId: snapshot.strategyTemplateId,
       snapshot,
     }
+  }
+
+  private async resolveDeployExchangeAccountForFunding(input: {
+    userId: string
+    exchange: 'binance' | 'okx' | 'hyperliquid'
+    exchangeAccountId: string | null
+  }): Promise<{ id: string | null }> {
+    const resolver = (this.repo as Partial<AccountStrategyViewRepository>).resolveDeployExchangeAccount
+    if (!resolver) {
+      return { id: input.exchangeAccountId }
+    }
+    return resolver.call(this.repo, input)
   }
 
   private async resolveEffectiveLeverageConstraints(input: {

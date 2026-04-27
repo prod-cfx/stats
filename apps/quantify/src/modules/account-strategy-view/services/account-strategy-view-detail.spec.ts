@@ -1191,7 +1191,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(detail.totalPnl).toBe(100)
   })
 
-  it('prefers bound exchange account balances for pristine strategy accounts', async () => {
+  it('keeps persisted execution balances for pristine strategy accounts', async () => {
     const repo = {
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-live-account',
@@ -1264,18 +1264,18 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     )
     const detail = await service.getStrategyDetail('user-1', 'inst-live-account')
 
-    expect(tradingService.getBalance).toHaveBeenCalledWith('user-1', 'okx', 'spot', 'exchange-account-1')
+    expect(tradingService.getBalance).not.toHaveBeenCalled()
     expect(detail.accountOverview).toEqual({
-      initialBalance: 60000,
-      totalEquity: 60000,
-      availableBalance: 60000,
-      executionCapital: 60000,
+      initialBalance: 1000,
+      totalEquity: 1000,
+      availableBalance: 1000,
+      executionCapital: 1000,
       nonTradableReason: null,
       totalPnl: 0,
       todayPnl: 0,
       baseCurrency: 'USDT',
     })
-    expect(detail.equitySeries.every(item => item.value === 60000)).toBe(true)
+    expect(detail.equitySeries.every(item => item.value === 1000)).toBe(true)
   })
 
   it('does not substitute snapshot backtest equity for an empty strategy account curve', async () => {
@@ -1470,7 +1470,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     expect(detail.equitySeries.at(-1)?.value).toBe(10020)
   })
 
-  it('uses live exchange equity as the latest curve point for pristine non-default seed accounts', async () => {
+  it('uses persisted execution equity as the latest curve point for pristine non-default seed accounts', async () => {
     const repo = {
       findStrategyForUser: jest.fn().mockResolvedValue({
         id: 'inst-live-account-nondefault-seed',
@@ -1542,17 +1542,18 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     )
     const detail = await service.getStrategyDetail('user-1', 'inst-live-account-nondefault-seed')
 
+    expect(tradingService.getBalance).not.toHaveBeenCalled()
     expect(detail.accountOverview).toEqual({
       initialBalance: 50000,
-      totalEquity: 60000,
-      availableBalance: 58000,
-      executionCapital: 60000,
+      totalEquity: 50000,
+      availableBalance: 50000,
+      executionCapital: 50000,
       nonTradableReason: null,
       totalPnl: 0,
       todayPnl: 0,
       baseCurrency: 'USDT',
     })
-    expect(detail.equitySeries.at(-1)?.value).toBe(60000)
+    expect(detail.equitySeries.at(-1)?.value).toBe(50000)
   })
 
   it('ignores pre-start closed positions when computing drawdown', async () => {
@@ -2346,7 +2347,7 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     })
   })
 
-  it('still prefers exchange balances when only flat daily snapshots exist locally', async () => {
+  it('keeps persisted execution balances when only flat daily snapshots exist locally', async () => {
     const todayStart = new Date()
     todayStart.setUTCHours(0, 0, 0, 0)
     const repo = {
@@ -2431,11 +2432,12 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     )
     const detail = await service.getStrategyDetail('user-1', 'inst-exchange-flat-daily')
 
+    expect(tradingService.getBalance).not.toHaveBeenCalled()
     expect(detail.accountOverview).toEqual({
-      initialBalance: 60000,
-      totalEquity: 60000,
-      availableBalance: 58000,
-      executionCapital: 60000,
+      initialBalance: 1000,
+      totalEquity: 1000,
+      availableBalance: 1000,
+      executionCapital: 1000,
       nonTradableReason: null,
       totalPnl: 0,
       todayPnl: 0,

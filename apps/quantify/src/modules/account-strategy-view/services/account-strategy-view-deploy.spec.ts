@@ -705,6 +705,92 @@ describe('accountStrategyViewService.deployStrategy', () => {
     }))
   })
 
+  it('resolves the default exchange account before reading deploy funding when no account id is provided', async () => {
+    const repo = {
+      resolveDeployExchangeAccount: jest.fn().mockResolvedValue({
+        id: 'exchange-account-default',
+        isTestnet: true,
+        exchangeId: 'okx',
+      }),
+      deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-okx-1', mode: 'TESTNET' }),
+      findStrategyForUser: jest.fn().mockResolvedValue(null),
+      findDeployRequestByUserAndRequestId: jest.fn().mockResolvedValue(null),
+      createDeployRequestProcessing: jest.fn().mockResolvedValue({ id: 'req-1' }),
+      markDeployRequestSucceeded: jest.fn().mockResolvedValue(undefined),
+      markDeployRequestFailed: jest.fn().mockResolvedValue(undefined),
+      upsertRiskProfile: jest.fn().mockResolvedValue(undefined),
+      activateStrategyInstanceForRuntime: jest.fn().mockResolvedValue(undefined),
+      markStrategyInstanceRuntimeBindingFailed: jest.fn().mockResolvedValue(undefined),
+    }
+    const snapshotsRepository = {
+      findByIdForUser: jest.fn().mockResolvedValue({
+        id: 'snapshot-default-account-balance',
+        snapshotHash: 'snapshot-hash-default-account',
+        strategyConfig: {
+          exchange: 'okx',
+          symbol: 'SOLUSDT',
+          baseTimeframe: '5m',
+          marketType: 'spot',
+          positionPct: 10,
+        },
+        deploymentExecutionDefaults: {
+          leverage: 1,
+          priceSource: 'close',
+          orderType: 'market',
+          timeInForce: 'GTC',
+        },
+        deploymentExecutionConstraints: {
+          platformRiskMaxLeverage: 5,
+          defaultLeverage: 1,
+          supportedPriceSources: ['close'],
+          supportedOrderTypes: ['market'],
+          supportedTimeInForce: ['GTC'],
+        },
+        strategyInstanceId: 'inst-draft-1',
+        strategyTemplateId: 'template-1',
+        astSnapshot: {
+          runtimeExecutionSemantics: createStructuredRuntimeExecutionSemantics(),
+        },
+      }),
+    }
+    const tradingService = {
+      getBalance: jest.fn().mockResolvedValue([
+        { asset: 'USDT', free: 58000, locked: 2000, total: 60000 },
+      ]),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn(), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn().mockResolvedValue(undefined) } as any,
+      undefined,
+      undefined,
+      tradingService as any,
+      snapshotsRepository as any,
+      createRuntimeExecutionStateService() as any,
+    )
+    service.getStrategyDetail = jest.fn().mockResolvedValue({ id: 'inst-okx-1' } as any)
+
+    await service.deployStrategy({
+      userId: 'user-1',
+      name: 'OKX SOL 5m',
+      publishedSnapshotId: 'snapshot-default-account-balance',
+      deployRequestId: 'deploy-req-default-account-balance',
+    } as any)
+
+    expect(repo.resolveDeployExchangeAccount).toHaveBeenCalledWith({
+      userId: 'user-1',
+      exchange: 'okx',
+      exchangeAccountId: null,
+    })
+    expect(tradingService.getBalance).toHaveBeenCalledWith('user-1', 'okx', 'spot', 'exchange-account-default')
+    expect(repo.deployStrategyForUser).toHaveBeenCalledWith(expect.objectContaining({
+      exchangeAccountId: 'exchange-account-default',
+      initialBalanceQuote: 60000,
+      accountBalanceQuote: 58000,
+    }))
+  })
+
   it('ignores exchange balance snapshots when the preferred quote asset is unavailable', async () => {
     const repo = {
       deployStrategyForUser: jest.fn().mockResolvedValue({ strategyInstanceId: 'inst-okx-1', mode: 'TESTNET' }),
