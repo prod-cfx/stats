@@ -4,6 +4,19 @@ import { canonicalizeStrategySymbolInput } from './market-scope-equivalence'
 
 type SeedTrigger = NonNullable<CodegenSemanticPatch['triggers']>[number]
 type SeedAction = NonNullable<CodegenSemanticPatch['actions']>[number]
+type SemanticAliasContext = {
+  bollingerBandParams?: {
+    period?: number
+    stdDev?: number
+  }
+  movingAverage?: {
+    indicator: 'ma' | 'ema'
+    period: number
+  }
+  rsi?: {
+    period: number
+  }
+}
 
 @Injectable()
 export class SemanticSeedExtractorService {
@@ -14,7 +27,8 @@ export class SemanticSeedExtractorService {
     }
 
     const contextSlots = this.extractContextSlots(text)
-    const triggers = this.extractTriggers(text)
+    const aliasContext = this.extractAliasContext(text)
+    const triggers = this.extractTriggers(text, aliasContext)
     const actions = this.extractActions(text, triggers)
     const risk = this.extractRisk(text)
     const position = this.extractPosition(text, triggers)
@@ -66,16 +80,16 @@ export class SemanticSeedExtractorService {
     return contextSlots
   }
 
-  private extractTriggers(text: string): SeedTrigger[] {
+  private extractTriggers(text: string, aliasContext: SemanticAliasContext): SeedTrigger[] {
     const triggers: SeedTrigger[] = []
     const seen = new Set<string>()
     const segments = this.splitSegments(text)
 
     for (const segment of segments) {
       this.pushMovingAverageCrossTrigger(segment, triggers, seen)
-      this.pushMovingAverageTrigger(segment, triggers, seen)
-      this.pushBollingerTriggers(segment, triggers, seen)
-      this.pushRsiTriggers(segment, triggers, seen)
+      this.pushMovingAverageTrigger(segment, triggers, seen, aliasContext)
+      this.pushBollingerTriggers(segment, triggers, seen, aliasContext)
+      this.pushRsiTriggers(segment, triggers, seen, aliasContext)
       this.pushMacdTriggers(segment, triggers, seen, text)
       this.pushBreakoutTriggers(segment, triggers, seen)
       this.pushRangePositionTriggers(segment, triggers, seen, text)
@@ -212,10 +226,13 @@ export class SemanticSeedExtractorService {
     }
   }
 
-  private pushMovingAverageTrigger(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
-    const clauses = segment.includes('，') || segment.includes(',')
-      ? segment.split(/[，,]/u).map(clause => clause.trim()).filter(Boolean)
-      : [segment]
+  private pushMovingAverageTrigger(
+    segment: string,
+    triggers: SeedTrigger[],
+    seen: Set<string>,
+    aliasContext: SemanticAliasContext,
+  ): void {
+    const clauses = this.splitCommaClauses(segment)
 
     for (const clause of clauses) {
       const subClauses = clause.includes('且') || clause.includes('并且') || clause.includes('同时') || clause.includes('并')
@@ -231,15 +248,24 @@ export class SemanticSeedExtractorService {
           .filter(value => Number.isFinite(value))
         if (referencePeriods.length === 0) {
           const fallbackPeriod = this.extractNumber(subClause, [/均线\s*(\d{1,4})/u])
-          if (fallbackPeriod === null) continue
-          referencePeriods.push(fallbackPeriod)
+          if (fallbackPeriod !== null) {
+            referencePeriods.push(fallbackPeriod)
+          } else if (aliasContext.movingAverage && /(?:该均线|均线)/u.test(subClause)) {
+            referencePeriods.push(aliasContext.movingAverage.period)
+          } else {
+            continue
+          }
         }
 
         const intent = this.resolveTradeIntent(subClause) ?? this.resolveTradeIntent(clause)
         if (!intent) continue
 
         const confirmationMode = this.extractConfirmationMode(subClause)
-        const indicator = /\bEMA\s*\d+/iu.test(subClause) ? 'ema' : 'ma'
+        const hasExplicitEma = /\bEMA\s*\d+/iu.test(subClause)
+        const hasExplicitMa = /\bMA\s*\d+/iu.test(subClause)
+        const indicator = hasExplicitEma
+          ? 'ema'
+          : (hasExplicitMa ? 'ma' : (aliasContext.movingAverage?.indicator ?? 'ma'))
         const key = /突破|上穿|站上|高于/u.test(subClause)
           ? 'indicator.above'
           : (/跌破|下穿|失守|低于/u.test(subClause) ? 'indicator.below' : null)
@@ -262,20 +288,27 @@ export class SemanticSeedExtractorService {
     }
   }
 
-  private pushBollingerTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
-    if (!/布林带/u.test(segment)) return
+  private pushBollingerTriggers(
+    segment: string,
+    triggers: SeedTrigger[],
+    seen: Set<string>,
+    aliasContext: SemanticAliasContext,
+  ): void {
+    const hasExplicitBollinger = /布林带/u.test(segment)
+    if (!hasExplicitBollinger && !aliasContext.bollingerBandParams) return
 
-    const clauses = segment.includes('，') || segment.includes(',')
-      ? segment.split(/[，,]/u).map(clause => clause.trim()).filter(Boolean)
-      : [segment]
-    const segmentBandParams = this.extractBollingerBandParams(segment)
+    const clauses = this.splitCommaClauses(segment)
+    const segmentBandParams = this.extractBollingerBandParams(segment) ?? aliasContext.bollingerBandParams
 
     for (const clause of clauses) {
+      const isAliasClause = !/布林带/u.test(clause)
+      if (isAliasClause && !this.hasBollingerBandAction(clause)) continue
       const bandParams = this.extractBollingerBandParams(clause) ?? segmentBandParams
       const confirmationMode = this.extractConfirmationMode(clause) ?? this.extractConfirmationMode(segment)
       const intent = this.resolveTradeIntent(clause)
 
       if (/上轨/u.test(clause)) {
+        if (isAliasClause && !intent) continue
         this.pushTrigger(triggers, seen, {
           key: 'bollinger.touch_upper',
           phase: intent?.phase ?? 'entry',
@@ -290,6 +323,7 @@ export class SemanticSeedExtractorService {
       }
 
       if (/下轨/u.test(clause)) {
+        if (isAliasClause && !intent) continue
         this.pushTrigger(triggers, seen, {
           key: 'bollinger.touch_lower',
           phase: intent?.phase ?? 'entry',
@@ -304,6 +338,7 @@ export class SemanticSeedExtractorService {
       }
 
       if (/中轨/u.test(clause)) {
+        if (isAliasClause && !intent) continue
         this.pushTrigger(triggers, seen, {
           key: 'bollinger.touch_middle',
           phase: 'exit',
@@ -396,11 +431,16 @@ export class SemanticSeedExtractorService {
     })
   }
 
-  private pushRsiTriggers(segment: string, triggers: SeedTrigger[], seen: Set<string>): void {
+  private pushRsiTriggers(
+    segment: string,
+    triggers: SeedTrigger[],
+    seen: Set<string>,
+    aliasContext: SemanticAliasContext,
+  ): void {
     if (!/RSI/iu.test(segment)) return
 
     const clauses = this.splitLogicClauses(segment)
-    const segmentPeriod = this.extractNumber(segment, [/RSI\s*(\d{1,3})/iu]) ?? 14
+    const segmentPeriod = this.extractNumber(segment, [/RSI\s*(\d{1,3})/iu]) ?? aliasContext.rsi?.period ?? 14
 
     for (const clause of clauses) {
       if (!/RSI/iu.test(clause)) continue
@@ -827,6 +867,14 @@ export class SemanticSeedExtractorService {
     return /(上涨|下跌|涨|跌|回落|回调|反弹)/u.test(segment)
   }
 
+  private hasExecutableTradeIntent(segment: string): boolean {
+    return /(买入|卖出|入场|出场|离场|开仓|平仓|平多|平空|做多|做空|开多|开空|多单|空单)/u.test(segment)
+  }
+
+  private hasBollingerBandAction(segment: string): boolean {
+    return /(触及|突破|回到|回归|跌破|上穿|下穿|站上|失守|高于|低于)/u.test(segment)
+  }
+
   private resolvePercentDirection(segment: string): 'up' | 'down' | null {
     if (/(下跌|跌|回落|回调)/u.test(segment)) {
       return 'down'
@@ -835,6 +883,114 @@ export class SemanticSeedExtractorService {
       return 'up'
     }
     return null
+  }
+
+  private extractAliasContext(text: string): SemanticAliasContext {
+    const bollingerBandParams = this.extractBollingerBandAliasContext(text)
+    const movingAverage = this.extractMovingAverageAliasContext(text)
+    const rsi = this.extractRsiAliasContext(text)
+
+    return {
+      ...(bollingerBandParams ? { bollingerBandParams } : {}),
+      ...(movingAverage ? { movingAverage } : {}),
+      ...(rsi ? { rsi } : {}),
+    }
+  }
+
+  private extractMovingAverageAliasContext(text: string): SemanticAliasContext['movingAverage'] | null {
+    const declarations = this.splitSegments(text)
+      .flatMap(segment => this.splitLogicClauses(segment))
+      .filter(clause => this.isMovingAverageAliasDeclarationClause(clause))
+      .flatMap(clause => Array.from(clause.matchAll(/\b(MA|EMA)\s*(\d{1,4})(?!\s*[\/和与、]\s*\d)/giu)))
+      .map(match => ({
+        indicator: match[1]?.toLowerCase() === 'ema' ? ('ema' as const) : ('ma' as const),
+        period: Number(match[2]),
+      }))
+      .filter(declaration => Number.isFinite(declaration.period))
+    const uniqueDeclarations = declarations.filter((declaration, index, all) => (
+      all.findIndex(item => item.indicator === declaration.indicator && item.period === declaration.period) === index
+    ))
+
+    return uniqueDeclarations.length === 1 ? uniqueDeclarations[0] ?? null : null
+  }
+
+  private isMovingAverageAliasDeclarationClause(clause: string): boolean {
+    if (/布林|bollinger|上轨|下轨|中轨/iu.test(clause)) return false
+    if (/(更正|修正|改为|调整为|改成|不是|而是)/u.test(clause)) return false
+    if (this.hasExecutableTradeIntent(clause)) return false
+    if (/(?:突破|上穿|站上|高于|跌破|下穿|失守|低于)/u.test(clause)) return false
+    if (!/(使用|采用|基于|指标|参数|设置|用)/u.test(clause)) return false
+    return /\b(?:MA|EMA)\s*\d{1,4}(?!\s*[\/和与、]\s*\d)/iu.test(clause)
+  }
+
+  private extractRsiAliasContext(text: string): SemanticAliasContext['rsi'] | null {
+    const declarations = this.splitSegments(text)
+      .flatMap(segment => this.splitLogicClauses(segment))
+      .filter(clause => this.isRsiAliasDeclarationClause(clause))
+      .map(clause => this.extractNumber(clause, [/RSI\s*(\d{1,3})/iu]))
+      .filter((period): period is number => period !== null && Number.isFinite(period))
+    const uniquePeriods = Array.from(new Set(declarations))
+    const period = uniquePeriods[0]
+
+    return uniquePeriods.length === 1 && period !== undefined ? { period } : null
+  }
+
+  private extractBollingerBandAliasContext(text: string): SemanticAliasContext['bollingerBandParams'] | null {
+    const declarations = this.splitSegments(text)
+      .flatMap(segment => this.splitCommaClauses(segment))
+      .filter(clause => this.isBollingerAliasDeclarationClause(clause))
+      .map(clause => ({
+        params: this.extractLastBollingerBandParams(clause),
+        isCorrection: this.isCorrectionClause(clause),
+      }))
+      .filter((declaration): declaration is { params: { period?: number; stdDev?: number }; isCorrection: boolean } => declaration.params !== null)
+    const lastCorrection = declarations.filter(declaration => declaration.isCorrection).at(-1)
+    if (lastCorrection) {
+      return lastCorrection.params
+    }
+
+    const uniqueDeclarations = declarations.map(declaration => declaration.params).filter((declaration, index, all) => (
+      all.findIndex(item => item.period === declaration.period && item.stdDev === declaration.stdDev) === index
+    ))
+    const declaration = uniqueDeclarations[0]
+
+    return uniqueDeclarations.length === 1 && declaration ? declaration : null
+  }
+
+  private isBollingerAliasDeclarationClause(clause: string): boolean {
+    if (!/布林带|bollinger/iu.test(clause)) return false
+    if (this.hasExecutableTradeIntent(clause)) return false
+    if (/(?:上轨|下轨|中轨)/u.test(clause) && this.hasBollingerBandAction(clause)) return false
+    if (this.isCorrectionClause(clause)) return true
+    return /(使用|采用|基于|指标|参数|设置|用)/u.test(clause)
+  }
+
+  private isCorrectionClause(clause: string): boolean {
+    return /(更正|修正|改为|调整为|改成|不是|而是)/u.test(clause)
+  }
+
+  private isRsiAliasDeclarationClause(clause: string): boolean {
+    if (this.hasExecutableTradeIntent(clause)) return false
+    if (/(更正|修正|改为|调整为|改成|不是|而是)/u.test(clause)) return false
+    if (!/(使用|采用|基于|指标|参数|设置|用)/u.test(clause)) return false
+    return /RSI\s*\d{1,3}/iu.test(clause)
+  }
+
+  private extractLastBollingerBandParams(segment: string): { period?: number; stdDev?: number } | null {
+    const matches = [
+      ...Array.from(segment.matchAll(/布林带\s*[（(]\s*(\d{1,4})\s*[，,]\s*(\d+(?:\.\d+)?)\s*[)）]/gu)),
+      ...Array.from(segment.matchAll(/布林带\s*(\d{1,4})\s*(?:周期|日|根|period)?\s*(\d+(?:\.\d+)?)\s*(?:倍)?\s*标准差/gu)),
+    ]
+      .filter(match => match.index !== undefined)
+      .sort((left, right) => (left.index ?? 0) - (right.index ?? 0))
+    const match = matches.at(-1)
+    if (!match?.[1] || !match[2]) return null
+
+    const period = Number(match[1])
+    const stdDev = Number(match[2])
+    if (!Number.isFinite(period) || !Number.isFinite(stdDev)) return null
+
+    return { period, stdDev }
   }
 
   private extractBollingerBandParams(segment: string): { period?: number; stdDev?: number } | null {
@@ -956,6 +1112,33 @@ export class SemanticSeedExtractorService {
       .split(/[；;。]/u)
       .map(segment => segment.trim())
       .filter(Boolean)
+  }
+
+  private splitCommaClauses(segment: string): string[] {
+    const clauses: string[] = []
+    let depth = 0
+    let start = 0
+
+    for (let index = 0; index < segment.length; index += 1) {
+      const char = segment[index]
+      if (char === '(' || char === '（') {
+        depth += 1
+        continue
+      }
+      if (char === ')' || char === '）') {
+        depth = Math.max(0, depth - 1)
+        continue
+      }
+      if (depth === 0 && (char === '，' || char === ',')) {
+        const clause = segment.slice(start, index).trim()
+        if (clause) clauses.push(clause)
+        start = index + 1
+      }
+    }
+
+    const tail = segment.slice(start).trim()
+    if (tail) clauses.push(tail)
+    return clauses.length > 0 ? clauses : [segment]
   }
 
   private normalizeText(message?: string): string {
