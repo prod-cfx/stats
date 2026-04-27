@@ -1,111 +1,135 @@
 'use client'
 
-import type {ElementType} from 'react';
-import type { QuantParams } from '@/app/[lng]/ai-quant/AiQuantPageClient'
-import { Activity, BarChart3, Edit3, Play, Shield, TrendingUp, Zap } from 'lucide-react'
+import type { StrategyPlazaTemplate } from '@/lib/api'
+import { Activity, Edit3, Play } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { STRATEGY_PRESETS } from './strategy-presets'
 
 interface StrategyPlazaProps {
-  onRunStrategy: (strategyId: string, preset: Partial<QuantParams>, presetName: string) => void
-  onEditStrategy: (strategyId: string, preset: Partial<QuantParams>, presetName: string) => void
+  templates: StrategyPlazaTemplate[]
+  loading: boolean
+  error?: string | null
+  actionError?: string | null
+  pendingTemplateId?: string | null
+  pendingAction?: 'run' | 'edit' | null
+  onRunStrategy: (templateId: string) => void
+  onEditStrategy: (templateId: string) => void
   subtitle?: string
 }
 
-// Mock data for display purposes to make the "Strategy Square" look professional
-const PRESET_DISPLAY_DATA: Record<string, {
-  tags: string[]
-  returnRate: string
-  winRate: string
-  risk: 'Low' | 'Medium' | 'High'
-  icon: ElementType
-}> = {
-  'momentum-steady': {
-    tags: ['trend', 'steady'],
-    returnRate: '+12.5%',
-    winRate: '68%',
-    risk: 'Low',
-    icon: Shield,
-  },
-  'momentum-aggressive': {
-    tags: ['hft', 'aggressive'],
-    returnRate: '+45.2%',
-    winRate: '42%',
-    risk: 'High',
-    icon: Zap,
-  },
-  'grid-range': {
-    tags: ['oscillation', 'grid'],
-    returnRate: '+8.3%',
-    winRate: '95%',
-    risk: 'Low',
-    icon: Activity,
-  },
-  'bollinger-reversion': {
-    tags: ['meanReversion', 'bollinger'],
-    returnRate: '+15.7%',
-    winRate: '72%',
-    risk: 'Medium',
-    icon: TrendingUp,
-  },
-  'breakout-short': {
-    tags: ['breakout', 'shortTerm'],
-    returnRate: '+22.1%',
-    winRate: '55%',
-    risk: 'Medium',
-    icon: BarChart3,
-  },
-  'dip-buy-mid': {
-    tags: ['dipBuy', 'swing'],
-    returnRate: '+18.4%',
-    winRate: '63%',
-    risk: 'Medium',
-    icon: TrendingUp,
-  },
+function formatPositionPct(value: number): string {
+  const percent = Math.abs(value) <= 1 ? value * 100 : value
+  return `${Number(percent.toFixed(2)).toString()}%`
+}
+
+function getMarketTypeLabel(marketType: StrategyPlazaTemplate['marketType']): string {
+  return marketType === 'perp' ? '永续' : '现货'
+}
+
+function getLeverageLabel(leverage: number | null): string {
+  return leverage ? `${leverage}x` : '无杠杆'
+}
+
+function formatMetricPct(value: number | null, options: { sign?: boolean } = {}): string {
+  if (value == null) return '--'
+  const formatted = `${Number(value.toFixed(2)).toString()}%`
+  return options.sign && value > 0 ? `+${formatted}` : formatted
 }
 
 export function StrategyPlaza({
+  templates,
+  loading,
+  error,
+  actionError,
+  pendingTemplateId,
+  pendingAction,
   onRunStrategy,
   onEditStrategy,
   subtitle,
 }: StrategyPlazaProps) {
   const { t } = useTranslation()
   const displaySubtitle = subtitle || t('aiQuant.strategyPlazaSubtitle')
+  const hasPendingAction = Boolean(pendingTemplateId && pendingAction)
+
+  if (loading) {
+    return (
+      <section className="space-y-4">
+        <p className="text-sm text-[color:var(--cf-muted)]">{displaySubtitle}</p>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {[0, 1, 2].map(item => (
+            <article
+              key={item}
+              className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5"
+            >
+              <div className="h-10 w-10 animate-pulse rounded-xl bg-[color:var(--cf-bg)]" />
+              <div className="mt-4 h-4 w-2/3 animate-pulse rounded bg-[color:var(--cf-bg)]" />
+              <div className="mt-3 h-3 w-full animate-pulse rounded bg-[color:var(--cf-bg)]" />
+              <div className="mt-2 h-3 w-5/6 animate-pulse rounded bg-[color:var(--cf-bg)]" />
+              <div className="mt-5 grid grid-cols-2 gap-3">
+                <div className="h-10 animate-pulse rounded-xl bg-[color:var(--cf-bg)]" />
+                <div className="h-10 animate-pulse rounded-xl bg-[color:var(--cf-bg)]" />
+              </div>
+            </article>
+          ))}
+        </div>
+      </section>
+    )
+  }
+
+  if (error) {
+    return (
+      <section className="space-y-4">
+        <p className="text-sm text-[color:var(--cf-muted)]">{displaySubtitle}</p>
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-5 text-sm text-red-500">
+          {error}
+        </div>
+      </section>
+    )
+  }
+
+  if (templates.length === 0) {
+    return (
+      <section className="space-y-4">
+        <p className="text-sm text-[color:var(--cf-muted)]">{displaySubtitle}</p>
+        <div className="rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-8 text-center text-sm text-[color:var(--cf-muted)]">
+          暂无可用策略模板
+        </div>
+      </section>
+    )
+  }
 
   return (
     <section className="space-y-4">
-      {/* Optional: Add a "View All" link here if needed */}
+      <p className="text-sm text-[color:var(--cf-muted)]">{displaySubtitle}</p>
+      {actionError && (
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-500">
+          {actionError}
+        </div>
+      )}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {STRATEGY_PRESETS.map(item => {
-          const display = PRESET_DISPLAY_DATA[item.id] || {
-            tags: ['通用'],
-            returnRate: '--',
-            winRate: '--',
-            risk: 'Medium',
-            icon: Activity,
-          }
-          const Icon = display.icon
+        {templates.map(template => {
+          const isRunning = pendingTemplateId === template.id && pendingAction === 'run'
+          const isEditing = pendingTemplateId === template.id && pendingAction === 'edit'
 
           return (
             <article
-              key={item.id}
+              key={template.id}
               className="group flex flex-col justify-between rounded-2xl border border-[color:var(--cf-border)] bg-[color:var(--cf-surface)] p-5 transition-all hover:border-primary/30 hover:shadow-lg hover:-translate-y-0.5"
             >
               <div>
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[color:var(--cf-bg)] text-primary group-hover:bg-primary/10 group-hover:text-primary transition-colors">
-                      <Icon className="h-5 w-5" />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[color:var(--cf-bg)] text-primary transition-colors group-hover:bg-primary/10 group-hover:text-primary">
+                      <Activity className="h-5 w-5" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-[color:var(--cf-text-strong)]">{t(`aiQuant.strategies.${item.id}.name`, { defaultValue: item.name })}</h3>
+                      <h3 className="font-bold text-[color:var(--cf-text-strong)]">{template.name}</h3>
                       <div className="mt-1 flex flex-wrap gap-1.5">
-                        {display.tags.map(tag => (
+                        {template.tags.map(tag => (
                           <span
                             key={tag}
-                            className="inline-flex items-center rounded-md bg-[color:var(--cf-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--cf-muted)] border border-[color:var(--cf-border)]"
+                            className="inline-flex items-center rounded-md border border-[color:var(--cf-border)] bg-[color:var(--cf-bg)] px-1.5 py-0.5 text-[10px] font-medium text-[color:var(--cf-muted)]"
                           >
-                            {t(`aiQuant.strategies.${item.id}.tags.${tag}`, { defaultValue: tag })}
+                            {tag}
                           </span>
                         ))}
                       </div>
@@ -114,18 +138,56 @@ export function StrategyPlaza({
                 </div>
 
                 <p className="mt-4 line-clamp-2 text-sm leading-relaxed text-[color:var(--cf-muted)]">
-                  {t(`aiQuant.strategies.${item.id}.desc`, { defaultValue: item.desc })}
+                  {template.description}
                 </p>
 
-                <div className="mt-4 flex items-center gap-4 rounded-xl bg-[color:var(--cf-bg)] px-3 py-2">
-                  <div>
-                    <div className="text-xs text-[color:var(--cf-muted)]">{t('aiQuant.guestLanding.backtestReturn')}</div>
-                    <div className="font-mono text-sm font-bold text-green-500">{display.returnRate}</div>
+                <div className="mt-4 grid gap-2 rounded-xl bg-[color:var(--cf-bg)] px-3 py-3 text-xs text-[color:var(--cf-muted)]">
+                  <div className="flex items-center justify-between gap-3">
+                    <span>交易对 / 周期</span>
+                    <span className="font-mono font-semibold text-[color:var(--cf-text)]">
+                      {template.symbol}
+                      {' / '}
+                      {template.timeframe}
+                    </span>
                   </div>
-                  <div className="h-8 w-px bg-[color:var(--cf-border)]" />
-                  <div>
-                    <div className="text-xs text-[color:var(--cf-muted)]">{t('aiQuant.guestLanding.winRate')}</div>
-                    <div className="font-mono text-sm font-bold text-[color:var(--cf-text)]">{display.winRate}</div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>环境</span>
+                    <span className="font-semibold text-[color:var(--cf-text)]">OKX 模拟盘</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>市场</span>
+                    <span className="font-semibold text-[color:var(--cf-text)]">
+                      {getMarketTypeLabel(template.marketType)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>仓位 / 杠杆</span>
+                    <span className="font-mono font-semibold text-[color:var(--cf-text)]">
+                      {formatPositionPct(template.positionPct)}
+                      {' / '}
+                      {getLeverageLabel(template.leverage)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+                  <div className="rounded-lg border border-[color:var(--cf-border)] px-2 py-2">
+                    <div className="text-[10px] text-[color:var(--cf-muted)]">胜率</div>
+                    <div className="mt-1 font-mono font-semibold text-[color:var(--cf-text-strong)]">
+                      {formatMetricPct(template.displayMetrics.winRatePct)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-[color:var(--cf-border)] px-2 py-2">
+                    <div className="text-[10px] text-[color:var(--cf-muted)]">最大回撤</div>
+                    <div className="mt-1 font-mono font-semibold text-emerald-500">
+                      {formatMetricPct(template.displayMetrics.maxDrawdownPct)}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-[color:var(--cf-border)] px-2 py-2">
+                    <div className="text-[10px] text-[color:var(--cf-muted)]">收益</div>
+                    <div className="mt-1 font-mono font-semibold text-[color:var(--cf-text-strong)]">
+                      {formatMetricPct(template.displayMetrics.returnPct, { sign: true })}
+                    </div>
                   </div>
                 </div>
               </div>
@@ -133,19 +195,23 @@ export function StrategyPlaza({
               <div className="mt-5 grid grid-cols-2 gap-3">
                 <button
                   type="button"
-                  onClick={() => onRunStrategy(item.id, item.params, t(`aiQuant.strategies.${item.id}.name`, { defaultValue: item.name }))}
-                  className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:from-indigo-600 hover:to-purple-700 active:scale-95"
+                  disabled={hasPendingAction}
+                  aria-busy={isRunning}
+                  onClick={() => onRunStrategy(template.id)}
+                  className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:from-indigo-600 hover:to-purple-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Play className="h-4 w-4 fill-current" />
-                  {t('aiQuant.run')}
+                  {isRunning ? '运行中' : t('aiQuant.run')}
                 </button>
                 <button
                   type="button"
-                  onClick={() => onEditStrategy(item.id, item.params, t(`aiQuant.strategies.${item.id}.name`, { defaultValue: item.name }))}
-                  className="flex items-center justify-center gap-2 rounded-xl border border-[color:var(--cf-border)] bg-transparent px-4 py-2.5 text-sm font-semibold text-[color:var(--cf-text-strong)] transition-all hover:bg-[color:var(--cf-bg)] hover:border-[color:var(--cf-text-strong)] active:scale-95"
+                  disabled={hasPendingAction}
+                  aria-busy={isEditing}
+                  onClick={() => onEditStrategy(template.id)}
+                  className="flex items-center justify-center gap-2 rounded-xl border border-[color:var(--cf-border)] bg-transparent px-4 py-2.5 text-sm font-semibold text-[color:var(--cf-text-strong)] transition-all hover:border-[color:var(--cf-text-strong)] hover:bg-[color:var(--cf-bg)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
                 >
                   <Edit3 className="h-4 w-4" />
-                  {t('aiQuant.edit')}
+                  {isEditing ? '处理中' : t('aiQuant.edit')}
                 </button>
               </div>
             </article>

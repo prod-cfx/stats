@@ -46,6 +46,19 @@ export class ExchangeAccountRepository {
     return client.exchangeAccount.findMany({ where: { userId }, orderBy })
   }
 
+  async findLatestOkxDemoAccountForUser(userId: string): Promise<Pick<ExchangeAccount, 'id' | 'name'> | null> {
+    const client = this.txHost.tx
+    return client.exchangeAccount.findFirst({
+      where: {
+        userId,
+        exchangeId: 'okx',
+        isTestnet: true,
+      },
+      orderBy: [{ updatedAt: 'desc' }, { createdAt: 'desc' }],
+      select: { id: true, name: true },
+    })
+  }
+
   async deleteExchangeAccount(id: string): Promise<void> {
     const client = this.txHost.tx
     await client.exchangeAccount.delete({ where: { id } })

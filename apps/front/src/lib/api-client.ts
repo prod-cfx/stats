@@ -15,14 +15,30 @@ function normalizePublicUrlEnv(value?: string): string | undefined {
   return normalized.replace(/\/$/, '')
 }
 
-// 优先使用显式配置的基础地址（包含 /api/v1 前缀），与 admin-front 保持一致
-// 若未配置 NEXT_PUBLIC_API_BASE_URL，则回退到旧逻辑：由 NEXT_PUBLIC_API_SERVER_URL 拼接 /api/v1
+function resolveBrowserApiBaseUrl(explicitApiBaseUrl: string | undefined): string {
+  if (!explicitApiBaseUrl) {
+    return '/api/v1'
+  }
+  if (!isAbsoluteHttpUrl(explicitApiBaseUrl)) {
+    return explicitApiBaseUrl
+  }
+
+  try {
+    const pathname = new URL(explicitApiBaseUrl).pathname.replace(/\/$/, '')
+    return pathname || '/api/v1'
+  } catch {
+    return '/api/v1'
+  }
+}
+
+// Browser requests should default to the same-origin Next rewrite to avoid CORS
+// preflight failures on authenticated API calls.
 const EXPLICIT_API_BASE_URL = normalizePublicUrlEnv(process.env.NEXT_PUBLIC_API_BASE_URL)
 const SERVER_BASE_URL =
   normalizePublicUrlEnv(process.env.NEXT_PUBLIC_API_SERVER_URL) ?? 'http://localhost:3000'
 
-export const API_BASE_URL = EXPLICIT_API_BASE_URL ?? `${SERVER_BASE_URL}/api/v1`
-export const SERVER_API_BASE_URL = resolveServerApiBaseUrl(API_BASE_URL, SERVER_BASE_URL)
+export const API_BASE_URL = resolveBrowserApiBaseUrl(EXPLICIT_API_BASE_URL)
+export const SERVER_API_BASE_URL = resolveServerApiBaseUrl(EXPLICIT_API_BASE_URL ?? API_BASE_URL, SERVER_BASE_URL)
 
 function isAbsoluteHttpUrl(value: string): boolean {
   return /^https?:\/\//i.test(value)

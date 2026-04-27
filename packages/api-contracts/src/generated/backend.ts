@@ -534,6 +534,39 @@ const LlmCodegenContinueRequestDto = z
   })
   .passthrough()
 const Function = z.object({}).partial().passthrough()
+const StrategyPlazaDisplayMetricsResponseDto = z
+  .object({
+    label: z.literal('official_sample_backtest'),
+    returnPct: z.number().nullish(),
+    winRatePct: z.number().nullish(),
+    maxDrawdownPct: z.number().nullish(),
+  })
+  .passthrough()
+const StrategyPlazaTemplateResponseDto = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string(),
+    logicDescription: z.string(),
+    tags: z.array(z.string()),
+    riskLevel: z.enum(['low', 'medium', 'high']),
+    scenario: z.string(),
+    exchange: z.literal('okx'),
+    environment: z.literal('demo'),
+    marketType: z.enum(['spot', 'perp']),
+    symbol: z.string(),
+    timeframe: z.string(),
+    positionPct: z.number(),
+    leverage: z.number().nullish(),
+    status: z.enum(['live', 'hidden']),
+    displayOrder: z.number(),
+    displayMetrics: StrategyPlazaDisplayMetricsResponseDto,
+  })
+  .passthrough()
+const StrategyPlazaRunRequestDto = z.object({ runRequestId: z.string().min(8) }).passthrough()
+const StrategyPlazaEditSessionResponseDto = z
+  .object({ sessionId: z.string(), templateId: z.string(), initialMessage: z.string() })
+  .passthrough()
 const AdminLoginDto = z.object({ username: z.string(), password: z.string() }).passthrough()
 const AdminProfileDto = z
   .object({
@@ -1462,6 +1495,10 @@ export const schemas = {
   CodegenSessionResponseDto,
   LlmCodegenContinueRequestDto,
   Function,
+  StrategyPlazaDisplayMetricsResponseDto,
+  StrategyPlazaTemplateResponseDto,
+  StrategyPlazaRunRequestDto,
+  StrategyPlazaEditSessionResponseDto,
   AdminLoginDto,
   AdminProfileDto,
   AdminAuthResponseDto,
@@ -4434,6 +4471,78 @@ const endpoints = makeApi([
       },
     ],
     response: z.array(PredictionMarketCardDto),
+  },
+  {
+    method: 'get',
+    path: '/strategy-plaza/templates',
+    alias: 'StrategyPlazaProxyController_list',
+    requestFormat: 'json',
+    response: z
+      .object({ data: z.array(StrategyPlazaTemplateResponseDto), message: z.string().optional() })
+      .passthrough(),
+  },
+  {
+    method: 'get',
+    path: '/strategy-plaza/templates/:id',
+    alias: 'StrategyPlazaProxyController_detail',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({ data: StrategyPlazaTemplateResponseDto, message: z.string().optional() })
+      .passthrough(),
+  },
+  {
+    method: 'post',
+    path: '/strategy-plaza/templates/:id/edit-session',
+    alias: 'StrategyPlazaProxyController_editSession',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({ data: StrategyPlazaEditSessionResponseDto, message: z.string().optional() })
+      .passthrough(),
+  },
+  {
+    method: 'post',
+    path: '/strategy-plaza/templates/:id/run',
+    alias: 'StrategyPlazaProxyController_run',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: z.object({ runRequestId: z.string().min(8) }).passthrough(),
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({ data: AccountAiQuantStrategyDetailResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'get',

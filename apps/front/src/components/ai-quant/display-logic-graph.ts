@@ -190,13 +190,16 @@ function formatPositionLossCondition(condition: DisplayLogicGraphCondition): str
 }
 
 function formatBollingerCondition(condition: DisplayLogicGraphCondition): string {
+  const period = formatNumber(condition.params?.period)
+  const stdDev = formatNumber(condition.params?.stdDev)
+  const suffix = period && stdDev ? `（${period}, ${stdDev}）` : ''
   switch (condition.key) {
     case 'bollinger.upper_break':
-      return '价格向上突破布林带上轨'
+      return `价格向上突破布林带上轨${suffix}`
     case 'bollinger.lower_break':
-      return '价格向下突破布林带下轨'
+      return `价格向下突破布林带下轨${suffix}`
     case 'bollinger.middle_revert':
-      return '价格回到布林带中轨（MA20）'
+      return period ? `价格回到布林带中轨（MA${period}）` : '价格回到布林带中轨'
     case 'bollinger.bars_outside': {
       const bars = formatNumber(condition.value) ?? '3'
       return `价格连续 ${bars} 根 K 线在布林带外`
@@ -208,29 +211,75 @@ function formatBollingerCondition(condition: DisplayLogicGraphCondition): string
 
 function formatRsiCondition(condition: DisplayLogicGraphCondition): string {
   const threshold = formatNumber(condition.value)
+  const period = formatNumber(condition.params?.period)
+  const label = period ? `RSI${period}` : 'RSI'
   switch (condition.key) {
     case 'rsi.threshold_lte':
-      return threshold ? `RSI 低于或等于 ${threshold}` : 'RSI 低于阈值'
+      return threshold ? `${label} 低于或等于 ${threshold}` : `${label} 低于阈值`
     case 'rsi.threshold_gte':
-      return threshold ? `RSI 高于或等于 ${threshold}` : 'RSI 高于阈值'
+      return threshold ? `${label} 高于或等于 ${threshold}` : `${label} 高于阈值`
     case 'rsi.cross_over':
-      return threshold ? `RSI 上穿 ${threshold}` : 'RSI 上穿阈值'
+      return threshold ? `${label} 上穿 ${threshold}` : `${label} 上穿阈值`
     case 'rsi.cross_under':
-      return threshold ? `RSI 下穿 ${threshold}` : 'RSI 下穿阈值'
+      return threshold ? `${label} 下穿 ${threshold}` : `${label} 下穿阈值`
     default:
       return 'RSI 条件'
   }
 }
 
 function formatMacdCondition(condition: DisplayLogicGraphCondition): string {
+  const fast = formatNumber(condition.params?.fastPeriod)
+  const slow = formatNumber(condition.params?.slowPeriod)
+  const signal = formatNumber(condition.params?.signalPeriod)
+  const label = fast && slow && signal ? `MACD ${fast}/${slow}/${signal}` : 'MACD'
   switch (condition.key) {
     case 'macd.golden_cross':
-      return 'MACD 金叉'
+      return `${label} 金叉`
     case 'macd.death_cross':
-      return 'MACD 死叉'
+      return `${label} 死叉`
     default:
       return 'MACD 条件'
   }
+}
+
+function formatMovingAverageCondition(condition: DisplayLogicGraphCondition): string {
+  const indicator = pickString(condition.params?.indicator)?.toUpperCase() ?? 'MA'
+  const fast = formatNumber(condition.params?.fastPeriod)
+  const slow = formatNumber(condition.params?.slowPeriod)
+  const fastLabel = fast ? `${indicator}${fast}` : `${indicator}短周期`
+  const slowLabel = slow ? `${indicator}${slow}` : `${indicator}长周期`
+  switch (condition.key) {
+    case 'ma.golden_cross':
+      return `${fastLabel} 上穿 ${slowLabel}`
+    case 'ma.death_cross':
+      return `${fastLabel} 下穿 ${slowLabel}`
+    default:
+      return '均线条件'
+  }
+}
+
+function formatRangePositionCondition(condition: DisplayLogicGraphCondition): string {
+  const period = formatNumber(condition.params?.period ?? condition.params?.lookbackBars)
+  const threshold = formatPercent(condition.value ?? condition.params?.thresholdPct)
+  const side = condition.key === 'price.range_position_lte' ? '下' : '上'
+  const prefix = period ? `最近 ${period} 根 K 线` : '最近区间'
+  return threshold ? `${prefix}区间${side} ${threshold}%` : `${prefix}区间${side}方`
+}
+
+function formatBreakoutCondition(condition: DisplayLogicGraphCondition): string {
+  const period = formatNumber(condition.params?.period)
+  const buffer = formatNumber(condition.params?.bufferPct)
+  const direction = condition.key === 'breakout.channel_high_break'
+    ? '突破'
+    : '跌回'
+  const target = condition.key === 'breakout.channel_high_break'
+    ? '高点'
+    : '低点'
+  const periodText = period ? `最近 ${period} 根 K 线${target}` : `近期${target}`
+  return [
+    `${direction}${periodText}`,
+    buffer ? `突破缓冲 ${buffer}%` : null,
+  ].filter((item): item is string => Boolean(item)).join('，')
 }
 
 function formatGridCondition(condition: DisplayLogicGraphCondition): string {
@@ -272,6 +321,9 @@ function formatConditionText(condition: DisplayLogicGraphCondition | undefined):
     case 'bollinger.middle_revert':
     case 'bollinger.bars_outside':
       return formatBollingerCondition(condition)
+    case 'ma.golden_cross':
+    case 'ma.death_cross':
+      return formatMovingAverageCondition(condition)
     case 'rsi.threshold_lte':
     case 'rsi.threshold_gte':
     case 'rsi.cross_over':
@@ -280,6 +332,12 @@ function formatConditionText(condition: DisplayLogicGraphCondition | undefined):
     case 'macd.golden_cross':
     case 'macd.death_cross':
       return formatMacdCondition(condition)
+    case 'price.range_position_lte':
+    case 'price.range_position_gte':
+      return formatRangePositionCondition(condition)
+    case 'breakout.channel_high_break':
+    case 'breakout.channel_low_break':
+      return formatBreakoutCondition(condition)
     case 'grid.range_rebalance':
       return formatGridCondition(condition)
     default:

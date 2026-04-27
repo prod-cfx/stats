@@ -1,5 +1,6 @@
 import { ErrorCode } from '@ai/shared'
 import { HttpStatus, Injectable } from '@nestjs/common'
+import { resolveBackendApiBaseUrl } from '@/common/auth/backend-api-base-url'
 import { DomainException } from '@/common/exceptions/domain.exception'
 // eslint-disable-next-line ts/consistent-type-imports -- Nest DI requires value import with emitDecoratorMetadata
 import { EnvService } from '@/common/services/env.service'
@@ -95,11 +96,7 @@ export class AccountStrategyCallerIdentityService {
   }
 
   private resolveBackendApiBaseUrl(): string {
-    const configured = this.env.getString('BACKEND_API_BASE_URL')?.trim()
-    if (configured) {
-      return configured.replace(/\/$/, '')
-    }
-    return 'http://127.0.0.1:3000/api/v1'
+    return resolveBackendApiBaseUrl(this.env)
   }
 
   private extractUserId(payload: unknown): string | null {

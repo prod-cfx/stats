@@ -421,6 +421,22 @@ export class CanonicalSpecV2IrCompilerService {
         )
       }
 
+      case 'price.range_position_lte':
+      case 'price.range_position_gte': {
+        const period = this.readNumber([atom.params?.period, atom.params?.lookbackBars], 20)
+        const rangePositionRef = this.ensureRangePositionSeries(context, period)
+        const thresholdRef = this.ensureConstSeries(
+          context,
+          this.normalizeRangePositionThreshold(this.readNumber([atom.value, atom.params?.thresholdPct], 0.5)),
+        )
+        return this.upsertPredicate(
+          context.predicateMap,
+          `${seed}_${atom.key.replace(/\./g, '_')}`,
+          atom.key === 'price.range_position_lte' ? 'LTE' : 'GTE',
+          [rangePositionRef, thresholdRef],
+        )
+      }
+
       case 'ma.golden_cross':
       case 'ma.death_cross': {
         const fastRef = this.ensureMovingAverageSeries(context, context.movingAverage.fast)
@@ -730,6 +746,23 @@ export class CanonicalSpecV2IrCompilerService {
         id,
         kind,
         timeframe: context.timeframe,
+        params: { period },
+      })
+    }
+    return id
+  }
+
+  private ensureRangePositionSeries(context: CompileContext, period: number): string {
+    const closeRef = this.ensurePriceSeries(context, 'close')
+    const highRef = this.ensureChannelSeries(context, 'HIGHEST_HIGH', period)
+    const lowRef = this.ensureChannelSeries(context, 'LOWEST_LOW', period)
+    const id = `range_position_pct_${period}_${context.timeframe}`
+    if (!context.seriesMap.has(id)) {
+      context.seriesMap.set(id, {
+        id,
+        kind: 'RANGE_POSITION_PCT',
+        timeframe: context.timeframe,
+        inputs: [closeRef, highRef, lowRef],
         params: { period },
       })
     }
@@ -1071,6 +1104,14 @@ export class CanonicalSpecV2IrCompilerService {
       case 'breakout.channel_low_break':
         return `CROSS_UNDER(CLOSE,LOWEST_LOW(${this.readNumber([condition.params?.period], 20)}))`
 
+      case 'price.range_position_lte':
+      case 'price.range_position_gte': {
+        const operator = condition.key === 'price.range_position_lte' ? 'LTE' : 'GTE'
+        const period = this.readNumber([condition.params?.period, condition.params?.lookbackBars], 20)
+        const threshold = this.normalizeRangePositionThreshold(this.readNumber([condition.value, condition.params?.thresholdPct], 0.5))
+        return `${operator}(RANGE_POSITION_PCT(CLOSE,HIGHEST_HIGH(${period}),LOWEST_LOW(${period})),${threshold})`
+      }
+
       case 'risk.time_stop_bars':
         return `GTE(POSITION_BARS_HELD,${this.readNumber([condition.value], 0)})`
 
@@ -1169,5 +1210,11 @@ export class CanonicalSpecV2IrCompilerService {
   private normalizePositionPnlPctThreshold(value: number): number {
     if (!Number.isFinite(value)) return value
     return Math.abs(value) <= 1 ? value * 100 : value
+  }
+
+  private normalizeRangePositionThreshold(value: number): number {
+    if (!Number.isFinite(value)) return 0.5
+    const normalized = value > 1 ? value / 100 : value
+    return Number(Math.min(1, Math.max(0, normalized)).toFixed(4))
   }
 }

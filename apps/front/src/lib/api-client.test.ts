@@ -25,13 +25,14 @@ describe('api-client env resolution', () => {
     }
   })
 
-  it('falls back to NEXT_PUBLIC_API_SERVER_URL when NEXT_PUBLIC_API_BASE_URL is placeholder text', async () => {
+  it('uses same-origin API base when public API base URL is placeholder text', async () => {
     process.env.NEXT_PUBLIC_API_BASE_URL = '__SET_IN_env.local__'
     process.env.NEXT_PUBLIC_API_SERVER_URL = 'https://cfx-backend-staging.devbase.cloud'
 
-    const { API_BASE_URL } = await loadApiClient()
+    const { API_BASE_URL, SERVER_API_BASE_URL } = await loadApiClient()
 
-    expect(API_BASE_URL).toBe('https://cfx-backend-staging.devbase.cloud/api/v1')
+    expect(API_BASE_URL).toBe('/api/v1')
+    expect(SERVER_API_BASE_URL).toBe('https://cfx-backend-staging.devbase.cloud/api/v1')
   })
 
   it('builds SERVER_API_BASE_URL as absolute when NEXT_PUBLIC_API_BASE_URL is relative', async () => {
@@ -47,8 +48,9 @@ describe('api-client env resolution', () => {
     process.env.NEXT_PUBLIC_API_BASE_URL = 'https://api.example.com/api/v1'
     process.env.NEXT_PUBLIC_API_SERVER_URL = 'http://localhost:3000'
 
-    const { SERVER_API_BASE_URL } = await loadApiClient()
+    const { API_BASE_URL, SERVER_API_BASE_URL } = await loadApiClient()
 
+    expect(API_BASE_URL).toBe('/api/v1')
     expect(SERVER_API_BASE_URL).toBe('https://api.example.com/api/v1')
   })
 

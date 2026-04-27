@@ -29,6 +29,8 @@ export type CanonicalRuleKeyValue = (typeof CANONICAL_RULE_KEYS)[keyof typeof CA
 export const FIRST_WAVE_TRIGGER_ATOMS = [
   'execution.on_start',
   'price.percent_change',
+  'price.range_position_lte',
+  'price.range_position_gte',
   'price.breakout_up',
   'price.breakout_down',
   'indicator.cross_over',

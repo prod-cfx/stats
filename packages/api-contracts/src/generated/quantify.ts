@@ -1073,138 +1073,70 @@ const UpdateStrategyTemplateDto = z
   })
   .partial()
   .passthrough()
-const LlmStrategyResponseDto = z
+const StrategyPlazaTemplateResponseDto = z
   .object({
     id: z.string(),
     name: z.string(),
     description: z.string(),
-    status: z.enum(['draft', 'live', 'archived']),
-    systemPrompt: z.string().nullish(),
-    initialPromptTemplate: z.string().nullish(),
-    allowedSymbols: z.array(z.string()).optional(),
-    allowedTimeframes: z.array(z.string()).optional(),
-    riskConfig: z.object({}).partial().passthrough().nullish(),
-    createdBy: z.string(),
-    updatedBy: z.string(),
-    metadata: z.object({}).partial().passthrough().nullish(),
-    createdAt: z.string().datetime({ offset: true }),
-    updatedAt: z.string().datetime({ offset: true }),
+    logicDescription: z.string(),
+    tags: z.array(z.string()),
+    riskLevel: z.enum(['low', 'medium', 'high']),
+    scenario: z.string(),
+    exchange: z.literal('okx'),
+    environment: z.literal('demo'),
+    marketType: z.enum(['spot', 'perp']),
+    symbol: z.string(),
+    timeframe: z.string(),
+    positionPct: z.number(),
+    leverage: z.number().nullish(),
+    status: z.enum(['live', 'hidden']),
+    displayOrder: z.number(),
+    displayMetrics: z
+      .object({
+        label: z.literal('official_sample_backtest'),
+        returnPct: z.number().nullable(),
+        winRatePct: z.number().nullable(),
+        maxDrawdownPct: z.number().nullable(),
+      })
+      .partial()
+      .passthrough(),
   })
   .passthrough()
-const CreateLlmStrategyDto = z
+const RunStrategyPlazaTemplateDto = z.object({ runRequestId: z.string() }).passthrough()
+const StrategyPlazaEditSessionResponseDto = z
+  .object({ sessionId: z.string(), templateId: z.string(), initialMessage: z.string() })
+  .passthrough()
+const CreateExchangeAccountDto = z
   .object({
-    name: z.string().max(100),
-    description: z.string().max(1000),
-    systemPrompt: z.string().max(10000).optional(),
-    initialPromptTemplate: z.string().max(10000).optional(),
-    allowedSymbols: z.array(z.string()).optional(),
-    allowedTimeframes: z.array(z.string()).optional(),
-    riskConfig: z.object({}).partial().passthrough().optional(),
-    metadata: z.object({}).partial().passthrough().optional(),
-    createdBy: z.string().optional(),
+    userId: z.string(),
+    userEmail: z.string().optional(),
+    exchangeId: z.enum(['binance', 'okx', 'hyperliquid']),
+    name: z.string().max(64).optional(),
+    isTestnet: z.boolean().optional().default(false),
+    marketType: z.enum(['spot', 'perp']).optional().default('spot'),
+    apiKey: z.string().optional(),
+    apiSecret: z.string().optional(),
+    passphrase: z.string().optional(),
+    mainWalletAddress: z
+      .string()
+      .regex(/^0x[0-9a-fA-F]{40}$/)
+      .optional(),
+    agentPrivateKey: z
+      .string()
+      .regex(/^0x[0-9a-fA-F]{64}$/)
+      .optional(),
   })
   .passthrough()
-const UpdateLlmStrategyDto = z
+const ExchangeAccountResponseDto = z
   .object({
-    name: z.string().max(100),
-    description: z.string().max(1000),
-    status: z.enum(['draft', 'live', 'archived']),
-    systemPrompt: z.string().max(10000),
-    initialPromptTemplate: z.string().max(10000),
-    allowedSymbols: z.array(z.string()).nullable(),
-    allowedTimeframes: z.array(z.string()).nullable(),
-    riskConfig: z.object({}).partial().passthrough().nullable(),
-    metadata: z.object({}).partial().passthrough().nullable(),
-    updatedBy: z.string(),
-  })
-  .partial()
-  .passthrough()
-const LlmStrategyInstanceResponseDto = z
-  .object({
-    id: z.string(),
-    strategyId: z.string(),
-    name: z.string(),
-    status: z.enum(['running', 'paused', 'stopped']),
-    mode: z.enum(['LIVE', 'PAPER', 'BACKTEST']),
-    llmModel: z.string(),
-    scheduleCron: z.string().nullish(),
-    maxToolCallsPerRun: z.number().nullish(),
-    maxRunsPerHour: z.number().nullish(),
-    cooldownSeconds: z.number().nullish(),
-    configOverrides: z.object({}).partial().passthrough().nullish(),
-    createdBy: z.string(),
-    updatedBy: z.string(),
-    metadata: z.object({}).partial().passthrough().nullish(),
-    lastRunAt: z.string().datetime({ offset: true }).nullish(),
-    createdAt: z.string().datetime({ offset: true }),
-    updatedAt: z.string().datetime({ offset: true }),
-  })
-  .passthrough()
-const CreateLlmStrategyInstanceDto = z
-  .object({
-    strategyId: z.string(),
-    name: z.string().max(100),
-    mode: z.enum(['LIVE', 'PAPER', 'BACKTEST']),
-    llmModel: z.string().max(100),
-    scheduleCron: z.string().max(100).optional(),
-    maxToolCallsPerRun: z.number().gte(1).lte(100).optional(),
-    maxRunsPerHour: z.number().gte(1).lte(60).optional(),
-    cooldownSeconds: z.number().gte(0).lte(86400).optional(),
-    configOverrides: z.object({}).partial().passthrough().optional(),
-    metadata: z.object({}).partial().passthrough().optional(),
-    createdBy: z.string().optional(),
-  })
-  .passthrough()
-const UpdateLlmStrategyInstanceDto = z
-  .object({
-    name: z.string().max(100),
-    status: z.enum(['running', 'paused', 'stopped']),
-    mode: z.enum(['LIVE', 'PAPER', 'BACKTEST']),
-    llmModel: z.string().max(100),
-    scheduleCron: z.string().max(100),
-    maxToolCallsPerRun: z.number().gte(1).lte(100).nullable(),
-    maxRunsPerHour: z.number().gte(1).lte(60).nullable(),
-    cooldownSeconds: z.number().gte(0).lte(86400).nullable(),
-    configOverrides: z.object({}).partial().passthrough().nullable(),
-    metadata: z.object({}).partial().passthrough().nullable(),
-    updatedBy: z.string(),
-  })
-  .partial()
-  .passthrough()
-const LlmStrategyRunResponseDto = z
-  .object({
-    id: z.string(),
-    strategyInstanceId: z.string(),
-    startedAt: z.string().datetime({ offset: true }),
-    finishedAt: z.string().datetime({ offset: true }).nullish(),
-    status: z.enum(['success', 'failed', 'skipped']),
-    reason: z.string().nullish(),
-    toolCallsCount: z.number().nullish(),
-    llmModel: z.string().nullish(),
-    rawDialogSnapshot: z.object({}).partial().passthrough().nullish(),
-    generatedSignalId: z.string().nullish(),
-    generatedSignal: TradingSignalResponseDto.nullish(),
-    errorMessage: z.string().nullish(),
-    metadata: z.object({}).partial().passthrough().nullish(),
-    createdAt: z.string().datetime({ offset: true }),
-    updatedAt: z.string().datetime({ offset: true }),
-  })
-  .passthrough()
-const LlmStrategyInstancePublicResponseDto = z
-  .object({
-    id: z.string(),
-    strategyId: z.string(),
-    strategyName: z.string(),
-    strategyDescription: z.string().nullish(),
-    name: z.string(),
-    description: z.string().nullish(),
-    status: z.enum(['running', 'paused', 'stopped']),
-    mode: z.enum(['LIVE', 'PAPER', 'BACKTEST']),
-    llmModel: z.string(),
-    lastRunAt: z.string().datetime({ offset: true }).nullish(),
-    isSubscribed: z.boolean(),
-    createdAt: z.string().datetime({ offset: true }),
-    updatedAt: z.string().datetime({ offset: true }),
+    id: z.string().nullish(),
+    exchangeId: z.enum(['binance', 'okx', 'hyperliquid']),
+    isBound: z.boolean(),
+    name: z.string().nullish(),
+    maskedCredential: z.string().nullish(),
+    isTestnet: z.boolean().nullish().default(false),
+    lastValidatedAt: z.string().datetime({ offset: true }).nullish(),
+    createdAt: z.string().datetime({ offset: true }).nullish(),
   })
   .passthrough()
 const AiQuantConversationMessageDto = z
@@ -1435,37 +1367,138 @@ const LlmCodegenEngineTestResponseDto = z
     rejectReason: z.string().optional(),
   })
   .passthrough()
-const CreateExchangeAccountDto = z
+const LlmStrategyResponseDto = z
   .object({
-    userId: z.string(),
-    userEmail: z.string().optional(),
-    exchangeId: z.enum(['binance', 'okx', 'hyperliquid']),
-    name: z.string().max(64).optional(),
-    isTestnet: z.boolean().optional().default(false),
-    marketType: z.enum(['spot', 'perp']).optional().default('spot'),
-    apiKey: z.string().optional(),
-    apiSecret: z.string().optional(),
-    passphrase: z.string().optional(),
-    mainWalletAddress: z
-      .string()
-      .regex(/^0x[0-9a-fA-F]{40}$/)
-      .optional(),
-    agentPrivateKey: z
-      .string()
-      .regex(/^0x[0-9a-fA-F]{64}$/)
-      .optional(),
+    id: z.string(),
+    name: z.string(),
+    description: z.string(),
+    status: z.enum(['draft', 'live', 'archived']),
+    systemPrompt: z.string().nullish(),
+    initialPromptTemplate: z.string().nullish(),
+    allowedSymbols: z.array(z.string()).optional(),
+    allowedTimeframes: z.array(z.string()).optional(),
+    riskConfig: z.object({}).partial().passthrough().nullish(),
+    createdBy: z.string(),
+    updatedBy: z.string(),
+    metadata: z.object({}).partial().passthrough().nullish(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
   })
   .passthrough()
-const ExchangeAccountResponseDto = z
+const CreateLlmStrategyDto = z
   .object({
-    id: z.string().nullish(),
-    exchangeId: z.enum(['binance', 'okx', 'hyperliquid']),
-    isBound: z.boolean(),
-    name: z.string().nullish(),
-    maskedCredential: z.string().nullish(),
-    isTestnet: z.boolean().nullish().default(false),
-    lastValidatedAt: z.string().datetime({ offset: true }).nullish(),
-    createdAt: z.string().datetime({ offset: true }).nullish(),
+    name: z.string().max(100),
+    description: z.string().max(1000),
+    systemPrompt: z.string().max(10000).optional(),
+    initialPromptTemplate: z.string().max(10000).optional(),
+    allowedSymbols: z.array(z.string()).optional(),
+    allowedTimeframes: z.array(z.string()).optional(),
+    riskConfig: z.object({}).partial().passthrough().optional(),
+    metadata: z.object({}).partial().passthrough().optional(),
+    createdBy: z.string().optional(),
+  })
+  .passthrough()
+const UpdateLlmStrategyDto = z
+  .object({
+    name: z.string().max(100),
+    description: z.string().max(1000),
+    status: z.enum(['draft', 'live', 'archived']),
+    systemPrompt: z.string().max(10000),
+    initialPromptTemplate: z.string().max(10000),
+    allowedSymbols: z.array(z.string()).nullable(),
+    allowedTimeframes: z.array(z.string()).nullable(),
+    riskConfig: z.object({}).partial().passthrough().nullable(),
+    metadata: z.object({}).partial().passthrough().nullable(),
+    updatedBy: z.string(),
+  })
+  .partial()
+  .passthrough()
+const LlmStrategyInstanceResponseDto = z
+  .object({
+    id: z.string(),
+    strategyId: z.string(),
+    name: z.string(),
+    status: z.enum(['running', 'paused', 'stopped']),
+    mode: z.enum(['LIVE', 'PAPER', 'BACKTEST']),
+    llmModel: z.string(),
+    scheduleCron: z.string().nullish(),
+    maxToolCallsPerRun: z.number().nullish(),
+    maxRunsPerHour: z.number().nullish(),
+    cooldownSeconds: z.number().nullish(),
+    configOverrides: z.object({}).partial().passthrough().nullish(),
+    createdBy: z.string(),
+    updatedBy: z.string(),
+    metadata: z.object({}).partial().passthrough().nullish(),
+    lastRunAt: z.string().datetime({ offset: true }).nullish(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough()
+const CreateLlmStrategyInstanceDto = z
+  .object({
+    strategyId: z.string(),
+    name: z.string().max(100),
+    mode: z.enum(['LIVE', 'PAPER', 'BACKTEST']),
+    llmModel: z.string().max(100),
+    scheduleCron: z.string().max(100).optional(),
+    maxToolCallsPerRun: z.number().gte(1).lte(100).optional(),
+    maxRunsPerHour: z.number().gte(1).lte(60).optional(),
+    cooldownSeconds: z.number().gte(0).lte(86400).optional(),
+    configOverrides: z.object({}).partial().passthrough().optional(),
+    metadata: z.object({}).partial().passthrough().optional(),
+    createdBy: z.string().optional(),
+  })
+  .passthrough()
+const UpdateLlmStrategyInstanceDto = z
+  .object({
+    name: z.string().max(100),
+    status: z.enum(['running', 'paused', 'stopped']),
+    mode: z.enum(['LIVE', 'PAPER', 'BACKTEST']),
+    llmModel: z.string().max(100),
+    scheduleCron: z.string().max(100),
+    maxToolCallsPerRun: z.number().gte(1).lte(100).nullable(),
+    maxRunsPerHour: z.number().gte(1).lte(60).nullable(),
+    cooldownSeconds: z.number().gte(0).lte(86400).nullable(),
+    configOverrides: z.object({}).partial().passthrough().nullable(),
+    metadata: z.object({}).partial().passthrough().nullable(),
+    updatedBy: z.string(),
+  })
+  .partial()
+  .passthrough()
+const LlmStrategyRunResponseDto = z
+  .object({
+    id: z.string(),
+    strategyInstanceId: z.string(),
+    startedAt: z.string().datetime({ offset: true }),
+    finishedAt: z.string().datetime({ offset: true }).nullish(),
+    status: z.enum(['success', 'failed', 'skipped']),
+    reason: z.string().nullish(),
+    toolCallsCount: z.number().nullish(),
+    llmModel: z.string().nullish(),
+    rawDialogSnapshot: z.object({}).partial().passthrough().nullish(),
+    generatedSignalId: z.string().nullish(),
+    generatedSignal: TradingSignalResponseDto.nullish(),
+    errorMessage: z.string().nullish(),
+    metadata: z.object({}).partial().passthrough().nullish(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
+  })
+  .passthrough()
+const LlmStrategyInstancePublicResponseDto = z
+  .object({
+    id: z.string(),
+    strategyId: z.string(),
+    strategyName: z.string(),
+    strategyDescription: z.string().nullish(),
+    name: z.string(),
+    description: z.string().nullish(),
+    status: z.enum(['running', 'paused', 'stopped']),
+    mode: z.enum(['LIVE', 'PAPER', 'BACKTEST']),
+    llmModel: z.string(),
+    lastRunAt: z.string().datetime({ offset: true }).nullish(),
+    isSubscribed: z.boolean(),
+    createdAt: z.string().datetime({ offset: true }),
+    updatedAt: z.string().datetime({ offset: true }),
   })
   .passthrough()
 const CreateSubscriptionDto = z
@@ -1666,14 +1699,11 @@ export const schemas = {
   StrategyTemplateResponseDto,
   CreateStrategyTemplateDto,
   UpdateStrategyTemplateDto,
-  LlmStrategyResponseDto,
-  CreateLlmStrategyDto,
-  UpdateLlmStrategyDto,
-  LlmStrategyInstanceResponseDto,
-  CreateLlmStrategyInstanceDto,
-  UpdateLlmStrategyInstanceDto,
-  LlmStrategyRunResponseDto,
-  LlmStrategyInstancePublicResponseDto,
+  StrategyPlazaTemplateResponseDto,
+  RunStrategyPlazaTemplateDto,
+  StrategyPlazaEditSessionResponseDto,
+  CreateExchangeAccountDto,
+  ExchangeAccountResponseDto,
   AiQuantConversationMessageDto,
   AiQuantConversationBacktestRangeDto,
   AiQuantConversationBacktestExecutionDto,
@@ -1694,8 +1724,14 @@ export const schemas = {
   ContinueCodegenSessionDto,
   TestLlmCodegenEngineDto,
   LlmCodegenEngineTestResponseDto,
-  CreateExchangeAccountDto,
-  ExchangeAccountResponseDto,
+  LlmStrategyResponseDto,
+  CreateLlmStrategyDto,
+  UpdateLlmStrategyDto,
+  LlmStrategyInstanceResponseDto,
+  CreateLlmStrategyInstanceDto,
+  UpdateLlmStrategyInstanceDto,
+  LlmStrategyRunResponseDto,
+  LlmStrategyInstancePublicResponseDto,
   CreateSubscriptionDto,
   SubscriptionStatus,
   SubscriptionResponseDto,
@@ -3964,6 +4000,88 @@ const endpoints = makeApi([
         .partial()
         .passthrough(),
     ),
+  },
+  {
+    method: 'get',
+    path: '/strategy-plaza/templates',
+    alias: 'StrategyPlazaController_list',
+    requestFormat: 'json',
+    response: z
+      .object({ data: z.array(StrategyPlazaTemplateResponseDto), message: z.string().optional() })
+      .passthrough(),
+  },
+  {
+    method: 'get',
+    path: '/strategy-plaza/templates/:id',
+    alias: 'StrategyPlazaController_detail',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+    ],
+    response: z
+      .object({ data: StrategyPlazaTemplateResponseDto, message: z.string().optional() })
+      .passthrough(),
+  },
+  {
+    method: 'post',
+    path: '/strategy-plaza/templates/:id/edit-session',
+    alias: 'StrategyPlazaController_editSession',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+    ],
+    response: z
+      .object({ data: StrategyPlazaEditSessionResponseDto, message: z.string().optional() })
+      .passthrough(),
+  },
+  {
+    method: 'post',
+    path: '/strategy-plaza/templates/:id/run',
+    alias: 'StrategyPlazaController_run',
+    requestFormat: 'json',
+    parameters: [
+      {
+        name: 'body',
+        type: 'Body',
+        schema: z.object({ runRequestId: z.string() }).passthrough(),
+      },
+      {
+        name: 'id',
+        type: 'Path',
+        schema: z.string(),
+      },
+      {
+        name: 'authorization',
+        type: 'Header',
+        schema: z.string(),
+      },
+      {
+        name: 'x-user-id',
+        type: 'Header',
+        schema: z.string().optional(),
+      },
+    ],
+    response: z
+      .object({ data: AccountStrategyDetailResponseDto, message: z.string().optional() })
+      .passthrough(),
   },
   {
     method: 'post',

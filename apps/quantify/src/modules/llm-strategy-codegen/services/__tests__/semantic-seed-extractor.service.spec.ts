@@ -139,6 +139,17 @@ describe('SemanticSeedExtractorService', () => {
     }))
   })
 
+  it('canonicalizes OKX swap instrument ids into strategy symbols', () => {
+    const patch = service.extract('基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建 MA 6/48 均线交叉趋势跟随策略。')
+
+    expect(patch.contextSlots).toEqual(expect.objectContaining({
+      exchange: 'okx',
+      marketType: 'perp',
+      symbol: 'BTCUSDT',
+      timeframe: '15m',
+    }))
+  })
+
   it('extracts Chinese percent sizing and timeframes in deterministic seed fallback wording', () => {
     const patch = service.extract('BTCUSDT 3分钟之内跌百分1买入；15分钟之内涨百分2卖出；单笔用百分10资金')
 
@@ -526,12 +537,17 @@ describe('SemanticSeedExtractorService', () => {
     ]))
   })
 
-  it('does not emit MA crossover triggers for MACD金叉 wording', () => {
+  it('does not emit MA or price-reference triggers for MACD金叉 wording', () => {
     const patch = service.extract('MACD 金叉做多；单笔 10%。')
 
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        params: expect.objectContaining({ indicator: 'macd' }),
+      }),
+    ]))
     expect(patch.triggers).not.toEqual(expect.arrayContaining([
-      expect.objectContaining({ key: 'indicator.cross_over' }),
-      expect.objectContaining({ key: 'indicator.cross_under' }),
+      expect.objectContaining({ params: expect.objectContaining({ indicator: 'ma' }) }),
       expect.objectContaining({ key: 'indicator.above' }),
       expect.objectContaining({ key: 'indicator.below' }),
     ]))
@@ -689,6 +705,37 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.triggers?.find(trigger => trigger.key === 'bollinger.touch_middle')?.params).not.toHaveProperty('confirmationMode')
   })
 
+  it('extracts optimized Bollinger parameters from the official reversion template', () => {
+    const patch = service.extract('基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建布林带均值回归策略。入场规则：价格触及布林带 30 周期 0.9 倍标准差下轨时做多开仓；出场规则：价格回归布林带中轨时平多；风控：仓位 35%，2 倍杠杆，止损 3%，止盈 0.5%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'bollinger.touch_lower',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          band: 'lower',
+          period: 30,
+          stdDev: 0.9,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_middle',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          band: 'middle',
+          period: 30,
+          stdDev: 0.9,
+        }),
+      }),
+    ]))
+    expect(patch.actions).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'open_long' }),
+      expect.objectContaining({ key: 'close_long' }),
+    ]))
+  })
+
   it('respects explicit long intent for Bollinger upper-band wording', () => {
     const patch = service.extract('突破布林带上轨买入做多；单笔 10%。')
 
@@ -803,6 +850,133 @@ describe('SemanticSeedExtractorService', () => {
           rangeUpper: 80000,
           stepPct: 0.5,
           sideMode: 'bidirectional',
+        }),
+      }),
+    ]))
+  })
+
+  it('extracts rolling range-position semantics from the official grid-range template', () => {
+    const patch = service.extract('基于 OKX 模拟盘 BTC-USDT 现货 15m，创建网格区间策略。入场规则：价格位于最近 36 根 K 线区间下 20% 时买入；出场规则：价格回到区间上 55% 或盈利达到 0.45% 时卖出平仓；风控：单次仓位 25%，不使用杠杆，止损 3%。')
+
+    expect(patch).toEqual(expect.objectContaining({
+      contextSlots: expect.objectContaining({
+        exchange: 'okx',
+        marketType: 'spot',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+      }),
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'price.range_position_lte',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            lookbackBars: 36,
+            thresholdPct: 20,
+          }),
+        }),
+        expect.objectContaining({
+          key: 'price.range_position_gte',
+          phase: 'exit',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            lookbackBars: 36,
+            thresholdPct: 55,
+          }),
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'open_long' }),
+        expect.objectContaining({ key: 'close_long' }),
+      ]),
+      risk: expect.arrayContaining([
+        expect.objectContaining({ key: 'risk.stop_loss_pct', params: expect.objectContaining({ valuePct: 3 }) }),
+        expect.objectContaining({ key: 'risk.take_profit_pct', params: expect.objectContaining({ valuePct: 0.45 }) }),
+      ]),
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.25,
+        positionMode: 'long_only',
+      },
+    }))
+  })
+
+  it('extracts RSI reversal semantics from the official RSI template', () => {
+    const patch = service.extract('基于 OKX 模拟盘 ETH-USDT 现货 15m，创建 RSI 反转策略。入场规则：RSI14 从 38 下方向上穿回 38 时买入；出场规则：RSI14 高于 64 时卖出平仓；风控：仓位 25%，不使用杠杆，止损 5%，止盈 0.5%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'rsi',
+          period: 14,
+          value: 38,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'oscillator.rsi_gte',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          period: 14,
+          value: 64,
+        }),
+      }),
+    ]))
+  })
+
+  it('extracts breakout-tracking semantics from the official breakout template', () => {
+    const patch = service.extract('基于 OKX 模拟盘 BTC-USDT-SWAP 合约 15m，创建突破追踪策略。入场规则：价格突破最近 24 根 K 线高点且突破缓冲 0.25% 时做多开仓；出场规则：价格跌回最近 12 根 K 线低点时平多；风控：仓位 25%，2 倍杠杆，止损 3%，止盈 0.6%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'price.breakout_up',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          period: 24,
+          reference: 'channel_high',
+          bufferPct: 0.25,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'price.breakout_down',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          period: 12,
+          reference: 'channel_low',
+        }),
+      }),
+    ]))
+  })
+
+  it('extracts MACD DIF/DEA cross semantics from the official MACD template', () => {
+    const patch = service.extract('基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建 MACD 16/34/12 金叉死叉策略。入场规则：MACD DIF 上穿 DEA 时做多开仓；出场规则：MACD DIF 下穿 DEA 时平多；风控：仓位 35%，2 倍杠杆，止损 2%，止盈 0.5%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.cross_over',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'macd',
+          fastPeriod: 16,
+          slowPeriod: 34,
+          signalPeriod: 12,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.cross_under',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'macd',
+          fastPeriod: 16,
+          slowPeriod: 34,
+          signalPeriod: 12,
         }),
       }),
     ]))

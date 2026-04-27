@@ -9,6 +9,7 @@ import { QuantifyAiQuantClient } from './clients/quantify-ai-quant.client'
 import { LlmStrategyCodegenController } from './llm-strategy-codegen.controller'
 import { LlmStrategyInstancesController } from './llm-strategy-instances.controller'
 import { LlmStrategySubscriptionsController } from './llm-strategy-subscriptions.controller'
+import { StrategyPlazaProxyController } from './strategy-plaza.controller'
 
 @Module({
   imports: [AuthModule, AccountExchangeAccountsModule],
@@ -19,6 +20,7 @@ import { LlmStrategySubscriptionsController } from './llm-strategy-subscriptions
     LlmStrategyCodegenController,
     LlmStrategyInstancesController,
     LlmStrategySubscriptionsController,
+    StrategyPlazaProxyController,
   ],
   providers: [AiQuantProxyService, QuantifyAiQuantClient],
 })

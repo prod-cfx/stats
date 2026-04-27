@@ -1273,13 +1273,27 @@ export function AiQuantPageClient({
     const intent = getIntent(INTENT_TTL_MS)
     if (!intent) return
 
-    clearIntent()
+    if (intent.type === 'plaza-run' || intent.type === 'plaza-edit') {
+      return
+    }
+
+    if (intent.type === 'plaza-chat-session') {
+      const targetConversation = conversations.find(conversation =>
+        conversation.llmCodegenSessionId === intent.sessionId || conversation.id === intent.sessionId,
+      )
+      if (!targetConversation) return
+      clearIntent()
+      setActiveConversationId(targetConversation.id)
+      return
+    }
 
     if (intent.type === 'chat') {
+      clearIntent()
       onSend(intent.draft)
       return
     }
 
+    clearIntent()
     const preset = findPresetById(intent.strategyId)
     if (!preset) {
       updateActiveConversation(curr => ({

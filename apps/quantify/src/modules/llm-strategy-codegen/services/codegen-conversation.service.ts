@@ -140,6 +140,7 @@ const DEFAULT_PROVIDER_CODE = 'strategy-codegen'
 const DEFAULT_MODEL = 'gpt-4'
 const DEFAULT_CODEGEN_STRICT_ENABLED = true
 const DEFAULT_CODEGEN_STRICT_FALLBACK = true
+const STRATEGY_PLAZA_RUN_SESSION_ID_PREFIX = 'strategy-plaza:official:'
 const DEFAULT_CODEGEN_STRICT_UNSUPPORTED_TTL_MS = 10 * 60 * 1000
 
 const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
@@ -314,14 +315,16 @@ export class CodegenConversationService {
   }
 
   async listConversations(userId: string): Promise<AiQuantConversationResponseDto[]> {
-    let conversations = await this.conversationsRepo.listByUser(userId)
-    const knownSessionIds = new Set(await this.conversationsRepo.listKnownSessionIdsByUser(userId))
-    const sessions = await this.sessionsRepo.listByUser(userId)
+    let conversations = this.excludeStrategyPlazaRunConversations(await this.conversationsRepo.listByUser(userId))
+    const knownSessionIds = new Set((await this.conversationsRepo.listKnownSessionIdsByUser(userId))
+      .filter(sessionId => !this.isStrategyPlazaRunSessionId(sessionId)))
+    const sessions = (await this.sessionsRepo.listByUser(userId))
+      .filter(session => !this.isStrategyPlazaRunSessionId(session.id))
     const sessionsNeedingProjection = sessions.filter(session => !knownSessionIds.has(session.id))
 
     if (sessionsNeedingProjection.length > 0) {
       await Promise.all(sessionsNeedingProjection.map(session => this.persistConversationProjectionForSessionId(session.id, userId)))
-      conversations = await this.conversationsRepo.listByUser(userId)
+      conversations = this.excludeStrategyPlazaRunConversations(await this.conversationsRepo.listByUser(userId))
     }
 
     return Promise.all(conversations.map(conversation => this.toConversationResponse(conversation)))
@@ -3039,6 +3042,9 @@ export class CodegenConversationService {
     sessionId: string,
     fallbackUserId?: string,
   ): Promise<void> {
+    if (this.isStrategyPlazaRunSessionId(sessionId)) {
+      return
+    }
     const session = await this.sessionsRepo.findById(sessionId)
     if (!session) {
       return
@@ -3056,6 +3062,16 @@ export class CodegenConversationService {
       title,
       messages,
     })
+  }
+
+  private excludeStrategyPlazaRunConversations(
+    conversations: AiQuantConversationSnapshotRecord[],
+  ): AiQuantConversationSnapshotRecord[] {
+    return conversations.filter(conversation => !this.isStrategyPlazaRunSessionId(conversation.codegenSessionId))
+  }
+
+  private isStrategyPlazaRunSessionId(sessionId: string): boolean {
+    return sessionId.startsWith(STRATEGY_PLAZA_RUN_SESSION_ID_PREFIX)
   }
 
   private normalizeDirectionClarificationAnswer(answer: string): 'long' | 'short' | null {
