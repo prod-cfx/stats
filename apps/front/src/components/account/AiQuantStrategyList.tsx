@@ -8,10 +8,12 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/use-auth'
 import {
   deleteAccountAiQuantStrategy,
+  fetchAccountAiQuantStrategyDetail,
   fetchAccountAiQuantStrategies,
   performAccountAiQuantStrategyAction,
 } from '@/lib/api'
-import { mapAccountStrategyListItemToRecord } from './ai-quant-strategy-api-adapter'
+import { StopRunningStrategyDialog } from '@/components/ai-quant/StopRunningStrategyDialog'
+import { mapAccountStrategyDetailToRecord, mapAccountStrategyListItemToRecord } from './ai-quant-strategy-api-adapter'
 import { buildDynamicParamSummary } from './dynamic-param-summary'
 
 function fmtTime(ts: string, lng: string) {
@@ -48,6 +50,18 @@ export function buildPrimarySummary(
   ]
 }
 
+type StrategyListTranslation = (key: string, options?: { defaultValue?: string }) => string
+
+export function getStrategyRuntimeActionLabel(
+  status: AiQuantStrategyViewState,
+  t: StrategyListTranslation,
+): string {
+  if (status === 'running') {
+    return t('aiQuant.actions.stopStrategy', { defaultValue: '停止策略' })
+  }
+  return t('aiQuant.actions.run')
+}
+
 export function AiQuantStrategyPrimarySummary({
   item,
   t,
@@ -81,6 +95,7 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
   const [error, setError] = useState<string | null>(null)
   const [pendingActionId, setPendingActionId] = useState<string | null>(null)
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null)
+  const [stopDialogStrategy, setStopDialogStrategy] = useState<AiQuantStrategyRecord | null>(null)
 
   const loadStrategies = useCallback(async () => {
     if (!session) return
@@ -114,6 +129,42 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
         userId: session.userId,
         action: status === 'running' ? 'run' : 'stop',
       })
+      await loadStrategies()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('aiQuant.errors.statusUpdateFailed', { defaultValue: 'Failed to update strategy status' }))
+    } finally {
+      setPendingActionId(null)
+    }
+  }
+
+  const openStopDialog = async (e: React.MouseEvent, item: AiQuantStrategyRecord) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!session) return
+
+    setPendingActionId(item.id)
+    setError(null)
+    try {
+      const detail = await fetchAccountAiQuantStrategyDetail(item.id, session.userId)
+      setStopDialogStrategy(mapAccountStrategyDetailToRecord(detail))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : t('aiQuant.errors.statusUpdateFailed', { defaultValue: 'Failed to update strategy status' }))
+    } finally {
+      setPendingActionId(null)
+    }
+  }
+
+  const handleStopDialogAction = async (action: 'stop' | 'liquidate_and_stop') => {
+    if (!session || !stopDialogStrategy) return
+
+    setPendingActionId(stopDialogStrategy.id)
+    setError(null)
+    try {
+      await performAccountAiQuantStrategyAction(stopDialogStrategy.id, {
+        userId: session.userId,
+        action,
+      })
+      setStopDialogStrategy(null)
       await loadStrategies()
     } catch (err) {
       setError(err instanceof Error ? err.message : t('aiQuant.errors.statusUpdateFailed', { defaultValue: 'Failed to update strategy status' }))
@@ -263,12 +314,15 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
                 </div>
                 
                 {item.status === 'running' ? (
-                  <span
+                  <button
+                    type="button"
+                    onClick={(e) => openStopDialog(e, item)}
+                    disabled={pendingActionId === item.id}
                     className="flex items-center gap-1 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-1.5 text-xs font-semibold text-red-600 transition hover:bg-red-500/20 dark:text-red-400"
                   >
                     <StopCircle className="h-3 w-3" />
-                    {t('aiQuant.actions.viewDetails', { defaultValue: '查看详情' })}
-                  </span>
+                    {getStrategyRuntimeActionLabel(item.status, t)}
+                  </button>
                 ) : (
                   <button
                     type="button"
@@ -302,6 +356,23 @@ export function AiQuantStrategyList({ lng }: { lng: 'zh' | 'en' }) {
           )
         })}
       </div>
+
+      <StopRunningStrategyDialog
+        open={stopDialogStrategy !== null}
+        strategy={stopDialogStrategy}
+        pending={stopDialogStrategy !== null && pendingActionId === stopDialogStrategy.id}
+        errorMessage={error}
+        onStopOnly={() => {
+          void handleStopDialogAction('stop')
+        }}
+        onLiquidateAndStop={() => {
+          void handleStopDialogAction('liquidate_and_stop')
+        }}
+        onCancel={() => {
+          if (pendingActionId) return
+          setStopDialogStrategy(null)
+        }}
+      />
     </section>
   )
 }
