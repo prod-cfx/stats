@@ -832,6 +832,12 @@ export class SemanticSeedExtractorService {
 
   private extractRsiThreshold(clause: string, period: number): number | null {
     const compact = clause.replace(/\s+/gu, '')
+    const explicitThreshold = this.extractNumber(compact, [
+      /(?:高于|大于|超过|上方|低于|小于|下方|上穿|穿回|下穿|跌破)(\d+(?:\.\d+)?)/u,
+      /(?:从)?(\d+(?:\.\d+)?)(?:上方|下方)(?:向上|向下)?(?:穿回|上穿|下穿|跌破)/u,
+    ])
+    if (explicitThreshold !== null) return explicitThreshold
+
     const numbers = Array.from(compact.matchAll(/\d+(?:\.\d+)?/gu))
       .map(match => Number(match[0]))
       .filter(value => Number.isFinite(value))
