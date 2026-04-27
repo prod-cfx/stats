@@ -2035,6 +2035,93 @@ describe('ai-quant-page-conversation', () => {
       expect(message).toContain('交易标的')
     })
 
+    it('prefers the latest codegen spec semantics over stale display graph text', () => {
+      const conversation = {
+        ...createConversation((key: string) => key),
+        params: {
+          exchange: 'okx',
+          symbol: 'ETHUSDT',
+          baseTimeframe: '15m',
+          buyWindowMin: 3,
+          buyDropPct: 1,
+          sellWindowMin: 15,
+          sellRisePct: 2,
+          positionPct: 25,
+        },
+        displayLogicGraph: {
+          blocks: [
+            {
+              type: 'IF',
+              items: [
+                {
+                  id: 'stale-entry',
+                  kind: 'condition',
+                  text: 'MA6 上穿 MA48',
+                },
+              ],
+            },
+          ],
+        },
+        codegenSpecDesc: {
+          rules: [
+            {
+              id: 'entry-rsi',
+              phase: 'entry',
+              condition: {
+                key: 'rsi.cross_over',
+                params: { period: 14, threshold: 38 },
+              },
+              actions: [{ type: 'OPEN_LONG' }],
+            },
+            {
+              id: 'exit-rsi',
+              phase: 'exit',
+              condition: {
+                key: 'rsi.gte',
+                params: { period: 14, threshold: 64 },
+              },
+              actions: [{ type: 'CLOSE_LONG' }],
+            },
+            {
+              id: 'risk-stop-loss',
+              phase: 'risk',
+              condition: {
+                key: 'position_loss_pct',
+                value: 0.05,
+              },
+              actions: [{ type: 'FORCE_EXIT' }],
+            },
+            {
+              id: 'risk-take-profit',
+              phase: 'risk',
+              condition: {
+                key: 'position_profit_pct',
+                value: 0.005,
+              },
+              actions: [{ type: 'CLOSE_LONG' }],
+            },
+          ],
+          lockedParams: {
+            exchange: 'okx',
+            symbol: 'ETHUSDT',
+            timeframe: '15m',
+            positionPct: 25,
+          },
+        },
+      } as ConversationState
+
+      const message = buildStrategyRevisionPromptMessage(conversation, '请继续补充')
+
+      expect(message).toContain('当前策略：')
+      expect(message).toContain('ETHUSDT')
+      expect(message).toContain('RSI')
+      expect(message).toContain('38')
+      expect(message).toContain('64')
+      expect(message).toContain('亏损达到 5%')
+      expect(message).toContain('盈利达到 0.5%')
+      expect(message).not.toContain('MA6 上穿 MA48')
+    })
+
     it('keeps an atomic revision prompt when only params exist', () => {
       const conversation = {
         ...createConversation((key: string) => key),

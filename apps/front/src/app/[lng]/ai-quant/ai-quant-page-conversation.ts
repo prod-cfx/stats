@@ -1593,6 +1593,27 @@ function collectRevisionGraphTexts(
   return items
 }
 
+function buildRevisionGraphFromCodegenSpec(
+  conversation: ConversationState,
+): DisplayLogicGraph | null {
+  if (!isRecord(conversation.codegenSpecDesc)) {
+    return null
+  }
+
+  const graph = normalizeDisplayLogicGraph(buildDisplayLogicGraphFromCodegenSpec({
+    specDesc: conversation.codegenSpecDesc,
+    fallbackMeta: {
+      exchange: conversation.params.exchange,
+      symbol: conversation.params.symbol,
+      timeframe: conversation.params.baseTimeframe,
+      baseTimeframe: conversation.params.baseTimeframe,
+      positionPct: conversation.params.positionPct,
+    },
+  }))
+
+  return collectRevisionGraphTexts(graph).length > 0 ? graph : null
+}
+
 export function buildStrategyRevisionPromptMessage(
   conversation: ConversationState,
   fallbackMessage: string,
@@ -1606,7 +1627,8 @@ export function buildStrategyRevisionPromptMessage(
       : null,
   ].filter((item): item is string => Boolean(item))
 
-  const graphTexts = collectRevisionGraphTexts(conversation.displayLogicGraph).slice(0, 8)
+  const revisionGraph = buildRevisionGraphFromCodegenSpec(conversation) ?? conversation.displayLogicGraph
+  const graphTexts = collectRevisionGraphTexts(revisionGraph).slice(0, 12)
   const currentStrategy = [...contextParts, ...graphTexts].join('；')
   if (!currentStrategy) {
     return [
