@@ -293,7 +293,7 @@ export class AccountStrategyViewService {
       ? resolveStrategyFundingFromStrategyAccount({
           account: {
             baseCurrency: this.readAccountBaseCurrency(account),
-            balance: overviewAvailableBalance,
+            balance: hasLocalActivity ? overviewAvailableBalance : account.balance,
             equity: overviewTotalEquity,
             initialBalance: account.initialBalance,
           },

@@ -254,7 +254,22 @@ export class AccountStrategyViewRepository {
               strategyId: existingInstance.strategyTemplateId,
             },
           },
-          select: { id: true },
+          select: {
+            id: true,
+            initialBalance: true,
+            balance: true,
+            equity: true,
+            totalRealizedPnl: true,
+            totalUnrealizedPnl: true,
+            _count: {
+              select: {
+                positions: true,
+                trades: true,
+                ledger: true,
+                signalExecutions: true,
+              },
+            },
+          },
         })
 
         if (!existingStrategyAccount) {
@@ -266,6 +281,19 @@ export class AccountStrategyViewRepository {
               strategyId: existingInstance.strategyTemplateId,
               strategyName: normalizedName,
               baseCurrency: 'USDT',
+              initialBalance,
+              balance: accountBalance,
+              equity: initialBalance,
+            },
+          })
+        }
+        else if (this.isPristineStrategyAccount(existingStrategyAccount)) {
+          const initialBalance = this.resolveInitialBalanceQuote(mergedParams)
+          const accountBalance = this.resolveAccountBalanceQuote(mergedParams, initialBalance)
+          await tx.userStrategyAccount.update({
+            where: { id: existingStrategyAccount.id },
+            data: {
+              strategyName: normalizedName,
               initialBalance,
               balance: accountBalance,
               equity: initialBalance,
@@ -305,6 +333,35 @@ export class AccountStrategyViewRepository {
       ...fundingSnapshot,
       fundingSource: mode === 'LIVE' ? 'exchange_live' : 'exchange_testnet',
     }
+  }
+
+  private isPristineStrategyAccount(account: {
+    initialBalance: unknown
+    balance: unknown
+    equity: unknown
+    totalRealizedPnl: unknown
+    totalUnrealizedPnl: unknown
+    _count?: {
+      positions?: number
+      trades?: number
+      ledger?: number
+      signalExecutions?: number
+    }
+  }): boolean {
+    const hasActivity =
+      (account._count?.positions ?? 0) > 0
+      || (account._count?.trades ?? 0) > 0
+      || (account._count?.ledger ?? 0) > 0
+      || (account._count?.signalExecutions ?? 0) > 0
+    if (hasActivity) return false
+
+    return this.toFiniteNumber(account.totalRealizedPnl) === 0
+      && this.toFiniteNumber(account.totalUnrealizedPnl) === 0
+  }
+
+  private toFiniteNumber(value: unknown): number | null {
+    const numeric = Number(value)
+    return Number.isFinite(numeric) ? numeric : null
   }
 
   private assertSnapshotBindingMatchesExistingInstance(input: {
