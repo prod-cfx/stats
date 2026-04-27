@@ -949,8 +949,8 @@ describe('AiQuantPageClient backtest range integration', () => {
       await Promise.resolve()
     })
 
-    expect(deleteAccountAiQuantStrategy).toHaveBeenCalledWith('strategy-stopped', 'u-1')
-    expect(deleteAiQuantConversation).toHaveBeenCalledWith('conv-stopped')
+    expect(deleteAccountAiQuantStrategy).not.toHaveBeenCalled()
+    expect(deleteAiQuantConversation).toHaveBeenCalledWith('conv-stopped', { deleteStoppedStrategy: true })
     expect(container.textContent).not.toContain('stopped-message')
   })
 

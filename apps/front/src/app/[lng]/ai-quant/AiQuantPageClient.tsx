@@ -37,7 +37,6 @@ import { applyCapabilitiesToParamSchema } from '@/components/ai-quant/strategy-p
 import { findPresetById } from '@/components/ai-quant/strategy-presets'
 import { useAuth } from '@/hooks/use-auth'
 import {
-  deleteAccountAiQuantStrategy,
   deleteAiQuantConversation,
   fetchAccountAiQuantStrategyDetail,
   fetchUserExchangeAccountStatuses,
@@ -832,15 +831,10 @@ export function AiQuantPageClient({
     serverConversationId: string
     deleteStoppedStrategy?: boolean
   }) {
-    if (args.deleteStoppedStrategy && args.conversation.publishedStrategyInstanceId && session?.userId) {
-      await deleteAccountAiQuantStrategy(args.conversation.publishedStrategyInstanceId, session.userId)
-      await deleteAiQuantConversation(args.serverConversationId)
+    if (args.deleteStoppedStrategy) {
+      await deleteAiQuantConversation(args.serverConversationId, { deleteStoppedStrategy: true })
     } else {
-      if (args.deleteStoppedStrategy) {
-        await deleteAiQuantConversation(args.serverConversationId, { deleteStoppedStrategy: true })
-      } else {
-        await deleteAiQuantConversation(args.serverConversationId)
-      }
+      await deleteAiQuantConversation(args.serverConversationId)
     }
     removeDeletedConversation(args.conversation.id)
   }
