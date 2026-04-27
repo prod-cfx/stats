@@ -169,6 +169,7 @@ function buildStrategyDetail(
     id: string
     status: 'running' | 'stopped' | 'draft'
     positionCount: number
+    publishedSnapshotId: string | null
   }> = {},
 ) {
   return {
@@ -197,7 +198,7 @@ function buildStrategyDetail(
       symbol: 'BTCUSDT',
       timeframe: '15m',
       positionPct: 10,
-      publishedSnapshotId: 'snapshot-1',
+      publishedSnapshotId: overrides.publishedSnapshotId ?? 'snapshot-1',
       snapshotHash: 'hash-1',
       paramSchema: null,
       paramValues: null,
@@ -224,7 +225,13 @@ function buildStrategyDetail(
   }
 }
 
-function seedDeployableConversation(now = Date.now()) {
+function seedDeployableConversation(
+  now = Date.now(),
+  overrides: Partial<{
+    publishedStrategyInstanceId: string | null
+    publishedSnapshotId: string | null
+  }> = {},
+) {
   localStorage.setItem('ai_quant_conversations_v1', JSON.stringify([
     {
       id: 'conv-1',
@@ -277,8 +284,8 @@ function seedDeployableConversation(now = Date.now()) {
         },
       },
       llmCodegenSessionId: null,
-      publishedStrategyInstanceId: 'strategy-1',
-      publishedSnapshotId: 'snapshot-1',
+      publishedStrategyInstanceId: overrides.publishedStrategyInstanceId ?? 'strategy-1',
+      publishedSnapshotId: overrides.publishedSnapshotId ?? 'snapshot-1',
       publishedSnapshotStrategyConfig: {
         exchange: 'binance',
         symbol: 'BTCUSDT',
@@ -426,6 +433,34 @@ describe('AiQuantPageClient deploy guard', () => {
 
     expect(container.querySelector('[data-testid="confirm-deploy"]')).toBeNull()
     expect(mockDeployAccountAiQuantStrategy).not.toHaveBeenCalled()
+  })
+
+  it('allows deploying a newly published snapshot even when an older strategy instance is linked', async () => {
+    seedDeployableConversation(Date.now(), {
+      publishedSnapshotId: 'snapshot-new',
+      publishedStrategyInstanceId: 'strategy-old',
+    })
+    mockFetchAccountAiQuantStrategyDetail.mockResolvedValueOnce(
+      buildStrategyDetail({
+        id: 'strategy-old',
+        status: 'running',
+        publishedSnapshotId: 'snapshot-old',
+      }),
+    )
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const deployButton = container.querySelector('[data-testid="open-deploy"]') as HTMLButtonElement | null
+    expect(container.querySelector('[data-testid="deployment-state"]')?.textContent).toBe('not_deployed')
+    expect(deployButton?.textContent).toBe('aiQuant.deploy')
+    expect(deployButton?.disabled).toBe(false)
   })
 
   it('locks deploy exchange and market type to the published snapshot truth', async () => {

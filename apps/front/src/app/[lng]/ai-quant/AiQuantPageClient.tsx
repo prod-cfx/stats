@@ -143,6 +143,21 @@ function isAccountStrategyNotFoundError(error: unknown): boolean {
     || candidate.details?.code === ACCOUNT_STRATEGY_NOT_FOUND_CODE
 }
 
+function isDeploymentDetailForPublishedSnapshot(
+  detail: AccountAiQuantStrategyDetail | null,
+  publishedSnapshotId: string | null | undefined,
+): boolean {
+  const currentPublishedSnapshotId = typeof publishedSnapshotId === 'string'
+    ? publishedSnapshotId.trim()
+    : ''
+  if (!currentPublishedSnapshotId) return true
+
+  const deployedPublishedSnapshotId = typeof detail?.snapshot?.publishedSnapshotId === 'string'
+    ? detail.snapshot.publishedSnapshotId.trim()
+    : ''
+  return deployedPublishedSnapshotId === currentPublishedSnapshotId
+}
+
 export function AiQuantPageClient({
   deployVersion = 'local-dev',
   serverOwnedConversations = false,
@@ -552,10 +567,15 @@ export function AiQuantPageClient({
     if (deploymentDetailStatus !== 'ready') {
       return 'unknown' as const
     }
+    if (!isDeploymentDetailForPublishedSnapshot(deploymentDetail, activeConversation?.publishedSnapshotId)) {
+      return 'not_deployed' as const
+    }
     return deploymentDetail?.status === 'running' ? 'running' as const : 'stopped' as const
   }, [
     activeConversation?.publishedStrategyInstanceId,
+    activeConversation?.publishedSnapshotId,
     deploymentDetail?.status,
+    deploymentDetail?.snapshot?.publishedSnapshotId,
     deploymentDetailStatus,
   ])
   const deployLabel = useMemo(() => {
