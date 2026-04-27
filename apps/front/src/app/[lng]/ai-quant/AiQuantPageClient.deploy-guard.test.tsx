@@ -592,6 +592,80 @@ describe('AiQuantPageClient deploy guard', () => {
     )
   })
 
+  it('defaults deploy leverage from the confirmed backtest config', async () => {
+    localStorage.clear()
+    seedDeployableConversation(Date.now())
+    const stored = JSON.parse(localStorage.getItem('ai_quant_conversations_v1') ?? '[]')
+    stored[0].paramValues = {
+      ...stored[0].paramValues,
+      backtestLeverage: 2,
+    }
+    stored[0].backtestDraftConfig = {
+      range: {
+        preset: '7D',
+        startAt: null,
+        endAt: null,
+      },
+      execution: {
+        initialCash: 1000,
+        leverage: 2,
+        slippageBps: 5,
+        feeBps: 2,
+        priceSource: 'close',
+        allowPartial: true,
+      },
+    }
+    stored[0].publishedSnapshotDeploymentExecutionDefaults = {
+      leverage: 1,
+      priceSource: 'close',
+      orderType: 'market',
+      timeInForce: 'GTC',
+    }
+    localStorage.setItem('ai_quant_conversations_v1', JSON.stringify(stored))
+
+    mockFetchUserExchangeAccountStatuses.mockReset()
+    mockDeployAccountAiQuantStrategy.mockReset()
+    mockFetchUserExchangeAccountStatuses.mockResolvedValue([
+      {
+        id: 'acct-binance-1',
+        exchangeId: 'binance',
+        isBound: true,
+        name: 'Binance Main',
+        maskedCredential: 'BIN****01',
+        isTestnet: false,
+        lastValidatedAt: null,
+        createdAt: null,
+      },
+    ])
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient />)
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      container.querySelector('[data-testid="open-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(container.querySelector('[data-testid="selected-leverage"]')?.textContent).toBe('2')
+
+    await act(async () => {
+      container.querySelector('[data-testid="select-account"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+      container.querySelector('[data-testid="confirm-deploy"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+    })
+
+    expect(mockDeployAccountAiQuantStrategy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        deploymentExecutionConfig: expect.objectContaining({
+          leverage: 2,
+        }),
+      }),
+    )
+  })
+
   it('omits deployment leverage for spot snapshots and keeps market type locked', async () => {
     localStorage.clear()
     seedDeployableConversation(Date.now())

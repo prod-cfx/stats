@@ -118,8 +118,12 @@ export function buildLocalizedBacktestErrorMessage(
       })
     case 'BACKTEST_SERVICE_TEMPORARILY_UNAVAILABLE':
     case 'SERVICE_TEMPORARILY_UNAVAILABLE':
+    case 'TOO_MANY_REQUESTS':
       return t('aiQuant.messages.backtestServiceTemporarilyUnavailable')
     default:
+      if (status === 429) {
+        return t('aiQuant.messages.backtestServiceTemporarilyUnavailable')
+      }
       return buildAiQuantErrorMessage(fallback, status, meta)
   }
 }

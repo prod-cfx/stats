@@ -1,4 +1,4 @@
-import { of } from 'rxjs'
+import { of, throwError } from 'rxjs'
 import { OkxMarketDataProvider } from '../okx-market-data.provider'
 
 describe('okx market data provider', () => {
@@ -7,7 +7,11 @@ describe('okx market data provider', () => {
   }
 
   const configServiceMock = {
-    get: jest.fn((_key: string, fallback?: unknown) => fallback),
+    get: jest.fn((key: string, fallback?: unknown) => {
+      if (key === 'marketData.okxRestMinIntervalMs') return 0
+      if (key === 'marketData.okxRestRetryDelayMs') return 0
+      return fallback
+    }),
   }
 
   let provider: OkxMarketDataProvider
@@ -53,6 +57,31 @@ describe('okx market data provider', () => {
     const [, requestConfig] = httpMock.get.mock.calls[0] as [string, { params: Record<string, string> }]
     expect(requestConfig.params.before).toBe(String(Date.parse('2026-04-01T04:45:00.000Z')))
     expect(requestConfig.params.after).toBeUndefined()
+  })
+
+  it('retries rate-limited history candle requests before returning bars', async () => {
+    const rateLimitError = Object.assign(new Error('Request failed with status code 429'), {
+      response: {
+        status: 429,
+        headers: {
+          'retry-after': '0',
+        },
+      },
+    })
+    httpMock.get
+      .mockReturnValueOnce(throwError(() => rateLimitError))
+      .mockReturnValueOnce(of({
+        data: {
+          code: '0',
+          msg: '',
+          data: [['1710000000000', '1', '2', '0.5', '1.5', '10', '', '20', '1']],
+        },
+      }))
+
+    const bars = await provider.fetchHistoricalBars({ symbol: 'BTCUSDT:PERP', timeframe: '1m', limit: 10 })
+
+    expect(httpMock.get).toHaveBeenCalledTimes(2)
+    expect(bars).toHaveLength(1)
   })
 
   it('dedupes requested symbols when filtering instruments', async () => {

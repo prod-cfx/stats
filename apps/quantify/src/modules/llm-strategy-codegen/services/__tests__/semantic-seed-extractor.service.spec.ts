@@ -705,6 +705,220 @@ describe('SemanticSeedExtractorService', () => {
     expect(patch.triggers?.find(trigger => trigger.key === 'bollinger.touch_middle')?.params).not.toHaveProperty('confirmationMode')
   })
 
+  it('binds split Bollinger band aliases back to the declared indicator context', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 1m，使用布林带(5,1)。价格触及或突破上轨时做空，价格触及或突破下轨时做多；多单在价格回到中轨时平仓，空单在价格回到中轨时平仓；单笔仓位 10%，止损 1%，止盈 1.5%。')
+
+    expect(patch).toEqual(expect.objectContaining({
+      contextSlots: expect.objectContaining({
+        exchange: 'okx',
+        marketType: 'perp',
+        symbol: 'BTCUSDT',
+        timeframe: '1m',
+      }),
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'bollinger.touch_upper',
+          phase: 'entry',
+          sideScope: 'short',
+          params: expect.objectContaining({
+            band: 'upper',
+            period: 5,
+            stdDev: 1,
+          }),
+        }),
+        expect.objectContaining({
+          key: 'bollinger.touch_lower',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            band: 'lower',
+            period: 5,
+            stdDev: 1,
+          }),
+        }),
+        expect.objectContaining({
+          key: 'bollinger.touch_middle',
+          phase: 'exit',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            band: 'middle',
+            period: 5,
+            stdDev: 1,
+          }),
+        }),
+        expect.objectContaining({
+          key: 'bollinger.touch_middle',
+          phase: 'exit',
+          sideScope: 'short',
+          params: expect.objectContaining({
+            band: 'middle',
+            period: 5,
+            stdDev: 1,
+          }),
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'open_short' }),
+        expect.objectContaining({ key: 'open_long' }),
+        expect.objectContaining({ key: 'close_long' }),
+        expect.objectContaining({ key: 'close_short' }),
+      ]),
+      risk: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'risk.stop_loss_pct',
+          params: { valuePct: 1, basis: 'entry_avg_price' },
+        }),
+        expect.objectContaining({
+          key: 'risk.take_profit_pct',
+          params: { valuePct: 1.5, basis: 'entry_avg_price' },
+        }),
+      ]),
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_short',
+      },
+    }))
+    expect(patch).not.toHaveProperty('entryRules')
+    expect(patch).not.toHaveProperty('exitRules')
+    expect(patch).not.toHaveProperty('riskRules')
+    expect(patch).not.toHaveProperty('grid')
+    expect(patch).not.toHaveProperty('families')
+    expect(patch).not.toHaveProperty('missingFields')
+  })
+
+  it('binds split Bollinger aliases from bare comma parameters', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 1m，使用布林带 5,1。价格触及或突破上轨时做空，价格触及或突破下轨时做多；多单在价格回到中轨时平仓，空单在价格回到中轨时平仓；单笔仓位 10%，止损 1%，止盈 1.5%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'bollinger.touch_upper',
+        phase: 'entry',
+        sideScope: 'short',
+        params: expect.objectContaining({
+          band: 'upper',
+          period: 5,
+          stdDev: 1,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_lower',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          band: 'lower',
+          period: 5,
+          stdDev: 1,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_middle',
+        phase: 'exit',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          band: 'middle',
+          period: 5,
+          stdDev: 1,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_middle',
+        phase: 'exit',
+        sideScope: 'short',
+        params: expect.objectContaining({
+          band: 'middle',
+          period: 5,
+          stdDev: 1,
+        }),
+      }),
+    ]))
+  })
+
+  it('does not infer split Bollinger upper/lower aliases from side words alone', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 1m，使用布林带(5,1)。上轨时做空，下轨时做多；单笔仓位 10%。')
+    const triggerKeys = patch.triggers?.map(trigger => trigger.key) ?? []
+    const actionKeys = patch.actions?.map(action => action.key) ?? []
+
+    expect(triggerKeys).not.toContain('bollinger.touch_upper')
+    expect(triggerKeys).not.toContain('bollinger.touch_lower')
+    expect(actionKeys).not.toContain('open_short')
+    expect(actionKeys).not.toContain('open_long')
+  })
+
+  it('requires explicit trade intent for split Bollinger upper/lower aliases', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 1m，使用布林带(5,1)。价格触及上轨，价格跌破下轨；单笔仓位 10%。')
+    const triggerKeys = patch.triggers?.map(trigger => trigger.key) ?? []
+
+    expect(triggerKeys).not.toContain('bollinger.touch_upper')
+    expect(triggerKeys).not.toContain('bollinger.touch_lower')
+  })
+
+  it('requires action semantics before extracting split Bollinger middle aliases', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 1m，使用布林带(5,1)。多单在中轨时平仓，空单在中轨时平仓；单笔仓位 10%。')
+
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: 'bollinger.touch_middle' }),
+    ]))
+  })
+
+  it('requires explicit exit intent before extracting split Bollinger middle aliases', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 1m，使用布林带(5,1)。价格回到中轨；单笔仓位 10%。')
+    const triggerKeys = patch.triggers?.map(trigger => trigger.key) ?? []
+
+    expect(triggerKeys).not.toContain('bollinger.touch_middle')
+  })
+
+  it('binds split Bollinger aliases to corrected parameters instead of stale ones', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 1m，更正：布林带(20,2) 改成 布林带(5,1)。价格触及上轨时做空，价格触及下轨时做多；单笔仓位 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'bollinger.touch_upper',
+        params: expect.objectContaining({
+          period: 5,
+          stdDev: 1,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_lower',
+        params: expect.objectContaining({
+          period: 5,
+          stdDev: 1,
+        }),
+      }),
+    ]))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'bollinger.touch_upper',
+        params: expect.objectContaining({
+          period: 20,
+          stdDev: 2,
+        }),
+      }),
+    ]))
+  })
+
+  it('binds split Bollinger aliases to corrected parameters when correction is split from the original declaration', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 1m，使用布林带(20,2)，更正：布林带(20,2) 改成 布林带(5,1)。价格触及上轨时做空，价格触及下轨时做多；单笔仓位 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'bollinger.touch_upper',
+        params: expect.objectContaining({
+          period: 5,
+          stdDev: 1,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'bollinger.touch_lower',
+        params: expect.objectContaining({
+          period: 5,
+          stdDev: 1,
+        }),
+      }),
+    ]))
+  })
+
   it('extracts optimized Bollinger parameters from the official reversion template', () => {
     const patch = service.extract('基于 OKX 模拟盘 ETH-USDT-SWAP 合约 15m，创建布林带均值回归策略。入场规则：价格触及布林带 30 周期 0.9 倍标准差下轨时做多开仓；出场规则：价格回归布林带中轨时平多；风控：仓位 35%，2 倍杠杆，止损 3%，止盈 0.5%。')
 
@@ -1007,6 +1221,295 @@ describe('SemanticSeedExtractorService', () => {
         }),
       ]),
     }))
+  })
+
+  it('binds split MA reference aliases back to the declared moving-average context', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 15m，使用 MA6。价格上穿该均线做多，价格下穿该均线平多，价格下穿该均线做空；单笔 10%。')
+
+    expect(patch).toEqual(expect.objectContaining({
+      contextSlots: expect.objectContaining({
+        exchange: 'okx',
+        marketType: 'perp',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+      }),
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'indicator.above',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            'reference.period': 6,
+          }),
+        }),
+        expect.objectContaining({
+          key: 'indicator.below',
+          phase: 'exit',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            'reference.period': 6,
+          }),
+        }),
+        expect.objectContaining({
+          key: 'indicator.below',
+          phase: 'entry',
+          sideScope: 'short',
+          params: expect.objectContaining({
+            indicator: 'ma',
+            'reference.period': 6,
+          }),
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'open_long' }),
+        expect.objectContaining({ key: 'close_long' }),
+        expect.objectContaining({ key: 'open_short' }),
+      ]),
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_short',
+      },
+    }))
+    expect(patch).not.toHaveProperty('entryRules')
+    expect(patch).not.toHaveProperty('exitRules')
+    expect(patch).not.toHaveProperty('riskRules')
+    expect(patch).not.toHaveProperty('grid')
+    expect(patch).not.toHaveProperty('families')
+    expect(patch).not.toHaveProperty('missingFields')
+  })
+
+  it('keeps explicit MA clauses ahead of a declared EMA alias context', () => {
+    const patch = service.extract('使用 EMA6。价格突破 MA50 买入；单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'ma',
+          'reference.period': 50,
+        }),
+      }),
+    ]))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        params: expect.objectContaining({
+          indicator: 'ema',
+          'reference.period': 50,
+        }),
+      }),
+    ]))
+  })
+
+  it('does not treat a lone MA token in a trigger clause as an alias declaration', () => {
+    const patch = service.extract('价格突破 MA50 买入，价格跌破该均线卖出；单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        phase: 'entry',
+        sideScope: 'long',
+        params: expect.objectContaining({
+          indicator: 'ma',
+          'reference.period': 50,
+        }),
+      }),
+    ]))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.below',
+        params: expect.objectContaining({
+          'reference.period': 50,
+        }),
+      }),
+    ]))
+  })
+
+  it('binds split MA aliases to corrected periods instead of stale ones', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 15m，使用 MA20，更正：改为 MA6。价格上穿该均线做多，价格下穿该均线平多；单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        params: expect.objectContaining({
+          indicator: 'ma',
+          'reference.period': 6,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'indicator.below',
+        params: expect.objectContaining({
+          indicator: 'ma',
+          'reference.period': 6,
+        }),
+      }),
+    ]))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'indicator.above',
+        params: expect.objectContaining({
+          'reference.period': 20,
+        }),
+      }),
+    ]))
+  })
+
+  it('binds split RSI threshold aliases back to the declared oscillator context', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 15m，使用 RSI 9。该 RSI 小于30做多，该 RSI 大于70平多，该 RSI 大于70做空；单笔 10%。')
+
+    expect(patch).toEqual(expect.objectContaining({
+      contextSlots: expect.objectContaining({
+        exchange: 'okx',
+        marketType: 'perp',
+        symbol: 'BTCUSDT',
+        timeframe: '15m',
+      }),
+      triggers: expect.arrayContaining([
+        expect.objectContaining({
+          key: 'oscillator.rsi_lte',
+          phase: 'entry',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            period: 9,
+            value: 30,
+          }),
+        }),
+        expect.objectContaining({
+          key: 'oscillator.rsi_gte',
+          phase: 'exit',
+          sideScope: 'long',
+          params: expect.objectContaining({
+            period: 9,
+            value: 70,
+          }),
+        }),
+        expect.objectContaining({
+          key: 'oscillator.rsi_gte',
+          phase: 'entry',
+          sideScope: 'short',
+          params: expect.objectContaining({
+            period: 9,
+            value: 70,
+          }),
+        }),
+      ]),
+      actions: expect.arrayContaining([
+        expect.objectContaining({ key: 'open_long' }),
+        expect.objectContaining({ key: 'close_long' }),
+        expect.objectContaining({ key: 'open_short' }),
+      ]),
+      position: {
+        mode: 'fixed_ratio',
+        value: 0.1,
+        positionMode: 'long_short',
+      },
+    }))
+    expect(patch).not.toHaveProperty('entryRules')
+    expect(patch).not.toHaveProperty('exitRules')
+    expect(patch).not.toHaveProperty('riskRules')
+    expect(patch).not.toHaveProperty('grid')
+    expect(patch).not.toHaveProperty('families')
+    expect(patch).not.toHaveProperty('missingFields')
+  })
+
+  it('binds split RSI aliases to corrected periods instead of stale ones', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 15m，使用 RSI 14，更正：改为 RSI 9。该 RSI 小于30做多，该 RSI 大于70平多；单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'oscillator.rsi_lte',
+        params: expect.objectContaining({
+          period: 9,
+          value: 30,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'oscillator.rsi_gte',
+        params: expect.objectContaining({
+          period: 9,
+          value: 70,
+        }),
+      }),
+    ]))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'oscillator.rsi_lte',
+        params: expect.objectContaining({
+          period: 14,
+        }),
+      }),
+    ]))
+  })
+
+  it('uses the latest RSI period when correction and trigger aliases are in the same segment', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 15m，使用 RSI 14，更正：改为 RSI 9，该 RSI 小于30做多，该 RSI 大于70平多；单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'oscillator.rsi_lte',
+        params: expect.objectContaining({
+          period: 9,
+          value: 30,
+        }),
+      }),
+      expect.objectContaining({
+        key: 'oscillator.rsi_gte',
+        params: expect.objectContaining({
+          period: 9,
+          value: 70,
+        }),
+      }),
+    ]))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'oscillator.rsi_lte',
+        params: expect.objectContaining({
+          period: 14,
+        }),
+      }),
+    ]))
+  })
+
+  it('does not treat stale RSI periods as thresholds in same-clause corrections', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 15m，使用 RSI 14，更正：RSI 14 改为 RSI 9 小于30做多；单笔 10%。')
+
+    expect(patch.triggers).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'oscillator.rsi_lte',
+        params: expect.objectContaining({
+          period: 9,
+          value: 30,
+        }),
+      }),
+    ]))
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'oscillator.rsi_lte',
+        params: expect.objectContaining({
+          period: 9,
+          value: 14,
+        }),
+      }),
+    ]))
+  })
+
+  it('does not treat executable RSI trigger clauses as alias declarations', () => {
+    const patch = service.extract('OKX 合约 BTCUSDT 15m，RSI 9 小于30做多。该 RSI 大于70平多；单笔 10%。')
+
+    expect(patch.triggers).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        key: 'oscillator.rsi_gte',
+        params: expect.objectContaining({
+          period: 9,
+          value: 70,
+        }),
+      }),
+    ]))
   })
 
   it('extracts percent-change and on-start semantics into semantic patches', () => {

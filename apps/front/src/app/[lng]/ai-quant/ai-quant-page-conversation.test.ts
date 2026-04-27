@@ -1392,8 +1392,8 @@ describe('ai-quant-page-conversation', () => {
 
     expect(conversation.logicGraph?.status).toBe('confirmed')
     expect(conversation.messages.at(-1)?.content).toContain('Strategy code generated, ready to backtest.')
-    expect(conversation.messages.at(-1)?.content).not.toContain('Generated strategy code')
-    expect(conversation.messages.at(-1)?.content).not.toContain('export default function strategy()')
+    expect(conversation.messages.at(-1)?.content).toContain('Generated strategy code')
+    expect(conversation.messages.at(-1)?.content).toContain('export default function strategy()')
     expect(conversation.publishedScriptCode).toBe('export default function strategy() { return true }')
   })
 

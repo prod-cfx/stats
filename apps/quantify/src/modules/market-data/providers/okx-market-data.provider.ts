@@ -13,7 +13,7 @@ import type {
   ProviderSymbol,
   SubscribeParams,
 } from '../interfaces/market-data-provider.interface'
-import type {SymbolMarketType} from '../utils/market-symbol-code.util';
+import type { SymbolMarketType } from '../utils/market-symbol-code.util'
 import { HttpService } from '@nestjs/axios'
 import { Inject, Injectable, Logger } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config'
@@ -22,8 +22,7 @@ import WebSocket from 'ws'
 import {
   extractRawSymbol,
   parseSymbolMarket,
-  toSymbolCode
-  
+  toSymbolCode,
 } from '../utils/market-symbol-code.util'
 import { WsLifecycleManager } from './ws-lifecycle.manager'
 
@@ -46,6 +45,11 @@ interface OkxCandlesResponse {
   data: string[][]
 }
 
+interface OkxRestRequestConfig {
+  params?: Record<string, string>
+  timeout?: number
+}
+
 @Injectable()
 export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestroy {
   readonly name = 'OKX'
@@ -59,6 +63,8 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
   private tickHandler?: SubscribeParams['onTick']
   private klineHandler?: SubscribeParams['onKline']
   private readonly subscriptionsByMarket: Partial<Record<SymbolMarketType, Array<{ raw: string; timeframe: MarketTimeframe }>>> = {}
+  private restRequestChain: Promise<void> = Promise.resolve()
+  private lastRestRequestAt = 0
 
   constructor(
     @Inject(HttpService)
@@ -81,6 +87,18 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
 
   private get reconnectDelayMs() {
     return this.configService.get<number>('marketData.wsReconnectDelayMs', 5_000)
+  }
+
+  private get restMinIntervalMs() {
+    return this.configService.get<number>('marketData.okxRestMinIntervalMs', 120)
+  }
+
+  private get restMaxRetries() {
+    return this.configService.get<number>('marketData.okxRestMaxRetries', 3)
+  }
+
+  private get restRetryDelayMs() {
+    return this.configService.get<number>('marketData.okxRestRetryDelayMs', 250)
   }
 
   async fetchSymbols(symbols?: string[]): Promise<ProviderSymbol[]> {
@@ -110,12 +128,10 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
     if (query.end) params.after = String(query.end.getTime())
 
     const url = new URL('/api/v5/market/history-candles', this.restBaseUrl)
-    const { data } = await lastValueFrom(
-      this.http.get<OkxCandlesResponse>(url.toString(), {
-        params,
-        timeout: this.restTimeoutMs,
-      }),
-    )
+    const data = await this.requestRest<OkxCandlesResponse>(url.toString(), {
+      params,
+      timeout: this.restTimeoutMs,
+    })
 
     const rows = data.data ?? []
     return rows
@@ -166,12 +182,10 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
   private async fetchInstruments(market: SymbolMarketType, symbols?: Set<string>): Promise<ProviderSymbol[]> {
     const url = new URL('/api/v5/public/instruments', this.restBaseUrl)
     const params = { instType: market === 'PERP' ? 'SWAP' : 'SPOT' }
-    const { data } = await lastValueFrom(
-      this.http.get<OkxInstrumentsResponse>(url.toString(), {
-        params,
-        timeout: this.restTimeoutMs,
-      }),
-    )
+    const data = await this.requestRest<OkxInstrumentsResponse>(url.toString(), {
+      params,
+      timeout: this.restTimeoutMs,
+    })
 
     return (data.data ?? [])
       .map(item => this.toProviderSymbol(item, market))
@@ -198,6 +212,92 @@ export class OkxMarketDataProvider implements MarketDataProvider, OnModuleDestro
 
   private toStatus(state: string): MarketSymbolStatus {
     return state?.toLowerCase() === 'live' ? 'ACTIVE' : 'DISABLED'
+  }
+
+  private async requestRest<T>(url: string, config: OkxRestRequestConfig): Promise<T> {
+    const maxRetries = Math.max(0, this.restMaxRetries)
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      try {
+        await this.waitForRestTurn()
+        const { data } = await lastValueFrom(this.http.get<T>(url, config))
+        return data
+      } catch (error) {
+        if (attempt >= maxRetries || !this.isRetryableRestError(error)) {
+          throw error
+        }
+        await this.sleep(this.resolveRetryDelayMs(error, attempt))
+      }
+    }
+
+    throw new Error('unreachable_okx_rest_retry_state')
+  }
+
+  private async waitForRestTurn(): Promise<void> {
+    const previous = this.restRequestChain
+    let releaseCurrent: (() => void) | undefined
+    this.restRequestChain = new Promise<void>((resolve) => {
+      releaseCurrent = resolve
+    })
+
+    await previous.catch(() => undefined)
+    try {
+      const minIntervalMs = Math.max(0, this.restMinIntervalMs)
+      const elapsedMs = Date.now() - this.lastRestRequestAt
+      if (minIntervalMs > 0 && elapsedMs < minIntervalMs) {
+        await this.sleep(minIntervalMs - elapsedMs)
+      }
+      this.lastRestRequestAt = Date.now()
+    } finally {
+      releaseCurrent?.()
+    }
+  }
+
+  private isRetryableRestError(error: unknown): boolean {
+    const status = this.readResponseStatus(error)
+    if (status === null) return false
+    return status === 408
+      || status === 425
+      || status === 429
+      || status === 500
+      || status === 502
+      || status === 503
+      || status === 504
+  }
+
+  private resolveRetryDelayMs(error: unknown, attempt: number): number {
+    const retryAfterMs = this.readRetryAfterMs(error)
+    if (retryAfterMs !== null) return retryAfterMs
+    return this.restRetryDelayMs * 2 ** attempt
+  }
+
+  private readResponseStatus(error: unknown): number | null {
+    if (!error || typeof error !== 'object') return null
+    const response = (error as { response?: unknown }).response
+    if (!response || typeof response !== 'object') return null
+    const status = (response as { status?: unknown }).status
+    return typeof status === 'number' ? status : null
+  }
+
+  private readRetryAfterMs(error: unknown): number | null {
+    if (!error || typeof error !== 'object') return null
+    const response = (error as { response?: unknown }).response
+    if (!response || typeof response !== 'object') return null
+    const headers = (response as { headers?: unknown }).headers
+    if (!headers || typeof headers !== 'object') return null
+    const retryAfter = (headers as Record<string, unknown>)['retry-after']
+      ?? (headers as Record<string, unknown>)['Retry-After']
+    if (typeof retryAfter !== 'string' || !retryAfter.trim()) return null
+    const numeric = Number(retryAfter)
+    if (Number.isFinite(numeric)) {
+      return Math.max(0, numeric * 1000)
+    }
+    const dateMs = Date.parse(retryAfter)
+    return Number.isFinite(dateMs) ? Math.max(0, dateMs - Date.now()) : null
+  }
+
+  private async sleep(ms: number): Promise<void> {
+    if (ms <= 0) return
+    await new Promise(resolve => setTimeout(resolve, ms))
   }
 
   private fromInstId(instId: string): string {

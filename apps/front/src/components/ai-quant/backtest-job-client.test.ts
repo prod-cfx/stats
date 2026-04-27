@@ -177,6 +177,19 @@ describe('backtest-job-client', () => {
     })).toContain('建议改为 2026-03-15T04:24:00.000Z ~ 2026-04-14T04:24:00.000Z 后重试')
   })
 
+  it('formats failed-job rate limits without leaking raw axios messages', () => {
+    const message = formatBacktestJobFailure({
+      error: 'Request failed with status code 429',
+      errorDetails: {
+        code: 'TOO_MANY_REQUESTS',
+        message: 'Request failed with status code 429',
+      },
+    })
+
+    expect(message).toContain('回测行情数据暂时被限流')
+    expect(message).not.toContain('Request failed with status code 429')
+  })
+
   it('encodes jobId safely in path params', async () => {
     mockClient.BacktestingProxyController_getJob.mockResolvedValue({
       data: { id: 'btjob-1', status: 'queued', createdAt: '2026-03-25T00:00:00.000Z' },

@@ -1601,9 +1601,13 @@ function buildServerTerminalCodegenReply(args: {
   }
 
   if (response.status === 'PUBLISHED' && typeof response.scriptCode === 'string' && response.scriptCode.trim()) {
-    return translate('aiQuant.messages.codeGeneratedBacktest', {
+    const summary = translate('aiQuant.messages.codeGeneratedBacktest', {
       defaultValue: 'Strategy code generated, ready to backtest.',
     })
+    const title = translate('aiQuant.messages.generatedStrategyCodeTitle', {
+      defaultValue: 'Generated strategy code:',
+    })
+    return `${summary}\n\n${title}\n\n\`\`\`javascript\n${response.scriptCode.trim()}\n\`\`\``
   }
 
   return null

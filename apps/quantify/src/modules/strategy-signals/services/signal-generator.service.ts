@@ -1423,6 +1423,18 @@ export class SignalGeneratorService {
       )
 
       if (runtimeSignalOutcome.kind === 'noop') {
+        if (!activeRuntimeState) {
+          await this.resetStrategyFailure(instance.id)
+          this.telemetry.recordGeneration({
+            strategyId: strategy.id,
+            symbolCode,
+            success: true,
+            reason: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
+            runtimePhase: 'execution',
+          })
+          return
+        }
+
         await this.handleStrategyFailure(instance.id, config)
         await this.markRuntimeExecutionStateTerminal(activeRuntimeState, {
           failureReason: 'SNAPSHOT_RUNTIME_EXECUTION_NO_SIGNAL',
