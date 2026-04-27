@@ -493,6 +493,14 @@ export function applyCodegenResponseToConversationState(args: {
       if (responseScriptCode) {
         return responseScriptCode
       }
+      const responseSnapshotId = normalizePublishedSnapshotId(response.publishedSnapshotId)
+      if (
+        conversation.publishedScriptCode
+        && conversation.publishedSnapshotId
+        && responseSnapshotId === conversation.publishedSnapshotId
+      ) {
+        return conversation.publishedScriptCode
+      }
       if (!shouldUpdateGraph) {
         return conversation.publishedScriptCode
       }

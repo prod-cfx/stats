@@ -723,6 +723,75 @@ describe('AiQuantPageClient codegen P1 guards', () => {
     })
   })
 
+  it('keeps restored published script code when reconciliation returns the same snapshot without scriptCode', () => {
+    const next = applyCodegenResponseToConversationState({
+      conversation: {
+        id: 'conv-live',
+        serverConversationId: 'server-conv-1',
+        title: '新对话',
+        messages: [{ id: 'msg-1', role: 'assistant', content: 'Strategy code generated.' }],
+        params: DEFAULT_PARAMS,
+        paramSchema: DEFAULT_PARAM_SCHEMA,
+        paramValues: DEFAULT_PARAM_VALUES,
+        backtestResult: null,
+        logicGraph: {
+          version: 1,
+          status: 'confirmed',
+          trigger: [],
+          actions: [],
+          risk: [],
+          meta: {
+            exchange: 'okx',
+            symbol: 'BTCUSDT',
+            timeframe: '15m',
+            positionPct: 10,
+          },
+        },
+        codegenSpecDesc: null,
+        semanticGraph: null,
+        validationReport: null,
+        clarificationGate: null,
+        publicationGate: null,
+        pendingCanonicalDigest: 'sha256:canonical-1',
+        llmCodegenSessionId: 'session-1',
+        publishedStrategyInstanceId: null,
+        publishedSnapshotId: 'snapshot-1',
+        publishedScriptCode: 'export default function strategy() { return true }',
+        publishedScriptGraphVersion: 1,
+        latestSignalMessage: null,
+        backtestExecutionConfigExplicit: false,
+        backtestExecutionState: 'idle',
+        updatedAt: 1,
+      } as any,
+      response: {
+        id: 'session-1',
+        conversationId: 'server-conv-1',
+        status: 'PUBLISHED',
+        scriptCode: null,
+        publishedSnapshotId: 'snapshot-1',
+        specDesc: {
+          canonicalDigest: 'sha256:canonical-1',
+          market: {
+            symbols: ['BTCUSDT'],
+            timeframes: ['15m'],
+          },
+          rules: [],
+        },
+      } as any,
+      confirmGenerate: false,
+      targetParams: DEFAULT_PARAMS,
+      backtestCapabilities: null,
+      activeSessionId: 'session-1',
+      trimmedMessage: '',
+      t: (key: string, options?: Record<string, unknown>) =>
+        options?.defaultValue ? String(options.defaultValue) : key,
+    })
+
+    expect(next.publishedSnapshotId).toBe('snapshot-1')
+    expect(next.publishedScriptCode).toBe('export default function strategy() { return true }')
+    expect(next.publishedScriptGraphVersion).not.toBeNull()
+  })
+
   it('prefers authoritative publishedSnapshotParamValues over strategyConfig-derived subsets on publish response', () => {
     const next = applyCodegenResponseToConversationState({
       conversation: {
