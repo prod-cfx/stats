@@ -11,6 +11,7 @@ import type { RecoverAiQuantEditConversationRequestDto } from '../dto/recover-ai
 import type { StartCodegenSessionDto } from '../dto/start-codegen-session.dto'
 import type { TestLlmCodegenEngineDto } from '../dto/test-llm-codegen-engine.dto'
 import type { AiQuantConversationSnapshotRecord } from '../repositories/ai-quant-conversations.repository'
+import type { EditablePublishedStrategySnapshotRecord } from '../repositories/published-strategy-snapshots.repository'
 import type { StrategyLogicSnapshot, StrategyRuleBasis, StrategyRuleDraft } from '../types/strategy-logic-snapshot'
 import type { CodegenSemanticPatch } from '../types/codegen-semantic-patch'
 import type { LlmCodegenSessionStatus } from '../types/codegen-session-status'
@@ -147,6 +148,7 @@ const DEFAULT_CODEGEN_STRICT_ENABLED = true
 const DEFAULT_CODEGEN_STRICT_FALLBACK = true
 const STRATEGY_PLAZA_RUN_SESSION_ID_PREFIX = 'strategy-plaza:official:'
 const DEFAULT_CODEGEN_STRICT_UNSUPPORTED_TTL_MS = 10 * 60 * 1000
+const EDIT_RECOVERY_ASSISTANT_MESSAGE = '已基于上一版策略恢复修改上下文。你可以直接说明要调整的触发、行动、风控、仓位或运行参数。'
 
 const CODEGEN_STRICT_RESPONSE_SCHEMA_V1: Record<string, unknown> = {
   type: 'object',
@@ -441,13 +443,302 @@ export class CodegenConversationService {
   }
 
   async recoverEditConversation(
-    _userId: string,
-    _input: RecoverAiQuantEditConversationRequestDto,
+    userId: string,
+    input: RecoverAiQuantEditConversationRequestDto,
   ): Promise<AiQuantConversationResponseDto> {
-    throw new DomainException('ai_quant.edit_context_recovery_unavailable', {
-      code: ErrorCode.SERVICE_TEMPORARILY_UNAVAILABLE,
-      status: HttpStatus.SERVICE_UNAVAILABLE,
+    const conversationId = this.readNullableString(input.conversationId)
+    if (conversationId) {
+      const conversation = await this.conversationsRepo.findActiveByIdAndUser(conversationId, userId)
+      if (conversation) {
+        return this.toConversationResponse(conversation)
+      }
+    }
+
+    const sessionId = this.readNullableString(input.sessionId)
+    if (sessionId) {
+      const conversation = await this.conversationsRepo.findActiveByAnyCodegenSessionIdAndUser([sessionId], userId)
+      if (conversation) {
+        return this.toConversationResponse(conversation)
+      }
+    }
+
+    const associatedConversation = await this.findActiveConversationResponseForEditContext(userId, input)
+    if (associatedConversation) {
+      return associatedConversation
+    }
+
+    return this.recoverEditConversationFromPublishedSnapshot(userId, input)
+  }
+
+  private async findActiveConversationResponseForEditContext(
+    userId: string,
+    input: RecoverAiQuantEditConversationRequestDto,
+  ): Promise<AiQuantConversationResponseDto | null> {
+    const strategyInstanceId = this.readNullableString(input.strategyInstanceId)
+    const publishedSnapshotId = this.readNullableString(input.publishedSnapshotId)
+    if (!strategyInstanceId && !publishedSnapshotId) {
+      return null
+    }
+
+    const conversations = this.excludeStrategyPlazaRunConversations(await this.conversationsRepo.listByUser(userId))
+    for (const conversation of conversations.slice(0, 50)) {
+      const response = await this.toConversationResponse(conversation)
+      if (!response.activeCodegenSessionId) {
+        continue
+      }
+      if (strategyInstanceId && response.strategyInstanceId === strategyInstanceId) {
+        return response
+      }
+      if (publishedSnapshotId && response.publishedSnapshotId === publishedSnapshotId) {
+        return response
+      }
+    }
+
+    return null
+  }
+
+  private async recoverEditConversationFromPublishedSnapshot(
+    userId: string,
+    input: RecoverAiQuantEditConversationRequestDto,
+  ): Promise<AiQuantConversationResponseDto> {
+    const strategyInstanceId = this.readNullableString(input.strategyInstanceId)
+    if (!strategyInstanceId) {
+      throw new DomainException('ai_quant.edit_context_not_found', {
+        code: ErrorCode.NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+        args: {
+          strategyInstanceId: input.strategyInstanceId,
+          publishedSnapshotId: input.publishedSnapshotId,
+          source: input.source,
+        },
+      })
+    }
+
+    const publishedSnapshotId = this.readNullableString(input.publishedSnapshotId)
+    const snapshot = await this.publishedSnapshotsRepo.findEditableSnapshotForUser({
+      userId,
+      strategyInstanceId,
+      publishedSnapshotId,
     })
+    if (!snapshot) {
+      throw new DomainException('ai_quant.edit_context_not_found', {
+        code: ErrorCode.NOT_FOUND,
+        status: HttpStatus.NOT_FOUND,
+        args: {
+          strategyInstanceId,
+          publishedSnapshotId,
+          source: input.source,
+        },
+      })
+    }
+
+    const semanticState = this.recoverSemanticStateFromEditableSnapshot(snapshot)
+    const normalization = this.buildNormalizationFromSemanticState(semanticState)
+    const canonicalSpec = this.buildCanonicalSpecForConversation(semanticState, normalization)
+    const specDesc = this.specDescBuilder.buildFromCanonicalSpec(canonicalSpec, '', {
+      normalizedIntent: normalization.normalizedIntent,
+      executionContext: this.resolveSemanticClarificationArtifacts(semanticState).executionContext.context,
+    })
+    const semanticGraph = specDesc
+    const constraintPack = {
+      ...createDefaultConstraintPack(),
+      conversationHistory: [`A: ${EDIT_RECOVERY_ASSISTANT_MESSAGE}`],
+    }
+
+    const session = await this.sessionsRepo.createSession({
+      userId,
+      status: 'DRAFTING',
+      semanticState: semanticState as unknown as Prisma.InputJsonValue,
+      clarificationState: this.resolveSemanticClarificationArtifacts(semanticState).clarificationState as unknown as Prisma.InputJsonValue,
+      constraintPack: constraintPack as unknown as Prisma.InputJsonValue,
+      latestDraftCode: null,
+      latestSpecDesc: specDesc as Prisma.InputJsonValue,
+      semanticGraph: semanticGraph as Prisma.InputJsonValue,
+      rejectReason: null,
+      strategyInstanceId: snapshot.strategyInstanceId ?? strategyInstanceId,
+    } as unknown as Prisma.LlmStrategyCodegenSessionCreateInput)
+
+    const titleSymbol = this.readRecoveredSnapshotSymbol(snapshot) ?? '上一版'
+    const conversation = await this.conversationsRepo.upsertConversationSnapshot({
+      userId,
+      codegenSessionId: session.id,
+      title: `修改 ${titleSymbol} 策略`,
+      messages: [{ role: 'assistant', content: EDIT_RECOVERY_ASSISTANT_MESSAGE }],
+    })
+
+    return this.toConversationResponse(conversation)
+  }
+
+  private recoverSemanticStateFromEditableSnapshot(
+    snapshot: EditablePublishedStrategySnapshotRecord,
+  ): SemanticState {
+    if (this.hasPersistedSemanticState(snapshot.originalSessionSemanticState)) {
+      return snapshot.originalSessionSemanticState as unknown as SemanticState
+    }
+
+    const state = this.createEmptySemanticState()
+    const strategyConfig = this.readJsonRecord(snapshot.strategyConfig)
+    const paramsSnapshot = this.readJsonRecord(snapshot.paramsSnapshot)
+    const lockedParams = this.readJsonRecord(snapshot.lockedParams)
+    const exchange = this.normalizeRecoveredExchange(
+      this.readFirstString(
+        strategyConfig?.exchange,
+        strategyConfig?.provider,
+        strategyConfig?.exchangeId,
+        paramsSnapshot?.exchange,
+        paramsSnapshot?.provider,
+        paramsSnapshot?.exchangeId,
+      ),
+    )
+    const symbol = this.normalizeRecoveredSymbol(
+      this.readFirstString(strategyConfig?.symbol, paramsSnapshot?.symbol, lockedParams?.symbol),
+    )
+    const marketType = this.normalizeRecoveredMarketType(
+      this.readFirstString(strategyConfig?.marketType, paramsSnapshot?.marketType, lockedParams?.marketType),
+    )
+    const timeframe = this.readFirstString(
+      strategyConfig?.baseTimeframe,
+      strategyConfig?.timeframe,
+      paramsSnapshot?.baseTimeframe,
+      paramsSnapshot?.timeframe,
+      lockedParams?.baseTimeframe,
+      lockedParams?.timeframe,
+    )
+
+    return {
+      ...state,
+      position: this.buildRecoveredSnapshotPosition(strategyConfig, paramsSnapshot, lockedParams),
+      contextSlots: {
+        exchange: exchange ? this.buildRecoveredContextSlot('exchange', exchange) : null,
+        symbol: symbol ? this.buildRecoveredContextSlot('symbol', symbol) : null,
+        marketType: marketType ? this.buildRecoveredContextSlot('marketType', marketType) : null,
+        timeframe: timeframe ? this.buildRecoveredContextSlot('timeframe', timeframe) : null,
+      },
+    }
+  }
+
+  private buildRecoveredSnapshotPosition(
+    strategyConfig: Record<string, unknown> | null,
+    paramsSnapshot: Record<string, unknown> | null,
+    lockedParams: Record<string, unknown> | null,
+  ): SemanticState['position'] {
+    const directRatio = this.readFirstPositiveNumber(
+      strategyConfig?.positionSizeRatio,
+      paramsSnapshot?.positionSizeRatio,
+      lockedParams?.positionSizeRatio,
+    )
+    const percent = this.readFirstPositiveNumber(
+      strategyConfig?.positionSizeRatioPercent,
+      strategyConfig?.positionPct,
+      paramsSnapshot?.positionSizeRatioPercent,
+      paramsSnapshot?.positionPct,
+      lockedParams?.positionSizeRatioPercent,
+      lockedParams?.positionPct,
+    )
+    const value = directRatio ?? (percent !== null ? this.normalizePercentToRatio(percent) : null)
+    if (value === null) {
+      return null
+    }
+
+    return {
+      mode: 'fixed_ratio',
+      value,
+      positionMode: this.readFirstString(
+        strategyConfig?.positionMode,
+        paramsSnapshot?.positionMode,
+        lockedParams?.positionMode,
+      ) ?? 'long_only',
+      status: 'locked',
+      source: 'derived',
+      evidence: {
+        text: 'published snapshot structured strategy config',
+        source: 'derived',
+      },
+    }
+  }
+
+  private buildRecoveredContextSlot(
+    slotKey: 'exchange' | 'symbol' | 'marketType' | 'timeframe',
+    value: string,
+  ): SemanticSlotState {
+    const hints: Record<typeof slotKey, string> = {
+      exchange: '请确认交易所。',
+      symbol: '请确认交易标的。',
+      marketType: '请确认市场类型（现货或合约/perp）。',
+      timeframe: '请确认主周期。',
+    }
+
+    return {
+      slotKey,
+      fieldPath: `contextSlots.${slotKey}`,
+      value,
+      status: 'locked',
+      priority: 'context',
+      questionHint: hints[slotKey],
+      affectsExecution: true,
+      evidence: {
+        text: 'published snapshot structured strategy config',
+        source: 'derived',
+      },
+    }
+  }
+
+  private readRecoveredSnapshotSymbol(snapshot: EditablePublishedStrategySnapshotRecord): string | null {
+    const strategyConfig = this.readJsonRecord(snapshot.strategyConfig)
+    const paramsSnapshot = this.readJsonRecord(snapshot.paramsSnapshot)
+    return this.normalizeRecoveredSymbol(
+      this.readFirstString(strategyConfig?.symbol, paramsSnapshot?.symbol),
+    )
+  }
+
+  private readFirstString(...values: unknown[]): string | null {
+    for (const value of values) {
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim()
+      }
+    }
+    return null
+  }
+
+  private readFirstPositiveNumber(...values: unknown[]): number | null {
+    for (const value of values) {
+      if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+        return value
+      }
+      if (typeof value === 'string' && value.trim()) {
+        const parsed = Number(value.trim())
+        if (Number.isFinite(parsed) && parsed > 0) {
+          return parsed
+        }
+      }
+    }
+    return null
+  }
+
+  private normalizePercentToRatio(value: number): number {
+    return value > 1 ? value / 100 : value
+  }
+
+  private normalizeRecoveredExchange(value: string | null): string | null {
+    return value?.trim().toLowerCase() || null
+  }
+
+  private normalizeRecoveredSymbol(value: string | null): string | null {
+    return value ? normalizePublishedSymbol(value) : null
+  }
+
+  private normalizeRecoveredMarketType(value: string | null): 'spot' | 'perp' | null {
+    const normalized = value?.trim().toLowerCase()
+    if (!normalized) {
+      return null
+    }
+    if (normalized === 'spot') {
+      return 'spot'
+    }
+    if (normalized === 'perp' || normalized === 'swap' || normalized === 'perpetual' || normalized === 'futures') {
+      return 'perp'
+    }
+    return null
   }
 
   async continueSession(
@@ -2560,6 +2851,7 @@ export class CodegenConversationService {
     status: LlmCodegenSessionStatus
     latestDraftCode: Prisma.JsonValue | null
     latestSpecDesc: Prisma.JsonValue | null
+    semanticGraph?: Prisma.JsonValue | null
     constraintPack?: Prisma.JsonValue | null
     rejectReason: string | null
     createdAt: Date
@@ -2630,6 +2922,7 @@ export class CodegenConversationService {
             : null),
       specDesc: effectiveSpecDesc,
       canonicalDigest: this.readCanonicalDigest(effectiveSpecDesc),
+      semanticGraph: this.readJsonRecord(session.semanticGraph) ?? this.readJsonRecord(latestSnapshot?.semanticGraph),
       strategyInstanceId: session.strategyInstanceId ?? null,
       clarificationState: this.readClarificationState(session.clarificationState),
       publicationGate:
