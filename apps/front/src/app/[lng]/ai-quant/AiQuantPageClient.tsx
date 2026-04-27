@@ -96,6 +96,7 @@ const ACCOUNT_STRATEGY_NOT_FOUND_CODE = 'ACCOUNT_STRATEGY_NOT_FOUND'
 type CapabilityState = 'loading' | 'ready' | 'failed'
 type ConversationSyncState = 'idle' | 'loading' | 'ready' | 'error'
 type DeploymentDetailStatus = 'idle' | 'loading' | 'ready' | 'not_found' | 'error'
+type StrategyEditIntent = Extract<ReturnType<typeof getIntent>, { type: 'strategy-edit-session' }>
 
 type ConversationDeleteDialogState = {
   conversation: ConversationState
@@ -123,6 +124,30 @@ function hasRenderableDisplayLogicGraph(
     if (!block || typeof block !== 'object') return false
     return Array.isArray((block as { items?: unknown }).items)
   })
+}
+
+function hasRenderableSemanticGraph(
+  graph: ConversationState['semanticGraph'] | null | undefined,
+): graph is NonNullable<ConversationState['semanticGraph']> {
+  if (!graph || typeof graph !== 'object') return false
+  const candidate = graph as { market?: unknown, nodes?: unknown, actions?: unknown, risk?: unknown }
+  return Boolean(candidate.market)
+    && Array.isArray(candidate.nodes)
+    && Array.isArray(candidate.actions)
+    && Array.isArray(candidate.risk)
+}
+
+function isSameStrategyEditIntent(
+  current: ReturnType<typeof getIntent>,
+  expected: StrategyEditIntent,
+): boolean {
+  return current?.type === 'strategy-edit-session'
+    && current.strategyInstanceId === expected.strategyInstanceId
+    && current.publishedSnapshotId === expected.publishedSnapshotId
+    && current.conversationId === expected.conversationId
+    && current.sessionId === expected.sessionId
+    && current.source === expected.source
+    && current.ts === expected.ts
 }
 
 function isAccountStrategyNotFoundError(error: unknown): boolean {
@@ -297,7 +322,9 @@ export function AiQuantPageClient({
               if (cancelled) return
 
               const recovered = createConversationFromServerConversation(recoveredConversation, t)
-              clearIntent()
+              if (isSameStrategyEditIntent(getIntent(INTENT_TTL_MS), intent)) {
+                clearIntent()
+              }
               setConversations([recovered, ...restored])
               setActiveConversationId(recovered.id)
               setConversationSyncState('ready')
@@ -1582,7 +1609,7 @@ export function AiQuantPageClient({
             canRunBacktest={canRunBacktest}
           />
 
-          {activeConversation.semanticGraph?.market && (
+          {hasRenderableSemanticGraph(activeConversation.semanticGraph) && (
             <SemanticGraphCard semanticGraph={activeConversation.semanticGraph} />
           )}
           {activeConversation.validationReport && !activeConversation.validationReport.ok && (

@@ -399,6 +399,22 @@ function createDeferred<T>() {
   return { promise, resolve, reject }
 }
 
+async function waitForCondition(assertion: () => void, attempts = 20) {
+  let lastError: unknown
+  for (let i = 0; i < attempts; i += 1) {
+    try {
+      assertion()
+      return
+    } catch (error) {
+      lastError = error
+      await act(async () => {
+        await Promise.resolve()
+      })
+    }
+  }
+  throw lastError
+}
+
 describe('AiQuantPageClient backtest range integration', () => {
   let container: HTMLDivElement
   let root: ReturnType<typeof createRoot> | null
@@ -773,12 +789,9 @@ describe('AiQuantPageClient backtest range integration', () => {
 
     await act(async () => {
       root?.render(<AiQuantPageClient serverOwnedConversations />)
-      await Promise.resolve()
-      await Promise.resolve()
-      await Promise.resolve()
     })
 
-    expect(container.textContent).toContain('second-message')
+    await waitForCondition(() => expect(container.textContent).toContain('second-message'))
     expect(container.textContent).not.toContain('first-message')
     expect(recoverAiQuantEditConversation).not.toHaveBeenCalled()
     expect(localStorage.getItem('ai_quant_return_intent_v1')).toBeNull()
@@ -812,12 +825,9 @@ describe('AiQuantPageClient backtest range integration', () => {
 
     await act(async () => {
       root?.render(<AiQuantPageClient serverOwnedConversations />)
-      await Promise.resolve()
-      await Promise.resolve()
-      await Promise.resolve()
     })
 
-    expect(container.textContent).toContain('已基于上一版策略恢复修改上下文。')
+    await waitForCondition(() => expect(container.textContent).toContain('已基于上一版策略恢复修改上下文。'))
     expect(recoverAiQuantEditConversation).toHaveBeenCalledWith({
       strategyInstanceId: 'strategy-9',
       publishedSnapshotId: 'snapshot-9',
@@ -844,12 +854,55 @@ describe('AiQuantPageClient backtest range integration', () => {
 
     await act(async () => {
       root?.render(<AiQuantPageClient serverOwnedConversations />)
-      await Promise.resolve()
-      await Promise.resolve()
+    })
+
+    await waitForCondition(() => expect(recoverAiQuantEditConversation).toHaveBeenCalled())
+    expect(localStorage.getItem('ai_quant_return_intent_v1')).toContain('strategy-edit-session')
+  })
+
+  it('preserves newer strategy edit intent when recovery resolves late', async () => {
+    localStorage.clear()
+    localStorage.setItem('ai_quant_return_intent_v1', JSON.stringify({
+      type: 'strategy-edit-session',
+      strategyInstanceId: 'strategy-old',
+      publishedSnapshotId: 'snapshot-old',
+      ts: Date.now(),
+    }))
+
+    const { listAiQuantConversations, recoverAiQuantEditConversation } = jest.requireMock('@/lib/api') as {
+      listAiQuantConversations: jest.Mock
+      recoverAiQuantEditConversation: jest.Mock
+    }
+    const deferred = createDeferred<Record<string, unknown>>()
+    listAiQuantConversations.mockResolvedValue([])
+    recoverAiQuantEditConversation.mockReturnValue(deferred.promise)
+
+    await act(async () => {
+      root?.render(<AiQuantPageClient serverOwnedConversations />)
+    })
+    await waitForCondition(() => expect(recoverAiQuantEditConversation).toHaveBeenCalled())
+
+    localStorage.setItem('ai_quant_return_intent_v1', JSON.stringify({
+      type: 'strategy-edit-session',
+      strategyInstanceId: 'strategy-new',
+      publishedSnapshotId: 'snapshot-new',
+      ts: Date.now() + 1,
+    }))
+
+    await act(async () => {
+      deferred.resolve({
+        id: 'conversation-old',
+        activeCodegenSessionId: 'session-old',
+        conversationTitle: 'recovered old',
+        conversationMessages: [{ role: 'assistant', content: 'old recovered message' }],
+        strategyInstanceId: 'strategy-old',
+        publishedSnapshotId: 'snapshot-old',
+      })
       await Promise.resolve()
     })
 
-    expect(localStorage.getItem('ai_quant_return_intent_v1')).toContain('strategy-edit-session')
+    await waitForCondition(() => expect(container.textContent).toContain('old recovered message'))
+    expect(localStorage.getItem('ai_quant_return_intent_v1')).toContain('strategy-new')
   })
 
   it('shows a dedicated loading state while server-owned conversations are syncing', async () => {
