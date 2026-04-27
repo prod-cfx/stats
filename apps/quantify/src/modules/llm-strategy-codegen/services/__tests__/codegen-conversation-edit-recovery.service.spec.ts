@@ -210,6 +210,74 @@ describe('codegenConversationService edit recovery', () => {
     expect(result.conversationMessages).toEqual(conversation.messages)
   })
 
+  it('keeps failed terminal sessions recoverable when they still match the requested strategy', async () => {
+    const harness = createHarness()
+    const conversation = buildConversation({ codegenSessionId: 'failed-session-1' })
+    harness.sessions.set('failed-session-1', buildSession({
+      id: 'failed-session-1',
+      status: 'REJECTED',
+      rejectReason: 'previous code generation failed',
+    }))
+    harness.conversationsRepo.findActiveByIdAndUser.mockResolvedValue(conversation)
+
+    const result = await harness.service.recoverEditConversation('user-1', {
+      strategyInstanceId: 'strategy-1',
+      conversationId: 'conversation-1',
+    })
+
+    expect(result.id).toBe('conversation-1')
+    expect(result.activeCodegenSessionId).toBe('failed-session-1')
+    expect(result.rejectReason).toBe('previous code generation failed')
+    expect(harness.publishedSnapshotsRepo.findEditableSnapshotForUser).not.toHaveBeenCalled()
+  })
+
+  it('falls through direct conversation recovery when the requested strategy context does not match', async () => {
+    const harness = createHarness()
+    harness.sessions.set('session-1', buildSession({
+      strategyInstanceId: 'strategy-other',
+    }))
+    harness.conversationsRepo.findActiveByIdAndUser.mockResolvedValue(buildConversation())
+    harness.conversationsRepo.findActiveByAnyCodegenSessionIdAndUser.mockResolvedValue(null)
+    harness.publishedSnapshotsRepo.findEditableSnapshotForUser.mockResolvedValue(buildSnapshot())
+
+    const result = await harness.service.recoverEditConversation('user-1', {
+      strategyInstanceId: 'strategy-1',
+      conversationId: 'conversation-1',
+    })
+
+    expect(result.id).toBe('recovered-conversation-1')
+    expect(harness.publishedSnapshotsRepo.findEditableSnapshotForUser).toHaveBeenCalledWith({
+      userId: 'user-1',
+      strategyInstanceId: 'strategy-1',
+      publishedSnapshotId: null,
+    })
+  })
+
+  it('falls through direct session recovery when an exact published snapshot id does not match', async () => {
+    const harness = createHarness()
+    harness.sessions.set('session-1', buildSession({
+      latestSpecDesc: { version: 1, publishedSnapshotId: 'snapshot-other' },
+    }))
+    harness.conversationsRepo.findActiveByIdAndUser.mockResolvedValue(null)
+    harness.conversationsRepo.findActiveByAnyCodegenSessionIdAndUser.mockResolvedValue(buildConversation())
+    harness.publishedSnapshotsRepo.findEditableSnapshotForUser.mockResolvedValue(buildSnapshot({
+      id: 'snapshot-1',
+    }))
+
+    const result = await harness.service.recoverEditConversation('user-1', {
+      strategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
+      sessionId: 'session-1',
+    })
+
+    expect(result.id).toBe('recovered-conversation-1')
+    expect(harness.publishedSnapshotsRepo.findEditableSnapshotForUser).toHaveBeenCalledWith({
+      userId: 'user-1',
+      strategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
+    })
+  })
+
   it('recovers from a published snapshot into a new editable conversation with spec and semantic graph', async () => {
     const harness = createHarness()
     harness.conversationsRepo.findActiveByIdAndUser.mockResolvedValue(null)
@@ -241,6 +309,9 @@ describe('codegenConversationService edit recovery', () => {
     }))
     expect(result.id).toBe('recovered-conversation-1')
     expect(result.specDesc).toBeTruthy()
+    expect(result.specDesc).toEqual(expect.objectContaining({
+      publishedSnapshotId: 'snapshot-1',
+    }))
     expect(result.semanticGraph).toEqual(snapshotSemanticGraph)
     expect(harness.sessionsRepo.createSession.mock.calls[0][0].semanticGraph).toEqual(snapshotSemanticGraph)
     expect(result.conversationMessages).toEqual([{ role: 'assistant', content: recoveryMessage }])

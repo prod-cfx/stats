@@ -451,7 +451,10 @@ export class CodegenConversationService {
       const conversation = await this.conversationsRepo.findActiveByIdAndUser(conversationId, userId)
       if (conversation) {
         const response = await this.toConversationResponse(conversation)
-        if (this.isUsableRecoveredConversationResponse(response)) {
+        if (
+          this.isUsableRecoveredConversationResponse(response)
+          && this.recoveredConversationMatchesEditContext(response, input)
+        ) {
           return response
         }
       }
@@ -462,7 +465,10 @@ export class CodegenConversationService {
       const conversation = await this.conversationsRepo.findActiveByAnyCodegenSessionIdAndUser([sessionId], userId)
       if (conversation) {
         const response = await this.toConversationResponse(conversation)
-        if (this.isUsableRecoveredConversationResponse(response)) {
+        if (
+          this.isUsableRecoveredConversationResponse(response)
+          && this.recoveredConversationMatchesEditContext(response, input)
+        ) {
           return response
         }
       }
@@ -512,6 +518,38 @@ export class CodegenConversationService {
     return Boolean(response.activeCodegenSessionId?.trim())
   }
 
+  private recoveredConversationMatchesEditContext(
+    response: AiQuantConversationResponseDto,
+    input: RecoverAiQuantEditConversationRequestDto,
+  ): boolean {
+    const publishedSnapshotId = this.readNullableString(input.publishedSnapshotId)
+    if (publishedSnapshotId) {
+      return this.readRecoveredResponsePublishedSnapshotId(response) === publishedSnapshotId
+    }
+
+    const strategyInstanceId = this.readNullableString(input.strategyInstanceId)
+    if (strategyInstanceId) {
+      return response.strategyInstanceId === strategyInstanceId
+    }
+
+    return true
+  }
+
+  private readRecoveredResponsePublishedSnapshotId(
+    response: AiQuantConversationResponseDto,
+  ): string | null {
+    if (typeof response.publishedSnapshotId === 'string' && response.publishedSnapshotId.trim().length > 0) {
+      return response.publishedSnapshotId.trim()
+    }
+
+    const specDesc = response.specDesc
+    if (!specDesc || typeof specDesc !== 'object' || Array.isArray(specDesc)) {
+      return null
+    }
+    const candidate = (specDesc as Record<string, unknown>).publishedSnapshotId
+    return typeof candidate === 'string' && candidate.trim().length > 0 ? candidate.trim() : null
+  }
+
   private async recoverEditConversationFromPublishedSnapshot(
     userId: string,
     input: RecoverAiQuantEditConversationRequestDto,
@@ -554,6 +592,10 @@ export class CodegenConversationService {
       normalizedIntent: normalization.normalizedIntent,
       executionContext: this.resolveSemanticClarificationArtifacts(semanticState).executionContext.context,
     })
+    const recoveredSpecDesc = {
+      ...specDesc,
+      publishedSnapshotId: snapshot.id,
+    }
     const semanticGraph = this.resolveRecoveredSemanticGraph(snapshot, semanticState)
     const constraintPack = {
       ...createDefaultConstraintPack(),
@@ -567,7 +609,7 @@ export class CodegenConversationService {
       clarificationState: this.resolveSemanticClarificationArtifacts(semanticState).clarificationState as unknown as Prisma.InputJsonValue,
       constraintPack: constraintPack as unknown as Prisma.InputJsonValue,
       latestDraftCode: null,
-      latestSpecDesc: specDesc as Prisma.InputJsonValue,
+      latestSpecDesc: recoveredSpecDesc as Prisma.InputJsonValue,
       semanticGraph: semanticGraph as Prisma.InputJsonValue,
       rejectReason: null,
       strategyInstanceId: snapshot.strategyInstanceId ?? strategyInstanceId,
@@ -2998,7 +3040,7 @@ export class CodegenConversationService {
 
     return {
       id: conversation.id,
-      activeCodegenSessionId: session && !this.stateMachine.isTerminalStatus(session.status) ? session.id : null,
+      activeCodegenSessionId: session && this.isEditableConversationSessionStatus(session.status) ? session.id : null,
       conversationTitle: conversation.title,
       conversationMessages: conversation.messages,
       status: snapshot?.status as LlmCodegenSessionStatus | undefined,
@@ -3023,6 +3065,12 @@ export class CodegenConversationService {
       strategyInstanceId: snapshot?.strategyInstanceId ?? null,
       rejectReason: snapshot?.rejectReason ?? null,
     }
+  }
+
+  private isEditableConversationSessionStatus(status: LlmCodegenSessionStatus): boolean {
+    return !this.stateMachine.isTerminalStatus(status)
+      || status === 'REJECTED'
+      || status === 'CONSISTENCY_FAILED'
   }
 
   private finalizeSessionResponse(
