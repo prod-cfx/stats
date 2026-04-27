@@ -110,4 +110,45 @@ describe('accountAiQuantConversationsController', () => {
       deleteStoppedStrategy: false,
     })
   })
+
+  it('recovers an edit conversation for the resolved caller identity', async () => {
+    const service = {
+      recoverEditConversation: jest.fn().mockResolvedValue({ id: 'conversation-1' }),
+    }
+    const moduleRef = await Test.createTestingModule({
+      controllers: [AccountAiQuantConversationsController],
+      providers: [
+        { provide: CodegenConversationService, useValue: service },
+        {
+          provide: EnvService,
+          useValue: {
+            getString: jest.fn((key: string) => {
+              if (key === 'BACKEND_API_BASE_URL') return 'http://backend.test/api/v1'
+              return undefined
+            }),
+            getBoolean: jest.fn().mockReturnValue(false),
+            isDev: jest.fn().mockReturnValue(false),
+          },
+        },
+        CallerIdentityService,
+      ],
+    }).compile()
+    const controller = moduleRef.get(AccountAiQuantConversationsController)
+
+    await expect(controller.recoverEditSession(
+      createBearerToken({ sub: 'caller-u1', principalType: 'user', exp: 4_102_444_800 }),
+      'caller-u1',
+      {
+        strategyInstanceId: 'strategy-1',
+        publishedSnapshotId: 'snapshot-1',
+        source: 'account-detail',
+      },
+    )).resolves.toEqual({ id: 'conversation-1' })
+
+    expect(service.recoverEditConversation).toHaveBeenCalledWith('caller-u1', {
+      strategyInstanceId: 'strategy-1',
+      publishedSnapshotId: 'snapshot-1',
+      source: 'account-detail',
+    })
+  })
 })
