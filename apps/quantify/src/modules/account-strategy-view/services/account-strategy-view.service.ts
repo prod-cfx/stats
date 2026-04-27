@@ -308,7 +308,9 @@ export class AccountStrategyViewService {
           mode: (row as Record<string, unknown>).mode === 'LIVE' ? 'LIVE' : 'TESTNET',
           reservedQuote: 0,
         })
-      : paramsFundingSnapshot ?? localFundingSnapshot
+      : hasLocalActivity
+        ? localFundingSnapshot
+        : paramsFundingSnapshot ?? localFundingSnapshot
     const totalPnl = account
       ? (resolvedRealizedPnl ?? 0) + (resolvedUnrealizedPnl ?? 0)
       : this.readStatsNumber(stats, 'totalPnl')

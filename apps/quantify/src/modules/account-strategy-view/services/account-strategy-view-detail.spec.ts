@@ -2065,6 +2065,82 @@ describe('accountStrategyViewService.getStrategyDetail', () => {
     }))
   })
 
+  it('prefers local funding over stale deploy snapshot after strategy activity', async () => {
+    const repo = {
+      findStrategyForUser: jest.fn().mockResolvedValue({
+        id: 'inst-local-activity-funding',
+        name: 'Local activity funding strategy',
+        status: 'running',
+        createdBy: 'user-1',
+        params: {
+          symbol: 'BTCUSDT',
+          exchange: 'binance',
+          marketType: 'perp',
+          fundingSnapshot: {
+            asset: 'USDT',
+            totalEquity: 4901.58222,
+            availableCash: null,
+            availableEquity: 0,
+            reservedQuote: 0,
+            usedMargin: null,
+            buyingPower: 0,
+            executionCapital: 4901.58222,
+            fundingSource: 'exchange_testnet',
+            nonTradableReason: 'exchange_available_balance_zero',
+          },
+        },
+        strategyTemplateId: 'tpl-local-activity-funding',
+        strategyTemplate: {
+          defaultParams: { timeframe: '15m' },
+        },
+        subscriptions: [{ userId: 'user-1', status: 'active', customParams: {} }],
+        startedAt: new Date('2026-03-20T10:00:00.000Z'),
+        updatedAt: new Date('2026-03-20T10:02:00.000Z'),
+      }),
+      findUserStrategyAccount: jest.fn().mockResolvedValue({
+        id: 'acc-local-activity-funding',
+        baseCurrency: 'USDT',
+        initialBalance: 10000,
+        balance: 10320.12,
+        equity: 10320.12,
+        totalRealizedPnl: 300,
+        totalUnrealizedPnl: 20.12,
+      }),
+      loadEquitySeries: jest.fn().mockResolvedValue([]),
+      loadClosedPositionPnlSeries: jest.fn().mockResolvedValue([]),
+      loadTradeStats: jest.fn().mockResolvedValue({ tradeCount: 1, closedCount: 1, winningCount: 1 }),
+      loadPositionOverview: jest.fn().mockResolvedValue({ openCount: 0, closedCount: 1 }),
+      loadPositionFinancials: jest.fn().mockResolvedValue({
+        openCostBasis: 0,
+        totalUnrealizedPnl: 0,
+        totalRealizedPnl: 0,
+      }),
+      loadOpenPositionsForValuation: jest.fn().mockResolvedValue([]),
+      loadTimeline: jest.fn().mockResolvedValue({
+        instance: { createdAt: new Date('2026-03-18T10:00:00.000Z') },
+        subscription: null,
+        signalExecutions: [],
+        trades: [],
+      }),
+    }
+    const service = new AccountStrategyViewService(
+      repo as any,
+      { calculateStats: jest.fn().mockResolvedValue(null), calculateBatchStats: jest.fn() } as any,
+      { updateInstance: jest.fn() } as any,
+      { ensureSymbolsSubscribed: jest.fn() } as any,
+    )
+
+    const detail = await service.getStrategyDetail('user-1', 'inst-local-activity-funding')
+
+    expect(detail.accountOverview).toEqual(expect.objectContaining({
+      totalEquity: 10320.12,
+      availableBalance: 10300,
+      executionCapital: 10320.12,
+      nonTradableReason: null,
+      baseCurrency: 'USDT',
+    }))
+  })
+
   it('derives today pnl from the latest daily equity start when available', async () => {
     const todayStart = new Date()
     todayStart.setUTCHours(0, 0, 0, 0)
